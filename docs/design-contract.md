@@ -61,7 +61,7 @@ fail the check. Tailwind namespace resets are applied in source order.
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Fourteen named colours, including sidecar `colorMeta.*.canonical` | Explicit semantic colour mapping in the theme; Chat divider is contextual below      |
 | Five `rounded` entries                                            | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`          |
-| Six typography roles: size, complete font stack, line height      | `--text-*`, `--font-sans`, paired leading; document prose is contextual below        |
+| Seven typography roles: size, complete font stack, line height    | `--text-*`, `--font-sans`, paired leading; document prose is contextual below        |
 | Eight spacing steps                                               | Multiples of `--spacing`                                                             |
 | Four sidecar shadow entries                                       | `--shadow-resting`, `--shadow-resting-strong`, `--shadow-raised`, `--shadow-overlay` |
 | Seven sidecar motion entries                                      | Fast/base/linger duration, smooth-out/move curves, sidebar open/close duration       |
@@ -77,7 +77,7 @@ Font weights are validated as numeric CSS weights, but are not compared to a
 shared token: the current theme does not own weight roles. Component recipes,
 illustrative tonal ramps, breakpoints, and narrative are outside this canonical
 value comparison. Component aliases are still resolved so a broken reference
-cannot hide there. Sidecar typography metadata must cover the same six roles.
+cannot hide there. Sidecar typography metadata must cover the same seven roles.
 Timestamps are metadata, never evidence that a value is correct.
 
 The comparison normalises whitespace and font-name quotes, not arbitrary CSS

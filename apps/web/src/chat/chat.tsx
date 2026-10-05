@@ -552,10 +552,10 @@ export function Chat(
 						)}
 						{agent && busy && (
 							<button
-								aria-label="Stop Planner"
+								aria-label="Stop Chopin"
 								className="btn btn-icon btn-secondary"
 								onClick={() => wire?.send("chat:abort")}
-								title="Stop Planner"
+								title="Stop Chopin"
 								type="button"
 							>
 								<img alt="" className="size-[14px]" src={plannerStop} />

@@ -125,9 +125,11 @@
 	/*
 	 * Utopia-style fluid modular scale: 360–1440px viewport, 15–16px base,
 	 * and 1.12–1.14 ratio. Each clamp interpolates base * ratio^step.
-	 * The smaller steps serve compact controls (-2), UI text (-1), and prose (0).
+	 * The smaller steps serve metadata (-2.5), compact controls (-2), UI text (-1), and prose (0).
 	 */
 	--text-*: initial;
+	--text-2xs: clamp(0.706198rem, 0.701373rem + 0.021444vw, 0.720672rem);
+	--text-2xs--line-height: 1.35;
 	--text-xs: clamp(0.747369rem, 0.740003rem + 0.032738vw, 0.769468rem);
 	--text-xs--line-height: 1.35;
 	--text-sm: clamp(0.837054rem, 0.823674rem + 0.059466vw, 0.877193rem);

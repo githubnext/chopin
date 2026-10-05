@@ -288,8 +288,8 @@ test("chat uses one room-message composer when the planner is off", async ({ joi
 	await expect(send).toHaveAttribute("title", "Send message");
 	await expect(chat.getByRole("button", { name: "Send message" })).toHaveCount(1);
 	await expect(chat.getByRole("button", { name: "Send to room" })).toHaveCount(0);
-	await expect(chat.getByRole("button", { name: "Ask Planner" })).toHaveCount(0);
-	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Ask Chopin" })).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
 	await draft.fill("A room message");
 	await expect(send).toBeEnabled();
@@ -299,7 +299,7 @@ test("chat uses one room-message composer when the planner is off", async ({ joi
 	await draft.fill("@chopin Do not start a turn here.");
 	await send.click();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
-	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 });
 
 test("chat keeps both ends of a tall transcript clear across layouts", async ({ join, page }) => {
@@ -391,10 +391,10 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	await draft.fill("@chopin Start the migration.");
 	await draft.press("Enter");
 	await planner.started;
-	await expect(chat.getByRole("button", { name: "Stop Planner" })).toBeVisible();
-	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveAttribute(
+	await expect(chat.getByRole("button", { name: "Stop Chopin" })).toBeVisible();
+	await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveAttribute(
 		"title",
-		"Stop Planner",
+		"Stop Chopin",
 	);
 
 	await draft.fill("Keep the release notes brief.");
@@ -418,7 +418,7 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 		to: "planner",
 	});
 
-	await chat.getByRole("button", { name: "Stop Planner" }).click();
+	await chat.getByRole("button", { name: "Stop Chopin" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	let next = chat.locator("[data-chat-entry]").filter({ hasText: "Queue the rollback checks." });
 	let later = chat.locator("[data-chat-entry]").filter({ hasText: /Keep\s+the new line/ });
@@ -471,7 +471,7 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	await planner.started;
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 
-	await chat.getByRole("button", { name: "Stop Planner" }).click();
+	await chat.getByRole("button", { name: "Stop Chopin" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 
 	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill("@chopin Try again.");
@@ -505,7 +505,7 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	await expect(chat.getByText("I found it.")).toBeVisible();
 
-	await chat.getByRole("button", { name: "Stop Planner" }).click();
+	await chat.getByRole("button", { name: "Stop Chopin" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 });
 
@@ -622,9 +622,9 @@ test(
 
 		await expect(live).toContainText("7 done");
 		await expect(chat.getByRole("button", { name: /Edit plan/ })).toHaveCount(0);
-		await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
+		await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
-		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "Ask Planner" });
+		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "Ask Chopin" });
 		let theirs = chat.locator("[data-chat-entry]").filter({
 			hasText: "Check the rollback path too.",
 		});
