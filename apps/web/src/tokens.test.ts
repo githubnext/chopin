@@ -212,8 +212,8 @@ describe("type", () => {
 			["sm", -1],
 			["base", 0],
 			["lg", 2],
-			["xl", 4],
-			["2xl", 7],
+			["xl", 3],
+			["2xl", 5],
 		] as const;
 		let found = [...SHARED_THEME.matchAll(/\n\s*(--text-(?![\w-]*--line-height)[\w-]+):/g)]
 			.map(match => match[1]);

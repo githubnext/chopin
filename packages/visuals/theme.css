@@ -141,9 +141,9 @@
 	--text-base--line-height: 1.5;
 	--text-lg: clamp(1.176rem, 1.1348rem + 0.183111vw, 1.2996rem);
 	--text-lg--line-height: 1.4;
-	--text-xl: clamp(1.475174rem, 1.403912rem + 0.31672vw, 1.68896rem);
+	--text-xl: clamp(1.31712rem, 1.262312rem + 0.243591vw, 1.481544rem);
 	--text-xl--line-height: 1.25;
-	--text-2xl: clamp(2.072514rem, 1.929262rem + 0.636674vw, 2.502269rem);
+	--text-2xl: clamp(1.652195rem, 1.561122rem + 0.404769vw, 1.925415rem);
 	--text-2xl--line-height: 1.15;
 
 	/* Tailwind's multiplier keeps 4px steps and admits 2, 6, 10 and 22px. */

@@ -1071,6 +1071,14 @@
 	font-size: var(--plan-body);
 }
 
+/* iOS Safari zooms the page when it focuses editable text under 16px. */
+@media (pointer: coarse) {
+	.plan .plan-content,
+	.plan-content :is(h4, h5, h6) {
+		font-size: max(1rem, var(--plan-body));
+	}
+}
+
 .plan-content p {
 	margin-block: 0.75em;
 }

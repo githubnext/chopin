@@ -681,6 +681,15 @@ body {
 	padding-block: 0.5rem;
 }
 
+/* iOS Safari zooms the page when it focuses a text field under 16px. */
+@media (pointer: coarse) {
+	textarea,
+	select,
+	input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]) {
+		font-size: max(1rem, var(--text-sm));
+	}
+}
+
 .question-field {
 	scroll-margin-block-end: calc(var(--keyboard-inset, 0px) + 1rem);
 }
