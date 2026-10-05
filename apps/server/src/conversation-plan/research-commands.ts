@@ -15,6 +15,8 @@ type ResearchCommand = Request<
 >;
 type ResearchCommandDeps = {
 	enabled: boolean;
+	canExecute?: boolean;
+	eligible?: () => Promise<boolean>;
 	runtime: ReturnType<typeof createConversationRuntime>;
 	research: () => ResearchWorkspaceService | undefined;
 	unavailable: (id: string) => boolean;
@@ -40,6 +42,9 @@ export async function handleResearchCommand(
 		case "conversation-plan:research-edit":
 		case "conversation-plan:research-presence": {
 			try {
+				if (deps.eligible && !await deps.eligible()) {
+					throw new Error("Research is unavailable in this document");
+				}
 				if (
 					!deps.enabled || !ws.data.canEdit || ws.data.channelArchivedAt || room.closing
 					|| deps.unavailable(room.id)
@@ -65,6 +70,12 @@ export async function handleResearchCommand(
 		}
 		case "conversation-plan:research": {
 			try {
+				if (deps.eligible && !await deps.eligible()) {
+					throw new Error("Research is unavailable in this document");
+				}
+				if (frame.choice !== "dismiss" && deps.canExecute === false) {
+					throw new Error("Research execution is disabled");
+				}
 				if (!deps.enabled) throw new Error("conversation analysis is disabled");
 				if (
 					!ws.data.canEdit || ws.data.channelArchivedAt || room.closing

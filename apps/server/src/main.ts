@@ -483,6 +483,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "conversation-plan:research-presence":
 			await handleResearchCommand(frame, room, ws, {
 				enabled: !!config.conversationPlan,
+				canExecute: config.webResearch,
+				eligible: async () => {
+					let channel = await storage.channels.get(room.id);
+					return !!channel && !channel.parentChannelId && !channel.archivedAt;
+				},
 				runtime: conversationRuntime,
 				research: () => researchService,
 				unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
