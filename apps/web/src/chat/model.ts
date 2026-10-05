@@ -263,3 +263,46 @@ export function duration(milliseconds: number): string {
 	if (milliseconds < 1_000) return `${milliseconds}ms`;
 	return `${(milliseconds / 1_000).toFixed(1).replace(/\.0$/, "")}s`;
 }
+
+function askedPrompts(args: string | undefined): string[] {
+	try {
+		let parsed: unknown = JSON.parse(args ?? "");
+		let questions = (parsed as { questions?: unknown }).questions;
+		if (!Array.isArray(questions)) return [];
+		return questions.flatMap(item => {
+			let prompt = (item as { question?: unknown } | null)?.question;
+			return typeof prompt === "string" ? [prompt] : [];
+		});
+	} catch {
+		return [];
+	}
+}
+
+export function waitingPrompts(tools: Chat.Activity[]): string[] | undefined {
+	let running = tools.findLast(tool => tool.status === "running");
+	return running?.name === "ask" ? askedPrompts(running.args) : undefined;
+}
+
+/**
+ * Open decision cards a waiting `ask` call is blocked on. A card matches when any of
+ * its questions asks one of the call's prompts; the count is of distinct cards, or of
+ * distinct prompts while no card has arrived yet.
+ */
+export function waitingCards(
+	prompts: string[],
+	cards: Array<{ id: string; prompts: string[]; open: boolean }>,
+): { ids: string[]; count: number } {
+	let asked = new Set(prompts.map(prompt => prompt.trim()).filter(Boolean));
+	let ids = [
+		...new Set(
+			cards
+				.filter(card => card.open && card.prompts.some(prompt => asked.has(prompt.trim())))
+				.map(card => card.id),
+		),
+	];
+	return { ids, count: ids.length || asked.size };
+}
+
+export function waitingText(count: number): string {
+	return count > 1 ? `Waiting on ${count} decisions` : "Waiting on your decision";
+}

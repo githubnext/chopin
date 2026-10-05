@@ -196,7 +196,7 @@ test("completed tool names wrap in compact Chat", async ({ join, seed }) => {
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
-	await page.getByRole("button", { name: /1 tool/ }).click();
+	await page.getByRole("button", { name: /Work details.*1 action/ }).click();
 	let name = page.getByText(`A${toolName.slice(1)}`);
 	let fragments = await name.evaluate(element => {
 		let range = document.createRange();

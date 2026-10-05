@@ -1,6 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
-import { displayText, duration, group, summarize, workPhase } from "./model";
+import {
+	displayText,
+	duration,
+	group,
+	summarize,
+	waitingCards,
+	waitingPrompts,
+	waitingText,
+	workPhase,
+} from "./model";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -374,4 +383,41 @@ it("preserves decision metadata and timestamp on system groups", () => {
 		ts: 1_700_000_000,
 		decision: prompt.decision,
 	}]);
+});
+
+describe("waiting decisions in work progression", () => {
+	it("derives pending ask prompts without treating other tools as waits", () => {
+		expect(
+			waitingPrompts([{
+				id: "ask",
+				name: "ask",
+				status: "running",
+				args: JSON.stringify({ questions: [{ question: "Which database?" }] }),
+			}]),
+		).toEqual(["Which database?"]);
+		expect(waitingPrompts([{ id: "read", name: "read_plan", status: "running" }])).toBeUndefined();
+		expect(waitingPrompts([{ id: "ask", name: "ask", status: "done" }])).toBeUndefined();
+	});
+	it("matches distinct open cards when any of their questions was asked", () => {
+		let cards = [
+			{ id: "old", prompts: ["Which database?"], open: true },
+			{ id: "pair", prompts: ["Which cache?", " Which database? "], open: true },
+			{ id: "region", prompts: ["Which region?"], open: false },
+		];
+		expect(waitingCards(["Which database?", "Which region?"], cards))
+			.toEqual({ ids: ["old", "pair"], count: 2 });
+		expect(waitingCards(["Which cache?", "Which database?"], [cards[1]!]))
+			.toEqual({ ids: ["pair"], count: 1 });
+	});
+
+	it("counts distinct asked prompts until a card arrives", () => {
+		expect(waitingCards(["Which region?", " Which region?", "Which cache?"], []))
+			.toEqual({ ids: [], count: 2 });
+	});
+
+	it("words the wait for one or several decisions", () => {
+		expect(waitingText(1)).toBe("Waiting on your decision");
+		expect(waitingText(0)).toBe("Waiting on your decision");
+		expect(waitingText(3)).toBe("Waiting on 3 decisions");
+	});
 });
