@@ -1,32 +1,20 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronIcon, CloseIcon, DecisionIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
-import { cardStatus } from "@chopin/dialect";
-import type { Questionnaire } from "@chopin/dialect";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { CloseIcon, SignInIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
-import { Face, MotionDisclosure, MotionDisclosureIcon, useCardMeta } from "@chopin/editor";
+import { Face, useCardMeta } from "@chopin/editor";
 
 import { ChopinMark } from "./agent-mark";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
-import {
-	capitalize,
-	displayText,
-	duration,
-	group,
-	summarize,
-	toolCopy,
-	waitingCards,
-	waitingText,
-} from "./model";
+import { capitalize, displayText, group } from "./model";
+import { WorkProgress } from "./work-progress";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
-import { motionContract } from "../motion-contract";
-import { motionImmediately } from "../motion-input";
 
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { Group, Message } from "./model";
@@ -52,7 +40,6 @@ type PlanMarkers = {
 	sourceDestination?: ChatDestination;
 	conversationPlan?: ConversationPlan.State;
 	researchOffers?: ResearchOfferControls;
-	decisions?: TranscriptDecisions;
 };
 
 export type TranscriptDecisions = {
@@ -66,143 +53,6 @@ export type TranscriptDecisions = {
 
 function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-const NO_QUESTIONS: ReturnType<QuestionnaireStore["snapshot"]> = [];
-const noQuestions = () => () => {};
-
-/** A malformed stored status must not break the transcript; it is simply not open. */
-function isOpen(value: Questionnaire): boolean {
-	try {
-		let status = cardStatus(value);
-		return status === "open" || status === "reopened";
-	} catch {
-		return false;
-	}
-}
-
-function WaitingRun(
-	{ decisions, prompts }: { decisions?: TranscriptDecisions; prompts: string[] },
-) {
-	let values = useSyncExternalStore(
-		decisions?.questions.subscribe ?? noQuestions,
-		decisions?.questions.snapshot ?? (() => NO_QUESTIONS),
-		decisions?.questions.snapshot ?? (() => NO_QUESTIONS),
-	);
-	let { ids, count } = waitingCards(
-		prompts,
-		values.map(({ id, value }) => ({
-			id,
-			prompts: value.questions.map(question => question.prompt),
-			open: isOpen(value),
-		})),
-	);
-	let first = ids[0];
-	return (
-		<div
-			className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary"
-			data-tool-waiting
-			role="status"
-		>
-			<DecisionIcon aria-hidden="true" size={14} />
-			<span>{waitingText(count)}</span>
-			{decisions && first && (
-				<button
-					aria-label="Open decision"
-					className="btn btn-sm btn-ghost -my-1"
-					onClick={() => decisions.onOpenCard(first)}
-					type="button"
-				>
-					Open
-				</button>
-			)}
-		</div>
-	);
-}
-
-function ToolRun(
-	{ decisions, tools }: { decisions?: TranscriptDecisions; tools: Chat.Activity[] },
-) {
-	let [open, setOpen] = useState(false);
-	let contentId = useId();
-	let summary = summarize(tools);
-	let motion = motionContract("collapse");
-	if (summary.state === "waiting") {
-		return <WaitingRun decisions={decisions} prompts={summary.prompts} />;
-	}
-	if (summary.state === "running") {
-		return (
-			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
-				<LoaderIcon aria-hidden="true" className="chat-tool-loader" size={14} />
-				<span className="min-w-0 break-words">{summary.label}</span>
-				{summary.completed > 0 && (
-					<>
-						<span aria-hidden="true">·</span>
-						<span className="tabular-nums">{summary.completed} done</span>
-					</>
-				)}
-			</div>
-		);
-	}
-
-	return (
-		<div>
-			<button
-				aria-controls={open ? contentId : undefined}
-				aria-expanded={open}
-				className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 bg-transparent py-1 text-sm text-text-quaternary"
-				onClick={() => setOpen(value => !value)}
-				type="button"
-			>
-				<MotionDisclosureIcon
-					className="motion-feedback size-[14px]"
-					closed={<ChevronIcon aria-hidden="true" size={14} />}
-					open={open}
-					opened={<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />}
-				/>
-				<span className="tabular-nums">
-					{summary.count} {summary.count === 1 ? "tool" : "tools"}
-				</span>
-				{summary.failures > 0 && (
-					<span className="text-destructive-ink tabular-nums">
-						{summary.failures} failed
-					</span>
-				)}
-				<span className="tabular-nums">{duration(summary.elapsed)}</span>
-			</button>
-
-			<MotionDisclosure
-				id={contentId}
-				immediately={motionImmediately()}
-				motion={motion}
-				open={open}
-				surface="chat-tools"
-			>
-				<ul
-					aria-label="Tool calls"
-					className="m-0 flex list-none flex-col pl-6 text-sm text-text-quaternary"
-				>
-					{tools.map(tool => (
-						<li
-							className="flex min-h-6 items-start gap-3"
-							data-tool-status={tool.status}
-							key={tool.id}
-						>
-							<span className="min-w-0 flex-1 break-all font-mono text-text-secondary">
-								{toolCopy(tool.name)}
-							</span>
-							{tool.status === "failed" && (
-								<span className="shrink-0 text-destructive-ink">Failed</span>
-							)}
-							<span className="shrink-0 tabular-nums">
-								{tool.took === undefined ? "—" : duration(tool.took)}
-							</span>
-						</li>
-					))}
-				</ul>
-			</MotionDisclosure>
-		</div>
-	);
 }
 
 function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
@@ -305,6 +155,14 @@ function MessageBody(
 			data-chat-raw={message.text}
 			data-chat-state={message.working ? "working" : undefined}
 		>
+			{(message.working || !!message.tools?.length) && (
+				<WorkProgress
+					active={!!message.working}
+					responseSeen={!!message.workResponseSeen}
+					streaming={!!message.workStreaming || !!message.streaming}
+					tools={message.tools ?? []}
+				/>
+			)}
 			{text && (
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1" data-chat-message-text>
@@ -329,9 +187,6 @@ function MessageBody(
 							</button>
 						)}
 				</div>
-			)}
-			{message.tools && message.tools.length > 0 && (
-				<ToolRun decisions={markers.decisions} tools={message.tools} />
 			)}
 			{markers.sourceDestination?.source.messageId === message.id && (
 				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
@@ -404,7 +259,6 @@ function MessageGroup(
 						onRetryJob={markers.onRetryJob}
 						conversationPlan={markers.conversationPlan}
 						researchOffers={markers.researchOffers}
-						decisions={markers.decisions}
 						sourceDestination={markers.sourceDestination}
 						handle={handle}
 						key={message.id}
@@ -550,7 +404,6 @@ export function Transcript(
 								onRetryJob={onRetryJob}
 								conversationPlan={conversationPlan}
 								researchOffers={researchOffers}
-								decisions={decisions}
 								group={item}
 								handle={handle}
 								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}

@@ -14,16 +14,30 @@ export type Message = {
 	references?: Chat.Reference[];
 	queued: boolean;
 	working?: boolean;
+	workStreaming?: boolean;
+	workResponseSeen?: boolean;
 };
 
 export type Group =
 	| { kind: "messages"; author: Speaker; messages: Message[]; queued: boolean }
 	| { kind: "system"; id: string; text: string; ts?: number; decision?: Chat.Entry["decision"] };
 
-export type ToolSummary =
-	| { state: "running"; label: string; completed: number }
-	| { state: "waiting"; prompts: string[] }
-	| { state: "finished"; count: number; failures: number; elapsed: number };
+export type ToolSummary = {
+	count: number;
+	finished: number;
+	failures: number;
+	interrupted: number;
+	toolTime: number;
+};
+
+export type WorkPhase =
+	| "Getting oriented"
+	| "Gathering context"
+	| "Waiting for an answer"
+	| "Making changes"
+	| "Working through the request"
+	| "Writing a response"
+	| "Reviewing the next step";
 
 function speaker(author: Speaker): string {
 	return author.kind === "agent" ? "agent" : `member:${author.handle}`;
@@ -52,13 +66,42 @@ export function group(
 	queued: Chat.Waiting[],
 	working?: Pick<Chat.Turn, "id" | "started">,
 ): Group[] {
+	let promptIndex = working
+		? entries.findLastIndex(entry => entry.author.kind === "member" && entry.ts <= working.started)
+		: -1;
+	let current = working
+		? entries.map((entry, index) => ({ entry, index })).filter(({ entry, index }) =>
+			index > promptIndex && entry.author.kind === "agent" && entry.ts >= working.started
+		)
+		: [];
+	let activeIndex =
+		current.find(({ entry }) => !!entry.tools?.length || !!entry.text.trim() || !!entry.streaming)
+			?.index ?? -1;
+	let activeTools = current.flatMap(({ entry }) => entry.tools ?? []);
+	let currentIndices = new Set(current.map(({ index }) => index));
+	let workStreaming = current.some(({ entry }) => !!entry.streaming);
+	let workResponseSeen = current.some(({ entry }) => !!entry.text.trim());
 	let rows: Array<Chat.Entry | Message> = [
-		...entries,
-		...(working
+		...entries.map((entry, index) =>
+			index === activeIndex && entry.author.kind === "agent"
+				? {
+					...entry,
+					author: { kind: "agent" },
+					tools: activeTools,
+					queued: false,
+					working: true,
+					workStreaming,
+					workResponseSeen,
+				} satisfies Message
+				: currentIndices.has(index) && entry.author.kind === "agent" && entry.tools?.length
+				? { ...entry, tools: undefined }
+				: entry
+		),
+		...(working && activeIndex < 0
 			? [{
 				id: working.id,
 				author: { kind: "agent" as const },
-				text: "Working on it",
+				text: "",
 				ts: working.started,
 				queued: false,
 				working: true,
@@ -112,103 +155,45 @@ function append(result: Group[], message: Message): void {
 	});
 }
 
-const RUNNING_LABELS: { [name: string]: string } = {
-	read_plan: "Reading the document",
-	edit_plan: "Editing the document",
-	anchor_plan: "Linking decisions to prose",
-	read_reference: "Reading a reference",
-	read_repository_file: "Reading a file",
-	list_repository_tree: "Browsing the repository",
-	search_repository: "Searching the repository",
-	repository_history: "Reading repository history",
-	list_pull_requests: "Listing pull requests",
-	pull_request_read: "Reading a pull request",
-	list_background_jobs: "Checking background work",
-	read_background_job: "Reading background work",
-	create_research_workspace: "Starting research",
-	read_implementation_graph: "Reading tasks",
-	edit_implementation_graph: "Editing tasks",
-	revise_open_decision: "Revising a decision",
-	draft_heading: "Drafting a heading",
-	refine_decision: "Refining a decision",
-	write_decision_prose: "Writing decision prose",
-};
-
-const GITHUB_LABELS: { [name: string]: string } = {
-	get_file_contents: "Reading a GitHub file",
-	list_pull_requests: "Listing pull requests",
-	pull_request_read: "Reading a pull request",
-	search_code: "Searching GitHub code",
-	list_commits: "Reading commit history",
-};
-
-/** What a running tool is doing, in sentence case. */
-export function runningLabel(name: string): string {
-	let known = RUNNING_LABELS[name];
-	if (known) return known;
-	if (name.startsWith("github/")) return GITHUB_LABELS[name.slice(7)] ?? "Using GitHub";
-	return `Using ${toolCopy(name).toLowerCase()}`;
-}
-
-/** The question prompts an `ask` call carries, so its live cards can be found. */
-function askedPrompts(args: string | undefined): string[] {
-	try {
-		let parsed: unknown = JSON.parse(args ?? "");
-		let questions = (parsed as { questions?: unknown }).questions;
-		if (!Array.isArray(questions)) return [];
-		return questions.flatMap(item => {
-			let prompt = (item as { question?: unknown } | null)?.question;
-			return typeof prompt === "string" ? [prompt] : [];
-		});
-	} catch {
-		return [];
-	}
-}
-
-export function summarize(tools: Chat.Activity[]): ToolSummary {
+export function workPhase(
+	tools: Chat.Activity[],
+	streaming: boolean,
+	active: boolean,
+	responseSeen = false,
+): WorkPhase | undefined {
+	if (!active) return undefined;
 	let running = tools.findLast(tool => tool.status === "running");
-	// `ask` stays running until people answer; it is waiting, not working.
-	if (running?.name === "ask") return { state: "waiting", prompts: askedPrompts(running.args) };
 	if (running) {
-		return {
-			state: "running",
-			label: runningLabel(running.name),
-			completed: tools.filter(tool => tool.status !== "running").length,
-		};
+		if (running.name === "ask") return "Waiting for an answer";
+		if (
+			/(^|[_/.-])(read|get|list|search|grep|find|query|fetch|inspect)(?=$|[_/.-])/i.test(
+				running.name,
+			)
+		) return "Gathering context";
+		if (
+			/(^|[_/.-])(edit|write|create|update|delete|anchor|link|apply|append|move|remove)(?=$|[_/.-])/i
+				.test(
+					running.name,
+				)
+		) return "Making changes";
+		return "Working through the request";
 	}
+	if (streaming) return "Writing a response";
+	if (tools.length || responseSeen) return "Reviewing the next step";
+	return "Getting oriented";
+}
+
+export function summarize(tools: Chat.Activity[], active: boolean): ToolSummary {
 	return {
-		state: "finished",
 		count: tools.length,
+		finished: tools.filter(tool => tool.status !== "running").length,
 		failures: tools.filter(tool => tool.status === "failed").length,
-		elapsed: tools.reduce((total, tool) => total + (tool.took ?? 0), 0),
+		interrupted: active ? 0 : tools.filter(tool => tool.status === "running").length,
+		toolTime: tools.reduce((total, tool) => total + (tool.took ?? 0), 0),
 	};
 }
 
 export function duration(milliseconds: number): string {
 	if (milliseconds < 1_000) return `${milliseconds}ms`;
 	return `${(milliseconds / 1_000).toFixed(1).replace(/\.0$/, "")}s`;
-}
-
-/**
- * Open decision cards a waiting `ask` call is blocked on. A card matches when any of
- * its questions asks one of the call's prompts; the count is of distinct cards, or of
- * distinct prompts while no card has arrived yet.
- */
-export function waitingCards(
-	prompts: string[],
-	cards: Array<{ id: string; prompts: string[]; open: boolean }>,
-): { ids: string[]; count: number } {
-	let asked = new Set(prompts.map(prompt => prompt.trim()).filter(Boolean));
-	let ids = [
-		...new Set(
-			cards
-				.filter(card => card.open && card.prompts.some(prompt => asked.has(prompt.trim())))
-				.map(card => card.id),
-		),
-	];
-	return { ids, count: ids.length || asked.size };
-}
-
-export function waitingText(count: number): string {
-	return count > 1 ? `Waiting on ${count} decisions` : "Waiting on your decision";
 }
