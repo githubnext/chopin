@@ -1,4 +1,5 @@
 import { MessageForwardIcon } from "@chopin/icons";
+import { InlineCode } from "@chopin/question/react";
 import { Face } from "@chopin/editor";
 
 import type { SourceDestination } from "./card-parts";
@@ -45,7 +46,7 @@ export function EvidencePopover({ rows, onSource }: {
 			{rows.map(row => (
 				<div className="flex flex-col gap-1" key={row.optionId ?? "question"}>
 					<h4 className="m-0 min-w-0 break-words text-sm font-medium text-text-primary [overflow-wrap:anywhere]">
-						{row.label}
+						<InlineCode text={row.label} />
 					</h4>
 					<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 						{row.origin === "planner" && (

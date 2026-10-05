@@ -14,8 +14,8 @@ import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@ch
 
 import { INPUT_EXPIRY_MS, MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
-import { InlineCode } from "./inline-code";
-import { plainInlineText } from "./inline-segments";
+import { InlineCode, InlineCodeList } from "./inline-code";
+import { plainInlineList, plainInlineText } from "./inline-segments";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 import { ResolvedActions } from "./resolved-actions";
 import type { VisibleSuggestion } from "./project-suggestion";
@@ -496,13 +496,13 @@ function Resolved(
 		<div className="space-y-2 px-3 py-2.5">
 			{answers.map((answer, index) => {
 				let id = definition.questions[index]?.id;
-				let chosen = answer.custom ?? (answer.choices ?? []).join(", ");
+				let chosen = answer.custom === undefined ? (answer.choices ?? []) : [answer.custom];
 				return (
 					<Related
 						key={id ?? index}
 						id={id}
 						count={(id ? places?.[id] : undefined) ?? 0}
-						label={`${plainInlineText(answer.question)} — ${plainInlineText(chosen)}`}
+						label={`${plainInlineText(answer.question)} — ${plainInlineList(chosen)}`}
 						className=""
 						onEnter={onQuestionEnter}
 						onLeave={onQuestionLeave}
@@ -516,7 +516,7 @@ function Resolved(
 							<InlineCode text={answer.question} />
 						</p>
 						<p className="m-0 text-sm font-medium text-text-primary">
-							<InlineCode text={chosen} />
+							<InlineCodeList items={chosen} />
 						</p>
 					</Related>
 				);
@@ -809,8 +809,7 @@ export function QuestionView(props: QuestionViewProps) {
 								{current.multiple && <p className="question-hint">Choose any</p>}
 								{previousAnswer && (
 									<p className="question-hint">
-										Previously: {plainInlineText(previousAnswer.labels.join(", "))}{" "}
-										· @{previousAnswer.by}
+										Previously: {plainInlineList(previousAnswer.labels)} · @{previousAnswer.by}
 									</p>
 								)}
 								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}

@@ -12,3 +12,19 @@ export function InlineCode({ text }: { text: string }) {
 		</>
 	);
 }
+
+/** Renders each item on its own so a stray backtick never pairs with the next item's. */
+export function InlineCodeList(
+	{ items, separator = ", " }: { items: string[]; separator?: string },
+) {
+	return (
+		<>
+			{items.map((item, index) => (
+				<span key={index}>
+					{index > 0 && separator}
+					<InlineCode text={item} />
+				</span>
+			))}
+		</>
+	);
+}
