@@ -17,6 +17,7 @@ export {
 	LightbulbIcon,
 	LinkPlusIcon,
 	LockIcon,
+	MagnifierIcon,
 	MessageForwardIcon,
 	MessageIcon,
 	MessagePlusIcon,
