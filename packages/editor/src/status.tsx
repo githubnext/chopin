@@ -1,6 +1,6 @@
 /** Connection and document state, surfaced in the document pane's header. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { Connection } from "./transport";
 
@@ -96,15 +96,40 @@ export function useStalled(connection: Connection | undefined): boolean {
 	return lost && stalled;
 }
 
+function speaks(level: StatusLevel): boolean {
+	return level === "notice" || level === "alert";
+}
+
+/**
+ * What the live region says on moving from `previous` to `next`.
+ *
+ * Only labels that need attention are spoken, never "Ready" or loading, so
+ * opening a document is silent; leaving an outage is said once.
+ */
+export function announcement(previous: StatusLevel, next: StatusDescription): string {
+	if (speaks(next.level)) return next.label;
+	if (speaks(previous)) return "Reconnected";
+	return "";
+}
+
 function reloadPage() {
 	location.reload();
 }
 
 export function PlanStatus({ onReload = reloadPage, ...props }: PlanStatusProps) {
 	let stalled = useStalled(props.connection);
-	let { label, level, detail, reload } = describeStatus({ ...props, stalled });
+	let status = describeStatus({ ...props, stalled });
+	let { label, level, detail, reload } = status;
+	let detailId = useId();
+	let previous = useRef<StatusLevel>(level);
+	let [spoken, setSpoken] = useState("");
+	useEffect(() => {
+		if (previous.current === level && !speaks(level)) return;
+		setSpoken(announcement(previous.current, { level, label }));
+		previous.current = level;
+	}, [level, label]);
 	return (
-		<div aria-live="polite" className="plan-status" data-level={level} role="status">
+		<div className="plan-status" data-level={level}>
 			{(level === "quiet" || level === "notice") && (
 				<span
 					aria-hidden="true"
@@ -112,19 +137,35 @@ export function PlanStatus({ onReload = reloadPage, ...props }: PlanStatusProps)
 					title={level === "quiet" ? label : undefined}
 				/>
 			)}
-			<span
-				className={level === "notice" || level === "alert" ? "plan-status-label" : "sr-only"}
-				data-tooltip={detail}
-				data-tooltip-verbatim={detail ? "" : undefined}
-			>
-				{label}
-			</span>
-			{detail && <span className="sr-only">{detail}</span>}
+			{speaks(level) && (
+				<span aria-hidden="true" className="plan-status-text">
+					<span
+						className="plan-status-label"
+						data-tooltip={detail}
+						data-tooltip-verbatim={detail ? "" : undefined}
+					>
+						{label}
+					</span>
+					{detail && <span className="plan-status-detail">{detail}</span>}
+				</span>
+			)}
+			{detail && <span className="sr-only" id={detailId}>{detail}</span>}
 			{reload && (
-				<button className="btn btn-sm btn-ghost" onClick={onReload} type="button">
+				<button
+					aria-describedby={detailId}
+					className="btn btn-sm btn-ghost"
+					data-tooltip={detail}
+					data-tooltip-detail=""
+					data-tooltip-verbatim=""
+					onClick={onReload}
+					type="button"
+				>
 					Reload
 				</button>
 			)}
+			<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
+				{spoken}
+			</span>
 		</div>
 	);
 }

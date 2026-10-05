@@ -595,20 +595,44 @@ body {
 }
 
 /*
- * Without the split header row, status takes a row at the top of the document,
- * and only while it has something to say. A quiet dot alone is not worth one.
+ * Without the split header row, status lies over the top of the document, and
+ * only while it has something to say. Overlaid rather than inserted, so a
+ * short blip does not push the prose down and back. A quiet dot alone is not
+ * worth a row.
  */
+.workspace-status-row {
+	position: absolute;
+	z-index: 3;
+	inset-block-start: 0;
+	inset-inline: 0;
+}
+
 .workspace-status-row:has(.plan-status:is([data-level="notice"], [data-level="alert"])) {
 	display: flex;
-	justify-content: flex-end;
 	min-height: calc(var(--spacing) * 9);
 	align-items: center;
-	padding-inline: calc(var(--spacing) * 4);
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 4);
 	border-bottom: var(--edge-width) solid var(--color-edge);
+	background: var(--color-page);
+}
+
+.workspace-status-row .plan-status {
+	flex: 1;
+}
+
+.workspace-status-row .plan-status .btn {
+	margin-inline-start: auto;
 }
 
 .workspace-status-row .plan-status[data-level="quiet"] .plan-status-dot {
 	display: none;
+}
+
+/* Touch has no hover, so the detail a tooltip would carry is written out. */
+@media (pointer: coarse) {
+	.workspace-status-row .plan-status-detail {
+		display: block;
+	}
 }
 
 .chat-message-body:has([data-analysis-trigger]) {

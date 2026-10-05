@@ -68,7 +68,7 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	// send is worse than one that stops, because the typing looks like it
 	// worked right up until the reload that loses it.
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
-	await expect(page.locator('[aria-live="polite"][data-level]')).toHaveAttribute(
+	await expect(page.locator(".plan-status")).toHaveAttribute(
 		"data-level",
 		"notice",
 	);
@@ -219,24 +219,32 @@ test("a lost connection is said in the document header and the composer", async 
 
 	await join("ana");
 	let status = page.locator("[data-document-toolbar] .plan-status");
+	let spoken = status.getByRole("status");
 	await expect(status).toHaveAttribute("data-level", "hidden");
+	// Opening a document is not news.
+	await expect(spoken).toHaveText("");
 
 	offline = true;
 	await sockets.at(-1)!.close();
 
 	await expect(status).toHaveAttribute("data-level", "notice");
 	await expect(status).toContainText("Reconnecting…");
+	await expect(spoken).toHaveText("Reconnecting…");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
 	await expect(page.getByPlaceholder("Reconnecting…")).toHaveCount(1);
 	await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
 
 	// Lost for long enough, it stops promising and offers a way out.
 	await expect(status).toHaveAttribute("data-level", "alert", { timeout: 10_000 });
-	await expect(status.getByRole("button", { name: "Reload" })).toBeVisible();
+	await expect(spoken).toHaveText("Offline");
+	let reload = status.getByRole("button", { name: "Reload" });
+	await expect(reload).toBeVisible();
+	await expect(reload).toHaveAccessibleDescription(/Editing resumes once connected/);
 
 	offline = false;
 	await ready(page);
 	await expect(status).toHaveAttribute("data-level", "hidden");
+	await expect(spoken).toHaveText("Reconnected");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(0);
 	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(1);
 });

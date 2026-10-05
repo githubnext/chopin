@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { describeStatus } from "./status";
+import { announcement, describeStatus } from "./status";
 
 describe("describeStatus", () => {
 	test("says nothing while connected and idle", () => {
@@ -66,5 +66,28 @@ describe("describeStatus", () => {
 			describeStatus({ connection: "reconnecting", synced: false, failed: "Permission denied" })
 				.label,
 		).toBe("Reconnecting…");
+	});
+});
+
+describe("announcement", () => {
+	test("opening a document says nothing", () => {
+		expect(announcement("quiet", { level: "hidden", label: "Ready" })).toBe("");
+		expect(announcement("hidden", { level: "quiet", label: "Loading" })).toBe("");
+	});
+
+	test("an outage speaks its label only, not the detail", () => {
+		expect(
+			announcement("hidden", {
+				level: "notice",
+				label: "Reconnecting…",
+				detail: "Editing resumes once connected.",
+			}),
+		).toBe("Reconnecting…");
+		expect(announcement("notice", { level: "alert", label: "Offline" })).toBe("Offline");
+	});
+
+	test("leaving an outage is said once as reconnected", () => {
+		expect(announcement("alert", { level: "hidden", label: "Ready" })).toBe("Reconnected");
+		expect(announcement("notice", { level: "quiet", label: "Loading" })).toBe("Reconnected");
 	});
 });
