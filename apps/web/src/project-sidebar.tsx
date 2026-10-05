@@ -122,17 +122,14 @@ function Project(
 								>
 									<a
 										aria-current={parentCurrent ? "page" : undefined}
-										className="project-sidebar-document-link min-w-0 flex-1 text-left text-sm font-medium"
+										aria-description={channel.description || undefined}
+										className="project-sidebar-document-link"
+										data-tooltip={channel.description || undefined}
+										data-tooltip-side="right"
+										data-tooltip-verbatim=""
 										href={parentHref}
 									>
-										<span className="min-w-0 flex-1">
-											<span className="block truncate">{channel.title}</span>
-											{channel.description && (
-												<span className="block truncate font-normal text-text-quaternary">
-													{channel.description}
-												</span>
-											)}
-										</span>
+										<span className="truncate">{channel.title}</span>
 									</a>
 									{canManage && (
 										<div className="project-sidebar-document-actions">
@@ -387,7 +384,12 @@ export function ProjectSidebar(
 		)
 		: null;
 	return (
-		<aside className="project-sidebar" data-project-sidebar="" aria-label="Projects">
+		<aside
+			aria-label="Projects"
+			className="project-sidebar"
+			data-project-sidebar=""
+			data-tooltip-edge=""
+		>
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<header className="project-sidebar-header group/sidebar-header">
 					<div className="flex items-center gap-2">
@@ -461,13 +463,13 @@ export function ProjectSidebar(
 						? (
 							<img
 								alt=""
-								className="size-5 rounded-full"
-								height={20}
+								className="size-3.5 rounded-full"
+								height={14}
 								src={user.avatarUrl}
-								width={20}
+								width={14}
 							/>
 						)
-						: <span aria-hidden="true" className="size-5 rounded-full bg-gray-300" />}
+						: <span aria-hidden="true" className="size-3.5 rounded-full bg-gray-300" />}
 					<span className="truncate">{user.login}</span>
 				</button>
 				{accountMenu}

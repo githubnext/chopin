@@ -198,8 +198,24 @@ describe("sidebar navigation", () => {
 		);
 	});
 
-	it("keeps project rows on the compact spacing scale", () => {
-		expect(NAVIGATION).toMatch(/\.project-sidebar-project-row\s*{[^}]*gap:\s*10px/s);
+	it("keeps every rail row on one compact height, inset, and gap", () => {
+		expect(NAVIGATION).toMatch(/--project-sidebar-row:\s*calc\(var\(--spacing\) \* 7\.5\)/);
+		for (
+			let row of [
+				"primary-action",
+				"project-row",
+				"document",
+				"child",
+				"account",
+			]
+		) {
+			expect(NAVIGATION).toMatch(
+				new RegExp(
+					`\\.project-sidebar-${row}\\s*{[^}]*min-height:\\s*var\\(--project-sidebar-row\\)`,
+					"s",
+				),
+			);
+		}
 	});
 });
 

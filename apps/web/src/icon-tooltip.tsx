@@ -86,6 +86,18 @@ export function IconTooltip() {
 				if (!label) return hide();
 				tooltip.textContent = tooltipText(label, button.hasAttribute("data-tooltip-verbatim"));
 				let rect = button.getBoundingClientRect();
+				// A row's description card sits beside its rail (data-tooltip-edge) when there is room.
+				if (button.dataset.tooltipSide === "right") {
+					tooltip.dataset.side = "right";
+					let right = (button.closest("[data-tooltip-edge]") ?? button).getBoundingClientRect()
+						.right;
+					if (right + GAP + tooltip.offsetWidth <= window.innerWidth - 8) {
+						tooltip.style.top = `${rect.top + rect.height / 2}px`;
+						tooltip.style.left = `${right + GAP}px`;
+						tooltip.setAttribute("data-visible", "");
+						return;
+					}
+				}
 				let below = rect.top < tooltip.offsetHeight + GAP;
 				tooltip.style.top = `${below ? rect.bottom + GAP : rect.top - GAP}px`;
 				tooltip.dataset.side = below ? "bottom" : "top";
