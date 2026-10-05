@@ -324,7 +324,7 @@ test("the Add Project dialog traps focus, dismisses, and filters repositories", 
 	await page.keyboard.press("Escape");
 	await expect(dialog).toBeHidden();
 
-	let trigger = page.getByRole("button", { name: "Add Project" });
+	let trigger = page.getByRole("button", { exact: true, name: "Add Project" });
 	await trigger.click();
 	await expect(search).toBeFocused();
 	await search.fill("notes");
@@ -349,7 +349,7 @@ test("the Add Project dialog reuses a fresh tab cache", async ({ baseURL, page }
 	page.on("request", request => {
 		if (request.url().includes("/api/github/installations")) requests++;
 	});
-	await page.getByRole("button", { name: "Add Project" }).click();
+	await page.getByRole("button", { exact: true, name: "Add Project" }).click();
 	await expect(repositoryOption(page, "archive-12")).toBeVisible();
 	await page.evaluate(() =>
 		new Promise<void>(resolve =>
