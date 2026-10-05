@@ -80,7 +80,11 @@ export type ChatProps = {
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
 	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
-	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryAnalysis?: (
+		messageId: string,
+		actionId: string,
+		lane?: "decision" | "research",
+	) => Promise<void>;
 	onRetryJob?: (jobId: string) => Promise<void>;
 	decisions?: TranscriptDecisions;
 	researchOffers?: ResearchOfferControls;

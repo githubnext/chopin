@@ -24,6 +24,7 @@ export class ResearchDraftController {
 	#snapshot: Snapshot;
 	#connection = 0;
 	#connected = false;
+	#focusSent?: boolean;
 	constructor(offer: ConversationPlan.ResearchOffer) {
 		this.#offer = offer;
 		this.#snapshot = {
@@ -54,6 +55,7 @@ export class ResearchDraftController {
 			this.#connection++;
 			this.#sending = undefined;
 			this.#opening = undefined;
+			this.#focusSent = undefined;
 		}
 		this.#wire = wire;
 		this.#connected = connected;
@@ -163,7 +165,8 @@ export class ResearchDraftController {
 		}
 	};
 	focus(editing: boolean) {
-		if (this.#wire?.connected) {
+		if (this.#wire?.connected && this.#focusSent !== editing) {
+			this.#focusSent = editing;
 			this.#wire.send("conversation-plan:research-presence", { offerId: this.#offer.id, editing });
 		}
 	}

@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { analysisForMessage, jobsForMessage, messageLinks } from "./links";
 import { AnalysisOverview } from "./analysis-overview";
+import { ResearchDiagnostics } from "./research-diagnostics";
 import { JobsOnlyDiagnostics, PlannerJobDiagnostics } from "./planner-job-diagnostics";
 import type { ExcerptCorrectionAction } from "./analysis-overview";
 
@@ -33,7 +34,7 @@ export function MessageMarkers(
 		messageText?: string;
 		onCard: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
-		onRetry: (messageId: string, actionId: string) => Promise<void>;
+		onRetry: (messageId: string, actionId: string, lane?: "decision" | "research") => Promise<void>;
 		onRetryJob?: (jobId: string) => Promise<void>;
 		state?: ConversationPlan.State;
 	},
@@ -51,13 +52,19 @@ export function MessageMarkers(
 	let popoverId = useId();
 	let links = state ? messageLinks(state, messageId) : [];
 	let analysis = state ? analysisForMessage(state, messageId) : undefined;
+	let research = state?.research?.analysis.find(item => item.messageId === messageId);
+	let researchPending = !!state?.research?.queue.some(item =>
+		item.messageId === messageId && item.status !== "failed"
+	);
 	let jobs = state
 		? jobsForMessage(state, allJobs, messageId)
 		: allJobs.filter(job => job.trigger === messageId);
-	let jobsOnly = !analysis && links.length === 0 && jobs.length > 0;
+	let jobsOnly = !analysis && !research && !researchPending && links.length === 0
+		&& jobs.length > 0;
 	let status = analysis?.status
 		?? (links.length > 0 ? "applied" : jobsOnly ? "Planner jobs" : "unlinked");
-	let hasDiagnostics = !!analysis || links.length > 0 || jobs.length > 0;
+	let hasDiagnostics = !!analysis || !!research || researchPending || links.length > 0
+		|| jobs.length > 0;
 	let visible = pinned && hasDiagnostics;
 	let requestPanelFocus = () => setFocusPanelRequest(request => request + 1);
 	let closeAnalysis = (returnFocus = false) => {
@@ -213,7 +220,7 @@ export function MessageMarkers(
 	}, [visible]);
 
 	if (!state && jobs.length === 0) return null;
-	if (state && links.length === 0 && !analysis && jobs.length === 0) return null;
+	if (state && !hasDiagnostics) return null;
 
 	return (
 		<div data-message-markers={messageId}>
@@ -320,6 +327,12 @@ export function MessageMarkers(
 										onAddExcerpt={onAddExcerpt}
 										state={state}
 										status={analysis?.status ?? (links.length ? "applied" : "unlinked")}
+									/>
+									<ResearchDiagnostics
+										analysis={research}
+										pending={researchPending}
+										canEdit={canEdit}
+										onRetry={onRetry}
 									/>
 									<PlannerJobDiagnostics
 										canEdit={canEdit}
