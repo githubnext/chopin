@@ -298,7 +298,7 @@ export default workflow({
 				[];
 			for await (let part of result.fullStream) {
 				parts.push(part as (typeof parts)[number]);
-				if (part.type === "tool-result" && part.toolName === "bash") {
+				if (part.type === "tool-result" && part.dynamic) {
 					events?.push(part.preliminary ? "part:partial" : "part:final");
 				}
 			}
@@ -387,12 +387,14 @@ test("registered Planner sessions load operator resources and offer only read-on
 
 test("a full Planner streams an Atomic builtin live and reports its tools as the turn's active set", async () => {
 	let result = await run(true, "cwd");
-	let bash = result.parts.filter(part => part.toolName === "bash");
-	let types = bash.map(part => part.type);
+	let builtin = result.parts.find(part => part.type === "tool-call" && part.dynamic)?.toolName;
+	expect(builtin).toBeDefined();
+	let own = result.parts.filter(part => part.toolName === builtin);
+	let types = own.map(part => part.type);
 	expect(types.slice(0, 2)).toEqual(["tool-input-start", "tool-call"]);
 	expect(types.at(-1)).toBe("tool-result");
-	expect(bash.at(-1)?.preliminary).not.toBe(true);
-	expect(result.offered).toContain("bash");
+	expect(own.at(-1)?.preliminary).not.toBe(true);
+	expect(result.offered).toContain(builtin);
 	expect(result.offered).toContain("host_tool");
 });
 
