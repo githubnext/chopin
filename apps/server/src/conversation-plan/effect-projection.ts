@@ -11,6 +11,7 @@ import type { Effect } from "./effect-types";
 function purposeful(analysis?: ConversationPlan.AnalysisRecord): boolean {
 	if (
 		analysis?.questionSetVersion !== QUESTION_SET_VERSION
+		&& analysis?.questionSetVersion !== "conversation-plan-8"
 		&& analysis?.questionSetVersion !== "conversation-plan-4"
 	) return false;
 	let triage = analysis.passes.find(pass => pass.stage === "triage");

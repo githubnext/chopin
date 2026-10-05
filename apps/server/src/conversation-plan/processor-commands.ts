@@ -7,6 +7,7 @@ import { applyEvent } from "./events";
 import { assertStateShape, MAX_ANALYSIS, MAX_QUEUE } from "./validation";
 import { QUESTION_SET_VERSION } from "./question-shared";
 import { appendEffects } from "./processor-fields";
+import { RESEARCH_QUESTION_SET } from "./research-interpreter";
 // Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
 
 export function createCommands(
@@ -42,6 +43,29 @@ export function createCommands(
 					};
 					assertStateShape(next);
 					plan.conversationPlan = next;
+				}
+				if (deps.researchInterpret && message.author.kind === "member") {
+					let state = plan.conversationPlan.research!;
+					plan.conversationPlan = {
+						...plan.conversationPlan,
+						research: state.queue.length < MAX_QUEUE
+							? {
+								...state,
+								queue: [...state.queue, { messageId: message.id, status: "pending", attempts: 0 }],
+							}
+							: {
+								...state,
+								analysis: [...state.analysis, {
+									messageId: message.id,
+									questionSetVersion: RESEARCH_QUESTION_SET,
+									modelVersion: "unavailable",
+									status: "unlinked" as const,
+									answers: {},
+									policyGate: "research queue full",
+									latencyMs: 0,
+								}].slice(-MAX_ANALYSIS),
+							},
+					};
 				}
 				await deps.persist();
 			} catch (error) {

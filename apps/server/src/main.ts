@@ -223,7 +223,12 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 				await backfillPlannerAskThreads(opened);
 			}
 		});
-		await conversationRuntime.attach(room, opened, !!channel?.archivedAt);
+		await conversationRuntime.attach(
+			room,
+			opened,
+			!!channel?.archivedAt,
+			!!channel && !channel.parentChannelId,
+		);
 		if (!channel?.archivedAt) {
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled()) Inject.ask(opened, server, room.id);
@@ -1000,7 +1005,12 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 				Rooms.get(channelId) === current && current.plan === opened
 				&& !current.closing && !deletingChannels.has(channelId)
 			) {
-				await conversationRuntime.attach(current, opened, !!channel?.archivedAt);
+				await conversationRuntime.attach(
+					current,
+					opened,
+					!!channel?.archivedAt,
+					!!channel && !channel.parentChannelId,
+				);
 			}
 		}
 	}
@@ -1025,7 +1035,9 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 	scheduleResearchRecovery(recovery?.deferred ?? 0);
 	summaryCoordinator?.resume(channelId);
 	let current = Rooms.get(channelId);
-	if (current?.plan) await conversationRuntime.attach(current, current.plan, false);
+	if (current?.plan) {
+		await conversationRuntime.attach(current, current.plan, false, !result.channel.parentChannelId);
+	}
 	announceChannel(result.channel);
 	if (summaryCoordinator) void summaryCoordinator.ensure(channelId).catch(() => {});
 	return result;

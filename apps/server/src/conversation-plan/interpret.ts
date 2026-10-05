@@ -3,20 +3,13 @@ import { askJev, type JevAnswer } from "./jev";
 import { planEvents } from "./policy";
 import {
 	buildCandidateTargetingRequest,
-	buildResearchOfferRequest,
 	buildTriageRequest,
 	QUESTION_SET_VERSION,
 } from "./questions";
 import { extractQuotes } from "./quotes";
 import { assertQuoteBudget } from "./quote-budget";
 import { noul, score } from "./interpret-scoring";
-import { type MemberResearchInput, selectResearchOffer } from "./interpret-research";
-import type {
-	Analysis,
-	Interpretation,
-	InterpretInput,
-	ResearchOfferCandidate,
-} from "./interpret-types";
+import type { Analysis, Interpretation, InterpretInput } from "./interpret-types";
 export type { Interpretation, InterpretInput, ResearchOfferCandidate } from "./interpret-types";
 
 /** Computes a proposal only; the caller owns fenced persistence and publication. */
@@ -44,7 +37,6 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 		};
 	}
 	let ask = input.ask ?? askJev;
-	let researchOffer: ResearchOfferCandidate | undefined;
 	try {
 		let quotes = extractQuotes(input.message.text);
 		assertQuoteBudget(quotes);
@@ -57,23 +49,6 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 		));
 		modelVersion = first.model;
 		passes.push({ stage: "triage", answers: first.answers });
-		if (
-			input.message.author.kind === "member" && quotes.length
-			&& noul(first.answers, "research_need") >= 0.8
-		) {
-			try {
-				let result = await ask(buildResearchOfferRequest(
-					input.message,
-					input.recent,
-					input.state.threads,
-					quotes,
-					input.state.events,
-				));
-				researchOffer = selectResearchOffer(input as MemberResearchInput, first, quotes, result);
-			} catch {
-				// An uncertain or unavailable research judgment never blocks planning analysis.
-			}
-		}
 		let triageTarget = first.answers.thread_target;
 		let rankedTargets = triageTarget?.type === "choice"
 			? Object.values(triageTarget.probabilities).sort((a, b) => b - a)
@@ -106,7 +81,6 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 		if (!useful) {
 			return {
 				events: [],
-				researchOffer,
 				analysis: {
 					...base,
 					modelVersion,
@@ -119,7 +93,6 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 		if (!quotes.length) {
 			return {
 				events: [],
-				researchOffer,
 				analysis: {
 					...base,
 					modelVersion,
@@ -177,7 +150,6 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 		});
 		return {
 			events: planned.events,
-			researchOffer,
 			analysis: {
 				...base,
 				modelVersion: first.model,
@@ -197,7 +169,6 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 	} catch {
 		return {
 			events: [],
-			researchOffer,
 			analysis: {
 				...base,
 				modelVersion,
