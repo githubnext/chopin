@@ -14,9 +14,15 @@ describe("excerpt", () => {
 		expect(value).toBe("The rollout should reach a shared staging environment before…");
 	});
 
-	it("keeps the word that ends exactly at the limit", () => {
+	it("drops a word the limit would split, even when it is the last one", () => {
 		let text = `${"a".repeat(59)} next`;
 		expect(excerpt(text)).toBe(`${"a".repeat(59)}…`);
+	});
+
+	it("keeps the whole word that ends exactly at the limit", () => {
+		let text = `${"a".repeat(30)} ${"b".repeat(29)} next`;
+		expect(text[60]).toBe(" ");
+		expect(excerpt(text)).toBe(`${"a".repeat(30)} ${"b".repeat(29)}…`);
 	});
 
 	it("falls back to a hard cut when there is no usable boundary", () => {
