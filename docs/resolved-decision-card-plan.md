@@ -22,28 +22,29 @@ chooses the open-like surface. Shared CSS tokens paint the selected static row.
 
 ## Task 1 — Make the resolved body resemble the open card
 
-- [ ] Add a failing markup test for a heading with `question-head`/`question-mark`, static
-  option rows with letter tiles, selected row/check, no inputs, and one linked heading button.
-- [ ] Run `bun test packages/question/src/react/resolved-actions.test.ts` and confirm that
-  the new expectation fails on the old resolved markup.
-- [ ] Render offered options in read-only rows; select by `optionIds` when present and
-  label fallback for legacy answers. Show a custom/unmatched answer as a chosen text row.
-  Preserve multi-question order and the missing-projection “Saved decision” fallback.
-- [ ] Extend `.question-option` selected styling to the static row marker in `theme.css`.
-- [ ] Run the focused unit test and `bun run types`.
+- [x] Add a failing markup test for a heading with `question-head`/`question-mark`, static
+      option rows with letter tiles, selected row/check and screen-reader cue, no inputs,
+      and one linked heading button.
+- [x] Run `bun test packages/question/src/react/resolved-actions.test.ts` and confirm that
+      the new expectation fails on the old resolved markup.
+- [x] Render offered options in read-only rows; select by `optionIds` when present and
+      label fallback for legacy answers. Show a custom/unmatched answer as a chosen text row.
+      Preserve multi-question order and the missing-projection “Saved decision” fallback.
+- [x] Extend `.question-option` selected styling to the static row marker in `theme.css`.
+- [x] Run the focused unit test and `bun run types`.
 
 ## Task 2 — Align chrome and metadata
 
-- [ ] Give answered cards the normal white/shadow surface; retain the muted surface for
-  discarded cards. Use the existing `SidecarCard` boundary without changing comment cards.
-- [ ] Move answered provenance below the choice rows through `QuestionView`’s existing
-  `aside` slot. Keep the attribution server-owned and the action callbacks unchanged.
-- [ ] Run `bun test packages/editor/src` and `bun run types`.
+- [x] Give answered cards the normal white/shadow surface; retain the muted surface for
+      discarded cards. Use the existing `SidecarCard` boundary without changing comment cards.
+- [x] Move answered provenance below the choice rows through `QuestionView`’s existing
+      `aside` slot. Keep the attribution server-owned and the action callbacks unchanged.
+- [x] Run `bun test packages/editor/src` and `bun run types`.
 
 ## Task 3 — Verify the real interaction and ship
 
-- [ ] Extend the existing resolved-card browser checks for selected presentation,
-  keyboard prose navigation, read-only actions, Reopen/Discard, and compact width.
-- [ ] Run focused Chromium checks, `bun run fix`, `bun run ci`, and `bun run build`.
-- [ ] Capture settled open/answered screenshots in `/private/tmp`, independently review
-  the diff, then commit and open the standalone PR with hosted inline visuals.
+- [x] Extend the existing resolved-card browser checks for selected presentation,
+      keyboard prose navigation, read-only actions, Reopen/Discard, and compact width.
+- [x] Run focused Chromium checks, `bun run fix`, `bun run ci`, and `bun run build`.
+- [x] Capture settled open/answered screenshots in `/private/tmp`, independently review
+      the diff, then commit and open the standalone PR with hosted inline visuals.

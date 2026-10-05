@@ -26,15 +26,17 @@ history, so the card itself can preserve the context of the original choice.
 - Each answered question uses the open card’s green decision mark and strong
   question heading. Original choices remain visible as static lettered rows. A
   chosen row uses the existing selected wash, filled letter tile, and check mark.
-  Multiple selections show multiple chosen rows. A historical custom or unmatched
-  answer remains visible as a selected text row.
+  A visually hidden cue also announces each chosen row to screen readers. Multiple
+  selections show multiple chosen rows. A historical custom or unmatched answer
+  remains visible as a selected text row.
 - Attribution becomes quiet metadata below the choices: who answered and when.
   Reopen and Discard stay in the established footer, including the existing
   confirmation and error behavior. Read-only viewers see neither action.
 - A linked question keeps one keyboard-operable “show in plan” control in its
   heading. Static choice rows do not add tab stops or pretend to be form fields.
 - Multiple-question records show a question section for each answer in order.
-  Missing projected answers retain the current “Saved decision” fallback.
+  A missing projected answer keeps the current all-or-nothing “Saved decision”
+  fallback rather than implying the partial record is authoritative.
 
 ## Boundaries and verification
 
