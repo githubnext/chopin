@@ -263,7 +263,7 @@ test("a known deleted channel keeps its context and routes back without retry", 
 	await expect(page.getByText(recoveryChannel.slug, { exact: true })).toBeVisible();
 	await expect(page.getByText(score.fullName, { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
-	let channels = page.getByRole("link", { name: `View ${score.fullName} channels` });
+	let channels = page.getByRole("link", { name: `View ${score.fullName} documents` });
 	await expect(channels).toHaveAttribute("href", "/documents/octo-org/score");
 	await channels.click();
 	await expect(page).toHaveURL("/documents/octo-org/score");

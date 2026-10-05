@@ -332,9 +332,7 @@ export default function DocumentWorkspaceHost(
 		);
 	}
 	if (!loaded) {
-		return (
-			<Loading label={route.page === "document" ? "Opening channel..." : "Opening document..."} />
-		);
+		return <Loading label={"Opening document…"} />;
 	}
 
 	let parentPath = anchoredChildPaths(

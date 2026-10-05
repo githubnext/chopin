@@ -362,7 +362,7 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		page,
 		"[data-content-swap-state]:not([hidden]):not([inert])",
 	);
-	await expect(page.getByText("Opening channel...", { exact: true })).toBeHidden();
+	await expect(page.getByText("Opening document…", { exact: true })).toBeHidden();
 	await expect(interactiveRoutes).toHaveCount(1);
 	await expect(interactiveRoutes).toBeVisible();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);

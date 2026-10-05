@@ -201,7 +201,7 @@ function Failure(
 							className={`btn btn-md ${onRetry ? "btn-secondary" : "btn-primary"}`}
 							href={repositoryHref(repository)}
 						>
-							View {repository.fullName} channels
+							View {repository.fullName} documents
 						</a>
 					)}
 					<a className="btn btn-md btn-secondary" href="/">Back to repositories</a>
@@ -318,7 +318,7 @@ function ChannelWorkspace(
 			/>
 		);
 	}
-	if (!loaded) return <Loading label="Opening channel..." />;
+	if (!loaded) return <Loading label="Opening document…" />;
 	let { detail } = loaded;
 	let channel = navigationChannel?.id === detail.channel.id
 		? newestDocument(detail.channel, navigationChannel)
@@ -429,7 +429,7 @@ function DocumentRouteSwap(
 					>
 						{source.page === "document" || source.page === "child"
 							? (
-								<Suspense fallback={<Loading label="Opening document..." />}>
+								<Suspense fallback={<Loading label="Opening document…" />}>
 									<DocumentWorkspaceHost
 										agent={agent}
 										Failure={Failure}
