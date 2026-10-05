@@ -13,6 +13,8 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getRoot, $isElementNode } from "lexical";
 import { $isTabNode, $isTabsNode } from "@chopin/dialect";
 
+import { edgeMask, scrollEdges } from "./tab-edges";
+
 import type { ElementNode, LexicalEditor } from "lexical";
 
 type Group = {
@@ -65,6 +67,7 @@ function Strip(
 ) {
 	let strip = useRef<HTMLDivElement>(null);
 	let buttons = useRef<Array<HTMLButtonElement | null>>([]);
+	let [mask, setMask] = useState<string | undefined>();
 	let activeIndex = group.tabs.findIndex(tab => tab.key === active);
 	let structure = group.tabs.map(tab => tab.key).join(" ");
 	let select = (index: number) => {
@@ -76,14 +79,23 @@ function Strip(
 		let list = strip.current;
 		let activeButton = buttons.current[activeIndex];
 		if (!list || !activeButton) return;
-		let reveal = () => revealInline(list, activeButton);
+		let measure = () =>
+			setMask(edgeMask(scrollEdges(list.scrollLeft, list.clientWidth, list.scrollWidth)));
+		let reveal = () => {
+			revealInline(list, activeButton);
+			measure();
+		};
 		reveal();
+		list.addEventListener("scroll", measure, { passive: true });
 		let observer = new ResizeObserver(reveal);
 		observer.observe(list);
 		for (let button of buttons.current) {
 			if (button) observer.observe(button);
 		}
-		return () => observer.disconnect();
+		return () => {
+			observer.disconnect();
+			list.removeEventListener("scroll", measure);
+		};
 	}, [active, activeIndex, structure]);
 
 	return (
@@ -93,7 +105,8 @@ function Strip(
 			data-focus-boundary=""
 			// The strip is chrome, not content: keep it out of the editable tree.
 			contentEditable={false}
-			className="flex gap-1 overflow-x-auto pb-1 hairline-b"
+			style={mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
+			className="flex gap-1 overflow-x-auto pb-1 hairline-b scroll-smooth motion-reduce:scroll-auto"
 		>
 			{group.tabs.map((tab, position) => (
 				<button
@@ -103,6 +116,7 @@ function Strip(
 					}}
 					type="button"
 					role="tab"
+					title={tab.label || undefined}
 					id={`ace-tab-${tab.key}`}
 					aria-selected={tab.key === active}
 					aria-controls={`ace-panel-${tab.key}`}
@@ -117,7 +131,7 @@ function Strip(
 						else return;
 						event.preventDefault();
 					}}
-					className={`max-w-full shrink-0 whitespace-normal break-words rounded-md px-2.5 py-1 text-left text-sm font-medium transition ${
+					className={`max-w-64 shrink-0 truncate rounded-md px-2.5 py-1 text-left text-sm font-medium transition ${
 						tab.key === active
 							? "bg-selected text-text-primary"
 							: "text-text-quaternary hover:text-text-primary"
