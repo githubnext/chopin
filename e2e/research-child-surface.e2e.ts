@@ -47,8 +47,10 @@ test("authored links open from parent and child documents", async ({ baseURL, jo
 
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
 	let parentLink = parent.getByRole("link", { name: "Parent source", exact: true });
-	let parentPopupPromise = page.waitForEvent("popup");
+	// A click shows where the link goes; opening it is one more deliberate step.
 	await parentLink.click();
+	let parentPopupPromise = page.waitForEvent("popup");
+	await page.getByRole("dialog", { name: "Link" }).getByRole("button", { name: "Open" }).click();
 	let parentPopup = await parentPopupPromise;
 	await expect(parentPopup).toHaveURL("https://example.com/parent-source");
 	expect(await parentPopup.evaluate(() => opener === null)).toBe(true);
@@ -63,8 +65,9 @@ test("authored links open from parent and child documents", async ({ baseURL, jo
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 
 	let childLink = surface.getByRole("link", { name: "Child source", exact: true });
-	let childPopupPromise = page.waitForEvent("popup");
 	await childLink.click();
+	let childPopupPromise = page.waitForEvent("popup");
+	await page.getByRole("dialog", { name: "Link" }).getByRole("button", { name: "Open" }).click();
 	let childPopup = await childPopupPromise;
 	await expect(childPopup).toHaveURL("https://example.com/child-source");
 	await childPopup.close();

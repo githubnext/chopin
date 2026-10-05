@@ -987,6 +987,11 @@
 	background-color: var(--color-brand-wash);
 }
 
+/* The passage a link is being added to, while its field holds the selection. */
+::highlight(plan-link-target) {
+	background-color: var(--color-brand-wash);
+}
+
 /*
  * The same pointer, for a browser with no Highlight API.
  *

@@ -9,10 +9,12 @@ import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection } from "lexical";
+import { useState } from "react";
 
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
 import { SelectionBubble } from "./bubble";
+import { LinkSurface } from "./link";
 import { ResearchComposerSurface } from "./research";
 import { SlashMenu } from "./slash";
 
@@ -27,6 +29,8 @@ export function Toolbar() {
 	let disabled = useCellValue(readOnly$);
 	let options = useCellValue(widgets$);
 	let [editor] = useLexicalComposerContext();
+	// The link editor sits where the bubble would, so only one shows.
+	let [linking, setLinking] = useState(false);
 
 	let threads = options.threads;
 
@@ -64,7 +68,8 @@ export function Toolbar() {
 
 	return (
 		<>
-			<SelectionBubble disabled={disabled} onComment={comment} />
+			<SelectionBubble disabled={disabled} hidden={linking} onComment={comment} />
+			<LinkSurface disabled={disabled} onEditing={setLinking} />
 			<SlashMenu
 				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}
 				disabled={disabled}
