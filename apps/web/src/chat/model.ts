@@ -129,11 +129,25 @@ const RUNNING_LABELS: { [name: string]: string } = {
 	read_implementation_graph: "Reading tasks",
 	edit_implementation_graph: "Editing tasks",
 	revise_open_decision: "Revising a decision",
+	draft_heading: "Drafting a heading",
+	refine_decision: "Refining a decision",
+	write_decision_prose: "Writing decision prose",
+};
+
+const GITHUB_LABELS: { [name: string]: string } = {
+	get_file_contents: "Reading a GitHub file",
+	list_pull_requests: "Listing pull requests",
+	pull_request_read: "Reading a pull request",
+	search_code: "Searching GitHub code",
+	list_commits: "Reading commit history",
 };
 
 /** What a running tool is doing, in sentence case. */
 export function runningLabel(name: string): string {
-	return RUNNING_LABELS[name] ?? toolCopy(name);
+	let known = RUNNING_LABELS[name];
+	if (known) return known;
+	if (name.startsWith("github/")) return GITHUB_LABELS[name.slice(7)] ?? "Using GitHub";
+	return `Using ${toolCopy(name).toLowerCase()}`;
 }
 
 /** The question prompts an `ask` call carries, so its live cards can be found. */
@@ -175,19 +189,24 @@ export function duration(milliseconds: number): string {
 	return `${(milliseconds / 1_000).toFixed(1).replace(/\.0$/, "")}s`;
 }
 
-/** Open decision cards a waiting `ask` call is blocked on, matched by prompt. */
+/**
+ * Open decision cards a waiting `ask` call is blocked on. A card matches when any of
+ * its questions asks one of the call's prompts; the count is of distinct cards, or of
+ * distinct prompts while no card has arrived yet.
+ */
 export function waitingCards(
 	prompts: string[],
-	cards: Array<{ id: string; prompt?: string; open: boolean }>,
-): string[] {
-	let ids: string[] = [];
-	for (let prompt of prompts) {
-		let card = cards.findLast(item =>
-			item.open && item.prompt === prompt && !ids.includes(item.id)
-		);
-		if (card) ids.push(card.id);
-	}
-	return ids;
+	cards: Array<{ id: string; prompts: string[]; open: boolean }>,
+): { ids: string[]; count: number } {
+	let asked = new Set(prompts.map(prompt => prompt.trim()).filter(Boolean));
+	let ids = [
+		...new Set(
+			cards
+				.filter(card => card.open && card.prompts.some(prompt => asked.has(prompt.trim())))
+				.map(card => card.id),
+		),
+	];
+	return { ids, count: ids.length || asked.size };
 }
 
 export function waitingText(count: number): string {

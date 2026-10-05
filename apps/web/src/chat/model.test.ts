@@ -148,7 +148,10 @@ describe("tool-run summaries", () => {
 			{ id: "t2", name: "edit_plan", status: "running" },
 		])).toEqual({ state: "running", label: "Editing the document", completed: 1 });
 		expect(runningLabel("read_repository_file")).toBe("Reading a file");
-		expect(runningLabel("github/get_file_contents")).toBe("Github get file contents");
+		expect(runningLabel("github/get_file_contents")).toBe("Reading a GitHub file");
+		expect(runningLabel("github/unknown_tool")).toBe("Using GitHub");
+		expect(runningLabel("write_decision_prose")).toBe("Writing decision prose");
+		expect(runningLabel("bash")).toBe("Using bash");
 	});
 
 	it("treats a live ask as waiting on people, with the prompts it asked", () => {
@@ -164,14 +167,21 @@ describe("tool-run summaries", () => {
 			.toEqual({ state: "waiting", prompts: [] });
 	});
 
-	it("matches waiting prompts to the latest open card for each", () => {
+	it("matches distinct open cards when any of their questions was asked", () => {
 		let cards = [
-			{ id: "old", prompt: "Which database?", open: true },
-			{ id: "db", prompt: "Which database?", open: true },
-			{ id: "region", prompt: "Which region?", open: false },
+			{ id: "old", prompts: ["Which database?"], open: true },
+			{ id: "pair", prompts: ["Which cache?", " Which database? "], open: true },
+			{ id: "region", prompts: ["Which region?"], open: false },
 		];
-		expect(waitingCards(["Which database?", "Which region?"], cards)).toEqual(["db"]);
-		expect(waitingCards(["Which database?", "Which database?"], cards)).toEqual(["db", "old"]);
+		expect(waitingCards(["Which database?", "Which region?"], cards))
+			.toEqual({ ids: ["old", "pair"], count: 2 });
+		expect(waitingCards(["Which cache?", "Which database?"], [cards[1]!]))
+			.toEqual({ ids: ["pair"], count: 1 });
+	});
+
+	it("counts distinct asked prompts until a card arrives", () => {
+		expect(waitingCards(["Which region?", " Which region?", "Which cache?"], []))
+			.toEqual({ ids: [], count: 2 });
 	});
 
 	it("words the wait for one or several decisions", () => {
