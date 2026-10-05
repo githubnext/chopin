@@ -347,6 +347,7 @@ export function hosted(
 				let located = await locatedChannel(caller, id);
 				if (!located || located === "forbidden") return undefined;
 				let { channel } = located;
+				let url = documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug);
 
 				let live = Rooms.get(channel.id)?.plan;
 				if (live) {
@@ -360,6 +361,7 @@ export function hosted(
 								source: Plan.source(live),
 								revision: live.revision,
 								archivedAt: channel.archivedAt,
+								url,
 							}));
 					} catch {
 						return undefined;
@@ -384,6 +386,7 @@ export function hosted(
 						source: projected.source,
 						revision: projected.revision,
 						archivedAt: channel.archivedAt,
+						url,
 					});
 				} catch {
 					return undefined;

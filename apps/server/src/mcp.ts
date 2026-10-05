@@ -48,10 +48,10 @@ export type DocumentReader<Caller> = {
 		repository: string,
 		includeArchived?: boolean,
 	): Promise<DocumentSummary[] | "forbidden">;
-	read(caller: Caller, id: string): Promise<Document | undefined>;
+	read(caller: Caller, id: string): Promise<LinkedDocument | undefined>;
 };
 
-export type CreatedDocument = Document & { url: string };
+export type LinkedDocument = Document & { url: string };
 
 export type Implementation = {
 	document: Document;
@@ -101,8 +101,8 @@ export type CreateDocument<Caller> = {
 		caller: Caller,
 		input: CreateDocumentInput,
 	): Promise<
-		| { kind: "created"; document: CreatedDocument }
-		| { kind: "replayed"; document: CreatedDocument }
+		| { kind: "created"; document: LinkedDocument }
+		| { kind: "replayed"; document: LinkedDocument }
 		| { kind: "conflict" }
 		| { kind: "title-taken" }
 		| { kind: "forbidden" }
@@ -312,8 +312,9 @@ export const TOOLS: Tool[] = [
 				brief: BRIEF,
 				source: { type: "string" },
 				revision: { type: "integer", minimum: 0 },
+				url: { type: "string" },
 			},
-			required: ["id", "title", "source", "revision"],
+			required: ["id", "title", "source", "revision", "url"],
 			additionalProperties: false,
 		},
 	},
