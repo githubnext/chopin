@@ -456,17 +456,16 @@
 	box-shadow: var(--shadow-resting);
 }
 
-/* The button is the hit area; on a coarse pointer it grows to 44px around the 24px chip. */
+/* The button is the hit area: 44px on a coarse pointer, kept inside the document, around a 24px chip. */
 .plan-comment-button {
 	pointer-events: auto;
 	position: absolute;
-	display: grid;
-	place-items: center;
 	border-radius: var(--radius-md);
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 .plan-comment-chip {
+	position: absolute;
 	display: inline-flex;
 	height: 24px;
 	align-items: center;
@@ -476,11 +475,6 @@
 	font-size: var(--text-xs);
 	font-variant-numeric: tabular-nums;
 	line-height: 1;
-}
-
-/* A slim chip fits the content padding; its touch area extends toward the page edge. */
-.plan-comment-button[data-slim] {
-	justify-items: start;
 }
 
 .plan-comment-button[data-slim] .plan-comment-chip {
