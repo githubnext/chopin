@@ -359,12 +359,8 @@ export function Workspace(
 									<span aria-hidden="true" className="workspace-working-indicator ml-1 shrink-0" />
 								)}
 								{destination === "chat" && chatActivity.unread > 0 && (
-									<span
-										aria-hidden="true"
-										className={`${motionContract("feedback").className} ml-1`}
-										data-motion-feedback="count"
-									>
-										{chatActivity.unread}
+									<span aria-hidden="true" className="ml-1">
+										<Count>{chatActivity.unread}</Count>
 									</span>
 								)}
 							</button>
