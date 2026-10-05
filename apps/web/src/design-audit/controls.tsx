@@ -1,9 +1,31 @@
 import { CheckIcon, ChevronIcon, LoaderIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { StaticPlanEditor } from "@chopin/editor/static";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@chopin/visuals";
 
+import { DecisionViewControl } from "../decision-view-control";
 import { AuditPlate, StateLabel } from "./frame";
 
 import type { ReactNode } from "react";
+
+const TABS = [
+	'<Tabs id="01K0N4W3B7P27CBAEC7A8C8WF0">',
+	'<Tab id="01K0N4W3B7P27CBAEC7A8C8WF1" label="macOS">',
+	"",
+	"Run the installer, then open the app from Applications.",
+	"",
+	"</Tab>",
+	'<Tab id="01K0N4W3B7P27CBAEC7A8C8WF2" label="Web">',
+	"",
+	"Open the document in any current browser.",
+	"",
+	"</Tab>",
+	'<Tab id="01K0N4W3B7P27CBAEC7A8C8WF3" label="A deliberately long label for the third tab of this group">',
+	"",
+	"Long labels wrap inside the strip.",
+	"",
+	"</Tab>",
+	"</Tabs>",
+].join("\n") + "\n";
 
 const STATES = ["Default", "Hover", "Active", "Focus", "Disabled"] as const;
 
@@ -232,34 +254,26 @@ export function Controls() {
 			</AuditPlate>
 
 			<AuditPlate
-				description="Destination and authored-content tab treatments."
+				description="The real document view switcher and the real authored Tabs widget."
 				item="tabs"
 				title="Tabs"
 			>
 				<div className="design-audit-tab-specimens">
 					<div>
-						<StateLabel>Selected · focus · disabled</StateLabel>
-						<div aria-label="Document views" className="design-audit-tabs" role="tablist">
-							<button aria-selected="true" role="tab" type="button">Document</button>
-							<button aria-selected="false" data-audit-state="focus" role="tab" type="button">
-								Decisions <span>3</span>
-							</button>
-							<button aria-selected="false" disabled role="tab" type="button">Unavailable</button>
-						</div>
+						<StateLabel>Document view switcher · Document selected</StateLabel>
+						<DecisionViewControl onView={() => {}} unanswered={3} view="plan" />
 					</div>
-					<div className="design-audit-tab-overflow">
-						<StateLabel>Overflow</StateLabel>
-						<div
-							aria-label="Overflowing document views"
-							className="design-audit-tabs"
-							role="tablist"
-						>
-							<button aria-selected="true" role="tab" type="button">Document</button>
-							<button aria-selected="false" role="tab" type="button">Resolved decisions</button>
-							<button aria-selected="false" role="tab" type="button">Resolved comments</button>
-						</div>
+					<div>
+						<StateLabel>Document view switcher · Decisions selected</StateLabel>
+						<DecisionViewControl onView={() => {}} unanswered={3} view="decisions" />
+					</div>
+					<div>
+						<StateLabel>Document view switcher · no unanswered decisions</StateLabel>
+						<DecisionViewControl onView={() => {}} unanswered={0} view="plan" />
 					</div>
 				</div>
+				<StateLabel>Authored tabs · first tab selected, long labels wrap</StateLabel>
+				<StaticPlanEditor source={TABS} />
 			</AuditPlate>
 
 			<AuditPlate

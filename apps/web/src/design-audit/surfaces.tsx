@@ -228,6 +228,10 @@ const RUN_STAGES: Chat.RunStage[] = [
 	{ id: "r:draft-2", name: "draft-2", status: "running", started: 1_620 },
 ];
 
+/** Fixture seconds are offsets; place them just before now so live durations read as minutes. */
+let AUDIT_NOW = Math.floor(Date.now() / 1000);
+let at = (offset: number) => AUDIT_NOW - 2_200 + offset;
+
 function run(
 	status: Chat.Run["status"],
 	stages: Chat.RunStage[],
@@ -237,15 +241,21 @@ function run(
 		waiting?: number;
 	} = {},
 ): Chat.Run {
-	let ended = ["finished", "blocked", "failed", "stopped"].includes(status) ? { ended: 2_100 } : {};
+	let ended = ["finished", "blocked", "failed", "stopped"].includes(status)
+		? { ended: at(2_100) }
+		: {};
 	return {
 		id: `audit-${name}-${status}`,
 		name,
 		status,
-		started,
-		updated: 2_100,
+		started: at(started),
+		updated: at(2_100),
 		...ended,
-		stages,
+		stages: stages.map(({ ended: stageEnded, ...stage }): Chat.RunStage => ({
+			...stage,
+			...(stage.started === undefined ? {} : { started: at(stage.started) }),
+			...(stageEnded === undefined ? {} : { ended: at(stageEnded) }),
+		})),
 		waiting,
 	};
 }
@@ -410,11 +420,11 @@ function Feedback() {
 			>
 				<div className="design-audit-status-grid">
 					<div>
-						<StateLabel>Loading</StateLabel>
+						<StateLabel>Loading · quiet dot, label on hover</StateLabel>
 						<PlanStatus synced={false} />
 					</div>
 					<div>
-						<StateLabel>Busy</StateLabel>
+						<StateLabel>Busy · quiet dot, label on hover</StateLabel>
 						<PlanStatus busy synced />
 					</div>
 					<div>
