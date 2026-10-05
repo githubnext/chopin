@@ -83,3 +83,12 @@ test("uses token-only compact pill styles with bounded label truncation", async 
 	expect(iconLabelCss).toContain("text-overflow: ellipsis;");
 	expect(css).not.toMatch(/#[\da-f]{3,8}|(?:oklch|rgb|hsl)\(/i);
 });
+
+test("marks its size so the compact status label can be styled", () => {
+	expect(renderToStaticMarkup(<Badge icon={CheckIcon} label="Ready" />)).toContain(
+		'data-size="md"',
+	);
+	expect(renderToStaticMarkup(<Badge icon={CheckIcon} label="Ready" size="sm" />)).toContain(
+		'data-size="sm"',
+	);
+});
