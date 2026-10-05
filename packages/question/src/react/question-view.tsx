@@ -14,6 +14,8 @@ import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@ch
 
 import { INPUT_EXPIRY_MS, MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
+import { InlineCode } from "./inline-code";
+import { plainInlineText } from "./inline-segments";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 import { ResolvedActions } from "./resolved-actions";
 import type { VisibleSuggestion } from "./project-suggestion";
@@ -199,11 +201,17 @@ function Choices(
 						/>
 						<Key>{letter(index)}</Key>
 						<span className="question-text">
-							<span className="question-label">{option.label}</span>
+							<span className="question-label">
+								<InlineCode text={option.label} />
+							</span>
 							{!custom && selected && option.id === suggestedOptionId && (
 								<span className="text-sm text-text-tertiary">{" from chat"}</span>
 							)}
-							{option.description && <span className="question-desc">{option.description}</span>}
+							{option.description && (
+								<span className="question-desc">
+									<InlineCode text={option.description} />
+								</span>
+							)}
 						</span>
 						<span aria-hidden="true" className="question-check">
 							<CheckIcon />
@@ -494,7 +502,7 @@ function Resolved(
 						key={id ?? index}
 						id={id}
 						count={(id ? places?.[id] : undefined) ?? 0}
-						label={`${answer.question} — ${chosen}`}
+						label={`${plainInlineText(answer.question)} — ${plainInlineText(chosen)}`}
 						className=""
 						onEnter={onQuestionEnter}
 						onLeave={onQuestionLeave}
@@ -504,8 +512,12 @@ function Resolved(
 							/* The question and what was chosen are one decision, so they are
 						    one target: two stacked buttons led to the same prose. */
 						}
-						<p className="m-0 text-sm text-text-secondary">{answer.question}</p>
-						<p className="m-0 text-sm font-medium text-text-primary">{chosen}</p>
+						<p className="m-0 text-sm text-text-secondary">
+							<InlineCode text={answer.question} />
+						</p>
+						<p className="m-0 text-sm font-medium text-text-primary">
+							<InlineCode text={chosen} />
+						</p>
 					</Related>
 				);
 			})}
@@ -572,7 +584,9 @@ function Expired({ definition }: { definition: Definition }) {
 	return (
 		<div className="space-y-2 px-3 py-2.5">
 			{definition.questions.map(question => (
-				<p key={question.id} className="m-0 text-sm text-text-secondary">{question.question}</p>
+				<p key={question.id} className="m-0 text-sm text-text-secondary">
+					<InlineCode text={question.question} />
+				</p>
 			))}
 			<p className="m-0 text-sm text-text-primary">{EXPIRED_NOTE}</p>
 		</div>
@@ -784,18 +798,19 @@ export function QuestionView(props: QuestionViewProps) {
 									<Related
 										id={current.id}
 										count={places?.[current.id] ?? 0}
-										label={current.question}
+										label={plainInlineText(current.question)}
 										className="question-title-link"
 										inline
 										onSelect={onQuestionSelect}
 									>
-										{current.question}
+										<InlineCode text={current.question} />
 									</Related>
 								</h4>
 								{current.multiple && <p className="question-hint">Choose any</p>}
 								{previousAnswer && (
 									<p className="question-hint">
-										Previously: {previousAnswer.labels.join(", ")} · @{previousAnswer.by}
+										Previously: {plainInlineText(previousAnswer.labels.join(", "))}{" "}
+										· @{previousAnswer.by}
 									</p>
 								)}
 								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}

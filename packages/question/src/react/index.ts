@@ -5,6 +5,8 @@
  * helpers without pulling React into a headless process.
  */
 
+export { InlineCode } from "./inline-code";
+export { plainInlineText } from "./inline-segments";
 export { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 export type {
 	SuggestionEditAction,
