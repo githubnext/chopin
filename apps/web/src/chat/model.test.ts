@@ -8,8 +8,8 @@ function entry(id: string, author: Chat.Author, text = id): Chat.Entry {
 	return { id, author, text, ts: 1_700_000_000 };
 }
 
-function working() {
-	return { id: "turn-1", started: 1_700_000_001 };
+function working(entryOffset = 1) {
+	return { id: "turn-1", started: 1_700_000_001, entryOffset };
 }
 
 function running(name: string): Chat.Activity[] {
@@ -141,7 +141,7 @@ describe("transcript groups", () => {
 				},
 			],
 			[],
-			working(),
+			working(2),
 		);
 
 		expect(result).toMatchObject([
@@ -162,15 +162,22 @@ describe("transcript groups", () => {
 					tools: [{ id: "old-tool", name: "read_plan", status: "running" }],
 				},
 				{ ...entry("prompt", { kind: "member", handle: "ana" }), ts: 1_700_000_001 },
+				{ ...entry("room", { kind: "member", handle: "sam" }), ts: 1_700_000_001 },
+				{
+					...entry("current", { kind: "agent" }, ""),
+					ts: 1_700_000_001,
+					tools: [{ id: "current-tool", name: "edit_plan", status: "running" }],
+				},
 			],
 			[],
-			working(),
+			working(2),
 		);
 
 		expect(result.at(-1)).toMatchObject({
 			kind: "messages",
-			messages: [{ id: "turn-1", working: true }],
+			messages: [{ id: "current", working: true, tools: [{ id: "current-tool" }] }],
 		});
+		expect(JSON.stringify(result[0])).not.toContain('"working":true');
 	});
 
 	it("uses streamed prose as the active row instead of adding a second one", () => {
@@ -222,28 +229,59 @@ describe("transcript groups", () => {
 		expect(messages.find(item => item.id === "later-tool")?.tools).toBeUndefined();
 		expect(messages.filter(item => item.working)).toHaveLength(1);
 
-		let completed = group([
-			entry("prompt", { kind: "member", handle: "ana" }),
-			{
-				...entry("first-tool", { kind: "agent" }, ""),
-				ts: 1_700_000_001,
-				tools: [{ id: "read", name: "read_plan", status: "done" }],
-			},
-			{
-				...entry("later-tool", { kind: "agent" }, ""),
-				ts: 1_700_000_003,
-				tools: [{ id: "edit", name: "edit_plan", status: "running" }],
-			},
-		], []);
+		let completed = group(
+			[
+				entry("prompt", { kind: "member", handle: "ana" }),
+				{
+					...entry("first-tool", { kind: "agent" }, ""),
+					ts: 1_700_000_001,
+					tools: [{ id: "read", name: "read_plan", status: "done" }],
+				},
+				{
+					...entry("later-tool", { kind: "agent" }, ""),
+					ts: 1_700_000_003,
+					tools: [{ id: "edit", name: "edit_plan", status: "running" }],
+				},
+			],
+			[],
+			undefined,
+			[{
+				turnId: "turn-1",
+				entryOffset: 1,
+				endOffset: 3,
+				anchorId: "first-tool",
+			}],
+		);
 		let completedMessages = completed.flatMap(item =>
 			item.kind === "messages" ? item.messages : []
 		);
-		expect(completedMessages.find(item => item.id === "first-tool")?.tools).toMatchObject([{
-			id: "read",
-		}]);
-		expect(completedMessages.find(item => item.id === "later-tool")?.tools).toMatchObject([{
-			id: "edit",
-		}]);
+		expect(completedMessages.find(item => item.id === "first-tool")?.tools).toMatchObject([
+			{ id: "read" },
+			{ id: "edit" },
+		]);
+		expect(completedMessages.find(item => item.id === "later-tool")?.tools).toBeUndefined();
+	});
+
+	it("keeps completed tools on earlier prose when a later entry owns the call", () => {
+		let entries = [
+			entry("prompt", { kind: "member", handle: "ana" }),
+			entry("prose", { kind: "agent" }, "I will inspect this."),
+			{
+				...entry("tool-entry", { kind: "agent" }, ""),
+				tools: [{ id: "read", name: "read_plan", status: "done" as const }],
+			},
+		];
+		let retained = [{
+			turnId: "turn-1",
+			entryOffset: 1,
+			endOffset: 3,
+			anchorId: "prose",
+		}];
+		let messages = group(entries, [], undefined, retained).flatMap(item =>
+			item.kind === "messages" ? item.messages : []
+		);
+		expect(messages.find(item => item.id === "prose")?.tools).toMatchObject([{ id: "read" }]);
+		expect(messages.find(item => item.id === "tool-entry")?.tools).toBeUndefined();
 	});
 });
 

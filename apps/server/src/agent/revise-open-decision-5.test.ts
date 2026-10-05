@@ -65,7 +65,13 @@ test("a queued direct tool cannot write after the member turn changes", async ()
 		title: "Why now?",
 	}, {} as never)).then(String);
 	await entered.promise;
-	context.plan.chat.turn = { id: "turn-2", handle: "ana", started: 2, responded: false };
+	context.plan.chat.turn = {
+		id: "turn-2",
+		handle: "ana",
+		started: 2,
+		entryOffset: 0,
+		responded: false,
+	};
 	release.resolve();
 	let errors = spyOn(console, "error").mockImplementation(() => {});
 	try {

@@ -20,7 +20,13 @@ export function createReviseOpenDecisionFixture(
 			options,
 		});
 		context.plan.chat.busy = true;
-		context.plan.chat.turn = { id: "turn-1", handle: "ana", started: 1, responded: false };
+		context.plan.chat.turn = {
+			id: "turn-1",
+			handle: "ana",
+			started: 1,
+			entryOffset: 0,
+			responded: false,
+		};
 		let request: { text: string } | undefined = {
 			text:
 				"@chopin revise the question for the Authentication decision and add an option to the Authentication decision",

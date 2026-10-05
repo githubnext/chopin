@@ -17,7 +17,7 @@ import { clearSourceHighlight, highlightSource } from "../conversation-plan/sour
 import type { ChatDestination } from "../conversation-plan/source";
 
 import type { Chat, ConversationPlan } from "@chopin/protocol";
-import type { Group, Message } from "./model";
+import type { CompletedWork, Group, Message } from "./model";
 import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
 import type { Transport } from "@chopin/question/react";
 import { ActivityLine, DecisionPrompt } from "./decision-entry";
@@ -275,6 +275,7 @@ export function Transcript(
 	{
 		active,
 		canEdit,
+		completedWork,
 		conversationPlan,
 		conversationPlanJobs,
 		decisions,
@@ -292,6 +293,7 @@ export function Transcript(
 	}: {
 		active: boolean;
 		canEdit?: boolean;
+		completedWork?: CompletedWork[];
 		conversationPlan?: ConversationPlan.State;
 		conversationPlanJobs?: ConversationPlan.Job[];
 		onCardLink?: (link: CardLink) => void;
@@ -308,7 +310,7 @@ export function Transcript(
 		handle: string;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
-		working?: Pick<Chat.Turn, "id" | "started">;
+		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
 		sourceDestination?: ChatDestination;
 	},
 ) {
@@ -317,7 +319,7 @@ export function Transcript(
 	let pinned = useRef(true);
 	let sourceOwner = useRef({});
 	let groups = researchTranscript(
-		group(entries, queued, working),
+		group(entries, queued, working, completedWork),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
 	let latestPrompt = new Map<string, string>();

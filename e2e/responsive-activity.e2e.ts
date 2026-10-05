@@ -22,6 +22,7 @@ async function interceptBusyHistory(page: Page) {
 						handle: "ana",
 						responded: false,
 						started: 1_700_000_000,
+						entryOffset: (frame.entries as unknown[]).length,
 					},
 				};
 			}
@@ -79,7 +80,13 @@ test("busy history exposes working state without creating false unread activity"
 		kind: "chat:state",
 		ts: 0,
 		busy: true,
-		turn: { id: "new-turn", handle: "ana", responded: false, started: 1_700_000_001 },
+		turn: {
+			id: "new-turn",
+			handle: "ana",
+			responded: false,
+			started: 1_700_000_001,
+			entryOffset: 0,
+		},
 	});
 	await expect(chat).toHaveAccessibleName("Chat, Planner working");
 });

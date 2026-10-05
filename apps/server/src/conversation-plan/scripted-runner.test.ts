@@ -79,7 +79,7 @@ test("missing scripts skip, malformed scripts fail, and an active turn is never 
 	expect(await run(heading(), "prompt")).toMatchObject({ status: "skipped" });
 	await writeFile(join(path, "heading.json"), "{not JSON");
 	expect(await run(heading(), "prompt")).toMatchObject({ status: "failed" });
-	let turn = { id: "existing", handle: "chopin", started: 1, responded: false };
+	let turn = { id: "existing", handle: "chopin", started: 1, entryOffset: 0, responded: false };
 	plan.chat.turn = turn;
 	expect(await run(heading(), "prompt")).toMatchObject({ status: "failed" });
 	expect(plan.chat.turn).toBe(turn);
@@ -132,7 +132,7 @@ test("a replaced job keeps its new turn and output after an old scripted call fi
 	let pending = run(heading(), "prompt");
 	await entered.promise;
 	let replacement = { ...heading(), id: "heading:document:m2" };
-	let turn = { id: "new-turn", handle: "chopin", started: 2, responded: false };
+	let turn = { id: "new-turn", handle: "chopin", started: 2, entryOffset: 0, responded: false };
 	plan.chat.job = replacement;
 	plan.chat.turn = turn;
 	plan.chat.jobOutput = "new output";
