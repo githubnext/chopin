@@ -61,7 +61,7 @@ export function transcriptReducer(
 				? state.completedWork.filter(item =>
 					action.entries.some(entry => entry.id === item.anchorId)
 				)
-				: finish(state, action.turn?.entryOffset ?? action.entries.length, action.entries);
+				: finish(state, action.turn?.entryOffset ?? state.entries.length, action.entries);
 			return withAnchor({
 				entries: action.entries,
 				turn: action.turn,

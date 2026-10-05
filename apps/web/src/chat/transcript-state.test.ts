@@ -86,4 +86,36 @@ describe("transcript work retention", () => {
 		});
 		expect(other.completedWork).toEqual([]);
 	});
+
+	it("does not pull another finished turn into an offline turn's work span", () => {
+		let local = [
+			entry("prompt-a", { kind: "member", handle: "ana" }),
+			entry("prose-a", { kind: "agent" }, "Checking A."),
+			{
+				...entry("tool-a", { kind: "agent" }),
+				tools: [{ id: "read-a", name: "read_plan", status: "done" as const }],
+			},
+		];
+		let state = transcriptReducer(initialTranscript, { kind: "history", entries: local, turn });
+		let history = [
+			...local,
+			entry("prompt-b", { kind: "member", handle: "sam" }),
+			{
+				...entry("tool-b", { kind: "agent" }),
+				tools: [{ id: "read-b", name: "read_plan", status: "done" as const }],
+			},
+		];
+		state = transcriptReducer(state, { kind: "history", entries: history });
+
+		expect(state.completedWork).toMatchObject([{ anchorId: "prose-a", endOffset: 3 }]);
+		let messages = group(state.entries, [], state.turn, state.completedWork).flatMap(item =>
+			item.kind === "messages" ? item.messages : []
+		);
+		expect(messages.find(message => message.id === "prose-a")?.tools).toMatchObject([{
+			id: "read-a",
+		}]);
+		expect(messages.find(message => message.id === "tool-b")?.tools).toMatchObject([{
+			id: "read-b",
+		}]);
+	});
 });

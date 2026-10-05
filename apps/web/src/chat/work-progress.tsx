@@ -8,12 +8,14 @@ import { motionImmediately } from "../motion-input";
 
 import type { Chat } from "@chopin/protocol";
 
-function ToolCall({ active, tool }: { active: boolean; tool: Chat.Activity }) {
+function ToolCall(
+	{ active, disconnected, tool }: { active: boolean; disconnected: boolean; tool: Chat.Activity },
+) {
 	let [open, setOpen] = useState(false);
 	let contentId = useId();
 	let hasDetails = tool.args !== undefined || tool.result !== undefined;
 	let status = tool.status === "running"
-		? active ? "Running" : "Interrupted"
+		? disconnected ? "Last seen running" : active ? "Running" : "Interrupted"
 		: tool.status === "failed"
 		? "Failed"
 		: "Done";
@@ -33,15 +35,17 @@ function ToolCall({ active, tool }: { active: boolean; tool: Chat.Activity }) {
 	);
 
 	return (
-		<li className="chat-tool-call" data-tool-status={active ? tool.status : status.toLowerCase()}>
+		<li
+			className="chat-tool-call"
+			data-tool-status={active || disconnected ? tool.status : status.toLowerCase()}
+		>
 			{hasDetails
 				? (
 					<button
 						aria-controls={contentId}
 						aria-expanded={open}
 						className="chat-tool-call-toggle"
-						onClick={() =>
-							setOpen(value => !value)}
+						onClick={() => setOpen(value => !value)}
 						type="button"
 					>
 						{row}
@@ -77,8 +81,9 @@ function Lattice() {
 }
 
 export function WorkProgress(
-	{ active, responseSeen, streaming, tools }: {
+	{ active, disconnected = false, responseSeen, streaming, tools }: {
 		active: boolean;
+		disconnected?: boolean;
 		responseSeen: boolean;
 		streaming: boolean;
 		tools: Chat.Activity[];
@@ -86,14 +91,18 @@ export function WorkProgress(
 ) {
 	let [open, setOpen] = useState(false);
 	let contentId = useId();
-	let summary = summarize(tools, active);
+	let summary = summarize(tools, active || disconnected);
 	let phase = workPhase(tools, streaming, active, responseSeen);
-	if (!active && !tools.length) return null;
+	if (!active && !disconnected && !tools.length) return null;
 
 	let headline = active
 		? phase!
+		: disconnected && !tools.length
+		? "Connection lost"
 		: `Work details · ${summary.count} ${summary.count === 1 ? "action" : "actions"}`;
-	let details = active ? "Details" : summary.toolTime > 0
+	let details = active ? "Details" : disconnected && tools.length
+		? "Connection lost"
+		: summary.toolTime > 0
 		? `${duration(summary.toolTime)} tool time`
 		: undefined;
 	let status = summary.failures > 0
@@ -105,7 +114,7 @@ export function WorkProgress(
 	let row = (
 		<>
 			{active && <Lattice />}
-			<span aria-live="polite" className="chat-work-headline">
+			<span className="chat-work-headline">
 				<span className="chat-work-headline-motion" key={headline}>{headline}</span>
 			</span>
 			{count && <span className="chat-work-meta tabular-nums">{count}</span>}
@@ -115,7 +124,7 @@ export function WorkProgress(
 	);
 
 	return (
-		<div className="chat-work" data-work-active={active}>
+		<div className="chat-work" data-work-active={active} data-work-disconnected={disconnected}>
 			{tools.length > 0
 				? (
 					<button
@@ -145,7 +154,9 @@ export function WorkProgress(
 						surface="chat-tools"
 					>
 						<ul aria-label="Tool calls" className="chat-tool-list">
-							{tools.map(tool => <ToolCall active={active} key={tool.id} tool={tool} />)}
+							{tools.map(tool => (
+								<ToolCall active={active} disconnected={disconnected} key={tool.id} tool={tool} />
+							))}
 						</ul>
 					</MotionDisclosure>
 				</div>
