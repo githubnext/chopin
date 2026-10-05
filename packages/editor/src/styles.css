@@ -775,7 +775,7 @@
 }
 
 .plan-decisions-content {
-	padding: 3rem var(--plan-gutter) 60vh;
+	padding: 1.5rem var(--plan-gutter) 60vh;
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
 }
