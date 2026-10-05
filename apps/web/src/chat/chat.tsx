@@ -36,15 +36,18 @@ import {
 import {
 	acknowledgeDraft,
 	addressedOutsideReferences,
+	addressesPlanner,
 	boundedChatError,
 	chatSendPayload,
 	insertReference,
 	MAX_REFERENCES,
+	PLANNER_UNAVAILABLE_NOTICE,
 	prepareDraftSubmission,
 	reconcileReferenceDrafts,
 	referenceTrigger,
 	referenceTriggerKey,
 	reviseComposerDraft,
+	withNoticesAfter,
 } from "./references";
 import { RunStack } from "./run-card";
 import { Transcript } from "./transcript";
@@ -141,6 +144,7 @@ export function Chat(
 	let [transcript, dispatchTranscript] = useReducer(transcriptReducer, initialTranscript);
 	let { entries, turn } = transcript;
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
+	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
 	let [busy, setBusy] = useState(false);
 	let [runs, setRuns] = useState<Wire.Runs>();
 	let counts = runCounts(runs);
@@ -345,6 +349,18 @@ export function Chat(
 		setDraft(submitted);
 		setSubmitting(true);
 		setSendError(undefined);
+
+		if (!agent && addressesPlanner(payload)) {
+			setUnanswered(current => ({
+				...current,
+				[payload.requestId]: {
+					id: `unanswered-${payload.requestId}`,
+					author: { kind: "system" },
+					text: PLANNER_UNAVAILABLE_NOTICE,
+					ts: Date.now(),
+				},
+			}));
+		}
 		if (!sendAcknowledgements) {
 			wire.send("chat:send", payload);
 			clearSubmittedDraft(submitted);
@@ -453,7 +469,7 @@ export function Chat(
 				: undefined}
 			researchOffers={researchOffers}
 			sourceDestination={sourceDestination}
-			entries={entries}
+			entries={withNoticesAfter(entries, unanswered)}
 			completedWork={transcript.completedWork}
 			suspendedWork={suspendedWork}
 			handle={handle}
