@@ -1,5 +1,6 @@
 import { ChopinMark } from "./agent-mark";
-import { useEffect, useState } from "react";
+import { Face } from "@chopin/editor";
+import { useEffect } from "react";
 
 import { referenceOptionId } from "./reference-picker";
 
@@ -7,29 +8,6 @@ import type { MentionCandidate } from "./mentions";
 
 /** At most this many rows show before the list scrolls: 8 × 2rem plus the 0.25rem padding. */
 const LIST_HEIGHT = "16.5rem";
-
-function Avatar({ login }: { login: string }) {
-	let [failed, setFailed] = useState(false);
-	if (failed) {
-		return (
-			<span
-				aria-hidden="true"
-				className="grid size-5 shrink-0 place-items-center rounded-md bg-selected text-xs font-medium text-text-secondary uppercase"
-			>
-				{login[0]}
-			</span>
-		);
-	}
-	return (
-		<img
-			alt=""
-			className="block size-5 shrink-0 rounded-md bg-selected"
-			onError={() => setFailed(true)}
-			referrerPolicy="no-referrer"
-			src={`https://github.com/${encodeURIComponent(login)}.png?size=40`}
-		/>
-	);
-}
 
 export function MentionPicker(
 	{
@@ -83,7 +61,7 @@ export function MentionPicker(
 									<ChopinMark circle />
 								</span>
 							)
-							: <Avatar login={option.login} />}
+							: <Face decorative handle={option.login} size={20} titled={false} />}
 						<span className="min-w-0 flex-1 truncate">{option.login}</span>
 					</button>
 				))}

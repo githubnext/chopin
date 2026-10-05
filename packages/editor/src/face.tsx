@@ -13,17 +13,12 @@
  * answered rather than who is speaking — and a person with a photograph would
  * be the same shape as the agent.
  *
- * No lettering. Initials were 8px inside a 20px mark and the scale now stops at
- * 13px, so they either sat off the scale or the mark grew to 28px and took that
- * width from every message in the rail. Identity rests on the photograph, the
- * shape, the account colour and the name — which is beside the mark everywhere
- * except the presence stack, where hovering is the only way to tell two people
- * on neighbouring account colours apart.
+ * Until the photograph arrives, and for good if it never does, the mark is a
+ * neutral square carrying the person's initial, so a dead URL never shows the
+ * browser's broken-image glyph.
  */
 
 import { useState } from "react";
-
-import { color } from "./cursor";
 
 /** Retina-sharp at the rendered size. */
 function photograph(handle: string, size: number): string {
@@ -38,6 +33,8 @@ export type FaceProps = {
 	ring?: "ground" | "page";
 	/** Set false where a design-system tooltip already names the face. */
 	titled?: boolean;
+	/** Set true where the name is written beside the face, so it is not read twice. */
+	decorative?: boolean;
 };
 
 export const FACE_RING_CLASS = {
@@ -55,33 +52,30 @@ export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
 	return size <= 18 ? "small" : "regular";
 }
 
-export function Face({ handle, ring, size = 20, titled = true }: FaceProps) {
+export function Face({ decorative, handle, ring, size = 20, titled = true }: FaceProps) {
 	let [failed, setFailed] = useState(false);
-	let edge = `shrink-0 ${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
-	let box = { width: size, height: size };
-
-	if (failed) {
-		return (
-			<span
-				aria-label={handle}
-				className={`block ${edge}`}
-				role="img"
-				style={{ ...box, background: color(handle) }}
-				title={titled ? handle : undefined}
-			/>
-		);
-	}
+	let [loaded, setLoaded] = useState(false);
+	let edge = `${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
 
 	return (
-		<img
-			alt={handle}
-			className={`block bg-selected ${edge}`}
-			onError={() => setFailed(true)}
-			referrerPolicy="no-referrer"
-			src={photograph(handle, size)}
-			style={box}
+		<span
+			className={`relative grid shrink-0 place-items-center overflow-hidden bg-selected text-xs font-semibold text-text-secondary uppercase ${edge}`}
+			style={{ width: size, height: size }}
 			title={titled ? handle : undefined}
-		/>
+		>
+			{!loaded && <span aria-hidden="true">{handle.slice(0, 1)}</span>}
+			{!failed && (
+				<img
+					alt={decorative ? "" : handle}
+					className={`absolute inset-0 size-full object-cover ${loaded ? "" : "opacity-0"}`}
+					onError={() => setFailed(true)}
+					onLoad={() => setLoaded(true)}
+					referrerPolicy="no-referrer"
+					src={photograph(handle, size)}
+				/>
+			)}
+			{failed && !decorative && <span className="sr-only">{handle}</span>}
+		</span>
 	);
 }
 
