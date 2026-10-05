@@ -34,6 +34,7 @@ export type Dependencies = {
 	) => Promise<ResearchInterpretation>;
 	effects?: EffectCommands;
 	onError?: (error: unknown) => void;
+	researchChanged?: () => void;
 };
 
 export type EffectCommands = Omit<EffectDeps, "applied" | "markApplied">;

@@ -6,7 +6,6 @@ import { assertEventCapacity, ConversationCapacityError, currentScopedProposal }
 import { effectsFor } from "./effects";
 import { assertOptionCapacity } from "./option-capacity";
 import { cardCycle, linkedCardOptions } from "./processor-card-context";
-import { admitResearchOffer } from "./processor-research-admission";
 import { appendEffects, failure, sameThreads } from "./processor-fields";
 // Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
 
@@ -63,7 +62,6 @@ export function createRun(
 						)
 					) return "gone" as const;
 					let affected = new Set(interpretation.events.map(event => event.threadId));
-					if (interpretation.researchOffer) affected.add(interpretation.researchOffer.threadId);
 					if (
 						plan.pendingCardActions.some(action =>
 							affected.has(action.threadId)
@@ -120,22 +118,6 @@ export function createRun(
 									: "analysis failed validation",
 							),
 						);
-					}
-					try {
-						let researchThread = next.threads.find(item =>
-							item.id === interpretation.researchOffer?.threadId
-						);
-						let cardId = researchThread?.questionnaireId;
-						next = admitResearchOffer(
-							current,
-							next,
-							interpretInput.message,
-							interpretation.researchOffer,
-							currentCards.get(researchThread?.id ?? ""),
-							!!cardId && plan.records.has(cardId),
-						);
-					} catch {
-						// A rejected optional offer must not discard valid planning events.
 					}
 					let pending = plan.conversationPlanPendingEffects;
 					plan.conversationPlan = next;

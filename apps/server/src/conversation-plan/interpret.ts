@@ -10,7 +10,7 @@ import { extractQuotes } from "./quotes";
 import { assertQuoteBudget } from "./quote-budget";
 import { noul, score } from "./interpret-scoring";
 import type { Analysis, Interpretation, InterpretInput } from "./interpret-types";
-export type { Interpretation, InterpretInput, ResearchOfferCandidate } from "./interpret-types";
+export type { Interpretation, InterpretInput } from "./interpret-types";
 
 /** Computes a proposal only; the caller owns fenced persistence and publication. */
 export async function interpretMessage(input: InterpretInput): Promise<Interpretation> {
