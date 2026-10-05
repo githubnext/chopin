@@ -115,7 +115,7 @@ it. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
 covers this against the real Pi agent loop; run it before bumping
 `@ai-sdk/harness-pi` or `@earendil-works/pi-coding-agent`.
 
-`HARNESS=atomic` runs Atomic 0.9.26 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.27-alpha.1 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI, use
 RPC mode, or substitute Atomic for Pi's runtime.
 
