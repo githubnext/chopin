@@ -586,7 +586,7 @@ test("concurrent Stop requests pause a retained Planner's workflows only once", 
 	).toHaveLength(1);
 });
 
-test("Stop stays idempotent until a retained Planner reports a new run snapshot", async () => {
+test("Stop ignores active progress and resets for resumed or new workflow runs", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = runningSession();
 	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
@@ -603,11 +603,29 @@ test("Stop stays idempotent until a retained Planner reports a new run snapshot"
 	expect(planner.calls.filter(call => call === "pause")).toHaveLength(1);
 	expect(notices()).toHaveLength(1);
 
+	planner.set({
+		active: ["run-1"],
+		paused: [],
+		cards: [{ ...card("running"), updated: 1_700 }],
+	});
+	await Chat.abort(context, ws);
+	expect(planner.calls.filter(call => call === "pause")).toHaveLength(1);
+	expect(notices()).toHaveLength(1);
+
 	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
 	planner.set({ active: ["run-1"], paused: [], cards: [card("running")] });
 	await Chat.abort(context, ws);
 	expect(planner.calls.filter(call => call === "pause")).toHaveLength(2);
 	expect(notices()).toHaveLength(2);
+
+	planner.set({
+		active: ["run-1", "run-2"],
+		paused: [],
+		cards: [card("running"), { ...card("running"), id: "run-2", name: "second-workflow" }],
+	});
+	await Chat.abort(context, ws);
+	expect(planner.calls.filter(call => call === "pause")).toHaveLength(3);
+	expect(notices()).toHaveLength(3);
 });
 
 test("Stop can retry when pausing a retained Planner's workflows fails", async () => {
