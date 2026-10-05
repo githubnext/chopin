@@ -58,6 +58,11 @@ for (let width of [1280, 390]) {
 		await rename.getByRole("textbox", { name: "Document title" }).fill(title);
 		await rename.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(rename).toBeHidden();
+		await expect.poll(() =>
+			page.getByRole("banner").locator("svg").evaluateAll(icons =>
+				Math.min(...icons.map(icon => icon.getBoundingClientRect().width))
+			)
+		).toBeGreaterThanOrEqual(14);
 		await actions.click();
 		await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
 		await actions.click();

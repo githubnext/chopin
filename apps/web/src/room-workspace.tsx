@@ -92,7 +92,7 @@ export function Header(
 				aria-label={`Document: ${label}`}
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
-				<DocumentIcon />
+				<DocumentIcon className="shrink-0" />
 				{presentation.type === "parent-with-child"
 					? (
 						<>
@@ -125,8 +125,8 @@ export function Header(
 							onAction={onAction}
 							trigger={
 								<>
-									<span className="truncate">{label}</span>
-									<ChevronIcon aria-hidden="true" className="rotate-90" />
+									<span className="min-w-0 truncate">{label}</span>
+									<ChevronIcon aria-hidden="true" className="shrink-0 rotate-90" />
 								</>
 							}
 						/>
