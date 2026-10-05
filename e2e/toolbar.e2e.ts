@@ -7,7 +7,7 @@
  * required. Everything here is on the other side of that line.
  */
 
-import { content, expect, openIsolatedRoom, test, written } from "./room";
+import { authenticate, content, expect, openIsolatedRoom, roomPath, test, written } from "./room";
 import { expectInsideViewport } from "./responsive";
 import { installVisualViewport } from "./visual-viewport";
 
@@ -317,33 +317,114 @@ test("the block type menu converts the block it names", async ({ join, room }) =
 	await written(page, room, /^## What we are building$/m);
 });
 
-test("the link prompt refuses a scheme the dialect will not carry", async ({ join, room }) => {
+test("escape lets go of a selection and keeps the caret in the editor", async ({ join }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("Let this selection go.");
+	await page.keyboard.press("Shift+Home");
+	await expect(page.getByRole("toolbar", BUBBLE)).toBeVisible();
+
+	await page.keyboard.press("Escape");
+
+	await expect(page.getByRole("toolbar", BUBBLE)).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
+	expect(await page.evaluate(() => getSelection()?.isCollapsed)).toBe(true);
+});
+
+test("a link is added, edited and removed in place", async ({ join, room }) => {
 	let page = await join("ana");
 
 	await content(page).click();
 	await page.keyboard.type("Read the docs.");
 	await page.keyboard.press("Shift+Home");
-
-	let said: string[] = [];
-	page.on("dialog", async dialog => {
-		said.push(dialog.message());
-		await (dialog.type() === "prompt"
-			? dialog.accept("javascript:alert(1)")
-			: dialog.dismiss());
-	});
-
 	await page.getByRole("toolbar", BUBBLE).getByRole("button", { name: "Add link" }).click();
 
+	let adding = page.getByRole("form", { name: "Add link" });
+	let field = adding.getByRole("textbox", { name: "Link URL" });
+	await expect(field).toBeFocused();
+	await expect(page.getByRole("toolbar", BUBBLE)).toHaveCount(0);
+
 	/*
-	 * Refused where the button is, not where the document is. A URL the
+	 * Refused where the field is, not where the document is. A URL the
 	 * dialect rejects applies locally, syncs, and is then refused by the
 	 * server — which cannot undo a Yjs transaction, so it rebuilds the room
 	 * under a fresh epoch and everybody in it loses their cursors.
 	 */
-	await expect.poll(() => said).toContain("Only https:, mailto:, relative paths are allowed here.");
+	await field.fill("javascript:alert(1)");
+	await page.keyboard.press("Enter");
+	await expect(adding.getByRole("alert")).toHaveText(
+		"Use an https:// or mailto: link, or a path in this repository.",
+	);
+	await expect(field).toHaveAttribute("aria-invalid", "true");
 	await expect(content(page).locator("a")).toHaveCount(0);
 
+	// A bare domain is taken to mean the web, not a repository path.
+	await field.fill("example.com/docs");
+	await page.keyboard.press("Enter");
+	await expect(adding).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
+	let link = content(page).getByRole("link", { name: "Read the docs." });
+	await expect(link).toHaveAttribute("href", "https://example.com/docs");
+	await written(page, room, /^\[Read the docs\.\]\(https:\/\/example\.com\/docs\)$/m);
+
+	// The caret on a link is enough to show where it goes.
+	await link.click();
+	let preview = page.getByRole("dialog", { name: "Link" });
+	await expect(preview).toContainText("https://example.com/docs");
+	await expect(preview.getByRole("button", { name: "Open" })).toBeVisible();
+	await preview.getByRole("button", { name: "Edit" }).click();
+
+	let editing = page.getByRole("form", { name: "Edit link" });
+	await expect(editing.getByRole("textbox", { name: "Link URL" })).toHaveValue(
+		"https://example.com/docs",
+	);
+	await expect(editing.getByRole("textbox", { name: "Link URL" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(editing).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
+
+	// The shortcut opens the same editor from a caret inside the link.
+	await page.keyboard.press("ControlOrMeta+k");
+	await editing.getByRole("textbox", { name: "Link URL" }).fill("https://example.com/guide");
+	await page.keyboard.press("Enter");
+	await written(page, room, /^\[Read the docs\.\]\(https:\/\/example\.com\/guide\)$/m);
+
+	await link.click();
+	await preview.getByRole("button", { name: "Edit" }).click();
+	await editing.getByRole("button", { name: "Remove" }).click();
+	await expect(content(page).locator("a")).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
 	await written(page, room, /^Read the docs\.$/m);
+});
+
+test("a reader can open a link but not edit it", async ({ baseURL, browser, room, seed }) => {
+	await seed("Read [the docs](https://example.com/docs).\n");
+	let context = await browser.newContext({ baseURL });
+	await context.route(
+		"https://example.com/**",
+		route => route.fulfill({ contentType: "text/html", body: "<title>Docs</title>" }),
+	);
+	let page = await context.newPage();
+	await authenticate(page, "readonly", baseURL!);
+	await page.goto(roomPath(room));
+	await expect(content(page)).toHaveAttribute("contenteditable", "false", { timeout: 20_000 });
+
+	await content(page).getByRole("link", { name: "the docs" }).click();
+	let preview = page.getByRole("dialog", { name: "Link" });
+	await expect(preview).toContainText("https://example.com/docs");
+	await expect(preview.getByRole("button", { name: "Edit" })).toHaveCount(0);
+
+	let popup = page.waitForEvent("popup");
+	await preview.getByRole("button", { name: "Open" }).click();
+	let opened = await popup;
+	await expect(opened).toHaveURL("https://example.com/docs");
+	expect(await opened.evaluate(() => opener === null)).toBe(true);
+	await opened.close();
+
+	await page.keyboard.press("Escape");
+	await expect(preview).toHaveCount(0);
+	await context.close();
 });
 
 test("touch editor menus use reachable targets and stay inside the viewport", async ({ join }) => {
