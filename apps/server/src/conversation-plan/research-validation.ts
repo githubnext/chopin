@@ -1,6 +1,7 @@
 import type { ConversationPlan } from "@chopin/protocol";
 import { assertSourceShape } from "./sources";
 import { actor, id, knownKeys, record, text, version } from "./validation-fields";
+import { assertResearchWorkflow } from "./research-state";
 
 const MAX_RESEARCH_OPTION_LABEL = 160;
 
@@ -69,6 +70,7 @@ export function assertResearchOfferShape(
 		"task",
 		"status",
 		"action",
+		"workflow",
 	]);
 	id(offer.id);
 	id(offer.needId);
@@ -80,9 +82,19 @@ export function assertResearchOfferShape(
 		throw new Error("research offer source requires a member message");
 	}
 	actor(source.author);
-	text(offer.brief, 2048);
+	if (offer.workflow !== undefined) {
+		assertResearchWorkflow(offer.workflow, offer);
+		if (offer.task !== undefined) {
+			throw new Error("general research offer cannot contain a pricing task");
+		}
+		if (typeof offer.brief !== "string" || offer.brief.length > 2048) {
+			throw new Error("invalid research brief");
+		}
+	} else text(offer.brief, 2048);
 	if (offer.threadId !== undefined) id(offer.threadId);
-	if (offer.task === undefined) {
+	if (offer.workflow !== undefined) {
+		// The shared draft and accepted snapshot own general research wording.
+	} else if (offer.task === undefined) {
 		if (offer.brief !== source.quote) throw new Error("research brief must equal source quote");
 	} else {
 		let task = record(offer.task);
