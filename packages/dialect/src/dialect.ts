@@ -324,6 +324,28 @@ export function leavesRepository(url: string): boolean {
 }
 
 /**
+ * Why a URL is unsafe to newly store, or nothing if it is fine.
+ *
+ * Browsers trim surrounding whitespace and drop tabs and newlines anywhere,
+ * so ` javascript:` or `java\tscript:` reach a scheme the plain check below
+ * never saw. Only images are absolute by rule, so only links can be
+ * scheme-less paths that wander off to another host.
+ */
+export function disguisedUrl(url: string, kind: "link" | "image" = "link"): string | undefined {
+	let noun = kind === "image" ? "Image URL" : "Link";
+	if (HIDDEN_URL_CHARACTERS.test(url)) return `${noun} contains hidden or control characters`;
+	if (/^\s|\s$/.test(url)) return `${noun} cannot start or end with whitespace`;
+	let scheme = /^[a-z][a-z0-9+.-]*:/i;
+	if (!scheme.test(url) && scheme.test(url.replace(/\s/g, ""))) {
+		return `${noun} hides a protocol behind whitespace`;
+	}
+	if (kind === "link" && !scheme.test(url) && leavesRepository(url)) {
+		return "Link without a protocol must stay in the repository";
+	}
+	return undefined;
+}
+
+/**
  * URL protocols permitted in images.
  *
  * Narrower than links, and absolute where a link need not be: there is no

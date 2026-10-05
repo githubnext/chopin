@@ -28,6 +28,7 @@ import {
 	SELECTION_CHANGE_COMMAND,
 } from "lexical";
 
+import { registerLinkGuard } from "./link-guard";
 import { placeSurface } from "./placement";
 import { $relativePosition, $resolveRange } from "./position";
 import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
@@ -124,6 +125,7 @@ export function LinkSurface(
 	let editing = open?.mode === "edit";
 
 	useEffect(() => onEditing?.(editing), [editing, onEditing]);
+	useEffect(() => registerLinkGuard(editor), [editor]);
 
 	let edit = useCallback(() => {
 		if (disabled) return false;

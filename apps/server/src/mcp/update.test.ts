@@ -197,6 +197,18 @@ describe("the MCP update protocol", () => {
 		expect(first.input.fingerprint).toBe(second.input.fingerprint);
 	});
 
+	/**
+	 * The newer URL rules judge what a change introduces, and only the stored
+	 * document can say that, so preparing an update must not apply them blind.
+	 */
+	it("prepares an update that keeps a stored link only the newer URL rules refuse", () => {
+		let prepared = prepareUpdate({
+			...update,
+			plan: "# Revised\n\nRead [the notes](docs\\\\notes.md).\n",
+		});
+		expect(prepared).toHaveProperty("input");
+	});
+
 	it("accepts canonical URLs and advertises the optional creation brief", () => {
 		let prepared = prepareUpdate({
 			...update,

@@ -307,6 +307,19 @@ describe("recovery", () => {
 			let refused = await room.apply(restored, [Y.encodeStateAsUpdate(client.doc, before)]);
 			expect(refused.ok).toBe(false);
 			if (!refused.ok) expect(refused.issues).toContain("bad-link");
+
+			// So is a hidden character, which the stored text did not carry.
+			let hidden = `https://ex${String.fromCharCode(0x200b)}ample.com`;
+			before = Y.encodeStateVector(client.doc);
+			client.editor.update(() => {
+				$importPlan(`${stored}\nAdded [elsewhere](${hidden}).\n`, {
+					registry: REGISTRY,
+					validate: false,
+				});
+			}, { discrete: true });
+			let hiding = await room.apply(restored, [Y.encodeStateAsUpdate(client.doc, before)]);
+			expect(hiding.ok).toBe(false);
+			if (!hiding.ok) expect(hiding.issues).toContain("bad-link");
 		} finally {
 			restored.doc.destroy();
 			document.doc.destroy();
