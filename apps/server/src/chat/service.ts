@@ -835,7 +835,9 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
  */
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
-	let turn = chat.busy ? chat.turnController : undefined;
+	let turn = chat.busy && !chat.turnController?.signal.aborted
+		? chat.turnController
+		: undefined;
 	let session = chat.retained?.session ?? chat.agent;
 	let live = (session?.runs?.()?.active.length ?? 0) > 0;
 	if (!turn && !live) return;
@@ -1383,12 +1385,25 @@ export async function resolveOwner(
  * the entry keeps its streaming flag and every client goes on drawing a caret
  * after a message that will never be added to.
  */
-function settle(chat: Chat, server: Server<SocketData>, room: string): void {
+function settle(chat: Chat, server: Server<SocketData>, room: string, stopped: boolean): void {
 	for (let entry of chat.entries) {
+		for (let activity of entry.tools ?? []) {
+			if (activity.status !== "running") continue;
+			let started = chat.timings.get(activity.id);
+			let finished: Wire.Activity = {
+				...activity,
+				status: "failed",
+				result: stopped ? "Turn stopped." : "Turn ended without a result.",
+				...(started ? { took: Date.now() - started } : {}),
+			};
+			Object.assign(activity, finished);
+			broadcast(server, room, { kind: "chat:tool", ts: 0, entry: entry.id, activity: finished });
+		}
 		if (!entry.streaming) continue;
 		delete entry.streaming;
 		announce(server, room, entry);
 	}
+	chat.timings.clear();
 }
 
 /** Run one turn, then drain whatever queued up behind it. */
@@ -1475,8 +1490,8 @@ async function run(
 		if (jobTurn) releaseJobAbort = watchJobAbort(chat, jobTurn, signal);
 		let result = await opened.session.stream(prompt, signal);
 		for await (let part of result.fullStream) {
-			translate(context, part);
 			if (turnController.signal.aborted) break;
+			translate(context, part);
 		}
 		if (jobTurn && chat.closed) throw new Error("The document closed.");
 		if (chat.interruption) throw new Error(chat.interruption);
@@ -1499,7 +1514,7 @@ async function run(
 					status: sendStarted || chat.interruption ? "failed" : "skipped",
 					reason: jobReason(err),
 				};
-		} else if (!chat.closed) {
+		} else if (!chat.closed && (!turnController.signal.aborted || chat.interruption)) {
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
@@ -1512,19 +1527,35 @@ async function run(
 		releaseJobAbort?.();
 		chat.activeRequest = undefined;
 		chat.turnController = undefined;
-		let kept = !!opened && !chat.closed && !jobTurn && retain(context, opened);
-		if (!kept) {
-			try {
+		let kept = false;
+		try {
+			if (opened && !chat.closed && !jobTurn) kept = retain(context, opened);
+			if (!kept) {
 				if (!jobTurn && chat.retained?.session === opened?.session) await chat.retained?.release();
-				else if (jobTurn) {
+				else await opened?.session.destroy();
+			}
+		} catch (err) {
+			console.error("[chat] could not close a finished turn:", err);
+			if (jobTurn) persistenceError = err;
+			else {
+				// Fence late tool work, then keep transcript persistence and queue cleanup reachable.
+				let stopped = turnController.signal.aborted;
+				turnController.abort();
+				if (!stopped && !chat.closed) {
 					try {
-						await opened?.session.destroy();
-					} catch (err) {
-						persistenceError = err;
-						console.error("[chat] could not close a finished turn:", err);
+						say(chat, server, room, {
+							id: ulid(),
+							author: { kind: "system" },
+							text: "The Planner session could not close cleanly. Try again.",
+							ts: now(),
+						});
+					} catch (noticeError) {
+						console.error("[chat] could not announce a failed turn:", noticeError);
 					}
-				} else await opened?.session.destroy();
-			} finally {
+				}
+			}
+		} finally {
+			if (!kept) {
 				opened?.binding.release();
 				if (chat.agent === opened?.session) chat.agent = undefined;
 				chat.owner = undefined;
@@ -1540,7 +1571,7 @@ async function run(
 		chat.messageIds = undefined;
 		chat.writing = undefined;
 		chat.tooling = undefined;
-		settle(chat, server, room);
+		settle(chat, server, room, turnController.signal.aborted);
 		if (jobTurn) {
 			chat.job = undefined;
 			chat.jobOutput = undefined;

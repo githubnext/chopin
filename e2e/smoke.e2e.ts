@@ -453,7 +453,10 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 		new Date(1_700_000_001 * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 	);
 	await expect(
-		working.locator("xpath=ancestor::*[@data-chat-entry][1]").getByText(timestamp, { exact: true }),
+		working.locator("xpath=ancestor::*[@data-chat-entry][1]").getByText(
+			`Started at ${timestamp}`,
+			{ exact: true },
+		),
 	).toBeVisible();
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await expect(working).toBeVisible();
@@ -513,6 +516,11 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	planner.stream();
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	await expect(chat.getByText("I found it.")).toBeVisible();
+	await expect(
+		chat.locator('[data-chat-state="working"]')
+			.locator("xpath=ancestor::*[@data-chat-entry][1]")
+			.getByText(/^Started at /),
+	).toBeVisible();
 
 	await chat.getByRole("button", { name: "Stop Chopin" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);

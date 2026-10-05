@@ -391,7 +391,7 @@ export const documentTools = {
 			additionalProperties: false,
 		}),
 		metadata: { skipPermission: true },
-		execute: (raw, { context: { room: context } }) =>
+		execute: (raw, { context: { room: context }, abortSignal }) =>
 			answer("ask", async () => {
 				if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 				let args = Arguments.askPlan(raw);
@@ -405,6 +405,7 @@ export const documentTools = {
 					definition,
 					{ revision: args.revision, blocks: args.questions.map(question => question.blocks) },
 					context.anchors,
+					abortSignal,
 				);
 				return {
 					outcomes: ended.map(outcome =>
