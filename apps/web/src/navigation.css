@@ -689,9 +689,10 @@
 
 .navigation-account-menu {
 	position: absolute;
-	bottom: calc(100% + 4px);
+	bottom: calc(100% - 4px);
+	right: 8px;
 	left: 8px;
-	z-index: 1;
+	z-index: 60;
 	border-radius: var(--radius-md);
 	background: var(--color-page);
 	padding: 4px;
@@ -701,13 +702,17 @@
 
 .navigation-account-menu button {
 	border-radius: var(--radius-sm);
-	padding: 8px 12px;
+	padding: 7px 10px;
+	min-height: 34px;
 	font-size: var(--text-sm);
+	text-align: left;
+	color: var(--color-text-secondary);
 }
 
 .navigation-account-menu button:hover,
 .navigation-account-menu button:focus-visible {
 	background: var(--color-hover);
+	color: var(--color-text-primary);
 }
 
 .document-actions-menu {
@@ -782,7 +787,7 @@
 	min-height: 44px;
 }
 
-:root[data-plan-coarse-pointer] .document-actions-menu button {
+:root[data-plan-coarse-pointer] :where(.document-actions-menu, .navigation-account-menu) button {
 	min-height: 44px;
 }
 

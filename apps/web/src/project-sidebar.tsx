@@ -16,7 +16,7 @@ import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentCreationPhase } from "./use-document-creation";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 export function NavigationIcon(
 	{ alt = "", className, src }: { alt?: string; className?: string; src: string },
@@ -280,6 +280,7 @@ export function ProjectSidebar(
 	{
 		accountMenu,
 		accountMenuOpen,
+		accountWrapRef,
 		canCreateDocument,
 		newDocumentPhase,
 		pendingCreations,
@@ -299,6 +300,7 @@ export function ProjectSidebar(
 	}: {
 		accountMenu?: ReactNode;
 		accountMenuOpen?: boolean;
+		accountWrapRef?: Ref<HTMLDivElement>;
 		canCreateDocument: boolean;
 		catalogueMode: "active" | "archived";
 		newDocumentPhase?: DocumentCreationPhase | "loading";
@@ -452,7 +454,7 @@ export function ProjectSidebar(
 				</nav>
 			</div>
 			{archiveFooter}
-			<div className="project-sidebar-account-wrap">
+			<div className="project-sidebar-account-wrap" ref={accountWrapRef}>
 				{accountMenu}
 				<button
 					className="project-sidebar-account"

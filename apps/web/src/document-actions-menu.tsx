@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
 import { motionContract } from "./motion-contract";
+import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 
 import type * as Api from "./api";
@@ -42,10 +43,12 @@ export function documentMenuKeyAction(key: string): DocumentMenuKeyAction | unde
 export function DocumentActionsMenu(
 	{
 		channel,
+		align = "end",
 		className = "",
 		onAction,
 		trigger,
 	}: {
+		align?: "start" | "end";
 		channel: Pick<Api.Channel, "title" | "archivedAt">;
 		className?: string;
 		onAction: (action: DocumentAction) => void;
@@ -100,7 +103,10 @@ export function DocumentActionsMenu(
 				: anchor.top - height - gap;
 			let left = Math.max(
 				margin,
-				Math.min(anchor.right - width, window.innerWidth - width - margin),
+				Math.min(
+					align === "start" ? anchor.left : anchor.right - width,
+					window.innerWidth - width - margin,
+				),
 			);
 			let placedTop = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
 			setPosition({
@@ -124,7 +130,7 @@ export function DocumentActionsMenu(
 			window.removeEventListener("resize", place);
 			document.removeEventListener("scroll", place, true);
 		};
-	}, [closeMenu, open]);
+	}, [align, closeMenu, open]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -132,26 +138,11 @@ export function DocumentActionsMenu(
 			panel.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]")[initialItem.current]
 				?.focus();
 		});
-		let outside = (event: Event) => {
-			let target = event.target;
-			if (!(target instanceof Node)) return;
-			if (!button.current?.contains(target) && !panel.current?.contains(target)) closeMenu();
-		};
-		let escape = (event: globalThis.KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			closeMenu(true);
-		};
-		document.addEventListener("pointerdown", outside);
-		document.addEventListener("focusin", outside);
-		document.addEventListener("keydown", escape);
 		return () => {
 			cancelAnimationFrame(frame);
-			document.removeEventListener("pointerdown", outside);
-			document.removeEventListener("focusin", outside);
-			document.removeEventListener("keydown", escape);
 		};
-	}, [closeMenu, open]);
+	}, [open]);
+	useMenuDismissal(open, [button, panel], closeMenu);
 
 	let openAt = (index: number) => {
 		initialItem.current = index;

@@ -127,6 +127,35 @@ test("document action menu motion follows its pointer trigger and survives inter
 	await expect(menu).toHaveCount(0);
 });
 
+test("header actions menu is start-aligned to its trigger", async ({ join }) => {
+	let page = await join("ana");
+	let trigger = headerActions(page);
+	await trigger.click();
+	let menu = page.getByRole("menu", { name: /^Actions for / });
+	await expect(menu).toBeVisible();
+	let [triggerBox, menuBox] = await Promise.all([trigger.boundingBox(), menu.boundingBox()]);
+	expect(menuBox!.x).toBeCloseTo(triggerBox!.x, 0);
+	expect(menuBox!.y).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height);
+});
+
+test("account menu closes on Escape and outside click, and returns focus", async ({ join }) => {
+	let page = await join("ana");
+	let account = sidebar(page).locator(".project-sidebar-account");
+	let menu = page.getByRole("menu").filter({
+		has: page.getByRole("menuitem", { name: "Sign out" }),
+	});
+	await account.click();
+	await expect(menu).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(menu).toHaveCount(0);
+	await expect(account).toBeFocused();
+	await account.click();
+	await expect(menu).toBeVisible();
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(menu).toHaveCount(0);
+	await expect(account).toHaveAttribute("aria-expanded", "false");
+});
+
 test("document action menu motion settles keyboard opening immediately", async ({ join }) => {
 	let page = await join("ana");
 	let trigger = headerActions(page);
