@@ -586,6 +586,55 @@ test("concurrent Stop requests pause a retained Planner's workflows only once", 
 	).toHaveLength(1);
 });
 
+test("Stop stays idempotent until a retained Planner reports a new run snapshot", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let ws = { data: { handle: "ana" } } as unknown as Socket;
+	let notices = () =>
+		context.chat.entries.filter(entry =>
+			entry.text === "@ana stopped the Planner and paused its workflows."
+		);
+
+	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
+	await context.chat.running;
+	await Chat.abort(context, ws);
+	await Chat.abort(context, ws);
+	expect(planner.calls.filter(call => call === "pause")).toHaveLength(1);
+	expect(notices()).toHaveLength(1);
+
+	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
+	planner.set({ active: ["run-1"], paused: [], cards: [card("running")] });
+	await Chat.abort(context, ws);
+	expect(planner.calls.filter(call => call === "pause")).toHaveLength(2);
+	expect(notices()).toHaveLength(2);
+});
+
+test("Stop can retry when pausing a retained Planner's workflows fails", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let fail = true;
+	planner.session.pauseRuns = async () => {
+		planner.calls.push("pause");
+		if (fail) {
+			fail = false;
+			throw new Error("pause failed");
+		}
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let ws = { data: { handle: "ana" } } as unknown as Socket;
+
+	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
+	await context.chat.running;
+	await Chat.abort(context, ws);
+	await Chat.abort(context, ws);
+	expect(planner.calls.filter(call => call === "pause")).toHaveLength(2);
+	expect(context.chat.entries.map(entry => entry.text).slice(-2)).toEqual([
+		"@ana stopped the turn.",
+		"@ana stopped the Planner and paused its workflows.",
+	]);
+});
+
 test("a background job while a Planner is retained runs in its own session and leaves the retained one, and its references, alone", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = runningSession();

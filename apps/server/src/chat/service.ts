@@ -833,7 +833,14 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
  * Stop the running turn and pause the Planner's workflow runs, so both hold
  * until someone resumes them. Anyone may, and the transcript says who did.
  */
-const stoppingRuns = new WeakMap<PlannerSession, Promise<void>>();
+type StoppingRuns = {
+	pause: Promise<void>;
+	runs: ReturnType<NonNullable<PlannerSession["runs"]>>;
+	settled: boolean;
+	paused: boolean;
+};
+
+const stoppingRuns = new WeakMap<PlannerSession, StoppingRuns>();
 
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
@@ -841,7 +848,8 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 		? chat.turnController
 		: undefined;
 	let session = chat.retained?.session ?? chat.agent;
-	let live = (session?.runs?.()?.active.length ?? 0) > 0;
+	let runs = session?.runs?.();
+	let live = (runs?.active.length ?? 0) > 0;
 	let notice = (paused: boolean) =>
 		say(chat, server, room, {
 			id: ulid(),
@@ -852,33 +860,47 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			ts: now(),
 		});
 	let stopping = session && stoppingRuns.get(session);
+	// Atomic replaces the run snapshot when workflow activity changes.
+	if (session && stopping?.settled && stopping.paused && stopping.runs !== runs) {
+		stoppingRuns.delete(session);
+		stopping = undefined;
+	}
 	if (stopping) {
 		if (turn) {
 			turn.abort();
 			notice(false);
 		}
-		await stopping;
+		await stopping.pause;
 		return;
 	}
 	if (!turn && !live) return;
 	if (live && session?.pauseRuns) {
 		let pauseRuns = session.pauseRuns;
-		let pause = Promise.resolve().then(async () => {
-			let paused = false;
+		let stopping: StoppingRuns = {
+			pause: Promise.resolve(),
+			runs,
+			settled: false,
+			paused: false,
+		};
+		stopping.pause = Promise.resolve().then(async () => {
 			try {
 				await pauseRuns.call(session);
-				paused = true;
+				stopping.paused = true;
 			} catch (err) {
 				console.error("[chat] pausing workflow runs failed:", err);
 			}
-			notice(paused);
+			notice(stopping.paused);
 		});
-		stoppingRuns.set(session, pause);
+		stoppingRuns.set(session, stopping);
 		turn?.abort();
 		try {
-			await pause;
+			await stopping.pause;
 		} finally {
-			if (stoppingRuns.get(session) === pause) stoppingRuns.delete(session);
+			stopping.settled = true;
+			if (
+				stoppingRuns.get(session) === stopping
+				&& (!stopping.paused || session.runs?.() !== stopping.runs)
+			) stoppingRuns.delete(session);
 		}
 		return;
 	}
