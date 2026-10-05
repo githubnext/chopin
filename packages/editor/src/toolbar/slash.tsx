@@ -561,7 +561,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 			aria-label="Insert block"
 			data-focus-boundary=""
 			contentEditable={false}
-			className={`${SHELL} max-h-72 w-96 max-w-[calc(100vw-2rem)] overflow-y-auto`}
+			className={`${SHELL} max-h-72 w-auto min-[480px]:w-96 max-w-[calc(100vw-2rem)] overflow-y-auto`}
 			style={position
 				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
 				: { top: anchor.bottom + 8, left: anchor.left, visibility: "hidden" }}
@@ -593,7 +593,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 								<span className="ml-2 w-24 shrink-0">{command.label}</span>
 								<span
 									aria-hidden="true"
-									className="min-w-0 truncate text-xs text-text-tertiary"
+									className="min-w-0 truncate text-xs text-text-tertiary max-[479px]:hidden"
 								>
 									{command.hint}
 								</span>
