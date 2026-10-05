@@ -119,14 +119,19 @@ model again before every model request.
 ## Full Atomic Planner
 
 Under `HARNESS=atomic` every Planner session is a full Atomic session, in local
-and hosted deployments alike, with no separate flag. This gives the Planner
-shell and filesystem access **as the server process's user**, not a sandbox
+and hosted deployments alike, with no separate flag. The workflows it starts
+get shell and filesystem access **as the server process's user**, not a sandbox
 confined to a repository. Operators who do not want that should use
 `copilot-sdk` or `pi`. Both `HARNESS_AUTH=auto` and `ai-gateway` work, under
 their usual [bind rules](self-hosting.md#choose-and-trust-a-harness).
 
-Atomic's workflows, subagents, MCP, web access, Intercom, and default coding
-tools run alongside Chopin's document and repository tools. The normal Atomic
+The Planner's own turns offer only read-only tools beside Chopin's document and
+repository tools: `read`, `find`, `search`, and `ast_grep` for the working
+directory, Atomic's web research tools, `ask_user_question`, `workflow`, and
+`intercom`. It cannot edit files, run commands, or start subagents itself, so it
+never implements the plan; a workflow it starts keeps the tools its stages
+declare. Atomic's workflows, MCP, web access, and Intercom run alongside
+Chopin's tools. The normal Atomic
 agent directory (including `ATOMIC_CODING_AGENT_DIR` or the legacy
 `PI_CODING_AGENT_DIR` override) supplies extensions, skills, prompt templates,
 context files, and a read-only copy of its settings. A verified checkout's
@@ -135,7 +140,9 @@ packages installed for that project load too; the document's own directory
 has none. Paths in `HARNESS_EXTENSIONS` load in every Planner session as if
 passed to Atomic's `--extension` flag, so a package listed there adds its
 extensions, skills, and workflows without being installed in the agent
-directory. Chopin's compaction, summary, and cache overrides still apply on top.
+directory. Tools those extensions register load but are not offered to the
+Planner's own turns unless they are named above; workflow stages still load
+them. Chopin's compaction, summary, and cache overrides still apply on top.
 Chopin appends its Planner
 instructions to Atomic's assembled prompt. Session, settings, and model
 credentials remain in memory; Atomic's own enabled tools, extensions, MCP
