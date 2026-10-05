@@ -29,6 +29,7 @@
         "@ai-sdk/sandbox-just-bash": "catalog:harness",
         "@bastani/atomic": "catalog:harness",
         "@chopin/dialect": "workspace:*",
+        "@chopin/draft": "workspace:*",
         "@chopin/protocol": "workspace:*",
         "@chopin/question": "workspace:*",
         "@earendil-works/pi-coding-agent": "catalog:harness",
@@ -53,6 +54,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@chopin/dialect": "workspace:*",
+        "@chopin/draft": "workspace:*",
         "@chopin/editor": "workspace:*",
         "@chopin/icons": "workspace:*",
         "@chopin/protocol": "workspace:*",
@@ -112,6 +114,16 @@
         "@types/mdast": "4.0.4",
         "@types/react": "catalog:react",
         "react": "catalog:react",
+      },
+    },
+    "packages/draft": {
+      "name": "@chopin/draft",
+      "version": "0.0.0",
+      "dependencies": {
+        "json-joy": "catalog:mdx",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:bun",
       },
     },
     "packages/editor": {
@@ -416,6 +428,8 @@
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
 
     "@chopin/dialect": ["@chopin/dialect@workspace:packages/dialect"],
+
+    "@chopin/draft": ["@chopin/draft@workspace:packages/draft"],
 
     "@chopin/editor": ["@chopin/editor@workspace:packages/editor"],
 

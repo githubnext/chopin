@@ -144,6 +144,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 				broadcast(server, room.id, { kind: "conversation-plan:changed", ts: 0, state }),
 			active,
 			researchChanged: () => briefCoordinator?.wake(),
+			researchPresence: event => broadcast(server, room.id, event),
 			researchInterpret: researchAllowed
 				? deps.researchInterpret
 					?? ((input, signal) =>

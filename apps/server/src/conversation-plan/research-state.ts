@@ -1,4 +1,5 @@
 import type { ConversationPlan } from "@chopin/protocol";
+import * as Draft from "@chopin/draft";
 import {
 	actor,
 	id,
@@ -125,6 +126,9 @@ export function assertResearchWorkflow(value: unknown, offer: Record<string, unk
 	for (let editor of editors) id(editor);
 	if (new Set(editors).size !== editors.length) throw new Error("duplicate research editor");
 	if (item.draft !== undefined) {
+		if (Draft.read(Draft.restore(item.draft as number[])) !== offer.brief) {
+			throw new Error("research draft differs from brief");
+		}
 		let bytes = array(item.draft, 256 * 1024);
 		if (
 			!bytes.length

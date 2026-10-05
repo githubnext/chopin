@@ -35,6 +35,7 @@ export type Dependencies = {
 	effects?: EffectCommands;
 	onError?: (error: unknown) => void;
 	researchChanged?: () => void;
+	researchPresence?: (event: ConversationPlan.ResearchPresenceChanged) => void;
 };
 
 export type EffectCommands = Omit<EffectDeps, "applied" | "markApplied">;

@@ -479,6 +479,8 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "conversation-plan:research":
 		case "conversation-plan:research-link":
+		case "conversation-plan:research-edit":
+		case "conversation-plan:research-presence":
 			await handleResearchCommand(frame, room, ws, {
 				enabled: !!config.conversationPlan,
 				runtime: conversationRuntime,
@@ -814,6 +816,7 @@ function listen(): Server<SocketData> {
 				if (room.plan) {
 					Service.departed(room.plan, ws);
 					Questions.away(room.plan, ws);
+					conversationRuntime.processor(room.plan)?.leaveResearch(ws.data.client);
 					Comments.away(room.plan, ws);
 				}
 				if (room.members.size > 0) presence(server, room);

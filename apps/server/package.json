@@ -17,6 +17,7 @@
 		"@bastani/atomic": "catalog:harness",
 		"@earendil-works/pi-coding-agent": "catalog:harness",
 		"@chopin/dialect": "workspace:*",
+		"@chopin/draft": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",
 		"@github/copilot": "catalog:copilot",
