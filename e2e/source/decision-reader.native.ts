@@ -192,3 +192,47 @@ test("detaching a mounted editor root clears its highlight and pin before reatta
 	await expect(dialog(page)).toHaveCount(0);
 	expect(await page.evaluate(() => window.decisionReaderFixture.pinned())).toBe(false);
 });
+
+test("decision metadata aligns at desktop width and wraps safely on narrow screens", async ({ page }) => {
+	await page.setViewportSize({ width: 945, height: 850 });
+	await loadReader(page);
+	await marker(page).click();
+	await expect(dialog(page)).toBeVisible();
+	await expect.poll(async () =>
+		dialog(page).evaluate(element => getComputedStyle(element).transform)
+	)
+		.toBe("none");
+	let meta = dialog(page).locator(".plan-decision-meta");
+	let items = meta.locator(":scope > p");
+	await expect(items).toHaveCount(2);
+	await expect(meta).toHaveCSS("display", "flex");
+	await expect(meta).toHaveCSS("column-gap", "24px");
+	let author = await items.nth(0).boundingBox();
+	let timestamp = await items.nth(1).boundingBox();
+	expect(Math.abs(timestamp!.y - author!.y)).toBeLessThanOrEqual(2);
+	expect(timestamp!.x - (author!.x + author!.width)).toBeCloseTo(24, 1);
+
+	await page.setViewportSize({ width: 390, height: 620 });
+	await items.nth(0).locator("strong").evaluate(element => {
+		element.textContent = "MaggieAppletonVeryLongUnbrokenHandle123456789";
+	});
+	await expect.poll(async () =>
+		dialog(page).evaluate(element => getComputedStyle(element).transform)
+	)
+		.toBe("none");
+	await expect(dialog(page)).toBeVisible();
+	let host = await reader(page).boundingBox();
+	let panel = await dialog(page).boundingBox();
+	let narrowMeta = await meta.boundingBox();
+	let narrowAuthor = await items.nth(0).boundingBox();
+	let narrowTimestamp = await items.nth(1).boundingBox();
+	expect(panel!.x).toBeGreaterThanOrEqual(host!.x);
+	expect(panel!.x + panel!.width).toBeLessThanOrEqual(host!.x + host!.width);
+	expect(narrowMeta!.x).toBeGreaterThanOrEqual(panel!.x);
+	expect(narrowMeta!.x + narrowMeta!.width).toBeLessThanOrEqual(panel!.x + panel!.width);
+	expect(await meta.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+	expect(await items.nth(0).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(
+		true,
+	);
+	expect(narrowTimestamp!.y).toBeGreaterThan(narrowAuthor!.y);
+});
