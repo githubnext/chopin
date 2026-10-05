@@ -63,7 +63,7 @@ for (let action of ["global", "pencil", "empty"] as const) {
 		let posts = creationRequests(page);
 		await page.goto("/");
 		let add = page.getByRole("dialog", { name: "Add project", exact: true });
-		await add.getByRole("button", { name: "octo-org/score", exact: true }).click();
+		await add.getByRole("option", { name: "octo-org/score", exact: true }).click();
 		let projects = sidebar(page);
 		await expect(projects.getByText("No documents", { exact: true })).toBeVisible();
 		let pencil = projects.getByRole("button", { name: "New document in score", exact: true });

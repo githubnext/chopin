@@ -656,7 +656,7 @@ test("the sidebar paginates documents and global search queries beyond the loade
 	let search = dialog.getByRole("textbox", { name: "Search documents" });
 	await expect(search).toBeFocused();
 	await search.fill("needle");
-	await expect(dialog.getByRole("button", { name: /Search needle/ })).toBeVisible();
+	await expect(dialog.getByRole("option", { name: /Search needle/ })).toBeVisible();
 	await expect(dialog.getByText("RFC about catalogue search", { exact: true })).toBeVisible();
 	expect(requests.some(url => url.searchParams.get("query") === "needle")).toBe(true);
 });

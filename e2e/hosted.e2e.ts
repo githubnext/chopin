@@ -36,7 +36,7 @@ function addProjectDialog(page: Parameters<typeof authenticate>[0]) {
 }
 
 function repositoryOption(page: Parameters<typeof authenticate>[0], name: string) {
-	return addProjectDialog(page).getByRole("button").filter({ hasText: name });
+	return addProjectDialog(page).getByRole("option").filter({ hasText: name });
 }
 
 test("organization admission rejects outsiders and pending members", async ({ baseURL }) => {
@@ -329,6 +329,7 @@ test("the Add project dialog traps focus, dismisses, and filters repositories", 
 	await expect(search).toBeFocused();
 	await search.fill("notes");
 	await expect(repositoryOption(page, "notes")).toBeVisible();
+	await expect(repositoryOption(page, "notes")).toHaveAttribute("aria-selected", "true");
 	await expect(repositoryOption(page, "score")).toHaveCount(0);
 	await search.press("ArrowDown");
 	await expect(repositoryOption(page, "notes")).toBeFocused();
@@ -419,6 +420,28 @@ test("returning from GitHub App setup invalidates the tab cache", async ({ baseU
 	await page.goto("/auth/github/setup?installation_id=101");
 	await expect(page).toHaveURL("/");
 	await expect(repositoryOption(page, "archive-12")).toBeVisible();
+});
+
+test("the Add project palette keeps one active row across keyboard and pointer", async ({ baseURL, page }) => {
+	await authenticate(page, "paged", baseURL!);
+	await page.goto("/");
+	let dialog = addProjectDialog(page);
+	let options = dialog.getByRole("option");
+	let selected = dialog.locator('[role="option"][aria-selected="true"]');
+	await expect(repositoryOption(page, "archive-12")).toBeVisible();
+	await expect(selected).toHaveCount(0);
+
+	await page.keyboard.press("ArrowDown");
+	await expect(options.first()).toBeFocused();
+	await page.keyboard.press("End");
+	await expect(options.last()).toBeFocused();
+	await page.keyboard.press("Home");
+	await expect(options.first()).toBeFocused();
+
+	await repositoryOption(page, "archive-3").hover();
+	await expect(selected).toHaveCount(1);
+	await expect(repositoryOption(page, "archive-3")).toHaveAttribute("aria-selected", "true");
+	await expect(repositoryOption(page, "archive-3")).toBeFocused();
 });
 
 test("repository search includes pages loaded in the background", async ({ baseURL, page }) => {

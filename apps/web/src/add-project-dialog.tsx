@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
+import { PaletteListbox } from "./navigation-palette";
 import {
 	installedRepositoryGroups,
 	loadRepositorySnapshot,
@@ -108,7 +109,7 @@ export function AddProjectDialog(
 			</div>
 			<div className="navigation-palette-list" aria-busy={!snapshot && error === undefined}>
 				{!snapshot && error === undefined && (
-					<p className="navigation-palette-status">
+					<p className="navigation-palette-status" role="status">
 						<LoaderIcon aria-hidden="true" data-palette-loader="" />
 						Loading repositories
 					</p>
@@ -126,46 +127,53 @@ export function AddProjectDialog(
 					</div>
 				)}
 				{snapshot && visible.length === 0 && error === undefined && (
-					<p className="navigation-palette-status">
+					<p className="navigation-palette-status" role="status">
 						{normalized ? "No matching repositories" : "No accessible repositories"}
 					</p>
 				)}
-				{visible.map(repository => {
-					let alreadyAdded = addedIds.has(repository.id);
-					let busy = adding === repository.id;
-					return (
-						<button
-							aria-busy={busy || undefined}
-							aria-label={`${repository.owner}/${repository.name}${alreadyAdded ? ", added" : ""}`}
-							className="navigation-palette-option"
-							disabled={alreadyAdded || busy}
-							key={repository.id}
-							onClick={() => void select(repository)}
-							type="button"
-						>
-							<span
-								className={`min-w-0 flex-1 truncate ${
-									alreadyAdded ? "text-text-tertiary" : "text-text-primary"
-								}`}
-							>
-								<span className="text-text-tertiary">{repository.owner}/</span>
-								{repository.name}
-							</span>
-							{alreadyAdded
-								? (
-									<span className="flex shrink-0 items-center gap-1 text-xs text-text-tertiary">
-										<CheckIcon aria-hidden="true" />
-										Added
+				{visible.length > 0 && (
+					<PaletteListbox
+						enabled={repository => !addedIds.has(repository.id)}
+						input={input}
+						itemKey={repository => repository.id}
+						itemLabel={repository =>
+							`${repository.owner}/${repository.name}${
+								addedIds.has(repository.id) ? ", added" : ""
+							}`}
+						items={visible}
+						label="Repositories"
+						onChoose={repository => void select(repository)}
+						query={query}
+						renderItem={repository => {
+							let alreadyAdded = addedIds.has(repository.id);
+							let busy = adding === repository.id;
+							return (
+								<>
+									<span
+										className={`min-w-0 flex-1 truncate ${
+											alreadyAdded ? "text-text-tertiary" : "text-text-primary"
+										}`}
+									>
+										<span className="text-text-tertiary">{repository.owner}/</span>
+										{repository.name}
 									</span>
-								)
-								: (
-									<span className="navigation-palette-hint">
-										{busy ? "Adding…" : "Add"}
-									</span>
-								)}
-						</button>
-					);
-				})}
+									{alreadyAdded
+										? (
+											<span className="flex shrink-0 items-center gap-1 text-xs text-text-tertiary">
+												<CheckIcon aria-hidden="true" />
+												Added
+											</span>
+										)
+										: (
+											<span className="navigation-palette-hint" data-busy={busy || undefined}>
+												{busy ? "Adding…" : "Add"}
+											</span>
+										)}
+								</>
+							);
+						}}
+					/>
+				)}
 			</div>
 			<div className="navigation-palette-footer">
 				<a href="/auth/github/install">Manage repository access</a>
