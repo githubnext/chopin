@@ -11,6 +11,8 @@ export declare namespace ConversationPlan {
 		| Request<Retry>
 		| Request<RetryJob>
 		| Request<ResearchConsent>
+		| Request<ResearchEdit>
+		| Request<ResearchPresence>
 		| Request<ResearchLink>;
 	export type Outgoing =
 		| Snapshot
@@ -21,6 +23,8 @@ export declare namespace ConversationPlan {
 		| Jobs
 		| RetriedJob
 		| ResearchConsentResult
+		| ResearchEdited
+		| ResearchPresenceChanged
 		| ResearchLinkResult;
 
 	export type JobKind = "heading" | "refine" | "suggest" | "prose";
@@ -477,6 +481,28 @@ export declare namespace ConversationPlan {
 		execution: "none" | "pending-owner" | "pending-retry" | "started";
 		/** Present when this attempt returned an already placed research request. */
 		researchRequestId?: string;
+	};
+	export type ResearchEdit = KIND<"conversation-plan:research-edit"> & {
+		offerId: string;
+		operation:
+			| { kind: "begin" }
+			| { kind: "patch"; patch: number[] }
+			| { kind: "addition"; id: string; actionId: string; choice: "apply" | "dismiss" }
+			| { kind: "retry" };
+	};
+	export type ResearchEdited = KIND<"conversation-plan:research-edit"> & {
+		offer: ResearchOffer;
+		revision: number;
+	};
+	export type ResearchPresence = KIND<"conversation-plan:research-presence"> & {
+		offerId: string;
+		editing: boolean;
+	};
+	export type ResearchPresenceChanged = KIND<"conversation-plan:research-presence"> & {
+		offerId: string;
+		client: string;
+		handle: string;
+		editing: boolean;
 	};
 	export type ResearchLink = KIND<"conversation-plan:research-link"> & { offerId: string };
 	export type ResearchLinkResult = KIND<"conversation-plan:research-link"> & {

@@ -8,6 +8,7 @@ import { createScopedSave } from "./processor-scoped-save";
 import { createResearchConsent } from "./processor-research-consent";
 import { createRun } from "./processor-run";
 import { createResearchProcessor } from "./research-processor";
+import { createResearchDraftService } from "./research-draft-service";
 
 // Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
 
@@ -48,6 +49,7 @@ export function createProcessor(deps: Dependencies) {
 	let researchConsent = createResearchConsent(deps, plan, active, publish, markApplied, report);
 	let run = createRun(deps, plan, active, controller, publish, recover, drainEffects);
 	let research = createResearchProcessor(deps, active, controller.signal, publish);
+	let drafts = createResearchDraftService(deps, active);
 
 	function wake(): void {
 		if (!active()) return;
@@ -112,6 +114,9 @@ export function createProcessor(deps: Dependencies) {
 		record: track(record),
 		retry: track(retry),
 		retryResearch: track(research.retry),
+		editResearch: track(drafts.edit),
+		focusResearch: drafts.focus,
+		leaveResearch: drafts.away,
 		setEffects,
 		wake,
 		stop,
