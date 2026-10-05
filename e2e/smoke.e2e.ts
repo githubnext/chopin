@@ -9,6 +9,7 @@ import { chatInput, expectChatValue, fillChat } from "./chat-input";
  */
 
 import { content, expect, ready, roomPath, test } from "./room";
+import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { Chat } from "../packages/protocol/index";
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -511,7 +512,8 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 
 	planner.tool();
-	await expect(chat.getByText("Read plan", { exact: true })).toBeVisible();
+	await expect(chat.getByText("Reading the document", { exact: true })).toBeVisible();
+	await expect(chat.getByText(/done/)).toHaveCount(0);
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 
 	planner.stream();
@@ -636,10 +638,10 @@ test(
 
 		await join("ana");
 		let chat = chatPane(page);
-		let live = chat.getByText("Edit plan", { exact: true }).locator("..");
+		let live = chat.getByText("Editing the document", { exact: true }).locator("..");
 
 		await expect(live).toContainText("7 done");
-		await expect(chat.getByRole("button", { name: /Edit plan/ })).toHaveCount(0);
+		await expect(chat.getByRole("button", { name: /Editing the document/ })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
 		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "Ask Chopin" });
@@ -656,6 +658,86 @@ test(
 		});
 	},
 );
+
+test("a Planner question waits on people and opens its card", async ({ join, page, seed }) => {
+	let widget = "01K0N700000000000000000001";
+	let question = {
+		id: "01K0N700000000000000000002",
+		header: "Rollout",
+		question: "Should we ship a small pilot?",
+		multiple: false,
+		options: [{ id: "01K0N700000000000000000003", label: "Start small", description: "" }],
+	};
+	let definition = { questions: [question] };
+	await seed(
+		`# Migration
+
+<Questionnaire id="${widget}" by="chopin">
+<Question id="${question.id}" header="${question.header}" prompt="${question.question}" multiple="false">
+<Option id="${question.options[0]!.id}" label="Start small" />
+</Question>
+</Questionnaire>
+`,
+		{
+			revision: 1,
+			questions: [{
+				id: widget,
+				definition,
+				status: "open",
+				origin: "planner",
+				history: [],
+				optionOrigins: {},
+				editors: [],
+			}],
+			openQuestions: [{
+				definition,
+				id: widget,
+				model: storedQuestion(definition),
+				revision: 0,
+				widget,
+			}],
+		},
+	);
+	let wire = await injectChatHistory(page, frame => ({
+		...frame,
+		entries: [{
+			id: "a1",
+			author: { kind: "agent" },
+			text: "I need a decision before I edit.",
+			ts: 1_700_000_001,
+			tools: [
+				{ id: "t1", name: "read_plan", status: "done", took: 20 },
+				{
+					id: "t2",
+					name: "ask",
+					status: "running",
+					args: JSON.stringify({ revision: 1, questions: [{ question: question.question }] }),
+				},
+			],
+		}],
+	}));
+
+	await join("ana");
+	let chat = chatPane(page);
+	let waiting = chat.locator("[data-tool-waiting]");
+	await expect(waiting).toHaveText(/Waiting on your decision/);
+	await expect(chat.locator(".chat-tool-loader")).toHaveCount(0);
+	await waiting.getByRole("button", { name: "Open", exact: true }).click();
+	await expect(
+		page.locator(
+			`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${widget}"]`,
+		),
+	).toBeFocused();
+
+	wire.send({
+		kind: "chat:tool",
+		ts: 0,
+		entry: "a1",
+		activity: { id: "t2", name: "ask", status: "done", took: 4_000 },
+	});
+	await expect(waiting).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: /2 tools/ })).toBeVisible();
+});
 
 test(
 	"chat groups authors and collapses a finished tool run",
