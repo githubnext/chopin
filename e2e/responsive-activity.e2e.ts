@@ -47,7 +47,7 @@ test("the compact room header preserves member identity and secondary actions", 
 	let header = page.getByRole("banner");
 	await expect(header.locator('[aria-label^="Document:"]')).toBeVisible();
 	await expect(header.getByRole("button", { name: /^Actions for / })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Open Projects sidebar" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Show sidebar" })).toBeVisible();
 	let people = header.getByRole("group", { name: /People here:/ });
 	await expect(people).toBeVisible();
 	await expect(header.getByRole("button", { name: "More room actions" })).toHaveCount(0);

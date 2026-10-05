@@ -395,10 +395,10 @@ export function ProjectSidebar(
 						<span className="text-sm font-semibold text-brand">Chopin</span>
 					</div>
 					<button
-						aria-label="Collapse Projects sidebar"
+						aria-label="Hide sidebar"
 						className="project-sidebar-action"
 						data-press="small"
-						data-tooltip="Close sidebar"
+						data-tooltip="Hide sidebar"
 						onClick={onCollapse}
 						type="button"
 					>

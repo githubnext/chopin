@@ -232,6 +232,27 @@ describe("reference picker accessibility", () => {
 		expect(markup).toContain(">release-plan</span>");
 	});
 
+	test("omits the slug when it matches the title", () => {
+		let markup = renderToStaticMarkup(createElement(ReferencePicker, {
+			active: 0,
+			id: "reference-list",
+			onActive: () => {},
+			onSelect: () => {},
+			state: {
+				status: "ready",
+				options: [{
+					kind: "document",
+					channelId: "ivory",
+					title: "ivory-brook",
+					slug: "ivory-brook",
+				}],
+			},
+		}));
+
+		expect(markup).not.toContain("font-mono");
+		expect(markup).not.toContain("-slug");
+	});
+
 	test("announces loading, empty, errors, and the reference limit", () => {
 		let render = (state: Parameters<typeof ReferencePicker>[0]["state"]) =>
 			renderToStaticMarkup(createElement(ReferencePicker, {

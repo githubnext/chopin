@@ -270,7 +270,8 @@ export function ReferencePicker(
 					let generatedDescription = option.description
 						? `${referenceOptionId(id, index)}-description`
 						: undefined;
-					let slugDescription = option.slug
+					let showSlug = !!option.slug && option.slug !== option.title;
+					let slugDescription = showSlug
 						? `${referenceOptionId(id, index)}-slug`
 						: undefined;
 					let describedBy = [generatedDescription, slugDescription].filter(Boolean).join(" ")
@@ -304,7 +305,7 @@ export function ReferencePicker(
 									</span>
 								)}
 							</span>
-							{option.slug && (
+							{showSlug && (
 								<span
 									className="shrink-0 font-mono text-sm text-text-quaternary"
 									id={slugDescription}

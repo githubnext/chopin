@@ -126,7 +126,7 @@ function prose(page: Page, text: string) {
 async function open(page: Page, answer = "Team by team") {
 	await page.setViewportSize({ width: 1_440, height: 900 });
 	await page.getByRole("button", { name: "Close sidebar" }).click();
-	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	// The panes animate; a marker under a still-moving pointer would be left behind.
 	let last = "";
 	let steady = 0;

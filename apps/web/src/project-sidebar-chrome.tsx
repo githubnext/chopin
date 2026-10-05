@@ -12,7 +12,7 @@ export function ProjectSidebarLoading({ onCollapse }: { onCollapse: () => void }
 			<div className="project-sidebar-header">
 				<p role="status">Loading projects…</p>
 				<button
-					aria-label="Collapse Projects sidebar"
+					aria-label="Hide sidebar"
 					className="btn btn-icon btn-ghost"
 					onClick={onCollapse}
 					type="button"
@@ -35,9 +35,9 @@ export function ProjectSidebarExpandButton(
 ) {
 	return (
 		<button
-			aria-label="Open Projects sidebar"
+			aria-label="Show sidebar"
 			className="project-sidebar-expand btn btn-icon btn-ghost shrink-0"
-			data-tooltip="Open sidebar"
+			data-tooltip="Show sidebar"
 			onClick={onExpand}
 			ref={buttonRef}
 			type="button"
