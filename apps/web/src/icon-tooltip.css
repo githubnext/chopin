@@ -23,7 +23,7 @@
 }
 
 .icon-tooltip[data-side="right"] {
-	max-width: min(17.5rem, calc(100vw - 16px));
+	max-width: min(calc(var(--spacing) * 70), calc(100vw - 16px));
 	font-weight: 400;
 	text-align: left;
 	transform: translateY(-50%);

@@ -300,6 +300,53 @@ test("sidebar rows stay single-line and reveal descriptions beside the rail", as
 	await expect(pencil).toHaveCSS("opacity", "1");
 });
 
+test("a tapped sidebar row does not open its description card", async ({ join }) => {
+	let title = "Release plan";
+	let listed = channel("cccccccc-0000-4000-8000-000000000000", title, "Touch never shows this.");
+	let page = await join("ana", { hasTouch: true, viewport: { width: 1180, height: 820 } });
+	await page.context().route(
+		"**/api/repositories/octo-org/score/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: [listed], repository } }),
+	);
+	await page.reload();
+	let link = sidebar(page).getByRole("link", { name: title, exact: true });
+	await link.evaluate(element =>
+		element.addEventListener("click", event => event.preventDefault())
+	);
+	await link.tap();
+	await expect(link).toBeFocused();
+	await page.waitForTimeout(800);
+	await expect(page.locator("[data-icon-tooltip]")).toBeHidden();
+});
+
+test("a long description card stays inside the window beside a bottom row", async ({ join }) => {
+	let description = Array.from({ length: 12 }, () => "Coordinates release readiness work.")
+		.join(" ");
+	let listed = Array.from(
+		{ length: 12 },
+		(_, index) =>
+			channel(
+				`${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000000`,
+				`Note ${index + 1}`,
+				index === 11 ? description : undefined,
+			),
+	);
+	let height = 420;
+	let page = await join("ana", { viewport: { width: 1440, height } });
+	await page.context().route(
+		"**/api/repositories/octo-org/score/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: listed, repository } }),
+	);
+	await page.reload();
+	await sidebar(page).getByRole("link", { name: "Note 12", exact: true }).hover();
+	let card = page.locator("[data-icon-tooltip]");
+	await expect(card).toBeVisible();
+	let box = (await card.boundingBox())!;
+	expect(box.height).toBeGreaterThan(100);
+	expect(box.y).toBeGreaterThanOrEqual(8);
+	expect(box.y + box.height).toBeLessThanOrEqual(height - 8);
+});
+
 test("a stale catalogue response cannot remove a newly created document", async ({ join, page }) => {
 	let captured = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
