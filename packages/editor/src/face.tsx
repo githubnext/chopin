@@ -14,8 +14,8 @@
  * be the same shape as the agent.
  *
  * Until the photograph arrives, and for good if it never does, the mark is a
- * square tinted with the person's cursor colour and carrying their initial, so a dead URL never shows the
- * browser's broken-image glyph.
+ * square tinted with the person's cursor colour and carrying their initial, so a
+ * dead URL never shows the browser's broken-image glyph.
  */
 
 import { useState } from "react";
@@ -54,7 +54,12 @@ export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
 	return size <= 18 ? "small" : "regular";
 }
 
-export function Face({ decorative, handle, ring, size = 20, titled = true }: FaceProps) {
+/** Keyed by handle so a reused mount never carries one person's load state to another. */
+export function Face(props: FaceProps) {
+	return <Portrait key={props.handle} {...props} />;
+}
+
+function Portrait({ decorative, handle, ring, size = 20, titled = true }: FaceProps) {
 	let [failed, setFailed] = useState(false);
 	let [loaded, setLoaded] = useState(false);
 	let tone = color(handle);

@@ -237,7 +237,7 @@ function MessageGroup(
 			<div className={`shrink-0 ${item.queued ? "opacity-45" : ""}`}>
 				{item.author.kind === "agent"
 					? <ChopinMark circle />
-					: <Face handle={item.author.handle} size={24} />}
+					: <Face decorative handle={item.author.handle} size={24} titled={false} />}
 			</div>
 			<div
 				className={`-mt-0.5 flex min-w-0 flex-1 flex-col gap-1 ${item.queued ? "opacity-60" : ""}`}
