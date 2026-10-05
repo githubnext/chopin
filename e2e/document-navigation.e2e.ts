@@ -686,7 +686,7 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	await headerAction(ana, "Archive");
 	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toBeVisible();
 	await expect(bo.getByRole("banner").getByText("Archived", { exact: true })).toBeVisible();
-	await expect(ana.getByText("This document is archived. Restore it to keep chatting."))
+	await expect(ana.getByText("Archived. Restore it to keep chatting."))
 		.toBeVisible();
 	await expect(ana.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
 	await expect(content(ana)).toHaveAttribute("contenteditable", "false");
