@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, CloseIcon, MessageIcon } from "@chopin/icons";
+import { ArrowUpIcon, CheckIcon, ChevronIcon, CloseIcon, MessageIcon } from "@chopin/icons";
 
 import { limits } from "@chopin/dialect";
 
@@ -247,6 +247,9 @@ export type ThreadCardProps = {
 	showClose?: boolean;
 	/** The overlay is document chrome rather than an item in the decisions rail. */
 	inDocument?: boolean;
+	/** Return to the list of a block's threads this one was opened from. */
+	onBack?: () => void;
+	backLabel?: string;
 };
 
 export function ThreadCard({
@@ -264,6 +267,8 @@ export function ThreadCard({
 	onTyping,
 	quote,
 	inDocument,
+	onBack,
+	backLabel,
 	showClose = true,
 	view,
 	writing,
@@ -316,6 +321,18 @@ export function ThreadCard({
 			settled={!open}
 			status={!open && <Provenance at={thread.at} by={thread.resolver} verb="Accepted" />}
 		>
+			{onBack && (
+				<button
+					className="plan-comment-back btn btn-sm btn-ghost gap-1 self-start"
+					data-plan-comment-back
+					onClick={onBack}
+					type="button"
+				>
+					<ChevronIcon aria-hidden="true" className="rotate-180" size={14} />
+					{backLabel}
+				</button>
+			)}
+
 			<ul className="m-0 flex list-none flex-col gap-2 p-0">
 				{thread.notes.map((note, index) => (
 					<Note
@@ -404,6 +421,86 @@ export function ThreadCard({
 						)}
 				</>
 			)}
+		</SidecarCard>
+	);
+}
+
+export type ThreadListProps = {
+	views: ThreadView[];
+	/** A compact sheet focuses its own grabber instead. */
+	autoFocus?: boolean;
+	onSelect: (id: string) => void;
+	onClose?: () => void;
+	showClose?: boolean;
+};
+
+/** Several threads on one block, as one stop that opens into each of them. */
+export function ThreadList(
+	{ autoFocus = true, onClose, onSelect, showClose = true, views }: ThreadListProps,
+) {
+	let list = useRef<HTMLUListElement>(null);
+
+	useEffect(() => {
+		if (autoFocus) {
+			list.current?.querySelector<HTMLElement>("[data-plan-comment-group-item]")?.focus();
+		}
+	}, [autoFocus]);
+
+	let move = (event: KeyboardEvent<HTMLUListElement>) => {
+		let items = Array.from(
+			list.current?.querySelectorAll<HTMLElement>("[data-plan-comment-group-item]") ?? [],
+		);
+		let index = items.indexOf(document.activeElement as HTMLElement);
+		let next = event.key === "ArrowDown"
+			? (index + 1) % items.length
+			: event.key === "ArrowUp"
+			? (index - 1 + items.length) % items.length
+			: event.key === "Home"
+			? 0
+			: event.key === "End"
+			? items.length - 1
+			: undefined;
+		if (next === undefined || items.length === 0) return;
+		event.preventDefault();
+		items[next]?.focus();
+	};
+
+	return (
+		<SidecarCard data-plan-comment-card data-plan-comment-group label="Comments" padded={false}>
+			<header className="flex min-h-7 items-center justify-between px-3 pt-2.5">
+				<span className="text-sm text-text-tertiary tabular-nums">
+					{views.length} comments
+				</span>
+				{showClose && onClose && <CloseButton onClose={onClose} />}
+			</header>
+			<ul className="m-0 flex list-none flex-col p-1.5 pt-1" onKeyDown={move} ref={list}>
+				{views.map(view => {
+					let opening = view.thread.notes[0];
+					let replies = Math.max(0, view.thread.notes.length - 1);
+					return (
+						<li key={view.thread.id}>
+							<button
+								className="plan-comment-group-item"
+								data-plan-comment-group-item={view.thread.id}
+								onClick={() => onSelect(view.thread.id)}
+								type="button"
+							>
+								<span className="flex min-w-0 items-baseline justify-between gap-2">
+									{opening && <Who handle={opening.handle} />}
+									{replies > 0 && (
+										<span className="text-xs text-text-tertiary tabular-nums">
+											{replies} {replies === 1 ? "reply" : "replies"}
+										</span>
+									)}
+								</span>
+								<span className="plan-comment-group-note text-sm text-text-secondary">
+									{opening?.text.split("\n")[0]}
+								</span>
+							</button>
+						</li>
+					);
+				})}
+			</ul>
 		</SidecarCard>
 	);
 }

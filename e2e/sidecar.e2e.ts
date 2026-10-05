@@ -1055,47 +1055,33 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep the whole passage.");
-	let knownMarkers = await page.locator("[data-plan-comment-button]").evaluateAll(buttons =>
-		buttons.map(button => button.getAttribute("data-plan-comment-button"))
-	);
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 
-	let postedId: string | null | undefined;
-	await expect.poll(async () => {
-		let ids = await page.locator("[data-plan-comment-button]").evaluateAll(buttons =>
-			buttons.map(button => button.getAttribute("data-plan-comment-button"))
-		);
-		let posted = ids.filter(id => id && !knownMarkers.includes(id));
-		postedId = posted[0];
-		return posted.length;
-	}).toBe(1);
-	let marker = page.locator(`[data-plan-comment-button="${postedId}"]`);
+	// Both threads mark the one block, so they share its marker.
+	let marker = page.getByRole("button", { name: /^2 comments on “A selected passage/ });
 	await expect(marker).toBeAttached();
+	await expect(page.locator("[data-plan-comment-button]")).toHaveCount(1);
 	await marker.click();
+	await page.getByRole("dialog", { name: "Comments" })
+		.locator("[data-plan-comment-group-item]")
+		.filter({ hasText: "Keep the whole passage." })
+		.click();
 	let sheet = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(sheet).toContainText("Keep the whole passage.");
-	let grabber = sheet.getByRole("button", { name: "Resize comment sheet" });
-	await expect(grabber).toBeFocused();
+	let back = sheet.getByRole("button", { name: "All 2 comments" });
+	await expect(back).toBeFocused();
 
-	// No 44px point can fit inside this host. The marker moves beyond the passage,
-	// but the open sheet and its focus must not be unmounted while geometry changes.
+	// The open sheet and its focus must not be unmounted while geometry changes,
+	// even in a host too narrow to hold a marker beside the prose.
 	await page.setViewportSize({ width: 32, height: 300 });
 	await expect(marker).toBeAttached();
 	await expect(sheet).toBeVisible();
-	await expect(grabber).toBeFocused();
+	await expect(back).toBeFocused();
 	let host = page.locator(".plan-document");
-	await expect.poll(async () => {
-		let markerBox = await marker.boundingBox();
-		let documentBox = await host.boundingBox();
-		return !!markerBox && !!documentBox && documentBox.width < 44
-			&& markerBox.y >= documentBox.y + documentBox.height;
-	}).toBe(true);
 
-	// Recover with enough vertical room for the marker after the passage. Whether a
-	// 44px marker fits beside the wrapped text depends on platform font metrics.
 	await page.setViewportSize({ width: 430, height: 3_200 });
 	await expect(sheet).toBeVisible();
-	await expect(grabber).toBeFocused();
+	await expect(back).toBeFocused();
 	await expect(marker).toBeAttached();
 	await expect.poll(async () => {
 		let markerBox = await marker.boundingBox();
