@@ -1,6 +1,7 @@
 /** Browser coverage for decision card lifecycle states and metadata regrouping. */
 
 import { authenticate, content, expect, roomPath, test } from "./room";
+import { expectNoHorizontalOverflow } from "./responsive";
 
 import type { Question } from "../packages/protocol/index";
 import type { Page } from "@playwright/test";
@@ -138,6 +139,7 @@ test("discarding a decided card records the person who discarded it", async ({ j
 test("reopening a decision shares a fresh draft and a later Save survives reload", async ({ join, seed }) => {
 	await seed(PROSE);
 	let ana = await join("ana");
+	await ana.setViewportSize({ width: 945, height: 850 });
 	let ben = await join("ben");
 	for (let page of [ana, ben]) await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = (page: Page) =>
@@ -148,6 +150,10 @@ test("reopening a decision shares a fresh draft and a later Save survives reload
 	await card(ana).getByText("In SQLite", { exact: true }).click();
 	await card(ana).getByRole("button", { name: "Save", exact: true }).click();
 	await ana.getByRole("button", { name: "1 resolved" }).click();
+	let selected = card(ana).locator(".question-option[data-selected]");
+	await expect(selected).toHaveCount(1);
+	await expect(selected).toContainText("In SQLite");
+	await expect(card(ana).getByRole("radio")).toHaveCount(0);
 	await card(ana).getByRole("button", { name: "Reopen" }).click();
 
 	for (let page of [ana, ben]) {
@@ -251,7 +257,7 @@ test("card metadata regroups Decisions before the document update arrives", asyn
 test("resolved cards show no actions to a read-only viewer", async ({ baseURL, browser, join, room, seed }) => {
 	await seed(`${PROSE}\n${DECIDED_CARD}`, { questions: [DECIDED_RECORD] });
 	await join("ana");
-	let context = await browser.newContext({ baseURL });
+	let context = await browser.newContext({ baseURL, viewport: { width: 945, height: 850 } });
 	try {
 		let reader = await context.newPage();
 		await authenticate(reader, "readonly", baseURL!);
@@ -262,6 +268,9 @@ test("resolved cards show no actions to a read-only viewer", async ({ baseURL, b
 			`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
 		);
 		await expect(card).toContainText("Answered by @ana");
+		await expect(card.locator(".question-option[data-selected]")).toContainText("Canary");
+		await expect(card.getByRole("radio")).toHaveCount(0);
+		await expect(card.getByRole("checkbox")).toHaveCount(0);
 		await expect(card.getByRole("button", { name: "Reopen" })).toHaveCount(0);
 		await expect(card.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	} finally {
@@ -286,6 +295,12 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 	let card = page.locator(
 		`[data-document-view="decisions"] [data-plan-sidecar-questionnaire="${WIDGET}"]`,
 	);
+	await expect(card.getByRole("heading", { name: "How should we deploy?" })).toBeVisible();
+	await expect(card.getByRole("heading", { name: "What belongs in the first cut?" }))
+		.toBeVisible();
+	await expect(card.locator(".question-option[data-selected]")).toHaveCount(2);
+	await expect(card.locator(".question-option[data-selected]").first())
+		.toContainText("Only collaborative anchors");
 	await card.getByRole("button", { name: "Reopen" }).click();
 	await expect(card).toContainText("Previously: Only collaborative anchors · @ana");
 	await expect(card.getByRole("radio", { name: "Canary" })).not.toBeChecked();
@@ -294,6 +309,45 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 		.toBeVisible();
 	await expect(card).toContainText("Previously: Anchors · @ana");
 	await expect(card.getByRole("radio", { name: "Anchors" })).not.toBeChecked();
+});
+
+test("an answered heading remains a keyboard link to its prose", async ({ join, seed }) => {
+	await seed(`Anchored paragraph.\n\n${DECIDED_CARD}`, {
+		questions: [{
+			...DECIDED_RECORD,
+			prose: [{ epoch: "stale", position: "AAAA", digest: ANCHORED_DIGEST }],
+		}],
+	});
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	await page.getByRole("button", { name: "1 resolved" }).click();
+	let card = cardByPrompt(page, "How should we deploy?");
+	let link = card.getByRole("button", { name: "How should we deploy? — show in plan" });
+	await expect(link).toHaveCount(1);
+	await link.focus();
+	await link.press("Enter");
+	await expect(page.getByRole("button", { name: "Document", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
+	await expect(content(page).getByText("Anchored paragraph.", { exact: true })).toBeVisible();
+});
+
+test("a long legacy answer wraps inside a 390px decided card", async ({ join, seed }) => {
+	let answer = "Only collaborative anchors that preserve every surrounding edit across devices";
+	let source = `<Questionnaire id="${WIDGET}" by="ana" status="decided">
+<Question id="${QUESTION}" header="Rollout" prompt="How should we deploy?" multiple="false">
+<Option id="${OPTION}" label="Canary" />
+<Answer value="${answer}" />
+</Question>
+</Questionnaire>`;
+	await seed(`${PROSE}\n${source}`, {
+		questions: [{ ...DECIDED_RECORD, answers: { [QUESTION]: answer }, choices: [] }],
+	});
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	await page.getByRole("button", { name: "1 resolved" }).click();
+	let card = cardByPrompt(page, "How should we deploy?");
+	await expect(card.locator(".question-option[data-selected]")).toContainText(answer);
+	await expectNoHorizontalOverflow(page);
 });
 
 test("an orphaned prose anchor retains its authoritative state and resolved card", async ({ join, page, seed }) => {

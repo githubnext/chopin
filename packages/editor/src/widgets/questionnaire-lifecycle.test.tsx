@@ -19,6 +19,7 @@ test("terminal lifecycle actions require current edit permission and a connected
 	expect(editable).toContain(">Reopen<");
 	expect(editable).toContain(">Discard<");
 	expect(editable).not.toMatch(/<button[^>]*disabled=""[^>]*>Reopen</);
+	expect(editable).not.toContain("question-resolved-meta");
 	for (
 		let permission of [
 			{ canEdit: false, connected: true, wire },
@@ -51,6 +52,22 @@ test("current metadata governs lifecycle actions despite a stale discarded proje
 	expect(markup).toContain("Answered by");
 	expect(markup).toContain("@bea");
 	expect(markup).not.toContain("@ana");
+});
+
+test("answered cards use the open surface and put attribution after the chosen options", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
+		canEdit: true,
+		connected: true,
+		meta: { ...META, resolver: "ana" },
+		value: DECIDED,
+		wire,
+	}));
+
+	expect(markup).toContain("bg-page shadow-resting");
+	expect(markup).not.toContain("bg-inset");
+	expect(markup.indexOf("Answered by")).toBeGreaterThan(markup.indexOf("data-selected"));
+	expect(markup.indexOf("Answered by")).toBeLessThan(markup.indexOf(">Reopen<"));
 });
 
 test("discarded metadata retires lifecycle actions and the old projection actor", () => {

@@ -463,23 +463,26 @@ function Decided(
 				setSubmitting(false);
 			});
 	};
+	// Metadata owns lifecycle attribution; older nodes retain their document fallback.
+	let resolver = meta ? meta.resolver : value.by;
+	let provenance = resolver && (
+		<Provenance
+			at={meta ? meta.decidedAt : value.at}
+			by={resolver}
+			verb={discarded ? "Discarded" : "Answered"}
+		/>
+	);
 	return (
 		<SidecarCard
 			data-plan-sidecar-questionnaire={value.id}
 			label={value.questions.length === 1 ? "Decision" : "Question"}
 			padded={false}
-			settled
-			// Metadata owns lifecycle attribution; older nodes retain their document fallback.
-			status={
-				<Provenance
-					at={meta ? meta.decidedAt : value.at}
-					by={meta ? meta.resolver : value.by}
-					verb={discarded ? "Discarded" : "Answered"}
-				/>
-			}
+			settled={discarded}
+			status={discarded ? provenance : undefined}
 		>
 			<QuestionView
 				answers={resolved}
+				aside={discarded ? undefined : provenance}
 				definition={definition(value)}
 				disabled={!editable}
 				drafts={{}}

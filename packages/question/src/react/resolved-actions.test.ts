@@ -23,6 +23,83 @@ test("a decided card offers Reopen and Discard when allowed", () => {
 	expect(markup).toContain(">Discard<");
 });
 
+test("a decided card shows static choices and one linked question heading", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: AUTH,
+		drafts: {},
+		status: "answered",
+		answers: [{ question: AUTH.questions[0].question, choices: ["GitHub Apps"], optionIds: ["b"] }],
+		places: { q: 1 },
+		onQuestionSelect: () => {},
+	}));
+
+	expect(markup).toContain('class="question-head"');
+	expect(markup).toContain('class="question-mark"');
+	expect(markup).toMatch(/<h4[^>]*><button[^>]*data-ace-question-id="q"/);
+	expect(markup.match(/data-ace-question-id="q"/g)).toHaveLength(1);
+	expect(markup).toContain('class="question-choice-row question-option"');
+	expect(markup).toContain('class="question-choice-row question-option" data-selected=""');
+	expect(markup).toContain('class="question-key"');
+	expect(markup).toContain('class="question-check"');
+	expect(markup).not.toContain("<input");
+	expect(markup).not.toContain("<label");
+});
+
+test("multiple selections and legacy text answers remain visible in question order", () => {
+	let definition = {
+		questions: [
+			{
+				...AUTH.questions[0],
+				multiple: true,
+				options: [
+					...AUTH.questions[0].options,
+					{ id: "c", label: "Passkeys", description: "For members" },
+				],
+			},
+			{
+				id: "scope",
+				header: "Scope",
+				question: "What belongs in the first cut?",
+				multiple: false,
+				options: [{ id: "d", label: "Invites", description: "" }],
+			},
+		],
+	};
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition,
+		drafts: {},
+		status: "answered",
+		answers: [
+			{
+				question: definition.questions[0].question,
+				choices: ["Auth0", "Passkeys"],
+				optionIds: ["a", "c"],
+			},
+			{ question: definition.questions[1].question, custom: "Only collaborative anchors" },
+		],
+	}));
+
+	expect(markup.match(/data-selected=""/g)).toHaveLength(3);
+	expect(markup.indexOf("What auth system should we use?"))
+		.toBeLessThan(markup.indexOf("What belongs in the first cut?"));
+	expect(markup).toContain("Only collaborative anchors");
+	expect(markup).toContain("Selected: ");
+	expect(markup).not.toContain("<input");
+});
+
+test("a legacy answer that no longer matches an option keeps its chosen text", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: AUTH,
+		drafts: {},
+		status: "answered",
+		answers: [{ question: AUTH.questions[0].question, choices: ["Only GitHub teams"] }],
+	}));
+
+	expect(markup).toContain("Only GitHub teams");
+	expect(markup.match(/data-selected=""/g)).toHaveLength(1);
+	expect(markup).not.toContain("<input");
+});
+
 test("a decided card announces a reopen or discard failure", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: AUTH,
