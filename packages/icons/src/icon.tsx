@@ -5,9 +5,8 @@ export type IconProps = Omit<SVGProps<SVGSVGElement>, "height" | "width"> & {
 };
 
 export function LineIcon(
-	{ children, size = 14, title, viewBox = "0 0 18 18", ...props }: IconProps & {
+	{ children, size = 14, viewBox = "0 0 18 18", ...props }: IconProps & {
 		children: React.ReactNode;
-		title?: string;
 		viewBox?: string;
 	},
 ) {
@@ -21,7 +20,6 @@ export function LineIcon(
 			width={size}
 			{...props}
 		>
-			{title && <title>{title}</title>}
 			<g
 				fill="none"
 				stroke="currentColor"

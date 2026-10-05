@@ -9,6 +9,7 @@ export {
 	CloseIcon,
 	CodeIcon,
 	DecisionIcon,
+	ImageIcon,
 	InfoIcon,
 	LightbulbIcon,
 	LinkPlusIcon,

@@ -473,6 +473,45 @@ test("a selected tab follows strip layout changes without moving the document", 
 	).toBeLessThanOrEqual(64);
 });
 
+test("authored blocks share the prose edge and unavailable images degrade in place", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.route(RESPONSIVE_IMAGE_URL, route => route.abort());
+	await seed(RESPONSIVE_SOURCE);
+	page = await join("unavailable-image-reader");
+	let document = content(page);
+	let block = document.getByRole("img", { name: "Responsive workspace reference" });
+	let inline = document.getByRole("img", { name: "Mixed prose reference" });
+	await expect(block).toHaveText("Responsive workspace reference");
+	await expect(inline).toHaveText("Mixed prose reference");
+	await expect(document.getByRole("img", { name: "Contained callout reference" })).toBeVisible();
+
+	let geometry = await document.evaluate(root => {
+		// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
+		let rectangle = (element: Element | null) => {
+			if (!element) throw new Error("authored block is missing");
+			let box = element.getBoundingClientRect();
+			return { left: box.left, top: box.top, right: box.right, width: box.width };
+		};
+		let math = root.querySelector('.planMath[data-plan-inline="false"]');
+		return {
+			prose: rectangle(root.querySelector(":scope > p")),
+			table: rectangle(root.querySelector(":scope > table")),
+			block: rectangle(root.querySelector('[aria-label="Responsive workspace reference"]')),
+			inline: getComputedStyle(root.querySelector('[aria-label="Mixed prose reference"]')!)
+				.display,
+			math: rectangle(math),
+			toggle: rectangle(math?.querySelector('button[aria-label="Show source"]') ?? null),
+		};
+	});
+
+	expect(Math.abs(geometry.table.left - geometry.prose.left)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry.block.left - geometry.prose.left)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry.block.width - geometry.prose.width)).toBeLessThanOrEqual(1);
+	expect(geometry.inline).toBe("inline-flex");
+	expect(Math.abs(geometry.toggle.top - geometry.math.top)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry.toggle.right - geometry.math.right)).toBeLessThanOrEqual(1);
+});
+
 test("rich surfaces stay contained within their document or callout", async ({ join, page, seed }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await routeResponsiveImage(page);

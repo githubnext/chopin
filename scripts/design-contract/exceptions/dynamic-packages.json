@@ -161,6 +161,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > ImageIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > PlusIcon > <LineIcon>",
 				1
 			],
