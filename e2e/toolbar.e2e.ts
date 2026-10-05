@@ -108,7 +108,7 @@ test("filtering resets the option Enter will choose", async ({ join }) => {
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.type("call");
 
-	await expect(menu.getByRole("option", { selected: true })).toHaveText("Callout");
+	await expect(menu.getByRole("option", { selected: true })).toHaveAccessibleName("Callout");
 	await page.keyboard.press("Enter");
 	await expect(page.getByRole("combobox", { name: "Change callout type: Note" })).toBeVisible();
 });
