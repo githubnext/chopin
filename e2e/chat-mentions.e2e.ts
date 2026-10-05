@@ -174,21 +174,21 @@ test("the @ picker closes on Escape or an outside press and keeps the draft", as
 	let ana = await join("ana");
 	await join("cy");
 	let chat = chatPane(ana);
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let list = chat.getByRole("listbox", { name: "Mentions" });
 
 	await draft.fill("Ask @");
 	await expect(list).toBeVisible();
 	await draft.press("Escape");
 	await expect(list).toHaveCount(0);
-	await expect(draft).toHaveValue("Ask @");
+	await expectChatValue(draft, "Ask @");
 	await expect(draft).toBeFocused();
 
 	await draft.fill("Ask @c");
 	await expect(list).toBeVisible();
 	await ana.mouse.click(5, 5);
 	await expect(list).toHaveCount(0);
-	await expect(draft).toHaveValue("Ask @c");
+	await expectChatValue(draft, "Ask @c");
 });
 
 test("the @ picker closes when focus leaves the composer", async ({ join, page }) => {
@@ -197,7 +197,7 @@ test("the @ picker closes when focus leaves the composer", async ({ join, page }
 	let ana = await join("ana");
 	await join("cy");
 	let chat = chatPane(ana);
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let list = chat.getByRole("listbox", { name: "Mentions" });
 
 	await draft.fill("Ask @c");
@@ -205,5 +205,5 @@ test("the @ picker closes when focus leaves the composer", async ({ join, page }
 
 	await chat.getByRole("button", { name: "Send message" }).focus();
 	await expect(list).toHaveCount(0);
-	await expect(draft).toHaveValue("Ask @c");
+	await expectChatValue(draft, "Ask @c");
 });

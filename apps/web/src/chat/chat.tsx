@@ -151,6 +151,7 @@ export function Chat(
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
+	let composerRoot = useRef<HTMLDivElement>(null);
 	let [mode, setMode] = useState(false);
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
@@ -222,10 +223,15 @@ export function Chat(
 	// Escape keeps the draft and the composer's focus; only the picker closes.
 	usePopoverDismissal(
 		mentionOpen || pickerOpen,
-		() => [
-			textarea.current,
-			...document.querySelectorAll("[data-chat-mention-picker], [data-chat-reference-picker]"),
-		],
+		() =>
+			composerRoot.current
+				? [
+					composerRoot.current.querySelector("[contenteditable]"),
+					...composerRoot.current.querySelectorAll(
+						"[data-chat-mention-picker], [data-chat-reference-picker]",
+					),
+				]
+				: [],
 		() => setDismissedPicker(mentionOpen ? mentionKey : triggerKey),
 	);
 	let activeOption = picker.options.length === 0
@@ -482,7 +488,7 @@ export function Chat(
 				</div>
 			)}
 
-			<div className="chat-composer relative shrink-0 px-2.5 pb-2.5">
+			<div ref={composerRoot} className="chat-composer relative shrink-0 px-2.5 pb-2.5">
 				{referencesEnabled && (
 					<p className="sr-only" id={instructionsId}>
 						Type # to reference a document.
@@ -650,12 +656,6 @@ export function Chat(
 											event.preventDefault();
 											return;
 										}
-										if (mentionAction === "dismiss") {
-											setDismissedPicker(mentionKey);
-											event.preventDefault();
-											event.stopPropagation();
-											return;
-										}
 										if (mentionAction === "select" && activeMention) {
 											chooseMention(activeMention);
 											event.preventDefault();
@@ -683,12 +683,6 @@ export function Chat(
 													: (value - 1 + picker.options.length) % picker.options.length
 											);
 											event.preventDefault();
-											return;
-										}
-										if (action === "dismiss") {
-											setDismissedPicker(triggerKey);
-											event.preventDefault();
-											event.stopPropagation();
 											return;
 										}
 										if (action === "select" && activeOption) {
