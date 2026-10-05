@@ -55,8 +55,17 @@ export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
 }
 
 /** Keyed by handle so a reused mount never carries one person's load state to another. */
-export function Face(props: FaceProps) {
-	return <Portrait key={props.handle} {...props} />;
+export function Face({ decorative, handle, ring, size, titled }: FaceProps) {
+	return (
+		<Portrait
+			decorative={decorative}
+			key={handle}
+			handle={handle}
+			ring={ring}
+			size={size}
+			titled={titled}
+		/>
+	);
 }
 
 function Portrait({ decorative, handle, ring, size = 20, titled = true }: FaceProps) {
