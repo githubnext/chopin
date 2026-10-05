@@ -879,7 +879,7 @@ export function NavigationShell(
 			{children ?? (
 				<Suspense fallback={null}>
 					<EmptyWorkspace
-						disabled={creationTarget.type === "loading"}
+						disabled={creationTarget.type === "loading" || creation.pending.size > 0}
 						hasProjects={navigation?.projects.length !== 0}
 						onAddProject={() => showDialog("add")}
 						onNewDocument={newDocument}

@@ -76,6 +76,9 @@ for (let action of ["global", "pencil", "empty"] as const) {
 				name: "New document",
 				exact: true,
 			});
+		if (action === "empty") {
+			await page.getByRole("button", { name: "Close Projects sidebar", exact: true }).click();
+		}
 		await trigger.click();
 		await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 		await expect(page.getByRole("textbox", { name: "editable markdown" })).toHaveAttribute(
