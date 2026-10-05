@@ -25,11 +25,10 @@ export function revealDelta(
 	item: { left: number; right: number },
 	inset: number,
 ): number {
-	if (item.left < view.left + inset) return item.left - view.left - inset;
-	// An item wider than the clear area stays start-aligned instead of flip-flopping.
-	if (item.right - item.left > view.right - view.left - 2 * inset) {
-		return item.left - view.left - inset;
-	}
-	if (item.right > view.right - inset) return item.right - view.right + inset;
+	// An item too wide to clear both fades gets only the room that exists, so the
+	// two sides can never pull against each other.
+	let room = Math.max(0, Math.min(inset, (view.right - view.left - (item.right - item.left)) / 2));
+	if (item.left < view.left + room) return item.left - view.left - room;
+	if (item.right > view.right - room) return item.right - view.right + room;
 	return 0;
 }
