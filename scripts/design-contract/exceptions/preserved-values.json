@@ -529,6 +529,13 @@
 				"max(1rem, var(--plan-body))",
 				"CSS > @media (pointer: coarse) > .plan .plan-content,\n\t.plan-content :is(h4, h5, h6)",
 				1
+			],
+			[
+				"typography",
+				"font-size",
+				"max(1rem, var(--text-sm))",
+				"CSS > @media (pointer: coarse) > .plan-content :is(pre, [data-plan-source]),\n\t.plan-content [data-plan-preview]:not(:empty) ~ [data-plan-source],\n\t.plan-content .planCode .plan-code-view[data-view=\"file\"]",
+				1
 			]
 		]
 	}
