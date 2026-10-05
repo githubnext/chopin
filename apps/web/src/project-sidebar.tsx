@@ -280,6 +280,8 @@ export function ProjectSidebar(
 	{
 		accountMenu,
 		accountMenuOpen,
+		accountMenuId,
+		accountTriggerRef,
 		accountWrapRef,
 		canCreateDocument,
 		newDocumentPhase,
@@ -300,6 +302,8 @@ export function ProjectSidebar(
 	}: {
 		accountMenu?: ReactNode;
 		accountMenuOpen?: boolean;
+		accountMenuId?: string;
+		accountTriggerRef?: Ref<HTMLButtonElement>;
 		accountWrapRef?: Ref<HTMLDivElement>;
 		canCreateDocument: boolean;
 		catalogueMode: "active" | "archived";
@@ -455,8 +459,10 @@ export function ProjectSidebar(
 			</div>
 			{archiveFooter}
 			<div className="project-sidebar-account-wrap" ref={accountWrapRef}>
-				{accountMenu}
 				<button
+					aria-controls={accountMenu ? accountMenuId : undefined}
+					aria-haspopup="menu"
+					ref={accountTriggerRef}
 					className="project-sidebar-account"
 					aria-expanded={accountMenuOpen ?? !!accountMenu}
 					onClick={onAccount}
@@ -475,6 +481,7 @@ export function ProjectSidebar(
 						: <span aria-hidden="true" className="size-5 rounded-full bg-gray-300" />}
 					<span className="truncate">{user.login}</span>
 				</button>
+				{accountMenu}
 			</div>
 		</aside>
 	);

@@ -16,9 +16,10 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 
 // Includes the keyboard focus recovery and document-creation guards/progress.
 // The latter adds a 1 KB compressed allowance, including Linux gzip variation.
+// Shared menu dismissal and the account menu keyboard contract add 1 KB raw.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
 	gzip: 81_500,
-	raw: 255_000,
+	raw: 256_000,
 };
 
 export function enforceInitialJavaScript(

@@ -6,6 +6,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -311,13 +312,20 @@ export function NavigationShell(
 	);
 	let dialogPresence = useTransitionPresence(dialog, 150, immediateMotion);
 	let accountWrap = useRef<HTMLDivElement>(null);
+	let accountTrigger = useRef<HTMLButtonElement>(null);
+	let accountMenuId = useId();
 	let closeAccount = useCallback((restoreFocus: boolean) => {
 		setAccountOpen(false);
-		if (restoreFocus) {
-			accountWrap.current?.querySelector<HTMLElement>("[aria-expanded]")?.focus();
-		}
+		if (restoreFocus) accountTrigger.current?.focus();
 	}, []);
 	useMenuDismissal(accountOpen, [accountWrap], closeAccount);
+	useEffect(() => {
+		if (!accountOpen) return;
+		let frame = requestAnimationFrame(() => {
+			accountWrap.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [accountOpen]);
 	let accountPresence = useTransitionPresence(
 		accountOpen ? true : undefined,
 		150,
@@ -781,13 +789,24 @@ export function NavigationShell(
 					<div
 						aria-hidden={accountPresence.phase === "closing" ? "true" : undefined}
 						className={`navigation-account-menu motion-dropdown ${accountPresence.className}`}
+						id={accountMenuId}
 						inert={accountPresence.phase === "closing"}
+						onKeyDown={event => {
+							if (event.key === "Tab") return closeAccount(false);
+							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+							event.preventDefault();
+							let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+							let last = event.key === "ArrowUp" || event.key === "End";
+							items.at(last ? -1 : 0)?.focus();
+						}}
 						role="menu"
 					>
 						<button onClick={() => void signOut()} role="menuitem" type="button">Sign out</button>
 					</div>
 				)}
+				accountMenuId={accountMenuId}
 				accountMenuOpen={accountOpen}
+				accountTriggerRef={accountTrigger}
 				accountWrapRef={accountWrap}
 				canCreateDocument={creationTarget.type !== "loading"}
 				pendingCreations={creation.pending}

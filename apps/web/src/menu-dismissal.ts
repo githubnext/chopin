@@ -18,15 +18,17 @@ export function useMenuDismissal(
 		let escape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
 			event.preventDefault();
+			event.stopPropagation();
 			close(true);
 		};
 		document.addEventListener("pointerdown", outside);
 		document.addEventListener("focusin", outside);
-		document.addEventListener("keydown", escape);
+		document.addEventListener("keydown", escape, true);
 		return () => {
 			document.removeEventListener("pointerdown", outside);
 			document.removeEventListener("focusin", outside);
-			document.removeEventListener("keydown", escape);
+			document.removeEventListener("keydown", escape, true);
 		};
-	}, [close, open]); // refs are stable
+		// `regions` is deliberately omitted: callers pass a fresh array of stable refs each render.
+	}, [close, open]);
 }
