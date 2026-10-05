@@ -10,11 +10,11 @@ The [Kobra Reasoning Steps demo](https://kobra.systems/components/reasoning-step
 
 ## Approaches considered
 
-| Approach | Benefit | Cost |
-| --- | --- | --- |
-| Use the existing chat events for a derived progression | Small, reviewable client change; stages remain tied to real work | Older entries remain grouped by message rather than an exact persistent turn timeline |
-| Add durable turn IDs and a server-side timeline | Exact grouping across messages and reconnections | Cross-package schema and persistence work for a visual improvement |
-| Animate the existing tool label and count | Fastest | Keeps the current opaque, technical wording and does not make tool calls inspectable during work |
+| Approach                                               | Benefit                                                          | Cost                                                                                             |
+| ------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Use the existing chat events for a derived progression | Small, reviewable client change; stages remain tied to real work | Older entries remain grouped by message rather than an exact persistent turn timeline            |
+| Add durable turn IDs and a server-side timeline        | Exact grouping across messages and reconnections                 | Cross-package schema and persistence work for a visual improvement                               |
+| Animate the existing tool label and count              | Fastest                                                          | Keeps the current opaque, technical wording and does not make tool calls inspectable during work |
 
 Use the existing events. Add a protocol turn identity only if a later workflow needs an exact cross-message history. The client already receives each tool's name, status, arguments, result, and duration; the server redacts reference content and caps displayed results.
 
