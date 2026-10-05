@@ -116,3 +116,94 @@ test("Tab nests a list item and Shift+Tab brings it back", async ({ join, room }
 	await expect(content(page).locator("li li")).toHaveCount(0);
 	await written(page, room, /^- one\n- two$/m);
 });
+
+test("Tab on a first list item leaves without a phantom indent", async ({ join, room }) => {
+	let ana = await join("ana");
+	let ben = await join("ben");
+
+	await content(ana).click();
+	await ana.keyboard.type("- one");
+	await written(ana, room, /^- one$/m);
+	let before = await content(ana).innerHTML();
+
+	// Lexical would nest it inside an empty item of its own, which the source
+	// cannot show but every collaborator would.
+	await ana.keyboard.press("Tab");
+	await expect(content(ana)).not.toBeFocused();
+	expect(await content(ana).innerHTML()).toBe(before);
+
+	// A later edit from the same author is the barrier: once Ben has it, he
+	// has everything Ana sent before it.
+	await content(ana).getByText("one", { exact: true }).click();
+	await ana.keyboard.press("End");
+	await ana.keyboard.type("!");
+	await expect(content(ben).getByRole("listitem")).toHaveText(["one!"]);
+	await expect(content(ben).locator("li li")).toHaveCount(0);
+	await written(ana, room, /^- one!$/m);
+});
+
+test("Tab indents code, Shift+Tab outdents, and Escape then Tab leaves", async ({ join, room }) => {
+	let page = await join("ana");
+	let hint = content(page).getByText("Esc then Tab to leave");
+
+	await content(page).click();
+	await page.keyboard.type("/code");
+	await page.getByRole("listbox", { name: "Insert block" }).getByRole("option", {
+		name: "Code block",
+	})
+		.click();
+	await page.keyboard.type("a();");
+	await page.keyboard.press("Enter");
+	await page.keyboard.press("Tab");
+	await page.keyboard.type("b();");
+	await written(page, room, /^a\(\);\n\tb\(\);$/m);
+	await expect(hint).toBeVisible();
+
+	await page.keyboard.press("Shift+Tab");
+	await expect(content(page)).toBeFocused();
+	await written(page, room, /^a\(\);\nb\(\);$/m);
+
+	await page.keyboard.press("Escape");
+	await page.keyboard.press("Tab");
+	await expect(content(page)).not.toBeFocused();
+	await expect(hint).toBeHidden();
+	await written(page, room, /^a\(\);\nb\(\);$/m);
+});
+
+test("Tab moves between table cells and out of the last one", async ({ join, room, seed }) => {
+	await seed("| Item | Note |\n| ---- | ---- |\n| one  | a    |\n\nAfter.\n");
+	let page = await join("ana");
+
+	await content(page).getByText("one", { exact: true }).click();
+	await page.keyboard.press("End");
+	await page.keyboard.type("1");
+	await page.keyboard.press("Tab");
+	await page.keyboard.type("2");
+	await written(page, room, /one1\s*\|\s*a2/);
+
+	// The last cell hands the caret to the block after the table.
+	await page.keyboard.press("Tab");
+	await expect(content(page)).toBeFocused();
+	await page.keyboard.type("3");
+	await written(page, room, /^(3After\.|After\.3)$/m);
+	await written(page, room, /one1\s*\|\s*a2\s*\|/);
+});
+
+test("Tab over a selection from a list into a paragraph leaves it alone", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("- one\ntwo\n\nafter");
+	await written(page, room, /^- one\n- two\n\nafter$/m);
+
+	await page.keyboard.press("Shift+ArrowUp");
+	await expect.poll(() => page.evaluate(() => getSelection()?.isCollapsed)).toBe(false);
+	// Lexical reads the selection on `selectionchange`, a task after the key.
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+	let before = await content(page).innerHTML();
+
+	await page.keyboard.press("Tab");
+	await expect(content(page)).not.toBeFocused();
+	expect(await content(page).innerHTML()).toBe(before);
+	await written(page, room, /^- one\n- two\n\nafter$/m);
+});

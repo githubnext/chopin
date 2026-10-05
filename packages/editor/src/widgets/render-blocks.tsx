@@ -30,8 +30,12 @@ import {
 	$getSelection,
 	$isElementNode,
 	$isRangeSelection,
+	BLUR_COMMAND,
 	COLLABORATION_TAG,
+	COMMAND_PRIORITY_LOW,
+	FOCUS_COMMAND,
 	HISTORIC_TAG,
+	mergeRegister,
 } from "lexical";
 import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
@@ -41,7 +45,7 @@ import { CodeView } from "./code-view";
 import { LanguageMenu } from "./language-menu";
 import { CodeIcon, WarningIcon } from "@chopin/icons";
 
-import type { ElementNode, LexicalEditor } from "lexical";
+import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
 import type { Kind } from "./code";
 
 type Block = {
@@ -220,11 +224,13 @@ function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => v
 
 /** Attaches a preview element beside a block's source, keyed to its content. */
 function Preview(
-	{ block, editor, collapsed, disabled, onToggle, onHidable }: {
+	{ block, editor, collapsed, disabled, editing, onToggle, onHidable }: {
 		block: Block;
 		editor: LexicalEditor;
 		collapsed: boolean;
 		disabled?: boolean;
+		/** The caret is in this block's source and the editor has focus. */
+		editing: boolean;
 		onToggle: () => void;
 		onHidable: (key: string, hidable: boolean) => void;
 	},
@@ -326,7 +332,16 @@ function Preview(
 							<span className="plan-code-title">{titleOf(block.meta)}</span>
 						)}
 					</div>
-					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
+					<div className="flex shrink-0 items-center gap-2">
+						{
+							// Tab indents code, so the way out has to be said
+							// where someone is typing it.
+							editing && !disabled && block.kind !== "math" && (
+								<span className="text-xs text-text-tertiary">Esc then Tab to leave</span>
+							)
+						}
+						{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
+					</div>
 				</div>,
 				chrome,
 				`${block.key}:chrome`,
@@ -406,6 +421,8 @@ export function PreviewPlugin() {
 	/** Blocks that currently have a rendered preview. */
 	let [hidable, setHidable] = useState<ReadonlySet<string>>(() => new Set());
 
+	/** The code block holding the caret while the editor has focus. */
+	let [editing, setEditing] = useState<string>();
 	/** Read by listeners that must not re-register whenever one is toggled. */
 	let current = useRef(shown);
 	current.current = shown;
@@ -457,6 +474,35 @@ export function PreviewPlugin() {
 		});
 	}, [editor]);
 
+	useEffect(() => {
+		let refresh = () => {
+			let root = editor.getRootElement();
+			if (!root || root.ownerDocument.activeElement !== root) return setEditing(undefined);
+			setEditing(
+				editor.getEditorState().read(() => {
+					let selection = $getSelection();
+					if (!$isRangeSelection(selection)) return undefined;
+					for (let at: LexicalNode | null = selection.anchor.getNode(); at; at = at.getParent()) {
+						if ($isCodeBlockNode(at)) return at.getKey();
+					}
+					return undefined;
+				}),
+			);
+		};
+		refresh();
+		return mergeRegister(
+			editor.registerUpdateListener(refresh),
+			editor.registerCommand(FOCUS_COMMAND, () => {
+				refresh();
+				return false;
+			}, COMMAND_PRIORITY_LOW),
+			editor.registerCommand(BLUR_COMMAND, () => {
+				setEditing(undefined);
+				return false;
+			}, COMMAND_PRIORITY_LOW),
+		);
+	}, [editor]);
+
 	let toggle = useCallback((key: string) => {
 		// Collapsing with the caret inside would strand it in a hidden box, so
 		// it is moved past the block first.
@@ -481,6 +527,7 @@ export function PreviewPlugin() {
 					editor={editor}
 					collapsed={!shown[block.key]}
 					disabled={disabled}
+					editing={editing === block.key}
 					onToggle={() => toggle(block.key)}
 					onHidable={reportHidable}
 				/>
