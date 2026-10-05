@@ -1272,6 +1272,13 @@
 	display: block;
 }
 
+/* The managed break after a block frame would add an empty line beneath it. */
+.plan-content
+	p:has(> [data-plan-src]:first-child > .plan-image-missing)
+	> br[data-lexical-managed-linebreak]:last-child {
+	display: none;
+}
+
 .plan-content
 	p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)
 	.plan-image-missing {

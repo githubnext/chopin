@@ -490,13 +490,21 @@ test("authored blocks share the prose edge and unavailable images degrade in pla
 		let rectangle = (element: Element | null) => {
 			if (!element) throw new Error("authored block is missing");
 			let box = element.getBoundingClientRect();
-			return { left: box.left, top: box.top, right: box.right, width: box.width };
+			return {
+				left: box.left,
+				top: box.top,
+				right: box.right,
+				width: box.width,
+				height: box.height,
+			};
 		};
+		let frame = root.querySelector('[aria-label="Responsive workspace reference"]');
 		let math = root.querySelector('.planMath[data-plan-inline="false"]');
 		return {
 			prose: rectangle(root.querySelector(":scope > p")),
 			table: rectangle(root.querySelector(":scope > table")),
-			block: rectangle(root.querySelector('[aria-label="Responsive workspace reference"]')),
+			block: rectangle(frame),
+			blockRow: rectangle(frame?.closest("p") ?? null),
 			inline: getComputedStyle(root.querySelector('[aria-label="Mixed prose reference"]')!)
 				.display,
 			math: rectangle(math),
@@ -510,6 +518,16 @@ test("authored blocks share the prose edge and unavailable images degrade in pla
 	expect(geometry.inline).toBe("inline-flex");
 	expect(Math.abs(geometry.toggle.top - geometry.math.top)).toBeLessThanOrEqual(1);
 	expect(Math.abs(geometry.toggle.right - geometry.math.right)).toBeLessThanOrEqual(1);
+	// The paragraph's managed line break must not add an empty line under the frame.
+	expect(Math.abs(geometry.blockRow.height - geometry.block.height)).toBeLessThanOrEqual(1);
+
+	// Revealed by focus within the block, not only by hover.
+	let formula = document.locator('.planMath[data-plan-inline="false"]').first();
+	let toggle = formula.getByRole("button", { name: "Show source" });
+	await page.mouse.move(0, 0);
+	await expect(toggle).toHaveCSS("opacity", "0");
+	await toggle.evaluate(node => (node as HTMLElement).focus());
+	await expect(toggle).toHaveCSS("opacity", "1");
 });
 
 test("rich surfaces stay contained within their document or callout", async ({ join, page, seed }) => {
