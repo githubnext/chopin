@@ -532,15 +532,14 @@
 }
 
 .plan-comment-preview .plan-comment-preview-author {
-	font-weight: 600;
-	color: var(--color-brand-ink);
+	display: flex;
 }
 
 .plan-comment-preview .plan-comment-preview-note {
 	margin-top: 0.125rem;
 }
 
-.plan-comment-preview span {
+.plan-comment-preview .plan-comment-preview-replies {
 	display: block;
 	margin-top: 0.25rem;
 	color: var(--color-text-tertiary);

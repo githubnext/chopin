@@ -199,23 +199,25 @@ async function secondThread(page: import("@playwright/test").Page) {
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 }
 
-test("a desktop comment uses a stable document-edge surface", async ({ join, seed }) => {
+test("a wide desktop comment sits in the gutter beside its passage", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_440, height: 900 });
 	await page.getByRole("button", { name: "Close sidebar" }).click();
 	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	let card = await thread(page);
+	let paragraph = content(page).locator("p").first();
 	let document = page.locator(".plan-document");
 
 	await expect.poll(async () => {
 		let cardBox = await card.boundingBox();
+		let paragraphBox = await paragraph.boundingBox();
 		let documentBox = await document.boundingBox();
-		if (!cardBox || !documentBox) return Number.POSITIVE_INFINITY;
-		return Math.abs(
-			documentBox.x + documentBox.width - 12 - (cardBox.x + cardBox.width),
-		);
-	}).toBeLessThanOrEqual(1);
+		if (!cardBox || !paragraphBox || !documentBox) return false;
+		return cardBox.x >= paragraphBox.x + paragraphBox.width
+			&& cardBox.x + cardBox.width <= documentBox.x + documentBox.width
+			&& Math.abs(cardBox.y - paragraphBox.y) <= 4;
+	}).toBe(true);
 });
 
 test("a narrow split document keeps the desktop comment popover", async ({ join, seed }) => {
@@ -223,16 +225,19 @@ test("a narrow split document keeps the desktop comment popover", async ({ join,
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_024, height: 800 });
 	let card = await thread(page);
-	let document = page.locator(".plan-document");
+	let paragraph = content(page).locator("p").first();
 
 	await expect(card).not.toHaveAttribute("aria-modal", "true");
 	await expect(page.getByRole("button", { name: "Resize comment sheet" })).toHaveCount(0);
+	// No gutter is wide enough here, so the card sits below the passage inside its column.
 	await expect.poll(async () => {
 		let cardBox = await card.boundingBox();
-		let documentBox = await document.boundingBox();
-		if (!cardBox || !documentBox) return false;
+		let paragraphBox = await paragraph.boundingBox();
+		if (!cardBox || !paragraphBox) return false;
 		return cardBox.width <= 320
-			&& Math.abs(cardBox.x + cardBox.width - (documentBox.x + documentBox.width - 12)) <= 1;
+			&& cardBox.y >= paragraphBox.y + paragraphBox.height
+			&& cardBox.x >= paragraphBox.x - 1
+			&& cardBox.x + cardBox.width <= paragraphBox.x + paragraphBox.width + 1;
 	}).toBe(true);
 });
 
