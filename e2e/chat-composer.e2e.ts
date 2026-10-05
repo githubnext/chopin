@@ -1,4 +1,4 @@
-import { chatCaret, chatInput, expectChatValue } from "./chat-input";
+import { chatCaret, chatInput, expectChatValue, fillChat } from "./chat-input";
 import { seedChildChannel } from "./database";
 import { expect, test } from "./room";
 
@@ -19,6 +19,38 @@ test("touch chat input stays at least 16px to avoid focus zoom", async ({ join }
 	let size = await input.evaluate(element => parseFloat(getComputedStyle(element).fontSize));
 	expect(size).toBeGreaterThanOrEqual(16);
 });
+
+for (let touch of [false, true]) {
+	test(`chat input rests at two lines and grows to its cap on ${touch ? "touch" : "desktop"}`, async ({ join }) => {
+		let page = await join("ana", {
+			hasTouch: touch,
+			viewport: touch ? { width: 390, height: 844 } : { width: 1440, height: 900 },
+		});
+		if (touch) {
+			await page.getByRole("navigation", { name: "Workspace view" })
+				.getByRole("button", { name: /^Chat/ }).click();
+		}
+		let input = chatInput(chatPane(page));
+		await expect(input).toBeVisible();
+		let initial = await input.evaluate(element => {
+			let style = getComputedStyle(element);
+			return {
+				height: element.getBoundingClientRect().height,
+				line: parseFloat(style.lineHeight),
+				padding: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom),
+				maximum: parseFloat(style.maxHeight),
+			};
+		});
+		expect(initial.height).toBeCloseTo(initial.padding + 2 * initial.line, 0);
+		await fillChat(input, "One\nTwo\nThree\nFour");
+		await expect.poll(() => input.evaluate(element => element.getBoundingClientRect().height))
+			.toBeGreaterThan(initial.height);
+		await fillChat(input, Array.from({ length: 30 }, (_, index) => `Line ${index}`).join("\n"));
+		await expect.poll(() => input.evaluate(element => element.getBoundingClientRect().height))
+			.toBeCloseTo(initial.maximum, 0);
+		expect(await input.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+	});
+}
 
 async function enablePlanner(page: Page): Promise<void> {
 	await page.route("**/api/session", async route => {

@@ -35,8 +35,8 @@
 	position: relative;
 	display: block;
 	width: 100%;
-	min-height: 64px;
-	max-height: 14rem;
+	min-height: calc(1.5rem + 2lh);
+	max-height: 12rem;
 	padding: 0.75rem;
 	border: 0;
 	background: transparent;
