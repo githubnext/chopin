@@ -746,6 +746,7 @@
 	flex-direction: column;
 	overflow-y: auto;
 	padding: 6px;
+	scroll-padding-block: 6px;
 }
 
 .navigation-palette-option {
