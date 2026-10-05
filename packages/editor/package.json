@@ -15,6 +15,10 @@
 			"types": "./src/content-swap.tsx",
 			"default": "./src/content-swap.tsx"
 		},
+		"./count": {
+			"types": "./src/count.tsx",
+			"default": "./src/count.tsx"
+		},
 		"./pointer": {
 			"types": "./src/pointer.ts",
 			"default": "./src/pointer.ts"
@@ -27,7 +31,11 @@
 			"types": "./src/transition-presence.ts",
 			"default": "./src/transition-presence.ts"
 		},
-		"./styles.css": "./src/styles.css"
+		"./styles.css": "./src/styles.css",
+		"./popover-dismissal": {
+			"types": "./src/popover-dismissal.ts",
+			"default": "./src/popover-dismissal.ts"
+		}
 	},
 	"dependencies": {
 		"@base-ui/react": "1.7.0",
