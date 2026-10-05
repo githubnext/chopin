@@ -122,20 +122,22 @@ export function ScopedChoicePrompt({
 				</p>
 			)}
 			{error && <p className="m-0 pl-7 text-xs text-destructive-ink" role="alert">{error}</p>}
-			<div className="flex justify-end">
-				<button
-					className="btn btn-sm btn-primary"
-					disabled={!enabled}
-					onClick={() => void save()}
-					type="button"
-				>
-					{saved
-						? "Saved for this spike"
-						: submitting || acknowledged
-						? "Saving…"
-						: "Save for this spike"}
-				</button>
-			</div>
+			{(canEdit || saved) && (
+				<div className="flex justify-end">
+					<button
+						className="btn btn-sm btn-primary"
+						disabled={!enabled}
+						onClick={() => void save()}
+						type="button"
+					>
+						{saved
+							? "Saved for this spike"
+							: submitting || acknowledged
+							? "Saving…"
+							: "Save for this spike"}
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }

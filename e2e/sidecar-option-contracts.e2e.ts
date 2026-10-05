@@ -25,6 +25,25 @@ function questionnaire(page: import("@playwright/test").Page) {
 	return page.locator('[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]');
 }
 
+test("an archived document's decision card offers no way to add an option", async ({ join, seed }) => {
+	await seed(PROSE);
+	let ana = await join("ana");
+	await ana.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(ana).filter({
+		has: ana.getByRole("heading", { name: "Where should room state live?" }),
+	});
+	await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeVisible();
+
+	await ana.getByRole("banner").getByRole("button", { name: /^Actions for / }).click();
+	await ana.getByRole("menuitem", { name: "Archive", exact: true }).click();
+	await expect(ana.getByText("Archived, read-only", { exact: true })).toBeVisible();
+
+	await expect(card).toBeVisible();
+	await expect(card.getByRole("button", { name: "Add an option", exact: true })).toHaveCount(0);
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+	await expect(ana.getByRole("button", { name: "Save decision", exact: true })).toHaveCount(0);
+});
+
 test("adding an option shows it to everyone and keeps a selection", async ({ join, seed }) => {
 	await seed(PROSE);
 	let ana = await join("ana");
