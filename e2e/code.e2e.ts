@@ -445,3 +445,22 @@ test("the language menu takes focus before the next animation frame", async ({ j
 	await expect(content(page).getByRole("button", { name: "Code language: XML", exact: true }))
 		.toBeVisible();
 });
+
+test("the language menu closes on Escape from its trigger and when focus leaves", async ({ join, seed }) => {
+	await seed("```typescript\nlet total = 1;\n```\n");
+	let page = await join("ana");
+	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
+	let list = page.getByRole("listbox", { name: "Code language" });
+
+	await trigger.click();
+	await expect(list).toBeVisible();
+	await trigger.focus();
+	await page.keyboard.press("Escape");
+	await expect(list).toBeHidden();
+	await expect(trigger).toBeFocused();
+
+	await trigger.click();
+	await expect(list).toBeVisible();
+	await content(page).getByRole("button", { name: "Show source" }).focus();
+	await expect(list).toBeHidden();
+});

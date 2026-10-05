@@ -167,3 +167,26 @@ test("the @ picker stays inside a narrow Chat panel", async ({ join, page }) => 
 	expect(box!.x).toBeGreaterThanOrEqual(panel!.x);
 	expect(box!.x + box!.width).toBeLessThanOrEqual(panel!.x + panel!.width);
 });
+
+test("the @ picker closes on Escape or an outside press and keeps the draft", async ({ join, page }) => {
+	await enablePlanner(page);
+	await stubAvatars(page);
+	let ana = await join("ana");
+	await join("cy");
+	let chat = chatPane(ana);
+	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let list = chat.getByRole("listbox", { name: "Mentions" });
+
+	await draft.fill("Ask @");
+	await expect(list).toBeVisible();
+	await draft.press("Escape");
+	await expect(list).toHaveCount(0);
+	await expect(draft).toHaveValue("Ask @");
+	await expect(draft).toBeFocused();
+
+	await draft.fill("Ask @c");
+	await expect(list).toBeVisible();
+	await ana.mouse.click(5, 5);
+	await expect(list).toHaveCount(0);
+	await expect(draft).toHaveValue("Ask @c");
+});

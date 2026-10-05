@@ -12,9 +12,10 @@
  * was here, but the block itself is gone and cannot be asked what it was.
  */
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 
 import { MotionDisclosureIcon } from "./disclosure-motion";
+import { usePopoverDismissal } from "./popover-dismissal";
 
 import type { ChangeStore, Entry, Snapshot } from "./changes";
 
@@ -93,6 +94,7 @@ function Chip(
 	let [open, setOpen] = useState(false);
 	let [iconMotionOwner, setIconMotionOwner] = useState<"immediate" | "pointer">();
 	let box = useRef<HTMLDivElement>(null);
+	let more = useRef<HTMLButtonElement>(null);
 
 	// Once every change in this direction is read, the list has nothing left
 	// to show. Adjusting state during render (rather than in an Effect that
@@ -107,19 +109,13 @@ function Chip(
 		}
 	}
 
-	// Closing on an outside click rather than on blur: the list is inside the
-	// same box as the button, so blur fires on the way to clicking it.
-	useEffect(() => {
-		if (!open) return;
-		let close = (event: MouseEvent) => {
-			if (!box.current?.contains(event.target as Node)) {
-				setIconMotionOwner("pointer");
-				setOpen(false);
-			}
-		};
-		document.addEventListener("mousedown", close);
-		return () => document.removeEventListener("mousedown", close);
-	}, [open]);
+	// Outside the whole box rather than blur: the list is inside the same box
+	// as the button, so blur fires on the way to clicking it.
+	usePopoverDismissal(open, () => [box.current], reason => {
+		setIconMotionOwner(reason === "escape" ? "immediate" : "pointer");
+		setOpen(false);
+		if (reason === "escape") more.current?.focus();
+	});
 
 	if (waiting === 0) return null;
 
@@ -142,6 +138,7 @@ function Chip(
 				<button
 					type="button"
 					className="plan-changes-more"
+					ref={more}
 					data-tooltip="View changes"
 					aria-expanded={open}
 					onClick={() => {

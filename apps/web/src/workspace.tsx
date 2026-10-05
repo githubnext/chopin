@@ -1,6 +1,7 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { Count } from "@chopin/editor";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CloseIcon } from "@chopin/icons";
@@ -350,12 +351,8 @@ export function Workspace(
 									? "Decisions"
 									: "Document"}
 								{destination === "decisions" && unanswered > 0 && (
-									<span
-										aria-hidden="true"
-										className={`${motionContract("feedback").className} ml-1`}
-										data-motion-feedback="count"
-									>
-										{unanswered}
+									<span aria-hidden="true" className="ml-1" data-plan-decision-count>
+										<Count>{unanswered}</Count>
 									</span>
 								)}
 								{destination === "chat" && chatActivity.busy && (
