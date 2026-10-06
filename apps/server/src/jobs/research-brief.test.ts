@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import {
 	parseResearchBriefInput,
 	researchBriefDefinition,
@@ -6,6 +6,8 @@ import {
 	sourceId,
 } from "./research-brief";
 import type { JobExecution } from "./registry";
+import { researchBriefAgent } from "../harness/agents";
+import * as Worker from "./worker-session";
 
 function input(): ResearchBriefInput {
 	return {
@@ -71,4 +73,55 @@ test("brief input rejects extra capabilities and oversized context", () => {
 			},
 		})
 	).toThrow();
+});
+
+test("the default brief engine opens a worker within Copilot's session credit contract", async () => {
+	let material = input();
+	let creditLimit = 0;
+	let closed: string[] = [];
+	let session = {
+		destroy: async () => {
+			closed.push("session");
+		},
+	};
+	let openWorker = Worker.openWorkerSession;
+	let opener = spyOn(Worker, "openWorkerSession").mockImplementation((agent, options) => {
+		creditLimit = options.maxAiCredits;
+		return openWorker(agent, {
+			...options,
+			openSandbox: async () =>
+				({
+					destroy: async () => {
+						closed.push("sandbox");
+					},
+				}) as unknown as Worker.WorkerSandbox,
+		});
+	});
+	let create = spyOn(researchBriefAgent, "createSession").mockImplementation(async () => {
+		if (creditLimit < 30) throw new Error("Minimum session limit is 30 AI credits.");
+		return session as never;
+	});
+	let generate = spyOn(researchBriefAgent, "generate").mockImplementation(async () =>
+		({
+			output: { brief: "Compare Jev alternatives.", sourceIds: [sourceId(material.sources[0]!)] },
+		}) as never
+	);
+	try {
+		let definition = researchBriefDefinition({ config: { agent: true, model: "fixture" } });
+		let result = await definition.execute({
+			input: material,
+			signal: new AbortController().signal,
+			deadline: new Date(Date.now() + 60_000),
+			credential: { kind: "active-planner", token: "fixture-only", authorize: async () => true },
+		} as JobExecution<ResearchBriefInput>);
+		expect(result.brief).toBe("Compare Jev alternatives.");
+		expect(creditLimit).toBe(definition.limits.maxAiCredits);
+		expect(create).toHaveBeenCalledTimes(1);
+		expect(generate).toHaveBeenCalledTimes(1);
+		expect(closed).toEqual(["session", "sandbox"]);
+	} finally {
+		opener.mockRestore();
+		create.mockRestore();
+		generate.mockRestore();
+	}
 });

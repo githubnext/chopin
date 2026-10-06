@@ -85,6 +85,9 @@ Chat excerpts and decision snapshots, returns structured output with source IDs,
 and has no web, repository, shell, or document-editing tools. Generation checks
 prevent stale output from replacing human edits or accepted briefs. Successful
 artifacts reconcile on completion or the next room opening.
+Runner failures also reconcile the offer immediately so its refinement error and
+retry action become visible. The brief worker uses a 30-credit session ceiling,
+matching the Copilot SDK's minimum accepted session limit.
 
 ## Configuration
 
