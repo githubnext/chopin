@@ -7,6 +7,9 @@ import type { JsonValue } from "../storage/model";
 import { type JobDefinition, type JobExecution, JobExecutionError } from "./registry";
 import { openWorkerSession } from "./worker-session";
 
+// Copilot requires a session ceiling of at least 30, even for a single short turn.
+const MAX_AI_CREDITS = 30;
+
 export type ResearchBriefInput = {
 	offerId: string;
 	generation: number;
@@ -90,7 +93,7 @@ async function generate(
 		if (!await credential.authorize()) throw new JobExecutionError("owner-unavailable");
 		let opened = await openWorkerSession(researchBriefAgent, {
 			token: () => credential.token,
-			maxAiCredits: 8,
+			maxAiCredits: MAX_AI_CREDITS,
 			aborted,
 		});
 		close = opened.close;
@@ -142,7 +145,7 @@ export function researchBriefDefinition(options: {
 		limits: {
 			timeoutMs: 60000,
 			maxAttempts: 2,
-			maxAiCredits: 8,
+			maxAiCredits: MAX_AI_CREDITS,
 			maxInputBytes: 128 * 1024,
 			maxArtifactBytes: 16 * 1024,
 		},

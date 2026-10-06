@@ -68,10 +68,14 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 		return draining;
 	}
 
+	function refreshBriefs(opened: Plan.Plan): void {
+		briefs.get(opened)?.wake();
+	}
+
 	function wake(opened: Plan.Plan): void {
 		let processor = processors.get(opened);
 		if (!processor) return;
-		briefs.get(opened)?.wake();
+		refreshBriefs(opened);
 		if (!deps.unavailable(opened.id)) jobs.get(opened)?.wake();
 		mirrors.set(opened, wakeCardMirror(opened, processor).catch(report));
 	}
@@ -220,6 +224,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 		attach,
 		bind,
 		wake,
+		refreshBriefs,
 		stop,
 		interrupt,
 		contexts,

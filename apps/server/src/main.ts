@@ -1139,6 +1139,8 @@ async function announceJobsChanged(channelId: string): Promise<void> {
 	let page = await jobService.list(channelId, 1);
 	if (!page) return;
 	broadcast(server, channelId, { kind: "job:changed", ts: 0, revision: page.revision });
+	let opened = Rooms.get(channelId)?.plan;
+	if (opened) conversationRuntime.refreshBriefs(opened);
 }
 
 function announceResearchChanged(channelId: string, workspaceId: string, revision: number): void {
@@ -1288,10 +1290,6 @@ let jobService = new JobService({
 	},
 	onChange: job => {
 		jobRunner?.notify(job);
-		if (job.type === "research-brief") {
-			let opened = Rooms.get(job.channelId)?.plan;
-			if (opened) conversationRuntime.wake(opened);
-		}
 		if (job.state === "completed") {
 			void descriptionProjector?.jobChanged(job).catch(err => {
 				console.error("chopin: document description reconciliation failed -", err);
