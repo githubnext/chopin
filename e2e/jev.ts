@@ -389,6 +389,25 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 					),
 			]),
 		);
+		if (research && current?.text === RESEARCH_MESSAGES.borderline) {
+			for (
+				let [id, noul] of Object.entries({
+					research_warranted: 0.89,
+					external: 0.79,
+					owned: 0.88,
+					explicit_proposal: 0.95,
+					already_answered: 0.18,
+				})
+			) {
+				answers[id] = { type: "noul", noul };
+			}
+			answers.research_subject = {
+				type: "choice",
+				choice: "contextual",
+				confidence: 0.27,
+				probabilities: { explicit: 0.4, contextual: 0.47, unclear: 0.13 },
+			};
+		}
 		return Response.json({
 			model: "jev-e2e-fixture",
 			answers,

@@ -167,12 +167,24 @@ export declare namespace ConversationPlan {
 	export type ResearchAnalysis = {
 		messageId: string;
 		questionSetVersion: string;
+		/** Absent on historical analyses written before admission diagnostics. */
+		policyVersion?: string;
+		admission?: ResearchAdmission;
 		modelVersion: string;
 		status: "applied" | "unlinked" | "failed";
 		answers: Record<string, AnalysisAnswer>;
 		policyGate: string;
 		offerId?: string;
 		latencyMs: number;
+	};
+	export type ResearchAdmission = {
+		path: "explicit-proposal" | "inferred-opportunity" | "existing-offer-update";
+		checks: Array<{
+			signal: "research_warranted" | "external" | "owned" | "subject_clarity" | "already_answered";
+			score: number;
+			threshold: number;
+			comparison: "minimum" | "maximum";
+		}>;
 	};
 	export type ResearchState = {
 		queue: QueueItem[];

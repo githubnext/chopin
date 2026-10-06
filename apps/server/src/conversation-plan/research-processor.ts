@@ -4,6 +4,7 @@ import { RESEARCH_QUESTION_SET, type ResearchInterpretation } from "./research-i
 import { assertStateShape } from "./validation";
 import { MAX_ANALYSIS } from "./validation-fields";
 import { applyResearchOpportunity, researchTargetChanged } from "./research-opportunities";
+import { RESEARCH_POLICY_VERSION } from "./research-admission";
 
 export function createResearchProcessor(
 	deps: Dependencies,
@@ -38,6 +39,7 @@ export function createResearchProcessor(
 					analysis: {
 						messageId: input.message.id,
 						questionSetVersion: RESEARCH_QUESTION_SET,
+						policyVersion: RESEARCH_POLICY_VERSION,
 						modelVersion: "unavailable",
 						answers: {},
 						status: "failed",
