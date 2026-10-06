@@ -12,6 +12,7 @@ declare global {
 			move(): void;
 			remote(text: string): void;
 			capabilities(canAct: boolean, canExecute: boolean): void;
+			failResearch(): void;
 			snapshot(): { brief: string; started: string[]; requests: string[]; pending: number };
 		};
 		researchInput?: HTMLTextAreaElement;
@@ -156,6 +157,22 @@ test("IME input merges remote edits while its card moves", async ({ page }) => {
 	await expect(field).toHaveValue("Investigate fast Jev alternatives. 日本語");
 	await expect.poll(() => page.evaluate(() => window.researchOffersProbe.snapshot().brief)).toBe(
 		"Investigate fast Jev alternatives. 日本語",
+	);
+	expect(errors).toEqual([]);
+});
+
+test("linked research explains a timeout and retries the same request from Chat", async ({ page }) => {
+	let errors = await load(page);
+	await page.evaluate(() => window.researchOffersProbe.failResearch());
+	let ana = page.getByRole("region", { name: "ana", exact: true });
+	await expect(ana.getByRole("alert")).toHaveText("A public web-search request timed out.");
+	await page.evaluate(() => window.researchOffersProbe.capabilities(false, true));
+	await expect(ana.getByRole("button", { name: "Retry research", exact: true })).toHaveCount(0);
+	await page.evaluate(() => window.researchOffersProbe.capabilities(true, true));
+	await ana.getByRole("button", { name: "Retry research", exact: true }).click();
+	await expect(ana.getByRole("status")).toHaveText("Research queued");
+	expect(await page.evaluate(() => window.researchOffersProbe.snapshot().requests)).toContain(
+		"retry:request",
 	);
 	expect(errors).toEqual([]);
 });

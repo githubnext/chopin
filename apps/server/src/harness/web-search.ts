@@ -23,13 +23,29 @@ type CreateClient = (config: MCPClientConfig) => Promise<Client>;
 type Credential = Extract<JobExecutionCredential, { kind: "active-planner" }>;
 const WebContext = z.object({ credential: z.custom<Credential>() });
 
+export class WebSearchTimeoutError extends Error {
+	constructor(readonly phase: "authorization" | "request" = "request") {
+		super(
+			phase === "authorization"
+				? "MCP web_search authorization timed out"
+				: "MCP web_search timed out",
+		);
+		this.name = "WebSearchTimeoutError";
+	}
+}
+
 export async function webSearchTool(
 	credential: Credential,
 	deps: {
 		createClient?: CreateClient;
-		onCall?: (result?: unknown, error?: unknown) => void;
+		onCall?: (result?: unknown, error?: unknown) => void | Promise<void>;
+		timeoutMs?: number;
 	} = {},
 ): Promise<Result<{ tool: ToolSet["web_search"]; close: () => Promise<void> }, GitHubToolsError>> {
+	let timeoutMs = deps.timeoutMs ?? 60_000;
+	if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) {
+		throw new Error("Invalid web search timeout");
+	}
 	let client: Client;
 	try {
 		client = await (deps.createClient ?? (createMCPClient as CreateClient))({
@@ -69,19 +85,52 @@ export async function webSearchTool(
 						if (
 							current !== credential || credential.signal?.aborted
 							|| credential.expiresAt.getTime() <= Date.now()
-							|| !await credential.authorize()
 						) throw new Error("MCP web_search authorization ended");
-						deps.onCall?.();
+						let timeout = AbortSignal.timeout(timeoutMs);
+						let signal = AbortSignal.any([
+							timeout,
+							...(options.abortSignal ? [options.abortSignal] : []),
+							...(credential.signal ? [credential.signal] : []),
+						]);
+						let stop!: () => void;
+						let phase: "authorization" | "request" = "authorization";
+						let aborted = new Promise<never>((_, reject) => {
+							stop = () =>
+								reject(
+									timeout.aborted
+										? new WebSearchTimeoutError(phase)
+										: new Error("MCP web_search aborted"),
+								);
+							if (signal.aborted) stop();
+							else signal.addEventListener("abort", stop, { once: true });
+						});
 						try {
-							let result = await execute(input, options);
-							if (result && typeof result === "object" && "isError" in result && result.isError) {
-								throw new Error("MCP web_search returned an error");
+							let result: unknown;
+							try {
+								result = await Promise.race([
+									(async () => {
+										signal.throwIfAborted();
+										if (!await credential.authorize() || signal.aborted) {
+											throw new Error("MCP web_search authorization ended");
+										}
+										phase = "request";
+										await deps.onCall?.();
+										signal.throwIfAborted();
+										return execute(input, { ...options, abortSignal: signal });
+									})(),
+									aborted,
+								]);
+								if (result && typeof result === "object" && "isError" in result && result.isError) {
+									throw new Error("MCP web_search returned an error");
+								}
+							} catch (error) {
+								await deps.onCall?.(undefined, error);
+								throw error;
 							}
-							deps.onCall?.(result);
+							await deps.onCall?.(result);
 							return result;
-						} catch (error) {
-							deps.onCall?.(undefined, error);
-							throw error;
+						} finally {
+							signal.removeEventListener("abort", stop);
 						}
 					},
 				}),

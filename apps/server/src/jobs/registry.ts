@@ -12,6 +12,28 @@ export type JobExecutionDiagnostic = Readonly<Record<string, boolean | number | 
 
 export type JobExecutionErrorOptions = ErrorOptions & { diagnostic?: JobExecutionDiagnostic };
 
+export function executionDiagnostic(
+	value: JobExecutionDiagnostic | undefined,
+): JobExecutionDiagnostic | undefined {
+	if (
+		value !== undefined
+		&& (!value || typeof value !== "object" || Array.isArray(value)
+			|| Object.getPrototypeOf(value) !== Object.prototype)
+	) {
+		throw new Error("Background job execution diagnostic is invalid.");
+	}
+	let entries = Object.entries(value ?? {});
+	if (
+		entries.length > 16 || entries.some(([key, item]) =>
+			!/^[a-z][a-zA-Z0-9]{0,31}$/.test(key)
+			|| typeof item !== "boolean" && typeof item !== "number" && typeof item !== "string"
+			|| typeof item === "number" && (!Number.isSafeInteger(item) || item < 0)
+			|| typeof item === "string" && !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/.test(item)
+		)
+	) throw new Error("Background job execution diagnostic is invalid.");
+	return entries.length ? Object.freeze(Object.fromEntries(entries)) : undefined;
+}
+
 export class JobExecutionError extends Error {
 	readonly progressReason: string;
 	readonly diagnostic?: JobExecutionDiagnostic;
@@ -20,28 +42,11 @@ export class JobExecutionError extends Error {
 		if (typeof progressReason !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(progressReason)) {
 			throw new Error("Background job execution failure reason is invalid.");
 		}
-		let suppliedDiagnostic = options.diagnostic;
-		if (
-			suppliedDiagnostic !== undefined
-			&& (!suppliedDiagnostic
-				|| typeof suppliedDiagnostic !== "object"
-				|| Array.isArray(suppliedDiagnostic)
-				|| Object.getPrototypeOf(suppliedDiagnostic) !== Object.prototype)
-		) throw new Error("Background job execution diagnostic is invalid.");
-		let entries = Object.entries(suppliedDiagnostic ?? {});
-		if (
-			entries.length > 16
-			|| entries.some(([key, value]) =>
-				!/^[a-z][a-zA-Z0-9]{0,31}$/.test(key)
-				|| typeof value !== "boolean" && typeof value !== "number" && typeof value !== "string"
-				|| typeof value === "number" && (!Number.isSafeInteger(value) || value < 0)
-				|| typeof value === "string" && !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/.test(value)
-			)
-		) throw new Error("Background job execution diagnostic is invalid.");
+		let diagnostic = executionDiagnostic(options.diagnostic);
 		super(`Background job execution failed: ${progressReason}.`, { cause: options.cause });
 		this.name = "JobExecutionError";
 		this.progressReason = progressReason;
-		if (entries.length > 0) this.diagnostic = Object.freeze(Object.fromEntries(entries));
+		if (diagnostic) this.diagnostic = diagnostic;
 	}
 }
 
@@ -65,6 +70,8 @@ export type JobExecution<Input extends JsonValue = JsonValue> = {
 	readonly signal: AbortSignal;
 	readonly deadline: Date;
 	readonly progress: (stage: string, state: "started" | "completed") => Promise<void>;
+	/** Bounded, token-free operational state retained for failure diagnostics. */
+	readonly diagnostic?: (value: JobExecutionDiagnostic) => void;
 };
 
 export type JobLimits = {

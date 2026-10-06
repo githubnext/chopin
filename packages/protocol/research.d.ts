@@ -48,6 +48,8 @@ export declare namespace Research {
 		readonly sources: readonly Source[];
 		readonly createdAt: string;
 		readonly updatedAt: string;
+		/** Code-owned current worker activity; contains no search query or model prose. */
+		readonly activity?: string;
 	};
 
 	export type RequestView =

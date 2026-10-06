@@ -2,7 +2,7 @@ import { expect, it } from "bun:test";
 import { tool } from "ai";
 import { z } from "zod";
 
-import { webSearchTool } from "./web-search";
+import { WebSearchTimeoutError, webSearchTool } from "./web-search";
 
 import type { MCPClientConfig } from "@ai-sdk/mcp";
 import type { JobExecutionCredential } from "../jobs/registry";
@@ -45,7 +45,9 @@ it("loads only the host GitHub MCP web_search and binds execution to the owner",
 				},
 			};
 		},
-		onCall: (value, error) => calls.push({ value, error }),
+		onCall: (value, error) => {
+			calls.push({ value, error });
+		},
 	});
 	expect(result.ok).toBe(true);
 	if (!result.ok) return;
@@ -106,7 +108,9 @@ it("does not count a resolved MCP error as a successful search", async () => {
 			}),
 			close: async () => {},
 		}),
-		onCall: (result, error) => results.push({ result, error }),
+		onCall: (result, error) => {
+			results.push({ result, error });
+		},
 	});
 	expect(loaded.ok).toBe(true);
 	if (!loaded.ok) return;
@@ -118,6 +122,92 @@ it("does not count a resolved MCP error as a successful search", async () => {
 		expect(results[0]).toEqual({ result: undefined, error: undefined });
 		expect(results[1]).toMatchObject({ error: expect.any(Error) });
 	} finally {
+		await loaded.value.close();
+	}
+});
+
+it("times out a stalled search, aborts its request, and ignores late output", async () => {
+	let owner = credential();
+	let pending = Promise.withResolvers<unknown>();
+	let signal: AbortSignal | undefined;
+	let calls: Array<{ result?: unknown; error?: unknown }> = [];
+	let loaded = await webSearchTool(owner, {
+		timeoutMs: 20,
+		createClient: async () => ({
+			tools: async () => ({
+				web_search: tool({
+					inputSchema: z.object({ query: z.string() }),
+					execute: async (_input, options) => {
+						signal = options.abortSignal;
+						return pending.promise;
+					},
+				}),
+			}),
+			close: async () => {},
+		}),
+		onCall: (result, error) => {
+			calls.push({ result, error });
+		},
+	});
+	if (!loaded.ok) throw new Error("fixture failed");
+	try {
+		await expect(
+			loaded.value.tool.execute!(
+				{ query: "synthetic" },
+				{ context: { credential: owner } } as never,
+			),
+		).rejects.toBeInstanceOf(WebSearchTimeoutError);
+		expect(signal?.aborted).toBe(true);
+		expect(calls).toHaveLength(2);
+		expect(calls[1]?.error).toBeInstanceOf(WebSearchTimeoutError);
+		expect(calls[1]?.error).toMatchObject({ phase: "request" });
+		pending.resolve({ content: [] });
+		await Promise.resolve();
+		expect(calls).toHaveLength(2);
+	} finally {
+		pending.resolve({});
+		await loaded.value.close();
+	}
+});
+
+it("a timed-out authorization cannot start a search after it finally resolves", async () => {
+	let authorization = Promise.withResolvers<boolean>();
+	let owner = { ...credential(), authorize: () => authorization.promise };
+	let calls = 0;
+	let events: Array<{ result?: unknown; error?: unknown }> = [];
+	let loaded = await webSearchTool(owner, {
+		timeoutMs: 20,
+		onCall: (result, error) => {
+			events.push({ result, error });
+		},
+		createClient: async () => ({
+			tools: async () => ({
+				web_search: tool({
+					inputSchema: z.object({ query: z.string() }),
+					execute: async () => {
+						calls++;
+						return {};
+					},
+				}),
+			}),
+			close: async () => {},
+		}),
+	});
+	if (!loaded.ok) throw new Error("fixture failed");
+	try {
+		await expect(
+			loaded.value.tool.execute!(
+				{ query: "synthetic" },
+				{ context: { credential: owner } } as never,
+			),
+		).rejects.toMatchObject({ name: "WebSearchTimeoutError", phase: "authorization" });
+		expect(events).toHaveLength(1);
+		expect(events[0]?.error).toMatchObject({ phase: "authorization" });
+		authorization.resolve(true);
+		await Promise.resolve();
+		expect(calls).toBe(0);
+	} finally {
+		authorization.resolve(false);
 		await loaded.value.close();
 	}
 });

@@ -7,7 +7,7 @@ import {
 	researchPrivateAgent,
 	researchReportAgent,
 } from "../harness/agents";
-import { webSearchTool } from "../harness/web-search";
+import { WebSearchTimeoutError, webSearchTool } from "../harness/web-search";
 import { JobExecutionError } from "./registry";
 import { openWorkerSession, type WorkerSession } from "./worker-session";
 import type { Config } from "../config";
@@ -169,7 +169,13 @@ export type ResearchAnswerOptions = {
 };
 
 type PublicResearchMetrics = {
-	phase: "opening" | "ready" | "sending" | "waiting" | "idle";
+	phase:
+		| "authorizing"
+		| "connecting-web"
+		| "opening-session"
+		| "waiting-model"
+		| "waiting-web-search"
+		| "validating-result";
 	webCalls: number;
 	webSuccesses: number;
 	webFailures: number;
@@ -801,8 +807,10 @@ async function stage(
 	if (execution.credential.kind !== "active-planner") throw new Error("research requires an owner");
 	let credential = execution.credential;
 	let publicWeb = kind === "public";
+	let started = performance.now();
+	let toolFailure = new AbortController();
 	let metrics: PublicResearchMetrics = {
-		phase: "opening",
+		phase: "authorizing",
 		webCalls: 0,
 		webSuccesses: 0,
 		webFailures: 0,
@@ -817,9 +825,18 @@ async function stage(
 	let observed = new Set<string>();
 	let abortSignal = AbortSignal.any([
 		execution.signal,
+		toolFailure.signal,
 		...(credential.signal ? [credential.signal] : []),
 		AbortSignal.timeout(Math.max(1, execution.deadline.getTime() - Date.now())),
 	]);
+	let diagnose = (phase: PublicResearchMetrics["phase"] = metrics.phase) => {
+		metrics.phase = phase;
+		execution.diagnostic?.({
+			...(publicWeb ? publicDiagnostic(metrics) : { stage: kind, phase }),
+			elapsedMs: Math.round(performance.now() - started),
+		});
+	};
+	diagnose();
 	let aborted = new Promise<never>((_, reject) => {
 		let stop = () => reject(abortSignal.reason ?? new Error("research authorization ended"));
 		if (abortSignal.aborted) stop();
@@ -843,11 +860,27 @@ async function stage(
 	try {
 		await authorize();
 		if (publicWeb) {
+			diagnose("connecting-web");
+			await execution.progress("web-setup", "started");
 			let loading = webSearchTool(credential, {
-				onCall: (result, error) => {
-					if (result === undefined && error === undefined) metrics.webCalls++;
-					else if (error !== undefined) metrics.webFailures++;
-					else {
+				onCall: async (result, error) => {
+					if (abortSignal.aborted) return;
+					if (result === undefined && error === undefined) {
+						metrics.webCalls++;
+						diagnose("waiting-web-search");
+						await execution.progress("web-search", "started");
+					} else if (error !== undefined) {
+						metrics.webFailures++;
+						diagnose();
+						if (error instanceof WebSearchTimeoutError) {
+							toolFailure.abort(publicStageError(
+								error.phase === "authorization"
+									? "web-search-authorization-timeout"
+									: "web-search-timeout",
+								metrics,
+							));
+						}
+					} else {
 						metrics.webSuccesses++;
 						let urls = observedWebSourceUrls(result);
 						for (let url of urls) {
@@ -862,6 +895,15 @@ async function stage(
 									metrics.citableSources + sources.length,
 								);
 							}
+						}
+						diagnose(
+							metrics.webCalls > metrics.webSuccesses + metrics.webFailures
+								? "waiting-web-search"
+								: "waiting-model",
+						);
+						if (metrics.phase === "waiting-model") {
+							await execution.progress("web-search", "completed");
+							await execution.progress("research-result", "started");
 						}
 					}
 				},
@@ -885,19 +927,23 @@ async function stage(
 					),
 				);
 			}
+			await execution.progress("web-setup", "completed");
 		}
+		diagnose("opening-session");
+		if (publicWeb) await execution.progress("worker-session", "started");
 		worker = await openWorkerSession(agent, {
 			token: () => credential.token,
 			maxAiCredits: STAGE_AI_CREDITS,
 			aborted,
 		});
-		metrics.phase = "ready";
+		if (publicWeb) await execution.progress("worker-session", "completed");
 		let stagePrompt = JSON.stringify({ material });
 		if (Buffer.byteLength(stagePrompt) > MAX_STAGE_PROMPT_BYTES) {
 			throw new Error("research stage prompt exceeds its bound");
 		}
 		await authorize();
-		metrics.phase = "sending";
+		diagnose("waiting-model");
+		if (publicWeb) await execution.progress("research-result", "started");
 		let result = await Promise.race([
 			agent.generate({
 				session: worker.session,
@@ -911,15 +957,21 @@ async function stage(
 			}),
 			aborted,
 		]);
-		metrics.phase = "idle";
 		let value = result.output as JsonValue;
 		metrics.resultSubmitted = true;
+		diagnose("validating-result");
 		if (publicWeb) {
 			let failure = publicResearchResultFailure(value, observed, metrics);
 			if (failure) throw publicStageError(failure, metrics);
+			await execution.progress("research-result", "completed");
 		}
 		return value;
 	} catch (err) {
+		if (
+			publicWeb && Date.now() >= execution.deadline.getTime() && !(err instanceof JobExecutionError)
+		) {
+			throw publicStageError("attempt-timeout", metrics, err);
+		}
 		if (publicWeb && !(err instanceof JobExecutionError) && !abortSignal.aborted) {
 			throw publicStageError(
 				publicResearchFailureReason(err) === "web-search-unavailable"
@@ -1031,7 +1083,13 @@ export function researchEvidenceDefinition(options: ResearchEvidenceOptions): Jo
 		description: "Collects isolated public-web evidence for a research workspace turn.",
 		origins: ["user", "planner"],
 		credential: "active-planner",
-		progress: { "public-web": "Public web research" },
+		progress: {
+			"public-web": "Public web research",
+			"web-setup": "Connecting to public web search",
+			"worker-session": "Starting the research model",
+			"web-search": "Waiting for a web-search response",
+			"research-result": "Waiting for the research model's findings",
+		},
 		limits: {
 			timeoutMs: 300_000,
 			maxAttempts: 1,
