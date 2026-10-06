@@ -1,13 +1,19 @@
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
+import { cp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { copyApplication } from "../e2e/liveapp/fixture";
+import { sourceProvider } from "../e2e/liveapp/provider";
 
 import type { Subprocess } from "bun";
 
 let root = fileURLToPath(new URL("..", import.meta.url));
+let checkout = root;
 let children: Subprocess[] = [];
 let container = `frontend-pilot-${crypto.randomUUID()}`;
 let ownsContainer = false;
 let integrated = process.argv.includes("--integrated");
+let provider: Awaited<ReturnType<typeof sourceProvider>> | undefined;
 
 async function port() {
 	let listener = createServer();
@@ -46,6 +52,12 @@ function start(command: string[], env: Record<string, string>) {
 }
 
 try {
+	if (integrated) {
+		root = await copyApplication(checkout);
+		await run(["git", "init", "--quiet"]);
+		await run(["bun", "install", "--offline", "--frozen-lockfile"]);
+		provider = await sourceProvider(root);
+	}
 	let appPort = await port();
 	let webPort = await port();
 	await run([
@@ -109,8 +121,9 @@ try {
 		DEV_COMMENTS: "",
 		LIVEAPP_PILOT_PROBE: "1",
 		LIVEAPP_TEST_ORIGIN: origin,
-		LIVEAPP_NO_AI: "1",
+		LIVEAPP_NO_AI: integrated ? "0" : "1",
 		LIVEAPP_TEST_INTEGRATED: integrated ? "1" : "0",
+		LIVEAPP_TEST_ROOT: root,
 	};
 	await run(["bun", "apps/server/src/storage/migrate.ts"], env);
 	start([
@@ -119,7 +132,7 @@ try {
 		"apps/web",
 		...(integrated ? ["--mode", "liveapp"] : []),
 	], env);
-	start(["bun", "--preload", "./e2e/github.ts", "apps/server/src/main.ts"], env);
+	let app = start(["bun", "--preload", "./e2e/github.ts", "apps/server/src/main.ts"], env);
 	deadline = Date.now() + 180_000;
 	while (true) {
 		try {
@@ -139,7 +152,7 @@ try {
 		"--config",
 		"e2e/liveapp/playwright.config.ts",
 		...process.argv.slice(2).filter(arg => arg !== "--integrated"),
-	], env);
+	], { ...env, LIVEAPP_TEST_PID: String(app.pid) });
 	let code = await test.exited;
 	if (code) process.exitCode = code;
 } finally {
@@ -155,4 +168,11 @@ try {
 		} catch {}
 	}
 	if (ownsContainer) await run(["docker", "rm", "-f", container]);
+	await provider?.close();
+	if (root !== checkout) {
+		await cp(join(root, "e2e/test-results"), join(checkout, "e2e/test-results"), {
+			recursive: true,
+		}).catch(() => {});
+		await rm(root, { recursive: true, force: true });
+	}
 }

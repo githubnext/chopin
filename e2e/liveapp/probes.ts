@@ -4,6 +4,18 @@ export function lifetimeProbes() {
 		name: "frontend-lifetime-probes",
 		enforce: "pre" as const,
 		transform(code: string, id: string) {
+			if (id.endsWith("/apps/web/src/main.tsx")) {
+				return code.replace(
+					"createRoot(root)",
+					'(value => { Reflect.get(globalThis, "__frontendProbe")?.remember("reactRoot", { value }); return value; })(createRoot(root))',
+				);
+			}
+			if (id.endsWith("/packages/editor/src/widgets/index.ts")) {
+				return code.replace(
+					"registered = true;",
+					'registered = true; Reflect.get(globalThis, "__frontendProbe")?.record("registration");',
+				);
+			}
 			if (id.endsWith("/packages/editor/src/collaboration.tsx")) {
 				return code.replace(
 					"setCollab({ binding, provider });",
@@ -33,6 +45,9 @@ export function installProbe() {
 	let counts: Record<string, number> = {};
 	let releases: Record<string, number> = {};
 	Reflect.set(globalThis, "__frontendProbe", {
+		record(name: string) {
+			counts[name] = (counts[name] ?? 0) + 1;
+		},
 		remember(name: string, values: Record<string, object>) {
 			counts[name] = (counts[name] ?? 0) + 1;
 			groups.set(
@@ -54,7 +69,20 @@ export function installProbe() {
 					ids[`${name}.${key}`] = identities.get(value)!;
 				}
 			}
-			return { ids, counts: { ...counts }, releases: { ...releases } };
+			let editor = groups.get("editor")?.editor?.deref() as {
+				_listeners: Record<string, Set<unknown>>;
+			} | undefined;
+			let provider = groups.get("editor")?.provider?.deref() as { epoch: string } | undefined;
+			let listeners = Object.fromEntries(
+				Object.entries(editor?._listeners ?? {}).map(([key, value]) => [key, value.size]),
+			);
+			return {
+				ids,
+				counts: { ...counts },
+				releases: { ...releases },
+				listeners,
+				epoch: provider?.epoch,
+			};
 		},
 	});
 }
