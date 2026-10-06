@@ -1,35 +1,54 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+type Tool = { name: string; arguments: object; pause?: boolean };
 
 /** Script the external streaming boundary; the real Pi SDK runs all source tools. */
 export async function sourceProvider(root: string) {
 	let step = 0;
+	let script: Tool[] = [
+		{ name: "inspect_project", arguments: {} },
+		{
+			name: "edit_source",
+			arguments: {
+				path: "apps/web/src/room-workspace.tsx",
+				oldText: "label={metadata.title}",
+				newText: "label={`${metadata.title} · live`}",
+			},
+		},
+		{ name: "check_candidate", arguments: { summary: "Update workspace presentation" } },
+		{ name: "publish_revision", arguments: {} },
+	];
+	let release: (() => void) | undefined, lastTool = "";
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
+		idleTimeout: 0,
 		async fetch(request) {
+			let path = new URL(request.url).pathname;
+			if (path === "/script") {
+				script = await request.json() as Tool[];
+				lastTool = "";
+				return Response.json({ ok: true });
+			}
+			if (path === "/state") return Response.json({ paused: Boolean(release), lastTool });
+			if (path === "/release") {
+				release?.();
+				release = undefined;
+				return Response.json({ ok: true });
+			}
 			let body = await request.json() as { messages: Array<{ role: string; content: string }> };
-			let index = step++ - 1;
-			let tool: { name: string; arguments: object } | undefined;
-			if (index === -1) tool = { name: "inspect_project", arguments: {} };
-			if (index === 0) {
-				tool = {
-					name: "edit_source",
-					arguments: {
-						path: "apps/web/src/room-workspace.tsx",
-						oldText: "label={metadata.title}",
-						newText: "label={`${metadata.title} · live`}",
-					},
-				};
-			}
-			if (index === 1) {
-				tool = { name: "check_candidate", arguments: { summary: "Update workspace presentation" } };
-			}
-			if (index === 2) {
+			let index = step++, tool = script.shift();
+			lastTool = body.messages.findLast(message => message.role === "tool")?.content ?? "";
+			if (tool?.name === "publish_revision") {
 				let result = body.messages.findLast(message => message.role === "tool");
 				let candidate = JSON.parse(result!.content);
 				if (!candidate.candidateId) return Response.json({ error: result }, { status: 500 });
-				tool = { name: "publish_revision", arguments: { candidateId: candidate.candidateId } };
+				tool.arguments = { candidateId: candidate.candidateId };
+			}
+			if (tool?.pause) {
+				await new Promise<void>(resolve => {
+					release = resolve;
+				});
 			}
 			let delta = tool
 				? {
@@ -41,7 +60,7 @@ export async function sourceProvider(root: string) {
 						function: { name: tool.name, arguments: JSON.stringify(tool.arguments) },
 					}],
 				}
-				: { role: "assistant", content: "The workspace presentation is live." };
+				: { role: "assistant", content: "The source-edit scenario is finished." };
 			let chunk = (value: object, finish: string | null) =>
 				`data: ${
 					JSON.stringify({
@@ -84,5 +103,5 @@ export async function sourceProvider(root: string) {
 			},
 		}),
 	);
-	return { close: () => server.stop(true) };
+	return { origin: `http://127.0.0.1:${server.port}`, close: () => server.stop(true) };
 }

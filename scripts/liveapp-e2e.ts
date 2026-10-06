@@ -124,6 +124,7 @@ try {
 		LIVEAPP_NO_AI: integrated ? "0" : "1",
 		LIVEAPP_TEST_INTEGRATED: integrated ? "1" : "0",
 		LIVEAPP_TEST_ROOT: root,
+		LIVEAPP_TEST_PROVIDER: provider?.origin ?? "",
 	};
 	await run(["bun", "apps/server/src/storage/migrate.ts"], env);
 	start([

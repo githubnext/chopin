@@ -4,6 +4,12 @@ export function lifetimeProbes() {
 		name: "frontend-lifetime-probes",
 		enforce: "pre" as const,
 		transform(code: string, id: string) {
+			if (id.endsWith("/apps/web/src/navigation-shell.tsx")) {
+				return code.replace(
+					'import("./document-search-dialog")',
+					'import("./document-search-dialog").then(async module => { await Reflect.get(globalThis, "__frontendProbe")?.lazyReady(); return module; })',
+				);
+			}
 			if (id.endsWith("/apps/web/src/main.tsx")) {
 				return code.replace(
 					"createRoot(root)",
@@ -44,7 +50,23 @@ export function installProbe() {
 	let groups = new Map<string, Record<string, WeakRef<object>>>();
 	let counts: Record<string, number> = {};
 	let releases: Record<string, number> = {};
+	let lazy: Promise<void> | undefined, releaseLazy: (() => void) | undefined, waiting = false;
 	Reflect.set(globalThis, "__frontendProbe", {
+		blockLazy() {
+			lazy = new Promise<void>(resolve => {
+				releaseLazy = resolve;
+			});
+		},
+		async lazyReady() {
+			waiting = true;
+			await lazy;
+			waiting = false;
+		},
+		lazyWaiting: () => waiting,
+		releaseLazy() {
+			releaseLazy?.();
+			lazy = undefined;
+		},
 		record(name: string) {
 			counts[name] = (counts[name] ?? 0) + 1;
 		},
