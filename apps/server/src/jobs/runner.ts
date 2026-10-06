@@ -1,9 +1,14 @@
 import { StorageError } from "../storage/errors";
-import { JobExecutionError } from "./registry";
+import { executionDiagnostic, JobExecutionError } from "./registry";
 
 import type { BackgroundJob, BackgroundJobCursor, JsonValue, Lease } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
-import type { JobDefinition, JobExecutionCredential, JobRegistry } from "./registry";
+import type {
+	JobDefinition,
+	JobExecutionCredential,
+	JobExecutionDiagnostic,
+	JobRegistry,
+} from "./registry";
 import type { JobService, JobView } from "./service";
 
 export type ResolvedJobCredential = {
@@ -41,7 +46,15 @@ export type JobRunnerOptions = {
 	id?: () => string;
 	scheduler?: RunnerScheduler;
 	changed?: (channelId: string) => void | Promise<void>;
-	attemptFailed?: (job: Readonly<BackgroundJob>, err: unknown) => void | Promise<void>;
+	attemptFailed?: (
+		job: Readonly<BackgroundJob>,
+		err: unknown,
+		diagnostic?: JobExecutionDiagnostic,
+	) => void | Promise<void>;
+	attemptProgress?: (
+		job: Readonly<BackgroundJob>,
+		diagnostic: JobExecutionDiagnostic,
+	) => void | Promise<void>;
 	fatal?: (err: unknown) => void;
 };
 
@@ -54,6 +67,7 @@ type Attempt = {
 	credential?: ResolvedJobCredential;
 	releaseOwner?: () => void;
 	execution?: Promise<JsonValue>;
+	diagnostic?: JobExecutionDiagnostic;
 	recovery?: Promise<void>;
 	done: Promise<void>;
 };
@@ -461,6 +475,7 @@ export class JobRunner {
 					signal: attempt.controller.signal,
 					deadline,
 					progress: (stage, state) => this.#progress(attempt, definition, stage, state),
+					diagnostic: value => this.#diagnostic(attempt, value),
 				})
 			);
 			attempt.execution = running;
@@ -504,14 +519,33 @@ export class JobRunner {
 				await this.#pause(attempt, "owner-unavailable");
 				return;
 			}
-			try {
-				let diagnostic = this.#options.attemptFailed?.(structuredClone(attempt.job), err);
-				void Promise.resolve(diagnostic).catch(noop);
-			} catch {
-				// Diagnostics must not change durable retry behavior.
-			}
+			this.#reportFailure(attempt, err);
 			let reason = err instanceof JobExecutionError ? err.progressReason : "attempt-error";
 			await this.#retry(attempt, timeout ? "attempt-timeout" : reason, true);
+		}
+	}
+
+	#diagnostic(attempt: Attempt, value: JobExecutionDiagnostic): void {
+		if (!attempt.accepting || attempt.controller.signal.aborted) return;
+		let diagnostic = executionDiagnostic(value);
+		if (!diagnostic || JSON.stringify(diagnostic) === JSON.stringify(attempt.diagnostic)) return;
+		attempt.diagnostic = diagnostic;
+		try {
+			void Promise.resolve(
+				this.#options.attemptProgress?.(structuredClone(attempt.job), diagnostic),
+			).catch(noop);
+		} catch {
+			// Logging must not change the job lifecycle.
+		}
+	}
+
+	#reportFailure(attempt: Attempt, error: unknown): void {
+		try {
+			void Promise.resolve(
+				this.#options.attemptFailed?.(structuredClone(attempt.job), error, attempt.diagnostic),
+			).catch(noop);
+		} catch {
+			// Diagnostics must not change durable retry behavior.
 		}
 	}
 
@@ -771,6 +805,7 @@ export class JobRunner {
 		maxAttempts: number,
 	): Promise<void> {
 		if (!attempt.accepting) return;
+		this.#reportFailure(attempt, new Error("attempt-timeout"));
 		attempt.accepting = false;
 		attempt.heartbeat?.();
 		attempt.controller.abort(new Error("attempt-timeout"));

@@ -221,18 +221,43 @@ export function useResearchOfferLinks(
 	return { links, refresh };
 }
 
-function LinkedResearch({ id, store }: { id: string; store: ResearchRequestStore }) {
+function LinkedResearch(
+	{ id, store, canRetry }: { id: string; store: ResearchRequestStore; canRetry: boolean },
+) {
+	let [retrying, setRetrying] = useState(false);
+	let [error, setError] = useState("");
 	let subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
 	let request = useSyncExternalStore(subscribe, () => store.get(id), () => undefined);
 	useEffect(() => store.retain(id), [id, store]);
 	if (!request) return <p className="m-0 text-sm text-text-secondary">Loading research…</p>;
 	return (
-		<div className="flex items-center justify-between gap-2 text-sm text-text-secondary">
+		<div className="flex flex-col gap-2 text-sm text-text-secondary">
 			<span role="status">
 				{request.stage === "ready"
 					? "Research ready"
 					: `Research ${request.stage}`}
 			</span>
+			{request.activity && <p className="m-0 text-xs text-text-tertiary">{request.activity}</p>}
+			{request.stage === "failed" && (
+				<p className="m-0 text-sm text-destructive-ink" role="alert">{request.error}</p>
+			)}
+			{canRetry && (request.stage === "failed" || request.stage === "cancelled") && (
+				<button
+					className="btn btn-sm btn-secondary self-end"
+					disabled={retrying}
+					onClick={() => {
+						setRetrying(true);
+						setError("");
+						void store.retry(id).catch(() =>
+							setError("Research could not be retried. Try again when connected.")
+						).finally(() => setRetrying(false));
+					}}
+					type="button"
+				>
+					{retrying ? "Retrying…" : "Retry research"}
+				</button>
+			)}
+			{error && <p className="m-0 text-sm text-destructive-ink" role="alert">{error}</p>}
 			{request.stage === "ready" && request.child && (
 				<button
 					className="btn btn-sm btn-secondary"
@@ -449,7 +474,13 @@ export function ResearchOfferCard(
 			)}
 			{offer.status === "dismissed" && <p className="m-0 text-sm text-text-tertiary">Dismissed</p>}
 			{offer.status === "accepted" && link?.status === "linked" && link.researchRequestId
-				? <LinkedResearch id={link.researchRequestId} store={controls.store} />
+				? (
+					<LinkedResearch
+						id={link.researchRequestId}
+						store={controls.store}
+						canRetry={controls.canAct && canExecute}
+					/>
+				)
 				: offer.status === "accepted" && (
 					<div className="flex items-center justify-between gap-2 text-sm text-text-secondary">
 						<span role="status">

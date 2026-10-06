@@ -44,6 +44,11 @@ complete report has been published. Failure and retry preserve the accepted
 brief. See [background jobs](background-jobs.md) for research execution and child
 publication. The existing `/research` document composer remains the manual entry.
 
+While research runs, Chat also shows its current code-owned worker activity,
+such as waiting for a web-search response or waiting for the model's findings.
+A failed request exposes its safe failure explanation and **Retry research** in
+the same card. Retrying keeps the accepted brief and request identity.
+
 ## Processing and persistence
 
 Both analysis queues commit with the saved message. Each has independent outcomes
@@ -144,3 +149,12 @@ identifying TypeSafe Jev's role. A deterministic regression covers the reported
 79% external-suitability score with strong intent and explicitly clear subject
 probabilities; that score now passes the explicit-proposal path. These results
 do not establish that every paraphrase will pass the other admission gates.
+
+A live execution check on 6 October under `copilot-sdk` with `gpt-6-luna`
+successfully refined an existing offer. Retrying its accepted research request
+completed MCP setup, opened the model session, and passed search authorization,
+but the `web_search` call remained unresolved for 60 seconds. The request failed
+with `web-search-timeout`, retaining its identity and sealed brief. This confirms
+the bounded failure and retry path; successful report publication for that
+request remains unverified. The diagnostics locate the delay inside the MCP
+call but do not establish whether its cause is the transport or remote service.

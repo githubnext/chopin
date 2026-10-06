@@ -405,6 +405,23 @@ operator diagnostic. It accepts at most 16 boolean, nonnegative integer, or
 token-like string diagnostic fields. Unknown browser reasons are deliberately
 rendered as a generic interruption.
 
+Executors can also report bounded operational snapshots through
+`execution.diagnostic()`. The runner retains a validated copy for the current
+attempt and reports it on timeout as well as ordinary failure. Late snapshots
+after cancellation or timeout are ignored. These snapshots are log-only; they
+must not contain source text, search queries, URLs, or credentials.
+
+Public research reports setup, session opening, model waiting, and search-call
+boundaries. Search-call counts distinguish a model that has not invoked search
+from an outstanding search or a model that has received results. Each web-search
+tool invocation has a 60-second limit, including authorization, and passes its
+abort signal to the MCP client. A timed-out search ends the research attempt with
+`web-search-timeout`; a stalled authorization check produces
+`web-search-authorization-timeout`. Search calls are counted after authorization.
+The overall evidence-stage limit remains five minutes. Use the host wrapper's
+search counters for live progress: the harness can buffer tool lifecycle
+callbacks until the completed step is published.
+
 ## Publication hooks
 
 A definition may delay completion with `publish()`:

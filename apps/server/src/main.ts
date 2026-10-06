@@ -1376,10 +1376,20 @@ jobRunner = new JobRunner({
 	globalConcurrency: 2,
 	ownerConcurrency: 1,
 	changed: announceJobsChanged,
-	attemptFailed(job, err) {
+	attemptProgress(job, diagnostic) {
+		console.info(
+			`chopin: background job ${job.type} ${job.id} attempt ${job.attempts} progress ${
+				JSON.stringify(diagnostic)
+			}`,
+		);
+	},
+	attemptFailed(job, err, latestDiagnostic) {
 		let reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-		let diagnostic = err instanceof JobExecutionError && err.diagnostic
-			? ` diagnostic=${JSON.stringify(err.diagnostic)}`
+		let detail = err instanceof JobExecutionError && err.diagnostic
+			? err.diagnostic
+			: latestDiagnostic;
+		let diagnostic = detail
+			? ` diagnostic=${JSON.stringify(detail)}`
 			: "";
 		console.warn(
 			`chopin: background job ${job.type} ${job.id} attempt ${job.attempts} failed - ${reason}${diagnostic}`,

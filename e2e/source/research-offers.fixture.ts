@@ -21,6 +21,18 @@ let held = false;
 let pending: Array<() => void> = [];
 let started: string[] = [];
 let requests: string[] = [];
+let linkedRequest: import("@chopin/protocol").Research.RequestView | undefined;
+let researchStore = {
+	subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
+	get: () => linkedRequest,
+	retain: () => () => {},
+	async retry(id: string) {
+		requests.push("retry:" + id);
+		linkedRequest = { ...linkedRequest!, state: "pending", stage: "queued", error: undefined };
+		publish();
+		return linkedRequest;
+	},
+} as unknown as ResearchRequestStore;
 function publish() {
 	state = { ...state, revision: state.revision + 1, researchOffers: [structuredClone(offer)] };
 	snapshot = { ...snapshot, state };
@@ -42,8 +54,8 @@ function edit(operation: ConversationPlan.ResearchEdit["operation"]) {
 function View({ handle }: { handle: string }) {
 	let value = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => snapshot);
 	let controls: ResearchOfferControls = {
-		links: {}, busy: new Set(), errors: {}, canAct: value.canAct, canExecute: value.canExecute, canCheckLink: false,
-		store: { subscribe: () => () => {}, get: () => undefined, retain: () => () => {} } as unknown as ResearchRequestStore,
+		links: linkedRequest ? { [offer.id]: { status: "linked", researchRequestId: linkedRequest.id } } : {}, busy: new Set(), errors: {}, canAct: value.canAct, canExecute: value.canExecute, canCheckLink: false,
+		store: researchStore,
 		wire: wires[handle],
 		onAction: (_id, choice) => {
 			if (choice === "research") { started.push(offer.brief); offer.status = "accepted"; }
@@ -75,6 +87,11 @@ window.researchOffersProbe = {
 		edit({ kind: "patch", patch: Draft.change(model, text)! });
 	},
 	capabilities(canAct: boolean, canExecute: boolean) { snapshot = { ...snapshot, canAct, canExecute }; publish(); },
+	failResearch() {
+		offer.status = "accepted";
+		linkedRequest = { id: "request", channelId: "channel", question: offer.brief, sources: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), state: "failed", stage: "failed", error: "A public web-search request timed out." };
+		publish();
+	},
 	snapshot() { return { brief: offer.brief, started: [...started], requests: [...requests], pending: pending.length }; },
 };
 createRoot(document.getElementById("fixture")!).render(<><View handle="ana" /><View handle="bo" /></>);
