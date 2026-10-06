@@ -85,7 +85,18 @@ try {
 	let deadline = Date.now() + 30_000;
 	while (true) {
 		try {
-			await run(["docker", "exec", container, "pg_isready", "-U", "pilot", "-d", "pilot"]);
+			await run([
+				"docker",
+				"exec",
+				container,
+				"pg_isready",
+				"-h",
+				"127.0.0.1",
+				"-U",
+				"pilot",
+				"-d",
+				"pilot",
+			]);
 			break;
 		} catch (error) {
 			if (Date.now() >= deadline) throw error;
@@ -121,6 +132,7 @@ try {
 		DEV_COMMENTS: "",
 		LIVEAPP_PILOT_PROBE: "1",
 		LIVEAPP_TEST_ORIGIN: origin,
+		LIVEAPP_TEST_WEB_ORIGIN: `http://127.0.0.1:${webPort}`,
 		LIVEAPP_NO_AI: integrated ? "0" : "1",
 		LIVEAPP_TEST_INTEGRATED: integrated ? "1" : "0",
 		LIVEAPP_TEST_ROOT: root,

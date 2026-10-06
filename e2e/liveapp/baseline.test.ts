@@ -15,6 +15,19 @@ test("pilot installation preserves application ownership code", async () => {
 		expect(original.exitCode).toBe(0);
 		expect(await readFile(resolve(root, file), "utf8")).toBe(original.stdout.toString());
 	}
+	let changed = Bun.spawnSync([
+		"git",
+		"diff",
+		"--name-only",
+		applicationBaseline,
+		"--",
+		"apps/web/src",
+		"packages/*/src",
+	], { cwd: root });
+	expect(changed.exitCode).toBe(0);
+	expect(changed.stdout.toString().trim().split("\n").filter(Boolean)).toEqual([
+		"apps/web/src/main.tsx",
+	]);
 });
 
 test("the packed library matches its record and uses the web workspace's React", async () => {

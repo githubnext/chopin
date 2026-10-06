@@ -32,6 +32,7 @@ export function devNetwork(exeHost: string | undefined, port = PORT): DevNetwork
 }
 
 export default defineConfig(async ({ mode }) => ({
+	define: { "import.meta.env.LIVEAPP_ENABLED": mode === "liveapp" ? "true" : "false" },
 	plugins: [
 		...(mode === "liveapp"
 			? [(await import("liveapp/vite")).liveApp({

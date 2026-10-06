@@ -98,7 +98,7 @@ function harnessServer(port: number, database: string) {
 
 export default defineConfig({
 	testDir: ".",
-	testIgnore: join(ROOT, "e2e/design/*.e2e.ts"),
+	testIgnore: [join(ROOT, "e2e/design/*.e2e.ts"), join(ROOT, "e2e/liveapp/**")],
 
 	/*
 	 * Bun's test runner claims `*.test.*` and `*.spec.*`. A Playwright file
@@ -132,6 +132,7 @@ export default defineConfig({
 		{
 			name: "chromium",
 			testIgnore: [
+				join(ROOT, "e2e/liveapp/**"),
 				join(ROOT, "e2e/design/*.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-heading.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-jobs.e2e.ts"),

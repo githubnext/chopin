@@ -106,6 +106,9 @@ and tool vocabulary remain optimized for planning.
 
 ## Run locally
 
+For the optional in-app frontend editing pilot, see
+[In-app frontend development](docs/frontend-development.md).
+
 The development path requires:
 
 - Bun 1.4.2;

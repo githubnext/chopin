@@ -1,5 +1,4 @@
 import { StrictMode } from "react";
-import { Developer } from "liveapp/react";
 import { createRoot } from "react-dom/client";
 import { usePointerCapabilities } from "@chopin/editor/pointer";
 
@@ -33,12 +32,19 @@ let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
 	? import("./design-audit/page").then(({ DesignAuditPage }) => <DesignAuditPage />)
 	: Promise.resolve(<Root />);
 
-void Promise.all([content, import("./icon-tooltip")]).then(([value, { IconTooltip }]) => {
-	createRoot(root).render(
-		<StrictMode>
-			{value}
-			<IconTooltip />
-			{import.meta.env.DEV && import.meta.env.LIVEAPP_ENABLED && <Developer />}
-		</StrictMode>,
-	);
-});
+let developer = import.meta.env.DEV && import.meta.env.LIVEAPP_ENABLED
+	? import("liveapp/react")
+	: Promise.resolve(undefined);
+
+void Promise.all([content, import("./icon-tooltip"), developer]).then(
+	([value, { IconTooltip }, development]) => {
+		let Developer = development?.Developer;
+		createRoot(root).render(
+			<StrictMode>
+				{value}
+				<IconTooltip />
+				{Developer && <Developer />}
+			</StrictMode>,
+		);
+	},
+);

@@ -26,13 +26,11 @@ let hash = createHash("sha256").update(await readFile(archive)).digest("hex");
 let destination = resolve(directory, `liveapp-${hash.slice(0, 20)}.tgz`);
 await rename(archive, destination);
 let web = resolve(root, "apps/web");
-await run([
-	"bun",
-	"add",
-	"--dev",
-	relative(web, destination),
-	"--registry=https://registry.npmjs.org",
-], web);
+let manifestPath = resolve(web, "package.json");
+let manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+manifest.devDependencies.liveapp = relative(web, destination);
+await writeFile(manifestPath, JSON.stringify(manifest, null, "\t") + "\n");
+await run(["bun", "install", "--registry=https://registry.npmjs.org"], root);
 await writeFile(
 	resolve(root, "liveapp.package.json"),
 	JSON.stringify(
