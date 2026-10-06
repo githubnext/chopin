@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 import { initialJavaScriptBudget } from "./bundle-budget";
+import { lifetimeProbes } from "../../e2e/liveapp/probes";
 
 import type { ServerOptions } from "vite";
 
@@ -31,7 +32,13 @@ export function devNetwork(exeHost: string | undefined, port = PORT): DevNetwork
 }
 
 export default defineConfig({
-	plugins: [react(), tailwindcss(), tsconfigPaths(), initialJavaScriptBudget()],
+	plugins: [
+		...(process.env.LIVEAPP_PILOT_PROBE === "1" ? [lifetimeProbes()] : []),
+		react(),
+		tailwindcss(),
+		tsconfigPaths(),
+		initialJavaScriptBudget(),
+	],
 
 	resolve: {
 		// Only what this app resolves itself. Lexical and Yjs belong to the
