@@ -37,10 +37,15 @@ const GRACE_MS = 2_000;
 
 const WEB_PORT = process.env.CHOPIN_DEV_WEB_PORT || "5173";
 const WEB = `http://127.0.0.1:${WEB_PORT}`;
+let liveapp = process.argv.includes("--liveapp");
 
 async function exeDevelopment() {
 	try {
-		return parseDevTarget(process.argv.slice(2)) === "exe" ? await discoverExeDev() : undefined;
+		let target = parseDevTarget(process.argv.slice(2).filter(arg => arg !== "--liveapp"));
+		if (liveapp && target === "exe") {
+			throw new Error("LiveApp development currently uses local mode");
+		}
+		return target === "exe" ? await discoverExeDev() : undefined;
 	} catch (error) {
 		console.error(`[dev] ${error instanceof Error ? error.message : String(error)}`);
 		process.exit(1);
@@ -55,7 +60,7 @@ const APP = exe?.origin
 const READY = exe ? "http://127.0.0.1:8787" : APP;
 const HMR = exe ? `wss://${exe.host}:${WEB_PORT}` : undefined;
 
-const READY_MS = 30_000;
+const READY_MS = liveapp ? 120_000 : 30_000;
 
 type Child = { name: string; proc: Subprocess };
 
@@ -132,6 +137,9 @@ async function announce(): Promise<void> {
 			await response.body?.cancel();
 			if (response.ok) {
 				console.log(`\n[dev] chopin is at ${APP}`);
+				if (liveapp) {
+					console.log(`[dev] LiveApp is enabled; ${WEB} is internal. Use one application tab.`);
+				}
 				if (HMR) console.log(`[dev] vite hmr is at ${HMR} (private alternate port)`);
 				console.log();
 				return;
@@ -143,14 +151,16 @@ async function announce(): Promise<void> {
 }
 
 children = [
-	// Vite's own entry, run by Bun. Going through `bun run dev` would add the
-	// wrapper described above, and the shim in `.bin` carries a Node shebang —
-	// which is one more thing that has to be installed for no benefit.
-	start("web", "apps/web", ["bun", "node_modules/vite/bin/vite.js"], {
+	// Run Vite directly so process-group shutdown also reaches compiler children.
+	start("web", "apps/web", [
+		liveapp ? process.env.LIVEAPP_NODE || "node" : "bun",
+		"node_modules/vite/bin/vite.js",
+		...(liveapp ? ["--mode", "liveapp"] : []),
+	], {
 		APP_ORIGIN: exe?.origin ?? process.env.APP_ORIGIN ?? "",
 		CHOPIN_DEV_EXE_HOST: exe?.host ?? "",
 	}),
-	start("server", "apps/server", ["bun", "--watch", "src/main.ts"], {
+	start("server", "apps/server", ["bun", ...(liveapp ? [] : ["--watch"]), "src/main.ts"], {
 		DEV_CLIENT: WEB,
 		...(exe
 			? {

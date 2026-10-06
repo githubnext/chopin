@@ -21,6 +21,8 @@
 		"**/.impeccable/hook.cache.json",
 		"**/dist",
 		"**/node_modules",
+		".liveapp/**",
+		".liveapp-package/**",
 		"**/*-lock.json",
 		"**/*.lock",
 		"data/**",

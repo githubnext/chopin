@@ -7,6 +7,7 @@ let root = fileURLToPath(new URL("..", import.meta.url));
 let children: Subprocess[] = [];
 let container = `frontend-pilot-${crypto.randomUUID()}`;
 let ownsContainer = false;
+let integrated = process.argv.includes("--integrated");
 
 async function port() {
 	let listener = createServer();
@@ -108,11 +109,18 @@ try {
 		DEV_COMMENTS: "",
 		LIVEAPP_PILOT_PROBE: "1",
 		LIVEAPP_TEST_ORIGIN: origin,
+		LIVEAPP_NO_AI: "1",
+		LIVEAPP_TEST_INTEGRATED: integrated ? "1" : "0",
 	};
 	await run(["bun", "apps/server/src/storage/migrate.ts"], env);
-	start(["bun", "apps/web/node_modules/vite/bin/vite.js", "apps/web"], env);
+	start([
+		integrated ? "node" : "bun",
+		"apps/web/node_modules/vite/bin/vite.js",
+		"apps/web",
+		...(integrated ? ["--mode", "liveapp"] : []),
+	], env);
 	start(["bun", "--preload", "./e2e/github.ts", "apps/server/src/main.ts"], env);
-	deadline = Date.now() + 60_000;
+	deadline = Date.now() + 180_000;
 	while (true) {
 		try {
 			let response = await fetch(origin);
@@ -130,7 +138,7 @@ try {
 		"test",
 		"--config",
 		"e2e/liveapp/playwright.config.ts",
-		...process.argv.slice(2),
+		...process.argv.slice(2).filter(arg => arg !== "--integrated"),
 	], env);
 	let code = await test.exited;
 	if (code) process.exitCode = code;

@@ -1,4 +1,5 @@
 import { StrictMode } from "react";
+import { Developer } from "liveapp/react";
 import { createRoot } from "react-dom/client";
 import { usePointerCapabilities } from "@chopin/editor/pointer";
 
@@ -37,6 +38,7 @@ void Promise.all([content, import("./icon-tooltip")]).then(([value, { IconToolti
 		<StrictMode>
 			{value}
 			<IconTooltip />
+			{import.meta.env.DEV && import.meta.env.LIVEAPP_ENABLED && <Developer />}
 		</StrictMode>,
 	);
 });

@@ -6,6 +6,8 @@
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
 		"dev:exe": "bun scripts/dev.ts --exe",
+		"dev:liveapp": "bun scripts/dev.ts --liveapp",
+		"liveapp:prepare": "bun scripts/liveapp-prepare.ts",
 		"db:up": "docker compose -f compose.yaml -f compose.local.yaml up -d --wait db",
 		"db:down": "docker compose -f compose.yaml -f compose.local.yaml down",
 		"docker:up": "docker compose -f compose.yaml -f compose.local.yaml up -d --build --wait app",
@@ -20,6 +22,7 @@
 		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
 		"e2e": "bun scripts/e2e.ts",
 		"test:liveapp:baseline": "bun scripts/liveapp-e2e.ts",
+		"test:liveapp": "bun scripts/liveapp-e2e.ts --integrated",
 		"e2e:ui": "bun scripts/e2e.ts --ui",
 		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium",
 		"design:test": "bun node_modules/@playwright/test/cli.js test --config e2e/design/playwright.config.ts",

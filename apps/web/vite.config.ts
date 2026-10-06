@@ -31,8 +31,16 @@ export function devNetwork(exeHost: string | undefined, port = PORT): DevNetwork
 	};
 }
 
-export default defineConfig({
+export default defineConfig(async ({ mode }) => ({
 	plugins: [
+		...(mode === "liveapp"
+			? [(await import("liveapp/vite")).liveApp({
+				projectRoot: "../..",
+				adapter: "./liveapp.adapter.ts",
+				controlSocketOrigin: `http://127.0.0.1:${PORT}`,
+				ai: process.env.LIVEAPP_NO_AI !== "1",
+			})]
+			: []),
 		...(process.env.LIVEAPP_PILOT_PROBE === "1" ? [lifetimeProbes()] : []),
 		react(),
 		tailwindcss(),
@@ -77,4 +85,4 @@ export default defineConfig({
 		 * allowlisted. Bun cannot relay it because `/ws` belongs to the product.
 		 */
 	},
-});
+}));

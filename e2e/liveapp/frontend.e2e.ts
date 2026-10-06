@@ -6,6 +6,9 @@ test("the real authenticated editor has observable resource and editing continui
 	let page = await join("ana");
 	let editor = content(page);
 	await ready(page);
+	if (process.env.LIVEAPP_TEST_INTEGRATED === "1") {
+		await page.getByRole("button", { name: "Collapse developer widget" }).click();
+	}
 	let snapshot = () => page.evaluate(() => Reflect.get(globalThis, "__frontendProbe").snapshot());
 	let before = await snapshot();
 	expect(Object.keys(before.ids)).toEqual(expect.arrayContaining([
