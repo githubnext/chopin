@@ -8,6 +8,7 @@ import { assertStateShape, MAX_ANALYSIS, MAX_QUEUE } from "./validation";
 import { QUESTION_SET_VERSION } from "./question-shared";
 import { appendEffects } from "./processor-fields";
 import { RESEARCH_QUESTION_SET } from "./research-interpreter";
+import { RESEARCH_POLICY_VERSION } from "./research-admission";
 
 export function createCommands(
 	deps: Dependencies,
@@ -57,6 +58,7 @@ export function createCommands(
 								analysis: [...state.analysis, {
 									messageId: message.id,
 									questionSetVersion: RESEARCH_QUESTION_SET,
+									policyVersion: RESEARCH_POLICY_VERSION,
 									modelVersion: "unavailable",
 									status: "unlinked" as const,
 									answers: {},

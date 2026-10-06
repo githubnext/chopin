@@ -2,6 +2,7 @@ import type { Chat, ConversationPlan } from "@chopin/protocol";
 import { askJev, type JevQuestion, type JevRequest, type JevResult } from "./jev";
 import { choice, noul } from "./policy-scoring";
 import { visibleThreads } from "./question-context";
+import { RESEARCH_POLICY_VERSION, researchAdmission } from "./research-admission";
 
 export const RESEARCH_QUESTION_SET = "conversation-research-1";
 export type ResearchInput = {
@@ -151,6 +152,7 @@ export async function interpretResearch(
 	let analysis: ConversationPlan.ResearchAnalysis = {
 		messageId: input.message.id,
 		questionSetVersion: RESEARCH_QUESTION_SET,
+		policyVersion: RESEARCH_POLICY_VERSION,
 		modelVersion: "unavailable",
 		status: "unlinked",
 		answers: {},
@@ -190,21 +192,8 @@ export async function interpretResearch(
 			}
 		}
 		let updating = changed && !!input.state.researchOffers?.some(offer => offer.id === target);
-		let subject = answers.research_subject;
-		let clarity = subject?.type === "choice"
-			? (subject.probabilities.explicit ?? 0) + (subject.probabilities.contextual ?? 0)
-			: 0;
-		let gate = noul(answers, "research_warranted") < 0.8 && !updating
-			? "no clear research need"
-			: noul(answers, "external") < 0.8
-			? "not external research"
-			: noul(answers, "owned") < 0.8
-			? "source ownership unclear"
-			: clarity < 0.8
-			? "research subject unclear"
-			: noul(answers, "already_answered") > 0.2
-			? "research need already answered"
-			: undefined;
+		let { admission, failure: gate } = researchAdmission(answers, updating);
+		analysis.admission = admission;
 		let sourceChoice = Object.hasOwn(request.questions, "research_source")
 			? choice(answers, "research_source")
 			: "q0";

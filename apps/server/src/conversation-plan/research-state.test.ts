@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import { initialState, restoreState } from "./domain";
 import { assertStateShape } from "./validation";
+import { interpretResearch } from "./research-interpreter";
+import { mockResult } from "./interpret.test-fixtures";
 
 let message: Chat.Entry = {
 	id: "research-message",
@@ -115,4 +117,34 @@ test("research analysis is independently validated and requires an existing sour
 	expect(() => restoreState(state, [message])).toThrow("research analysis source message missing");
 	state.research!.analysis[0]!.answers.external = { type: "noul", noul: 2 };
 	expect(() => assertStateShape(state)).toThrow("invalid analysis probability");
+});
+
+test("admission diagnostics survive restoration and reject malformed thresholds or incomplete checks", async () => {
+	let state = offered();
+	let result = await interpretResearch(
+		{ message, recent: [], state },
+		async request =>
+			mockResult(request.questions, {
+				research_warranted: 0.89,
+				external: 0.79,
+				owned: 0.88,
+				explicit_proposal: 0.95,
+				research_subject: "explicit",
+				existing_offer: "new",
+				already_answered: 0.18,
+			}),
+	);
+	state.research!.analysis.push(result.analysis);
+	expect(restoreState(state, [message])).toEqual(state);
+	let invalid = structuredClone(state);
+	invalid.research!.analysis[0]!.admission!.checks[0]!.threshold = Number.NaN;
+	expect(() => restoreState(invalid, [message])).toThrow("invalid research admission probability");
+	invalid = structuredClone(state);
+	invalid.research!.analysis[0]!.admission!.checks.pop();
+	expect(() => restoreState(invalid, [message])).toThrow(
+		"missing or duplicate research admission check",
+	);
+	invalid = structuredClone(state);
+	delete invalid.research!.analysis[0]!.policyVersion;
+	expect(() => restoreState(invalid, [message])).toThrow();
 });

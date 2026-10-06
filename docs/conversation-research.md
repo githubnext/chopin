@@ -53,8 +53,21 @@ one analysis path does not roll back the other's accepted changes.
 
 Research uses its own versioned Jev question set. The decision classifier no
 longer asks `research_need`. Historical analyses retain that field when present.
-The message diagnostics show research judgments, policy outcomes, model/version,
-timing, and an independent retry action.
+The message diagnostics show research judgments, policy outcomes, model and
+question-set versions, admission-policy version, timing, and an independent retry
+action. Admission checks show the score and actual minimum or maximum used.
+Subject clarity combines the explicit and contextual probabilities; the winning
+category's confidence is a separate model judgment.
+
+Admission policy `research-admission-2` uses a 70% external-suitability minimum
+when the explicit-proposal signal is at least 90%. Inferred opportunities use
+80%. A proposal still needs sufficient research significance, speaker ownership,
+a clear subject, valid source evidence, and an unresolved question. Updates to
+an existing offer can establish significance through a material scope change.
+Only the external-suitability minimum responds to strong explicit intent.
+Failures report the unmet threshold rather than labeling a borderline score as
+proof that a request is not external research. Historical analyses without the
+new admission fields retain their original diagnostics.
 
 Conversation state version two adds research analysis and general offer metadata
 inside the existing version-one channel sidecar. Restoration upgrades unfinished
@@ -118,3 +131,13 @@ repository-only questions, negation, reported speech, and withdrawal. The lifecy
 pass retained one offer while adding a self-hosting requirement and allowed a fresh
 explicit proposal after dismissal. These observations cover classification and
 admission, not live execution of the report-generation workers.
+
+A follow-up admission-policy check on 6 October used 36 scenarios twice, including
+12 held-out scenarios, with `jev-1.13.0`. All 36 negative runs were withheld and
+32 of 36 positive runs produced research candidates. The four misses were bare
+references to Jev falling below the independent subject-clarity threshold. The
+exact reported question passed in two additional runs with recent discussion
+identifying TypeSafe Jev's role. A deterministic regression covers the reported
+79% external-suitability score with strong intent and explicitly clear subject
+probabilities; that score now passes the explicit-proposal path. These results
+do not establish that every paraphrase will pass the other admission gates.

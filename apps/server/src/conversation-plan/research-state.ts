@@ -196,6 +196,8 @@ export function assertResearchState(
 		knownKeys(item, [
 			"messageId",
 			"questionSetVersion",
+			"policyVersion",
+			"admission",
 			"modelVersion",
 			"status",
 			"answers",
@@ -206,8 +208,38 @@ export function assertResearchState(
 		if (!["applied", "unlinked", "failed"].includes(item.status as string)) {
 			throw new Error("invalid research analysis status");
 		}
-		let { answers, offerId, ...base } = item;
+		let { answers, offerId, policyVersion, admission, ...base } = item;
 		validateAnalysis({ ...base, passes: [{ stage: "triage", answers }], eventIds: [] });
+		if (policyVersion !== undefined) id(policyVersion);
+		if (admission !== undefined) {
+			id(policyVersion);
+			let value = record(admission);
+			knownKeys(value, ["path", "checks"]);
+			if (
+				!["explicit-proposal", "inferred-opportunity", "existing-offer-update"].includes(
+					value.path as string,
+				)
+			) throw new Error("invalid research admission path");
+			let required = ["external", "owned", "subject_clarity", "already_answered"];
+			if (value.path !== "existing-offer-update") required.push("research_warranted");
+			let signals = array(value.checks, 5).map(value => {
+				let check = record(value);
+				knownKeys(check, ["signal", "score", "threshold", "comparison"]);
+				if (
+					!required.includes(check.signal as string)
+					|| check.comparison !== (check.signal === "already_answered" ? "maximum" : "minimum")
+				) throw new Error("invalid research admission check");
+				for (let value of [check.score, check.threshold]) {
+					if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+						throw new Error("invalid research admission probability");
+					}
+				}
+				return check.signal;
+			});
+			if (signals.length !== required.length || new Set(signals).size !== signals.length) {
+				throw new Error("missing or duplicate research admission check");
+			}
+		}
 		if (offerId !== undefined) id(offerId);
 		return item.messageId;
 	});
