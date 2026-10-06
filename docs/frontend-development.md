@@ -65,6 +65,7 @@ existing workspace typechecks. The pilot exercises:
 
 - New Tailwind utilities and changed status/presentation helpers.
 - JSX changes in the existing resource-owning workspace module.
+- Populated product-chat Markdown, including saved messages and live rendering edits.
 - A complete Pi source-edit/check/publish turn.
 - Pending and mounted lazy dialogs, retained input, and updated UI callbacks.
 - A new editor UI component and repeated subsequent changes.
@@ -120,6 +121,6 @@ The first full graph contained 233 application modules and 44 external imports.
 
 Validated on 2026-10-06 with Bun 1.4.2, Vite 7.3.1, React 19.2.4, MDXEditor 4.1.0,
 Lexical 0.48.0, and Yjs 13.6.31. The package identity is recorded separately in
-`liveapp.package.json`. Validation includes the four integrated pilot tests,
+`liveapp.package.json`. Validation includes the integrated pilot tests,
 plain-mode checks, all 41 existing editing/toolbar/collaboration/navigation tests,
 workspace typechecks, repository checks, and the production build/bundle budget.

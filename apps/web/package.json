@@ -29,7 +29,7 @@
 		"@types/react": "catalog:react",
 		"@types/react-dom": "catalog:react",
 		"@vitejs/plugin-react": "catalog:react",
-		"liveapp": "../../.liveapp-package/liveapp-e3365ab99a1402796f14.tgz",
+		"liveapp": "../../.liveapp-package/liveapp-d28dce7158163f860cdc.tgz",
 		"tailwindcss": "catalog:ui",
 		"vite": "catalog:ui",
 		"vite-tsconfig-paths": "catalog:ui",

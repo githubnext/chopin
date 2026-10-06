@@ -40,7 +40,7 @@ await writeFile(
 			archive: relative(root, destination),
 		},
 		null,
-		2,
+		"\t",
 	) + "\n",
 );
 console.log(`Installed development library ${hash.slice(0, 20)}`);
