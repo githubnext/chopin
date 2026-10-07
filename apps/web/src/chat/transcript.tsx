@@ -360,7 +360,6 @@ export function Transcript(
 		sourceDestination?: ChatDestination;
 	},
 ) {
-	let bottom = useRef<HTMLDivElement>(null);
 	let scroller = useRef<HTMLDivElement>(null);
 	let stack = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
@@ -522,7 +521,8 @@ export function Transcript(
 	});
 
 	useLayoutEffect(() => {
-		if (active && pinned.current) bottom.current?.scrollIntoView({ block: "end" });
+		let element = scroller.current;
+		if (active && pinned.current && element) element.scrollTop = element.scrollHeight;
 	}, [active, entries, queued]);
 
 	// Rows grow after they mount (streaming, work details, offer cards) and the pane resizes
@@ -644,7 +644,7 @@ export function Transcript(
 							/>
 						)
 				)}
-				<div className="h-4 shrink-0" ref={bottom} />
+				<div className="h-4 shrink-0" />
 			</div>
 		</div>
 	);
