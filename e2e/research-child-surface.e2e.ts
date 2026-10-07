@@ -735,7 +735,7 @@ test("a child load failure preserves its mounted parent through back and retry",
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 
 	await childLink.click();
-	await expect(surface).toContainText("Child temporarily unavailable");
+	await expect(surface).toContainText("Couldn't open this document");
 	await surface.getByRole("button", { name: "Try again" }).click();
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
