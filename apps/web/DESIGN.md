@@ -128,6 +128,10 @@ The implementation is the authority for values: `../../packages/visuals/theme.cs
 
 Success, warning, and destructive colors communicate state. Their full surface, graphic, icon, and text pairs remain defined in the shared theme.
 
+Danger surfaces use Ruby 3, with Ruby 4 on hover and Ruby 5 when pressed. Recovery
+actions use the danger text role and a Ruby 7 danger edge to stay within the red
+surface's color family.
+
 The original destructive button red is an intentional visual exception: white text on its default state measures about 4.20:1, below the usual 4.5:1 AA target. Keep this red for its aesthetic character. The hover and pressed colors remain distinct and above 4.5:1.
 
 **The Contrast Hierarchy Rule.** Prefer AA contrast for primary content and controls, but do not treat it as a universal requirement for every text role. Preserve the approved visual hierarchy: timestamps and secondary conversation metadata use their original quiet roles; supplementary audit-page labels (source paths, specimen state, usage notes, type-scale metadata, icon names and section summaries) keep their original quaternary role; queued messages and loading/tool status keep their original muted roles and opacity; code and diff previews retain the original pierre-light palette and selection treatment. These are deliberate visual exceptions, alongside the original destructive button red. Do not darken these roles automatically to satisfy a contrast audit. Record measured findings honestly and keep exceptions scoped to the approved roles and states; new exceptions require a deliberate design decision. Token use, the fluid type scale, keyboard access, focus, and layout checks remain enforced.
@@ -139,6 +143,13 @@ The original destructive button red is an intentional visual exception: white te
 Inter Variable is used for interface text and document prose. The mono stack is reserved for code and technical content. The shared theme defines a fluid modular scale across 360–1440px viewports. Its base is 15–16px and its ratio grows from 1.12 to 1.14. Each role uses `base × ratio^step` at each endpoint and a CSS `clamp()` between them. The seven named roles are small metadata `--text-2xs` (step −2.5, 11.3–11.5px), compact `--text-xs` (step −2, 12–12.3px), common interface `--text-sm` (step −1, 13.4–14px), document body `--text-base` (step 0, 15–16px), subheading `--text-lg` (step +2), section heading `--text-xl` (step +4), and title `--text-2xl` (step +7, 33.2–40px). The editor gives prose looser leading than the paired UI token and forwards the fluid tokens through MDXEditor's fixed variable scope.
 
 **The Fluid Type Rule.** Use a named text utility or `--text-*` token for every font size. The CI type-scale check rejects raw CSS font sizes, arbitrary Tailwind font sizes, and literal inline font sizes. Add a role in the shared theme and update its modular-scale test when the existing roles cannot serve the need. Inline code inherits the size of surrounding prose or a heading.
+
+## Interface copy
+
+Keep labels and tooltips concise, natural, and in sentence case. Use the fewest
+words that make the action clear: “Add file” or “Shift+Tab to switch mode.” Let
+the surrounding interface supply context. Add helper text only when it explains
+something people need to act, recover from an error, or understand a limitation.
 
 ## Layout
 
@@ -157,6 +168,7 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 ## Components
 
 - **Buttons:** Primary, secondary, outline, ghost, and destructive tiers (outline is a white button with the control edge, for a quiet single action inside a card) share one shape and compact text treatment. Medium buttons are 2rem high; small buttons are 1.5rem. Hover and pressed states change the relevant color role. Keyboard focus shows the brand focus ring; a pointer press hides it on buttons and menus, while text fields keep theirs.
+- **Recovery buttons:** `btn-outline-danger` gives actions such as Retry a hairline danger edge and danger ink on an existing danger surface. Its transparent base preserves the surrounding surface; hover and pressed states use the shared danger surface roles.
 - **Fields and selections:** White fields use the medium radius, control edge, and subtle resting shadow. Invalid fields use the destructive role. Disabled controls use neutral fill and muted text.
 - **Navigation:** The current location uses a white surface and primary ink. Other items stay quieter and reveal their affordance on hover or focus.
 - **Badges and status graphics:** Neutral, success, warning, and danger use paired semantic surface, icon, graphic, and text roles. A badge combines an icon and label in a pill.

@@ -6,6 +6,8 @@ document workflow, not the product boundary. Read
 [README.md](README.md) for the product framing and [Architecture](docs/architecture.md)
 before changing cross-package behavior.
 
+Before changing UI or interface copy, read the [design guidance](apps/web/DESIGN.md).
+
 The most useful technical references are:
 
 - [Authentication and authorization](docs/authentication.md)
