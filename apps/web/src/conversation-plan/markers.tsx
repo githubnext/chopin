@@ -1,20 +1,95 @@
 import { createPortal } from "react-dom";
-import { CodeIcon } from "@chopin/icons";
+import { DecisionIcon, InfoIcon, WarningIcon } from "@chopin/icons";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { analysisForMessage, jobsForMessage, messageLinks } from "./links";
-import { AnalysisOverview } from "./analysis-overview";
-import { ResearchDiagnostics } from "./research-diagnostics";
-import { JobsOnlyDiagnostics, PlannerJobDiagnostics } from "./planner-job-diagnostics";
-import type { ExcerptCorrectionAction } from "./analysis-overview";
+import { changePhrase, messageOutcome } from "./outcome";
+import { motionContract } from "../motion-contract";
+import { motionImmediately } from "../motion-input";
 
 import type { ConversationPlan } from "@chopin/protocol";
 import type { CSSProperties } from "react";
+import type { ExcerptCorrectionAction } from "./analysis-action";
+import type { AnalysisDetails as Details } from "./analysis-details";
 import type { CardLink } from "./links";
-
-export { JobsOnlyDiagnostics, PlannerJobDiagnostics } from "./planner-job-diagnostics";
+import type { Lane, MessageOutcome } from "./outcome";
 
 let analysisOwner: { id: object; close: () => void } | undefined;
+let AnalysisDetails: typeof Details | undefined;
+let loadDetails = () =>
+	import("./analysis-details").then(module => {
+		AnalysisDetails = module.AnalysisDetails;
+	});
+
+/** What the conversation analysis did with a message, as one quiet line under it. */
+function AnalysisResult({ animate, canEdit, onCard, onRetry, outcome, retrying }: {
+	animate: boolean;
+	canEdit: boolean;
+	onCard: (link: CardLink) => void;
+	onRetry: (lane: Lane) => void;
+	outcome: MessageOutcome;
+	retrying?: Lane;
+}) {
+	let shown = outcome.changes.slice(0, 2);
+	let hidden = outcome.changes.length - shown.length;
+	let failed = outcome.failed[0];
+	if (shown.length === 0 && !failed) return null;
+	return (
+		<div
+			className={`${
+				animate ? "chat-analysis-result " : ""
+			}mt-0.5 flex flex-col gap-0.5 text-xs text-text-tertiary`}
+			data-analysis-result
+		>
+			{shown.length > 0 && (
+				<p className="m-0 flex min-w-0 items-start gap-1.5">
+					<DecisionIcon aria-hidden="true" className="mt-0.5 shrink-0" size={12} />
+					<span className="min-w-0 break-words">
+						{shown.map((change, index) => (
+							<span key={change.threadId}>
+								{index > 0 && " · "}
+								{changePhrase(change.labels)}{" "}
+								<button
+									className="font-medium text-text-secondary underline-offset-2 hover:underline"
+									onClick={() => onCard(change.link)}
+									type="button"
+								>
+									{change.title}
+								</button>
+							</span>
+						))}
+						{hidden > 0 && ` · ${hidden} more`}
+					</span>
+				</p>
+			)}
+			{failed && (
+				<p className="m-0 flex min-w-0 items-start gap-1.5" data-analysis-failed>
+					<WarningIcon aria-hidden="true" className="mt-0.5 shrink-0 text-warning-icon" size={12} />
+					<span className="min-w-0">
+						{failed === "decision"
+							? "Couldn’t analyse this message"
+							: "Couldn’t check for research"}
+						{canEdit && (
+							<>
+								{" · "}
+								<button
+									aria-label={failed === "decision" ? "Retry analysis" : "Retry research check"}
+									className="font-medium text-text-secondary underline-offset-2 hover:underline disabled:no-underline disabled:opacity-60"
+									disabled={retrying !== undefined}
+									onClick={() => onRetry(failed)}
+									type="button"
+								>
+									{retrying ? "Retrying…" : "Retry"}
+								</button>
+							</>
+						)}
+					</span>
+				</p>
+			)}
+		</div>
+	);
+}
 
 export function MessageMarkers(
 	{
@@ -40,7 +115,7 @@ export function MessageMarkers(
 	},
 ) {
 	let [pinned, setPinned] = useState(false);
-	let [retrying, setRetrying] = useState(false);
+	let [retrying, setRetrying] = useState<Lane>();
 	let [error, setError] = useState("");
 	let [position, setPosition] = useState<CSSProperties>({ visibility: "hidden" });
 	let [focusPanelRequest, setFocusPanelRequest] = useState(0);
@@ -48,7 +123,8 @@ export function MessageMarkers(
 	let popover = useRef<HTMLDivElement>(null);
 	let popoverContent = useRef<HTMLDivElement>(null);
 	let identity = useRef({});
-	let retryId = useRef<string | undefined>(undefined);
+	let retryIds = useRef<Partial<Record<Lane, string>>>({});
+	let resultSeen = useRef<boolean | undefined>(undefined);
 	let popoverId = useId();
 	let links = state ? messageLinks(state, messageId) : [];
 	let analysis = state ? analysisForMessage(state, messageId) : undefined;
@@ -66,6 +142,33 @@ export function MessageMarkers(
 	let hasDiagnostics = !!analysis || !!research || researchPending || links.length > 0
 		|| jobs.length > 0;
 	let visible = pinned && hasDiagnostics;
+	let outcome = state ? messageOutcome(state, messageId) : undefined;
+	let hasResult = !!outcome && (outcome.changes.length > 0 || outcome.failed.length > 0);
+	if (state && resultSeen.current === undefined) resultSeen.current = hasResult;
+	let motion = motionContract("popover");
+	let immediately = motionImmediately();
+	let presence = useTransitionPresence(
+		visible && position.visibility === "visible" ? position : undefined,
+		motion.closeDuration,
+		immediately,
+	);
+	let mounted = visible || presence.phase !== "closed";
+	let active = visible && presence.phase !== "closing";
+	let retry = (lane: Lane) => {
+		if (retrying) return;
+		let id = retryIds.current[lane] ?? crypto.randomUUID();
+		retryIds.current[lane] = id;
+		setRetrying(lane);
+		setError("");
+		void onRetry(messageId, id, lane === "research" ? lane : undefined).then(() => {
+			if (retryIds.current[lane] === id) delete retryIds.current[lane];
+		}, () =>
+			setError(
+				lane === "decision"
+					? "Couldn’t retry the analysis. Try again when connected."
+					: "Couldn’t retry the research check. Try again when connected.",
+			)).finally(() => setRetrying(undefined));
+	};
 	let requestPanelFocus = () => setFocusPanelRequest(request => request + 1);
 	let closeAnalysis = (returnFocus = false) => {
 		setFocusPanelRequest(0);
@@ -74,6 +177,10 @@ export function MessageMarkers(
 		if (returnFocus) trigger.current?.focus({ preventScroll: true });
 	};
 	let openAnalysis = () => {
+		if (!AnalysisDetails) {
+			void loadDetails().then(openAnalysis);
+			return;
+		}
 		if (analysisOwner?.id !== identity.current) analysisOwner?.close();
 		analysisOwner = { id: identity.current, close: () => setPinned(false) };
 		requestPanelFocus();
@@ -228,24 +335,41 @@ export function MessageMarkers(
 				<button
 					aria-controls={visible ? popoverId : undefined}
 					aria-expanded={visible}
-					aria-label={`Analysis for message: ${status}`}
-					className="btn btn-icon btn-ghost absolute right-0 top-0"
+					aria-label={`Message details: ${status}`}
+					className="chat-message-action btn btn-icon btn-ghost absolute right-0 top-0"
 					data-analysis-trigger
+					data-tooltip="Details"
 					onClick={() => visible ? closeAnalysis() : openAnalysis()}
+					onFocus={() => void loadDetails()}
+					onPointerEnter={() => void loadDetails()}
 					ref={trigger}
-					title={jobsOnly ? "Inspect Planner jobs" : "Inspect message analysis"}
 					type="button"
 				>
-					<CodeIcon aria-hidden="true" size={14} />
+					<InfoIcon aria-hidden="true" size={14} />
 				</button>
 			)}
-			{visible && createPortal(
+			{outcome && (
+				<AnalysisResult
+					animate={resultSeen.current === false}
+					canEdit={canEdit}
+					onCard={onCard}
+					onRetry={retry}
+					outcome={outcome}
+					retrying={retrying}
+				/>
+			)}
+			{mounted && AnalysisDetails && createPortal(
 				<div
+					aria-hidden={active ? undefined : "true"}
 					aria-label={jobsOnly ? "Planner jobs" : "Message analysis"}
-					className="motion-popover is-open fixed z-50 flex flex-col overflow-x-hidden overflow-y-auto rounded-lg bg-page p-3 text-sm text-text-secondary ring-hairline shadow-overlay"
+					className={`motion-popover ${
+						presence.phase === "open" ? "is-open" : presence.phase === "closing" ? "is-closing" : ""
+					} fixed z-50 flex flex-col overflow-x-hidden overflow-y-auto rounded-lg bg-page p-3 text-sm text-text-secondary ring-hairline shadow-overlay`}
 					data-analysis-message={messageId}
 					data-analysis-popover
+					data-motion-immediate={immediately || undefined}
 					id={popoverId}
+					inert={!active}
 					onKeyDown={event => {
 						if (event.key !== "Tab") return;
 						let controls = [
@@ -254,9 +378,7 @@ export function MessageMarkers(
 							),
 						].filter(element => element.getClientRects().length > 0);
 						let current = controls.indexOf(document.activeElement as HTMLElement);
-						if (
-							(event.shiftKey && current === 0)
-						) {
+						if (event.shiftKey && current === 0) {
 							event.preventDefault();
 							trigger.current?.focus();
 						}
@@ -269,97 +391,29 @@ export function MessageMarkers(
 					style={position}
 				>
 					<div ref={popoverContent}>
-						{jobsOnly
-							? (
-								<JobsOnlyDiagnostics
-									canEdit={canEdit}
-									jobs={jobs}
-									onClose={() => closeAnalysis(true)}
-									onRetryJob={onRetryJob}
-								/>
-							)
-							: (
-								<>
-									<div className="flex items-center justify-between gap-2">
-										<span className="text-xs font-medium uppercase tracking-wide text-text-tertiary">
-											Jev analysis
-										</span>
-										<button
-											aria-label="Close analysis"
-											className="btn btn-sm btn-ghost"
-											onClick={() => closeAnalysis(true)}
-											type="button"
-										>
-											Close
-										</button>
-									</div>
-									{links.length > 0 && (
-										<div
-											aria-label="Linked decisions"
-											className="mt-2 flex flex-wrap gap-1"
-											role="group"
-										>
-											{links.slice(0, 3).map(link => (
-												<button
-													aria-label={`${link.label}: show card for “${link.source.quote}”`}
-													className="rounded-full bg-inset px-2 py-0.5 text-xs text-text-secondary hover:bg-hover"
-													data-card-link={link.itemId}
-													data-card-thread={link.threadId}
-													key={`${link.itemId}-${link.source.start}-${link.source.end}`}
-													onClick={() => {
-														closeAnalysis();
-														onCard(link);
-													}}
-													title={link.source.quote}
-													type="button"
-												>
-													{link.label}
-												</button>
-											))}
-										</div>
-									)}
-									<AnalysisOverview
-										analysis={analysis}
-										canEdit={canEdit}
-										links={links}
-										messageId={messageId}
-										messageText={messageText}
-										onAddExcerpt={onAddExcerpt}
-										state={state}
-										status={analysis?.status ?? (links.length ? "applied" : "unlinked")}
-									/>
-									<ResearchDiagnostics
-										analysis={research}
-										pending={researchPending}
-										canEdit={canEdit}
-										onRetry={onRetry}
-									/>
-									<PlannerJobDiagnostics
-										canEdit={canEdit}
-										jobs={jobs}
-										onRetryJob={onRetryJob}
-									/>
-									{status === "failed" && canEdit && (
-										<button
-											className="btn btn-sm btn-secondary mt-2"
-											disabled={retrying}
-											onClick={() => {
-												let id = retryId.current ?? crypto.randomUUID();
-												retryId.current = id;
-												setRetrying(true);
-												setError("");
-												void onRetry(messageId, id).then(() => {
-													if (retryId.current === id) retryId.current = undefined;
-												}, error => setError(String(error))).finally(() => setRetrying(false));
-											}}
-											type="button"
-										>
-											Retry analysis
-										</button>
-									)}
-									{error && <p className="m-0 mt-1 text-destructive-ink" role="alert">{error}</p>}
-								</>
-							)}
+						<AnalysisDetails
+							analysis={analysis}
+							canEdit={canEdit}
+							error={error}
+							jobs={jobs}
+							jobsOnly={jobsOnly}
+							links={links}
+							messageId={messageId}
+							messageText={messageText}
+							onAddExcerpt={onAddExcerpt}
+							onCard={link => {
+								closeAnalysis();
+								onCard(link);
+							}}
+							onClose={() => closeAnalysis(true)}
+							onRetry={retry}
+							onRetryJob={onRetryJob}
+							outcome={outcome}
+							research={research}
+							researchPending={researchPending}
+							retrying={retrying}
+							state={state}
+						/>
 					</div>
 				</div>,
 				document.body,

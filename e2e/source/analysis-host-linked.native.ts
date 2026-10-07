@@ -11,7 +11,7 @@ test(
 		await page.evaluate(() => window.analysisHostFixture.linked(true));
 		let anchor = message(page, "host-review");
 		await anchor.scrollIntoViewIfNeeded();
-		let diagnosticsButton = anchor.getByRole("button", { name: /^Analysis for message:/ });
+		let diagnosticsButton = anchor.getByRole("button", { name: /^Message details:/ });
 		await diagnosticsButton.press("Enter");
 		let panel = analysis(page, "host-review");
 		await expect(panel).toBeVisible();
@@ -47,7 +47,7 @@ test(
 		await page.evaluate(() => window.analysisHostFixture.linked(true));
 		let anchor = message(page, "host-review");
 		await anchor.scrollIntoViewIfNeeded();
-		await anchor.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
+		await anchor.getByRole("button", { name: /^Message details:/ }).press("Enter");
 		let panel = analysis(page, "host-review");
 		await expect(panel).toBeVisible();
 		await expect(panel.getByRole("group", { name: "Linked decisions", exact: true }))
@@ -58,7 +58,7 @@ test(
 		await page.keyboard.press("Escape");
 
 		let retry = message(page, "host-retry");
-		await retry.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
+		await retry.getByRole("button", { name: /^Message details:/ }).press("Enter");
 		await expect(
 			analysis(page, "host-retry").getByRole("button", {
 				name: "Retry analysis",
@@ -68,7 +68,7 @@ test(
 		await page.keyboard.press("Escape");
 
 		let jobs = message(page, "host-jobs");
-		await jobs.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
+		await jobs.getByRole("button", { name: /^Message details:/ }).press("Enter");
 		await expect(
 			analysis(page, "host-jobs").getByRole("button", {
 				name: "Retry refine job",
@@ -77,7 +77,7 @@ test(
 		).toHaveCount(0);
 		await page.keyboard.press("Escape");
 
-		await anchor.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
+		await anchor.getByRole("button", { name: /^Message details:/ }).press("Enter");
 		let linkedPanel = analysis(page, "host-review");
 		let questionLink = linkedPanel.getByRole("button", { name: /^Question: show card for/ });
 		await questionLink.focus();

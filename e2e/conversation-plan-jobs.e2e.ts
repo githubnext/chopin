@@ -19,7 +19,7 @@ function message(page: Page, messageId: string) {
 }
 
 function inspection(page: Page, messageId: string) {
-	return message(page, messageId).getByRole("button", { name: /Analysis for message/ });
+	return message(page, messageId).getByRole("button", { name: /Message details/ });
 }
 
 function jobs(page: Page) {

@@ -38,8 +38,6 @@ test("research diagnostics distinguish policy thresholds and combined clarity fr
 		<ResearchDiagnostics
 			analysis={analysis()}
 			pending={false}
-			canEdit={false}
-			onRetry={async () => {}}
 		/>,
 	);
 	expect(html).toContain("Policy research-admission-2");
@@ -60,8 +58,6 @@ test("historical research analyses display their original outcome without invent
 		<ResearchDiagnostics
 			analysis={historical}
 			pending={false}
-			canEdit={false}
-			onRetry={async () => {}}
 		/>,
 	);
 	expect(html).toContain("not external research");

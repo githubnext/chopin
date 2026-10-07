@@ -87,9 +87,11 @@ test("interface icons default to fourteen pixels", () => {
 				&& match[1] === "Info" && size === 16;
 			let referenceFailure = file.endsWith("chat/reference-status-icon.tsx")
 				&& match[1] === "CircleClose" && size === 16;
+			let analysisResult = file.endsWith("conversation-plan/markers.tsx")
+				&& match[1] === "Warning" && size === 12;
 			if (
 				size !== 14 && !emptyStateException && !stepperCaret && !composerNotice && !referenceStatus
-				&& !referenceFailure
+				&& !referenceFailure && !analysisResult
 			) {
 				offenders.push(`${file}: ${match[0]}`);
 			}

@@ -84,8 +84,9 @@ test("repository-only questions explain the rejected research scope without crea
 	await expect.poll(async () => (await wireState(page))?.research?.analysis.at(-1)?.policyGate)
 		.toBe("External suitability below threshold: 3%; required 80%.");
 	await page.locator(`[data-chat-message-id="${messageId}"]`).getByRole("button", {
-		name: /Analysis for message/,
+		name: /Message details/,
 	}).click();
+	await page.getByLabel("Message analysis").getByText("Diagnostics", { exact: true }).click();
 	await expect(page.getByRole("region", { name: "Research analysis", exact: true })).toContainText(
 		"External suitability below threshold: 3%; required 80%.",
 	);
@@ -100,8 +101,11 @@ test("a borderline explicit research proposal produces an offer with its admissi
 	let messageId = await sendChat(page, RESEARCH_MESSAGES.borderline);
 	await expect(page.getByRole("group", { name: "Research suggestion", exact: true })).toBeVisible();
 	await page.locator(`[data-chat-message-id="${messageId}"]`).getByRole("button", {
-		name: /Analysis for message/,
+		name: /Message details/,
 	}).click();
+	let analysis = page.getByLabel("Message analysis");
+	await expect(analysis).toContainText("Research suggested");
+	await analysis.getByText("Diagnostics", { exact: true }).click();
 	let diagnostics = page.getByRole("region", { name: "Research analysis", exact: true });
 	await expect(diagnostics).toContainText("Policy research-admission-2");
 	await expect(diagnostics).toContainText("Admission path: Explicit proposal");

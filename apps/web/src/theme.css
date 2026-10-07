@@ -476,9 +476,28 @@ body {
 	}
 }
 
-@media (any-pointer: coarse) {
-	.chat-header-control {
+@media (hover: hover) and (pointer: fine) {
+	.chat-message-action {
+		opacity: 0;
+		transition: opacity var(--duration-fast) var(--ease-out);
+	}
+
+	.chat-message-body:is(:hover, :focus-within) .chat-message-action,
+	.chat-message-action[aria-expanded="true"] {
 		opacity: 1;
+	}
+}
+
+@media (any-pointer: coarse) {
+	.chat-header-control,
+	.chat-message-action {
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.chat-analysis-result {
+		animation: chat-work-stage-in var(--duration-base) var(--motion-smooth-out);
 	}
 }
 
@@ -1477,7 +1496,8 @@ button.question-add:disabled {
 		transition: none;
 	}
 
-	.chat-header-control {
+	.chat-header-control,
+	.chat-message-action {
 		transition: none;
 	}
 

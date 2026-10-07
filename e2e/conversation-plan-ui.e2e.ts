@@ -31,7 +31,7 @@ test("Chat analysis diagnostics float without moving a bottom message", async ({
 	let messageId = await sendChat(page, "Should we ship a small pilot?");
 	await waitForEvent(page, "thread.opened");
 	let message = page.locator(`[data-chat-message-id="${messageId}"]`);
-	let inspect = message.getByRole("button", { name: /Analysis for message/ });
+	let inspect = message.getByRole("button", { name: /Message details/ });
 	let transcript = message.locator("xpath=ancestor::*[@data-focus-boundary][1]");
 	await expect(inspect).toBeVisible();
 	await message.hover();
@@ -52,7 +52,11 @@ test("Chat analysis diagnostics float without moving a bottom message", async ({
 	expect(popoverBox).not.toBeNull();
 	expect(composerBox).not.toBeNull();
 	expect(popoverBox!.height).toBeLessThanOrEqual(352);
-	expect(await popover.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+	await popover.getByText("Diagnostics", { exact: true }).click();
+	await expect.poll(() => popover.evaluate(element => element.scrollHeight > element.clientHeight))
+		.toBe(true);
+	popoverBox = await popover.boundingBox();
+	expect(popoverBox!.height).toBeLessThanOrEqual(352);
 	expect(popoverBox!.y + popoverBox!.height).toBeLessThanOrEqual(composerBox!.y);
 });
 
@@ -68,17 +72,17 @@ test("another message hover stays quiet and code buttons keep one analysis porta
 	let earlier = page.locator(`[data-chat-message-id="${earlierId}"]`);
 	let active = page.locator(`[data-chat-message-id="${activeId}"]`);
 	let popover = page.locator(`[data-analysis-message="${activeId}"]`);
-	await active.getByRole("button", { name: /Analysis for message/ }).click();
+	await active.getByRole("button", { name: /Message details/ }).click();
 	await expect(popover).toBeVisible();
 	await page.mouse.move(0, 0);
 	await expect(popover).toBeVisible();
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(1);
-	await popover.getByText("Model answers and run details").click();
+	await popover.getByText("Diagnostics", { exact: true }).click();
 	await expect(popover).toContainText("targeting");
 	await popover.getByRole("button", { name: "Close analysis" }).click();
 	await earlier.hover();
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(0);
-	await earlier.getByRole("button", { name: /Analysis for message/ }).click();
+	await earlier.getByRole("button", { name: /Message details/ }).click();
 	await expect(popover).toHaveCount(0);
 	await expect(page.locator(`[data-analysis-message="${earlierId}"]`)).toBeVisible();
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(1);
@@ -96,7 +100,7 @@ test("analysis Escape dismisses before compact Chat and narrow split popovers st
 	let compactMessage = await sendChat(page, "Should we ship a small pilot?");
 	await waitForEvent(page, "thread.opened");
 	let compactMarker = page.locator(`[data-chat-message-id="${compactMessage}"]`)
-		.getByRole("button", { name: /Analysis for message/ });
+		.getByRole("button", { name: /Message details/ });
 	let analysis = page.getByLabel("Message analysis");
 	await compactMarker.focus();
 	await expect(analysis).toHaveCount(0);
@@ -113,7 +117,7 @@ test("analysis Escape dismisses before compact Chat and narrow split popovers st
 	let splitMessage = await sendChat(page, "Could we use a small pilot?");
 	let splitMessageElement = page.locator(`[data-chat-message-id="${splitMessage}"]`);
 	let splitMarker = splitMessageElement
-		.getByRole("button", { name: /Analysis for message/ });
+		.getByRole("button", { name: /Message details/ });
 	await expect(splitMarker).toBeVisible();
 	await page.mouse.move(0, 0);
 	await splitMessageElement.hover();
@@ -164,7 +168,7 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 		.toBeAttached();
 	let compound = page.locator(`[data-chat-message-id="${compoundMessage}"]`);
 	await expect(compound.locator(`[data-card-link="${option.id}"]`)).toHaveCount(0);
-	let inspect = compound.getByRole("button", { name: /Analysis for message/ });
+	let inspect = compound.getByRole("button", { name: /Message details/ });
 	await inspect.press("Enter");
 	let analysis = page.getByLabel("Message analysis");
 	let cardLink = analysis.locator(`[data-card-link="${option.id}"]`);
@@ -182,8 +186,8 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	await inspect.focus();
 	await expect(analysis).toHaveCount(0);
 	await inspect.press("Enter");
-	await expect(analysis).toContainText("findings applied");
-	await analysis.getByText("Model answers and run details").click();
+	await expect(analysis).toContainText("Added to a decision");
+	await analysis.getByText("Diagnostics", { exact: true }).click();
 	await expect(analysis).toContainText("targeting");
 	await analysis.getByRole("button", { name: "Close analysis" }).click();
 	await expect(analysis).toHaveCount(0);
@@ -207,9 +211,9 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 		(await wireState(page))?.analysis.find(item => item.messageId === unlinkedMessage)?.status
 	).toBe("unlinked");
 	let unlinked = page.locator(`[data-chat-message-id="${unlinkedMessage}"]`);
-	await expect(unlinked.getByRole("button", { name: "Analysis for message: unlinked" }))
+	await expect(unlinked.getByRole("button", { name: "Message details: unlinked" }))
 		.toBeVisible();
-	await expect(unlinked.getByRole("button", { name: "Analysis for message: unlinked" }))
+	await expect(unlinked.getByRole("button", { name: "Message details: unlinked" }))
 		.toHaveAttribute("data-analysis-trigger", "true");
 	await expect(page.getByText("Unlinked", { exact: true })).toHaveCount(0);
 });
@@ -416,7 +420,7 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 		(await wireState(page))?.analysis.find(item => item.messageId === failureMessage)?.status
 	).toBe("failed");
 	let message = page.locator(`[data-chat-message-id="${failureMessage}"]`);
-	let inspect = message.getByRole("button", { name: /Analysis for message/ });
+	let inspect = message.getByRole("button", { name: /Message details/ });
 	await message.locator("[data-chat-message-text]").click();
 	let analysis = page.getByLabel("Message analysis");
 	await expect(analysis).toHaveCount(0);
@@ -426,13 +430,15 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 	await expect(retry).toBeVisible();
 	await expect(close).toBeFocused();
 	await close.press("Tab");
-	let details = analysis.getByText("Model answers and run details");
+	await expect(retry).toBeFocused();
+	await retry.press("Tab");
+	let details = analysis.getByText("Diagnostics", { exact: true });
 	await expect(details).toBeFocused();
-	await details.press("Tab");
+	await details.press("Shift+Tab");
 	await expect(retry).toBeFocused();
 	await retry.press("Enter");
 	await waitForEvent(page, "thread.opened");
-	await expect(analysis).toContainText("finding applied");
+	await expect(analysis).toContainText("New decision");
 	await expect(page.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]'))
 		.toBeVisible();
 
@@ -459,7 +465,7 @@ test("a second acknowledged retry uses a fresh action after analysis fails again
 	await marker.locator("[data-chat-message-text]").click();
 	let analysis = page.getByLabel("Message analysis");
 	await expect(analysis).toHaveCount(0);
-	await marker.getByRole("button", { name: /Analysis for message/ }).click();
+	await marker.getByRole("button", { name: /Message details/ }).click();
 	await analysis.getByRole("button", { name: "Retry analysis" }).click();
 	await expect.poll(async () =>
 		(await wireState(page))?.queue.find(item => item.messageId === messageId)
@@ -480,7 +486,7 @@ test("scrolling a pinned message analysis out of Chat dismisses its portal", asy
 	await marker.locator("[data-chat-message-text]").click();
 	let analysis = page.locator(`[data-analysis-message="${messageId}"]`);
 	await expect(analysis).toHaveCount(0);
-	await marker.getByRole("button", { name: /Analysis for message/ }).click();
+	await marker.getByRole("button", { name: /Message details/ }).click();
 	await expect(analysis).toBeVisible();
 	for (let index = 0; index < 32; index++) await sendChat(page, `Maybe that? ${index}`);
 	let transcript = marker.locator("xpath=ancestor::*[@data-focus-boundary][1]");
@@ -515,9 +521,9 @@ test("read-only and archived readers keep cards and diagnostics with disabled co
 		await marker.locator("[data-chat-message-text]").click();
 		let analysis = reader.getByLabel("Message analysis");
 		await expect(analysis).toHaveCount(0);
-		await marker.getByRole("button", { name: /Analysis for message/ }).click();
-		await expect(analysis).toContainText("finding applied");
-		await analysis.getByText("Model answers and run details").click();
+		await marker.getByRole("button", { name: /Message details/ }).click();
+		await expect(analysis).toContainText("New decision");
+		await analysis.getByText("Diagnostics", { exact: true }).click();
 		await expect(analysis).toContainText("triage");
 	} finally {
 		await readonlyContext.close();

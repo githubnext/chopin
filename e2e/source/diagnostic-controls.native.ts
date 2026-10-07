@@ -20,7 +20,7 @@ test.describe("chat diagnostic controls", () => {
 			await loadAnalysis(page);
 			let anchor = message(page, "host-review");
 			await anchor.scrollIntoViewIfNeeded();
-			let trigger = anchor.getByRole("button", { name: /^Analysis for message:/ });
+			let trigger = anchor.getByRole("button", { name: /^Message details:/ });
 			await expect(trigger).toBeVisible();
 			let [messageBounds, iconBounds] = await Promise.all([
 				anchor.boundingBox(),

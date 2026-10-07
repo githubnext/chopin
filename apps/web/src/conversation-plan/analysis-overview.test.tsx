@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { AnalysisOverview } from "./analysis-overview";
+import { AnalysisDiagnostics, AnalysisOverview } from "./analysis-overview";
 
 import type { ConversationPlan } from "@chopin/protocol";
 
-test("analysis leads with applied and held excerpts, then explains Jev and policy", () => {
+test("analysis lists applied and held excerpts and keeps model details for diagnostics", () => {
 	let messageText = "We should use S3, but it must be encrypted.";
 	let first = "We should use S3";
 	let second = "it must be encrypted";
@@ -42,17 +42,15 @@ test("analysis leads with applied and held excerpts, then explains Jev and polic
 		analysis,
 		links: [],
 		messageText,
-		status: "applied",
 	}));
+	let diagnostics = renderToStaticMarkup(createElement(AnalysisDiagnostics, { analysis }));
 
-	expect(html).toContain("1 finding applied");
-	expect(html).toContain("Jev detected");
-	expect(html).toContain("Proposal");
-	expect(html).toContain("Constraint");
 	expect(html).toContain(`“${first}”`);
 	expect(html).toContain(`“${second}”`);
 	expect(html).toContain("contribution target needs review");
-	expect(html).toContain("Model answers and run details");
-	expect(html).toContain("94% signal");
-	expect(html).not.toContain("{&quot;type&quot;");
+	expect(html).not.toContain("jev-1");
+	expect(diagnostics).toContain("Detected: Proposal, Constraint");
+	expect(diagnostics).toContain("Model jev-1");
+	expect(diagnostics).toContain("94% signal");
+	expect(diagnostics).not.toContain("{&quot;type&quot;");
 });

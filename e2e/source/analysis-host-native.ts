@@ -76,13 +76,13 @@ export async function load(page: Page, mode: HostMode = "editable") {
 export async function inspect(page: Page, id: string) {
 	let anchor = message(page, id);
 	await anchor.scrollIntoViewIfNeeded();
-	await anchor.getByRole("button", { name: /^Analysis for message:/ }).click();
+	await anchor.getByRole("button", { name: /^Message details:/ }).click();
 	await expect(analysis(page, id)).toBeVisible();
 }
 export async function openCorrection(page: Page) {
 	let anchor = message(page, "host-review");
 	await anchor.scrollIntoViewIfNeeded();
-	await anchor.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
+	await anchor.getByRole("button", { name: /^Message details:/ }).press("Enter");
 	let panel = analysis(page, "host-review");
 	let correction = panel.getByRole("button", { name: "Add to card", exact: true });
 	await correction.focus();

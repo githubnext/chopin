@@ -2,10 +2,11 @@ import { useState } from "react";
 
 import type { ConversationPlan } from "@chopin/protocol";
 
-export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob }: {
+export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob, titled = true }: {
 	canEdit: boolean;
 	jobs: ConversationPlan.Job[];
 	onRetryJob?: (jobId: string) => Promise<void>;
+	titled?: boolean;
 }) {
 	let [retrying, setRetrying] = useState<string>();
 	let [error, setError] = useState("");
@@ -25,8 +26,12 @@ export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob }: {
 	if (jobs.length === 0) return null;
 
 	return (
-		<div className="mt-2 hairline-t pt-2" aria-label="Planner jobs" role="group">
-			<strong>Planner jobs</strong>
+		<div
+			aria-label="Planner jobs"
+			className={titled ? "mt-2 hairline-t pt-2" : "mt-1"}
+			role="group"
+		>
+			{titled && <strong>Planner jobs</strong>}
 			{jobs.map(job => (
 				<div className="mt-1" key={job.id}>
 					<p className="m-0">
@@ -53,28 +58,5 @@ export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob }: {
 			))}
 			{error && <p className="m-0 mt-1 text-destructive-ink" role="alert">{error}</p>}
 		</div>
-	);
-}
-
-export function JobsOnlyDiagnostics({ canEdit, jobs, onClose, onRetryJob }: {
-	canEdit: boolean;
-	jobs: ConversationPlan.Job[];
-	onClose: () => void;
-	onRetryJob?: (jobId: string) => Promise<void>;
-}) {
-	return (
-		<>
-			<div className="flex items-center justify-end gap-2">
-				<button
-					aria-label="Close Planner jobs"
-					className="btn btn-sm btn-ghost"
-					onClick={onClose}
-					type="button"
-				>
-					Close
-				</button>
-			</div>
-			<PlannerJobDiagnostics canEdit={canEdit} jobs={jobs} onRetryJob={onRetryJob} />
-		</>
 	);
 }

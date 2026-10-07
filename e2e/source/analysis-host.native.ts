@@ -11,7 +11,7 @@ test("message diagnostics stay closed until the code button is activated", async
 	await expect(analysis(page, "host-review")).toHaveCount(0);
 	await anchor.locator("[data-chat-message-text]").click();
 	await expect(analysis(page, "host-review")).toHaveCount(0);
-	let trigger = anchor.getByRole("button", { name: "Analysis for message: unlinked", exact: true });
+	let trigger = anchor.getByRole("button", { name: "Message details: unlinked", exact: true });
 	await expect(trigger).toBeVisible();
 	await trigger.click();
 	await expect(analysis(page, "host-review")).toBeVisible();
@@ -20,10 +20,10 @@ test("message diagnostics stay closed until the code button is activated", async
 test("code buttons keep one portal owner and Escape returns native focus", async ({ page }) => {
 	let errors = await load(page);
 	await message(page, "host-review").scrollIntoViewIfNeeded();
-	await message(page, "host-review").getByRole("button", { name: /^Analysis for message:/ })
+	await message(page, "host-review").getByRole("button", { name: /^Message details:/ })
 		.click();
 	await expect(analysis(page, "host-review")).toBeVisible();
-	await message(page, "host-retry").getByRole("button", { name: /^Analysis for message:/ }).click();
+	await message(page, "host-retry").getByRole("button", { name: /^Message details:/ }).click();
 	await expect(analysis(page, "host-retry")).toBeVisible();
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(1);
 	await expect(analysis(page, "host-review")).toHaveCount(0);
@@ -31,7 +31,7 @@ test("code buttons keep one portal owner and Escape returns native focus", async
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(0);
 	await expect(
 		message(page, "host-retry").getByRole("button", {
-			name: "Analysis for message: failed",
+			name: "Message details: failed",
 			exact: true,
 		}),
 	).toBeFocused();
@@ -41,7 +41,7 @@ test("code buttons keep one portal owner and Escape returns native focus", async
 test("diagnostics restoration after reconnect never reopens a former pin", async ({ page }) => {
 	await load(page);
 	let trigger = message(page, "host-review").getByRole("button", {
-		name: "Analysis for message: unlinked",
+		name: "Message details: unlinked",
 		exact: true,
 	});
 	await trigger.click();
@@ -59,7 +59,7 @@ test("diagnostics restoration after reconnect never reopens a former pin", async
 test("keyboard-only inspect opens real diagnostics and pinned message survives pointer leave", async ({ page }) => {
 	let errors = await load(page);
 	let trigger = message(page, "host-review").getByRole("button", {
-		name: "Analysis for message: unlinked",
+		name: "Message details: unlinked",
 		exact: true,
 	});
 	await trigger.focus();
@@ -73,7 +73,7 @@ test("keyboard-only inspect opens real diagnostics and pinned message survives p
 	await expect(trigger).toBeFocused();
 	await message(page, "host-review").locator("[data-chat-message-text]").click();
 	await expect(analysis(page, "host-review")).toHaveCount(0);
-	await message(page, "host-review").getByRole("button", { name: /^Analysis for message:/ })
+	await message(page, "host-review").getByRole("button", { name: /^Message details:/ })
 		.click();
 	await expect(analysis(page, "host-review")).toBeVisible();
 	await page.mouse.move(2, 2);
@@ -123,7 +123,7 @@ test("native selection refuses whole-message pinning and interactive controls re
 	await page.evaluate(() => window.getSelection()!.removeAllRanges());
 	await expect(anchor.getByRole("button", { name: "Review 1 excerpt", exact: true }))
 		.toHaveCount(0);
-	await anchor.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
+	await anchor.getByRole("button", { name: /^Message details:/ }).press("Enter");
 	await expect(analysis(page, "host-review")).toBeVisible();
 	let correction = analysis(page, "host-review").getByRole("button", {
 		name: "Add to card",
