@@ -15,8 +15,8 @@ export function EmptyWorkspace(
 			<div
 				className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-center ${
 					mode === "split"
-						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-page shadow-raised ring-hairline"
-						: "m-2 overflow-hidden rounded-[12px] bg-page shadow-resting ring-hairline"
+						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-ground shadow-raised ring-hairline"
+						: "m-2 overflow-hidden rounded-[12px] bg-ground shadow-resting ring-hairline"
 				}`}
 			>
 				<h2 className="text-sm font-semibold text-text-primary">No document open</h2>
