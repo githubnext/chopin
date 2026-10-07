@@ -396,8 +396,9 @@ test("a desktop comment card opens beside its passage instead of over it", async
 	let paragraphBox = (await paragraph.boundingBox())!;
 	expect(cardBox.x).toBeGreaterThanOrEqual(paragraphBox.x - 1);
 	expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(paragraphBox.x + paragraphBox.width + 1);
-	// Authors read as they do in Chat: a face beside a display name.
-	await expect(card.getByRole("img", { name: "dev" })).toBeVisible();
+	// The visible name carries the handle; the adjacent face is decorative.
+	await expect(card.getByTitle("@dev")).toContainText("Dev");
+	await expect(card.getByRole("img", { name: "dev" })).toHaveCount(0);
 	await page.keyboard.press("Escape");
 
 	let target = page.locator(".plan-content > p").nth(4);
