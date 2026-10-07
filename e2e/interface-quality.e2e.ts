@@ -1,3 +1,4 @@
+import { chatInput, expectChatValue } from "./chat-input";
 import { expect, test } from "./room";
 import { textContrast } from "./rendered-contrast";
 
@@ -100,14 +101,14 @@ for (let width of [1280, 390]) {
 				.getByRole("button", { name: /^Chat/ }).click();
 		}
 		let chat = page.getByRole("complementary", { name: "Chat", exact: true });
-		let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+		let draft = chatInput(chat);
 		await draft.fill("Keep this draft until the message is saved.");
 		await chat.getByRole("button", { name: "Send message" }).click();
 		let error = chat.getByRole("alert");
 		await expect(error).toContainText("Check the connection and try again.");
 		await expect.poll(() => error.evaluate(element => element.scrollWidth - element.clientWidth))
 			.toBeLessThanOrEqual(1);
-		await expect(draft).toHaveValue("Keep this draft until the message is saved.");
+		await expectChatValue(draft, "Keep this draft until the message is saved.");
 		await expect(draft).toBeFocused();
 		await expect.poll(() =>
 			draft.evaluate(element => {
@@ -117,6 +118,9 @@ for (let width of [1280, 390]) {
 			})
 		).toBeGreaterThanOrEqual(0);
 		await expect(chat.getByRole("button", { name: "Send message" })).toBeEnabled();
+		if (width === 1280) {
+			await chat.screenshot({ path: "/private/tmp/chopin-composer-production-error.png" });
+		}
 	});
 }
 

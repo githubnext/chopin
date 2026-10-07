@@ -417,7 +417,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 						aria-label={`Move ${noun} ${index + 1}`}
 						className={`plan-grip ${mine?.from === index ? "is-held" : ""}`}
 						data-press="small"
-						data-tooltip={`Move ${column ? "Column" : "Row"}`}
+						data-tooltip={`Move ${column ? "column" : "row"}`}
 						data-plan-held={mine?.from === index || undefined}
 						style={box}
 						title={`Drag to move this ${noun}`}
@@ -502,7 +502,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 									className="plan-align"
 									data-press="small"
 									data-plan-align={table.align[index] ?? "default"}
-									data-tooltip="Align Column"
+									data-tooltip="Align column"
 									data-plan-shown={shown}
 									style={place(-PAIR)}
 									title="Change this column's alignment"
@@ -521,7 +521,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 									className="plan-grip-remove"
 									data-press="small"
 									data-plan-shown={shown}
-									data-tooltip={`Remove ${column ? "Column" : "Row"}`}
+									data-tooltip={`Remove ${column ? "column" : "row"}`}
 									style={place(PAIR)}
 									title={`Remove this ${noun}`}
 									onFocus={() => setUnder(index)}
@@ -547,7 +547,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 								: `Insert ${noun} after ${noun} ${seam}`}
 							className="plan-insert"
 							data-press="small"
-							data-tooltip={`Insert ${column ? "Column" : "Row"}`}
+							data-tooltip={`Insert ${column ? "column" : "row"}`}
 							style={seamBox(axis, line, origin, TOOL, SEAM)}
 							title={`Insert a ${noun} here`}
 							onClick={() => insert(seam)}

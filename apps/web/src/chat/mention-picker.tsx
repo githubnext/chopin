@@ -1,4 +1,4 @@
-import { AgentFace } from "@chopin/editor";
+import { ChopinMark } from "./agent-mark";
 import { useEffect, useState } from "react";
 
 import { referenceOptionId } from "./reference-picker";
@@ -55,7 +55,7 @@ export function MentionPicker(
 
 	return (
 		<div
-			className="absolute bottom-full left-2.5 z-30 mb-1 w-max min-w-48 max-w-[calc(100%-1.25rem)] overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-overlay"
+			className="absolute bottom-full left-2.5 z-30 mb-1 w-max min-w-48 max-w-[calc(100%-1.25rem)] overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-resting-strong"
 			data-chat-mention-picker=""
 			data-focus-boundary=""
 			style={{ maxHeight: `min(${LIST_HEIGHT}, 45dvh, 45vh)` }}
@@ -80,7 +80,7 @@ export function MentionPicker(
 						{option.kind === "planner"
 							? (
 								<span aria-hidden="true" className="flex shrink-0">
-									<AgentFace size={20} />
+									<ChopinMark circle />
 								</span>
 							)
 							: <Avatar login={option.login} />}

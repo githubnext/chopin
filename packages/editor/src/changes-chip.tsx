@@ -142,7 +142,7 @@ function Chip(
 				<button
 					type="button"
 					className="plan-changes-more"
-					data-tooltip="View Changes"
+					data-tooltip="View changes"
 					aria-expanded={open}
 					onClick={() => {
 						setIconMotionOwner(

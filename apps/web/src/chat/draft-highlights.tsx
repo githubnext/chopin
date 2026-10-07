@@ -4,7 +4,7 @@ export function writeDraft(
 	element: HTMLElement,
 	text: string,
 	references: ReferenceDraft[],
-	mentions: readonly string[] = ["chopin", "maggieappleton", "matt"],
+	mentions: readonly string[] = [],
 ) {
 	let fragment = document.createDocumentFragment();
 	let end = 0;

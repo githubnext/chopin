@@ -250,7 +250,7 @@ function Project(
 						aria-label={`New document in ${label}`}
 						className={`project-sidebar-action ${phase ? "project-sidebar-action-pending" : ""}`}
 						data-press="small"
-						data-tooltip="New Document"
+						data-tooltip="New document"
 						disabled={!!phase}
 						onClick={() => onCreateDocument(project)}
 						title={`New document in ${label}`}
@@ -403,7 +403,7 @@ export function ProjectSidebar(
 						aria-label="Collapse Projects sidebar"
 						className="project-sidebar-action"
 						data-press="small"
-						data-tooltip="Close Sidebar"
+						data-tooltip="Close sidebar"
 						onClick={onCollapse}
 						type="button"
 					>
@@ -419,6 +419,7 @@ export function ProjectSidebar(
 						{!archiveMode && (
 							<button
 								aria-label="Add Project"
+								data-tooltip="Add project"
 								className="project-sidebar-action"
 								data-press="small"
 								onClick={onAddProject}

@@ -227,6 +227,59 @@ describe("status", () => {
 		expect(wire.status).toBe("connected");
 	});
 
+	it("reconnects immediately without leaving a second backoff attempt", async () => {
+		let service = restartable();
+		let seen: Status[] = [];
+		let wire = connect(service.port, seen);
+		await until(() => wire.status === "connected", "connected");
+		service.drop();
+		await until(() => wire.status === "reconnecting", "backoff");
+		wire.reconnect();
+		await until(() => wire.status === "connected", "manual reconnect");
+		await Bun.sleep(500);
+		expect(seen.filter(status => status === "connected")).toHaveLength(2);
+		wire.dispose();
+		wire.reconnect();
+		expect(wire.status).toBe("closed");
+	});
+
+	it("ignores a superseded refusal probe after manual reconnection", async () => {
+		let probe = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let socket: ServerWebSocket<undefined> | undefined;
+		let server = Bun.serve<undefined>({
+			port: 0,
+			hostname: "127.0.0.1",
+			async fetch(request, self) {
+				if (request.headers.get("x-chopin-socket-probe") === "1") {
+					probe.resolve();
+					await release.promise;
+					return new Response("stale refusal", { status: 401 });
+				}
+				return self.upgrade(request) ? undefined : new Response("no", { status: 400 });
+			},
+			websocket: {
+				open: current => {
+					socket = current;
+				},
+				message() {},
+			},
+		});
+		servers.push(server);
+		let seen: Status[] = [];
+		let required = 0;
+		let wire = connect(server.port!, seen, () => required++);
+		await until(() => wire.status === "connected", "connected");
+		socket!.terminate();
+		await probe.promise;
+		wire.reconnect();
+		await until(() => wire.status === "connected", "manual reconnect");
+		release.resolve();
+		await Bun.sleep(30);
+		expect(wire.status).toBe("connected");
+		expect(required).toBe(0);
+	});
+
 	for (let mode of ["frame", "close"] as const) {
 		it(`treats a deleted ${mode} as terminal`, async () => {
 			let service = deleted(mode);

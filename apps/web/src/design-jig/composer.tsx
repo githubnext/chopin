@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { SendAction } from "@chopin/editor";
-import { InfoIcon, LoaderIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { ArchiveIcon, InfoIcon, LoaderIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { MentionPicker } from "../chat/mention-picker";
 import { referenceOptionId } from "../chat/reference-picker";
 import { ReferenceMenu } from "./reference-menu";
@@ -114,28 +114,44 @@ export function ComposerPreview(
 		? "Chopin working"
 		: "";
 
-	let focus = (at = caret) => {
+	let focus = (at = caret, end = at) => {
 		if (focusFrame.current !== undefined) cancelAnimationFrame(focusFrame.current);
 		focusFrame.current = requestAnimationFrame(() => {
 			focusFrame.current = undefined;
 			field.current?.focus();
-			field.current?.setSelectionRange(at, at);
+			field.current?.setSelectionRange(at, end);
 		});
 	};
 	let toggle = () => {
 		if (unavailable || sending || agentOff) return;
 		if (focusFrame.current !== undefined) cancelAnimationFrame(focusFrame.current);
+		let at = field.current?.selectionStart ?? caret;
+		let end = field.current?.selectionEnd ?? at;
 		if (effectiveMode) {
-			let next = text.replace(/(^|[^\w@])@chopin\b/gi, (match, before, offset) => {
-				let start = offset + before.length;
-				return refs.some(ref => start >= ref.start && start < ref.end) ? match : before;
-			});
-			setRefs(reconcileReferenceDrafts(text, next, refs));
+			let removals = [...text.matchAll(/(^|[^\w@])@chopin\b/gi)]
+				.map(match => ({
+					start: match.index + match[1]!.length,
+					end: match.index + match[0].length,
+				}))
+				.filter(edit =>
+					!refs.some(reference => edit.start < reference.end && edit.end > reference.start)
+				);
+			let next = text;
+			let references = refs;
+			for (let edit of removals.toReversed()) {
+				let revised = next.slice(0, edit.start) + next.slice(edit.end);
+				references = reconcileReferenceDrafts(next, revised, references, edit);
+				if (edit.start < at) at -= Math.min(edit.end - edit.start, at - edit.start);
+				if (edit.start < end) end -= Math.min(edit.end - edit.start, end - edit.start);
+				next = revised;
+			}
+			setRefs(references);
 			setText(next);
+			setCaret(at);
 			setMode(false);
 		} else setMode(true);
 		setDismissed(true);
-		field.current?.focus();
+		focus(at, end);
 	};
 	let choose = (index: number) => {
 		if (mention && options[index]) {
@@ -221,7 +237,7 @@ export function ComposerPreview(
 						? (
 							<WarningIcon
 								aria-hidden="true"
-								className={phase === "error" ? "text-danger-icon" : undefined}
+								className={phase === "error" ? "icon-danger" : undefined}
 								size={14}
 							/>
 						)
@@ -269,6 +285,7 @@ export function ComposerPreview(
 				{readonly
 					? (
 						<div className="composer-unavailable" role="status">
+							{phase === "archived" ? <ArchiveIcon size={18} /> : <LockIcon size={18} />}
 							<strong>{phase === "archived" ? "Document archived" : "Read-only access"}</strong>
 							<p>
 								{phase === "archived"
@@ -359,12 +376,13 @@ export function ComposerPreview(
 								/>
 							</div>
 							<div className="composer-footer">
-								<ModeSwitch
-									effectiveMode={effectiveMode}
-									disabled={unavailable || sending || agentOff}
-									onToggle={toggle}
-								/>
-								<div className="composer-actions">
+								<div className="composer-left">
+									<ModeSwitch
+										effectiveMode={effectiveMode}
+										disabled={unavailable || sending || agentOff}
+										onToggle={toggle}
+									/>
+
 									<button
 										type="button"
 										className="btn btn-icon btn-ghost"
@@ -383,22 +401,26 @@ export function ComposerPreview(
 									>
 										<PlusIcon size={14} />
 									</button>
-									{["working", "queued", "paused"].includes(phase) && (
-										<button
-											type="button"
-											className="btn btn-icon btn-secondary"
-											aria-label={phase === "paused" ? "Resume Chopin" : "Stop Chopin"}
-											data-tooltip={phase === "paused" ? "Resume Chopin" : "Stop Chopin"}
-											onClick={() => setPhase(phase === "paused" ? "working" : "paused")}
-										>
-											<img
-												alt=""
-												width="14"
-												height="14"
-												src={phase === "paused" ? resumeIcon : stopIcon}
-											/>
-										</button>
-									)}
+								</div>
+								<div className="composer-actions">
+									<span className="composer-run-control">
+										{["working", "queued", "paused"].includes(phase) && (
+											<button
+												type="button"
+												className="btn btn-icon btn-secondary"
+												aria-label={phase === "paused" ? "Resume Chopin" : "Stop Chopin"}
+												data-tooltip={phase === "paused" ? "Resume Chopin" : "Stop Chopin"}
+												onClick={() => setPhase(phase === "paused" ? "working" : "paused")}
+											>
+												<img
+													alt=""
+													width="14"
+													height="14"
+													src={phase === "paused" ? resumeIcon : stopIcon}
+												/>
+											</button>
+										)}
+									</span>
 									{sending
 										? (
 											<button

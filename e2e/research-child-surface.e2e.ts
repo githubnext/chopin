@@ -1,3 +1,4 @@
+import { chatInput } from "./chat-input";
 import { seedChildChannel } from "./database";
 import { installPointerMedia } from "./pointer-media";
 import { authenticate, expect, test } from "./room";
@@ -210,7 +211,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 		includeHidden: true,
 	});
 	let parentRoomMessage = `Parent room message ${room.slice(0, 8)}`;
-	let parentDraft = parentChat.getByPlaceholder("Use @chopin to ask Chopin");
+	let parentDraft = chatInput(parentChat);
 	await parentDraft.fill(parentRoomMessage);
 	await parentChat.getByRole("button", { name: "Send message" }).click();
 	await expect(parentChat.getByText(parentRoomMessage, { exact: true })).toBeVisible();
@@ -240,7 +241,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	let childRoomMessage = `Child room message ${room.slice(0, 8)}`;
 	let childPlannerMessage = `@chopin Child Planner message ${room.slice(0, 8)}`;
 	let childPlannerTranscript = childPlannerMessage.replace("@chopin ", "");
-	let childDraft = childChat.getByPlaceholder("Use @chopin to ask Chopin");
+	let childDraft = chatInput(childChat);
 	await childDraft.fill(childRoomMessage);
 	await childChat.getByRole("button", { name: "Send message" }).click();
 	await expect(childChat.getByText(childRoomMessage, { exact: true })).toBeVisible();

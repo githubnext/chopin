@@ -29,7 +29,7 @@ export type WorkspaceEvent =
 	| { type: "set-chat"; open: boolean }
 	| { type: "set-desktop-chat"; open: boolean };
 
-export const WORKSPACE_MEDIA = ["(width < 500px)"] as const;
+export const WORKSPACE_MEDIA = ["(width < 724px)"] as const;
 
 export function initialWorkspaceState(
 	profile: WorkspaceProfile,

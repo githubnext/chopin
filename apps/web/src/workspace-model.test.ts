@@ -96,7 +96,7 @@ describe("adaptive workspace", () => {
 	});
 
 	it("classifies fractional widths on either side of the media boundary", () => {
-		expect([499.5, 500].map(width => workspaceMode(mediaAt(width))))
+		expect([723.5, 724].map(width => workspaceMode(mediaAt(width))))
 			.toEqual(["compact", "split"]);
 	});
 

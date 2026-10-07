@@ -70,6 +70,20 @@
 	background: var(--color-destructive-active);
 }
 
+.design-audit-danger-actions .design-audit-control-state > div {
+	padding: 0.5rem;
+	border-radius: var(--radius-md);
+	background: var(--color-danger-surface);
+}
+
+.design-audit [data-audit-state="hover"].btn-outline-danger {
+	background: var(--color-danger-surface-hover);
+}
+
+.design-audit [data-audit-state="active"].btn-outline-danger {
+	background: var(--color-danger-surface-active);
+}
+
 .design-audit [data-audit-state="focus"] {
 	outline: var(--focus-ring-width) solid var(--focus-ring-color);
 	outline-offset: var(--focus-ring-offset);

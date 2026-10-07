@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { InfoIcon, LoaderIcon, SearchIcon } from "@chopin/icons";
+import { ReferenceErrorIcon } from "./reference-status-icon";
 
 import * as Api from "../api";
 import { MAX_REFERENCES, referenceTriggerKey } from "./references";
@@ -212,6 +214,7 @@ export function ReferencePicker(
 		state: ReferencePickerState;
 	},
 ) {
+	let [animate] = useState(() => document.documentElement.dataset.motionInput === "pointer");
 	let label = "Document references";
 	let empty = state.status === "ready" && state.truncated
 		? "No matches in the available documents."
@@ -227,33 +230,38 @@ export function ReferencePicker(
 
 	return (
 		<div
-			className="absolute inset-x-2.5 bottom-full z-30 mb-1 overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-overlay"
+			className="absolute inset-x-2.5 bottom-full z-30 mb-1 overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-resting-strong"
 			data-chat-reference-picker="document"
+			data-animate={animate || undefined}
 			data-focus-boundary=""
 			style={{ maxHeight: "min(16rem, 45dvh, 45vh)" }}
 		>
 			<div aria-busy={state.status === "loading"} aria-label={label} id={id} role="listbox">
 				{state.status === "loading" && (
-					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
-						Loading documents...
+					<p className="composer-picker-status" role="status">
+						<LoaderIcon className="chat-tool-loader" size={14} />Loading documents...
 					</p>
 				)}
 				{state.status === "limit" && (
-					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
-						A message can include up to 10 references.
+					<p className="composer-picker-status" role="status">
+						<InfoIcon size={16} />A message can include up to 10 references.
 					</p>
 				)}
 				{state.status === "error" && (
-					<p className="px-2 py-3 text-sm text-destructive-ink" role="alert">
+					<p className="composer-picker-status" role="alert">
+						<ReferenceErrorIcon />
 						{failureMessage(state.error)}
 					</p>
 				)}
 				{state.status === "ready" && state.options.length === 0 && (
-					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">{empty}</p>
+					<p className="composer-picker-status" role="status">
+						<SearchIcon size={14} />
+						{empty}
+					</p>
 				)}
 				{state.status === "ready" && state.truncated && (
-					<p className="px-2 py-2 text-sm text-text-tertiary" role="status">
-						Some documents are not shown.
+					<p className="composer-picker-status" role="status">
+						<InfoIcon size={14} />Some documents are not shown.
 					</p>
 				)}
 				{state.options.map((option, index) => {

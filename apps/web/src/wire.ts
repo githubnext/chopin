@@ -73,6 +73,7 @@ export class Wire {
 	#everConnected = false;
 	#disposed = false;
 	#terminal = false;
+	#connectionGeneration = 0;
 
 	constructor(options: WireOptions) {
 		this.#options = options;
@@ -94,6 +95,17 @@ export class Wire {
 		return this.#socket?.readyState === WebSocket.OPEN;
 	}
 
+	reconnect(): void {
+		if (this.#disposed || this.#terminal) return;
+		clearTimeout(this.#timer);
+		this.#timer = undefined;
+		let previous = this.#socket;
+		this.#socket = undefined;
+		this.#abandon("connection restarted");
+		previous?.close();
+		this.#connect();
+	}
+
 	#set(status: Status, reason?: string): void {
 		if (this.#status === status) return;
 		this.#status = status;
@@ -102,18 +114,21 @@ export class Wire {
 
 	#connect(): void {
 		if (this.#disposed || this.#terminal) return;
+		this.#connectionGeneration++;
 		this.#set(this.#everConnected ? "reconnecting" : "connecting");
 
 		let socket = new WebSocket(endpoint(this.#options));
 		this.#socket = socket;
 
 		socket.addEventListener("open", () => {
+			if (this.#socket !== socket) return;
 			this.#everConnected = true;
 			this.#attempts = 0;
 			this.#set("connected");
 		});
 
 		socket.addEventListener("message", event => {
+			if (this.#socket !== socket) return;
 			if (typeof event.data !== "string") return;
 			this.#receive(event.data);
 		});
@@ -158,9 +173,10 @@ export class Wire {
 
 	async #retry(): Promise<void> {
 		if (this.#disposed || this.#terminal) return;
+		let generation = this.#connectionGeneration;
 
 		let refusal = await this.#refusal();
-		if (this.#disposed || this.#terminal) return;
+		if (this.#disposed || this.#terminal || generation !== this.#connectionGeneration) return;
 		if (refusal) {
 			if (refusal.authentication) this.#options.onAuthenticationRequired?.();
 			return this.#set("denied", refusal.reason);

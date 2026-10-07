@@ -494,6 +494,19 @@
 		]
 	},
 	{
+		"file": "apps/web/src/chat/composer.css",
+		"reason": "User-approved Chopin mode halo uses 10px spread at 0.4 opacity on a separate outer layer. This addressing indicator keeps the input white and does not change shared elevation tiers.",
+		"cases": [
+			[
+				"shadow",
+				"box-shadow",
+				"0 0 var(--composer-glow-spread) var(--color-brand)",
+				"CSS > .chat-composer .composer-surface::before",
+				1
+			]
+		]
+	},
+	{
 		"file": "apps/web/src/design-jig/styles.css",
 		"reason": "User-approved dev-only Chopin mode halo has tunable spread and opacity; outer petrol shadow keeps the composer interior white. This preview does not alter shared elevation tokens.",
 		"cases": [

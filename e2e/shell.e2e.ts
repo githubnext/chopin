@@ -1,5 +1,6 @@
 /** Browser coverage for the two-view document shell. */
 
+import { chatInput, expectChatValue } from "./chat-input";
 import { expect, ready, test } from "./room";
 import { expectNoHorizontalOverflow } from "./responsive";
 
@@ -19,11 +20,11 @@ test("an icon button shows its label on keyboard focus", async ({ join }) => {
 	await addProject.focus();
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await expect(tooltip).toBeVisible();
-	await expect(tooltip).toHaveText("Add Project");
+	await expect(tooltip).toHaveText("Add project");
 	await page.getByRole("button", { name: /^New document in / }).first().focus();
-	await expect(tooltip).toHaveText("New Document");
+	await expect(tooltip).toHaveText("New document");
 	await page.getByRole("button", { name: "Collapse Projects sidebar" }).focus();
-	await expect(tooltip).toHaveText("Close Sidebar");
+	await expect(tooltip).toHaveText("Close sidebar");
 	await page.keyboard.press("Tab");
 	await expect(tooltip).toBeHidden();
 });
@@ -129,7 +130,7 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 	let pane = chatPane(page);
 	let paneId = await pane.getAttribute("id");
 	expect(paneId).toBeTruthy();
-	let draft = pane.locator("textarea");
+	let draft = chatInput(pane);
 	let header = page.getByRole("banner");
 	let heading = page.getByRole("heading", { name: "Chat" });
 	let close = page.getByRole("button", { name: "Close sidebar" });
@@ -179,7 +180,7 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 	await expect(opener.locator(".chat-toggle-icon-sidebar")).toHaveCSS("opacity", "1");
 	await opener.click();
 	await expect(heading).toBeFocused();
-	await expect(draft).toHaveValue("unfinished thought");
+	await expectChatValue(draft, "unfinished thought");
 });
 
 test("split Chat controls remain available to touch", async ({ join }) => {
@@ -237,6 +238,6 @@ test("Escape leaves a persistent split Chat pane open", async ({ join, page }) =
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await join("ana");
 	let pane = chatPane(page);
-	await pane.locator("textarea").press("Escape");
+	await chatInput(pane).press("Escape");
 	await expect(pane).toBeVisible();
 });

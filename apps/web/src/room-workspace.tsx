@@ -40,7 +40,7 @@ import { useNavigationDocument } from "./navigation-shell";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
-import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
+import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
 import type { ConversationPlan, Research, Session } from "@chopin/protocol";
@@ -228,7 +228,7 @@ export function RoomWorkspace(
 	let repositoryRef = useRef(repository);
 	repositoryRef.current = repository;
 	let user = useMemo(() => cursor(handle), [handle]);
-	let mode = useWorkspaceMode();
+	let { available, frame, mode } = useWorkspaceLayout();
 	let workspaceIds = useWorkspaceIds();
 	let profile = workspaceProfile(presentation);
 	let researchEnabled = profile.research;
@@ -709,11 +709,15 @@ export function RoomWorkspace(
 				<span key={announcement.sequence}>{announcement.text}</span>
 			</p>
 			<Workspace
+				available={available}
+				frame={frame}
 				chat={
 					<Chat
 						active={chatActive}
 						agent={agent}
-						connected={status === "connected" && workspaceCanEdit}
+						connected={status === "connected"}
+						readonly={!workspaceCanEdit}
+						archived={!!workspaceArchivedAt}
 						handle={handle}
 						onActivity={onChatActivity}
 						onShowDecisions={() => selectDestination("decisions")}
