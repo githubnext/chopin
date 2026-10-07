@@ -80,6 +80,48 @@ function value(placement: Placement): string {
 	return placement.kind;
 }
 
+function reduced(): boolean {
+	return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function duration(style: CSSStyleDeclaration, token: string): number {
+	let value = style.getPropertyValue(token).trim();
+	let number = Number.parseFloat(value);
+	if (!Number.isFinite(number)) return 0;
+	return value.endsWith("ms") ? number : number * 1000;
+}
+
+/**
+ * Let a mark fade rather than vanish.
+ *
+ * A transition cannot do it. Its timing is read from the style being changed
+ * to, which is the plain block's, and putting a transition on every block in
+ * the document for the sake of this would slow down everything else they do.
+ * Returns what to run once the attribute is off.
+ */
+function settle(element: HTMLElement): (() => void) | undefined {
+	if (!element.isConnected || reduced()) return undefined;
+	let style = getComputedStyle(element);
+	let from = {
+		backgroundColor: style.backgroundColor,
+		boxShadow: style.boxShadow,
+		outlineColor: style.outlineColor,
+	};
+	let length = duration(style, "--duration-linger");
+	let easing = style.getPropertyValue("--ease-out").trim() || "ease-out";
+	return () => {
+		let to = getComputedStyle(element);
+		element.animate(
+			[from, {
+				backgroundColor: to.backgroundColor,
+				boxShadow: to.boxShadow,
+				outlineColor: to.outlineColor,
+			}],
+			{ duration: length, easing },
+		);
+	};
+}
+
 export class ChangeStore {
 	#listeners = new Set<() => void>();
 	#snapshot: Snapshot = EMPTY;
@@ -148,6 +190,7 @@ export class ChangeStore {
 	 * work out for themselves that they were the same block.
 	 */
 	mark(changes: Plan.Change[]): void {
+		this.#marks.renew();
 		for (let change of changes) {
 			let id = `c${this.#counter++}`;
 			this.#changes.set(id, change);
@@ -373,7 +416,12 @@ export class ChangeStore {
 
 		for (let [element, names] of this.#painted) {
 			for (let name of names) {
-				if (!next.get(element)?.has(name)) element.removeAttribute(name);
+				if (next.get(element)?.has(name)) continue;
+				// Read before the attribute goes: once it has, the wash it drew
+				// is no longer anywhere to fade from.
+				let from = settle(element);
+				element.removeAttribute(name);
+				from?.();
 			}
 		}
 		this.#painted = next;
@@ -384,6 +432,47 @@ export class ChangeStore {
 			for (let name of names) element.removeAttribute(name);
 		}
 		this.#painted.clear();
+	}
+
+	/**
+	 * Open up blocks that were just inserted in front of the reader.
+	 *
+	 * A block that appears at full height shoves everything under it down in
+	 * one frame, which reads as the page lurching. Only blocks on screen are
+	 * worth it: one inserted out of view moves nothing anybody is looking at.
+	 */
+	arrived(elements: HTMLElement[]): void {
+		let root = this.#scroller;
+		if (!root || reduced()) return;
+
+		let bounds = root.getBoundingClientRect();
+		for (let element of elements) {
+			let rect = element.getBoundingClientRect();
+			if (rect.top >= bounds.bottom || rect.bottom <= bounds.top) continue;
+
+			let style = getComputedStyle(element);
+			let overflow = element.style.overflow;
+			element.style.overflow = "clip";
+			let opening = element.animate(
+				[
+					{ height: "0px", marginBlock: "0px", paddingBlock: "0px", opacity: 0 },
+					{
+						height: `${rect.height}px`,
+						marginBlock: `${style.marginBlockStart} ${style.marginBlockEnd}`,
+						paddingBlock: `${style.paddingBlockStart} ${style.paddingBlockEnd}`,
+						opacity: 1,
+					},
+				],
+				{
+					duration: duration(style, "--acc-expand"),
+					easing: style.getPropertyValue("--motion-move").trim() || "ease-out",
+				},
+			);
+			let done = () => {
+				element.style.overflow = overflow;
+			};
+			void opening.finished.then(done, done);
+		}
 	}
 
 	// -- what the chips say --------------------------------------------------

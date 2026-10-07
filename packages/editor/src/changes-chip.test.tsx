@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { PlanChanges } from "./changes-chip";
+import { author, PlanChanges } from "./changes-chip";
 
 import type { ChangeStore, Snapshot } from "./changes";
 
@@ -27,4 +27,24 @@ test("the change-list trigger uses keyed editor feedback for its closed glyph", 
 	expect(markup).toContain('data-feedback-icon="closed"');
 	expect(markup).toContain('data-motion-feedback="icon"');
 	expect(markup).toContain("editor-motion-feedback");
+});
+
+function attributed(name: string) {
+	return {
+		id: "change",
+		kind: "added" as const,
+		blocks: [],
+		seen: true,
+		attribution: {
+			client: { name, version: "unknown" },
+			user: "ana",
+			fromRevision: 1,
+			revision: 2,
+		},
+	};
+}
+
+test("an MCP change names the caller when the client never introduced itself", () => {
+	expect(author(attributed("unknown"))).toBe("@ana");
+	expect(author(attributed("Review bot"))).toBe("Review bot");
 });

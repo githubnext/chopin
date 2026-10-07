@@ -237,6 +237,15 @@ function Collaboration(options: CollaborationOptions) {
 		let flash = labels(binding, provider);
 		let paint = () => {
 			cursors(binding, provider);
+			// The agent's caret sits at the end of what it just wrote, so its
+			// label goes beside the caret rather than over the line above.
+			let states = provider.awareness.getStates();
+			for (let [client, cursor] of binding.cursors) {
+				let caret = cursor.selection?.caret;
+				if (!caret) continue;
+				if (states.get(client)?.agent === true) caret.dataset.planAgent = "";
+				else caret.removeAttribute("data-plan-agent");
+			}
 			flash.sync();
 		};
 

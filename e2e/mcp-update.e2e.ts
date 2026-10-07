@@ -110,6 +110,6 @@ test("MCP changes identify the client and revision transition in the change list
 	await expect(label).toBeVisible();
 	await expect(label).toHaveAttribute(
 		"title",
-		`Review bot 1.2.3, revisions ${revision} to ${revision + 1}`,
+		`Review bot 1.2.3 for @ana, revisions ${revision} to ${revision + 1}`,
 	);
 });
