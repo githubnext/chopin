@@ -39,3 +39,7 @@ e2e/blob-report/
 **/dist/**
 *.tsbuildinfo
 vite.config.ts.timestamp-*
+
+# Temporary local design jigs.
+/apps/web/design-jig/
+/apps/web/src/design-jig/

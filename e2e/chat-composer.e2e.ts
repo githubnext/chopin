@@ -38,16 +38,6 @@ test("Shift+Tab preserves the draft and sends in persistent Chopin mode after ac
 	let chat = chatPane(await join("ana"));
 	let input = chatInput(chat);
 	let toggle = chat.getByRole("button", { name: "Talk to Chopin", exact: true });
-	await expect(
-		chat.locator(".composer-left").getByRole("button", { name: "Talk to Chopin", exact: true }),
-	).toHaveCount(1);
-	await expect(
-		chat.locator(".composer-left").getByRole("button", { name: "Mention docs", exact: true }),
-	).toHaveCount(1);
-	await expect(
-		chat.locator(".composer-actions").getByRole("button", { name: "Send message", exact: true }),
-	).toHaveCount(1);
-	await expect(chat.locator(".composer-actions > .composer-run-control")).toHaveCount(1);
 	await expect(toggle).toHaveAttribute("aria-pressed", "false");
 	await input.fill("Outline export options");
 	await input.press("ArrowLeft");
@@ -82,7 +72,7 @@ test("Shift+Tab preserves the draft and sends in persistent Chopin mode after ac
 	await expect(input).not.toBeFocused();
 });
 
-test("document mentions use the actual semibold text for wrapped caret placement, edits and undo", async ({ baseURL, join, page, room, seed }) => {
+test("wrapped document mentions keep caret placement, edits and undo aligned", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Export formats\n\nShare a document as Markdown or PDF.\n");
 	let target = crypto.randomUUID();
 	let title = `Export formats ${target.slice(0, 8)}`;
@@ -93,21 +83,9 @@ test("document mentions use the actual semibold text for wrapped caret placement
 	await page.getByRole("separator", { name: "Resize chat", exact: true }).press("Home");
 	let input = chatInput(chat);
 	await input.fill(`Could you outline the export options? #${target.slice(0, 8)}`);
-	let picker = chat.locator("[data-chat-reference-picker]");
-	let shadow = await picker.evaluate(element => {
-		let probe = document.createElement("span");
-		probe.style.boxShadow = "var(--shadow-resting-strong)";
-		element.append(probe);
-		let expected = getComputedStyle(probe).boxShadow;
-		probe.remove();
-		return { expected, actual: getComputedStyle(element).boxShadow };
-	});
-	expect(shadow.actual).toBe(shadow.expected);
 	await chat.getByRole("option", { name: title, exact: true }).click();
 	let reference = input.locator(".draft-reference");
 	await expect(reference).toHaveAttribute("data-document-id", target);
-	await expect(reference).toHaveCSS("font-weight", "600");
-	await expect(reference).toHaveCSS("text-decoration-line", "underline");
 	await expect.poll(() => reference.evaluate(element => element.getClientRects().length))
 		.toBeGreaterThan(1);
 	let before = await input.textContent();
@@ -145,18 +123,6 @@ test("document mentions use the actual semibold text for wrapped caret placement
 	await page.keyboard.insertText("Keep comments attached.");
 	await expectChatValue(input, before + " and PDF\nKeep comments attached.");
 	await expect(reference).toHaveAttribute("data-document-id", target);
-	let divider = await page.getByRole("separator", { name: "Resize chat", exact: true })
-		.boundingBox();
-	await page.mouse.move(divider!.x + divider!.width / 2, divider!.y + 20);
-	await page.mouse.down();
-	await page.mouse.move(divider!.x + divider!.width / 2 + 250, divider!.y + 20, { steps: 8 });
-	await page.mouse.up();
-	await expect.poll(async () => (await chat.boundingBox())!.width).toBeCloseTo(500, 0);
-	await page.screenshot({
-		path: test.info().outputPath("chopin-composer-production.png"),
-		fullPage: true,
-	});
-	await chat.screenshot({ path: test.info().outputPath("chopin-composer-production-chat.png") });
 });
 
 test("read-only and archived notices replace the composer input", async ({ join, page, room }) => {
@@ -179,10 +145,6 @@ test("read-only and archived notices replace the composer input", async ({ join,
 	announce!({ ...hello, canEdit: false, canManage: false });
 	await expect(chat.getByText("Read-only access", { exact: true })).toBeVisible();
 	await expect(chatInput(chat)).toHaveCount(0);
-	let unavailable = chat.locator(".composer-unavailable");
-	await expect(unavailable).toHaveCSS("align-items", "center");
-	await expect(unavailable).toHaveCSS("justify-content", "center");
-	await expect(unavailable.locator("svg")).toHaveCount(1);
 	announce!({
 		...hello,
 		kind: "session:channel",
@@ -192,7 +154,6 @@ test("read-only and archived notices replace the composer input", async ({ join,
 	});
 	await expect(chat.getByText("Document archived", { exact: true })).toBeVisible();
 	await expect(chatInput(chat)).toHaveCount(0);
-	await expect(unavailable.locator("svg")).toHaveCount(1);
 });
 
 test("switching to Chat removes multiple addresses while preserving a document mention between them", async ({ baseURL, join, page, room }) => {

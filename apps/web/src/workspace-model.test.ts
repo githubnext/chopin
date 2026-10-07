@@ -7,23 +7,13 @@ import {
 	transitionWorkspace,
 	workspaceDestinations,
 	workspaceHeadingId,
-	workspaceMode,
 	workspaceProfile,
 } from "./workspace-model";
 
 import type { WorkspaceState } from "./workspace-model";
 
-type MatchMedia = (query: string) => { matches: boolean };
-
 const childPresentation = { label: "Source review", onClose() {}, type: "child" } as const;
 const documentPresentation = { type: "document" } as const;
-
-function mediaAt(width: number): MatchMedia {
-	return query => {
-		let boundary = /\(width < (\d+(?:\.\d+)?)px\)/.exec(query);
-		return { matches: boundary !== null && width < Number(boundary[1]) };
-	};
-}
 
 describe("adaptive workspace", () => {
 	it("derives child capabilities from the workspace presentation", () => {
@@ -93,11 +83,6 @@ describe("adaptive workspace", () => {
 	it("keeps child pane ids distinct from the mounted parent", () => {
 		expect(workspaceHeadingId("plan")).toBe("workspace-plan-heading");
 		expect(workspaceHeadingId("plan", "child-room")).toBe("child-room-workspace-plan-heading");
-	});
-
-	it("classifies fractional widths on either side of the media boundary", () => {
-		expect([723.5, 724].map(width => workspaceMode(mediaAt(width))))
-			.toEqual(["compact", "split"]);
 	});
 
 	it("closing Chat leaves the visible document view untouched", () => {

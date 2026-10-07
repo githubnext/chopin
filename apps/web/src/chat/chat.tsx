@@ -5,9 +5,6 @@
  * a turn runs — a turn owns the plan, not the chat — and anything sent
  * to the agent meanwhile is queued in order, with its author's name on it, so
  * nobody is silenced because a colleague prompted first.
- *
- * The composer mode adds an explicit Planner address at submission; typed
- * mentions and stable document references retain their existing wire semantics.
  */
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
@@ -688,7 +685,6 @@ export function Chat(
 											return;
 										}
 										if (composing) return;
-										// Enter sends; a newline needs a modifier, as everywhere else.
 										if (event.key !== "Enter" || event.shiftKey) return;
 										event.preventDefault();
 										submit();
