@@ -1973,6 +1973,18 @@
 	transition: opacity var(--duration-base) var(--ease-out);
 }
 
+/*
+ * The agent's caret is left at the end of the block it last wrote, so the line
+ * above it is prose the reader has just been shown. Beside the caret, on its
+ * own line, the label covers nothing.
+ */
+.plan .plan-cursor[data-plan-agent] .plan-cursor-name {
+	inset-block-end: auto;
+	inset-block-start: 50%;
+	inset-inline-start: calc(100% + 0.25rem);
+	translate: 0 -50%;
+}
+
 /* Raised while its peer is moving or typing, or while it is pointed at, then
    left to fade. */
 .plan .plan-cursor[data-plan-active] .plan-cursor-name,
@@ -2446,12 +2458,27 @@
  * read.
  */
 .plan .plan-content [data-plan-change] {
-	transition: background var(--duration-linger) var(--ease-out);
+	--plan-wash-color: color-mix(in oklch, var(--color-brand-wash) 65%, transparent);
+	background-color: var(--plan-wash-color);
+	animation: plan-change-in var(--duration-linger) var(--ease-out);
 }
 
-/* Written just now. */
-.plan .plan-content [data-plan-change="added"] {
-	background: var(--color-brand-wash);
+/*
+ * Bled past the block in an outline, so the wash neither moves the text nor
+ * stops hard at its edge, and two changed blocks in a row meet as one region.
+ * `box-shadow` is the holes' below. Zero specificity, so a block that already
+ * draws its own edge or corners keeps them.
+ */
+:where(.plan .plan-content [data-plan-change]) {
+	border-radius: var(--radius-sm);
+	outline: 0.375rem solid var(--plan-wash-color);
+}
+
+@keyframes plan-change-in {
+	from {
+		background-color: transparent;
+		outline-color: transparent;
+	}
 }
 
 /*
@@ -2460,7 +2487,7 @@
  * saying "new, but less so" about them would not be true.
  */
 .plan .plan-content [data-plan-change="moved"] {
-	background: color-mix(in oklch, var(--color-text-quaternary) 9%, transparent);
+	--plan-wash-color: color-mix(in oklch, var(--color-text-quaternary) 9%, transparent);
 }
 
 /*
@@ -2477,7 +2504,16 @@
 	box-shadow:
 		var(--plan-gap-above, 0 0 transparent),
 		var(--plan-gap-below, 0 0 transparent);
-	transition: box-shadow var(--duration-linger) var(--ease-out);
+}
+
+.plan .plan-content :is([data-plan-gap-before], [data-plan-gap-after]):not([data-plan-change]) {
+	animation: plan-gap-in var(--duration-linger) var(--ease-out);
+}
+
+@keyframes plan-gap-in {
+	from {
+		box-shadow: none;
+	}
 }
 
 .plan .plan-content [data-plan-gap-before="removed"] {
@@ -2527,19 +2563,18 @@
 /* Reaching the ones off screen ------------------------------------------- */
 
 /*
- * One chip per edge, over the prose rather than in it, and only while
- * something in that direction is still unread. Opposite the status chip at the
- * bottom, which is why the lower one sits inline-start of it.
+ * One chip per edge, in the leading margin rather than over the prose, and only
+ * while something in that direction is still unread. The status chip has the
+ * trailing corner at the bottom.
  */
 .plan-changes {
 	position: absolute;
 	z-index: 3;
-	inset-inline-start: 50%;
-	translate: -50% 0;
+	inset-inline-start: 0.5rem;
 	display: flex;
 	flex-direction: column;
+	align-items: flex-start;
 	gap: 0.375rem;
-	max-width: min(24rem, calc(100% - 1.5rem));
 }
 
 .plan-changes[data-side="above"] {
@@ -2553,50 +2588,53 @@
 
 .plan-changes-bar {
 	display: flex;
-	align-self: center;
 	align-items: stretch;
 	border-radius: var(--radius-full);
 	background: var(--color-page);
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
-	box-shadow: var(--shadow-resting);
+	box-shadow: var(--shadow-raised);
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
-	max-inline-size: 100%;
+	color: var(--color-text-secondary);
 }
 
 .plan-changes-go,
 .plan-changes-more {
-	min-inline-size: 0;
 	display: flex;
 	align-items: center;
-	gap: 0.375rem;
-	padding: 0.25rem 0.625rem;
-	color: var(--color-text-primary);
+	justify-content: center;
+	min-block-size: 1.5rem;
+	min-inline-size: 1.5rem;
 	cursor: pointer;
+}
+
+.plan-changes-go {
+	gap: 0.1875rem;
+	padding-inline: 0.375rem 0.3125rem;
+	border-start-start-radius: var(--radius-full);
+	border-end-start-radius: var(--radius-full);
+	font-weight: 500;
 }
 
 .plan-changes-more {
 	border-start-end-radius: var(--radius-full);
 	border-end-end-radius: var(--radius-full);
-	padding-inline: 0.375rem;
-	border-inline-start: var(--edge-width) solid var(--color-edge);
-}
-
-.plan-changes-go {
-	border-start-start-radius: var(--radius-full);
-	border-end-start-radius: var(--radius-full);
+	padding-inline-end: 0.125rem;
 }
 
 .plan-changes-go:hover,
-.plan-changes-more:hover {
-	background: var(--color-brand-wash);
+.plan-changes-more:hover,
+.plan-changes-more[aria-expanded="true"] {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
 }
 
 .plan-changes-list,
 .plan-changes-empty {
+	max-inline-size: min(24rem, calc(100cqi - 1rem));
 	margin: 0;
-	padding: 0.375rem;
+	padding: 0.25rem;
 	max-height: 12rem;
 	overflow-y: auto;
 	list-style: none;
@@ -2614,31 +2652,32 @@
 	color: var(--color-text-quaternary);
 }
 
+/* The dot's slot is kept on every row, so read and unread text line up. */
 .plan-changes-item {
 	display: flex;
+	align-items: baseline;
 	gap: 0.5rem;
 	padding: 0.25rem 0.5rem;
 	border-radius: var(--radius-sm);
 }
 
+.plan-changes-item::before {
+	content: "";
+	flex: none;
+	align-self: center;
+	width: 0.375rem;
+	height: 0.375rem;
+	border-radius: var(--radius-full);
+}
+
 .plan-changes-kind {
 	flex: none;
-	font-weight: 600;
+	font-weight: 500;
 	color: var(--color-text-tertiary);
 }
 
 /* Still waiting to be reached, as opposed to already shown and counted down. */
-.plan-changes-item[data-unread] {
-	background: var(--color-brand-wash);
-}
-
 .plan-changes-item[data-unread]::before {
-	content: "";
-	flex: none;
-	width: 0.375rem;
-	height: 0.375rem;
-	margin-block-start: 0.4375rem;
-	border-radius: var(--radius-full);
 	background: var(--color-brand);
 }
 

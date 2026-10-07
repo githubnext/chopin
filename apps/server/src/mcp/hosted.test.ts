@@ -1620,6 +1620,13 @@ describe("the hosted MCP adapter", () => {
 				"plan:anchors",
 			]);
 			expect(frames.some(frame => frame.kind === "plan:awareness")).toBe(false);
+			let marked = frames.find(frame => frame.kind === "plan:changes") as
+				| { changes: Array<{ attribution?: unknown }> }
+				| undefined;
+			expect(marked?.changes[0]?.attribution).toMatchObject({
+				client: { name: "Codex", version: "1.2.3" },
+				user: caller.user.login,
+			});
 			expect(Service.source(opened.plan)).toBe("# Live rewrite\n");
 		} finally {
 			Rooms.forget(live);
