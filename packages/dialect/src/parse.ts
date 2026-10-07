@@ -29,20 +29,34 @@ export class PlanParseError extends Error {
 	override readonly name = "PlanParseError";
 }
 
+export type ParseOptions = {
+	/**
+	 * Parse components. Off, `<Questionnaire>` and every other tag stay literal
+	 * text, which is what pasted Markdown needs: it must never be able to mint a
+	 * protected projection. Defaults to true.
+	 */
+	jsx?: boolean;
+	/**
+	 * Treat `$…$` as inline math. Pasted prose mentions prices far more often
+	 * than formulas, so paste keeps only `$$…$$`. Defaults to true.
+	 */
+	singleDollarMath?: boolean;
+};
+
 /**
  * Syntax extensions. Notably absent: `mdxjs`/`mdxExpression` (ESM and JS
  * expressions) and any raw-HTML extension.
  */
-function syntax() {
+function syntax({ jsx = true, singleDollarMath = true }: ParseOptions) {
 	return [
 		gfmTable(),
 		gfmStrikethrough({ singleTilde: false }),
 		gfmTaskListItem(),
 		gfmFootnote(),
-		math(),
+		math({ singleDollarTextMath: singleDollarMath }),
 		// No `acorn`: attribute expressions cannot be parsed into JS, and the
 		// validator rejects any attribute that is not a plain string.
-		mdxJsx(),
+		...(jsx ? [mdxJsx()] : []),
 		// Turns off raw HTML, autolinks and indented code. Without it micromark's
 		// HTML constructs shadow JSX, so `<Callout>` would parse as an opaque
 		// `html` node, and indenting a nested component would turn it into code.
@@ -50,14 +64,14 @@ function syntax() {
 	];
 }
 
-function mdast() {
+function mdast({ jsx = true }: ParseOptions) {
 	return [
 		gfmTableFromMarkdown(),
 		gfmStrikethroughFromMarkdown(),
 		gfmTaskListItemFromMarkdown(),
 		gfmFootnoteFromMarkdown(),
 		mathFromMarkdown(),
-		mdxJsxFromMarkdown(),
+		...(jsx ? [mdxJsxFromMarkdown()] : []),
 	];
 }
 
@@ -66,11 +80,11 @@ function mdast() {
  *
  * @throws {PlanParseError} when the source cannot be parsed.
  */
-export function parse(source: string): Root {
+export function parse(source: string, options: ParseOptions = {}): Root {
 	try {
 		return fromMarkdown(source, {
-			extensions: syntax(),
-			mdastExtensions: mdast(),
+			extensions: syntax(options),
+			mdastExtensions: mdast(options),
 		});
 	} catch (err) {
 		let reason = err instanceof Error ? err.message : String(err);
