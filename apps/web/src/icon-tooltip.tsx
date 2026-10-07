@@ -129,6 +129,7 @@ export function IconTooltip() {
 					?? originalTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
 				tooltip.textContent = tooltipText(label, button.hasAttribute("data-tooltip-verbatim"));
+				tooltip.setAttribute("data-shortcut", button.dataset.tooltipShortcut ?? "");
 				let rect = button.getBoundingClientRect();
 				// A row's description card sits beside its rail (data-tooltip-edge) when there is room.
 				if (button.dataset.tooltipSide === "right") {
