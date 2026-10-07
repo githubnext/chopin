@@ -11,7 +11,7 @@ import { Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArchiveIcon, ChevronIcon, DocumentIcon, SearchIcon } from "@chopin/icons";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
@@ -54,9 +54,39 @@ export function documentGroups(
 	return parents.map(parent => ({ parent, children: children.get(parent.id) ?? [] }));
 }
 
+function archiveFocusTarget(list: HTMLElement | null, documentId: string): HTMLElement | undefined {
+	let row = [...list?.querySelectorAll<HTMLElement>(":scope > li[data-document-id]") ?? []]
+		.find(item => item.dataset.documentId === documentId);
+	if (!row || !list) return undefined;
+	let links = [...list.querySelectorAll<HTMLElement>(
+		":scope > li:not([data-exiting]) .project-sidebar-document-link",
+	)].filter(link => !row.contains(link));
+	return links.find(link => row.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING)
+		?? links.at(-1)
+		?? row.closest(".project-sidebar-project")?.querySelector<HTMLElement>(
+			".project-sidebar-project-disclosure",
+		) ?? undefined;
+}
+
+// The actions menu is portalled and restores focus to its own trigger, which is
+// inside the row being removed, so focus is reclaimed once the menu has settled.
+function reclaimFocus(target: HTMLElement) {
+	let reclaim = () => {
+		let active = document.activeElement;
+		if (
+			target.isConnected
+			&& (!active || active === document.body || active.closest("[data-exiting], [inert]"))
+		) target.focus({ preventScroll: true });
+	};
+	window.setTimeout(reclaim, 0);
+	requestAnimationFrame(() => requestAnimationFrame(reclaim));
+	window.setTimeout(reclaim, 120);
+}
+
 function DocumentRow(
-	{ children, exiting, enter, onExited }: {
+	{ children, documentId, exiting, enter, onExited }: {
 		children: ReactNode;
+		documentId: string;
 		enter: boolean;
 		exiting: boolean;
 		onExited: () => void;
@@ -71,31 +101,17 @@ function DocumentRow(
 		let frame = requestAnimationFrame(() => setArmed(true));
 		return () => cancelAnimationFrame(frame);
 	}, [armed]);
-	useLayoutEffect(() => {
+	let finished = useRef(onExited);
+	finished.current = onExited;
+	useEffect(() => {
 		if (!exiting) return;
-		let row = item.current;
-		let active = document.activeElement;
-		if (row && active && row.contains(active)) {
-			let links = [
-				...(row.parentElement?.querySelectorAll<HTMLElement>(
-					":scope > li:not([data-exiting]) .project-sidebar-document-link",
-				) ?? []),
-			];
-			let next = links.find(link =>
-				row.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING
-			)
-				?? links.at(-1)
-				?? row.closest(".project-sidebar-project")?.querySelector<HTMLElement>(
-					".project-sidebar-project-disclosure",
-				);
-			next?.focus({ preventScroll: true });
-		}
-		let timer = window.setTimeout(onExited, motion.closeDuration + 50);
+		let timer = window.setTimeout(() => finished.current(), motion.closeDuration + 50);
 		return () => window.clearTimeout(timer);
-	}, [exiting, motion.closeDuration, onExited]);
+	}, [exiting, motion.closeDuration]);
 	return (
 		<li
 			className="group/document"
+			data-document-id={documentId}
 			data-exiting={exiting ? "" : undefined}
 			ref={item}
 		>
@@ -147,6 +163,12 @@ function Project(
 	let phase = pendingCreations.get(project.repositoryId);
 	let contentId = useId();
 	let collapseMotion = motionContract("collapse");
+	let list = useRef<HTMLUListElement>(null);
+	let documentAction = (channel: Api.Channel, action: DocumentAction) => {
+		let target = action === "archive" ? archiveFocusTarget(list.current, channel.id) : undefined;
+		onDocumentAction(channel, action);
+		if (target) reclaimFocus(target);
+	};
 	let projectContent = (
 		<>
 			{documents.status === "ready" && groups.length === 0 && !documents.nextCursor && (
@@ -164,10 +186,12 @@ function Project(
 				<p className="project-sidebar-status" role="status">Loading documents…</p>
 			)}
 			{(groups.length > 0 || presence.rows.length > 0) && (
-				<ul className="project-sidebar-documents">
+				<ul className="project-sidebar-documents" ref={list}>
 					{presence.rows.map(({ enter, exiting, group: { children, parent: channel } }) => {
 						let parentCurrent = currentDocumentId === channel.id;
-						let childCurrent = children.some(child => child.id === currentDocumentId);
+						let childCurrent = children.some(child =>
+							child.id === currentDocumentId
+						);
 						let parentHref = documentPath(
 							channel.repositoryOwner,
 							channel.repositoryName,
@@ -175,6 +199,7 @@ function Project(
 						);
 						return (
 							<DocumentRow
+								documentId={channel.id}
 								enter={enter}
 								exiting={exiting}
 								key={channel.id}
@@ -205,7 +230,7 @@ function Project(
 											<DocumentActionsMenu
 												channel={channel}
 												className="project-sidebar-document-action"
-												onAction={action => onDocumentAction(channel, action)}
+												onAction={action => documentAction(channel, action)}
 												trigger={
 													<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
 												}
