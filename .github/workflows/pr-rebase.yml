@@ -28,10 +28,10 @@ jobs:
 
       - name: Rebase eligible PRs with GitHub's guarded API
         env:
-          GH_TOKEN: ${{ secrets.PR_MAINTENANCE_TOKEN }}
+          GH_TOKEN: ${{ secrets.PR_MAITENANCE_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "Set PR_MAINTENANCE_TOKEN with Contents and Pull requests read/write access."
+            echo "Set PR_MAITENANCE_TOKEN with Contents and Pull requests read/write access."
             exit 1
           fi
           node scripts/pr-maintenance/run.mjs rebase
