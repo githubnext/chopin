@@ -372,12 +372,19 @@
 			[
 				"color",
 				"background",
-				"color(handle)",
-				"style object > Face > <span>",
+				"`color-mix(in srgb, ${tone} 18%, var(--color-page))`",
+				"style object > Portrait > <span>",
+				1
+			],
+			[
+				"color",
+				"color",
+				"`color-mix(in srgb, ${tone} 80%, var(--color-text-primary))`",
+				"style object > Portrait > <span>",
 				1
 			]
 		],
-		"sourceHash": "c48b0ab153ac5d663bad5f32412551d05c0c53e805abbd43d75fb3a2b4ee6576"
+		"sourceHash": "830c3d5275279f75c3fa0da9d01f5d4802daff0deb0923f95df1072150b9d11e"
 	},
 	{
 		"file": "packages/editor/src/callout.css",
