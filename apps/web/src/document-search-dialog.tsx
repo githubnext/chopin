@@ -61,8 +61,32 @@ type SearchState =
 	| { status: "ready"; results: DocumentSearchResult[]; failedProjectIds: string[] }
 	| { status: "error"; message: string };
 
-// Last unfiltered result, so a reopened palette shows documents immediately and revalidates.
-let lastRecent: { key: string; results: DocumentSearchResult[] } | undefined;
+// Last unfiltered result. It is valid only for the same user, project set and
+// document catalogue identity, so mutations never leave stale rows behind.
+let recent: { key: string; source: unknown; results: DocumentSearchResult[] } | undefined;
+
+let recentKey = (userId: string, projects: Api.NavigationProject[], includeArchived: boolean) =>
+	`${userId}:${includeArchived}:${projects.map(project => project.repositoryId).join(",")}`;
+
+function rememberRecent(
+	key: string,
+	source: unknown,
+	result: Awaited<ReturnType<typeof searchAvailableDocuments>>,
+) {
+	if (!result.failedProjectIds.length) recent = { key, source, results: result.results };
+}
+
+export function warmRecentSearch(
+	userId: string,
+	projects: Api.NavigationProject[],
+	includeArchived: boolean,
+	source: unknown,
+) {
+	return searchAvailableDocuments(projects, "", includeArchived).then(
+		result => rememberRecent(recentKey(userId, projects, includeArchived), source, result),
+		() => {},
+	);
+}
 
 export function DocumentSearchDialog(
 	{
@@ -71,29 +95,40 @@ export function DocumentSearchDialog(
 		onDismiss,
 		onSelect,
 		projects,
+		source,
+		userId,
 	}: {
 		includeArchived: boolean;
 		motion: NavigationDialogMotion;
 		onDismiss: () => void;
 		onSelect: (documentId: string) => void;
 		projects: Api.NavigationProject[];
+		source: unknown;
+		userId: string;
 	},
 ) {
 	let input = useRef<HTMLInputElement>(null);
 	let [query, setQuery] = useState("");
 	let [retry, setRetry] = useState(0);
-	let recentKey = `${includeArchived}:${projects.map(project => project.repositoryId).join(",")}`;
-	let [search, setSearch] = useState<SearchState>(() =>
-		lastRecent?.key === recentKey
-			? { status: "ready", results: lastRecent.results, failedProjectIds: [] }
-			: { status: "loading" }
-	);
+	let key = recentKey(userId, projects, includeArchived);
+	let cached = () => recent?.key === key && recent.source === source ? recent : undefined;
+	let [search, setSearch] = useState<SearchState>(() => {
+		let hit = cached();
+		return hit
+			? { status: "ready", results: hit.results, failedProjectIds: [] }
+			: { status: "loading" };
+	});
 
 	useEffect(() => {
 		let active = true;
 		let controller = new AbortController();
 		let timer = window.setTimeout(() => {
-			if (query.trim() || lastRecent?.key !== recentKey) setSearch({ status: "loading" });
+			let hit = query.trim() ? undefined : cached();
+			setSearch(
+				hit
+					? { status: "ready", results: hit.results, failedProjectIds: [] }
+					: { status: "loading" },
+			);
 			searchAvailableDocuments(
 				projects,
 				query,
@@ -102,9 +137,7 @@ export function DocumentSearchDialog(
 				controller.signal,
 			).then(result => {
 				if (!active) return;
-				if (!query.trim() && result.failedProjectIds.length === 0) {
-					lastRecent = { key: recentKey, results: result.results };
-				}
+				if (!query.trim()) rememberRecent(key, source, result);
 				setSearch({ status: "ready", ...result });
 			}, error => {
 				if (active && !controller.signal.aborted) {
@@ -120,7 +153,7 @@ export function DocumentSearchDialog(
 			window.clearTimeout(timer);
 			controller.abort();
 		};
-	}, [includeArchived, projects, query, recentKey, retry]);
+	}, [includeArchived, key, projects, query, retry, source]);
 
 	let results = search.status === "ready" ? search.results : [];
 	let manyProjects = projects.length > 1;

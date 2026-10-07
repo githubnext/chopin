@@ -92,24 +92,17 @@ let ProjectSidebar = lazy(() =>
 let EmptyWorkspace = lazy(() =>
 	import("./empty-workspace").then(module => ({ default: module.EmptyWorkspace }))
 );
-// Idle prefetch (below) shares these loaders so a first open finds the chunk ready.
-let dialogChunks = [
-	() => import("./add-project-dialog"),
-	() => import("./new-document-dialog"),
-	() => import("./document-search-dialog"),
-	() => import("./delete-document-dialog"),
-] as const;
 let AddProjectDialog = lazy(() =>
-	dialogChunks[0]().then(module => ({ default: module.AddProjectDialog }))
+	import("./add-project-dialog").then(module => ({ default: module.AddProjectDialog }))
 );
 let NewDocumentDialog = lazy(() =>
-	dialogChunks[1]().then(module => ({ default: module.NewDocumentDialog }))
+	import("./new-document-dialog").then(module => ({ default: module.NewDocumentDialog }))
 );
 let DocumentSearchDialog = lazy(() =>
-	dialogChunks[2]().then(module => ({ default: module.DocumentSearchDialog }))
+	import("./document-search-dialog").then(module => ({ default: module.DocumentSearchDialog }))
 );
 let DeleteDocumentDialog = lazy(() =>
-	dialogChunks[3]().then(module => ({ default: module.DeleteDocumentDialog }))
+	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
 );
 
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
@@ -296,12 +289,6 @@ export function NavigationShell(
 		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
-	useEffect(() => {
-		let timer = window.setTimeout(() => {
-			for (let load of dialogChunks) load().catch(() => {});
-		}, 1500);
-		return () => window.clearTimeout(timer);
-	}, []);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [width, resize] = useSidebarWidth();
@@ -993,6 +980,8 @@ export function NavigationShell(
 							onDismiss={dismissDialog}
 							onSelect={navigateToDocument}
 							projects={navigation?.projects ?? []}
+							source={projects}
+							userId={user.id}
 						/>
 					</LazyDialogBoundary>
 				)}
