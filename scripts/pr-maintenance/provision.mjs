@@ -10,9 +10,16 @@ export async function provisionState(repository, key, request) {
 	try {
 		await request("GET", `${prefix}/git/ref/heads/automation/pr-maintenance-state`);
 	} catch (error) {
-		if (error.status !== 404) throw new Error("State branch lookup failed", { cause: error });
+		if (error.status !== 404) {
+			// Keep remote response details out of provisioning diagnostics.
+			// oxlint-disable-next-line preserve-caught-error
+			throw new Error("State branch lookup failed");
+		}
 		let main = await request("GET", `${prefix}/git/ref/heads/main`);
-		if (!/^[a-f0-9]{40}$/.test(main.object?.sha)) throw new Error("Invalid main reference", { cause: error });
+		if (!/^[a-f0-9]{40}$/.test(main.object?.sha)) {
+			// oxlint-disable-next-line preserve-caught-error
+			throw new Error("Invalid main reference");
+		}
 		let payload = { schemaVersion: 1, repository, revision: 0, prs: {} };
 		let content = Buffer.from(JSON.stringify(sealState(payload, key))).toString("base64");
 		await request("POST", `${prefix}/git/refs`, {
