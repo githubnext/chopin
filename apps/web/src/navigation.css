@@ -969,9 +969,59 @@
 	color: var(--color-text-tertiary);
 }
 
+.document-title-trigger {
+	cursor: text;
+}
+
 .document-title-trigger:hover:not(:disabled),
-.document-title-trigger:focus-visible {
+.document-title-trigger:focus-visible,
+.document-title-menu:hover,
+.document-title-menu:focus-visible,
+.document-title-menu[aria-expanded="true"] {
 	background: var(--color-hover);
+}
+
+.document-title-menu {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	border-radius: var(--radius-sm);
+	padding: 4px;
+	color: var(--color-text-tertiary);
+}
+
+.document-title-form {
+	position: relative;
+	display: flex;
+	min-width: 0;
+}
+
+/* Same box and type as the resting title, so swapping in the field does not move the text. */
+.document-title-input {
+	min-width: 12ch;
+	max-width: 100%;
+	field-sizing: content;
+	border-radius: var(--radius-sm);
+	padding: 4px;
+	background: var(--color-page);
+	font-size: var(--text-sm);
+	color: var(--color-text-primary);
+}
+
+.document-title-input::placeholder {
+	color: var(--color-text-quaternary);
+}
+
+.document-title-error {
+	position: absolute;
+	top: calc(100% + var(--spacing));
+	left: 0;
+	z-index: 10;
+	border-radius: var(--radius-md);
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	white-space: nowrap;
 }
 
 .document-parent-breadcrumb {

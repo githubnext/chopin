@@ -7,6 +7,13 @@ import { canManageProject } from "./navigation-model";
 
 export type DocumentCreationPhase = "creating" | "opening";
 
+let untitled = new Set<string>();
+
+/** The workspace for a document this tab just created asks once to focus its title. */
+export function claimNewDocumentTitle(id: string): boolean {
+	return untitled.delete(id);
+}
+
 type Attempt = {
 	phase: DocumentCreationPhase;
 	destination?: string;
@@ -83,6 +90,7 @@ export function useDocumentCreation(
 				slug: created.channel.slug,
 			});
 			publish();
+			untitled.add(created.channel.id);
 			onNavigate(
 				created.channel.id,
 				documentPath(

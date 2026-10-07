@@ -36,9 +36,11 @@ import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { DocumentRename } from "./document-rename";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
+import { claimNewDocumentTitle } from "./use-document-creation";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
@@ -59,6 +61,8 @@ type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
 type ManagedAccess = Session.Access & { canManage: boolean };
 type WorkspaceMetadata = DocumentMetadata;
+/** A title opened for a document this tab just created hands the caret to its body. */
+type TitleEdit = "rename" | "new";
 
 function settleMotionImmediately(): boolean {
 	return motionImmediately();
@@ -73,20 +77,40 @@ export function Header(
 	{
 		archivedAt,
 		canManage,
+		editing,
 		members,
 		label,
 		onAction,
+		onEditingChange,
+		onRenamed,
 		presentation,
+		room,
 	}: {
 		archivedAt?: string;
 		canManage: boolean;
+		editing?: TitleEdit;
 		members: Session.Member[];
 		label: string;
 		onAction: (action: DocumentAction) => void;
+		onEditingChange: (editing?: TitleEdit) => void;
+		onRenamed: (channel: DocumentMetadata) => void;
 		presentation: WorkspacePresentation;
+		room: string;
 	},
 ) {
 	let people = peopleHere(members);
+	let title = useRef<HTMLButtonElement>(null);
+	let previousEdit = useRef(editing);
+	useEffect(() => {
+		let previous = previousEdit.current;
+		previousEdit.current = editing;
+		// Hand the caret on only when the field took it with it, not after a blur commit.
+		if (editing || !previous || document.activeElement !== document.body) return;
+		let body = previous === "new"
+			? document.querySelector<HTMLElement>(".plan-content[contenteditable='true']")
+			: null;
+		(body ?? title.current)?.focus();
+	}, [editing]);
 	return (
 		<header className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0">
 			<div
@@ -117,22 +141,45 @@ export function Header(
 							</span>
 						</>
 					)
-					: canManage
+					: editing && canManage && !archivedAt
 					? (
-						<DocumentActionsMenu
-							align="start"
-							channel={{ archivedAt, title: label }}
-							className="document-title-trigger"
-							onAction={onAction}
-							trigger={
-								<>
-									<span className="min-w-0 truncate">{label}</span>
-									<ChevronIcon aria-hidden="true" className="shrink-0 rotate-90" />
-								</>
-							}
+						<DocumentRename
+							channel={{ id: room, title: label }}
+							inline
+							onCancel={() => onEditingChange()}
+							onRenamed={detail => {
+								onRenamed(detail.channel);
+								onEditingChange();
+							}}
 						/>
 					)
+					: canManage && !archivedAt
+					? (
+						<button
+							aria-label={`Rename ${label}`}
+							className="document-title-trigger"
+							onClick={() => onEditingChange("rename")}
+							onKeyDown={event => {
+								if (event.key !== "F2") return;
+								event.preventDefault();
+								onEditingChange("rename");
+							}}
+							ref={title}
+							type="button"
+						>
+							<span className="truncate">{label}</span>
+						</button>
+					)
 					: <span className="document-title-label truncate">{label}</span>}
+				{canManage && presentation.type !== "parent-with-child" && (
+					<DocumentActionsMenu
+						align="start"
+						channel={{ archivedAt, title: label }}
+						className="document-title-menu"
+						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
+						trigger={<ChevronIcon aria-hidden="true" className="rotate-90" />}
+					/>
+				)}
 				{archivedAt && (
 					<span className="document-archived-status">
 						<Badge icon={ArchiveIcon} label="Archived" size="sm" />
@@ -219,6 +266,10 @@ export function RoomWorkspace(
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [planState, setPlanState] = useState<PlanState>({ synced: false });
+	let [titleEdit, setTitleEdit] = useState<TitleEdit>();
+	useEffect(() => {
+		if (claimNewDocumentTitle(room)) setTitleEdit("new");
+	}, [room]);
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
 	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
@@ -787,10 +838,14 @@ export function RoomWorkspace(
 					<Header
 						archivedAt={workspaceArchivedAt}
 						canManage={effectiveCanManage}
+						editing={titleEdit}
 						members={members}
 						label={metadata.title}
 						onAction={action => onDocumentAction(room, action)}
+						onEditingChange={setTitleEdit}
+						onRenamed={updateMetadata}
 						presentation={presentation}
+						room={room}
 					/>
 				}
 				controls={

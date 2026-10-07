@@ -216,15 +216,54 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toBeVisible();
 	await expect(projects.locator('[aria-current="page"]')).toHaveCount(1);
 	await expect(header.getByRole("button", { name: /planner session/i })).toHaveCount(0);
+	await expect(trigger).toBeVisible();
 	await headerAction(page, "Rename");
 	let title = page.getByRole("textbox", { name: "Document title" });
 	await expect(title).toBeFocused();
 	await title.press("Escape");
-	await expect(trigger).toBeFocused();
+	await expect(header.getByRole("button", { name: /^Rename / })).toBeFocused();
 
 	await projects.getByRole("button", { name: "New document", exact: true }).click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
+	// A new document opens with its generated name selected, ready to be replaced.
+	await expect(title).toBeFocused();
+	expect(
+		await title.evaluate(field => {
+			let input = field as HTMLInputElement;
+			return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+		}),
+	).toBe(true);
+	let name = `Named ${crypto.randomUUID().slice(0, 8)}`;
+	await page.keyboard.type(name);
+	await page.keyboard.press("Enter");
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+	await expect(content(page)).toBeFocused();
+	await expect(projects.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
+test("the header title renames in place with click, F2, Escape, and blur", async ({ join, room }) => {
+	let page = await join("ana");
+	let header = page.getByRole("banner");
+	let field = page.getByRole("textbox", { name: "Document title" });
+	let title = `Inline ${room.slice(0, 8)}`;
+
+	await header.getByRole("button", { name: /^Rename / }).click();
+	await expect(field).toBeFocused();
+	await field.fill("Discarded title");
+	await field.press("Escape");
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).not.toHaveAccessibleName("Document: Discarded title");
+
+	let button = header.getByRole("button", { name: /^Rename / });
+	await expect(button).toBeFocused();
+	await button.press("F2");
+	await expect(field).toBeFocused();
+	await field.fill(title);
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
+	await expect(header.getByRole("button", { name: `Rename ${title}`, exact: true })).toBeVisible();
 });
 
 test("a pointer-dismissed navigation dialog releases focus while it exits", async ({ join }) => {
@@ -673,7 +712,7 @@ test("renaming the current document updates collaborators and survives reload", 
 	let input = ana.getByRole("textbox", { name: "Document title" });
 	await expect(input).toBeFocused();
 	await input.fill(title);
-	await ana.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${title}`);
 	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${title}`);
@@ -703,12 +742,12 @@ test("a delayed rename response cannot overwrite a newer collaborator rename", a
 
 	await headerAction(ana, "Rename");
 	await ana.getByRole("textbox", { name: "Document title" }).fill(first);
-	await ana.getByRole("button", { name: "Save" }).click();
+	await ana.getByRole("textbox", { name: "Document title" }).press("Enter");
 	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${first}`);
 
 	await headerAction(bo, "Rename");
 	await bo.getByRole("textbox", { name: "Document title" }).fill(latest);
-	await bo.getByRole("button", { name: "Save" }).click();
+	await bo.getByRole("textbox", { name: "Document title" }).press("Enter");
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${latest}`);
 
 	release.resolve();
@@ -753,11 +792,12 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 	await headerAction(page, "Rename");
 	let input = page.getByRole("textbox", { name: "Document title" });
 	await input.fill(title);
-	await page.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 	await expect(page.getByRole("alert")).toBeVisible();
 	await expect(input).toHaveValue(title);
+	await expect(input).toBeFocused();
 
-	await page.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
 });
 

@@ -9,11 +9,15 @@ function message(error: unknown): string {
 	return error instanceof Error ? error.message : "Could not rename document.";
 }
 
-/** One server-backed title form shared by room navigation and repository rows. */
+/**
+ * One server-backed title form shared by room navigation and repository rows.
+ * `inline` renders only the field: Enter or blur commits, Escape reverts.
+ */
 export function DocumentRename(
 	{
 		channel,
 		className = "",
+		inline = false,
 		onCancel,
 		onErrorChange,
 		onRenamed,
@@ -21,6 +25,7 @@ export function DocumentRename(
 	}: {
 		channel: Pick<Api.Channel, "id" | "title">;
 		className?: string;
+		inline?: boolean;
 		onCancel: () => void;
 		onErrorChange?: (error: unknown) => void;
 		onRenamed: (detail: Api.ChannelDetail) => void;
@@ -31,6 +36,9 @@ export function DocumentRename(
 	let [title, setTitle] = useState(channel.title);
 	let [error, setError] = useState<unknown>();
 	let [saving, setSaving] = useState(false);
+	// Enter and the blur it can cause arrive before React re-renders `saving`.
+	let busy = useRef(false);
+	let cancelled = useRef(false);
 
 	useEffect(() => {
 		input.current?.focus();
@@ -42,10 +50,17 @@ export function DocumentRename(
 		onErrorChange?.(next);
 	}
 
-	async function submit(event: FormEvent) {
-		event.preventDefault();
+	async function submit(event?: FormEvent) {
+		event?.preventDefault();
 		let next = title.trim();
-		if (!next || saving) return;
+		if (busy.current || cancelled.current) return;
+		if (inline && (!next || next === channel.title)) {
+			cancelled.current = true;
+			onCancel();
+			return;
+		}
+		if (!next) return;
+		busy.current = true;
 		setSaving(true);
 		onSavingChange?.(true);
 		report(undefined);
@@ -53,6 +68,7 @@ export function DocumentRename(
 			onRenamed(await Api.renameChannel(channel.id, next));
 		} catch (reason) {
 			report(reason);
+			busy.current = false;
 			setSaving(false);
 			onSavingChange?.(false);
 		}
@@ -63,7 +79,37 @@ export function DocumentRename(
 		event.preventDefault();
 		event.stopPropagation();
 		if (saving) return;
+		cancelled.current = true;
 		onCancel();
+	}
+
+	if (inline) {
+		return (
+			<form className="document-title-form" data-focus-boundary="" onSubmit={submit}>
+				<label className="sr-only" htmlFor={`document-title-${channel.id}`}>Document title</label>
+				<input
+					aria-invalid={error === undefined ? undefined : true}
+					className="document-title-input"
+					id={`document-title-${channel.id}`}
+					maxLength={120}
+					onBlur={() => void submit()}
+					onChange={event => {
+						setTitle(event.target.value);
+						if (error !== undefined) report(undefined);
+					}}
+					onKeyDown={keyDown}
+					placeholder="Untitled"
+					readOnly={saving}
+					ref={input}
+					value={title}
+				/>
+				{error !== undefined && (
+					<TerminalAlert className="document-title-error text-sm text-destructive-ink">
+						{message(error)}
+					</TerminalAlert>
+				)}
+			</form>
+		);
 	}
 
 	return (
