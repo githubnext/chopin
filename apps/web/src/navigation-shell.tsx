@@ -21,7 +21,7 @@ import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
-import { NavigationNotice, useNavigationNotice } from "./navigation-notice";
+import { useNavigationNotice } from "./navigation-notice";
 import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
 import { useMenuDismissal } from "./menu-dismissal";
@@ -87,6 +87,7 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 	}
 }
 
+let NavigationNotice = lazy(() => import("./navigation-notice-view"));
 let ProjectSidebar = lazy(() =>
 	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
 );
@@ -658,14 +659,7 @@ export function NavigationShell(
 		if (action === "copy-link") {
 			let href =
 				new URL(documentDestination(projectsRef.current, channel.id), location.origin).href;
-			void (async () => {
-				try {
-					await navigator.clipboard.writeText(href);
-					showNotice({ message: "Link copied" });
-				} catch {
-					showNotice({ message: "Could not copy link" });
-				}
-			})();
+			void import("./copy-link").then(module => module.copyLink(href, showNotice));
 			return;
 		}
 		if (action === "rename") {
@@ -828,7 +822,11 @@ export function NavigationShell(
 	);
 	let content = (
 		<>
-			<NavigationNotice notice={notice} show={showNotice} />
+			{notice && (
+				<Suspense>
+					<NavigationNotice notice={notice} show={showNotice} />
+				</Suspense>
+			)}
 			{!sidebarVisible && !drawerOpen && presentedDialog !== "new" && creation.pending.size > 0 && (
 				<div className="navigation-creation-status" role="status">
 					{[...creation.pending].map(([id, phase]) => (
