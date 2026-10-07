@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "c05928e1771f8684f1e67bdc2997b46e6a0aee430c8b89aa5c3913bf26d002e6"
+		"sourceHash": "fb8833b7ba83f22bb04ad40139753f701b4b50b3c1344a9e698b912f2b88e066"
 	},
 	{
 		"file": "packages/visuals/src/ui/badge.tsx",
@@ -417,7 +417,7 @@
 				1
 			]
 		],
-		"sourceHash": "c05928e1771f8684f1e67bdc2997b46e6a0aee430c8b89aa5c3913bf26d002e6"
+		"sourceHash": "fb8833b7ba83f22bb04ad40139753f701b4b50b3c1344a9e698b912f2b88e066"
 	},
 	{
 		"file": "packages/visuals/src/ui/table.tsx",
