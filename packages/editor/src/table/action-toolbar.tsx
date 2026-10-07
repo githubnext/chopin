@@ -84,9 +84,14 @@ export function TableActionToolbar(
 		let viewport = editorSurfaceViewport(editor);
 		let width = Math.max(0, viewport.width - 16);
 		let bottom = viewport.top + viewport.height;
+		// The previous group's maxHeight can constrain a newly expanded action panel.
+		let height = Math.max(
+			element.offsetHeight,
+			element.scrollHeight + element.offsetHeight - element.clientHeight,
+		);
 		let next = placeSurface(
 			{ left: viewport.left, right: viewport.left, top: bottom, bottom, width: 0, height: 0 },
-			{ width, height: element.offsetHeight },
+			{ width, height },
 			viewport,
 		);
 		let dock = { ...next, width };

@@ -119,7 +119,9 @@ for (let width of [1280, 390]) {
 		).toBeGreaterThanOrEqual(0);
 		await expect(chat.getByRole("button", { name: "Send message" })).toBeEnabled();
 		if (width === 1280) {
-			await chat.screenshot({ path: "/private/tmp/chopin-composer-production-error.png" });
+			await chat.screenshot({
+				path: test.info().outputPath("chopin-composer-production-error.png"),
+			});
 		}
 	});
 }

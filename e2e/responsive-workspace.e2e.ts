@@ -200,6 +200,10 @@ test(
 
 		await page.setViewportSize({ width: 900, height: 850 });
 		let handle = page.getByRole("separator", { name: "Resize chat" });
+		await expect.poll(async () => {
+			let frame = await page.locator(".workspace-frame").boundingBox();
+			return Number(await handle.getAttribute("aria-valuemax")) - (frame!.width - 450);
+		}).toBeCloseTo(0, 0);
 		let preferredWidth = Number(await handle.getAttribute("aria-valuemax"));
 		await handle.press("End");
 		await expect.poll(async () => (await chat.boundingBox())!.width)

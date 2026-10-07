@@ -201,3 +201,12 @@ export function LockIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function CircleCloseIcon(props: IconProps) {
+	return (
+		<LineIcon title="circle-xmark" {...props}>
+			<circle cx="9" cy="9" r="7.25" />
+			<path d="M6.5 6.5L11.5 11.5M11.5 6.5L6.5 11.5" />
+		</LineIcon>
+	);
+}

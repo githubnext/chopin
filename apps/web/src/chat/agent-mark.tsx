@@ -1,3 +1,5 @@
+import { ChopinIcon } from "@chopin/icons";
+
 export function ChopinMark({ circle = false }: { circle?: boolean }) {
 	return (
 		<span
@@ -6,9 +8,7 @@ export function ChopinMark({ circle = false }: { circle?: boolean }) {
 			role="img"
 			aria-label="Chopin"
 		>
-			<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
-				<path d="M14.013 1.03353L9.51398 1.63934C8.65198 1.75734 8.00098 2.50334 8.00098 3.37334V10.6353C7.43298 10.2373 6.74498 10.0003 6.00098 10.0003C4.07098 10.0003 2.50098 11.5703 2.50098 13.5003C2.50098 15.4303 4.07098 17.0003 6.00098 17.0003C7.93098 17.0003 9.50098 15.4303 9.50098 13.5003V6.40535L14.487 5.73353C15.349 5.61553 16 4.86953 16 3.99953V2.76853C16 2.26353 15.782 1.78253 15.401 1.45053C15.02 1.11753 14.507 0.966532 14.014 1.03453L14.013 1.03353Z" />
-			</svg>
+			<ChopinIcon />
 		</span>
 	);
 }

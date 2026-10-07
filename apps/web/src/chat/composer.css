@@ -25,10 +25,6 @@
 .chat-composer .composer-surface[data-mode="chopin"]::before {
 	opacity: var(--composer-glow-opacity);
 }
-.chat-composer .composer-surface:focus-within {
-	outline: var(--edge-width) solid var(--color-brand);
-	outline-offset: 0;
-}
 .chat-composer .composer-surface[data-error] {
 	border-color: var(--color-danger-edge);
 }
@@ -48,7 +44,6 @@
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	color: var(--color-text-primary);
-	outline: none;
 	white-space: pre-wrap;
 	overflow-wrap: break-word;
 	overflow-y: auto;
