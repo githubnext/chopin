@@ -25,7 +25,10 @@ permissions:
   actions: read
   pull-requests: read
 
-engine: codex
+engine:
+  id: codex
+  args: ["-c", 'model_reasoning_effort=\"low\"']
+model: openai/gpt-6.1-sol
 timeout-minutes: 40
 max-turns: 120
 max-ai-credits: 500
@@ -66,6 +69,7 @@ safe-outputs:
   github-token: ${{ secrets.PR_MAITENANCE_TOKEN }}
   report-failure-as-issue: false
   threat-detection:
+    engine: codex
     continue-on-error: false
   push-to-pull-request-branch:
     target: "*"
