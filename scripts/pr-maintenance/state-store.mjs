@@ -149,6 +149,8 @@ export function createStateStore(repository, key, request) {
 			return await request(method, url, body);
 		} catch (error) {
 			let status = Number.isInteger(error?.status) ? ` (HTTP ${error.status})` : "";
+			// API error payloads must not expose authenticated state or credentials.
+			// oxlint-disable-next-line preserve-caught-error
 			throw new Error(`Maintenance state ${method} failed${status}`);
 		}
 	}

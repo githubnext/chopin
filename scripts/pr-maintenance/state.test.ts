@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { attachRun, begin, finish, initialState, observe, registerProposal } from "./state.mjs";
+import {
+	attachRun,
+	begin,
+	finish,
+	initialState,
+	observe,
+	observeFailure,
+	registerProposal,
+} from "./state.mjs";
+
+import { openState, sealState } from "./state-store.mjs";
 
 let observation = { number: 12, head: "head", baseHead: "base", action: "repair" };
 let failed = { kind: "failed", fingerprint: "ci:types", progress: false };
@@ -246,4 +256,105 @@ test("active action freezes dispatch mode independently of later observed action
 		};
 		expect(() => attachRun(invalid, "a", "run")).toThrow();
 	}
+});
+
+test("applied verification is durable evidence, not a readiness authorization", () => {
+	let evidence = {
+		head: "a".repeat(40),
+		operation: "fix",
+		paths: ["apps/a.ts"],
+		checks: [{ command: "bun test", result: "passed" }],
+		hashReviews: [],
+	};
+	let state = finish(begin(initialState(observation, 0), "a", 1), "a", {
+		kind: "applied",
+		head: evidence.head,
+		verification: evidence,
+	}, 2);
+	expect(state.verification).toEqual(evidence);
+	let key = "k".repeat(32);
+	let persisted = openState(
+		sealState({ schemaVersion: 1, repository: "o/r", revision: 1, prs: { 12: state } }, key),
+		"o/r",
+		key,
+	);
+	expect(persisted.prs[12].verification).toEqual(evidence);
+	expect(state.status).toBe("waiting-ci");
+	expect(
+		observe(state, { ...observation, head: "human" }, { now: 3, humanChange: true }).verification,
+	).toBeNull();
+	for (
+		let invalid of [{ ...evidence, head: "wrong" }, { ...evidence, paths: ["apps/../secret"] }, {
+			...evidence,
+			checks: [{ command: "", result: "passed" }],
+		}, {
+			...evidence,
+			hashReviews: [{ file: "apps/a.ts", sourceHash: "bad", rationale: "reviewed" }],
+		}]
+	) {
+		expect(() =>
+			finish(begin(initialState(observation, 0), "a", 1), "a", {
+				kind: "applied",
+				head: evidence.head,
+				verification: invalid,
+			}, 2)
+		).toThrow();
+	}
+});
+
+test("trusted CI failure observations count each completed repair once and reset on progress", () => {
+	let state = observeFailure(initialState(observation, 0), "types:A", 1);
+	expect(state.failureCount).toBe(0);
+	state = finish(begin(state, "a", 2), "a", { kind: "applied", head: "p1" }, 3);
+	state = observe(state, { ...observation, head: "p1" }, { now: 4 });
+	state = observeFailure(state, "types:A", 4);
+	expect(state.failureCount).toBe(1);
+	expect(observeFailure(state, "types:A", 5).failureCount).toBe(1);
+	state = finish(begin(state, "b", 6), "b", { kind: "applied", head: "p2" }, 7);
+	state = observe(state, { ...observation, head: "p2" }, { now: 8 });
+	expect(observeFailure(state, "types:A", 8).blocker?.reason).toBe(
+		"Repeated failure without progress",
+	);
+	let progress = observeFailure(state, "types:B", 8);
+	expect(progress.failureCount).toBe(0);
+	expect(progress.failureRepairCount).toBe(2);
+});
+
+test("registered published repair with lost result charges once and backs off", () => {
+	let state = registerProposal(begin(initialState(observation, 0), "a", 1), "a", "published");
+	state = observe(state, { ...observation, head: "published" }, { now: 2 });
+	let done = finish(state, "a", { kind: "transient", reason: "lost result" }, 3);
+	expect(done.repairCount).toBe(1);
+	expect(done.action).toBe("repair");
+	expect(done.nextRetryAt).toBe(3 + 5 * 60_000);
+	expect(finish(done, "a", { kind: "transient", reason: "lost result" }, 4).repairCount).toBe(1);
+	let human = observe(state, { ...observation, head: "published" }, { now: 2, humanChange: true });
+	expect(finish(human, "a", { kind: "superseded" }, 3).repairCount).toBe(0);
+});
+
+test("base-only replay and repeated polls do not count an unchanged CI failure again", () => {
+	let state = observeFailure(initialState(observation, 0), "same", 1);
+	state = observe(state, { ...observation, action: "rebase" }, { now: 2 });
+	state = finish(begin(state, "replay", 3), "replay", { kind: "applied", head: "rebased" }, 4);
+	state = observe(state, { ...observation, head: "rebased" }, { now: 5 });
+	state = observeFailure(state, "same", 5);
+	expect(state.repairCount).toBe(0);
+	expect(state.failureCount).toBe(0);
+	expect(observeFailure(state, "same", 6).failureCount).toBe(0);
+});
+
+test("three observed publications without trusted results exhaust repair budget", () => {
+	let state = initialState(observation, 0);
+	for (let index = 1; index <= 3; index++) {
+		state = registerProposal(
+			begin(state, `a${index}`, index * 1_000_000),
+			`a${index}`,
+			`p${index}`,
+		);
+		state = observe(state, { ...observation, head: `p${index}` }, { now: index * 1_000_000 + 1 });
+		state = finish(state, `a${index}`, { kind: "superseded" }, index * 1_000_000 + 2);
+	}
+	expect(state.repairCount).toBe(3);
+	expect(state.blocker?.reason).toBe("Repair budget exhausted");
+	expect(() => begin(state, "fourth", 4_000_000)).toThrow();
 });
