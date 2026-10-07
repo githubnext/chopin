@@ -829,3 +829,31 @@ test("sidebar creation failures remain retryable", async ({ join, page }) => {
 	await create.click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 });
+
+test("archiving a sidebar row by keyboard moves focus to a neighbouring row", async ({ baseURL, join }) => {
+	let page = await join("ana");
+	let port = Number(new URL(baseURL!).port);
+	await createChannel(port, crypto.randomUUID());
+	await createChannel(port, crypto.randomUUID());
+	await page.reload();
+	let links = sidebar(page).locator(".project-sidebar-document-link");
+	await expect.poll(() => links.count()).toBeGreaterThanOrEqual(3);
+	let names = (await links.allInnerTexts()).map(name => name.trim());
+	let index = await links.evaluateAll(elements =>
+		elements.findIndex(element => element.getAttribute("aria-current") !== "page")
+	);
+	let neighbour = names[index + 1] ?? names[index - 1];
+	let row = links.nth(index).locator(
+		"xpath=ancestor::div[contains(@class,'project-sidebar-document')][1]",
+	);
+	let trigger = row.getByRole("button", { name: /^Actions for / });
+	await row.hover();
+	await trigger.focus();
+	await trigger.press("ArrowDown");
+	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await expect(links).toHaveCount(names.length - 1);
+	await expect(sidebar(page).locator(".project-sidebar-document-link", { hasText: neighbour! }))
+		.toBeFocused();
+});
