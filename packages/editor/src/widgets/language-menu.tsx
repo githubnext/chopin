@@ -89,10 +89,14 @@ export function LanguageMenu(
 			?.scrollIntoView({ block: "nearest" });
 	}, [open, active]);
 
-	usePopoverDismissal(open, () => [panel.current, trigger.current], reason => {
-		setOpen(false);
-		if (reason === "escape") trigger.current?.focus();
-	});
+	usePopoverDismissal(
+		open,
+		target => panel.current?.contains(target) || trigger.current?.contains(target),
+		restoreFocus => {
+			setOpen(false);
+			if (restoreFocus) trigger.current?.focus();
+		},
+	);
 
 	let show = () => {
 		setActiveId(value);

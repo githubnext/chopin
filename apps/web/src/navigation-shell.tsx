@@ -317,10 +317,10 @@ export function NavigationShell(
 	let accountWrap = useRef<HTMLDivElement>(null);
 	let accountTrigger = useRef<HTMLButtonElement>(null);
 	let accountMenuId = useId();
-	let closeAccount = useCallback((restoreFocus: boolean) => {
+	let closeAccount = (restoreFocus: boolean) => {
 		setAccountOpen(false);
 		if (restoreFocus) accountTrigger.current?.focus();
-	}, []);
+	};
 	useMenuDismissal(accountOpen, [accountWrap], closeAccount);
 	useEffect(() => {
 		if (!accountOpen) return;
@@ -798,9 +798,7 @@ export function NavigationShell(
 							if (event.key === "Tab") return closeAccount(false);
 							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
 							event.preventDefault();
-							let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
-							let last = event.key === "ArrowUp" || event.key === "End";
-							items.at(last ? -1 : 0)?.focus();
+							event.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus();
 						}}
 						role="menu"
 					>
