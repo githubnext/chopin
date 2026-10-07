@@ -757,6 +757,7 @@ export function RoomWorkspace(
 								canExecute: researchExecution,
 								wire,
 								controllers: researchDrafts,
+								handle,
 								onSource: source =>
 									showSource({ source: { ...source, role: "support" }, itemId: source.messageId }),
 								store: research,

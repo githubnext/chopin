@@ -15,11 +15,22 @@ export function researchCaret(before: string, after: string, position: number): 
 	return position <= start ? position : position >= end ? position + nextEnd - end : nextEnd;
 }
 
+export function researchBriefKey(
+	event: { key: string; metaKey: boolean; ctrlKey: boolean; isComposing: boolean },
+): "done" | "start" | undefined {
+	if (event.isComposing) return undefined;
+	if (event.key === "Escape") return "done";
+	if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) return "start";
+	return undefined;
+}
+
 export function ResearchBriefEditor(
-	{ controller, text, readOnly }: {
+	{ controller, text, readOnly, onEscape, onSubmit }: {
 		controller: ResearchDraftController;
 		text: string;
 		readOnly: boolean;
+		onEscape: () => void;
+		onSubmit: () => void;
 	},
 ) {
 	let input = useRef<HTMLTextAreaElement>(null);
@@ -41,12 +52,25 @@ export function ResearchBriefEditor(
 	return (
 		<textarea
 			aria-label="Research brief"
-			className="w-full resize-y rounded-md bg-page p-2 text-sm text-text-primary ring-hairline"
+			className="chat-research-brief w-full rounded-md bg-page p-2 text-sm text-text-primary ring-hairline"
 			defaultValue={text}
 			maxLength={2048}
 			readOnly={readOnly}
 			ref={input}
-			rows={5}
+			rows={2}
+			onKeyDown={event => {
+				let action = researchBriefKey({
+					key: event.key,
+					metaKey: event.metaKey,
+					ctrlKey: event.ctrlKey,
+					isComposing: event.nativeEvent.isComposing || event.keyCode === 229,
+				});
+				if (!action) return;
+				event.preventDefault();
+				event.stopPropagation();
+				if (action === "done") onEscape();
+				else onSubmit();
+			}}
 			onFocus={() => controller.focus(true)}
 			onBlur={() => controller.focus(false)}
 			onChange={event => {

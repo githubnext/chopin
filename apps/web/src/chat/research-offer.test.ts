@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { forwardStage, ResearchOfferCard, shouldShowResearchActionError } from "./research-offer";
 import { deferred } from "./research-offer.test-fixtures";
+import { researchBriefKey } from "./research-brief-editor";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { OfferLinkView } from "./research-offer";
 import type { ResearchRequestStore } from "../research-requests";
@@ -76,12 +77,12 @@ test("a deferred Resume failure cannot create an error after the link becomes li
 	expect(shouldShowResearchActionError("research", "accepted", undefined)).toBe(false);
 });
 
-test("a failed brief projection exposes refinement failure and a writer-only retry", () => {
+test("a failed refinement with a usable brief offers a quiet writer-only retry", () => {
 	let offer = researchDraftHarness().offer();
 	offer.workflow!.preparation = "failed";
-	let render = (canAct: boolean) =>
+	let render = (canAct: boolean, brief = offer.brief) =>
 		renderToStaticMarkup(createElement(ResearchOfferCard, {
-			offer,
+			offer: { ...offer, brief },
 			controls: {
 				links: {},
 				busy: new Set<string>(),
@@ -93,10 +94,24 @@ test("a failed brief projection exposes refinement failure and a writer-only ret
 				onRetryLink() {},
 			},
 		}));
-	expect(render(true)).toContain("Brief refinement failed.");
-	expect(render(true)).toContain(">Retry refinement</button>");
-	expect(render(false)).toContain("Brief refinement failed.");
-	expect(render(false)).not.toContain(">Retry refinement</button>");
+	expect(render(true)).toContain('aria-label="Retry brief refinement"');
+	expect(render(true)).not.toContain(">Retry refinement</button>");
+	expect(render(false)).not.toContain("Retry brief refinement");
+	expect(render(true, "")).toContain("Brief refinement failed.");
+	expect(render(true, "")).toContain(">Retry refinement</button>");
+	expect(render(false, "")).not.toContain(">Retry refinement</button>");
+});
+
+test("the brief editor finishes on Escape and starts on Command or Control Enter", () => {
+	let key = (
+		key: string,
+		extra: { metaKey?: boolean; ctrlKey?: boolean; isComposing?: boolean } = {},
+	) => researchBriefKey({ key, metaKey: false, ctrlKey: false, isComposing: false, ...extra });
+	expect(key("Escape")).toBe("done");
+	expect(key("Enter", { metaKey: true })).toBe("start");
+	expect(key("Enter", { ctrlKey: true })).toBe("start");
+	expect(key("Enter")).toBeUndefined();
+	expect(key("Escape", { isComposing: true })).toBeUndefined();
 });
 
 test("an active request never shows an earlier stage, but terminal and retried stages do", () => {
