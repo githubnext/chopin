@@ -200,8 +200,11 @@ test("the research draft stays fully visible as its anchor nears an edge", async
 	await page.keyboard.press("Enter");
 	let question = page.getByRole("textbox", { name: "Research question", exact: true });
 	await expect(question).toBeFocused();
-	await expect.poll(async () => (await draftGeometry(page)).inside).toBe(true);
-	expect((await draftGeometry(page)).side).toBe("below");
+	// The reveal may still be scrolling; wait for it to settle below the anchor.
+	await expect.poll(async () => {
+		let geometry = await draftGeometry(page);
+		return geometry.inside && geometry.side === "below";
+	}).toBe(true);
 
 	// Scroll the anchor to just above the bottom edge: the draft flips above it.
 	let scroller = page.locator("[data-plan-scroll]");
