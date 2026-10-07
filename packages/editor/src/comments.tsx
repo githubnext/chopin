@@ -30,7 +30,7 @@ import type { ThreadView } from "./threads";
 export function Author({ handle, ts }: { handle: string; ts?: number }) {
 	return (
 		<span className="flex min-w-0 items-center gap-2 text-sm">
-			<Face handle={handle} size={20} titled={false} />
+			<Face decorative handle={handle} size={20} titled={false} />
 			<span className="min-w-0 truncate font-semibold" title={`@${handle}`}>
 				{displayName(handle)}
 				<span className="sr-only">(@{handle})</span>
