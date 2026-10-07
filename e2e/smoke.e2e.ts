@@ -1,3 +1,4 @@
+import { chatInput, expectChatValue, fillChat } from "./chat-input";
 /**
  * The harness proving itself.
  *
@@ -278,7 +279,7 @@ test("an empty plan puts its muted prompt at the first writing position", async 
 test("chat uses one room-message composer when the planner is off", async ({ join }) => {
 	let page = await join("ana");
 	let chat = chatPane(page);
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let send = chat.getByRole("button", { name: "Send message" });
 
 	await expect(chat.locator("header")).toHaveCount(0);
@@ -320,7 +321,7 @@ test("chat keeps both ends of a tall transcript clear across layouts", async ({ 
 	let chat = chatPane(await join("ana"));
 	let stack = chat.locator("[data-chat-stack]");
 	let scroller = stack.locator("..");
-	let composer = chat.getByPlaceholder("Use @chopin to ask Chopin").locator("..");
+	let composer = chatInput(chat).locator("..");
 	let lastMessageGap = async () => {
 		await scroller.evaluate(element => element.scrollTop = element.scrollHeight);
 		return chat.getByText("Transcript message 23", { exact: false })
@@ -373,7 +374,7 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 	});
 
 	let chat = chatPane(await join("ana"));
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let send = chat.getByRole("button", { name: "Send message" });
 	await draft.fill("A draft left during reconnect.");
 	await expect(send).toBeEnabled();
@@ -385,7 +386,7 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 test("chat routes one Send action by @chopin without blocking room messages or its queue", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let send = chat.getByRole("button", { name: "Send message" });
 
 	await draft.fill("@chopin Start the migration.");
@@ -397,6 +398,14 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 		"Stop Chopin",
 	);
 
+	await expectChatValue(draft, "");
+	if (
+		await chat.getByRole("button", { name: "Talk to Chopin", exact: true }).getAttribute(
+			"aria-pressed",
+		) === "true"
+	) {
+		await draft.press("Shift+Tab");
+	}
 	await draft.fill("Keep the release notes brief.");
 	await expect(send).toBeEnabled();
 	await send.click();
@@ -409,9 +418,9 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	]);
 	await expect(chat.locator('[data-chat-state="queued"]')).toBeVisible();
 
-	await draft.fill("@chopin Keep\nthe new line.");
+	await fillChat(draft, "@chopin Keep\nthe new line.");
 	await draft.press("Shift+Enter");
-	await expect(draft).toHaveValue("@chopin Keep\nthe new line.\n");
+	await expectChatValue(draft, "@chopin Keep\nthe new line.\n");
 	await draft.press("Enter");
 	await expect.poll(planner.sends).toContainEqual({
 		text: "@chopin Keep\nthe new line.",
@@ -432,7 +441,7 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
 
-	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
+	await chatInput(chat).fill(
 		"@chopin Draft the migration.",
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
@@ -464,7 +473,7 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
 
-	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
+	await chatInput(chat).fill(
 		"@chopin Draft the migration.",
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
@@ -474,7 +483,7 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	await chat.getByRole("button", { name: "Stop Chopin" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 
-	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill("@chopin Try again.");
+	await chatInput(chat).fill("@chopin Try again.");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	planner.fail();
@@ -490,7 +499,7 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
 
-	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
+	await chatInput(chat).fill(
 		"@chopin Check the current plan.",
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();

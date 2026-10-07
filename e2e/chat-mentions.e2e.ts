@@ -1,3 +1,4 @@
+import { chatCaret, chatInput, expectChatValue } from "./chat-input";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { expect, test } from "./room";
 
@@ -59,7 +60,7 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	let ana = await join("ana");
 	// `bo` speaks and leaves, so appears only as a Chat author.
 	let leaving = await join("bo");
-	let bo = chatPane(leaving).getByPlaceholder("Use @chopin to ask Chopin");
+	let bo = chatInput(chatPane(leaving));
 	await bo.fill("Morning, both.");
 	await chatPane(leaving).getByRole("button", { name: "Send message" }).click();
 	await expect(chatPane(ana).getByText("Morning, both.")).toBeVisible();
@@ -68,7 +69,7 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await expect(ana.getByRole("group", { name: /People here: ana, cy$/ })).toBeVisible();
 
 	let chat = chatPane(ana);
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let list = chat.getByRole("listbox", { name: "Mentions" });
 	await expect(draft).toHaveAttribute("role", "combobox");
 
@@ -104,7 +105,7 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await draft.pressSequentially("ch");
 	expect(await names(ana)).toEqual(["chopin"]);
 	await draft.press("Enter");
-	await expect(draft).toHaveValue("Ask @chopin ");
+	await expectChatValue(draft, "Ask @chopin ");
 	await expect(list).toHaveCount(0);
 	await expect(draft).toBeFocused();
 	await draft.pressSequentially("what is open?");
@@ -112,21 +113,35 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await expect.poll(() => sent.at(-1)?.text).toBe("Ask @chopin what is open?");
 	expect(sent.at(-1)?.to).toBe("planner");
 
+	await expectChatValue(draft, "");
+	await draft.press("Shift+Tab");
 	await draft.fill("Thanks @cy");
-	await draft.press("Tab");
-	await expect(draft).toHaveValue("Thanks @cy ");
+	await draft.press("Enter");
+	await expectChatValue(draft, "Thanks @cy ");
+	await expect(draft.locator('.draft-mention[data-mention="cy"]')).toHaveCSS("font-weight", "600");
+	expect(await chatCaret(draft)).toBe("Thanks @cy ".length);
 	await draft.pressSequentially("for looking.");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect.poll(() => sent.at(-1)?.text).toBe("Thanks @cy for looking.");
 	expect(sent.at(-1)?.to).toBe("room");
+	await expectChatValue(draft, "");
 
 	await draft.fill("Mail a@b");
 	await expect(list).toHaveCount(0);
 	await draft.fill("@c");
 	await expect(list).toBeVisible();
+	await draft.press("Tab");
+	await draft.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+	await expect(draft).not.toBeFocused();
+	await expectChatValue(draft, "@c");
+	await draft.focus();
 	await draft.press("Escape");
 	await expect(list).toHaveCount(0);
-	await expect(draft).toHaveValue("@c");
+	await expectChatValue(draft, "@c");
 	await draft.fill("@zzz");
 	await expect(list).toHaveCount(0);
 	await draft.press("Enter");
@@ -141,7 +156,7 @@ test("the @ picker stays inside a narrow Chat panel", async ({ join, page }) => 
 	await opened.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
 	let chat = chatPane(opened);
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	await draft.fill("@");
 	let list = chat.locator("[data-chat-mention-picker]");
 	await expect(list).toBeVisible();

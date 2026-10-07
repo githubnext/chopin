@@ -1,6 +1,6 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
-import { useEffect, useId, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CloseIcon } from "@chopin/icons";
@@ -9,15 +9,15 @@ import {
 	initialWorkspaceState,
 	presentWorkspace,
 	transitionWorkspace,
-	WORKSPACE_MEDIA,
 	workspaceDestinations,
 	workspaceHeadingId,
-	workspaceMode,
 	workspaceProfile,
 } from "./workspace-model";
 import chatCloseIcon from "./assets/icons/panel-close.svg";
 import chatIcon from "./assets/icons/chat.svg";
-import { ResizeHandle, usePaneWidth } from "./resizable-pane";
+import { clampPane, ResizeHandle, usePaneWidth } from "./resizable-pane";
+import { workspaceSizing } from "./workspace-sizing";
+import "./workspace-sizing.css";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 
@@ -34,9 +34,9 @@ import type {
 export type Pane = "chat";
 
 const CHAT_PANE = {
-	initial: 364,
-	max: 400,
-	min: 304,
+	initial: 500,
+	max: Number.MAX_SAFE_INTEGER,
+	min: 250,
 	storageKey: "chopin:pane:chat",
 };
 
@@ -57,21 +57,19 @@ export function useWorkspaceIds(): WorkspaceIds {
 	};
 }
 
-function currentMode(): WorkspaceMode {
-	return workspaceMode(matchMedia);
-}
-
-function subscribeMode(notify: () => void): () => void {
-	let queries = WORKSPACE_MEDIA.map(matchMedia);
-	for (let query of queries) query.addEventListener("change", notify);
-	return () => {
-		for (let query of queries) query.removeEventListener("change", notify);
-	};
-}
-
-/** Read CSS width atomically so a render cannot contain two workspace modes. */
-export function useWorkspaceMode(): WorkspaceMode {
-	return useSyncExternalStore(subscribeMode, currentMode, currentMode);
+export function useWorkspaceLayout() {
+	let frame = useRef<HTMLDivElement>(null);
+	let [available, setAvailable] = useState(() => Math.max(0, window.innerWidth - 24));
+	useLayoutEffect(() => {
+		let element = frame.current;
+		if (!element) return;
+		let measure = () => setAvailable(element.clientWidth);
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+	return { available, frame, mode: workspaceSizing(available, 500).mode };
 }
 
 /** Only the desktop Chat preference crosses a page load. */
@@ -101,6 +99,8 @@ export function useWorkspaceState(
 
 export type WorkspaceProps = {
 	header: ReactNode;
+	available?: number;
+	frame?: RefObject<HTMLDivElement | null>;
 	chat?: ReactNode;
 	plan: ReactNode;
 	decisions: ReactNode;
@@ -150,7 +150,7 @@ export function ChatToggle(
 			aria-expanded={open}
 			aria-label={open ? "Close sidebar" : `Show chat pane${status ? `, ${status}` : ""}`}
 			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
-			data-tooltip={open ? "Close sidebar" : "Show Chat"}
+			data-tooltip={open ? "Close sidebar" : "Show chat"}
 			data-tooltip-verbatim={open ? "" : undefined}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
@@ -219,6 +219,8 @@ function destinationLabel(
 
 export function Workspace(
 	{
+		available = 950,
+		frame,
 		chat,
 		controls,
 		ids,
@@ -238,11 +240,16 @@ export function Workspace(
 	}: WorkspaceProps,
 ) {
 	let profile = workspaceProfile(workspacePresentation);
-	let [chatWidth, resizeChat] = usePaneWidth({
+	let [preferredWidth, resizePreferred] = usePaneWidth({
 		active: mode === "split",
 		...CHAT_PANE,
 		storageKey: profile.persistPaneSize ? CHAT_PANE.storageKey : undefined,
 	});
+	let { chat: chatWidth, maximum } = workspaceSizing(available, preferredWidth);
+	let resizeChat = (delta: number) => {
+		let next = clampPane(chatWidth + delta, CHAT_PANE.min, maximum);
+		resizePreferred(next - preferredWidth);
+	};
 	let root = useRef<HTMLDivElement>(null);
 	let presentation = presentWorkspace(state, mode, view);
 	let childPresentation = workspacePresentation.type === "child"
@@ -313,185 +320,10 @@ export function Workspace(
 		>
 			{header}
 
-			<div
-				aria-hidden={paperObscured || undefined}
-				className={`workspace-frame relative flex min-h-0 flex-1 ${
-					mode === "split"
-						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-page shadow-raised ring-hairline"
-						: "m-2 overflow-hidden rounded-[12px] bg-page shadow-resting ring-hairline"
-				}`}
-				data-paper-obscured={paperObscured || undefined}
-				inert={paperObscured}
-			>
-				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
-				{chat && (
-					<aside
-						aria-hidden={chatInactive || undefined}
-						aria-labelledby={ids.heading.chat}
-						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
-							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
-						}`}
-						hidden={chatPresence.phase === "closed"}
-						id={ids.pane.chat}
-						inert={chatInactive}
-						onKeyDown={event => {
-							if (event.key === "Escape" && mode !== "split") {
-								event.preventDefault();
-								event.stopPropagation();
-								dismissChat();
-							}
-						}}
-						style={mode === "split"
-							? { width: chatWidth }
-							: { width: "100%" }}
-					>
-						{mode === "split"
-							? (
-								<div
-									className="chat-header flex h-[46px] shrink-0 items-center gap-2 px-3.5 hairline-b"
-									data-chat-header
-								>
-									{presentation.separatorVisible && (
-										<ResizeHandle
-											label="Resize chat"
-											max={CHAT_PANE.max}
-											min={CHAT_PANE.min}
-											onResize={resizeChat}
-											side="right"
-											width={chatWidth}
-										/>
-									)}
-									<span
-										aria-hidden="true"
-										className="relative grid size-[14px] shrink-0"
-										data-chat-identity
-									>
-										<img alt="" className="size-[14px]" src={chatIcon} />
-										{(chatActivity.busy || chatActivity.unread > 0) && (
-											<span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-brand" />
-										)}
-									</span>
-									<h2
-										className="text-sm font-medium text-text-tertiary"
-										id={ids.heading.chat}
-										tabIndex={-1}
-									>
-										Chat
-									</h2>
-									<ChatToggle
-										activity={chatActivity}
-										className="chat-header-control -mr-[5px] ml-auto"
-										controls={ids.pane.chat}
-										onToggle={dismissChat}
-										open
-									/>
-								</div>
-							)
-							: (
-								<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
-									Chat
-								</h2>
-							)}
-						<div className="min-h-0 flex-1">
-							{chat}
-						</div>
-					</aside>
-				)}
-
-				<main
-					aria-hidden={!presentation.documentVisible || undefined}
-					className={`order-1 relative min-w-0 w-full flex-1 ${
-						mode === "split" ? "hairline-l hairline-b" : ""
-					}`}
-					hidden={!presentation.documentVisible}
-					inert={!presentation.documentVisible}
-				>
-					<div className="relative flex h-full flex-col overflow-hidden">
-						{mode === "split" && (
-							<div
-								className="flex h-[46px] shrink-0 items-center overflow-x-auto overflow-y-hidden px-2.5 hairline-b"
-								data-document-toolbar
-								onFocusCapture={event => {
-									if (!(event.target instanceof HTMLElement)) return;
-									let control = event.target.getBoundingClientRect();
-									let toolbar = event.currentTarget.getBoundingClientRect();
-									if (control.left < toolbar.left) {
-										event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
-									} else if (control.right > toolbar.right) {
-										event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
-									}
-								}}
-							>
-								{chat && !presentation.chatVisible && (
-									<ChatToggle
-										activity={chatActivity}
-										buttonRef={edgeTab}
-										className="mr-1 shrink-0"
-										controls={ids.pane.chat}
-										onToggle={showDesktopChat}
-										open={false}
-										swapOnHover
-									/>
-								)}
-								{controls}
-								{childPresentation && (
-									<div className="ml-auto flex shrink-0 items-center">
-										<button
-											aria-label={`Close ${childPresentation.label}`}
-											className="btn btn-icon btn-ghost -mr-1 shrink-0"
-											data-child-document-close
-											data-tooltip="Close Document"
-											onClick={childPresentation.onClose}
-											type="button"
-										>
-											<CloseIcon aria-hidden="true" size={14} />
-										</button>
-									</div>
-								)}
-							</div>
-						)}
-						<div
-							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
-							data-workspace-document-swap
-						>
-							<ContentSwapLayer
-								active={presentation.documentVisible && presentation.documentView === "plan"}
-								className="workspace-document-layer min-h-0"
-								immediately={immediately}
-								motion={contentSwapMotion}
-							>
-								<section
-									aria-labelledby={ids.heading.plan}
-									className="h-full min-h-0"
-									data-document-view="plan"
-								>
-									<h2 className="sr-only" id={ids.heading.plan} tabIndex={-1}>Document</h2>
-									{plan}
-								</section>
-							</ContentSwapLayer>
-							<ContentSwapLayer
-								active={presentation.documentVisible && presentation.documentView === "decisions"}
-								className="workspace-document-layer min-h-0"
-								immediately={immediately}
-								motion={contentSwapMotion}
-							>
-								<section
-									aria-labelledby={ids.heading.decisions}
-									className="h-full min-h-0"
-									data-document-view="decisions"
-								>
-									{decisions}
-								</section>
-							</ContentSwapLayer>
-						</div>
-					</div>
-				</main>
-			</div>
-
 			{mode !== "split" && (
 				<nav
 					aria-label="Workspace view"
-					className="workspace-navigation hairline-t grid shrink-0 grid-cols-3 bg-ground p-1"
+					className="workspace-navigation hairline-b grid shrink-0 grid-cols-3 bg-ground p-1"
 				>
 					{destinations.map(destination => {
 						let active = destination === "chat"
@@ -543,6 +375,182 @@ export function Workspace(
 					})}
 				</nav>
 			)}
+
+			<div
+				aria-hidden={paperObscured || undefined}
+				ref={frame}
+				className={`workspace-frame relative flex min-h-0 flex-1 ${
+					mode === "split"
+						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-page shadow-raised ring-hairline"
+						: "m-2 overflow-hidden rounded-[12px] bg-page shadow-resting ring-hairline"
+				}`}
+				data-paper-obscured={paperObscured || undefined}
+				inert={paperObscured}
+			>
+				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
+				{chat && (
+					<aside
+						aria-hidden={chatInactive || undefined}
+						aria-labelledby={ids.heading.chat}
+						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
+							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
+						}`}
+						hidden={chatPresence.phase === "closed"}
+						id={ids.pane.chat}
+						inert={chatInactive}
+						onKeyDown={event => {
+							if (event.key === "Escape" && mode !== "split") {
+								event.preventDefault();
+								event.stopPropagation();
+								dismissChat();
+							}
+						}}
+						style={mode === "split"
+							? { width: chatWidth }
+							: { width: "100%" }}
+					>
+						{mode === "split"
+							? (
+								<div
+									className="chat-header flex h-[46px] shrink-0 items-center gap-2 px-3.5 hairline-b"
+									data-chat-header
+								>
+									{presentation.separatorVisible && (
+										<ResizeHandle
+											label="Resize chat"
+											max={maximum}
+											min={CHAT_PANE.min}
+											onResize={resizeChat}
+											side="right"
+											width={chatWidth}
+										/>
+									)}
+									<span
+										aria-hidden="true"
+										className="relative grid size-[14px] shrink-0"
+										data-chat-identity
+									>
+										<img alt="" className="size-[14px]" src={chatIcon} />
+										{(chatActivity.busy || chatActivity.unread > 0) && (
+											<span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-brand" />
+										)}
+									</span>
+									<h2
+										className="text-sm font-medium text-text-tertiary"
+										id={ids.heading.chat}
+										tabIndex={-1}
+									>
+										Chat
+									</h2>
+									<ChatToggle
+										activity={chatActivity}
+										className="chat-header-control -mr-[5px] ml-auto"
+										controls={ids.pane.chat}
+										onToggle={dismissChat}
+										open
+									/>
+								</div>
+							)
+							: (
+								<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
+									Chat
+								</h2>
+							)}
+						<div className="min-h-0 flex-1">
+							{chat}
+						</div>
+					</aside>
+				)}
+
+				<main
+					aria-hidden={!presentation.documentVisible || undefined}
+					className={`workspace-document-panel order-1 relative min-w-0 w-full flex-1 ${
+						mode === "split" ? "hairline-l hairline-b" : ""
+					}`}
+					hidden={!presentation.documentVisible}
+					inert={!presentation.documentVisible}
+				>
+					<div className="relative flex h-full flex-col overflow-hidden">
+						{mode === "split" && (
+							<div
+								className="flex h-[46px] shrink-0 items-center overflow-x-auto overflow-y-hidden px-2.5 hairline-b"
+								data-document-toolbar
+								onFocusCapture={event => {
+									if (!(event.target instanceof HTMLElement)) return;
+									let control = event.target.getBoundingClientRect();
+									let toolbar = event.currentTarget.getBoundingClientRect();
+									if (control.left < toolbar.left) {
+										event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
+									} else if (control.right > toolbar.right) {
+										event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
+									}
+								}}
+							>
+								{chat && !presentation.chatVisible && (
+									<ChatToggle
+										activity={chatActivity}
+										buttonRef={edgeTab}
+										className="mr-1 shrink-0"
+										controls={ids.pane.chat}
+										onToggle={showDesktopChat}
+										open={false}
+										swapOnHover
+									/>
+								)}
+								{controls}
+								{childPresentation && (
+									<div className="ml-auto flex shrink-0 items-center">
+										<button
+											aria-label={`Close ${childPresentation.label}`}
+											className="btn btn-icon btn-ghost -mr-1 shrink-0"
+											data-child-document-close
+											data-tooltip="Close document"
+											onClick={childPresentation.onClose}
+											type="button"
+										>
+											<CloseIcon aria-hidden="true" size={14} />
+										</button>
+									</div>
+								)}
+							</div>
+						)}
+						<div
+							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
+							data-workspace-document-swap
+						>
+							<ContentSwapLayer
+								active={presentation.documentVisible && presentation.documentView === "plan"}
+								className="workspace-document-layer min-h-0"
+								immediately={immediately}
+								motion={contentSwapMotion}
+							>
+								<section
+									aria-labelledby={ids.heading.plan}
+									className="h-full min-h-0"
+									data-document-view="plan"
+								>
+									<h2 className="sr-only" id={ids.heading.plan} tabIndex={-1}>Document</h2>
+									{plan}
+								</section>
+							</ContentSwapLayer>
+							<ContentSwapLayer
+								active={presentation.documentVisible && presentation.documentView === "decisions"}
+								className="workspace-document-layer min-h-0"
+								immediately={immediately}
+								motion={contentSwapMotion}
+							>
+								<section
+									aria-labelledby={ids.heading.decisions}
+									className="h-full min-h-0"
+									data-document-view="decisions"
+								>
+									{decisions}
+								</section>
+							</ContentSwapLayer>
+						</div>
+					</div>
+				</main>
+			</div>
 		</div>
 	);
 }

@@ -22,6 +22,10 @@
 	color: var(--color-icon);
 }
 
+@utility icon-danger {
+	--color-icon: var(--color-danger-icon);
+}
+
 :where(.btn-primary, .btn-destructive) [data-nucleo-icon] {
 	color: inherit;
 }

@@ -333,13 +333,13 @@ html[data-jig], [data-jig] body {
 .composer-preview [data-chat-mention-picker] {
 	left: calc(-1 * var(--edge-width));
 	margin-bottom: calc(0.625rem + var(--edge-width));
+	box-shadow: var(--shadow-resting-strong);
 }
 .composer-preview [data-chat-mention-picker] [role="option"] {
 	padding-left: 0.25rem;
 }
 .composer-preview [data-chat-reference-picker] {
 	right: calc(-1 * var(--edge-width));
-	box-shadow: var(--shadow-raised);
 }
 .composer-picker-status,
 .composer-reference-menu[data-truncated] [data-chat-reference-picker] [role="status"] {
@@ -410,7 +410,7 @@ html[data-jig], [data-jig] body {
 	pointer-events: none;
 	color: var(--color-text-quaternary);
 }
-.draft-reference {
+.draft-reference, .draft-mention {
 	font-weight: 600;
 	color: var(--color-brand);
 	text-decoration: underline;
@@ -473,6 +473,18 @@ html[data-jig], [data-jig] body {
 .composer-surface[data-hover] .composer-mode {
 	background: var(--color-hover);
 }
+.composer-left {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+.composer-run-control {
+	display: inline-flex;
+	width: 1.75rem;
+	height: 1.75rem;
+	align-items: center;
+	justify-content: center;
+}
 .composer-actions {
 	display: flex;
 	align-items: center;
@@ -502,17 +514,25 @@ html[data-jig], [data-jig] body {
 	flex-shrink: 0;
 }
 .composer-unavailable {
-	padding: 1.25rem var(--composer-inset);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 0.75rem var(--composer-inset);
 	min-height: calc(var(--composer-min-height) + 2.5rem);
 	font-size: var(--text-sm);
 	line-height: 1.6;
+	text-align: center;
+}
+.composer-unavailable > svg {
+	margin-bottom: 0.375rem;
 }
 .composer-unavailable strong {
 	font-weight: 500;
 }
 .composer-unavailable p {
 	color: var(--color-text-tertiary);
-	margin-top: 0.25rem;
+	margin-top: 0.125rem;
 }
 .composer-queue-chat {
 	margin-bottom: 0.75rem;

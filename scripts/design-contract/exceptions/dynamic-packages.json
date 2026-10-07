@@ -233,9 +233,16 @@
 				"props",
 				"unresolved JSX props > WrenchIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > LockIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "7e670b6feeecb09bacd4bf391be796cf033981d1210f9c664ea85d1272a7aa69"
+		"sourceHash": "d9b7dffc6cb82982799d7f445f6d54471da23a659b8690be2446a0c79ffac8c1"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

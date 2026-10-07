@@ -1,3 +1,4 @@
+import { chatInput } from "./chat-input";
 /**
  * Slice 5: a scripted Planner turn through the real host tools, chat
  * projection, and sockets, against the isolated `AGENT=on` harness project.
@@ -34,7 +35,7 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 
 	let opened = await join("ana");
 	let chat = chatPane(opened);
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	await draft.fill("@chopin what does the plan say, and what is the latest pull request?");
 	await chat.getByRole("button", { name: "Send message" }).click();
 
@@ -91,15 +92,14 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 	await expect(reloadedChat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
 });
 
-test("the composer says whether a message reaches the Planner or only the room before it is sent", async ({ join }) => {
+test("the composer marks its destination in the mode switch before sending", async ({ join }) => {
 	let opened = await join("ana");
 	let chat = chatPane(opened);
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
-	let cue = chat.getByRole("status");
-
-	await expect(cue).toHaveCount(0);
+	let draft = chatInput(chat);
+	let toggle = chat.getByRole("button", { name: "Talk to Chopin", exact: true });
+	await expect(toggle).toHaveAttribute("aria-pressed", "false");
 	await draft.fill("should we ask about auth first?");
-	await expect(cue).toHaveText("Room only. Add @chopin to ask the Planner");
+	await expect(toggle).toHaveAttribute("aria-pressed", "false");
 	await draft.fill("@chopin should we ask about auth first?");
-	await expect(cue).toHaveText("Sends to the Planner, which will reply");
+	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });

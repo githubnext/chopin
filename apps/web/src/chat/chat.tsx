@@ -6,14 +6,19 @@
  * to the agent meanwhile is queued in order, with its author's name on it, so
  * nobody is silenced because a colleague prompted first.
  *
- * The agent only acts when addressed, so one Send action can follow the
- * message's own signal rather than asking its author to select a destination.
+ * The composer mode adds an explicit Planner address at submission; typed
+ * mentions and stable document references retain their existing wire semantics.
  */
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { SendAction } from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
+import { ArchiveIcon, InfoIcon, LoaderIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { DraftInput } from "./draft-input";
+import type { DraftInputHandle } from "./draft-input";
+import { ModeSwitch } from "./mode-switch";
+import "./composer.css";
 
 import { MentionPicker } from "./mention-picker";
 import {
@@ -33,10 +38,9 @@ import {
 } from "./reference-picker";
 import {
 	acknowledgeDraft,
-	beforeInputSelection,
+	addressedOutsideReferences,
 	boundedChatError,
 	chatSendPayload,
-	destinationCue,
 	insertReference,
 	MAX_REFERENCES,
 	prepareDraftSubmission,
@@ -52,7 +56,6 @@ import type { CardLink } from "../conversation-plan/links";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { ChatDestination } from "../conversation-plan/source";
 import type { ResearchOfferControls } from "./research-offer";
-import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
 import plannerResume from "../assets/icons/planner-resume.svg";
 
@@ -66,6 +69,8 @@ export type ChatProps = {
 	wire: Socket | undefined;
 	handle: string;
 	connected: boolean;
+	readonly?: boolean;
+	archived?: boolean;
 	referencesEnabled: boolean;
 	repository: Pick<Repository, "id" | "name" | "owner">;
 	room: string;
@@ -106,6 +111,8 @@ export function Chat(
 	{
 		active = true,
 		agent = true,
+		readonly = false,
+		archived = false,
 		connected,
 		handle,
 		onActivity,
@@ -142,9 +149,10 @@ export function Chat(
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
-	let textarea = useRef<HTMLTextAreaElement>(null);
-	let pendingCaret = useRef<number | undefined>(undefined);
-	let pendingEdit = useRef<{ start: number; end: number } | undefined>(undefined);
+	let textarea = useRef<DraftInputHandle>(null);
+	let [mode, setMode] = useState(false);
+	let [historyKey, setHistoryKey] = useState(0);
+	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
 	let draftRef = useRef(draft);
 	draftRef.current = draft;
@@ -159,7 +167,9 @@ export function Chat(
 	// A socket opens before its fresh transcript arrives, and reconnects reuse
 	// the same Wire. Only that transcript makes this composer current.
 	if (!connected) synchronized.current = undefined;
-	let composerReady = connected && synchronized.current === wire;
+	let composerReady = connected && synchronized.current === wire && !readonly && !archived;
+	let connectionLost = !connected && ["reconnecting", "closed"].includes(wire?.status ?? "");
+	let effectiveMode = agent && (mode || addressedOutsideReferences(draft.text, draft.references));
 	let detected = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
 		: undefined;
@@ -290,7 +300,10 @@ export function Chat(
 		let caret = pendingCaret.current;
 		pendingCaret.current = undefined;
 		textarea.current?.focus();
-		textarea.current?.setSelectionRange(caret, caret);
+		textarea.current?.setSelectionRange(
+			typeof caret === "number" ? caret : caret.start,
+			typeof caret === "number" ? caret : caret.end,
+		);
 	});
 
 	let restoreComposerFocus = () => {
@@ -303,20 +316,24 @@ export function Chat(
 		setDraft(cleared);
 		setSelection({ start: 0, end: 0 });
 		setDismissedPicker(undefined);
+		setHistoryKey(current => current + 1);
 	};
-
-	let cue = sendError
-		? undefined
-		: destinationCue(draft.text, draft.references, agent, referencesEnabled);
 
 	let submit = () => {
 		if (submission.current || !composerReady || !wire) return;
 		let current = draftRef.current;
 		if (!current.text.trim()) return;
 		let submitted = prepareDraftSubmission(current);
+		let prefix = effectiveMode && !addressedOutsideReferences(submitted.text, submitted.references)
+			? `${MENTION} `
+			: "";
 		let payload = chatSendPayload(
-			submitted.text,
-			submitted.references,
+			prefix + submitted.text,
+			submitted.references.map(reference => ({
+				...reference,
+				start: reference.start + prefix.length,
+				end: reference.end + prefix.length,
+			})),
 			agent,
 			submitted.requestId,
 			referencesEnabled,
@@ -348,6 +365,43 @@ export function Chat(
 		});
 	};
 
+	let toggleMode = () => {
+		if (!composerReady || submitting || !agent) return;
+		let current = draftRef.current;
+		let at = selection.start;
+		let end = selection.end;
+		if (effectiveMode) {
+			let removals = [...current.text.matchAll(/(^|[^\w@])@chopin\b/gi)]
+				.map(match => ({
+					start: match.index + match[1]!.length,
+					end: match.index + match[0].length,
+				}))
+				.filter(edit =>
+					!current.references.some(reference =>
+						edit.start < reference.end && edit.end > reference.start
+					)
+				);
+			let next = current.text;
+			let references = current.references;
+			for (let edit of removals.toReversed()) {
+				let revised = next.slice(0, edit.start) + next.slice(edit.end);
+				references = reconcileReferenceDrafts(next, revised, references, edit);
+				if (edit.start < at) at -= Math.min(edit.end - edit.start, at - edit.start);
+				if (edit.start < end) end -= Math.min(edit.end - edit.start, end - edit.start);
+				next = revised;
+			}
+			setDraft({ text: next, references });
+			setSelection({ start: at, end });
+			setMode(false);
+		} else {
+			setMode(true);
+			setDraft({ text: current.text, references: current.references });
+		}
+		setSendError(undefined);
+		setDismissedPicker(triggerKey ?? mentionKey);
+		pendingCaret.current = { start: at, end };
+	};
+
 	let chooseReference = (target: ReferenceTarget) => {
 		if (!trigger) return;
 		let next = insertReference(draft.text, draft.references, trigger, target);
@@ -355,13 +409,13 @@ export function Chat(
 		setSelection({ start: next.caret, end: next.caret });
 		setSendError(undefined);
 		setDismissedPicker(undefined);
-		pendingEdit.current = undefined;
 		pendingCaret.current = next.caret;
 	};
 
 	let chooseMention = (candidate: MentionCandidate) => {
 		if (!mention) return;
 		let next = insertMention(draft.text, mention, candidate);
+		if (candidate.kind === "planner") setMode(true);
 		setDraft(current =>
 			reviseComposerDraft(
 				current,
@@ -377,7 +431,6 @@ export function Chat(
 		setSelection({ start: next.caret, end: next.caret });
 		setSendError(undefined);
 		setDismissedPicker(undefined);
-		pendingEdit.current = undefined;
 		pendingCaret.current = next.caret;
 	};
 
@@ -388,7 +441,7 @@ export function Chat(
 		<div className="flex h-full min-h-0 flex-col">
 			<Transcript
 				active={active}
-				canEdit={connected}
+				canEdit={composerReady}
 				conversationPlanJobs={conversationPlanJobs}
 				onCardLink={onCardLink}
 				onAddExcerpt={onAddExcerpt}
@@ -421,218 +474,303 @@ export function Chat(
 			)}
 
 			<div className="chat-composer relative shrink-0 px-2.5 pb-2.5">
-				{pickerOpen && trigger && (
-					<ReferencePicker
-						active={picker.active}
-						id={pickerId}
-						onActive={picker.setActive}
-						onSelect={chooseReference}
-						state={atReferenceLimit
-							? { status: "limit", options: [] }
-							: picker}
-					/>
-				)}
-				{mentionOpen && (
-					<MentionPicker
-						active={mentionActive}
-						id={mentionPickerId}
-						onActive={index => setMentionCursor({ key: mentionKey, index })}
-						onSelect={chooseMention}
-						options={mentionOptions}
-					/>
-				)}
 				{referencesEnabled && (
 					<p className="sr-only" id={instructionsId}>
 						Type # to reference a document.
 					</p>
 				)}
-				<div aria-busy={submitting} className="field flex flex-col">
-					<textarea
-						aria-activedescendant={mentionOpen
-							? referenceOptionId(mentionPickerId, mentionActive)
-							: pickerOpen && activeOption
-							? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
-							: undefined}
-						aria-autocomplete="list"
-						aria-controls={mentionOpen ? mentionPickerId : pickerOpen ? pickerId : undefined}
-						aria-describedby={[
-							referencesEnabled ? instructionsId : undefined,
-							cue ? cueId : undefined,
-						]
-							.filter(Boolean).join(" ") || undefined}
-						aria-disabled={!composerReady || submitting}
-						aria-expanded={pickerOpen || mentionOpen}
-						aria-haspopup="listbox"
-						className="h-14 min-h-14 flex-1 w-full resize-none bg-transparent px-4 py-3 text-sm"
-						readOnly={!composerReady || submitting}
-						role="combobox"
-						onBeforeInput={event => {
-							let input = event.nativeEvent as InputEvent;
-							pendingEdit.current = beforeInputSelection(
-								event.currentTarget.selectionStart,
-								event.currentTarget.selectionEnd,
-								input.inputType ?? "",
-								draft.text.length,
-							);
-						}}
-						onChange={event => {
-							let next = event.currentTarget.value;
-							let edit = pendingEdit.current;
-							pendingEdit.current = undefined;
-							setDraft(current =>
-								reviseComposerDraft(
-									current,
-									next,
-									reconcileReferenceDrafts(
-										current.text,
-										next,
-										current.references,
-										edit,
-									),
-								)
-							);
-							setSendError(undefined);
-							setDismissedPicker(undefined);
-							setSelection({
-								start: event.currentTarget.selectionStart,
-								end: event.currentTarget.selectionEnd,
-							});
-						}}
-						onKeyDown={event => {
-							let composing = event.nativeEvent.isComposing || event.keyCode === 229;
-							let mentionAction = mentionOpen
-								? mentionKeyAction({
-									key: event.key,
-									keyCode: event.keyCode,
-									isComposing: event.nativeEvent.isComposing,
-									shiftKey: event.shiftKey,
-									altKey: event.altKey,
-									ctrlKey: event.ctrlKey,
-									metaKey: event.metaKey,
-								}, true)
-								: undefined;
-							if (mentionAction === "next") {
-								moveMention(index => (index + 1) % mentionOptions.length);
-								event.preventDefault();
-								return;
-							}
-							if (mentionAction === "previous") {
-								moveMention(index => (index - 1 + mentionOptions.length) % mentionOptions.length);
-								event.preventDefault();
-								return;
-							}
-							if (mentionAction === "dismiss") {
-								setDismissedPicker(mentionKey);
-								event.preventDefault();
-								event.stopPropagation();
-								return;
-							}
-							if (mentionAction === "select" && activeMention) {
-								chooseMention(activeMention);
-								event.preventDefault();
-								return;
-							}
-							let action = pickerOpen
-								? referencePickerKeyAction({
-									key: event.key,
-									keyCode: event.keyCode,
-									isComposing: event.nativeEvent.isComposing,
-									shiftKey: event.shiftKey,
-								}, activeOption !== undefined)
-								: undefined;
-							if (action === "next") {
-								picker.setActive(value =>
-									picker.options.length === 0 ? 0 : (value + 1) % picker.options.length
-								);
-								event.preventDefault();
-								return;
-							}
-							if (action === "previous") {
-								picker.setActive(value =>
-									picker.options.length === 0
-										? 0
-										: (value - 1 + picker.options.length) % picker.options.length
-								);
-								event.preventDefault();
-								return;
-							}
-							if (action === "dismiss") {
-								setDismissedPicker(triggerKey);
-								event.preventDefault();
-								event.stopPropagation();
-								return;
-							}
-							if (action === "select" && activeOption) {
-								chooseReference(activeOption);
-								event.preventDefault();
-								return;
-							}
-							if (composing) return;
-							// Enter sends; a newline needs a modifier, as everywhere else.
-							if (event.key !== "Enter" || event.shiftKey) return;
-							event.preventDefault();
-							submit();
-						}}
-						onKeyUp={event =>
-							setSelection({
-								start: event.currentTarget.selectionStart,
-								end: event.currentTarget.selectionEnd,
-							})}
-						onSelect={event =>
-							setSelection({
-								start: event.currentTarget.selectionStart,
-								end: event.currentTarget.selectionEnd,
-							})}
-						placeholder={`Use ${MENTION} to ask Chopin`}
-						ref={textarea}
-						rows={3}
-						value={draft.text}
-					/>
-
-					<div className="flex items-center justify-end gap-1 px-2 pb-2">
-						{sendError && (
-							<TerminalAlert className="mr-auto min-w-0 text-sm text-destructive-ink [overflow-wrap:anywhere]">
-								{sendError}
-							</TerminalAlert>
-						)}
-						{cue && (
-							<p
-								className="mr-auto min-w-0 text-sm text-text-tertiary [overflow-wrap:anywhere]"
-								data-destination={cue.to}
-								id={cueId}
-								role="status"
-							>
-								{cue.text}
-							</p>
-						)}
-						{agent && (busy || counts.active > 0) && (
-							<button
-								aria-label="Stop Chopin"
-								className="btn btn-icon btn-secondary"
-								onClick={() => wire?.send("chat:abort")}
-								title="Stop Chopin"
-								type="button"
-							>
-								<img alt="" className="size-[14px]" src={plannerStop} />
-							</button>
-						)}
-						{agent && !busy && !counts.active && counts.paused > 0 && (
-							<button
-								aria-label="Resume Planner"
-								className="btn btn-icon btn-secondary"
-								onClick={() => wire?.send("chat:resume")}
-								title="Resume Planner"
-								type="button"
-							>
-								<img alt="" className="size-[14px]" src={plannerResume} />
-							</button>
-						)}
-						<SendAction
-							disabled={!composerReady || submitting || !draft.text.trim()}
-							onClick={submit}
-							label="Send message"
-						/>
+				{!readonly && !archived && (sendError || !composerReady || !agent) && (
+					<div
+						className={sendError ? "composer-notice motion-feedback" : "composer-notice"}
+						data-motion-feedback={sendError ? "alert" : undefined}
+						role={sendError ? "alert" : "status"}
+						data-error={!!sendError || undefined}
+						id={cueId}
+					>
+						{sendError
+							? <WarningIcon className="icon-danger" size={14} />
+							: connectionLost
+							? <WarningIcon size={14} />
+							: !composerReady
+							? <LoaderIcon className="chat-tool-loader" size={14} />
+							: <InfoIcon size={14} />}
+						<span>
+							{sendError ?? (!composerReady
+								? connected ? "Synchronizing…" : connectionLost ? "Connection lost" : "Connecting…"
+								: "Chopin unavailable")}
+						</span>
+						{sendError
+							? (
+								<button
+									className="btn btn-sm btn-outline-danger"
+									disabled={!composerReady || submitting}
+									onClick={submit}
+								>
+									Retry
+								</button>
+							)
+							: !composerReady && wire && (
+								<button
+									className="btn btn-sm btn-ghost"
+									onClick={() => wire.reconnect()}
+								>
+									{connectionLost ? "Reconnect" : "Retry"}
+								</button>
+							)}
 					</div>
+				)}
+				<div
+					aria-busy={submitting}
+					className="composer-surface field"
+					data-mode={effectiveMode ? "chopin" : "chat"}
+					data-error={!!sendError || undefined}
+				>
+					{pickerOpen && trigger && (
+						<ReferencePicker
+							active={picker.active}
+							id={pickerId}
+							onActive={picker.setActive}
+							onSelect={chooseReference}
+							state={atReferenceLimit
+								? { status: "limit", options: [] }
+								: picker}
+						/>
+					)}
+					{mentionOpen && (
+						<MentionPicker
+							active={mentionActive}
+							id={mentionPickerId}
+							onActive={index => setMentionCursor({ key: mentionKey, index })}
+							onSelect={chooseMention}
+							options={mentionOptions}
+						/>
+					)}
+					{readonly || archived
+						? (
+							<div className="composer-unavailable" role="status">
+								{archived ? <ArchiveIcon size={18} /> : <LockIcon size={18} />}
+								<strong>{archived ? "Document archived" : "Read-only access"}</strong>
+								<p>
+									{archived
+										? "Restore this document to send messages."
+										: "You need write access to send messages."}
+								</p>
+							</div>
+						)
+						: (
+							<>
+								<DraftInput
+									aria-label="Message"
+									aria-activedescendant={mentionOpen
+										? referenceOptionId(mentionPickerId, mentionActive)
+										: pickerOpen && activeOption
+										? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
+										: undefined}
+									aria-autocomplete="list"
+									aria-controls={mentionOpen ? mentionPickerId : pickerOpen ? pickerId : undefined}
+									aria-describedby={[
+										referencesEnabled ? instructionsId : undefined,
+										sendError || !composerReady || !agent ? cueId : undefined,
+									].filter(Boolean).join(" ") || undefined}
+									aria-disabled={!composerReady || submitting}
+									aria-invalid={!!sendError || undefined}
+									aria-expanded={pickerOpen || mentionOpen}
+									readOnly={!composerReady || submitting}
+									role="combobox"
+									resetKey={historyKey}
+									historyGroupKey={mode}
+									onSubmit={submit}
+									references={draft.references}
+									mentions={[
+										handle,
+										...mentionCandidates({ authors, people, planner: agent, self: handle }).map(
+											candidate => candidate.login,
+										),
+									]}
+									onChange={event => {
+										let next = event.currentTarget.value;
+										setDraft(current =>
+											reviseComposerDraft(
+												current,
+												next,
+												event.currentTarget.references
+													?? reconcileReferenceDrafts(current.text, next, current.references),
+											)
+										);
+										setSendError(undefined);
+										setDismissedPicker(undefined);
+										setSelection({
+											start: event.currentTarget.selectionStart,
+											end: event.currentTarget.selectionEnd,
+										});
+									}}
+									onKeyDown={event => {
+										let composing = event.nativeEvent.isComposing || event.keyCode === 229;
+										if (!composing && event.key === "Tab" && !event.shiftKey) {
+											setDismissedPicker(mentionKey ?? triggerKey);
+											return;
+										}
+										if (
+											!composing && event.key === "Tab" && event.shiftKey && !event.metaKey
+											&& !event.ctrlKey && !event.altKey && agent && composerReady && !submitting
+										) {
+											event.preventDefault();
+											if (!event.repeat) toggleMode();
+											return;
+										}
+										let mentionAction = mentionOpen
+											? mentionKeyAction({
+												key: event.key,
+												keyCode: event.keyCode,
+												isComposing: event.nativeEvent.isComposing,
+												shiftKey: event.shiftKey,
+												altKey: event.altKey,
+												ctrlKey: event.ctrlKey,
+												metaKey: event.metaKey,
+											}, true)
+											: undefined;
+										if (mentionAction === "next") {
+											moveMention(index => (index + 1) % mentionOptions.length);
+											event.preventDefault();
+											return;
+										}
+										if (mentionAction === "previous") {
+											moveMention(index =>
+												(index - 1 + mentionOptions.length) % mentionOptions.length
+											);
+											event.preventDefault();
+											return;
+										}
+										if (mentionAction === "dismiss") {
+											setDismissedPicker(mentionKey);
+											event.preventDefault();
+											event.stopPropagation();
+											return;
+										}
+										if (mentionAction === "select" && activeMention) {
+											chooseMention(activeMention);
+											event.preventDefault();
+											return;
+										}
+										let action = pickerOpen
+											? referencePickerKeyAction({
+												key: event.key,
+												keyCode: event.keyCode,
+												isComposing: event.nativeEvent.isComposing,
+												shiftKey: event.shiftKey,
+											}, activeOption !== undefined)
+											: undefined;
+										if (action === "next") {
+											picker.setActive(value =>
+												picker.options.length === 0 ? 0 : (value + 1) % picker.options.length
+											);
+											event.preventDefault();
+											return;
+										}
+										if (action === "previous") {
+											picker.setActive(value =>
+												picker.options.length === 0
+													? 0
+													: (value - 1 + picker.options.length) % picker.options.length
+											);
+											event.preventDefault();
+											return;
+										}
+										if (action === "dismiss") {
+											setDismissedPicker(triggerKey);
+											event.preventDefault();
+											event.stopPropagation();
+											return;
+										}
+										if (action === "select" && activeOption) {
+											chooseReference(activeOption);
+											event.preventDefault();
+											return;
+										}
+										if (composing) return;
+										// Enter sends; a newline needs a modifier, as everywhere else.
+										if (event.key !== "Enter" || event.shiftKey) return;
+										event.preventDefault();
+										submit();
+									}}
+									onSelect={event =>
+										setSelection({
+											start: event.currentTarget.selectionStart,
+											end: event.currentTarget.selectionEnd,
+										})}
+									placeholder={effectiveMode ? "Ask Chopin…" : "Message your collaborators…"}
+									ref={textarea}
+									value={draft.text}
+								/>
+
+								<div className="composer-footer">
+									<div className="composer-left">
+										<ModeSwitch
+											effectiveMode={effectiveMode}
+											disabled={!composerReady || submitting || !agent}
+											onToggle={toggleMode}
+										/>
+
+										{referencesEnabled && (
+											<button
+												type="button"
+												className="btn btn-icon btn-ghost"
+												aria-label="Mention docs"
+												title="Mention docs"
+												data-tooltip="Mention docs"
+												data-tooltip-verbatim=""
+												disabled={!composerReady || submitting}
+												onClick={() => {
+													let current = draftRef.current;
+													let next = current.text
+														+ (current.text && !current.text.endsWith(" ") ? " #" : "#");
+													setDraft(reviseComposerDraft(current, next, current.references));
+													setSelection({ start: next.length, end: next.length });
+													setDismissedPicker(undefined);
+													pendingCaret.current = next.length;
+												}}
+											>
+												<PlusIcon size={14} />
+											</button>
+										)}
+									</div>
+									<div className="composer-actions">
+										<span className="composer-run-control">
+											{agent && (busy || counts.active > 0) && (
+												<button
+													aria-label="Stop Chopin"
+													disabled={!composerReady}
+													className="btn btn-icon btn-secondary"
+													onClick={() => wire?.send("chat:abort")}
+													title="Stop Chopin"
+													type="button"
+												>
+													<img alt="" className="size-[14px]" src={plannerStop} />
+												</button>
+											)}
+											{agent && !busy && !counts.active && counts.paused > 0 && (
+												<button
+													aria-label="Resume Chopin"
+													disabled={!composerReady}
+													className="btn btn-icon btn-secondary"
+													onClick={() => wire?.send("chat:resume")}
+													title="Resume Chopin"
+													type="button"
+												>
+													<img alt="" className="size-[14px]" src={plannerResume} />
+												</button>
+											)}
+										</span>
+										<SendAction
+											busy={submitting}
+											disabled={!composerReady || submitting || !draft.text.trim()}
+											onClick={submit}
+											label="Send message"
+										/>
+									</div>
+								</div>
+							</>
+						)}
 				</div>
 			</div>
 		</div>

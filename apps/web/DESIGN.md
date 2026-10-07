@@ -147,8 +147,9 @@ Inter Variable is used for interface text and document prose. The mono stack is 
 ## Interface copy
 
 Keep labels and tooltips concise, natural, and in sentence case. Use the fewest
-words that make the action clear: “Add file” or “Shift+Tab to switch mode.” Let
-the surrounding interface supply context. Add helper text only when it explains
+words that make the action clear: “Mention docs” or “Shift+Tab to switch mode.” Let
+the surrounding interface supply context. Capitalize the first word and proper
+names; preserve handles and keyboard shortcuts as written. Add helper text only when it explains
 something people need to act, recover from an error, or understand a limitation.
 
 ## Layout
@@ -169,6 +170,7 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 
 - **Buttons:** Primary, secondary, outline, ghost, and destructive tiers (outline is a white button with the control edge, for a quiet single action inside a card) share one shape and compact text treatment. Medium buttons are 2rem high; small buttons are 1.5rem. Hover and pressed states change the relevant color role. Keyboard focus shows the brand focus ring; a pointer press hides it on buttons and menus, while text fields keep theirs.
 - **Recovery buttons:** `btn-outline-danger` gives actions such as Retry a hairline danger edge and danger ink on an existing danger surface. Its transparent base preserves the surrounding surface; hover and pressed states use the shared danger surface roles.
+- **Danger icons:** `icon-danger` gives a Nucleo icon the danger icon role. Use it for error indicators so the shared neutral icon default does not take precedence over the status color.
 - **Fields and selections:** White fields use the medium radius, control edge, and subtle resting shadow. Invalid fields use the destructive role. Disabled controls use neutral fill and muted text.
 - **Navigation:** The current location uses a white surface and primary ink. Other items stay quieter and reveal their affordance on hover or focus.
 - **Badges and status graphics:** Neutral, success, warning, and danger use paired semantic surface, icon, graphic, and text roles. A badge combines an icon and label in a pill.

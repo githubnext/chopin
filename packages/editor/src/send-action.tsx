@@ -1,4 +1,4 @@
-import { ArrowUpIcon } from "@chopin/icons";
+import { ArrowUpIcon, LoaderIcon } from "@chopin/icons";
 
 export function SendAction(
 	{ busy, label, disabled, onClick }: {
@@ -18,7 +18,9 @@ export function SendAction(
 			title={label}
 			type="button"
 		>
-			<ArrowUpIcon aria-hidden="true" size={14} />
+			{busy
+				? <LoaderIcon aria-hidden="true" data-button-loader="" size={14} />
+				: <ArrowUpIcon aria-hidden="true" size={14} />}
 		</button>
 	);
 }

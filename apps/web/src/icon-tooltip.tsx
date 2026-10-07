@@ -42,7 +42,7 @@ function iconButton(target: EventTarget | null): HTMLElement | null {
 export function tooltipText(label: string, verbatim: boolean): string {
 	return verbatim
 		? label.trim()
-		: label.trim().replace(/(^|\s)([a-z])/g, (_, space, letter) => space + letter.toUpperCase());
+		: label.trim().replace(/^[a-z]/, (letter) => letter.toUpperCase());
 }
 
 export function IconTooltip() {

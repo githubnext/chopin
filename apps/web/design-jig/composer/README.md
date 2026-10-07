@@ -43,7 +43,15 @@ the destination clear without relying on colour. The jig uses a steady glow.
 3. **Port Ace's ProseMirror composer.** Closest interaction fidelity, at the cost
    of an additional editor stack and substantial Ace-specific dependencies.
 
-## Small production slices after review
+## Approved production integration
+
+The live app now uses a native editable surface with styled mention spans. This
+keeps the caret aligned with semibold references without adding another editor
+stack. Plain-text paste, grouped undo, IME, and identity-backed references are
+covered by browser tests. Mode and Mention docs stay on the left; Stop/Resume
+and Send stay on the right.
+
+## Original integration slices
 
 1. Extract the view without changing send behaviour.
 2. Add explicit destination mode and Shift+Tab. Keep mode after sending, as Ace
@@ -82,8 +90,8 @@ Motion dial can compare press scale from 0.96 to 1; Copy values includes it.
 
 ## Document references
 
-Both pickers align with the composer's left edge and use a 10px gap. The document picker matches the composer width, uses the raised
-shadow rather than overlay, and has 32px rows. Selected references render in
+Both pickers align with the composer's left edge and use a 10px gap. The document picker matches the composer width, uses the shared resting-strong
+shadow, matching the people picker and all search-status panels, and has 32px rows. Selected references render in
 semibold petrol with an underline. The jig uses an editable text surface with
 styled reference spans so the native caret follows their actual font metrics.
 The existing identity-backed draft helpers remain in use; edited tokens reconcile

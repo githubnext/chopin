@@ -156,6 +156,10 @@ coding agents.
 
 ## Collaborate with the Planner
 
+Press Shift+Tab in the composer, or click its mode button, to switch between
+Chat and Chopin. Chopin mode adds the mention when sending and stays selected
+afterwards. The draft and inline document mentions stay intact when switching.
+
 The web composer treats `@chopin` as an instruction for the Planner:
 
 ```text
@@ -179,6 +183,10 @@ identities even when their titles change. The Planner reads referenced documents
 at their latest revision, and references never change which document its editing
 tools target. Research starts from `/research` in the document rather than from
 a Chat reference.
+
+Chat starts at 500 pixels wide and can shrink to 250. Drag its divider to give
+it more room while keeping at least 450 pixels for the document. Narrow
+workspaces show one view at a time.
 
 ## Connect a coding agent
 

@@ -343,7 +343,7 @@ export function SelectionBubble(
 							type="button"
 							aria-label={`Block type: ${describe(block).label}`}
 							aria-expanded={false}
-							data-tooltip="Block Type"
+							data-tooltip="Block type"
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
 							className={`${CELL} ${CELL_OFF}`}
@@ -393,7 +393,7 @@ export function SelectionBubble(
 								<button
 									type="button"
 									aria-label="Comment on this passage"
-									data-tooltip="Add Comment"
+									data-tooltip="Add comment"
 									title="Comment on this passage"
 									/*
 									 * The passage is captured now, inside the click, because

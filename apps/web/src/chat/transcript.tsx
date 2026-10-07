@@ -4,14 +4,9 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
-import {
-	AgentFace,
-	Face,
-	MotionDisclosure,
-	MotionDisclosureIcon,
-	useCardMeta,
-} from "@chopin/editor";
+import { Face, MotionDisclosure, MotionDisclosureIcon, useCardMeta } from "@chopin/editor";
 
+import { ChopinMark } from "./agent-mark";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
@@ -250,7 +245,7 @@ function MessageBody(
 						&& (
 							<button
 								aria-label="Withdraw queued message"
-								data-tooltip="Withdraw Message"
+								data-tooltip="Withdraw message"
 								className="btn btn-icon btn-ghost -my-1 shrink-0"
 								onClick={() => onWithdraw(message.id)}
 								title="Withdraw"
@@ -302,7 +297,7 @@ function MessageGroup(
 		>
 			<div className={`shrink-0 ${item.queued ? "opacity-45" : ""}`}>
 				{item.author.kind === "agent"
-					? <AgentFace size={24} />
+					? <ChopinMark circle />
 					: <Face handle={item.author.handle} size={24} />}
 			</div>
 			<div

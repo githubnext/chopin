@@ -1,3 +1,4 @@
+import { chatCaret, chatInput, expectChatValue } from "./chat-input";
 import { seedChannelDescription, seedChildChannel } from "./database";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { expect, ready, test } from "./room";
@@ -81,7 +82,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 	await opened.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
 	let chat = opened.getByRole("complementary", { name: "Chat" });
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	await expect(draft).toHaveAttribute("role", "combobox");
 	await expect(draft).toHaveAttribute("aria-autocomplete", "list");
 	await draft.fill(`@chopin Compare #${targetRoom.slice(0, 8)}`);
@@ -109,7 +110,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 	await draft.pressSequentially(" with [external docs](https://example.com).", { delay: 1 });
 	let expected =
 		`@chopin Compare #${targetTitle} and %OAuth with [external docs](https://example.com).`;
-	await expect(draft).toHaveValue(expected);
+	await expectChatValue(draft, expected);
 	let send = chat.getByRole("button", { name: "Send message" });
 	await send.hover();
 	await page.evaluate(() => {
@@ -130,10 +131,28 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 	});
 	await send.click();
 	await expect(send).toBeDisabled();
-	await expect(draft).toHaveAttribute("readonly", "");
+	await expect(draft).toHaveAttribute("contenteditable", "false");
 	await expect(draft).toHaveAttribute("aria-disabled", "true");
 	let error = chat.getByRole("alert");
 	await expect(error).toContainText("Message not sent: Unavailable");
+	let danger = await error.evaluate(element => {
+		let probe = document.createElement("span");
+		element.append(probe);
+		probe.style.color = "var(--color-danger-icon)";
+		let expectedIcon = getComputedStyle(probe).color;
+		probe.style.color = "color-mix(in srgb, var(--color-ruby-7) 45%, transparent)";
+		let expectedEdge = getComputedStyle(probe).color;
+		probe.remove();
+		let paint = getComputedStyle(element.querySelector("svg path")!);
+		return {
+			icon: paint.stroke === "none" ? paint.fill : paint.stroke,
+			edge: getComputedStyle(element.querySelector("button")!).outlineColor,
+			expectedIcon,
+			expectedEdge,
+		};
+	});
+	expect(danger.icon).toBe(danger.expectedIcon);
+	expect(danger.edge).toBe(danger.expectedEdge);
 	expect(
 		await error.evaluate(element =>
 			getComputedStyle(element).transitionDuration.split(",").some(duration =>
@@ -150,8 +169,8 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 			return record.starts > 0 && record.ends >= record.starts;
 		})
 	).toBe(true);
-	expect((await error.textContent())!.length).toBeLessThan(150);
-	await expect(draft).toHaveValue(expected);
+	expect((await error.locator("span").last().textContent())!.length).toBeLessThan(150);
+	await expectChatValue(draft, expected);
 	await expect(draft).toBeFocused();
 	await expect(send).toBeEnabled();
 	let starts = await page.evaluate(() => {
@@ -205,7 +224,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 			},
 		],
 	});
-	await expect(draft).toHaveValue("");
+	await expectChatValue(draft, "");
 	await expect(draft).toBeFocused();
 	let documentLink = chat.getByRole("link", { name: `#${targetTitle}`, exact: true });
 	await expect(documentLink).toHaveAttribute("href", targetPath);
@@ -248,7 +267,7 @@ test("a server without chat references leaves typed tokens ordinary", async ({ j
 	});
 
 	let chat = chatPane(await join("ana"));
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	// The `@` list needs no server support, so the composer is a combobox either way.
 	await expect(draft).toHaveRole("combobox");
 	await draft.fill("See #Ask @chopin");
@@ -261,7 +280,7 @@ test("a server without chat references leaves typed tokens ordinary", async ({ j
 	expect(sent[0]!.references).toBeUndefined();
 });
 
-test("an empty picker leaves arrows and Enter to the textarea", async ({ join, page, seed }) => {
+test("an empty picker leaves arrows and Enter to the editor", async ({ join, page, seed }) => {
 	await seed("# Empty picker\n");
 	let sent: Chat.Send[] = [];
 	await page.routeWebSocket("**/ws?**", route => {
@@ -277,19 +296,21 @@ test("an empty picker leaves arrows and Enter to the textarea", async ({ join, p
 	});
 
 	let chat = chatPane(await join("ana"));
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let value = `No result #missing-${crypto.randomUUID()}`;
 	await draft.fill(value);
-	await expect(chat.getByText("No matching documents.", { exact: true })).toBeVisible();
+	await expect(
+		chat.getByRole("listbox", { name: "Document references", exact: true }).getByRole("status"),
+	).toContainText("No matching documents.");
 	await draft.press("ArrowLeft");
-	expect(await draft.evaluate(element => (element as HTMLTextAreaElement).selectionStart))
+	expect(await chatCaret(draft))
 		.toBe(value.length - 1);
 	await draft.press("End");
 	await draft.press("Enter");
 	await expect.poll(() => sent).toHaveLength(1);
 	expect(sent[0]).toMatchObject({ text: value, to: "room" });
 	expect(sent[0]!.references).toBeUndefined();
-	await expect(draft).toHaveValue("");
+	await expectChatValue(draft, "");
 });
 
 test("a disconnect rejects a pending send without losing its draft", async ({ join, page, seed }) => {
@@ -308,7 +329,7 @@ test("a disconnect rejects a pending send without losing its draft", async ({ jo
 	});
 
 	let chat = chatPane(await join("ana"));
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	let value = "Keep this draft through disconnect";
 	await draft.fill(value);
 	await page.evaluate(() => {
@@ -335,7 +356,7 @@ test("a disconnect rejects a pending send without losing its draft", async ({ jo
 			(Reflect.get(window, "__disconnectAlertTransitions") as { starts: number }).starts
 		),
 	).toBe(0);
-	await expect(draft).toHaveValue(value);
+	await expectChatValue(draft, value);
 	await expect(draft).toBeFocused();
 });
 
@@ -364,14 +385,14 @@ test("legacy delivery clears immediately without waiting for an acknowledgement"
 	});
 
 	let chat = chatPane(await join("ana"));
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	await draft.fill("Legacy delivery");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect.poll(() => sent).toHaveLength(1);
 	expect(sent[0]!.requestId).toMatch(
 		/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
 	);
-	await expect(draft).toHaveValue("");
+	await expectChatValue(draft, "");
 	await expect(draft).toBeFocused();
 });
 
@@ -394,9 +415,9 @@ test("the composer stays read-only until fresh chat history arrives", async ({ j
 	});
 
 	let chat = chatPane(await join("ana"));
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(chat);
 	await expect.poll(() => releaseHistory !== undefined).toBe(true);
-	await expect(draft).toHaveAttribute("readonly", "");
+	await expect(draft).toHaveAttribute("contenteditable", "false");
 	await expect(draft).toHaveAttribute("aria-disabled", "true");
 	await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();
 	releaseHistory!();

@@ -58,6 +58,10 @@ export function Controls() {
 						<h4>Outline</h4>
 						<ButtonRow className="btn-outline" label="Retry" />
 					</div>
+					<div className="design-audit-danger-actions" data-audit-sample="danger-outline">
+						<h4>Outline on a danger surface</h4>
+						<ButtonRow className="btn-outline-danger" label="Retry" />
+					</div>
 					<div data-audit-sample="ghost">
 						<h4>Ghost</h4>
 						<ButtonRow className="btn-ghost" label="Learn more" />

@@ -1,4 +1,5 @@
 import { authenticate, content, expect, openIsolatedRoom, ready, test } from "./room";
+import { chatInput, expectChatValue } from "./chat-input";
 import { expectInsideViewport, expectNoHorizontalOverflow, RESPONSIVE_SOURCE } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
 
@@ -56,8 +57,8 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 			shadow: style.boxShadow,
 		};
 	});
-	expect(surface.left).toBe(8);
-	expect(surface.right).toBe(8);
+	expect(surface.left).toBe(12);
+	expect(surface.right).toBe(12);
 	expect(surface.radius).toBe("12px");
 	expect(surface.overflow).toBe("hidden");
 	expect(surface.shadow).not.toBe("none");
@@ -108,13 +109,13 @@ test("a representative compact phone exposes one mounted destination at a time",
 });
 
 test(
-	"the 500px boundary preserves mounted panes, drafts, and keyboard controls",
+	"the 700px frame boundary preserves mounted panes, drafts, and keyboard controls",
 	async ({ join, seed }) => {
 		await seed(RESPONSIVE_SOURCE);
 		let page = await join("ana", { viewport: { width: 900, height: 850 } });
 		let editor = content(page);
 		let chat = chatPane(page);
-		let draft = chat.locator("textarea");
+		let draft = chatInput(chat);
 		await draft.fill("An unfinished thought across layouts");
 		await page.evaluate(() => {
 			let saved = window as typeof window & {
@@ -126,9 +127,9 @@ test(
 		});
 
 		let fromCompactChat = false;
-		for (let width of [500, 499, 500]) {
+		for (let width of [724, 723, 724]) {
 			await page.setViewportSize({ width, height: 850 });
-			let split = width >= 500;
+			let split = width >= 724;
 			await expect(page.locator("[data-workspace-mode]")).toHaveAttribute(
 				"data-workspace-mode",
 				split ? "split" : "compact",
@@ -139,7 +140,7 @@ test(
 				await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 				let views = page.getByRole("group", { name: "Document view" });
 				await expect(views).toBeVisible();
-				if (width === 500 && fromCompactChat) {
+				if (width === 724 && fromCompactChat) {
 					await page.getByRole("button", { name: "Close sidebar" }).click();
 					await expect(chat).toBeHidden();
 					let showChat = page.getByRole("button", { name: "Show chat pane" });
@@ -149,7 +150,7 @@ test(
 					await expect(page.getByRole("heading", { name: "Chat", exact: true })).toBeFocused();
 					fromCompactChat = false;
 				}
-				if (width === 500) {
+				if (width === 724) {
 					let decisions = views.getByRole("button", { name: /^Decisions/ });
 					let documentButton = views.getByRole("button", { name: "Document" });
 					await documentButton.focus();
@@ -174,10 +175,10 @@ test(
 				await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 				await nav.getByRole("button", { name: /^Chat/ }).click();
 				await expect(chat).toBeVisible();
-				await expect(draft).toHaveValue("An unfinished thought across layouts");
+				await expectChatValue(draft, "An unfinished thought across layouts");
 				await nav.getByRole("button", { name: "Document" }).click();
 				await expect(editor).toBeEditable();
-				if (width === 499) {
+				if (width === 723) {
 					await nav.getByRole("button", { name: /^Chat/ }).click();
 					fromCompactChat = true;
 				}
@@ -193,7 +194,7 @@ test(
 						&& saved.__workspaceChat === document.querySelector(".workspace-chat-panel");
 				}),
 			).toBe(true);
-			await expect(draft).toHaveValue("An unfinished thought across layouts");
+			await expectChatValue(draft, "An unfinished thought across layouts");
 			await expectNoHorizontalOverflow(page);
 		}
 
@@ -203,7 +204,7 @@ test(
 		await handle.press("End");
 		await expect.poll(async () => (await chat.boundingBox())!.width)
 			.toBeCloseTo(preferredWidth, 0);
-		await page.setViewportSize({ width: 500, height: 850 });
+		await page.setViewportSize({ width: 724, height: 850 });
 		let main = page.locator(".workspace-frame main");
 		await expect.poll(async () => (await main.boundingBox())!.width).toBeGreaterThan(0);
 		let views = page.getByRole("group", { name: "Document view" });
@@ -357,7 +358,7 @@ test("a shifted visual viewport keeps workspace controls in the exposed rectangl
 	}
 });
 
-test("the document surface leaves the bottom navigation unobstructed", async ({ join, seed }) => {
+test("the document surface leaves the top navigation unobstructed", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
@@ -374,7 +375,7 @@ test("the document surface leaves the bottom navigation unobstructed", async ({ 
 			element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)),
 		buttonBox!,
 	);
-	expect(navBox!.y).toBeGreaterThanOrEqual(mainBox!.y + mainBox!.height);
+	expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(mainBox!.y);
 	expect(hitInsideNavigation).toBe(true);
 });
 
@@ -475,7 +476,7 @@ test("the Projects drawer below 1024px keeps the split workspace", async ({ join
 	await opener.click();
 	await expect(chat).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Chat", exact: true })).toBeFocused();
-	await chat.locator("textarea").press("Escape");
+	await chatInput(chat).press("Escape");
 	await expect(chat).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 });
@@ -532,15 +533,14 @@ test("a representative desktop retains the split Chat layout", async ({ join, se
 	await expect(content(page)).toBeEditable();
 });
 
-test("200% zoom at 640 CSS pixels keeps split controls without clipping", async ({ join, seed }) => {
+test("200% zoom at 640 CSS pixels uses compact controls without clipping", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", {
 		screen: { width: 1280, height: 900 },
 		viewport: { width: 640, height: 450 },
 	});
-	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
-	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
-	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeVisible();
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 	await expect(content(page)).toBeEditable();
 	await expectNoHorizontalOverflow(page);
 	await page.setViewportSize({ width: 480, height: 450 });
@@ -556,7 +556,7 @@ test("Chromium visual viewport emulation keeps Chat controls above the keyboard"
 		let nav = emulation.page.getByRole("navigation", { name: "Workspace view" });
 		await nav.getByRole("button", { name: /Chat/ }).click();
 		let chat = emulation.page.getByRole("complementary");
-		let textarea = chat.getByPlaceholder("Use @chopin to ask Chopin");
+		let textarea = chatInput(chat);
 		await textarea.focus();
 		await setVisualViewport(emulation.page, {
 			event: "scroll",

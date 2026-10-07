@@ -1,3 +1,4 @@
+import { chatInput, expectChatValue } from "./chat-input";
 import { expect, test } from "./room";
 import { expectNoHorizontalOverflow, RESPONSIVE_SOURCE } from "./responsive";
 
@@ -118,7 +119,7 @@ test("a closed desktop Chat tab keeps unread activity visible", async ({ join, p
 		}, true);
 	});
 	let sender = await join("ben");
-	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
+	await chatInput(sender).fill(
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
@@ -215,7 +216,7 @@ test("chat activity appears while closed and clears when opened", async ({ join,
 	await expect(chat).toBeVisible();
 	await chat.hover();
 	let sender = await join("ben");
-	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
+	await chatInput(sender).fill(
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
@@ -235,7 +236,7 @@ test("keyboard-created actionable feedback stays immediate", async ({ join, seed
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	await page.keyboard.press("Tab");
 	let sender = await join("ben");
-	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
+	await chatInput(sender).fill(
 		"A keyboard-modality room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
@@ -252,9 +253,9 @@ test("a Chat draft survives Chromium orientation emulation", async ({ join, seed
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
-	let textarea = page.getByPlaceholder("Use @chopin to ask Chopin");
+	let textarea = chatInput(page);
 	await textarea.fill("Keep this draft");
 	await page.setViewportSize({ width: 844, height: 390 });
-	await expect(textarea).toHaveValue("Keep this draft");
+	await expectChatValue(textarea, "Keep this draft");
 	await expectNoHorizontalOverflow(page);
 });

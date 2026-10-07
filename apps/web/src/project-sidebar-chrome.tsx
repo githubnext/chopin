@@ -37,7 +37,7 @@ export function ProjectSidebarExpandButton(
 		<button
 			aria-label="Open Projects sidebar"
 			className="project-sidebar-expand btn btn-icon btn-ghost shrink-0"
-			data-tooltip="Open Sidebar"
+			data-tooltip="Open sidebar"
 			onClick={onExpand}
 			ref={buttonRef}
 			type="button"

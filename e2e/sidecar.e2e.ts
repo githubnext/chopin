@@ -1,3 +1,4 @@
+import { chatInput, expectChatValue } from "./chat-input";
 /**
  * Questionnaires and comment threads, without an agent.
  *
@@ -328,7 +329,7 @@ test("switching views restores the plan scroll position", async ({ join, seed })
 async function expectCompactDestinationStatePreserved(page: Page): Promise<void> {
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let planScroller = page.locator("[data-plan-scroll]");
-	let draft = page.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chatInput(page);
 	await planScroller.evaluate(element => {
 		element.scrollTop = 160;
 		element.dispatchEvent(new Event("scroll"));
@@ -368,7 +369,7 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 	let decisionScroll = await decisionScroller.evaluate(element => element.scrollTop);
 	await nav.getByRole("button", { name: "Document" }).click();
 
-	await expect(draft).toHaveValue("unfinished compact thought");
+	await expectChatValue(draft, "unfinished compact thought");
 	await expect.poll(() => planScroller.evaluate(element => element.scrollTop)).toBe(160);
 	await nav.getByRole("button", { name: /^Decisions/ }).click();
 	await expect.poll(() => decisionScroller.evaluate(element => element.scrollTop)).toBe(
@@ -966,13 +967,16 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 	};
 	await expect.poll(() =>
 		page.evaluate(
-			({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-plan-comment-sheet]"),
+			({ x, y }) =>
+				!!document.elementFromPoint(x, y)?.closest("[data-plan-comment-sheet-backdrop]"),
 			destinationPoint,
 		)
 	).toBe(true);
 	await page.mouse.click(destinationPoint.x, destinationPoint.y);
-	await expect(sheet).toBeVisible();
+	await expect(sheet).toHaveCount(0);
 	await expect(plan).toHaveAttribute("aria-pressed", "true");
+	await expect(editor).toBeFocused();
+	sheet = await openDraft();
 	await page.locator("[data-plan-comment-sheet-backdrop]").click({
 		position: { x: 10, y: 10 },
 	});

@@ -9,6 +9,7 @@ export type DraftInputHandle = {
 	focus: () => void;
 	setSelectionRange: (start: number, end: number) => void;
 	readonly selectionStart: number;
+	readonly selectionEnd: number;
 };
 type DraftEvent = {
 	currentTarget: { value: string; selectionStart: number; references?: ReferenceDraft[] };
@@ -149,6 +150,11 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftProps>(function DraftI
 		get selectionStart() {
 			return element.current ? event().currentTarget.selectionStart : 0;
 		},
+		get selectionEnd() {
+			if (!element.current) return 0;
+			let selected = selectionOffsets(element.current);
+			return Math.max(selected.anchor, selected.focus);
+		},
 	}));
 	useLayoutEffect(() => {
 		let current = element.current;
@@ -203,6 +209,9 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftProps>(function DraftI
 				change();
 			}}
 			onKeyDown={keyboard => {
+				if (composing.current || keyboard.nativeEvent.isComposing || keyboard.keyCode === 229) {
+					return;
+				}
 				let selected = selectionOffsets(element.current!);
 				Object.assign(history.current[historyIndex.current]!, selected);
 				if (
