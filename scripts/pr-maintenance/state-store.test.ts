@@ -200,7 +200,8 @@ test("rejects array extra properties, symbol properties, sparse and noncanonical
 	let extra = Object.assign([1], { other: "ignored" });
 	let symbol = [1];
 	Object.defineProperty(symbol, Symbol("extra"), { value: 2 });
-	let sparse = new Array(2);
+	let sparse = [];
+	sparse.length = 2;
 	let noncanonical = Object.assign([1], { "01": 2 });
 	for (let list of [extra, symbol, sparse, noncanonical]) {
 		expect(() => sealState({ ...payload, prs: { "12": { list } } }, key)).toThrow(
