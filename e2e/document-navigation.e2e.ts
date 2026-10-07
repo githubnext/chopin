@@ -562,25 +562,39 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		),
 	).toBe("preserved");
 	await page.keyboard.press("Shift");
+	// Sample every frame: exit and entry are short-lived and must never overlap.
+	await page.evaluate(() => {
+		let samples: string[] = [];
+		(window as Window & { __routeSamples?: string[] }).__routeSamples = samples;
+		let sample = () => {
+			let layers = document.querySelectorAll<HTMLElement>(
+				".document-route-swap > [data-content-swap-state]:not([hidden])",
+			);
+			samples.push(
+				[...layers].map(layer =>
+					`${layer.dataset.contentSwapState}${layer.hasAttribute("inert") ? ":inert" : ""}`
+				).join(" "),
+			);
+			if (samples.length < 600) requestAnimationFrame(sample);
+		};
+		requestAnimationFrame(sample);
+	});
 	release.resolve();
 	let visibleRoutes = documentRouteLayers(page, "[data-content-swap-state]:not([hidden])");
 	let outgoingRoutes = documentRouteLayers(
 		page,
 		'[data-content-swap-state="outgoing"]:not([hidden])',
 	);
-	// Inspect the short-lived exit layer in one browser turn, before its timer removes it.
-	await expect.poll(() =>
-		visibleRoutes.evaluateAll(routes =>
-			routes.map(route => ({
-				outgoing: route.getAttribute("data-content-swap-state") === "outgoing",
-				inert: route.hasAttribute("inert"),
-				hidden: route.getAttribute("aria-hidden"),
-			}))
-		)
-	).toEqual([
-		{ outgoing: true, inert: true, hidden: "true" },
-		{ outgoing: false, inert: false, hidden: null },
-	]);
+	await expect(visibleRoutes).toHaveCount(1);
+	let samples = await page.evaluate(() =>
+		(window as Window & { __routeSamples?: string[] }).__routeSamples!
+	);
+	// The incoming route waits unseen and inert while the outgoing one leaves.
+	expect(samples).toContain("outgoing:inert staged:inert");
+	for (let sample of samples) {
+		expect(sample.split(" ").filter(layer => layer && !layer.endsWith(":inert")).length)
+			.toBeLessThanOrEqual(1);
+	}
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(page).toHaveURL(originalPath!);
 

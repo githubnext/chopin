@@ -244,7 +244,7 @@ function DocumentRouteSwap(
 	let layers = [state.previous, state.current, state.pending].filter(
 		(layer): layer is DocumentRouteLayer => layer !== undefined,
 	);
-	let motion = motionContract("content-swap");
+	let motion = motionContract("route-swap");
 	let { onDocumentLoaded, onDocumentRouteSettled } = useNavigationDocument();
 	let ready = useCallback((
 		key: DocumentRouteIdentity,
@@ -284,7 +284,8 @@ function DocumentRouteSwap(
 				let source = layer.source;
 				return (
 					<ContentSwapLayer
-						active={layer.key === state.current.key}
+						// The incoming route loads unseen and enters once the outgoing one has left.
+						active={layer.key === state.current.key && !state.previous}
 						className="document-route-layer h-full min-h-0"
 						immediately={state.current.immediately}
 						key={layer.key}
@@ -292,6 +293,8 @@ function DocumentRouteSwap(
 						onClosed={layer.key === state.previous?.key
 							? () => dispatch({ key: layer.key, type: "closed" })
 							: undefined}
+						staged={layer.key === state.pending?.key
+							|| (layer.key === state.current.key && !!state.previous)}
 					>
 						{source.page === "document" || source.page === "child"
 							? (

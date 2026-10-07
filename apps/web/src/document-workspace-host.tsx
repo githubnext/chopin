@@ -69,6 +69,8 @@ function workspaceProps(
 	};
 }
 
+const REVEAL_LIMIT = 500;
+
 export default function DocumentWorkspaceHost(
 	{
 		agent,
@@ -188,11 +190,25 @@ export default function DocumentWorkspaceHost(
 					repository: parent.repository.name,
 					slug: parent.channel.slug,
 				});
-			onReady(layerKey, {
+			let resolution = {
 				canonicalPath: prepared.pathname,
 				channel: (child ?? parent).channel,
 				routeKey,
-			});
+			};
+			// The outgoing document stays on screen until this one has synced, briefly.
+			let started = performance.now();
+			let reveal = () => {
+				if (!active) return;
+				if (
+					parentSurface.current?.querySelector("[data-plan-synced]")
+					|| performance.now() - started > REVEAL_LIMIT
+				) {
+					onReady(layerKey, resolution);
+				} else {
+					requestAnimationFrame(reveal);
+				}
+			};
+			reveal();
 		}, reason => {
 			if (active) {
 				send({ error: reason, type: "failed" });

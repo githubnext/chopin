@@ -366,6 +366,7 @@ export function PlanEditor(
 						className="h-full min-h-0 overflow-auto"
 						data-focus-boundary=""
 						data-plan-scroll=""
+						data-plan-synced={state.synced || undefined}
 					>
 						<MDXEditor
 							// Remounting on epoch rotation is deliberate: the previous
