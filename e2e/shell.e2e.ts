@@ -40,6 +40,48 @@ test("an icon tooltip remains visible while its button is focused", async ({ joi
 	await expect(tooltip).toBeVisible();
 });
 
+test("an icon tooltip stays hidden after its button is pressed until the pointer returns", async ({ join, page }) => {
+	await join("ana");
+	let mention = page.getByRole("button", { exact: true, name: "Mention docs" });
+	let tooltip = page.locator("[data-icon-tooltip]");
+	await mention.hover();
+	await expect(tooltip).toBeVisible();
+	await mention.click();
+	await expect(tooltip).toBeHidden();
+	await page.waitForTimeout(600);
+	await expect(tooltip).toBeHidden();
+	await page.mouse.move(0, 0);
+	await mention.hover();
+	await expect(tooltip).toBeVisible();
+	await expect(tooltip).toHaveText("Mention docs");
+});
+
+test("an icon tooltip shows on keyboard focus and hides when its trigger opens a popup", async ({ join, page }) => {
+	await join("ana");
+	let addProject = page.getByRole("button", { exact: true, name: "Add project" });
+	let tooltip = page.locator("[data-icon-tooltip]");
+	await addProject.focus();
+	await page.keyboard.press("Shift+Tab");
+	await page.keyboard.press("Tab");
+	await expect(addProject).toBeFocused();
+	await expect(tooltip).toBeVisible();
+	await addProject.evaluate(button => {
+		button.setAttribute("aria-haspopup", "menu");
+		button.setAttribute("aria-expanded", "true");
+	});
+	await expect(tooltip).toBeHidden();
+});
+
+test("a second icon tooltip opens without the delay once one has shown", async ({ join, page }) => {
+	await join("ana");
+	let tooltip = page.locator("[data-icon-tooltip]");
+	await page.getByRole("button", { exact: true, name: "Add project" }).hover();
+	await expect(tooltip).toHaveText("Add project");
+	await page.getByRole("button", { name: /^New document in / }).first().hover();
+	await expect(tooltip).toHaveText("New document", { timeout: 200 });
+	await expect(tooltip).toHaveAttribute("data-instant", "");
+});
+
 test("an icon tooltip preserves a title updated during hover", async ({ join, page }) => {
 	await join("ana");
 	let addProject = page.getByRole("button", { exact: true, name: "Add project" });
