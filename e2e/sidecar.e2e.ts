@@ -675,16 +675,15 @@ test("decision cards save independently with progressive custom answers", async 
 	field = scope.getByRole("textbox", { name: "New option" });
 	await field.fill("Only collaborative anchors");
 	await field.press("Enter");
-	// It joins everyone's list as the next lettered row and is not chosen for anyone.
+	// It joins everyone's list as the next lettered row, chosen by its author.
 	let added = scope.getByRole("checkbox", { name: "Only collaborative anchors" });
 	await expect(added).toBeVisible();
-	await expect(added).not.toBeChecked();
+	await expect(added).toBeChecked();
 	await expect(scope.locator("label", { hasText: "Only collaborative anchors" })).toContainText(
 		"D",
 	);
 	await expect(addRow).toBeFocused();
-	await expect(saveScope).toBeDisabled();
-	await added.check();
+	await expect(saveScope).toBeEnabled();
 	await scope.getByRole("checkbox", { name: /^Anchors/ }).check();
 	await saveScope.click();
 	let allResolved = page.getByRole("button", { name: "2 resolved" });
@@ -854,11 +853,11 @@ test("an option one member adds is shared, durable, and choosable by another", a
 	await field.fill("In PostgreSQL");
 	await field.press("Enter");
 
-	// Everyone sees it as the next lettered row, chosen by nobody.
+	// Everyone sees it as the next lettered row, chosen by its author.
 	for (let page of [ana, bo]) {
 		let row = storage(page).getByRole("radio", { name: "In PostgreSQL" });
 		await expect(row).toBeVisible();
-		await expect(row).not.toBeChecked();
+		await expect(row).toBeChecked();
 		await expect(storage(page).locator("label", { hasText: "In PostgreSQL" })).toContainText("C");
 	}
 	await expect(storage(ana).getByRole("textbox", { name: "New option" })).toHaveCount(0);
@@ -897,9 +896,8 @@ test("adding a duplicate option is refused and keeps what was typed", async ({ j
 	await field.fill("in sqlite");
 	await field.press("Enter");
 
-	let alert = card.getByRole("alert");
-	await expect(alert).toContainText("Couldn’t add option");
-	await expect(alert).toContainText("already exists");
+	await expect(card.getByText("Already an option: In SQLite")).toBeVisible();
+	await expect(card.getByRole("alert")).toHaveCount(0);
 	await expect(field).toHaveValue("in sqlite");
 	await expect(card.getByRole("radio")).toHaveCount(2);
 });
