@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { inventory, nextAction } from "./inventory.mjs";
+import { inventory, nextAction, requiresRebase } from "./inventory.mjs";
 
 let repository = "githubnext/chopin";
 let run = {
@@ -19,6 +19,7 @@ function pull(number = 1, base = "main") {
 		draft: true,
 		labels: [] as { name: string }[],
 		mergeable: true,
+		rebaseable: true,
 		head: { sha: `head-${number}`, ref: `branch-${number}`, repo: { full_name: repository } },
 		base: { ref: base },
 	};
@@ -56,6 +57,71 @@ function fixture(pages = [[pull()]], overrides: Record<string, unknown> = {}) {
 	};
 	return { gh, calls };
 }
+
+test("green CI cannot hide an unreplayable branch when its merge policy requires rebase", () => {
+	let pr = { ...pull(), rebaseable: false };
+	for (let method of ["rebase", "squash", "merge"]) {
+		let { gh } = fixture([[pr]]);
+		let read = (args: string[]) => {
+			if (args[1] === `repos/${repository}`) {
+				return { allow_rebase_merge: true, allow_squash_merge: true, allow_merge_commit: true };
+			}
+			if (args[1]?.includes("/rules/branches/")) {
+				return [[{ type: "pull_request", parameters: { allowed_merge_methods: [method] } }]];
+			}
+			return gh(args);
+		};
+		expect(inventory(repository, read)[0]?.action).toBe(method === "rebase" ? "rebase" : "ready");
+	}
+});
+
+test("effective merge methods intersect repository settings and branch rules conservatively", () => {
+	let settings = { allow_rebase_merge: true, allow_squash_merge: true, allow_merge_commit: true };
+	expect(requiresRebase(settings, [])).toBe(false);
+	expect(requiresRebase({ ...settings, allow_squash_merge: false, allow_merge_commit: false }, []))
+		.toBe(true);
+	for (let method of ["REBASE", "SQUASH", "MERGE"]) {
+		expect(
+			requiresRebase(settings, [{ type: "merge_queue", parameters: { merge_method: method } }]),
+		)
+			.toBe(method === "REBASE");
+	}
+	expect(
+		requiresRebase({ ...settings, allow_squash_merge: false }, [{
+			type: "required_linear_history",
+		}]),
+	)
+		.toBe(true);
+	for (
+		let rules of [
+			[{ type: "merge_queue", parameters: {} }],
+			[{ type: "pull_request", parameters: { allowed_merge_methods: ["unknown"] } }],
+			[{ type: "pull_request", parameters: { allowed_merge_methods: [] } }],
+		]
+	) expect(requiresRebase(settings, rules)).toBeNull();
+	expect(requiresRebase({}, [])).toBeNull();
+	expect(requiresRebase({ ...settings, allow_rebase_merge: false }, [
+		{ type: "pull_request", parameters: { allowed_merge_methods: ["rebase"] } },
+	])).toBeNull();
+});
+
+test("an unreplayable parent still takes precedence over descendants and opt-outs", () => {
+	let parent = { ...pull(), rebaseable: false };
+	let { gh } = fixture([[pull(2, "branch-1"), parent]]);
+	let read = (args: string[]) => {
+		if (args[1] === `repos/${repository}`) {
+			return { allow_rebase_merge: true, allow_squash_merge: false, allow_merge_commit: false };
+		}
+		if (args[1]?.includes("/rules/branches/")) return [[]];
+		return gh(args);
+	};
+	expect(inventory(repository, read).map(row => [row.number, row.action]))
+		.toEqual([[1, "rebase"], [2, "waiting-parent"]]);
+	expect(nextAction({ ...snapshot, rebaseRequired: true, rebaseable: false, optedOut: true }))
+		.toBe("opted-out");
+	expect(nextAction({ ...snapshot, rebaseRequired: true, rebaseable: null })).toBe("verify");
+	expect(nextAction({ ...snapshot, rebaseRequired: null, rebaseable: false })).toBe("verify");
+});
 
 test("readiness requires current successful aggregate CI, no lag, and known mergeability", () => {
 	expect(nextAction(snapshot)).toBe("ready");

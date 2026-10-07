@@ -16,6 +16,7 @@ function transport(options = {}) {
 				head: { sha: "abc", ref: "feature", repo: { full_name: "a/b" } },
 				base: { ref: "main" },
 				mergeable: true,
+				rebaseable: true,
 			};
 		}
 		if (path.includes("/commits/main")) return { sha: "base" };
@@ -85,6 +86,95 @@ test("requires actual successful configured CI jobs", async () => {
 		expect((await inspectReadiness("a/b", row, transport({ [option]: true }))).action).toBe(
 			"waiting-ci",
 		);
+	}
+});
+
+test("current green CI still needs replayable history when repository only permits rebase", async () => {
+	for (let rebaseOnly of [true, false]) {
+		let base = transport();
+		let request = async (method, path) => {
+			if (path === "/repos/a/b") {
+				return {
+					allow_rebase_merge: true,
+					allow_squash_merge: !rebaseOnly,
+					allow_merge_commit: !rebaseOnly,
+				};
+			}
+			let response = await base(method, path);
+			return path.includes("/pulls/") ? { ...response, rebaseable: false } : response;
+		};
+		expect((await inspectReadiness("a/b", row, request)).action)
+			.toBe(rebaseOnly ? "rebase" : "ready");
+	}
+});
+
+test("replay checks preserve fresh head, base, and opt-out guards", async () => {
+	for (let change of ["head", "base", "opt-out", "unknown-policy", "unknown-replay"]) {
+		let base = transport();
+		let pulls = 0;
+		let bases = 0;
+		let request = async (method, path) => {
+			if (path === "/repos/a/b") {
+				return change === "unknown-policy" ? {} : {
+					allow_rebase_merge: true,
+					allow_squash_merge: false,
+					allow_merge_commit: false,
+				};
+			}
+			let response = await base(method, path);
+			if (path.includes("/pulls/")) {
+				let fresh = ++pulls > 1;
+				return {
+					...response,
+					rebaseable: change === "unknown-replay" ? null : false,
+					labels: fresh && change === "opt-out" ? [{ name: "no-babysit" }] : [],
+					head: fresh && change === "head" ? { ...response.head, sha: "new" } : response.head,
+				};
+			}
+			if (path.includes("/commits/main") && ++bases > 1 && change === "base") return { sha: "new" };
+			return response;
+		};
+		expect((await inspectReadiness("a/b", row, request)).action)
+			.toBe(change === "opt-out" ? "opted-out" : "verify");
+	}
+});
+
+test("readiness catches replayability becoming false during successful CI inspection", async () => {
+	let base = transport();
+	let pulls = 0;
+	let request = async (method, path) => {
+		if (path === "/repos/a/b") {
+			return { allow_rebase_merge: true, allow_squash_merge: false, allow_merge_commit: false };
+		}
+		let response = await base(method, path);
+		return path.includes("/pulls/") ? { ...response, rebaseable: ++pulls === 1 } : response;
+	};
+	expect((await inspectReadiness("a/b", row, request)).action).toBe("rebase");
+});
+
+test("inventory rebase advice is freshly confirmed before scheduling history repair", async () => {
+	for (
+		let state of [
+			{ rebaseable: null, behind: 0, mergeable: true, action: "verify" },
+			{ rebaseable: true, behind: 0, mergeable: true, action: "ready" },
+			{ rebaseable: false, behind: 0, mergeable: true, action: "rebase" },
+			{ rebaseable: null, behind: 1, mergeable: true, action: "rebase" },
+			{ rebaseable: true, behind: 1, mergeable: false, action: "conflict" },
+		]
+	) {
+		let base = transport();
+		let request = async (method, path) => {
+			if (path === "/repos/a/b") {
+				return { allow_rebase_merge: true, allow_squash_merge: false, allow_merge_commit: false };
+			}
+			if (path.includes("/compare/")) return { behind_by: state.behind };
+			let response = await base(method, path);
+			return path.includes("/pulls/")
+				? { ...response, mergeable: state.mergeable, rebaseable: state.rebaseable }
+				: response;
+		};
+		expect((await inspectReadiness("a/b", { ...row, action: "rebase" }, request)).action)
+			.toBe(state.action);
 	}
 });
 test("required rules are app bound and failures override green CI", async () => {

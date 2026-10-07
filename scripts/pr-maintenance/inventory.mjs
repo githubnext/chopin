@@ -1,11 +1,52 @@
 import { github } from "./maintenance.mjs";
 
+export function requiresRebase(repository, rules) {
+	let methods = ["merge", "squash", "rebase"];
+	let flags = {
+		merge: "allow_merge_commit",
+		squash: "allow_squash_merge",
+		rebase: "allow_rebase_merge",
+	};
+	if (
+		!Array.isArray(rules)
+		|| methods.some(method => typeof repository?.[flags[method]] !== "boolean")
+	) return null;
+	methods = methods.filter(method => repository[flags[method]]);
+	for (let rule of rules) {
+		if (rule.type === "required_linear_history") {
+			methods = methods.filter(method => method !== "merge");
+		}
+		if (rule.type === "pull_request" && rule.parameters?.allowed_merge_methods !== undefined) {
+			let allowed = rule.parameters.allowed_merge_methods;
+			if (
+				!Array.isArray(allowed)
+				|| allowed.some(method => !["merge", "squash", "rebase"].includes(method))
+			) {
+				return null;
+			}
+			methods = methods.filter(method => allowed.includes(method));
+		}
+		if (rule.type === "merge_queue") {
+			let method = typeof rule.parameters?.merge_method === "string"
+				? rule.parameters.merge_method.toLowerCase()
+				: null;
+			if (!["merge", "squash", "rebase"].includes(method)) return null;
+			methods = methods.filter(candidate => candidate === method);
+		}
+	}
+	return methods.length ? methods.every(method => method === "rebase") : null;
+}
+
 export function nextAction(snapshot) {
 	if (snapshot.optedOut) return "opted-out";
 	if (snapshot.parentReady === false) return "waiting-parent";
 	if (snapshot.mergeable === false) return "conflict";
 	if (snapshot.behind > 0) return "rebase";
 	if (snapshot.behind !== 0 || snapshot.mergeable !== true) return "verify";
+	if (snapshot.rebaseRequired === null) return "verify";
+	if (snapshot.rebaseRequired === true && snapshot.rebaseable !== true) {
+		return snapshot.rebaseable === false ? "rebase" : "verify";
+	}
 	let run = snapshot.run;
 	if (
 		!run || run.head_sha !== snapshot.head || run.event !== "pull_request"
@@ -33,6 +74,8 @@ export function inventory(repository, gh = github) {
 		"--slurp",
 	]).flat();
 	let snapshots = new Map();
+	let mergePolicies = new Map();
+	let settings;
 	for (let candidate of listed) {
 		if (!included(candidate, repository)) continue;
 		let pr = optedOut(candidate)
@@ -86,6 +129,7 @@ export function inventory(repository, gh = github) {
 		entry.changed = fresh.head.sha !== entry.row.head || fresh.head.ref !== entry.row.branch
 			|| fresh.base.ref !== entry.row.base;
 		entry.snapshot.mergeable = fresh.mergeable;
+		entry.snapshot.rebaseable = fresh.rebaseable;
 		if (entry.changed || entry.snapshot.optedOut) continue;
 		if (!currentBases.has(entry.row.base)) {
 			currentBases.set(
@@ -103,6 +147,25 @@ export function inventory(repository, gh = github) {
 		]);
 		entry.row.run = runs[0] ?? null;
 		entry.snapshot.run = entry.row.run;
+		if (fresh.rebaseable !== true) {
+			if (!mergePolicies.has(entry.row.base)) {
+				let policy = null;
+				try {
+					settings ??= gh(["api", `repos/${repository}`]);
+					let rules = gh([
+						"api",
+						`repos/${repository}/rules/branches/${encodeURIComponent(entry.row.base)}`,
+						"--paginate",
+						"--slurp",
+					]).flat();
+					policy = requiresRebase(settings, rules);
+				} catch {
+					// Unknown merge policy cannot establish readiness.
+				}
+				mergePolicies.set(entry.row.base, policy);
+			}
+			entry.snapshot.rebaseRequired = mergePolicies.get(entry.row.base);
+		}
 	}
 	let pending = new Map(snapshots);
 	let rows = [];

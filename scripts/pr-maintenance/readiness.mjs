@@ -1,3 +1,5 @@
+import { requiresRebase } from "./inventory.mjs";
+
 let jobsRequired = ["format, lint, types, tests", "e2e", "container"];
 let failures = new Set(["failure", "timed_out", "action_required", "startup_failure"]);
 
@@ -5,6 +7,17 @@ export async function inspectReadiness(repository, row, request) {
 	let result = { ...row };
 	let root = `/repos/${repository}`;
 	let get = (path) => request("GET", `${root}${path}`);
+	let rules;
+	let settings;
+	async function replayAction(pr) {
+		if (pr.rebaseable === true) return null;
+		rules ??= await pages(`/rules/branches/${encodeURIComponent(row.base)}`);
+		settings ??= await get("");
+		let required = requiresRebase(settings, rules);
+		return required === null ? "verify" : required && pr.rebaseable !== true
+			? (pr.rebaseable === false ? "rebase" : "verify")
+			: null;
+	}
 	async function pages(path, field) {
 		let values = [];
 		for (let page = 1;; page++) {
@@ -28,13 +41,35 @@ export async function inspectReadiness(repository, row, request) {
 			|| pr.head.sha !== row.head || pr.head.ref !== row.branch || pr.base.ref !== row.base
 			|| base.sha !== row.baseHead
 		) return { ...result, action: "verify" };
-		if (!["ready", "waiting-ci", "repair", "waiting-parent"].includes(row.action)) return result;
+		if (!["ready", "waiting-ci", "repair", "waiting-parent", "rebase"].includes(row.action)) {
+			return result;
+		}
 		let comparison = await get(`/compare/${base.sha}...${row.head}`);
-		if (row.action === "waiting-parent") {
+		if (["waiting-parent", "rebase"].includes(row.action)) {
 			if (pr.mergeable === false) return { ...result, action: "conflict" };
 			if (comparison.behind_by > 0) return { ...result, action: "rebase" };
 		}
 		if (pr.mergeable !== true || comparison.behind_by !== 0) return { ...result, action: "verify" };
+		let replay = await replayAction(pr);
+		if (replay) {
+			let fresh = await get(`/pulls/${row.number}`);
+			let currentBase = await get(`/commits/${encodeURIComponent(row.base)}`);
+			if (
+				fresh.labels?.some(label =>
+					(typeof label === "string" ? label : label.name) === "no-babysit"
+				)
+			) {
+				return { ...result, action: "opted-out" };
+			}
+			if (
+				fresh.state !== "open" || fresh.head.repo?.full_name !== repository
+				|| fresh.head.sha !== row.head || fresh.head.ref !== row.branch
+				|| fresh.base.ref !== row.base
+				|| currentBase.sha !== row.baseHead || fresh.mergeable !== true
+				|| fresh.rebaseable !== pr.rebaseable
+			) replay = "verify";
+			return { ...result, action: replay };
+		}
 		let runs = await pages(`/actions/workflows/ci.yml/runs?head_sha=${row.head}`, "workflow_runs");
 		result.run = runs.filter(run =>
 			run.head_sha === row.head && run.head_branch === row.branch
@@ -58,7 +93,7 @@ export async function inspectReadiness(repository, row, request) {
 				...checks.map(check => ({ context: check.context, integration_id: check.app_id })),
 			);
 		} else if (protection?.enabled !== false) throw new Error("Unknown classic protection");
-		let rules = await pages(`/rules/branches/${encodeURIComponent(row.base)}`);
+		rules ??= await pages(`/rules/branches/${encodeURIComponent(row.base)}`);
 		for (let rule of rules) {
 			if (rule.type !== "required_status_checks") continue;
 			if (!Array.isArray(rule.parameters?.required_status_checks)) {
@@ -121,6 +156,10 @@ export async function inspectReadiness(repository, row, request) {
 			|| fresh.head.sha !== row.head || fresh.base.ref !== row.base || fresh.head.ref !== row.branch
 			|| fresh.mergeable !== true || currentBase.sha !== row.baseHead
 		) result.action = "verify";
+		else {
+			let replay = await replayAction(fresh);
+			if (replay) result.action = replay;
+		}
 		return result;
 	} catch {
 		return { ...result, action: "verify" };

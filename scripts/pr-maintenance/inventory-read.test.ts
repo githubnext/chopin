@@ -13,6 +13,7 @@ let pr = number => ({
 	head: { sha: `head${number}`, ref: `feature${number}`, repo: { full_name: "a/b" } },
 	base: { ref: "main" },
 	mergeable: true,
+	rebaseable: true,
 });
 
 test("504 retry permits inventory to inspect every PR", () => {
@@ -39,6 +40,30 @@ test("504 retry permits inventory to inspect every PR", () => {
 	expect(inventory("a/b", gh).map(row => row.number)).toEqual([327, 328]);
 	expect(pauses).toEqual([1000]);
 	expect(seen).toContain("repos/a/b/pulls/328");
+});
+
+test("merge policy reads stay repository fixed and branch names remain literal", () => {
+	let calls = [];
+	let gh = createInventoryRead("a/b", {
+		read: (_binary, args) => {
+			calls.push(args);
+			return "[]";
+		},
+	});
+	gh(["api", "repos/a/b"]);
+	gh(["api", "repos/a/b/rules/branches/release%2Fv2", "--paginate", "--slurp"]);
+	expect(calls).toHaveLength(2);
+	for (
+		let path of [
+			"repos/a/foreign",
+			"repos/a/b/rulesets",
+			"repos/a/b/rules/branches/..%2Fmain",
+			"repos/a/b/rules/branches/main?field=x",
+		]
+	) {
+		expect(() => gh(["api", path])).toThrow("Invalid read-only inventory request");
+	}
+	expect(calls).toHaveLength(2);
 });
 test("only server status stderr retries, exhaustion bounded and sanitized", () => {
 	for (let status of [502, 503, 504, 403, 404]) {
