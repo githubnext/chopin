@@ -99,20 +99,29 @@ export function Header(
 	},
 ) {
 	let people = peopleHere(members);
+	let header = useRef<HTMLElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
 	let previousEdit = useRef(editing);
 	useEffect(() => {
 		let previous = previousEdit.current;
 		previousEdit.current = editing;
-		// Hand the caret on only when the field took it with it, not after a blur commit.
-		if (editing || !previous || document.activeElement !== document.body) return;
-		let body = previous === "new"
-			? document.querySelector<HTMLElement>(".plan-content[contenteditable='true']")
-			: null;
-		(body ?? title.current)?.focus();
+		// Hand the caret back only when the field took it with it, not after a blur commit.
+		if (!editing && previous && document.activeElement === document.body) title.current?.focus();
 	}, [editing]);
+	let finishEdit = () => {
+		// Naming a new document leads into writing it, unless the user already clicked elsewhere.
+		if (editing === "new" && header.current?.contains(document.activeElement)) {
+			header.current.closest(".workspace-root")
+				?.querySelector<HTMLElement>(".plan-content[contenteditable='true']")
+				?.focus();
+		}
+		onEditingChange();
+	};
 	return (
-		<header className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0">
+		<header
+			className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0"
+			ref={header}
+		>
 			<div
 				aria-label={`Document: ${label}`}
 				className="flex min-w-0 flex-1 items-center gap-0.5"
@@ -146,10 +155,10 @@ export function Header(
 						<DocumentRename
 							channel={{ id: room, title: label }}
 							inline
-							onCancel={() => onEditingChange()}
+							onCancel={finishEdit}
 							onRenamed={detail => {
 								onRenamed(detail.channel);
-								onEditingChange();
+								finishEdit();
 							}}
 						/>
 					)
