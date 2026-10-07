@@ -389,10 +389,7 @@ export class QuestionnaireController {
 		if (!reply.ok) return { ok: false, message: reply.message ?? "Could not add this option." };
 		this.#adding = undefined;
 		if (reply.definition) this.#redefine(reply.definition);
-		let key2 = label.toLowerCase();
-		let added = reply.definition?.questions.find(item => item.id === question)?.options
-			.find(option => option.label.trim().toLowerCase() === key2);
-		return { ok: true, ...(added ? { optionId: added.id } : {}) };
+		return { ok: true };
 	};
 
 	/** Take the server's definition when it has gained options. */

@@ -17,7 +17,7 @@ import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
-import { PresenceFaces } from "../presence-faces";
+import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
@@ -327,8 +327,10 @@ function Undecided(
 				onSubmit={editable ? state.submit : undefined}
 				renderPeople={people => (
 					<PresenceFaces
-						handles={[...(meta?.involved ?? []), ...people.map(person => person.handle)]
-							.filter(handle => handle.toLowerCase() !== self?.toLowerCase())}
+						handles={withoutSelf(
+							[...(meta?.involved ?? []), ...people.map(person => person.handle)],
+							self,
+						)}
 						label={meta ? "In this decision" : undefined}
 					/>
 				)}

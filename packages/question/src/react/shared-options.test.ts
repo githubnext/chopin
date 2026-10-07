@@ -83,8 +83,7 @@ describe("shared options", () => {
 
 		let result = await controller.addOption("q0", "Shadow");
 
-		let added = controller.getSnapshot().definition!.questions[0]!.options[2]!;
-		expect(result).toEqual({ ok: true, optionId: added.id });
+		expect(result).toEqual({ ok: true });
 		expect(controller.getSnapshot().definition!.questions[0]!.options.map(option => option.label))
 			.toEqual(["Canary", "Blue-green", "Shadow"]);
 		off();
