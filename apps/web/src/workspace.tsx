@@ -21,8 +21,9 @@ import { workspaceSizing } from "./workspace-sizing";
 import "./workspace-sizing.css";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
+import { usePaneMotion } from "./pane-motion";
 
-import type { Dispatch, ReactNode, RefObject } from "react";
+import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
 import type {
 	WorkspaceDestination,
 	WorkspaceEvent,
@@ -267,6 +268,24 @@ export function Workspace(
 		220,
 		immediately,
 	);
+	let chatTrack = usePaneMotion(chatPresence.phase);
+	// The outgoing document stays under Chat until Chat has faded in over it.
+	let documentPresence = useTransitionPresence(
+		presentation.documentVisible ? true : undefined,
+		contentSwapMotion.closeDuration,
+		immediately,
+	);
+	let destination: WorkspaceDestination = mode !== "split" && presentation.chatVisible
+		? "chat"
+		: view;
+	let [travel, setTravel] = useState({ destination, back: false });
+	if (travel.destination !== destination) {
+		let order = workspaceDestinations();
+		setTravel({
+			back: order.indexOf(destination) < order.indexOf(travel.destination),
+			destination,
+		});
+	}
 	let opener = useRef<HTMLElement | undefined>(undefined);
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousChatOpen = useRef(state.chatOpen);
@@ -320,6 +339,7 @@ export function Workspace(
 			data-workspace-mode={mode}
 			data-workspace-room={identity}
 			data-workspace-surface={profile.surface}
+			data-workspace-travel={travel.back ? "back" : undefined}
 			ref={root}
 		>
 			{header}
@@ -391,6 +411,7 @@ export function Workspace(
 						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
 							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
+						data-pane-moving={chatTrack.moving || undefined}
 						hidden={chatPresence.phase === "closed"}
 						id={ids.pane.chat}
 						inert={chatInactive}
@@ -401,8 +422,9 @@ export function Workspace(
 								dismissChat();
 							}
 						}}
+						onTransitionEnd={chatTrack.onTransitionEnd}
 						style={mode === "split"
-							? { width: chatWidth }
+							? { "--chat-width": `${chatWidth}px` } as CSSProperties
 							: { width: "100%" }}
 					>
 						{mode === "split"
@@ -463,7 +485,7 @@ export function Workspace(
 					className={`workspace-document-panel order-1 relative min-w-0 w-full flex-1 ${
 						mode === "split" ? "hairline-l hairline-b" : ""
 					}`}
-					hidden={!presentation.documentVisible}
+					hidden={documentPresence.phase === "closed"}
 					inert={!presentation.documentVisible}
 				>
 					<div className="relative flex h-full flex-col overflow-hidden">
