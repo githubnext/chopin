@@ -1,10 +1,4 @@
-export type MotionKind =
-	| "collapse"
-	| "content-swap"
-	| "feedback"
-	| "popover"
-	| "route-swap"
-	| "sidebar";
+export type MotionKind = "collapse" | "content-swap" | "feedback" | "popover" | "sidebar";
 
 export const MOTION_STATES = ["", "is-open", "is-closing"] as const;
 
@@ -29,8 +23,6 @@ let contracts = {
 	},
 	feedback: { className: "motion-feedback", closeDuration: 180, states: MOTION_STATES },
 	popover: { className: "motion-popover", closeDuration: 150, states: MOTION_STATES },
-	// `closeDelay` adds 50ms, so the incoming route starts as the 80ms fade-out ends.
-	"route-swap": { className: "motion-route-swap", closeDuration: 30, states: MOTION_STATES },
 	sidebar: { className: "motion-sidebar", closeDuration: 180, states: MOTION_STATES },
 } as const satisfies Record<MotionKind, MotionContract>;
 

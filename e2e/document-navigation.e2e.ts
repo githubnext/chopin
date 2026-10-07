@@ -49,6 +49,38 @@ function documentRouteLayers(page: import("@playwright/test").Page, selector: st
 	});
 }
 
+// Records visible route layers every frame; exit and entry are too brief to poll.
+async function recordRouteLayers(page: import("@playwright/test").Page) {
+	await page.evaluate(() => {
+		let samples: string[] = [];
+		(window as Window & { __routeSamples?: string[] }).__routeSamples = samples;
+		let sample = () => {
+			let layers = document.querySelectorAll<HTMLElement>(
+				".document-route-swap > [data-content-swap-state]:not([hidden])",
+			);
+			samples.push(
+				[...layers].map(layer =>
+					`${layer.dataset.contentSwapState}${layer.hasAttribute("inert") ? ":inert" : ""}`
+				).join(" "),
+			);
+			if (samples.length < 1200) requestAnimationFrame(sample);
+		};
+		requestAnimationFrame(sample);
+	});
+}
+
+async function routeLayerSamples(page: import("@playwright/test").Page) {
+	let samples = await page.evaluate(() =>
+		(window as Window & { __routeSamples?: string[] }).__routeSamples ?? []
+	);
+	// Two routes are never interactive at once.
+	for (let sample of samples) {
+		expect(sample.split(" ").filter(layer => layer && !layer.endsWith(":inert")).length)
+			.toBeLessThanOrEqual(1);
+	}
+	return samples;
+}
+
 async function headerAction(page: import("@playwright/test").Page, action: string) {
 	await headerActions(page).click();
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
@@ -562,47 +594,26 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		),
 	).toBe("preserved");
 	await page.keyboard.press("Shift");
-	// Sample every frame: exit and entry are short-lived and must never overlap.
-	await page.evaluate(() => {
-		let samples: string[] = [];
-		(window as Window & { __routeSamples?: string[] }).__routeSamples = samples;
-		let sample = () => {
-			let layers = document.querySelectorAll<HTMLElement>(
-				".document-route-swap > [data-content-swap-state]:not([hidden])",
-			);
-			samples.push(
-				[...layers].map(layer =>
-					`${layer.dataset.contentSwapState}${layer.hasAttribute("inert") ? ":inert" : ""}`
-				).join(" "),
-			);
-			if (samples.length < 600) requestAnimationFrame(sample);
-		};
-		requestAnimationFrame(sample);
-	});
+	await recordRouteLayers(page);
 	release.resolve();
 	let visibleRoutes = documentRouteLayers(page, "[data-content-swap-state]:not([hidden])");
 	let outgoingRoutes = documentRouteLayers(
 		page,
 		'[data-content-swap-state="outgoing"]:not([hidden])',
 	);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(visibleRoutes).toHaveCount(1);
-	let samples = await page.evaluate(() =>
-		(window as Window & { __routeSamples?: string[] }).__routeSamples!
-	);
 	// The incoming route waits unseen and inert while the outgoing one leaves.
-	expect(samples).toContain("outgoing:inert staged:inert");
-	for (let sample of samples) {
-		expect(sample.split(" ").filter(layer => layer && !layer.endsWith(":inert")).length)
-			.toBeLessThanOrEqual(1);
-	}
+	expect(await routeLayerSamples(page)).toContain("outgoing:inert staged:inert");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(page).toHaveURL(originalPath!);
 
 	let createdLink = projects.getByRole("link", { name: createdTitle, exact: true });
+	await recordRouteLayers(page);
 	await createdLink.click();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
-	await expect(visibleRoutes).toHaveCount(2);
 	await expect(visibleRoutes).toHaveCount(1);
+	expect(await routeLayerSamples(page)).toContain("outgoing:inert staged:inert");
 	await expect(page).toHaveURL(createdPath!);
 	await page.unroute(documentRoutePattern);
 
