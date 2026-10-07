@@ -675,15 +675,16 @@ test("decision cards save independently with progressive custom answers", async 
 	field = scope.getByRole("textbox", { name: "New option" });
 	await field.fill("Only collaborative anchors");
 	await field.press("Enter");
-	// It joins everyone's list as the next lettered row, chosen by its author.
+	// It joins everyone's list as the next lettered row and is not chosen for anyone.
 	let added = scope.getByRole("checkbox", { name: "Only collaborative anchors" });
 	await expect(added).toBeVisible();
-	await expect(added).toBeChecked();
+	await expect(added).not.toBeChecked();
 	await expect(scope.locator("label", { hasText: "Only collaborative anchors" })).toContainText(
 		"D",
 	);
 	await expect(addRow).toBeFocused();
-	await expect(saveScope).toBeEnabled();
+	await expect(saveScope).toBeDisabled();
+	await added.check();
 	await scope.getByRole("checkbox", { name: /^Anchors/ }).check();
 	await saveScope.click();
 	let allResolved = page.getByRole("button", { name: "2 resolved" });
@@ -853,11 +854,11 @@ test("an option one member adds is shared, durable, and choosable by another", a
 	await field.fill("In PostgreSQL");
 	await field.press("Enter");
 
-	// Everyone sees it as the next lettered row, chosen by its author.
+	// Everyone sees it as the next lettered row, chosen by nobody.
 	for (let page of [ana, bo]) {
 		let row = storage(page).getByRole("radio", { name: "In PostgreSQL" });
 		await expect(row).toBeVisible();
-		await expect(row).toBeChecked();
+		await expect(row).not.toBeChecked();
 		await expect(storage(page).locator("label", { hasText: "In PostgreSQL" })).toContainText("C");
 	}
 	await expect(storage(ana).getByRole("textbox", { name: "New option" })).toHaveCount(0);
@@ -883,12 +884,21 @@ test("an option one member adds is shared, durable, and choosable by another", a
 	}
 });
 
-test("adding a duplicate option is refused and keeps what was typed", async ({ join, seed }) => {
+test("adding a duplicate option is flagged inline and sends no request", async ({ join, page, seed }) => {
 	await seed(PROSE);
-	let page = await join("ana");
-	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page).filter({
-		has: page.getByRole("heading", { name: "Where should room state live?" }),
+	let sent = 0;
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			if (typeof message === "string" && message.includes('"question:option"')) sent++;
+			server.send(message);
+		});
+		server.onMessage(message => route.send(message));
+	});
+	let ana = await join("ana");
+	await ana.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(ana).filter({
+		has: ana.getByRole("heading", { name: "Where should room state live?" }),
 	});
 
 	await card.getByRole("button", { name: "Add an option" }).click();
@@ -900,6 +910,43 @@ test("adding a duplicate option is refused and keeps what was typed", async ({ j
 	await expect(card.getByRole("alert")).toHaveCount(0);
 	await expect(field).toHaveValue("in sqlite");
 	await expect(card.getByRole("radio")).toHaveCount(2);
+	expect(sent).toBe(0);
+});
+
+test("a duplicate the client could not see is still refused by the server", async ({ join, page, seed }) => {
+	await seed(PROSE);
+	// Ana never hears about added options, so only the server can catch the repeat.
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message === "string" && message.includes('"question:option-added"')) return;
+			route.send(message);
+		});
+	});
+	let ana = await join("ana");
+	let bo = await join("bo");
+	let storage = (p: Page) =>
+		questionnaire(p).filter({
+			has: p.getByRole("heading", { name: "Where should room state live?" }),
+		});
+	for (let p of [ana, bo]) await p.getByRole("button", { name: /^Decisions/ }).click();
+
+	await storage(bo).getByRole("button", { name: "Add an option" }).click();
+	let boField = storage(bo).getByRole("textbox", { name: "New option" });
+	await boField.fill("In PostgreSQL");
+	await boField.press("Enter");
+	await expect(storage(bo).getByRole("radio", { name: "In PostgreSQL" })).toBeVisible();
+
+	await storage(ana).getByRole("button", { name: "Add an option" }).click();
+	let field = storage(ana).getByRole("textbox", { name: "New option" });
+	await field.fill("in postgresql");
+	await field.press("Enter");
+
+	let alert = storage(ana).getByRole("alert");
+	await expect(alert).toContainText("Couldn’t add option");
+	await expect(alert).toContainText("already exists");
+	await expect(field).toHaveValue("in postgresql");
 });
 
 test("discarding asks first", async ({ join, seed }) => {

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { currentQuestion, QuestionView } from "./question-view";
+import { currentQuestion, duplicateOf, QuestionView } from "./question-view";
 import { create, limits, normalize, read } from "../index";
 
 test("a replacement definition falls back before rendering when its active question disappears", () => {
@@ -276,4 +276,16 @@ test("an expired card keeps its question and says the Planner will proceed; a wi
 	let withdrawn = render("cancelled");
 	expect(withdrawn).toContain("Cancelled by @chopin");
 	expect(withdrawn).not.toContain("Nobody answered");
+});
+
+test("a typed label repeats an option regardless of case or padding", () => {
+	let question = {
+		id: "q",
+		header: "Q",
+		question: "Where?",
+		multiple: false,
+		options: [{ id: "a", label: " In SQLite ", description: "" }],
+	};
+	expect(duplicateOf(question, "in sqlite")?.id).toBe("a");
+	expect(duplicateOf(question, "In files")).toBeUndefined();
 });

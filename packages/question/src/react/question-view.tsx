@@ -32,7 +32,7 @@ export type Collaborator = {
 	question?: string;
 };
 
-export type AddOptionResult = { ok: true; optionId?: string } | { ok: false; message: string };
+export type AddOptionResult = { ok: true } | { ok: false; message: string };
 
 export type QuestionStepRenderProps = {
 	children: ReactNode;
@@ -251,6 +251,12 @@ function LegacyCustom(
 	);
 }
 
+/** The existing option a typed label would repeat, matched like the server does. */
+export function duplicateOf(question: Item, label: string) {
+	let key = label.toLowerCase();
+	return question.options.find(option => option.label.trim().toLowerCase() === key);
+}
+
 /**
  * The last row: a prompt to add an option, which becomes the field for it.
  *
@@ -258,19 +264,13 @@ function LegacyCustom(
  * pending the field stays focusable so Escape still works; a rejection keeps
  * the text intact.
  */
-function duplicateOf(question: Item, label: string) {
-	let key = label.toLowerCase();
-	return question.options.find(option => option.label.trim().toLowerCase() === key);
-}
-
 function AddOption(
-	{ question, offset, disabled, onAdd, onAdded, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
+	{ question, offset, disabled, onAdd, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
 		question: Item;
 		/** Rows already shown below the options, such as a legacy custom answer. */
 		offset: number;
 		disabled: boolean;
 		onAdd?: (label: string) => Promise<AddOptionResult>;
-		onAdded?: (optionId: string) => void;
 		onFailed: (message: string | undefined) => void;
 		onEdit?: () => void;
 		onCancelEdit?: () => void;
@@ -333,7 +333,6 @@ function AddOption(
 		if (edit.current !== submittedEdit) return;
 		let ownsFocus = document.activeElement === input.current;
 		if (result.ok) {
-			if (result.optionId) onAdded?.(result.optionId);
 			onCommitEdit?.();
 			setText(null);
 			if (ownsFocus) focus.current = "trigger";
@@ -939,16 +938,6 @@ export function QuestionView(props: QuestionViewProps) {
 										: 0}
 									disabled={disabled}
 									onAdd={label => onAddOption(current.id, label)}
-									onAdded={optionId =>
-										onChange?.(
-											current.id,
-											current.multiple
-												? {
-													mode: "choices",
-													options: { ...drafts[current.id]?.options, [optionId]: true },
-												}
-												: { mode: "choices", choice: optionId },
-										)}
 									onFailed={setAddError}
 									onEdit={markComposerEdit}
 									onCancelEdit={cancelComposerEdit}
