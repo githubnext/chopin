@@ -88,7 +88,9 @@ describe("Comment card hierarchy", () => {
 	it("shows authors as chat does: a face, a display name and the handle for assistive tech", () => {
 		let markup = render(view("open"), true);
 
-		expect(markup).toContain('alt="ana"');
+		expect(markup).toContain('<span aria-hidden="true" class="relative grid');
+		expect(markup).toContain('alt=""');
+		expect(markup).not.toContain('aria-label="ana"');
 		expect(markup).toContain(">Ana<");
 		expect(markup).toContain("(@ana)");
 		expect(markup).not.toContain("text-brand-ink");
