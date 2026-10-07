@@ -191,7 +191,7 @@
 	overflow: hidden;
 }
 
-/* The track's width moves the workspace; the sidebar slides under its clip. Dragging is direct. */
+/* The track's width moves the workspace; the sidebar slides under its clip. Resizing is direct. */
 .motion-sidebar {
 	position: relative;
 	z-index: 45;
@@ -202,7 +202,7 @@
 	transition: width var(--sidebar-open-dur) var(--motion-move);
 }
 
-.motion-sidebar:has(> .project-sidebar-resize:active) {
+.motion-sidebar:has(> .project-sidebar-resize:is(:active, :focus-visible)) {
 	transition: none;
 }
 

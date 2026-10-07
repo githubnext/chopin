@@ -574,6 +574,10 @@ body {
 	width: var(--chat-width, 0px);
 }
 
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel:not(.is-open) {
+	border-inline-width: 0;
+}
+
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-pane-moving] {
 	transition: width var(--panel-open-dur) var(--motion-move);
 }
