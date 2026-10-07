@@ -158,7 +158,14 @@ describe("AI SDK stream projection", () => {
 
 	it("keeps reasoning private to the Planner: no frame, no transcript entry", () => {
 		let chat = create();
-		chat.turn = { id: "turn-1", handle: "ana", started: 1, startedAt: 1_000, entryOffset: 0, responded: false };
+		chat.turn = {
+			id: "turn-1",
+			handle: "ana",
+			started: 1,
+			startedAt: 1_000,
+			entryOffset: 0,
+			responded: false,
+		};
 		let { context, sent } = room(chat);
 		translate(context, part({ type: "reasoning-start", id: "r1" }));
 		translate(context, part({ type: "reasoning-delta", id: "r1", text: "Weighing options." }));

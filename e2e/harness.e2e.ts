@@ -132,7 +132,7 @@ async function recordChat(page: Page) {
 
 async function sendSlowTurn(page: Page) {
 	let chat = chatPane(page);
-	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill("@chopin SLOW-LIVE show your work");
+	await chatInput(chat).fill("@chopin SLOW-LIVE show your work");
 	await chat.getByRole("button", { name: "Send message" }).click();
 }
 
