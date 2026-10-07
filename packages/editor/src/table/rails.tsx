@@ -14,7 +14,9 @@
  *
  * Only one table has rails at a time — whichever the pointer is over, or the
  * caret is in. Rails on every table at once would be a page of grey furniture
- * around prose that is mostly not tables.
+ * around prose that is mostly not tables. Within that table only the row and
+ * column being pointed at, or holding the caret, draw a grip; an insert button
+ * shows only while its seam is aimed at.
  *
  * There is no test for this file, on purpose: it is rectangles and pointers all
  * the way down and the test runtime has no DOM. What can be decided without one
@@ -24,8 +26,8 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $findTableNode } from "@lexical/table";
-import { $getSelection, $isRangeSelection } from "lexical";
+import { $findTableNode, $isTableCellNode } from "@lexical/table";
+import { $findMatchingParent, $getSelection, $isRangeSelection } from "lexical";
 
 import { alignmentLabel, nextAlign } from "./alignment";
 import { destination, dropSeam, gripBox, seamAt, seamBox, seams } from "./geometry";
@@ -54,16 +56,16 @@ import type { Table } from "./ops";
  * going down. Nothing in the two lanes overlaps now, so neither can take the
  * other's pointer.
  */
-const GRIP = 14;
-const TOOL = 14;
+const GRIP = 12;
+const TOOL = 24;
 const DEPTH = GRIP + TOOL;
 
 /** How much of a seam can be aimed at. */
-const SEAM = 16;
+const SEAM = 24;
 
 /** One button in the tool lane, and how far each of a pair sits from centre. */
-const BUTTON = 15;
-const PAIR = 8;
+const BUTTON = 24;
+const PAIR = 13;
 
 export type RailMode = "full" | "grips";
 
@@ -88,6 +90,22 @@ type Metrics = {
 
 /** A drag in progress. */
 type Drag = { axis: Axis; from: number; seam: number };
+
+/** A cell of the active table, by row and column. */
+type Cell = { table: NodeKey; row: number; column: number };
+
+/** The seam an insert button is aimed at, drawn across the table. */
+type Aim = { axis: Axis; seam: number };
+
+function cellAt(tables: Table[], key: NodeKey): Cell | undefined {
+	for (let table of tables) {
+		for (let [row, keys] of table.cells.entries()) {
+			let column = keys.indexOf(key);
+			if (column >= 0) return { table: table.key, row, column };
+		}
+	}
+	return undefined;
+}
 
 /**
  * Measure one table.
@@ -148,6 +166,9 @@ export function TableRails(
 	let [active, setActive] = useState<NodeKey>();
 	let [metrics, setMetrics] = useState<Metrics>();
 	let [drag, setDrag] = useState<Drag>();
+	let [pointed, setPointed] = useState<Cell>();
+	let [caretCell, setCaretCell] = useState<Cell>();
+	let [aim, setAim] = useState<Aim>();
 
 	let table = tables.find(item => item.key === active);
 
@@ -214,6 +235,7 @@ export function TableRails(
 	let dragging = useRef(false);
 	dragging.current = drag !== undefined;
 	let leaving = useRef(0);
+	let caret = useRef<NodeKey | undefined>(undefined);
 
 	let hover = useCallback((key: NodeKey | undefined) => {
 		cancelAnimationFrame(leaving.current);
@@ -227,7 +249,11 @@ export function TableRails(
 		 * would take the rails out from under a pointer on its way to them.
 		 * The rail's own handler cancels this before it runs.
 		 */
-		leaving.current = requestAnimationFrame(() => setActive(undefined));
+		leaving.current = requestAnimationFrame(() => {
+			// Back to the table holding the caret, if any, rather than none.
+			setActive(caret.current);
+			setAim(undefined);
+		});
 	}, []);
 
 	useEffect(() => {
@@ -237,9 +263,19 @@ export function TableRails(
 		let over = (event: PointerEvent) => {
 			let target = event.target;
 			if (!(target instanceof Node)) return;
-			hover(tables.find(item => editor.getElementByKey(item.key)?.contains(target))?.key);
+			let found = tables.find(item => editor.getElementByKey(item.key)?.contains(target));
+			hover(found?.key);
+			let element = target instanceof Element ? target : target.parentElement;
+			let cell = element?.closest("td, th");
+			let key = found && cell
+				? found.cells.flat().find(item => editor.getElementByKey(item) === cell)
+				: undefined;
+			setPointed(key ? cellAt([found!], key) : undefined);
 		};
-		let out = () => hover(undefined);
+		let out = () => {
+			hover(undefined);
+			setPointed(undefined);
+		};
 
 		root.addEventListener("pointerover", over);
 		root.addEventListener("pointerleave", out);
@@ -257,14 +293,21 @@ export function TableRails(
 	 * re-asserting it against a pointer resting somewhere else, and the rails
 	 * would flick between the two as long as somebody kept writing.
 	 */
-	let caret = useRef<NodeKey | undefined>(undefined);
+	let tablesRef = useRef(tables);
+	tablesRef.current = tables;
 	useEffect(() => {
 		let sync = () => {
 			editor.getEditorState().read(() => {
 				let selection = $getSelection();
-				let found = $isRangeSelection(selection)
-					? $findTableNode(selection.anchor.getNode())?.getKey()
-					: undefined;
+				let node = $isRangeSelection(selection) ? selection.anchor.getNode() : undefined;
+				let found = node ? $findTableNode(node)?.getKey() : undefined;
+				let cell = node ? $findMatchingParent(node, $isTableCellNode)?.getKey() : undefined;
+				let at = cell ? cellAt(tablesRef.current, cell) : undefined;
+				setCaretCell(last =>
+					last?.table === at?.table && last?.row === at?.row && last?.column === at?.column
+						? last
+						: at
+				);
 				if (found === caret.current) return;
 				caret.current = found;
 				if (found) setActive(found);
@@ -280,14 +323,39 @@ export function TableRails(
 	// table's rectangles would put the rails somewhere they do not belong.
 	if (disabled || !table || !metrics || metrics.key !== table.key) return null;
 	let tools = mode === "full";
+	let hot = pointed?.table === table.key
+		? pointed
+		: caretCell?.table === table.key
+		? caretCell
+		: undefined;
+	let holding = caretCell?.table === table.key;
+
+	let line = aim
+		? seams(aim.axis === "column" ? metrics.columns : metrics.rows)[aim.seam]
+		: undefined;
 
 	return (
 		<>
+			{aim && line !== undefined
+				? (
+					<div
+						aria-hidden="true"
+						className="plan-seam-line"
+						data-plan-seam-line={aim.axis}
+						style={aim.axis === "column"
+							? { left: line - 1, top: metrics.top, width: 2, height: metrics.height }
+							: { left: metrics.left, top: line - 1, width: metrics.width, height: 2 }}
+					/>
+				)
+				: null}
 			<Rail
 				axis="column"
+				caret={holding}
 				drag={drag}
+				hot={hot?.column}
 				metrics={metrics}
 				onAct={act}
+				onAim={setAim}
 				onDrag={setDrag}
 				onHover={hover}
 				table={table}
@@ -296,9 +364,12 @@ export function TableRails(
 			/>
 			<Rail
 				axis="row"
+				caret={holding}
 				drag={drag}
+				hot={hot?.row}
 				metrics={metrics}
 				onAct={act}
+				onAim={setAim}
 				onDrag={setDrag}
 				onHover={hover}
 				table={table}
@@ -311,9 +382,14 @@ export function TableRails(
 
 type RailProps = {
 	axis: Axis;
+	/** Whether the caret is in this table, which keeps every grip faintly drawn. */
+	caret: boolean;
 	drag: Drag | undefined;
+	/** The track being pointed at in the table, or holding the caret. */
+	hot: number | undefined;
 	metrics: Metrics;
 	onAct: (op: () => void) => void;
+	onAim: (aim: Aim | undefined) => void;
 	onDrag: (drag: Drag | undefined) => void;
 	onHover: (key: NodeKey | undefined) => void;
 	table: Table;
@@ -321,7 +397,10 @@ type RailProps = {
 	tools: boolean;
 };
 
-function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tools }: RailProps) {
+function Rail(
+	{ axis, caret, drag, hot, metrics, onAct, onAim, onDrag, onHover, table, tracks, tools }:
+		RailProps,
+) {
 	let column = axis === "column";
 	let key = table.key;
 	let count = tracks.length;
@@ -389,12 +468,18 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 		column ? canRemoveColumn(table.shape, index) : canRemoveRow(table.shape, index);
 	// Every column may be taken hold of; the header row may not.
 	let holdable = (index: number) => table.shape.simple && (column || index > HEADER);
+	// A row rail is beside the table, so its tooltips go further out to the left;
+	// a column rail's already open above it.
+	let side = column ? undefined : "left";
 
 	return (
 		<div
 			className="plan-rail"
 			data-focus-boundary=""
+			data-plan-caret={caret || undefined}
 			data-plan-rail={axis}
+			// Tooltips sit beyond the rail, so none covers a control in it.
+			data-tooltip-edge=""
 			// Placement is measured, so it is a style rather than a class.
 			style={frame}
 			onPointerOver={() => onHover(key)}
@@ -406,19 +491,24 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 			{tracks.map((track, index) => {
 				let box = gripBox(axis, track, origin, GRIP, gripLane);
 				if (!holdable(index)) {
-					// The header still gets a bar, so the rail does not have a
-					// gap in it where the row everybody can see plainly is.
+					// Undrawn, but still the rail's: a hole here would be a
+					// pointerleave on the way from the header to the first grip.
 					return <div key={index} className="plan-grip is-fixed" style={box} />;
 				}
 				return (
 					<button
 						key={index}
 						type="button"
+						aria-keyshortcuts={column
+							? "Meta+ArrowLeft Meta+ArrowRight Control+ArrowLeft Control+ArrowRight"
+							: "Meta+ArrowUp Meta+ArrowDown Control+ArrowUp Control+ArrowDown"}
 						aria-label={`Move ${noun} ${index + 1}`}
 						className={`plan-grip ${mine?.from === index ? "is-held" : ""}`}
 						data-press="small"
 						data-tooltip={`Move ${column ? "column" : "row"}`}
+						data-tooltip-side={side}
 						data-plan-held={mine?.from === index || undefined}
+						data-plan-hot={(under ?? hot) === index || undefined}
 						style={box}
 						title={`Drag to move this ${noun}`}
 						onPointerEnter={() => setUnder(index)}
@@ -503,6 +593,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 									data-press="small"
 									data-plan-align={table.align[index] ?? "default"}
 									data-tooltip="Align column"
+									data-tooltip-side={side}
 									data-plan-shown={shown}
 									style={place(-PAIR)}
 									title="Change this column's alignment"
@@ -522,6 +613,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 									data-press="small"
 									data-plan-shown={shown}
 									data-tooltip={`Remove ${column ? "column" : "row"}`}
+									data-tooltip-side={side}
 									style={place(PAIR)}
 									title={`Remove this ${noun}`}
 									onFocus={() => setUnder(index)}
@@ -548,9 +640,14 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 							className="plan-insert"
 							data-press="small"
 							data-tooltip={`Insert ${column ? "column" : "row"}`}
+							data-tooltip-side={side}
 							style={seamBox(axis, line, origin, TOOL, SEAM)}
 							title={`Insert a ${noun} here`}
+							onBlur={() => onAim(undefined)}
 							onClick={() => insert(seam)}
+							onFocus={() => onAim({ axis, seam })}
+							onPointerEnter={() => onAim({ axis, seam })}
+							onPointerLeave={() => onAim(undefined)}
 						/>
 					);
 				})}

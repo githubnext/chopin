@@ -31,6 +31,10 @@
 	transform: translateY(-50%);
 }
 
+.icon-tooltip[data-side="left"] {
+	transform: translateY(-50%);
+}
+
 .icon-tooltip[data-visible] {
 	opacity: 1;
 	visibility: visible;

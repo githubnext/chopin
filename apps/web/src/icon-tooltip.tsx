@@ -150,6 +150,17 @@ export function IconTooltip() {
 						return;
 					}
 				}
+				// A table's row rail keeps its tooltips beyond its outer edge, clear of its controls.
+				if (button.dataset.tooltipSide === "left") {
+					tooltip.dataset.side = "left";
+					let left = (button.closest("[data-tooltip-edge]") ?? button).getBoundingClientRect().left;
+					if (left - GAP - tooltip.offsetWidth >= 8) {
+						tooltip.style.top = `${rect.top + rect.height / 2}px`;
+						tooltip.style.left = `${left - GAP - tooltip.offsetWidth}px`;
+						tooltip.setAttribute("data-visible", "");
+						return;
+					}
+				}
 				let below = rect.top < tooltip.offsetHeight + GAP;
 				tooltip.style.top = `${below ? rect.bottom + GAP : rect.top - GAP}px`;
 				tooltip.dataset.side = below ? "bottom" : "top";
