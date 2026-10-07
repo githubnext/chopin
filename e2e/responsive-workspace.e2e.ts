@@ -454,8 +454,8 @@ test("an 844px landscape viewport keeps the split workspace", async ({ join, see
 	await expectNoHorizontalOverflow(page);
 });
 
-test("the Projects drawer below 1024px keeps the split workspace", async ({ join, seed }) => {
-	let viewport = { width: 1023, height: 964 };
+test("the Projects drawer below 1198px keeps the split workspace", async ({ join, seed }) => {
+	let viewport = { width: 1197, height: 964 };
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport });
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
@@ -487,7 +487,7 @@ test("the Projects drawer below 1024px keeps the split workspace", async ({ join
 
 test("the wide Projects sidebar leaves the workspace unobstructed", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
-	let page = await join("ana", { viewport: { width: 1024, height: 768 } });
+	let page = await join("ana", { viewport: { width: 1198, height: 768 } });
 	let projects = page.getByRole("complementary", { includeHidden: true, name: "Projects" });
 	let opener = page.getByRole("button", { name: "Show sidebar" });
 	let track = projects.locator("../..");
@@ -616,4 +616,30 @@ test("a touch comment sheet keeps its composer above the visual keyboard", async
 	} finally {
 		await emulation.close();
 	}
+});
+
+test("layout resize moves focus out of a hidden Chat pane", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { viewport: { width: 960, height: 850 } });
+	await chatInput(chatPane(page)).focus();
+	await page.setViewportSize({ width: 640, height: 850 });
+	await expect(chatPane(page)).toBeHidden();
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let active = document.activeElement;
+			return active !== document.body && !active?.closest("[hidden], [inert]");
+		})
+	).toBe(true);
+});
+
+test("the obsolete auto-saved Chat key does not hide Chat or persist a new choice", async ({ join, seed, page }) => {
+	await seed(RESPONSIVE_SOURCE);
+	await page.setViewportSize({ width: 960, height: 850 });
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
+	await join("ana");
+	await expect(chatPane(page)).toBeVisible();
+	expect(await page.evaluate(() => localStorage.getItem("chopin:pane:chat:choice"))).toBeNull();
+	await page.getByRole("button", { name: "Close sidebar" }).click();
+	await expect.poll(() => page.evaluate(() => localStorage.getItem("chopin:pane:chat:choice")))
+		.toBe("false");
 });
