@@ -15,7 +15,9 @@
 	pointer-events: none;
 	opacity: 0;
 	visibility: hidden;
-	transition: opacity var(--duration-fast) ease-out, visibility var(--duration-fast) ease-out;
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		visibility var(--duration-fast) var(--ease-out);
 }
 
 .icon-tooltip[data-side="top"] {
@@ -32,6 +34,10 @@
 .icon-tooltip[data-visible] {
 	opacity: 1;
 	visibility: visible;
+}
+
+.icon-tooltip[data-instant] {
+	transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

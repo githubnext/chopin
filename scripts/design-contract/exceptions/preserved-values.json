@@ -113,19 +113,6 @@
 		]
 	},
 	{
-		"file": "apps/web/src/icon-tooltip.css",
-		"reason": "Native CSS ease-out differs from the shared custom ease-out curve; duration is migrated, original tooltip response curve is preserved.",
-		"cases": [
-			[
-				"motion",
-				"transition",
-				"opacity var(--duration-fast) ease-out, visibility var(--duration-fast) ease-out",
-				"CSS > .icon-tooltip",
-				1
-			]
-		]
-	},
-	{
 		"file": "apps/web/src/workspace.tsx",
 		"reason": "Existing workspace frame has an intentional 12px outer radius; preserve the approved layout/hierarchy rather than introducing a one-use scale token.",
 		"cases": [
