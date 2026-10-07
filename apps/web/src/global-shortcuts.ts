@@ -1,4 +1,4 @@
-import { currentShortcutPlatform, matchShortcut } from "./shortcuts";
+import { currentShortcutPlatform, matchShortcut, shortcutLabel } from "./shortcuts";
 
 import type { ShortcutId } from "./shortcuts";
 
@@ -6,6 +6,10 @@ export type ShortcutActions = Partial<Record<ShortcutId, () => void>>;
 
 const TYPING =
 	"input, textarea, select, [contenteditable]:not([contenteditable='false']), [role=menu], [role=listbox]";
+
+export function shortcutHint(id: ShortcutId): string {
+	return shortcutLabel(id, currentShortcutPlatform());
+}
 
 /** Listens on the window, after the editor and fields have had their chance to claim a key. */
 export function listenForShortcuts(actions: () => ShortcutActions): () => void {

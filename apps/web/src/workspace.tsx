@@ -369,10 +369,11 @@ export function Workspace(
 		if (mode !== "split" || pane?.contains(document.activeElement)) dismissChat();
 		else onDesktopChatOpen(false);
 	};
+	let chatShortcutEnabled = !!chat && !paperObscured;
 	useEffect(() => {
-		if (!chat || paperObscured) return;
+		if (!chatShortcutEnabled) return;
 		return listenForShortcuts(() => ({ "toggle-chat": () => toggleChat.current() }));
-	}, [!chat, paperObscured]);
+	}, [chatShortcutEnabled]);
 
 	return (
 		<div

@@ -32,7 +32,14 @@ export type Shortcut = {
 };
 
 export const SHORTCUTS: readonly Shortcut[] = [
-	{ id: "search", label: "Search documents", group: "General", key: "k", mod: true },
+	{
+		id: "search",
+		label: "Search documents",
+		group: "General",
+		key: "k",
+		code: "KeyK",
+		mod: true,
+	},
 	{ id: "new-document", label: "New document", group: "General", key: "c" },
 	{
 		id: "toggle-sidebar",
@@ -121,16 +128,16 @@ export function matchShortcut(
 	let other = platform === "mac" ? event.ctrlKey : event.metaKey;
 	if (other) return;
 	let key = event.key.toLowerCase();
+	// A Latin letter or digit is what the user meant, wherever the key sits (Dvorak's ⌘V is
+	// on the physical Period key). The physical key is only a fallback for other characters.
+	let latin = /^[a-z0-9]$/.test(key);
 	for (let entry of SHORTCUTS) {
 		if (entry.display || !!entry.mod !== mod) continue;
 		if (!entry.mod && context.typing) continue;
-		// `?` is a shifted key on most layouts, so its own character is the match.
-		if (entry.key === "?") {
-			if (key === "?") return entry.id;
-			continue;
-		}
-		if (!!entry.shift !== event.shiftKey) continue;
-		if (key === entry.key || (entry.code !== undefined && event.code === entry.code)) {
+		// Punctuation needs Shift on some layouts (`.` on AZERTY, `?` nearly everywhere), so
+		// Shift only distinguishes letter chords.
+		if (/^[a-z0-9]$/.test(entry.key) && !!entry.shift !== event.shiftKey) continue;
+		if (key === entry.key || (!latin && entry.code !== undefined && event.code === entry.code)) {
 			return entry.id;
 		}
 	}

@@ -95,6 +95,33 @@ describe("matchShortcut", () => {
 		expect(matchShortcut(key("\\", { metaKey: true }), "mac", idle)).toBe("toggle-sidebar");
 	});
 
+	test("Dvorak keeps the shortcuts its keys type, not the keys they sit on", () => {
+		// ⌘V on Dvorak is the physical Period key; it must stay paste.
+		expect(matchShortcut(key("v", { code: "Period", metaKey: true }), "mac", typing))
+			.toBeUndefined();
+		// ⌘. on Dvorak is the physical E key.
+		expect(matchShortcut(key(".", { code: "KeyE", metaKey: true }), "mac", typing))
+			.toBe("toggle-chat");
+		expect(matchShortcut(key("k", { code: "KeyV", metaKey: true }), "mac", idle)).toBe("search");
+	});
+
+	test("AZERTY punctuation chords match the character they type, shifted or not", () => {
+		// AZERTY types `.` with Shift on the `;` key.
+		expect(
+			matchShortcut(key(".", { code: "Comma", metaKey: true, shiftKey: true }), "mac", idle),
+		).toBe("toggle-chat");
+		expect(matchShortcut(key("?", { code: "KeyM", shiftKey: true }), "other", idle))
+			.toBe("shortcuts");
+		// AZERTY's A sits on the physical Q key; letters stay letters.
+		expect(matchShortcut(key("k", { code: "KeyK", ctrlKey: true }), "other", idle)).toBe("search");
+	});
+
+	test("non-Latin layouts fall back to the physical key", () => {
+		expect(matchShortcut(key("л", { code: "KeyK", metaKey: true }), "mac", idle)).toBe("search");
+		expect(matchShortcut(key("ю", { code: "Period", metaKey: true }), "mac", idle))
+			.toBe("toggle-chat");
+	});
+
 	test("an open modal, Alt, or composition suppresses every shortcut", () => {
 		expect(matchShortcut(key("k", { metaKey: true }), "mac", { typing: false, modal: true }))
 			.toBeUndefined();

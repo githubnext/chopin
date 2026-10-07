@@ -112,4 +112,8 @@ test("icon tooltips show their shortcut", async ({ join }) => {
 	await page.getByRole("button", { name: "Add project" }).hover();
 	await expect(tooltip).toHaveText("Add project");
 	await expect(tooltip).toHaveAttribute("data-shortcut", "");
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
+	await page.getByRole("button", { name: "Show sidebar" }).hover();
+	await expect(tooltip).toHaveText("Show sidebar");
+	await expect(tooltip).toHaveAttribute("data-shortcut", /^(⌘|Ctrl\+)\\$/);
 });
