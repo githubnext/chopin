@@ -610,6 +610,13 @@
 	pointer-events: none;
 }
 
+.navigation-creation-status button {
+	margin-left: 8px;
+	pointer-events: auto;
+	color: var(--color-text-primary);
+	text-decoration: underline;
+}
+
 .navigation-error {
 	position: absolute;
 	left: 16px;
@@ -889,48 +896,23 @@
 }
 
 .navigation-account-menu [role="separator"] {
-	margin: 4px 6px;
-	height: 1px;
-	background: var(--color-selected);
-}
-
-.navigation-toast {
-	position: fixed;
-	bottom: 16px;
-	left: 50%;
-	z-index: 70;
-	translate: -50% 0;
-	border-radius: var(--radius-md);
-	background: var(--color-page);
-	padding: 6px 12px;
-	font-size: var(--text-sm);
-	color: var(--color-text-secondary);
-	box-shadow: var(--shadow-raised);
-	pointer-events: none;
+	margin: 4px 0;
+	height: var(--edge-width);
+	background: var(--color-edge);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.navigation-toast {
-		animation: navigation-toast-in var(--duration-fast) var(--motion-smooth-out);
-	}
-
 	.project-sidebar-project-row[data-flash] {
-		animation: project-row-flash var(--duration-linger) var(--motion-smooth-out);
-	}
-}
-
-@keyframes navigation-toast-in {
-	from {
-		opacity: 0;
-		transform: translateY(4px);
+		animation: project-row-flash calc(var(--duration-linger) * 1.5) var(--motion-smooth-out);
 	}
 }
 
 @keyframes project-row-flash {
-	from {
+	0%,
+	28% {
 		background: var(--color-selected);
 	}
-	to {
+	100% {
 		background: transparent;
 	}
 }
