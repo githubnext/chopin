@@ -266,13 +266,6 @@
 				"dynamic",
 				"*",
 				"props",
-				"unresolved JSX props > ImageIcon > <LineIcon>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
 				"unresolved JSX props > DiagramIcon > <LineIcon>",
 				1
 			],
@@ -305,7 +298,7 @@
 				1
 			]
 		],
-		"sourceHash": "ebd0a2806b33809811350d70d2f391ffa458b32f5396beca2123e7249e7f8592"
+		"sourceHash": "751c15f0f701cc37590be4ae69a498f8ba6a13708715239b3a2d645c2b799681"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",
