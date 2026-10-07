@@ -22,6 +22,7 @@ import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
+import { NavigationNotice, useNavigationNotice } from "./navigation-notice";
 import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
 import { useMenuDismissal } from "./menu-dismissal";
@@ -292,14 +293,7 @@ export function NavigationShell(
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
-	let [notice, setNotice] = useState<string>();
-	let noticeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-	let announce = useCallback((message: string) => {
-		clearTimeout(noticeTimer.current);
-		setNotice(message);
-		noticeTimer.current = setTimeout(() => setNotice(undefined), 2000);
-	}, []);
-	useEffect(() => () => clearTimeout(noticeTimer.current), []);
+	let { dismiss: dismissNotice, notice, show: showNotice } = useNavigationNotice();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
@@ -542,7 +536,7 @@ export function NavigationShell(
 			project.scrollIntoView({ block: "nearest" });
 			if (row) {
 				row.dataset.flash = "";
-				setTimeout(() => delete row.dataset.flash, 600);
+				setTimeout(() => delete row.dataset.flash, 900);
 			}
 			setFocusProjectId(undefined);
 		});
@@ -684,10 +678,15 @@ export function NavigationShell(
 		setAccountOpen(false);
 		if (action === "copy-link") {
 			let url = new URL(documentDestination(projectsRef.current, channel.id), location.origin);
-			navigator.clipboard.writeText(url.href).then(
-				() => announce("Link copied"),
-				() => announce("Could not copy link"),
-			);
+			let failed = () => showNotice({ message: "Could not copy link" });
+			try {
+				navigator.clipboard.writeText(url.href).then(
+					() => showNotice({ message: "Link copied" }),
+					failed,
+				);
+			} catch {
+				failed();
+			}
 			return;
 		}
 		if (action === "rename") {
@@ -711,7 +710,7 @@ export function NavigationShell(
 		}, reason => {
 			setError({ reason });
 		});
-	}, [acceptChannel, announce, navigate, showDialog]);
+	}, [acceptChannel, navigate, showDialog, showNotice]);
 	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
@@ -827,7 +826,7 @@ export function NavigationShell(
 						}}
 						role="menu"
 					>
-						<a href="/auth/github/install" role="menuitem">
+						<a href="/auth/github/install" rel="noopener" role="menuitem" target="_blank">
 							<LockIcon aria-hidden="true" size={14} />
 							Manage repository access
 						</a>
@@ -867,6 +866,7 @@ export function NavigationShell(
 	);
 	let content = (
 		<>
+			<NavigationNotice notice={notice} onDismiss={dismissNotice} />
 			{!sidebarVisible && !drawerOpen && presentedDialog !== "new" && creation.pending.size > 0 && (
 				<div className="navigation-creation-status" role="status">
 					{[...creation.pending].map(([id, phase]) => (
@@ -927,9 +927,6 @@ export function NavigationShell(
 				data-navigation-mode={mode}
 				onClickCapture={navigateLink}
 			>
-				<div aria-live="polite" role="status">
-					{notice && <p className="navigation-toast" key={notice}>{notice}</p>}
-				</div>
 				{sidebarPresence.phase !== "closed" && (
 					<div
 						aria-hidden={sidebarPresence.phase === "closing" ? "true" : undefined}
