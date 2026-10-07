@@ -472,7 +472,7 @@ export function ProjectSidebar(
 	let archiveMode = catalogueMode === "archived";
 	let platform = currentShortcutPlatform();
 	let primaryActions = (
-		<div className="project-sidebar-primary-actions">
+		<div className="project-sidebar-primary-actions project-sidebar-mode" key={catalogueMode}>
 			{archiveMode
 				? (
 					<button
@@ -484,7 +484,7 @@ export function ProjectSidebar(
 						ref={allDocumentsButton}
 						type="button"
 					>
-						<span aria-hidden="true">←</span>
+						<ChevronIcon aria-hidden="true" className="rotate-180" size={14} />
 						<span>All documents</span>
 					</button>
 				)
@@ -575,9 +575,13 @@ export function ProjectSidebar(
 
 				{primaryActions}
 
-				<nav className="px-2 py-2" aria-label="Projects">
+				<nav
+					className="project-sidebar-mode px-2 py-2"
+					aria-label={archiveMode ? "Archived documents" : "Projects"}
+					key={catalogueMode}
+				>
 					<div className="project-sidebar-projects-heading group/projects-heading">
-						<span>Projects</span>
+						<span>{archiveMode ? "Archived" : "Projects"}</span>
 						{!archiveMode && (
 							<button
 								aria-label="Add project"

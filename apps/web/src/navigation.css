@@ -306,6 +306,19 @@
 	color: color-mix(in srgb, var(--color-text-tertiary) 60%, transparent);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+	.project-sidebar-mode {
+		animation: project-sidebar-mode-in var(--duration-base) var(--motion-smooth-out);
+	}
+}
+
+@keyframes project-sidebar-mode-in {
+	from {
+		opacity: 0;
+		transform: translateX(8px);
+	}
+}
+
 .project-sidebar-projects,
 .project-sidebar-documents,
 .project-sidebar-children {

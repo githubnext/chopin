@@ -944,6 +944,24 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
 });
 
+test("archiving offers Undo and archived mode names itself", async ({ join, room }) => {
+	let ana = await join("ana");
+	let title = `Test ${room.slice(0, 8)}`;
+	let projects = sidebar(ana);
+
+	await headerAction(ana, "Archive");
+	let notice = ana.getByRole("status").filter({ hasText: `Archived ${title}` });
+	await expect(notice).toBeVisible();
+	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);
+	await notice.getByRole("button", { name: "Undo", exact: true }).click();
+	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toHaveCount(0);
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
+
+	await projects.getByRole("button", { name: "Archived", exact: true }).click();
+	await expect(projects.getByRole("navigation", { name: "Archived documents" })).toBeVisible();
+	await expect(projects.getByText("Projects", { exact: true })).toHaveCount(0);
+});
+
 test("writers can archive, restore, and permanently delete a document", async ({ join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
