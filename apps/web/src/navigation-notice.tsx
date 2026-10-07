@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type NoticeOptions = {
 	message: string;
@@ -10,40 +10,33 @@ export type NoticeOptions = {
 export function useNavigationNotice() {
 	let [notice, setNotice] = useState<NoticeOptions>();
 	let timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-	let dismiss = useCallback(() => {
-		clearTimeout(timer.current);
-		setNotice(undefined);
-	}, []);
-	let show = useCallback((options: NoticeOptions) => {
+	let show = (options?: NoticeOptions) => {
 		clearTimeout(timer.current);
 		setNotice(options);
-		timer.current = setTimeout(() => setNotice(undefined), options.duration ?? 2000);
-	}, []);
+		if (options) timer.current = setTimeout(show, options.duration ?? 2000);
+	};
 	useEffect(() => () => clearTimeout(timer.current), []);
-	return { dismiss, notice, show };
+	return { notice, show };
 }
 
 /** Shares the creation status surface so every transient shell message looks the same. */
 export function NavigationNotice(
-	{ notice, onDismiss }: { notice?: NoticeOptions; onDismiss: () => void },
+	{ notice, show }: { notice?: NoticeOptions; show: (options?: NoticeOptions) => void },
 ) {
-	if (!notice) return null;
-	return (
+	return notice && (
 		<div className="navigation-creation-status" role="status">
-			<p>
-				{notice.message}
-				{notice.action && (
-					<button
-						onClick={() => {
-							notice.action?.onAction();
-							onDismiss();
-						}}
-						type="button"
-					>
-						{notice.action.label}
-					</button>
-				)}
-			</p>
+			{notice.message}
+			{notice.action && (
+				<button
+					onClick={() => {
+						notice.action?.onAction();
+						show();
+					}}
+					type="button"
+				>
+					{notice.action.label}
+				</button>
+			)}
 		</div>
 	);
 }

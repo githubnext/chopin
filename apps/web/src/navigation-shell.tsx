@@ -1,4 +1,3 @@
-import { LockIcon, SignInIcon } from "@chopin/icons";
 import {
 	Component,
 	createContext,
@@ -293,7 +292,7 @@ export function NavigationShell(
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
-	let { dismiss: dismissNotice, notice, show: showNotice } = useNavigationNotice();
+	let { notice, show: showNotice } = useNavigationNotice();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
@@ -523,26 +522,6 @@ export function NavigationShell(
 		}
 	}, [navigation?.projects.length, route.page]);
 
-	useEffect(() => {
-		if (!focusProjectId) return;
-		let frame = requestAnimationFrame(() => {
-			let project = document.querySelector<HTMLElement>(
-				`[data-project-id="${CSS.escape(focusProjectId)}"]`,
-			);
-			if (!project) return;
-			let row = project.querySelector<HTMLElement>(".project-sidebar-project-row");
-			project.querySelector<HTMLElement>(".project-sidebar-project-disclosure")
-				?.focus({ preventScroll: true });
-			project.scrollIntoView({ block: "nearest" });
-			if (row) {
-				row.dataset.flash = "";
-				setTimeout(() => delete row.dataset.flash, 900);
-			}
-			setFocusProjectId(undefined);
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [focusProjectId, projects]);
-
 	let navigateToDocument = (documentId: string, path?: string) => {
 		setError(undefined);
 		setDialog(undefined);
@@ -677,16 +656,16 @@ export function NavigationShell(
 		setDrawerOpen(false);
 		setAccountOpen(false);
 		if (action === "copy-link") {
-			let url = new URL(documentDestination(projectsRef.current, channel.id), location.origin);
-			let failed = () => showNotice({ message: "Could not copy link" });
-			try {
-				navigator.clipboard.writeText(url.href).then(
-					() => showNotice({ message: "Link copied" }),
-					failed,
-				);
-			} catch {
-				failed();
-			}
+			let href =
+				new URL(documentDestination(projectsRef.current, channel.id), location.origin).href;
+			void (async () => {
+				try {
+					await navigator.clipboard.writeText(href);
+					showNotice({ message: "Link copied" });
+				} catch {
+					showNotice({ message: "Could not copy link" });
+				}
+			})();
 			return;
 		}
 		if (action === "rename") {
@@ -812,31 +791,12 @@ export function NavigationShell(
 	let sidebar = (
 		<Suspense fallback={<ProjectSidebarLoading onCollapse={collapseSidebar} />}>
 			<ProjectSidebar
-				accountMenu={accountPresence.phase !== "closed" && (
-					<div
-						aria-hidden={accountPresence.phase === "closing" ? "true" : undefined}
-						className={`navigation-account-menu motion-dropdown ${accountPresence.className}`}
-						id={accountMenuId}
-						inert={accountPresence.phase === "closing"}
-						onKeyDown={event => {
-							if (event.key === "Tab") return closeAccount(false);
-							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-							event.preventDefault();
-							event.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus();
-						}}
-						role="menu"
-					>
-						<a href="/auth/github/install" rel="noopener" role="menuitem" target="_blank">
-							<LockIcon aria-hidden="true" size={14} />
-							Manage repository access
-						</a>
-						<div role="separator" />
-						<button onClick={() => void signOut()} role="menuitem" type="button">
-							<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
-							Sign out
-						</button>
-					</div>
-				)}
+				accountMenu={accountPresence.phase !== "closed" && {
+					className: accountPresence.className,
+					closing: accountPresence.phase === "closing",
+					onDismiss: () => closeAccount(false),
+					onSignOut: () => void signOut(),
+				}}
 				accountMenuId={accountMenuId}
 				accountMenuOpen={accountOpen}
 				accountTriggerRef={accountTrigger}
@@ -850,7 +810,9 @@ export function NavigationShell(
 					: undefined}
 				currentDocumentId={currentDocumentId}
 				onAccount={() => setAccountOpen(open => !open)}
+				focusProjectId={focusProjectId}
 				onAddProject={() => showDialog("add")}
+				onFocusedProject={() => setFocusProjectId(undefined)}
 				onCollapse={collapseSidebar}
 				onCreateDocument={project => void createDocument(project)}
 				onDocumentAction={documentAction}
@@ -866,7 +828,7 @@ export function NavigationShell(
 	);
 	let content = (
 		<>
-			<NavigationNotice notice={notice} onDismiss={dismissNotice} />
+			<NavigationNotice notice={notice} show={showNotice} />
 			{!sidebarVisible && !drawerOpen && presentedDialog !== "new" && creation.pending.size > 0 && (
 				<div className="navigation-creation-status" role="status">
 					{[...creation.pending].map(([id, phase]) => (
