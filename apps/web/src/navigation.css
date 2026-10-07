@@ -1202,8 +1202,46 @@
 	}
 }
 
+/* Loading states stay silent for fast loads, then arrive without a pop. */
+.hosted-loading,
+.project-sidebar-chrome-fade,
+.project-sidebar-skeleton {
+	animation: hosted-fade-in var(--duration-base) var(--ease-out) both;
+}
+
+.hosted-loading {
+	animation-delay: var(--duration-linger);
+}
+
+.project-sidebar-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 4);
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 2);
+	animation-delay: var(--duration-base);
+
+	& > span {
+		display: block;
+		height: calc(var(--spacing) * 2);
+		border-radius: var(--radius-full);
+		background-color: var(--color-selected);
+	}
+}
+
+@keyframes hosted-fade-in {
+	from {
+		opacity: 0;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.project-sidebar-document-new::before {
+		animation: none;
+	}
+
+	.hosted-loading,
+	.project-sidebar-chrome-fade,
+	.project-sidebar-skeleton {
 		animation: none;
 	}
 }

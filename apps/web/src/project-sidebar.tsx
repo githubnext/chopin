@@ -4,6 +4,7 @@ import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
@@ -578,6 +579,7 @@ export function ProjectSidebar(
 							</button>
 						)}
 					</div>
+					{newDocumentPhase === "loading" && projects.length === 0 && <ProjectSidebarSkeleton />}
 					<ul className="project-sidebar-projects gap-2">
 						{[...projects].sort((first, second) => first.project.position - second.project.position)
 							.map(entry => (

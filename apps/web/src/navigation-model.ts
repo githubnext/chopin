@@ -11,7 +11,8 @@ export type NavigationMode = "drawer" | "inline";
 export type NavigationRoute =
 	| DocumentRouteIdentitySource
 	| { page: "repositories" }
-	| { page: "repository"; owner: string; repository: string };
+	| { page: "repository"; owner: string; repository: string }
+	| { page: "missing" };
 
 export const NAVIGATION_INLINE_MIN = 1198;
 export const NAVIGATION_MEDIA = `(max-width: ${NAVIGATION_INLINE_MIN - 1}px)`;

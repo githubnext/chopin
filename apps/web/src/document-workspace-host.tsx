@@ -383,7 +383,7 @@ export default function DocumentWorkspaceHost(
 	let childLabel = loaded.child?.channel.title ?? (route.page === "child" ? route.childSlug : "");
 	let closeChild = () => onChildClose(loaded.parent.channel.id, parentPath);
 	let parent = (
-		<Suspense fallback={<Loading label="Opening parent document..." />}>
+		<Suspense fallback={<Loading label="Opening document…" />}>
 			<RoomWorkspace
 				{...workspaceProps(
 					loaded.parent,
@@ -400,7 +400,7 @@ export default function DocumentWorkspaceHost(
 	);
 	let child = loaded.child
 		? (
-			<Suspense fallback={<Loading label="Opening child document..." />}>
+			<Suspense fallback={<Loading label="Opening child document…" />}>
 				<RoomWorkspace
 					{...workspaceProps(
 						loaded.child,
@@ -425,7 +425,7 @@ export default function DocumentWorkspaceHost(
 		: route.page === "child" && presentation === "open"
 		? error
 			? <Failure error={error} onRetry={retryFailure} />
-			: <Loading label="Opening child document..." />
+			: <Loading label="Opening child document…" />
 		: undefined;
 	return (
 		<AnchoredChildSurface

@@ -1,3 +1,4 @@
+export { GitHubIcon } from "./brand";
 export { ChopinIcon } from "./filled";
 export type { IconProps } from "./icon";
 export {

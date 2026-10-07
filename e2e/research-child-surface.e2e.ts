@@ -518,7 +518,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 	await childLink(secondTitle).click();
 	await expect(page).toHaveURL(url => url.pathname === second.path);
 	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toHaveCount(0);
-	await expect(page.locator(".anchored-child-surface")).toContainText("Opening child document...");
+	await expect(page.locator(".anchored-child-surface")).toContainText("Opening child document…");
 
 	release();
 	let secondSurface = page.getByRole("region", { name: `Child document: ${secondTitle}` });
