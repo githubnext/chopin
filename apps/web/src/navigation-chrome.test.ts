@@ -3,7 +3,12 @@ import { ChevronIcon, DocumentIcon, SearchIcon } from "@chopin/icons";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { NavigationIcon, ProjectSidebar, toggleCollapsedProjectIds } from "./project-sidebar";
+import {
+	menuItemTarget,
+	NavigationIcon,
+	ProjectSidebar,
+	toggleCollapsedProjectIds,
+} from "./project-sidebar";
 import { ProjectSidebarExpandButton } from "./project-sidebar-chrome";
 import { Header } from "./room-workspace";
 
@@ -102,6 +107,14 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toMatch(
 			/<\/button><button[^>]*aria-label="New document in testing-sql-transcripts"/s,
 		);
+	});
+
+	test("steps through account menu items and wraps", () => {
+		expect(menuItemTarget("ArrowDown", 0, 2)).toBe(1);
+		expect(menuItemTarget("ArrowDown", 1, 2)).toBe(0);
+		expect(menuItemTarget("ArrowUp", 0, 2)).toBe(1);
+		expect(menuItemTarget("Home", 1, 2)).toBe(0);
+		expect(menuItemTarget("End", 0, 2)).toBe(1);
 	});
 
 	test("exposes whether the account menu is open", () => {

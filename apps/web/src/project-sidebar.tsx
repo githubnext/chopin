@@ -135,6 +135,12 @@ function DocumentRow(
 	);
 }
 
+export function menuItemTarget(key: string, current: number, count: number): number {
+	if (key === "Home") return 0;
+	if (key === "End") return count - 1;
+	return (current + (key === "ArrowDown" ? 1 : -1) + count) % count;
+}
+
 function noop() {}
 
 function Project(
@@ -620,7 +626,15 @@ export function ProjectSidebar(
 							if (event.key === "Tab") return accountMenu.onDismiss();
 							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
 							event.preventDefault();
-							event.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+							let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+							items[
+								menuItemTarget(
+									event.key,
+									items.indexOf(document.activeElement as HTMLElement),
+									items.length,
+								)
+							]
+								?.focus();
 						}}
 						role="menu"
 					>

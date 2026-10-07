@@ -597,17 +597,39 @@
 
 .navigation-creation-status {
 	position: absolute;
-	top: calc(var(--document-shell-header-height) + 8px);
-	left: 16px;
-	right: 16px;
+	top: calc(var(--document-shell-header-height) + 56px);
+	left: 50%;
 	z-index: 15;
+	translate: -50% 0;
+	width: fit-content;
+	max-width: calc(100% - 32px);
+	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-md);
 	background: var(--color-page);
-	padding: 8px 12px;
-	box-shadow: var(--shadow-resting);
+	padding: 6px 12px;
+	box-shadow: var(--shadow-raised);
 	font-size: var(--text-sm);
-	color: var(--color-text-tertiary);
+	color: var(--color-text-secondary);
 	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.navigation-creation-status {
+		animation: navigation-status-in var(--duration-base) var(--motion-smooth-out);
+	}
+
+	.navigation-creation-status[data-leaving] {
+		opacity: 0;
+		transform: translateY(-4px);
+		transition: opacity var(--duration-fast) ease-out, transform var(--duration-fast) ease-out;
+	}
+}
+
+@keyframes navigation-status-in {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
 }
 
 .navigation-creation-status button {
