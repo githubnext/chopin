@@ -22,7 +22,8 @@ export let evidenceFixtureSource = `import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { QuestionnaireCard } from "../../../../packages/editor/src/widgets/questionnaire";
 import { create } from "../../../../packages/question/src/draft";
-import { EvidencePopover } from "../conversation-plan/evidence-popover";
+import { EvidencePopover, EvidenceSummary } from "../conversation-plan/evidence-popover";
+import { evidenceCounts } from "../conversation-plan/evidence";
 import { META } from "../../../../packages/editor/src/widgets/questionnaire-metadata.test-fixtures";
 import type { Questionnaire } from "@chopin/dialect";
 import type { Question } from "@chopin/protocol";
@@ -83,10 +84,11 @@ function Fixture({ editable }: { editable: boolean }) {
 		<section className="plan-document"><div data-plan-scroll>
 			{visible && <QuestionnaireCard value={value} meta={meta} connected canEdit={editable} wire={wire}
 				onCardSource={() => window.evidenceFixture.sources.push("card-source")}
-				evidence={evidence.length ? <EvidencePopover rows={evidence} onSource={next => {
-					window.evidenceFixture.sources.push(next.source.quote);
-					setDestination({ ...next, token: ++window.evidenceFixture.token });
-				}} /> : null} />}
+				evidence={evidence.length ? { summary: <EvidenceSummary counts={evidenceCounts(evidence)} />,
+					content: <EvidencePopover rows={evidence} onSource={next => {
+						window.evidenceFixture.sources.push(next.source.quote);
+						setDestination({ ...next, token: ++window.evidenceFixture.token });
+					}} /> } : null} />}
 			<div style={{ height: 900 }} />
 		</div></section>
 		<section className="native-chat"><Transcript active entries={entries.map(entry => entry.id === source.messageId ? { ...entry, text: sourceText } : entry)}

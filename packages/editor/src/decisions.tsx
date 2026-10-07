@@ -20,6 +20,7 @@ import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
 import type { QuestionStepMotion } from "./widget-options";
+import type { DecisionEvidence } from "./widgets/evidence-hover";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
@@ -40,6 +41,7 @@ export type DecisionsProps = {
 	 * scrolls — naming it again means "show me", not "it is already open".
 	 */
 	reveal?: { widget: string; token: number };
+	evidence?: (questionnaireId: string) => DecisionEvidence | null;
 };
 
 let EMPTY_CARDS: ReadonlyMap<string, Question.CardMeta> = new Map();
@@ -79,6 +81,7 @@ export function Decisions(
 		cardMeta,
 		canEdit = true,
 		connected,
+		evidence,
 		headingId,
 		motion,
 		motionImmediately,
@@ -157,6 +160,7 @@ export function Decisions(
 			meta={metadata.get(entry.id)}
 			canEdit={canEdit}
 			connected={connected}
+			evidence={evidence?.(entry.id)}
 			key={entry.id}
 			motion={questionMotion}
 			onQuestionEnter={question => store.highlight(entry.id, question)}

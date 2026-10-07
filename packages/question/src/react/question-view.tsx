@@ -61,6 +61,8 @@ export type QuestionViewProps = {
 	onAddOption?: (question: string, label: string) => Promise<AddOptionResult>;
 	disabled?: boolean;
 	submitting?: boolean;
+	/** A quiet line at the start of the action row; hosts use it for evidence. */
+	summary?: ReactNode;
 	status?: "open" | Question.Status | "discarded";
 	/** Shown instead of controls once the questionnaire has resolved. */
 	answers?: Answer[];
@@ -618,6 +620,7 @@ export function QuestionView(props: QuestionViewProps) {
 		errorClassName,
 		aside,
 		headerActions,
+		summary,
 		places,
 		onQuestionEnter,
 		onQuestionLeave,
@@ -878,7 +881,7 @@ export function QuestionView(props: QuestionViewProps) {
 				/>
 			)}
 
-			{(onSubmit || discard || multiple || showActions) && (
+			{(onSubmit || discard || multiple || showActions || summary) && (
 				<footer
 					className="question-actions"
 					data-confirm={discard && confirming ? "" : undefined}
@@ -909,6 +912,7 @@ export function QuestionView(props: QuestionViewProps) {
 						)
 						: (
 							<>
+								{summary}
 								{multiple && (
 									<div role="group" aria-label="Questions" className="question-stepper">
 										<button

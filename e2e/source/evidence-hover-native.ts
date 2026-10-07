@@ -81,7 +81,7 @@ export async function load(page: Page, editable = false): Promise<void> {
 	await expect(card(page)).toBeVisible();
 }
 export async function open(page: Page) {
-	await card(page).getByRole("button", { name: "Inspect decision evidence", exact: true }).click();
+	await card(page).getByRole("button", { name: /^Evidence:/ }).click();
 	await expect(panel(page)).toBeVisible();
 }
 export async function moveAway(page: Page) {

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { EvidencePopover } from "./evidence-popover";
+import { EvidencePopover, EvidenceSummary } from "./evidence-popover";
 
 import type { EvidenceRow } from "./evidence";
 
@@ -148,4 +148,43 @@ test("does not present a rationale-only Planner option as a chat quote", () => {
 	expect(markup).toContain("Why Chopin suggested this: Repository permissions require it.");
 	expect(markup).not.toContain("<q class=");
 	expect(markup).not.toContain("in chat");
+});
+
+test("groups decision-wide evidence and marks objections", () => {
+	let row: EvidenceRow = {
+		label: "Should we ship a small pilot?",
+		origin: "chat",
+		supporters: [],
+		opposers: [],
+		items: [
+			{ id: "c1", kind: "constraint", text: "Keep it keyboard accessible.", sources: [] },
+			{
+				id: "o1",
+				kind: "objection",
+				text: "A pilot excludes keyboard users.",
+				sources: [],
+				by: "ana",
+			},
+		],
+	};
+	let markup = renderToStaticMarkup(
+		createElement(EvidencePopover, { rows: [row], onSource: () => {} }),
+	);
+
+	expect(markup).toContain("Applies to all options");
+	expect(markup).not.toContain("Should we ship a small pilot?");
+	expect(markup).toContain('text-warning-ink">Objection</span>');
+	expect(markup).toContain("A pilot excludes keyboard users.");
+	expect(markup).toContain(" @ana");
+});
+
+test("summarises evidence counts with objections in warning ink", () => {
+	let summary = (counts: Parameters<typeof EvidenceSummary>[0]["counts"]) =>
+		renderToStaticMarkup(createElement(EvidenceSummary, { counts }));
+
+	expect(summary({ reasons: 1, constraints: 2, objections: 1 })).toBe(
+		'<span>1 reason</span><span aria-hidden="true">·</span><span>2 constraints</span>'
+			+ '<span aria-hidden="true">·</span><span class="text-warning-ink">1 objection</span>',
+	);
+	expect(summary({ reasons: 0, constraints: 0, objections: 0 })).toBe("Evidence");
 });

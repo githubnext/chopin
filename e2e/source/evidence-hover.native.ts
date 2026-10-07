@@ -12,12 +12,12 @@ import {
 
 test.beforeAll(prepareEvidence);
 
-test("decision evidence stays closed on hover and opens from its code button", async ({ page }) => {
+test("decision evidence stays closed on hover and opens from its summary", async ({ page }) => {
 	await load(page);
 	await card(page).hover();
 	await page.waitForTimeout(450);
 	await expect(panel(page)).toHaveCount(0);
-	let trigger = card(page).getByRole("button", { name: "Inspect decision evidence", exact: true });
+	let trigger = card(page).getByRole("button", { name: /^Evidence:/ });
 	await expect(trigger).toBeVisible();
 	await trigger.click();
 	await expect(panel(page)).toBeVisible();
@@ -28,7 +28,7 @@ test("actual card hover and focus stay closed; button activation and Escape are 
 	await card(page).hover();
 	await page.waitForTimeout(450);
 	await expect(panel(page)).toHaveCount(0);
-	let trigger = card(page).getByRole("button", { name: "Inspect decision evidence", exact: true });
+	let trigger = card(page).getByRole("button", { name: /^Evidence:/ });
 	await trigger.focus();
 	await expect(panel(page)).toHaveCount(0);
 	await trigger.press("Enter");
@@ -166,7 +166,7 @@ test("missing authoritative metadata hides the evidence button", async ({ page }
 	await load(page);
 	await page.evaluate(() => window.evidenceFixture.status(undefined));
 	await card(page).hover();
-	await expect(card(page).getByRole("button", { name: "Inspect decision evidence" })).toHaveCount(
+	await expect(card(page).getByRole("button", { name: /^Evidence:/ })).toHaveCount(
 		0,
 	);
 	await expect(panel(page)).toHaveCount(0);

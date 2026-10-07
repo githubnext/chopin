@@ -24,7 +24,6 @@ import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
 
-import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
@@ -35,6 +34,7 @@ import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
 import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
 import type { ResearchLauncher } from "./research-launcher";
+import type { DecisionEvidence } from "./widgets/evidence-hover";
 
 /**
  * Lexical paints remote cursors with inline styles unless the theme names a
@@ -82,7 +82,7 @@ export type PlanEditorProps = {
 	cardMeta?: CardMetaStore;
 	/** Open the chat message that started a conversation decision. */
 	onCardSource?: (questionnaireId: string) => void;
-	evidence?: (questionnaireId: string) => ReactNode | null;
+	evidence?: (questionnaireId: string) => DecisionEvidence | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
 	/** Lets the host open the research composer at the end of the document. */

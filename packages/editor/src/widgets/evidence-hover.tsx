@@ -1,4 +1,4 @@
-import { CodeIcon } from "@chopin/icons";
+import { CloseIcon } from "@chopin/icons";
 import {
 	createContext,
 	useCallback,
@@ -13,12 +13,17 @@ import { createPortal } from "react-dom";
 
 import { evidencePoint } from "../evidence-geometry";
 import { planScroller } from "../scroll";
+import { useTransitionPresence } from "../transition-presence";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+
+/** What a host knows about a card's evidence: a one-line summary and the full listing. */
+export type DecisionEvidence = { summary: ReactNode; content: ReactNode };
 
 type Position = { top: number; left: number; side: "right" | "left" };
 type EvidenceControl = {
 	active: boolean;
+	summary: ReactNode;
 	open: boolean;
 	id: string;
 	trigger: React.RefObject<HTMLButtonElement | null>;
@@ -27,6 +32,11 @@ type EvidenceControl = {
 
 let EvidenceContext = createContext<EvidenceControl | null>(null);
 
+export function useEvidenceAvailable(): boolean {
+	return !!useContext(EvidenceContext)?.active;
+}
+
+/** The card's evidence summary, which is also the only way to open the listing. */
 export function EvidenceTrigger() {
 	let evidence = useContext(EvidenceContext);
 	if (!evidence?.active) return null;
@@ -34,25 +44,26 @@ export function EvidenceTrigger() {
 		<button
 			aria-controls={evidence.open ? evidence.id : undefined}
 			aria-expanded={evidence.open}
-			aria-label="Inspect decision evidence"
-			className="btn btn-icon btn-ghost"
+			aria-haspopup="dialog"
+			className="question-evidence btn btn-sm btn-ghost"
 			onClick={evidence.toggle}
 			ref={evidence.trigger}
-			title="Inspect decision evidence"
 			type="button"
 		>
-			<CodeIcon aria-hidden="true" size={14} />
+			<span className="sr-only">Evidence:</span>
+			{evidence.summary}
 		</button>
 	);
 }
 
-/** Evidence remains card-local, but opens only through its header control. */
-export function EvidenceHover({ active, children, content, question }: {
+/** Evidence remains card-local, but opens only through its summary control. */
+export function EvidenceHover({ active, children, evidence, question }: {
 	active: boolean;
 	children: ReactNode;
-	content: ReactNode | null;
+	evidence: DecisionEvidence | null;
 	question: string;
 }) {
+	let content = evidence?.content ?? null;
 	let [open, setOpen] = useState(false);
 	let [position, setPosition] = useState<Position>();
 	let card = useRef<HTMLDivElement>(null);
@@ -61,10 +72,11 @@ export function EvidenceHover({ active, children, content, question }: {
 	let focusPending = useRef(false);
 	let id = useId();
 	let visible = active && !!content && open;
+	// The listing that is fading out keeps what it showed when it was dismissed.
+	let presence = useTransitionPresence(visible ? content : undefined, 150, false);
 	let dismiss = useCallback((returnFocus = false) => {
 		focusPending.current = false;
 		setOpen(false);
-		setPosition(undefined);
 		if (returnFocus) trigger.current?.focus({ preventScroll: true });
 	}, []);
 
@@ -158,6 +170,7 @@ export function EvidenceHover({ active, children, content, question }: {
 		<EvidenceContext.Provider
 			value={{
 				active,
+				summary: evidence?.summary,
 				open: visible,
 				id,
 				trigger,
@@ -165,6 +178,7 @@ export function EvidenceHover({ active, children, content, question }: {
 					if (visible) dismiss();
 					else {
 						focusPending.current = true;
+						setPosition(undefined);
 						setOpen(true);
 					}
 				},
@@ -176,36 +190,49 @@ export function EvidenceHover({ active, children, content, question }: {
 				ref={card}
 			>
 				{children}
-				{visible && createPortal(
+				{presence.phase !== "closed" && createPortal(
 					<div className="plan-evidence-popover">
 						<div
+							aria-hidden={visible ? undefined : true}
 							aria-label={`Evidence for ${question}`}
-							className="plan-evidence-panel"
+							className={presence.phase === "open"
+								? "plan-evidence-panel motion-popover is-open"
+								: presence.phase === "closing"
+								? "plan-evidence-panel motion-popover is-closing"
+								: "plan-evidence-panel motion-popover"}
 							data-side={position?.side}
 							id={id}
+							inert={!visible}
 							onClick={event => {
 								if (event.target instanceof Element && event.target.closest("button")) dismiss();
 							}}
 							ref={panel}
 							role="dialog"
 							style={position
-								? { left: position.left, top: position.top }
+								? {
+									left: position.left,
+									top: position.top,
+									"--motion-origin-x": position.side === "right" ? "0%" : "100%",
+									"--motion-origin-y": "0%",
+								} as CSSProperties
 								: { left: 0, top: 0, visibility: "hidden" }}
 						>
-							<div className="flex justify-end px-3 pt-2">
+							<header className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-page py-1.5 pr-1.5 pl-3">
+								<h3 className="m-0 text-sm font-medium text-text-primary">Evidence</h3>
 								<button
 									aria-label="Close evidence"
-									className="btn btn-sm btn-ghost"
+									className="btn btn-icon btn-ghost"
 									onClick={event => {
 										event.stopPropagation();
 										dismiss(true);
 									}}
+									title="Close evidence"
 									type="button"
 								>
-									Close
+									<CloseIcon aria-hidden="true" size={14} />
 								</button>
-							</div>
-							{content}
+							</header>
+							{presence.value}
 						</div>
 					</div>,
 					document.body,

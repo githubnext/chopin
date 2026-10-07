@@ -2,10 +2,14 @@ import type { ConversationPlan, Question } from "@chopin/protocol";
 
 export type EvidenceItem = {
 	id: string;
-	kind: "reason" | "constraint";
+	kind: "reason" | "constraint" | "objection";
 	text: string;
 	sources: ConversationPlan.SourceRef[];
+	/** Who raised an objection. */
+	by?: string;
 };
+
+export type EvidenceCounts = { reasons: number; constraints: number; objections: number };
 
 export type EvidenceRow = {
 	/** Absent for evidence about the question as a whole. */
@@ -57,18 +61,6 @@ export function evidenceRows(
 		if (row.optionId) rowByOptionId.set(row.optionId, row);
 	}
 
-	for (let stance of thread.stances) {
-		if (!stance.optionId) continue;
-		let row = rowByOptionId.get(stance.optionId);
-		if (!row) continue;
-		let handles = stance.position === "support"
-			? row.supporters
-			: stance.position === "oppose"
-			? row.opposers
-			: undefined;
-		if (handles && !handles.includes(stance.participant)) handles.push(stance.participant);
-	}
-
 	let questionItems: EvidenceItem[] = [];
 	for (let contribution of thread.contributions) {
 		if (contribution.kind === "option") continue;
@@ -85,6 +77,29 @@ export function evidenceRows(
 		else questionItems.push(item);
 	}
 
+	for (let stance of thread.stances) {
+		let row = stance.optionId ? rowByOptionId.get(stance.optionId) : undefined;
+		let quote = stance.sources[0]?.quote;
+		if (stance.position === "oppose" && quote) {
+			let item: EvidenceItem = {
+				id: stance.id,
+				kind: "objection",
+				text: quote,
+				sources: stance.sources,
+				by: stance.participant,
+			};
+			if (row) row.items.push(item);
+			else questionItems.push(item);
+		}
+		if (!row) continue;
+		let handles = stance.position === "support"
+			? row.supporters
+			: stance.position === "oppose"
+			? row.opposers
+			: undefined;
+		if (handles && !handles.includes(stance.participant)) handles.push(stance.participant);
+	}
+
 	if (questionItems.length) {
 		rows.push({
 			label: thread.question,
@@ -96,6 +111,16 @@ export function evidenceRows(
 	}
 
 	return rows;
+}
+
+export function evidenceCounts(rows: EvidenceRow[]): EvidenceCounts {
+	let counts: EvidenceCounts = { reasons: 0, constraints: 0, objections: 0 };
+	for (let item of rows.flatMap(row => row.items)) {
+		if (item.kind === "reason") counts.reasons++;
+		else if (item.kind === "constraint") counts.constraints++;
+		else counts.objections++;
+	}
+	return counts;
 }
 
 export function hasEvidence(rows: EvidenceRow[]): boolean {

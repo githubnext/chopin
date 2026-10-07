@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ConversationPlan, Question } from "@chopin/protocol";
 
-import { evidenceRows, hasEvidence } from "./evidence";
+import { evidenceCounts, evidenceRows, hasEvidence } from "./evidence";
 
 let source = (
 	messageId: string,
@@ -213,6 +213,46 @@ describe("evidenceRows", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.rationale).toBe("Repository permissions require it.");
 		expect(rows[0]?.source).toBeUndefined();
+	});
+});
+
+describe("objections", () => {
+	let objection = (participant: string, optionId: string | undefined, quote: string) => ({
+		...stance(participant, optionId, "oppose"),
+		sources: [source(`m-${participant}`, quote, "objection")],
+	});
+
+	it("lists a quoted objection under its option and decision-wide ones last", () => {
+		let thread: ConversationPlan.Thread = {
+			...THREAD,
+			stances: [
+				...THREAD.stances,
+				objection("ravi", "github", "GitHub Apps lock us to one forge."),
+				objection("suki", undefined, "We should not decide this yet."),
+			],
+		};
+		let rows = evidenceRows(thread, META);
+		let github = rows.find(row => row.optionId === "github")!;
+		expect(github.opposers).toEqual(["ravi"]);
+		expect(github.items.at(-1)).toMatchObject({
+			kind: "objection",
+			text: "GitHub Apps lock us to one forge.",
+			by: "ravi",
+		});
+		let general = rows.at(-1)!;
+		expect(general.optionId).toBeUndefined();
+		expect(general.items.at(-1)).toMatchObject({
+			kind: "objection",
+			text: "We should not decide this yet.",
+			by: "suki",
+		});
+		expect(evidenceCounts(rows)).toEqual({ reasons: 2, constraints: 1, objections: 2 });
+	});
+
+	it("keeps an unquoted opposition as a stance only", () => {
+		let rows = evidenceRows(THREAD, META);
+		expect(rows[0]!.opposers).toEqual(["lee"]);
+		expect(rows.flatMap(row => row.items).some(item => item.kind === "objection")).toBe(false);
 	});
 });
 

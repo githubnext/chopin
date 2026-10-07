@@ -11,6 +11,7 @@ import type { ResearchDraftStore } from "./research-draft";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Transport } from "./transport";
+import type { DecisionEvidence } from "./widgets/evidence-hover";
 
 export type CommentPresentation = "popover" | "sheet";
 
@@ -43,7 +44,7 @@ export type WidgetOptions = {
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
 	onCardSource?: (questionnaireId: string) => void;
-	evidence?: (questionnaireId: string) => ReactNode | null;
+	evidence?: (questionnaireId: string) => DecisionEvidence | null;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;
 	researchLauncher?: ResearchLauncher;

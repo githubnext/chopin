@@ -74,3 +74,4 @@ export {
 	ResearchReference,
 } from "./widgets";
 export { DecisionCard } from "./widgets/decision";
+export type { DecisionEvidence } from "./widgets/evidence-hover";

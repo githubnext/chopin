@@ -35,7 +35,7 @@ async function discuss(ana: Page, bo: Page, room: string) {
 
 async function openEvidence(page: Page): Promise<Locator> {
 	await page.mouse.move(0, 0);
-	await card(page).getByRole("button", { name: "Inspect decision evidence", exact: true })
+	await card(page).getByRole("button", { name: /^Evidence:/ })
 		.click();
 	let panel = evidence(page);
 	await expect(panel).toBeVisible();
@@ -50,7 +50,7 @@ test.afterEach(async () => {
 	await resetPlannerJobs();
 });
 
-test("a card stays quiet on hover and evidence opens only by its code button", async ({ join, room }) => {
+test("a card stays quiet on hover and evidence opens only by its summary", async ({ join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
 	await discuss(ana, bo, room);
@@ -58,7 +58,7 @@ test("a card stays quiet on hover and evidence opens only by its code button", a
 	await card(ana).hover();
 	await ana.waitForTimeout(450);
 	await expect(evidence(ana)).toHaveCount(0);
-	let trigger = card(ana).getByRole("button", { name: "Inspect decision evidence", exact: true });
+	let trigger = card(ana).getByRole("button", { name: /^Evidence:/ });
 	await trigger.focus();
 	await expect(evidence(ana)).toHaveCount(0);
 	await trigger.press("Enter");
@@ -84,9 +84,15 @@ test("evidence shows exact sources and current stances, then source navigation c
 	let ana = await join("ana");
 	let bo = await join("bo");
 	let reason = await discuss(ana, bo, room);
+	await expect(card(ana).getByRole("button", { name: /^Evidence:/ })).toHaveText(
+		"Evidence:1 reason·1 constraint·1 objection",
+	);
 	let panel = await openEvidence(ana);
+	await expect(panel.getByRole("heading", { name: "Evidence", exact: true })).toBeVisible();
 	await expect(panel).toContainText(REASON);
 	await expect(panel).toContainText(CONSTRAINT);
+	await expect(panel).toContainText("Objection");
+	await expect(panel).toContainText("a small pilot will exclude keyboard-only users.");
 	await expect(panel).toContainText("Supported by ana");
 	await expect(panel).toContainText("Opposed by bo");
 	await expect(panel.locator("input, select, textarea")).toHaveCount(0);
@@ -258,7 +264,7 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 			| undefined;
 		return Object.values(meta?.optionOrigins ?? {}).find(origin => origin.source)?.source;
 	}).toEqual(source);
-	await refined.getByRole("button", { name: "Inspect decision evidence", exact: true }).click();
+	await refined.getByRole("button", { name: /^Evidence:/ }).click();
 	let panel = ana.getByRole("dialog", {
 		name: "Evidence for Should we run a limited pilot?",
 		exact: true,
@@ -384,10 +390,15 @@ test("empty, remote-closed, and hidden-document cards do not retain evidence por
 	panel = await openEvidence(ana);
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(panel).toHaveCount(0);
-	await ana.locator('[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]')
-		.first().hover();
+	let listed = ana.locator(
+		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
+	).filter({ has: ana.getByRole("heading", { name: QUESTION, exact: true }) });
+	await listed.hover();
 	await ana.waitForTimeout(450);
 	await expect(evidence(ana)).toHaveCount(0);
+	await listed.getByRole("button", { name: /^Evidence:/ }).click();
+	await expect(evidence(ana)).toBeVisible();
+	await expect(evidence(ana)).toContainText(REASON);
 });
 
 test("a remote discard removes an open evidence portal", async ({ join, room }) => {

@@ -5,12 +5,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QuestionnaireCard } from "./questionnaire";
 import { DECIDED, META } from "./questionnaire-metadata.test-fixtures";
 
-test("evidence inspection is available only on an open inline conversation card", () => {
+test("the evidence summary appears only on an open conversation card, inline or listed", () => {
 	let open = {
 		...DECIDED,
 		questions: [{ ...DECIDED.questions[0]!, answer: undefined, choices: undefined }],
 	};
-	let evidence = createElement("p", null, "Evidence");
+	let evidence = {
+		summary: "1 objection",
+		content: createElement("p", null, "Listing"),
+	};
 	let render = (value: typeof open, status: "open" | "decided", presentation?: "inline" | "list") =>
 		renderToStaticMarkup(createElement(QuestionnaireCard, {
 			evidence,
@@ -26,12 +29,15 @@ test("evidence inspection is available only on an open inline conversation card"
 		meta: { ...META, status: "open" },
 		value: open,
 	}));
-	for (let markup of [eligible, noThread, settled, noEvidence]) {
+	for (let markup of [eligible, noThread, settled, list, noEvidence]) {
 		expect(markup).toContain("plan-evidence-host");
 	}
-	expect(eligible).toContain('aria-label="Inspect decision evidence"');
-	for (let markup of [noThread, settled, list, noEvidence]) {
-		expect(markup).not.toContain('aria-label="Inspect decision evidence"');
+	for (let markup of [eligible, list]) {
+		expect(markup).toContain('<span class="sr-only">Evidence:</span>1 objection</button>');
+		expect(markup).not.toContain("Listing");
+	}
+	for (let markup of [noThread, settled, noEvidence]) {
+		expect(markup).not.toContain("question-evidence");
 	}
 });
 

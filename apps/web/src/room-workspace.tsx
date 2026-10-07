@@ -29,8 +29,8 @@ import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/res
 import type { ResearchDraftController } from "./chat/research-draft-controller";
 import { advanceConversationAnnouncement } from "./conversation-plan/announcements";
 import type { ConversationAnnouncementSummary } from "./conversation-plan/announcements";
-import { evidenceRows, hasEvidence } from "./conversation-plan/evidence";
-import { EvidencePopover } from "./conversation-plan/evidence-popover";
+import { evidenceCounts, evidenceRows, hasEvidence } from "./conversation-plan/evidence";
+import { EvidencePopover, EvidenceSummary } from "./conversation-plan/evidence-popover";
 import { threadForCard } from "./conversation-plan/links";
 import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
@@ -537,9 +537,6 @@ export function RoomWorkspace(
 		if (thread && source) showSource({ source, itemId: thread.id });
 	}, [conversation.state, showSource]);
 	let showEvidence = useCallback((questionnaireId: string) => {
-		if (!workspacePresentation.documentVisible || workspacePresentation.documentView !== "plan") {
-			return null;
-		}
 		let state = conversation.enabled ? conversation.state : undefined;
 		let thread = state && threadForCard(state, questionnaireId);
 		let meta = cardMetadata.get(questionnaireId);
@@ -549,16 +546,12 @@ export function RoomWorkspace(
 		let options = entries.find(entry => entry.id === questionnaireId)
 			?.value.questions[0]?.options;
 		let rows = evidenceRows(thread, meta, options);
-		return hasEvidence(rows) ? <EvidencePopover onSource={showSource} rows={rows} /> : null;
-	}, [
-		cardMetadata,
-		conversation.enabled,
-		conversation.state,
-		entries,
-		showSource,
-		workspacePresentation.documentView,
-		workspacePresentation.documentVisible,
-	]);
+		if (!hasEvidence(rows)) return null;
+		return {
+			summary: <EvidenceSummary counts={evidenceCounts(rows)} />,
+			content: <EvidencePopover onSource={showSource} rows={rows} />,
+		};
+	}, [cardMetadata, conversation.enabled, conversation.state, entries, showSource]);
 
 	let retryAnalysis = async (
 		messageId: string,
@@ -971,6 +964,7 @@ export function RoomWorkspace(
 						cardMeta={cardMeta}
 						canEdit={workspaceCanEdit}
 						connected={treatAsConnected && workspaceCanEdit}
+						evidence={showEvidence}
 						headingId={workspaceIds.heading.decisions}
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}

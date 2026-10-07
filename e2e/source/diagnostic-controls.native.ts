@@ -52,24 +52,23 @@ test.describe("decision diagnostic controls", () => {
 			await page.setViewportSize(viewport);
 			await loadEvidence(page);
 			await page.addStyleTag({ content: stylesheet });
-			let trigger = card(page).getByRole("button", {
-				name: "Inspect decision evidence",
-				exact: true,
-			});
+			let trigger = card(page).getByRole("button", { name: /^Evidence:/ });
 			let sourceButton = card(page).getByRole("button", {
 				name: "Show source in chat",
 				exact: true,
 			});
 			await expect(trigger).toBeVisible();
 			await expect(sourceButton).toBeVisible();
-			let [iconBounds, sourceBounds] = await Promise.all([
+			let [summaryBounds, sourceBounds] = await Promise.all([
 				trigger.boundingBox(),
 				sourceButton.boundingBox(),
 			]);
-			expect(iconBounds).toBeTruthy();
+			expect(summaryBounds).toBeTruthy();
 			expect(sourceBounds).toBeTruthy();
-			expect(iconBounds!.x).toBeGreaterThanOrEqual(0);
-			expect(iconBounds!.x + iconBounds!.width).toBeLessThanOrEqual(sourceBounds!.x);
+			expect(summaryBounds!.x).toBeGreaterThanOrEqual(0);
+			expect(summaryBounds!.x + summaryBounds!.width).toBeLessThanOrEqual(viewport.width);
+			// The summary sits under the options, clear of the header's source control.
+			expect(summaryBounds!.y).toBeGreaterThanOrEqual(sourceBounds!.y + sourceBounds!.height);
 			expect(sourceBounds!.x + sourceBounds!.width).toBeLessThanOrEqual(viewport.width);
 		}
 	});

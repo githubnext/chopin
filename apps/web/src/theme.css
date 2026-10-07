@@ -1346,6 +1346,25 @@ button.question-add:disabled {
 	color: var(--color-text-primary);
 }
 
+/* Footer evidence summary, left: a quiet text trigger for the evidence listing. */
+.question-evidence {
+	gap: 0.375rem;
+	min-width: 0;
+	margin-inline-end: auto;
+	font-size: var(--text-xs);
+	font-weight: 400;
+	color: var(--color-text-tertiary);
+}
+
+.question-evidence:hover,
+.question-evidence[aria-expanded="true"] {
+	color: var(--color-text-secondary);
+}
+
+.question-evidence[aria-expanded="true"] {
+	background: var(--color-selected);
+}
+
 /* Footer stepper, left: ‹ question name n/m ›, 28px carets and --text-sm. */
 .question-stepper {
 	display: inline-flex;

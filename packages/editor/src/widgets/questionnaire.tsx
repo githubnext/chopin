@@ -16,7 +16,8 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
-import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
+import { EvidenceHover, EvidenceTrigger, useEvidenceAvailable } from "./evidence-hover";
+import type { DecisionEvidence } from "./evidence-hover";
 import { PresenceFaces } from "../presence-faces";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
@@ -69,7 +70,7 @@ export type QuestionnaireCardProps = {
 	presentation?: "inline" | "list";
 	motionImmediately?: () => boolean;
 	onCardSource?: (questionnaireId: string) => void;
-	evidence?: ReactNode | null;
+	evidence?: DecisionEvidence | null;
 	wire?: Transport;
 	connected?: boolean;
 	/** Whether this viewer may change or resolve the shared draft. */
@@ -175,18 +176,21 @@ export function QuestionnaireCard(
 			/>
 		);
 	}
-	if (presentation === "list") return content;
-	let presented = closing ? lastVisible.current!.content : content;
 	let evidenceActive = (current === "open" || current === "reopened")
 		&& !!value.thread
 		&& (meta?.status === "open" || meta?.status === "reopened")
 		&& !!evidence;
+	let question = value.questions[0]?.prompt ?? "this decision";
+	if (presentation === "list") {
+		return (
+			<EvidenceHover active={evidenceActive} evidence={evidence ?? null} question={question}>
+				{content}
+			</EvidenceHover>
+		);
+	}
+	let presented = closing ? lastVisible.current!.content : content;
 	return (
-		<EvidenceHover
-			active={evidenceActive}
-			content={evidence ?? null}
-			question={value.questions[0]?.prompt ?? "this decision"}
-		>
+		<EvidenceHover active={evidenceActive} evidence={evidence ?? null} question={question}>
 			<div
 				aria-hidden={closing || undefined}
 				className={`decision-collapse ${presence.className}`}
@@ -278,6 +282,7 @@ function Undecided(
 		definition: definition(value),
 	});
 
+	let evidence = useEvidenceAvailable();
 	let answerable = connected && !!state.definition;
 	let editable = canEdit && answerable;
 	let previous = previousAnswers(value);
@@ -291,7 +296,6 @@ function Undecided(
 			<QuestionView
 				headerActions={
 					<>
-						<EvidenceTrigger />
 						{meta?.thread && onCardSource && (
 							<button
 								aria-label="Show source in chat"
@@ -304,6 +308,7 @@ function Undecided(
 						)}
 					</>
 				}
+				summary={evidence ? <EvidenceTrigger /> : undefined}
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding
