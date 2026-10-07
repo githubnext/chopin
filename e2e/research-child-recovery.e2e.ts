@@ -271,6 +271,31 @@ async function startInlineResearch(page: Page, question: string) {
 	return card;
 }
 
+test("a submitted /research card stays in the document through reload", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let databasePort = port(baseURL!);
+	let research = await scriptResearch(page, room, databasePort);
+	let resets = 0;
+	page.on("websocket", socket => {
+		socket.on("framereceived", frame => {
+			if (String(frame.payload).includes('"kind":"plan:reset"')) resets++;
+		});
+	});
+	let opened = await join("ana");
+	let brief = "Compare evidence for keeping submitted research in place.";
+	let card = await startInlineResearch(opened, brief);
+	let id = [...research.requests.values()].find(request => request.question === brief)!.id;
+	await expect.poll(async () => readSource(databasePort, room)).toContain(
+		`<Research id="${id}" />`,
+	);
+	await expect(card).toBeVisible();
+	expect(resets).toBe(0);
+
+	await opened.reload();
+	await expect(opened.getByRole("article", { name: "Research" }).filter({ hasText: brief }))
+		.toBeVisible();
+});
+
 test("inline research publishes one ordinary child and opens it", async ({ baseURL, join, page, room, seed }) => {
 	test.slow();
 	await seed(PARENT_SOURCE);
