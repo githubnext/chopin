@@ -49,6 +49,13 @@ export function ResearchBriefEditor(
 	useLayoutEffect(() => {
 		input.current?.focus({ preventScroll: true });
 	}, []);
+	// Browsers without field-sizing grow the field from its content; CSS still bounds it.
+	useLayoutEffect(() => {
+		let field = input.current;
+		if (!field || CSS.supports("field-sizing", "content")) return;
+		field.style.height = "auto";
+		field.style.height = `${field.scrollHeight}px`;
+	}, [text]);
 	return (
 		<textarea
 			aria-label="Research brief"

@@ -387,6 +387,7 @@ export function ResearchOfferCard(
 	let initial = useRef(offer.status);
 	let [opening, setOpening] = useState(false);
 	let [sourceAt, setSourceAt] = useState(0);
+	let [hint, setHint] = useState("");
 	let editButton = useRef<HTMLButtonElement>(null);
 	useLayoutEffect(() => {
 		controller.configure(controls.wire, !!controls.wire?.connected, offer);
@@ -485,6 +486,16 @@ export function ResearchOfferCard(
 			),
 		),
 	];
+	let sourceLabel = `from ${
+		authors.length > 2
+			? `${authors.slice(0, 2).join(", ")} +${authors.length - 2}`
+			: authors.join(", ")
+	}`;
+	let editingLabel = others.length === 0
+		? ""
+		: `${others.map(handle => `@${handle}`).join(", ")} ${
+			others.length === 1 ? "is" : "are"
+		} editing`;
 	let editing = draft.editing && offer.status === "offered";
 	let refinementFailed = offer.status === "offered" && offer.workflow?.preparation === "failed";
 	let retryRefinement = () => perform(() => edit({ kind: "retry" }));
@@ -502,201 +513,212 @@ export function ResearchOfferCard(
 		<div
 			aria-label="Research suggestion"
 			aria-busy={disabled}
-			className="chat-research ml-9 flex min-w-0 flex-col gap-2 rounded-lg bg-page px-3 py-2.5 shadow-resting ring-hairline max-w-[28.125rem]"
+			className="chat-research ml-9 min-w-0"
 			data-entering={entering ? "" : undefined}
 			data-research-offer={offer.id}
 			role="group"
 		>
-			<div className="flex min-h-6 items-center gap-2">
-				<SearchIcon aria-hidden="true" className="shrink-0 text-text-tertiary" size={14} />
-				<p className="m-0 min-w-0 flex-1 truncate text-sm font-medium text-text-primary">
-					Research suggestion
-				</p>
-				{others.length > 0 && (
-					<span
-						aria-label={`Also editing: ${others.map(handle => `@${handle}`).join(", ")}`}
-						aria-live="polite"
-						className="flex shrink-0 -space-x-1"
-						role="img"
-					>
-						{others.slice(0, 3).map(handle => (
-							<Face handle={handle} key={handle} ring="page" size={16} titled={false} />
-						))}
-					</span>
-				)}
-				{refinementFailed && controls.canAct && draft.text.trim() && (
-					<button
-						aria-label="Retry brief refinement"
-						className="btn btn-icon btn-ghost -my-1 shrink-0"
-						data-tooltip="Brief refinement failed. Retry"
-						disabled={disabled}
-						onClick={retryRefinement}
-						type="button"
-					>
-						<WarningIcon aria-hidden="true" size={14} />
-					</button>
-				)}
-				{authors.length > 0 && controls.onSource && (
-					<button
-						aria-label={`Show source ${sources.length === 1 ? "message" : "messages"}`}
-						className="max-w-[45%] shrink-0 truncate text-xs text-text-tertiary hover:text-text-secondary"
-						data-tooltip={sources.length > 1 ? `${sources.length} source messages` : undefined}
-						onClick={() => {
-							let source = sources[sourceAt % sources.length];
-							if (source) controls.onSource?.(source);
-							setSourceAt(sourceAt + 1);
-						}}
-						type="button"
-					>
-						from {authors.length > 2
-							? `${authors.slice(0, 2).join(", ")} +${authors.length - 2}`
-							: authors.join(", ")}
-					</button>
-				)}
-			</div>
-			{editing
-				? (
-					<ResearchBriefEditor
-						controller={controller}
-						onEscape={finish}
-						onSubmit={() => {
-							if (canStart) start();
-						}}
-						readOnly={!controls.canAct || disabled}
-						text={draft.text}
-					/>
-				)
-				: (
-					<div className="min-w-0 break-words text-sm text-text-primary">
-						<ResearchBrief text={offer.brief} />
-					</div>
-				)}
-			{offer.status === "offered"
-				&& offer.workflow?.additions.filter(item => item.status === "pending").map(addition => (
-					<div
-						aria-label="Suggested addition"
-						className="flex items-start gap-1 rounded-md bg-inset py-1 pr-1 pl-2 text-sm text-text-secondary"
-						key={addition.id}
-						role="group"
-					>
-						<PlusIcon aria-hidden="true" className="mt-0.5 shrink-0 text-text-tertiary" size={14} />
-						<p className="m-0 min-w-0 flex-1 break-words py-0.5">{addition.text}</p>
-						{controls.canAct && (
-							<>
-								<button
-									aria-label="Add to brief"
-									className="btn btn-icon btn-ghost shrink-0"
-									data-tooltip="Add to brief"
-									disabled={disabled}
-									onClick={() =>
-										perform(() =>
-											edit({
-												kind: "addition",
-												id: addition.id,
-												actionId: crypto.randomUUID(),
-												choice: "apply",
-											})
-										)}
-									type="button"
-								>
-									<CheckIcon aria-hidden="true" size={14} />
-								</button>
-								<button
-									aria-label="Dismiss addition"
-									className="btn btn-icon btn-ghost shrink-0"
-									data-tooltip="Dismiss"
-									disabled={disabled}
-									onClick={() =>
-										perform(() =>
-											edit({
-												kind: "addition",
-												id: addition.id,
-												actionId: crypto.randomUUID(),
-												choice: "dismiss",
-											})
-										)}
-									type="button"
-								>
-									<CloseIcon aria-hidden="true" size={14} />
-								</button>
-							</>
-						)}
-					</div>
-				))}
-			{refinementFailed && !draft.text.trim() && (
-				<div className="flex items-center justify-between gap-2 text-xs text-text-tertiary">
-					Brief refinement failed.{controls.canAct && (
+			<div className="plan-research-tracked gap-2 rounded-lg bg-page px-3 py-2.5 shadow-resting ring-hairline">
+				<div className="flex min-h-6 items-center gap-2">
+					<SearchIcon aria-hidden="true" className="shrink-0 text-text-tertiary" size={14} />
+					<p className="m-0 min-w-0 truncate text-sm font-medium text-text-primary">
+						Research suggestion
+					</p>
+					{others.length > 0 && (
+						<span
+							aria-hidden="true"
+							className="flex shrink-0 -space-x-1"
+							data-tooltip={editingLabel}
+							data-tooltip-verbatim=""
+						>
+							{others.slice(0, 3).map(handle => (
+								<Face handle={handle} key={handle} ring="page" size={16} titled={false} />
+							))}
+						</span>
+					)}
+					<span aria-live="polite" className="sr-only">{editingLabel}</span>
+					<span className="flex-1" />
+					{refinementFailed && controls.canAct && draft.text.trim() && (
 						<button
-							className="btn btn-sm btn-ghost"
+							aria-label="Retry brief refinement"
+							className="btn btn-icon btn-ghost -my-1 shrink-0"
+							data-tooltip="Brief refinement failed. Retry"
 							disabled={disabled}
 							onClick={retryRefinement}
 							type="button"
 						>
-							Retry refinement
+							<WarningIcon aria-hidden="true" size={14} />
 						</button>
 					)}
-				</div>
-			)}
-			{offer.status === "offered" && controls.canAct && (
-				<div className="flex items-center justify-end gap-1.5">
-					{busy && (
-						<span className="mr-auto text-xs text-text-tertiary" role="status">Saving…</span>
-					)}
-					{!editing && (
+					{authors.length > 0 && controls.onSource && (
 						<button
-							className="btn btn-sm btn-ghost"
-							disabled={disabled}
-							onClick={() => controls.onAction(offer.id, "dismiss")}
-							type="button"
-						>
-							Dismiss
-						</button>
-					)}
-					{offer.workflow && controls.wire && (
-						<button
-							aria-busy={opening}
-							className={`btn btn-sm ${editing ? "btn-secondary" : "btn-ghost"}`}
-							disabled={disabled || opening}
+							aria-label={`Show source ${
+								sources.length === 1 ? "message" : "messages"
+							} ${sourceLabel}`}
+							className="max-w-[45%] shrink-0 truncate text-xs text-text-tertiary hover:text-text-secondary"
+							data-tooltip={sources.length > 1 ? `${sources.length} source messages` : undefined}
 							onClick={() => {
-								if (editing) {
-									finish();
-									return;
-								}
-								setOpening(true);
-								perform(controller.begin, () => setOpening(false));
+								let source = sources[sourceAt % sources.length];
+								if (source) controls.onSource?.(source);
+								setSourceAt(sourceAt + 1);
 							}}
-							ref={editButton}
 							type="button"
 						>
-							{editing ? "Done" : opening ? "Opening…" : "Edit brief"}
+							{sourceLabel}
 						</button>
 					)}
-					<button
-						aria-keyshortcuts={editing ? "Meta+Enter Control+Enter" : undefined}
-						className="btn btn-sm btn-primary"
-						disabled={!canStart}
-						onClick={start}
-						type="button"
-					>
-						Start research
-					</button>
 				</div>
-			)}
-			{offer.status === "offered" && controls.canAct && !canExecute && (
-				<p className="m-0 text-xs text-text-tertiary">
-					Research execution is unavailable on this instance.
-				</p>
-			)}
-			{(actionError || draft.error) && (
-				<p className="m-0 text-sm text-destructive-ink" role="alert">
-					{actionError || draft.error}
-				</p>
-			)}
-			{controls.errors[offer.id] && (
-				<p className="m-0 text-sm text-destructive-ink" role="alert">
-					{controls.errors[offer.id]}
-				</p>
-			)}
+				{editing
+					? (
+						<ResearchBriefEditor
+							controller={controller}
+							onEscape={finish}
+							onSubmit={() => {
+								if (canStart) start();
+								else if (!draft.text.trim()) setHint("Write a brief to start research.");
+							}}
+							readOnly={!controls.canAct || disabled}
+							text={draft.text}
+						/>
+					)
+					: (
+						<div className="min-w-0 break-words text-sm text-text-primary">
+							<ResearchBrief text={offer.brief} />
+						</div>
+					)}
+				{offer.status === "offered"
+					&& offer.workflow?.additions.filter(item => item.status === "pending").map(addition => (
+						<div
+							aria-label="Suggested addition"
+							className="flex items-start gap-1 rounded-md bg-inset py-1 pr-1 pl-2 text-sm text-text-secondary"
+							key={addition.id}
+							role="group"
+						>
+							<PlusIcon
+								aria-hidden="true"
+								className="mt-0.5 shrink-0 text-text-tertiary"
+								size={14}
+							/>
+							<p className="m-0 min-w-0 flex-1 break-words py-0.5">{addition.text}</p>
+							{controls.canAct && (
+								<>
+									<button
+										aria-label="Add to brief"
+										className="btn btn-icon btn-ghost shrink-0"
+										data-tooltip="Add to brief"
+										disabled={disabled}
+										onClick={() =>
+											perform(() =>
+												edit({
+													kind: "addition",
+													id: addition.id,
+													actionId: crypto.randomUUID(),
+													choice: "apply",
+												})
+											)}
+										type="button"
+									>
+										<CheckIcon aria-hidden="true" size={14} />
+									</button>
+									<button
+										aria-label="Dismiss addition"
+										className="btn btn-icon btn-ghost shrink-0"
+										data-tooltip="Dismiss"
+										disabled={disabled}
+										onClick={() =>
+											perform(() =>
+												edit({
+													kind: "addition",
+													id: addition.id,
+													actionId: crypto.randomUUID(),
+													choice: "dismiss",
+												})
+											)}
+										type="button"
+									>
+										<CloseIcon aria-hidden="true" size={14} />
+									</button>
+								</>
+							)}
+						</div>
+					))}
+				{refinementFailed && !draft.text.trim() && (
+					<div className="flex items-center justify-between gap-2 text-xs text-text-tertiary">
+						Brief refinement failed.{controls.canAct && (
+							<button
+								className="btn btn-sm btn-ghost"
+								disabled={disabled}
+								onClick={retryRefinement}
+								type="button"
+							>
+								Retry refinement
+							</button>
+						)}
+					</div>
+				)}
+				{offer.status === "offered" && controls.canAct && (
+					<div className="flex items-center justify-end gap-1.5">
+						{(busy || hint && !draft.text.trim()) && (
+							<span className="mr-auto text-xs text-text-tertiary" role="status">
+								{busy ? "Saving…" : hint}
+							</span>
+						)}
+						{!editing && (
+							<button
+								className="btn btn-sm btn-ghost"
+								disabled={disabled}
+								onClick={() => controls.onAction(offer.id, "dismiss")}
+								type="button"
+							>
+								Dismiss
+							</button>
+						)}
+						{offer.workflow && controls.wire && (
+							<button
+								aria-busy={opening}
+								className={`btn btn-sm ${editing ? "btn-secondary" : "btn-ghost"}`}
+								disabled={disabled || opening}
+								onClick={() => {
+									if (editing) {
+										finish();
+										return;
+									}
+									setOpening(true);
+									perform(controller.begin, () => setOpening(false));
+								}}
+								ref={editButton}
+								type="button"
+							>
+								{editing ? "Done" : opening ? "Opening…" : "Edit brief"}
+							</button>
+						)}
+						<button
+							aria-keyshortcuts={editing ? "Meta+Enter Control+Enter" : undefined}
+							className="btn btn-sm btn-primary"
+							disabled={!canStart}
+							onClick={start}
+							type="button"
+						>
+							Start research
+						</button>
+					</div>
+				)}
+				{offer.status === "offered" && controls.canAct && !canExecute && (
+					<p className="m-0 text-xs text-text-tertiary">
+						Research execution is unavailable on this instance.
+					</p>
+				)}
+				{(actionError || draft.error) && (
+					<p className="m-0 text-sm text-destructive-ink" role="alert">
+						{actionError || draft.error}
+					</p>
+				)}
+				{controls.errors[offer.id] && (
+					<p className="m-0 text-sm text-destructive-ink" role="alert">
+						{controls.errors[offer.id]}
+					</p>
+				)}
+			</div>
 		</div>
 	);
 }
