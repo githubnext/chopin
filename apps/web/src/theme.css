@@ -683,6 +683,7 @@ body {
 
 /* iOS Safari zooms the page when it focuses a text field under 16px. */
 @media (pointer: coarse) {
+	.chat-composer .composer-draft-input[contenteditable],
 	textarea,
 	select,
 	input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]) {
