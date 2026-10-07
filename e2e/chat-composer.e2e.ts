@@ -186,16 +186,18 @@ test("read-only and archived notices replace the composer input", async ({ join,
 	let chat = chatPane(await join("ana"));
 	await expect(chatInput(chat)).toBeVisible();
 	announce!({ ...hello, canEdit: false, canManage: false });
-	await expect(chat.getByText("Read-only access", { exact: true })).toBeVisible();
+	await expect(chat.getByText("You have read-only access to this document.", { exact: true }))
+		.toBeVisible();
 	await expect(chatInput(chat)).toHaveCount(0);
 	announce!({
 		...hello,
 		kind: "session:channel",
 		channelId: room,
 		archivedAt: new Date().toISOString(),
-		canManage: false,
+		canManage: true,
 	});
-	await expect(chat.getByText("Document archived", { exact: true })).toBeVisible();
+	await expect(chat.getByText("Archived. Restore it to keep chatting.", { exact: true }))
+		.toBeVisible();
 	await expect(chatInput(chat)).toHaveCount(0);
 });
 

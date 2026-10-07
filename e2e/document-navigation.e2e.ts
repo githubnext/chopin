@@ -1,5 +1,6 @@
 import { authenticate, content, expect, roomPath, test } from "./room";
 import { createChannel, seedChannel } from "./database";
+import { chatInput } from "./chat-input";
 
 function channel(id: string, title: string, description?: string) {
 	return {
@@ -710,7 +711,7 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	await expect(content(ana)).toHaveAttribute("contenteditable", "true");
 	await expect(content(bo)).toHaveAttribute("contenteditable", "true");
 	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toHaveCount(0);
-	await expect(ana.getByPlaceholder("Use @chopin to ask Chopin")).toBeVisible();
+	await expect(chatInput(ana)).toBeVisible();
 	await expect(projects.getByRole("button", { name: "Archived", exact: true })).toBeVisible();
 	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
 
