@@ -14,7 +14,7 @@ import * as Y from "yjs";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
-import { assertIntroducedUrls, parse, ULID } from "@chopin/dialect";
+import { assertIntroducedUrls, parse } from "@chopin/dialect";
 import { MENTION } from "@chopin/protocol/address";
 import * as Question from "@chopin/question";
 
@@ -1405,7 +1405,6 @@ async function commit(plan: Plan): Promise<void> {
 		plan.document,
 		batch.map(item => item.update),
 		async (id, action) => {
-			if (!ULID.test(id)) return false;
 			let request = await plan.persistence.storage.research.get(plan.id, id);
 			let initial = request?.turns.find(turn => turn.kind === "initial");
 			let jobId = initial?.answerJobId ?? initial?.evidenceJobId;
