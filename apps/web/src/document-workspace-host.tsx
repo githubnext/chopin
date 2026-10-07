@@ -69,7 +69,9 @@ function workspaceProps(
 	};
 }
 
-const REVEAL_LIMIT = 500;
+// How long after a request the outgoing document may wait for this one to sync. Past
+// it, the header and body would disagree with the sidebar for too long.
+const REVEAL_LIMIT = 200;
 
 export default function DocumentWorkspaceHost(
 	{
@@ -140,6 +142,7 @@ export default function DocumentWorkspaceHost(
 		let active = true;
 		let controller = new AbortController();
 		let requestedRoute = routeRef.current;
+		let requestedAt = performance.now();
 		send({ type: "loading" });
 		let currentState = stateRef.current;
 		let current = currentState.status === "ready" ? currentState.loaded : undefined;
@@ -196,12 +199,14 @@ export default function DocumentWorkspaceHost(
 				routeKey,
 			};
 			// The outgoing document stays on screen until this one has synced, briefly.
-			let started = performance.now();
+			let synced = `[data-workspace-room="${
+				CSS.escape(resolution.channel.id)
+			}"] [data-plan-synced]`;
 			let reveal = () => {
 				if (!active) return;
 				if (
-					parentSurface.current?.querySelector("[data-plan-synced]")
-					|| performance.now() - started > REVEAL_LIMIT
+					parentSurface.current?.closest(".document-route-layer")?.querySelector(synced)
+					|| performance.now() - requestedAt > REVEAL_LIMIT
 				) {
 					onReady(layerKey, resolution);
 				} else {

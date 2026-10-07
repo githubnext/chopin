@@ -244,8 +244,7 @@ function DocumentRouteSwap(
 	let layers = [state.previous, state.current, state.pending].filter(
 		(layer): layer is DocumentRouteLayer => layer !== undefined,
 	);
-	// `closeDelay` adds 50ms, so the incoming route starts as the 80ms fade-out ends.
-	let motion = { className: "motion-route-swap", closeDuration: 30 };
+	let motion = motionContract("route-swap");
 	let { onDocumentLoaded, onDocumentRouteSettled } = useNavigationDocument();
 	let ready = useCallback((
 		key: DocumentRouteIdentity,

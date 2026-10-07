@@ -65,11 +65,10 @@ export function transitionDocumentRoute<T extends KeyedDocumentRoute, R = unknow
 				previous: state.previous,
 			};
 		}
+		// While a route is still leaving, the current one has never been shown, so a
+		// return to the leaving route simply keeps it.
 		if (requested.key === state.previous?.key) {
-			return {
-				current: retarget(state.previous),
-				previous: state.current,
-			};
+			return { current: retarget(state.previous) };
 		}
 		return { ...state, pending: requested };
 	}
@@ -79,7 +78,8 @@ export function transitionDocumentRoute<T extends KeyedDocumentRoute, R = unknow
 				? route
 				: { ...route, resolution: action.resolution };
 		if (state.pending?.key === action.key) {
-			return { current: ready(state.pending), previous: state.current };
+			// A route that never reached the screen is dropped, not shown on its way out.
+			return { current: ready(state.pending), previous: state.previous ?? state.current };
 		}
 		if (state.current.key === action.key && action.resolution !== undefined) {
 			if (state.current.resolution === action.resolution) return state;
