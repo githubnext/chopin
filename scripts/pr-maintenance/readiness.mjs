@@ -43,23 +43,21 @@ export async function inspectReadiness(repository, row, request) {
 		)
 			.sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null;
 		let required = [];
-		try {
-			let protection = await get(
-				`/branches/${encodeURIComponent(row.base)}/protection/required_status_checks`,
+		let branch = await get(`/branches/${encodeURIComponent(row.base)}`);
+		if (branch.commit?.sha !== row.baseHead) return { ...result, action: "verify" };
+		let protection = branch.protection;
+		if (protection?.enabled === true) {
+			let checks = protection.required_status_checks?.checks;
+			let contexts = protection.required_status_checks?.contexts;
+			if (
+				!Array.isArray(checks) || !Array.isArray(contexts)
+				|| contexts.some(context => !checks.some(check => check.context === context))
+				|| checks.some(check => !Object.hasOwn(check, "app_id"))
+			) throw new Error("Unknown classic check requirements");
+			required.push(
+				...checks.map(check => ({ context: check.context, integration_id: check.app_id })),
 			);
-			if (Array.isArray(protection.checks)) {
-				required.push(
-					...protection.checks.map(check => ({
-						context: check.context,
-						integration_id: check.app_id,
-					})),
-				);
-			} else if (Array.isArray(protection.contexts)) {
-				required.push(...protection.contexts.map(context => ({ context })));
-			} else throw new Error("Invalid branch requirements");
-		} catch (error) {
-			if (error.status !== 404) throw error;
-		}
+		} else if (protection?.enabled !== false) throw new Error("Unknown classic protection");
 		let rules = await pages(`/rules/branches/${encodeURIComponent(row.base)}`);
 		for (let rule of rules) {
 			if (rule.type !== "required_status_checks") continue;

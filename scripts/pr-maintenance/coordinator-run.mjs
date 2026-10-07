@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 import { createRequest, openResult } from "./actions.mjs";
 import { coordinate } from "./coordinator.mjs";
 import { inventory } from "./inventory.mjs";
+import { getFailureFingerprint, isFailedCI } from "./failures.mjs";
 import { inspectReadiness } from "./readiness.mjs";
 import { createStateStore } from "./state-store.mjs";
 import { validateState } from "./state.mjs";
@@ -117,6 +118,20 @@ export async function runCoordinator(config = {}) {
 		if (!state || row.head === state.head || row.head === state.active?.proposalHead) continue;
 		let commit = await request("GET", `${root}/commits/${row.head}`);
 		if (commit.committer?.type === "User") humanChanges.push(row.number);
+	}
+	for (let row of rows) {
+		row.failureFingerprint = null;
+		if (
+			row.action !== "repair" || !selected(row.number)
+			|| !isFailedCI(repository, row.run, row.head, row.branch)
+		) continue;
+		try {
+			let fingerprint = await (config.getFailureFingerprint ?? getFailureFingerprint)(
+				repository,
+				row.run,
+			);
+			if (/^[0-9a-f]{64}$/.test(fingerprint ?? "")) row.failureFingerprint = fingerprint;
+		} catch { /* Missing trusted logs do not invent a repeated failure identity. */ }
 	}
 	let rawRuns = [];
 	for (let page = 1;; page++) {

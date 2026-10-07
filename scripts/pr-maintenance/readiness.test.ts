@@ -20,10 +20,19 @@ function transport(options = {}) {
 		}
 		if (path.includes("/commits/main")) return { sha: "base" };
 		if (path.includes("/compare/")) return { behind_by: 0 };
-		if (path.includes("/protection/")) {
-			let error = new Error();
-			error.status = options.forbidden ? 403 : 404;
-			throw error;
+		if (path.startsWith("/repos/a/b/branches/")) {
+			if (options.forbidden) {
+				let error = new Error();
+				error.status = 403;
+				throw error;
+			}
+			return {
+				commit: { sha: "base" },
+				protection: {
+					enabled: false,
+					required_status_checks: { checks: [], contexts: [], enforcement_level: "off" },
+				},
+			};
 		}
 		if (path.includes("/rules/")) {
 			return options.required
@@ -114,4 +123,28 @@ test("pending actual CI waits despite older required-check failure", async () =>
 test("child may become ready when freshly inspected parent becomes ready", async () => {
 	expect((await inspectReadiness("a/b", { ...row, action: "waiting-parent" }, transport())).action)
 		.toBe("ready");
+});
+
+test("contents-readable branch metadata preserves rules requirements without admin endpoint", async () => {
+	let calls = [];
+	let base = transport({ required: true, failed: true });
+	let request = async (method, path) => {
+		calls.push(path);
+		return base(method, path);
+	};
+	expect((await inspectReadiness("a/b", row, request)).action).toBe("repair");
+	expect(calls.some(path => path.includes("/protection/"))).toBe(false);
+	expect(calls.some(path => path.includes("/branches/main"))).toBe(true);
+	for (
+		let protection of [{ enabled: true }, {
+			enabled: true,
+			required_status_checks: { checks: [], contexts: ["legacy"] },
+		}]
+	) {
+		let inspect = async (method, path) =>
+			path === "/repos/a/b/branches/main"
+				? { commit: { sha: "base" }, protection }
+				: base(method, path);
+		expect((await inspectReadiness("a/b", row, inspect)).action).toBe("verify");
+	}
 });

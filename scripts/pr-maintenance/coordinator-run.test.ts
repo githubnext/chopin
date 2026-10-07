@@ -282,3 +282,42 @@ test("expired trusted queued/in-progress workers cancel without releasing lock",
 		}
 	}
 });
+
+test("failure logs sampled only for confirmed current-head failed CI and errors stay null", async () => {
+	let run = {
+		id: 12,
+		head_sha: rows[0].head,
+		head_branch: rows[0].branch,
+		head_repository: { full_name: "a/b" },
+		path: ".github/workflows/ci.yml",
+		event: "pull_request",
+		status: "completed",
+		conclusion: "failure",
+	};
+	for (let scenario of ["failed", "throws", "pending", "stale", "foreign", "green", "disabled"]) {
+		let calls = 0;
+		let current = {
+			...run,
+			...(scenario === "pending" ? { status: "queued" } : {}),
+			...(scenario === "stale" ? { head_sha: "c".repeat(40) } : {}),
+			...(scenario === "foreign" ? { head_repository: { full_name: "foreign/repo" } } : {}),
+			...(scenario === "green" ? { conclusion: "success" } : {}),
+		};
+		let value = config({
+			enabled: scenario !== "disabled",
+			prs: "1",
+			inspect: async () => [{ ...rows[0], run: current }],
+			getFailureFingerprint: async () => {
+				calls++;
+				if (scenario === "throws") throw new Error("secret-value");
+				return "d".repeat(64);
+			},
+		});
+		let result = await runCoordinator(value);
+		expect(calls).toBe(["failed", "throws"].includes(scenario) ? 1 : 0);
+		if (scenario !== "disabled") {
+			expect(result.rows[0].failureFingerprint).toBe(scenario === "failed" ? "d".repeat(64) : null);
+		}
+		expect(JSON.stringify(result)).not.toContain("secret-value");
+	}
+});
