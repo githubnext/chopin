@@ -158,15 +158,22 @@
 	border: 0;
 	background: transparent;
 	font: inherit;
-	margin-block-start: 0.125rem;
+	margin-block-start: calc(var(--spacing) * 0.5);
+	border-radius: var(--radius-sm);
 	font-size: var(--text-xs);
 	font-weight: 400;
 	color: var(--color-text-tertiary);
 	cursor: pointer;
 }
 
-.plan-research-more:hover {
+.plan-research-more:hover,
+.plan-research-more:focus-visible {
 	color: var(--color-text-secondary);
+}
+
+.plan-research-more:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
 }
 
 .plan-research-card[data-stage="cancelled"] .plan-research-title {
