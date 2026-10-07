@@ -18,7 +18,7 @@
 				1
 			]
 		],
-		"sourceHash": "290fd2e09192f125e7ac058f2085d2576428e1f2aa6e32c3cdc6386dd8048019"
+		"sourceHash": "f3f4962157920e770d9b0a33fdc49a258328c8c2fec876aa54e0934821291a07"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -60,7 +60,7 @@
 				1
 			]
 		],
-		"sourceHash": "2ca53fd13462a95b33f5576502c95929d7f95cd73d216e907b917f8c2c011295"
+		"sourceHash": "62287c7db9facadae75a89f371c291e7078fa492ae92e0e5f4a59d944298bb1a"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -277,7 +277,7 @@
 				1
 			]
 		],
-		"sourceHash": "2faf001a9706655858f27b51818f9ea53bd3593aa53b77233ae61debe23cb8df"
+		"sourceHash": "dfc75e68e618e2002071f79f1cea48e30bded75c08166cf6c64af3750568ca59"
 	},
 	{
 		"file": "apps/web/src/repository-picker.tsx",
@@ -291,7 +291,7 @@
 				1
 			]
 		],
-		"sourceHash": "2faf001a9706655858f27b51818f9ea53bd3593aa53b77233ae61debe23cb8df"
+		"sourceHash": "dfc75e68e618e2002071f79f1cea48e30bded75c08166cf6c64af3750568ca59"
 	},
 	{
 		"file": "apps/web/src/document-picker.tsx",
