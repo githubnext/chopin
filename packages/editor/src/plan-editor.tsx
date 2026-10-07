@@ -26,6 +26,7 @@ import { widgetsPlugin } from "./widgets-plugin";
 
 import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
+import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
@@ -65,6 +66,7 @@ export type PlanEditorProps = {
 	commentPresentation?: CommentPresentation;
 	/** App-owned input policy for interactions that should settle without motion. */
 	motionImmediately?: () => boolean;
+	disclosureMotion?: MotionDisclosureContract;
 	/** Host presentation for moving between bounded questionnaire steps. */
 	questionMotion?: QuestionStepMotion;
 	/** Identity for this client's remote cursor. */
@@ -129,6 +131,7 @@ export function PlanEditor(
 		className,
 		commentPresentation = "popover",
 		connection,
+		disclosureMotion,
 		motionImmediately,
 		onScrollTop,
 		onState,
@@ -351,6 +354,7 @@ export function PlanEditor(
 					widgetsPlugin({
 						binding,
 						commentPresentation,
+						disclosureMotion,
 						motionImmediately,
 						questionMotion,
 						questions,
@@ -388,6 +392,7 @@ export function PlanEditor(
 			researchDrafts,
 			researchLauncher,
 			commentPresentation,
+			disclosureMotion,
 			motionImmediately,
 			questionMotion,
 			threads,

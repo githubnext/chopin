@@ -6,6 +6,7 @@ import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
+import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { Research } from "@chopin/protocol";
 import type { ResearchDraftStore } from "./research-draft";
 import type { QuestionnaireStore } from "./questionnaires";
@@ -39,6 +40,7 @@ export type WidgetOptions = {
 	binding?: Binding;
 	commentPresentation?: CommentPresentation;
 	motionImmediately?: () => boolean;
+	disclosureMotion?: MotionDisclosureContract;
 	questionMotion?: QuestionStepMotion;
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;

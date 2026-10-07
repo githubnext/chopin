@@ -685,6 +685,24 @@
 	-webkit-line-clamp: 1;
 }
 
+.plan-content [data-plan-comment-card] :is(p, ul, li, blockquote) {
+	margin-block: 0;
+}
+
+.plan-content [data-plan-comment-card] ul {
+	padding-inline-start: calc(1em + 3px);
+}
+
+.plan-content [data-plan-comment-card] blockquote {
+	padding-inline-start: 1em;
+	border-inline-start: 3px solid var(--color-edge);
+	color: var(--color-text-secondary);
+}
+
+:root[data-plan-coarse-pointer] .plan-comment-row {
+	min-height: 44px;
+}
+
 .plan-comment-context {
 	padding: 0.5rem 0.625rem;
 	border-radius: var(--radius-md);
