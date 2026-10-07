@@ -998,3 +998,34 @@
 		transition: none;
 	}
 }
+
+.project-sidebar-document {
+	position: relative;
+}
+
+.project-sidebar-document-new::before {
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: var(--project-sidebar-selected);
+	content: "";
+	opacity: 0;
+	pointer-events: none;
+	animation: sidebar-row-new var(--duration-linger) var(--motion-move) var(--acc-expand) both;
+}
+
+@keyframes sidebar-row-new {
+	from {
+		opacity: 1;
+	}
+
+	to {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.project-sidebar-document-new::before {
+		animation: none;
+	}
+}

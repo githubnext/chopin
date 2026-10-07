@@ -9,8 +9,9 @@ import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
 import { Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
+import { useSidebarRowPresence } from "./sidebar-row-presence";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ArchiveIcon, ChevronIcon, DocumentIcon, SearchIcon } from "@chopin/icons";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
@@ -53,6 +54,64 @@ export function documentGroups(
 	return parents.map(parent => ({ parent, children: children.get(parent.id) ?? [] }));
 }
 
+function DocumentRow(
+	{ children, exiting, enter, onExited }: {
+		children: ReactNode;
+		enter: boolean;
+		exiting: boolean;
+		onExited: () => void;
+	},
+) {
+	let item = useRef<HTMLLIElement>(null);
+	let id = useId();
+	let motion = motionContract("collapse");
+	let [armed, setArmed] = useState(!enter);
+	useEffect(() => {
+		if (armed) return;
+		let frame = requestAnimationFrame(() => setArmed(true));
+		return () => cancelAnimationFrame(frame);
+	}, [armed]);
+	useLayoutEffect(() => {
+		if (!exiting) return;
+		let row = item.current;
+		let active = document.activeElement;
+		if (row && active && row.contains(active)) {
+			let links = [
+				...(row.parentElement?.querySelectorAll<HTMLElement>(
+					":scope > li:not([data-exiting]) .project-sidebar-document-link",
+				) ?? []),
+			];
+			let next = links.find(link =>
+				row.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING
+			)
+				?? links.at(-1)
+				?? row.closest(".project-sidebar-project")?.querySelector<HTMLElement>(
+					".project-sidebar-project-disclosure",
+				);
+			next?.focus({ preventScroll: true });
+		}
+		let timer = window.setTimeout(onExited, motion.closeDuration + 50);
+		return () => window.clearTimeout(timer);
+	}, [exiting, motion.closeDuration, onExited]);
+	return (
+		<li
+			className="group/document"
+			data-exiting={exiting ? "" : undefined}
+			ref={item}
+		>
+			<MotionDisclosure
+				id={id}
+				immediately={motionImmediately()}
+				motion={motion}
+				open={armed && !exiting}
+				surface="documents"
+			>
+				{children}
+			</MotionDisclosure>
+		</li>
+	);
+}
+
 function Project(
 	{
 		archiveMode,
@@ -78,6 +137,11 @@ function Project(
 ) {
 	let { documents, project } = entry;
 	let groups = documentGroups(documents.channels, archiveMode);
+	let presence = useSidebarRowPresence(groups, {
+		immediately: motionImmediately(),
+		ready: documents.status === "ready",
+		scope: archiveMode ? "archived" : "active",
+	});
 	let label = project.repository?.name ?? project.repositoryName;
 	let canManage = canManageProject(project);
 	let phase = pendingCreations.get(project.repositoryId);
@@ -99,9 +163,9 @@ function Project(
 			{documents.status === "loading" && groups.length === 0 && (
 				<p className="project-sidebar-status" role="status">Loading documents…</p>
 			)}
-			{groups.length > 0 && (
+			{(groups.length > 0 || presence.rows.length > 0) && (
 				<ul className="project-sidebar-documents">
-					{groups.map(({ children, parent: channel }) => {
+					{presence.rows.map(({ enter, exiting, group: { children, parent: channel } }) => {
 						let parentCurrent = currentDocumentId === channel.id;
 						let childCurrent = children.some(child => child.id === currentDocumentId);
 						let parentHref = documentPath(
@@ -110,7 +174,12 @@ function Project(
 							channel.slug,
 						);
 						return (
-							<li className="group/document" key={channel.id}>
+							<DocumentRow
+								enter={enter}
+								exiting={exiting}
+								key={channel.id}
+								onExited={() => presence.finish(channel.id)}
+							>
 								<div
 									className={`project-sidebar-document ${
 										parentCurrent
@@ -118,7 +187,7 @@ function Project(
 											: childCurrent
 											? "project-sidebar-document-ancestor"
 											: ""
-									}`}
+									} ${enter && !parentCurrent ? "project-sidebar-document-new" : ""}`}
 								>
 									<a
 										aria-current={parentCurrent ? "page" : undefined}
@@ -187,7 +256,7 @@ function Project(
 										})}
 									</ul>
 								)}
-							</li>
+							</DocumentRow>
 						);
 					})}
 				</ul>
