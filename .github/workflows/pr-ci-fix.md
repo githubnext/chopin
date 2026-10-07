@@ -15,7 +15,7 @@ if: github.event_name != 'workflow_run' || contains(fromJson('["failure","timed_
 concurrency:
   group: pr-babysitter
   cancel-in-progress: false
-  queue: single
+  queue: max
 
 imports:
   - shared/dprint-verification.md
@@ -28,7 +28,11 @@ permissions:
 engine:
   id: codex
   args: ["-c", 'model_reasoning_effort=\"low\"']
-model: openai/gpt-6.1-sol
+model: gpt-5.4
+sandbox:
+  agent:
+    model-fallback: false
+    token-steering: false
 timeout-minutes: 40
 max-turns: 120
 max-ai-credits: 500
