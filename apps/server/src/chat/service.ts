@@ -1581,7 +1581,9 @@ async function run(
 		}
 		sendStarted = true;
 		if (!jobTurn) {
-			chat.toolFinished = (id, output, success) => finished(context, id, output, success);
+			chat.toolFinished = (id, output, success) => {
+				if (!turnController.signal.aborted) finished(context, id, output, success);
+			};
 			chat.toolProgress = (id, output) => progressed(context, id, output);
 		}
 		let signal = AbortSignal.any([opened.binding.signal, turnController.signal]);
