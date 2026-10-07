@@ -1,10 +1,14 @@
 /**
  * Per-person undo over a shared document.
  *
- * Real Lexical and real Yjs on both ends. What decides correctness is which
- * Yjs transactions the undo manager tracks and which stack items it refuses,
+ * Real Lexical and real Yjs on every end. What decides correctness is which
+ * Yjs transactions the undo manager tracks and which reversals it refuses,
  * and both are visible here without a browser. The keyboard path is covered
  * by `e2e/undo.e2e.ts`.
+ *
+ * After every scenario the document has to read the same from a fresh load as
+ * it does in each live editor, and export as valid MDX, because a document
+ * that reads differently when reopened is one the server will no longer open.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -15,18 +19,28 @@ import {
 	$createTextNode,
 	$getRoot,
 	$isDecoratorNode,
+	$isElementNode,
 	$isParagraphNode,
+	$isTextNode,
 	REDO_COMMAND,
 	UNDO_COMMAND,
 } from "lexical";
 import * as Y from "yjs";
 
-import { $createDecisionNode, $createResearchNode, importPlan, registry } from "@chopin/dialect";
+import {
+	$createDecisionNode,
+	$createPlanNodes,
+	$createResearchNode,
+	exportPlan,
+	importPlan,
+	parse,
+	registry,
+} from "@chopin/dialect";
 
-import { planUndoManager, registerPlanHistory, touchesProjection } from "./history";
+import { registerPlanHistory } from "./history";
 
 import type { Binding, Provider } from "@lexical/yjs";
-import type { LexicalEditor } from "lexical";
+import type { LexicalEditor, LexicalNode } from "lexical";
 
 const REGISTRY = registry();
 
@@ -74,16 +88,26 @@ function bound(doc: Y.Doc): Person {
 	return { editor, binding, doc };
 }
 
+/** A bare mirror, as the server's room and a fresh load both are. */
+function follower(doc: Y.Doc): Person {
+	let found = bound(doc);
+	found.binding.root.getSharedType().observeDeep((events, transaction) => {
+		if (transaction.origin === found.binding) return;
+		syncYjsChangesToLexical(found.binding, PROVIDER, events, false);
+	});
+	return found;
+}
+
 /** A browser: the binding as `collaboration.tsx` wires it, plus MDXEditor's trailing paragraph. */
-function person(update: Uint8Array): Person {
+function person(update: Uint8Array, captureTimeout?: number): Person {
 	let found = bound(new Y.Doc());
 	let { editor, binding, doc } = found;
-	let history = registerPlanHistory(editor, binding);
+	let history = registerPlanHistory(editor, binding, captureTimeout);
 	binding.root.getSharedType().observeDeep((events, transaction) => {
 		if (transaction.origin === binding) return;
-		history.react();
 		let undone = transaction.origin instanceof Y.UndoManager;
 		syncYjsChangesToLexical(binding, PROVIDER, events, undone);
+		history.react();
 	});
 	editor.registerUpdateListener(({ editorState }) => {
 		let last = editorState.read(() => $getRoot().getLastChild());
@@ -96,16 +120,15 @@ function person(update: Uint8Array): Person {
 }
 
 /**
- * Two people in one room with the server, every update relayed to the others
- * as a remote one. The server is a bare binding, as the Planner's edits are.
+ * People in one room with the server, every update relayed to the others as a
+ * remote one. The server is a bare mirror, and the Planner edits through it.
  */
-async function room(source: string): Promise<{ me: Person; peer: Person; server: Person }> {
-	let server = bound(new Y.Doc());
+async function room(source: string, count = 2, captureTimeout?: number) {
+	let server = follower(new Y.Doc());
 	importPlan(server.editor, source, { registry: REGISTRY });
 	let seeded = Y.encodeStateAsUpdate(server.doc);
-	let me = person(seeded);
-	let peer = person(seeded);
-	let everyone = [me, peer, server];
+	let people = Array.from({ length: count }, () => person(seeded, captureTimeout));
+	let everyone = [...people, server];
 	for (let from of everyone) {
 		from.doc.on("update", (update: Uint8Array, origin: unknown) => {
 			if (origin === REMOTE) return;
@@ -113,11 +136,16 @@ async function room(source: string): Promise<{ me: Person; peer: Person; server:
 		});
 	}
 	await settle();
-	return { me, peer, server };
+	let [me, peer] = people as [Person, Person];
+	return { me, peer, people, server };
 }
 
 async function settle(): Promise<void> {
 	await new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function source(editor: LexicalEditor): string {
+	return exportPlan(editor, { registry: REGISTRY });
 }
 
 function text(editor: LexicalEditor): string {
@@ -126,6 +154,21 @@ function text(editor: LexicalEditor): string {
 
 function types(editor: LexicalEditor): string[] {
 	return editor.getEditorState().read(() => $getRoot().getChildren().map(node => node.getType()));
+}
+
+function count(editor: LexicalEditor, type: string): number {
+	return [...editor.getEditorState()._nodeMap.values()].filter(node => node.getType() === type)
+		.length;
+}
+
+/** What a newcomer reads from the shared state, against what everybody live sees. */
+async function consistent(...live: Person[]): Promise<string> {
+	let fresh = follower(new Y.Doc());
+	Y.applyUpdate(fresh.doc, Y.encodeStateAsUpdate(live[0]!.doc), REMOTE);
+	await settle();
+	let expected = source(fresh.editor);
+	for (let each of live) expect(source(each.editor)).toBe(expected);
+	return expected;
 }
 
 /** Append to the nth paragraph, as typing would. */
@@ -137,29 +180,57 @@ function type(editor: LexicalEditor, value: string, index = 0) {
 	}, { discrete: true });
 }
 
+function undo(editor: LexicalEditor) {
+	editor.dispatchCommand(UNDO_COMMAND, undefined);
+}
+
+function redo(editor: LexicalEditor) {
+	editor.dispatchCommand(REDO_COMMAND, undefined);
+}
+
 const DECISION = {
 	id: "01K0N4Y9VG9DHBFZB6HC89E2AA",
 	quote: "Keep the pilot small.",
 	by: "octocat",
 	at: "2026-10-07T00:00:00.000Z",
-	notes: [],
+	notes: [{ by: "octocat", text: "Keep it small." }],
 };
+
+const RESEARCH = "01K0N4Y9VG9DHBFZB6HC89E2AB";
+
+const QUESTIONNAIRE = `<Questionnaire id="01K0N4TR8K7JGM4R1J7PW4R8YJ">\n`
+	+ `<Question id="01K0N4V4E7Y6P4MJ5WD8XZF3B2" header="Rollout" `
+	+ `prompt="How should we deploy?" multiple="false">\n`
+	+ `<Option id="01K0N4W3B7P27CBAEC7A8C8WEA" label="Canary" />\n`
+	+ `</Question>\n`
+	+ `</Questionnaire>\n`;
+
+const TABLE = "| a | b | c |\n| - | - | - |\n| d | e | f |\n| g | h | i |\n";
+
+function appendTable(editor: LexicalEditor) {
+	editor.update(() => {
+		for (let node of $createPlanNodes(parse(TABLE) as never, { registry: REGISTRY })) {
+			$getRoot().append(node);
+		}
+	}, { discrete: true });
+}
 
 describe("plan history", () => {
 	it("undoes and redoes this person's typing", async () => {
-		let { me } = await room("Start here.\n");
+		let { me, peer } = await room("Start here.\n");
 
 		type(me.editor, " Mine.");
 		await settle();
 		expect(text(me.editor)).toBe("Start here. Mine.");
 
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
 		expect(text(me.editor)).toBe("Start here.");
 
-		me.editor.dispatchCommand(REDO_COMMAND, undefined);
+		redo(me.editor);
 		await settle();
 		expect(text(me.editor)).toBe("Start here. Mine.");
+		await consistent(me, peer);
 	});
 
 	it("leaves a peer's edit alone", async () => {
@@ -169,61 +240,78 @@ describe("plan history", () => {
 		await settle();
 		type(peer.editor, " Typed by them.", 1);
 		await settle();
-		expect(text(me.editor)).toContain("Typed by them.");
 
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
 		expect(text(me.editor)).not.toContain("Typed by me.");
 		expect(text(me.editor)).toContain("Typed by them.");
-		expect(text(peer.editor)).toBe(text(me.editor));
+		await consistent(me, peer);
 	});
 
 	it("undoes typing around a projection the server inserted afterwards", async () => {
-		let { me, peer } = await room("Start here.\n");
+		let { me, peer, server } = await room("Start here.\n");
 
 		me.editor.update(() => {
-			let paragraph = $createParagraphNode().append($createTextNode("A new paragraph."));
-			$getRoot().append(paragraph);
+			$getRoot().append($createParagraphNode().append($createTextNode("A new paragraph.")));
 		}, { discrete: true });
 		await settle();
-		peer.editor.update(() => {
-			$getRoot().getLastChildOrThrow().insertAfter($createDecisionNode(DECISION));
+		server.editor.update(() => {
+			$getRoot().append($createDecisionNode(DECISION));
 		}, { discrete: true });
 		await settle();
-		expect(types(me.editor)).toContain("plan-decision");
 
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
 		expect(text(me.editor)).not.toContain("A new paragraph.");
-		expect(types(me.editor)).toContain("plan-decision");
-		expect(types(peer.editor)).toEqual(types(me.editor));
+		expect(count(me.editor, "plan-decision")).toBe(1);
+		await consistent(me, peer, server);
 	});
 
 	it("will not undo past a projection this person inserted", async () => {
-		let { me } = await room("Start here.\n");
+		let { me, peer } = await room("Start here.\n");
 
 		me.editor.update(() => {
-			$getRoot().getFirstChildOrThrow().insertAfter(
-				$createResearchNode("01K0N4Y9VG9DHBFZB6HC89E2AB"),
-			);
+			$getRoot().getFirstChildOrThrow().insertAfter($createResearchNode(RESEARCH));
 		}, { discrete: true });
 		await settle();
-		let inserted = text(me.editor);
 		let before = Y.encodeStateVector(me.doc);
 
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
-		expect(types(me.editor)).toContain("plan-research");
+		expect(count(me.editor, "plan-research")).toBe(1);
 		// Nothing was sent: a removed reference would be refused by the server.
 		expect(Y.encodeStateVector(me.doc)).toEqual(before);
 
 		// The refused step ends the history rather than blocking it forever.
+		let inserted = text(me.editor);
 		type(me.editor, " Later.");
 		await settle();
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
 		expect(text(me.editor)).toBe(inserted);
-		expect(types(me.editor)).toContain("plan-research");
+		expect(count(peer.editor, "plan-research")).toBe(1);
+	});
+
+	it("checks the step Yjs reaches past one that no longer changes anything", async () => {
+		let { me, peer } = await room("Start here.\n\nSecond.\n", 2, 0);
+
+		me.editor.update(() => {
+			$getRoot().getFirstChildOrThrow().insertAfter($createResearchNode(RESEARCH));
+		}, { discrete: true });
+		await settle();
+		type(me.editor, " x", 1);
+		await settle();
+		// The peer deletes exactly what I typed, so my last step is now empty.
+		peer.editor.update(() => {
+			$getRoot().getChildren().filter($isParagraphNode)[1]!.getLastChildOrThrow().remove();
+		}, { discrete: true });
+		await settle();
+
+		undo(me.editor);
+		await settle();
+		expect(count(me.editor, "plan-research")).toBe(1);
+		expect(count(peer.editor, "plan-research")).toBe(1);
+		await consistent(me, peer);
 	});
 
 	it("does nothing while the editor is read-only", async () => {
@@ -232,14 +320,14 @@ describe("plan history", () => {
 		await settle();
 
 		me.editor.setEditable(false);
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
 		expect(text(me.editor)).toBe("Start here. Mine.");
 	});
 });
 
 describe("plan history with peers", () => {
-	it("keeps a paragraph this person created once a peer has typed in it", async () => {
+	it("will not delete a paragraph a peer has typed in", async () => {
 		let { me, peer } = await room("Start here.\n");
 
 		me.editor.update(() => {
@@ -249,11 +337,64 @@ describe("plan history with peers", () => {
 		type(peer.editor, " Theirs.", 1);
 		await settle();
 
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
-		expect(text(me.editor)).not.toContain("Mine.");
-		expect(text(me.editor)).toContain("Theirs.");
-		expect(text(peer.editor)).toBe(text(me.editor));
+		expect(text(peer.editor)).toContain("Theirs.");
+		expect(await consistent(me, peer)).toContain("Theirs.");
+	});
+
+	it("will not delete a table a peer has typed in", async () => {
+		let { me, peer } = await room("Start here.\n");
+
+		appendTable(me.editor);
+		await settle();
+		peer.editor.update(() => {
+			let table = $getRoot().getChildren().find(node => node.getType() === "table");
+			if (!$isElementNode(table)) throw new Error("no table");
+			let row = table.getChildAtIndex(1);
+			let cell = $isElementNode(row) ? row.getChildAtIndex(1) : null;
+			let paragraph = $isElementNode(cell) ? cell.getFirstChild() : null;
+			if (!$isElementNode(paragraph)) throw new Error("no cell paragraph");
+			paragraph.append($createTextNode(" peer"));
+		}, { discrete: true });
+		await settle();
+
+		undo(me.editor);
+		await settle();
+		expect(await consistent(me, peer)).toContain("e peer");
+	});
+
+	it("will not delete a list a peer has typed in", async () => {
+		let { me, peer } = await room("Start here.\n");
+
+		me.editor.update(() => {
+			for (let node of $createPlanNodes(parse("- one\n- two\n") as never, { registry: REGISTRY })) {
+				$getRoot().append(node);
+			}
+		}, { discrete: true });
+		await settle();
+		peer.editor.update(() => {
+			let list = $getRoot().getLastChild();
+			let item = $isElementNode(list) ? list.getFirstChild() : null;
+			if (!$isElementNode(item)) throw new Error("no list item");
+			item.append($createTextNode(" peer"));
+		}, { discrete: true });
+		await settle();
+
+		undo(me.editor);
+		await settle();
+		expect(await consistent(me, peer)).toContain("one peer");
+	});
+
+	it("undoes a table nobody else has touched", async () => {
+		let { me, peer } = await room("Start here.\n");
+
+		appendTable(me.editor);
+		await settle();
+		undo(me.editor);
+		await settle();
+		expect(types(me.editor)).not.toContain("table");
+		await consistent(me, peer);
 	});
 
 	it("does not undo what this client wrote in reaction to a remote card", async () => {
@@ -267,74 +408,102 @@ describe("plan history with peers", () => {
 		await settle();
 		let shape = types(me.editor);
 		expect(shape.at(-1)).toBe("paragraph");
-		expect(shape).toContain("plan-decision");
 		let last = () => me.binding.root.getSharedType().toDelta().at(-1)?.insert;
 		let trailing = last();
 
-		me.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		undo(me.editor);
 		await settle();
 		expect(text(me.editor)).not.toContain("Mine.");
 		expect(types(me.editor)).toEqual(shape);
 		// The same paragraph, not one removed by the undo and appended again.
 		expect(last()).toBe(trailing);
 	});
+
+	it("keeps a keystroke that follows a remote change in the history", async () => {
+		let { me, peer } = await room("Start here.\n\nTheirs.\n", 2, 0);
+
+		type(peer.editor, " a", 1);
+		// The next task, as a keystroke would be, ahead of any timer.
+		await new Promise(resolve => setImmediate(resolve));
+		type(me.editor, " Mine.");
+		await settle();
+
+		undo(me.editor);
+		await settle();
+		expect(text(me.editor)).not.toContain("Mine.");
+		await consistent(me, peer);
+	});
 });
 
-describe("touchesProjection", () => {
-	it("sees the removal of a projection this person inserted", () => {
-		let doc = new Y.Doc();
-		let root = doc.get("root", Y.XmlText);
-		let local = Symbol("local");
-		let manager = planUndoManager(root, local);
+/** A small deterministic generator, so a failure can be replayed by its seed. */
+function random(seed: number) {
+	return () => {
+		seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+		return seed / 2_147_483_648;
+	};
+}
 
-		doc.transact(() => root.insertEmbed(0, new Y.XmlText()), local);
-		expect(touchesProjection(doc, manager.undoStack[0]!)).toBe(false);
+function texts(editor: LexicalEditor): LexicalNode[] {
+	return [...editor.getEditorState()._nodeMap.values()].filter(node =>
+		$isTextNode(node) && node.isAttached()
+	);
+}
 
-		let projection = new Y.XmlElement();
-		doc.transact(() => {
-			root.insertEmbed(0, projection);
-			projection.setAttribute("__type", "plan-research");
-		}, local);
-		expect(touchesProjection(doc, manager.undoStack.at(-1)!)).toBe(true);
-	});
+describe("plan history under random editing", () => {
+	for (let seed of [1, 2, 3, 4, 5, 6]) {
+		it(`keeps the room openable and its projections intact (seed ${seed})`, async () => {
+			let next = random(seed);
+			let pick = <T>(items: T[]) => items[Math.floor(next() * items.length)]!;
+			let { people, server } = await room(
+				`Start here.\n\n${QUESTIONNAIRE}\nSecond.\n`,
+				3,
+				0,
+			);
+			let research = 0;
+			let decisions = 0;
 
-	it("sees the restoration of a projection this person moved away", () => {
-		let doc = new Y.Doc();
-		let root = doc.get("root", Y.XmlText);
-		let projection = new Y.XmlElement();
-		doc.transact(() => {
-			root.insertEmbed(0, projection);
-			projection.setAttribute("__type", "plan-questionnaire");
-		}, REMOTE);
-		let local = Symbol("local");
-		let manager = planUndoManager(root, local);
+			for (let round = 0; round < 60; round++) {
+				let who = pick(people);
+				let roll = next();
+				if (roll < 0.25) {
+					let paragraphs = who.editor.getEditorState().read(() =>
+						$getRoot().getChildren().filter($isParagraphNode).length
+					);
+					if (paragraphs > 0) type(who.editor, ` w${round}`, Math.floor(next() * paragraphs));
+				} else if (roll < 0.35) {
+					who.editor.update(() => {
+						$getRoot().append($createParagraphNode().append($createTextNode(`p${round}`)));
+					}, { discrete: true });
+				} else if (roll < 0.45) {
+					who.editor.update(() => {
+						let nodes = texts(who.editor);
+						if (nodes.length > 1) pick(nodes).remove();
+					}, { discrete: true });
+				} else if (roll < 0.5) {
+					appendTable(who.editor);
+				} else if (roll < 0.53) {
+					let id = `01K0N4Y9VG9DHBFZB6HC89E${String(research++).padStart(3, "0")}`;
+					who.editor.update(() => {
+						$getRoot().getFirstChildOrThrow().insertAfter($createResearchNode(id));
+					}, { discrete: true });
+				} else if (roll < 0.56) {
+					let id = `01K0N4Y9VG9DHBFZB6HC89F${String(decisions++).padStart(3, "0")}`;
+					server.editor.update(() => {
+						$getRoot().append($createDecisionNode({ ...DECISION, id }));
+					}, { discrete: true });
+				} else if (roll < 0.85) {
+					undo(who.editor);
+				} else {
+					redo(who.editor);
+				}
+				await settle();
 
-		doc.transact(() => root.delete(0, 1), local);
-		expect(touchesProjection(doc, manager.undoStack[0]!)).toBe(true);
-	});
-
-	it("keeps a remote projection placed inside a block this person created", () => {
-		let doc = new Y.Doc();
-		let root = doc.get("root", Y.XmlText);
-		let local = Symbol("local");
-		let manager = planUndoManager(root, local);
-
-		let block = new Y.XmlText();
-		doc.transact(() => root.insertEmbed(0, block), local);
-		// Another client's projection, as the server would place it.
-		let server = new Y.Doc();
-		Y.applyUpdate(server, Y.encodeStateAsUpdate(doc));
-		let projection = new Y.XmlElement();
-		let host = server.get("root", Y.XmlText).toDelta()[0].insert as Y.XmlText;
-		server.transact(() => {
-			host.insertEmbed(0, projection);
-			projection.setAttribute("__type", "plan-decision");
+				// The server never sees a projection disappear, so it never refuses a batch.
+				expect(count(server.editor, "plan-research")).toBe(research);
+				expect(count(server.editor, "plan-decision")).toBe(decisions);
+				expect(count(server.editor, "plan-questionnaire")).toBe(1);
+				await consistent(...people, server);
+			}
 		});
-		Y.applyUpdate(doc, Y.encodeStateAsUpdate(server, Y.encodeStateVector(doc)), REMOTE);
-
-		expect(touchesProjection(doc, manager.undoStack[0]!)).toBe(false);
-		manager.undo();
-		expect(block.toDelta()[0]?.insert).toBeInstanceOf(Y.XmlElement);
-		expect(root.toDelta()).toHaveLength(1);
-	});
+	}
 });

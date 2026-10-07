@@ -138,9 +138,9 @@ function Collaboration(options: CollaborationOptions) {
 		let history = registerPlanHistory(editor, binding);
 		let observer = (events: unknown[], transaction: { origin: unknown }) => {
 			if (transaction.origin !== binding) {
-				history.react();
 				let undone = transaction.origin instanceof Y.UndoManager;
 				syncYjsChangesToLexical(binding, provider, events as never, undone, cursors);
+				history.react();
 			}
 		};
 		binding.root.getSharedType().observeDeep(observer);
