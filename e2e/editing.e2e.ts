@@ -10,6 +10,7 @@
  */
 
 import { content, expect, ready, test, written } from "./room";
+import { chatInput } from "./chat-input";
 
 import type { WebSocketRoute } from "@playwright/test";
 
@@ -218,6 +219,7 @@ test("a lost connection is said in the document header and the composer", async 
 	});
 
 	await join("ana");
+	let chat = page.getByRole("complementary", { name: "Chat", exact: true });
 	let status = page.locator("[data-document-toolbar] .plan-status");
 	let spoken = status.getByRole("status");
 	await expect(status).toHaveAttribute("data-level", "hidden");
@@ -231,7 +233,8 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(status).toContainText("Reconnecting…");
 	await expect(spoken).toHaveText("Reconnecting…");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
-	await expect(page.getByPlaceholder("Reconnecting…")).toHaveCount(1);
+	await expect(chat.getByText("Connection lost", { exact: true })).toBeVisible();
+	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "false");
 	await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
 
 	// Lost for long enough, it stops promising and offers a way out.
@@ -246,5 +249,5 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(status).toHaveAttribute("data-level", "hidden");
 	await expect(spoken).toHaveText("Reconnected");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(0);
-	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(1);
+	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "true");
 });
