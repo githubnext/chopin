@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 import { createRequest, openResult } from "./actions.mjs";
 import { coordinate } from "./coordinator.mjs";
 import { inventory } from "./inventory.mjs";
+import { createInventoryRead } from "./inventory-read.mjs";
 import { getFailureFingerprint, isFailedCI } from "./failures.mjs";
 import { inspectReadiness } from "./readiness.mjs";
 import { createStateStore } from "./state-store.mjs";
@@ -57,7 +58,8 @@ export async function runCoordinator(config = {}) {
 	}
 	let enabled = config.enabled ?? process.env.PR_READINESS_ENABLED === "true";
 	let request = config.request ?? createRequest(process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN);
-	let rows = await (config.inspect ?? (() => inventory(repository)))();
+	let rows =
+		await (config.inspect ?? (() => inventory(repository, createInventoryRead(repository))))();
 	let confirm = config.confirm ?? inspectReadiness;
 	rows = await Promise.all(rows.map(row => confirm(repository, row, request)));
 	// Reapply parent ordering using confirmed checks, not the advisory inventory.
