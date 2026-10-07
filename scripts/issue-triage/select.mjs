@@ -48,11 +48,20 @@ export function selectIssues(repository, event, gh = github) {
 			issue.body,
 			humanComments.map(({ id, body, updated_at }) => ({ id, body, updated_at })),
 		])).digest("hex").slice(0, 20);
-		let marker = `<!-- issue-triage:${issue.number}:${fingerprint} -->`;
+		let receipt = `issue-triage:${issue.number}:${fingerprint}`;
+		let recordUrl = process.env.GITHUB_RUN_ID
+			? `https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}`
+			: `https://github.com/${repository}/issues/${issue.number}`;
+		let marker = `[Triage record](${recordUrl}#${receipt})`;
 		if (
 			comments.some((comment) =>
 				comment.user.login === "github-actions[bot]" && comment.user.type === "Bot"
-				&& comment.body.includes(marker)
+				&& (comment.body.includes(receipt)
+					// The first deployed run lost HTML receipts during safe-output sanitization.
+					|| (comment.body.includes("<!-- gh-aw-agentic-workflow: Issue triage,")
+						&& !comment.body.includes("#issue-triage:")
+						&& comment.updated_at >= issue.updated_at
+						&& issue.labels.some((label) => routingLabels.includes(label.name))))
 			)
 		) continue;
 		candidates.push({

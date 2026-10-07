@@ -87,6 +87,36 @@ test("only a genuine github-actions bot receipt suppresses repeat triage", () =>
 	expect(selectIssues(repository, {}, forged.gh)).toHaveLength(1);
 });
 
+test("recognizes the first published acknowledgement after its HTML receipt was stripped", () => {
+	let issue = {
+		...external,
+		updated_at: "2026-10-07T12:41:08Z",
+		labels: [{ name: "triage/human-response" }],
+	};
+	let receipt = {
+		body: "Acknowledged.\n<!-- gh-aw-agentic-workflow: Issue triage, engine: codex -->",
+		updated_at: issue.updated_at,
+		user: { login: "github-actions[bot]", type: "Bot" },
+	};
+	let unchanged = fixture([issue], { 149: [receipt] });
+	expect(selectIssues(repository, {}, unchanged.gh)).toEqual([]);
+	let edited = fixture([{ ...issue, updated_at: "2026-10-07T13:00:00Z" }], { 149: [receipt] });
+	expect(selectIssues(repository, {}, edited.gh)).toHaveLength(1);
+});
+
+test("receipt identity survives a later workflow run", () => {
+	let { gh } = fixture();
+	let marker = selectIssues(repository, {}, gh)[0]!.marker;
+	expect(marker).toContain("[Triage record](https://github.com/");
+	expect(marker).not.toContain("<!--");
+	let receipt = {
+		body: marker.replace("/issues/149", "/actions/runs/123"),
+		user: { login: "github-actions[bot]", type: "Bot" },
+	};
+	let acknowledged = fixture([external], { 149: [receipt] });
+	expect(selectIssues(repository, {}, acknowledged.gh)).toEqual([]);
+});
+
 test("bot activity and labels do not change a receipt; human replies and edits do", () => {
 	let { gh } = fixture();
 	let marker = selectIssues(repository, {}, gh)[0]!.marker;
