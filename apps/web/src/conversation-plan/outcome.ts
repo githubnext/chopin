@@ -22,34 +22,51 @@ export type MessageOutcome = {
 	tone: "success" | "warning" | "neutral";
 };
 
-const PHRASES: Record<string, string> = {
-	Question: "New decision",
-	Proposal: "Option on",
-	Reason: "Reason on",
-	Constraint: "Constraint on",
-	Support: "Support on",
-	Objection: "Objection on",
-	Reopening: "Reopened",
-	Settle: "Ready to settle",
+const NOUNS: Record<string, string> = {
+	Option: "an option",
+	Reason: "a reason",
+	Constraint: "a constraint",
+	Objection: "an objection",
+	Support: "support",
 };
 
-/** "Option and reason on" or "New decision" — the words before a card title. */
-export function changePhrase(labels: readonly string[]): string {
-	let [first, ...rest] = labels;
-	if (!first) return "Added to";
-	if (rest.length === 0) return PHRASES[first] ?? `${first} on`;
-	let nouns = labels.filter(label => PHRASES[label]?.endsWith(" on"));
-	if (nouns.length === labels.length) {
-		let words = nouns.map((label, index) => {
-			let noun = PHRASES[label]!.slice(0, -" on".length);
-			return index === 0 ? noun : noun.toLowerCase();
-		});
-		let list = words.length === 2
-			? words.join(" and ")
-			: `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
-		return `${list} on`;
+/** One change as a sentence around the card title; `title: undefined` makes the phrase the link. */
+export type ChangeSentence = { before: string; title?: string; after: string };
+
+function plain(text: string): string {
+	return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+function list(words: string[]): string {
+	return words.length <= 2
+		? words.join(" and ")
+		: `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
+}
+
+export function changeSentence(change: CardChange, messageText = ""): ChangeSentence {
+	let { labels, title } = change;
+	if (labels.includes("Question")) {
+		return plain(title) === plain(messageText)
+			? { before: "Started a decision", after: "" }
+			: { before: "Started the decision", title, after: "" };
 	}
-	return "Added to";
+	if (labels.includes("Reopening")) return { before: "Reopened", title, after: "" };
+	if (labels.includes("Settle")) return { before: "Marked", title, after: "ready to settle" };
+	let nouns = labels.filter(label => NOUNS[label]);
+	if (nouns.length === 1 && nouns[0] === "Support") {
+		return { before: "Counted as support for", title, after: "" };
+	}
+	if (nouns.length === 1) return { before: `Added as ${NOUNS[nouns[0]!]} to`, title, after: "" };
+	if (nouns.length > 1) {
+		return { before: `Added ${list(nouns.map(label => NOUNS[label]!))} to`, title, after: "" };
+	}
+	return { before: "Added to", title, after: "" };
+}
+
+/** The same sentence as plain text, for headings and accessible names. */
+export function changeText(change: CardChange, messageText = ""): string {
+	let sentence = changeSentence(change, messageText);
+	return [sentence.before, sentence.title, sentence.after].filter(Boolean).join(" ");
 }
 
 export function messageOutcome(
@@ -90,7 +107,7 @@ export function messageOutcome(
 		: changes.length > 1
 		? `Added to ${changes.length} decisions`
 		: changes.length === 1
-		? changes[0]!.labels.join() === "Question" ? "New decision" : "Added to a decision"
+		? changes[0]!.labels.includes("Question") ? "Started a decision" : "Added to a decision"
 		: researchState === "offered"
 		? "Research suggested"
 		: researchState === "failed"

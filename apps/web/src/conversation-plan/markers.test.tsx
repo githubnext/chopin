@@ -161,7 +161,7 @@ test("a failed generation-keyed prose job remains inspectable from the card's op
 		reason: "The writer failed.",
 	};
 	let html = markup(current, [prose]);
-	expect(html).toContain('aria-label="Message details: applied"');
+	expect(html).toContain('aria-label="Message details: Started a decision"');
 	let diagnostics = renderToStaticMarkup(createElement(PlannerJobDiagnostics, {
 		canEdit: true,
 		jobs: jobsForMessage(current, [prose], "message-1"),
@@ -185,7 +185,7 @@ test("read-only job diagnostics omit retry controls", () => {
 test("unlinked analysis remains accessible without a status label", () => {
 	let html = markup(state(0, "unlinked"));
 
-	expect(html).toContain('aria-label="Message details: unlinked"');
+	expect(html).toContain('aria-label="Message details: No changes"');
 	expect(html).not.toContain("Unlinked");
 	expect(html).not.toContain('class="block size-1.5 rounded-full');
 });
@@ -194,8 +194,8 @@ test("an applied message names the card it changed under the message", () => {
 	let html = markup(state(1, "applied"));
 
 	expect(html).toContain("data-analysis-result");
-	expect(html).toContain("Option on");
-	expect(html).toContain(">Which option?</button>");
+	expect(html).toContain("Added as an option to");
+	expect(html).toContain(">Which option?</span>");
 	expect(html).not.toContain("data-card-link");
 	expect(html).not.toContain("chat-analysis-result");
 });
@@ -206,7 +206,7 @@ test("failed analysis says so under the message and offers a retry", () => {
 	expect(html).toContain("data-analysis-failed");
 	expect(html).toContain("Couldn’t analyse this message");
 	expect(html).toContain('aria-label="Retry analysis"');
-	expect(html).toContain('aria-label="Message details: failed"');
+	expect(html).toContain('aria-label="Message details: Couldn’t analyse this message"');
 });
 
 test("unlinked analysis adds no line under the message", () => {

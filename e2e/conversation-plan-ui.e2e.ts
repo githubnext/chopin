@@ -172,7 +172,7 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	await inspect.press("Enter");
 	let analysis = page.getByLabel("Message analysis");
 	let cardLink = analysis.locator(`[data-card-link="${option.id}"]`);
-	await expect(cardLink).toHaveText("Proposal");
+	await expect(cardLink).toHaveText("Option");
 	await cardLink.click();
 	await expect(analysis).toHaveCount(0);
 	await expect(card).toBeFocused();
@@ -211,9 +211,9 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 		(await wireState(page))?.analysis.find(item => item.messageId === unlinkedMessage)?.status
 	).toBe("unlinked");
 	let unlinked = page.locator(`[data-chat-message-id="${unlinkedMessage}"]`);
-	await expect(unlinked.getByRole("button", { name: "Message details: unlinked" }))
+	await expect(unlinked.getByRole("button", { name: "Message details: No changes" }))
 		.toBeVisible();
-	await expect(unlinked.getByRole("button", { name: "Message details: unlinked" }))
+	await expect(unlinked.getByRole("button", { name: "Message details: No changes" }))
 		.toHaveAttribute("data-analysis-trigger", "true");
 	await expect(page.getByText("Unlinked", { exact: true })).toHaveCount(0);
 });

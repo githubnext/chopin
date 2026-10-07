@@ -164,7 +164,7 @@ test("badges name accepted roles only", () => {
 	let labels = (messageId: string) => messageLinks(state, messageId).map(link => link.label);
 
 	expect(labels("m1")).toEqual(["Question"]);
-	expect(labels("m2")).toEqual(["Proposal"]);
+	expect(labels("m2")).toEqual(["Option"]);
 	expect(labels("m3")).toEqual(["Reason"]);
 	expect(labels("m4")).toEqual(["Constraint"]);
 	expect(labels("m5")).toEqual(["Support"]);

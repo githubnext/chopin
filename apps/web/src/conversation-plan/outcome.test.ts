@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { changePhrase, messageOutcome } from "./outcome";
+import { changeSentence, changeText, messageOutcome } from "./outcome";
+
+import type { CardChange } from "./outcome";
 
 import type { ConversationPlan } from "@chopin/protocol";
 
@@ -42,12 +44,36 @@ function research(
 	};
 }
 
-test("change phrases read as plain sentences", () => {
-	expect(changePhrase(["Proposal"])).toBe("Option on");
-	expect(changePhrase(["Question"])).toBe("New decision");
-	expect(changePhrase(["Proposal", "Constraint"])).toBe("Option and constraint on");
-	expect(changePhrase(["Reason", "Support", "Objection"])).toBe("Reason, support and objection on");
-	expect(changePhrase(["Question", "Proposal"])).toBe("Added to");
+function change(labels: string[], title = "Should we ship a small pilot?"): CardChange {
+	return {
+		threadId: "thread-1",
+		title,
+		labels,
+		link: { threadId: "thread-1", itemId: "item", label: labels[0]!, source: source(0) },
+	};
+}
+
+test("change sentences use verbs with the card title as the object", () => {
+	expect(changeText(change(["Option"]))).toBe(
+		"Added as an option to Should we ship a small pilot?",
+	);
+	expect(changeText(change(["Support"]))).toBe(
+		"Counted as support for Should we ship a small pilot?",
+	);
+	expect(changeText(change(["Option", "Constraint"])))
+		.toBe("Added an option and a constraint to Should we ship a small pilot?");
+	expect(changeText(change(["Reason", "Support", "Objection"])))
+		.toBe("Added a reason, support and an objection to Should we ship a small pilot?");
+	expect(changeText(change(["Reopening"]))).toBe("Reopened Should we ship a small pilot?");
+	expect(changeText(change(["Settle"])))
+		.toBe("Marked Should we ship a small pilot? ready to settle");
+});
+
+test("a question that is the card title becomes the link itself", () => {
+	expect(changeSentence(change(["Question"]), "Should we ship a small pilot?"))
+		.toEqual({ before: "Started a decision", after: "" });
+	expect(changeText(change(["Question"]), "Ship it now?"))
+		.toBe("Started the decision Should we ship a small pilot?");
 });
 
 test("links on one card collapse into one change with its title", () => {
@@ -85,7 +111,7 @@ test("links on one card collapse into one change with its title", () => {
 	let outcome = messageOutcome(current, "message-1");
 	expect(outcome.changes).toHaveLength(1);
 	expect(outcome.changes[0]!.title).toBe("Should we ship a small pilot?");
-	expect(outcome.changes[0]!.labels).toEqual(["Proposal", "Constraint"]);
+	expect(outcome.changes[0]!.labels).toEqual(["Option", "Constraint"]);
 	expect(outcome.heading).toBe("Added to a decision");
 	expect(outcome.tone).toBe("success");
 });

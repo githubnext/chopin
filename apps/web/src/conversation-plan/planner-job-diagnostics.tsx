@@ -60,3 +60,54 @@ export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob, titled = true
 		</div>
 	);
 }
+
+const FAILURES: Record<ConversationPlan.JobKind, string> = {
+	heading: "Chopin couldn’t update the document heading",
+	refine: "Chopin couldn’t rewrite the card wording",
+	suggest: "Chopin couldn’t suggest an answer",
+	prose: "Chopin couldn’t write this decision into the document",
+};
+
+/** Failed follow-up work in plain words, with the job details left to Diagnostics. */
+export function FailedJobs({ canEdit, jobs, onRetryJob }: {
+	canEdit: boolean;
+	jobs: ConversationPlan.Job[];
+	onRetryJob?: (jobId: string) => Promise<void>;
+}) {
+	let [retrying, setRetrying] = useState<string>();
+	let [error, setError] = useState("");
+	let retry = async (jobId: string) => {
+		if (!onRetryJob || retrying) return;
+		setRetrying(jobId);
+		setError("");
+		try {
+			await onRetryJob(jobId);
+		} catch {
+			setError("Couldn’t retry. Try again when connected.");
+		} finally {
+			setRetrying(undefined);
+		}
+	};
+	return (
+		<div aria-label="Unfinished work" className="mt-3 flex flex-col gap-2" role="group">
+			{jobs.map(job => (
+				<div className="flex items-center gap-2 text-sm" key={job.id}>
+					<span className="min-w-0 flex-1">{FAILURES[job.kind]}</span>
+					{canEdit && onRetryJob && (
+						<button
+							aria-busy={retrying === job.id || undefined}
+							aria-label={`Retry ${job.kind} job`}
+							className="btn btn-sm btn-secondary shrink-0"
+							disabled={retrying !== undefined}
+							onClick={() => void retry(job.id)}
+							type="button"
+						>
+							{retrying === job.id ? "Retrying…" : "Retry"}
+						</button>
+					)}
+				</div>
+			))}
+			{error && <p className="m-0 text-destructive-ink" role="alert">{error}</p>}
+		</div>
+	);
+}

@@ -16,6 +16,7 @@ export function AnalysisOverview({
 	messageId = "",
 	messageText,
 	onAddExcerpt,
+	onCard,
 	state,
 }: {
 	analysis?: ConversationPlan.AnalysisRecord;
@@ -24,6 +25,7 @@ export function AnalysisOverview({
 	messageId?: string;
 	messageText: string;
 	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+	onCard?: (link: CardLink) => void;
 	state?: ConversationPlan.State;
 }) {
 	let outcomes = analysis?.outcomes ?? [];
@@ -75,7 +77,7 @@ export function AnalysisOverview({
 	return (
 		<>
 			{rows.length > 0 && (
-				<div className="mt-3 hairline-t" aria-label="How excerpts were handled">
+				<div aria-label="How excerpts were handled" className="mt-3 hairline-t" role="group">
 					{rows.map(({ outcome, label, link, completeLink, linkedSubspans, quote }, index) => (
 						<div
 							className="flex gap-2 hairline-b py-2 last:border-b-0"
@@ -91,18 +93,28 @@ export function AnalysisOverview({
 							</span>
 							<div className="min-w-0 flex-1">
 								<div className="flex items-baseline justify-between gap-2">
-									<strong className="capitalize text-sm text-text-primary">{label}</strong>
-									<span className="shrink-0 text-sm text-text-tertiary">
-										{link && outcome.status !== "accepted"
-											? "Added to card"
-											: outcome.status === "accepted"
-											? "Applied"
-											: outcome.status === "review"
-											? "Review"
-											: "Not applied"}
-									</span>
+									{link && onCard
+										? (
+											<button
+												aria-label={`${link.label}: show card for “${link.source.quote}”`}
+												className="text-left text-sm font-semibold text-text-primary underline-offset-2 hover:underline"
+												data-card-link={link.itemId}
+												data-card-thread={link.threadId}
+												onClick={() => onCard(link)}
+												title="Show card"
+												type="button"
+											>
+												{label}
+											</button>
+										)
+										: <strong className="capitalize text-sm text-text-primary">{label}</strong>}
+									{!link && outcome.status !== "accepted" && (
+										<span className="shrink-0 text-sm text-text-tertiary">
+											{outcome.status === "review" ? "Held for review" : "Not applied"}
+										</span>
+									)}
 								</div>
-								<p className="m-0 mt-0.5 break-words text-sm leading-4">“{quote}”</p>
+								<p className="m-0 mt-0.5 break-words text-sm leading-4">“{plainQuote(quote)}”</p>
 								{outcome.status !== "accepted" && !link && (
 									<p className="m-0 mt-1 text-sm text-text-tertiary">{outcome.gate}</p>
 								)}
@@ -130,6 +142,14 @@ export function AnalysisOverview({
 				</p>
 			)}
 		</>
+	);
+}
+
+/** Excerpts are raw Markdown source; show them as read, without emphasis markers. */
+export function plainQuote(text: string): string {
+	return text.replace(/\*\*|__|~~|`/g, "").replace(
+		/(^|[^\w])[*_](?=\S)|(?<=\S)[*_](?=[^\w]|$)/g,
+		"$1",
 	);
 }
 

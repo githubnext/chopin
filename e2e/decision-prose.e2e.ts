@@ -320,8 +320,8 @@ test("a failed prose job is visible on the opening message and Retry uses the co
 	await waitForProseJob(page, "failed");
 	let opening = page.locator(`[data-chat-message-id="${source}"]`);
 	await opening.getByRole("button", { name: /Message details/ }).click();
-	let jobs = page.getByRole("group", { name: "Planner jobs" });
-	await expect(jobs).toContainText("prose · failed");
+	let jobs = page.getByRole("group", { name: "Unfinished work" });
+	await expect(jobs).toContainText("Chopin couldn’t write this decision into the document");
 	await scriptProse(OPTION);
 	await jobs.getByRole("button", { name: "Retry prose job", exact: true }).click();
 	await waitForProseJob(page, "done");

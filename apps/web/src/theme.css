@@ -495,6 +495,18 @@ body {
 	}
 }
 
+/* Without hover, only messages that changed something, failed or offered research keep Details. */
+@media (hover: none) {
+	.chat-message-action:not([data-analysis-notable]) {
+		display: none;
+	}
+
+	.chat-message-body:has(.chat-message-action:not([data-analysis-notable])) {
+		min-height: 0;
+		padding-inline-end: 0;
+	}
+}
+
 @media (prefers-reduced-motion: no-preference) {
 	.chat-analysis-result {
 		animation: chat-work-stage-in var(--duration-base) var(--motion-smooth-out);

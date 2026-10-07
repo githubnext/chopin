@@ -49,7 +49,7 @@ test("analysis lists applied and held excerpts and keeps model details for diagn
 	expect(html).toContain(`“${second}”`);
 	expect(html).toContain("contribution target needs review");
 	expect(html).not.toContain("jev-1");
-	expect(diagnostics).toContain("Detected: Proposal, Constraint");
+	expect(diagnostics).toContain("Detected: Option, Constraint");
 	expect(diagnostics).toContain("Model jev-1");
 	expect(diagnostics).toContain("94% signal");
 	expect(diagnostics).not.toContain("{&quot;type&quot;");

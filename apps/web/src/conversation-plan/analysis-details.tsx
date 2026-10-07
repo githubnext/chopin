@@ -3,7 +3,9 @@
 import { CloseIcon, WarningIcon } from "@chopin/icons";
 
 import { AnalysisDiagnostics, AnalysisOverview } from "./analysis-overview";
-import { PlannerJobDiagnostics } from "./planner-job-diagnostics";
+import { FailedJobs, PlannerJobDiagnostics } from "./planner-job-diagnostics";
+import { changeText } from "./outcome";
+import { motionImmediately } from "../motion-input";
 import { ResearchDiagnostics } from "./research-diagnostics";
 
 import type { ConversationPlan } from "@chopin/protocol";
@@ -112,9 +114,11 @@ export function AnalysisDetails({
 			</>
 		);
 	}
-	let titles = outcome.changes.map(change => change.title);
-	let text = summary(outcome);
-	let hasDiagnostics = !!analysis || !!research || researchPending;
+	let lines = outcome.changes.length
+		? outcome.changes.map(change => changeText(change, messageText))
+		: [summary(outcome)];
+	let failedJobs = jobs.filter(job => job.status === "failed");
+	let hasDiagnostics = !!analysis || !!research || researchPending || jobs.length > 0;
 
 	return (
 		<>
@@ -124,32 +128,7 @@ export function AnalysisDetails({
 				onClose={onClose}
 				tone={outcome.tone}
 			/>
-			{titles.length > 0 && (
-				<p className="m-0 mt-2 text-sm leading-5">
-					Linked to {titles.length === 1
-						? <b className="font-medium text-text-primary">{titles[0]}</b>
-						: `${titles.length} decisions`}.
-				</p>
-			)}
-			{text && <p className="m-0 mt-2 text-sm leading-5">{text}</p>}
-			{links.length > 0 && (
-				<div aria-label="Linked decisions" className="mt-2 flex flex-wrap gap-1" role="group">
-					{links.slice(0, 3).map(link => (
-						<button
-							aria-label={`${link.label}: show card for “${link.source.quote}”`}
-							className="rounded-full bg-inset px-2 py-0.5 text-xs text-text-secondary hover:bg-hover"
-							data-card-link={link.itemId}
-							data-card-thread={link.threadId}
-							key={`${link.itemId}-${link.source.start}-${link.source.end}`}
-							onClick={() => onCard(link)}
-							title={link.source.quote}
-							type="button"
-						>
-							{link.label}
-						</button>
-					))}
-				</div>
-			)}
+			{lines.map(line => <p className="m-0 mt-2 text-sm leading-5" key={line}>{line}</p>)}
 			<AnalysisOverview
 				analysis={analysis}
 				canEdit={canEdit}
@@ -157,12 +136,15 @@ export function AnalysisDetails({
 				messageId={messageId}
 				messageText={messageText}
 				onAddExcerpt={onAddExcerpt}
+				onCard={onCard}
 				state={state}
 			/>
 			{outcome.research === "offered" && outcome.changes.length > 0 && (
 				<p className="m-0 mt-2 text-sm text-text-tertiary">Chopin also suggested research.</p>
 			)}
-			<PlannerJobDiagnostics canEdit={canEdit} jobs={jobs} onRetryJob={onRetryJob} />
+			{failedJobs.length > 0 && (
+				<FailedJobs canEdit={canEdit} jobs={failedJobs} onRetryJob={onRetryJob} />
+			)}
 			{canEdit && outcome.failed.length > 0 && (
 				<div className="mt-3 flex flex-wrap gap-2">
 					{outcome.failed.map(lane => (
@@ -180,12 +162,22 @@ export function AnalysisDetails({
 			)}
 			{error && <p className="m-0 mt-1 text-sm text-destructive-ink" role="alert">{error}</p>}
 			{hasDiagnostics && (
-				<details className="mt-3 hairline-t pt-2">
+				<details
+					className="mt-3 hairline-t pt-2"
+					onToggle={event => {
+						if (!event.currentTarget.open) return;
+						event.currentTarget.scrollIntoView({
+							behavior: motionImmediately() ? "auto" : "smooth",
+							block: "nearest",
+						});
+					}}
+				>
 					<summary className="cursor-pointer text-sm text-text-tertiary hover:text-text-secondary">
 						Diagnostics
 					</summary>
 					<AnalysisDiagnostics analysis={analysis} />
 					<ResearchDiagnostics analysis={research} pending={researchPending} />
+					<PlannerJobDiagnostics canEdit={false} jobs={jobs} />
 				</details>
 			)}
 		</>

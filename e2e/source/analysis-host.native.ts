@@ -11,7 +11,7 @@ test("message diagnostics stay closed until the code button is activated", async
 	await expect(analysis(page, "host-review")).toHaveCount(0);
 	await anchor.locator("[data-chat-message-text]").click();
 	await expect(analysis(page, "host-review")).toHaveCount(0);
-	let trigger = anchor.getByRole("button", { name: "Message details: unlinked", exact: true });
+	let trigger = anchor.getByRole("button", { name: "Message details: No changes", exact: true });
 	await expect(trigger).toBeVisible();
 	await trigger.click();
 	await expect(analysis(page, "host-review")).toBeVisible();
@@ -31,7 +31,7 @@ test("code buttons keep one portal owner and Escape returns native focus", async
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(0);
 	await expect(
 		message(page, "host-retry").getByRole("button", {
-			name: "Message details: failed",
+			name: "Message details: Couldn’t analyse this message",
 			exact: true,
 		}),
 	).toBeFocused();
@@ -41,7 +41,7 @@ test("code buttons keep one portal owner and Escape returns native focus", async
 test("diagnostics restoration after reconnect never reopens a former pin", async ({ page }) => {
 	await load(page);
 	let trigger = message(page, "host-review").getByRole("button", {
-		name: "Message details: unlinked",
+		name: "Message details: No changes",
 		exact: true,
 	});
 	await trigger.click();
@@ -59,7 +59,7 @@ test("diagnostics restoration after reconnect never reopens a former pin", async
 test("keyboard-only inspect opens real diagnostics and pinned message survives pointer leave", async ({ page }) => {
 	let errors = await load(page);
 	let trigger = message(page, "host-review").getByRole("button", {
-		name: "Message details: unlinked",
+		name: "Message details: No changes",
 		exact: true,
 	});
 	await trigger.focus();

@@ -2,7 +2,7 @@ import type { ConversationPlan } from "@chopin/protocol";
 
 export const SIGNALS: Record<string, string> = {
 	new_question: "Question",
-	new_option: "Proposal",
+	new_option: "Option",
 	reason: "Reason",
 	constraint: "Constraint",
 	evidence: "Evidence",

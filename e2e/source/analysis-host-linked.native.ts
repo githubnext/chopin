@@ -15,12 +15,12 @@ test(
 		await diagnosticsButton.press("Enter");
 		let panel = analysis(page, "host-review");
 		await expect(panel).toBeVisible();
-		await expect(panel.getByRole("group", { name: "Linked decisions", exact: true }))
+		await expect(panel.getByRole("group", { name: "How excerpts were handled", exact: true }))
 			.toBeVisible();
 		let cardLinks = panel.locator("[data-card-link]");
 		await expect(cardLinks).toHaveCount(3);
 		await expect(cardLinks.nth(0)).toHaveText("Question");
-		await expect(cardLinks.nth(1)).toHaveText("Proposal");
+		await expect(cardLinks.nth(1)).toHaveText("Option");
 		await expect(cardLinks.nth(2)).toHaveText("Reason");
 		await expect(panel.getByRole("button", { name: /^Constraint:/ })).toHaveCount(0);
 		await expect(panel.getByRole("button", { name: "Add another excerpt", exact: true }))
@@ -28,7 +28,7 @@ test(
 		await page.keyboard.press("Escape");
 		await diagnosticsButton.press("Enter");
 
-		let proposal = panel.getByRole("button", { name: /^Proposal: show card for/ });
+		let proposal = panel.getByRole("button", { name: /^Option: show card for/ });
 		await proposal.focus();
 		await expect(proposal).toBeFocused();
 		await page.keyboard.press("Enter");
@@ -50,7 +50,7 @@ test(
 		await anchor.getByRole("button", { name: /^Message details:/ }).press("Enter");
 		let panel = analysis(page, "host-review");
 		await expect(panel).toBeVisible();
-		await expect(panel.getByRole("group", { name: "Linked decisions", exact: true }))
+		await expect(panel.getByRole("group", { name: "How excerpts were handled", exact: true }))
 			.toBeVisible();
 		await expect(panel.getByRole("button", { name: "Add another excerpt", exact: true }))
 			.toBeDisabled();

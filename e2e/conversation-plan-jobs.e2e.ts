@@ -23,7 +23,7 @@ function inspection(page: Page, messageId: string) {
 }
 
 function jobs(page: Page) {
-	return page.getByRole("group", { name: "Planner jobs" });
+	return page.getByLabel("Message analysis");
 }
 
 async function waitForCard(page: Page) {
@@ -41,6 +41,10 @@ async function waitForRefine(page: Page, messageId: string, status: string) {
 	await expect(marker).toHaveAttribute("aria-expanded", "true");
 	let popoverId = await marker.getAttribute("aria-controls");
 	if (!popoverId) throw new Error("analysis marker did not identify its popover");
+	let diagnostics = page.locator(`[id="${popoverId}"] details`);
+	if (!await diagnostics.evaluate(element => (element as HTMLDetailsElement).open)) {
+		await diagnostics.getByText("Diagnostics", { exact: true }).click();
+	}
 	await expect(page.locator(`[id="${popoverId}"]`).getByRole("group", { name: "Planner jobs" }))
 		.toContainText(`refine · ${status}`);
 }

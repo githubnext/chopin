@@ -23,7 +23,7 @@ export function messageLinks(state: ConversationPlan.State, messageId: string): 
 	for (let thread of state.threads) {
 		add(thread.id, thread.id, "Question", thread.questionSources);
 		for (let item of thread.contributions) {
-			let label = item.kind === "option" ? "Proposal" : item.kind === "reason"
+			let label = item.kind === "option" ? "Option" : item.kind === "reason"
 				? "Reason"
 				: "Constraint";
 			add(thread.id, item.id, label, item.sources);
