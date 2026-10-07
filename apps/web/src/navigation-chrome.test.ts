@@ -124,7 +124,7 @@ describe("the Figma navigation chrome", () => {
 		let closed = renderToStaticMarkup(createElement(ProjectSidebar, props));
 		let open = renderToStaticMarkup(createElement(ProjectSidebar, {
 			...props,
-			accountMenu: createElement("div", { role: "menu" }),
+			accountMenu: { className: "", closing: false, onDismiss() {}, onSignOut() {} },
 		}));
 
 		expect(closed).toMatch(/class="project-sidebar-account" aria-expanded="false"/);
