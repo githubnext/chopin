@@ -40,6 +40,12 @@ function iconButton(target: EventTarget | null): HTMLElement | null {
 	return button;
 }
 
+// A persistent toggle (such as the sidebar) is expanded without covering anything.
+function openPopup(element: HTMLElement): boolean {
+	let popup = element.getAttribute("aria-haspopup");
+	return element.getAttribute("aria-expanded") === "true" && popup !== null && popup !== "false";
+}
+
 /**
  * Tooltips use sentence case.
  * Names and handles opt out so they keep their own casing.
@@ -110,10 +116,11 @@ export function IconTooltip() {
 			active = button;
 			originalTitle = button.getAttribute("title");
 			if (originalTitle !== null) button.removeAttribute("title");
-			let show = () => {
+			let show = (instant: boolean) => {
 				timer = undefined;
-				if (!button.isConnected || button.getAttribute("aria-expanded") === "true") return hide();
-				tooltip.removeAttribute("data-instant");
+				if (!button.isConnected || openPopup(button)) return hide();
+				if (instant) tooltip.setAttribute("data-instant", "");
+				else tooltip.removeAttribute("data-instant");
 				let label = button.getAttribute("data-tooltip") ?? button.getAttribute("aria-label")
 					?? originalTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
@@ -151,8 +158,8 @@ export function IconTooltip() {
 				}px`;
 				tooltip.setAttribute("data-visible", "");
 			};
-			if (performance.now() < warmUntil) show();
-			else timer = setTimeout(show, DELAY);
+			if (performance.now() < warmUntil) show(true);
+			else timer = setTimeout(() => show(false), DELAY);
 		}
 
 		let coarse = window.matchMedia("(pointer: coarse)");
@@ -174,7 +181,7 @@ export function IconTooltip() {
 		function expandedChange(records: MutationRecord[]) {
 			for (let record of records) {
 				let target = record.target as HTMLElement;
-				if (target === active && target.getAttribute("aria-expanded") === "true") {
+				if (target === active && openPopup(target)) {
 					if (target === hovered) pressed = target;
 					hide(true);
 				}
