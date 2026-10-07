@@ -11,6 +11,7 @@ on:
 concurrency:
   group: pr-babysitter
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
