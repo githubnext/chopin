@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef } from "react";
 
-import * as Api from "./api";
+import * as DeviceAuthorization from "./device-authorization";
 import { LocalLoginView } from "./local-login-view";
 import { copyAndOpen, localSignInReducer } from "./local-sign-in";
 
@@ -12,8 +12,10 @@ function safeMessage(reason: unknown, fallback: string): string {
 	return reason instanceof Error && reason.message ? reason.message : fallback;
 }
 
-/** Turns one `Api.DeviceAuthorizationStatus` into the matching reducer event. */
-function statusEvent(result: Api.DeviceAuthorizationStatus): LocalSignInEvent | undefined {
+/** Turns one `DeviceAuthorization.DeviceAuthorizationStatus` into the matching reducer event. */
+function statusEvent(
+	result: DeviceAuthorization.DeviceAuthorizationStatus,
+): LocalSignInEvent | undefined {
 	switch (result.status) {
 		case "waiting":
 			return {
@@ -53,7 +55,7 @@ export function LocalLogin() {
 		began.current = true;
 		dispatch({ type: "start" });
 		try {
-			let result = await Api.startDeviceAuthorization();
+			let result = await DeviceAuthorization.startDeviceAuthorization();
 			let event = statusEvent(result);
 			if (event) dispatch(event);
 		} catch (reason) {
@@ -65,7 +67,7 @@ export function LocalLogin() {
 		began.current = true;
 		dispatch({ type: "cancel" });
 		try {
-			await Api.cancelDeviceAuthorization();
+			await DeviceAuthorization.cancelDeviceAuthorization();
 		} catch {
 			// The attempt is already cancelled locally; a failed cancel request
 			// does not change what the user needs to do next.
@@ -74,7 +76,7 @@ export function LocalLogin() {
 
 	let decide = async (accept: boolean) => {
 		try {
-			let result = await Api.consentDeviceAuthorization(accept);
+			let result = await DeviceAuthorization.consentDeviceAuthorization(accept);
 			if (result.status === "complete") {
 				location.reload();
 				return;
@@ -101,7 +103,7 @@ export function LocalLogin() {
 		if (completing.current) return;
 		completing.current = true;
 		try {
-			let completed = await Api.completeDeviceAuthorization();
+			let completed = await DeviceAuthorization.completeDeviceAuthorization();
 			if (!active()) return;
 			if (completed.status === "complete") {
 				location.reload();
@@ -123,7 +125,7 @@ export function LocalLogin() {
 
 	useEffect(() => {
 		let active = true;
-		void Api.deviceAuthorizationStatus().then(result => {
+		void DeviceAuthorization.deviceAuthorizationStatus().then(result => {
 			if (!active || began.current || result.status === "cancelled") return;
 			if (result.status === "authorized") {
 				void finish(() => active && !began.current);
@@ -142,7 +144,7 @@ export function LocalLogin() {
 		let active = true;
 		let poll = async () => {
 			try {
-				let result = await Api.deviceAuthorizationStatus();
+				let result = await DeviceAuthorization.deviceAuthorizationStatus();
 				if (!active) return;
 				if (result.status === "authorized") {
 					if (completing.current) {

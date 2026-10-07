@@ -14,11 +14,11 @@ import {
 	readRepositoryCache,
 	repositoryCacheIsStale,
 	writeRepositoryCache,
-} from "./repository-cache";
+} from "./repository-snapshot";
 import { TerminalAlert } from "./terminal-alert";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { InstalledRepositoryGroup, RepositorySnapshot } from "./repository-cache";
+import type { InstalledRepositoryGroup, RepositorySnapshot } from "./repository-snapshot";
 
 export type RepositoryIdentity = Pick<
 	Api.Repository,

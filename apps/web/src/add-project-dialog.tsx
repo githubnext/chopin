@@ -10,10 +10,10 @@ import {
 	readRepositoryCache,
 	repositoryCacheIsStale,
 	writeRepositoryCache,
-} from "./repository-cache";
+} from "./repository-snapshot";
 import { TerminalAlert } from "./terminal-alert";
 
-import type { RepositorySnapshot } from "./repository-cache";
+import type { RepositorySnapshot } from "./repository-snapshot";
 import type { NavigationDialogMotion } from "./navigation-dialog";
 
 function message(error: unknown): string {
