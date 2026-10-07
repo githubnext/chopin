@@ -45,13 +45,20 @@ runtimes:
   node:
     version: "24"
 network:
-  allowed: [defaults, node]
+  allowed: [defaults, node, release-assets.githubusercontent.com]
 tools:
   bash: true
   github:
     mode: gh-proxy
     toolsets: [repos, pull_requests, actions]
 steps:
+  - name: Expose pinned Bun through the sandbox tool cache
+    run: |
+      test "$(bun --version)" = "1.4.2"
+      directory="${RUNNER_TOOL_CACHE:?}/bun/1.4.2/x64/bin"
+      mkdir -p "$directory"
+      install -m 755 "$(command -v bun)" "$directory/bun"
+      test "$("$directory/bun" --version)" = "1.4.2"
   - name: Authenticate the reserved attempt
     run: node scripts/pr-maintenance/worker-run.mjs prepare
     env:
@@ -94,12 +101,12 @@ safe-outputs:
           type: choice
           options: [proposal, human, infrastructure]
         review:
-          description: Exact binary Git diff from captured head to proposal; empty for a report
-          required: true
+          description: Exact binary Git diff from captured head to proposal; omit for a report
+          required: false
           type: string
         reason:
-          description: Concrete blocker and next action; empty for a proposal
-          required: true
+          description: Nonempty concrete blocker and next action; omit for a proposal
+          required: false
           type: string
       steps:
         - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -155,13 +162,18 @@ job owns publication; a proposal is not proof of publication or passing CI.
 1. Read the PR diff and relevant CI logs through the read-only GitHub tools.
    Check out the captured head exactly, with Git hooks disabled. Use trusted
    instructions captured from main. Keep the PR's authorship and intent.
+   Verify `bun --version` is `1.4.2`. Report a failed prerequisite as
+   infrastructure; do not change dependencies or install another runtime.
 2. If `operation` is `rebase`, replay its original linear commits onto the exact
    captured base. Preserve their full messages, authors, and author dates. Resolve
-   conflicts only where both sides' intent is clear. Run relevant verification.
+   conflicts only where both sides' intent is clear. After replay, run
+   `bun install --frozen-lockfile` inside the sandbox against the rebased working
+   head, then run relevant verification.
    Do not add a separate CI repair commit during a rebase: publish the replay
    first, then the coordinator will schedule repair if current-head CI fails.
    Never flatten a stack or guess its replay boundary.
-3. If `operation` is `fix`, reproduce the actual current-head CI failure first.
+3. If `operation` is `fix`, run `bun install --frozen-lockfile` inside the sandbox
+   against the captured working head, then reproduce its actual CI failure first.
    Make the smallest correction preserving intended behavior, then create exactly
    one nonempty commit. Run the failing check and the narrowest useful regression.
    Run `bun run fix`, inspect its changes, and run `bun run ci`; run `bun run types`
@@ -175,11 +187,11 @@ job owns publication; a proposal is not proof of publication or passing CI.
    `{file, sourceHash, rationale}` in `hashReviews`; hash actual source bytes with
    SHA-256. Changed expectations or a broader exception need a human decision.
 5. When intent is ambiguous or protected edits are needed, call `finish_attempt`
-   once with kind `human`, the exact attempt, review `""`, and a concise reason:
+   once with kind `human`, the exact attempt, and a nonempty concise reason:
    conflicting files, both competing intentions, the precise decision needed,
    and a suggested resolution. Infrastructure blockers use kind `infrastructure`
-   with the failed prerequisite and concrete retry action. Always include all
-   four input fields. Do not create a proposal for these reports.
+   with the failed prerequisite and concrete retry action. Omit `review` for
+   these reports. Do not create a proposal for these reports.
 6. For a verified proposal, place only `proposal.json` and `proposal.bundle` in
    `/tmp/gh-aw/proposal/`. Set ref `refs/pr-maintenance/proposal` to the proposal
    commit and bundle that ref, excluding captured head and base prerequisites.
@@ -193,7 +205,7 @@ job owns publication; a proposal is not proof of publication or passing CI.
    --no-textconv HEAD_SHA PROPOSAL_SHA`. If larger than 200 KiB, report a human
    blocker for reviewing the larger change. Otherwise call `finish_attempt`
    exactly once with kind `proposal`, the exact attempt, that entire diff as
-   `review`, and reason `""`. The detector must inspect the actual proposed change.
+   `review`; omit `reason`. The detector must inspect the actual proposed change.
 
 ## Usage
 
