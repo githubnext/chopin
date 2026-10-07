@@ -104,11 +104,11 @@
 				1
 			]
 		],
-		"sourceHash": "1c6364428fdee52392f3011cc8b9116b3c71d049e14b9cff9a695b55313118ea",
+		"sourceHash": "7736dc2ddcd49b36b90b85f387b3e497810b7a2b9efd78ca5d91ec282760b6b2",
 		"producers": [
 			{
 				"file": "apps/web/src/design-audit/foundations.tsx",
-				"sourceHash": "1c6364428fdee52392f3011cc8b9116b3c71d049e14b9cff9a695b55313118ea"
+				"sourceHash": "7736dc2ddcd49b36b90b85f387b3e497810b7a2b9efd78ca5d91ec282760b6b2"
 			}
 		]
 	},
