@@ -185,6 +185,16 @@ test("blocks protected changes and exact detector review mismatch before writes"
 	}
 });
 
+test("missing or empty proposal review cannot authorize a nonempty Git diff", async () => {
+	for (let review of [undefined, "", "incorrect review"]) {
+		let f = fixture();
+		expect(f.options.review.length).toBeGreaterThan(0);
+		expect((await applyProposal({ ...f.options, review })).kind).toBe("blocked");
+		expect(f.calls).not.toContain("save");
+		expect(f.calls).not.toContain("push");
+	}
+});
+
 test("CAS failure prevents push and does not leak infrastructure errors", async () => {
 	let f = fixture();
 	f.options.store.save = async () => {

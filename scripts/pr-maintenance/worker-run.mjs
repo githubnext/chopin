@@ -13,17 +13,19 @@ function output(path) {
 	let items = Array.isArray(value) ? value : value.items;
 	if (!Array.isArray(items) || items.length !== 1) throw new Error("One safe output required");
 	let item = items[0];
-	let fields = ["type", "attempt", "kind", "review", "reason"];
+	let fields = new Set(["type", "attempt", "kind", "review", "reason"]);
 	if (
-		!item || Object.keys(item).length !== fields.length
-		|| fields.some((field) => !Object.hasOwn(item, field))
+		!item || Object.keys(item).some(field => !fields.has(field))
+		|| ["type", "attempt", "kind"].some(field => !Object.hasOwn(item, field))
 		|| item.type !== "finish_attempt"
 		|| !["proposal", "human", "infrastructure"].includes(item.kind)
-		|| typeof item.review !== "string" || typeof item.reason !== "string"
+		|| ["review", "reason"].some(field =>
+			Object.hasOwn(item, field) && typeof item[field] !== "string"
+		)
 	) {
 		throw new Error("Invalid safe output");
 	}
-	return item;
+	return { ...item, review: item.review ?? "", reason: item.reason ?? "" };
 }
 
 export async function runWorker(mode, config) {

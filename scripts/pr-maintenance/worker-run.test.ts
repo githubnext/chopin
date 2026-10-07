@@ -44,6 +44,69 @@ test("report binds the signed result to trusted run and neutral outcome", async 
 		reason: "Choose parent",
 	});
 });
+
+test("human and infrastructure reports accept absent or empty optional review", async () => {
+	for (let kind of ["human", "infrastructure"]) {
+		for (let review of [undefined, ""]) {
+			let config = context({
+				items: [{ type: "finish_attempt", attempt: "a", kind, review, reason: "Choose parent" }],
+			});
+			let expected = { kind: kind === "human" ? "blocked" : "transient", reason: "Choose parent" };
+			expect(await runWorker("finish", config)).toEqual(expected);
+			expect(openResult(JSON.parse(readFileSync(config.resultPath, "utf8")), config, key))
+				.toEqual(expected);
+		}
+	}
+});
+
+test("optional fields never admit invalid types or unknown fields and reports still need a reason", async () => {
+	for (
+		let change of [
+			{ review: null },
+			{ reason: 5 },
+			{ extra: "unexpected" },
+			{ reason: undefined },
+			{ reason: "" },
+			{ reason: " " },
+			{ reason: "x".repeat(4097) },
+		]
+	) {
+		let config = context({
+			items: [{
+				type: "finish_attempt",
+				attempt: "a",
+				kind: "human",
+				reason: "Choose parent",
+				...change,
+			}],
+		});
+		expect(await runWorker("finish", config)).toEqual({
+			kind: "transient",
+			reason: "Worker infrastructure failure; inspect Actions logs",
+		});
+	}
+});
+
+test("proposal optional omissions reach guarded application without inventing a review", async () => {
+	for (let fields of [{ review: "exact diff" }, { reason: "" }, {}]) {
+		let config = context({
+			items: [{ type: "finish_attempt", attempt: "a", kind: "proposal", ...fields }],
+		});
+		let calls = 0;
+		let result = await runWorker("finish", {
+			...config,
+			request: async () => {
+				calls++;
+				throw new Error("unavailable");
+			},
+			push: async () => {
+				throw new Error("must not push");
+			},
+		});
+		expect(calls).toBe(1);
+		expect(result.kind).toBe("transient");
+	}
+});
 test("multiple or wrong-attempt safe outputs become sanitized infrastructure failure", async () => {
 	for (
 		let items of [[{
