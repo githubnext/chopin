@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { intersectViewport, placeSurface } from "./placement";
+import { intersectViewport, placeSurface, visibleAnchor } from "./placement";
 
 test("intersects the visual viewport with the editor host", () => {
 	expect(
@@ -74,4 +74,20 @@ test("clamps a preferred-above surface horizontally", () => {
 		"above",
 	);
 	expect(placed).toEqual({ left: 592, top: 256, maxHeight: 36 });
+});
+
+test("hides an anchor that has mostly scrolled out and clips a tall one", () => {
+	let viewport = { left: 0, top: 100, width: 800, height: 400 };
+	let anchor = (top: number, bottom: number) => ({
+		left: 0,
+		right: 100,
+		top,
+		bottom,
+		width: 100,
+		height: bottom - top,
+	});
+	expect(visibleAnchor(anchor(200, 220), viewport)).toEqual(anchor(200, 220));
+	expect(visibleAnchor(anchor(60, 105), viewport)).toBeUndefined();
+	expect(visibleAnchor(anchor(520, 540), viewport)).toBeUndefined();
+	expect(visibleAnchor(anchor(0, 1000), viewport)).toEqual(anchor(100, 500));
 });

@@ -63,3 +63,15 @@ export function placeSurface(
 function clamp(value: number, lower: number, upper: number): number {
 	return Math.min(Math.max(value, lower), Math.max(lower, upper));
 }
+
+/**
+ * The part of a selection the viewport shows, or nothing once most of it has
+ * scrolled away. A selection taller than the viewport keeps its visible slice.
+ */
+export function visibleAnchor(anchor: DOMRectLike, viewport: ViewportBox): DOMRectLike | undefined {
+	let top = Math.max(anchor.top, viewport.top);
+	let bottom = Math.min(anchor.bottom, viewport.top + viewport.height);
+	let shown = bottom - top;
+	if (shown <= 0 || shown < Math.min(anchor.height / 2, 20)) return undefined;
+	return { ...anchor, top, bottom, height: shown };
+}

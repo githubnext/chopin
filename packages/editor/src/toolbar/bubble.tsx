@@ -12,7 +12,9 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { ChevronIcon, CodeIcon, LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
 
 import { $linkAt, OPEN_LINK_EDITOR_COMMAND } from "./link";
-import { placeSurface } from "./placement";
+import { placeSurface, visibleAnchor } from "./placement";
+import { shortcut } from "./shortcut";
+import { PRIMARY_COARSE_POINTER_QUERY } from "../pointer";
 import {
 	CELL,
 	CELL_OFF,
@@ -20,6 +22,7 @@ import {
 	editorSurfaceViewport,
 	listenToEditorGeometry,
 	nativeSelectionRect,
+	ROW,
 	SEAM,
 	SHELL,
 } from "./surface";
@@ -63,7 +66,7 @@ const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
 	{ id: "h1", glyph: "H1", label: "Heading 1" },
 	{ id: "h2", glyph: "H2", label: "Heading 2" },
 	{ id: "h3", glyph: "H3", label: "Heading 3" },
-	{ id: "quote", glyph: ">", label: "Blockquote" },
+	{ id: "quote", glyph: ">", label: "Quote" },
 	{ id: "bullet", glyph: "UL", label: "Bulleted list" },
 	{ id: "number", glyph: "OL", label: "Numbered list" },
 ];
@@ -140,21 +143,31 @@ type Mark = { format: TextFormatType; label: string; glyph: ReactNode; shortcut:
 
 /** Each letter is drawn in the style it applies, so the row reads as a format bar. */
 const MARKS: Mark[] = [
-	{ format: "bold", label: "Bold", glyph: <span className="font-bold">B</span>, shortcut: "⌘B" },
-	{ format: "italic", label: "Italic", glyph: <span className="italic">I</span>, shortcut: "⌘I" },
+	{
+		format: "bold",
+		label: "Bold",
+		glyph: <span className="font-bold">B</span>,
+		shortcut: shortcut("B"),
+	},
+	{
+		format: "italic",
+		label: "Italic",
+		glyph: <span className="italic">I</span>,
+		shortcut: shortcut("I"),
+	},
 	{
 		format: "strikethrough",
 		label: "Strikethrough",
 		glyph: <span className="line-through">S</span>,
-		shortcut: "⌘⇧X",
+		shortcut: shortcut("X", { shift: true }),
 	},
 	{
 		format: "underline",
 		label: "Underline",
 		glyph: <span className="underline underline-offset-2">U</span>,
-		shortcut: "⌘U",
+		shortcut: shortcut("U"),
 	},
-	{ format: "code", label: "Inline code", glyph: <CodeIcon />, shortcut: "⌘E" },
+	{ format: "code", label: "Inline code", glyph: <CodeIcon />, shortcut: shortcut("E") },
 ];
 
 export function SelectionBubble(
@@ -305,22 +318,33 @@ export function SelectionBubble(
 			return;
 		}
 		let viewport = editorSurfaceViewport(editor);
+		let visible = visibleAnchor(liveAnchor, viewport);
+		if (!visible) {
+			setPosition(undefined);
+			return;
+		}
+		// Measure the natural height: a stale cap from the last placement would shrink the menu.
+		let capped = element.style.maxHeight;
+		element.style.maxHeight = "";
 		element.style.maxWidth = `${Math.max(0, viewport.width - 16)}px`;
 		let width = element.offsetWidth;
-		let centre = liveAnchor.left + liveAnchor.width / 2;
+		let height = element.offsetHeight;
+		element.style.maxHeight = capped;
+		let centre = visible.left + visible.width / 2;
 		let next = placeSurface(
 			{
-				bottom: liveAnchor.bottom,
-				height: liveAnchor.height,
+				bottom: visible.bottom,
+				height: visible.height,
 				left: centre - width / 2,
 				right: centre + width / 2,
-				top: liveAnchor.top,
-				width: liveAnchor.width,
+				top: visible.top,
+				width: visible.width,
 			},
-			{ width, height: element.offsetHeight },
+			{ width, height },
 			viewport,
 			8,
-			"above",
+			// A touch selection has the system's own callout above it.
+			matchMedia(PRIMARY_COARSE_POINTER_QUERY).matches ? "auto" : "above",
 		);
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top
@@ -347,7 +371,9 @@ export function SelectionBubble(
 			contentEditable={false}
 			// No translate utilities here: placement belongs to the layout effect,
 			// and Tailwind's would compose with its transform rather than replace it.
-			className={`${SHELL} plan-formatting-toolbar flex max-w-[calc(100vw-1rem)] items-center gap-0.5 overflow-x-auto`}
+			className={`${SHELL} plan-formatting-toolbar flex max-w-[calc(100vw-1rem)] ${
+				choosing ? "flex-col items-stretch" : "flex-wrap items-center"
+			} gap-0.5 overflow-y-auto`}
 			style={position
 				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
 				: { top: anchor.bottom + 8, left: anchor.left, visibility: "hidden" }}
@@ -366,12 +392,17 @@ export function SelectionBubble(
 						type="button"
 						aria-label={item.label}
 						aria-current={item.id === block}
-						title={item.label}
 						onClick={() => convert(item.id)}
-						className={`${CELL} ${item.id === block ? CELL_ON : CELL_OFF}`}
+						className={`${ROW} gap-2 ${item.id === block ? CELL_ON : CELL_OFF}`}
 						data-press="small"
 					>
-						<span aria-hidden="true">{item.glyph}</span>
+						<span
+							aria-hidden="true"
+							className="w-5 shrink-0 text-center text-xs font-medium text-text-quaternary"
+						>
+							{item.glyph}
+						</span>
+						<span>{item.label}</span>
 					</button>
 				))
 				: (
@@ -383,14 +414,14 @@ export function SelectionBubble(
 							data-tooltip="Block type"
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
-							className={`plan-menu-cell inline-flex h-7 shrink-0 items-center gap-0.5 rounded-sm pl-2 pr-1 text-sm font-semibold ${CELL_OFF}`}
+							className={`plan-menu-cell plan-bubble-trigger inline-flex h-7 shrink-0 items-center gap-0.5 rounded-sm pl-2 pr-1 text-sm font-semibold ${CELL_OFF}`}
 							data-press="small"
 						>
 							<span aria-hidden="true">{describe(block).short}</span>
 							<ChevronIcon aria-hidden="true" className="size-3.5 rotate-90" />
 						</button>
 
-						<span aria-hidden="true" className={SEAM} />
+						<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
 
 						{MARKS.map(mark => (
 							<button
@@ -408,12 +439,12 @@ export function SelectionBubble(
 							</button>
 						))}
 
-						<span aria-hidden="true" className={SEAM} />
+						<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
 
 						<button
 							type="button"
 							aria-label={linked ? "Edit link" : "Add link"}
-							title={`${linked ? "Edit link" : "Add link"} (⌘K)`}
+							title={`${linked ? "Edit link" : "Add link"} (${shortcut("K")})`}
 							onClick={() => editor.dispatchCommand(OPEN_LINK_EDITOR_COMMAND, undefined)}
 							className={`${CELL} ${CELL_OFF}`}
 							data-press="small"
@@ -423,7 +454,7 @@ export function SelectionBubble(
 
 						{onComment && (
 							<>
-								<span aria-hidden="true" className={SEAM} />
+								<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
 								<button
 									type="button"
 									aria-label="Comment on this passage"

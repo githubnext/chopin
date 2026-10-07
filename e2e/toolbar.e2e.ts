@@ -270,7 +270,7 @@ test("a formatting glyph shows its label on hover", async ({ join }) => {
 	await bold.hover();
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await expect(tooltip).toBeVisible();
-	await expect(tooltip).toHaveText("Bold ⌘B");
+	await expect(tooltip).toHaveText(/^Bold (⌘|Ctrl\+)B$/);
 	await page.mouse.move(0, 0);
 	await expect(tooltip).toBeHidden();
 });

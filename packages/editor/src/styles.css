@@ -1195,6 +1195,20 @@
 	min-width: 44px;
 }
 
+/* The bubble's block trigger carries a label, and its seams cost width a phone lacks. */
+:root[data-plan-coarse-pointer] .plan-bubble-trigger {
+	width: auto;
+	padding-inline: 0.5rem 0.25rem;
+}
+
+:root[data-plan-coarse-pointer] .plan-formatting-toolbar {
+	gap: 0;
+}
+
+:root[data-plan-coarse-pointer] .plan-bubble-seam {
+	display: none;
+}
+
 /*
  * Document typography.
  *
