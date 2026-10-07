@@ -69,6 +69,8 @@ export type QuestionnaireCardProps = {
 	presentation?: "inline" | "list";
 	motionImmediately?: () => boolean;
 	onCardSource?: (questionnaireId: string) => void;
+	/** The viewer's own handle, who is never shown as present on a card. */
+	self?: string;
 	evidence?: ReactNode | null;
 	wire?: Transport;
 	connected?: boolean;
@@ -107,6 +109,7 @@ export function QuestionnaireCard(
 		motionImmediately,
 		onCardSource,
 		presentation = "inline",
+		self,
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionSelect,
@@ -152,6 +155,7 @@ export function QuestionnaireCard(
 		: (
 			<Undecided
 				onCardSource={onCardSource}
+				self={self}
 				canEdit={canEdit}
 				connected={connected}
 				motion={motion}
@@ -259,13 +263,14 @@ function QuestionStepSwap(
 }
 
 function Undecided(
-	{ canEdit, connected, meta, motion, onCardSource, value, wire, ...pointing }:
+	{ canEdit, connected, meta, motion, onCardSource, self, value, wire, ...pointing }:
 		& {
 			canEdit: boolean;
 			connected: boolean;
 			meta?: Question.CardMeta;
 			motion?: QuestionStepMotion;
 			onCardSource?: (questionnaireId: string) => void;
+			self?: string;
 			value: Questionnaire;
 			wire?: Transport;
 		}
@@ -322,7 +327,8 @@ function Undecided(
 				onSubmit={editable ? state.submit : undefined}
 				renderPeople={people => (
 					<PresenceFaces
-						handles={[...(meta?.involved ?? []), ...people.map(person => person.handle)]}
+						handles={[...(meta?.involved ?? []), ...people.map(person => person.handle)]
+							.filter(handle => handle.toLowerCase() !== self?.toLowerCase())}
 						label={meta ? "In this decision" : undefined}
 					/>
 				)}
@@ -555,6 +561,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			motion={options.questionMotion}
 			motionImmediately={options.motionImmediately}
 			onCardSource={options.onCardSource}
+			self={options.self}
 			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}

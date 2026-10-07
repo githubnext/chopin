@@ -977,6 +977,7 @@ export function RoomWorkspace(
 						onShowPlan={showPlan}
 						questionMotion={QUESTION_MOTION}
 						reveal={reveal}
+						self={handle}
 						store={questions}
 						wire={wire}
 					/>
