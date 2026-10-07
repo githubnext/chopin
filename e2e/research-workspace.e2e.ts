@@ -37,9 +37,9 @@ test("a pending legacy workspace has no standalone product surface", async ({ ba
 		.toHaveCount(0);
 
 	await page.goto(legacy.path);
-	await expect(page.getByRole("heading", { name: "Cannot open Chopin", exact: true }))
+	await expect(page.getByRole("heading", { name: "Page not found", exact: true }))
 		.toBeVisible();
-	await expect(page.getByText("This page does not exist.", { exact: true })).toBeVisible();
+	await expect(page.getByText("This page doesn't exist.", { exact: true })).toBeVisible();
 });
 
 test("click and Tab both insert the inline Research draft", async ({ join, seed }) => {

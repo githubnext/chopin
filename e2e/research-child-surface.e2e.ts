@@ -726,8 +726,7 @@ test("a child load failure preserves its mounted parent through back and retry",
 
 	await childLink.click();
 	let surface = page.locator(".anchored-child-surface");
-	await expect(surface).toContainText("Cannot open Chopin");
-	await expect(surface).toContainText("Child temporarily unavailable");
+	await expect(surface).toContainText("Couldn't open this document");
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("inert", "");
 	await parent.locator(".room-header")
