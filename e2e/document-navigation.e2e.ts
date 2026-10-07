@@ -656,6 +656,52 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(outgoingRoutes).toHaveCount(0);
 });
 
+test("rapid document switches and history jumps settle on one visible document", async ({ baseURL, join, seed }) => {
+	await seed("Burst origin document.\n");
+	let databasePort = Number(new URL(baseURL!).port);
+	let documents = await Promise.all([0, 1, 2, 3].map(async index => {
+		let id = crypto.randomUUID();
+		await createChannel(databasePort, id);
+		await seedChannel(databasePort, id, `Burst document ${index}.\n`);
+		return { text: `Burst document ${index}.`, title: `Test ${id.slice(0, 8)}` };
+	}));
+	let page = await join("ana");
+	let projects = sidebar(page);
+	for (let document of documents) {
+		await expect(projects.getByRole("link", { name: document.title, exact: true })).toBeVisible();
+	}
+	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
+	let interactive = page.locator(
+		".document-route-swap > [data-content-swap-state]:not([hidden]):not([inert])",
+	);
+	let settled = async (document: { text: string; title: string }) => {
+		await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${document.title}`);
+		await expect(routes).toHaveCount(1);
+		await expect(interactive).toHaveCount(1);
+		await expect(interactive.getByText(document.text, { exact: true })).toBeVisible();
+	};
+
+	// Clicks land faster than a route can finish leaving.
+	await page.evaluate(async titles => {
+		for (let title of titles) {
+			[...document.querySelectorAll<HTMLAnchorElement>("a")]
+				.find(link => link.textContent?.trim() === title)!.click();
+			await new Promise(resolve => setTimeout(resolve, 80));
+		}
+	}, documents.map(document => document.title));
+	await settled(documents[3]!);
+
+	await page.evaluate(async () => {
+		for (let step of [-1, 1, -1, -1]) {
+			history.go(step);
+			await new Promise(resolve => setTimeout(resolve, 60));
+		}
+	});
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\//);
+	let current = (await projects.locator('a[aria-current="page"]').textContent())!.trim();
+	await settled(documents.find(document => document.title === current)!);
+});
+
 test("overlapping document workspaces keep IDs, ARIA targets, and focus instance-scoped", async ({ baseURL, join }) => {
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	let created = crypto.randomUUID();

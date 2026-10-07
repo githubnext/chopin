@@ -32,16 +32,18 @@ export function ContentSwapLayer(
 	let onClosedRef = useRef(onClosed);
 	onClosedRef.current = onClosed;
 
-	// Before paint, so whatever replaces a closed layer lands in the same frame.
+	let closable = onClosed !== undefined;
+	// Before paint, so whatever replaces a closed layer lands in the same frame. A
+	// layer that closed before it had a listener reports once one arrives.
 	useLayoutEffect(() => {
 		if (active) {
 			notifiedClosed.current = false;
 			return;
 		}
-		if (presence.phase !== "closed" || notifiedClosed.current) return;
+		if (presence.phase !== "closed" || notifiedClosed.current || !onClosedRef.current) return;
 		notifiedClosed.current = true;
-		onClosedRef.current?.();
-	}, [active, presence.phase]);
+		onClosedRef.current();
+	}, [active, closable, presence.phase]);
 
 	let inactive = !active;
 	return (

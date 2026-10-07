@@ -105,14 +105,12 @@ test("reversing to a loaded layer preserves metadata and accepts the requested s
 		source: { slug: "a" },
 	};
 	state = transitionDocumentRoute(state, { route: requested, type: "requested" });
-	expect(state).toEqual({
-		current: { ...requested, resolution: "loaded" },
-		previous: b,
-	});
+	// B never reached the screen while A was leaving, so it is dropped.
+	expect(state).toEqual({ current: { ...requested, resolution: "loaded" } });
 	expect(state.current.source).toBe(requested.source);
 });
 
-test("rapid requests cancel pending work and preserve the requested visible route", () => {
+test("rapid requests replace pending work and keep the leaving route until the newest is ready", () => {
 	let state: DocumentRouteSwap<Route> = { current: a };
 	state = transitionDocumentRoute(state, { route: b, type: "requested" });
 	state = transitionDocumentRoute(state, { key: b.key, type: "ready" });
@@ -120,8 +118,22 @@ test("rapid requests cancel pending work and preserve the requested visible rout
 	state = transitionDocumentRoute(state, { route: c, type: "requested" });
 	state = transitionDocumentRoute(state, { route: b, type: "requested" });
 
-	expect(state.pending).toBeUndefined();
-	expect(state.current).toEqual(b);
+	expect(state.current.key).toBe(a.key);
+	expect(state.previous).toBeUndefined();
+	expect(state.pending).toEqual(b);
+});
+
+test("a route that becomes ready while another is leaving replaces the never-shown one", () => {
+	let state: DocumentRouteSwap<Route> = { current: a };
+	state = transitionDocumentRoute(state, { route: b, type: "requested" });
+	state = transitionDocumentRoute(state, { key: b.key, type: "ready" });
+	// A is still leaving, so B has not been shown yet.
+	state = transitionDocumentRoute(state, { route: c, type: "requested" });
+	state = transitionDocumentRoute(state, { key: c.key, type: "ready" });
+
+	expect(state).toEqual({ current: c, previous: a });
+	state = transitionDocumentRoute(state, { key: a.key, type: "closed" });
+	expect(state).toEqual({ current: c, pending: undefined });
 });
 
 test("stale ready and close events cannot replace or remove current content", () => {
