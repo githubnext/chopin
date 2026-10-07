@@ -56,6 +56,14 @@ export async function searchAvailableDocuments(
 	};
 }
 
+type SearchState =
+	| { status: "loading" }
+	| { status: "ready"; results: DocumentSearchResult[]; failedProjectIds: string[] }
+	| { status: "error"; message: string };
+
+// Last unfiltered result, so a reopened palette shows documents immediately and revalidates.
+let lastRecent: { key: string; results: DocumentSearchResult[] } | undefined;
+
 export function DocumentSearchDialog(
 	{
 		includeArchived,
@@ -74,17 +82,18 @@ export function DocumentSearchDialog(
 	let input = useRef<HTMLInputElement>(null);
 	let [query, setQuery] = useState("");
 	let [retry, setRetry] = useState(0);
-	let [search, setSearch] = useState<
-		| { status: "loading" }
-		| { status: "ready"; results: DocumentSearchResult[]; failedProjectIds: string[] }
-		| { status: "error"; message: string }
-	>({ status: "loading" });
+	let recentKey = `${includeArchived}:${projects.map(project => project.repositoryId).join(",")}`;
+	let [search, setSearch] = useState<SearchState>(() =>
+		lastRecent?.key === recentKey
+			? { status: "ready", results: lastRecent.results, failedProjectIds: [] }
+			: { status: "loading" }
+	);
 
 	useEffect(() => {
 		let active = true;
 		let controller = new AbortController();
 		let timer = window.setTimeout(() => {
-			setSearch({ status: "loading" });
+			if (query.trim() || lastRecent?.key !== recentKey) setSearch({ status: "loading" });
 			searchAvailableDocuments(
 				projects,
 				query,
@@ -92,7 +101,11 @@ export function DocumentSearchDialog(
 				Api.channels,
 				controller.signal,
 			).then(result => {
-				if (active) setSearch({ status: "ready", ...result });
+				if (!active) return;
+				if (!query.trim() && result.failedProjectIds.length === 0) {
+					lastRecent = { key: recentKey, results: result.results };
+				}
+				setSearch({ status: "ready", ...result });
 			}, error => {
 				if (active && !controller.signal.aborted) {
 					setSearch({
@@ -107,7 +120,7 @@ export function DocumentSearchDialog(
 			window.clearTimeout(timer);
 			controller.abort();
 		};
-	}, [includeArchived, projects, query, retry]);
+	}, [includeArchived, projects, query, recentKey, retry]);
 
 	let results = search.status === "ready" ? search.results : [];
 	let manyProjects = projects.length > 1;

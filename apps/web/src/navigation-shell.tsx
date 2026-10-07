@@ -92,17 +92,24 @@ let ProjectSidebar = lazy(() =>
 let EmptyWorkspace = lazy(() =>
 	import("./empty-workspace").then(module => ({ default: module.EmptyWorkspace }))
 );
+// Idle prefetch (below) shares these loaders so a first open finds the chunk ready.
+let dialogChunks = [
+	() => import("./add-project-dialog"),
+	() => import("./new-document-dialog"),
+	() => import("./document-search-dialog"),
+	() => import("./delete-document-dialog"),
+] as const;
 let AddProjectDialog = lazy(() =>
-	import("./add-project-dialog").then(module => ({ default: module.AddProjectDialog }))
+	dialogChunks[0]().then(module => ({ default: module.AddProjectDialog }))
 );
 let NewDocumentDialog = lazy(() =>
-	import("./new-document-dialog").then(module => ({ default: module.NewDocumentDialog }))
+	dialogChunks[1]().then(module => ({ default: module.NewDocumentDialog }))
 );
 let DocumentSearchDialog = lazy(() =>
-	import("./document-search-dialog").then(module => ({ default: module.DocumentSearchDialog }))
+	dialogChunks[2]().then(module => ({ default: module.DocumentSearchDialog }))
 );
 let DeleteDocumentDialog = lazy(() =>
-	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
+	dialogChunks[3]().then(module => ({ default: module.DeleteDocumentDialog }))
 );
 
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
@@ -289,6 +296,12 @@ export function NavigationShell(
 		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
+	useEffect(() => {
+		let timer = window.setTimeout(() => {
+			for (let load of dialogChunks) load().catch(() => {});
+		}, 1500);
+		return () => window.clearTimeout(timer);
+	}, []);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [width, resize] = useSidebarWidth();

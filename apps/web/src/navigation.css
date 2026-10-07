@@ -654,6 +654,17 @@
 	transform: scale(1);
 }
 
+/* The lazy dialog can mount already open; the starting style makes first paint animate. */
+@starting-style {
+	.motion-modal.is-open {
+		opacity: 0;
+	}
+
+	.motion-modal.is-open .navigation-modal-content {
+		transform: scale(var(--modal-scale));
+	}
+}
+
 .motion-modal.is-closing {
 	opacity: 0;
 	transition-duration: var(--modal-close-dur);
@@ -752,6 +763,8 @@
 
 .navigation-palette-list {
 	display: flex;
+	/* Reserve the loading and empty height so results do not resize the palette. */
+	min-height: calc(var(--spacing) * 21);
 	max-height: min(50vh, 20rem);
 	flex-direction: column;
 	overflow-y: auto;
