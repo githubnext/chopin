@@ -123,7 +123,8 @@
 				"class > Workspace > <div>",
 				2
 			]
-		]
+		],
+		"sourceHash": "2126fad848c10e57fbed4bbfb6fb6518db7b69ac4d9ad29f86590440e5251ab3"
 	},
 	{
 		"file": "apps/web/src/empty-workspace.tsx",
