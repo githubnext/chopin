@@ -87,7 +87,7 @@ export function rebasePullRequests(repository, gh = github) {
 			]);
 			results.push({ number: pr.number, status: "rebased" });
 		} catch (error) {
-			let message = String(error);
+			let message = error?.stderr === undefined ? String(error) : String(error.stderr);
 			if (/expected.*head|head.*changed/i.test(message)) {
 				results.push({ number: pr.number, status: "changed during rebase; skipped" });
 				continue;

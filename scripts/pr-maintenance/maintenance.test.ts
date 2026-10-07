@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { eligible, rebasePullRequests, selectFailures } from "./maintenance.mjs";
 
 let repository = "githubnext/chopin";
@@ -204,4 +205,42 @@ test("a conflict leaves the branch untouched and reports the blocker once", () =
 		return alreadyReported.gh(args);
 	});
 	expect(alreadyReported.writes).toEqual([]);
+});
+
+for (
+	let diagnostic of ["PullRequest::RebaseConflictError", "rebase conflict between base and head"]
+) {
+	test(`reports a subprocess ${diagnostic} without matching its command arguments`, () => {
+		let { gh, writes } = fixture();
+		let result = rebasePullRequests(repository, (args) => {
+			if (args.includes("graphql")) {
+				execFileSync(process.execPath, [
+					"-e",
+					`process.stderr.write(${JSON.stringify(`gh: ${diagnostic}`)}); process.exit(1);`,
+					...args,
+				], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+			}
+			return gh(args);
+		});
+		expect(result).toEqual([{ number: 42, status: "blocked" }]);
+		expect(writes).toHaveLength(1);
+		expect(writes[0]?.join(" ")).toContain("<!-- pr-rebase:head:main -->");
+	});
+}
+
+test("subprocess permission failures are not mistaken for changed heads", () => {
+	let { gh, writes } = fixture();
+	expect(() =>
+		rebasePullRequests(repository, (args) => {
+			if (args.includes("graphql")) {
+				execFileSync(process.execPath, [
+					"-e",
+					'process.stderr.write("gh: Resource not accessible by token"); process.exit(1);',
+					...args,
+				], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+			}
+			return gh(args);
+		})
+	).toThrow("Resource not accessible by token");
+	expect(writes).toEqual([]);
 });
