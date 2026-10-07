@@ -206,11 +206,11 @@ test("decision metadata aligns at desktop width and wraps safely on narrow scree
 	let items = meta.locator(":scope > p");
 	await expect(items).toHaveCount(2);
 	await expect(meta).toHaveCSS("display", "flex");
-	await expect(meta).toHaveCSS("column-gap", "24px");
+	await expect(meta).toHaveCSS("column-gap", "16px");
 	let author = await items.nth(0).boundingBox();
 	let timestamp = await items.nth(1).boundingBox();
 	expect(Math.abs(timestamp!.y - author!.y)).toBeLessThanOrEqual(2);
-	expect(timestamp!.x - (author!.x + author!.width)).toBeCloseTo(24, 1);
+	expect(timestamp!.x - (author!.x + author!.width)).toBeCloseTo(16, 1);
 
 	await page.setViewportSize({ width: 390, height: 620 });
 	await items.nth(0).locator("strong").evaluate(element => {

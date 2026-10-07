@@ -2313,7 +2313,7 @@
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	column-gap: 1.5rem;
+	column-gap: 1rem;
 	row-gap: 0.5rem;
 	/* A clear space separates what was decided from who and when. */
 	margin-block-start: 1rem;
