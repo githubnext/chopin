@@ -396,13 +396,15 @@
 	display: grid;
 	grid-template-rows: 0fr;
 	opacity: 0;
-	transition: grid-template-rows 420ms var(--ease-out), opacity 300ms var(--ease-out);
+	transition:
+		grid-template-rows var(--acc-collapse) var(--motion-move),
+		opacity var(--acc-collapse) var(--motion-move);
 }
 
 .plan-research-fold[data-open] {
 	grid-template-rows: 1fr;
 	opacity: 1;
-	transition-delay: var(--duration-fast);
+	transition-duration: var(--acc-expand);
 }
 
 .plan-research-fold > div {
@@ -2901,7 +2903,7 @@
 .plan-decision-fold {
 	display: grid;
 	grid-template-rows: 0fr;
-	transition: grid-template-rows var(--duration-base) var(--ease-out);
+	transition: grid-template-rows var(--acc-collapse) var(--motion-move);
 }
 
 .plan-decision-fold > div {
@@ -2910,6 +2912,7 @@
 
 .plan-decision-pop[data-pinned] .plan-decision-fold {
 	grid-template-rows: 1fr;
+	transition-duration: var(--acc-expand);
 }
 
 @media (prefers-reduced-motion: reduce) {

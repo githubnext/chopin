@@ -78,20 +78,28 @@ function ToolCall(
 				)
 				: <div className="chat-tool-call-toggle">{row}</div>}
 			{hasDetails && (
-				<div className="chat-tool-call-details" hidden={!open} id={contentId}>
-					{tool.args !== undefined && (
-						<div>
-							<div className="chat-tool-data-label">Input</div>
-							<pre>{tool.args}</pre>
-						</div>
-					)}
-					{tool.result !== undefined && (
-						<div>
-							<div className="chat-tool-data-label">Result</div>
-							<pre>{tool.result}</pre>
-						</div>
-					)}
-				</div>
+				<MotionDisclosure
+					id={contentId}
+					immediately={motionImmediately()}
+					motion={motionContract("collapse")}
+					open={open}
+					surface="tool-call"
+				>
+					<div className="chat-tool-call-details">
+						{tool.args !== undefined && (
+							<div>
+								<div className="chat-tool-data-label">Input</div>
+								<pre>{tool.args}</pre>
+							</div>
+						)}
+						{tool.result !== undefined && (
+							<div>
+								<div className="chat-tool-data-label">Result</div>
+								<pre>{tool.result}</pre>
+							</div>
+						)}
+					</div>
+				</MotionDisclosure>
 			)}
 		</li>
 	);

@@ -870,10 +870,6 @@ button.chat-tool-call-toggle {
 	margin: 0 0 7px 20px;
 }
 
-.chat-tool-call-details[hidden] {
-	display: none;
-}
-
 .chat-tool-data-label {
 	margin-bottom: 3px;
 	color: var(--color-text-quaternary);
