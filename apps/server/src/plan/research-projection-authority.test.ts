@@ -83,6 +83,7 @@ describe("hosted plan persistence", () => {
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
 		let originalSource = Service.source(plan);
 		let request = await pendingInlineResearch(context, otherChannel.id);
+		await linkedResearchJob(context, request.workspace.id, "evidence", otherChannel.id);
 		let peer = await Room.restore(
 			plan.document.epoch,
 			Y.encodeStateAsUpdate(plan.document.doc),
