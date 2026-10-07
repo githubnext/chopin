@@ -135,8 +135,13 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	await expect(parentHeader.getByRole("group", { name: /People here:/ })).toBeVisible();
 	await expect(parentPaper).toHaveAttribute("inert", "");
 	await expect(parentPaper).toHaveAttribute("aria-hidden", "true");
-	await expect(parentPaper).toHaveCSS("filter", "blur(3px)");
-	await expect(parentPaper).toHaveCSS("opacity", "0.68");
+	await expect(parentPaper).toHaveCSS("filter", "none");
+	await expect(parentPaper).toHaveCSS("opacity", "1");
+	await expect.poll(() =>
+		page.locator(".anchored-child-parent").evaluate(
+			element => getComputedStyle(element, "::after").opacity,
+		)
+	).toBe("1");
 	await expect(surface.locator(".room-header")).toBeHidden();
 	await surface.evaluate(async element => {
 		await Promise.all(element.getAnimations().map(animation => animation.finished));
@@ -806,7 +811,11 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 	expect(crumbBox!.x + crumbBox!.width).toBeLessThanOrEqual(membersBox!.x);
 	let parentPaper = page.locator('[data-workspace-surface="document"] .workspace-frame');
 	await expect(parentPaper).toHaveCSS("transform", "none");
-	await expect(parentPaper).toHaveCSS("transition-property", "none");
+	expect(
+		await page.locator(".anchored-child-parent").evaluate(
+			element => getComputedStyle(element, "::after").transitionProperty,
+		),
+	).toBe("none");
 	let headerBox = await parentHeader.boundingBox();
 	let childBox = await surface.boundingBox();
 	expect(headerBox).not.toBeNull();
@@ -831,5 +840,41 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 
 	await parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }).click();
 	await expect(surface).toHaveCSS("animation-name", "anchored-child-fade-out");
+	await expect(page).toHaveURL(url => url.pathname.endsWith(`/test-${room.slice(0, 8)}`));
+});
+
+test("Escape in a child editor dismisses the innermost thing before the sheet", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let title = `Escape source ${room.slice(0, 8)}`;
+	let child = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		title,
+		CHILD_SOURCE,
+	);
+	await join("ana");
+	await page.goto(child.path);
+	let surface = page.getByRole("region", { name: `Child document: ${title}` });
+	let editor = surface.getByRole("textbox", { name: "editable markdown", exact: true });
+	await expect(editor).toBeVisible();
+
+	await surface.getByRole("heading", { level: 1 }).click();
+	await page.keyboard.press("End");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/");
+	let menu = page.getByRole("listbox", { name: "Insert block" });
+	await expect(menu).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(menu).toHaveCount(0);
+	await expect(surface).toBeVisible();
+
+	await page.keyboard.press("Escape");
+	await expect(surface).toBeVisible();
+	await expect(editor).not.toBeFocused();
+	await expect(surface).toBeFocused();
+
+	await page.keyboard.press("Escape");
+	await expect(surface).toHaveCount(0);
 	await expect(page).toHaveURL(url => url.pathname.endsWith(`/test-${room.slice(0, 8)}`));
 });

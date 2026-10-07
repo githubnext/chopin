@@ -37,6 +37,8 @@ type Metadata = Pick<
 	| "updatedAt"
 >;
 
+// Popover menus and the editor's insert listbox render as dialogs, listboxes or comboboxes and
+// handle their own Escape; the sheet must not close under them.
 let DISMISSIBLE_TARGET =
 	'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="listbox"], [role="dialog"], [role="combobox"]';
 
@@ -268,7 +270,9 @@ export default function DocumentWorkspaceHost(
 			let target = event.target instanceof Element ? event.target : undefined;
 			if (target?.closest(DISMISSIBLE_TARGET)) {
 				event.preventDefault();
-				if (target instanceof HTMLElement) target.blur();
+				document.querySelector<HTMLElement>(".anchored-child-surface")?.focus({
+					preventScroll: true,
+				});
 				return;
 			}
 			event.preventDefault();
