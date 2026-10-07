@@ -164,12 +164,12 @@ test("writers can dismiss offers while execution is disabled; viewers only read 
 	let dismissButton = dismissedCardA.getByRole("button", { name: "Dismiss", exact: true });
 	await dismissButton.focus();
 	await dismissButton.press("Space");
-	await expect(dismissedCardA).toContainText("Dismissed");
+	await expect(dismissedCardA).toContainText("Research suggestion dismissed");
 	expect(await researchWorkCounts(room)).toEqual(countsBeforeDismiss);
 	await writerB.reload();
 	await ready(writerB);
 	let dismissedCardB = offerCard(writerB, "ui-dismiss");
-	await expect(dismissedCardB).toContainText("Dismissed");
+	await expect(dismissedCardB).toContainText("Research suggestion dismissed");
 	await expect(dismissedCardB.getByRole("button", { name: "Start research", exact: true }))
 		.toHaveCount(0);
 	await expect(dismissedCardB.getByRole("button", { name: "Dismiss", exact: true }))
@@ -193,7 +193,7 @@ test("writers can dismiss offers while execution is disabled; viewers only read 
 		}
 		await readonly.reload();
 		await expect(offerCard(readonly, "ui-accept")).toContainText(specs[0]!.brief);
-		await expect(offerCard(readonly, "ui-dismiss")).toContainText("Dismissed");
+		await expect(offerCard(readonly, "ui-dismiss")).toContainText("Research suggestion dismissed");
 	} finally {
 		await viewerContext.close();
 	}

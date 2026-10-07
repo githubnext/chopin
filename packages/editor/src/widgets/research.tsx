@@ -255,7 +255,7 @@ function Indicator({ stage }: { stage: Research.RequestStage }) {
 }
 
 /** A question is context, not a heading: two quiet lines that open on request. */
-function Brief({ text }: { text: string }) {
+export function ResearchBrief({ text }: { text: string }) {
 	let [open, setOpen] = useState(false);
 	let [long, setLong] = useState(false);
 	let ref = useRef<HTMLSpanElement>(null);
@@ -379,7 +379,7 @@ export function ResearchCard(
 					</div>
 				</div>
 				<Swap className="plan-research-title" id={ready ? "report" : "question"}>
-					{ready ? ready.title : <Brief text={request.question} />}
+					{ready ? ready.title : <ResearchBrief text={request.question} />}
 				</Swap>
 				<Fold open={!!ready}>
 					{shownSummary !== undefined && <p className="plan-research-summary">{shownSummary}</p>}

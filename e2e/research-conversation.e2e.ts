@@ -24,7 +24,7 @@ test("research-only discussion creates a shared editable offer with sourced addi
 		"Compare self-hosted alternatives",
 	);
 	let later = await sendChat(ana, RESEARCH_MESSAGES.constraint);
-	await expect(card.getByText("Suggested addition", { exact: true })).toBeVisible();
+	await expect(card.getByRole("group", { name: "Suggested addition", exact: true })).toBeVisible();
 	await card.getByRole("button", { name: "Add to brief", exact: true }).click();
 	await expect(card.getByRole("textbox", { name: "Research brief", exact: true })).toHaveValue(
 		/We also need self-hosted options/,
@@ -41,7 +41,7 @@ test("research-only discussion creates a shared editable offer with sourced addi
 		"We also need self-hosted options",
 	);
 	await bo.getByRole("button", { name: "Dismiss", exact: true }).click();
-	await expect(card.getByText("Dismissed", { exact: true })).toBeVisible();
+	await expect(card.getByText("Research suggestion dismissed", { exact: true })).toBeVisible();
 	await sendChat(ana, RESEARCH_MESSAGES.repeat);
 	await expect.poll(async () => (await wireState(ana))?.research?.analysis.at(-1)?.policyGate).toBe(
 		"dismissed research topic",

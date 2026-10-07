@@ -58,6 +58,7 @@ export type {
 export {
 	QuestionnaireCard,
 	register as registerPlanWidgets,
+	ResearchBrief,
 	ResearchCard,
 	ResearchComposer,
 	ResearchReference,
