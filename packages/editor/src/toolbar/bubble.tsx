@@ -19,6 +19,7 @@ import {
 	CELL,
 	CELL_OFF,
 	CELL_ON,
+	DIVIDER,
 	editorSurfaceViewport,
 	listenToEditorGeometry,
 	nativeSelectionRect,
@@ -170,6 +171,20 @@ const MARKS: Mark[] = [
 	{ format: "code", label: "Inline code", glyph: <CodeIcon />, shortcut: shortcut("E") },
 ];
 
+/** Marks a phone keeps on the row; the rest move into the block menu. */
+const PHONE_ROW = new Set<TextFormatType>(["bold", "italic"]);
+
+function usePrimaryCoarse(): boolean {
+	let [coarse, setCoarse] = useState(() => matchMedia(PRIMARY_COARSE_POINTER_QUERY).matches);
+	useEffect(() => {
+		let query = matchMedia(PRIMARY_COARSE_POINTER_QUERY);
+		let update = () => setCoarse(query.matches);
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
+	}, []);
+	return coarse;
+}
+
 export function SelectionBubble(
 	{ disabled, hidden, onComment }: {
 		disabled?: boolean;
@@ -187,6 +202,7 @@ export function SelectionBubble(
 	/** Whether the bubble is showing block types instead of its marks. */
 	let [choosing, setChoosing] = useState(false);
 	let ref = useRef<HTMLDivElement>(null);
+	let coarse = usePrimaryCoarse();
 
 	let sync = useCallback(() => {
 		editor.getEditorState().read(() => {
@@ -344,7 +360,7 @@ export function SelectionBubble(
 			viewport,
 			8,
 			// A touch selection has the system's own callout above it.
-			matchMedia(PRIMARY_COARSE_POINTER_QUERY).matches ? "auto" : "above",
+			coarse ? "auto" : "above",
 		);
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top
@@ -352,8 +368,8 @@ export function SelectionBubble(
 				? current
 				: next
 		);
-	}, [anchor]);
-	useLayoutEffect(place, [place, choosing]);
+	}, [anchor, coarse]);
+	useLayoutEffect(place, [place, choosing, coarse]);
 
 	useEffect(() => {
 		if (!anchor) return;
@@ -404,7 +420,32 @@ export function SelectionBubble(
 						</span>
 						<span>{item.label}</span>
 					</button>
-				))
+				)).concat(
+					coarse
+						? [
+							<span key="rule" aria-hidden="true" className={DIVIDER} />,
+							...MARKS.filter(mark => !PHONE_ROW.has(mark.format)).map(mark => (
+								<button
+									key={mark.format}
+									type="button"
+									aria-label={mark.label}
+									aria-pressed={active.has(mark.format)}
+									onClick={() => {
+										setChoosing(false);
+										editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format);
+									}}
+									className={`${ROW} gap-2 ${active.has(mark.format) ? CELL_ON : CELL_OFF}`}
+									data-press="small"
+								>
+									<span aria-hidden="true" className="flex w-5 shrink-0 justify-center">
+										{mark.glyph}
+									</span>
+									<span>{mark.label}</span>
+								</button>
+							)),
+						]
+						: [],
+				)
 				: (
 					<>
 						<button
@@ -421,9 +462,9 @@ export function SelectionBubble(
 							<ChevronIcon aria-hidden="true" className="size-3.5 rotate-90" />
 						</button>
 
-						<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
+						<span aria-hidden="true" className={`${SEAM}`} />
 
-						{MARKS.map(mark => (
+						{MARKS.filter(mark => !coarse || PHONE_ROW.has(mark.format)).map(mark => (
 							<button
 								key={mark.format}
 								type="button"
@@ -439,7 +480,7 @@ export function SelectionBubble(
 							</button>
 						))}
 
-						<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
+						<span aria-hidden="true" className={`${SEAM}`} />
 
 						<button
 							type="button"
@@ -454,7 +495,7 @@ export function SelectionBubble(
 
 						{onComment && (
 							<>
-								<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
+								<span aria-hidden="true" className={`${SEAM}`} />
 								<button
 									type="button"
 									aria-label="Comment on this passage"

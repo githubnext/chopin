@@ -1201,14 +1201,6 @@
 	padding-inline: 0.5rem 0.25rem;
 }
 
-:root[data-plan-coarse-pointer] .plan-formatting-toolbar {
-	gap: 0;
-}
-
-:root[data-plan-coarse-pointer] .plan-bubble-seam {
-	display: none;
-}
-
 /*
  * Document typography.
  *
