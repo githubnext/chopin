@@ -1,4 +1,4 @@
-import { useWorkspaceMode } from "./workspace";
+import { useWorkspaceLayout } from "./workspace";
 
 export function EmptyWorkspace(
 	{ disabled, hasProjects, onAddProject, onNewDocument }: {
@@ -8,9 +8,9 @@ export function EmptyWorkspace(
 		onNewDocument: () => void;
 	},
 ) {
-	let mode = useWorkspaceMode();
+	let { frame, mode } = useWorkspaceLayout();
 	return (
-		<div className="flex h-full flex-col bg-ground">
+		<div className="flex h-full flex-col bg-ground" ref={frame}>
 			<div className="room-header shrink-0" />
 			<div
 				className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-center ${
