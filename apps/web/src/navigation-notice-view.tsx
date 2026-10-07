@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import type { NoticeOptions } from "./navigation-notice";
 
@@ -6,12 +6,19 @@ import type { NoticeOptions } from "./navigation-notice";
 export default function NavigationNotice(
 	{ notice, show }: { notice: NoticeOptions; show: (options?: NoticeOptions) => void },
 ) {
+	let [leaving, setLeaving] = useState(false);
 	useEffect(() => {
-		let timer = setTimeout(show, notice.duration ?? 2000);
-		return () => clearTimeout(timer);
+		let duration = notice.duration ?? 2000;
+		setLeaving(false);
+		let fade = setTimeout(setLeaving, duration - 120, true);
+		let timer = setTimeout(show, duration);
+		return () => {
+			clearTimeout(fade);
+			clearTimeout(timer);
+		};
 	}, [notice, show]);
 	return (
-		<div className="navigation-creation-status" role="status">
+		<div className="navigation-creation-status" data-leaving={leaving || undefined} role="status">
 			{notice.message}
 			{notice.action && (
 				<button
