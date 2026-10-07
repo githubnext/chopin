@@ -200,7 +200,7 @@
 				1
 			]
 		],
-		"sourceHash": "db127842206a29d6eb733356a77095b22ac618f648e01dcd72955f134a46a25d"
+		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -228,7 +228,7 @@
 				1
 			]
 		],
-		"sourceHash": "db127842206a29d6eb733356a77095b22ac618f648e01dcd72955f134a46a25d"
+		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
