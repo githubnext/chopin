@@ -514,7 +514,7 @@
 				"typography",
 				"font-size",
 				"max(1rem, var(--text-sm))",
-				"CSS > @media (pointer: coarse) > textarea,\n\tselect,\n\tinput:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"])",
+				"CSS > @media (pointer: coarse) > .chat-composer .composer-draft-input[contenteditable],\n\ttextarea,\n\tselect,\n\tinput:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"])",
 				1
 			]
 		]

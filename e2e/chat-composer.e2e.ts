@@ -9,6 +9,17 @@ function chatPane(page: Page) {
 	return page.getByRole("complementary", { name: "Chat", exact: true });
 }
 
+test("touch chat input stays at least 16px to avoid focus zoom", async ({ join }) => {
+	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).click();
+	let input = chatInput(chatPane(page));
+	await expect(input).toBeVisible();
+	await input.focus();
+	let size = await input.evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+	expect(size).toBeGreaterThanOrEqual(16);
+});
+
 async function enablePlanner(page: Page): Promise<void> {
 	await page.route("**/api/session", async route => {
 		let response = await route.fetch();
