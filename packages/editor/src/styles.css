@@ -171,11 +171,6 @@
 	color: var(--color-text-secondary);
 }
 
-.plan-research-more:focus-visible {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
-}
-
 .plan-research-card[data-stage="cancelled"] .plan-research-title {
 	color: var(--color-text-tertiary);
 }
