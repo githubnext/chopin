@@ -6,104 +6,176 @@
  * this binding's transactions undoes this person's edits and leaves peers' and
  * the Planner's alone, because those arrive under the provider's origin.
  *
- * Three things keep that from undoing more than the person did:
+ * Yjs can reverse a step whatever has happened since, but not every reversal
+ * is one the room can accept. Deleting a block a peer has typed in deletes
+ * their text; removing or restoring a Questionnaire, Decision or Research
+ * projection is refused by the server and rebuilds the epoch for everybody;
+ * and a reversal that Lexical applies differently live than it reads from a
+ * fresh load leaves a document that no longer opens. So every undo and redo
+ * is first run on a copy of the document and checked; one that fails ends the
+ * history there instead of running.
  *
- * - Edits this client makes in reaction to a remote change are not theirs.
- *   MDXEditor appends a paragraph whenever a card ends the document, and every
- *   client does so when the server appends one; undoing that would remove a
- *   paragraph somebody else may be typing in, and MDXEditor would put it back.
- * - A block this person created can hold other people's text by the time it is
- *   undone. Yjs would delete the block and their text with it; it stays, and
- *   only this person's part of it goes.
- * - The server refuses any browser batch that drops, alters or restores a
- *   Questionnaire, Decision or Research projection, and a refused batch costs
- *   everybody a rebuilt epoch. A step that inserted, moved or removed one (a
- *   `/research` reference, a dragged decision) cannot be reversed safely, so it
- *   ends the history instead of running.
+ * Edits this client makes in reaction to a remote change are not the person's
+ * either. MDXEditor appends a paragraph whenever a card ends the document, and
+ * every client does so when the server appends one, so those are left out.
  */
 
-import { COMMAND_PRIORITY_EDITOR, REDO_COMMAND, UNDO_COMMAND } from "lexical";
+import { COMMAND_PRIORITY_EDITOR, createEditor, REDO_COMMAND, UNDO_COMMAND } from "lexical";
+import { createYjsBinding, syncYjsChangesToLexical } from "@lexical/yjs";
 import * as Y from "yjs";
 
-import type { Binding } from "@lexical/yjs";
+import { exportPlan, parse, registry, serialize } from "@chopin/dialect";
+
+import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
+import type { Registry } from "@chopin/dialect";
 
-/** Lexical types of the components whose records live outside the document. */
-const PROTECTED = new Set(["plan-questionnaire", "plan-decision", "plan-research"]);
+/** Components whose records live outside the document. */
+const PROTECTED = new Set(["Questionnaire", "Decision", "Research"]);
 
-type StackItem = Y.UndoManager["undoStack"][number];
-type DeleteSet = StackItem["insertions"];
+/** A headless mirror reads no presence. */
+const NOBODY = {
+	awareness: {
+		getLocalState: () => null,
+		getStates: () => new Map(),
+		off() {},
+		on() {},
+		setLocalState() {},
+		setLocalStateField() {},
+	},
+	connect() {},
+	disconnect() {},
+	off() {},
+	on() {},
+} as unknown as Provider;
 
-function projection(type: Y.AbstractType<any>): boolean {
-	if (!(type instanceof Y.XmlElement)) return false;
-	// Read past deletion: a removed element's attributes are deleted with it,
-	// and restoring a removed projection is one of the cases being asked about.
-	let attribute = type._map.get("__type");
-	return PROTECTED.has(attribute?.content.getContent()[0] as string);
+let shared: Registry | undefined;
+
+/** A headless editor following `doc` the way a browser or the server's room does. */
+function mirror(doc: Y.Doc): LexicalEditor {
+	shared ??= registry();
+	let editor = createEditor({
+		nodes: shared.nodes,
+		onError(err) {
+			throw err;
+		},
+	});
+	let binding = createYjsBinding({ editor, id: "plan", doc, docMap: new Map([["plan", doc]]) });
+	binding.root.getSharedType().observeDeep(events => {
+		syncYjsChangesToLexical(binding, NOBODY, events, false, () => {});
+	});
+	return editor;
 }
 
-/** Whether this item is a projection or sits inside one. */
-function within(item: Y.Item): boolean {
-	if (item.content instanceof Y.ContentType && projection(item.content.type)) return true;
-	let parent = item.parent;
-	while (parent instanceof Y.AbstractType) {
-		if (projection(parent)) return true;
-		parent = parent._item?.parent ?? null;
-	}
-	return false;
+/** Commit whatever the mirror has queued, so it can be read now. */
+function flush(editor: LexicalEditor): void {
+	editor.update(() => {}, { discrete: true });
 }
 
-/** Whether deleting this item would delete live content another client wrote. */
-function foreign(doc: Y.Doc, item: Y.Item): boolean {
-	if (!(item.content instanceof Y.ContentType)) return false;
-	if (item.content.type instanceof Y.Map) {
-		// A text node is its property map followed by its characters, and a
-		// peer typing at its end extends the run rather than starting a node.
-		// Without the map Lexical has nowhere to put their characters.
-		for (let next = item.right; next; next = next.right) {
-			if (next.content instanceof Y.ContentType) break;
-			if (!next.deleted && next.id.client !== doc.clientID) return true;
+function source(editor: LexicalEditor): string {
+	shared ??= registry();
+	return exportPlan(editor, { registry: shared });
+}
+
+/**
+ * Protected projections as the server compares them: each component's own
+ * serialized MDX. Where they sit is free to change.
+ */
+function projections(source: string): Set<string> {
+	let found = new Set<string>();
+	let walk = (node: { type: string; name?: string | null; children?: unknown[] }) => {
+		if (node.type === "mdxJsxFlowElement" && node.name && PROTECTED.has(node.name)) {
+			found.add(serialize({ type: "root", children: [node] } as never));
 		}
-		return false;
-	}
-	for (let child = item.content.type._start; child; child = child.right) {
-		if (child.deleted) continue;
-		if (child.id.client !== doc.clientID || foreign(doc, child)) return true;
-	}
-	return false;
+		for (let child of node.children ?? []) walk(child as typeof node);
+	};
+	walk(parse(source) as never);
+	return found;
 }
 
-function some(doc: Y.Doc, set: DeleteSet, test: (item: Y.Item) => boolean): boolean {
-	for (let [client, ranges] of set.clients) {
-		let structs = doc.store.clients.get(client);
-		if (!structs) continue;
-		for (let { clock, len } of ranges) {
-			for (let index = Y.findIndexSS(structs, clock); index < structs.length; index++) {
-				let struct = structs[index]!;
-				if (struct.id.clock >= clock + len) break;
-				if (struct instanceof Y.Item && test(struct)) return true;
+type Stack = Y.UndoManager["undoStack"];
+
+/** Stack items describe a step by ids, so they replay against a copy of the document. */
+function copied(stack: Stack): Stack {
+	return stack.map(item => ({
+		insertions: item.insertions,
+		deletions: item.deletions,
+		meta: new Map(),
+	})) as Stack;
+}
+
+function same(a: Set<string>, b: Set<string>): boolean {
+	return a.size === b.size && [...a].every(value => b.has(value));
+}
+
+/**
+ * Whether the next undo or redo is one the room will accept.
+ *
+ * Runs it on a copy, including Yjs passing over steps that no longer change
+ * anything, and checks that it deletes nothing another client wrote, leaves
+ * every protected projection exactly as it is, exports as valid MDX, and reads
+ * the same from a fresh load as it does applied to a live editor.
+ */
+export function safe(manager: Y.UndoManager, direction: "undo" | "redo"): boolean {
+	let doc = manager.doc;
+	let scope = manager.scope[0];
+	if (!(scope instanceof Y.AbstractType)) return false;
+	let key = Y.findRootTypeKey(scope);
+
+	let copy = new Y.Doc({ gc: false });
+	let live = mirror(copy);
+	Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc));
+	// A redo leaves pointers from undone items to their replacements, and
+	// they are local state the encoding does not carry.
+	copy.transact(transaction => {
+		for (let structs of doc.store.clients.values()) {
+			for (let struct of structs) {
+				if (!(struct instanceof Y.Item) || !struct.redone) continue;
+				let item = Y.getItemCleanStart(transaction, struct.id);
+				Y.getItemCleanEnd(
+					transaction,
+					copy.store,
+					Y.createID(struct.id.client, struct.id.clock + struct.length - 1),
+				);
+				item.redone = struct.redone;
 			}
 		}
-	}
-	return false;
-}
-
-/** Whether reversing this stack item would insert, remove or alter a projection. */
-export function touchesProjection(doc: Y.Doc, item: StackItem): boolean {
-	return some(doc, item.insertions, within) || some(doc, item.deletions, within);
-}
-
-/** An undo manager over `scope` for the transactions made under `origin`. */
-export function planUndoManager(scope: Y.AbstractType<any>, origin: unknown): Y.UndoManager {
-	let doc = scope.doc!;
-	return new Y.UndoManager(scope, {
-		trackedOrigins: new Set([origin]),
-		deleteFilter: item => !foreign(doc, item),
 	});
+
+	try {
+		flush(live);
+		let before = projections(source(live));
+
+		let replay = new Y.UndoManager(copy.get(key, Y.XmlText), { trackedOrigins: new Set() });
+		replay.undoStack = copied(manager.undoStack);
+		replay.redoStack = copied(manager.redoStack);
+
+		let deleted: Y.Item[] = [];
+		copy.on("afterTransaction", (transaction: Y.Transaction) => {
+			if (transaction.origin !== replay) return;
+			Y.iterateDeletedStructs(transaction, transaction.deleteSet, struct => {
+				if (struct instanceof Y.Item) deleted.push(struct);
+			});
+		});
+		replay[direction]();
+		if (deleted.some(item => item.id.client !== doc.clientID)) return false;
+
+		flush(live);
+		let result = source(live);
+		let fresh = new Y.Doc();
+		let loaded = mirror(fresh);
+		Y.applyUpdate(fresh, Y.encodeStateAsUpdate(copy));
+		flush(loaded);
+		return result === source(loaded) && same(before, projections(result));
+	} catch {
+		return false;
+	} finally {
+		copy.destroy();
+	}
 }
 
 export type PlanHistory = {
-	/** Leave out whatever this client writes until the current task has run. */
+	/** Leave out whatever this client writes in reaction to the current change. */
 	react(): void;
 	dispose(): void;
 };
@@ -114,38 +186,48 @@ export type PlanHistory = {
  * Bound to one Y.Doc, so an epoch rotation, which remounts the editor over a
  * fresh document, starts an empty history with it.
  */
-export function registerPlanHistory(editor: LexicalEditor, binding: Binding): PlanHistory {
-	let manager = planUndoManager(binding.root.getSharedType(), binding);
-	let doc = binding.doc;
+export function registerPlanHistory(
+	editor: LexicalEditor,
+	binding: Binding,
+	captureTimeout = 500,
+): PlanHistory {
+	let manager = new Y.UndoManager(binding.root.getSharedType(), {
+		trackedOrigins: new Set([binding]),
+		captureTimeout,
+	});
 
 	let step = (direction: "undo" | "redo") => {
 		if (!editor.isEditable()) return false;
 		let stack = direction === "undo" ? manager.undoStack : manager.redoStack;
-		let next = stack.at(-1);
-		if (next && touchesProjection(doc, next)) {
-			manager.clear(direction === "undo", direction === "redo");
-		} else if (next) {
-			manager[direction]();
-		}
+		if (stack.length === 0) return true;
+		if (safe(manager, direction)) manager[direction]();
+		else manager.clear(direction === "undo", direction === "redo");
 		return true;
 	};
 
 	let stopUndo = editor.registerCommand(UNDO_COMMAND, () => step("undo"), COMMAND_PRIORITY_EDITOR);
 	let stopRedo = editor.registerCommand(REDO_COMMAND, () => step("redo"), COMMAND_PRIORITY_EDITOR);
 
-	// Lexical commits a remote change in a microtask and its listeners react
-	// synchronously from there, so a macrotask is past all of it.
-	let quiet: ReturnType<typeof setTimeout> | undefined;
+	/*
+	 * Lexical commits a remote change in a microtask queued by the caller, and
+	 * its listeners react synchronously from there or in microtasks of their
+	 * own. Input arrives as a task, so it can never land inside this window,
+	 * however busy the room is.
+	 */
+	let pending = 0;
 	let react = () => {
+		pending++;
 		manager.trackedOrigins.delete(binding);
-		clearTimeout(quiet);
-		quiet = setTimeout(() => manager.trackedOrigins.add(binding));
+		let settle = (depth: number) => {
+			if (depth > 0) return void queueMicrotask(() => settle(depth - 1));
+			if (--pending === 0) manager.trackedOrigins.add(binding);
+		};
+		settle(4);
 	};
 
 	return {
 		react,
 		dispose() {
-			clearTimeout(quiet);
 			stopUndo();
 			stopRedo();
 			manager.destroy();
