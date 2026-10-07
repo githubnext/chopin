@@ -176,7 +176,7 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toContain('aria-label="Actions for Hushed mountain"');
 		expect(markup).toContain("gap-0.5");
 		expect(markup).not.toContain("safe-area-inset-top");
-		expect(markup).toContain('style="width:24px;height:24px"');
+		expect(markup).toContain('style="width:24px;height:24px;');
 		expect(markup).not.toContain('aria-label="Show sidebar"');
 		expect(markup).not.toContain('aria-label="Repository:');
 		expect(markup).not.toContain('href="/"');

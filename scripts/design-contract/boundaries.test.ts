@@ -33,7 +33,11 @@ describe("reviewed dynamic boundaries stay narrow", () => {
 	test("a participant-color waiver never covers a hardcoded interface color", () => {
 		let errors = check(
 			"packages/editor/src/face.tsx",
-			source => source.replace("background: color(handle)", 'background: "#123456"'),
+			source =>
+				source.replace(
+					"background: `color-mix(in srgb, ${tone} 18%, var(--color-page))`",
+					'background: "#123456"',
+				),
 		);
 		expect(errors.some(error => error.includes("background: #123456"))).toBe(true);
 	});
