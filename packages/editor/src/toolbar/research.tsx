@@ -372,12 +372,19 @@ export function ResearchComposerSurface(
 			if (!surface.current?.contains(document.activeElement)) return;
 			revealUntil.current = performance.now() + REVEAL_WINDOW;
 		};
+		// Any user input ends a reveal, so it never fights the reader's own scroll or click.
+		let interrupted = () => {
+			revealUntil.current = 0;
+		};
+		let inputs = ["keydown", "pointerdown", "touchstart", "wheel"];
 		let viewport = window.visualViewport;
 		window.addEventListener("resize", resized, true);
 		viewport?.addEventListener("resize", resized, true);
+		for (let input of inputs) window.addEventListener(input, interrupted, true);
 		return () => {
 			window.removeEventListener("resize", resized, true);
 			viewport?.removeEventListener("resize", resized, true);
+			for (let input of inputs) window.removeEventListener(input, interrupted, true);
 		};
 	}, [visible]);
 	useEffect(() => {
