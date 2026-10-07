@@ -11,7 +11,7 @@
  * login session cookie. They still meet in one repository-authorized channel.
  */
 
-import { content, expect, ready, test } from "./room";
+import { content, expect, ready, test, written } from "./room";
 
 test("an edit by one appears for the other", async ({ join }) => {
 	let ana = await join("ana");
@@ -28,6 +28,21 @@ test("an edit by one appears for the other", async ({ join }) => {
 	await bo.keyboard.type(" Readable and diffable.");
 
 	await expect(content(ana)).toContainText("Readable and diffable.");
+});
+
+test("typing faster than the server takes updates still reaches everyone", async ({ join, room }) => {
+	let ana = await join("ana");
+	let bo = await join("bo");
+
+	// Without a delay this is well past the 200 updates a second the server
+	// accepts from one socket. The excess used to be dropped, and everything
+	// typed afterwards was stranded behind it.
+	await content(ana).click();
+	await ana.keyboard.type("Typed faster than anybody types. ".repeat(8).trim());
+	await ana.keyboard.type(" Then the rest.", { delay: 50 });
+
+	await expect(content(bo)).toContainText("anybody types. Then the rest.");
+	await written(ana, room, "anybody types. Then the rest.");
 });
 
 test("the header represents everyone here as faces", async ({ join }) => {

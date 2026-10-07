@@ -11,7 +11,7 @@
  * layout, and happy-dom returns zero for every measurement.
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, jest } from "bun:test";
 import * as Y from "yjs";
 
 import { PlanProvider } from "./provider";
@@ -300,5 +300,96 @@ describe("opening the plan", () => {
 			status: "failed",
 			message: "the plan could not be opened",
 		});
+	});
+});
+
+/**
+ * A server that applies, acknowledges and relays updates, and drops some
+ * without a word, as the real one does past its rate limit.
+ *
+ * The plan service accepts at most 200 updates a second from one socket and
+ * silently ignores the rest. A dropped update also strands every later one
+ * from the same client, because Yjs holds an update whose predecessor never
+ * arrived instead of integrating it.
+ */
+function server(drop: (index: number) => boolean) {
+	let doc = new Y.Doc();
+	let transport = wire();
+	let received = 0;
+	let delivered = 0;
+	let send = transport.send;
+	transport.send = (kind: string, payload: Record<string, unknown> = {}) => {
+		send.call(transport, kind);
+		if (kind !== "plan:update") return;
+		if (drop(received++)) return;
+		delivered++;
+		let binary = atob(payload.update as string);
+		let update = Uint8Array.from(binary, char => char.charCodeAt(0));
+		Y.applyUpdate(doc, update);
+		transport.emit("plan:ack", { kind: "plan:ack", id: payload.id });
+	};
+	return {
+		doc,
+		transport,
+		get delivered() {
+			return delivered;
+		},
+	};
+}
+
+function typing(doc: Y.Doc, count: number) {
+	let text = doc.getText("typed");
+	for (let i = 0; i < count; i++) text.insert(text.length, "x");
+}
+
+describe("delivering local edits", () => {
+	afterEach(() => {
+		jest.useRealTimers();
+	});
+
+	it("does not send faster than the server accepts", async () => {
+		jest.useFakeTimers();
+		// Past 200 a second the real server drops the rest.
+		let room = server(() => room.delivered >= 200);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+
+		typing(doc, 300);
+		jest.advanceTimersByTime(1_000);
+
+		expect(room.doc.getText("typed").toString()).toBe("x".repeat(300));
+		expect(room.delivered).toBeLessThan(200);
+	});
+
+	it("resends an edit the server never acknowledged", async () => {
+		jest.useFakeTimers();
+		let room = server(index => index === 0);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+
+		typing(doc, 1);
+		jest.advanceTimersByTime(100);
+		typing(doc, 1);
+		jest.advanceTimersByTime(100);
+		// The second keystroke arrived but cannot be applied without the first.
+		expect(room.doc.getText("typed").toString()).toBe("");
+
+		jest.advanceTimersByTime(10_000);
+		expect(room.doc.getText("typed").toString()).toBe("xx");
+	});
+
+	it("leaves acknowledged edits alone", async () => {
+		jest.useFakeTimers();
+		let room = server(() => false);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+
+		typing(doc, 1);
+		jest.advanceTimersByTime(10_000);
+
+		expect(room.delivered).toBe(1);
 	});
 });
