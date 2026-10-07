@@ -466,7 +466,7 @@
 				1
 			]
 		],
-		"sourceHash": "1fd8fff50b8a2ec1103afeb234de2169a6b2a0c94bb1900d73f372eccc03fe71"
+		"sourceHash": "d6976f81401b6563b3b68c38364b94bab169b30eed0038ed1f788f4025488260"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -480,6 +480,6 @@
 				1
 			]
 		],
-		"sourceHash": "1fd8fff50b8a2ec1103afeb234de2169a6b2a0c94bb1900d73f372eccc03fe71"
+		"sourceHash": "d6976f81401b6563b3b68c38364b94bab169b30eed0038ed1f788f4025488260"
 	}
 ]
