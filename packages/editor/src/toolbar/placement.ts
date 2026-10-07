@@ -30,6 +30,7 @@ export function placeSurface(
 	surface: { width: number; height: number },
 	viewport: ViewportBox,
 	gap = 8,
+	prefer: "auto" | "above" = "auto",
 ): SurfacePlacement {
 	let leftEdge = viewport.left + gap;
 	let rightEdge = viewport.left + viewport.width - gap;
@@ -38,7 +39,9 @@ export function placeSurface(
 	let left = clamp(anchor.left, leftEdge, rightEdge - surface.width);
 	let above = Math.max(0, anchor.top - gap - topEdge);
 	let below = Math.max(0, bottomEdge - anchor.bottom - gap);
-	let useAbove = above > below;
+	// `above` keeps a surface off the line under a selection and flips only
+	// when the whole surface no longer fits over it and below has more room.
+	let useAbove = prefer === "above" ? above >= surface.height || above >= below : above > below;
 
 	if (useAbove) {
 		let top = Math.max(topEdge, anchor.top - gap - surface.height);
