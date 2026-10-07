@@ -203,7 +203,7 @@ test("a wide desktop comment sits in the gutter beside its passage", async ({ jo
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_440, height: 900 });
-	await page.getByRole("button", { name: "Close sidebar" }).click();
+	await page.getByRole("button", { name: "Hide chat" }).click();
 	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	let card = await thread(page);
 	let paragraph = content(page).locator("p").first();
@@ -1214,7 +1214,7 @@ test("clicking a comment button pins its document card and preserves the related
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_440, height: 900 });
-	await page.getByRole("button", { name: "Close sidebar" }).click();
+	await page.getByRole("button", { name: "Hide chat" }).click();
 	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	let card = await thread(page);
 	await expect(card).toContainText("@dev");

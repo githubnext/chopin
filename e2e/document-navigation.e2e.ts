@@ -201,10 +201,10 @@ test("document action menu motion settles keyboard opening immediately", async (
 	await trigger.focus();
 	await trigger.press("ArrowDown");
 	let menu = page.getByRole("menu", { name: /^Actions for / });
-	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+	await expect(page.getByRole("menuitem", { name: "Copy link", exact: true })).toBeFocused();
 	await expect(menu).toHaveCSS("transition-duration", "0s");
 	await page.keyboard.press("ArrowDown");
-	await expect(page.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
+	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
 });
 
 test("a pointer-collapsed Project stays inert through exit and restores in place", async ({ join }) => {

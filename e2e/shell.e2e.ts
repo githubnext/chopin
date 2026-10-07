@@ -175,7 +175,7 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 	let draft = chatInput(pane);
 	let header = page.getByRole("banner");
 	let heading = page.getByRole("heading", { name: "Chat" });
-	let close = page.getByRole("button", { name: "Close sidebar" });
+	let close = page.getByRole("button", { name: "Hide chat" });
 	let chatHeader = pane.locator("[data-chat-header]");
 	let identity = chatHeader.locator("[data-chat-identity]");
 
@@ -199,12 +199,12 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 	await heading.hover();
 	await expect(close).toHaveCSS("opacity", "1");
 	await close.hover();
-	await expect(page.locator("[data-icon-tooltip]")).toHaveText("Close sidebar");
+	await expect(page.locator("[data-icon-tooltip]")).toHaveText("Hide chat");
 	await expect(page.locator("[data-icon-tooltip]")).toBeVisible();
 	await expect(close).toHaveAttribute("aria-controls", paneId!);
 	await expect(close).toHaveAttribute("aria-expanded", "true");
 	await close.click();
-	let opener = page.getByRole("button", { name: "Show chat pane" });
+	let opener = page.getByRole("button", { name: "Show chat" });
 	let toolbar = page.locator("[data-document-toolbar]");
 	let documentTab = toolbar.getByRole("button", { name: "Document", exact: true });
 	await expect(pane).toBeHidden();
@@ -228,12 +228,12 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 test("split Chat controls remain available to touch", async ({ join }) => {
 	let page = await join("ana", { hasTouch: true, viewport: { width: 1280, height: 800 } });
 	let pane = chatPane(page);
-	let close = pane.getByRole("button", { name: "Close sidebar" });
+	let close = pane.getByRole("button", { name: "Hide chat" });
 	expect(await page.evaluate(() => matchMedia("(any-pointer: coarse)").matches)).toBe(true);
 	await expect(close).toHaveCSS("opacity", "1");
 	await close.tap();
 	await expect(pane).toBeHidden();
-	let opener = page.getByRole("button", { name: "Show chat pane" });
+	let opener = page.getByRole("button", { name: "Show chat" });
 	await opener.tap();
 	await expect(pane).toBeVisible();
 });
@@ -247,14 +247,14 @@ test("the chat rail remembers its width and visibility", async ({ join, page }) 
 	let paneId = await pane.getAttribute("id");
 	expect(paneId).toBeTruthy();
 	let rememberedWidth = (await box(pane)).width;
-	let toggle = page.getByRole("button", { name: "Close sidebar" });
+	let toggle = page.getByRole("button", { name: "Hide chat" });
 	await expect(toggle).toHaveAttribute("aria-controls", paneId!);
 	await toggle.click();
 	await expect(pane).toBeHidden();
 
 	await page.reload();
 	await ready(page);
-	await page.getByRole("button", { name: "Show chat pane" }).click();
+	await page.getByRole("button", { name: "Show chat" }).click();
 	await expect.poll(async () => (await box(chatPane(page))).width)
 		.toBeCloseTo(rememberedWidth, 0);
 });

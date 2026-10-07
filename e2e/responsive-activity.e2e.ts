@@ -97,7 +97,7 @@ test("a closed desktop Chat toggle exposes initial planner activity", async ({ j
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await interceptBusyHistory(page);
 	page = await join("ana");
-	let toggle = page.getByRole("button", { name: "Show chat pane, Planner working" });
+	let toggle = page.getByRole("button", { name: "Show chat, Planner working" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle).toHaveAttribute("aria-expanded", "false");
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
@@ -108,7 +108,7 @@ test("a closed desktop Chat tab keeps unread activity visible", async ({ join, p
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	page = await join("ana");
-	await page.getByRole("button", { name: "Show chat pane" }).hover();
+	await page.getByRole("button", { name: "Show chat" }).hover();
 	await page.evaluate(() => {
 		let record = { ends: 0, starts: 0 };
 		Reflect.set(window, "__feedbackCountTransitions", record);
@@ -130,7 +130,7 @@ test("a closed desktop Chat tab keeps unread activity visible", async ({ join, p
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
-	let toggle = page.getByRole("button", { name: "Show chat pane, 1 unread" });
+	let toggle = page.getByRole("button", { name: "Show chat, 1 unread" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
 	let count = toggle.locator('[data-motion-feedback="count"]');
@@ -179,7 +179,7 @@ test("a closed desktop Chat tab keeps unread activity visible", async ({ join, p
 	).toBe(starts);
 	await toggle.click();
 	await expect(page.getByRole("heading", { name: "Chat" })).toBeFocused();
-	await expect(page.getByRole("button", { name: "Close sidebar" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Hide chat" })).toBeVisible();
 });
 
 test("completed tool names wrap in compact Chat", async ({ join, seed }) => {

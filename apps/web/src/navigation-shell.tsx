@@ -1,3 +1,4 @@
+import { LockIcon, SignInIcon } from "@chopin/icons";
 import {
 	Component,
 	createContext,
@@ -291,6 +292,14 @@ export function NavigationShell(
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
+	let [notice, setNotice] = useState<string>();
+	let noticeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+	let announce = useCallback((message: string) => {
+		clearTimeout(noticeTimer.current);
+		setNotice(message);
+		noticeTimer.current = setTimeout(() => setNotice(undefined), 2000);
+	}, []);
+	useEffect(() => () => clearTimeout(noticeTimer.current), []);
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
@@ -527,7 +536,14 @@ export function NavigationShell(
 				`[data-project-id="${CSS.escape(focusProjectId)}"]`,
 			);
 			if (!project) return;
-			project.focus({ preventScroll: true });
+			let row = project.querySelector<HTMLElement>(".project-sidebar-project-row");
+			project.querySelector<HTMLElement>(".project-sidebar-project-disclosure")
+				?.focus({ preventScroll: true });
+			project.scrollIntoView({ block: "nearest" });
+			if (row) {
+				row.dataset.flash = "";
+				setTimeout(() => delete row.dataset.flash, 600);
+			}
 			setFocusProjectId(undefined);
 		});
 		return () => cancelAnimationFrame(frame);
@@ -666,6 +682,14 @@ export function NavigationShell(
 	let documentAction = useCallback((channel: Api.Channel, action: DocumentAction) => {
 		setDrawerOpen(false);
 		setAccountOpen(false);
+		if (action === "copy-link") {
+			let url = new URL(documentDestination(projectsRef.current, channel.id), location.origin);
+			navigator.clipboard.writeText(url.href).then(
+				() => announce("Link copied"),
+				() => announce("Could not copy link"),
+			);
+			return;
+		}
 		if (action === "rename") {
 			requestTitleEdit(channel.id, "rename");
 			if (currentDocumentIdRef.current !== channel.id) {
@@ -687,7 +711,7 @@ export function NavigationShell(
 		}, reason => {
 			setError({ reason });
 		});
-	}, [acceptChannel, navigate, showDialog]);
+	}, [acceptChannel, announce, navigate, showDialog]);
 	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
@@ -803,7 +827,15 @@ export function NavigationShell(
 						}}
 						role="menu"
 					>
-						<button onClick={() => void signOut()} role="menuitem" type="button">Sign out</button>
+						<a href="/auth/github/install" role="menuitem">
+							<LockIcon aria-hidden="true" size={14} />
+							Manage repository access
+						</a>
+						<div role="separator" />
+						<button onClick={() => void signOut()} role="menuitem" type="button">
+							<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
+							Sign out
+						</button>
 					</div>
 				)}
 				accountMenuId={accountMenuId}
@@ -895,6 +927,9 @@ export function NavigationShell(
 				data-navigation-mode={mode}
 				onClickCapture={navigateLink}
 			>
+				<div aria-live="polite" role="status">
+					{notice && <p className="navigation-toast" key={notice}>{notice}</p>}
+				</div>
 				{sidebarPresence.phase !== "closed" && (
 					<div
 						aria-hidden={sidebarPresence.phase === "closing" ? "true" : undefined}

@@ -231,6 +231,15 @@ export function TableIcon(props: IconProps) {
 	);
 }
 
+export function LinkIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M7.87 7.39c-.3.16-.59.37-.84.63l-.01.01c-1.38 1.38-1.38 3.62 0 5l2.17 2.17c1.38 1.38 3.62 1.38 5 0l.01-.01c1.38-1.38 1.38-3.62 0-5" />
+			<path d="M10.13 10.61c.3-.16.59-.37.84-.63l.01-.01c1.38-1.38 1.38-3.62 0-5L8.81 2.8c-1.38-1.38-3.62-1.38-5 0l-.01.01c-1.38 1.38-1.38 3.62 0 5" />
+		</LineIcon>
+	);
+}
+
 export function DiagramIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
@@ -276,6 +285,15 @@ export function DiffIcon(props: IconProps) {
 			<line x1="5.5" x2="8.5" y1="7" y2="7" />
 			<line x1="7" x2="7" y1="5.5" y2="8.5" />
 			<line x1="9.5" x2="12.5" y1="11" y2="11" />
+		</LineIcon>
+	);
+}
+
+export function PencilIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M10.5 4.25 13.75 7.5" />
+			<path d="M3.25 14.75 3.9 11.6c.05-.25.17-.47.35-.65l7.6-7.6c.59-.59 1.54-.59 2.12 0l.94.94c.59.59.59 1.54 0 2.12l-7.6 7.6c-.18.18-.4.3-.65.35l-3.15.65c-.2.04-.4-.16-.36-.36Z" />
 		</LineIcon>
 	);
 }
