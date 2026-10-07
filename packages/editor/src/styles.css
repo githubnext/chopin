@@ -140,6 +140,35 @@
 	color: var(--color-text-primary);
 }
 
+.plan-research-brief {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	font-weight: 400;
+}
+
+.plan-research-brief[data-open] {
+	display: block;
+}
+
+.plan-research-more {
+	display: block;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	font: inherit;
+	margin-block-start: 0.125rem;
+	font-size: var(--text-xs);
+	font-weight: 400;
+	color: var(--color-text-tertiary);
+	cursor: pointer;
+}
+
+.plan-research-more:hover {
+	color: var(--color-text-secondary);
+}
+
 .plan-research-card[data-stage="cancelled"] .plan-research-title {
 	color: var(--color-text-tertiary);
 }

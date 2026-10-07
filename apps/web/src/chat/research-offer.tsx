@@ -6,6 +6,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { ResearchCard } from "@chopin/editor";
 import { SearchIcon } from "@chopin/icons";
 
 import type { ConversationPlan, Research } from "@chopin/protocol";
@@ -13,6 +14,7 @@ import type { ResearchRequestStore } from "../research-requests";
 import type { Wire } from "../wire";
 import { ResearchDraftController } from "./research-draft-controller";
 import { ResearchBriefEditor } from "./research-brief-editor";
+import "./research-offer.css";
 
 const RETRY_DELAYS = [2_000, 5_000, 10_000];
 
@@ -221,51 +223,119 @@ export function useResearchOfferLinks(
 	return { links, refresh };
 }
 
-function LinkedResearch(
-	{ id, store, canRetry }: { id: string; store: ResearchRequestStore; canRetry: boolean },
+const TRACK: readonly Research.RequestStage[] = [
+	"queued",
+	"searching",
+	"analyzing",
+	"writing",
+	"publishing",
+];
+
+/** Keep an active request's stage from stepping backwards; terminal stages always show. */
+export function forwardStage(
+	previous: Research.RequestStage | undefined,
+	next: Research.RequestStage,
+): Research.RequestStage {
+	let from = previous ? TRACK.indexOf(previous) : -1;
+	let to = TRACK.indexOf(next);
+	return to >= 0 && from > to ? previous! : next;
+}
+
+function AcceptedResearch(
+	{ offer, link, controls, canExecute }: {
+		offer: ConversationPlan.ResearchOffer;
+		link: OfferLinkView | undefined;
+		controls: ResearchOfferControls;
+		canExecute: boolean;
+	},
 ) {
-	let [retrying, setRetrying] = useState(false);
-	let [error, setError] = useState("");
+	let { store } = controls;
+	let id = link?.status === "linked" ? link.researchRequestId : undefined;
+	let [busy, setBusy] = useState(false);
+	let [error, setError] = useState<string>();
 	let subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
-	let request = useSyncExternalStore(subscribe, () => store.get(id), () => undefined);
-	useEffect(() => store.retain(id), [id, store]);
-	if (!request) return <p className="m-0 text-sm text-text-secondary">Loading research…</p>;
+	let request = useSyncExternalStore(
+		subscribe,
+		() => id ? store.get(id) : undefined,
+		() => undefined,
+	);
+	useEffect(() => id ? store.retain(id) : undefined, [id, store]);
+	let shown = useRef<Research.RequestStage | undefined>(undefined);
+	let stage = request ? forwardStage(shown.current, request.stage) : undefined;
+	shown.current = stage;
+	// Until the request is readable the card shows the accepted brief as waiting work.
+	let view = (request
+		? { ...request, stage }
+		: {
+			id: offer.id,
+			channelId: "",
+			question: offer.brief,
+			sources: [],
+			createdAt: "",
+			updatedAt: "",
+			state: "pending",
+			stage: "queued",
+		}) as Research.RequestView;
+	let canEdit = controls.canAct && canExecute && !!request;
+	let action = (run: () => Promise<Research.RequestView>, failure: string) => {
+		setBusy(true);
+		setError(undefined);
+		void run().catch(() => setError(failure)).finally(() => setBusy(false));
+	};
+	let canResume = link?.status === "pending" || link?.status === "unlinked";
+	let unverified = link?.status === "error" && link.exhausted;
+	let note = !request && (unverified
+		? "The research request could not be confirmed yet."
+		: link?.status === "unlinked"
+		? "Accepted but not started."
+		: undefined);
 	return (
-		<div className="flex flex-col gap-2 text-sm text-text-secondary">
-			<span role="status">
-				{request.stage === "ready"
-					? "Research ready"
-					: `Research ${request.stage}`}
-			</span>
-			{request.activity && <p className="m-0 text-xs text-text-tertiary">{request.activity}</p>}
-			{request.stage === "failed" && (
-				<p className="m-0 text-sm text-destructive-ink" role="alert">{request.error}</p>
-			)}
-			{canRetry && (request.stage === "failed" || request.stage === "cancelled") && (
-				<button
-					className="btn btn-sm btn-secondary self-end"
-					disabled={retrying}
-					onClick={() => {
-						setRetrying(true);
-						setError("");
-						void store.retry(id).catch(() =>
-							setError("Research could not be retried. Try again when connected.")
-						).finally(() => setRetrying(false));
-					}}
-					type="button"
-				>
-					{retrying ? "Retrying…" : "Retry research"}
-				</button>
-			)}
-			{error && <p className="m-0 text-sm text-destructive-ink" role="alert">{error}</p>}
-			{request.stage === "ready" && request.child && (
-				<button
-					className="btn btn-sm btn-secondary"
-					onClick={event => store.open(request.child!, store.opener(id, event.currentTarget))}
-					type="button"
-				>
-					Open research
-				</button>
+		<div className="flex flex-col gap-2">
+			<ResearchCard
+				actionError={error}
+				busy={busy}
+				canEdit={canEdit}
+				request={view}
+				onCancel={id && canEdit
+					? () => action(() => store.cancel(id), "Research could not be cancelled.")
+					: undefined}
+				onOpen={id && view.child
+					? opener => store.open(view.child!, store.opener(id, opener))
+					: undefined}
+				openButtonRef={id ? button => store.opener(id, button) : undefined}
+				onRetry={id && canEdit
+					? () =>
+						action(
+							() => store.retry(id),
+							"Research could not be retried. Try again when connected.",
+						)
+					: undefined}
+			/>
+			{(note
+				|| controls.canAct && canExecute && canResume
+				|| unverified && controls.canCheckLink) && (
+				<div className="flex items-center justify-end gap-2 text-xs text-text-tertiary">
+					{note && <span className="mr-auto">{note}</span>}
+					{controls.canAct && canExecute && canResume && (
+						<button
+							className="btn btn-sm btn-outline"
+							disabled={controls.busy.has(offer.id)}
+							onClick={() => controls.onAction(offer.id, "resume")}
+							type="button"
+						>
+							Resume
+						</button>
+					)}
+					{unverified && controls.canCheckLink && (
+						<button
+							className="btn btn-sm btn-outline"
+							onClick={() => controls.onRetryLink(offer.id)}
+							type="button"
+						>
+							Retry link check
+						</button>
+					)}
+				</div>
 			)}
 		</div>
 	);
@@ -284,6 +354,7 @@ export function ResearchOfferCard(
 	let [actionError, setActionError] = useState("");
 	let [acting, setActing] = useState(false);
 	let [editors, setEditors] = useState<Record<string, string>>({});
+	let initial = useRef(offer.status);
 	useLayoutEffect(() => {
 		controller.configure(controls.wire, !!controls.wire?.connected, offer);
 	}, [controller, controls.wire, controls.canAct, offer]);
@@ -323,8 +394,31 @@ export function ResearchOfferCard(
 	let disabled = busy || acting;
 	let canExecute = controls.canExecute ?? controls.canAct;
 	let link = controls.links[offer.id];
-	let canResume = link?.status === "pending" || link?.status === "unlinked";
-	let canRetryLink = link?.status === "error" && link.exhausted && controls.canCheckLink;
+	let entering = initial.current !== offer.status;
+	if (offer.status === "accepted") {
+		return (
+			<div
+				aria-label="Research suggestion"
+				aria-busy={busy}
+				className="chat-research ml-9 flex min-w-0 flex-col gap-2"
+				data-entering={entering ? "" : undefined}
+				data-research-offer={offer.id}
+				role="group"
+			>
+				<AcceptedResearch
+					canExecute={canExecute}
+					controls={controls}
+					link={link}
+					offer={offer}
+				/>
+				{link?.status !== "linked" && controls.errors[offer.id] && (
+					<p className="m-0 text-sm text-destructive-ink" role="alert">
+						{controls.errors[offer.id]}
+					</p>
+				)}
+			</div>
+		);
+	}
 	return (
 		<div
 			aria-label="Research suggestion"
@@ -473,44 +567,6 @@ export function ResearchOfferCard(
 				</div>
 			)}
 			{offer.status === "dismissed" && <p className="m-0 text-sm text-text-tertiary">Dismissed</p>}
-			{offer.status === "accepted" && link?.status === "linked" && link.researchRequestId
-				? (
-					<LinkedResearch
-						id={link.researchRequestId}
-						store={controls.store}
-						canRetry={controls.canAct && canExecute}
-					/>
-				)
-				: offer.status === "accepted" && (
-					<div className="flex items-center justify-between gap-2 text-sm text-text-secondary">
-						<span role="status">
-							{link?.exhausted || link?.status === "error"
-								? "Accepted; request link not yet verified"
-								: link?.status === "unlinked"
-								? "Accepted; waiting to start"
-								: "Research accepted"}
-						</span>
-						{controls.canAct && canExecute && canResume && (
-							<button
-								className="btn btn-sm btn-secondary"
-								disabled={busy}
-								onClick={() => controls.onAction(offer.id, "resume")}
-								type="button"
-							>
-								Resume
-							</button>
-						)}
-						{canRetryLink && (
-							<button
-								className="btn btn-sm btn-secondary"
-								onClick={() => controls.onRetryLink(offer.id)}
-								type="button"
-							>
-								Retry link check
-							</button>
-						)}
-					</div>
-				)}
 			{busy && <p className="m-0 text-xs text-text-tertiary" role="status">Saving…</p>}
 			{(actionError || draft.error) && (
 				<p className="m-0 text-sm text-destructive-ink" role="alert">

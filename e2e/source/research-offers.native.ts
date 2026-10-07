@@ -165,12 +165,15 @@ test("linked research explains a timeout and retries the same request from Chat"
 	let errors = await load(page);
 	await page.evaluate(() => window.researchOffersProbe.failResearch());
 	let ana = page.getByRole("region", { name: "ana", exact: true });
-	await expect(ana.getByRole("alert")).toHaveText("A public web-search request timed out.");
+	await expect(ana.getByRole("article", { name: "Research" })).toContainText("Research failed");
+	await expect(ana.getByRole("status").filter({ hasText: "timed out" })).toHaveText(
+		"A public web-search request timed out.",
+	);
 	await page.evaluate(() => window.researchOffersProbe.capabilities(false, true));
 	await expect(ana.getByRole("button", { name: "Retry research", exact: true })).toHaveCount(0);
 	await page.evaluate(() => window.researchOffersProbe.capabilities(true, true));
 	await ana.getByRole("button", { name: "Retry research", exact: true }).click();
-	await expect(ana.getByRole("status")).toHaveText("Research queued");
+	await expect(ana.getByRole("article", { name: "Research" })).toContainText("Waiting to start");
 	expect(await page.evaluate(() => window.researchOffersProbe.snapshot().requests)).toContain(
 		"retry:request",
 	);
