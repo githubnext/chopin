@@ -1348,6 +1348,12 @@ button.question-add:disabled {
 	outline: none;
 }
 
+/* The header title edits like a heading, not a form: beside its wash, a hairline is enough. */
+:where(.document-title-input):focus-visible {
+	outline-width: calc(var(--focus-ring-width) / 2);
+	outline-offset: calc(var(--focus-ring-width) / -2);
+}
+
 /* A listbox holds the keyboard's place on its highlighted option instead. */
 :where(.plan-language-menu[role="listbox"]):focus-visible {
 	outline: none;

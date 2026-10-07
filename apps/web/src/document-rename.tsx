@@ -6,6 +6,9 @@ import { TerminalAlert } from "./terminal-alert";
 import type { FormEvent, KeyboardEvent } from "react";
 
 function message(error: unknown): string {
+	if (error instanceof Api.ApiError && error.status === 409) {
+		return "A document with this title already exists. Try a different title.";
+	}
 	return error instanceof Error ? error.message : "Could not rename document.";
 }
 
@@ -85,14 +88,21 @@ export function DocumentRename(
 
 	if (inline) {
 		return (
-			<form className="document-title-form" data-focus-boundary="" onSubmit={submit}>
+			<form className="document-title-form" onSubmit={submit}>
 				<label className="sr-only" htmlFor={`document-title-${channel.id}`}>Document title</label>
 				<input
 					aria-invalid={error === undefined ? undefined : true}
 					className="document-title-input"
 					id={`document-title-${channel.id}`}
 					maxLength={120}
-					onBlur={() => void submit()}
+					onBlur={() => {
+						// Leaving a rejected title reverts it rather than repeating the failure.
+						if (error === undefined) void submit();
+						else if (!busy.current) {
+							cancelled.current = true;
+							onCancel();
+						}
+					}}
 					onChange={event => {
 						setTitle(event.target.value);
 						if (error !== undefined) report(undefined);
