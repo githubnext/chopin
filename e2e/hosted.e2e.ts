@@ -257,13 +257,12 @@ test("a known deleted channel keeps its context and routes back without retry", 
 	deleted = true;
 	await page.reload();
 
-	await expect(page.getByRole("heading", { name: "Cannot open Chopin" })).toBeVisible();
-	await expect(page.getByText(recoveryChannel.title, { exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Document not found" })).toBeVisible();
+	await expect(page.getByText(`We couldn't find "${recoveryChannel.title}" in ${score.fullName}.`))
+		.toBeVisible();
 	await expect(page.getByText(recoveryChannel.id, { exact: true })).toHaveCount(0);
-	await expect(page.getByText(recoveryChannel.slug, { exact: true })).toBeVisible();
-	await expect(page.getByText(score.fullName, { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
-	let channels = page.getByRole("link", { name: `View ${score.fullName} documents` });
+	let channels = page.getByRole("link", { name: `Open ${score.fullName}` });
 	await expect(channels).toHaveAttribute("href", "/documents/octo-org/score");
 	await channels.click();
 	await expect(page).toHaveURL("/documents/octo-org/score");
@@ -288,7 +287,7 @@ test("a transient channel failure retries the safe read", async ({ baseURL, page
 	);
 	await showKnownChannel(page);
 
-	await expect(page.getByText("storage is unavailable", { exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Couldn't open this document" })).toBeVisible();
 	await page.getByRole("button", { name: "Try again" }).click();
 	await expect(page.getByRole("banner").getByLabel(`Document: ${recoveryChannel.title}`))
 		.toBeVisible();
@@ -309,7 +308,7 @@ test("an unknown direct channel link stays privacy-safe", async ({ baseURL, page
 	await expect(page.getByText(score.fullName, { exact: true })).toHaveCount(0);
 	await expect(page.getByRole("link", { name: /channels$/ })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
-	await expect(page.getByRole("link", { name: "Back to repositories" })).toBeVisible();
+	await expect(page.getByRole("link", { name: "Go to Chopin" })).toBeVisible();
 });
 
 test("the Add project dialog traps focus, dismisses, and filters repositories", async ({ baseURL, page }) => {
