@@ -6,8 +6,9 @@ export async function linkedResearchJob(
 	context: Awaited<ReturnType<typeof hosted>>,
 	workspaceId: string,
 	role: "evidence" | "answer",
+	channelId = context.channel.id,
 ) {
-	let detail = await context.storage.research.get(context.channel.id, workspaceId);
+	let detail = await context.storage.research.get(channelId, workspaceId);
 	let initial = detail?.turns.find(turn => turn.kind === "initial");
 	if (!initial) throw new Error("initial research turn is missing");
 	let type = `research-${role}`;
@@ -15,7 +16,7 @@ export async function linkedResearchJob(
 	let targetKey = `${type}:workspace:${workspaceId}:turn:${initial.id}:${role}`;
 	let created = await context.storage.jobs.enqueue({
 		id: jobId,
-		channelId: context.channel.id,
+		channelId,
 		type,
 		version: 1,
 		origin: "user",
@@ -28,7 +29,7 @@ export async function linkedResearchJob(
 		lease: context.lease,
 	});
 	await context.storage.research.linkJob({
-		channelId: context.channel.id,
+		channelId,
 		workspaceId,
 		turnId: initial.id,
 		role,
