@@ -43,7 +43,7 @@ export function DecisionViewControl(
 				aria-current={view === "decisions" ? "page" : undefined}
 				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
-				className={`btn btn-sm transition-[background-color,box-shadow,color] ${
+				className={`btn btn-sm gap-1 transition-[background-color,box-shadow,color] ${
 					view === "decisions"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"
@@ -56,7 +56,6 @@ export function DecisionViewControl(
 				{unanswered > 0 && (
 					<span
 						aria-hidden="true"
-						className="ml-1"
 						data-plan-decision-count
 					>
 						<Count
