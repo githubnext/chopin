@@ -204,7 +204,7 @@ export function WrenchIcon(props: IconProps) {
 
 export function LockIcon(props: IconProps) {
 	return (
-		<LineIcon title="lock" {...props}>
+		<LineIcon {...props}>
 			<rect x="3.75" y="7.75" width="10.5" height="8.5" rx="1.5" />
 			<path d="M5.75 7.75V5a3.25 3.25 0 0 1 6.5 0v2.75" />
 			<path d="M9 11.25V12.75" />
@@ -214,7 +214,7 @@ export function LockIcon(props: IconProps) {
 
 export function CircleCloseIcon(props: IconProps) {
 	return (
-		<LineIcon title="circle-xmark" {...props}>
+		<LineIcon {...props}>
 			<circle cx="9" cy="9" r="7.25" />
 			<path d="M6.5 6.5L11.5 11.5M11.5 6.5L6.5 11.5" />
 		</LineIcon>
