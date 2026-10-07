@@ -162,9 +162,9 @@ export function ChatToggle(
 			aria-controls={controls}
 			aria-description={open ? status : undefined}
 			aria-expanded={open}
-			aria-label={open ? "Close sidebar" : `Show chat pane${status ? `, ${status}` : ""}`}
+			aria-label={open ? "Hide chat" : `Show chat${status ? `, ${status}` : ""}`}
 			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
-			data-tooltip={open ? "Close sidebar" : "Show chat"}
+			data-tooltip={open ? "Hide chat" : "Show chat"}
 			data-tooltip-verbatim={open ? "" : undefined}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}

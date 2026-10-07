@@ -32,7 +32,7 @@ test("the closed chat opener swaps its glyph without display changes", () => {
 
 	expect(markup.match(/class="chat-toggle-icon/g)).toHaveLength(2);
 	expect(markup.match(/size-\[14px\]/g)).toHaveLength(3);
-	expect(markup).toContain('aria-label="Show chat pane"');
+	expect(markup).toContain('aria-label="Show chat"');
 	expect(markup).toContain("chat-toggle-icon-sidebar");
 	expect(markup).toContain("rotate-180");
 	expect(markup).not.toContain("group-hover:hidden");
@@ -49,8 +49,8 @@ test("the open chat control has a distinct close action", () => {
 		}),
 	);
 
-	expect(markup).toContain('aria-label="Close sidebar"');
-	expect(markup).toContain('data-tooltip="Close sidebar"');
+	expect(markup).toContain('aria-label="Hide chat"');
+	expect(markup).toContain('data-tooltip="Hide chat"');
 	expect(markup).toContain('data-tooltip-verbatim=""');
 	expect(markup).toContain("panel-close.svg");
 });
@@ -65,6 +65,6 @@ test("live busy feedback stays immediate", () => {
 		}),
 	);
 
-	expect(markup).toContain('aria-label="Show chat pane, Planner working"');
+	expect(markup).toContain('aria-label="Show chat, Planner working"');
 	expect(markup).not.toContain('data-motion-feedback="count"');
 });

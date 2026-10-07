@@ -21,6 +21,7 @@ export function InteractiveSpecimens() {
 	let presence = useTransitionPresence(dialog, 220, motionImmediately());
 
 	function action(value: DocumentAction) {
+		if (value === "copy-link") return;
 		if (value === "archive" || value === "restore") {
 			setArchived(value === "archive");
 			return;

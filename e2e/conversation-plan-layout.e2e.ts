@@ -99,9 +99,9 @@ test("the Chat edge grows right, keeps its left-side reopen control, and remembe
 	expect(rememberedWidth).toBeLessThanOrEqual(Number(await handle.getAttribute("aria-valuemax")));
 	let frame = await box(page.locator(".workspace-frame"));
 
-	await page.getByRole("button", { name: "Close sidebar" }).click();
+	await page.getByRole("button", { name: "Hide chat" }).click();
 	await expect(chat).toBeHidden();
-	let opener = page.getByRole("button", { name: "Show chat pane" });
+	let opener = page.getByRole("button", { name: "Show chat" });
 	let openerBox = await box(opener);
 	expect(openerBox.x + openerBox.width).toBeLessThanOrEqual(frame.x + frame.width);
 	expect(openerBox.x - frame.x).toBeLessThan(32);

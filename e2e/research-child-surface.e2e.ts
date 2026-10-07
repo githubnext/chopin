@@ -163,7 +163,7 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 
 	let childClose = surface.getByRole("button", { name: `Close ${childTitle}`, exact: true });
 	let childChatToggle = surface.getByRole("button", {
-		name: "Show chat pane",
+		name: "Show chat",
 		exact: true,
 	});
 	await expect(childChatToggle).toBeVisible();
@@ -265,7 +265,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect(parentChat).not.toContainText(childRoomMessage);
 	await expect(parentChat).not.toContainText(childPlannerTranscript);
 	await childChat.getByRole("button", {
-		name: "Close sidebar",
+		name: "Hide chat",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();
@@ -304,7 +304,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect(childChat.getByText(childRoomMessage, { exact: true })).toBeVisible();
 	await expect(childChat.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
 	await childChat.getByRole("button", {
-		name: "Close sidebar",
+		name: "Hide chat",
 		exact: true,
 	}).click();
 	await parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }).click();
@@ -394,7 +394,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("inert", "");
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("aria-hidden", "true");
 	let childChatToggle = surface.getByRole("button", {
-		name: "Show chat pane",
+		name: "Show chat",
 		exact: true,
 	});
 	let childChat = surface.getByRole("complementary", { name: "Chat" });
@@ -411,7 +411,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeHidden();
 	await childChat.getByRole("button", {
-		name: "Close sidebar",
+		name: "Hide chat",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();
