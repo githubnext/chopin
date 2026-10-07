@@ -55,6 +55,10 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		name: "Comment on this passage",
 		exact: true,
 	});
+	// The toolbar enters with a scale; measure it once that has finished.
+	await commentAction.evaluate(element =>
+		Promise.all(element.closest("[role=toolbar]")!.getAnimations().map(item => item.finished))
+	);
 	let actionBox = await commentAction.boundingBox();
 	let iconBox = await commentAction.locator("[data-nucleo-icon]").boundingBox();
 	expect(actionBox).not.toBeNull();
