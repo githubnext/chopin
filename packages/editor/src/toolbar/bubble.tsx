@@ -7,8 +7,9 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
+import { ChevronIcon, CodeIcon, LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
 
 import { $linkAt, OPEN_LINK_EDITOR_COMMAND } from "./link";
 import { placeSurface } from "./placement";
@@ -67,6 +68,13 @@ const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
 	{ id: "number", glyph: "OL", label: "Numbered list" },
 ];
 
+const SHORT: Partial<Record<Block, string>> = {
+	paragraph: "Text",
+	quote: "Quote",
+	bullet: "List",
+	number: "Numbered",
+};
+
 /**
  * How to show a block the menu does not offer.
  *
@@ -74,10 +82,10 @@ const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
  * an agent may hold any of them, and the trigger has to say so rather than
  * claim the selection is something it is not.
  */
-function describe(block: Block): { glyph: string; label: string } {
+function describe(block: Block): { short: string; label: string } {
 	let known = BLOCKS.find(item => item.id === block);
-	if (known) return known;
-	return { glyph: block.toUpperCase(), label: `Heading ${block.slice(1)}` };
+	if (known) return { short: SHORT[block] ?? known.glyph, label: known.label };
+	return { short: block.toUpperCase(), label: `Heading ${block.slice(1)}` };
 }
 
 /**
@@ -128,14 +136,25 @@ export function $block(node: LexicalNode | null): Block {
 	return "paragraph";
 }
 
-type Mark = { format: TextFormatType; label: string; glyph: string; shortcut: string };
+type Mark = { format: TextFormatType; label: string; glyph: ReactNode; shortcut: string };
 
+/** Each letter is drawn in the style it applies, so the row reads as a format bar. */
 const MARKS: Mark[] = [
-	{ format: "bold", label: "Bold", glyph: "B", shortcut: "⌘B" },
-	{ format: "italic", label: "Italic", glyph: "I", shortcut: "⌘I" },
-	{ format: "strikethrough", label: "Strikethrough", glyph: "S", shortcut: "⌘⇧X" },
-	{ format: "underline", label: "Underline", glyph: "U", shortcut: "⌘U" },
-	{ format: "code", label: "Inline code", glyph: "<>", shortcut: "⌘E" },
+	{ format: "bold", label: "Bold", glyph: <span className="font-bold">B</span>, shortcut: "⌘B" },
+	{ format: "italic", label: "Italic", glyph: <span className="italic">I</span>, shortcut: "⌘I" },
+	{
+		format: "strikethrough",
+		label: "Strikethrough",
+		glyph: <span className="line-through">S</span>,
+		shortcut: "⌘⇧X",
+	},
+	{
+		format: "underline",
+		label: "Underline",
+		glyph: <span className="underline underline-offset-2">U</span>,
+		shortcut: "⌘U",
+	},
+	{ format: "code", label: "Inline code", glyph: <CodeIcon />, shortcut: "⌘E" },
 ];
 
 export function SelectionBubble(
@@ -300,6 +319,8 @@ export function SelectionBubble(
 			},
 			{ width, height: element.offsetHeight },
 			viewport,
+			8,
+			"above",
 		);
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top
@@ -362,10 +383,11 @@ export function SelectionBubble(
 							data-tooltip="Block type"
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
-							className={`${CELL} ${CELL_OFF}`}
+							className={`plan-menu-cell inline-flex h-7 shrink-0 items-center gap-0.5 rounded-sm pl-2 pr-1 text-sm font-semibold ${CELL_OFF}`}
 							data-press="small"
 						>
-							<span aria-hidden="true">{describe(block).glyph}</span>
+							<span aria-hidden="true">{describe(block).short}</span>
+							<ChevronIcon aria-hidden="true" className="size-3.5 rotate-90" />
 						</button>
 
 						<span aria-hidden="true" className={SEAM} />
@@ -376,6 +398,7 @@ export function SelectionBubble(
 								type="button"
 								aria-label={mark.label}
 								aria-pressed={active.has(mark.format)}
+								data-tooltip={`${mark.label} ${mark.shortcut}`}
 								title={`${mark.label} (${mark.shortcut})`}
 								onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format)}
 								className={`${CELL} ${active.has(mark.format) ? CELL_ON : CELL_OFF}`}

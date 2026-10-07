@@ -2846,3 +2846,25 @@
 		transition: none;
 	}
 }
+
+@keyframes plan-bubble-enter {
+	from {
+		opacity: 0;
+		transform: translateY(4px) scale(var(--dropdown-pre-scale));
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.plan-formatting-toolbar {
+	animation: plan-bubble-enter var(--duration-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-formatting-toolbar {
+		animation: none;
+	}
+}
