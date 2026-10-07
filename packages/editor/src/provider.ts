@@ -93,7 +93,17 @@ const MAX_OUTBOX_ITEMS = 1_000;
  * while is sent again in case it was dropped anyway.
  */
 const SEND_MS = 10;
+/**
+ * Resends back off from this, doubling up to `MAX_RESEND_MS`, so a server that
+ * is slow to commit is not also asked to take every backlog again.
+ */
 const RESEND_MS = 2_000;
+const MAX_RESEND_MS = 30_000;
+/**
+ * An update sent this many times without an acknowledgement is left for the
+ * next open to replay. Something other than a dropped frame is refusing it.
+ */
+const MAX_SENDS = 5;
 /** Merged updates stay far below the server's per-update limit. */
 const MERGE_BYTES = 64 * 1024;
 
@@ -118,6 +128,9 @@ export class PlanProvider implements Provider {
 	readonly #unsent = new Set<string>();
 	/** Outbox entries already outstanding when the resend timer last fired. */
 	#overdue = new Set<string>();
+	/** How often each outbox entry has been sent since the last open. */
+	readonly #sends = new Map<string, number>();
+	#resendDelay = RESEND_MS;
 	#pacing: ReturnType<typeof setTimeout> | undefined;
 	#resending: ReturnType<typeof setTimeout> | undefined;
 
@@ -185,15 +198,19 @@ export class PlanProvider implements Provider {
 			let merged = Y.mergeUpdates(group.map(id => this.#outbox.get(id)!));
 			let id = `merged-${this.#counter++}`;
 			let unsent = false;
+			let sends = 0;
 			for (let part of group) {
 				this.#outboxBytes -= this.#outbox.get(part)!.byteLength;
 				this.#outbox.delete(part);
 				if (this.#unsent.delete(part)) unsent = true;
 				this.#overdue.delete(part);
+				sends = Math.max(sends, this.#sends.get(part) ?? 0);
+				this.#sends.delete(part);
 			}
 			this.#outbox.set(id, merged);
 			this.#outboxBytes += merged.byteLength;
 			if (unsent) this.#unsent.add(id);
+			if (sends > 0) this.#sends.set(id, sends);
 			return id;
 		});
 	}
@@ -259,6 +276,10 @@ export class PlanProvider implements Provider {
 			this.#wire.on<Plan.Ack>("plan:ack", event => this.#settle(event.id)),
 			this.#wire.on<Plan.Awareness>("plan:awareness", event => this.#presence(event)),
 			this.#wire.on<Plan.Reset>("plan:reset", event => this.#reset(event)),
+			// Refused outright rather than dropped: repeating it changes nothing.
+			this.#wire.on<{ message?: string }>("session:error", event => {
+				if (event.message === "implementation is active") this.#park();
+			}),
 			this.#wire.on<Plan.Changes>("plan:changes", event => {
 				if (event.epoch === this.#epoch) this.#options.onChanges?.(event.changes);
 			}),
@@ -341,6 +362,7 @@ export class PlanProvider implements Provider {
 			this.#outboxBytes = 0;
 			this.#unsent.clear();
 			this.#overdue.clear();
+			this.#sends.clear();
 		} else {
 			this.#replay();
 		}
@@ -389,6 +411,8 @@ export class PlanProvider implements Provider {
 	 */
 	#replay(): void {
 		this.#unsent.clear();
+		this.#sends.clear();
+		this.#resendDelay = RESEND_MS;
 		for (let id of this.#merge([...this.#outbox.keys()])) this.#send(id);
 	}
 
@@ -431,15 +455,26 @@ export class PlanProvider implements Provider {
 			return;
 		}
 		let overdue = [...this.#outbox.keys()].filter(id =>
-			this.#overdue.has(id) && !this.#unsent.has(id)
+			this.#overdue.has(id) && !this.#unsent.has(id) && (this.#sends.get(id) ?? 0) < MAX_SENDS
 		);
-		for (let id of this.#merge(overdue)) this.#send(id);
+		if (overdue.length > 0) {
+			this.#resendDelay = Math.min(this.#resendDelay * 2, MAX_RESEND_MS);
+			for (let id of this.#merge(overdue)) this.#send(id);
+		}
 		this.#overdue = new Set(this.#outbox.keys());
-		if (this.#outbox.size > 0) this.#armResend();
+		let waiting = [...this.#outbox.keys()].some(id => (this.#sends.get(id) ?? 0) < MAX_SENDS);
+		if (waiting) this.#armResend();
 	}
 
 	#armResend(): void {
-		this.#resending ??= setTimeout(() => this.#resend(), RESEND_MS);
+		this.#resending ??= setTimeout(() => this.#resend(), this.#resendDelay);
+	}
+
+	/** Stop resending what is outstanding now. The next open still replays it. */
+	#park(): void {
+		for (let id of this.#outbox.keys()) {
+			if (!this.#unsent.has(id)) this.#sends.set(id, MAX_SENDS);
+		}
 	}
 
 	#stopTimers(): void {
@@ -449,6 +484,8 @@ export class PlanProvider implements Provider {
 		this.#resending = undefined;
 		this.#unsent.clear();
 		this.#overdue.clear();
+		this.#sends.clear();
+		this.#resendDelay = RESEND_MS;
 	}
 
 	/**
@@ -463,6 +500,7 @@ export class PlanProvider implements Provider {
 		let update = this.#outbox.get(id);
 		if (!this.#epoch || !update) return;
 		this.#wire.send("plan:update", { epoch: this.#epoch, id, update: encode(update) });
+		this.#sends.set(id, (this.#sends.get(id) ?? 0) + 1);
 		this.#armResend();
 	}
 
@@ -472,6 +510,9 @@ export class PlanProvider implements Provider {
 		this.#outbox.delete(id);
 		this.#outboxBytes -= update.byteLength;
 		this.#overdue.delete(id);
+		this.#sends.delete(id);
+		// The server is accepting again, so the next resend need not wait long.
+		this.#resendDelay = RESEND_MS;
 	}
 
 	#remote(event: Plan.Update): void {
@@ -511,7 +552,9 @@ export class PlanProvider implements Provider {
 	 * boundary where continuity ends.
 	 */
 	#reset(event: Plan.Reset): void {
-		if (event.epoch === this.#epoch) return;
+		// The same epoch is the server refusing an oversized update while
+		// keeping the document. Sending it again would be refused again.
+		if (event.epoch === this.#epoch) return this.#park();
 
 		this.#outbox.clear();
 		this.#stopTimers();

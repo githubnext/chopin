@@ -315,26 +315,30 @@ describe("opening the plan", () => {
 function server(drop: (index: number) => boolean) {
 	let doc = new Y.Doc();
 	let transport = wire();
-	let received = 0;
+	let received: Array<{ id: string; bytes: number }> = [];
 	let delivered = 0;
 	let send = transport.send;
-	transport.send = (kind: string, payload: Record<string, unknown> = {}) => {
-		send.call(transport, kind);
-		if (kind !== "plan:update") return;
-		if (drop(received++)) return;
-		delivered++;
-		let binary = atob(payload.update as string);
-		let update = Uint8Array.from(binary, char => char.charCodeAt(0));
-		Y.applyUpdate(doc, update);
-		transport.emit("plan:ack", { kind: "plan:ack", id: payload.id });
-	};
-	return {
+	let room = {
 		doc,
 		transport,
+		received,
+		drop,
 		get delivered() {
 			return delivered;
 		},
 	};
+	transport.send = (kind: string, payload: Record<string, unknown> = {}) => {
+		send.call(transport, kind);
+		if (kind !== "plan:update") return;
+		let binary = atob(payload.update as string);
+		let update = Uint8Array.from(binary, char => char.charCodeAt(0));
+		received.push({ id: payload.id as string, bytes: update.byteLength });
+		if (room.drop(received.length - 1)) return;
+		delivered++;
+		Y.applyUpdate(doc, update);
+		transport.emit("plan:ack", { kind: "plan:ack", id: payload.id });
+	};
+	return room;
 }
 
 function typing(doc: Y.Doc, count: number) {
@@ -391,5 +395,112 @@ describe("delivering local edits", () => {
 		jest.advanceTimersByTime(10_000);
 
 		expect(room.delivered).toBe(1);
+	});
+
+	it("backs off and then stops resending an edit nobody acknowledges", async () => {
+		jest.useFakeTimers();
+		let room = server(() => true);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+
+		typing(doc, 1);
+		// Sent at once, resent at 4s, then at 8s, 16s and 32s.
+		jest.advanceTimersByTime(7_000);
+		expect(room.received).toHaveLength(2);
+		jest.advanceTimersByTime(7_000);
+		expect(room.received).toHaveLength(3);
+
+		jest.advanceTimersByTime(10 * 60_000);
+		expect(room.received).toHaveLength(5);
+	});
+
+	it("does not repeat an edit the server refused", async () => {
+		jest.useFakeTimers();
+		let room = server(() => true);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+
+		typing(doc, 1);
+		room.transport.emit("session:error", {
+			kind: "session:error",
+			message: "implementation is active",
+		});
+		typing(doc, 1);
+		// Too large, in the real server: refused without rotating the epoch.
+		jest.advanceTimersByTime(100);
+		room.transport.emit("plan:reset", {
+			kind: "plan:reset",
+			epoch: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+			reason: "rebuilt",
+		});
+		jest.advanceTimersByTime(10 * 60_000);
+
+		expect(room.received).toHaveLength(2);
+	});
+
+	it("stops resending once the epoch is replaced", async () => {
+		jest.useFakeTimers();
+		let room = server(() => true);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+
+		typing(doc, 1);
+		room.transport.emit("plan:reset", {
+			kind: "plan:reset",
+			epoch: "01K0N4TR8K7JGM4R1J7PW4R8YK",
+			reason: "rebuilt",
+		});
+		jest.advanceTimersByTime(10 * 60_000);
+
+		expect(room.received).toHaveLength(1);
+	});
+
+	it("keeps a merged resend outstanding when the old ids are acknowledged late", async () => {
+		jest.useFakeTimers();
+		let room = server(() => true);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+
+		typing(doc, 1);
+		jest.advanceTimersByTime(100);
+		typing(doc, 1);
+		jest.advanceTimersByTime(4_000);
+		let [first, second, merged] = room.received.map(entry => entry.id);
+		expect(merged).toStartWith("merged-");
+
+		for (let id of [first, second]) {
+			room.transport.emit("plan:ack", { kind: "plan:ack", id });
+		}
+		room.drop = () => false;
+		jest.advanceTimersByTime(60_000);
+
+		expect(room.received.at(-1)?.id).toBe(merged);
+		expect(room.doc.getText("typed").toString()).toBe("xx");
+	});
+
+	it("replays a large backlog in chunks the server accepts", async () => {
+		jest.useFakeTimers();
+		let room = server(() => true);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+		let text = doc.getText("typed");
+		for (let i = 0; i < 64; i++) {
+			text.insert(text.length, "y".repeat(4_096));
+			jest.advanceTimersByTime(20);
+		}
+
+		room.drop = () => false;
+		let before = room.received.length;
+		await provider.resume();
+		let replayed = room.received.slice(before);
+
+		expect(replayed.length).toBeGreaterThan(1);
+		for (let entry of replayed) expect(entry.bytes).toBeLessThanOrEqual(64 * 1024);
+		expect(room.doc.getText("typed").length).toBe(64 * 4_096);
 	});
 });
