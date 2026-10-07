@@ -20,7 +20,7 @@ test("an icon button shows its label on keyboard focus", async ({ join }) => {
 	await addProject.focus();
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await expect(tooltip).toBeVisible();
-	await expect(tooltip).toHaveText("Add Project");
+	await expect(tooltip).toHaveText("Add project");
 	await page.getByRole("button", { name: /^New document in / }).first().focus();
 	await expect(tooltip).toHaveText("New document");
 	await page.getByRole("button", { name: "Hide sidebar" }).focus();
