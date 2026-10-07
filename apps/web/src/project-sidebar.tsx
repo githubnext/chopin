@@ -406,6 +406,19 @@ export function ProjectSidebar(
 	let [collapsedProjectIds, setCollapsedProjectIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
+	useEffect(() => {
+		let timer = window.setTimeout(() => {
+			void import("./dialog-prefetch").then(module =>
+				module.prefetchDialogs(
+					user.id,
+					projects.map(entry => entry.project),
+					catalogueMode === "archived",
+					projects,
+				)
+			);
+		}, 1500);
+		return () => window.clearTimeout(timer);
+	}, [catalogueMode, projects, user.id]);
 	let archivedButton = useRef<HTMLButtonElement>(null);
 	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
