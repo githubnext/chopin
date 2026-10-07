@@ -253,7 +253,11 @@ describe("mention picker markup", () => {
 		expect(html).toContain('alt=""');
 		expect(html).toContain("https://github.com/octocat.png?size=40");
 		expect(html).not.toContain("github.com/chopin.png");
-		expect(html).toContain("bg-brand");
+		expect(html).toContain(
+			'class="chat-agent-mark" data-circle="true" role="img" aria-label="Chopin"',
+		);
+		expect(html).toContain('fill="currentColor"');
+		expect(html).toContain('<svg aria-hidden="true"');
 	});
 
 	test("shows nothing but the login in a row", () => {

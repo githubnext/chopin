@@ -1,8 +1,10 @@
+export { ChopinIcon } from "./filled";
 export type { IconProps } from "./icon";
 export {
 	ArrowUpIcon,
 	CheckIcon,
 	ChevronIcon,
+	CircleCloseIcon,
 	ClockIcon,
 	CloseIcon,
 	CodeIcon,

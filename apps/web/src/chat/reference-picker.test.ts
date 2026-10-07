@@ -244,8 +244,11 @@ describe("reference picker accessibility", () => {
 
 		expect(render({ status: "loading", options: [] })).toContain("Loading documents...");
 		expect(render({ status: "ready", options: [] })).toContain("No matching documents.");
-		expect(render({ status: "error", options: [], error: new Error("Unavailable") }))
-			.toContain('role="alert">Unavailable');
+		let error = render({ status: "error", options: [], error: new Error("Unavailable") });
+		expect(error).toContain('role="alert"');
+		expect(error).toContain('class="icon-danger"');
+		expect(error).toContain('<svg aria-hidden="true"');
+		expect(error.replace(/<title>[^<]*<\/title>/g, "").replace(/<[^>]*>/g, "")).toBe("Unavailable");
 		expect(render({ status: "limit", options: [] })).toContain(
 			"A message can include up to 10 references.",
 		);

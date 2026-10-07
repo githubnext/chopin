@@ -152,8 +152,11 @@ test("document mentions use the actual semibold text for wrapped caret placement
 	await page.mouse.move(divider!.x + divider!.width / 2 + 250, divider!.y + 20, { steps: 8 });
 	await page.mouse.up();
 	await expect.poll(async () => (await chat.boundingBox())!.width).toBeCloseTo(500, 0);
-	await page.screenshot({ path: "/private/tmp/chopin-composer-production.png", fullPage: true });
-	await chat.screenshot({ path: "/private/tmp/chopin-composer-production-chat.png" });
+	await page.screenshot({
+		path: test.info().outputPath("chopin-composer-production.png"),
+		fullPage: true,
+	});
+	await chat.screenshot({ path: test.info().outputPath("chopin-composer-production-chat.png") });
 });
 
 test("read-only and archived notices replace the composer input", async ({ join, page, room }) => {

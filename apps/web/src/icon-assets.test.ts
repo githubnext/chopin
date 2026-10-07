@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SearchIcon } from "@chopin/icons";
+import { ChopinIcon, CircleCloseIcon, SearchIcon } from "@chopin/icons";
 
 let root = import.meta.dir;
 let repository = join(root, "../../..");
@@ -54,6 +54,8 @@ test("interface icons default to fourteen pixels", () => {
 		"ArrowUp",
 		"Check",
 		"Chevron",
+		"Chopin",
+		"CircleClose",
 		"Close",
 		"Document",
 		"Info",
@@ -85,8 +87,12 @@ test("interface icons default to fourteen pixels", () => {
 			let referenceStatus = (file.endsWith("chat/reference-picker.tsx")
 				|| file.endsWith("design-jig/reference-menu.tsx"))
 				&& match[1] === "Info" && size === 16;
+			let referenceFailure = (file.endsWith("chat/reference-status-icon.tsx")
+				|| file.endsWith("design-jig/reference-status-icon.tsx"))
+				&& match[1] === "CircleClose" && size === 16;
 			if (
 				size !== 14 && !emptyStateException && !stepperCaret && !composerNotice && !referenceStatus
+				&& !referenceFailure
 			) {
 				offenders.push(`${file}: ${match[0]}`);
 			}
@@ -172,4 +178,23 @@ test("directional controls reuse one chevron and one panel icon", () => {
 	expect(existsSync(join(root, "assets/icons/tool-chevron-down.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/icons/tool-chevron-right.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/figma/navigation/sidebar-right-3-hide.svg"))).toBe(false);
+});
+
+test("the shared Chopin symbol preserves the product logo rather than a generic note", () => {
+	let asset = readFileSync(join(root, "assets/figma/navigation/chopin.svg"), "utf8");
+	let path = /<path[^>]*d="([^"]+)"/.exec(asset)?.[1];
+	expect(path).toBeDefined();
+	let logo = renderToStaticMarkup(createElement(ChopinIcon));
+	expect(logo).toContain(`d="${path}"`);
+	expect(logo).toContain('fill="currentColor"');
+	expect(logo).toContain('width="14"');
+	expect(logo).toContain('aria-hidden="true"');
+});
+
+test("reference failures preserve the circular Nucleo cross", () => {
+	let icon = renderToStaticMarkup(createElement(CircleCloseIcon, { size: 16 }));
+	expect(icon).toContain('width="16"');
+	expect(icon).toContain('data-nucleo-icon=""');
+	expect(icon).toContain('r="7.25"');
+	expect(icon).toContain('d="M6.5 6.5L11.5 11.5M11.5 6.5L6.5 11.5"');
 });

@@ -252,9 +252,12 @@ describe("type", () => {
 });
 
 describe("edges and depth", () => {
-	it("has only a passive edge and a control edge", () => {
+	it("keeps neutral edges and the approved danger edge distinct", () => {
 		let edges = [...THEME.matchAll(/\n\s*(--color-[\w-]*edge):/g)].map(match => match[1]);
-		expect(edges).toEqual(["--color-edge", "--color-control-edge"]);
+		expect(edges.sort()).toEqual(["--color-control-edge", "--color-danger-edge", "--color-edge"]);
+		expect(declared("--color-danger-edge")).toBe(
+			"color-mix(in srgb, var(--color-ruby-7) 45%, transparent)",
+		);
 		expect(declared("--color-edge")).toBe("oklch(0 0 0 / 7%)");
 		expect(declared("--color-control-edge")).toBe("oklch(0 0 0 / 20%)");
 	});
@@ -403,9 +406,11 @@ describe("controls", () => {
 		);
 	});
 
-	it("puts Chat focus around the complete composer rather than its textarea", () => {
-		expect(THEME).toContain(".chat-composer .field:focus-within");
-		expect(THEME).toContain(".chat-composer textarea:focus");
+	it("puts Chat focus around the complete composer rather than its editable text", () => {
+		expect(THEME).toMatch(
+			/\.composer-surface:focus-within[^}]*\{[^}]*outline:\s*var\(--edge-width\) solid var\(--color-brand\);[^}]*outline-offset:\s*0/s,
+		);
+		expect(THEME).toMatch(/\.composer-surface \.composer-draft-input\s*\{\s*outline:\s*none/);
 	});
 
 	it("uses the two designed control edges across fields and choices", () => {
@@ -594,7 +599,7 @@ describe("migration", () => {
 		let controls: StandardControl[] = [
 			{
 				file: "apps/web/src/chat/chat.tsx",
-				marker: 'className="field flex flex-col"',
+				marker: 'className="composer-surface field"',
 				name: "chat composer",
 				tag: "div",
 				utility: "field",

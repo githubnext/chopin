@@ -1120,3 +1120,13 @@ button.question-add:disabled {
 		scale: none;
 	}
 }
+
+/* Composed fields place the focus boundary around their input and actions. */
+.composer-surface:focus-within, .composer-surface[data-focus] {
+	outline: var(--edge-width) solid var(--color-brand);
+	outline-offset: 0;
+}
+
+.composer-surface .composer-draft-input {
+	outline: none;
+}

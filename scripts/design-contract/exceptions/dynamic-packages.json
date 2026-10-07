@@ -240,9 +240,16 @@
 				"props",
 				"unresolved JSX props > LockIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CircleCloseIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "d9b7dffc6cb82982799d7f445f6d54471da23a659b8690be2446a0c79ffac8c1"
+		"sourceHash": "f7716f3a73ed04f57fd84f4ef9aa4398868fb9dcbd5e8c50f682db93e07f60e4"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",
@@ -663,5 +670,19 @@
 			]
 		],
 		"sourceHash": "1bd51181586edf1aedd919cf00b3e825a5efcda631fee849f88df887f1adad3f"
+	},
+	{
+		"file": "packages/icons/src/filled.tsx",
+		"reason": "Shared brand icon forwards typed SVG accessibility, size and caller styling props. Static caller values are scanned; artwork is the existing Chopin logo.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ChopinIcon > <svg>",
+				1
+			]
+		],
+		"sourceHash": "b6454ae171e15bf7a00d5cfc6ca34141ea34f87484d16dead55c6ae9dfc3ea09"
 	}
 ]

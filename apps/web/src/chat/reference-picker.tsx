@@ -214,7 +214,9 @@ export function ReferencePicker(
 		state: ReferencePickerState;
 	},
 ) {
-	let [animate] = useState(() => document.documentElement.dataset.motionInput === "pointer");
+	let [animate] = useState(() =>
+		typeof document !== "undefined" && document.documentElement.dataset.motionInput === "pointer"
+	);
 	let label = "Document references";
 	let empty = state.status === "ready" && state.truncated
 		? "No matches in the available documents."

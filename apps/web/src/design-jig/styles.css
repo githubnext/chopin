@@ -166,9 +166,6 @@ html[data-jig], [data-jig] body {
 .current-chat .chat-transcript {
 	display: none;
 }
-.current-chat textarea {
-	outline: none;
-}
 .sent-message {
 	border-top: var(--edge-width) solid var(--color-edge);
 	padding-top: 0.5rem;
@@ -302,10 +299,6 @@ html[data-jig], [data-jig] body {
 .composer-surface[data-mode="chopin"]::before {
 	opacity: var(--composer-glow-opacity);
 }
-.composer-surface:focus-within, .composer-surface[data-focus] {
-	outline: var(--edge-width) solid var(--color-brand);
-	outline-offset: 0;
-}
 .composer-surface[data-error] {
 	border-color: var(--color-destructive);
 }
@@ -324,7 +317,6 @@ html[data-jig], [data-jig] body {
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	color: var(--color-text-primary);
-	outline: none;
 	overflow-y: auto;
 	white-space: pre-wrap;
 	overflow-wrap: break-word;
