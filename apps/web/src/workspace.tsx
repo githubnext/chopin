@@ -21,7 +21,7 @@ import { workspaceSizing } from "./workspace-sizing";
 import "./workspace-sizing.css";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
-import { usePaneMotion } from "./pane-motion";
+import { sidebarMoving, usePaneMotion, usePaneSettledWidth } from "./pane-motion";
 
 import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
 import type {
@@ -65,11 +65,19 @@ export function useWorkspaceLayout() {
 	useLayoutEffect(() => {
 		let element = frame.current;
 		if (!element) return;
-		let measure = () => setAvailable(element.clientWidth);
+		let measure = () => {
+			if (!sidebarMoving()) setAvailable(element.clientWidth);
+		};
 		measure();
 		let observer = new ResizeObserver(measure);
 		observer.observe(element);
-		return () => observer.disconnect();
+		document.addEventListener("transitionend", measure);
+		document.addEventListener("transitioncancel", measure);
+		return () => {
+			observer.disconnect();
+			document.removeEventListener("transitionend", measure);
+			document.removeEventListener("transitioncancel", measure);
+		};
 	}, []);
 	return { available, frame, mode: workspaceSizing(available, 500).mode };
 }
@@ -269,6 +277,8 @@ export function Workspace(
 		immediately,
 	);
 	let chatTrack = usePaneMotion(chatPresence.phase);
+	let documentSwap = useRef<HTMLDivElement>(null);
+	usePaneSettledWidth(documentSwap);
 	// The outgoing document stays under Chat until Chat has faded in over it.
 	let documentPresence = useTransitionPresence(
 		presentation.documentVisible ? true : undefined,
@@ -539,6 +549,7 @@ export function Workspace(
 						<div
 							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
 							data-workspace-document-swap
+							ref={documentSwap}
 						>
 							<ContentSwapLayer
 								active={presentation.documentVisible && presentation.documentView === "plan"}
