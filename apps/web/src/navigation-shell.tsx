@@ -688,6 +688,26 @@ export function NavigationShell(
 		void mutation.then(detail => {
 			acceptChannel(detail.channel);
 			if (action === "restore") setCatalogueMode("active");
+			else {
+				showNotice({
+					message: `Archived ${detail.channel.title}`,
+					action: {
+						label: "Undo",
+						onAction: () => {
+							void Api.restoreChannel(detail.channel.id).then(
+								restored => acceptChannel(restored.channel),
+								reason => setError({ reason }),
+							);
+							requestAnimationFrame(() =>
+								document.querySelector<HTMLElement>(
+									"[data-project-sidebar] [aria-current=page]",
+								)?.focus({ preventScroll: true })
+							);
+						},
+					},
+					duration: 5000,
+				});
+			}
 		}, reason => {
 			setError({ reason });
 		});
