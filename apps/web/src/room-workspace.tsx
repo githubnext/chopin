@@ -1017,6 +1017,7 @@ export function RoomWorkspace(
 						commentPresentation={mode === "split" ? "popover" : "sheet"}
 						connection={status === "deleted" ? "closed" : status}
 						key={workspaceArchivedAt ? "archived" : "active"}
+						disclosureMotion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}
 						onScrollTop={setPlanScrollTop}
 						onState={setPlanState}
