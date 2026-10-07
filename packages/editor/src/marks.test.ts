@@ -15,7 +15,7 @@
  * placement has no test either.
  */
 
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import { clear, decidedRanges, holds, paint, paintDecided, pin, union, unpin } from "./marks";
 
@@ -109,11 +109,40 @@ describe("sharing the registry", () => {
 	});
 });
 
-/** A short one, so a lapse can be watched without waiting five seconds for it. */
-const BRIEF = 5;
-
-function tick(ms: number): Promise<void> {
-	return new Promise(resolve => setTimeout(resolve, ms));
+/** Advance pin timers synchronously, without depending on scheduler load. */
+function withClock(test: (advance: (ms: number) => void) => void): void {
+	let now = 0;
+	let next = 0;
+	let timers = new Map<number, { at: number; callback: () => void }>();
+	let schedule = spyOn(globalThis, "setTimeout").mockImplementation(
+		(
+			(callback: () => void, delay = 0) => {
+				let id = next++;
+				timers.set(id, { at: now + delay, callback });
+				return id;
+			}
+		) as typeof setTimeout,
+	);
+	let cancel = spyOn(globalThis, "clearTimeout").mockImplementation(timer => {
+		timers.delete(timer as unknown as number);
+	});
+	try {
+		test(ms => {
+			let target = now + ms;
+			while (true) {
+				let due = [...timers].sort((a, b) => a[1].at - b[1].at)[0];
+				if (!due || due[1].at > target) break;
+				now = due[1].at;
+				timers.delete(due[0]);
+				due[1].callback();
+			}
+			now = target;
+		});
+	} finally {
+		clear();
+		cancel.mockRestore();
+		schedule.mockRestore();
+	}
 }
 
 describe("being sent somewhere", () => {
@@ -152,24 +181,36 @@ describe("being sent somewhere", () => {
 		expect(holds("questions")).toBe(true);
 	});
 
-	it("goes out on its own, so it cannot become a standing mark", async () => {
-		pin(editor, "comments", [points("c")], BRIEF);
-		expect(union()).toEqual([points("c")]);
+	it("goes out on its own, so it cannot become a standing mark", () => {
+		withClock(advance => {
+			pin(editor, "comments", [points("c")], 30);
+			advance(29);
+			expect(union()).toEqual([points("c")]);
+			expect(holds("comments")).toBe(true);
 
-		await tick(BRIEF * 4);
-
-		expect(union()).toEqual([]);
-		expect(holds("comments")).toBe(false);
+			advance(1);
+			expect(union()).toEqual([]);
+			expect(holds("comments")).toBe(false);
+		});
 	});
 
 	/** Walking to the next place has to keep the pin alive, or it cannot be walked. */
-	it("starts the clock again each time it is asked", async () => {
-		pin(editor, "comments", [points("c1")], BRIEF * 6);
-		await tick(BRIEF * 3);
-		pin(editor, "comments", [points("c2")], BRIEF * 6);
-		await tick(BRIEF * 3);
+	it("starts the clock again each time it is asked", () => {
+		withClock(advance => {
+			pin(editor, "comments", [points("c1")], 30);
+			advance(15);
+			pin(editor, "comments", [points("c2")], 30);
 
-		expect(union()).toEqual([points("c2")]);
+			advance(16);
+			expect(union()).toEqual([points("c2")]);
+			expect(holds("comments")).toBe(true);
+			advance(13);
+			expect(union()).toEqual([points("c2")]);
+
+			advance(1);
+			expect(union()).toEqual([]);
+			expect(holds("comments")).toBe(false);
+		});
 	});
 
 	it("is only the owner's to drop", () => {
