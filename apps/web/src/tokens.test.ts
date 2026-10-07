@@ -732,6 +732,12 @@ describe("migration", () => {
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],
+			["apps/web/src/chat/chat.tsx", {
+				action: "Resume Planner",
+				marker: 'wire?.send("chat:resume")',
+				size: "btn-icon",
+				tiers: ["btn-secondary"],
+			}],
 			["packages/editor/src/send-action.tsx", {
 				action: "shared send action",
 				marker: "aria-label={label}",

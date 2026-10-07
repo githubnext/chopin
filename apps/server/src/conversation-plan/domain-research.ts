@@ -1,5 +1,6 @@
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import { isDeepStrictEqual } from "node:util";
+import * as Draft from "@chopin/draft";
 import { validateSource } from "./sources";
 import { assertResearchOfferShape, assertStateShape, MAX_RESEARCH_OFFERS } from "./validation";
 import { namesStaleResearchOption, taskMatches } from "./research-snapshots";
@@ -14,7 +15,9 @@ export function offerResearch(
 	if (
 		!proposal || typeof proposal !== "object" || Array.isArray(proposal)
 		|| Object.keys(proposal).some((key) =>
-			!["id", "needId", "contextId", "source", "brief", "threadId", "task"].includes(key)
+			!["id", "needId", "contextId", "source", "brief", "threadId", "task", "workflow"].includes(
+				key,
+			)
 		)
 	) throw new Error("invalid research offer proposal");
 	let offer: ConversationPlan.ResearchOffer = {
@@ -61,10 +64,29 @@ export function actOnResearchOffer(
 	let index = current.findIndex((item) => item.id === offerId);
 	if (index < 0) throw new Error("research offer is missing");
 	let offer = current[index];
+	if (offer.workflow && offer.status !== "offered") {
+		assertResearchOfferShape({ ...offer, action: { ...action, kind: offer.action!.kind } });
+		return state;
+	}
 	let status: ConversationPlan.ResearchOffer["status"] = action.kind === "research"
 		? "accepted"
 		: "dismissed";
-	assertResearchOfferShape({ ...offer, status, action });
+	let updated: ConversationPlan.ResearchOffer = {
+		...offer,
+		status,
+		action: structuredClone(action),
+	};
+	if (offer.workflow && status === "accepted") {
+		if (!offer.workflow.published || !offer.brief.trim()) {
+			throw new Error("Research brief is not ready");
+		}
+		Draft.create(offer.brief);
+		updated.workflow = {
+			...offer.workflow,
+			accepted: { brief: offer.brief, revision: offer.workflow.revision, executionKey: offer.id },
+		};
+	}
+	assertResearchOfferShape(updated);
 	if (offer.status !== "offered") {
 		if (
 			offer.action?.id === action.id && offer.action.kind === action.kind
@@ -79,9 +101,7 @@ export function actOnResearchOffer(
 	let next: State = {
 		...state,
 		revision: state.revision + 1,
-		researchOffers: current.map((item, position) =>
-			position === index ? { ...item, status, action: structuredClone(action) } : item
-		),
+		researchOffers: current.map((item, position) => position === index ? updated : item),
 	};
 	assertStateShape(next);
 	return next;

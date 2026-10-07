@@ -36,6 +36,7 @@ import {
 	beforeInputSelection,
 	boundedChatError,
 	chatSendPayload,
+	destinationCue,
 	insertReference,
 	MAX_REFERENCES,
 	prepareDraftSubmission,
@@ -44,6 +45,7 @@ import {
 	referenceTriggerKey,
 	reviseComposerDraft,
 } from "./references";
+import { RunStack } from "./run-card";
 import { Transcript } from "./transcript";
 import type { TranscriptDecisions } from "./transcript";
 import type { CardLink } from "../conversation-plan/links";
@@ -52,6 +54,7 @@ import type { ChatDestination } from "../conversation-plan/source";
 import type { ResearchOfferControls } from "./research-offer";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
+import plannerResume from "../assets/icons/planner-resume.svg";
 
 import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
@@ -77,12 +80,27 @@ export type ChatProps = {
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
 	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
-	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryAnalysis?: (
+		messageId: string,
+		actionId: string,
+		lane?: "decision" | "research",
+	) => Promise<void>;
 	onRetryJob?: (jobId: string) => Promise<void>;
 	decisions?: TranscriptDecisions;
 	researchOffers?: ResearchOfferControls;
 	sourceDestination?: ChatDestination;
+	/** Opens Decisions, where a waiting workflow's questions are. */
+	onShowDecisions?: () => void;
 };
+
+/** How many runs are still live, and how many are paused and resumable. */
+export function runCounts(runs: Wire.Runs | undefined): { active: number; paused: number } {
+	let list = runs ?? [];
+	return {
+		active: list.filter(run => run.status === "running" || run.status === "waiting").length,
+		paused: list.filter(run => run.status === "paused").length,
+	};
+}
 
 export function Chat(
 	{
@@ -101,6 +119,7 @@ export function Chat(
 		researchOffers,
 		sourceDestination,
 		people = [],
+		onShowDecisions,
 		referencesEnabled,
 		repository,
 		room,
@@ -112,6 +131,8 @@ export function Chat(
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
 	let [turn, setTurn] = useState<Wire.Turn>();
+	let [runs, setRuns] = useState<Wire.Runs>();
+	let counts = runCounts(runs);
 	let [draft, setDraft] = useState<ComposerDraft>({
 		text: "",
 		references: [],
@@ -130,6 +151,7 @@ export function Chat(
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let instructionsId = useId();
+	let cueId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
 	let reportedBusy = useRef(false);
@@ -202,6 +224,7 @@ export function Chat(
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
 				setTurn(frame.turn);
+				setRuns(frame.runs);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
 				activity.current?.({ type: "working", busy: frame.busy });
@@ -252,6 +275,7 @@ export function Chat(
 				reportedBusy.current = frame.busy;
 				setBusy(frame.busy);
 				setTurn(frame.turn);
+				setRuns(frame.runs);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
 		];
@@ -280,6 +304,10 @@ export function Chat(
 		setSelection({ start: 0, end: 0 });
 		setDismissedPicker(undefined);
 	};
+
+	let cue = sendError
+		? undefined
+		: destinationCue(draft.text, draft.references, agent, referencesEnabled);
 
 	let submit = () => {
 		if (submission.current || !composerReady || !wire) return;
@@ -379,6 +407,19 @@ export function Chat(
 					: undefined}
 			/>
 
+			{agent && !!runs?.length && (
+				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
+					<RunStack
+						onPause={runId =>
+							wire?.send("chat:pause-run", { runId })}
+						onResume={runId =>
+							wire?.send("chat:resume-run", { runId })}
+						onShowDecisions={onShowDecisions}
+						runs={runs}
+					/>
+				</div>
+			)}
+
 			<div className="chat-composer relative shrink-0 px-2.5 pb-2.5">
 				{pickerOpen && trigger && (
 					<ReferencePicker
@@ -414,7 +455,11 @@ export function Chat(
 							: undefined}
 						aria-autocomplete="list"
 						aria-controls={mentionOpen ? mentionPickerId : pickerOpen ? pickerId : undefined}
-						aria-describedby={referencesEnabled ? instructionsId : undefined}
+						aria-describedby={[
+							referencesEnabled ? instructionsId : undefined,
+							cue ? cueId : undefined,
+						]
+							.filter(Boolean).join(" ") || undefined}
 						aria-disabled={!composerReady || submitting}
 						aria-expanded={pickerOpen || mentionOpen}
 						aria-haspopup="listbox"
@@ -550,7 +595,17 @@ export function Chat(
 								{sendError}
 							</TerminalAlert>
 						)}
-						{agent && busy && (
+						{cue && (
+							<p
+								className="mr-auto min-w-0 text-sm text-text-tertiary [overflow-wrap:anywhere]"
+								data-destination={cue.to}
+								id={cueId}
+								role="status"
+							>
+								{cue.text}
+							</p>
+						)}
+						{agent && (busy || counts.active > 0) && (
 							<button
 								aria-label="Stop Chopin"
 								className="btn btn-icon btn-secondary"
@@ -559,6 +614,17 @@ export function Chat(
 								type="button"
 							>
 								<img alt="" className="size-[14px]" src={plannerStop} />
+							</button>
+						)}
+						{agent && !busy && !counts.active && counts.paused > 0 && (
+							<button
+								aria-label="Resume Planner"
+								className="btn btn-icon btn-secondary"
+								onClick={() => wire?.send("chat:resume")}
+								title="Resume Planner"
+								type="button"
+							>
+								<img alt="" className="size-[14px]" src={plannerResume} />
 							</button>
 						)}
 						<SendAction

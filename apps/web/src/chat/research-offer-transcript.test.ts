@@ -64,10 +64,10 @@ test("the exact public brief appears under its source message and viewer control
 	expect(source).toBeGreaterThan(0);
 	expect(offer).toBeGreaterThan(source);
 	expect(writer).toContain("Research VPS costs &lt;without&gt; assuming a provider.");
-	expect(writer).toContain(">Research</button>");
+	expect(writer).toContain(">Start research</button>");
 	expect(writer).toContain(">Dismiss</button>");
 	let viewer = render(false);
 	expect(viewer).toContain('data-research-offer="offer-1"');
-	expect(viewer).not.toContain(">Research</button>");
+	expect(viewer).not.toContain(">Start research</button>");
 	expect(viewer).not.toContain(">Dismiss</button>");
 });

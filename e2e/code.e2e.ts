@@ -57,8 +57,8 @@ async function diagramGeometry(page: Page) {
 	return await region.evaluate(element => {
 		let svg = element.querySelector("svg")!;
 		let bounds = svg.getBoundingClientRect();
-		let labels = [...svg.querySelectorAll("text")];
-		let drawn = [...svg.querySelectorAll("text, rect, path[marker-end]")];
+		let labels = [...svg.querySelectorAll(".node .nodeLabel")];
+		let drawn = [...svg.querySelectorAll("foreignObject, rect, path[marker-end]")];
 		return {
 			edges: svg.querySelectorAll("path[marker-end]").length,
 			labels: labels.length,
@@ -169,6 +169,29 @@ test("a diagram is shown with its source hidden by default", async ({ join, seed
 	await expect(content(page).locator("[data-plan-preview] svg")).toBeVisible();
 	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
 	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
+});
+
+test("diagram labels keep arrows, operators and entity codes as written", async ({ join, seed }) => {
+	await seed(`\`\`\`mermaid
+flowchart LR
+	A["create_router(pool: SqlitePool, config: Config) -> Router"] -- "a && b => c" --> B["Vec#lt;T#gt; or Option#lt;&str#gt;"]
+	B --> C["say #quot;hi#quot; when n #gt; 0"]
+\`\`\`
+`);
+	let page = await join("ana");
+
+	let svg = content(page).locator("[data-plan-preview] svg");
+	await expect(svg).toBeVisible();
+	let labels = await svg.evaluate(element =>
+		[...element.querySelectorAll("g.label, g.edgeLabel")].map(label =>
+			(label.textContent ?? "").replace(/\s+/g, " ").trim()
+		)
+	);
+	expect(labels).toContain("create_router(pool: SqlitePool, config: Config) -> Router");
+	expect(labels).toContain("a && b => c");
+	expect(labels).toContain("Vec<T> or Option<&str>");
+	expect(labels).toContain('say "hi" when n > 0');
+	expect(labels.join(" ")).not.toMatch(/&(?:gt|lt|amp|quot|#\d+);|#(?:gt|lt|quot);/);
 });
 
 test("an invalid diagram leaves its error inside the fence", async ({ join, seed }) => {

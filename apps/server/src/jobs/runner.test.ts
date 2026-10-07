@@ -6,6 +6,7 @@ import { JobService } from "./service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
 import type { JobDefinition } from "./registry";
+import type { JobExecutionDiagnostic } from "./registry";
 import type { JobRunnerOptions, ResolvedJobCredential } from "./runner";
 import type { JsonValue } from "../storage/model";
 
@@ -552,6 +553,57 @@ describe("background job runner", () => {
 					],
 				},
 			});
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("reports the last validated operational diagnostic when a worker times out", async () => {
+		let reported: Array<{ message: string; diagnostic?: JobExecutionDiagnostic }> = [];
+		let registered = definition(
+			async execution => {
+				let diagnostic = {
+					stage: "public-web",
+					phase: "waiting-web-search",
+					webCalls: 1,
+					webSuccesses: 0,
+				};
+				execution.diagnostic?.(diagnostic);
+				diagnostic.phase = "mutated-after-report";
+				execution.signal.addEventListener(
+					"abort",
+					() => execution.diagnostic?.({ phase: "late-cleanup" }),
+					{ once: true },
+				);
+				return new Promise<JsonValue>(() => {});
+			},
+			"none",
+			1,
+			25,
+		);
+		let value = await setup(registered, undefined, true, async (_job, error, diagnostic) => {
+			reported.push({ message: error instanceof Error ? error.message : "unknown", diagnostic });
+			throw new Error("reporting cannot change timeout settlement");
+		});
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.state === "failed"
+			);
+			expect(reported).toEqual([{
+				message: "attempt-timeout",
+				diagnostic: {
+					stage: "public-web",
+					phase: "waiting-web-search",
+					webCalls: 1,
+					webSuccesses: 0,
+				},
+			}]);
+			expect((await value.service.get(value.channelId, queued.job.id))!.job.reason).toBe(
+				"attempts-exhausted:attempt-timeout",
+			);
 		} finally {
 			await value.runner.shutdown();
 			await value.storage.close();

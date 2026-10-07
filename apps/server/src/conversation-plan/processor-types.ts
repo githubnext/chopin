@@ -2,7 +2,7 @@ import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { Plan } from "../plan/service";
 import type { EffectDeps } from "./effects";
 import type { Interpretation, InterpretInput } from "./interpret";
-// Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
+import type { ResearchInput, ResearchInterpretation } from "./research-interpreter";
 
 export type State = ConversationPlan.State;
 
@@ -27,8 +27,14 @@ export type Dependencies = {
 	publish: (state: State) => void;
 	active: () => boolean;
 	interpret?: (input: InterpretInput, signal: AbortSignal) => Promise<Interpretation>;
+	researchInterpret?: (
+		input: ResearchInput,
+		signal: AbortSignal,
+	) => Promise<ResearchInterpretation>;
 	effects?: EffectCommands;
 	onError?: (error: unknown) => void;
+	researchChanged?: () => void;
+	researchPresence?: (event: ConversationPlan.ResearchPresenceChanged) => void;
 };
 
 export type EffectCommands = Omit<EffectDeps, "applied" | "markApplied">;

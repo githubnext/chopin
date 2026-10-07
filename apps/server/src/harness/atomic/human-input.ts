@@ -15,25 +15,23 @@ import type { DocumentRoom } from "../../agent/tools";
  * Atomic owns input requests; Chopin owns their shared decision records.
  *
  * A request nobody answers within `expiresInMs` expires: its cards stay in
- * Decisions marked expired, and Atomic gets no answer.
+ * Decisions marked expired, and Atomic gets no answer. An answer to a workflow
+ * question is returned only once `hold` allows it, so a paused run stays stopped.
  */
 export function createHumanInput(
 	room: DocumentRoom,
 	expiresInMs = limits.INPUT_EXPIRY_MS,
+	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 ): HostInput {
 	async function questionnaire(
 		params: QuestionParams,
 		options: HostInputOptions,
 	): Promise<QuestionnaireResult> {
 		if (options.signal.aborted) return { answers: [], cancelled: true };
-		let workflow = [
-			options.workflowRunId === undefined ? undefined : `Workflow run: ${options.workflowRunId}`,
-			options.workflowStageId === undefined ? undefined : `stage: ${options.workflowStageId}`,
-		].filter(value => value !== undefined).join("; ");
 		let definition = Questions.identify({
 			questions: params.questions.map(question => ({
 				header: question.header,
-				question: workflow ? `${question.question}\n\n${workflow}` : question.question,
+				question: question.question,
 				options: question.options.map(option => ({
 					label: option.label,
 					// Decisions shows no preview pane, so the mockup or code a member
@@ -57,6 +55,10 @@ export function createHumanInput(
 		);
 		if (options.signal.aborted || ended.some(outcome => outcome.status === "expired")) {
 			return { answers: [], cancelled: true };
+		}
+		if (hold && options.workflowRunId !== undefined) {
+			await hold(options.workflowRunId, options.signal);
+			if (options.signal.aborted) return { answers: [], cancelled: true };
 		}
 		let answers: QuestionAnswer[] = [];
 		ended.forEach((outcome, questionIndex) => {

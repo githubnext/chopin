@@ -106,6 +106,8 @@ export type StartPlannerResearchRequest = {
 };
 
 export type StartPlannerInlineResearchRequest = StartPlannerResearchRequest & {
+	/** Stable offer identity, independent of its original or current transcript position. */
+	requestKey?: string;
 	/** Must durably place the canonical card before research work can be enqueued. */
 	placeReference: (workspaceId: string) => Promise<"placed" | "deferred">;
 };
@@ -424,7 +426,9 @@ export class ResearchWorkspaceService {
 		return this.#start({
 			channelId,
 			question,
-			scope: originMessageId,
+			scope: input.requestKey === undefined
+				? originMessageId
+				: safeId(input.requestKey, "Research request key", MAX_ORIGIN_MESSAGE_ID),
 			origin: "planner-inline",
 			originMessageId,
 			requestedBy,
@@ -443,7 +447,8 @@ export class ResearchWorkspaceService {
 		if (offer.status !== "accepted" || offer.action?.kind !== "research") {
 			throw new ResearchWorkspaceError("invalid-request", "Research offer is not accepted.");
 		}
-		let question = researchBrief(offer.brief);
+		let question = researchBrief(offer.workflow?.accepted?.brief ?? offer.brief);
+		let requestKey = offer.workflow?.accepted?.executionKey ?? offer.source.messageId;
 		let originMessageId = safeId(
 			offer.source.messageId,
 			"Origin message id",
@@ -457,7 +462,7 @@ export class ResearchWorkspaceService {
 		let identity = startIdentity({
 			channelId: verifiedChannelId,
 			question,
-			scope: originMessageId,
+			scope: requestKey,
 			origin: "planner-inline",
 			originMessageId,
 			requestedBy,
@@ -481,7 +486,7 @@ export class ResearchWorkspaceService {
 			|| workspace.createdBy !== requestedBy
 			|| !workspace.inlineReference
 			|| !initial || initial.kind !== "initial" || initial.workspaceId !== workspace.id
-			|| initial.requestId !== originMessageId || initial.fingerprint !== identity.fingerprint
+			|| initial.requestId !== requestKey || initial.fingerprint !== identity.fingerprint
 			|| initial.question !== question || initial.requestedBy !== requestedBy
 			|| !firstMessage || firstMessage.userId !== requestedBy
 			|| firstMessage.userHandle !== requestedByHandle || firstMessage.text !== question

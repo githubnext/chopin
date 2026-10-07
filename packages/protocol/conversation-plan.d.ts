@@ -11,6 +11,8 @@ export declare namespace ConversationPlan {
 		| Request<Retry>
 		| Request<RetryJob>
 		| Request<ResearchConsent>
+		| Request<ResearchEdit>
+		| Request<ResearchPresence>
 		| Request<ResearchLink>;
 	export type Outgoing =
 		| Snapshot
@@ -21,6 +23,8 @@ export declare namespace ConversationPlan {
 		| Jobs
 		| RetriedJob
 		| ResearchConsentResult
+		| ResearchEdited
+		| ResearchPresenceChanged
 		| ResearchLinkResult;
 
 	export type JobKind = "heading" | "refine" | "suggest" | "prose";
@@ -117,6 +121,76 @@ export declare namespace ConversationPlan {
 		threadId?: string;
 		status: "offered" | "dismissed" | "accepted";
 		action?: ResearchAction;
+		/** General research offers; absent on persisted pricing-only offers. */
+		workflow?: ResearchWorkflow;
+	};
+	export type ResearchContext = {
+		messages: Array<{ id: string; author: SourceAuthor; text: string }>;
+		decisions: Array<{
+			id: string;
+			version: number;
+			question: string;
+			options: Array<{ id: string; label: string }>;
+			answer?: string;
+		}>;
+	};
+	export type ResearchAddition = {
+		id: string;
+		text: string;
+		sources: ResearchSource[];
+		status: "pending" | "applied" | "dismissed";
+		actionId?: string;
+		actor?: string;
+	};
+	export type ResearchWorkflow = {
+		version: 1;
+		revision: number;
+		generation: number;
+		/** Frozen synthesis input; live human edits must not change a job fingerprint. */
+		generationBrief: string;
+		mode: "automatic" | "human";
+		/** Presentation only; never participates in request identity. */
+		placementMessageId: string;
+		sources: ResearchSource[];
+		context: ResearchContext;
+		published: boolean;
+		preparation: "pending" | "ready" | "failed";
+		jobId?: string;
+		modelVersion?: string;
+		/** Complete, validated string CRDT checkpoint. */
+		draft?: number[];
+		editedBy: string[];
+		additions: ResearchAddition[];
+		previousOfferId?: string;
+		accepted?: { brief: string; revision: number; executionKey: string };
+	};
+	export type ResearchAnalysis = {
+		messageId: string;
+		questionSetVersion: string;
+		/** Absent on historical analyses written before admission diagnostics. */
+		policyVersion?: string;
+		admission?: ResearchAdmission;
+		modelVersion: string;
+		status: "applied" | "unlinked" | "failed";
+		answers: Record<string, AnalysisAnswer>;
+		policyGate: string;
+		offerId?: string;
+		latencyMs: number;
+	};
+	export type ResearchAdmission = {
+		path: "explicit-proposal" | "inferred-opportunity" | "existing-offer-update";
+		checks: Array<{
+			signal: "research_warranted" | "external" | "owned" | "subject_clarity" | "already_answered";
+			score: number;
+			threshold: number;
+			comparison: "minimum" | "maximum";
+		}>;
+	};
+	export type ResearchState = {
+		queue: QueueItem[];
+		analysis: ResearchAnalysis[];
+		/** Retry receipts survive pruning of diagnostic history. */
+		retries: Array<{ id: string; messageId: string }>;
 	};
 
 	export type Authoring = "quoted" | "scribe" | "human-edited";
@@ -388,7 +462,7 @@ export declare namespace ConversationPlan {
 		error?: string;
 	};
 	export type State = {
-		schemaVersion: 1;
+		schemaVersion: 1 | 2;
 		revision: number;
 		events: Event[];
 		threads: Thread[];
@@ -397,11 +471,17 @@ export declare namespace ConversationPlan {
 		analysis: AnalysisRecord[];
 		/** Optional for version-1 sidecars saved before research offers existed. */
 		researchOffers?: ResearchOffer[];
+		/** Required in version two; version one is upgraded on restoration. */
+		research?: ResearchState;
 	};
 
 	export type Correct = KIND<"conversation-plan:correct"> & CorrectionAction;
 	export type SaveScopedChoice = KIND<"conversation-plan:scoped-choice-save"> & ScopedChoiceSave;
-	export type Retry = KIND<"conversation-plan:retry"> & { actionId: string; messageId: string };
+	export type Retry = KIND<"conversation-plan:retry"> & {
+		actionId: string;
+		messageId: string;
+		lane?: "decision" | "research";
+	};
 	export type ResearchConsent =
 		& KIND<"conversation-plan:research">
 		& (
@@ -415,6 +495,28 @@ export declare namespace ConversationPlan {
 		execution: "none" | "pending-owner" | "pending-retry" | "started";
 		/** Present when this attempt returned an already placed research request. */
 		researchRequestId?: string;
+	};
+	export type ResearchEdit = KIND<"conversation-plan:research-edit"> & {
+		offerId: string;
+		operation:
+			| { kind: "begin" }
+			| { kind: "patch"; patch: number[] }
+			| { kind: "addition"; id: string; actionId: string; choice: "apply" | "dismiss" }
+			| { kind: "retry" };
+	};
+	export type ResearchEdited = KIND<"conversation-plan:research-edit"> & {
+		offer: ResearchOffer;
+		revision: number;
+	};
+	export type ResearchPresence = KIND<"conversation-plan:research-presence"> & {
+		offerId: string;
+		editing: boolean;
+	};
+	export type ResearchPresenceChanged = KIND<"conversation-plan:research-presence"> & {
+		offerId: string;
+		client: string;
+		handle: string;
+		editing: boolean;
 	};
 	export type ResearchLink = KIND<"conversation-plan:research-link"> & { offerId: string };
 	export type ResearchLinkResult = KIND<"conversation-plan:research-link"> & {

@@ -3,13 +3,14 @@ import { describe, expect, it } from "bun:test";
 import { handler, TOOLS } from "../mcp";
 import { prepareUpdate } from "./update";
 
-import type { Document, DocumentReader, UpdateDocumentInput } from "../mcp";
+import type { DocumentReader, LinkedDocument, UpdateDocumentInput } from "../mcp";
 
-let document: Document = {
+let document: LinkedDocument = {
 	id: "f401c8d6-3717-4f1d-8473-cfdd0af894e4",
 	title: "Release readiness",
 	source: "# Release readiness\n",
 	revision: 4,
+	url: "/documents/githubnext/chopin/release-readiness",
 };
 
 let update = {

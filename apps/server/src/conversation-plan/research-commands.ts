@@ -7,9 +7,16 @@ import type { Processor } from "./service";
 import type { createConversationRuntime } from "./runtime";
 import type { ResearchWorkspaceService } from "../research/service";
 
-type ResearchCommand = Request<ConversationPlan.ResearchConsent | ConversationPlan.ResearchLink>;
+type ResearchCommand = Request<
+	| ConversationPlan.ResearchConsent
+	| ConversationPlan.ResearchLink
+	| ConversationPlan.ResearchEdit
+	| ConversationPlan.ResearchPresence
+>;
 type ResearchCommandDeps = {
 	enabled: boolean;
+	canExecute?: boolean;
+	eligible?: () => Promise<boolean>;
 	runtime: ReturnType<typeof createConversationRuntime>;
 	research: () => ResearchWorkspaceService | undefined;
 	unavailable: (id: string) => boolean;
@@ -32,8 +39,43 @@ export async function handleResearchCommand(
 	deps: ResearchCommandDeps,
 ): Promise<void> {
 	switch (frame.kind) {
+		case "conversation-plan:research-edit":
+		case "conversation-plan:research-presence": {
+			try {
+				if (deps.eligible && !await deps.eligible()) {
+					throw new Error("Research is unavailable in this document");
+				}
+				if (
+					!deps.enabled || !ws.data.canEdit || ws.data.channelArchivedAt || room.closing
+					|| deps.unavailable(room.id)
+				) throw new Error("Research editing is unavailable");
+				if (await deps.refreshAccess(ws, true) !== "allowed" || !ws.data.canEdit) {
+					throw new Error("Repository write access is required");
+				}
+				let processor = room.plan && deps.runtime.processor(room.plan);
+				if (!processor) throw new Error("Document is not open");
+				if (frame.kind === "conversation-plan:research-presence") {
+					processor.focusResearch(ws.data.client, ws.data.handle, frame.offerId, frame.editing);
+				} else {
+					let result = await processor.editResearch(frame.offerId, frame.operation, {
+						kind: "member",
+						handle: ws.data.handle,
+					});
+					reply(ws, frame.rid, { kind: frame.kind, ts: 0, ...result });
+				}
+			} catch (error) {
+				fail(ws, frame.rid, error instanceof Error ? error.message : "Cannot edit research brief");
+			}
+			return;
+		}
 		case "conversation-plan:research": {
 			try {
+				if (deps.eligible && !await deps.eligible()) {
+					throw new Error("Research is unavailable in this document");
+				}
+				if (frame.choice !== "dismiss" && deps.canExecute === false) {
+					throw new Error("Research execution is disabled");
+				}
 				if (!deps.enabled) throw new Error("conversation analysis is disabled");
 				if (
 					!ws.data.canEdit || ws.data.channelArchivedAt || room.closing

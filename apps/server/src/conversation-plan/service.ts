@@ -7,8 +7,8 @@ import { createCommands } from "./processor-commands";
 import { createScopedSave } from "./processor-scoped-save";
 import { createResearchConsent } from "./processor-research-consent";
 import { createRun } from "./processor-run";
-
-// Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
+import { createResearchProcessor } from "./research-processor";
+import { createResearchDraftService } from "./research-draft-service";
 
 export type Processor = ReturnType<typeof createProcessor>;
 
@@ -46,9 +46,12 @@ export function createProcessor(deps: Dependencies) {
 	let saveScopedChoice = createScopedSave(deps, plan, active, publish);
 	let researchConsent = createResearchConsent(deps, plan, active, publish, markApplied, report);
 	let run = createRun(deps, plan, active, controller, publish, recover, drainEffects);
+	let research = createResearchProcessor(deps, active, controller.signal, publish);
+	let drafts = createResearchDraftService(deps, active);
 
 	function wake(): void {
 		if (!active()) return;
+		research.wake();
 		if (running) {
 			wakeRequested = true;
 			return;
@@ -97,6 +100,7 @@ export function createProcessor(deps: Dependencies) {
 			await Promise.allSettled(tasks);
 			tasks = [...commands, ...(running ? [running] : [])];
 		}
+		await research.idle();
 	}
 
 	return {
@@ -107,6 +111,10 @@ export function createProcessor(deps: Dependencies) {
 		researchConsent: track(researchConsent),
 		record: track(record),
 		retry: track(retry),
+		retryResearch: track(research.retry),
+		editResearch: track(drafts.edit),
+		focusResearch: drafts.focus,
+		leaveResearch: drafts.away,
 		setEffects,
 		wake,
 		stop,

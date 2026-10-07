@@ -245,9 +245,12 @@ type Sidecar = {
 	conversationPlanEffects?: string[];
 	conversationPlanPendingEffects?: Effect[];
 	pendingCardActions?: PendingCardAction[];
+	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
 };
 
-function state(plan: Plan): Sidecar {
+type ChatView = Pick<Chat.Chat, "entries" | "runs">;
+
+function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 	return {
 		version: 1,
 		revision: plan.revision,
@@ -262,7 +265,7 @@ function state(plan: Plan): Sidecar {
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
-		transcript: plan.chat.entries,
+		transcript: chat.entries,
 		conversationPlan: plan.conversationPlan,
 		...(plan.conversationPlanRetries.length
 			? { conversationPlanRetries: plan.conversationPlanRetries }
@@ -277,18 +280,19 @@ function state(plan: Plan): Sidecar {
 			? { conversationPlanPendingEffects: plan.conversationPlanPendingEffects }
 			: {}),
 		...(plan.pendingCardActions.length ? { pendingCardActions: plan.pendingCardActions } : {}),
+		...(chat.runs?.length ? { workflowRuns: chat.runs } : {}),
 	};
 }
 
-function jsonState(plan: Plan): { value: JsonValue; text: string } {
-	let text = JSON.stringify(state(plan));
+function jsonState(plan: Plan, chat?: ChatView): { value: JsonValue; text: string } {
+	let text = JSON.stringify(state(plan, chat));
 	return { value: JSON.parse(text) as JsonValue, text };
 }
 
-function capture(plan: Plan): Captured {
+function capture(plan: Plan, chat?: ChatView): Captured {
 	assertEventCapacity(plan.conversationPlan, plan.pendingCardActions.length);
 	if (plan.persistence) assertOptionCapacity(plan);
-	let sidecar = jsonState(plan);
+	let sidecar = jsonState(plan, chat);
 	let source = room.project(plan.document);
 	return {
 		revision: plan.revision,
@@ -457,6 +461,7 @@ function restoredState(
 		expected.push("conversationPlanPendingEffects");
 	}
 	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
+	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -611,6 +616,7 @@ function restoredState(
 		|| conversationPlan.analysis.some(entry => !messageIds.has(entry.messageId))
 		|| conversationPlanRetries.some(entry => !messageIds.has(entry.messageId))
 	) throw new Error("hosted channel has conversation analysis without a source message");
+	let workflowRuns = restoreWorkflowRuns(item.workflowRuns);
 	return {
 		version: 1,
 		revision: item.revision,
@@ -630,6 +636,7 @@ function restoredState(
 		...(outbox.receipts.length ? { conversationPlanEffects: outbox.receipts } : {}),
 		...(outbox.pending.length ? { conversationPlanPendingEffects: outbox.pending } : {}),
 		...(pendingCardActions.length ? { pendingCardActions } : {}),
+		...(workflowRuns.length > 0 ? { workflowRuns } : {}),
 	};
 }
 
@@ -655,6 +662,59 @@ function restoreConversationPlanRetries(
 		seen.add(item.id);
 		return { id: item.id, messageId: item.messageId };
 	});
+}
+
+const RUN_STATUSES = new Set([
+	"running",
+	"waiting",
+	"paused",
+	"finished",
+	"blocked",
+	"failed",
+	"stopped",
+]);
+const RUN_STAGE_STATUSES = new Set([
+	"pending",
+	"running",
+	"awaiting_input",
+	"paused",
+	"blocked",
+	"completed",
+	"failed",
+	"skipped",
+]);
+
+function seconds(value: JsonValue | undefined, optional = false): boolean {
+	if (value === undefined) return optional;
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Workflow run cards Chat showed, as `Chat.Run` values. */
+function restoreWorkflowRuns(value: JsonValue | undefined): NonNullable<Chat.Chat["runs"]> {
+	if (value === undefined) return [];
+	if (!Array.isArray(value)) throw new Error("hosted channel has invalid workflow runs");
+	let runs = objects(value, "workflow run");
+	for (let run of runs) {
+		let stages = run.stages;
+		if (
+			typeof run.name !== "string"
+			|| !RUN_STATUSES.has(run.status as string)
+			|| !seconds(run.started)
+			|| !seconds(run.updated)
+			|| !seconds(run.ended, true)
+			|| !seconds(run.earlierStages, true)
+			|| !seconds(run.waiting)
+			|| !Array.isArray(stages)
+			|| stages.some(stage =>
+				!stage || typeof stage !== "object" || Array.isArray(stage)
+				|| typeof stage.id !== "string" || typeof stage.name !== "string"
+				|| stage.kind !== undefined && stage.kind !== "tool"
+				|| !RUN_STAGE_STATUSES.has(stage.status as string)
+				|| !seconds(stage.started, true) || !seconds(stage.ended, true)
+			)
+		) throw new Error("hosted channel has invalid workflow runs");
+	}
+	return runs as unknown as NonNullable<Chat.Chat["runs"]>;
 }
 
 function restoreMcpUpdates(value: JsonValue | undefined): McpUpdateRecord[] {
@@ -893,9 +953,14 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 	}
 }
 
-/** Persist a sidecar-only state transition. */
-export function persist(plan: Plan): Promise<void> {
-	let commit = () => commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
+/**
+ * Persist a sidecar-only state transition. `chat` is read when the commit runs
+ * and stored in place of the live transcript and run cards, so a change can be
+ * saved before it becomes visible in shared chat state.
+ */
+export function persist(plan: Plan, chat?: () => ChatView): Promise<void> {
+	let commit = () =>
+		commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan, chat?.()));
 	let pending = plan.flushing.then(commit, commit);
 	plan.flushing = pending;
 	return pending;
@@ -1125,7 +1190,7 @@ export async function open(
 		presence: presence.create(),
 		questions: Questions.restore(sidecar.openQuestions),
 		comments: Comments.create(),
-		chat: Chat.restore(sidecar.transcript),
+		chat: Chat.restore(sidecar.transcript, sidecar.workflowRuns),
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
 		conversationPlanRetries: sidecar.conversationPlanRetries ?? [],
 		conversationPlanJobs: sidecar.conversationPlanJobs ?? [],

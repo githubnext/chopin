@@ -5,6 +5,7 @@ import { applyEvent, currentScopedProposal } from "./events";
 import { assertStateShape } from "./validation";
 import { namesStaleResearchOption, taskMatches, taskSnapshot } from "./research-snapshots";
 import { validateStateSourcesWithChanges } from "./state-provenance";
+import { upgradeResearchState } from "./research-state";
 
 type State = ConversationPlan.State;
 
@@ -68,5 +69,5 @@ export function restoreState(
 		throw new Error("research task source names a stale option");
 	}
 	if (messages) validateStateSourcesWithChanges(restored, messages, changes);
-	return restored;
+	return upgradeResearchState(restored);
 }

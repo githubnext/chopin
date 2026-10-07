@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { createSummaryAgent } from "../agents";
+import { createResearchAgent, createSummaryAgent } from "../agents";
+import { webSearchTool } from "../web-search";
+import { tool } from "ai";
+import { z } from "zod";
 import { harnessContract } from "../contract";
 import { createCopilotSdk, MissingCredentialsError, ToolMetadataMismatchError } from "./adapter";
 
@@ -84,7 +87,13 @@ function fakeSession(
 			return () => listeners.delete(handler);
 		},
 		async send({ prompt }) {
-			if (prompt === "tools") {
+			if (prompt === "search-output") {
+				let search = tools.find(tool => tool.name === "web_search")!;
+				await search.handler!({ query: "synthetic public research" }, toolCall(search.name));
+				let output = tools.find(tool => tool.isTerminal)!;
+				await output.handler!(overrides.output ?? {}, toolCall(output.name));
+				emit({ type: "session.idle", data: {} });
+			} else if (prompt === "tools") {
 				let target = tools.find(tool => !tool.isTerminal)!;
 				await target.handler!({}, toolCall(target.name));
 				emit({ type: "assistant.message", data: { messageId: "m1", content: "done" } });
@@ -679,6 +688,76 @@ describe("copilot-sdk adapter", () => {
 			expect(source.sessions).toHaveLength(1);
 			expect(source.sessions[0]!.config.sessionLimits?.maxAiCredits).toBe(64);
 		} finally {
+			await session.destroy();
+			await harness.shutdown();
+		}
+	});
+
+	it("research generate completes the real host web-search/result round trip", async () => {
+		let output = {
+			findings: ["Synthetic finding"],
+			sources: [{ title: "Source", url: "https://example.com/source" }],
+		};
+		let source = stubRuntimeSource({ output });
+		let harness = createCopilotSdk({
+			credentials: () => "fixture-token",
+			limits: () => ({ maxAiCredits: 30 }),
+			connect: () => source,
+		});
+		let agent = createResearchAgent(harness);
+		let session = await agent.createSession({
+			sandboxSession: {
+				defaultWorkingDirectory: "/tmp",
+				run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+				destroy: async () => {},
+			} as never,
+		});
+		let calls = 0;
+		let owner = {
+			kind: "active-planner" as const,
+			token: "fixture-token",
+			ownerSessionId: "owner",
+			ownerGeneration: 1,
+			credentialRevision: 1,
+			expiresAt: new Date(Date.now() + 60000),
+			authorize: async () => true,
+		};
+		let web = await webSearchTool(owner, {
+			createClient: async () => ({
+				tools: async () => ({
+					web_search: tool({
+						inputSchema: z.object({ query: z.string() }),
+						execute: async input => {
+							calls++;
+							expect(input.query).toBe("synthetic public research");
+							return { content: [{ type: "text", text: "Synthetic source" }] };
+						},
+					}),
+				}),
+				close: async () => {},
+			}),
+		});
+		if (!web.ok) throw new Error("fixture web search unavailable");
+		try {
+			let result = await agent.generate({
+				session,
+				prompt: "search-output",
+				abortSignal: AbortSignal.timeout(2000),
+				options: {
+					model: "fixture",
+					instructions: "Search, then return evidence.",
+					webSearch: web.value.tool,
+					webContext: { credential: owner },
+				},
+			});
+			expect(result.output).toEqual(output);
+			expect(calls).toBe(1);
+			expect(source.sessions[0]!.config.availableTools).toEqual([
+				"custom:web_search",
+				"custom:chopin_submit_result",
+			]);
+		} finally {
+			await web.value.close();
 			await session.destroy();
 			await harness.shutdown();
 		}

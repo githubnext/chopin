@@ -540,11 +540,11 @@ describe("the hosted MCP adapter", () => {
 		expect(result.kind).toBe("created");
 		if (result.kind !== "created") return;
 		expect(result.document.id[14]).toBe("5");
-		let expected = createdDocument(result.document.id);
-		expect(result.document).toEqual({
-			...expected,
+		let expected = {
+			...createdDocument(result.document.id),
 			url: "/documents/octo-org/score/created-plan",
-		});
+		};
+		expect(result.document).toEqual(expected);
 		let stored = await context.storage.collaboration.load(result.document.id, context.now);
 		if (!stored) throw new Error("created channel was not stored");
 		expect(await Service.readStored(stored)).toMatchObject({
@@ -563,6 +563,14 @@ describe("the hosted MCP adapter", () => {
 		expect(
 			await adapter.documents.read(caller, `https://chopin.test/channels/${result.document.id}`),
 		).toEqual(expected);
+
+		if (!adapter.rename) throw new Error("hosted rename adapter is unavailable");
+		await adapter.rename.rename(caller, { id: result.document.id, title: "Launch plan" });
+		expect(await adapter.documents.read(caller, result.document.url)).toEqual({
+			...expected,
+			title: "Launch plan",
+			url: "/documents/octo-org/score/launch-plan",
+		});
 	});
 
 	it("renames document metadata with current write access and announces real changes", async () => {
@@ -716,6 +724,28 @@ describe("the hosted MCP adapter", () => {
 		).toEqual({ kind: "conflict" });
 	});
 
+	it("reports a title the repository already uses as title-taken, not an idempotency conflict", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		if (!adapter.create) throw new Error("hosted creation adapter is unavailable");
+		await adapter.create.create(caller, creation);
+
+		expect(
+			await adapter.create.create(caller, {
+				...creation,
+				idempotencyKey: "another-request",
+				fingerprint: "another-request",
+				title: creation.title.toUpperCase(),
+			}),
+		).toEqual({ kind: "title-taken" });
+	});
+
 	it("reconstructs a stored checkpoint and journal with the validated plan revision", async () => {
 		let context = setup();
 		let opened = await plan(context);
@@ -740,6 +770,7 @@ describe("the hosted MCP adapter", () => {
 			title: "Release readiness",
 			source: expectedSource,
 			revision: 1,
+			url: "/documents/octo-org/score/release-readiness",
 		});
 		await Service.close(opened.plan);
 	});
@@ -771,6 +802,7 @@ describe("the hosted MCP adapter", () => {
 				title: "Release readiness",
 				source: Service.source(opened.plan),
 				revision: 9,
+				url: "/documents/octo-org/score/release-readiness",
 			});
 		} finally {
 			Rooms.forget(live);
@@ -807,9 +839,10 @@ describe("the hosted MCP adapter", () => {
 		live.plan = opened;
 
 		try {
-			expect(await adapter.documents.read(caller, result.document.id)).toEqual(
-				createdDocument(result.document.id),
-			);
+			expect(await adapter.documents.read(caller, result.document.id)).toEqual({
+				...createdDocument(result.document.id),
+				url: "/documents/octo-org/score/created-plan",
+			});
 		} finally {
 			Rooms.forget(live);
 			await Service.close(opened);

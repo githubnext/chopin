@@ -7,7 +7,7 @@ import { message } from "./policy-initial.test-fixtures";
 test("candidate corroboration stays within the bounded second batch", () => {
 	let current = message("batch", "Use an outline. Keep it optional. Remember my choice.");
 	let request = buildTargetingRequest(current, [], seeded().threads, extractQuotes(current.text));
-	expect(QUESTION_SET_VERSION).toBe("conversation-plan-8");
+	expect(QUESTION_SET_VERSION).toBe("conversation-plan-9");
 	// The seeded thread has no prior contributions, so none of the three spans asks duplicate.
 	expect(Object.keys(request.questions)).toHaveLength(36);
 	expect(Object.keys(request.questions).filter(key => key.endsWith("_duplicate"))).toEqual([]);

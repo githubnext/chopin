@@ -30,13 +30,18 @@ import { ActivityLine, DecisionPrompt } from "./decision-entry";
 import { ScopedChoicePrompt } from "./scoped-choice-entry";
 import { ResearchOfferCard } from "./research-offer";
 import type { ResearchOfferControls } from "./research-offer";
+import { researchTranscript } from "./research-transcript";
 
 type PlanMarkers = {
 	canEdit?: boolean;
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
 	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
-	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryAnalysis?: (
+		messageId: string,
+		actionId: string,
+		lane?: "decision" | "research",
+	) => Promise<void>;
 	onRetryJob?: (jobId: string) => Promise<void>;
 	sourceDestination?: ChatDestination;
 	conversationPlan?: ConversationPlan.State;
@@ -257,11 +262,6 @@ function MessageBody(
 				</div>
 			)}
 			{message.tools && message.tools.length > 0 && <ToolRun tools={message.tools} />}
-			{!message.queued && markers.researchOffers && markers.conversationPlan?.researchOffers
-				?.filter(offer => offer.source.messageId === message.id)
-				.map(offer => (
-					<ResearchOfferCard controls={markers.researchOffers!} key={offer.id} offer={offer} />
-				))}
 			{markers.sourceDestination?.source.messageId === message.id && (
 				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
 					Source: “{markers.sourceDestination.source.quote}”
@@ -365,7 +365,11 @@ export function Transcript(
 		conversationPlanJobs?: ConversationPlan.Job[];
 		onCardLink?: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
-		onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+		onRetryAnalysis?: (
+			messageId: string,
+			actionId: string,
+			lane?: "decision" | "research",
+		) => Promise<void>;
 		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
 		researchOffers?: ResearchOfferControls;
@@ -381,7 +385,10 @@ export function Transcript(
 	let scroller = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
 	let sourceOwner = useRef({});
-	let groups = group(entries, queued, working);
+	let groups = researchTranscript(
+		group(entries, queued, working),
+		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
+	);
 	let latestPrompt = new Map<string, string>();
 	let latestScoped = new Map<string, string>();
 	for (let entry of entries) {
@@ -430,7 +437,15 @@ export function Transcript(
 				data-chat-stack
 			>
 				{groups.map(item =>
-					item.kind === "system"
+					item.kind === "research"
+						? (
+							<ResearchOfferCard
+								key={`research:${item.offer.id}`}
+								controls={researchOffers!}
+								offer={item.offer}
+							/>
+						)
+						: item.kind === "system"
 						? decisions && item.decision && item.ts !== undefined
 							? (
 								<DecisionSystemEntry

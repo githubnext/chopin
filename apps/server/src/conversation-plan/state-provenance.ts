@@ -34,6 +34,18 @@ export function validateStateSourcesWithChanges(
 		let message = lookup.get(offer.source.messageId);
 		if (!message) throw new Error("research offer source message missing");
 		validateSource({ ...offer.source, role: "support" }, message);
+		for (let source of offer.workflow?.sources ?? []) {
+			let origin = lookup.get(source.messageId);
+			if (!origin) throw new Error("research contribution source message missing");
+			validateSource({ ...source, role: "support" }, origin);
+		}
+		for (let addition of offer.workflow?.additions ?? []) {
+			for (let source of addition.sources) {
+				let origin = lookup.get(source.messageId);
+				if (!origin) throw new Error("research addition source message missing");
+				validateSource({ ...source, role: "support" }, origin);
+			}
+		}
 		if (
 			offer.task
 			&& (labelChanges.get(offer.id) ?? []).some(index =>
@@ -41,6 +53,15 @@ export function validateStateSourcesWithChanges(
 				&& eventSecond(state.events[index].at) <= message.ts
 			)
 		) throw new Error("research task source postdates its captured event prefix");
+	}
+	for (
+		let item of [
+			...state.research?.queue ?? [],
+			...state.research?.analysis ?? [],
+			...state.research?.retries ?? [],
+		]
+	) {
+		if (!lookup.has(item.messageId)) throw new Error("research analysis source message missing");
 	}
 }
 

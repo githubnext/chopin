@@ -405,6 +405,23 @@ operator diagnostic. It accepts at most 16 boolean, nonnegative integer, or
 token-like string diagnostic fields. Unknown browser reasons are deliberately
 rendered as a generic interruption.
 
+Executors can also report bounded operational snapshots through
+`execution.diagnostic()`. The runner retains a validated copy for the current
+attempt and reports it on timeout as well as ordinary failure. Late snapshots
+after cancellation or timeout are ignored. These snapshots are log-only; they
+must not contain source text, search queries, URLs, or credentials.
+
+Public research reports setup, session opening, model waiting, and search-call
+boundaries. Search-call counts distinguish a model that has not invoked search
+from an outstanding search or a model that has received results. Each web-search
+tool invocation has a 60-second limit, including authorization, and passes its
+abort signal to the MCP client. A timed-out search ends the research attempt with
+`web-search-timeout`; a stalled authorization check produces
+`web-search-authorization-timeout`. Search calls are counted after authorization.
+The overall evidence-stage limit remains five minutes. Use the host wrapper's
+search counters for live progress: the harness can buffer tool lifecycle
+callbacks until the completed step is published.
+
 ## Publication hooks
 
 A definition may delay completion with `publish()`:
@@ -459,7 +476,8 @@ Do not reuse the Planner conversation session. Every worker stage runs its own
 schema is fixed per agent, not per turn, so the four research stages — public
 evidence, private document analysis, private report synthesis, and private
 answer synthesis — each get their own named agent with its own result schema;
-`summaryAgent` is a fifth, for document descriptions. Generated document
+`summaryAgent` is a fifth, for document descriptions, and `researchBriefAgent`
+prepares Chat research offers in its own no-tool session. Generated document
 descriptions reuse one disposable session across multiple bounded chunk and
 reduction turns; every other stage submits one bounded structured result.
 
@@ -506,11 +524,12 @@ signals, and destroy the harness session in `finally`.
 
 ## Current definitions
 
-| Definition            | Production trigger                      | Persisted input                                                                      | Worker boundary                                                                           |
-| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `document-summary@1`  | Open, edit, restore, or MCP persistence | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash |
-| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public evidence agent bound to a host `web_search` tool, no other tools                   |
-| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two no-web private agents with structured output for analysis and report synthesis        |
+| Definition            | Production trigger                      | Persisted input                                                                      | Worker boundary                                                                                |
+| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `document-summary@1`  | Open, edit, restore, or MCP persistence | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash      |
+| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public evidence agent bound to a host `web_search` tool, no other tools                        |
+| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two no-web private agents with structured output for analysis and report synthesis             |
+| `research-brief@1`    | New or updated Chat research offer      | Offer generation, selected Chat sources, decision snapshots, and prior brief         | Private structured worker; no tools; source IDs and offer generation checked before projection |
 
 `document-summary@1` remains the only durable definition version; there is no
 `document-summary@2`. New V1 requests carry the output marker and use the
