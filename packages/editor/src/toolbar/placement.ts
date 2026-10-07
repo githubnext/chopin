@@ -75,3 +75,58 @@ export function visibleAnchor(anchor: DOMRectLike, viewport: ViewportBox): DOMRe
 	if (shown <= 0 || shown < Math.min(anchor.height / 2, 20)) return undefined;
 	return { ...anchor, top, bottom, height: shown };
 }
+
+export type DraftPlacement = {
+	left: number;
+	top: number;
+	side: "below" | "above" | "pinned" | "away";
+	/** The scroll distance that would show the anchor's last line and the whole draft below it. */
+	reveal: number;
+};
+
+/**
+ * Place an inline draft under its anchor block, inside the visible pixels.
+ *
+ * The draft follows its anchor while the anchor is on screen. When the space
+ * below runs out it flips above, then pins to the nearest edge. Once the anchor
+ * has scrolled away entirely the draft goes with it rather than floating free.
+ */
+export function placeDraft(
+	anchor: DOMRectLike,
+	surface: { width: number; height: number },
+	bounds: ViewportBox,
+	gap = 8,
+	line = 24,
+): DraftPlacement {
+	let topEdge = bounds.top + gap;
+	let bottomEdge = bounds.top + bounds.height - gap;
+	let left = clamp(
+		anchor.left,
+		bounds.left + gap,
+		bounds.left + bounds.width - gap - surface.width,
+	);
+	let lineTop = anchor.bottom - Math.min(line, anchor.height);
+	let below = anchor.bottom;
+	let reveal = 0;
+	if (surface.height + anchor.bottom - lineTop > bottomEdge - topEdge) reveal = lineTop - topEdge;
+	else if (below + surface.height > bottomEdge) reveal = below + surface.height - bottomEdge;
+	else if (lineTop < topEdge) reveal = lineTop - topEdge;
+
+	// Scroll offsets land on whole pixels, so a revealed draft may sit a fraction past the edge.
+	if (below >= topEdge - 1 && below + surface.height <= bottomEdge + 1) {
+		return { left, top: below, side: "below", reveal };
+	}
+	if (anchor.bottom < topEdge || anchor.top > bottomEdge) {
+		return { left, top: below, side: "away", reveal };
+	}
+	let above = anchor.top - surface.height;
+	if (below + surface.height > bottomEdge && above >= topEdge) {
+		return { left, top: above, side: "above", reveal };
+	}
+	return {
+		left,
+		top: clamp(below, topEdge, bottomEdge - surface.height),
+		side: "pinned",
+		reveal,
+	};
+}

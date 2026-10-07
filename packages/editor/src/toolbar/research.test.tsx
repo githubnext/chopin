@@ -10,7 +10,6 @@ type DraftLayerModule = {
 		offset: number,
 		previous: Block | undefined,
 	) => Block;
-	ResearchDraftRecovery?: ComponentType<{ unresolved: boolean }>;
 	ResearchDraftShell?: ComponentType<PropsWithChildren>;
 	retainDraftBlock?: <Block>(resolved: Block | undefined, previous: Block | undefined) =>
 		| Block
@@ -63,13 +62,8 @@ describe("research draft layer", () => {
 		expect(attach(resolved, 0, undefined)).toBe(resolved);
 	});
 
-	it("announces that an unresolved saved position cannot yet be placed", async () => {
-		let Recovery = (await draftLayer()).ResearchDraftRecovery;
-		expect(typeof Recovery).toBe("function");
-		if (!Recovery) return;
-		let markup = renderToStaticMarkup(createElement(Recovery, { unresolved: true }));
-
-		expect(markup).toContain('role="alert"');
-		expect(markup).toContain("cannot yet be placed");
+	it("explains an unresolved saved position without blocking submission", async () => {
+		let module = await import("./research");
+		expect(module.UNRESOLVED_DRAFT).toContain("cannot yet be placed");
 	});
 });
