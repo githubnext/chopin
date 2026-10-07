@@ -1,10 +1,26 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { rebasePullRequests, selectFailures } from "./maintenance.mjs";
+import { inventory } from "./inventory.mjs";
 
 let repository = process.env.GITHUB_REPOSITORY;
 if (!repository) throw new Error("GITHUB_REPOSITORY is required");
 
 switch (process.argv[2]) {
+	case "inventory": {
+		let rows = inventory(repository);
+		let summary = rows.map((row) => ({
+			number: row.number,
+			head: row.head,
+			branch: row.branch,
+			base: row.base,
+			baseHead: row.baseHead,
+			parent: row.parent,
+			action: row.action,
+			run: row.run?.id ?? null,
+		}));
+		console.log(JSON.stringify(summary, null, 2));
+		break;
+	}
 	case "select": {
 		let candidates = selectFailures(repository);
 		mkdirSync("/tmp/gh-aw/data", { recursive: true });
@@ -28,5 +44,5 @@ switch (process.argv[2]) {
 		break;
 	}
 	default:
-		throw new Error("Use select or rebase");
+		throw new Error("Use inventory, select, or rebase");
 }
