@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 
 const DELAY = 400;
+// After a tooltip was visible, the next one opens at once for this long.
+const WARM = 300;
 const GAP = 6;
 
 function hasVisibleText(button: HTMLButtonElement): boolean {
@@ -83,10 +85,16 @@ export function IconTooltip() {
 		let dismissed: HTMLElement | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let originalTitle: string | null = null;
+		// A pressed trigger stays quiet until the pointer leaves it.
+		let pressed: HTMLElement | null = null;
+		let warmUntil = 0;
 
-		function hide() {
+		function hide(instant = false) {
 			clearTimeout(timer);
 			timer = undefined;
+			if (tooltip.hasAttribute("data-visible")) warmUntil = performance.now() + WARM;
+			if (instant) tooltip.setAttribute("data-instant", "");
+			else tooltip.removeAttribute("data-instant");
 			tooltip.removeAttribute("data-visible");
 			if (active && originalTitle !== null && !active.hasAttribute("title")) {
 				active.setAttribute("title", originalTitle);
@@ -98,12 +106,14 @@ export function IconTooltip() {
 		function enter(button: HTMLElement | null) {
 			if (button === active) return;
 			hide();
-			if (!button) return;
+			if (!button || button === pressed) return;
 			active = button;
 			originalTitle = button.getAttribute("title");
 			if (originalTitle !== null) button.removeAttribute("title");
-			timer = setTimeout(() => {
-				if (!button.isConnected) return hide();
+			let show = () => {
+				timer = undefined;
+				if (!button.isConnected || button.getAttribute("aria-expanded") === "true") return hide();
+				tooltip.removeAttribute("data-instant");
 				let label = button.getAttribute("data-tooltip") ?? button.getAttribute("aria-label")
 					?? originalTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
@@ -140,7 +150,9 @@ export function IconTooltip() {
 					)
 				}px`;
 				tooltip.setAttribute("data-visible", "");
-			}, DELAY);
+			};
+			if (performance.now() < warmUntil) show();
+			else timer = setTimeout(show, DELAY);
 		}
 
 		let coarse = window.matchMedia("(pointer: coarse)");
@@ -154,7 +166,27 @@ export function IconTooltip() {
 			enter(hovered ?? focused);
 		}
 
+		function pointerDown(event: PointerEvent) {
+			pressed = iconButton(event.target);
+			hide(true);
+		}
+
+		function expandedChange(records: MutationRecord[]) {
+			for (let record of records) {
+				let target = record.target as HTMLElement;
+				if (target === active && target.getAttribute("aria-expanded") === "true") {
+					if (target === hovered) pressed = target;
+					hide(true);
+				}
+			}
+		}
+
 		function pointerOut(event: PointerEvent) {
+			if (
+				pressed?.contains(event.target as Node) && !pressed.contains(event.relatedTarget as Node)
+			) {
+				pressed = null;
+			}
 			if (
 				hovered?.contains(event.target as Node)
 				&& !hovered.contains(event.relatedTarget as Node)
@@ -194,9 +226,16 @@ export function IconTooltip() {
 		document.addEventListener("pointerout", pointerOut, true);
 		document.addEventListener("focusin", focusIn, true);
 		document.addEventListener("focusout", focusOut, true);
-		document.addEventListener("pointerdown", hide, true);
+		document.addEventListener("pointerdown", pointerDown, true);
+		let observer = new MutationObserver(expandedChange);
+		observer.observe(document.body, {
+			attributes: true,
+			attributeFilter: ["aria-expanded"],
+			subtree: true,
+		});
 		document.addEventListener("scroll", scroll, true);
-		window.addEventListener("resize", hide);
+		let resize = () => hide();
+		window.addEventListener("resize", resize);
 		let keyDown = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
 			if (focused) dismissed = focused;
@@ -211,9 +250,10 @@ export function IconTooltip() {
 			document.removeEventListener("pointerout", pointerOut, true);
 			document.removeEventListener("focusin", focusIn, true);
 			document.removeEventListener("focusout", focusOut, true);
-			document.removeEventListener("pointerdown", hide, true);
+			document.removeEventListener("pointerdown", pointerDown, true);
+			observer.disconnect();
 			document.removeEventListener("scroll", scroll, true);
-			window.removeEventListener("resize", hide);
+			window.removeEventListener("resize", resize);
 			document.removeEventListener("keydown", keyDown, true);
 		};
 	}, []);
