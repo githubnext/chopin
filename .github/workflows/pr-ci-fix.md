@@ -10,7 +10,7 @@ on:
     branches: ["**"]
   workflow_dispatch:
 
-if: github.event_name != 'workflow_run' || contains(fromJson('["failure","timed_out"]'), github.event.workflow_run.conclusion)
+if: vars.PR_READINESS_ENABLED != 'true' && (github.event_name != 'workflow_run' || contains(fromJson('["failure","timed_out"]'), github.event.workflow_run.conclusion))
 
 concurrency:
   group: pr-babysitter
