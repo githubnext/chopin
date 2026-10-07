@@ -1633,6 +1633,13 @@
 	position: fixed;
 	z-index: 40;
 	overflow: hidden;
+	animation: plan-rail-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes plan-rail-in {
+	from {
+		opacity: 0;
+	}
 }
 
 .plan-rail > * {
@@ -1642,15 +1649,55 @@
 	background: transparent;
 }
 
+/*
+ * Only the grip of the track being pointed at, or holding the caret, is drawn.
+ * The rest wait at nothing, or faintly while the caret is in the table, so a
+ * keyboard user can still see where every row and column can be taken from.
+ */
 .plan-grip {
+	opacity: 0;
 	border-radius: var(--radius-sm);
-	background: var(--color-selected);
-	transition: background-color var(--duration-fast) var(--ease-out);
+	background: var(--color-hover);
+	color: var(--color-text-quaternary);
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.plan-rail[data-plan-caret] .plan-grip {
+	opacity: 0.35;
+}
+
+.plan-rail .plan-grip[data-plan-hot],
+.plan-rail .plan-grip:focus-visible,
+.plan-rail .plan-grip.is-held {
+	opacity: 1;
 }
 
 .plan-grip:hover,
 .plan-grip:focus-visible {
-	background: color-mix(in oklch, var(--color-brand) 45%, transparent);
+	background: var(--color-selected);
+	color: var(--color-text-secondary);
+}
+
+/* Six dots, the mark for "this can be dragged". Drawn rather than an icon so the
+   dots stay on whole pixels at any track length. */
+.plan-grip::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 8px;
+	height: 12px;
+	translate: -50% -50%;
+	background-image: radial-gradient(circle, currentcolor 1px, transparent 1.25px);
+	background-size: 4px 4px;
+}
+
+[data-plan-rail="column"] .plan-grip::before {
+	width: 12px;
+	height: 8px;
 }
 
 [data-plan-rail="column"] .plan-grip {
@@ -1664,12 +1711,13 @@
 .plan-grip.is-held {
 	cursor: grabbing;
 	background: var(--color-brand);
+	color: var(--color-page);
 }
 
-/* The header row's bar. Drawn so the rail has no gap where the row plainly is,
-   but not a control: the header cannot move and cannot be removed. */
-.plan-grip.is-fixed {
-	background: color-mix(in oklch, var(--color-edge) 60%, transparent);
+/* The header row's place in the rail. Not a control: the header cannot move
+   and cannot be removed, so nothing is drawn there. */
+.plan-rail .plan-grip.is-fixed {
+	opacity: 0;
 	cursor: default;
 }
 
@@ -1681,24 +1729,43 @@
  * in the tab order while it is out of sight — and `pointer-events` with it, so
  * an invisible cross cannot be clicked by accident.
  */
+/*
+ * Each button's box is its whole target; the ghost drawn inside it is smaller,
+ * by its padding, so a 24-pixel target reads as a 20-pixel control.
+ */
 .plan-grip-remove,
 .plan-insert,
 .plan-align {
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity var(--duration-fast) var(--ease-out);
+	padding: 2px;
 	border-radius: var(--radius-sm);
-	background: var(--color-page);
-	outline: var(--edge-width) solid var(--color-control-edge);
-	outline-offset: calc(-1 * var(--edge-width));
-	color: var(--color-text-quaternary);
+	background-clip: content-box;
+	color: var(--color-text-tertiary);
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+/* An insert shows only while its own seam is aimed at, so it stays live
+   while invisible; the rail around it is already the hover area. */
+.plan-insert {
+	pointer-events: auto;
+}
+
+/* Over an insert where the two overlap on a short row: a shown remove or
+   align button is what the pointer came to the track for. */
+.plan-grip-remove[data-plan-shown],
+.plan-align[data-plan-shown] {
+	z-index: 1;
 }
 
 .plan-grip-remove[data-plan-shown],
 .plan-align[data-plan-shown],
 .plan-grip-remove:focus-visible,
 .plan-align:focus-visible,
-.plan-rail:hover .plan-insert,
+.plan-insert:hover,
 .plan-insert:focus-visible {
 	opacity: 1;
 	pointer-events: auto;
@@ -1706,9 +1773,10 @@
 
 .plan-grip-remove:hover,
 .plan-insert:hover,
+.plan-insert:focus-visible,
 .plan-align:hover {
+	background-color: var(--color-hover);
 	color: var(--color-text-primary);
-	outline-color: var(--color-brand);
 }
 
 /* Drawn rather than lettered: at fifteen pixels a glyph is a smudge, and these
@@ -1719,7 +1787,7 @@
 .plan-insert::after {
 	content: "";
 	position: absolute;
-	inset: 50% 25%;
+	inset: 50% 30%;
 	border-top: 1.5px solid currentcolor;
 	translate: 0 -50%;
 }
@@ -1747,17 +1815,17 @@
 .plan-align::after {
 	content: "";
 	position: absolute;
-	left: 3px;
-	right: 3px;
+	left: 7px;
+	right: 7px;
 	border-top: 1.5px solid currentcolor;
 }
 
 .plan-align::before {
-	top: 5px;
+	top: 9px;
 }
 
 .plan-align::after {
-	top: 9px;
+	top: 13px;
 }
 
 .plan-align[data-plan-align="default"] {
@@ -1771,16 +1839,16 @@
 
 .plan-align[data-plan-align="default"]::after,
 .plan-align[data-plan-align="left"]::after {
-	right: 7px;
+	right: 11px;
 }
 
 .plan-align[data-plan-align="center"]::after {
-	left: 5px;
-	right: 5px;
+	left: 9px;
+	right: 9px;
 }
 
 .plan-align[data-plan-align="right"]::after {
-	left: 7px;
+	left: 11px;
 }
 
 /* Where the drag will land. A hairline, because it is a position rather than a
@@ -1789,6 +1857,15 @@
 	background: var(--color-brand);
 	border-radius: 1px;
 	pointer-events: none;
+}
+
+/* Where an aimed-at insert will put the new row or column, across the table. */
+.plan-seam-line {
+	position: fixed;
+	z-index: 40;
+	background: var(--color-brand);
+	pointer-events: none;
+	animation: plan-rail-in var(--duration-fast) var(--ease-out);
 }
 
 .plan-table-action-toolbar {
@@ -1842,9 +1919,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.plan-rail,
+	.plan-seam-line {
+		animation: none;
+	}
+
 	.plan-grip,
 	.plan-grip-remove,
-	.plan-insert {
+	.plan-insert,
+	.plan-align {
 		transition: none;
 	}
 }
