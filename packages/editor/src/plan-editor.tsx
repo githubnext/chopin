@@ -167,7 +167,6 @@ export function PlanEditor(
 	// rebuilt rather than reconciled — that is what "reset" means. The marks
 	// describe a history that no longer exists, so they go with it.
 	let onReset = useCallback((reason: Plan.Reset["reason"], lost: boolean) => {
-		if (reason === "rebuilt") researchDrafts.restoreRejected();
 		changes.clear();
 		questions?.resetDocument();
 		setState(prev => ({
@@ -178,7 +177,7 @@ export function PlanEditor(
 			lost: lost ? (prev.lost ?? 0) + 1 : prev.lost,
 		}));
 		setGeneration(value => value + 1);
-	}, [changes, questions, researchDrafts]);
+	}, [changes, questions]);
 
 	// The store resolves anchors itself, because a Lexical key is per-editor:
 	// the server's key for a block means nothing in this browser.
