@@ -812,6 +812,12 @@
 	color: var(--color-text-quaternary);
 }
 
+@media (hover: none) {
+	.navigation-account-menu-item kbd {
+		display: none;
+	}
+}
+
 .navigation-dialog-list {
 	display: flex;
 	max-height: min(50vh, 20rem);

@@ -764,6 +764,7 @@ export function NavigationShell(
 		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
 	};
 	let dismissDialog = () => setDialog(undefined);
+	let [sidebarShortcut, setSidebarShortcut] = useState<string>();
 	let shortcutActions = useRef<ShortcutActions>({});
 	shortcutActions.current = {
 		search: () => showDialog("search"),
@@ -782,7 +783,9 @@ export function NavigationShell(
 		let stop: (() => void) | undefined;
 		let live = true;
 		void import("./global-shortcuts").then(module => {
-			if (live) stop = module.listenForShortcuts(() => shortcutActions.current);
+			if (!live) return;
+			stop = module.listenForShortcuts(() => shortcutActions.current);
+			setSidebarShortcut(module.shortcutHint("toggle-sidebar"));
 		});
 		return () => {
 			live = false;
@@ -960,6 +963,7 @@ export function NavigationShell(
 					<ProjectSidebarExpandButton
 						buttonRef={drawerOpener}
 						onExpand={() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false)}
+						shortcut={sidebarShortcut}
 					/>
 				)}
 				{drawerPresence.phase !== "closed" && (

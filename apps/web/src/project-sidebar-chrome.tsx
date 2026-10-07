@@ -87,9 +87,11 @@ export function ProjectSidebarExpandButton(
 	{
 		buttonRef,
 		onExpand,
+		shortcut,
 	}: {
 		buttonRef?: RefObject<HTMLButtonElement | null>;
 		onExpand: () => void;
+		shortcut?: string;
 	},
 ) {
 	return (
@@ -97,6 +99,7 @@ export function ProjectSidebarExpandButton(
 			aria-label="Show sidebar"
 			className="project-sidebar-expand btn btn-icon btn-ghost shrink-0"
 			data-tooltip="Show sidebar"
+			data-tooltip-shortcut={shortcut}
 			onClick={onExpand}
 			ref={buttonRef}
 			type="button"
