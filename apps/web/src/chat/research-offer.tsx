@@ -465,7 +465,7 @@ export function ResearchOfferCard(
 				data-research-offer={offer.id}
 				role="group"
 			>
-				<SearchIcon aria-hidden="true" className="shrink-0" size={12} />
+				<SearchIcon aria-hidden="true" className="shrink-0" size={14} />
 				<span className="min-w-0 truncate">Research suggestion dismissed</span>
 			</div>
 		);
@@ -579,7 +579,7 @@ export function ResearchOfferCard(
 						key={addition.id}
 						role="group"
 					>
-						<PlusIcon aria-hidden="true" className="mt-1 shrink-0 text-text-tertiary" size={12} />
+						<PlusIcon aria-hidden="true" className="mt-0.5 shrink-0 text-text-tertiary" size={14} />
 						<p className="m-0 min-w-0 flex-1 break-words py-0.5">{addition.text}</p>
 						{controls.canAct && (
 							<>
