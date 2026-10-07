@@ -19,6 +19,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
+import { WorkspaceNotice } from "./workspace-notice";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
 import type { NoticeOptions } from "./navigation-notice";
@@ -782,8 +783,9 @@ export function NavigationShell(
 		setDrawerOpen(false);
 		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
+	let sidebarLoading = <ProjectSidebarLoading onCollapse={collapseSidebar} user={user} />;
 	let sidebar = (
-		<Suspense fallback={<ProjectSidebarLoading onCollapse={collapseSidebar} />}>
+		<Suspense fallback={sidebarLoading}>
 			<ProjectSidebar
 				accountMenu={accountPresence.phase !== "closed" && {
 					className: accountPresence.className,
@@ -820,6 +822,13 @@ export function NavigationShell(
 			/>
 		</Suspense>
 	);
+	let unknownRepository = route.page === "repository" && navigation
+			&& !navigation.projects.some(project =>
+				project.repositoryOwner.toLowerCase() === route.owner.toLowerCase()
+				&& project.repositoryName.toLowerCase() === route.repository.toLowerCase()
+			)
+		? `${route.owner}/${route.repository}`
+		: undefined;
 	let content = (
 		<>
 			{notice && (
@@ -867,16 +876,32 @@ export function NavigationShell(
 					)}
 				</TerminalAlert>
 			)}
-			{children ?? (
-				<Suspense fallback={null}>
-					<EmptyWorkspace
-						disabled={creationTarget.type === "loading" || creation.pending.size > 0}
-						hasProjects={navigation?.projects.length !== 0}
-						onAddProject={() => showDialog("add")}
-						onNewDocument={newDocument}
+			{children ?? (unknownRepository
+				? (
+					<WorkspaceNotice
+						actions={
+							<button
+								className="btn btn-md btn-primary"
+								onClick={() => showDialog("add")}
+								type="button"
+							>
+								Add project
+							</button>
+						}
+						body="Add it to open its documents."
+						title={`${unknownRepository} isn't one of your projects`}
 					/>
-				</Suspense>
-			)}
+				)
+				: (
+					<Suspense fallback={null}>
+						<EmptyWorkspace
+							disabled={creationTarget.type === "loading" || creation.pending.size > 0}
+							hasProjects={navigation?.projects.length !== 0}
+							onAddProject={() => showDialog("add")}
+							onNewDocument={newDocument}
+						/>
+					</Suspense>
+				))}
 		</>
 	);
 
