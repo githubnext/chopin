@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ResearchOfferCard, shouldShowResearchActionError } from "./research-offer";
+import { forwardStage, ResearchOfferCard, shouldShowResearchActionError } from "./research-offer";
 import { deferred } from "./research-offer.test-fixtures";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { OfferLinkView } from "./research-offer";
@@ -98,4 +98,12 @@ test("a failed brief projection exposes refinement failure and a writer-only ret
 	expect(render(true)).toContain(">Retry refinement</button>");
 	expect(render(false)).toContain("Brief refinement failed.");
 	expect(render(false)).not.toContain(">Retry refinement</button>");
+});
+
+test("an active request never shows an earlier stage, but terminal and retried stages do", () => {
+	expect(forwardStage(undefined, "searching")).toBe("searching");
+	expect(forwardStage("searching", "queued")).toBe("searching");
+	expect(forwardStage("searching", "analyzing")).toBe("analyzing");
+	expect(forwardStage("writing", "failed")).toBe("failed");
+	expect(forwardStage("failed", "queued")).toBe("queued");
 });

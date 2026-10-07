@@ -1,0 +1,17 @@
+/* A card that changes state in this session settles in rather than snapping. */
+.chat-research[data-entering] {
+	animation: chat-research-enter var(--duration-base) var(--motion-smooth-out) both;
+}
+
+@keyframes chat-research-enter {
+	from {
+		opacity: 0;
+		transform: translateY(0.25rem);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-research[data-entering] {
+		animation: none;
+	}
+}
