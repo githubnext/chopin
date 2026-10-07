@@ -285,7 +285,11 @@ function DocumentRouteSwap(
 				return (
 					<ContentSwapLayer
 						// The incoming route loads unseen and enters once the outgoing one has left.
-						active={layer === state.current && !state.previous}
+						// A newer request keeps the outgoing route on screen, so a route the user
+						// has already moved past never flashes in.
+						active={layer === state.current
+							? !state.previous
+							: layer === state.previous && !!state.pending}
 						className="document-route-layer h-full min-h-0"
 						immediately={state.current.immediately}
 						key={layer.key}
