@@ -364,6 +364,8 @@ export function Transcript(
 	let scroller = useRef<HTMLDivElement>(null);
 	let stack = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
+	// Growth follows only a reader resting on the last line, not one a few pixels up.
+	let flush = useRef(true);
 	let previous = useRef<{ groups: Set<string>; atoms: Set<string>; planned: boolean }>(undefined);
 	let entered = useRef(new Set<string>());
 	let places = useRef(new Map<string, { at: string; top: number }>());
@@ -468,6 +470,13 @@ export function Transcript(
 				&& message.author.handle === handle
 			)
 		) pinned.current = true;
+		// Rows that arrived behind a hidden Chat (the phone tab) are not news when it opens.
+		if (!active || !scroller.current?.getClientRects().length) {
+			entered.current.clear();
+			for (let row of stack.current?.querySelectorAll("[data-chat-enter]") ?? []) {
+				row.removeAttribute("data-chat-enter");
+			}
+		}
 		let rows = new Set(keyed.map(entry => entry.key));
 		previous.current = { groups: rows, atoms, planned: !!conversationPlan };
 		for (let mark of entered.current) {
@@ -522,7 +531,7 @@ export function Transcript(
 		let element = scroller.current;
 		if (!active || !element || !stack.current) return;
 		let observer = new ResizeObserver(() => {
-			if (pinned.current) element.scrollTop = element.scrollHeight;
+			if (flush.current) element.scrollTop = element.scrollHeight;
 		});
 		observer.observe(stack.current);
 		observer.observe(element);
@@ -537,6 +546,7 @@ export function Transcript(
 			.find(element => element.dataset.chatMessageId === sourceDestination.source.messageId);
 		if (!message) return;
 		pinned.current = false;
+		flush.current = false;
 		message.scrollIntoView({ block: "center", inline: "nearest" });
 		let exact = highlightSource(sourceOwner.current, message, sourceDestination.source);
 		message.dataset.sourceExact = String(exact);
@@ -555,6 +565,7 @@ export function Transcript(
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
 				pinned.current = distance < 48;
+				flush.current = distance <= 2;
 			}}
 		>
 			<span
@@ -567,7 +578,7 @@ export function Transcript(
 				{announcement}
 			</span>
 			<div
-				className="flex min-h-full flex-col gap-4 [&>*:first-child]:mt-auto"
+				className="flex min-h-full shrink-0 flex-col gap-4 [&>*:first-child]:mt-auto"
 				data-chat-stack
 				ref={stack}
 			>
