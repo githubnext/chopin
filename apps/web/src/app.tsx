@@ -4,9 +4,8 @@ import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading } from "./hosted";
 import { clearRepositoryCache } from "./repository-cache";
 
-let HostedLogin = lazy(() =>
-	import("./hosted-login").then(module => ({ default: module.HostedLogin }))
-);
+let loadHostedLogin = () => import("./hosted-login");
+let HostedLogin = lazy(() => loadHostedLogin().then(module => ({ default: module.HostedLogin })));
 let LocalLogin = lazy(() =>
 	import("./local-login").then(module => ({ default: module.LocalLogin }))
 );
@@ -18,6 +17,9 @@ export function App() {
 
 	useEffect(() => {
 		let active = true;
+		// Fetch the sign-in page beside the session so a signed-out visit does not wait on
+		// a second round trip; it stays out of the initial bundle.
+		void loadHostedLogin().catch(() => {});
 		Api.session().then(value => {
 			if (active) setSession(value);
 		}, reason => {
