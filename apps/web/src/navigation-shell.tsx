@@ -21,7 +21,7 @@ import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
-import { useNavigationNotice } from "./navigation-notice";
+import type { NoticeOptions } from "./navigation-notice";
 import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
 import { useMenuDismissal } from "./menu-dismissal";
@@ -293,7 +293,7 @@ export function NavigationShell(
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
-	let { notice, show: showNotice } = useNavigationNotice();
+	let [notice, showNotice] = useState<NoticeOptions>();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
