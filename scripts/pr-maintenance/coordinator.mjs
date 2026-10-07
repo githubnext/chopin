@@ -1,4 +1,12 @@
-import { attachRun, begin, finish, initialState, observe, validateState } from "./state.mjs";
+import {
+	attachRun,
+	begin,
+	finish,
+	initialState,
+	observe,
+	observeFailure,
+	validateState,
+} from "./state.mjs";
 
 export async function coordinate({
 	store,
@@ -86,6 +94,15 @@ export async function coordinate({
 			}, now);
 		}
 		payload.prs[number] = state;
+	}
+	for (let row of rows) {
+		let state = payload.prs[row.number];
+		if (
+			!state.active && row.head === state.head && row.action === "repair"
+			&& typeof row.failureFingerprint === "string" && row.failureFingerprint.trim()
+		) {
+			payload.prs[row.number] = observeFailure(state, row.failureFingerprint, now);
+		}
 	}
 	let capacity = Math.max(0, 3 - Object.values(payload.prs).filter((state) => state.active).length);
 	let candidates = Object.values(payload.prs).filter((state) =>

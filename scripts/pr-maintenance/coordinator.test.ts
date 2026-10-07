@@ -288,3 +288,64 @@ test("published-head reconciliation never applies the caller's episode reset twi
 	expect(result.payload.prs[1].action).toBe("ready");
 	expect(result.payload.prs[1].active).toBeNull();
 });
+
+test("two published repairs with unchanged current-head CI block before third dispatch", async () => {
+	let f = fixture();
+	Object.assign(f.rows[0], { failureFingerprint: "ci:same" });
+	await coordinate(f.options);
+	for (let index = 1; index <= 2; index++) {
+		let active = f.durable.payload.prs[1].active;
+		active.proposalHead = `published${index}`;
+		f.rows[0].head = active.proposalHead;
+		f.runs.push({
+			id: `run${index}`,
+			attempt: active.id,
+			status: "completed",
+			outcome: { kind: "applied", head: active.proposalHead },
+		});
+		f.options.now++;
+		await coordinate(f.options);
+	}
+	expect(f.sent).toHaveLength(2);
+	expect(f.durable.payload.prs[1].failureCount).toBe(2);
+	expect(f.durable.payload.prs[1].blocker.reason).toBe("Repeated failure without progress");
+});
+
+test("lost trusted result after observed publication charges and delays next repair", async () => {
+	let f = fixture();
+	Object.assign(f.rows[0], { failureFingerprint: "ci:same" });
+	await coordinate(f.options);
+	let active = f.durable.payload.prs[1].active;
+	active.proposalHead = "published";
+	f.rows[0].head = "published";
+	f.runs.push({ id: "run1", attempt: active.id, status: "completed" });
+	f.options.now = 2;
+	await coordinate(f.options);
+	expect(f.sent).toHaveLength(1);
+	expect(f.durable.payload.prs[1].repairCount).toBe(1);
+	expect(f.durable.payload.prs[1].nextRetryAt).toBe(2 + 5 * 60_000);
+});
+
+test("changed trusted CI fingerprint resets the no-progress streak", async () => {
+	let f = fixture();
+	Object.assign(f.rows[0], { failureFingerprint: "ci:A" });
+	await coordinate(f.options);
+	for (let index = 1; index <= 2; index++) {
+		let active = f.durable.payload.prs[1].active;
+		active.proposalHead = `published${index}`;
+		f.rows[0].head = active.proposalHead;
+		if (index === 2) Object.assign(f.rows[0], { failureFingerprint: "ci:B" });
+		f.runs.push({
+			id: `run${index}`,
+			attempt: active.id,
+			status: "completed",
+			outcome: { kind: "applied", head: active.proposalHead },
+		});
+		f.options.now++;
+		await coordinate(f.options);
+	}
+	expect(f.sent).toHaveLength(3);
+	expect(f.durable.payload.prs[1].failureCount).toBe(0);
+	expect(f.durable.payload.prs[1].failureRepairCount).toBe(2);
+	expect(f.durable.payload.prs[1].blocker).toBeNull();
+});
