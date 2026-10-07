@@ -1252,6 +1252,13 @@ button.question-add:disabled {
 	outline-offset: var(--focus-ring-offset);
 }
 
+/* MDXEditor paints task-list checkboxes on the focused list item's pseudo-element. */
+.plan-content
+	:is([class*="_listItemUnchecked"], [class*="_listItemChecked"]):focus-visible::before {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
 /*
  * The ring answers "where am I?" for keyboard users, so it hides after a pointer
  * press. Text fields keep theirs: a caret alone is easy to lose.

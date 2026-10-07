@@ -2623,3 +2623,73 @@
 		transition: none;
 	}
 }
+
+/* Keep the caret off the bottom edge while typing: browsers honour this when
+   they scroll a selection into view. */
+.plan [data-plan-scroll] {
+	scroll-padding-block: 4rem 30%;
+}
+
+/*
+ * Task-list checkboxes. MDXEditor draws the box on ::before and the check on
+ * ::after of the list item; restyle both and centre them on the first line.
+ */
+.plan-content :is([class*="_listItemUnchecked"], [class*="_listItemChecked"]) {
+	--plan-check-size: 1rem;
+	--plan-check-top: calc((1lh - var(--plan-check-size)) / 2);
+}
+
+.plan-content :is([class*="_listItemUnchecked"], [class*="_listItemChecked"]):before {
+	top: var(--plan-check-top);
+	width: var(--plan-check-size);
+	height: var(--plan-check-size);
+	box-sizing: border-box;
+	border: 1px solid var(--color-control-edge);
+	border-radius: var(--radius-sm);
+	background-color: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	transition-property: background-color, border-color;
+}
+
+.plan-content [class*="_listItemUnchecked"]:hover:before {
+	background-color: var(--color-selected);
+}
+
+.plan-content [class*="_listItemChecked"]:before {
+	border-color: var(--color-brand);
+	background-color: var(--color-brand);
+}
+
+.plan-content [class*="_listItemChecked"]:hover:before {
+	border-color: var(--color-brand-hover);
+	background-color: var(--color-brand-hover);
+}
+
+.plan-content [class*="_listItemChecked"]:after {
+	top: calc(var(--plan-check-top) + 0.1875rem);
+	left: 0.3125rem;
+	right: auto;
+	width: 0.3125rem;
+	height: 0.5625rem;
+	border-color: var(--color-white);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+	animation: plan-check-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes plan-check-in {
+	from {
+		opacity: 0;
+		transform: rotate(45deg) scale(0.8);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-content [class*="_listItemChecked"]:after {
+		animation: none;
+	}
+
+	.plan-content :is([class*="_listItemUnchecked"], [class*="_listItemChecked"]):before {
+		transition: none;
+	}
+}
