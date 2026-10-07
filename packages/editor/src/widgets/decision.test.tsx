@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DecisionCard } from "./decision";
 
 describe("DecisionCard", () => {
-	it("renders an accepted thread as a frozen decision", () => {
+	it("renders an accepted thread as a collapsed row", () => {
 		let markup = renderToStaticMarkup(
 			<DecisionCard
 				value={{
@@ -20,18 +20,10 @@ describe("DecisionCard", () => {
 			/>,
 		);
 
-		expect(markup).toContain('article aria-label="Decision"');
+		expect(markup).toContain('article aria-label="Accepted comment"');
 		expect(markup).toContain("Keep the rollout reversible.");
+		expect(markup).toContain('aria-expanded="false"');
 		expect(markup).toContain("@ana");
-		expect(markup).toContain("Use a feature flag.");
-		expect(markup).toContain("@bo");
-		expect(markup).toContain("Measure rollback time.");
-		expect(markup).toContain('Accepted by <span class="text-brand-ink">@ana</span>');
-		expect(markup).toContain('class="text-sm font-semibold text-brand-ink"');
-		expect(markup).toContain("data-plan-comment-context");
-		expect(markup.indexOf("Use a feature flag.")).toBeLessThan(
-			markup.indexOf("Keep the rollout reversible."),
-		);
-		expect(markup).not.toContain("italic");
+		expect(markup).not.toContain("Use a feature flag.");
 	});
 });
