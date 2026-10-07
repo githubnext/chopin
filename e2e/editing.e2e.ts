@@ -175,7 +175,7 @@ test("Tab moves between table cells and out of the last one", async ({ join, roo
 	let page = await join("ana");
 
 	await content(page).getByText("one", { exact: true }).click();
-	await page.keyboard.press("End");
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
 	await page.keyboard.type("1");
 	await page.keyboard.press("Tab");
 	await page.keyboard.type("2");
