@@ -315,7 +315,7 @@ function MessageGroup(
 							? "queued"
 							: active
 							? `Started at ${when(active.ts!)}`
-								: when(first.ts!)}
+							: when(first.ts!)}
 					</span>
 				</div>
 				{item.messages.map(message => (
