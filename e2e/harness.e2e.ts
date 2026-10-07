@@ -92,6 +92,39 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 	await expect(reloadedChat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
 });
 
+test("tool activity redacts credential text before broadcast and history replay", async ({ join, page, seed }) => {
+	await seed(
+		'# Credential fixture\n\n```json\n{"password":"synthetic-password","AWS_SECRET_ACCESS_KEY":"synthetic-aws-secret","region":"eu-test-1"}\n```\n',
+	);
+	let frames = await recordChat(page);
+	let opened = await join("ana");
+	let chat = chatPane(opened);
+	await chatInput(chat).fill("@chopin read the document and latest pull request");
+	await chat.getByRole("button", { name: "Send message" }).click();
+	await expect.poll(() =>
+		frames("chat:tool").some(item =>
+			item.frame.activity.name === "read_plan" && item.frame.activity.status === "done"
+		)
+	).toBe(true);
+	let result = frames("chat:tool").find(item =>
+		item.frame.activity.name === "read_plan" && item.frame.activity.status === "done"
+	)!.frame.activity.result!;
+	expect(result).toContain("[redacted]");
+	expect(result).toContain("eu-test-1");
+	let activity = JSON.stringify(frames("chat:tool"));
+	expect(activity).not.toContain("synthetic-password");
+	expect(activity).not.toContain("synthetic-aws-secret");
+	await expect.poll(() => frames("chat:state").at(-1)?.frame.busy).toBe(false);
+
+	await opened.reload();
+	await ready(opened);
+	await expect.poll(() => frames("chat:history", 2).length).toBeGreaterThan(0);
+	let history = frames("chat:history", 2)[0]!.frame.entries.flatMap(entry => entry.tools ?? []);
+	expect(history.find(tool => tool.name === "read_plan")?.result).toBe(result);
+	expect(JSON.stringify(history)).not.toContain("synthetic-password");
+	expect(JSON.stringify(history)).not.toContain("synthetic-aws-secret");
+});
+
 test("the composer marks its destination in the mode switch before sending", async ({ join }) => {
 	let opened = await join("ana");
 	let chat = chatPane(opened);

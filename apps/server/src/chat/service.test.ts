@@ -326,6 +326,57 @@ describe("AI SDK stream projection", () => {
 		expect(tool.result).toBe("Bearer [redacted] [redacted]");
 	});
 
+	it.each(["stream", "host"])(
+		"scrubs credentials in %s tool updates before publication and retention",
+		mode => {
+			let chat = create();
+			let { context, sent } = room(chat);
+			translate(context, call("read_plan"));
+			let partial = "AWS_SECRET_ACCESS_KEY=synthetic-progress-314\nstatus=ready";
+			if (mode === "host") progressed(context, "t1", partial);
+			else {
+				translate(
+					context,
+					part({
+						type: "tool-result",
+						toolCallId: "t1",
+						toolName: "read_plan",
+						output: partial,
+						preliminary: true,
+					}),
+				);
+			}
+			expect(sent.findLast(frame => frame.kind === "chat:tool")?.activity).toMatchObject({
+				status: "running",
+				result: "AWS_SECRET_ACCESS_KEY=[redacted]\nstatus=ready",
+			});
+			let output = JSON.stringify({
+				source: '{"password":"synthetic-final-314","region":"local"}',
+			});
+			if (mode === "host") finished(context, "t1", output, true);
+			else {
+				translate(
+					context,
+					part({
+						type: "tool-result",
+						toolCallId: "t1",
+						toolName: "read_plan",
+						output,
+					}),
+				);
+			}
+			let result = JSON.stringify({ source: '{"password":"[redacted]","region":"local"}' });
+			expect(sent.findLast(frame => frame.kind === "chat:tool")?.activity).toMatchObject({
+				status: "done",
+				result,
+			});
+			expect(chat.entries[0]?.tools?.[0]?.result).toBe(result);
+			expect(JSON.stringify(sent)).not.toContain("synthetic-progress-314");
+			expect(JSON.stringify(sent)).not.toContain("synthetic-final-314");
+			expect(JSON.stringify(chat.entries)).not.toContain("synthetic-final-314");
+		},
+	);
+
 	it("accepts the tools of a full session's active set and rejects the rest", () => {
 		let chat = create();
 		chat.agent = {
