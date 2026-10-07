@@ -29,8 +29,6 @@ export type WorkspaceEvent =
 	| { type: "set-chat"; open: boolean }
 	| { type: "set-desktop-chat"; open: boolean };
 
-export const WORKSPACE_MEDIA = ["(width < 724px)"] as const;
-
 export function initialWorkspaceState(
 	profile: WorkspaceProfile,
 	desktopChatOpen: boolean,
@@ -73,11 +71,6 @@ export function workspaceHeadingId(destination: WorkspaceDestination, scope?: st
 export function storedDocumentView(value: string | null): DecisionView {
 	if (value === "decisions") return value;
 	return "plan";
-}
-
-/** Classify the same media queries the subscription observes. */
-export function workspaceMode(matchMedia: (query: string) => { matches: boolean }): WorkspaceMode {
-	return matchMedia(WORKSPACE_MEDIA[0]).matches ? "compact" : "split";
 }
 
 export function transitionWorkspace(state: WorkspaceState, event: WorkspaceEvent): WorkspaceState {

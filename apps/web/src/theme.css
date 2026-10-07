@@ -1121,8 +1121,7 @@ button.question-add:disabled {
 	}
 }
 
-/* Composed fields place the focus boundary around their input and actions. */
-.composer-surface:focus-within, .composer-surface[data-focus] {
+.composer-surface:focus-within {
 	outline: var(--edge-width) solid var(--color-brand);
 	outline-offset: 0;
 }

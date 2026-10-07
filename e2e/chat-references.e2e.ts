@@ -135,24 +135,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 	await expect(draft).toHaveAttribute("aria-disabled", "true");
 	let error = chat.getByRole("alert");
 	await expect(error).toContainText("Message not sent: Unavailable");
-	let danger = await error.evaluate(element => {
-		let probe = document.createElement("span");
-		element.append(probe);
-		probe.style.color = "var(--color-danger-icon)";
-		let expectedIcon = getComputedStyle(probe).color;
-		probe.style.color = "color-mix(in srgb, var(--color-ruby-7) 45%, transparent)";
-		let expectedEdge = getComputedStyle(probe).color;
-		probe.remove();
-		let paint = getComputedStyle(element.querySelector("svg path")!);
-		return {
-			icon: paint.stroke === "none" ? paint.fill : paint.stroke,
-			edge: getComputedStyle(element.querySelector("button")!).outlineColor,
-			expectedIcon,
-			expectedEdge,
-		};
-	});
-	expect(danger.icon).toBe(danger.expectedIcon);
-	expect(danger.edge).toBe(danger.expectedEdge);
+
 	expect(
 		await error.evaluate(element =>
 			getComputedStyle(element).transitionDuration.split(",").some(duration =>

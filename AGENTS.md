@@ -7,6 +7,7 @@ document workflow, not the product boundary. Read
 before changing cross-package behavior.
 
 Before changing UI or interface copy, read the [design guidance](apps/web/DESIGN.md).
+Design jigs are temporary local artifacts. Keep them out of commits and pull requests.
 
 The most useful technical references are:
 

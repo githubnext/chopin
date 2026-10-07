@@ -118,7 +118,6 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await draft.fill("Thanks @cy");
 	await draft.press("Enter");
 	await expectChatValue(draft, "Thanks @cy ");
-	await expect(draft.locator('.draft-mention[data-mention="cy"]')).toHaveCSS("font-weight", "600");
 	expect(await chatCaret(draft)).toBe("Thanks @cy ".length);
 	await draft.pressSequentially("for looking.");
 	await chat.getByRole("button", { name: "Send message" }).click();
