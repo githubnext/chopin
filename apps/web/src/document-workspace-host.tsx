@@ -37,6 +37,9 @@ type Metadata = Pick<
 	| "updatedAt"
 >;
 
+let DISMISSIBLE_TARGET =
+	'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="listbox"], [role="dialog"], [role="combobox"]';
+
 function workspaceProps(
 	detail: Api.ChannelDetail,
 	agent: boolean,
@@ -260,7 +263,14 @@ export default function DocumentWorkspaceHost(
 	useEffect(() => {
 		if (presentation !== "open") return;
 		let closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || event.defaultPrevented) return;
+			if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+			// Escape dismisses the innermost thing first: a field gives up focus, then the next one closes.
+			let target = event.target instanceof Element ? event.target : undefined;
+			if (target?.closest(DISMISSIBLE_TARGET)) {
+				event.preventDefault();
+				if (target instanceof HTMLElement) target.blur();
+				return;
+			}
 			event.preventDefault();
 			let current = stateRef.current;
 			if (current.status === "ready") {
