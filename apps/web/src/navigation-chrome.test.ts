@@ -110,11 +110,11 @@ describe("the Figma navigation chrome", () => {
 	});
 
 	test("steps through account menu items and wraps", () => {
-		expect(menuItemTarget("ArrowDown", 0, 2)).toBe(1);
-		expect(menuItemTarget("ArrowDown", 1, 2)).toBe(0);
-		expect(menuItemTarget("ArrowUp", 0, 2)).toBe(1);
-		expect(menuItemTarget("Home", 1, 2)).toBe(0);
-		expect(menuItemTarget("End", 0, 2)).toBe(1);
+		expect(menuItemTarget("ArrowDown", 0, 3)).toBe(1);
+		expect(menuItemTarget("ArrowDown", 2, 3)).toBe(0);
+		expect(menuItemTarget("ArrowUp", 0, 3)).toBe(2);
+		expect(menuItemTarget("Home", 2, 3)).toBe(0);
+		expect(menuItemTarget("End", 0, 3)).toBe(2);
 	});
 
 	test("exposes whether the account menu is open", () => {
@@ -137,11 +137,18 @@ describe("the Figma navigation chrome", () => {
 		let closed = renderToStaticMarkup(createElement(ProjectSidebar, props));
 		let open = renderToStaticMarkup(createElement(ProjectSidebar, {
 			...props,
-			accountMenu: { className: "", closing: false, onDismiss() {}, onSignOut() {} },
+			accountMenu: {
+				className: "",
+				closing: false,
+				onDismiss() {},
+				onShortcuts() {},
+				onSignOut() {},
+			},
 		}));
 
 		expect(closed).toMatch(/class="project-sidebar-account" aria-expanded="false"/);
 		expect(open).toMatch(/class="project-sidebar-account" aria-expanded="true"/);
+		expect(open).toContain("Keyboard shortcuts");
 	});
 
 	test("offers explicit pagination when a Project has more documents", () => {

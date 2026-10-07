@@ -45,3 +45,11 @@
 		transition: none;
 	}
 }
+
+/* A shortcut hint follows the label in quieter ink. */
+.icon-tooltip:not([data-shortcut=""])[data-shortcut]::after {
+	margin-left: calc(var(--spacing) * 1.5);
+	content: attr(data-shortcut);
+	font-weight: 400;
+	opacity: 0.6;
+}

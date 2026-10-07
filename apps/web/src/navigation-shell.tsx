@@ -57,6 +57,7 @@ import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
+import type { ShortcutActions } from "./global-shortcuts";
 import type { NavigationMode, NavigationRoute } from "./navigation-model";
 
 export type Navigate = (
@@ -106,6 +107,11 @@ let DocumentSearchDialog = lazy(() =>
 );
 let DeleteDocumentDialog = lazy(() =>
 	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
+);
+let KeyboardShortcutsDialog = lazy(() =>
+	import("./keyboard-shortcuts-dialog").then(module => ({
+		default: module.KeyboardShortcutsDialog,
+	}))
 );
 
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
@@ -289,6 +295,7 @@ export function NavigationShell(
 		| "add"
 		| "new"
 		| "search"
+		| "shortcuts"
 		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
@@ -757,6 +764,31 @@ export function NavigationShell(
 		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
 	};
 	let dismissDialog = () => setDialog(undefined);
+	let shortcutActions = useRef<ShortcutActions>({});
+	shortcutActions.current = {
+		search: () => showDialog("search"),
+		"new-document": newDocument,
+		shortcuts: () => showDialog("shortcuts"),
+		"toggle-sidebar": () => {
+			if (mode === "drawer") return setDrawerOpen(true);
+			if (collapsed) return setCollapsed(false);
+			let inside = document.activeElement?.closest(".project-sidebar-frame");
+			setCollapsed(true);
+			if (inside) requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
+		},
+	};
+	// The listener and its registry load after first paint; the shell only names its actions.
+	useEffect(() => {
+		let stop: (() => void) | undefined;
+		let live = true;
+		void import("./global-shortcuts").then(module => {
+			if (live) stop = module.listenForShortcuts(() => shortcutActions.current);
+		});
+		return () => {
+			live = false;
+			stop?.();
+		};
+	}, []);
 	let collapseSidebar = () => {
 		setCollapsed(true);
 		dismissDrawer();
@@ -791,6 +823,7 @@ export function NavigationShell(
 					className: accountPresence.className,
 					closing: accountPresence.phase === "closing",
 					onDismiss: () => closeAccount(false),
+					onShortcuts: () => showDialog("shortcuts"),
 					onSignOut: () => void signOut(),
 				}}
 				accountMenuId={accountMenuId}
@@ -1000,6 +1033,11 @@ export function NavigationShell(
 							source={projects}
 							userId={user.id}
 						/>
+					</LazyDialogBoundary>
+				)}
+				{dialogMotion && presentedDialog === "shortcuts" && (
+					<LazyDialogBoundary>
+						<KeyboardShortcutsDialog motion={dialogMotion} onDismiss={dismissDialog} />
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && typeof presentedDialog === "object"

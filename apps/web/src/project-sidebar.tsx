@@ -8,6 +8,7 @@ import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
+import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
@@ -423,6 +424,7 @@ export function ProjectSidebar(
 			className: string;
 			closing: boolean;
 			onDismiss: () => void;
+			onShortcuts: () => void;
 			onSignOut: () => void;
 		};
 		accountMenuOpen?: boolean;
@@ -468,6 +470,7 @@ export function ProjectSidebar(
 	let archivedButton = useRef<HTMLButtonElement>(null);
 	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
+	let platform = currentShortcutPlatform();
 	let primaryActions = (
 		<div className="project-sidebar-primary-actions">
 			{archiveMode
@@ -505,6 +508,11 @@ export function ProjectSidebar(
 									? "Loading projects…"
 									: "New document"}
 							</span>
+							{!newDocumentPhase && (
+								<kbd aria-hidden="true" className="project-sidebar-hint">
+									{shortcutLabel("new-document", platform)}
+								</kbd>
+							)}
 						</button>
 						<button
 							className="project-sidebar-primary-action"
@@ -513,6 +521,9 @@ export function ProjectSidebar(
 						>
 							<SearchIcon />
 							<span>Search</span>
+							<kbd aria-hidden="true" className="project-sidebar-hint">
+								{shortcutLabel("search", platform)}
+							</kbd>
 						</button>
 					</>
 				)}
@@ -554,6 +565,7 @@ export function ProjectSidebar(
 						className="project-sidebar-action"
 						data-press="small"
 						data-tooltip="Hide sidebar"
+						data-tooltip-shortcut={shortcutLabel("toggle-sidebar", platform)}
 						onClick={onCollapse}
 						type="button"
 					>
@@ -644,6 +656,14 @@ export function ProjectSidebar(
 							<LockIcon aria-hidden="true" size={14} />
 							Manage repository access
 						</a>
+						<button
+							className="navigation-account-menu-item"
+							onClick={accountMenu.onShortcuts}
+							role="menuitem"
+							type="button"
+						>
+							Keyboard shortcuts<kbd aria-hidden="true">?</kbd>
+						</button>
 						<div role="separator" />
 						<button onClick={accountMenu.onSignOut} role="menuitem" type="button">
 							<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
