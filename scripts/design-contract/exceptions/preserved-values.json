@@ -141,47 +141,6 @@
 	},
 	{
 		"file": "apps/web/src/navigation.css",
-		"reason": "Anchored navigation surface has settled asymmetric 240ms/170ms choreography and bespoke curves; preserve transform behavior rather than substituting a near-match.",
-		"cases": [
-			[
-				"motion",
-				"transition",
-				"filter 240ms cubic-bezier(0.16, 1, 0.3, 1),\n\t\topacity 240ms cubic-bezier(0.16, 1, 0.3, 1),\n\t\ttransform 240ms cubic-bezier(0.16, 1, 0.3, 1)",
-				"CSS > .anchored-child-parent .workspace-frame",
-				1
-			],
-			[
-				"motion",
-				"transition-duration",
-				"170ms",
-				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-parent .workspace-frame",
-				1
-			],
-			[
-				"motion",
-				"transition-timing-function",
-				"cubic-bezier(0.55, 0, 1, 0.45)",
-				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-parent .workspace-frame",
-				1
-			],
-			[
-				"motion",
-				"animation",
-				"anchored-child-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both",
-				"CSS > .anchored-child-surface",
-				1
-			],
-			[
-				"motion",
-				"animation",
-				"anchored-child-exit 170ms cubic-bezier(0.55, 0, 1, 0.45) both",
-				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-surface",
-				1
-			]
-		]
-	},
-	{
-		"file": "apps/web/src/navigation.css",
 		"reason": "Sidebar resize affordance uses neutral 20% black; its interaction geometry owns this existing local treatment.",
 		"cases": [
 			[
