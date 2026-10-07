@@ -1,5 +1,3 @@
-import type { Research } from "@chopin/protocol";
-
 export type User = {
 	id: string;
 	login: string;
@@ -148,7 +146,7 @@ async function decoded<T>(result: Response): Promise<T> {
 	return value as T;
 }
 
-async function response<T>(path: string, init?: RequestInit): Promise<T> {
+export async function response<T>(path: string, init?: RequestInit): Promise<T> {
 	return decoded(await fetch(path, init));
 }
 
@@ -255,45 +253,6 @@ export function visitDocument(documentId: string): Promise<void> {
 	});
 }
 
-function researchRequestPath(channelId: string, requestId?: string): string {
-	let path = `/api/channels/${encodeURIComponent(channelId)}/research-requests`;
-	return requestId ? `${path}/${encodeURIComponent(requestId)}` : path;
-}
-
-export function createResearchRequest(
-	channelId: string,
-	question: string,
-	requestId: string,
-): Promise<{ request: Research.RequestView; repeated: boolean }> {
-	return response(researchRequestPath(channelId), {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ question, requestId }),
-	});
-}
-
-export function researchRequest(
-	channelId: string,
-	requestId: string,
-	signal?: AbortSignal,
-): Promise<Research.RequestView> {
-	return response(researchRequestPath(channelId, requestId), { signal });
-}
-
-export function cancelResearchRequest(
-	channelId: string,
-	requestId: string,
-): Promise<Research.RequestView> {
-	return response(`${researchRequestPath(channelId, requestId)}/cancel`, { method: "POST" });
-}
-
-export function retryResearchRequest(
-	channelId: string,
-	requestId: string,
-): Promise<Research.RequestView> {
-	return response(`${researchRequestPath(channelId, requestId)}/retry`, { method: "POST" });
-}
-
 export function renameChannel(id: string, title: string): Promise<ChannelDetail> {
 	return response(`/api/channels/${encodeURIComponent(id)}`, {
 		method: "PATCH",
@@ -324,45 +283,4 @@ export async function resetAgent(id: string): Promise<void> {
 export async function logout(): Promise<void> {
 	let result = await fetch("/auth/logout", { method: "POST" });
 	if (!result.ok) throw new ApiError(`logout failed (${result.status})`, result.status);
-}
-
-export type DeviceAuthorizationStatus =
-	| { status: "waiting"; userCode: string; verificationUri: string; expiresAt: string }
-	| { status: "authorized" }
-	| { status: "consent"; path: string }
-	| { status: "complete" }
-	| { status: "failed"; message: string }
-	| { status: "expired" }
-	| { status: "denied" }
-	| { status: "cancelled" };
-
-/**
- * Local device-flow sign-in routes (`AUTH_MODE=local` only). Cookie
- * credentials must travel with each request so the server can bind the
- * attempt to the initiating browser; the server never answers these with a
- * generic 401, so a failure here does not trigger the reload in `decoded()`.
- */
-export function startDeviceAuthorization(): Promise<DeviceAuthorizationStatus> {
-	return response("/auth/device", { method: "POST", credentials: "same-origin" });
-}
-
-export function deviceAuthorizationStatus(): Promise<DeviceAuthorizationStatus> {
-	return response("/auth/device", { credentials: "same-origin" });
-}
-
-export function completeDeviceAuthorization(): Promise<DeviceAuthorizationStatus> {
-	return response("/auth/device/complete", { method: "POST", credentials: "same-origin" });
-}
-
-export function consentDeviceAuthorization(accept: boolean): Promise<DeviceAuthorizationStatus> {
-	return response("/auth/device/consent", {
-		method: "POST",
-		credentials: "same-origin",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ accept }),
-	});
-}
-
-export function cancelDeviceAuthorization(): Promise<void> {
-	return response("/auth/device/cancel", { method: "POST", credentials: "same-origin" });
 }

@@ -7,9 +7,9 @@ import {
 	readRepositoryCache,
 	repositoryCacheIsStale,
 	writeRepositoryCache,
-} from "./repository-cache";
+} from "./repository-snapshot";
 
-import type { RepositorySnapshot } from "./repository-cache";
+import type { RepositorySnapshot } from "./repository-snapshot";
 
 class MemoryStorage implements Storage {
 	readonly #values = new Map<string, string>();
