@@ -32,10 +32,10 @@ through gh-aw's separate inspection and application jobs.
 Create these **repository Actions secrets** under Settings → Secrets and
 variables → Actions:
 
-| Secret                 | Purpose                                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `CODEX_API_KEY`        | OpenAI API key used by the Codex engine.                                                                                |
-| `PR_MAINTENANCE_TOKEN` | Fine-grained GitHub PAT restricted to this repository, with **Contents: read/write** and **Pull requests: read/write**. |
+| Secret                | Purpose                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `CODEX_API_KEY`       | OpenAI API key used by the Codex engine.                                                                                |
+| `PR_MAITENANCE_TOKEN` | Fine-grained GitHub PAT restricted to this repository, with **Contents: read/write** and **Pull requests: read/write**. |
 
 The PAT needs organization approval if required by `githubnext`. It is used only
 by trusted rebasing and safe-output jobs, never given to the agent. An equivalent

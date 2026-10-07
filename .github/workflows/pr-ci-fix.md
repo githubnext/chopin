@@ -51,10 +51,10 @@ tools:
 steps:
   - name: Validate PR write credential
     env:
-      PR_WRITE_TOKEN: ${{ secrets.PR_MAINTENANCE_TOKEN }}
+      PR_WRITE_TOKEN: ${{ secrets.PR_MAITENANCE_TOKEN }}
     run: |
       if [ -z "$PR_WRITE_TOKEN" ]; then
-        echo "Set PR_MAINTENANCE_TOKEN with Contents and Pull requests read/write access."
+        echo "Set PR_MAITENANCE_TOKEN with Contents and Pull requests read/write access."
         exit 1
       fi
   - name: Select new CI failures
@@ -63,7 +63,7 @@ steps:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 safe-outputs:
-  github-token: ${{ secrets.PR_MAINTENANCE_TOKEN }}
+  github-token: ${{ secrets.PR_MAITENANCE_TOKEN }}
   report-failure-as-issue: false
   threat-detection:
     continue-on-error: false
