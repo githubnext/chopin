@@ -44,6 +44,7 @@ type DraftStore = {
 		position?: Y.RelativePosition,
 	): boolean;
 	place(position: Y.RelativePosition, writable?: boolean): boolean;
+	restoreRejected(now?: number): boolean;
 	start(
 		create: (question: string, requestId: string) => Promise<Research.RequestView>,
 	): Promise<void>;
@@ -238,5 +239,37 @@ describe("research draft lifecycle", () => {
 		expect(store.get()).toBe(snapshot);
 		expect(store.get()?.created).toEqual(REQUEST);
 		expect(store.get()?.position).toBe(original);
+	});
+
+	it("reopens a placed draft when the document is rebuilt soon after", async () => {
+		let Store = await draftStore();
+		if (!Store) return;
+		let store = new Store();
+		store.attachPlacement(() => true);
+		store.open(ANCHOR, position("rejected"));
+		store.change(REQUEST.question);
+		await store.start(async () => REQUEST);
+		expect(store.get()).toBeUndefined();
+
+		expect(store.restoreRejected()).toBe(true);
+		let draft = store.get();
+		expect(draft?.created).toEqual(REQUEST);
+		expect(draft?.position).toBeUndefined();
+		expect(draft?.error).toContain("place it again");
+		expect(store.dismiss()).toBe(false);
+		expect(store.restoreRejected()).toBe(false);
+	});
+
+	it("does not reopen a placement that outlived its confirmation window", async () => {
+		let Store = await draftStore();
+		if (!Store) return;
+		let store = new Store();
+		store.attachPlacement(() => true);
+		store.open(ANCHOR, position("accepted"));
+		store.change(REQUEST.question);
+		await store.start(async () => REQUEST);
+
+		expect(store.restoreRejected(Date.now() + 60_000)).toBe(false);
+		expect(store.get()).toBeUndefined();
 	});
 });

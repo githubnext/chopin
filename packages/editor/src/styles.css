@@ -35,11 +35,31 @@
 
 .plan-research-draft {
 	width: min(28.125rem, var(--plan-content-width, 48rem), calc(100vw - 2rem));
-	padding: 0.875rem;
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-lg);
-	background: var(--color-page);
-	box-shadow: var(--shadow-resting);
+}
+
+.motion-research-draft {
+	opacity: 0;
+	transform: scale(var(--dropdown-pre-scale));
+	transform-origin: top left;
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+}
+
+.motion-research-draft[data-side="above"] {
+	transform-origin: bottom left;
+}
+
+.motion-research-draft[data-motion="is-open"] {
+	opacity: 1;
+	transform: none;
+}
+
+.motion-research-draft[data-motion="is-closing"] {
+	pointer-events: none;
+	opacity: 0;
+	transform: scale(var(--dropdown-closing-scale));
+	transition-duration: var(--dropdown-close-dur);
 }
 
 [data-research-ready] {
@@ -69,23 +89,48 @@
 	max-width: 28.125rem;
 }
 
+/* One surface: the composer is the field, so focus rings the whole card. */
 .plan-research-composer {
-	display: grid;
-	gap: 0.625rem;
-}
-
-.plan-research-field {
 	position: relative;
+	display: grid;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
 }
 
-.plan-research-field textarea {
+.plan-research-draft:is([data-side="above"], [data-side="pinned"]) .plan-research-composer {
+	box-shadow: var(--shadow-raised);
+}
+
+.plan-research-composer:focus-within {
+	outline: 2px solid var(--color-brand);
+	outline-offset: 2px;
+}
+
+.plan-research-composer textarea {
 	display: block;
 	width: 100%;
-	min-height: 5.5rem;
+	min-height: 4rem;
 	resize: none;
-	padding: 0.625rem 2.5rem 3rem 0.75rem;
+	padding: 0.625rem 2.5rem 0.25rem 0.75rem;
+	border: 0;
+	background: transparent;
 	font: inherit;
 	font-size: var(--text-sm);
+	color: var(--color-text-primary);
+}
+
+.plan-research-composer textarea:focus {
+	outline: none;
+}
+
+.plan-research-composer textarea::placeholder {
+	color: var(--color-text-quaternary);
+}
+
+.plan-research-composer textarea:disabled {
+	color: var(--color-text-tertiary);
 }
 
 .plan-research-dismiss {
@@ -93,16 +138,24 @@
 	inset: 0.3125rem 0.3125rem auto auto;
 }
 
-.plan-research-send {
-	position: absolute;
-	inset: auto 0.625rem 0.625rem auto;
+.plan-research-composer-footer {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.25rem 0.5rem 0.5rem 0.75rem;
 }
 
-.plan-research-actions {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: flex-end;
-	gap: 0.5rem;
+.plan-research-message {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.plan-research-message[data-tone="error"] {
+	color: var(--color-destructive);
 }
 
 .plan-research-tracked {
@@ -387,6 +440,7 @@
 	.plan-research-track span::after {
 		animation: none;
 	}
+	.motion-research-draft,
 	.plan-research-fold,
 	.plan-research-track span,
 	.plan-research-track span::after {

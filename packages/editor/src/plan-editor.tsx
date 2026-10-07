@@ -167,6 +167,7 @@ export function PlanEditor(
 	// rebuilt rather than reconciled — that is what "reset" means. The marks
 	// describe a history that no longer exists, so they go with it.
 	let onReset = useCallback((reason: Plan.Reset["reason"], lost: boolean) => {
+		if (reason === "rebuilt") researchDrafts.restoreRejected();
 		changes.clear();
 		questions?.resetDocument();
 		setState(prev => ({
@@ -177,7 +178,7 @@ export function PlanEditor(
 			lost: lost ? (prev.lost ?? 0) + 1 : prev.lost,
 		}));
 		setGeneration(value => value + 1);
-	}, [changes, questions]);
+	}, [changes, questions, researchDrafts]);
 
 	// The store resolves anchors itself, because a Lexical key is per-editor:
 	// the server's key for a block means nothing in this browser.
@@ -231,10 +232,14 @@ export function PlanEditor(
 		return () => element.removeEventListener("scroll", onScroll);
 	}, [changes, generation, onScrollTop, wire]);
 
+	// Restore only when the scroller is (re)created. Echoing every reported
+	// position back cancels smooth scrolls and rewinds to a stale offset.
+	let restoreTop = useRef(scrollTop);
+	restoreTop.current = scrollTop;
 	useEffect(() => {
 		let element = scroller.current;
-		if (element && scrollTop !== undefined) element.scrollTop = scrollTop;
-	}, [generation, scrollTop]);
+		if (element && restoreTop.current !== undefined) element.scrollTop = restoreTop.current;
+	}, [generation]);
 
 	// A preface that changes height moves the document without resizing or scrolling it; overlays
 	// that track the prose (comment markers, rails) re-measure on scroll, so announce one.

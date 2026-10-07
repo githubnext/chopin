@@ -22,8 +22,10 @@ import {
 import { $createResearchNode, $isResearchNode } from "@chopin/dialect";
 import * as Y from "yjs";
 
-import { blockElement } from "../scroll";
+import { blockElement, planScroller } from "../scroll";
+import { useTransitionPresence } from "../transition-presence";
 import { ResearchComposer } from "../widgets/research";
+import { placeDraft } from "./placement";
 import { $relativePosition } from "./position";
 import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 
@@ -32,10 +34,13 @@ import type { LexicalEditor } from "lexical";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import type { ResearchDraftStore } from "../research-draft";
 import type { ResearchStore } from "../widget-options";
-import type { DOMRectLike } from "./placement";
+import type { DOMRectLike, DraftPlacement, ViewportBox } from "./placement";
 
 type Attachment = { block: HTMLElement; rect: DOMRectLike };
-type Position = { left: number; top: number };
+type Position = { left: number; top: number; side: DraftPlacement["side"] };
+
+// Long enough to outlast the editor's own scroll after the slash command's Enter.
+const REVEAL_WINDOW = 600;
 
 export type OpenResearch = {
 	anchor: DOMRectLike;
@@ -142,19 +147,14 @@ export function attachmentBlock<Block>(
 	return offset === 0 && previous ? previous : resolved;
 }
 
-export function ResearchDraftRecovery({ unresolved }: { unresolved: boolean }) {
-	return unresolved
-		? (
-			<div className="plan-research-callout" role="alert">
-				<p>This research draft cannot yet be placed at its saved position.</p>
-			</div>
-		)
-		: null;
-}
+export const UNRESOLVED_DRAFT = "This research draft cannot yet be placed at its saved position.";
 
 export function ResearchDraftShell(
-	{ children, surfaceRef, style }: {
+	{ children, inert, motion, side, surfaceRef, style }: {
 		children?: ReactNode;
+		inert?: boolean;
+		motion?: string;
+		side?: DraftPlacement["side"];
 		surfaceRef?: Ref<HTMLDivElement>;
 		style?: CSSProperties;
 	},
@@ -162,16 +162,30 @@ export function ResearchDraftShell(
 	return (
 		<div
 			ref={surfaceRef}
+			aria-hidden={inert ? "true" : undefined}
 			aria-label="Research question"
 			role="region"
 			data-focus-boundary=""
+			data-side={side}
 			contentEditable={false}
-			className="fixed z-50 plan-research-draft"
+			className="fixed z-50 plan-research-draft motion-research-draft"
+			data-motion={motion || undefined}
+			inert={inert}
 			style={style}
 		>
 			{children}
 		</div>
 	);
+}
+
+/** The pixels a draft may occupy: the visible scroller inside the visual viewport. */
+function draftBounds(editor: LexicalEditor): ViewportBox {
+	let bounds = editorSurfaceViewport(editor);
+	let scroller = planScroller(editor.getRootElement())?.getBoundingClientRect();
+	if (!scroller) return bounds;
+	let top = Math.max(bounds.top, scroller.top);
+	let bottom = Math.min(bounds.top + bounds.height, scroller.bottom);
+	return { ...bounds, top, height: Math.max(0, bottom - top) };
 }
 
 function resolveAttachment(
@@ -245,6 +259,9 @@ export function ResearchComposerSurface(
 	>(undefined);
 	let [position, setPosition] = useState<Position>();
 	let [unresolved, setUnresolved] = useState(false);
+	let revealUntil = useRef(0);
+	let presence = useTransitionPresence(draft, 150, false);
+	let shown = presence.value;
 	let visible = !!draft;
 
 	useEffect(() =>
@@ -288,25 +305,34 @@ export function ResearchComposerSurface(
 			: undefined);
 		setUnresolved(!!binding && !!draft.position && !resolved);
 		let anchor = attachment?.rect ?? draft.anchor;
-		let viewport = editorSurfaceViewport(editor);
-		element.style.maxWidth = `${Math.max(0, viewport.width - 16)}px`;
+		let bounds = draftBounds(editor);
+		let column = attachment ? anchor.width : Infinity;
+		element.style.maxWidth = `${Math.max(0, Math.min(bounds.width - 16, column))}px`;
 		let height = element.offsetHeight;
 		reserve(attachment?.block, height);
-		let leftEdge = viewport.left + 8;
-		let rightEdge = viewport.left + viewport.width - element.offsetWidth - 8;
-		let next = {
-			left: Math.min(Math.max(anchor.left, leftEdge), Math.max(leftEdge, rightEdge)),
-			top: anchor.bottom,
-		};
+		let next = placeDraft(anchor, { width: element.offsetWidth, height }, bounds);
+		let scroller = planScroller(editor.getRootElement());
+		if (next.reveal !== 0 && scroller && performance.now() < revealUntil.current) {
+			scroller.scrollTo({
+				top: scroller.scrollTop + next.reveal,
+				behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+			});
+		}
 		setPosition(current =>
-			current?.left === next.left && current.top === next.top ? current : next
+			current?.left === next.left && current.top === next.top && current.side === next.side
+				? current
+				: { left: next.left, top: next.top, side: next.side }
 		);
 	}, [binding, draft, editor, reserve]);
 
 	useLayoutEffect(() => {
+		if (!visible) return;
+		setPosition(undefined);
+		revealUntil.current = performance.now() + REVEAL_WINDOW;
+	}, [visible]);
+	useLayoutEffect(() => {
 		if (!draft) {
 			detach();
-			setPosition(undefined);
 			setUnresolved(false);
 			return;
 		}
@@ -326,10 +352,34 @@ export function ResearchComposerSurface(
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [visible]);
+	let settled = !!draft && !draft.submitting && !draft.cancelling;
+	useEffect(() => {
+		// A disabled textarea drops focus while a request is in flight; return it for a retry.
+		if (!settled) return;
+		let textarea = surface.current?.querySelector("textarea");
+		if (textarea && document.activeElement === document.body) {
+			textarea.focus({ preventScroll: true });
+		}
+	}, [settled]);
 	useEffect(() => {
 		if (!draft) return;
 		return listenToEditorGeometry(editor, place);
 	}, [draft, editor, place]);
+	useEffect(() => {
+		if (!visible) return;
+		// An on-screen keyboard shrinks the viewport after focus; bring the draft back.
+		let resized = () => {
+			if (!surface.current?.contains(document.activeElement)) return;
+			revealUntil.current = performance.now() + REVEAL_WINDOW;
+		};
+		let viewport = window.visualViewport;
+		window.addEventListener("resize", resized, true);
+		viewport?.addEventListener("resize", resized, true);
+		return () => {
+			window.removeEventListener("resize", resized, true);
+			viewport?.removeEventListener("resize", resized, true);
+		};
+	}, [visible]);
 	useEffect(() => {
 		if (!draft) return;
 		return editor.registerUpdateListener(place);
@@ -342,13 +392,14 @@ export function ResearchComposerSurface(
 		);
 	}, [binding, disabled, drafts, editor]);
 
-	if (!draft) return null;
+	if (!shown) return null;
+	let current = draft ?? shown;
 	let dismiss = () => {
 		drafts.dismiss();
 		editor.focus();
 	};
 	let submit = () => {
-		if (draft.submitting || draft.cancelling || !draft.question.trim()) return;
+		if (!draft || draft.submitting || draft.cancelling || !draft.question.trim()) return;
 		if (!binding || disabled) return;
 		let position = currentPosition(editor, binding);
 		if (draft.created) {
@@ -361,43 +412,47 @@ export function ResearchComposerSurface(
 		);
 	};
 	let cancel = () => {
+		if (!draft) return;
 		if (!draft.created) return dismiss();
 		if (disabled) return;
 		void drafts.cancelCreated(id => research.cancel(id), !disabled).then(cancelled => {
 			if (cancelled) editor.focus();
 		});
 	};
-	let busy = !!draft.submitting || !!draft.cancelling;
-	let dismissible = !busy && !draft.created;
+	let busy = !!current.submitting || !!current.cancelling;
+	let dismissible = !busy && !current.created;
 	return (
 		<ResearchDraftShell
+			motion={presence.className}
+			inert={!draft}
+			side={position?.side}
 			surfaceRef={surface}
 			style={position
 				? { top: position.top, left: position.left }
 				: {
-					top: draft.anchor.bottom,
-					left: draft.anchor.left,
+					top: current.anchor.bottom,
+					left: current.anchor.left,
 					visibility: "hidden",
 				}}
 		>
-			<ResearchDraftRecovery unresolved={unresolved && !draft.error} />
 			<ResearchComposer
 				blocked={disabled
 					? "Wait until the document is editable before placing research."
 					: binding
 					? undefined
 					: "Connect to the document before starting research."}
-				cancelDisabled={!!draft.created && !!disabled}
-				cancelLabel={draft.created ? "Cancel research" : undefined}
+				cancelDisabled={!!current.created && !!disabled}
+				cancelLabel={current.created ? "Cancel research" : undefined}
 				dismissible={dismissible}
-				error={draft.error}
+				error={current.error}
+				notice={unresolved ? UNRESOLVED_DRAFT : undefined}
 				onCancel={cancel}
 				onChange={question => drafts.change(question)}
 				onEscape={dismiss}
 				onSubmit={submit}
-				question={draft.question}
-				questionLocked={!!draft.created}
-				submitLabel={draft.created ? "Place Research" : undefined}
+				question={current.question}
+				questionLocked={!!current.created}
+				submitLabel={current.created ? "Place research" : undefined}
 				submitting={busy}
 			/>
 		</ResearchDraftShell>

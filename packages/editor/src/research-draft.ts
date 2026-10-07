@@ -45,6 +45,14 @@ export type ResearchDraft =
 	);
 
 type Placement = (position: RelativePosition, id: string) => boolean;
+type Placed = Pick<ResearchDraft, "anchor" | "question"> & {
+	at: number;
+	created: Research.RequestView;
+	submitted: Submission;
+};
+
+/** How long after placement a rebuilt document is taken to have rejected the reference. */
+export const PLACEMENT_CONFIRMATION = 10_000;
 
 /**
  * Owns the non-document research composer across keyed Lexical editor lifetimes.
@@ -54,6 +62,7 @@ export class ResearchDraftStore {
 	#draft: ResearchDraft | undefined;
 	#listeners = new Set<() => void>();
 	#placement: Placement | undefined;
+	#placed: Placed | undefined;
 
 	subscribe(listener: () => void): () => void {
 		this.#listeners.add(listener);
@@ -70,6 +79,7 @@ export class ResearchDraftStore {
 
 	open(anchor: DOMRectLike, position?: RelativePosition): boolean {
 		if (!this.canOpen()) return false;
+		this.#placed = undefined;
 		this.#set({ phase: "editing", anchor, position, question: "" });
 		return true;
 	}
@@ -124,6 +134,13 @@ export class ResearchDraftStore {
 		let current = this.#current(submitted.requestId);
 		if (!current) return;
 		if (current.position && this.#insert(current.position, request.id)) {
+			this.#placed = {
+				anchor: current.anchor,
+				at: Date.now(),
+				created: request,
+				question: current.question,
+				submitted,
+			};
 			this.#set(undefined);
 			return;
 		}
@@ -135,6 +152,26 @@ export class ResearchDraftStore {
 			error:
 				"Research started, but its reference could not be placed. Choose a new insertion point in the document.",
 		});
+	}
+
+	/**
+	 * Reopen a just-placed draft when the server rebuilt the document instead of
+	 * accepting it, so the request does not keep running with nothing on screen.
+	 */
+	restoreRejected(now = Date.now()): boolean {
+		let placed = this.#placed;
+		this.#placed = undefined;
+		if (!placed || this.#draft || now - placed.at > PLACEMENT_CONFIRMATION) return false;
+		this.#set({
+			phase: "placement",
+			anchor: placed.anchor,
+			question: placed.question,
+			created: placed.created,
+			submitted: placed.submitted,
+			error:
+				"The document could not keep this research. Click where it belongs, then place it again.",
+		});
+		return true;
 	}
 
 	attachPlacement(place: Placement): () => void {

@@ -61,6 +61,8 @@ export type ResearchComposerProps = {
 	cancelLabel?: string;
 	dismissible?: boolean;
 	error?: string;
+	/** Quiet context that does not block submission. */
+	notice?: string;
 	onCancel: () => void;
 	onChange: (value: string) => void;
 	onEscape?: () => void;
@@ -144,6 +146,7 @@ export function ResearchComposer(
 		cancelLabel,
 		dismissible = true,
 		error,
+		notice,
 		onCancel,
 		onChange,
 		onEscape,
@@ -158,62 +161,63 @@ export function ResearchComposer(
 		event.preventDefault();
 		onSubmit();
 	};
+	let message = error ?? blocked ?? notice;
 	return (
 		<form className="plan-research-composer" onSubmit={submit}>
-			<div className="plan-research-field">
-				<textarea
-					aria-label="Research question"
-					autoFocus
-					className="field"
-					disabled={submitting}
-					maxLength={4096}
-					onChange={event => onChange(event.target.value)}
-					onKeyDown={event =>
-						handleResearchComposerKey(event, {
-							dismissible,
-							onChange,
-							onDismiss: onEscape ?? onCancel,
-							onSubmit,
-						})}
-					placeholder="What should Chopin research?"
-					readOnly={questionLocked}
-					rows={3}
-					value={question}
-				/>
-				{dismissible && !submitting && (
+			<textarea
+				aria-label="Research question"
+				autoFocus
+				disabled={submitting}
+				maxLength={4096}
+				onChange={event => onChange(event.target.value)}
+				onKeyDown={event =>
+					handleResearchComposerKey(event, {
+						dismissible,
+						onChange,
+						onDismiss: onEscape ?? onCancel,
+						onSubmit,
+					})}
+				placeholder="What should Chopin research?"
+				readOnly={questionLocked}
+				rows={3}
+				value={question}
+			/>
+			{dismissible && !submitting && (
+				<button
+					aria-label="Discard research question"
+					className="plan-research-dismiss btn btn-icon btn-ghost"
+					data-tooltip="Discard research"
+					onClick={onCancel}
+					type="button"
+				>
+					<CloseIcon aria-hidden="true" size={14} />
+				</button>
+			)}
+			<div className="plan-research-composer-footer">
+				<p
+					className="plan-research-message"
+					data-tone={error ? "error" : undefined}
+					role={error ? "alert" : "status"}
+				>
+					{message}
+				</p>
+				{cancelLabel && (
 					<button
-						aria-label="Discard research question"
-						className="plan-research-dismiss btn btn-icon btn-ghost"
-						data-tooltip="Discard research"
-						onClick={onCancel}
-						type="button"
-					>
-						<CloseIcon aria-hidden="true" size={14} />
-					</button>
-				)}
-				<div className="plan-research-send">
-					<SendAction
-						busy={submitting}
-						disabled={submitting || !!blocked || !question.trim()}
-						label={submitLabel}
-						onClick={onSubmit}
-					/>
-				</div>
-			</div>
-			{blocked && <p role="status">{blocked}</p>}
-			{error && <p role="alert">{error}</p>}
-			{cancelLabel && (
-				<div className="plan-research-actions">
-					<button
-						className="btn btn-sm btn-secondary"
+						className="btn btn-sm btn-ghost"
 						disabled={submitting || cancelDisabled}
 						onClick={onCancel}
 						type="button"
 					>
 						{cancelLabel}
 					</button>
-				</div>
-			)}
+				)}
+				<SendAction
+					busy={submitting}
+					disabled={submitting || !!blocked || !question.trim()}
+					label={submitLabel}
+					onClick={onSubmit}
+				/>
+			</div>
 		</form>
 	);
 }
