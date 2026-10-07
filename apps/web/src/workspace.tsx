@@ -7,8 +7,10 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CloseIcon } from "@chopin/icons";
 
 import {
+	CHAT_CHOICE_STORAGE_KEY,
 	initialWorkspaceState,
 	presentWorkspace,
+	storedDesktopChat,
 	transitionWorkspace,
 	workspaceDestinations,
 	workspaceHeadingId,
@@ -90,13 +92,16 @@ export function useWorkspaceState(
 		transitionWorkspace,
 		undefined,
 		// A child opens with its parent's saved Chat preference but never saves its own.
-		() => initialWorkspaceState(localStorage.getItem("chopin:pane:chat:open") !== "false"),
+		() =>
+			initialWorkspaceState(
+				storedDesktopChat(localStorage.getItem(CHAT_CHOICE_STORAGE_KEY)),
+			),
 	);
 
 	useEffect(() => {
-		if (!profile.persistChat) return;
+		if (!profile.persistChat || state.desktopChatOpen === undefined) return;
 		localStorage.setItem(
-			"chopin:pane:chat:open",
+			CHAT_CHOICE_STORAGE_KEY,
 			String(state.desktopChatOpen),
 		);
 	}, [profile.persistChat, state.desktopChatOpen]);
@@ -313,6 +318,15 @@ export function Workspace(
 		}
 		previousChatOpen.current = state.chatOpen;
 	}, [mode, state.chatOpen]);
+
+	let previousMode = useRef(mode);
+	useLayoutEffect(() => {
+		if (previousMode.current === mode) return;
+		previousMode.current = mode;
+		if (document.activeElement?.closest("[hidden], [inert]")) {
+			focusDestination(presentation.documentVisible ? view : "chat");
+		}
+	}, [mode]);
 
 	let navigate = (destination: WorkspaceDestination, source?: HTMLElement) => {
 		if (destination === "chat" && source) opener.current = source;

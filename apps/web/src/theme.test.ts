@@ -467,7 +467,7 @@ describe("child document shell", () => {
 			/\.room-header\s*\{[^}]*height:\s*var\(--document-shell-header-height\)/s,
 		);
 		expect(NAVIGATION).toMatch(
-			/@media \(max-width: 1023px\)[^{]*\{.*?\.anchored-child-surface\s*\{[^}]*inset:\s*var\(--document-shell-header-height\) 0 0/s,
+			/@media \(max-width: 1197px\)[^{]*\{.*?\.anchored-child-surface\s*\{[^}]*inset:\s*var\(--document-shell-header-height\) 0 0/s,
 		);
 	});
 });

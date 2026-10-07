@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+	CHAT_CHOICE_STORAGE_KEY,
 	initialDocumentView,
 	initialWorkspaceState,
 	presentWorkspace,
+	storedDesktopChat,
 	transitionWorkspace,
 	workspaceDestinations,
 	workspaceHeadingId,
@@ -137,4 +139,16 @@ describe("adaptive workspace", () => {
 			separatorVisible: false,
 		});
 	});
+});
+
+it("opens Chat by default and accepts only an explicit saved choice", () => {
+	expect(CHAT_CHOICE_STORAGE_KEY).not.toBe("chopin:pane:chat:open");
+	expect(storedDesktopChat(null)).toBeUndefined();
+	expect(storedDesktopChat("true")).toBe(true);
+	expect(storedDesktopChat("false")).toBe(false);
+	expect(presentWorkspace(initialWorkspaceState(undefined), "split", "plan").chatVisible)
+		.toBe(true);
+	expect(presentWorkspace(initialWorkspaceState(false), "split", "plan").chatVisible).toBe(
+		false,
+	);
 });

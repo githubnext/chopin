@@ -8,7 +8,7 @@
 	min-height: var(--document-shell-header-height);
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1198px) {
 	:root {
 		--document-shell-header-height: calc(50px + env(safe-area-inset-top));
 	}
@@ -133,7 +133,7 @@
 	}
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1197px) {
 	.anchored-child-surface {
 		inset: var(--document-shell-header-height) 0 0;
 		border: 0;

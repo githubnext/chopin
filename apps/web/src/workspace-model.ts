@@ -29,14 +29,24 @@ export type WorkspaceDestination = "plan" | "decisions" | "chat";
 
 export type WorkspaceState = {
 	chatOpen: boolean;
-	desktopChatOpen: boolean;
+	/** Undefined until a person makes an explicit choice. */
+	desktopChatOpen: boolean | undefined;
 };
 
 export type WorkspaceEvent =
 	| { type: "set-chat"; open: boolean }
 	| { type: "set-desktop-chat"; open: boolean };
 
-export function initialWorkspaceState(desktopChatOpen: boolean): WorkspaceState {
+export const CHAT_CHOICE_STORAGE_KEY = "chopin:pane:chat:choice";
+
+export function storedDesktopChat(value: string | null): boolean | undefined {
+	if (value === "true") return true;
+	if (value === "false") return false;
+}
+
+export function initialWorkspaceState(
+	desktopChatOpen: boolean | undefined,
+): WorkspaceState {
 	return {
 		chatOpen: false,
 		desktopChatOpen,
@@ -88,7 +98,7 @@ export function presentWorkspace(
 	documentView: DecisionView,
 ) {
 	let chatVisible = mode === "split"
-		? state.desktopChatOpen || state.chatOpen
+		? (state.desktopChatOpen ?? true) || state.chatOpen
 		: state.chatOpen;
 	let documentVisible = mode === "compact" ? !chatVisible : true;
 
