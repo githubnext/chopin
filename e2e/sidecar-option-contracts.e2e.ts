@@ -128,12 +128,13 @@ test("adding an option selects it and refreshes consistently", async ({ join, pa
 	let save = card.getByRole("button", { name: "Save", exact: true });
 	await expect(options).toHaveCount(2);
 	await expect.poll(() => snapshots.length).toBeGreaterThan(0);
-	let unanswered = () => {
+	let draftChoice = (reloaded: boolean) => {
 		let snapshot = snapshots.at(-1)!;
 		let current = definition!;
 		let question = current.questions[0]!;
 		let draft = read(restore(snapshot.model, current), current)[question.id];
-		expect(draft?.choice).toBe(question.options.at(-1)!.id);
+		// The open snapshot predates the adds until the reload takes a fresh one.
+		expect(draft?.choice).toBe(reloaded ? question.options.at(-1)!.id : null);
 		expect(draft?.mode).toBe("choices");
 		expect(Object.values(draft?.options ?? {})).toEqual(
 			Array.from({ length: question.options.length }, () => false),
@@ -165,7 +166,7 @@ test("adding an option selects it and refreshes consistently", async ({ join, pa
 	}
 	await expect.poll(() => definition?.questions[0]?.options.length).toBe(6);
 	let beforeIds = definition!.questions[0]!.options.map(option => option.id);
-	unanswered();
+	draftChoice(false);
 	await checkVisible(6);
 	let previousChanges = changed;
 
@@ -178,7 +179,7 @@ test("adding an option selects it and refreshes consistently", async ({ join, pa
 		beforeIds,
 	);
 	expect(after.questions[0]!.options[6]?.label).toBe("In a repository");
-	unanswered();
+	draftChoice(false);
 	await checkVisible(7);
 	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
 
@@ -187,7 +188,7 @@ test("adding an option selects it and refreshes consistently", async ({ join, pa
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
 	await expect.poll(() => snapshots.length).toBeGreaterThan(previousSnapshots);
 	await expect.poll(() => definition?.questions[0]?.options.length).toBe(7);
-	unanswered();
+	draftChoice(true);
 	await checkVisible(7);
 });
 
