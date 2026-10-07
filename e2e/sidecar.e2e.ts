@@ -555,7 +555,7 @@ test("an unanswered inline decision is also shown in Decisions and can be focuse
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page).filter({ hasText: "How should we deploy?" });
 	await expect(card).toHaveCount(1);
-	await card.getByRole("button", { name: /How should we deploy.*show in plan/ }).click();
+	await card.getByRole("button", { name: /How should we deploy.*show in document/ }).click();
 
 	await expect(page.getByRole("button", { name: "Document", exact: true }))
 		.toHaveAttribute("aria-pressed", "true");

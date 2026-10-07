@@ -159,3 +159,20 @@ test("a resolved legacy multi-card keeps actions and errors", () => {
 	expect(reader).not.toContain(">Reopen<");
 	expect(reader).not.toContain(">Discard<");
 });
+
+test("a decided card says how it relates to the document, even without actions", () => {
+	let card = (relation: "linked" | "pending" | "empty" | "orphaned") =>
+		renderToStaticMarkup(createElement(QuestionView, {
+			definition: AUTH,
+			drafts: {},
+			status: "answered",
+			answers: [{ question: "What auth system should we use?", choices: ["GitHub Apps"] }],
+			places: { [AUTH.questions[0]!.id]: 2 },
+			relations: { [AUTH.questions[0]!.id]: relation },
+			onQuestionSelect: () => {},
+		}));
+	expect(card("linked")).toContain('aria-label="Show in document, 2 places"');
+	expect(card("pending")).toContain("Linking…");
+	expect(card("empty")).toContain("No related text");
+	expect(card("orphaned")).toContain("Related text was removed");
+});

@@ -1358,6 +1358,17 @@ button.question-add:disabled {
 	}
 }
 
+/* A decision whose prose has not been reviewed yet: a calm pulse, not a spinner. */
+.question-relation-dot {
+	background: var(--color-text-tertiary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.question-relation-dot {
+		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
+	}
+}
+
 /* Discard confirm: the footer swaps in place and fades in. */
 .question-confirm {
 	margin-inline-end: auto;

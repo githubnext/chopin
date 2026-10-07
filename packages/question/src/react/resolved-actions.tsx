@@ -1,8 +1,12 @@
 import { useState } from "react";
 
+import type { ReactNode } from "react";
+
 export function ResolvedActions(
-	{ className, disabled, onDiscard, onReopen, submitting }: {
+	{ className, disabled, note, onDiscard, onReopen, submitting }: {
 		className?: string;
+		/** Quiet card metadata that leads the footer, opposite the actions. */
+		note?: ReactNode;
 		disabled: boolean;
 		onDiscard?: () => void;
 		onReopen?: () => void;
@@ -13,7 +17,7 @@ export function ResolvedActions(
 	let keep = () => setConfirming(false);
 	let beginResolvedDiscard = () => setConfirming(true);
 	let confirmResolvedDiscard = () => onDiscard?.();
-	if (!onDiscard && !onReopen) return null;
+	if (!onDiscard && !onReopen && !note) return null;
 
 	return (
 		<footer
@@ -46,6 +50,7 @@ export function ResolvedActions(
 				)
 				: (
 					<>
+						{note && <div className="mr-auto flex min-w-0">{note}</div>}
 						{onDiscard && (
 							<button
 								className="btn btn-sm btn-secondary"

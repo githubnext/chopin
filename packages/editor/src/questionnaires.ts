@@ -16,7 +16,7 @@ import { useEffect } from "react";
 
 import { $isDecisionNode, $isQuestionnaireNode, QuestionnaireNode } from "@chopin/dialect";
 
-import { counts, relate, resolve } from "./anchors";
+import { counts, relate, relations, resolve } from "./anchors";
 import { holds, paint, pin, unpin } from "./marks";
 import { $blockPoints } from "./passage";
 import { scrollToKey } from "./scroll";
@@ -27,6 +27,7 @@ import type { Plan } from "@chopin/protocol";
 import type { Related } from "./anchors";
 import type { Points } from "./passage";
 import type { Questionnaire } from "@chopin/dialect";
+import type { Relation } from "@chopin/question";
 
 export type QuestionnaireEntry = {
 	id: string;
@@ -297,6 +298,22 @@ export class QuestionnaireStore {
 			return { [questions[0]!.id]: saved.orphaned ? 0 : this.proseKey(widget) ? 1 : 0 };
 		}
 		return counts(this.#related, widget);
+	}
+
+	/** Linked, pending, deliberately empty or orphaned, for each of a card's decisions. */
+	relations(widget: string): { [question: string]: Relation } {
+		let saved = this.#proseSnapshot?.find(item => item.widget === widget);
+		let questions = this.#state.entries.find(item => item.id === widget)?.value.questions;
+		if (saved && questions?.length === 1) {
+			return {
+				[questions[0]!.id]: saved.orphaned
+					? "orphaned"
+					: this.proseKey(widget)
+					? "linked"
+					: "pending",
+			};
+		}
+		return relations(this.#related, widget);
 	}
 
 	/**

@@ -601,6 +601,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 						<Popover
 							close={dismiss}
 							onSource={decision.meta?.thread && options.onCardSource
+									&& options.hasCardSource?.(decision.widget)
 								? () => options.onCardSource?.(decision.widget)
 								: undefined}
 							value={current}

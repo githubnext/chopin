@@ -85,6 +85,8 @@ export type PlanEditorProps = {
 	cardMeta?: CardMetaStore;
 	/** Open the chat message that started a conversation decision. */
 	onCardSource?: (questionnaireId: string) => void;
+	/** Whether a card has a Chat message to go back to; without one it offers no jump. */
+	hasCardSource?: (questionnaireId: string) => boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
@@ -140,6 +142,7 @@ export function PlanEditor(
 		questions,
 		cardMeta,
 		onCardSource,
+		hasCardSource,
 		evidence,
 		readOnly,
 		research,
@@ -365,6 +368,7 @@ export function PlanEditor(
 						questions,
 						cardMeta,
 						onCardSource,
+						hasCardSource,
 						evidence,
 						research,
 						researchDrafts,
@@ -393,6 +397,7 @@ export function PlanEditor(
 			questions,
 			cardMeta,
 			onCardSource,
+			hasCardSource,
 			evidence,
 			research,
 			researchDrafts,
