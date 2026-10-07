@@ -1863,12 +1863,11 @@
 	position: absolute;
 	inset-block-end: 100%;
 	inset-inline-start: -1px;
-	margin-block-end: 2px;
 	padding: 0 0.25rem;
 	border-radius: var(--radius-sm);
 	background: var(--lexical-cursor-color, currentColor);
 	color: var(--color-page);
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	line-height: 1rem;
 	font-weight: 500;
 	white-space: nowrap;
@@ -1880,9 +1879,18 @@
 	transition: opacity var(--duration-base) var(--ease-out);
 }
 
-/* Raised while its peer is moving, then left to fade. */
-.plan .plan-cursor[data-plan-active] .plan-cursor-name {
+/* Raised while its peer is moving or typing, or while it is pointed at, then
+   left to fade. */
+.plan .plan-cursor[data-plan-active] .plan-cursor-name,
+.plan .plan-cursor[data-plan-hover] .plan-cursor-name {
 	opacity: 1;
+}
+
+/* Beside the local caret, the label drops under its own line instead of
+   covering the line the local user is writing on. */
+.plan .plan-cursor[data-plan-below] .plan-cursor-name {
+	inset-block-end: auto;
+	inset-block-start: 100%;
 }
 
 /*
@@ -1897,14 +1905,6 @@
 	.plan * {
 		transition: none !important;
 		animation: none !important;
-	}
-
-	/*
-	 * Without the fade, a label would blink in and out on every keystroke a
-	 * peer makes. Leaving it up is the quieter of the two.
-	 */
-	.plan .plan-cursor-name {
-		opacity: 1;
 	}
 }
 

@@ -114,3 +114,31 @@ test("nobody sees their own caret twice", async ({ join }) => {
 	await expect(ana.getByRole("region", { name: "Document" }).getByText("ana", { exact: true }))
 		.toHaveCount(0);
 });
+
+test("a peer's name stays up while they type, fades when they stop, and returns on hover", async ({ join }) => {
+	let ana = await join("ana");
+	let bo = await join("bo");
+
+	await content(ana).click();
+	await ana.keyboard.type("Somewhere to type for a while.");
+	await expect(content(bo)).toContainText("Somewhere to type for a while.");
+
+	let name = bo.getByRole("region", { name: "Document" }).getByText("ana", { exact: true });
+	let typing = ana.keyboard.type("x".repeat(40), { delay: 80 });
+
+	// Longer than the linger, so only each keystroke renewing it can explain it.
+	await bo.waitForTimeout(2500);
+	await expect(name).toHaveCSS("opacity", "1");
+	await typing;
+
+	await expect(name).toHaveCSS("opacity", "0", { timeout: 5000 });
+
+	let caret = await bo.evaluate(() => {
+		let box = document.querySelector(".plan-cursor")!.getBoundingClientRect();
+		return { x: box.left, y: box.top + box.height / 2 };
+	});
+	await bo.mouse.move(caret.x + 2, caret.y);
+	await expect(name).toHaveCSS("opacity", "1");
+	await bo.mouse.move(0, 0);
+	await expect(name).toHaveCSS("opacity", "0");
+});
