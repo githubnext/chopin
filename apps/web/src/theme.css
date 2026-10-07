@@ -601,7 +601,7 @@ body {
 	display: grid;
 }
 
-.content-swap-stack > .motion-content-swap {
+.content-swap-stack > :is(.motion-content-swap, .motion-route-swap) {
 	grid-area: 1 / 1;
 	min-width: 0;
 }
@@ -625,6 +625,28 @@ body {
 	pointer-events: none;
 	opacity: 0;
 	transform: translateX(calc(var(--page-slide-distance) * var(--swap-direction, 1) * -1));
+}
+
+/*
+ * Switching documents keeps the header, tabs and Chat frame still. Only the
+ * document body and transcript change: out, then in, never both at once. A
+ * staged route is laid out but unseen while its document syncs.
+ */
+.motion-route-swap[data-content-swap-state="staged"] {
+	visibility: hidden;
+}
+
+.motion-route-swap :is([data-workspace-document-swap], [data-chat-stack]) {
+	opacity: 0;
+	transition: opacity var(--route-swap-in-dur) var(--ease-out);
+}
+
+.motion-route-swap.is-open :is([data-workspace-document-swap], [data-chat-stack]) {
+	opacity: 1;
+}
+
+.motion-route-swap.is-closing :is([data-workspace-document-swap], [data-chat-stack]) {
+	transition-duration: var(--route-swap-out-dur);
 }
 
 .workspace-root:not([data-workspace-mode="split"]) .workspace-chat-panel {
@@ -1393,6 +1415,7 @@ button.question-add:disabled {
 	.motion-popover,
 	.motion-panel,
 	.motion-content-swap,
+	.motion-route-swap :is([data-workspace-document-swap], [data-chat-stack]),
 	.motion-collapse,
 	.motion-collapse-content {
 		transition: none;
