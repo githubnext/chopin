@@ -223,15 +223,11 @@ export function Chat(
 	// Escape keeps the draft and the composer's focus; only the picker closes.
 	usePopoverDismissal(
 		mentionOpen || pickerOpen,
-		() =>
-			composerRoot.current
-				? [
-					composerRoot.current.querySelector("[contenteditable]"),
-					...composerRoot.current.querySelectorAll(
-						"[data-chat-mention-picker], [data-chat-reference-picker]",
-					),
-				]
-				: [],
+		target =>
+			composerRoot.current?.contains(target)
+			&& !!(target as Element).closest?.(
+				"[contenteditable], [data-chat-mention-picker], [data-chat-reference-picker]",
+			),
 		() => setDismissedPicker(mentionOpen ? mentionKey : triggerKey),
 	);
 	let activeOption = picker.options.length === 0

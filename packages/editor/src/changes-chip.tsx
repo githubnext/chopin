@@ -111,10 +111,10 @@ function Chip(
 
 	// Outside the whole box rather than blur: the list is inside the same box
 	// as the button, so blur fires on the way to clicking it.
-	usePopoverDismissal(open, () => [box.current], reason => {
-		setIconMotionOwner(reason === "escape" ? "immediate" : "pointer");
+	usePopoverDismissal(open, target => box.current?.contains(target), restoreFocus => {
+		setIconMotionOwner(restoreFocus ? "immediate" : "pointer");
 		setOpen(false);
-		if (reason === "escape") more.current?.focus();
+		if (restoreFocus) more.current?.focus();
 	});
 
 	if (waiting === 0) return null;

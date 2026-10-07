@@ -9,7 +9,7 @@ export function useMenuDismissal(
 ) {
 	usePopoverDismissal(
 		open,
-		() => regions.map(region => region.current),
-		reason => close(reason === "escape"),
+		target => regions.some(region => region.current?.contains(target)),
+		close,
 	);
 }

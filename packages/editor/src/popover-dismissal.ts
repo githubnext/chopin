@@ -1,6 +1,4 @@
-import { useEffect, useRef } from "react";
-
-export type PopoverDismissal = "escape" | "outside";
+import { useEffect, useEffectEvent } from "react";
 
 /**
  * Close an open popover on Escape (capture phase, so nothing underneath also
@@ -9,35 +7,30 @@ export type PopoverDismissal = "escape" | "outside";
  */
 export function usePopoverDismissal(
 	open: boolean,
-	regions: () => readonly (Pick<Node, "contains"> | null | undefined)[],
-	onDismiss: (reason: PopoverDismissal) => void,
+	inside: (target: Node) => boolean | undefined,
+	onDismiss: (restoreFocus: boolean) => void,
 ): void {
-	let latest = useRef({ regions, onDismiss });
-	latest.current = { regions, onDismiss };
+	let listener = useEffectEvent((event: Event) => {
+		if (event.type === "keydown") {
+			let key = event as KeyboardEvent;
+			if (
+				key.key !== "Escape" || key.defaultPrevented || key.isComposing
+				|| key.keyCode === 229
+			) return;
+			key.preventDefault();
+			key.stopPropagation();
+			onDismiss(true);
+			return;
+		}
+		if (!inside(event.target as Node)) onDismiss(false);
+	});
 
 	useEffect(() => {
 		if (!open) return;
-		let keydown = (event: KeyboardEvent) => {
-			if (
-				event.key !== "Escape" || event.defaultPrevented || event.isComposing
-				|| event.keyCode === 229
-			) return;
-			event.preventDefault();
-			event.stopPropagation();
-			latest.current.onDismiss("escape");
+		let events = ["keydown", "pointerdown", "focusin"];
+		for (let name of events) document.addEventListener(name, listener, true);
+		return () => {
+			for (let name of events) document.removeEventListener(name, listener, true);
 		};
-		let away = (event: Event) => {
-			let current = latest.current;
-			if (!current.regions().some(region => region?.contains(event.target as Node))) {
-				current.onDismiss("outside");
-			}
-		};
-		let controller = new AbortController();
-		let options = { capture: true, signal: controller.signal };
-		document.addEventListener("keydown", keydown, options);
-		for (let name of ["pointerdown", "focusin"]) {
-			document.addEventListener(name, away, options);
-		}
-		return () => controller.abort();
 	}, [open]);
 }
