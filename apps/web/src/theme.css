@@ -558,6 +558,41 @@ body {
 	transition-duration: var(--panel-close-dur);
 }
 
+/* Split Chat is a track: its width moves the document, and Chat slides under its clip. */
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	width: 0;
+	align-items: flex-end;
+	opacity: 1;
+	transform: none;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel > * {
+	width: var(--chat-width, 0px);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-open {
+	width: var(--chat-width, 0px);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-pane-moving] {
+	transition: width var(--panel-open-dur) var(--motion-move);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-closing[data-pane-moving] {
+	transition-duration: var(--panel-close-dur);
+}
+
+/* Compact views are sibling tabs: Chat sits leftmost, so it enters from the left. */
+.workspace-root:not([data-workspace-mode="split"]) .workspace-chat-panel {
+	--panel-direction: -1;
+	--panel-distance: var(--page-slide-distance);
+	transition-duration: var(--page-slide-dur);
+}
+
+.workspace-root[data-workspace-travel="back"] {
+	--swap-direction: -1;
+}
+
 .content-swap-stack {
 	display: grid;
 }
@@ -569,7 +604,7 @@ body {
 
 .motion-content-swap {
 	opacity: 0;
-	transform: translateX(var(--page-slide-distance));
+	transform: translateX(calc(var(--page-slide-distance) * var(--swap-direction, 1)));
 	transition:
 		opacity var(--page-slide-dur) var(--motion-smooth-out),
 		transform var(--page-slide-dur) var(--motion-smooth-out);
@@ -585,7 +620,7 @@ body {
 .motion-content-swap.is-closing {
 	pointer-events: none;
 	opacity: 0;
-	transform: translateX(calc(var(--page-slide-distance) * -1));
+	transform: translateX(calc(var(--page-slide-distance) * var(--swap-direction, 1) * -1));
 }
 
 .workspace-root:not([data-workspace-mode="split"]) .workspace-chat-panel {
@@ -1350,6 +1385,10 @@ button.question-add:disabled {
 	.motion-content-swap,
 	.motion-collapse,
 	.motion-collapse-content {
+		transition: none;
+	}
+
+	.workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-pane-moving] {
 		transition: none;
 	}
 

@@ -235,7 +235,16 @@ describe("motion contracts", () => {
 	it("uses the movement curve for the overlay sidebar", () => {
 		expect(THEME).toMatch(/--motion-move:\s*cubic-bezier\([^)]+\);/);
 		expect(NAVIGATION).toMatch(
-			/\.motion-sidebar\s*{[^}]*transition:\s*transform var\(--sidebar-open-dur\) var\(--motion-move\)/s,
+			/\.motion-sidebar\s*{[^}]*transition:\s*width var\(--sidebar-open-dur\) var\(--motion-move\)/s,
+		);
+	});
+
+	it("moves the document with the split Chat track", () => {
+		expect(THEME).toMatch(
+			/\.workspace-chat-panel\[data-pane-moving\]\s*{[^}]*transition:\s*width var\(--panel-open-dur\) var\(--motion-move\)/s,
+		);
+		expect(THEME).toMatch(
+			/\.motion-content-swap\s*{[^}]*var\(--swap-direction, 1\)/s,
 		);
 	});
 
