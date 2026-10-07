@@ -1,0 +1,51 @@
+name: PR readiness coordinator
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  push:
+    branches: [main]
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited, ready_for_review]
+  workflow_run:
+    workflows: [ci, PR readiness worker]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Retry one selected PR (repository writers only)
+        required: false
+        type: string
+
+concurrency:
+  group: pr-readiness-coordinator
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  reconcile:
+    if: github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # This privileged job executes only trusted main, never a PR checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+      - name: Reconcile current heads and reserved attempts
+        run: node scripts/pr-maintenance/coordinator-run.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_MAINTENANCE_STATE_KEY: ${{ secrets.PR_MAINTENANCE_STATE_KEY }}
+          PR_READINESS_ENABLED: ${{ vars.PR_READINESS_ENABLED }}
+          PR_READINESS_PRS: ${{ vars.PR_READINESS_PRS }}

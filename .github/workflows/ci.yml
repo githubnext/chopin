@@ -7,6 +7,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # A second push supersedes the first. Nothing here is worth finishing for a
 # commit that is no longer the head of the branch.

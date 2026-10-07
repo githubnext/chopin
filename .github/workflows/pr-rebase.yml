@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   rebase:
+    if: vars.PR_READINESS_ENABLED != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
