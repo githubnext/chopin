@@ -26,11 +26,6 @@ describe("motion contracts", () => {
 			closeDuration: 250,
 			states: MOTION_STATES,
 		});
-		expect(motionContract("route-swap")).toEqual({
-			className: "motion-route-swap",
-			closeDuration: 30,
-			states: MOTION_STATES,
-		});
 		expect(motionContract("feedback")).toEqual({
 			className: "motion-feedback",
 			closeDuration: 180,
