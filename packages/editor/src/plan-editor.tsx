@@ -339,6 +339,7 @@ export function PlanEditor(
 						wire,
 						connected: !offline,
 						canEdit: !readOnly,
+						self: user.name,
 						synced: state.synced,
 					}),
 				]

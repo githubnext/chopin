@@ -53,6 +53,8 @@ export type WidgetOptions = {
 	connected?: boolean;
 	synced?: boolean;
 	canEdit?: boolean;
+	/** The viewer's own handle. */
+	self?: string;
 };
 
 export const widgets$ = Cell<WidgetOptions>({});

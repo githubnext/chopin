@@ -32,7 +32,7 @@ export type Collaborator = {
 	question?: string;
 };
 
-export type AddOptionResult = { ok: true } | { ok: false; message: string };
+export type AddOptionResult = { ok: true; optionId?: string } | { ok: false; message: string };
 
 export type QuestionStepRenderProps = {
 	children: ReactNode;
@@ -258,13 +258,19 @@ function LegacyCustom(
  * pending the field stays focusable so Escape still works; a rejection keeps
  * the text intact.
  */
+function duplicateOf(question: Item, label: string) {
+	let key = label.toLowerCase();
+	return question.options.find(option => option.label.trim().toLowerCase() === key);
+}
+
 function AddOption(
-	{ question, offset, disabled, onAdd, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
+	{ question, offset, disabled, onAdd, onAdded, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
 		question: Item;
 		/** Rows already shown below the options, such as a legacy custom answer. */
 		offset: number;
 		disabled: boolean;
 		onAdd?: (label: string) => Promise<AddOptionResult>;
+		onAdded?: (optionId: string) => void;
 		onFailed: (message: string | undefined) => void;
 		onEdit?: () => void;
 		onCancelEdit?: () => void;
@@ -273,11 +279,13 @@ function AddOption(
 ) {
 	let [text, setText] = useState<string | null>(null);
 	let [pending, setPending] = useState<string | null>(null);
+	let hintId = useId();
 	let input = useRef<HTMLInputElement>(null);
 	let trigger = useRef<HTMLButtonElement>(null);
 	let focus = useRef<"field" | "trigger">(undefined);
 	let edit = useRef(0);
 	let letterIndex = question.options.length + offset;
+	let duplicate = text ? duplicateOf(question, text.trim()) : undefined;
 	useEffect(() => () => {
 		edit.current++;
 	}, []);
@@ -311,7 +319,7 @@ function AddOption(
 
 	let add = async () => {
 		let label = text?.trim();
-		if (!label || !onAdd || pending !== null) return;
+		if (!label || !onAdd || pending !== null || duplicateOf(question, label)) return;
 		let submittedEdit = edit.current;
 		setPending(label);
 		onFailed(undefined);
@@ -325,6 +333,7 @@ function AddOption(
 		if (edit.current !== submittedEdit) return;
 		let ownsFocus = document.activeElement === input.current;
 		if (result.ok) {
+			if (result.optionId) onAdded?.(result.optionId);
 			onCommitEdit?.();
 			setText(null);
 			if (ownsFocus) focus.current = "trigger";
@@ -357,52 +366,63 @@ function AddOption(
 	}
 
 	return (
-		<div
-			aria-busy={pending !== null || undefined}
-			className="question-choice-row question-option question-adding"
-		>
-			<Key>{letter(letterIndex)}</Key>
-			<input
-				aria-disabled={pending !== null || undefined}
-				aria-label="New option"
-				autoComplete="off"
-				className="question-field"
-				disabled={disabled}
-				maxLength={MAX_LABEL}
-				onBlur={() => {
-					// Only an empty field collapses by itself. Typed text is kept, because
-					// adding an option is visible to everyone and should be deliberate.
-					if (!text.trim() && pending === null) {
-						edit.current++;
-						onCancelEdit?.();
-						setText(null);
-					}
-				}}
-				onChange={event => {
-					onEdit?.();
-					setText(event.currentTarget.value);
-					onFailed(undefined);
-				}}
-				onKeyDown={event => {
-					if (event.key === "Escape") {
-						event.preventDefault();
-						event.stopPropagation();
-						edit.current++;
-						onCancelEdit?.();
-						setText(null);
+		<div className="question-adding-group">
+			<div
+				aria-busy={pending !== null || undefined}
+				className="question-choice-row question-option question-adding"
+			>
+				<Key>{letter(letterIndex)}</Key>
+				<input
+					aria-disabled={pending !== null || undefined}
+					aria-describedby={hintId}
+					aria-invalid={duplicate ? true : undefined}
+					aria-label="New option"
+					autoComplete="off"
+					className="question-field"
+					disabled={disabled}
+					maxLength={MAX_LABEL}
+					onBlur={() => {
+						// Only an empty field collapses by itself. Typed text is kept, because
+						// adding an option is visible to everyone and should be deliberate.
+						if (!text.trim() && pending === null) {
+							edit.current++;
+							onCancelEdit?.();
+							setText(null);
+						}
+					}}
+					onChange={event => {
+						onEdit?.();
+						setText(event.currentTarget.value);
 						onFailed(undefined);
-						focus.current = "trigger";
-					} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-						event.preventDefault();
-						void add();
-					}
-				}}
-				placeholder="Add an option"
-				readOnly={pending !== null}
-				ref={input}
-				value={text}
-			/>
-			{pending !== null && <span className="sr-only" role="status">Adding option</span>}
+					}}
+					onKeyDown={event => {
+						if (event.key === "Escape") {
+							event.preventDefault();
+							event.stopPropagation();
+							edit.current++;
+							onCancelEdit?.();
+							setText(null);
+							onFailed(undefined);
+							focus.current = "trigger";
+						} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+							event.preventDefault();
+							void add();
+						}
+					}}
+					placeholder="Add an option"
+					readOnly={pending !== null}
+					ref={input}
+					value={text}
+				/>
+				{pending !== null && <span className="sr-only" role="status">Adding option</span>}
+			</div>
+			<p
+				className="question-add-hint"
+				id={hintId}
+				role="status"
+			>
+				{duplicate ? `Already an option: ${duplicate.label}` : ""}
+			</p>
 		</div>
 	);
 }
@@ -880,13 +900,13 @@ export function QuestionView(props: QuestionViewProps) {
 								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
 							</div>
 							<span className="flex shrink-0 items-center gap-2">
-								{headerActions}
 								<Presence
 									people={collaborators.filter(person =>
 										person.question === current.id
 									)}
 									render={renderPeople}
 								/>
+								{headerActions}
 							</span>
 						</header>
 
@@ -919,6 +939,16 @@ export function QuestionView(props: QuestionViewProps) {
 										: 0}
 									disabled={disabled}
 									onAdd={label => onAddOption(current.id, label)}
+									onAdded={optionId =>
+										onChange?.(
+											current.id,
+											current.multiple
+												? {
+													mode: "choices",
+													options: { ...drafts[current.id]?.options, [optionId]: true },
+												}
+												: { mode: "choices", choice: optionId },
+										)}
 									onFailed={setAddError}
 									onEdit={markComposerEdit}
 									onCancelEdit={cancelComposerEdit}
