@@ -15,17 +15,19 @@ export function createInventoryRead(repository, options = {}) {
 	return args => {
 		if (
 			!Array.isArray(args) || args[0] !== "api" || typeof args[1] !== "string"
-			|| !args[1].startsWith(prefix) || args[1].includes("#")
+			|| !(args[1] === prefix.slice(0, -1) || args[1].startsWith(prefix)) || args[1].includes("#")
 			|| ![2, 4].includes(args.length)
 			|| (args.length === 4 && (args[2] !== "--paginate" || args[3] !== "--slurp"))
 		) throw new Error("Invalid read-only inventory request");
-		let path = args[1].slice(prefix.length);
+		let path = args[1] === prefix.slice(0, -1) ? "" : args[1].slice(prefix.length);
 		if (
-			!/^(?:pulls(?:\?state=open&sort=updated&direction=asc&per_page=100|\/[1-9][0-9]*)|commits\/(?:[A-Za-z0-9_.!~'()-]|%[0-9A-F]{2})+|compare\/[A-Za-z0-9_.~-]+\.\.\.[A-Za-z0-9_.~-]+|actions\/workflows\/ci\.yml\/runs\?head_sha=[A-Za-z0-9]+&event=pull_request&per_page=1)$/
+			!/^(?:|pulls(?:\?state=open&sort=updated&direction=asc&per_page=100|\/[1-9][0-9]*)|(?:commits|rules\/branches)\/(?:[A-Za-z0-9_.!~'()-]|%[0-9A-F]{2})+|compare\/[A-Za-z0-9_.~-]+\.\.\.[A-Za-z0-9_.~-]+|actions\/workflows\/ci\.yml\/runs\?head_sha=[A-Za-z0-9]+&event=pull_request&per_page=1)$/
 				.test(path)
 		) throw new Error("Invalid read-only inventory request");
-		if (path.startsWith("commits/")) {
-			let segment = path.slice("commits/".length);
+		if (path.startsWith("commits/") || path.startsWith("rules/branches/")) {
+			let segment = path.slice(
+				path.startsWith("commits/") ? "commits/".length : "rules/branches/".length,
+			);
 			let decoded;
 			try {
 				decoded = decodeURIComponent(segment);
