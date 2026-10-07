@@ -223,7 +223,7 @@ test("an accepted link arrives from the room event, reloads, and opens its ready
 	try {
 		let page = isolated.page;
 		let card = offerCard(page, spec.id);
-		await expect(card).toContainText("Research accepted");
+		await expect(card).toContainText("Waiting to start");
 		await expect.poll(() => socket?.initialLinkHeld()).toBe(true);
 		await expect(card.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
 		socket!.releaseInitialLink();

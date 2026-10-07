@@ -46,12 +46,11 @@ test("Resume appears only for a verified unresolved link and linked work hides s
 	for (let link of [undefined, { status: "checking" }, { status: "error" }] as const) {
 		expect(render(link)).not.toContain(">Resume</button>");
 	}
-	for (let status of ["pending", "unlinked"] as const) {
-		let link: OfferLinkView = status === "unlinked"
-			? { status, researchRequestId: "request-1" }
-			: { status };
-		expect(render(link)).toContain(">Resume</button>");
-	}
+	// A pending link usually links within moments; Resume waits until it stalls.
+	expect(render({ status: "pending" })).not.toContain(">Resume</button>");
+	expect(render({ status: "unlinked", researchRequestId: "request-1" })).toContain(
+		">Resume</button>",
+	);
 	let linked = render({ status: "linked", researchRequestId: "request-1" });
 	expect(linked).not.toContain(">Resume</button>");
 	expect(linked).not.toContain("Old Resume error");

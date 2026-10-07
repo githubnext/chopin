@@ -223,6 +223,10 @@ export function useResearchOfferLinks(
 	return { links, refresh };
 }
 
+const RESUME_AFTER = 1_500;
+const CANCEL_ATTEMPTS = 3;
+const CANCEL_RETRY_MS = 600;
+
 const TRACK: readonly Research.RequestStage[] = [
 	"queued",
 	"searching",
@@ -252,7 +256,7 @@ function AcceptedResearch(
 	let { store } = controls;
 	let id = link?.status === "linked" ? link.researchRequestId : undefined;
 	let [busy, setBusy] = useState(false);
-	let [error, setError] = useState<string>();
+	let [error, setError] = useState<{ text: string; cancel: boolean }>();
 	let subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
 	let request = useSyncExternalStore(
 		subscribe,
@@ -260,9 +264,19 @@ function AcceptedResearch(
 		() => undefined,
 	);
 	useEffect(() => id ? store.retain(id) : undefined, [id, store]);
-	let shown = useRef<Research.RequestStage | undefined>(undefined);
-	let stage = request ? forwardStage(shown.current, request.stage) : undefined;
-	shown.current = stage;
+	let [shown, setShown] = useState<{ id?: string; stage?: Research.RequestStage }>({});
+	let stage = request
+		? forwardStage(shown.id === id ? shown.stage : undefined, request.stage)
+		: undefined;
+	if (shown.id !== id || shown.stage !== stage) setShown({ id, stage });
+	// A link that stays pending needs Resume; one about to link should not flash it.
+	let [stalled, setStalled] = useState(false);
+	useEffect(() => {
+		setStalled(false);
+		if (link?.status !== "pending") return;
+		let timer = setTimeout(() => setStalled(true), RESUME_AFTER);
+		return () => clearTimeout(timer);
+	}, [link?.status]);
 	// Until the request is readable the card shows the accepted brief as waiting work.
 	let view = (request
 		? { ...request, stage }
@@ -277,12 +291,26 @@ function AcceptedResearch(
 			stage: "queued",
 		}) as Research.RequestView;
 	let canEdit = controls.canAct && canExecute && !!request;
-	let action = (run: () => Promise<Research.RequestView>, failure: string) => {
+	let action = (run: () => Promise<unknown>, failure: string, cancel = false) => {
 		setBusy(true);
 		setError(undefined);
-		void run().catch(() => setError(failure)).finally(() => setBusy(false));
+		void run().catch(() => setError({ text: failure, cancel })).finally(() => setBusy(false));
 	};
-	let canResume = link?.status === "pending" || link?.status === "unlinked";
+	// The server refuses a cancel until the worker has claimed the request; a settled
+	// request makes an earlier cancel failure moot.
+	let cancel = async (id: string) => {
+		for (let attempt = 1;; attempt++) {
+			try {
+				return await store.cancel(id);
+			} catch (failure) {
+				if (attempt >= CANCEL_ATTEMPTS) throw failure;
+				await new Promise(resolve => setTimeout(resolve, CANCEL_RETRY_MS));
+			}
+		}
+	};
+	let terminal = !!stage && !TRACK.includes(stage);
+	let actionError = error && !(error.cancel && terminal) ? error.text : undefined;
+	let canResume = link?.status === "unlinked" || link?.status === "pending" && stalled;
 	let unverified = link?.status === "error" && link.exhausted;
 	let note = !request && (unverified
 		? "The research request could not be confirmed yet."
@@ -292,12 +320,12 @@ function AcceptedResearch(
 	return (
 		<div className="flex flex-col gap-2">
 			<ResearchCard
-				actionError={error}
+				actionError={actionError}
 				busy={busy}
 				canEdit={canEdit}
 				request={view}
 				onCancel={id && canEdit
-					? () => action(() => store.cancel(id), "Research could not be cancelled.")
+					? () => action(() => cancel(id), "Research could not be cancelled yet.", true)
 					: undefined}
 				onOpen={id && view.child
 					? opener => store.open(view.child!, store.opener(id, opener))
