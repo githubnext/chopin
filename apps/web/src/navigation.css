@@ -696,7 +696,7 @@
 	border-radius: var(--radius-md);
 	background: var(--color-page);
 	padding: 4px;
-	box-shadow: var(--shadow-overlay);
+	box-shadow: var(--shadow-raised);
 	transform-origin: bottom left;
 }
 
@@ -723,7 +723,7 @@
 	border-radius: var(--radius-md);
 	background: var(--color-page);
 	padding: 4px;
-	box-shadow: var(--shadow-overlay);
+	box-shadow: var(--shadow-raised);
 }
 
 .document-actions-menu button {
