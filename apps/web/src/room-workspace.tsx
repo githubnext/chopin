@@ -40,7 +40,7 @@ import { DocumentRename } from "./document-rename";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
-import { claimNewDocumentTitle } from "./use-document-creation";
+import { claimTitleEdit, TITLE_EDIT_EVENT } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
@@ -51,6 +51,7 @@ import type { ConversationPlan, Research, Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState, PlanState } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
+import type { TitleEdit } from "./title-edit";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
 import type { ChatDestination } from "./conversation-plan/source";
@@ -61,8 +62,6 @@ type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
 type ManagedAccess = Session.Access & { canManage: boolean };
 type WorkspaceMetadata = DocumentMetadata;
-/** A title opened for a document this tab just created hands the caret to its body. */
-type TitleEdit = "rename" | "new";
 
 function settleMotionImmediately(): boolean {
 	return motionImmediately();
@@ -275,9 +274,16 @@ export function RoomWorkspace(
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [planState, setPlanState] = useState<PlanState>({ synced: false });
-	let [titleEdit, setTitleEdit] = useState<TitleEdit>();
+	// Claimed while rendering, so a new document's title takes focus as soon as it mounts.
+	let [titleEdit, setTitleEdit] = useState(() => claimTitleEdit(room));
 	useEffect(() => {
-		if (claimNewDocumentTitle(room)) setTitleEdit("new");
+		let listen = (event: Event) => {
+			if ((event as CustomEvent<string>).detail !== room) return;
+			let edit = claimTitleEdit(room);
+			if (edit) setTitleEdit(edit);
+		};
+		addEventListener(TITLE_EDIT_EVENT, listen);
+		return () => removeEventListener(TITLE_EDIT_EVENT, listen);
 	}, [room]);
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);

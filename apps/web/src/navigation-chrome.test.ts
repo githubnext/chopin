@@ -78,7 +78,9 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toMatch(
 			/aria-label="New document in testing-sql-transcripts"[^>]*>.*?new-document\.svg/s,
 		);
-		expect(markup).toContain(renderToStaticMarkup(createElement(DocumentIcon)));
+		expect(markup).toContain(
+			renderToStaticMarkup(createElement(DocumentIcon)),
+		);
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toMatch(
 			/aria-label="Add project"[^>]*>.*?class="size-3\.5"[^>]*add-project\.svg/s,
@@ -173,9 +175,9 @@ describe("the Figma navigation chrome", () => {
 		};
 		let markup = renderToStaticMarkup(createElement(Header, props));
 
-		expect(markup.split(renderToStaticMarkup(createElement(DocumentIcon, {
-			className: "shrink-0",
-		})))).toHaveLength(2);
+		expect(
+			markup.split(renderToStaticMarkup(createElement(DocumentIcon, { className: "shrink-0" }))),
+		).toHaveLength(2);
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toContain('aria-label="Document: Hushed mountain"');
 		expect(markup).toContain('aria-label="Actions for Hushed mountain"');

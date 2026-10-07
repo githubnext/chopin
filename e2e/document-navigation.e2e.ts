@@ -266,6 +266,63 @@ test("the header title renames in place with click, F2, Escape, and blur", async
 	await expect(header.getByRole("button", { name: `Rename ${title}`, exact: true })).toBeVisible();
 });
 
+test("typing straight after New document names it without losing a character", async ({ join }) => {
+	let page = await join("ana");
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
+	await field.waitFor();
+	let name = `Quick ${crypto.randomUUID().slice(0, 8)}`;
+	await page.keyboard.type(name);
+	await page.keyboard.press("Enter");
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+});
+
+test("sidebar Rename opens that document with its title ready to edit", async ({ baseURL, join }) => {
+	let other = crypto.randomUUID();
+	let otherTitle = `Test ${other.slice(0, 8)}`;
+	await createChannel(Number(new URL(baseURL!).port), other);
+	let page = await join("ana");
+	let projects = sidebar(page);
+
+	await projects.getByRole("link", { name: otherTitle, exact: true }).hover();
+	await projects.getByRole("button", { name: `Actions for ${otherTitle}` }).click();
+	await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${otherTitle}`);
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await expect(field).toBeFocused();
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	let renamed = `Renamed ${other.slice(0, 8)}`;
+	await field.fill(renamed);
+	await field.press("Enter");
+	await expect(projects.getByRole("link", { name: renamed, exact: true })).toBeVisible();
+});
+
+test("leaving a rejected title reverts it without retrying", async ({ join, room }) => {
+	let page = await join("ana");
+	let patches = 0;
+	await page.route("**/api/channels/*", async route => {
+		if (route.request().method() !== "PATCH") return route.continue();
+		patches += 1;
+		await route.fulfill({
+			status: 409,
+			json: { error: "a document with this title already exists" },
+		});
+	});
+	let before = await headerDocument(page).getAttribute("aria-label");
+	await page.getByRole("banner").getByRole("button", { name: /^Rename / }).click();
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await field.fill(`Taken ${room.slice(0, 8)}`);
+	await field.press("Enter");
+	await expect(page.getByRole("alert")).toHaveText(
+		"A document with this title already exists. Try a different title.",
+	);
+
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).toHaveAttribute("aria-label", before!);
+	expect(patches).toBe(1);
+});
+
 test("a pointer-dismissed navigation dialog releases focus while it exits", async ({ join }) => {
 	let page = await join("ana");
 	let trigger = sidebar(page).getByRole("button", { name: "Search", exact: true });

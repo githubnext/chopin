@@ -4,15 +4,9 @@ import { documentPath } from "@chopin/protocol/document-url";
 import * as Api from "./api";
 import { documentRouteIdentity } from "./document-route-swap";
 import { canManageProject } from "./navigation-model";
+import { requestTitleEdit } from "./title-edit";
 
 export type DocumentCreationPhase = "creating" | "opening";
-
-let untitled = new Set<string>();
-
-/** The workspace for a document this tab just created asks once to focus its title. */
-export function claimNewDocumentTitle(id: string): boolean {
-	return untitled.delete(id);
-}
 
 type Attempt = {
 	phase: DocumentCreationPhase;
@@ -90,7 +84,7 @@ export function useDocumentCreation(
 				slug: created.channel.slug,
 			});
 			publish();
-			untitled.add(created.channel.id);
+			requestTitleEdit(created.channel.id, "new");
 			onNavigate(
 				created.channel.id,
 				documentPath(

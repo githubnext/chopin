@@ -973,12 +973,17 @@
 	cursor: text;
 }
 
+/* The header sits on ground, where the lighter hover wash would vanish. */
 .document-title-trigger:hover:not(:disabled),
 .document-title-trigger:focus-visible,
 .document-title-menu:hover,
 .document-title-menu:focus-visible,
 .document-title-menu[aria-expanded="true"] {
-	background: var(--color-hover);
+	background: var(--color-selected);
+}
+
+.room-header:hover .document-title-menu {
+	color: var(--color-text-secondary);
 }
 
 .document-title-menu {
@@ -996,16 +1001,15 @@
 	min-width: 0;
 }
 
-/* Same box and type as the resting title, so swapping in the field does not move the text. */
+/* Same box, type, and ink as the resting title, so swapping in the field moves nothing. */
 .document-title-input {
-	min-width: 12ch;
 	max-width: 100%;
 	field-sizing: content;
 	border-radius: var(--radius-sm);
 	padding: 4px;
-	background: var(--color-page);
+	background: var(--color-selected);
 	font-size: var(--text-sm);
-	color: var(--color-text-primary);
+	color: var(--color-text-tertiary);
 }
 
 .document-title-input::placeholder {
