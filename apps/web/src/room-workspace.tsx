@@ -40,7 +40,7 @@ import { DocumentRename } from "./document-rename";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
-import { claimTitleEdit, TITLE_EDIT_EVENT } from "./title-edit";
+import { TITLE_EDIT_EVENT, titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
@@ -62,6 +62,14 @@ type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
 type ManagedAccess = Session.Access & { canManage: boolean };
 type WorkspaceMetadata = DocumentMetadata;
+
+// Lives here rather than in `title-edit.ts` to keep it out of the initial bundle.
+function claimTitleEdit(id: string): TitleEdit | undefined {
+	let edit = titleEdits.get(id);
+	// StrictMode renders twice in one task, and both renders must see the claim.
+	if (edit) queueMicrotask(() => titleEdits.delete(id));
+	return edit;
+}
 
 function settleMotionImmediately(): boolean {
 	return motionImmediately();
