@@ -5,11 +5,13 @@ import { declarationProblem, type TokenPolicy } from "./policy";
 import { applyExceptions, type Finding } from "./scan";
 
 let canonical = new Map(Object.entries({
+	"--text-2xs": "clamp(1rem, 2vw, 2rem)",
 	"--text-xs": "clamp(1rem, 2vw, 2rem)",
 	"--text-sm": "clamp(1rem, 2vw, 2rem)",
 	"--text-2xl": "clamp(1rem, 2vw, 2rem)",
 	"--font-sans": "Inter",
 	"--font-mono": "monospace",
+	"--text-2xs--line-height": "1.35",
 	"--text-sm--line-height": "1.5",
 	"--color-brand": "oklch(.5 .1 200)",
 	"--color-page": "white",
@@ -63,6 +65,7 @@ describe("property-aware design policy", () => {
 	it("accepts roles, semantic aliases, geometry, zero and property-specific neutral values", () => {
 		for (
 			let [property, value] of [
+				["font-size", "var(--text-2xs)"],
 				["font-size", "var(--plan-body)"],
 				["font-family", "var(--font-mono)"],
 				["font", "500 var(--text-sm) / var(--text-sm--line-height) var(--font-sans)"],
@@ -125,6 +128,7 @@ describe("property-aware design policy", () => {
 		}
 		for (
 			let value of [
+				"text-2xs",
 				"text-sm",
 				"hover:bg-brand/10",
 				"rounded-md",

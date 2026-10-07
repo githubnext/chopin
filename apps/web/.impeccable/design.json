@@ -239,6 +239,10 @@
 			"compact": {
 				"displayName": "Compact",
 				"purpose": "Small buttons, badges, and supporting labels."
+			},
+			"small-metadata": {
+				"displayName": "Small metadata",
+				"purpose": "Quiet timestamps and secondary conversation metadata."
 			}
 		},
 		"shadows": [

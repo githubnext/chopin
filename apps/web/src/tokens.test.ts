@@ -207,6 +207,7 @@ describe("palette", () => {
 describe("type", () => {
 	it("uses the designed fluid modular steps at both viewport endpoints", () => {
 		let steps = [
+			["2xs", -2.5],
 			["xs", -2],
 			["sm", -1],
 			["base", 0],
@@ -233,9 +234,11 @@ describe("type", () => {
 
 	it("pairs every rung with its designed line height", () => {
 		expect(
-			["xs", "sm", "base", "lg", "xl", "2xl"].map(name => declared(`--text-${name}--line-height`)),
+			["2xs", "xs", "sm", "base", "lg", "xl", "2xl"].map(name =>
+				declared(`--text-${name}--line-height`)
+			),
 		)
-			.toEqual(["1.35", "1.5", "1.5", "1.4", "1.25", "1.15"]);
+			.toEqual(["1.35", "1.35", "1.5", "1.5", "1.4", "1.25", "1.15"]);
 	});
 
 	it("restores fluid type inside MDXEditor's fixed variable scope", () => {
@@ -724,8 +727,14 @@ describe("migration", () => {
 				tiers: ["btn-ghost"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
-				action: "Stop Planner",
+				action: "Stop Chopin",
 				marker: 'wire?.send("chat:abort")',
+				size: "btn-icon",
+				tiers: ["btn-secondary"],
+			}],
+			["apps/web/src/chat/chat.tsx", {
+				action: "Resume Planner",
+				marker: 'wire?.send("chat:resume")',
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],

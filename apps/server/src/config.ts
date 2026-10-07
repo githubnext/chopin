@@ -6,6 +6,8 @@
  * than a puzzling behaviour three screens later.
  */
 
+import { delimiter } from "node:path";
+
 import { loadAuth } from "./auth/config";
 
 import type { AuthConfig } from "./auth/config";
@@ -18,6 +20,11 @@ export type Config = {
 	model: string;
 	harness: string;
 	harnessAuth: string | undefined;
+	/**
+	 * Extension or package paths every atomic Planner session loads, as if
+	 * passed to the CLI's `--extension`. Split on the platform path delimiter.
+	 */
+	harnessExtensions: string[];
 	/**
 	 * Whether to run the agent at all.
 	 *
@@ -63,11 +70,15 @@ function model(harness: string): string {
 	}
 	return DEFAULT_MODEL;
 }
-export function harnessSelection(): Pick<Config, "host" | "harness" | "harnessAuth"> {
+export function harnessSelection(): Pick<
+	Config,
+	"host" | "harness" | "harnessAuth" | "harnessExtensions"
+> {
 	return {
 		host: process.env.SERVER_HOST || "127.0.0.1",
 		harness: process.env.HARNESS || "copilot-sdk",
 		harnessAuth: process.env.HARNESS_AUTH || undefined,
+		harnessExtensions: (process.env.HARNESS_EXTENSIONS ?? "").split(delimiter).filter(Boolean),
 	};
 }
 
@@ -159,6 +170,9 @@ export function describe(config: Config): string {
 		`harness: ${config.harness}`,
 		...(config.harness === "atomic"
 			? ["Planner: full Atomic session (shell and filesystem access as this process's user)"]
+			: []),
+		...(config.harnessExtensions.length
+			? [`Planner extensions: ${config.harnessExtensions.join(", ")}`]
 			: []),
 		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
 		config.webResearch ? "web research: on" : "web research: off",

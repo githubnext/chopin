@@ -115,8 +115,8 @@ server's machine. Chopin verifies that its `origin` matches the document
 repository and refuses the request before posting if it does not. A verified
 path is remembered for the document until the server restarts, and every later
 Planner session for it, from the browser or through MCP, works there after
-checking the path again. Without one, the Planner works in an empty directory
-Chopin keeps for that document. Other harnesses ignore `checkout` entirely: it is
+checking the path again. Without one, the Planner works in a directory
+Chopin keeps for that document under its per-user state directory. Other harnesses ignore `checkout` entirely: it is
 neither verified, used, nor remembered.
 
 The result contains `id`, `title`, and the canonical `url` (plus any generated
@@ -141,9 +141,17 @@ Refusals return an object with `code`:
 - `document-unavailable`, `document-archived`, and `repository-forbidden` retain
   their ordinary document/access meanings.
 
+Document titles are unique within a repository, ignoring case. `create_document`
+returns `title-taken` when the repository already has a document with that title;
+choose another title and retry under a new idempotency key. `idempotency-conflict`
+means the same key was reused with a different request, and validation failures
+return `issues`. Every one of these outcomes matches the tool's output schema.
+
 ## Document URLs and IDs
 
-The `url` returned by `create_document` is the readable canonical route:
+The `url` returned by `create_document`, `update_document`, and `read_document` is
+the readable canonical route. `read_document` always returns the current one, so a
+caller that has only the UUID can recover it:
 
 ```text
 /documents/:owner/:repository/:slug

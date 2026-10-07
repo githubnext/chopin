@@ -1,0 +1,84 @@
+.run-pulse {
+	position: relative;
+	display: inline-block;
+	flex-shrink: 0;
+	width: 8px;
+	height: 8px;
+	margin: 3px;
+	border-radius: var(--radius-full);
+	background-color: var(--color-brand);
+
+	&::after {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		background-color: inherit;
+		content: "";
+		animation: run-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite;
+	}
+}
+
+@keyframes run-pulse {
+	from {
+		opacity: 0.6;
+		transform: scale(1);
+	}
+
+	to {
+		opacity: 0;
+		transform: scale(2.5);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.run-pulse::after {
+		animation: none;
+	}
+}
+
+.run-row + .run-row {
+	border-top: var(--edge-width) solid var(--color-edge);
+}
+
+.run-toggle {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	margin-inline: calc(var(--spacing) * -1.5);
+	padding: calc(var(--spacing) * 1.5);
+	border-radius: var(--radius-md);
+	text-align: left;
+	transition: background-color var(--duration-fast) var(--ease-out);
+
+	&:hover {
+		background-color: var(--color-hover);
+	}
+}
+
+.run-chevron {
+	transition: rotate var(--duration-fast) var(--ease-out);
+
+	.run-toggle[aria-expanded="true"] & {
+		rotate: 90deg;
+	}
+}
+
+.run-ring {
+	display: inline-block;
+	flex-shrink: 0;
+	width: 8px;
+	height: 8px;
+	margin: 3px;
+	border: 1.5px solid currentColor;
+	border-radius: var(--radius-full);
+	color: var(--color-text-quaternary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.run-toggle,
+	.run-chevron {
+		transition: none;
+	}
+}

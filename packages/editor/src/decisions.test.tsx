@@ -30,7 +30,7 @@ afterEach(() => {
 	else delete (globalThis as { localStorage?: unknown }).localStorage;
 });
 
-function markup(stored?: string, entries = [RESOLVED]): string {
+function markup(stored?: string, entries = [RESOLVED], failed = false): string {
 	let values = new Map<string, string>();
 	if (stored) values.set("chopin:decisions:resolved", stored);
 	Object.defineProperty(globalThis, "localStorage", {
@@ -43,6 +43,7 @@ function markup(stored?: string, entries = [RESOLVED]): string {
 
 	let store = new QuestionnaireStore();
 	store.set({ entries, hasPlanContent: true });
+	if (failed) store.failOpen();
 	let motion: MotionDisclosureContract = {
 		className: "motion-collapse",
 		closeDuration: 250,
@@ -91,4 +92,19 @@ test("an expired card is listed with the resolved cards and says nobody answered
 	for (let control of ["Save answer", "<textarea", 'type="radio"']) {
 		expect(history).not.toContain(control);
 	}
+});
+
+test("an unsynced empty snapshot does not claim there are no decisions", () => {
+	let loading = markup(undefined, []);
+	expect(loading).toContain("Loading decisions…");
+	expect(loading).not.toContain("No decisions yet");
+	expect(loading).toContain('aria-live="polite"');
+	expect(loading).toContain('role="status"');
+});
+
+test("a failed document open offers a retry instead of indefinite loading", () => {
+	let failed = markup(undefined, [], true);
+	expect(failed).toContain("Decisions unavailable");
+	expect(failed).toContain("Try again");
+	expect(failed).not.toContain("Loading decisions…");
 });

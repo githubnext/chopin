@@ -50,6 +50,12 @@ import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./w
 // happen before an editor mounts.
 register();
 
+function resume(provider: PlanProvider): void {
+	void provider.resume().catch(err => {
+		provider.fail(err instanceof Error ? err.message : "the plan could not be opened");
+	});
+}
+
 export type PlanEditorProps = {
 	wire: Transport | undefined;
 	connection?: Connection;
@@ -138,9 +144,10 @@ export function PlanEditor(
 	// describe a history that no longer exists, so they go with it.
 	let onReset = useCallback((reason: Plan.Reset["reason"]) => {
 		changes.clear();
-		setState(prev => ({ ...prev, synced: false, reset: reason }));
+		questions?.resetDocument();
+		setState(prev => ({ ...prev, synced: false, reset: reason, failed: undefined }));
 		setGeneration(value => value + 1);
-	}, [changes]);
+	}, [changes, questions]);
 
 	// The store resolves anchors itself, because a Lexical key is per-editor:
 	// the server's key for a block means nothing in this browser.
@@ -192,9 +199,21 @@ export function PlanEditor(
 	let onProvider = useCallback((value: PlanProvider | undefined) => {
 		provider.current = value;
 		setPresence(value);
-		if (!value) return;
-		value.on("sync", synced => setState(prev => ({ ...prev, synced })));
+		if (!value) {
+			questions?.setRetryOpen(undefined);
+			questions?.resetDocument();
+			return;
+		}
+		questions?.setRetryOpen(() => {
+			setState(prev => ({ ...prev, failed: undefined }));
+			resume(value);
+		});
+		value.on("sync", synced => {
+			setState(prev => ({ ...prev, synced }));
+			questions?.setDocumentSynced(synced);
+		});
 		value.on("status", ({ message, status }) => {
+			if (status === "failed") questions?.failOpen();
 			// A failure is sticky until something opens the document; anything
 			// else clears it, so a reconnect that works stops saying it failed.
 			setState(prev => ({
@@ -203,7 +222,7 @@ export function PlanEditor(
 				...(status === "connected" ? { failed: undefined } : {}),
 			}));
 		});
-	}, []);
+	}, [questions]);
 
 	/*
 	 * Open the document whenever the connection says it can carry the request.
@@ -219,7 +238,7 @@ export function PlanEditor(
 	 */
 	useEffect(() => {
 		if (connection !== undefined && connection !== "connected") return;
-		void presence?.resume();
+		if (presence) resume(presence);
 	}, [presence, connection]);
 
 	let offline = connection !== undefined && connection !== "connected";

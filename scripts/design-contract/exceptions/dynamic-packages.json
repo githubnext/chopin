@@ -226,9 +226,16 @@
 				"props",
 				"unresolved JSX props > ClockIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > WrenchIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "d7ae440d81602216ef965bf86afd5c4972d94bfaaf841cf91814dfcae870496a"
+		"sourceHash": "7e670b6feeecb09bacd4bf391be796cf033981d1210f9c664ea85d1272a7aa69"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

@@ -12,28 +12,6 @@
 			}
 		},
 		{
-			"approvedRole": "chat timestamp",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".gap-3.flex[data-chat-entry=\"true\"]:nth-child(1) > .-mt-0\\.5.gap-1.flex-1 > .items-baseline.gap-1\\.5.text-sm > .text-text-quaternary.tabular-nums.text-sm"
-				],
-				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">10:40</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.43 (foreground color: #78766e, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "chat timestamp",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".gap-3.flex[data-chat-entry=\"true\"]:nth-child(2) > .-mt-0\\.5.gap-1.flex-1 > .items-baseline.gap-1\\.5.text-sm > .text-text-quaternary.tabular-nums.text-sm"
-				],
-				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">10:41</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.43 (foreground color: #78766e, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
 			"approvedRole": "tool count",
 			"finding": {
 				"rule": "color-contrast",
@@ -71,7 +49,7 @@
 			"finding": {
 				"rule": "color-contrast",
 				"target": [
-					".opacity-60 > .items-baseline.gap-1\\.5.text-sm > .text-text-quaternary.tabular-nums.text-sm"
+					".text-text-quaternary.tabular-nums.text-sm"
 				],
 				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">queued</span>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.21 (foreground color: #adaca6, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
@@ -82,7 +60,7 @@
 			"finding": {
 				"rule": "color-contrast",
 				"target": [
-					".opacity-60 > div:nth-child(2) > .items-start.gap-1.flex > .flex-1.min-w-0 > .chat-markdown.break-words.text-chat-body > p"
+					"div[data-chat-message-id=\"audit-queued\"] > .items-start.gap-1.flex > .flex-1.min-w-0[data-chat-message-text=\"true\"] > .chat-markdown.break-words.text-chat-body > p"
 				],
 				"html": "<p>Also check the compact layout.</p>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.64 (foreground color: #9e9d98, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
@@ -102,28 +80,6 @@
 			}
 		},
 		{
-			"approvedRole": "chat timestamp",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".gap-3.flex[data-chat-entry=\"true\"]:nth-child(1) > .-mt-0\\.5.gap-1.flex-1 > .items-baseline.gap-1\\.5.text-sm > .text-text-quaternary.tabular-nums.text-sm"
-				],
-				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">10:40</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.43 (foreground color: #78766e, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "chat timestamp",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".gap-3.flex[data-chat-entry=\"true\"]:nth-child(2) > .-mt-0\\.5.gap-1.flex-1 > .items-baseline.gap-1\\.5.text-sm > .text-text-quaternary.tabular-nums.text-sm"
-				],
-				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">10:41</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.43 (foreground color: #78766e, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
 			"approvedRole": "tool count",
 			"finding": {
 				"rule": "color-contrast",
@@ -161,7 +117,7 @@
 			"finding": {
 				"rule": "color-contrast",
 				"target": [
-					".opacity-60 > .items-baseline.gap-1\\.5.text-sm > .text-text-quaternary.tabular-nums.text-sm"
+					".text-text-quaternary.tabular-nums.text-sm"
 				],
 				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">queued</span>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.21 (foreground color: #adaca6, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
@@ -172,7 +128,7 @@
 			"finding": {
 				"rule": "color-contrast",
 				"target": [
-					".opacity-60 > div:nth-child(2) > .items-start.gap-1.flex > .flex-1.min-w-0 > .chat-markdown.break-words.text-chat-body > p"
+					"div[data-chat-message-id=\"audit-queued\"] > .items-start.gap-1.flex > .flex-1.min-w-0[data-chat-message-text=\"true\"] > .chat-markdown.break-words.text-chat-body > p"
 				],
 				"html": "<p>Also check the compact layout.</p>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.64 (foreground color: #9e9d98, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"

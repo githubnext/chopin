@@ -30,13 +30,18 @@ import { ActivityLine, DecisionPrompt } from "./decision-entry";
 import { ScopedChoicePrompt } from "./scoped-choice-entry";
 import { ResearchOfferCard } from "./research-offer";
 import type { ResearchOfferControls } from "./research-offer";
+import { researchTranscript } from "./research-transcript";
 
 type PlanMarkers = {
 	canEdit?: boolean;
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
 	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
-	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryAnalysis?: (
+		messageId: string,
+		actionId: string,
+		lane?: "decision" | "research",
+	) => Promise<void>;
 	onRetryJob?: (jobId: string) => Promise<void>;
 	sourceDestination?: ChatDestination;
 	conversationPlan?: ConversationPlan.State;
@@ -136,7 +141,7 @@ function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 		.exec(item.text)?.[1];
 	let linked = readyPath !== undefined && parseChildDocumentPath(readyPath) !== undefined;
 	return (
-		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
+		<div className="flex items-center justify-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={14} />
 			</div>
@@ -217,7 +222,7 @@ function MessageBody(
 	} & PlanMarkers,
 ) {
 	let text = displayText(message.text) ? message.text : message.author.kind === "member"
-		? "Ask Planner"
+		? "Ask Chopin"
 		: "";
 
 	return (
@@ -257,11 +262,6 @@ function MessageBody(
 				</div>
 			)}
 			{message.tools && message.tools.length > 0 && <ToolRun tools={message.tools} />}
-			{!message.queued && markers.researchOffers && markers.conversationPlan?.researchOffers
-				?.filter(offer => offer.source.messageId === message.id)
-				.map(offer => (
-					<ResearchOfferCard controls={markers.researchOffers!} key={offer.id} offer={offer} />
-				))}
 			{markers.sourceDestination?.source.messageId === message.id && (
 				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
 					Source: “{markers.sourceDestination.source.quote}”
@@ -292,7 +292,7 @@ function MessageGroup(
 	} & PlanMarkers,
 ) {
 	let first = item.messages[0]!;
-	let name = item.author.kind === "agent" ? "Planner" : capitalize(item.author.handle);
+	let name = item.author.kind === "agent" ? "Chopin" : capitalize(item.author.handle);
 
 	return (
 		<div
@@ -310,7 +310,11 @@ function MessageGroup(
 			>
 				<div className="flex items-baseline gap-1.5 text-sm">
 					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span className="text-sm text-text-quaternary tabular-nums">
+					<span
+						className={item.queued
+							? "text-sm text-text-quaternary tabular-nums"
+							: "text-2xs text-text-tertiary tabular-nums"}
+					>
 						{item.queued ? "queued" : when(first.ts!)}
 					</span>
 				</div>
@@ -361,7 +365,11 @@ export function Transcript(
 		conversationPlanJobs?: ConversationPlan.Job[];
 		onCardLink?: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
-		onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+		onRetryAnalysis?: (
+			messageId: string,
+			actionId: string,
+			lane?: "decision" | "research",
+		) => Promise<void>;
 		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
 		researchOffers?: ResearchOfferControls;
@@ -377,7 +385,10 @@ export function Transcript(
 	let scroller = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
 	let sourceOwner = useRef({});
-	let groups = group(entries, queued, working);
+	let groups = researchTranscript(
+		group(entries, queued, working),
+		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
+	);
 	let latestPrompt = new Map<string, string>();
 	let latestScoped = new Map<string, string>();
 	for (let entry of entries) {
@@ -426,7 +437,15 @@ export function Transcript(
 				data-chat-stack
 			>
 				{groups.map(item =>
-					item.kind === "system"
+					item.kind === "research"
+						? (
+							<ResearchOfferCard
+								key={`research:${item.offer.id}`}
+								controls={researchOffers!}
+								offer={item.offer}
+							/>
+						)
+						: item.kind === "system"
 						? decisions && item.decision && item.ts !== undefined
 							? (
 								<DecisionSystemEntry

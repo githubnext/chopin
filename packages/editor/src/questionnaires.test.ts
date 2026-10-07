@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
-import { $createParagraphNode, $getNodeByKey, $getRoot } from "lexical";
+import { $createParagraphNode, $createTextNode, $getNodeByKey, $getRoot } from "lexical";
 import * as Y from "yjs";
 
 import { importPlan, registry } from "@chopin/dialect";
@@ -73,6 +73,77 @@ describe("plan questionnaire state", () => {
 		) {
 			expect(state(source)).toEqual({ entries: [], hasPlanContent: true });
 		}
+	});
+
+	it("confirms an empty snapshot only after a synced Lexical read", async () => {
+		let editor = open("");
+		let store = new QuestionnaireStore();
+		store.attach(editor);
+		expect(store.readinessSnapshot()).toBe("loading");
+
+		// The document write immediately before sync belongs to the confirmed snapshot.
+		editor.update(() => {
+			$getRoot().append($createParagraphNode().append($createTextNode("Loaded prose")));
+		});
+		store.setDocumentSynced(true);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(store.readinessSnapshot()).toBe("ready");
+		expect(store.contentSnapshot()).toBe(true);
+
+		store.setDocumentSynced(true);
+		expect(store.readinessSnapshot()).toBe("ready");
+		store.setDocumentSynced(false);
+		expect(store.readinessSnapshot()).toBe("ready");
+		store.resetDocument();
+		expect(store.readinessSnapshot()).toBe("loading");
+	});
+
+	it("clears stale decisions on epoch reset but preserves them on ordinary reconnect", async () => {
+		let editor = open(QUESTIONNAIRE);
+		let store = new QuestionnaireStore();
+		store.attach(editor);
+		store.setDocumentSynced(true);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(store.snapshot()).toHaveLength(1);
+
+		store.setDocumentSynced(false);
+		expect(store.snapshot()).toHaveLength(1);
+		store.resetDocument();
+		expect(store.snapshot()).toEqual([]);
+		expect(store.readinessSnapshot()).toBe("loading");
+		store.readDocument(editor);
+		expect(store.snapshot()).toEqual([]);
+
+		store.setDocumentSynced(true);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(store.snapshot()).toHaveLength(1);
+		expect(store.readinessSnapshot()).toBe("ready");
+	});
+
+	it("offers a retry after an open fails", () => {
+		let store = new QuestionnaireStore();
+		let retries = 0;
+		store.setRetryOpen(() => retries++);
+		store.failOpen();
+		expect(store.readinessSnapshot()).toBe("unavailable");
+		store.retryOpen();
+		expect(retries).toBe(1);
+		expect(store.readinessSnapshot()).toBe("loading");
+	});
+
+	it("cancels a queued confirmation when the provider closes", () => {
+		let pending: (() => void) | undefined;
+		let editor = {
+			update(callback: () => void) {
+				pending = callback;
+			},
+		} as unknown as LexicalEditor;
+		let store = new QuestionnaireStore();
+		store.attach(editor);
+		store.setDocumentSynced(true);
+		store.setDocumentSynced(false);
+		pending?.();
+		expect(store.readinessSnapshot()).toBe("loading");
 	});
 });
 

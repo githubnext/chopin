@@ -58,6 +58,19 @@
 			[
 				"color",
 				"fill",
+				"#212121",
+				"presentation attribute",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/assets/icons/planner-resume.svg",
+		"reason": "Standalone imported artwork owns its embedded palette and cannot inherit page custom properties when loaded as an image; preserve the source asset.",
+		"cases": [
+			[
+				"color",
+				"fill",
 				"#78766e",
 				"presentation attribute",
 				1

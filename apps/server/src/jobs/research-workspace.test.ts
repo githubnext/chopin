@@ -385,6 +385,8 @@ describe("research evidence provenance", () => {
 			.toBe("research-source-mismatch");
 		expect(publicResearchResultFailure(result, new Set([PUBLIC_SOURCE.url]), metrics))
 			.toBeUndefined();
+		expect(publicResearchResultFailure(undefined, new Set([PUBLIC_SOURCE.url]), metrics))
+			.toBe("research-result-missing");
 		expect(publicResearchResultFailure(result, new Set([PUBLIC_SOURCE.url]), {
 			...metrics,
 			webSuccesses: 0,

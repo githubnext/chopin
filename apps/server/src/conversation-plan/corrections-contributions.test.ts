@@ -95,7 +95,7 @@ describe("conversation card contribution corrections", () => {
 				contributions: Array<{ id: string; targetId: string; relation: string }>;
 			}>;
 		}).threads[0];
-		expect(QUESTION_SET_VERSION).toBe("conversation-plan-8");
+		expect(QUESTION_SET_VERSION).toBe("conversation-plan-9");
 		expect(context.stances).toEqual([{
 			participant: "alice",
 			optionId: undefined,

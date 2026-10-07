@@ -23,7 +23,7 @@ test("unlinked messages retain purpose evidence for later effects", async () => 
 	expect(calls).toBe(1);
 	expect(output.events).toEqual([]);
 	expect(output.analysis.status).toBe("unlinked");
-	expect(output.analysis.questionSetVersion).toBe("conversation-plan-8");
+	expect(output.analysis.questionSetVersion).toBe("conversation-plan-9");
 	expect(output.analysis.passes[0].answers.enough_purpose).toEqual({
 		type: "noul",
 		noul: 0.95,

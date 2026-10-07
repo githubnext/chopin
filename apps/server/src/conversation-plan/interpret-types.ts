@@ -3,22 +3,9 @@ import type { JevRequest, JevResult } from "./jev";
 import type { LinkedCardOptions } from "./questions";
 
 export type Analysis = Omit<ConversationPlan.AnalysisRecord, "messageId" | "eventIds">;
-export type ResearchOfferCandidate = {
-	source: ConversationPlan.ResearchSource;
-	threadId: string;
-	optionIds: [string, string];
-	kind?: "current-cost-comparison";
-} | {
-	source: ConversationPlan.ResearchSource;
-	threadId: string;
-	optionIds: string[];
-	kind: "current-cost-concern";
-	focusOptionId?: string;
-};
 export type Interpretation = {
 	events: ConversationPlan.Event[];
 	analysis: Analysis;
-	researchOffer?: ResearchOfferCandidate;
 };
 export type InterpretInput = {
 	channelId: string;

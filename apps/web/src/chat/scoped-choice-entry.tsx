@@ -98,7 +98,7 @@ export function ScopedChoicePrompt({
 						key={`${source.messageId}:${source.start}:${source.end}`}
 					>
 						<span className="font-medium text-text-primary">
-							{source.author.kind === "member" ? capitalize(source.author.handle) : "Planner"}
+							{source.author.kind === "member" ? capitalize(source.author.handle) : "Chopin"}
 						</span>
 						{" “"}
 						{source.quote}

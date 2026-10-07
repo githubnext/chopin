@@ -347,6 +347,7 @@ export function hosted(
 				let located = await locatedChannel(caller, id);
 				if (!located || located === "forbidden") return undefined;
 				let { channel } = located;
+				let url = documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug);
 
 				let live = Rooms.get(channel.id)?.plan;
 				if (live) {
@@ -360,6 +361,7 @@ export function hosted(
 								source: Plan.source(live),
 								revision: live.revision,
 								archivedAt: channel.archivedAt,
+								url,
 							}));
 					} catch {
 						return undefined;
@@ -384,6 +386,7 @@ export function hosted(
 						source: projected.source,
 						revision: projected.revision,
 						archivedAt: channel.archivedAt,
+						url,
 					});
 				} catch {
 					return undefined;
@@ -508,9 +511,9 @@ export function hosted(
 					if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
 					if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
 					let stored = await auth.storage.collaboration.load(id, auth.clock());
-					if (!stored || stored.channel.repositoryId !== repository.id) {
-						return { kind: "conflict" };
-					}
+					// Nothing stored under this key's id: the repository already has a document with this title.
+					if (!stored) return { kind: "title-taken" };
+					if (stored.channel.repositoryId !== repository.id) return { kind: "conflict" };
 					let restored = await Plan.readStored(stored);
 					if (
 						!restored.creation

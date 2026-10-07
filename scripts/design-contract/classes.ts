@@ -61,7 +61,7 @@ export function classProblems(value: string, policy: TokenPolicy): string[] {
 			: prefix === "ease"
 			? "transition-timing-function"
 			: "color";
-		if (prefix === "text" && /^(xs|sm|base|lg|xl|2xl)$/.test(base)) continue;
+		if (prefix === "text" && /^(2xs|xs|sm|base|lg|xl|2xl)$/.test(base)) continue;
 		if (
 			prefix === "text"
 			&& /^(left|right|center|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip)$/.test(

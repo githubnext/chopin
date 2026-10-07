@@ -115,7 +115,7 @@ it. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
 covers this against the real Pi agent loop; run it before bumping
 `@ai-sdk/harness-pi` or `@earendil-works/pi-coding-agent`.
 
-`HARNESS=atomic` runs Atomic 0.9.25 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.27 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI, use
 RPC mode, or substitute Atomic for Pi's runtime.
 
@@ -215,11 +215,13 @@ for the document, whether started from the browser or through MCP, re-verifies
 the remembered path before using it. The check establishes repository
 coordinates, not remote-host authenticity, and it does not confine the shell.
 
-Without a remembered checkout that still verifies, the session runs in an empty
-working directory that Chopin creates for that document alone under the operating
-system's temporary directory, with mode `0700`. It is never shared with another
-document, keeps what the Planner writes there for later sessions of the same
-document, and is removed when the server shuts down cleanly. The session has the
+Without a remembered checkout that still verifies, the session runs in a directory Chopin keeps for that document alone under its per-user state
+directory (`$XDG_STATE_HOME/chopin/planner/<document id>`, defaulting to
+`~/.local/state`; `~/Library/Application Support/Chopin/planner` on macOS;
+`%LOCALAPPDATA%\Chopin\planner` on Windows), with mode `0700`. It is never shared
+with another document, keeps what the Planner and its workflows write there
+across later sessions and server restarts, and is not placed in the shared
+temporary directory. A symlink or file at that path is refused. The session has the
 same tools either way; the Planner is told whether it is in a checkout or in an
 empty directory without repository files, and its repository tools remain
 available.
@@ -308,6 +310,7 @@ the image.
 | `MODEL`                        | `gpt-6-luna`          | Model requested for hosted agent sessions. Required under `HARNESS=pi` and `HARNESS=atomic`; under `atomic` it must be `provider/model` from Atomic's catalog.                                                                                                                                                                                                                                                                                                                                                                                     |
 | `HARNESS`                      | `copilot-sdk`         | Adapter name selected from Chopin's harness map (`copilot-sdk`, `pi`, or `atomic`). An unknown name refuses at startup. `atomic` gives every Planner session shell and filesystem access as the server process's user, hosted instances included; see [Choose and trust a harness](#choose-and-trust-a-harness).                                                                                                                                                                                                                                   |
 | `HARNESS_AUTH`                 | unset                 | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `pi`, it is required: `auto`, `openai`, `anthropic`, and `custom` require a loopback-only `SERVER_HOST`, only `ai-gateway` is allowed otherwise, and `direct` is always refused. For `atomic`, it is required and must be `auto`, which requires a loopback-only `SERVER_HOST`, or `ai-gateway`; every other value is refused. |
+| `HARNESS_EXTENSIONS`           | unset                 | Extension or package paths every atomic Planner session loads, as Atomic's `--extension` flag would, separated by the platform path delimiter (`:`, or `;` on Windows). A package's extensions, skills, and workflows all register. Each path must be absolute and exist; any other harness refuses the variable at startup. Background workers never load them. The code runs in the server process as its user.                                                                                                                                  |
 | `AGENT`                        | on                    | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `BACKGROUND_JOBS`              | on                    | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `WEB_RESEARCH`                 | on                    | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -324,6 +327,14 @@ Conversation-derived cards default to off. When enabled, interpretation sends
 current and recent Chat messages and selected decision context to TypeSafe's Jev
 service. It uses `JEV_API_KEY` and `JEV_MODEL` independently of the Planner's
 provider and credentials; `AGENT=off` does not disable it.
+
+The same flag enables independent external-research suggestions in Chat. Their
+shared briefs can be synthesized by the `research-brief@1` background worker under
+the existing Planner owner; this uses the configured harness provider, separately
+from Jev. A self-contained source excerpt is the fallback when synthesis is
+unavailable. Actual research starts only after a writer accepts the current shared
+brief and the execution capability is enabled. See
+[Research offers from Chat](conversation-research.md).
 
 The supplied Compose file forwards `CONVERSATION_PLAN`, `JEV_MODEL` and
 `JEV_API_KEY` from the deployment environment. It uses the server's default

@@ -56,16 +56,17 @@ image build. A documentation-only change should still pass `bun run ci`.
 
 ## Repository map
 
-| Area                | Responsibility                                         | Internal workspace dependencies               |
-| ------------------- | ------------------------------------------------------ | --------------------------------------------- |
-| `packages/dialect`  | Restricted MDX, MDAST, and Lexical schema              | none                                          |
-| `packages/protocol` | WebSocket declarations and addressing helper           | none                                          |
-| `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                    |
-| `packages/viewport` | Browser geometry and subscriptions                     | none                                          |
-| `packages/editor`   | Collaborative editor, decisions, comments, and widgets | `dialect`, `question`, `protocol`, `viewport` |
-| `apps/server`       | Auth, channels, rooms, storage, Planner, MCP, tasks    | `dialect`, `question`, `protocol`             |
-| `apps/web`          | Repository picker, navigation, conversation, workspace | `dialect`, `editor`, `protocol`, `viewport`   |
-| `e2e`               | Browser and system integration harness                 | may import server internals as fixtures       |
+| Area                | Responsibility                                         | Internal workspace dependencies                      |
+| ------------------- | ------------------------------------------------------ | ---------------------------------------------------- |
+| `packages/dialect`  | Restricted MDX, MDAST, and Lexical schema              | none                                                 |
+| `packages/protocol` | WebSocket declarations and addressing helper           | none                                                 |
+| `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                           |
+| `packages/draft`    | Bounded collaborative plain-text drafts                | none                                                 |
+| `packages/viewport` | Browser geometry and subscriptions                     | none                                                 |
+| `packages/editor`   | Collaborative editor, decisions, comments, and widgets | `dialect`, `question`, `protocol`, `viewport`        |
+| `apps/server`       | Auth, channels, rooms, storage, Planner, MCP, tasks    | `dialect`, `draft`, `question`, `protocol`           |
+| `apps/web`          | Repository picker, navigation, conversation, workspace | `dialect`, `draft`, `editor`, `protocol`, `viewport` |
+| `e2e`               | Browser and system integration harness                 | may import server internals as fixtures              |
 
 Runtime workspace packages do not depend on an application. E2E and skill
 contract tests may deliberately import server internals; do not treat those test
@@ -187,6 +188,13 @@ the Planner reviewed the decision and intentionally linked no prose; orphaned
 means a former target can no longer be identified safely.
 
 ## Research requests and child documents
+
+Conversation research offers are distinct from research requests. With
+`CONVERSATION_PLAN=on`, decision and research classifiers process saved messages
+independently. The research offer's original source and execution identity never
+change when its Chat placement moves. Human brief edits are shared CRDT patches;
+Start seals the latest server-accepted brief and persists its delivery intent
+before publication. See [Research offers from Chat](docs/conversation-research.md).
 
 Typing `/research` starts one parent-scoped durable request from the exact brief.
 A pending request is an inline card, not a channel: it has no URL, sidebar row,

@@ -70,15 +70,16 @@ the lease. This is a single-writer design, not an application cluster.
 
 ## Workspace packages
 
-| Area                | Responsibility                                                                             | Internal dependencies                         |
-| ------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| `packages/dialect`  | Restricted MDX dialect, parsing, serialization, and Lexical schema                         | none                                          |
-| `packages/protocol` | WebSocket types and shared addressing helper                                               | none                                          |
-| `packages/question` | Questionnaire definitions, shared drafts, and answer derivation                            | `protocol`                                    |
-| `packages/viewport` | Browser viewport geometry and subscriptions                                                | none                                          |
-| `packages/editor`   | Collaborative editor, cursors, decisions, comments, and widgets                            | `dialect`, `question`, `protocol`, `viewport` |
-| `apps/server`       | Authentication, channels, rooms, storage, Planner, jobs, MCP, and implementation lifecycle | `dialect`, `question`, `protocol`             |
-| `apps/web`          | Repository picker, channel navigation, Chat, and workspace shell                           | `dialect`, `editor`, `protocol`, `viewport`   |
+| Area                | Responsibility                                                                             | Internal dependencies                                |
+| ------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `packages/dialect`  | Restricted MDX dialect, parsing, serialization, and Lexical schema                         | none                                                 |
+| `packages/protocol` | WebSocket types and shared addressing helper                                               | none                                                 |
+| `packages/question` | Questionnaire definitions, shared drafts, and answer derivation                            | `protocol`                                           |
+| `packages/draft`    | Bounded collaborative plain-text draft codec                                               | none                                                 |
+| `packages/viewport` | Browser viewport geometry and subscriptions                                                | none                                                 |
+| `packages/editor`   | Collaborative editor, cursors, decisions, comments, and widgets                            | `dialect`, `question`, `protocol`, `viewport`        |
+| `apps/server`       | Authentication, channels, rooms, storage, Planner, jobs, MCP, and implementation lifecycle | `dialect`, `draft`, `question`, `protocol`           |
+| `apps/web`          | Repository picker, channel navigation, Chat, and workspace shell                           | `dialect`, `draft`, `editor`, `protocol`, `viewport` |
 
 Runtime workspace packages do not depend on either application. The E2E suite
 and skill contract tests deliberately import server internals as test harnesses;
@@ -369,6 +370,22 @@ used when a disposable Copilot session is recreated. The full transcript is not
 sent to every turn.
 
 ## Decisions and anchors
+
+### Conversation research offers
+
+With conversation analysis enabled, saved human messages also enter an independent
+research classifier. Research opportunities may exist before any decision thread
+or candidate options. The versioned conversation sidecar stores its queue,
+diagnostics, offers, source references, and collaborative brief checkpoints.
+
+An isolated `research-brief@1` worker synthesizes a grounded brief. People share a
+json-joy text draft; human editing stops automatic replacement. Start atomically
+captures the latest accepted draft and its durable delivery intent. An immutable
+offer key identifies execution independently of the card's changing Chat position.
+The existing research service creates the request and publishes its completed
+child. See [Research offers from Chat](conversation-research.md).
+
+### Decision records
 
 Question answers and accepted comment threads belong to durable records outside
 the document. Their `<Questionnaire>` and `<Decision>` nodes are readable MDX

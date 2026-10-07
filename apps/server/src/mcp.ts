@@ -48,10 +48,10 @@ export type DocumentReader<Caller> = {
 		repository: string,
 		includeArchived?: boolean,
 	): Promise<DocumentSummary[] | "forbidden">;
-	read(caller: Caller, id: string): Promise<Document | undefined>;
+	read(caller: Caller, id: string): Promise<LinkedDocument | undefined>;
 };
 
-export type CreatedDocument = Document & { url: string };
+export type LinkedDocument = Document & { url: string };
 
 export type Implementation = {
 	document: Document;
@@ -101,9 +101,10 @@ export type CreateDocument<Caller> = {
 		caller: Caller,
 		input: CreateDocumentInput,
 	): Promise<
-		| { kind: "created"; document: CreatedDocument }
-		| { kind: "replayed"; document: CreatedDocument }
+		| { kind: "created"; document: LinkedDocument }
+		| { kind: "replayed"; document: LinkedDocument }
 		| { kind: "conflict" }
+		| { kind: "title-taken" }
 		| { kind: "forbidden" }
 		| { kind: "unavailable" }
 	>;
@@ -213,6 +214,28 @@ const ARCHIVED_DOCUMENT = {
 	required: ["id", "title", "archivedAt"],
 };
 
+/** Validation failures of a submitted plan, returned instead of a document. */
+const ISSUES = {
+	type: "object",
+	properties: {
+		issues: {
+			type: "array",
+			items: {
+				type: "object",
+				properties: {
+					code: { type: "string" },
+					message: { type: "string" },
+					path: { type: "string" },
+				},
+				required: ["code", "message", "path"],
+				additionalProperties: true,
+			},
+		},
+	},
+	required: ["issues"],
+	additionalProperties: false,
+};
+
 function outcome(codes: string[]) {
 	return {
 		type: "object",
@@ -289,8 +312,9 @@ export const TOOLS: Tool[] = [
 				brief: BRIEF,
 				source: { type: "string" },
 				revision: { type: "integer", minimum: 0 },
+				url: { type: "string" },
 			},
-			required: ["id", "title", "source", "revision"],
+			required: ["id", "title", "source", "revision", "url"],
 			additionalProperties: false,
 		},
 	},
@@ -321,15 +345,22 @@ export const TOOLS: Tool[] = [
 		},
 		outputSchema: {
 			type: "object",
-			properties: {
-				...DOCUMENT.properties,
-				brief: BRIEF,
-				source: { type: "string" },
-				revision: { type: "integer", minimum: 0 },
-				url: { type: "string" },
-			},
-			required: ["id", "title", "brief", "source", "revision", "url"],
-			additionalProperties: false,
+			oneOf: [
+				{
+					type: "object",
+					properties: {
+						...DOCUMENT.properties,
+						brief: BRIEF,
+						source: { type: "string" },
+						revision: { type: "integer", minimum: 0 },
+						url: { type: "string" },
+					},
+					required: ["id", "title", "brief", "source", "revision", "url"],
+					additionalProperties: false,
+				},
+				outcome(["idempotency-conflict", "title-taken", "document-unavailable"]),
+				ISSUES,
+			],
 		},
 	},
 	{
@@ -383,26 +414,7 @@ export const TOOLS: Tool[] = [
 					"repository-forbidden",
 					"document-unavailable",
 				]),
-				{
-					type: "object",
-					properties: {
-						issues: {
-							type: "array",
-							items: {
-								type: "object",
-								properties: {
-									code: { type: "string" },
-									message: { type: "string" },
-									path: { type: "string" },
-								},
-								required: ["code", "message", "path"],
-								additionalProperties: true,
-							},
-						},
-					},
-					required: ["issues"],
-					additionalProperties: false,
-				},
+				ISSUES,
 			],
 		},
 	},
@@ -898,6 +910,9 @@ export function handler<Caller>(
 					}
 					if (outcome.kind === "conflict") {
 						return respond(text({ code: "idempotency-conflict" }, true));
+					}
+					if (outcome.kind === "title-taken") {
+						return respond(text({ code: "title-taken" }, true));
 					}
 					if (outcome.kind === "unavailable") {
 						return respond(text({ code: "document-unavailable" }, true));

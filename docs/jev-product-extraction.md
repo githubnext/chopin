@@ -22,6 +22,9 @@ not establish release readiness or replace the validation records below.
 - Research suggestions require human consent. Accepted offers use the existing
   durable research workflow and publish an ordinary child document on success.
   Child documents do not offer another level of research.
+  Research analysis is independent of decision analysis and supports general
+  external investigation and information gaps. Offers have live-collaborative
+  briefs; see [Research offers from Chat](conversation-research.md).
 
 The interface extends the existing QuestionView, resolved reader and Decisions
 list. It does not require a separate Jev card renderer. See
@@ -48,7 +51,7 @@ processing rechecks the affected conversation and card state. A stale result
 cannot silently overwrite an intervening human choice. Failed analysis has an
 explicit retry path; uncertain classification can leave a message unapplied.
 
-The current implementation has separate durable state for message analysis,
+The current implementation has separate durable state for decision and research message analysis,
 pending effects and receipts, card actions awaiting mirroring, and Planner jobs.
 These serve different stages of the flow; they are not separate databases.
 They live with the conversation events and decision records in the channel's

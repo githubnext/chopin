@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildResearchOfferRequest } from "./questions";
-import { extractQuotes } from "./quotes";
+import { researchRequest } from "./research-interpreter";
 import { researchQuoteSupportsPair } from "./service";
 import { seeded, withOption } from "./interpret.test-fixtures";
 import { message } from "./policy-initial.test-fixtures";
@@ -17,27 +16,16 @@ test("research selection shows effective relabeled options and exact quote choic
 		displayLabel: undefined,
 	});
 	let current = message("cost-request", "Compare current provider prices.");
-	let request = buildResearchOfferRequest(
-		current,
-		[],
-		state.threads,
-		extractQuotes(current.text),
+	let { request, context, spans } = researchRequest({ message: current, recent: [], state });
+	expect(context.decisions[0]!.options.find(item => item.id === option.id)?.label).toBe(
+		"Backblaze B2",
 	);
-	let criteria = request.questions.research_option_a;
-	expect(criteria?.type).toBe("choice");
-	if (criteria?.type !== "choice") throw new Error("missing option choices");
-	expect(criteria.criteria[option.id]).toContain("Backblaze B2");
-	expect(criteria.criteria[option.id]).not.toContain("R2 (in");
-	expect(
-		(request.state as any).threads[0].options.find((item: any) => item.id === option.id).text,
-	)
-		.toBe("Backblaze B2");
-	expect((request.state as any).candidates[0]).toEqual({
+	expect(spans[0]).toEqual({
 		quote: current.text,
 		start: 0,
 		end: current.text.length,
 	});
-	expect(request.questions.research_q0_owned?.type).toBe("noul");
+	expect(request.questions.owned?.type).toBe("noul");
 });
 
 test("research quote rejects explicit alternatives outside the current pair", () => {

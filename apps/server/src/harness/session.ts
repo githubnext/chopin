@@ -3,7 +3,14 @@ import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { headingPlannerAgent, plannerAgent, prosePlannerAgent, refinePlannerAgent } from "./agents";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
-import { registerFullPlanner } from "./atomic/full";
+import {
+	type FullPlanner,
+	pauseOwnedRuns,
+	type PlannerRuns,
+	registerFullPlanner,
+	resumeOwnedRuns,
+	untilUnpaused,
+} from "./atomic/full";
 import { createHumanInput } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 
@@ -31,11 +38,28 @@ export type PlannerChannel = {
 	harness?: string;
 };
 
+/** Atomic answers an action it could not carry out with `noop` or `cancelled`; report it rather than claim success. */
+function applied(outcome: { status: string; message: string }): void {
+	if (outcome.status === "noop" || outcome.status === "cancelled") throw new Error(outcome.message);
+}
+
 export type PlannerSession = {
 	/** Snapshot of the selected current static Planner profile. */
 	activeTools?: readonly string[];
 	stream: (prompt: string, abortSignal: AbortSignal) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
+	/** Workflow runs this session owns; only atomic Planner sessions report them. */
+	runs?: () => PlannerRuns | undefined;
+	/** Subscribes to run changes; returns the unsubscribe function. */
+	watchRuns?: (listener: (runs: PlannerRuns) => void) => () => void;
+	/** Pauses every workflow run this session owns, resumably. */
+	pauseRuns?: () => Promise<void>;
+	/** Resumes the runs this session paused. */
+	resumeRuns?: () => Promise<void>;
+	/** Pauses one run this session owns. */
+	pauseRun?: (runId: string) => Promise<void>;
+	/** Resumes one paused run this session owns. */
+	resumeRun?: (runId: string) => Promise<void>;
 };
 
 export type PlannerSessionDependencies = {
@@ -99,11 +123,21 @@ export async function openPlannerSession(
 		let workspace = channel.harness === "atomic" && !job
 			? await plannerWorkspace(channel.room.id, channel.repository)
 			: undefined;
+		let planner: FullPlanner | undefined;
+		let listeners = new Set<(runs: PlannerRuns) => void>();
 		if (workspace) {
-			unregisterFull = registerFullPlanner(sessionId, {
+			planner = {
 				cwd: workspace.cwd,
-				humanInput: createHumanInput(channel.room),
-			});
+				humanInput: createHumanInput(
+					channel.room,
+					undefined,
+					(runId, signal) => untilUnpaused(planner!, runId, signal),
+				),
+				onRuns: runs => {
+					for (let listener of listeners) listener(runs);
+				},
+			};
+			unregisterFull = registerFullPlanner(sessionId, planner);
 		}
 		let instructions = typeof channel.instructions === "function"
 			? channel.instructions(workspace)
@@ -132,12 +166,32 @@ export async function openPlannerSession(
 		let active = session;
 		let release = unregister;
 		let stopped: Promise<void> | undefined;
+		let workflows = () => {
+			if (!planner?.workflows) {
+				throw new Error("The Planner has no live Atomic session to control.");
+			}
+			return planner.workflows;
+		};
+		let runControl = planner
+			? {
+				runs: () => planner.runs,
+				watchRuns: (listener: (runs: PlannerRuns) => void) => {
+					listeners.add(listener);
+					return () => listeners.delete(listener);
+				},
+				pauseRuns: () => pauseOwnedRuns(workflows()),
+				resumeRuns: () => resumeOwnedRuns(workflows()),
+				pauseRun: async (runId: string) => applied(await workflows().pause(runId)),
+				resumeRun: async (runId: string) => applied(await workflows().resume(runId)),
+			}
+			: {};
 		return {
 			ok: true,
 			value: {
 				activeTools: Object.freeze([
 					...(job ? BACKGROUND_TOOL_NAMES[job.kind] : PLANNER_TOOL_NAMES),
 				]),
+				...runControl,
 				stream: (prompt, abortSignal) =>
 					agent.stream({
 						session: active,

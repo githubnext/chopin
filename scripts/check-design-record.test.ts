@@ -78,6 +78,21 @@ describe("structured design record", () => {
 		}
 	});
 
+	test("checks the small metadata role in both design records", () => {
+		expect(
+			check({
+				markdown: markdown.replace('fontSize: "var(--text-2xs)"', 'fontSize: "var(--text-xs)"'),
+			})[0],
+		).toContain("DESIGN.md.typography.small-metadata.fontSize:");
+		expect(
+			check({
+				json: editJSON(value => {
+					delete value.extensions.typographyMeta["small-metadata"];
+				}),
+			})[0],
+		).toContain("design.json.extensions.typographyMeta.small-metadata: missing mapped field");
+	});
+
 	test("checks sidecar shadows and motion against canonical tokens", () => {
 		expect(
 			check({

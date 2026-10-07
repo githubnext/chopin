@@ -17,6 +17,7 @@ import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
+import { researchBriefDefinition } from "./jobs/research-brief";
 import {
 	greetJoinedPlan,
 	prepareOpenedPlan,
@@ -100,6 +101,7 @@ let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
+let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
 let documentTransitions = new Map<string, Promise<void>>();
 let archivingChannels = new Set<string>();
@@ -108,6 +110,7 @@ let conversationRuntime = createConversationRuntime({
 	config,
 	server: () => server,
 	unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
+	researchJobs: () => researchBriefJobs,
 });
 
 function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promise<T> {
@@ -223,7 +226,12 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 				await backfillPlannerAskThreads(opened);
 			}
 		});
-		await conversationRuntime.attach(room, opened, !!channel?.archivedAt);
+		await conversationRuntime.attach(
+			room,
+			opened,
+			!!channel?.archivedAt,
+			!!channel && !channel.parentChannelId,
+		);
 		if (!channel?.archivedAt) {
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled()) Inject.ask(opened, server, room.id);
@@ -265,11 +273,18 @@ function conversation(
 		auth: hostedAuth,
 		claimantSessionId,
 		repository,
-		persist: () => Service.persist(opened),
+		persist: chat => Service.persist(opened, chat),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
+		hold: () => {
+			let held = Rooms.hold(room.id);
+			return () => {
+				held.release();
+				evict(held.room);
+			};
+		},
 		createResearch: config.agent
 			? async request => {
 				let service = researchService;
@@ -436,6 +451,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Chat.abort(chat(room, ws), ws);
 			return;
 
+		case "chat:resume":
+			if (room.plan) await Chat.resume(chat(room, ws), ws);
+			return;
+
+		case "chat:pause-run":
+		case "chat:resume-run":
+			if (room.plan) await Chat.controlRun(chat(room, ws), ws, frame);
+			return;
+
 		case "chat:unqueue":
 			if (room.plan) Chat.unqueue(chat(room, ws), ws, frame);
 			return;
@@ -455,8 +479,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "conversation-plan:research":
 		case "conversation-plan:research-link":
+		case "conversation-plan:research-edit":
+		case "conversation-plan:research-presence":
 			await handleResearchCommand(frame, room, ws, {
 				enabled: !!config.conversationPlan,
+				canExecute: config.webResearch,
+				eligible: async () => {
+					let channel = await storage.channels.get(room.id);
+					return !!channel && !channel.parentChannelId && !channel.archivedAt;
+				},
 				runtime: conversationRuntime,
 				research: () => researchService,
 				unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
@@ -790,6 +821,7 @@ function listen(): Server<SocketData> {
 				if (room.plan) {
 					Service.departed(room.plan, ws);
 					Questions.away(room.plan, ws);
+					conversationRuntime.processor(room.plan)?.leaveResearch(ws.data.client);
 					Comments.away(room.plan, ws);
 				}
 				if (room.members.size > 0) presence(server, room);
@@ -984,7 +1016,12 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 				Rooms.get(channelId) === current && current.plan === opened
 				&& !current.closing && !deletingChannels.has(channelId)
 			) {
-				await conversationRuntime.attach(current, opened, !!channel?.archivedAt);
+				await conversationRuntime.attach(
+					current,
+					opened,
+					!!channel?.archivedAt,
+					!!channel && !channel.parentChannelId,
+				);
 			}
 		}
 	}
@@ -1009,7 +1046,9 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 	scheduleResearchRecovery(recovery?.deferred ?? 0);
 	summaryCoordinator?.resume(channelId);
 	let current = Rooms.get(channelId);
-	if (current?.plan) await conversationRuntime.attach(current, current.plan, false);
+	if (current?.plan) {
+		await conversationRuntime.attach(current, current.plan, false, !result.channel.parentChannelId);
+	}
 	announceChannel(result.channel);
 	if (summaryCoordinator) void summaryCoordinator.ensure(channelId).catch(() => {});
 	return result;
@@ -1100,6 +1139,8 @@ async function announceJobsChanged(channelId: string): Promise<void> {
 	let page = await jobService.list(channelId, 1);
 	if (!page) return;
 	broadcast(server, channelId, { kind: "job:changed", ts: 0, revision: page.revision });
+	let opened = Rooms.get(channelId)?.plan;
+	if (opened) conversationRuntime.refreshBriefs(opened);
 }
 
 function announceResearchChanged(channelId: string, workspaceId: string, revision: number): void {
@@ -1225,6 +1266,7 @@ let hostedAuth = registerAuthRoutes(router, {
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
 let definitions: JobDefinition[] = [];
 if (config.backgroundJobs) {
+	definitions.push(researchBriefDefinition({ config }));
 	definitions.push(documentSummaryDefinition({
 		config,
 		current: currentDocumentTarget,
@@ -1259,6 +1301,7 @@ let jobService = new JobService({
 	},
 	publish: announceJobsChanged,
 });
+if (config.agent && config.backgroundJobs) researchBriefJobs = jobService;
 if (config.backgroundJobs) {
 	descriptionProjector = new DocumentDescriptionProjector({
 		storage,
@@ -1333,10 +1376,20 @@ jobRunner = new JobRunner({
 	globalConcurrency: 2,
 	ownerConcurrency: 1,
 	changed: announceJobsChanged,
-	attemptFailed(job, err) {
+	attemptProgress(job, diagnostic) {
+		console.info(
+			`chopin: background job ${job.type} ${job.id} attempt ${job.attempts} progress ${
+				JSON.stringify(diagnostic)
+			}`,
+		);
+	},
+	attemptFailed(job, err, latestDiagnostic) {
 		let reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-		let diagnostic = err instanceof JobExecutionError && err.diagnostic
-			? ` diagnostic=${JSON.stringify(err.diagnostic)}`
+		let detail = err instanceof JobExecutionError && err.diagnostic
+			? err.diagnostic
+			: latestDiagnostic;
+		let diagnostic = detail
+			? ` diagnostic=${JSON.stringify(detail)}`
 			: "";
 		console.warn(
 			`chopin: background job ${job.type} ${job.id} attempt ${job.attempts} failed - ${reason}${diagnostic}`,

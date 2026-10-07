@@ -6,6 +6,7 @@ import { deferred } from "./research-offer.test-fixtures";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { OfferLinkView } from "./research-offer";
 import type { ResearchRequestStore } from "../research-requests";
+import { researchDraftHarness } from "../../../server/src/conversation-plan/research-draft.test-fixtures";
 
 // Exact archive446a9779a937fa5be7cd3eb52fd7f3023d691ed2, apps/web/src/chat/research-offer.test.ts.
 test("Resume appears only for a verified unresolved link and linked work hides stale errors", () => {
@@ -74,4 +75,27 @@ test("a deferred Resume failure cannot create an error after the link becomes li
 	expect(showError).toBe(false);
 	expect(shouldShowResearchActionError("resume", "accepted", "unlinked")).toBe(true);
 	expect(shouldShowResearchActionError("research", "accepted", undefined)).toBe(false);
+});
+
+test("a failed brief projection exposes refinement failure and a writer-only retry", () => {
+	let offer = researchDraftHarness().offer();
+	offer.workflow!.preparation = "failed";
+	let render = (canAct: boolean) =>
+		renderToStaticMarkup(createElement(ResearchOfferCard, {
+			offer,
+			controls: {
+				links: {},
+				busy: new Set<string>(),
+				errors: {},
+				canAct,
+				canCheckLink: false,
+				store: {} as ResearchRequestStore,
+				onAction() {},
+				onRetryLink() {},
+			},
+		}));
+	expect(render(true)).toContain("Brief refinement failed.");
+	expect(render(true)).toContain(">Retry refinement</button>");
+	expect(render(false)).toContain("Brief refinement failed.");
+	expect(render(false)).not.toContain(">Retry refinement</button>");
 });

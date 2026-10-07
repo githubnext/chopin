@@ -21,6 +21,7 @@ import {
 
 import { Chat } from "./chat/chat";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
+import type { ResearchDraftController } from "./chat/research-draft-controller";
 import { advanceConversationAnnouncement } from "./conversation-plan/announcements";
 import type { ConversationAnnouncementSummary } from "./conversation-plan/announcements";
 import { evidenceRows, hasEvidence } from "./conversation-plan/evidence";
@@ -272,6 +273,8 @@ export function RoomWorkspace(
 	}
 	let [researchBusy, setResearchBusy] = useState<ReadonlySet<string>>(new Set());
 	let [researchErrors, setResearchErrors] = useState<Record<string, string>>({});
+	let [researchExecution, setResearchExecution] = useState(false);
+	let researchDrafts = useMemo(() => new Map<string, ResearchDraftController>(), [room]);
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
 	let [planScrollTop, setPlanScrollTop] = useState(0);
 	let entries = useQuestionnaires(questions);
@@ -446,10 +449,14 @@ export function RoomWorkspace(
 		workspacePresentation.documentVisible,
 	]);
 
-	let retryAnalysis = async (messageId: string, actionId: string) => {
+	let retryAnalysis = async (
+		messageId: string,
+		actionId: string,
+		lane?: "decision" | "research",
+	) => {
 		if (!wire || !workspaceCanEdit) throw new Error("This document is read-only.");
 		try {
-			await wire.ask("conversation-plan:retry", { messageId, actionId });
+			await wire.ask("conversation-plan:retry", { messageId, actionId, ...(lane ? { lane } : {}) });
 		} catch {
 			throw new Error("The message could not be retried. Try again when connected.");
 		}
@@ -578,6 +585,7 @@ export function RoomWorkspace(
 				setEffectiveCanManage(frame.canManage);
 				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
 				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
+				setResearchExecution(frame.webResearch === true);
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
 			}),
@@ -708,6 +716,7 @@ export function RoomWorkspace(
 						connected={status === "connected" && workspaceCanEdit}
 						handle={handle}
 						onActivity={onChatActivity}
+						onShowDecisions={() => selectDestination("decisions")}
 						people={peopleHere(members)}
 						conversationPlan={conversation.state}
 						conversationPlanJobs={conversation.jobs}
@@ -723,6 +732,11 @@ export function RoomWorkspace(
 								errors: researchErrors,
 								canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
 								canCheckLink: status === "connected" && !!wire?.connected,
+								canExecute: researchExecution,
+								wire,
+								controllers: researchDrafts,
+								onSource: source =>
+									showSource({ source: { ...source, role: "support" }, itemId: source.messageId }),
 								store: research,
 								onAction: actOnResearchOffer,
 								onRetryLink: offerId => researchLinks.refresh(offerId, true),

@@ -2,14 +2,15 @@ import { describe, expect, it } from "bun:test";
 
 import { handler, TOOLS } from "./mcp";
 
-import type { Document, DocumentReader, Implementations } from "./mcp";
+import type { DocumentReader, Implementations, LinkedDocument } from "./mcp";
 import type { Run } from "./tasks/graphs";
 
-const document: Document = {
+const document: LinkedDocument = {
 	id: "f401c8d6-3717-4f1d-8473-cfdd0af894e4",
 	title: "Release readiness",
 	source: "# Release readiness\n",
 	revision: 4,
+	url: "/documents/githubnext/chopin/release-readiness",
 };
 
 function request(

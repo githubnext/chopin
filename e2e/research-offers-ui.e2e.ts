@@ -18,13 +18,13 @@ function port(baseURL: string): number {
 }
 
 function offerCard(page: Page, offerId: string) {
-	return page.locator(`[data-chat-message-id="source-${offerId}"]`)
-		.getByRole("group", { name: "Research suggestion" });
+	return page.locator(`[data-research-offer="${offerId}"]`);
 }
 
 async function routeResearchNotification(
 	context: BrowserContext,
 	holdInitialLinkResponse = true,
+	executionAvailable = false,
 ): Promise<{
 	frames: SocketFrame[];
 	initialLinkHeld: () => boolean;
@@ -63,6 +63,11 @@ async function routeResearchNotification(
 				try {
 					let frame = JSON.parse(message) as SocketFrame;
 					frames.push(frame);
+					if (executionAvailable && frame.kind === "session:hello") {
+						// Expose Resume to exercise its delayed-refusal UI; server execution stays disabled.
+						route.send(JSON.stringify({ ...frame, webResearch: true }));
+						return;
+					}
 					if (
 						holdInitialLinkResponse
 						&& frame.kind === "conversation-plan:research-link"
@@ -113,7 +118,7 @@ async function routeResearchNotification(
 	};
 }
 
-test("writers can accept or dismiss source-attached offers; viewers only read them", async ({ baseURL, browser, context, join, room, seed }) => {
+test("writers can dismiss offers while execution is disabled; viewers only read them", async ({ baseURL, browser, join, room, seed }) => {
 	let specs: OfferSpec[] = [
 		{
 			id: "ui-accept",
@@ -131,53 +136,28 @@ test("writers can accept or dismiss source-attached offers; viewers only read th
 	await saveConversationState(room, state);
 	let writerCountsBefore = await researchWorkCounts(room);
 	expect(writerCountsBefore).toEqual({ jobs: 0, owners: 0, workspaces: 0 });
-	let socket = await routeResearchNotification(context, false);
 	let writerA = await join("writer-a");
 	let acceptedCardA = offerCard(writerA, "ui-accept");
 	let sourceMessageA = writerA.locator('[data-chat-message-id="source-ui-accept"]');
 	await expect(sourceMessageA).toContainText(specs[0]!.brief);
 	await expect(acceptedCardA.getByText(specs[0]!.brief, { exact: true })).toBeVisible();
-	await expect(acceptedCardA.getByRole("button", { name: "Research", exact: true }))
-		.toBeVisible();
+	await expect(acceptedCardA.getByRole("button", { name: "Start research", exact: true }))
+		.toBeDisabled();
 	await expect(acceptedCardA.getByRole("button", { name: "Dismiss", exact: true }))
 		.toBeVisible();
 	expect(await researchWorkCounts(room)).toEqual(writerCountsBefore);
 
-	let researchButton = acceptedCardA.getByRole("button", { name: "Research", exact: true });
-	await researchButton.focus();
-	await researchButton.press("Enter");
-	await expect.poll(() =>
-		socket.frames.some(frame =>
-			frame.kind === "conversation-plan:research"
-			&& frame.offerId === "ui-accept"
-			&& frame.status === "accepted"
-		)
-	).toBe(true);
-	let acceptedReply = socket.frames.find(frame =>
-		frame.kind === "conversation-plan:research" && frame.offerId === "ui-accept"
-	)!;
-	expect(acceptedReply.execution).toBe("pending-retry");
-	await expect(acceptedCardA).toContainText("Research accepted");
-	let countsAfterAcceptance = await researchWorkCounts(room);
-	expect(countsAfterAcceptance.jobs).toBe(0);
-	expect(countsAfterAcceptance.workspaces).toBe(0);
-	await expect.poll(() =>
-		socket.frames.some(frame =>
-			frame.kind === "conversation-plan:research-link"
-			&& frame.offerId === "ui-accept"
-			&& frame.status === "pending"
-		)
-	).toBe(true);
-
 	let writerB = await join("writer-b");
 	let acceptedCardB = offerCard(writerB, "ui-accept");
-	await expect(acceptedCardB).toContainText("Research accepted");
-	await expect(acceptedCardB.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+	await expect(acceptedCardB).toContainText(specs[0]!.brief);
+	await expect(acceptedCardB.getByRole("button", { name: "Start research", exact: true }))
+		.toBeDisabled();
 	await writerB.reload();
 	await ready(writerB);
 	acceptedCardB = offerCard(writerB, "ui-accept");
-	await expect(acceptedCardB).toContainText("Research accepted");
-	await expect(acceptedCardB.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+	await expect(acceptedCardB).toContainText(specs[0]!.brief);
+	await expect(acceptedCardB.getByRole("button", { name: "Start research", exact: true }))
+		.toBeDisabled();
 
 	let countsBeforeDismiss = await researchWorkCounts(room);
 	let dismissedCardA = offerCard(writerA, "ui-dismiss");
@@ -190,11 +170,11 @@ test("writers can accept or dismiss source-attached offers; viewers only read th
 	await ready(writerB);
 	let dismissedCardB = offerCard(writerB, "ui-dismiss");
 	await expect(dismissedCardB).toContainText("Dismissed");
-	await expect(dismissedCardB.getByRole("button", { name: "Research", exact: true }))
+	await expect(dismissedCardB.getByRole("button", { name: "Start research", exact: true }))
 		.toHaveCount(0);
 	await expect(dismissedCardB.getByRole("button", { name: "Dismiss", exact: true }))
 		.toHaveCount(0);
-	await expect(offerCard(writerB, "ui-accept")).toContainText("Research accepted");
+	await expect(offerCard(writerB, "ui-accept")).toContainText(specs[0]!.brief);
 
 	let viewerContext = await browser.newContext({ baseURL });
 	try {
@@ -204,7 +184,7 @@ test("writers can accept or dismiss source-attached offers; viewers only read th
 		for (let offerId of ["ui-accept", "ui-dismiss"]) {
 			let card = offerCard(readonly, offerId);
 			await expect(card).toBeVisible();
-			await expect(card.getByRole("button", { name: "Research", exact: true }))
+			await expect(card.getByRole("button", { name: "Start research", exact: true }))
 				.toHaveCount(0);
 			await expect(card.getByRole("button", { name: "Dismiss", exact: true }))
 				.toHaveCount(0);
@@ -212,7 +192,7 @@ test("writers can accept or dismiss source-attached offers; viewers only read th
 				.toHaveCount(0);
 		}
 		await readonly.reload();
-		await expect(offerCard(readonly, "ui-accept")).toContainText("Research accepted");
+		await expect(offerCard(readonly, "ui-accept")).toContainText(specs[0]!.brief);
 		await expect(offerCard(readonly, "ui-dismiss")).toContainText("Dismissed");
 	} finally {
 		await viewerContext.close();
@@ -237,7 +217,7 @@ test("an accepted link arrives from the room event, reloads, and opens its ready
 		handle,
 		{},
 		async context => {
-			socket = await routeResearchNotification(context);
+			socket = await routeResearchNotification(context, true, true);
 		},
 	);
 	try {

@@ -21,7 +21,7 @@ test.each([false, true])(
 			ask: request => {
 				let triage = "new_question" in request.questions;
 				let research = "research_kind" in request.questions;
-				if ((triage && !eligible) || research) {
+				if (triage || research) {
 					queueMicrotask(() => queueMicrotask(() => observe(targetingCalls)));
 				}
 				if (!triage && !research) targetingCalls++;
@@ -36,6 +36,6 @@ test.each([false, true])(
 		expect(await observed).toBe(1);
 		let output = await pending;
 		expect(output.analysis.passes.map(pass => pass.stage)).toEqual(["triage", "targeting"]);
-		expect(output.researchOffer).toBeUndefined();
+		expect(output).not.toHaveProperty("researchOffer");
 	},
 );
