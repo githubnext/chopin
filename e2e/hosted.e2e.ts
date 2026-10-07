@@ -197,6 +197,58 @@ test("a stale outgoing route cannot canonicalize or publish over the active docu
 	await expect.poll(() => visits).toEqual([room]);
 });
 
+test("a stale document resolution cannot canonicalize while another document is pending", async ({ baseURL, page, room }) => {
+	let next = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), next);
+	let stalePath = roomPath(room);
+	let nextPath = roomPath(next);
+	let staleCaptured = Promise.withResolvers<void>();
+	let staleRelease = Promise.withResolvers<void>();
+	let nextCaptured = Promise.withResolvers<void>();
+	let nextRelease = Promise.withResolvers<void>();
+	await page.route(
+		new RegExp(`/api/repositories/octo-org/score/documents/test-${room.slice(0, 8)}$`),
+		async route => {
+			staleCaptured.resolve();
+			await staleRelease.promise;
+			await route.continue();
+		},
+	);
+	await page.route(
+		new RegExp(`/api/repositories/octo-org/score/documents/test-${next.slice(0, 8)}$`),
+		async route => {
+			nextCaptured.resolve();
+			await nextRelease.promise;
+			await route.continue();
+		},
+	);
+	await authenticate(page, "stale-document-route", baseURL!);
+	await page.goto(stalePath);
+	await staleCaptured.promise;
+	await page.evaluate(path => {
+		history.pushState(null, "", path);
+		dispatchEvent(new PopStateEvent("popstate"));
+	}, nextPath);
+	await nextCaptured.promise;
+
+	let staleResponse = page.waitForResponse(response =>
+		new URL(response.url()).pathname
+			=== `/api/repositories/octo-org/score/documents/test-${room.slice(0, 8)}`
+	);
+	staleRelease.resolve();
+	await staleResponse;
+	await expect(page.locator(`[data-workspace-room="${room}"] [data-plan-synced]`)).toBeAttached();
+	await page.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+	await expect(page).toHaveURL(nextPath);
+	nextRelease.resolve();
+	await expect(page.locator(`[data-workspace-room="${next}"]`)).toBeVisible();
+	await expect(page).toHaveURL(nextPath);
+});
+
 test("superseded WebSocket metadata cannot canonicalize a requested document", async ({ baseURL, page, room }) => {
 	let stale = crypto.randomUUID();
 	await createChannel(Number(new URL(baseURL!).port), stale);
