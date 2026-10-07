@@ -439,6 +439,20 @@ body {
 	}
 }
 
+/* Live Chat arrivals only; `data-chat-enter` is never set on history. */
+[data-chat-enter] {
+	transition:
+		opacity var(--duration-base) var(--motion-smooth-out),
+		transform var(--duration-base) var(--motion-smooth-out);
+}
+
+@starting-style {
+	[data-chat-enter] {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
 .chat-toggle-icon-sidebar {
 	opacity: 0;
 }
@@ -1426,6 +1440,10 @@ button.question-add:disabled {
 	}
 
 	:root[data-motion-input="pointer"] .chat-toggle-icon {
+		transition: none;
+	}
+
+	[data-chat-enter] {
 		transition: none;
 	}
 

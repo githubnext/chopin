@@ -473,6 +473,7 @@ export function Chat(
 			completedWork={transcript.completedWork}
 			suspendedWork={suspendedWork}
 			handle={handle}
+			live={transcriptReady}
 			onWithdraw={id => wire?.send("chat:unqueue", { id })}
 			queued={queue}
 			working={workingTurn}

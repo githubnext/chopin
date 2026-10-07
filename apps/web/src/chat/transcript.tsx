@@ -1,7 +1,7 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { CloseIcon, SignInIcon } from "@chopin/icons";
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { CloseIcon, SignInIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { Face, useCardMeta } from "@chopin/editor";
@@ -25,6 +25,7 @@ import { ScopedChoicePrompt } from "./scoped-choice-entry";
 import { ResearchOfferCard } from "./research-offer";
 import type { ResearchOfferControls } from "./research-offer";
 import { researchTranscript } from "./research-transcript";
+import type { ResearchTranscriptItem } from "./research-transcript";
 
 type PlanMarkers = {
 	decisions?: TranscriptDecisions;
@@ -56,14 +57,31 @@ function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
-	let readyPath = /^Research is ready\. \[Open the research document\]\((\/documents\/\S+)\)\.$/
-		.exec(item.text)?.[1];
+const READY = /^Research is ready\. \[Open the research document\]\((\/documents\/\S+)\)\.$/;
+
+function readyChild(text: string): string | undefined {
+	let path = READY.exec(text)?.[1];
+	return path ? parseChildDocumentPath(path)?.childSlug : undefined;
+}
+
+function SystemEntry(
+	{ enter, item }: { enter: boolean; item: Extract<Group, { kind: "system" }> },
+) {
+	let readyPath = READY.exec(item.text)?.[1];
 	let linked = readyPath !== undefined && parseChildDocumentPath(readyPath) !== undefined;
+	let Icon = readyPath
+		? SparkleIcon
+		: item.text.startsWith("Research could not be completed")
+		? WarningIcon
+		: SignInIcon;
 	return (
-		<div className="flex items-center justify-start gap-3 text-text-tertiary" data-chat-system>
+		<div
+			className="flex items-center justify-start gap-3 text-text-tertiary"
+			data-chat-enter={enter || undefined}
+			data-chat-system
+		>
 			<div className="shrink-0">
-				<SignInIcon aria-hidden="true" size={14} />
+				<Icon aria-hidden="true" size={14} />
 			</div>
 			{linked
 				? (
@@ -135,7 +153,8 @@ function DecisionSystemEntry(
 }
 
 function MessageBody(
-	{ handle, message, onWithdraw, ...markers }: {
+	{ enter, handle, message, onWithdraw, ...markers }: {
+		enter: boolean;
 		handle: string;
 		message: Message;
 		onWithdraw: (id: string) => void;
@@ -152,6 +171,7 @@ function MessageBody(
 					? "rounded-md bg-inset px-1"
 					: ""
 			}`}
+			data-chat-enter={enter || undefined}
 			data-chat-message-id={message.id}
 			data-chat-raw={message.text}
 			data-chat-state={message.working
@@ -218,8 +238,11 @@ function MessageBody(
 }
 
 function MessageGroup(
-	{ group: item, handle, onWithdraw, ...markers }: {
-		group: Extract<Group, { kind: "messages" }>;
+	{ enter, entering, group: item, handle, onWithdraw, ...markers }: {
+		/** The whole group entered; `entering` holds messages that joined it later. */
+		enter: boolean;
+		entering: ReadonlySet<string>;
+		group: Extract<ResearchTranscriptItem, { kind: "messages" }>;
 		handle: string;
 		onWithdraw: (id: string) => void;
 	} & PlanMarkers,
@@ -231,33 +254,41 @@ function MessageGroup(
 	return (
 		<div
 			className={`flex gap-3 ${item.queued ? "text-text-quaternary" : ""}`}
+			data-chat-enter={enter || undefined}
 			data-chat-entry
 			data-chat-state={item.queued ? "queued" : undefined}
 		>
-			<div className={`shrink-0 ${item.queued ? "opacity-45" : ""}`}>
-				{item.author.kind === "agent"
+			<div className={`w-6 shrink-0 ${item.queued ? "opacity-45" : ""}`}>
+				{item.continued
+					? null
+					: item.author.kind === "agent"
 					? <ChopinMark circle />
 					: <Face decorative handle={item.author.handle} size={24} titled={false} />}
 			</div>
 			<div
-				className={`-mt-0.5 flex min-w-0 flex-1 flex-col gap-1 ${item.queued ? "opacity-60" : ""}`}
+				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"} ${
+					item.queued ? "opacity-60" : ""
+				}`}
 			>
-				<div className="flex items-baseline gap-1.5 text-sm">
-					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span
-						className={item.queued
-							? "text-sm text-text-quaternary tabular-nums"
-							: "text-2xs text-text-tertiary tabular-nums"}
-					>
-						{item.queued
-							? "queued"
-							: active
-							? `Started at ${when(active.ts!)}`
-							: when(first.ts!)}
-					</span>
-				</div>
+				{!item.continued && (
+					<div className="flex items-baseline gap-1.5 text-sm">
+						<span className="min-w-0 break-all font-semibold">{name}</span>
+						<span
+							className={item.queued
+								? "text-sm text-text-quaternary tabular-nums"
+								: "text-2xs text-text-tertiary tabular-nums"}
+						>
+							{item.queued
+								? "queued"
+								: active
+								? `Started at ${when(active.ts!)}`
+								: when(first.ts!)}
+						</span>
+					</div>
+				)}
 				{item.messages.map(message => (
 					<MessageBody
+						enter={entering.has(message.id)}
 						decisions={markers.decisions}
 						canEdit={markers.canEdit}
 						conversationPlanJobs={markers.conversationPlanJobs}
@@ -291,6 +322,7 @@ export function Transcript(
 		researchOffers,
 		entries,
 		handle,
+		live,
 		onCardLink,
 		onAddExcerpt,
 		onRetryAnalysis,
@@ -319,6 +351,8 @@ export function Transcript(
 		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
+		/** False until the current connection's history has arrived. */
+		live?: boolean;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
 		suspendedWork?: CompletedWork;
@@ -328,13 +362,69 @@ export function Transcript(
 ) {
 	let bottom = useRef<HTMLDivElement>(null);
 	let scroller = useRef<HTMLDivElement>(null);
+	let stack = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
+	let previous = useRef<{ groups: Set<string>; atoms: Set<string>; planned: boolean }>(undefined);
+	let entered = useRef(new Set<string>());
+	let places = useRef(new Map<string, { at: string; top: number }>());
 	let sourceOwner = useRef({});
 	let groups = researchTranscript(
 		group(entries, queued, working, completedWork, suspendedWork),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
 	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
+	// A turn keeps one row from its placeholder through completion, so it enters once.
+	let turns = new Map(
+		[...completedWork ?? [], ...suspendedWork ? [suspendedWork] : []].map(work => [
+			work.anchorId,
+			work.turnId,
+		]),
+	);
+	let keyed = groups.map(item => {
+		if (item.kind === "research") return { item, key: `research:${item.offer.id}` };
+		if (item.kind === "system") return { item, key: item.id };
+		let first = item.messages[0]!;
+		let turn = first.working ? working?.id : turns.get(first.id);
+		return { item, key: turn ? `turn:${turn}` : `${item.queued ? "queued" : "sent"}-${first.id}` };
+	});
+	let atoms = new Set(
+		groups.flatMap(item =>
+			item.kind === "messages"
+				? item.messages.map(message => message.id)
+				: [item.kind === "research" ? `research:${item.offer.id}` : item.id]
+		),
+	);
+	let before = previous.current;
+	let entering = new Set(before ? [...atoms].filter(atom => !before.atoms.has(atom)) : []);
+	// History, reconnects and document switches arrive in bulk; only live arrivals move.
+	let animate = !!live && !!before && entering.size <= 3;
+	// Marks stay for the row's lifetime: dropping one on the next render would cut its fade short.
+	if (animate) {
+		for (let { item, key } of keyed) {
+			if (!before!.groups.has(key)) {
+				if (item.kind !== "research" || before!.planned) entered.current.add(`row:${key}`);
+			} else if (item.kind === "messages") {
+				for (let message of item.messages) {
+					if (entering.has(message.id)) entered.current.add(message.id);
+				}
+			}
+		}
+	}
+	let enters = (key: string) => entered.current.has(`row:${key}`);
+	let readySubscribe = useCallback(
+		(listener: () => void) => researchOffers?.store.subscribe(listener) ?? (() => {}),
+		[researchOffers?.store],
+	);
+	// A ready request linked from a visible offer card already says so there.
+	let readySnapshot = () =>
+		groups.flatMap(item => {
+			if (item.kind !== "research") return [];
+			let id = researchOffers?.links[item.offer.id]?.researchRequestId;
+			let slug = id ? researchOffers?.store.get(id)?.child?.slug : undefined;
+			return slug ? [slug] : [];
+		}).join("\n");
+	let readySlugs = useSyncExternalStore(readySubscribe, readySnapshot, readySnapshot);
+	let announced = new Set(readySlugs ? readySlugs.split("\n") : []);
 	let currentWork = messages.find(message => message.working);
 	let phase = currentWork
 		? workPhase(
@@ -370,9 +460,74 @@ export function Transcript(
 		}
 	}
 
-	useEffect(() => {
+	useLayoutEffect(() => {
+		// Your own message always comes into view, wherever you had scrolled.
+		if (
+			messages.some(message =>
+				entering.has(message.id) && message.author.kind === "member"
+				&& message.author.handle === handle
+			)
+		) pinned.current = true;
+		let rows = new Set(keyed.map(entry => entry.key));
+		previous.current = { groups: rows, atoms, planned: !!conversationPlan };
+		for (let mark of entered.current) {
+			if (!atoms.has(mark) && !rows.has(mark.slice(4))) entered.current.delete(mark);
+		}
+	});
+
+	// An offer that follows a newer message slides from where it was last painted rather than
+	// teleporting. Positions are kept content-relative so the reader's own scrolling is not motion.
+	useLayoutEffect(() => {
+		let element = scroller.current;
+		if (!element) return;
+		let scrolled = element.scrollTop;
+		if (active && pinned.current) element.scrollTop = element.scrollHeight;
+		let reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+		let cards = () => [
+			...element.querySelectorAll<HTMLElement>("[data-chat-placement]"),
+		];
+		let place = (card: HTMLElement) =>
+			card.getBoundingClientRect().top - element.getBoundingClientRect().top;
+		for (let card of cards()) {
+			let last = places.current.get(card.dataset.chatOffer!);
+			if (!last || last.at === card.dataset.chatPlacement || reduce) continue;
+			for (let running of card.getAnimations()) running.cancel();
+			let offset = last.top - scrolled - place(card);
+			if (Math.abs(offset) < 1) continue;
+			let tokens = getComputedStyle(card);
+			let duration = tokens.getPropertyValue("--acc-expand").trim();
+			card.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }], {
+				duration: parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000),
+				easing: tokens.getPropertyValue("--motion-move"),
+			});
+		}
+		let frame = requestAnimationFrame(() => {
+			places.current = new Map(
+				cards().map(card => [card.dataset.chatOffer!, {
+					at: card.dataset.chatPlacement!,
+					top: place(card) + element.scrollTop,
+				}]),
+			);
+		});
+		return () => cancelAnimationFrame(frame);
+	});
+
+	useLayoutEffect(() => {
 		if (active && pinned.current) bottom.current?.scrollIntoView({ block: "end" });
 	}, [active, entries, queued]);
+
+	// Rows grow after they mount (streaming, work details, offer cards) and the pane resizes
+	// (phone keyboard, composer, window); a reader at the bottom stays on the newest line.
+	useLayoutEffect(() => {
+		let element = scroller.current;
+		if (!active || !element || !stack.current) return;
+		let observer = new ResizeObserver(() => {
+			if (pinned.current) element.scrollTop = element.scrollHeight;
+		});
+		observer.observe(stack.current);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [active]);
 
 	useEffect(() => {
 		if (!active || !sourceDestination) return;
@@ -399,7 +554,7 @@ export function Transcript(
 			onScroll={event => {
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-				pinned.current = distance < 40;
+				pinned.current = distance < 48;
 			}}
 		>
 			<span
@@ -414,6 +569,7 @@ export function Transcript(
 			<div
 				className="flex min-h-full flex-col gap-4 [&>*:first-child]:mt-auto"
 				data-chat-stack
+				ref={stack}
 			>
 				{empty && (
 					<p
@@ -423,14 +579,18 @@ export function Transcript(
 						{empty}
 					</p>
 				)}
-				{groups.map(item =>
+				{keyed.map(({ item, key }) =>
 					item.kind === "research"
 						? (
-							<ResearchOfferCard
-								key={`research:${item.offer.id}`}
-								controls={researchOffers!}
-								offer={item.offer}
-							/>
+							<div
+								data-chat-enter={enters(key) || undefined}
+								data-chat-offer={item.offer.id}
+								data-chat-placement={item.offer.workflow?.placementMessageId
+									?? item.offer.source.messageId}
+								key={key}
+							>
+								<ResearchOfferCard controls={researchOffers!} offer={item.offer} />
+							</div>
 						)
 						: item.kind === "system"
 						? decisions && item.decision && item.ts !== undefined
@@ -441,7 +601,7 @@ export function Transcript(
 									item={item as Extract<Group, { kind: "system" }> & {
 										decision: NonNullable<Chat.Entry["decision"]>;
 									}}
-									key={item.id}
+									key={key}
 									latest={item.decision.kind === "prompt"
 										? latestPrompt.get(item.decision.questionnaireId) === item.id
 										: item.decision.kind === "scoped-choice"
@@ -449,7 +609,9 @@ export function Transcript(
 										: true}
 								/>
 							)
-							: <SystemEntry item={item} key={item.id} />
+							: announced.has(readyChild(item.text) ?? "")
+							? null
+							: <SystemEntry enter={enters(key)} item={item} key={key} />
 						: (
 							<MessageGroup
 								decisions={decisions}
@@ -461,9 +623,11 @@ export function Transcript(
 								onRetryJob={onRetryJob}
 								conversationPlan={conversationPlan}
 								researchOffers={researchOffers}
+								enter={enters(key)}
+								entering={entered.current}
 								group={item}
 								handle={handle}
-								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}
+								key={key}
 								onWithdraw={onWithdraw}
 								sourceDestination={sourceDestination}
 							/>

@@ -1,7 +1,8 @@
 import type { ConversationPlan } from "@chopin/protocol";
 import type { Group, Message } from "./model";
 
-export type ResearchTranscriptItem = Group | {
+/** `continued` marks the part of a speaker's group that resumes after an offer card. */
+export type ResearchTranscriptItem = (Group & { continued?: boolean }) | {
 	kind: "research";
 	offer: ConversationPlan.ResearchOffer;
 };
@@ -24,15 +25,17 @@ export function researchTranscript(
 			continue;
 		}
 		let messages: Message[] = [];
+		let continued = false;
 		for (let message of group.messages) {
 			messages.push(message);
 			let following = byMessage.get(message.id);
 			if (!following) continue;
-			items.push({ ...group, messages });
+			items.push({ ...group, messages, ...(continued ? { continued } : {}) });
 			messages = [];
+			continued = true;
 			for (let offer of following) items.push({ kind: "research", offer });
 		}
-		if (messages.length) items.push({ ...group, messages });
+		if (messages.length) items.push({ ...group, messages, ...(continued ? { continued } : {}) });
 	}
 	return items;
 }
