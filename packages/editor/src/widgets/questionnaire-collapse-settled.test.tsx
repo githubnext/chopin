@@ -12,7 +12,7 @@ test("a settled line names the decision and conversation cards awaiting prose", 
 	expect(markup).toContain('class="decision-collapse is-open"');
 	expect(markup).toContain("data-card-settled");
 	expect(markup).toContain("Decided: GitHub Apps · @ana");
-	expect(markup).toContain("writing up…");
+	expect(markup).toContain("Writing up…");
 });
 
 test("an orphaned settled line says the prose was removed", () => {
@@ -21,8 +21,8 @@ test("an orphaned settled line says the prose was removed", () => {
 		value: DECIDED,
 	}));
 	expect(markup).toContain("Decided: GitHub Apps · @ana");
-	expect(markup).toContain("prose removed");
-	expect(markup).not.toContain("writing up…");
+	expect(markup).toContain("Related text was removed");
+	expect(markup).not.toContain("Writing up…");
 });
 
 test("an orphaned settled line offers Reopen only to an editable connected viewer", () => {
@@ -55,7 +55,7 @@ test("a Planner settled line never claims it is writing prose", () => {
 		value: DECIDED,
 	}));
 	expect(markup).toContain("data-card-settled");
-	expect(markup).not.toContain("writing up…");
+	expect(markup).not.toContain("Writing up…");
 });
 
 test("decided metadata keeps a delayed unanswered projection safely settled", () => {
@@ -70,4 +70,18 @@ test("decided metadata keeps a delayed unanswered projection safely settled", ()
 	expect(markup).toContain("Decided: Saved decision · @ana");
 	expect(markup).not.toContain("<input");
 	expect(markup).not.toContain(">Save<");
+});
+
+test("a Planner settled line names each relationship state", () => {
+	let line = (relation: "pending" | "empty" | "orphaned") =>
+		renderToStaticMarkup(createElement(QuestionnaireCard, {
+			meta: { ...META, origin: "planner" },
+			relations: { [DECIDED.questions[0]!.id]: relation },
+			value: DECIDED,
+		}));
+	expect(line("pending")).toContain("Linking…");
+	expect(line("empty")).toContain("No related text");
+	expect(line("orphaned")).toContain("Related text was removed");
+	expect(line("orphaned")).toMatch(/>Reopen<\/button>/);
+	expect(line("empty")).not.toContain("Reopen");
 });

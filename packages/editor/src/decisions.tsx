@@ -158,6 +158,7 @@ export function Decisions(
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
 			meta={metadata.get(entry.id)}
+			relations={store.relations(entry.id)}
 			canEdit={canEdit}
 			connected={connected}
 			key={entry.id}

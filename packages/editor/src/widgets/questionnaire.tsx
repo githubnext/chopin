@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cardStatus } from "@chopin/dialect";
 import { DecisionIcon, MessageForwardIcon } from "@chopin/icons";
-import { QuestionView, useQuestionnaire } from "@chopin/question/react";
+import { cardRelation, QuestionView, RelationNote, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { Provenance, SidecarCard } from "../card";
@@ -25,7 +25,7 @@ import { useTransitionPresence } from "../transition-presence";
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { Transport } from "@chopin/question/react";
-import type { Answer } from "@chopin/question";
+import type { Answer, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
 import type { QuestionStepMotion } from "../widget-options";
 
@@ -78,6 +78,8 @@ export type QuestionnaireCardProps = {
 	canEdit?: boolean;
 	/** How much prose each decision lives in. */
 	places?: { [question: string]: number };
+	/** Linked, pending, deliberately empty or orphaned, by question. */
+	relations?: { [question: string]: Relation };
 	onQuestionEnter?: (question: string) => void;
 	onQuestionLeave?: (question: string) => void;
 	/** Take the reader to that prose. Without it the shared view's jump is inert. */
@@ -116,6 +118,7 @@ export function QuestionnaireCard(
 		motion,
 		meta,
 		places,
+		relations,
 		value,
 		wire,
 	}: QuestionnaireCardProps,
@@ -123,7 +126,7 @@ export function QuestionnaireCard(
 	if (value.status === "expired") return <Expired value={value} />;
 	let resolved = answers(value);
 	let current = meta?.status ?? cardStatus(value);
-	let pointing = { places, onQuestionEnter, onQuestionLeave, onQuestionSelect };
+	let pointing = { places, relations, onQuestionEnter, onQuestionLeave, onQuestionSelect };
 
 	let shown = cardPresentation(value, meta, presentation);
 	let immediate = motionImmediately?.() ?? false;
@@ -137,6 +140,7 @@ export function QuestionnaireCard(
 				meta={meta}
 				value={value}
 				wire={wire}
+				{...pointing}
 			/>
 		)
 		: shown === "resolved"
@@ -205,6 +209,7 @@ export function QuestionnaireCard(
 
 type Pointing = {
 	places?: { [question: string]: number };
+	relations?: { [question: string]: Relation };
 	onQuestionEnter?: (question: string) => void;
 	onQuestionLeave?: (question: string) => void;
 	onQuestionSelect?: (question: string) => void;
@@ -374,16 +379,23 @@ function labels(value: Questionnaire): string[] {
 }
 
 function SettledLine(
-	{ canEdit, connected, meta, value, wire }: {
+	{ canEdit, connected, meta, value, wire, ...pointing }: {
 		canEdit: boolean;
 		connected: boolean;
 		meta?: Question.CardMeta;
 		value: Questionnaire;
 		wire?: Transport;
-	},
+	} & Pointing,
 ) {
 	let owner = meta?.owner ?? value.by;
 	let chosen = labels(value);
+	let first = value.questions[0]?.id;
+	let related = meta?.proseOrphaned && first
+		? { relation: "orphaned" as const, question: first }
+		: cardRelation(pointing.relations, value.questions.map(question => question.id))
+			?? (meta?.origin === "conversation" && first
+				? { relation: "pending" as const, question: first }
+				: undefined);
 	let state = useQuestionnaire({
 		id: value.id,
 		bridge: wire,
@@ -410,12 +422,19 @@ function SettledLine(
 				Decided: {chosen.length ? chosen.join(", ") : "Saved decision"}
 				{owner ? ` · @${owner}` : ""}
 			</span>
-			{meta?.origin === "conversation" && (
-				<span className="text-text-tertiary">
-					{meta.proseOrphaned ? " · prose removed" : "writing up…"}
-				</span>
+			{related && (
+				<RelationNote
+					count={pointing.places?.[related.question]}
+					onEnter={pointing.onQuestionEnter}
+					onLeave={pointing.onQuestionLeave}
+					onSelect={pointing.onQuestionSelect}
+					// A conversation decision waits on its own paragraph being written.
+					pending={meta?.origin === "conversation" ? "Writing up…" : undefined}
+					question={related.question}
+					relation={related.relation}
+				/>
 			)}
-			{meta?.proseOrphaned && (
+			{related?.relation === "orphaned" && (
 				<button
 					className="btn btn-sm btn-secondary ml-auto"
 					disabled={!canEdit || !connected || reopening}
@@ -542,6 +561,7 @@ function Expired({ value }: { value: Questionnaire }) {
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
 	let meta = useCardMeta(options.cardMeta, value.id);
+	let source = options.hasCardSource?.(value.id) ? options.onCardSource : undefined;
 	let evidence = value.thread && (meta?.status === "open" || meta?.status === "reopened")
 		? options.evidence?.(value.id)
 		: null;
@@ -562,13 +582,14 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			evidence={evidence}
 			motion={options.questionMotion}
 			motionImmediately={options.motionImmediately}
-			onCardSource={options.onCardSource}
+			onCardSource={source}
 			self={options.self}
 			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}
 			places={places}
+			relations={options.questions?.relations(value.id)}
 			value={value}
 			wire={options.wire}
 		/>

@@ -537,6 +537,10 @@ export function RoomWorkspace(
 		if (mode === "split") setDesktopChatOpen(true);
 		else dispatch({ type: "set-chat", open: true });
 	}, [dispatch, mode, setDesktopChatOpen]);
+	let hasCardSource = useCallback((questionnaireId: string) => {
+		let thread = conversation.state && threadForCard(conversation.state, questionnaireId);
+		return !!thread?.questionSources[0];
+	}, [conversation.state]);
 	let showCardSource = useCallback((questionnaireId: string) => {
 		let thread = conversation.state && threadForCard(conversation.state, questionnaireId);
 		let source = thread?.questionSources[0];
@@ -1014,6 +1018,7 @@ export function RoomWorkspace(
 						cardMeta={cardMeta}
 						evidence={showEvidence}
 						onCardSource={showCardSource}
+						hasCardSource={hasCardSource}
 						commentPresentation={mode === "split" ? "popover" : "sheet"}
 						connection={status === "deleted" ? "closed" : status}
 						key={workspaceArchivedAt ? "archived" : "active"}

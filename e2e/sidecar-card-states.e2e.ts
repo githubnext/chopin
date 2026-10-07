@@ -394,5 +394,5 @@ test("conversation decisions settle inline while their prose is being written up
 	let page = await join("ana");
 	let settled = content(page).locator("[data-card-settled]");
 	await expect(settled).toContainText("Decided: Canary · @ana");
-	await expect(settled).toContainText("writing up…");
+	await expect(settled).toContainText("Writing up…");
 });

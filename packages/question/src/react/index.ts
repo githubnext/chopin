@@ -21,6 +21,7 @@ export type {
 	QuestionStepRenderProps,
 	QuestionViewProps,
 } from "./question-view";
+export { cardRelation, RelationNote } from "./relation-note";
 export { ResolvedActions } from "./resolved-actions";
 export { forget, useQuestionnaire } from "./use-questionnaire";
 export type { QuestionnaireOptions, QuestionnaireState, Transport } from "./use-questionnaire";

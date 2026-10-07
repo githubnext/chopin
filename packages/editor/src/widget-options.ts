@@ -45,6 +45,8 @@ export type WidgetOptions = {
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
 	onCardSource?: (questionnaireId: string) => void;
+	/** Whether a card has a Chat message to go back to. */
+	hasCardSource?: (questionnaireId: string) => boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;
