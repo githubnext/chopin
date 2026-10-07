@@ -4,7 +4,6 @@ import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 import { initialJavaScriptBudget } from "./bundle-budget";
-import { lifetimeProbes } from "../../e2e/liveapp/probes";
 
 import type { ServerOptions } from "vite";
 
@@ -42,7 +41,6 @@ export default defineConfig(async ({ mode }) => ({
 				ai: process.env.LIVEAPP_NO_AI !== "1",
 			})]
 			: []),
-		...(process.env.LIVEAPP_PILOT_PROBE === "1" ? [lifetimeProbes()] : []),
 		react(),
 		tailwindcss(),
 		tsconfigPaths(),
