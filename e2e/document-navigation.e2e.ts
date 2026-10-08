@@ -214,7 +214,7 @@ test("document action menu motion settles keyboard opening immediately", async (
 test("a pointer-collapsed Project stays inert through exit and restores in place", async ({ join }) => {
 	let page = await join("ana");
 	let projects = sidebar(page);
-	let trigger = projects.getByRole("button", { name: "score", exact: true });
+	let trigger = projects.getByRole("button", { name: /^score(?:, \d+ unanswered decisions?)?$/ });
 	let body = projects.locator('[data-motion-disclosure="projects"]');
 	let bodyId = await body.getAttribute("id");
 

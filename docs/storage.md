@@ -111,7 +111,7 @@ applied migration. The application schema contains:
 | `web_sessions`             | Session metadata and optional browser-secret hashes, encrypted hosted credentials, and credential revisions. Planner ownership references session IDs.     |
 | `channels`                 | Repository identity, optional parent channel, title, creator, archive and generated-description metadata, storage revision, next sequence, and timestamps. |
 | `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                                                           |
-| `channel_state`            | Current sidecar JSON for a channel.                                                                                                                        |
+| `channel_state`            | Current sidecar JSON for a channel and its generated `unanswered_decisions` count, computed from the sidecar question records.                             |
 | `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                                                           |
 | `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                                                                |
 | `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                                                                |

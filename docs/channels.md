@@ -73,6 +73,17 @@ as the stable tie-breaker. Description projection does not change `updatedAt`,
 so it does not alter list recency. A cursor is bound to its original query and
 archive-inclusion mode and cannot be reused with another search.
 
+Every listed or opened channel also carries `unansweredDecisions`: the open and
+reopened questions in its sidecar question records, the same number its
+Decisions tab shows. The unfiltered active listing (no `query`, no
+`includeArchived`) adds a top-level `unansweredDecisions` total across the whole
+active catalogue, including documents on pages the client has not loaded. The
+Projects sidebar shows both without opening a room per row. When a commit changes
+an open document's count, and when a socket opens the document, the server sends
+`session:decisions` with the document count, the repository total, and the storage
+revision the count was committed at, so a client can ignore an older listing.
+Archived catalogue views show no counts.
+
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per
 repository without regard to case.

@@ -55,7 +55,7 @@ import type { Research } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import type { DocumentMetadata } from "./document-actions";
+import type { DecisionCounts, DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { ShortcutActions } from "./global-shortcuts";
 import type { NavigationMode, NavigationRoute } from "./navigation-model";
@@ -122,6 +122,7 @@ let NavigationDocument = createContext<{
 		documentId: string,
 		update: DocumentMetadata,
 	) => void;
+	onDecisionCounts: (counts: DecisionCounts) => void;
 	onDocumentAction: (documentId: string, action: DocumentAction) => void;
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
@@ -135,6 +136,7 @@ let NavigationDocument = createContext<{
 	) => void;
 	onResearchChildPublished: (parentId: string, child: Research.ReadyChild) => void;
 }>({
+	onDecisionCounts() {},
 	onDocumentChanged() {},
 	onDocumentAction() {},
 	onDocumentDeleted() {},
@@ -354,6 +356,7 @@ export function NavigationShell(
 		projects,
 		refreshProject,
 		removeDocument,
+		updateDecisionCounts,
 		updateDocument,
 		upsertDocument,
 	} = useProjectDocuments(navigation, catalogueMode === "archived");
@@ -754,6 +757,7 @@ export function NavigationShell(
 	}, [mode]);
 	let navigationDocument = useMemo(() => ({
 		channel: currentChannel,
+		onDecisionCounts: updateDecisionCounts,
 		onDocumentAction: workspaceDocumentAction,
 		onDocumentChanged: documentChanged,
 		onDocumentDeleted: documentDeleted,
@@ -773,6 +777,7 @@ export function NavigationShell(
 		repositoryAccessChanged,
 		researchChildOpen,
 		researchChildPublished,
+		updateDecisionCounts,
 		workspaceDocumentAction,
 	]);
 

@@ -77,7 +77,9 @@ test("a second icon tooltip opens without the delay once one has shown", async (
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await page.getByRole("button", { exact: true, name: "Add project" }).hover();
 	await expect(tooltip).toHaveText("Add project");
-	await page.getByRole("button", { name: /^New document in / }).first().hover();
+	let newDocument = page.getByRole("button", { name: /^New document in / }).first();
+	await newDocument.locator("..").hover();
+	await newDocument.hover();
 	await expect(tooltip).toHaveText("New document", { timeout: 200 });
 	await expect(tooltip).toHaveAttribute("data-instant", "");
 });

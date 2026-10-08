@@ -1,0 +1,243 @@
+import { expect, test } from "./room";
+import { installPointerMedia } from "./pointer-media";
+
+import type { Locator, Page } from "@playwright/test";
+
+const repository = {
+	defaultBranch: "main",
+	fullName: "octo-org/score",
+	id: "R_score",
+	name: "score",
+	owner: "octo-org",
+	ownerAvatarUrl: "https://example.invalid/octo-org.png",
+	permissions: { admin: false, pull: true, push: true },
+	private: true,
+	url: "https://github.com/octo-org/score",
+};
+
+function channel(id: string, title: string, unansweredDecisions: number, parentChannelId?: string) {
+	return {
+		createdAt: "2026-08-19T12:00:00.000Z",
+		createdBy: "U_ana",
+		id,
+		repositoryId: "R_score",
+		repositoryName: "score",
+		repositoryOwner: "octo-org",
+		revision: 1,
+		descriptionRevision: 0,
+		slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+		title,
+		updatedAt: "2026-08-19T12:00:00.000Z",
+		unansweredDecisions,
+		...(parentChannelId ? { parentChannelId } : {}),
+	};
+}
+
+const PARENT = channel("cccccccc-0000-4000-8000-000000000001", "Postgres writer lease", 4);
+const CHILD = channel("cccccccc-0000-4000-8000-000000000002", "Fencing tokens", 1, PARENT.id);
+const QUIET = channel("cccccccc-0000-4000-8000-000000000003", "Settled plan", 0);
+const LATER = channel("cccccccc-0000-4000-8000-000000000004", "Later page", 5);
+
+function sidebar(page: Page) {
+	return page.getByRole("complementary", { name: "Projects" });
+}
+
+function count(row: Locator) {
+	return row.locator(":scope > [data-sidebar-decision-count]");
+}
+
+async function mockCatalogue(page: Page) {
+	await page.route("**/api/repositories/octo-org/score/channels*", async route => {
+		let later = new URL(route.request().url()).searchParams.get("cursor") === "later";
+		await route.fulfill({
+			json: later
+				? { canEdit: true, channels: [LATER], repository, unansweredDecisions: 10 }
+				: {
+					canEdit: true,
+					channels: [PARENT, CHILD, QUIET],
+					nextCursor: "later",
+					repository,
+					unansweredDecisions: 10,
+				},
+		});
+	});
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message === "string" && JSON.parse(message).kind === "session:decisions") return;
+			route.send(message);
+		});
+	});
+}
+
+async function settlePointer(page: Page) {
+	await page.mouse.move(900, 700);
+	await page.locator("body").evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+}
+
+async function right(locator: Locator): Promise<number> {
+	let box = await locator.boundingBox();
+	if (!box) throw new Error("element has no box");
+	return box.x + box.width;
+}
+
+test("sidebar counts share one trailing slot with the hover and focus actions", async ({ join, page }) => {
+	await mockCatalogue(page);
+	page = await join("ana");
+	let projects = sidebar(page);
+	let disclosure = projects.getByRole("button", {
+		name: "score, 10 unanswered decisions",
+		exact: true,
+	});
+	let parentLink = projects.getByRole("link", {
+		name: "Postgres writer lease, 4 unanswered decisions",
+		exact: true,
+	});
+	let childLink = projects.getByRole("link", {
+		name: "Fencing tokens, 1 unanswered decision",
+		exact: true,
+	});
+	let quietLink = projects.getByRole("link", { name: "Settled plan", exact: true });
+	let projectRow = disclosure.locator("..");
+	let parentRow = parentLink.locator("..");
+	let childRow = childLink.locator("..");
+	let quietRow = quietLink.locator("..");
+	let newDocument = projects.getByRole("button", { name: "New document in score", exact: true });
+	let parentActions = projects.getByRole("button", { name: "Actions for Postgres writer lease" });
+	let childActions = projects.getByRole("button", { name: "Actions for Fencing tokens" });
+
+	await expect(disclosure).toBeVisible();
+	await expect(count(projectRow)).toHaveText("10");
+	await expect(count(parentRow)).toHaveText("4");
+	await expect(count(childRow)).toHaveText("1");
+	await expect(count(quietRow)).toHaveCount(0);
+	await expect(newDocument).toBeHidden();
+	await expect(parentActions).toBeHidden();
+	await expect(count(parentRow)).toHaveAttribute("aria-hidden", "true");
+
+	let edge = await right(count(projectRow));
+	expect(Math.abs(await right(count(parentRow)) - edge)).toBeLessThanOrEqual(1);
+	expect(Math.abs(await right(count(childRow)) - edge)).toBeLessThanOrEqual(1);
+
+	await parentRow.hover();
+	await expect(count(parentRow)).toBeHidden();
+	await expect(parentActions).toBeVisible();
+	expect(Math.abs(await right(parentActions) - edge)).toBeLessThanOrEqual(1);
+	await expect(count(projectRow)).toBeVisible();
+	await expect(count(childRow)).toBeVisible();
+	await expect(parentLink).toHaveAccessibleName("Postgres writer lease, 4 unanswered decisions");
+
+	await childRow.hover();
+	await expect(count(childRow)).toBeHidden();
+	await expect(childActions).toBeVisible();
+	await expect(count(parentRow)).toBeVisible();
+	expect(Math.abs(await right(childActions) - edge)).toBeLessThanOrEqual(1);
+
+	await projectRow.hover();
+	await expect(count(projectRow)).toBeHidden();
+	await expect(newDocument).toBeVisible();
+	expect(Math.abs(await right(newDocument) - edge)).toBeLessThanOrEqual(1);
+
+	await settlePointer(page);
+	await expect(count(projectRow)).toHaveText("10");
+	await expect(count(parentRow)).toHaveText("4");
+	await expect(count(childRow)).toHaveText("1");
+	await expect(newDocument).toBeHidden();
+
+	await parentLink.focus();
+	await expect(count(parentRow)).toBeHidden();
+	await expect(parentActions).toBeVisible();
+	await page.keyboard.press("Tab");
+	await expect(parentActions).toBeFocused();
+	await expect(count(parentRow)).toBeHidden();
+	await expect(parentLink).toHaveAccessibleName("Postgres writer lease, 4 unanswered decisions");
+
+	await disclosure.focus();
+	await expect(count(projectRow)).toBeHidden();
+	await expect(newDocument).toBeVisible();
+	await expect(count(parentRow)).toBeVisible();
+	await disclosure.press("Enter");
+	await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+	await expect(parentLink).toBeHidden();
+	await settlePointer(page);
+	await expect(disclosure).toHaveAccessibleName("score, 10 unanswered decisions");
+	await expect(count(projectRow)).toHaveText("10");
+
+	await disclosure.click();
+	await expect(parentLink).toBeVisible();
+	await projects.getByRole("button", { name: "Load more documents in score" }).click();
+	await expect(projects.getByRole("link", { name: "Later page, 5 unanswered decisions" }))
+		.toBeVisible();
+	await settlePointer(page);
+	await expect(count(projectRow)).toHaveText("10");
+});
+
+test("touch keeps each count visible beside its always-shown action", async ({ join }) => {
+	let page = await join("ana", { hasTouch: true, viewport: { width: 1180, height: 820 } });
+	await installPointerMedia(page.context(), { coarse: true, primaryCoarse: true });
+	await mockCatalogue(page);
+	await page.reload();
+	let projects = sidebar(page);
+	let parentLink = projects.getByRole("link", {
+		name: "Postgres writer lease, 4 unanswered decisions",
+		exact: true,
+	});
+	let parentRow = parentLink.locator("..");
+	let parentActions = projects.getByRole("button", { name: "Actions for Postgres writer lease" });
+	let disclosure = projects.getByRole("button", {
+		name: "score, 10 unanswered decisions",
+		exact: true,
+	});
+	let newDocument = projects.getByRole("button", { name: "New document in score", exact: true });
+
+	await expect(page.locator(":root")).toHaveAttribute("data-plan-coarse-pointer", "");
+	await expect(parentActions).toBeVisible();
+	await expect(count(parentRow)).toHaveText("4");
+	await expect(newDocument).toBeVisible();
+	await expect(count(disclosure.locator(".."))).toHaveText("10");
+	expect(await right(count(parentRow))).toBeLessThanOrEqual(
+		(await parentActions.boundingBox())!.x + 1,
+	);
+
+	await parentLink.evaluate(element =>
+		element.addEventListener("click", event => event.preventDefault())
+	);
+	await parentLink.tap();
+	await expect(count(parentRow)).toHaveText("4");
+	await expect(parentActions).toBeVisible();
+});
+
+test("a document's sidebar count follows decisions as they are asked and answered", async ({ join, room }) => {
+	let sockets: string[] = [];
+	let page = await join("ana");
+	page.on("websocket", socket => sockets.push(socket.url()));
+	let projects = sidebar(page);
+	let title = `Test ${room.slice(0, 8)}`;
+	let link = projects.getByRole("link", { name: new RegExp(`^${title}`) });
+	let row = link.locator("..");
+
+	await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+	await expect(count(row)).toHaveText("2");
+	await expect(projects.getByRole("button", { name: /^score, \d+ unanswered decisions?$/ }))
+		.toBeVisible();
+
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = page.locator(
+		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
+	)
+		.filter({ hasText: "Where should room state live?" });
+	await card.getByText("In SQLite", { exact: true }).click();
+	await card.getByRole("button", { name: "Save", exact: true }).click();
+
+	await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
+	await expect(count(row)).toHaveText("1");
+	let listed = await page.request.get("/api/repositories/octo-org/score/channels?limit=100");
+	let catalogue = await listed.json() as {
+		channels: Array<{ id: string; unansweredDecisions: number }>;
+		unansweredDecisions: number;
+	};
+	expect(catalogue.channels.find(item => item.id === room)?.unansweredDecisions).toBe(1);
+	expect(catalogue.unansweredDecisions).toBeGreaterThanOrEqual(1);
+	expect(sockets).toEqual([]);
+});

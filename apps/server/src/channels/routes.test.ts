@@ -15,6 +15,7 @@ import type {
 	Repository,
 	RepositoryPage,
 } from "../github/client";
+import type { JsonValue } from "../storage/model";
 
 class FakeGitHub implements GitHub {
 	affiliated = true;
@@ -156,6 +157,10 @@ function request(path: string, cookie?: string, init: RequestInit = {}): Request
 	let headers = new Headers(init.headers);
 	if (cookie) headers.set("cookie", cookie);
 	return new Request(`https://chopin.test${path}`, { ...init, headers });
+}
+
+function decisionRecord(id: string, status: string): JsonValue {
+	return { id, status, definition: { questions: [{ id: `${id}-question` }] } };
 }
 
 function createChannel(storage: MemoryStorage, now: Date, title: string) {
@@ -597,6 +602,59 @@ describe("channel routes", () => {
 			cookie,
 		));
 		expect(includedCursorInActiveMode!.status).toBe(400);
+	});
+
+	it("lists unanswered decisions per document and for the whole active catalogue", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let lease = (await storage.leases.acquire("writer", "routes-test", 60_000))!;
+		let commit = (channelId: string, questions: JsonValue[]) =>
+			storage.collaboration.commit({
+				channelId,
+				lease,
+				expectedRevision: 0,
+				operationId: crypto.randomUUID(),
+				epoch: "epoch",
+				sidecar: { questions },
+				events: [],
+				now,
+			});
+		let older = await createChannel(storage, new Date(now.getTime() - 60_000), "Older plan");
+		let newer = await createChannel(storage, now, "Newer plan");
+		let quiet = await createChannel(storage, now, "Quiet plan");
+		await commit(older.id, [decisionRecord("one", "open"), decisionRecord("two", "reopened")]);
+		await commit(newer.id, [decisionRecord("three", "open"), decisionRecord("four", "answered")]);
+		await commit(quiet.id, [decisionRecord("five", "discarded")]);
+
+		let first = await (await router.handle(request(
+			"/api/repositories/octo-org/score/channels?limit=1",
+			cookie,
+		)))!.json();
+		expect(first.channels).toHaveLength(1);
+		expect(first.nextCursor).toBeString();
+		expect(first.unansweredDecisions).toBe(3);
+		let all = await (await router.handle(request(
+			"/api/repositories/octo-org/score/channels",
+			cookie,
+		)))!.json();
+		expect(
+			Object.fromEntries(
+				all.channels.map((channel: { title: string; unansweredDecisions: number }) => [
+					channel.title,
+					channel.unansweredDecisions,
+				]),
+			),
+		).toEqual({ "Older plan": 2, "Newer plan": 1, "Quiet plan": 0 });
+
+		for (
+			let path of [
+				"/api/repositories/octo-org/score/channels?query=plan",
+				"/api/repositories/octo-org/score/channels?includeArchived=true",
+			]
+		) {
+			let page = await (await router.handle(request(path, cookie)))!.json();
+			expect(page.channels.length).toBeGreaterThan(0);
+			expect(page).not.toHaveProperty("unansweredDecisions");
+		}
 	});
 
 	it("opens archived documents by slug and UUID as manageable but read-only", async () => {

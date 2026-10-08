@@ -15,6 +15,16 @@ import { BACKGROUND_JOB_PROGRESS_LIMIT } from "./model";
 import type { StorageFactory as Factory } from "./contract-support";
 import type { JsonValue } from "./model";
 
+function decisionRecord(id: string, status: string, ...questions: string[]): JsonValue {
+	return {
+		id,
+		status,
+		definition: {
+			questions: questions.map(question => ({ id: question, header: question, options: [] })),
+		},
+	};
+}
+
 function attempt<T>(action: () => Promise<T>): Promise<T> {
 	return Promise.resolve().then(action);
 }
@@ -493,6 +503,109 @@ export function storageContract(name: string, factory: Factory): void {
 						activeChild.id,
 					]),
 				);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("counts unanswered decisions from committed question records", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let commit = async (target: string, sidecar: JsonValue, expectedRevision = 0) =>
+					storage.collaboration.commit({
+						channelId: target,
+						lease,
+						expectedRevision,
+						operationId: id("decisions"),
+						epoch: "epoch-decisions",
+						sidecar,
+						events: [],
+						now: new Date("2026-01-06T03:04:05.000Z"),
+					});
+				let channel = async (input: {
+					title: string;
+					parentChannelId?: string;
+					repository?: string;
+				}) =>
+					storage.channels.create({
+						id: id("decision-channel"),
+						repositoryId: input.repository ?? repositoryId,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						title: input.title,
+						createdBy: userId,
+						...(input.parentChannelId ? { parentChannelId: input.parentChannelId } : {}),
+						now: new Date("2026-01-03T03:04:05.000Z"),
+					});
+
+				expect((await storage.channels.get(channelId))?.unansweredDecisions).toBe(0);
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(0);
+
+				await commit(channelId, {
+					questions: [
+						decisionRecord("open", "open", "a", "b"),
+						decisionRecord("answered", "answered", "c"),
+						decisionRecord("discarded", "discarded", "d"),
+					],
+				});
+				let child = await channel({ title: "Child decisions", parentChannelId: channelId });
+				await commit(child.id, { questions: [decisionRecord("reopened", "reopened", "e")] });
+				let archivedChild = await channel({
+					title: "Archived child decisions",
+					parentChannelId: channelId,
+				});
+				await commit(archivedChild.id, { questions: [decisionRecord("open", "open", "f")] });
+				await storage.channels.archive({
+					id: archivedChild.id,
+					now: new Date("2026-01-07T03:04:05.000Z"),
+				});
+				let archived = await channel({ title: "Archived decisions" });
+				await commit(archived.id, { questions: [decisionRecord("open", "open", "g", "h", "i")] });
+				await storage.channels.archive({
+					id: archived.id,
+					now: new Date("2026-01-07T03:04:05.000Z"),
+				});
+				let elsewhere = await channel({ title: "Elsewhere", repository: id("repository") });
+				await commit(elsewhere.id, { questions: [decisionRecord("open", "open", "j")] });
+
+				expect((await storage.channels.get(channelId))?.unansweredDecisions).toBe(2);
+				expect((await storage.channels.get(child.id))?.unansweredDecisions).toBe(1);
+				expect((await storage.channels.get(archived.id))?.unansweredDecisions).toBe(3);
+				let listed = await storage.channels.list(repositoryId, 1);
+				let pages = [...listed.channels];
+				while (listed.next) {
+					listed = await storage.channels.list(repositoryId, 1, listed.next);
+					pages.push(...listed.channels);
+				}
+				expect(Object.fromEntries(pages.map(item => [item.id, item.unansweredDecisions])))
+					.toEqual({ [channelId]: 2, [child.id]: 1, [archivedChild.id]: 1 });
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(4);
+
+				await storage.collaboration.replace({
+					channelId: child.id,
+					lease,
+					expectedRevision: 1,
+					operationId: id("decisions-replace"),
+					generation: id("generation"),
+					epoch: "epoch-replaced",
+					source: "# Replaced\n",
+					sourceHash: "sha256:replaced",
+					document: new Uint8Array([1]),
+					sidecar: { questions: [decisionRecord("reopened", "answered", "e")] },
+					now: new Date("2026-01-08T03:04:05.000Z"),
+				});
+				await commit(channelId, { questions: [decisionRecord("open", "open", "a")] }, 1);
+				await commit(channelId, { version: 1 }, 2);
+
+				expect((await storage.channels.get(child.id))?.unansweredDecisions).toBe(0);
+				expect((await storage.channels.get(channelId))?.unansweredDecisions).toBe(0);
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(1);
+				await storage.channels.archive({
+					id: channelId,
+					now: new Date("2026-01-09T03:04:05.000Z"),
+				});
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(0);
 			} finally {
 				await storage.close();
 			}

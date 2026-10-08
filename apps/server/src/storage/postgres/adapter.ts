@@ -93,6 +93,7 @@ type ChannelRow = {
 	descriptionGeneratorVersion: Integer | null;
 	descriptionJobId: string | null;
 	descriptionUpdatedAt: Timestamp | null;
+	unansweredDecisions: Integer;
 };
 
 type SnapshotRow = {
@@ -233,6 +234,7 @@ function channel(row: ChannelRow): ChannelRecord {
 		descriptionGeneratorVersion,
 		descriptionJobId,
 		descriptionUpdatedAt,
+		unansweredDecisions,
 		...record
 	} = row;
 	let projectionRevision = integer(descriptionRevision, "channel description revision");
@@ -276,6 +278,7 @@ function channel(row: ChannelRow): ChannelRecord {
 		updatedAt: date(row.updatedAt, "channel update time"),
 		...(archivedAt === null ? {} : { archivedAt: date(archivedAt, "channel archive time") }),
 		...(projected ? { description: projected } : {}),
+		unansweredDecisions: integer(unansweredDecisions, "channel unanswered decisions"),
 	};
 }
 
@@ -382,7 +385,12 @@ const CHANNEL_COLUMNS = `
 	channels.generated_description_source_hash AS "descriptionSourceHash",
 	channels.generated_description_generator_version AS "descriptionGeneratorVersion",
 	channels.generated_description_job_id AS "descriptionJobId",
-	channels.generated_description_updated_at AS "descriptionUpdatedAt"
+	channels.generated_description_updated_at AS "descriptionUpdatedAt",
+	coalesce((
+		SELECT channel_state.unanswered_decisions
+		FROM channel_state
+		WHERE channel_state.channel_id = channels.id
+	), 0) AS "unansweredDecisions"
 `;
 
 const CHANNEL_RETURNING = `
@@ -403,7 +411,12 @@ const CHANNEL_RETURNING = `
 	generated_description_source_hash AS "descriptionSourceHash",
 	generated_description_generator_version AS "descriptionGeneratorVersion",
 	generated_description_job_id AS "descriptionJobId",
-	generated_description_updated_at AS "descriptionUpdatedAt"
+	generated_description_updated_at AS "descriptionUpdatedAt",
+	coalesce((
+		SELECT channel_state.unanswered_decisions
+		FROM channel_state
+		WHERE channel_state.channel_id = channels.id
+	), 0) AS "unansweredDecisions"
 `;
 
 const SNAPSHOT_COLUMNS = `
@@ -639,6 +652,7 @@ export class PostgresStorage implements StorageAdapter {
 			this.#listChannels(repositoryId, limit, after, query, includeArchived),
 		scan: (repositoryId, limit, after, includeArchived) =>
 			this.#scanChannels(repositoryId, limit, after, includeArchived),
+		unansweredDecisions: repositoryId => this.#unansweredDecisions(repositoryId),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -1059,6 +1073,28 @@ export class PostgresStorage implements StorageAdapter {
 				channels: page,
 				next: more && last ? { updatedAt: last.updatedAt, id: last.id } : undefined,
 			};
+		});
+	}
+
+	#unansweredDecisions(repositoryId: string): Promise<number> {
+		return this.#run("count unanswered decisions", async () => {
+			let [row] = await this.#sql<{ total: Integer }[]>`
+				SELECT coalesce(sum(channel_state.unanswered_decisions), 0)::bigint AS total
+				FROM channels
+				JOIN channel_state ON channel_state.channel_id = channels.id
+				LEFT JOIN channels AS parent_channels
+					ON parent_channels.id = channels.parent_channel_id
+				WHERE channels.repository_id = ${repositoryId}
+					AND (
+						(channels.parent_channel_id IS NULL AND channels.archived_at IS NULL)
+						OR (
+							parent_channels.repository_id = channels.repository_id
+							AND parent_channels.parent_channel_id IS NULL
+							AND parent_channels.archived_at IS NULL
+						)
+					)
+			`;
+			return integer(row?.total ?? 0, "unanswered decision total");
 		});
 	}
 
