@@ -12,7 +12,7 @@
 import { content, expect, ready, test, written } from "./room";
 import { chatInput } from "./chat-input";
 
-import type { WebSocketRoute } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 
 test("a reload shows what was typed", async ({ join, room }) => {
 	let page = await join("ana");
@@ -53,7 +53,9 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	 * the only way to be the thing that drops it.
 	 */
 	let sockets: WebSocketRoute[] = [];
+	let offline = false;
 	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -63,21 +65,22 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	await content(page).click();
 	await page.keyboard.type("Before the wire went.");
 
+	offline = true;
 	await sockets.at(-1)!.close();
 
-	// Read-only is the point: an editor that keeps taking keystrokes it cannot
-	// send is worse than one that stops, because the typing looks like it
-	// worked right up until the reload that loses it.
+	// Read-only is the point once the loss outlasts a blip: an editor that
+	// keeps taking keystrokes it cannot send is worse than one that stops,
+	// because the typing looks like it worked right up until the reload that
+	// loses it.
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
-	await expect(page.locator(".plan-status")).toHaveAttribute(
-		"data-level",
-		"notice",
-	);
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
+	await expect(page.locator(".plan-status")).toHaveAttribute("data-level", /^(notice|alert)$/);
 
 	// The client retries on its own; nothing here reconnects it. Opening is
 	// driven by the connection rather than by the mount, and a socket that
 	// comes back without re-opening the document would leave the editor
 	// unlocked over a plan quietly short of everyone else's edits.
+	offline = false;
 	await ready(page);
 	expect(sockets.length).toBeGreaterThan(1);
 	await expect(content(page)).toContainText("Before the wire went.");
@@ -212,8 +215,12 @@ test("Tab over a selection from a list into a paragraph leaves it alone", async 
 test("a lost connection is said in the document header and the composer", async ({ join, page }) => {
 	let sockets: WebSocketRoute[] = [];
 	let offline = false;
+	let refused = 0;
 	await page.routeWebSocket("**/ws?**", route => {
-		if (offline) return route.close();
+		if (offline) {
+			refused++;
+			return route.close();
+		}
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -233,21 +240,99 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(status).toContainText("Reconnecting…");
 	await expect(spoken).toHaveText("Reconnecting…");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
-	await expect(chat.getByText("Connection lost", { exact: true })).toBeVisible();
-	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "false");
+	// Chat says the same thing in its footer, and keeps the draft editable.
+	await expect(chat.locator(".composer-connection")).toHaveText("Reconnecting…");
+	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "true");
 	await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
 
 	// Lost for long enough, it stops promising and offers a way out.
 	await expect(status).toHaveAttribute("data-level", "alert", { timeout: 10_000 });
 	await expect(spoken).toHaveText("Offline");
-	let reload = status.getByRole("button", { name: "Reload" });
-	await expect(reload).toBeVisible();
-	await expect(reload).toHaveAccessibleDescription(/Editing resumes once connected/);
+	await expect(chat.locator(".composer-connection")).toHaveText("Offline");
+	// Reconnecting in place keeps a Chat draft a reload would lose. Only after
+	// it keeps failing does the page offer to reload.
+	let reconnect = status.getByRole("button", { name: "Reconnect", exact: true });
+	await expect(reconnect).toBeVisible();
+	await expect(reconnect).toHaveAccessibleDescription(/Editing resumes once connected/);
+	await expect(status.getByRole("button", { name: "Reload" })).toHaveCount(0);
+	for (let attempt = 0; attempt < 3; attempt++) {
+		let before = refused;
+		await status.getByRole("button", { name: "Reconnect", exact: true }).click();
+		await expect.poll(() => refused).toBeGreaterThan(before);
+	}
+	await expect(status.getByRole("button", { name: "Reload" })).toBeVisible();
+	await expect(status.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(0);
 
+	// No online event here: the wire's own retry has to bring it back, and
+	// asking to reconnect restarted the backoff rather than adding to it.
 	offline = false;
 	await ready(page);
 	await expect(status).toHaveAttribute("data-level", "hidden");
 	await expect(spoken).toHaveText("Reconnected");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(0);
-	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "true");
+	await expect(chat.locator(".composer-connection")).toBeEmpty();
+});
+
+const PASSAGES = Array.from({ length: 40 }, (_, index) => `Passage ${index + 1}.`).join("\n\n")
+	+ "\n";
+
+function passage(page: Page, number: number) {
+	return content(page).getByRole("paragraph").filter({
+		hasText: new RegExp(`^Passage ${number}\\.$`),
+	});
+}
+
+/*
+ * The right edge of a one-line block puts the caret at its end on every
+ * platform; macOS binds End to scrolling the document rather than the caret.
+ * Each test clicks once on a fresh page, so Lexical has no earlier selection
+ * for an immediate keystroke to outrun.
+ */
+async function caretAtEnd(page: Page, number: number) {
+	let line = passage(page, number);
+	let box = (await line.boundingBox())!;
+	await line.click({ position: { x: box.width - 4, y: box.height / 2 } });
+}
+
+function scrollTop(page: Page) {
+	return page.locator("[data-plan-scroll]").evaluate(element => element.scrollTop);
+}
+
+test("enter mid-document keeps the caret line where it was", async ({ join, seed }) => {
+	await seed(PASSAGES);
+	let page = await join("ana");
+	await page.locator("[data-plan-scroll]").evaluate(element =>
+		element.scrollTop = element.scrollHeight / 3
+	);
+	await caretAtEnd(page, 15);
+	let before = await scrollTop(page);
+	expect(before).toBeGreaterThan(0);
+	let y = (await passage(page, 15).boundingBox())!.y;
+
+	// A new block, then a slash command's Enter into another one.
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/code");
+	await page.keyboard.press("Enter");
+	await expect(content(page).getByRole("button", { name: /^Code language/ })).toBeVisible();
+
+	expect(Math.abs(await scrollTop(page) - before)).toBeLessThanOrEqual(4);
+	expect(Math.abs((await passage(page, 15).boundingBox())!.y - y)).toBeLessThanOrEqual(4);
+});
+
+test("typing past the bottom of the view scrolls the caret into it", async ({ join, seed }) => {
+	await seed(PASSAGES);
+	let page = await join("ana");
+	let scroller = page.locator("[data-plan-scroll]");
+	await scroller.evaluate(element => element.scrollTop = element.scrollHeight);
+	await caretAtEnd(page, 40);
+	let before = await scrollTop(page);
+
+	for (let index = 0; index < 20; index++) await page.keyboard.press("Enter");
+	await page.keyboard.type("Still in view");
+
+	await expect.poll(() => scrollTop(page)).toBeGreaterThan(before);
+	let typed = (await content(page).getByText("Still in view", { exact: true }).boundingBox())!;
+	let view = (await scroller.boundingBox())!;
+	expect(typed.y).toBeGreaterThanOrEqual(view.y);
+	expect(typed.y + typed.height).toBeLessThanOrEqual(view.y + view.height);
 });

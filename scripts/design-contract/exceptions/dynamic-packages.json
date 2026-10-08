@@ -254,9 +254,51 @@
 				"props",
 				"unresolved JSX props > CircleCloseIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TableIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > DiagramIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > FormulaIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TabsIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MagnifierIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > DiffIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "c20b4df1238227b0508167fb7d7ac86ceb30fc30c846777c5af11831f5d6ee7f"
+		"sourceHash": "751c15f0f701cc37590be4ae69a498f8ba6a13708715239b3a2d645c2b799681"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

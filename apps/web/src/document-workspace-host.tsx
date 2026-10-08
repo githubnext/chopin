@@ -16,6 +16,7 @@ import {
 } from "./document-workspace-state";
 
 import type { ComponentType } from "react";
+import type { ResearchOpener } from "@chopin/editor";
 import type { ChildFocusToken } from "./anchored-child-surface";
 import type { DocumentWorkspaceAction } from "./document-workspace-state";
 import type { DocumentRouteIdentity } from "./document-route-swap";
@@ -36,6 +37,11 @@ type Metadata = Pick<
 	| "title"
 	| "updatedAt"
 >;
+
+// Popover menus and the editor's insert listbox render as dialogs, listboxes or comboboxes and
+// handle their own Escape; the sheet must not close under them.
+let DISMISSIBLE_TARGET =
+	'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="listbox"], [role="dialog"], [role="combobox"]';
 
 function workspaceProps(
 	detail: Api.ChannelDetail,
@@ -63,6 +69,10 @@ function workspaceProps(
 		userId: user.id,
 	};
 }
+
+// How long after a request the outgoing document may wait for this one to sync. Past
+// it, the header and body would disagree with the sidebar for too long.
+const REVEAL_LIMIT = 200;
 
 export default function DocumentWorkspaceHost(
 	{
@@ -93,7 +103,7 @@ export default function DocumentWorkspaceHost(
 			routeKey: DocumentRouteIdentity,
 			pathname: string,
 		) => void;
-		onChildClose: (parentId: string, parentPath: string) => void;
+		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
 		onParentRestored: (token: ChildFocusToken) => void;
 		onReady: (
@@ -133,6 +143,7 @@ export default function DocumentWorkspaceHost(
 		let active = true;
 		let controller = new AbortController();
 		let requestedRoute = routeRef.current;
+		let requestedAt = performance.now();
 		send({ type: "loading" });
 		let currentState = stateRef.current;
 		let current = currentState.status === "ready" ? currentState.loaded : undefined;
@@ -183,11 +194,27 @@ export default function DocumentWorkspaceHost(
 					repository: parent.repository.name,
 					slug: parent.channel.slug,
 				});
-			onReady(layerKey, {
+			let resolution = {
 				canonicalPath: prepared.pathname,
 				channel: (child ?? parent).channel,
 				routeKey,
-			});
+			};
+			// The outgoing document stays on screen until this one has synced, briefly.
+			let synced = `[data-workspace-room="${
+				CSS.escape(resolution.channel.id)
+			}"] [data-plan-synced]`;
+			let reveal = () => {
+				if (!active) return;
+				if (
+					parentSurface.current?.closest(".document-route-layer")?.querySelector(synced)
+					|| performance.now() - requestedAt > REVEAL_LIMIT
+				) {
+					onReady(layerKey, resolution);
+				} else {
+					requestAnimationFrame(reveal);
+				}
+			};
+			reveal();
 		}, reason => {
 			if (active) {
 				send({ error: reason, type: "failed" });
@@ -260,7 +287,16 @@ export default function DocumentWorkspaceHost(
 	useEffect(() => {
 		if (presentation !== "open") return;
 		let closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || event.defaultPrevented) return;
+			if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+			// Escape dismisses the innermost thing first: a field gives up focus, then the next one closes.
+			let target = event.target instanceof Element ? event.target : undefined;
+			if (target?.closest(DISMISSIBLE_TARGET)) {
+				event.preventDefault();
+				document.querySelector<HTMLElement>(".anchored-child-surface")?.focus({
+					preventScroll: true,
+				});
+				return;
+			}
 			event.preventDefault();
 			let current = stateRef.current;
 			if (current.status === "ready") {
@@ -370,7 +406,16 @@ export default function DocumentWorkspaceHost(
 						loaded.child,
 						agent,
 						user,
-						{ label: loaded.child.channel.title, onClose: closeChild, type: "child" },
+						{
+							label: loaded.child.channel.title,
+							onClose: closeChild,
+							parent: {
+								id: loaded.parent.channel.id,
+								label: loaded.parent.channel.title,
+								onReturn: opener => onChildClose(loaded.parent.channel.id, parentPath, opener),
+							},
+							type: "child",
+						},
 						childMetadataChanged,
 					)}
 					key={loaded.child.channel.id}

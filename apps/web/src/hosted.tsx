@@ -221,7 +221,7 @@ function DocumentRouteSwap(
 	}: {
 		agent: boolean;
 		onCanonicalPath: (pathname: string) => void;
-		onChildClose: (parentId: string, parentPath: string) => void;
+		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
 		onParentRestored: (token: ChildFocusToken) => void;
 		route: DocumentRoute;
@@ -244,7 +244,7 @@ function DocumentRouteSwap(
 	let layers = [state.previous, state.current, state.pending].filter(
 		(layer): layer is DocumentRouteLayer => layer !== undefined,
 	);
-	let motion = motionContract("content-swap");
+	let motion = motionContract("route-swap");
 	let { onDocumentLoaded, onDocumentRouteSettled } = useNavigationDocument();
 	let ready = useCallback((
 		key: DocumentRouteIdentity,
@@ -284,7 +284,12 @@ function DocumentRouteSwap(
 				let source = layer.source;
 				return (
 					<ContentSwapLayer
-						active={layer.key === state.current.key}
+						// The incoming route loads unseen and enters once the outgoing one has left.
+						// A newer request keeps the outgoing route on screen, so a route the user
+						// has already moved past never flashes in.
+						active={layer === state.current
+							? !state.previous
+							: layer === state.previous && !!state.pending}
 						className="document-route-layer h-full min-h-0"
 						immediately={state.current.immediately}
 						key={layer.key}
@@ -292,6 +297,7 @@ function DocumentRouteSwap(
 						onClosed={layer.key === state.previous?.key
 							? () => dispatch({ key: layer.key, type: "closed" })
 							: undefined}
+						staged={layer !== state.previous && (layer === state.pending || !!state.previous)}
 					>
 						{source.page === "document" || source.page === "child"
 							? (
@@ -423,7 +429,9 @@ export function HostedApp(
 		if (started) childOpener.current = undefined;
 		return { started, token: { generation: next.generation, parentId } };
 	}, [cancelChildFocusFrame, moveChildFocus]);
-	let closeChild = useCallback((parentId: string, parentPath: string) => {
+	let closeChild = useCallback((parentId: string, parentPath: string, opener?: ResearchOpener) => {
+		// A provenance link returns focus to the parent's research card instead of the original opener.
+		if (opener) childOpener.current = opener;
 		let closing = beginChildClosing(parentId, parentPath);
 		if (!closing.started) return;
 		let action = childCloseAction(history.state, parentPath);
@@ -456,13 +464,16 @@ export function HostedApp(
 				moveChildFocus({ type: "cancel" });
 				return;
 			}
-			let target = attempt.opener?.current;
+			let opener = attempt.opener?.current;
+			let target = opener;
 			if (!target?.isConnected || target.closest("[inert]")) {
 				target = parent.querySelector<HTMLElement>(`[data-document-view="plan"] h2`);
 			}
 			moveChildFocus({ type: "finish", token });
 			if (target?.isConnected && !target.closest("[inert]")) {
 				target.focus({ preventScroll: true });
+				// An opener the reader clicked is already in view; a provenance target may not be.
+				if (target === opener) target.scrollIntoView({ block: "nearest" });
 			}
 		});
 	}, [cancelChildFocusFrame, moveChildFocus]);

@@ -49,6 +49,38 @@ function documentRouteLayers(page: import("@playwright/test").Page, selector: st
 	});
 }
 
+// Records visible route layers every frame; exit and entry are too brief to poll.
+async function recordRouteLayers(page: import("@playwright/test").Page) {
+	await page.evaluate(() => {
+		let samples: string[] = [];
+		(window as Window & { __routeSamples?: string[] }).__routeSamples = samples;
+		let sample = () => {
+			let layers = document.querySelectorAll<HTMLElement>(
+				".document-route-swap > [data-content-swap-state]:not([hidden])",
+			);
+			samples.push(
+				[...layers].map(layer =>
+					`${layer.dataset.contentSwapState}${layer.hasAttribute("inert") ? ":inert" : ""}`
+				).join(" "),
+			);
+			if (samples.length < 1200) requestAnimationFrame(sample);
+		};
+		requestAnimationFrame(sample);
+	});
+}
+
+async function routeLayerSamples(page: import("@playwright/test").Page) {
+	let samples = await page.evaluate(() =>
+		(window as Window & { __routeSamples?: string[] }).__routeSamples ?? []
+	);
+	// Two routes are never interactive at once.
+	for (let sample of samples) {
+		expect(sample.split(" ").filter(layer => layer && !layer.endsWith(":inert")).length)
+			.toBeLessThanOrEqual(1);
+	}
+	return samples;
+}
+
 async function headerAction(page: import("@playwright/test").Page, action: string) {
 	await headerActions(page).click();
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
@@ -216,15 +248,119 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toBeVisible();
 	await expect(projects.locator('[aria-current="page"]')).toHaveCount(1);
 	await expect(header.getByRole("button", { name: /planner session/i })).toHaveCount(0);
+	await expect(trigger).toBeVisible();
 	await headerAction(page, "Rename");
 	let title = page.getByRole("textbox", { name: "Document title" });
 	await expect(title).toBeFocused();
 	await title.press("Escape");
-	await expect(trigger).toBeFocused();
+	await expect(header.getByRole("button", { name: /^Rename / })).toBeFocused();
 
 	await projects.getByRole("button", { name: "New document", exact: true }).click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
+	// A new document opens with its generated name selected, ready to be replaced.
+	await expect(title).toBeFocused();
+	expect(
+		await title.evaluate(field => {
+			let input = field as HTMLInputElement;
+			return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+		}),
+	).toBe(true);
+	let name = `Named ${crypto.randomUUID().slice(0, 8)}`;
+	await page.keyboard.type(name);
+	await page.keyboard.press("Enter");
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+	await expect(content(page)).toBeFocused();
+	await expect(projects.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
+test("the header title renames in place with click, F2, Escape, and blur", async ({ join, room }) => {
+	let page = await join("ana");
+	let header = page.getByRole("banner");
+	let field = page.getByRole("textbox", { name: "Document title" });
+	let title = `Inline ${room.slice(0, 8)}`;
+
+	await header.getByRole("button", { name: /^Rename / }).click();
+	await expect(field).toBeFocused();
+	await field.fill("Discarded title");
+	await field.press("Escape");
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).not.toHaveAccessibleName("Document: Discarded title");
+
+	let button = header.getByRole("button", { name: /^Rename / });
+	await expect(button).toBeFocused();
+	await button.press("F2");
+	await expect(field).toBeFocused();
+	await field.fill(title);
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
+	await expect(header.getByRole("button", { name: `Rename ${title}`, exact: true })).toBeVisible();
+});
+
+test("typing straight after New document names it without losing a character", async ({ join }) => {
+	let page = await join("ana");
+	let cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+	try {
+		for (let delay of [0, 10]) {
+			// Sixteen characters typed while the document is still being created and opened.
+			let name = `Quick${crypto.randomUUID().replaceAll("-", "").slice(0, 11)}`;
+			await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
+			await page.keyboard.type(name, { delay });
+			await page.keyboard.press("Enter");
+			await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+			await expect(content(page)).not.toContainText(name.slice(0, 5));
+		}
+	} finally {
+		await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+	}
+});
+
+test("sidebar Rename opens that document with its title ready to edit", async ({ baseURL, join }) => {
+	let other = crypto.randomUUID();
+	let otherTitle = `Test ${other.slice(0, 8)}`;
+	await createChannel(Number(new URL(baseURL!).port), other);
+	let page = await join("ana");
+	let projects = sidebar(page);
+
+	await projects.getByRole("link", { name: otherTitle, exact: true }).hover();
+	await projects.getByRole("button", { name: `Actions for ${otherTitle}` }).click();
+	await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${otherTitle}`);
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await expect(field).toBeFocused();
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	let renamed = `Renamed ${other.slice(0, 8)}`;
+	await field.fill(renamed);
+	await field.press("Enter");
+	await expect(projects.getByRole("link", { name: renamed, exact: true })).toBeVisible();
+});
+
+test("leaving a rejected title reverts it without retrying", async ({ join, room }) => {
+	let page = await join("ana");
+	let patches = 0;
+	await page.route("**/api/channels/*", async route => {
+		if (route.request().method() !== "PATCH") return route.continue();
+		patches += 1;
+		await route.fulfill({
+			status: 409,
+			json: { error: "a document with this title already exists" },
+		});
+	});
+	let before = await headerDocument(page).getAttribute("aria-label");
+	await page.getByRole("banner").getByRole("button", { name: /^Rename / }).click();
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await field.fill(`Taken ${room.slice(0, 8)}`);
+	await field.press("Enter");
+	await expect(page.getByRole("alert")).toHaveText(
+		"A document with this title already exists. Try a different title.",
+	);
+
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).toHaveAttribute("aria-label", before!);
+	expect(patches).toBe(1);
 });
 
 test("a pointer-dismissed navigation dialog releases focus while it exits", async ({ join }) => {
@@ -303,7 +439,7 @@ test("sidebar rows stay single-line and reveal descriptions beside the rail", as
 test("a tapped sidebar row does not open its description card", async ({ join }) => {
 	let title = "Release plan";
 	let listed = channel("cccccccc-0000-4000-8000-000000000000", title, "Touch never shows this.");
-	let page = await join("ana", { hasTouch: true, viewport: { width: 1180, height: 820 } });
+	let page = await join("ana", { hasTouch: true, viewport: { width: 1280, height: 820 } });
 	await page.context().route(
 		"**/api/repositories/octo-org/score/channels*",
 		route => route.fulfill({ json: { canEdit: true, channels: [listed], repository } }),
@@ -311,7 +447,10 @@ test("a tapped sidebar row does not open its description card", async ({ join })
 	await page.reload();
 	let link = sidebar(page).getByRole("link", { name: title, exact: true });
 	await link.evaluate(element =>
-		element.addEventListener("click", event => event.preventDefault())
+		element.addEventListener("click", event => {
+			event.preventDefault();
+			event.stopPropagation();
+		})
 	);
 	await link.tap();
 	await expect(link).toBeFocused();
@@ -458,33 +597,26 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		),
 	).toBe("preserved");
 	await page.keyboard.press("Shift");
+	await recordRouteLayers(page);
 	release.resolve();
 	let visibleRoutes = documentRouteLayers(page, "[data-content-swap-state]:not([hidden])");
 	let outgoingRoutes = documentRouteLayers(
 		page,
 		'[data-content-swap-state="outgoing"]:not([hidden])',
 	);
-	// Inspect the short-lived exit layer in one browser turn, before its timer removes it.
-	await expect.poll(() =>
-		visibleRoutes.evaluateAll(routes =>
-			routes.map(route => ({
-				outgoing: route.getAttribute("data-content-swap-state") === "outgoing",
-				inert: route.hasAttribute("inert"),
-				hidden: route.getAttribute("aria-hidden"),
-			}))
-		)
-	).toEqual([
-		{ outgoing: true, inert: true, hidden: "true" },
-		{ outgoing: false, inert: false, hidden: null },
-	]);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
+	await expect(visibleRoutes).toHaveCount(1);
+	// The incoming route waits unseen and inert while the outgoing one leaves.
+	expect(await routeLayerSamples(page)).toContain("outgoing:inert staged:inert");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(page).toHaveURL(originalPath!);
 
 	let createdLink = projects.getByRole("link", { name: createdTitle, exact: true });
+	await recordRouteLayers(page);
 	await createdLink.click();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
-	await expect(visibleRoutes).toHaveCount(2);
 	await expect(visibleRoutes).toHaveCount(1);
+	expect(await routeLayerSamples(page)).toContain("outgoing:inert staged:inert");
 	await expect(page).toHaveURL(createdPath!);
 	await page.unroute(documentRoutePattern);
 
@@ -525,6 +657,52 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(visibleRoutes).toHaveCount(1, { timeout: 100 });
 	await expect(outgoingRoutes).toHaveCount(0);
+});
+
+test("rapid document switches and history jumps settle on one visible document", async ({ baseURL, join, seed }) => {
+	await seed("Burst origin document.\n");
+	let databasePort = Number(new URL(baseURL!).port);
+	let documents = await Promise.all([0, 1, 2, 3].map(async index => {
+		let id = crypto.randomUUID();
+		await createChannel(databasePort, id);
+		await seedChannel(databasePort, id, `Burst document ${index}.\n`);
+		return { text: `Burst document ${index}.`, title: `Test ${id.slice(0, 8)}` };
+	}));
+	let page = await join("ana");
+	let projects = sidebar(page);
+	for (let document of documents) {
+		await expect(projects.getByRole("link", { name: document.title, exact: true })).toBeVisible();
+	}
+	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
+	let interactive = page.locator(
+		".document-route-swap > [data-content-swap-state]:not([hidden]):not([inert])",
+	);
+	let settled = async (document: { text: string; title: string }) => {
+		await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${document.title}`);
+		await expect(routes).toHaveCount(1);
+		await expect(interactive).toHaveCount(1);
+		await expect(interactive.getByText(document.text, { exact: true })).toBeVisible();
+	};
+
+	// Clicks land faster than a route can finish leaving.
+	await page.evaluate(async titles => {
+		for (let title of titles) {
+			[...document.querySelectorAll<HTMLAnchorElement>("a")]
+				.find(link => link.textContent?.trim() === title)!.click();
+			await new Promise(resolve => setTimeout(resolve, 80));
+		}
+	}, documents.map(document => document.title));
+	await settled(documents[3]!);
+
+	await page.evaluate(async () => {
+		for (let step of [-1, 1, -1, -1]) {
+			history.go(step);
+			await new Promise(resolve => setTimeout(resolve, 60));
+		}
+	});
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\//);
+	let current = (await projects.locator('a[aria-current="page"]').textContent())!.trim();
+	await settled(documents.find(document => document.title === current)!);
 });
 
 test("overlapping document workspaces keep IDs, ARIA targets, and focus instance-scoped", async ({ baseURL, join }) => {
@@ -673,7 +851,7 @@ test("renaming the current document updates collaborators and survives reload", 
 	let input = ana.getByRole("textbox", { name: "Document title" });
 	await expect(input).toBeFocused();
 	await input.fill(title);
-	await ana.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${title}`);
 	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${title}`);
@@ -703,12 +881,12 @@ test("a delayed rename response cannot overwrite a newer collaborator rename", a
 
 	await headerAction(ana, "Rename");
 	await ana.getByRole("textbox", { name: "Document title" }).fill(first);
-	await ana.getByRole("button", { name: "Save" }).click();
+	await ana.getByRole("textbox", { name: "Document title" }).press("Enter");
 	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${first}`);
 
 	await headerAction(bo, "Rename");
 	await bo.getByRole("textbox", { name: "Document title" }).fill(latest);
-	await bo.getByRole("button", { name: "Save" }).click();
+	await bo.getByRole("textbox", { name: "Document title" }).press("Enter");
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${latest}`);
 
 	release.resolve();
@@ -753,11 +931,12 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 	await headerAction(page, "Rename");
 	let input = page.getByRole("textbox", { name: "Document title" });
 	await input.fill(title);
-	await page.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 	await expect(page.getByRole("alert")).toBeVisible();
 	await expect(input).toHaveValue(title);
+	await expect(input).toBeFocused();
 
-	await page.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
 });
 

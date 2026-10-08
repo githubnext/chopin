@@ -130,7 +130,7 @@ test("source navigation yields scrolling to the reader and expires its highlight
 	let message = ana.locator(`[data-chat-message-id="${reason}"]`);
 	await expect(message).toHaveAttribute("data-source-exact", "true");
 	await expect(message).toBeInViewport();
-	await expect(message.locator("[data-source-preview]")).toContainText(REASON);
+	await expect(message).toHaveAttribute("data-chat-source", "true");
 	await expect.poll(() => ana.evaluate(() => CSS.highlights.get("conversation-source")?.size ?? 0))
 		.toBe(1);
 
@@ -150,7 +150,7 @@ test("source navigation yields scrolling to the reader and expires its highlight
 
 	await expect(message).not.toHaveAttribute("data-source-exact", "true", { timeout: 8_000 });
 	await expect(message).not.toHaveClass(/bg-inset/);
-	await expect(message.locator("[data-source-preview]")).toHaveCount(0);
+	await expect(message).not.toHaveAttribute("data-chat-source", "true");
 	await expect.poll(() => ana.evaluate(() => CSS.highlights.get("conversation-source")?.size ?? 0))
 		.toBe(0);
 });
@@ -280,7 +280,7 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 	let sourceMessage = ana.locator(`[data-chat-message-id="${sourceId}"]`);
 	await expect(sourceMessage).toHaveAttribute("data-source-exact", "true");
 	await expect(sourceMessage).toBeInViewport();
-	await expect(sourceMessage.locator("[data-source-preview]")).toContainText(sourceQuote);
+	await expect(sourceMessage).toHaveAttribute("data-chat-source", "true");
 	await expect.poll(() => ana.evaluate(() => CSS.highlights.get("conversation-source")?.size ?? 0))
 		.toBe(1);
 });

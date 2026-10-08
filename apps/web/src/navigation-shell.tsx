@@ -47,6 +47,7 @@ import { clearRepositoryCache } from "./repository-cache";
 import { TerminalAlert } from "./terminal-alert";
 import { useProjectDocuments } from "./use-project-documents";
 import { useDocumentCreation } from "./use-document-creation";
+import { requestTitleEdit } from "./title-edit";
 
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
@@ -99,9 +100,6 @@ let NewDocumentDialog = lazy(() =>
 );
 let DocumentSearchDialog = lazy(() =>
 	import("./document-search-dialog").then(module => ({ default: module.DocumentSearchDialog }))
-);
-let RenameDocumentDialog = lazy(() =>
-	import("./rename-document-dialog").then(module => ({ default: module.RenameDocumentDialog }))
 );
 let DeleteDocumentDialog = lazy(() =>
 	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
@@ -288,7 +286,7 @@ export function NavigationShell(
 		| "add"
 		| "new"
 		| "search"
-		| { channel: Api.Channel; type: "delete" | "rename" }
+		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
@@ -669,7 +667,10 @@ export function NavigationShell(
 		setDrawerOpen(false);
 		setAccountOpen(false);
 		if (action === "rename") {
-			showDialog({ type: "rename", channel });
+			requestTitleEdit(channel.id, "rename");
+			if (currentDocumentIdRef.current !== channel.id) {
+				navigate(documentDestination(projectsRef.current, channel.id));
+			}
 			return;
 		}
 		if (action === "delete") {
@@ -686,7 +687,7 @@ export function NavigationShell(
 		}, reason => {
 			setError({ reason });
 		});
-	}, [acceptChannel, showDialog]);
+	}, [acceptChannel, navigate, showDialog]);
 	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
@@ -979,17 +980,6 @@ export function NavigationShell(
 							onDismiss={dismissDialog}
 							onSelect={navigateToDocument}
 							projects={navigation?.projects ?? []}
-						/>
-					</LazyDialogBoundary>
-				)}
-				{dialogMotion && typeof presentedDialog === "object"
-					&& presentedDialog.type === "rename" && (
-					<LazyDialogBoundary>
-						<RenameDocumentDialog
-							channel={presentedDialog.channel}
-							motion={dialogMotion}
-							onDismiss={dismissDialog}
-							onRenamed={acceptChannel}
 						/>
 					</LazyDialogBoundary>
 				)}

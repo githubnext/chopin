@@ -439,6 +439,20 @@ body {
 	}
 }
 
+/* Live Chat arrivals only; `data-chat-enter` is never set on history. */
+[data-chat-enter] {
+	transition:
+		opacity var(--duration-base) var(--motion-smooth-out),
+		transform var(--duration-base) var(--motion-smooth-out);
+}
+
+@starting-style {
+	[data-chat-enter] {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
 .chat-toggle-icon-sidebar {
 	opacity: 0;
 }
@@ -558,18 +572,57 @@ body {
 	transition-duration: var(--panel-close-dur);
 }
 
+/* Split Chat is a track: its width moves the document, and Chat slides under its clip. */
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	width: 0;
+	align-items: flex-end;
+	opacity: 1;
+	transform: none;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel > * {
+	width: var(--chat-width, 0px);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-open {
+	width: var(--chat-width, 0px);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel:not(.is-open) {
+	border-inline-width: 0;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-pane-moving] {
+	transition: width var(--panel-open-dur) var(--motion-move);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-closing[data-pane-moving] {
+	transition-duration: var(--panel-close-dur);
+}
+
+/* Compact views are sibling tabs: Chat sits leftmost, so it enters from the left. */
+.workspace-root:not([data-workspace-mode="split"]) .workspace-chat-panel {
+	--panel-direction: -1;
+	--panel-distance: var(--page-slide-distance);
+	transition-duration: var(--page-slide-dur);
+}
+
+.workspace-root[data-workspace-travel="back"] {
+	--swap-direction: -1;
+}
+
 .content-swap-stack {
 	display: grid;
 }
 
-.content-swap-stack > .motion-content-swap {
+.content-swap-stack > :is(.motion-content-swap, .motion-route-swap) {
 	grid-area: 1 / 1;
 	min-width: 0;
 }
 
 .motion-content-swap {
 	opacity: 0;
-	transform: translateX(var(--page-slide-distance));
+	transform: translateX(calc(var(--page-slide-distance) * var(--swap-direction, 1)));
 	transition:
 		opacity var(--page-slide-dur) var(--motion-smooth-out),
 		transform var(--page-slide-dur) var(--motion-smooth-out);
@@ -585,7 +638,29 @@ body {
 .motion-content-swap.is-closing {
 	pointer-events: none;
 	opacity: 0;
-	transform: translateX(calc(var(--page-slide-distance) * -1));
+	transform: translateX(calc(var(--page-slide-distance) * var(--swap-direction, 1) * -1));
+}
+
+/*
+ * Switching documents keeps the header, tabs and Chat frame still. Only the
+ * document body and transcript change: out, then in, never both at once. A
+ * staged route is laid out but unseen while its document syncs.
+ */
+.motion-route-swap[data-content-swap-state="staged"] {
+	visibility: hidden;
+}
+
+.motion-route-swap :is([data-workspace-document-swap], [data-chat-stack]) {
+	opacity: 0;
+	transition: opacity var(--route-swap-in-dur) var(--ease-out);
+}
+
+.motion-route-swap.is-open :is([data-workspace-document-swap], [data-chat-stack]) {
+	opacity: 1;
+}
+
+.motion-route-swap.is-closing :is([data-workspace-document-swap], [data-chat-stack]) {
+	transition-duration: var(--route-swap-out-dur);
 }
 
 .workspace-root:not([data-workspace-mode="split"]) .workspace-chat-panel {
@@ -632,6 +707,35 @@ body {
 @media (pointer: coarse) {
 	.workspace-status-row .plan-status-detail {
 		display: block;
+	}
+}
+
+/* Jump-to-source: a tint behind the message that fades; the message itself never moves. */
+.chat-message-body[data-chat-source] {
+	isolation: isolate;
+}
+
+.chat-message-body:not(:first-child) > .chat-message-to {
+	margin-top: 4px;
+}
+
+.chat-source-tint {
+	position: absolute;
+	inset: -2px -6px;
+	z-index: -1;
+	border-radius: var(--radius-md);
+	background: var(--color-brand-wash);
+	pointer-events: none;
+	animation: chat-source-tint calc(var(--duration-linger) * 2) var(--ease-out) forwards;
+}
+
+@keyframes chat-source-tint {
+	0%,
+	40% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
 	}
 }
 
@@ -1309,6 +1413,12 @@ button.question-add:disabled {
 	outline: none;
 }
 
+/* The header title edits like a heading, not a form: beside its wash, a hairline is enough. */
+:where(.document-title-input):focus-visible {
+	outline-width: calc(var(--focus-ring-width) / 2);
+	outline-offset: calc(var(--focus-ring-width) / -2);
+}
+
 /* A listbox holds the keyboard's place on its highlighted option instead. */
 :where(.plan-language-menu[role="listbox"]):focus-visible {
 	outline: none;
@@ -1336,7 +1446,8 @@ button.question-add:disabled {
 }
 @media (prefers-reduced-motion: reduce) {
 	.chat-work-lattice > span,
-	.chat-work-headline-motion {
+	.chat-work-headline-motion,
+	.chat-source-tint {
 		animation: none;
 	}
 
@@ -1348,12 +1459,21 @@ button.question-add:disabled {
 	.motion-popover,
 	.motion-panel,
 	.motion-content-swap,
+	.motion-route-swap :is([data-workspace-document-swap], [data-chat-stack]),
 	.motion-collapse,
 	.motion-collapse-content {
 		transition: none;
 	}
 
+	.workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-pane-moving] {
+		transition: none;
+	}
+
 	:root[data-motion-input="pointer"] .chat-toggle-icon {
+		transition: none;
+	}
+
+	[data-chat-enter] {
 		transition: none;
 	}
 

@@ -78,7 +78,9 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toMatch(
 			/aria-label="New document in testing-sql-transcripts"[^>]*>.*?new-document\.svg/s,
 		);
-		expect(markup).toContain(renderToStaticMarkup(createElement(DocumentIcon)));
+		expect(markup).toContain(
+			renderToStaticMarkup(createElement(DocumentIcon)),
+		);
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toMatch(
 			/aria-label="Add project"[^>]*>.*?class="size-3\.5"[^>]*add-project\.svg/s,
@@ -166,16 +168,20 @@ describe("the Figma navigation chrome", () => {
 			label: "Hushed mountain",
 			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
 			onAction: () => {},
+			onEditingChange: () => {},
+			onRenamed: () => {},
 			presentation: { type: "document" as const },
+			room: "room-one",
 		};
 		let markup = renderToStaticMarkup(createElement(Header, props));
 
-		expect(markup.split(renderToStaticMarkup(createElement(DocumentIcon, {
-			className: "shrink-0",
-		})))).toHaveLength(2);
+		expect(
+			markup.split(renderToStaticMarkup(createElement(DocumentIcon, { className: "shrink-0" }))),
+		).toHaveLength(2);
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toContain('aria-label="Document: Hushed mountain"');
 		expect(markup).toContain('aria-label="Actions for Hushed mountain"');
+		expect(markup).toContain('aria-label="Rename Hushed mountain"');
 		expect(markup).toContain("gap-0.5");
 		expect(markup).not.toContain("safe-area-inset-top");
 		expect(markup).toContain('style="width:24px;height:24px;');
@@ -185,12 +191,35 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).not.toContain("hairline-b");
 	});
 
+	test("swaps the title for an inline field while renaming", () => {
+		let markup = renderToStaticMarkup(createElement(Header, {
+			canManage: true,
+			editing: "rename",
+			label: "Hushed mountain",
+			members: [],
+			onAction() {},
+			onEditingChange() {},
+			onRenamed() {},
+			presentation: { type: "document" },
+			room: "room-one",
+		}));
+
+		expect(markup).toContain(">Document title</label>");
+		expect(markup).toContain('value="Hushed mountain"');
+		expect(markup).toContain('placeholder="Untitled"');
+		expect(markup).not.toContain('aria-label="Rename Hushed mountain"');
+		expect(markup).not.toContain(">Save</button>");
+	});
+
 	test("turns the parent title into a child-document breadcrumb", () => {
 		let markup = renderToStaticMarkup(createElement(Header, {
 			canManage: true,
 			label: "Release plan",
 			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
 			onAction() {},
+			onEditingChange() {},
+			onRenamed() {},
+			room: "room-one",
 			presentation: {
 				childLabel: "Source review",
 				onChildClose() {},
@@ -216,7 +245,10 @@ describe("the Figma navigation chrome", () => {
 			label: "Archived brief",
 			members: [],
 			onAction: () => {},
+			onEditingChange: () => {},
+			onRenamed: () => {},
 			presentation: { type: "document" as const },
+			room: "room-one",
 		};
 		let manager = renderToStaticMarkup(createElement(Header, { ...props, canManage: true }));
 		let viewer = renderToStaticMarkup(createElement(Header, { ...props, canManage: false }));
@@ -224,8 +256,10 @@ describe("the Figma navigation chrome", () => {
 		expect(manager).toContain(">Archived</span>");
 		expect(manager).toContain('aria-label="Actions for Archived brief"');
 		expect(manager).toContain(">Restore</button>");
+		expect(manager).not.toContain('aria-label="Rename Archived brief"');
 		expect(viewer).toContain(">Archived</span>");
 		expect(viewer).not.toContain('aria-label="Actions for Archived brief"');
 		expect(viewer).not.toContain(">Restore</button>");
+		expect(viewer).not.toContain('aria-label="Rename Archived brief"');
 	});
 });

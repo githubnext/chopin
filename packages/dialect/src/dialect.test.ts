@@ -243,6 +243,42 @@ describe("serialization safety", () => {
 			});
 		}
 	});
+
+	// micromark looks back through the whole paragraph for an opener at every
+	// unescaped `]`, so a pasted run of them made the server's own projection
+	// quadratic to re-parse: tens of seconds with the event loop blocked.
+	it("escapes closing brackets so a document at the size limit re-parses quickly", () => {
+		for (let value of ["]", "a]", "[a]", "x] [y"]) {
+			let source = serialize({
+				type: "root",
+				children: [{ type: "paragraph", children: [{ type: "text", value }] }],
+			});
+			expect(source).not.toMatch(/(?<!\\)\]/);
+			let paragraph = parse(source).children[0];
+			expect(paragraph?.type === "paragraph" && paragraph.children[0]).toMatchObject({
+				type: "text",
+				value,
+			});
+		}
+
+		let value = "[a]".repeat(limits.MAX_SOURCE_BYTES / 6);
+		let source = serialize({
+			type: "root",
+			children: [{ type: "paragraph", children: [{ type: "text", value }] }],
+		});
+		let started = performance.now();
+		let paragraph = parse(source).children[0];
+		expect(performance.now() - started).toBeLessThan(5_000);
+		expect(paragraph?.type === "paragraph" && paragraph.children[0]).toMatchObject({
+			type: "text",
+			value,
+		});
+	});
+
+	it("leaves closing brackets in links, references and footnotes alone", () => {
+		let source = "[site](https://example.com) and [^1]\n\n[^1]: Note.\n";
+		expect(serialize(parse(source))).toBe(source);
+	});
 });
 
 describe("components", () => {

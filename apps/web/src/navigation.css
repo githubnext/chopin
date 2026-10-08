@@ -8,7 +8,7 @@
 	min-height: var(--document-shell-header-height);
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1198px) {
 	:root {
 		--document-shell-header-height: calc(50px + env(safe-area-inset-top));
 	}
@@ -47,26 +47,26 @@
 	min-height: 0;
 }
 
-.anchored-child-parent .workspace-frame {
-	transition:
-		filter 240ms cubic-bezier(0.16, 1, 0.3, 1),
-		opacity 240ms cubic-bezier(0.16, 1, 0.3, 1),
-		transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+/* A calm dim over the live parent; opacity is the only thing that animates. */
+.anchored-child-parent::after {
+	content: "";
+	position: absolute;
+	z-index: 20;
+	inset: var(--document-shell-header-height) 0 0;
+	background: color-mix(in srgb, var(--color-text-primary) 12%, transparent);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--modal-close-dur) var(--motion-smooth-out);
 }
 
-.anchored-child-host[data-child-visible] .anchored-child-parent .workspace-frame {
-	filter: blur(3px);
-	transform: scale(0.99);
-	transform-origin: center;
-	opacity: 0.68;
-}
-
-.anchored-child-host[data-child-presentation="closing"] .anchored-child-parent .workspace-frame {
-	filter: none;
-	transform: none;
+.anchored-child-host[data-child-visible] .anchored-child-parent::after {
 	opacity: 1;
-	transition-duration: 170ms;
-	transition-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+	transition-duration: var(--modal-open-dur);
+}
+
+.anchored-child-host[data-child-presentation="closing"] .anchored-child-parent::after {
+	opacity: 0;
+	transition-duration: var(--modal-close-dur);
 }
 
 .anchored-child-backdrop {
@@ -78,23 +78,22 @@
 	touch-action: manipulation;
 }
 
+/* The sheet is the only frame; the child workspace fills it edge to edge. */
 .anchored-child-surface {
 	position: absolute;
 	z-index: 40;
-	/* The centered 0.99 parent scale withdraws 0.5% from each edge. */
-	inset: calc(var(--document-shell-header-height) + 12px + 0.5%) calc(24px + 0.5%)
-		calc(24px + 0.5%);
+	inset: calc(var(--document-shell-header-height) + 12px) 24px 24px;
 	overflow: hidden;
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-xl);
 	background: var(--color-page);
 	box-shadow: var(--shadow-overlay);
-	transform-origin: 50% 75%;
-	animation: anchored-child-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	transform-origin: 50% 100%;
+	animation: anchored-child-enter var(--modal-open-dur) var(--modal-ease) both;
 }
 
 .anchored-child-host[data-child-presentation="closing"] .anchored-child-surface {
-	animation: anchored-child-exit 170ms cubic-bezier(0.55, 0, 1, 0.45) both;
+	animation: anchored-child-exit var(--modal-close-dur) var(--modal-ease) both;
 }
 
 .anchored-child-surface .room-header {
@@ -105,16 +104,17 @@
 	background: transparent;
 }
 
-.anchored-child-surface .workspace-frame {
+.anchored-child-surface .workspace-root .workspace-frame,
+.anchored-child-surface .workspace-root[data-workspace-mode="split"] .workspace-frame {
 	margin: 0;
-	border-radius: inherit;
+	border-radius: 0;
 	box-shadow: none;
 }
 
 @keyframes anchored-child-enter {
 	from {
 		opacity: 0;
-		transform: translateY(10px) scale(0.975);
+		transform: translateY(var(--drawer-distance)) scale(var(--modal-scale));
 	}
 	to {
 		opacity: 1;
@@ -129,11 +129,11 @@
 	}
 	to {
 		opacity: 0;
-		transform: translateY(6px) scale(0.985);
+		transform: translateY(var(--drawer-distance)) scale(var(--modal-scale-close));
 	}
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1197px) {
 	.anchored-child-surface {
 		inset: var(--document-shell-header-height) 0 0;
 		border: 0;
@@ -143,12 +143,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.anchored-child-parent .workspace-frame {
+	.anchored-child-parent::after {
 		transition: none;
-	}
-
-	.anchored-child-host[data-child-visible] .anchored-child-parent .workspace-frame {
-		transform: none;
 	}
 
 	.anchored-child-surface {
@@ -195,13 +191,24 @@
 	overflow: hidden;
 }
 
+/* The track's width moves the workspace; the sidebar slides under its clip. Resizing is direct. */
 .motion-sidebar {
 	position: relative;
 	z-index: 45;
 	height: 100%;
+	width: 0;
+	justify-content: flex-end;
+	overflow: hidden;
+	transition: width var(--sidebar-open-dur) var(--motion-move);
+}
+
+.motion-sidebar:has(> .project-sidebar-resize:is(:active, :focus-visible)) {
+	transition: none;
+}
+
+.motion-sidebar .project-sidebar-motion-content {
 	width: var(--project-sidebar-width, 0px);
-	transform: translateX(-100%);
-	transition: transform var(--sidebar-open-dur) var(--motion-move);
+	flex: 0 0 var(--project-sidebar-width, 0px);
 }
 
 .motion-sidebar .project-sidebar {
@@ -210,7 +217,7 @@
 }
 
 .motion-sidebar.is-open {
-	transform: translateX(0);
+	width: var(--project-sidebar-width, 0px);
 }
 
 .motion-sidebar.is-closing {
@@ -962,9 +969,63 @@
 	color: var(--color-text-tertiary);
 }
 
+.document-title-trigger {
+	cursor: text;
+}
+
+/* The header sits on ground, where the lighter hover wash would vanish. */
 .document-title-trigger:hover:not(:disabled),
-.document-title-trigger:focus-visible {
-	background: var(--color-hover);
+.document-title-trigger:focus-visible,
+.document-title-menu:hover,
+.document-title-menu:focus-visible,
+.document-title-menu[aria-expanded="true"] {
+	background: var(--color-selected);
+}
+
+.room-header:hover .document-title-menu {
+	color: var(--color-text-secondary);
+}
+
+.document-title-menu {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	border-radius: var(--radius-sm);
+	padding: 4px;
+	color: var(--color-text-tertiary);
+}
+
+.document-title-form {
+	position: relative;
+	display: flex;
+	min-width: 0;
+}
+
+/* Same box, type, and ink as the resting title, so swapping in the field moves nothing. */
+.document-title-input {
+	max-width: 100%;
+	field-sizing: content;
+	border-radius: var(--radius-sm);
+	padding: 4px;
+	background: var(--color-selected);
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.document-title-input::placeholder {
+	color: var(--color-text-quaternary);
+}
+
+.document-title-error {
+	position: absolute;
+	top: calc(100% + var(--spacing));
+	left: 0;
+	z-index: 10;
+	border-radius: var(--radius-md);
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	white-space: nowrap;
 }
 
 .document-parent-breadcrumb {
@@ -987,6 +1048,49 @@
 	font-size: var(--text-sm);
 	font-weight: 400;
 	color: var(--color-text-primary);
+}
+
+/* A research child's provenance reads like the research card's own status line. */
+.child-provenance-line {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	margin: 0;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.child-provenance-parent {
+	font-weight: 500;
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+	text-decoration-color: var(--color-text-quaternary);
+	text-decoration-thickness: var(--edge-width);
+	text-underline-offset: calc(var(--spacing) * 0.75);
+	cursor: pointer;
+}
+
+.child-provenance-segment {
+	white-space: nowrap;
+}
+
+.child-provenance-parent:hover {
+	color: var(--color-text-primary);
+}
+
+.child-provenance-toggle {
+	flex-shrink: 0;
+	gap: var(--spacing);
+	margin-inline-start: auto;
+	color: var(--color-text-tertiary);
+}
+
+.child-provenance-brief {
+	margin: calc(var(--spacing) * 2) 0 0;
+	padding-inline-start: calc(var(--spacing) * 8);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-secondary);
 }
 
 @media (prefers-reduced-motion: reduce) {

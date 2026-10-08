@@ -135,8 +135,9 @@ export function IconTooltip() {
 					tooltip.dataset.side = "right";
 					let right = (button.closest("[data-tooltip-edge]") ?? button).getBoundingClientRect()
 						.right;
-					if (right + GAP + tooltip.offsetWidth <= window.innerWidth - 8) {
-						let half = tooltip.offsetHeight / 2;
+					let size = tooltip.getBoundingClientRect();
+					if (right + GAP + size.width <= window.innerWidth - 8) {
+						let half = size.height / 2;
 						tooltip.style.top = `${
 							Math.max(
 								8 + half,

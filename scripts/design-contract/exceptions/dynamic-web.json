@@ -1,5 +1,46 @@
 [
 	{
+		"file": "apps/web/src/chat/command-picker.tsx",
+		"reason": "Chat reuses the editor slash-menu class recipes; the imported constants are static token-based utilities in the reviewed editor producer.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"MENU_SURFACE",
+				"class > CommandPicker > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW",
+				"class > CommandPicker > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW_ON",
+				"class > CommandPicker > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW_OFF",
+				"class > CommandPicker > <button>",
+				1
+			]
+		],
+		"sourceHash": "9418b1cafede24f85820d9f2893e0f416412445dad0fcfc321e52bee4b9fea80",
+		"producers": [
+			{
+				"file": "packages/editor/src/toolbar/surface.ts",
+				"sourceHash": "ad3d483335b4dda9238fbcf529b79ad86320987accf3175d581a33d90f1c331b"
+			}
+		]
+	},
+	{
 		"file": "apps/web/src/document-workspace-host.tsx",
 		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function.",
 		"cases": [
@@ -13,12 +54,12 @@
 			[
 				"dynamic",
 				"*",
-				"workspaceProps(\n\t\t\t\t\t\tloaded.child,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\t{ label: loaded.child.channel.title, onClose: closeChild, type: \"child\" },\n\t\t\t\t\t\tchildMetadataChanged,\n\t\t\t\t\t)",
+				"workspaceProps(\n\t\t\t\t\t\tloaded.child,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlabel: loaded.child.channel.title,\n\t\t\t\t\t\t\tonClose: closeChild,\n\t\t\t\t\t\t\tparent: {\n\t\t\t\t\t\t\t\tid: loaded.parent.channel.id,\n\t\t\t\t\t\t\t\tlabel: loaded.parent.channel.title,\n\t\t\t\t\t\t\t\tonReturn: opener => onChildClose(loaded.parent.channel.id, parentPath, opener),\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\ttype: \"child\",\n\t\t\t\t\t\t},\n\t\t\t\t\t\tchildMetadataChanged,\n\t\t\t\t\t)",
 				"unresolved JSX props > DocumentWorkspaceHost > child > <RoomWorkspace>",
 				1
 			]
 		],
-		"sourceHash": "f3f4962157920e770d9b0a33fdc49a258328c8c2fec876aa54e0934821291a07"
+		"sourceHash": "901beece5ec4dc3c63b889d8f64de6c1de0bcdf435e4084db72aefb7b175dfc2"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -32,7 +73,7 @@
 				1
 			]
 		],
-		"sourceHash": "f4ec8e83f5ebcaa77846909abf5285f60591c6b617ad23afc4b09780996d3112"
+		"sourceHash": "40ca22148b2b9580fa180823db072d1ba59234ba5f146c45bb98d94f9cc6a610"
 	},
 	{
 		"file": "apps/web/src/chat/markdown.tsx",
@@ -186,7 +227,7 @@
 				1
 			]
 		],
-		"sourceHash": "ac53c1c31058e9f1d55f263554122ab1b245d07c9646d699780f1e89b9c5bf42"
+		"sourceHash": "e978c2739846dc0e08c514a0293bb5218a2384abd775d770a4dec859686e7177"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
@@ -214,7 +255,7 @@
 				1
 			]
 		],
-		"sourceHash": "fe04802e870411529b741e47013c9c265c0d998808332e814c695ee36b34f207"
+		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -242,7 +283,7 @@
 				1
 			]
 		],
-		"sourceHash": "fe04802e870411529b741e47013c9c265c0d998808332e814c695ee36b34f207"
+		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",

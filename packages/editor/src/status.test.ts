@@ -36,6 +36,8 @@ describe("describeStatus", () => {
 		expect(status.level).toBe("alert");
 		expect(status.label).toBe("Offline");
 		expect(status.reload).toBe(true);
+		// Reconnecting in place keeps unsent work; a host that can offers it.
+		expect(status.reconnect).toBe(true);
 		expect(describeStatus({ connection: "connecting", synced: false, stalled: true }).level)
 			.toBe("alert");
 	});

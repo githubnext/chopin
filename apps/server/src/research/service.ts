@@ -825,6 +825,26 @@ export class ResearchWorkspaceService {
 		});
 	}
 
+	async provenance(
+		parentChannelId: string,
+		childChannelId: string,
+	): Promise<Research.Provenance | undefined> {
+		if (!this.#validId(parentChannelId) || !this.#validId(childChannelId)) return undefined;
+		let found = await this.#storage.research.findPublished(parentChannelId, childChannelId);
+		if (!found) return undefined;
+		let view = await this.request(parentChannelId, found.workspace.id);
+		if (view?.stage !== "ready" || view.child.id !== childChannelId) return undefined;
+		let initial = found.turns.find(value => value.kind === "initial");
+		let user = initial && await this.#storage.users.get(initial.requestedBy);
+		return {
+			requestId: view.id,
+			parentChannelId,
+			brief: view.question,
+			sourceCount: view.child.sourceCount,
+			...(user ? { startedBy: user.login } : {}),
+		};
+	}
+
 	async reconcile(channelId: string, workspaceId: string): Promise<boolean> {
 		if (!this.#validId(channelId) || !this.#validId(workspaceId)) return false;
 		return this.#exclusive(

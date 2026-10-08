@@ -848,6 +848,16 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 		return workspaceId ? this.get(channelId, workspaceId) : undefined;
 	};
 
+	readonly findPublished = async (
+		channelId: string,
+		publishedChannelId: string,
+	): Promise<ResearchWorkspaceDetail | undefined> => {
+		let found = [...this.#workspaces.values()].find(value =>
+			value.channelId === channelId && value.publishedChannelId === publishedChannelId
+		);
+		return found ? this.get(channelId, found.id) : undefined;
+	};
+
 	readonly findTurnByJob = async (
 		channelId: string,
 		jobId: string,

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Transcript } from "./transcript";
+import { researchTranscript } from "./research-transcript";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { ResearchRequestStore } from "../research-requests";
 
@@ -70,4 +71,104 @@ test("the exact public brief appears under its source message and viewer control
 	expect(viewer).toContain('data-research-offer="offer-1"');
 	expect(viewer).not.toContain(">Start research</button>");
 	expect(viewer).not.toContain(">Dismiss</button>");
+});
+
+function offerState(status: "offered" | "accepted"): ConversationPlan.State {
+	return {
+		schemaVersion: 1,
+		revision: 1,
+		events: [],
+		threads: [],
+		queue: [],
+		analysis: [],
+		researchOffers: [{
+			id: "offer-1",
+			needId: "need-1",
+			contextId: "context-1",
+			brief: "Compare VPS costs",
+			status,
+			source: {
+				messageId: "source-1",
+				author: { kind: "member", handle: "ana" },
+				quote: "Compare VPS costs",
+				start: 0,
+				end: 17,
+			},
+		}],
+	};
+}
+
+let messages = [
+	{ id: "source-1", author: { kind: "member" as const, handle: "ana" }, text: "Compare", ts: 1 },
+	{ id: "source-2", author: { kind: "member" as const, handle: "ana" }, text: "And more", ts: 2 },
+];
+
+test("the speaker's messages after an offer card continue without a repeated header", () => {
+	let groups = researchTranscript(
+		[{
+			kind: "messages",
+			author: { kind: "member", handle: "ana" },
+			queued: false,
+			messages: messages.map(message => ({ ...message, queued: false })),
+		}],
+		offerState("offered").researchOffers!,
+	);
+	expect(groups.map(item => item.kind === "messages" ? !!item.continued : item.kind)).toEqual([
+		false,
+		"research",
+		true,
+	]);
+	let markup = renderToStaticMarkup(createElement(Transcript, {
+		active: true,
+		entries: messages,
+		handle: "ana",
+		onWithdraw: () => {},
+		queued: [],
+		conversationPlan: offerState("offered"),
+		researchOffers: {
+			links: {},
+			busy: new Set<string>(),
+			errors: {},
+			canAct: false,
+			canCheckLink: true,
+			store: {} as ResearchRequestStore,
+			onAction: () => {},
+			onRetryLink: () => {},
+		},
+	}));
+	expect(markup.match(/>Ana<\/span>/g)).toHaveLength(1);
+});
+
+test("a ready request linked from a visible offer card announces itself only on the card", () => {
+	let path = "/documents/octo-org/score/parent/children/vps-costs";
+	let render = (slug: string) =>
+		renderToStaticMarkup(createElement(Transcript, {
+			active: true,
+			entries: [messages[0]!, {
+				id: "ready",
+				author: { kind: "system" },
+				text: `Research is ready. [Open the research document](${path}).`,
+				ts: 3,
+			}],
+			handle: "ana",
+			onWithdraw: () => {},
+			queued: [],
+			conversationPlan: offerState("accepted"),
+			researchOffers: {
+				links: { "offer-1": { status: "linked", researchRequestId: "request-1" } },
+				busy: new Set<string>(),
+				errors: {},
+				canAct: false,
+				canCheckLink: true,
+				store: {
+					get: () => ({ stage: "ready", child: { slug } }),
+					subscribe: () => () => {},
+					retain: () => () => {},
+				} as unknown as ResearchRequestStore,
+				onAction: () => {},
+				onRetryLink: () => {},
+			},
+		}));
+	expect(render("vps-costs")).not.toContain("Open the research document");
+	expect(render("other-report")).toContain("Open the research document");
 });

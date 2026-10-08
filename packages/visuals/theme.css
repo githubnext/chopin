@@ -231,6 +231,8 @@
 	--page-slide-dur: 250ms;
 	--page-slide-distance: 8px;
 	--page-blur: 3px;
+	--route-swap-out-dur: 80ms;
+	--route-swap-in-dur: 150ms;
 	--icon-swap-dur: 250ms;
 	--icon-swap-blur: 2px;
 	--badge-pop-dur: 180ms;

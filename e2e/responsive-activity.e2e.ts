@@ -94,7 +94,7 @@ test("busy history exposes working state without creating false unread activity"
 test("a closed desktop Chat toggle exposes initial planner activity", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await interceptBusyHistory(page);
 	page = await join("ana");
 	let toggle = page.getByRole("button", { name: "Show chat pane, Planner working" });
@@ -106,7 +106,7 @@ test("a closed desktop Chat toggle exposes initial planner activity", async ({ j
 test("a closed desktop Chat tab keeps unread activity visible", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	page = await join("ana");
 	await page.getByRole("button", { name: "Show chat pane" }).hover();
 	await page.evaluate(() => {

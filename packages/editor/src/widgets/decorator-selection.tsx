@@ -10,6 +10,16 @@
  * the document. `BEFORE_INPUT_COMMAND` therefore cancels insertion while a node
  * is selected.
  *
+ * That cancellation only holds while the node selection does. With no DOM range
+ * left, Chrome parks its caret at the start of the root, and a `selectionchange`
+ * that Lexical attributes to a pointer press turns that caret into a range
+ * selection, so the next characters land at the top of the document. Lexical
+ * sets that attribution on `pointerdown` and clears it on the next
+ * `selectionchange`, which may not come before the keyboard moves on: clicking
+ * where the caret already is fires none, and a key pressed in the same frame as
+ * the click outruns it. A key press ends the pointer's claim, so `KEY_DOWN_COMMAND`
+ * clears it.
+ *
  * A resolved decision that a margin marker carries renders as a hidden
  * placeholder. Selecting it is invisible, so ArrowUp, ArrowDown, ArrowLeft and
  * ArrowRight step over it to the next block of text instead, as if it were not
@@ -31,6 +41,7 @@ import {
 	$isTextNode,
 	$setSelection,
 	BEFORE_INPUT_COMMAND,
+	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_HIGH,
 	KEY_ARROW_DOWN_COMMAND,
 	KEY_ARROW_LEFT_COMMAND,
@@ -38,6 +49,7 @@ import {
 	KEY_ARROW_UP_COMMAND,
 	KEY_BACKSPACE_COMMAND,
 	KEY_DELETE_COMMAND,
+	KEY_DOWN_COMMAND,
 	mergeRegister,
 } from "lexical";
 
@@ -259,6 +271,14 @@ export function registerDecoratorSelection(
 		);
 
 	return mergeRegister(
+		editor.registerCommand(
+			KEY_DOWN_COMMAND,
+			() => {
+				editor._inputState.isSelectionChangeFromMouseDown = false;
+				return false;
+			},
+			COMMAND_PRIORITY_CRITICAL,
+		),
 		editor.registerCommand(
 			BEFORE_INPUT_COMMAND,
 			event => {

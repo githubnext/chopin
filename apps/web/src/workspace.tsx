@@ -7,8 +7,10 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CloseIcon } from "@chopin/icons";
 
 import {
+	CHAT_CHOICE_STORAGE_KEY,
 	initialWorkspaceState,
 	presentWorkspace,
+	storedDesktopChat,
 	transitionWorkspace,
 	workspaceDestinations,
 	workspaceHeadingId,
@@ -21,8 +23,9 @@ import { workspaceSizing } from "./workspace-sizing";
 import "./workspace-sizing.css";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
+import { sidebarMoving, usePaneMotion, usePaneSettledWidth } from "./pane-motion";
 
-import type { Dispatch, ReactNode, RefObject } from "react";
+import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
 import type {
 	WorkspaceDestination,
 	WorkspaceEvent,
@@ -64,11 +67,19 @@ export function useWorkspaceLayout() {
 	useLayoutEffect(() => {
 		let element = frame.current;
 		if (!element) return;
-		let measure = () => setAvailable(element.clientWidth);
+		let measure = () => {
+			if (!sidebarMoving()) setAvailable(element.clientWidth);
+		};
 		measure();
 		let observer = new ResizeObserver(measure);
 		observer.observe(element);
-		return () => observer.disconnect();
+		document.addEventListener("transitionend", measure);
+		document.addEventListener("transitioncancel", measure);
+		return () => {
+			observer.disconnect();
+			document.removeEventListener("transitionend", measure);
+			document.removeEventListener("transitioncancel", measure);
+		};
 	}, []);
 	return { available, frame, mode: workspaceSizing(available, 500).mode };
 }
@@ -80,17 +91,17 @@ export function useWorkspaceState(
 	let [state, dispatch] = useReducer(
 		transitionWorkspace,
 		undefined,
+		// A child opens with its parent's saved Chat preference but never saves its own.
 		() =>
 			initialWorkspaceState(
-				profile,
-				localStorage.getItem("chopin:pane:chat:open") !== "false",
+				storedDesktopChat(localStorage.getItem(CHAT_CHOICE_STORAGE_KEY)),
 			),
 	);
 
 	useEffect(() => {
-		if (!profile.persistChat) return;
+		if (!profile.persistChat || state.desktopChatOpen === undefined) return;
 		localStorage.setItem(
-			"chopin:pane:chat:open",
+			CHAT_CHOICE_STORAGE_KEY,
 			String(state.desktopChatOpen),
 		);
 	}, [profile.persistChat, state.desktopChatOpen]);
@@ -267,6 +278,26 @@ export function Workspace(
 		220,
 		immediately,
 	);
+	let chatTrack = usePaneMotion(chatPresence.phase);
+	let documentSwap = useRef<HTMLDivElement>(null);
+	usePaneSettledWidth(documentSwap);
+	// The outgoing document stays under Chat until Chat has faded in over it.
+	let documentPresence = useTransitionPresence(
+		presentation.documentVisible ? true : undefined,
+		contentSwapMotion.closeDuration,
+		immediately,
+	);
+	let destination: WorkspaceDestination = mode !== "split" && presentation.chatVisible
+		? "chat"
+		: view;
+	let [travel, setTravel] = useState({ destination, back: false });
+	if (travel.destination !== destination) {
+		let order = workspaceDestinations();
+		setTravel({
+			back: order.indexOf(destination) < order.indexOf(travel.destination),
+			destination,
+		});
+	}
 	let opener = useRef<HTMLElement | undefined>(undefined);
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousChatOpen = useRef(state.chatOpen);
@@ -287,6 +318,15 @@ export function Workspace(
 		}
 		previousChatOpen.current = state.chatOpen;
 	}, [mode, state.chatOpen]);
+
+	let previousMode = useRef(mode);
+	useLayoutEffect(() => {
+		if (previousMode.current === mode) return;
+		previousMode.current = mode;
+		if (document.activeElement?.closest("[hidden], [inert]")) {
+			focusDestination(presentation.documentVisible ? view : "chat");
+		}
+	}, [mode]);
 
 	let navigate = (destination: WorkspaceDestination, source?: HTMLElement) => {
 		if (destination === "chat" && source) opener.current = source;
@@ -320,6 +360,7 @@ export function Workspace(
 			data-workspace-mode={mode}
 			data-workspace-room={identity}
 			data-workspace-surface={profile.surface}
+			data-workspace-travel={travel.back ? "back" : undefined}
 			ref={root}
 		>
 			{header}
@@ -391,6 +432,7 @@ export function Workspace(
 						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
 							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
+						data-pane-moving={chatTrack.moving || undefined}
 						hidden={chatPresence.phase === "closed"}
 						id={ids.pane.chat}
 						inert={chatInactive}
@@ -401,8 +443,9 @@ export function Workspace(
 								dismissChat();
 							}
 						}}
+						onTransitionEnd={chatTrack.onTransitionEnd}
 						style={mode === "split"
-							? { width: chatWidth }
+							? { "--chat-width": `${chatWidth}px` } as CSSProperties
 							: { width: "100%" }}
 					>
 						{mode === "split"
@@ -463,7 +506,7 @@ export function Workspace(
 					className={`workspace-document-panel order-1 relative min-w-0 w-full flex-1 ${
 						mode === "split" ? "hairline-l hairline-b" : ""
 					}`}
-					hidden={!presentation.documentVisible}
+					hidden={documentPresence.phase === "closed"}
 					inert={!presentation.documentVisible}
 				>
 					<div className="relative flex h-full flex-col overflow-hidden">
@@ -517,6 +560,7 @@ export function Workspace(
 						<div
 							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
 							data-workspace-document-swap
+							ref={documentSwap}
 						>
 							<ContentSwapLayer
 								active={presentation.documentVisible && presentation.documentView === "plan"}

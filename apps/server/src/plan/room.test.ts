@@ -368,6 +368,42 @@ describe("recovery", () => {
 		expect(room.project(fresh)).not.toContain("Tail.");
 	});
 
+	// Projection and its re-parse run on the event loop. Brackets used to make
+	// both quadratic, so one large paste held the loop for minutes and the
+	// storage writer lease, renewed on a timer, expired underneath the server.
+	it("accepts and refuses large bracket-heavy pastes without stalling the event loop", async () => {
+		let document = await room.create("# T\n");
+		room.mark(document);
+		let client = peer();
+		Y.applyUpdate(client.doc, room.sync(document), "remote");
+		await room.settle();
+
+		let longest = 0;
+		let last = performance.now();
+		let heartbeat = setInterval(() => {
+			let now = performance.now();
+			longest = Math.max(longest, now - last);
+			last = now;
+		}, 10);
+		try {
+			let paste = async () => {
+				let before = Y.encodeStateVector(client.doc);
+				client.editor.update(() => {
+					let paragraph = $createParagraphNode();
+					paragraph.append($createTextNode("[a]".repeat(limits.MAX_SOURCE_BYTES / 6)));
+					$getRoot().append(paragraph);
+				}, { discrete: true });
+				return room.apply(document, [Y.encodeStateAsUpdate(client.doc, before)], undefined, 1);
+			};
+			expect((await paste()).ok).toBe(true);
+			let refused = await paste();
+			expect(refused.ok ? [] : refused.issues).toEqual(["source-too-large"]);
+		} finally {
+			clearInterval(heartbeat);
+		}
+		expect(longest).toBeLessThan(5_000);
+	});
+
 	it("rebuilds to the last known-good state under a fresh epoch", async () => {
 		let document = await room.create("# Title\n");
 		room.mark(document);

@@ -18,6 +18,7 @@ import { plugins as dialectPlugins } from "@chopin/dialect";
 import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
+import { useConnectionNotice } from "./connection-notice";
 import { PLAN_LEXICAL_THEME } from "./plan-theme";
 import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
@@ -33,6 +34,7 @@ import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
 import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
+import type { ResearchLauncher } from "./research-launcher";
 
 /**
  * Lexical paints remote cursors with inline styles unless the theme names a
@@ -83,6 +85,8 @@ export type PlanEditorProps = {
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
+	/** Lets the host open the research composer at the end of the document. */
+	researchLauncher?: ResearchLauncher;
 	/** The same arrangement for comment threads. */
 	threads?: ThreadStore;
 	/** Remembered by the document host while this surface is hidden. */
@@ -91,6 +95,8 @@ export type PlanEditorProps = {
 	onScrollTop?: (top: number) => void;
 	/** Whether the document has opened, for status chrome the host renders. */
 	onState?: (state: PlanState) => void;
+	/** Host-owned context shown above the document, in the prose column. */
+	preface?: ReactNode;
 	className?: string;
 };
 
@@ -99,6 +105,11 @@ export type PlanState = {
 	synced: boolean;
 	/** Why the document was last replaced, if it was. */
 	reset?: Plan.Reset["reason"];
+	/**
+	 * Counts replacements that dropped edits the server never acknowledged,
+	 * so the host can say so once for each, until it is dismissed.
+	 */
+	lost?: number;
 	/** Why it could not be opened at all, if it could not. */
 	failed?: string;
 };
@@ -112,6 +123,7 @@ export function PlanEditor(
 		motionImmediately,
 		onScrollTop,
 		onState,
+		preface,
 		questionMotion,
 		questions,
 		cardMeta,
@@ -119,6 +131,7 @@ export function PlanEditor(
 		evidence,
 		readOnly,
 		research,
+		researchLauncher,
 		scrollTop,
 		threads,
 		user,
@@ -144,10 +157,16 @@ export function PlanEditor(
 	// A rotated epoch invalidates the whole local document, so the editor is
 	// rebuilt rather than reconciled — that is what "reset" means. The marks
 	// describe a history that no longer exists, so they go with it.
-	let onReset = useCallback((reason: Plan.Reset["reason"]) => {
+	let onReset = useCallback((reason: Plan.Reset["reason"], lost: boolean) => {
 		changes.clear();
 		questions?.resetDocument();
-		setState(prev => ({ ...prev, synced: false, reset: reason, failed: undefined }));
+		setState(prev => ({
+			...prev,
+			synced: false,
+			reset: reason,
+			failed: undefined,
+			lost: lost ? (prev.lost ?? 0) + 1 : prev.lost,
+		}));
 		setGeneration(value => value + 1);
 	}, [changes, questions]);
 
@@ -195,6 +214,18 @@ export function PlanEditor(
 		let element = scroller.current;
 		if (element && scrollTop !== undefined) element.scrollTop = scrollTop;
 	}, [generation, scrollTop]);
+
+	// A preface that changes height moves the document without resizing or scrolling it; overlays
+	// that track the prose (comment markers, rails) re-measure on scroll, so announce one.
+	let hasPreface = !!preface;
+	useEffect(() => {
+		let element = scroller.current;
+		let content = element?.querySelector(":scope > .plan-preface");
+		if (!element || !content) return;
+		let observer = new ResizeObserver(() => element.dispatchEvent(new Event("scroll")));
+		observer.observe(content);
+		return () => observer.disconnect();
+	}, [generation, hasPreface, wire]);
 
 	useEffect(() => () => changes.dispose(), [changes]);
 
@@ -247,7 +278,9 @@ export function PlanEditor(
 		if (presence) resume(presence);
 	}, [presence, connection]);
 
-	let offline = connection !== undefined && connection !== "connected";
+	// Locking waits out a blip, and edits made meanwhile wait in the outbox.
+	let offline = useConnectionNotice(connection !== undefined && connection !== "connected")
+		!== "none";
 	let locked = offline || !!busy || !!readOnly || !state.synced;
 
 	// Empty without a connection, and never used: the editor is not rendered
@@ -300,6 +333,7 @@ export function PlanEditor(
 						evidence,
 						research,
 						researchDrafts,
+						researchLauncher,
 						threads,
 						changes,
 						wire,
@@ -324,6 +358,7 @@ export function PlanEditor(
 			evidence,
 			research,
 			researchDrafts,
+			researchLauncher,
 			commentPresentation,
 			motionImmediately,
 			questionMotion,
@@ -366,7 +401,9 @@ export function PlanEditor(
 						className="h-full min-h-0 overflow-auto"
 						data-focus-boundary=""
 						data-plan-scroll=""
+						data-plan-synced={state.synced || undefined}
 					>
+						{hasPreface && <div className="plan-preface">{preface}</div>}
 						<MDXEditor
 							// Remounting on epoch rotation is deliberate: the previous
 							// document no longer exists, so there is nothing to reconcile.

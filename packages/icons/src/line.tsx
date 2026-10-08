@@ -220,3 +220,62 @@ export function CircleCloseIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function TableIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="12.5" rx="2" width="12.5" x="2.75" y="2.75" />
+			<line x1="2.75" x2="15.25" y1="7" y2="7" />
+			<line x1="7.5" x2="7.5" y1="7" y2="15.25" />
+		</LineIcon>
+	);
+}
+
+export function DiagramIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="4.5" rx="1" width="5" x="6.5" y="2.25" />
+			<rect height="4.5" rx="1" width="5" x="1.75" y="11.25" />
+			<rect height="4.5" rx="1" width="5" x="11.25" y="11.25" />
+			<path d="M9,6.75v2.25M4.25,11.25V9h9.5v2.25" />
+		</LineIcon>
+	);
+}
+
+export function FormulaIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<polyline points="14.25 3.25 3.75 3.25 9 9 3.75 14.75 14.25 14.75" />
+		</LineIcon>
+	);
+}
+
+export function TabsIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="9" rx="2" width="12.5" x="2.75" y="6.25" />
+			<path d="M2.75,6.25V4.75c0-.55.45-1,1-1h3.5c.55,0,1,.45,1,1v1.5" />
+			<line x1="11" x2="14" y1="4.25" y2="4.25" />
+		</LineIcon>
+	);
+}
+
+export function MagnifierIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="8" cy="8" r="5.25" />
+			<line x1="11.75" x2="15.25" y1="11.75" y2="15.25" />
+		</LineIcon>
+	);
+}
+
+export function DiffIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="12.5" rx="2" width="12.5" x="2.75" y="2.75" />
+			<line x1="5.5" x2="8.5" y1="7" y2="7" />
+			<line x1="7" x2="7" y1="5.5" y2="8.5" />
+			<line x1="9.5" x2="12.5" y1="11" y2="11" />
+		</LineIcon>
+	);
+}

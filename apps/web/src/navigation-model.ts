@@ -13,7 +13,8 @@ export type NavigationRoute =
 	| { page: "repositories" }
 	| { page: "repository"; owner: string; repository: string };
 
-export const NAVIGATION_MEDIA = "(max-width: 1023px)";
+export const NAVIGATION_INLINE_MIN = 1198;
+export const NAVIGATION_MEDIA = `(max-width: ${NAVIGATION_INLINE_MIN - 1}px)`;
 
 export function isDocumentWorkspaceRoute(
 	route: NavigationRoute,

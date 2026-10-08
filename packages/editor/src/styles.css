@@ -441,12 +441,13 @@
 /* A narrow document needs breathing room, but never a 32px tax on each side. */
 @container (max-width: 40rem) {
 	.plan-content,
+	.plan-preface,
 	.plan-decisions-content {
 		--plan-gutter: 1rem;
 	}
 
 	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
-	.plan-document[data-plan-decision-lane] .plan-content {
+	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface) {
 		--plan-leading-gutter: 2rem;
 	}
 
@@ -975,6 +976,29 @@
 	margin-block-start: 0;
 }
 
+/* The empty caret paragraph before the first block takes no room; the block sits at the top padding. */
+.plan .plan-content > p:has(> br:only-child):first-child:not(:last-child) {
+	block-size: 0;
+	margin-block: 0;
+	overflow: visible;
+}
+
+.plan
+	.plan-content
+	> p:has(> br:only-child):first-child:not(:last-child)
+	+ :is([data-plan-questionnaire], [data-plan-decision]) {
+	margin-block-start: 0;
+}
+
+/* Settled lines read as a tight list; the line's own paragraph margin is dropped. */
+.plan .plan-content :is([data-plan-questionnaire], [data-plan-decision]):has([data-card-settled]) {
+	margin-block: 0.5rem;
+}
+
+.plan .plan-content [data-card-settled] {
+	margin-block: 0;
+}
+
 /* The inner card is hidden after resolution, but its Lexical decorator host
    also has document spacing. Remove that host from layout as well. */
 .plan .plan-content [data-plan-questionnaire]:has([data-card-hidden]) {
@@ -1127,7 +1151,7 @@
 	 * The trailing space is deliberate and large: the caret should never sit
 	 * against the bottom of the pane, and a plan is usually appended to.
 	 */
-	padding: 3rem var(--plan-gutter) 60vh;
+	padding: 2rem var(--plan-gutter) 60vh;
 	padding-inline-start: var(--plan-leading-gutter);
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
@@ -1135,6 +1159,19 @@
 	/* Prose wants looser leading than the UI rhythm the token pairs with. */
 	line-height: 1.6;
 	color: var(--color-text-primary);
+}
+
+/* Host context above the document shares the prose column and pulls the title up under it. */
+.plan .plan-preface {
+	--plan-leading-gutter: var(--plan-gutter);
+	padding: 2rem var(--plan-gutter) 0;
+	padding-inline-start: var(--plan-leading-gutter);
+	margin-inline: auto;
+	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
+}
+
+.plan [data-plan-scroll]:has(> .plan-preface) .plan-content {
+	padding-block-start: 1rem;
 }
 
 /*
@@ -1176,6 +1213,24 @@
 
 .plan-content :is(h1, h2, h3, h4, h5, h6):first-child {
 	margin-block-start: 0;
+}
+
+/*
+ * The first visible block starts at the column's top padding. Decision cards keep
+ * a caret paragraph before them, and a resolved card's host is display: none, so
+ * neither may push a leading heading down. A heading with only those before it
+ * gets no top margin; the second rule gives it back once real content precedes it.
+ */
+.plan-content
+	> :is(p:has(> br:only-child), [data-plan-questionnaire]:has([data-card-hidden]))
+	~ :is(h1, h2, h3, h4, h5, h6) {
+	margin-block-start: 0;
+}
+
+.plan-content
+	> :not(:is(p:has(> br:only-child), [data-plan-questionnaire]:has([data-card-hidden])))
+	~ :is(h1, h2, h3, h4, h5, h6) {
+	margin-block-start: 1.5em;
 }
 
 .plan-content h1 {

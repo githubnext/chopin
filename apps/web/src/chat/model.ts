@@ -13,6 +13,8 @@ export type Message = {
 	streaming?: boolean;
 	tools?: Chat.Activity[];
 	references?: Chat.Reference[];
+	/** Set only when the sender addressed the Planner. */
+	to?: Chat.Destination;
 	queued: boolean;
 	working?: boolean;
 	workDisconnected?: boolean;
@@ -177,6 +179,7 @@ export function group(
 			author: { kind: "member" as const, handle: item.handle },
 			text: item.text,
 			references: item.references,
+			to: "planner" as const,
 			queued: true,
 		})),
 	];

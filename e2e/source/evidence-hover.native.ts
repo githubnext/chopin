@@ -90,8 +90,8 @@ test("actual Source falls back to the saved quote when current message text chan
 		"data-source-exact",
 		"false",
 	);
-	await expect(page.locator('[data-chat-message-id="native-source"] [data-source-preview]'))
-		.toContainText("People already have GitHub accounts.");
+	await expect(page.locator('[data-chat-message-id="native-source"]'))
+		.toHaveAttribute("data-chat-source", "true");
 	expect(await page.evaluate(() => CSS.highlights.get("conversation-source")?.size ?? 0)).toBe(0);
 });
 

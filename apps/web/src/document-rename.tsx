@@ -1,27 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 
 import * as Api from "./api";
+import { heldTyping, holdTyping } from "./title-edit";
 import { TerminalAlert } from "./terminal-alert";
 
 import type { FormEvent, KeyboardEvent } from "react";
 
 function message(error: unknown): string {
+	if (error instanceof Api.ApiError && error.status === 409) {
+		return "A document with this title already exists. Try a different title.";
+	}
 	return error instanceof Error ? error.message : "Could not rename document.";
 }
 
-/** One server-backed title form shared by room navigation and repository rows. */
+/**
+ * One server-backed title form shared by room navigation and repository rows.
+ * `inline` renders only the field: Enter or blur commits, Escape reverts.
+ */
 export function DocumentRename(
 	{
 		channel,
 		className = "",
+		inline = false,
 		onCancel,
+		replay = false,
 		onErrorChange,
 		onRenamed,
 		onSavingChange,
 	}: {
 		channel: Pick<Api.Channel, "id" | "title">;
 		className?: string;
+		inline?: boolean;
 		onCancel: () => void;
+		/** Takes over typing held since New document, replacing the generated name. */
+		replay?: boolean;
 		onErrorChange?: (error: unknown) => void;
 		onRenamed: (detail: Api.ChannelDetail) => void;
 		onSavingChange?: (saving: boolean) => void;
@@ -31,10 +43,36 @@ export function DocumentRename(
 	let [title, setTitle] = useState(channel.title);
 	let [error, setError] = useState<unknown>();
 	let [saving, setSaving] = useState(false);
+	// Enter and the blur it can cause arrive before React re-renders `saving`.
+	let busy = useRef(false);
+	let cancelled = useRef(false);
 
 	useEffect(() => {
-		input.current?.focus();
-		input.current?.select();
+		let field = input.current;
+		let layer = field?.closest<HTMLElement>(".document-route-layer");
+		let observer: MutationObserver | undefined;
+		let focus = () => {
+			if (!field || layer?.inert || layer?.hidden) return;
+			field.focus();
+			if (document.activeElement !== field) return;
+			observer?.disconnect();
+			// Taken in the same task as focus, so no key falls between the hold and the field.
+			let held = replay ? heldTyping : undefined;
+			if (replay) holdTyping(false);
+			if (held?.text) {
+				// Key presses after focus append to the held prefix, not replace it.
+				field.value = held.text;
+				field.setSelectionRange(held.text.length, held.text.length);
+				setTitle(held.text);
+			} else field.select();
+			if (held?.enter) void save(held.text || channel.title);
+		};
+		if (layer) {
+			observer = new MutationObserver(focus);
+			observer.observe(layer, { attributes: true, attributeFilter: ["inert", "hidden"] });
+		}
+		focus();
+		return () => observer?.disconnect();
 	}, []);
 
 	function report(next: unknown) {
@@ -42,10 +80,21 @@ export function DocumentRename(
 		onErrorChange?.(next);
 	}
 
-	async function submit(event: FormEvent) {
-		event.preventDefault();
-		let next = title.trim();
-		if (!next || saving) return;
+	function submit(event?: FormEvent) {
+		event?.preventDefault();
+		return save(title);
+	}
+
+	async function save(value: string) {
+		let next = value.trim();
+		if (busy.current || cancelled.current) return;
+		if (inline && (!next || next === channel.title)) {
+			cancelled.current = true;
+			onCancel();
+			return;
+		}
+		if (!next) return;
+		busy.current = true;
 		setSaving(true);
 		onSavingChange?.(true);
 		report(undefined);
@@ -53,6 +102,7 @@ export function DocumentRename(
 			onRenamed(await Api.renameChannel(channel.id, next));
 		} catch (reason) {
 			report(reason);
+			busy.current = false;
 			setSaving(false);
 			onSavingChange?.(false);
 		}
@@ -63,7 +113,44 @@ export function DocumentRename(
 		event.preventDefault();
 		event.stopPropagation();
 		if (saving) return;
+		cancelled.current = true;
 		onCancel();
+	}
+
+	if (inline) {
+		return (
+			<form className="document-title-form" onSubmit={submit}>
+				<label className="sr-only" htmlFor={`document-title-${channel.id}`}>Document title</label>
+				<input
+					aria-invalid={error === undefined ? undefined : true}
+					className="document-title-input"
+					id={`document-title-${channel.id}`}
+					maxLength={120}
+					onBlur={() => {
+						// Leaving a rejected title reverts it rather than repeating the failure.
+						if (error === undefined) void submit();
+						else if (!busy.current) {
+							cancelled.current = true;
+							onCancel();
+						}
+					}}
+					onChange={event => {
+						setTitle(event.target.value);
+						if (error !== undefined) report(undefined);
+					}}
+					onKeyDown={keyDown}
+					placeholder="Untitled"
+					readOnly={saving}
+					ref={input}
+					value={title}
+				/>
+				{error !== undefined && (
+					<TerminalAlert className="document-title-error text-sm text-destructive-ink">
+						{message(error)}
+					</TerminalAlert>
+				)}
+			</form>
+		);
 	}
 
 	return (
