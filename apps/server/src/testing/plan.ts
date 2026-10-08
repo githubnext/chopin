@@ -17,6 +17,7 @@ export type SeedState = {
 	revision?: number;
 	questions?: unknown[];
 	openQuestions?: unknown[];
+	visualRequests?: unknown[];
 	threads?: unknown[];
 	transcript?: unknown[];
 };
@@ -86,6 +87,7 @@ export async function openPlan(source = "", state: SeedState = {}) {
 		documentSeq: 0,
 		questions: state.questions ?? [],
 		openQuestions: state.openQuestions ?? [],
+		...(state.visualRequests ? { visualRequests: state.visualRequests } : {}),
 		threads: state.threads ?? [],
 		transcript: state.transcript ?? [],
 	} as JsonValue;
