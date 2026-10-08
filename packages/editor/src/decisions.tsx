@@ -14,12 +14,13 @@ import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { useQuestionnaires } from "./questionnaires";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
-import type { Question } from "@chopin/protocol";
+import type { Question, VisualDecision } from "@chopin/protocol";
 import type { CardMetaStore } from "./card-meta";
 import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
 import type { QuestionStepMotion } from "./widget-options";
+import type { VisualPreviewComponent } from "./widgets/visual-decision";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
@@ -28,6 +29,7 @@ export type DecisionsProps = {
 	motion: MotionDisclosureContract;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
+	visualPreview?: VisualPreviewComponent;
 	wire?: Transport;
 	connected?: boolean;
 	headingId?: string;
@@ -84,6 +86,7 @@ export function Decisions(
 		motionImmediately,
 		onShowPlan,
 		questionMotion,
+		visualPreview,
 		reveal,
 		store,
 		wire,
@@ -106,6 +109,24 @@ export function Decisions(
 	let revealed = useRef<number | undefined>(undefined);
 	let [history, setHistory] = useHistory();
 	let historyId = useId();
+	let [creating, setCreating] = useState(false);
+	let [createError, setCreateError] = useState<string>();
+	let createPending = useRef(false);
+	let create = async () => {
+		if (!wire || !connected || !canEdit || createPending.current) return;
+		createPending.current = true;
+		setCreating(true);
+		setCreateError(undefined);
+		try {
+			let result = await wire.ask("visual-decision:create", {}) as VisualDecision.Result;
+			if (!result.ok) throw new Error("Decision not created");
+		} catch {
+			setCreateError("The decision could not be created. Try again.");
+		} finally {
+			createPending.current = false;
+			setCreating(false);
+		}
+	};
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
 	// the pointer that asked for it, and a pin to the pane that set it.
@@ -159,6 +180,7 @@ export function Decisions(
 			connected={connected}
 			key={entry.id}
 			motion={questionMotion}
+			visualPreview={visualPreview}
 			onQuestionEnter={question => store.highlight(entry.id, question)}
 			onQuestionLeave={() => store.clear()}
 			onQuestionSelect={question => {
@@ -175,6 +197,19 @@ export function Decisions(
 	return (
 		<div className="plan-decisions">
 			<h2 className="sr-only" id={headingId} ref={heading} tabIndex={-1}>Decisions</h2>
+			{canEdit && (
+				<div className="visual-decision-create">
+					{createError && <span role="alert">{createError}</span>}
+					<button
+						className="btn btn-sm btn-outline"
+						disabled={!connected || !wire || creating}
+						onClick={() => void create()}
+						type="button"
+					>
+						{creating ? "Creating…" : "Tune decision card"}
+					</button>
+				</div>
+			)}
 
 			<div
 				className={`plan-decisions-content min-h-0 flex-1 overflow-auto${

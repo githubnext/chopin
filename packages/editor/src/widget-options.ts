@@ -11,6 +11,7 @@ import type { ResearchDraftStore } from "./research-draft";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Transport } from "./transport";
+import type { VisualPreviewComponent } from "./widgets/visual-decision";
 
 export type CommentPresentation = "popover" | "sheet";
 
@@ -40,6 +41,7 @@ export type WidgetOptions = {
 	commentPresentation?: CommentPresentation;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
+	visualPreview?: VisualPreviewComponent;
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
 	onCardSource?: (questionnaireId: string) => void;

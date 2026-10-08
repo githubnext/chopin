@@ -47,6 +47,7 @@ import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
+import { VisualPreview } from "./visual-preview/host";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
@@ -970,12 +971,13 @@ export function RoomWorkspace(
 					<Decisions
 						cardMeta={cardMeta}
 						canEdit={workspaceCanEdit}
-						connected={treatAsConnected && workspaceCanEdit}
+						connected={treatAsConnected}
 						headingId={workspaceIds.heading.decisions}
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}
 						onShowPlan={showPlan}
 						questionMotion={QUESTION_MOTION}
+						visualPreview={VisualPreview}
 						reveal={reveal}
 						store={questions}
 						wire={wire}
@@ -996,6 +998,7 @@ export function RoomWorkspace(
 							? <ChildProvenance channelId={room} parent={presentation.parent} />
 							: undefined}
 						questionMotion={QUESTION_MOTION}
+						visualPreview={VisualPreview}
 						questions={questions}
 						readOnly={!workspaceCanEdit}
 						research={profile.research ? research : undefined}
