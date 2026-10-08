@@ -303,7 +303,7 @@ export function RoomWorkspace(
 		return () => removeEventListener("title-edit", listen);
 	}, [room]);
 	// Controls dim only once a loss outlasts a blip; actions still read `status`.
-	let connectionShown = useConnectionNotice(status !== "connected") === "none";
+	let treatAsConnected = useConnectionNotice(status !== "connected") === "none";
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
 	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
@@ -875,7 +875,7 @@ export function RoomWorkspace(
 							questions,
 							meta: cardMeta,
 							wire,
-							connected: connectionShown,
+							connected: treatAsConnected,
 							canEdit: workspaceCanEdit,
 							onOpenCard: showDecisionCard,
 						}}
@@ -911,7 +911,7 @@ export function RoomWorkspace(
 				}
 				status={
 					<PlanStatus
-						connection={status === "deleted" ? "closed" : connectionShown ? undefined : status}
+						connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
 						failed={planState.failed}
 						synced={planState.synced}
 					/>
@@ -926,7 +926,7 @@ export function RoomWorkspace(
 					<Decisions
 						cardMeta={cardMeta}
 						canEdit={workspaceCanEdit}
-						connected={connectionShown && workspaceCanEdit}
+						connected={treatAsConnected && workspaceCanEdit}
 						headingId={workspaceIds.heading.decisions}
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}

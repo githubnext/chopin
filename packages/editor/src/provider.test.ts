@@ -27,11 +27,13 @@ function emptyUpdate(): string {
 	return btoa(binary);
 }
 
-function reply(): Plan.Open.Reply {
+const EPOCH = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
+
+function reply(epoch = EPOCH): Plan.Open.Reply {
 	return {
 		kind: "plan:open",
 		ts: 0,
-		epoch: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+		epoch,
 		seq: 1,
 		update: emptyUpdate(),
 		revision: 1,
@@ -53,6 +55,7 @@ function wire(open = true): Transport & {
 	sent: string[];
 	asked: object[];
 	up: boolean;
+	epoch: string;
 	emit: (kind: string, frame: unknown) => void;
 } {
 	let sent: string[] = [];
@@ -63,6 +66,7 @@ function wire(open = true): Transport & {
 		sent,
 		asked,
 		up: open,
+		epoch: EPOCH,
 		get connected(): boolean {
 			return this.up;
 		},
@@ -82,7 +86,7 @@ function wire(open = true): Transport & {
 			if (!this.up) return Promise.reject(new Error("not connected"));
 			sent.push(kind);
 			asked.push(payload);
-			if (kind === "plan:open") return Promise.resolve(reply() as T);
+			if (kind === "plan:open") return Promise.resolve(reply(this.epoch) as T);
 			return Promise.resolve(undefined as T);
 		},
 	};
@@ -276,6 +280,51 @@ describe("opening the plan", () => {
 			epoch: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
 			vector: expect.any(String),
 		});
+	});
+
+	/*
+	 * The server rebuilt the document while this client was away, so it never
+	 * heard the reset. Merging the new state into the old document kept edits
+	 * nobody else had, and every later edit was acknowledged but never applied.
+	 */
+	it("rebuilds rather than merges when the epoch rotated while it was away", async () => {
+		let transport = wire();
+		let doc = new Y.Doc();
+		let resets: Array<[string, boolean]> = [];
+		let provider = new PlanProvider({
+			wire: transport,
+			doc,
+			onReset: (reason, lost) => resets.push([reason, lost]),
+		});
+		await provider.connect();
+
+		transport.up = false;
+		doc.getText("plan").insert(0, "typed during a blip");
+		transport.up = true;
+		transport.epoch = "01K0N4TR8K7JGM4R1J7PW4R8Z0";
+		transport.sent.length = 0;
+		await provider.resume();
+
+		expect(resets).toEqual([["replaced", true]]);
+		// Nothing from the old history is replayed into the new one.
+		expect(transport.sent).toEqual(["plan:open"]);
+		expect(provider.synced).toBe(false);
+	});
+
+	it("says nothing was lost when a rotated epoch finds the outbox empty", async () => {
+		let transport = wire();
+		let resets: boolean[] = [];
+		let provider = new PlanProvider({
+			wire: transport,
+			doc: new Y.Doc(),
+			onReset: (_, lost) => resets.push(lost),
+		});
+		await provider.connect();
+
+		transport.epoch = "01K0N4TR8K7JGM4R1J7PW4R8Z0";
+		await provider.resume();
+
+		expect(resets).toEqual([false]);
 	});
 
 	it("does not ask twice while an open is already in flight", async () => {
