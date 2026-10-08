@@ -76,10 +76,12 @@ exact application origin, and the preview host/port to its deployment bindings.
 The application's CSP and preview frame-ancestor policy bind those origins.
 
 This branch does not deploy either site. Historical bundle retention is another
-delivery requirement before upgrading the specimen: the current server serves
-one digest, so an older saved decision safely shows an unavailable preview
-after a bundle change. Its frozen baseline, values and attribution remain in
-the record; silently substituting the new bundle is refused.
+delivery requirement before rebuilding a published specimen: local and Linux
+container builds produced different digests at the same source revision. Retain
+the exact published bytes rather than regenerating an old bundle. The current
+server serves one digest, so an older saved decision safely shows an unavailable
+preview after a bundle change. Its frozen baseline, values and attribution remain
+in the record; silently substituting the new bundle is refused.
 
 ## Verification and limits
 
@@ -106,7 +108,9 @@ arbitrary code, private bundles, or other browser engines.
 
 The focused unit run passed 356 tests, all 72 PostgreSQL persistence/lifecycle
 tests passed, and all 11 Chromium integration scenarios passed. TypeScript,
-build and local CI validation passed. The broader unit run
+build and local CI validation passed. The container build passed with verbose
+install logging; a networking-disabled runtime check verified its packaged
+manifest, bytes, CSP and preview imports. The broader unit run
 passed 4,187 tests with three skips and four timing failures in existing
 Git/harness fixtures. Those failures passed isolated reruns; the broad run itself
 was not wholly green.

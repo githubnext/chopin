@@ -105,3 +105,6 @@ Files: `e2e/visual-decision*.e2e.ts`, preview E2E setup and focused fixtures,
 - Real wide/narrow/saved screenshots are outside git. Production enablement still
   requires a reviewed credential-free preview site; historical digest retention
   also needs delivery work. No PR, merge or deployment was performed.
+- Container packaging passed with verbose install logging, followed by a
+  networking-disabled check of packaged bytes/CSP/manifest and preview imports.
+  Local and Linux builds have different digests; retain published bundles across rebuilds.
