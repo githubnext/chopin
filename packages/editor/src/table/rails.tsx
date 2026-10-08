@@ -87,17 +87,17 @@ type Metrics = {
 	columns: Track[];
 	rows: Track[];
 	/** The visible rect of the scroller the table is in, which rails never draw past. */
-	clip: { top: number; right: number; bottom: number; left: number };
+	clip: { top: number; bottom: number };
 };
 
 /** The nearest ancestor that scrolls vertically, or the viewport. */
 function visibleRect(element: HTMLElement): Metrics["clip"] {
 	for (let node = element.parentElement; node; node = node.parentElement) {
 		if (!/auto|scroll/.test(getComputedStyle(node).overflowY)) continue;
-		let { top, right, bottom, left } = node.getBoundingClientRect();
-		return { top, right, bottom, left };
+		let { top, bottom } = node.getBoundingClientRect();
+		return { top, bottom };
 	}
-	return { top: 0, right: innerWidth, bottom: innerHeight, left: 0 };
+	return { top: 0, bottom: innerHeight };
 }
 
 /** A fixed overlay's `clip-path`, cutting off whatever falls outside `clip`. */
@@ -105,12 +105,10 @@ function clipTo(
 	clip: Metrics["clip"],
 	box: { left: number; top: number; width: number; height: number },
 ) {
-	let inset = [
-		clip.top - box.top,
-		box.left + box.width - clip.right,
-		box.top + box.height - clip.bottom,
-		clip.left - box.left,
-	].map(edge => `${Math.max(edge, 0)}px`);
+	// Vertical only: a row rail lives in the gutter, which can be outside the
+	// scroller's own box, and the chrome a rail must not cover is above and below.
+	let inset = [clip.top - box.top, 0, box.top + box.height - clip.bottom, 0]
+		.map(edge => `${Math.max(edge, 0)}px`);
 	return `inset(${inset.join(" ")})`;
 }
 
