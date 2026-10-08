@@ -128,13 +128,24 @@ function stranding(doc: Y.Doc, item: Y.Item): boolean {
 	return false;
 }
 
+/** Whether every current property of a type, such as alignment or bold, was set by this client. */
+function settled(doc: Y.Doc, type: Y.AbstractType<any>): boolean {
+	for (let entry of type._map.values()) {
+		if (!entry.deleted && entry.id.client !== doc.clientID) return false;
+	}
+	return true;
+}
+
 /** Whether a block holds only text and text properties, all of it this client's. */
 function own(doc: Y.Doc, block: Y.XmlText): boolean {
+	if (!settled(doc, block)) return false;
 	for (let child = block._start; child; child = child.right) {
 		if (child.deleted) continue;
 		if (child.id.client !== doc.clientID) return false;
-		if (child.content instanceof Y.ContentType && !(child.content.type instanceof Y.Map)) {
-			return false;
+		if (child.content instanceof Y.ContentType) {
+			if (!(child.content.type instanceof Y.Map) || !settled(doc, child.content.type)) {
+				return false;
+			}
 		}
 	}
 	return true;
@@ -171,7 +182,10 @@ export function typing(item: Stack[number], doc: Y.Doc): boolean {
 				} else if (content instanceof Y.ContentString) {
 					if (!prose(parent)) return false;
 				} else if (content instanceof Y.ContentType && content.type instanceof Y.Map) {
-					if (!prose(parent) || (!struct.deleted && stranding(doc, struct))) return false;
+					if (!prose(parent)) return false;
+					if (!struct.deleted && (stranding(doc, struct) || !settled(doc, content.type))) {
+						return false;
+					}
 				} else if (content instanceof Y.ContentType && content.type instanceof Y.XmlText) {
 					if (parent._item !== null || !prose(content.type, BLOCKS)) return false;
 					if (!struct.deleted && !own(doc, content.type)) return false;

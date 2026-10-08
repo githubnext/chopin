@@ -41,7 +41,7 @@ import { registerPlanHistory, rehearse, typing } from "./history";
 
 import type { PlanHistory, Refusal } from "./history";
 import type { Binding, Provider } from "@lexical/yjs";
-import type { LexicalEditor, LexicalNode } from "lexical";
+import type { LexicalEditor, LexicalNode, TextNode } from "lexical";
 
 const REGISTRY = registry();
 
@@ -449,6 +449,27 @@ describe("plan history with peers", () => {
 		expect(await consistent(me, peer)).toContain("one peer");
 	});
 
+	it("will not quickly remove a paragraph a peer has aligned", async () => {
+		let { me, peer } = await room("Start here.\n", 2, 0);
+
+		me.editor.update(() => {
+			$getRoot().append($createParagraphNode().append($createTextNode("Mine.")));
+		}, { discrete: true });
+		await settle();
+		peer.editor.update(() => {
+			$getRoot().getChildren().filter($isParagraphNode)[1]!.setFormat("center");
+		}, { discrete: true });
+		await settle();
+
+		let manager = (me as Person).history!.manager;
+		expect(typing(manager.undoStack.at(-1)!, manager.doc)).toBe(false);
+		undo(me.editor);
+		await settle();
+		expect(me.refusals).toEqual(["others"]);
+		expect(text(peer.editor)).toContain("Mine.");
+		await consistent(me, peer);
+	});
+
 	it("undoes a table nobody else has touched", async () => {
 		let { me, peer } = await room("Start here.\n");
 
@@ -543,8 +564,20 @@ describe("plan history under random editing", () => {
 						let nodes = texts(who.editor);
 						if (nodes.length > 1) pick(nodes).remove();
 					}, { discrete: true });
-				} else if (roll < 0.5) {
+				} else if (roll < 0.47) {
 					appendTable(who.editor);
+				} else if (roll < 0.5) {
+					// Properties another client may set on someone else's prose.
+					who.editor.update(() => {
+						let blocks = $getRoot().getChildren().filter($isParagraphNode);
+						let nodes = texts(who.editor);
+						let choice = next();
+						if (choice < 0.4 && blocks.length > 0) {
+							pick(blocks).setFormat(pick(["center", "right", "left"]));
+						} else if (choice < 0.7 && blocks.length > 0) {
+							pick(blocks).setIndent(Math.floor(next() * 3));
+						} else if (nodes.length > 0) (pick(nodes) as TextNode).toggleFormat("bold");
+					}, { discrete: true });
 				} else if (roll < 0.53) {
 					let id = `01K0N4Y9VG9DHBFZB6HC89E${String(research++).padStart(3, "0")}`;
 					who.editor.update(() => {
