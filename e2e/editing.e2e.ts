@@ -336,3 +336,45 @@ test("typing past the bottom of the view scrolls the caret into it", async ({ jo
 	expect(typed.y).toBeGreaterThanOrEqual(view.y);
 	expect(typed.y + typed.height).toBeLessThanOrEqual(view.y + view.height);
 });
+
+test("a task list is written, toggled and left from the keyboard", async ({ join, room }) => {
+	let page = await join("ana");
+	let tasks = content(page).locator("li[role=checkbox]");
+
+	await content(page).click();
+	await page.keyboard.type("- [ ] Write the spec\n");
+	await page.keyboard.type("Review it\n\n");
+	await page.keyboard.type("Ship it");
+
+	await expect(tasks).toHaveCount(2);
+	await expect(tasks.first()).toHaveAttribute("aria-checked", "false");
+	await expect(content(page).getByText("Ship it")).toBeVisible();
+	await expect(tasks.filter({ hasText: "Ship it" })).toHaveCount(0);
+	await written(page, room, /^- \[ \] Write the spec$/m);
+
+	// The box sits in the item's left gutter; a click on the text only places the caret.
+	await tasks.first().click({ position: { x: 14, y: 10 } });
+	await expect(tasks.first()).toHaveAttribute("aria-checked", "true");
+	await written(page, room, /^- \[x\] Write the spec$/m);
+
+	await tasks.first().click({ position: { x: 14, y: 10 } });
+	await expect(tasks.first()).toHaveAttribute("aria-checked", "false");
+});
+
+test("[ ] and [x] start a task item, and the slash menu offers one", async ({ join, room }) => {
+	let page = await join("ana");
+	let tasks = content(page).locator("li[role=checkbox]");
+
+	await content(page).click();
+	await page.keyboard.type("[x] Already done\n\n");
+	await expect(tasks.first()).toHaveAttribute("aria-checked", "true");
+
+	await page.keyboard.type("/task");
+	await expect(page.getByRole("option", { name: "Task list" })).toBeVisible();
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("From the menu");
+
+	await expect(tasks).toHaveCount(2);
+	await written(page, room, /^- \[x\] Already done$/m);
+	await written(page, room, /^- \[ \] From the menu$/m);
+});

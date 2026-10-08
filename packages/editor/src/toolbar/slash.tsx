@@ -40,10 +40,12 @@ import {
 	ulid,
 } from "@chopin/dialect";
 
+import { INSERT_CHECK_LIST_COMMAND } from "@lexical/list";
 import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
 import {
+	CheckIcon,
 	CodeIcon,
 	DiagramIcon,
 	DiffIcon,
@@ -139,7 +141,10 @@ function insertContainer(
  * them here would be a third way to do what two already do, and would bury the
  * things that have no other route.
  *
- * A code fence is the exception that proves it: ``` is not wired, because
+ * Task lists are the second exception: `[ ] ` converts a line, but nobody
+ * guesses that, so the menu is where they are found.
+ *
+ * A code fence is the other exception: ``` is not wired, because
  * MDXEditor's transformer builds its own code node rather than the dialect's.
  *
  * Order is the menu order, and the first match is preselected: ordinary blocks
@@ -177,6 +182,16 @@ const COMMANDS: SlashCommand[] = [
 				 */
 				$insertNodes([$createTableNodeWithDimensions(3, 3, { rows: true, columns: false })]);
 			}),
+	},
+	{
+		id: "tasks",
+		label: "Task list",
+		hint: "Items to check off",
+		icon: CheckIcon,
+		group: "Blocks",
+		keywords: ["task", "todo", "checklist", "checkbox"],
+		kind: "insert",
+		run: editor => editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined),
 	},
 	{
 		id: "code",
