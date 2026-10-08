@@ -120,7 +120,7 @@ describe("task rule", () => {
 		let editor = editorAt("- top\n  - Q", "[ ]");
 		expect(space(editor)).toBe(false);
 		await settle();
-		expect(markdown(editor)).toContain("\\[ ]");
+		expect(markdown(editor)).toContain("\\[ \\]");
 	});
 
 	it("ignores a space after other text, modifiers and composition", async () => {
@@ -130,7 +130,7 @@ describe("task rule", () => {
 		editor = editorAt("- Q", "[ ]");
 		expect(space(editor, { metaKey: true })).toBe(false);
 		expect(space(editor, { isComposing: true })).toBe(false);
-		expect(markdown(editor)).toBe("- \\[ ]");
+		expect(markdown(editor)).toBe("- \\[ \\]");
 	});
 
 	it("leaves a plain paragraph to the markdown shortcuts", async () => {
