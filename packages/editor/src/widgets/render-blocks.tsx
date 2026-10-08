@@ -19,7 +19,7 @@
  * race.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
@@ -79,9 +79,14 @@ type Block = {
 	meta: string;
 };
 
+const SeeCodeDiagram = lazy(() =>
+	import("@chopin/diagrams/react").then(({ Diagram }) => ({ default: Diagram }))
+);
+
 /** Whether a block has a second reading of itself to show. */
-function renders(block: Block, html: string | undefined): boolean {
+function renders(block: Block, html: string | undefined, spec: unknown): boolean {
 	if (!block.source.trim()) return false;
+	if (block.kind === "seecode") return spec !== undefined;
 	if (block.kind === "math" || block.kind === "mermaid") return !!html;
 	return block.kind === "code" || block.kind === "diff";
 }
@@ -258,8 +263,9 @@ function Preview(
 ) {
 	let [html, setHtml] = useState<string>();
 	let [error, setError] = useState<string>();
+	let [spec, setSpec] = useState<unknown>();
 
-	let drawn = block.kind === "math" || block.kind === "mermaid";
+	let drawn = block.kind === "math" || block.kind === "mermaid" || block.kind === "seecode";
 
 	useEffect(() => {
 		// A block that stopped being a diagram must stop showing one. Its
@@ -269,10 +275,12 @@ function Preview(
 		if (!drawn) {
 			setHtml(undefined);
 			setError(undefined);
+			setSpec(undefined);
 			return;
 		}
 		let cancelled = false;
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		if (block.kind === "seecode") setSpec(undefined);
 
 		let run = async () => {
 			if (!block.source.trim()) {
@@ -281,6 +289,24 @@ function Preview(
 				return;
 			}
 			try {
+				if (block.kind === "seecode") {
+					let { parseDiagramSource, renderDiagram } = await import("@chopin/diagrams");
+					let parsed = parseDiagramSource(block.source);
+					if (!parsed.ok) throw new Error(parsed.message);
+					let rendered = renderDiagram(parsed.spec);
+					if (!rendered.ok) {
+						let problem = rendered.problems[0];
+						throw new Error(
+							problem
+								? `${problem.at === "(root)" ? "" : `${problem.at}: `}${problem.msg}`.slice(0, 240)
+								: "Diagram specification is invalid.",
+						);
+					}
+					if (cancelled) return;
+					setSpec(parsed.spec);
+					setError(undefined);
+					return;
+				}
 				let out = block.kind === "math"
 					? await renderMath(block.source, block.inline)
 					: await renderMermaid(block.key, block.source);
@@ -292,6 +318,8 @@ function Preview(
 				// Half-typed source fails on nearly every keystroke. Keep the last
 				// drawing and only say what is wrong once the author pauses.
 				let message = err instanceof Error ? err.message : "could not be rendered";
+				if (block.kind === "seecode") setSpec(undefined);
+				else if (block.kind === "math") setHtml(undefined);
 				timer = setTimeout(() => setError(message), ERROR_DELAY);
 			}
 		};
@@ -319,8 +347,8 @@ function Preview(
 	 * showing both would put every line on screen twice. A drawing is a
 	 * different reading of its source, and stays above it while it is edited.
 	 */
-	let hide = collapsed && renders(block, html);
-	let swap = !collapsed && renders(block, html)
+	let hide = collapsed && renders(block, html, spec);
+	let swap = !collapsed && renders(block, html, spec)
 		&& (block.kind === "code" || block.kind === "diff");
 	useLayoutEffect(() => {
 		let element = editor.getElementByKey(block.key);
@@ -338,7 +366,7 @@ function Preview(
 	// A block with nothing rendered has nothing to fall back to, so there is
 	// nothing to offer: hiding a plain fence would leave an empty box. A
 	// formula has no language either, so its row can be empty of both.
-	let hidable = renders(block, html);
+	let hidable = renders(block, html, spec);
 	let named = block.kind !== "math";
 
 	useEffect(() => {
@@ -353,7 +381,7 @@ function Preview(
 		<>
 			{host
 				&& createPortal(
-					<Rendered block={block} html={html} error={error} />,
+					<Rendered block={block} html={html} error={error} spec={spec} />,
 					host,
 					`${block.key}:preview`,
 				)}
@@ -481,7 +509,12 @@ function Diagram({ html, stale }: { html: string; stale: boolean }) {
 }
 
 function Rendered(
-	{ block, html, error }: { block: Block; html: string | undefined; error: string | undefined },
+	{ block, html, error, spec }: {
+		block: Block;
+		html: string | undefined;
+		error: string | undefined;
+		spec: unknown;
+	},
 ) {
 	if (block.kind === "mermaid" && (html || error)) {
 		return (
@@ -491,6 +524,7 @@ function Rendered(
 			</>
 		);
 	}
+	if (error && block.kind === "seecode") return <DiagramError message={error} />;
 	if (error) return <div data-plan-error="">{error}</div>;
 	if (!block.source.trim()) return null;
 
@@ -502,6 +536,22 @@ function Rendered(
 				language={block.language}
 				meta={block.meta}
 			/>
+		);
+	}
+	if (block.kind === "seecode") {
+		if (spec === undefined) return null;
+		return (
+			<div
+				className="plan-seecode"
+				contentEditable={false}
+				role="region"
+				aria-label="Diagram preview"
+				tabIndex={0}
+			>
+				<Suspense fallback={null}>
+					<SeeCodeDiagram spec={spec} idPrefix={block.key} />
+				</Suspense>
+			</div>
 		);
 	}
 
@@ -700,7 +750,7 @@ function $edgeBlock(
 }
 
 /** Something a reader can hold focus on in place of a caret. */
-const FOCUSABLE_PREVIEW = ".plan-code-view, .plan-diagram";
+const FOCUSABLE_PREVIEW = ".plan-code-view, .plan-diagram, .plan-seecode";
 
 export function PreviewPlugin() {
 	let [editor] = useLexicalComposerContext();
@@ -945,6 +995,9 @@ export function PreviewPlugin() {
 			if (!(event.target instanceof Element) || event.target.closest("[data-plan-chrome]")) return;
 			let block = blockAt(event.target.closest("[data-plan-preview]")?.parentElement);
 			if (!block || !latest.current.hidable.has(block.key)) return;
+			// SeeCode has its own interactive diagram controls; the source toggle
+			// is the explicit way to edit the diagram's specification.
+			if (block.kind === "seecode") return;
 			let offset = pressed?.offset ?? block.source.length;
 			editor.update(() => $open(block.key, offset));
 		};
@@ -988,6 +1041,7 @@ export function PreviewPlugin() {
 					let preview = event.target.closest(FOCUSABLE_PREVIEW);
 					let block = blockAt(preview?.closest("[data-plan-preview]")?.parentElement);
 					if (!block) return false;
+					if (block.kind === "seecode" && event.target !== preview) return false;
 					if (event.metaKey || event.ctrlKey || event.altKey) return true;
 					if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 						event.preventDefault();

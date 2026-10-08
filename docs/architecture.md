@@ -87,8 +87,10 @@ Runtime workspace packages do not depend on either application. The E2E suite
 and skill contract tests deliberately import server internals as test harnesses;
 they are not runtime dependency boundaries.
 
-`@chopin/diagrams` is currently consumed by a development gallery and document
-specimen. Diagram specs are not yet part of the persisted MDX dialect.
+`@chopin/diagrams` renders bounded JSON specs from `seecode` code fences in saved
+documents. The fence uses the existing collaborative code node; its source remains
+editable, while each reader owns the derived viewer state. A development gallery
+also exercises the renderer outside a saved document.
 
 ## Trust boundaries
 

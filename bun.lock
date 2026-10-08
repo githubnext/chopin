@@ -28,6 +28,7 @@
         "@ai-sdk/mcp": "catalog:harness",
         "@ai-sdk/sandbox-just-bash": "catalog:harness",
         "@bastani/atomic": "catalog:harness",
+        "@chopin/diagrams": "workspace:*",
         "@chopin/dialect": "workspace:*",
         "@chopin/draft": "workspace:*",
         "@chopin/protocol": "workspace:*",
@@ -146,6 +147,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@base-ui/react": "1.7.0",
+        "@chopin/diagrams": "workspace:*",
         "@chopin/dialect": "workspace:*",
         "@chopin/icons": "workspace:*",
         "@chopin/protocol": "workspace:*",

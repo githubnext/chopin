@@ -73,6 +73,7 @@ describe("conversion", () => {
 		let cases = [
 			'```js title="a.js"\nlet x = 1;\n```\n',
 			"```mermaid collapsed\ngraph TD;\nA-->B;\n```\n",
+			'```seecode\n{"type":"architecture","nodes":[],"edges":[]}\n```\n',
 			"```js\nlet x = 1;\n```\n",
 			"```\nplain\n```\n",
 		];
