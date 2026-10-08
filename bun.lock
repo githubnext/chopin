@@ -71,6 +71,7 @@
         "@chopin/dialect": "workspace:*",
         "@chopin/draft": "workspace:*",
         "@chopin/editor": "workspace:*",
+        "@chopin/experiment": "workspace:*",
         "@chopin/icons": "workspace:*",
         "@chopin/protocol": "workspace:*",
         "@chopin/question": "workspace:*",
@@ -198,10 +199,15 @@
       "name": "@chopin/experiment",
       "version": "0.0.0",
       "dependencies": {
+        "@chopin/diagrams": "workspace:*",
         "zod": "catalog:harness",
       },
       "devDependencies": {
         "@types/bun": "catalog:bun",
+        "@types/react": "catalog:react",
+      },
+      "peerDependencies": {
+        "react": "catalog:react",
       },
     },
     "packages/icons": {
