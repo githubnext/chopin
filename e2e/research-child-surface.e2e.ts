@@ -1,6 +1,7 @@
 import { chatInput } from "./chat-input";
 import { seedChildChannel } from "./database";
 import { installPointerMedia } from "./pointer-media";
+import { recordRoomMounts } from "./room-mounts";
 import { authenticate, expect, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
@@ -690,6 +691,42 @@ test("a recovered child id enters the canonical anchored child workspace", async
 	await close.click();
 	await expect(page).toHaveURL(url => url.pathname.endsWith(`/test-${room.slice(0, 8)}`));
 	await expect(surface).toHaveCount(0);
+});
+
+test("a channel link opens one parent room that a child opens and closes over", async ({ baseURL, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let childTitle = `Channel link child ${room.slice(0, 8)}`;
+	let child = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		childTitle,
+		CHILD_SOURCE,
+	);
+	let recorded = await recordRoomMounts(page);
+	await authenticate(page, "ana", baseURL!);
+	await page.goto(`/channels/${room}`);
+
+	let parentPath = `/documents/octo-org/score/test-${room.slice(0, 8)}`;
+	await expect(page).toHaveURL(url => url.pathname === parentPath);
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await expect(parent.locator("[data-plan-synced]")).toBeAttached();
+	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
+
+	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
+	await page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: childTitle, exact: true }).click();
+	await expect(page).toHaveURL(url => url.pathname === child.path);
+	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(page).toHaveURL(url => url.pathname === parentPath);
+	await expect(surface).toHaveCount(0);
+
+	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
+	expect((await recorded.mounts()).filter(entry => entry.endsWith(room))).toEqual([
+		`mount ${room}`,
+	]);
+	expect(recorded.reads(room)).toBe(1);
 });
 
 test("a child load failure preserves its mounted parent through back and retry", async ({ baseURL, join, page, room, seed }) => {

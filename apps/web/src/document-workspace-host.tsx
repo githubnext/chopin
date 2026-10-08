@@ -315,6 +315,7 @@ export default function DocumentWorkspaceHost(
 	}, [onChildClose, presentation]);
 
 	let metadataChanged = useCallback((kind: "parent" | "child", metadata: Metadata) => {
+		if (documentRouteIdentity(routeRef.current) !== routeKey) return;
 		let current = stateRef.current;
 		if (current.status === "empty") return;
 		let target = kind === "parent" ? current.loaded.parent : current.loaded.child;
@@ -336,8 +337,8 @@ export default function DocumentWorkspaceHost(
 		if (kind === "parent" && routeRef.current.page === "child") {
 			history.replaceState(rebaseChildHistoryState(history.state, paths.parent), "");
 		}
-		onCanonicalPath(layerKey, documentRouteIdentity(routeRef.current), pathname);
-	}, [layerKey, onCanonicalPath, send]);
+		onCanonicalPath(layerKey, routeKey, pathname);
+	}, [layerKey, onCanonicalPath, routeKey, send]);
 	let parentMetadataChanged = useCallback(
 		(metadata: Metadata) => metadataChanged("parent", metadata),
 		[metadataChanged],
