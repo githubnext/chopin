@@ -1026,10 +1026,12 @@ export function PreviewPlugin() {
 				if (next) {
 					unselect = registerPreviewSelection(
 						next,
-						target =>
-							blockAt(target.closest("[data-plan-preview]")?.parentElement)
+						target => {
+							let block = blockAt(target.closest("[data-plan-preview]")?.parentElement);
+							return block && block.kind !== "seecode"
 								? target.closest<HTMLElement>(FOCUSABLE_PREVIEW)
-								: null,
+								: null;
+						},
 					);
 				}
 			}),
