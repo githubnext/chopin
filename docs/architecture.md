@@ -77,6 +77,7 @@ the lease. This is a single-writer design, not an application cluster.
 | `packages/question` | Questionnaire definitions, shared drafts, and answer derivation                            | `protocol`                                           |
 | `packages/draft`    | Bounded collaborative plain-text draft codec                                               | none                                                 |
 | `packages/viewport` | Browser viewport geometry and subscriptions                                                | none                                                 |
+| `packages/diagrams` | SeeCode-derived, bounded diagram rendering and scoped React viewing                        | none (React peer)                                    |
 | `packages/editor`   | Collaborative editor, cursors, decisions, comments, and widgets                            | `dialect`, `question`, `protocol`, `viewport`        |
 | `apps/server`       | Authentication, channels, rooms, storage, Planner, jobs, MCP, and implementation lifecycle | `dialect`, `draft`, `question`, `protocol`           |
 | `apps/web`          | Repository picker, channel navigation, Chat, and workspace shell                           | `dialect`, `draft`, `editor`, `protocol`, `viewport` |
@@ -84,6 +85,9 @@ the lease. This is a single-writer design, not an application cluster.
 Runtime workspace packages do not depend on either application. The E2E suite
 and skill contract tests deliberately import server internals as test harnesses;
 they are not runtime dependency boundaries.
+
+`@chopin/diagrams` is currently consumed by a development gallery and document
+specimen. Diagram specs are not yet part of the persisted MDX dialect.
 
 ## Trust boundaries
 

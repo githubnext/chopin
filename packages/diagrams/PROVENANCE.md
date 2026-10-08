@@ -17,3 +17,8 @@ Repository formatting and safe lint fixes were applied to the copied algorithms.
 brand assets, standalone page, importer/exporter or command-line files are copied. The legacy
 `loop-terminal` alias retains its variant, but its `skin: "terminal"` hint is not used: the embedded
 viewer applies Chopin's presentation tokens.
+
+Local hardening in copied modules rejects inherited schema field names, assigns distinct graph and
+tree edge IDs, and validates kanban and other structure item IDs. The bar renderer's missing-data hint now asks for
+resolved inline values. Adjacent `.d.mts` files type the copied module boundary for TypeScript
+consumers.

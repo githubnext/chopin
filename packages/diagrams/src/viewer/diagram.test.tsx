@@ -26,6 +26,14 @@ test("two diagrams keep SVG IDs and accessible names independent", () => {
 	expect(svgLabels[0]).not.toBe(svgLabels[1]);
 });
 
+test("separate React roots do not reuse SVG resource IDs", () => {
+	let first = renderToStaticMarkup(<Diagram spec={graph} />);
+	let second = renderToStaticMarkup(<Diagram spec={graph} />);
+	let firstIds = [...first.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+	let secondIds = new Set([...second.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
+	expect(firstIds.filter((id) => secondIds.has(id))).toEqual([]);
+});
+
 test("renderer errors appear as escaped text and chart remains a semantic graphic", () => {
 	expect(chart).toBeDefined();
 	let error = renderToStaticMarkup(<Diagram spec={{ type: "<unsafe>" }} />);

@@ -8,12 +8,13 @@ export type DiagramProps = {
 	spec: unknown;
 	title?: string;
 	description?: string;
-	/** Supply a distinct prefix when rendering diagrams in separate React roots. */
+	/** Optional label within generated SVG resource IDs. */
 	idPrefix?: string;
 };
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
 type Item = { kind: "node" | "edge"; id: string };
+let diagramInstanceSequence = 0;
 
 const DiagramBody = memo(function DiagramBody({ body }: { body: string }) {
 	return <g dangerouslySetInnerHTML={{ __html: body }} />;
@@ -40,7 +41,8 @@ function DiagramView({
 	idPrefix,
 }: Omit<DiagramProps, "spec"> & { result: ReadyDiagram }) {
 	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-	let prefix = `chd-${idPrefix?.replace(/[^a-zA-Z0-9_-]/g, "") || "view"}-${id}`;
+	let [instance] = useState(() => ++diagramInstanceSequence);
+	let prefix = `chd-${idPrefix?.replace(/[^a-zA-Z0-9_-]/g, "") || "view"}-${id}-${instance}`;
 	let titleId = `${prefix}-title`;
 	let descriptionId = `${prefix}-description`;
 	let scrollHintId = `${prefix}-scroll-hint`;
@@ -93,10 +95,16 @@ function DiagramView({
 	useEffect(() => {
 		let svg = svgRef.current;
 		if (!svg) return;
+		let tabIndex = (element: SVGElement) => {
+			let value = element.closest("[data-sc-step]")?.getAttribute("data-sc-step");
+			return step === null || value === null || value === undefined || Number(value) <= step
+				? "0"
+				: "-1";
+		};
 		for (let element of svg.querySelectorAll<SVGElement>("[data-sc-node]")) {
 			let nodeId = element.getAttribute("data-sc-node");
 			let node = nodes.find((entry) => entry.id === nodeId);
-			element.setAttribute("tabindex", "0");
+			element.setAttribute("tabindex", tabIndex(element));
 			element.setAttribute("role", "button");
 			if (!element.hasAttribute("aria-label")) {
 				element.setAttribute("aria-label", node?.label ?? `Node ${nodeId}`);
@@ -108,11 +116,11 @@ function DiagramView({
 			if (!edge) continue;
 			let from = nodes.find((entry) => entry.id === edge.from)?.label ?? edge.from;
 			let to = nodes.find((entry) => entry.id === edge.to)?.label ?? edge.to;
-			element.setAttribute("tabindex", "0");
+			element.setAttribute("tabindex", tabIndex(element));
 			element.setAttribute("role", "button");
 			element.setAttribute("aria-label", `${from} to ${to}`);
 		}
-	}, [body, playback, edges, nodes]);
+	}, [body, playback, edges, nodes, step]);
 
 	useEffect(() => {
 		let svg = svgRef.current;
@@ -157,7 +165,10 @@ function DiagramView({
 		if (!svg) return;
 		for (let element of svg.querySelectorAll<SVGElement>("[data-sc-step]")) {
 			let elementStep = Number(element.getAttribute("data-sc-step"));
-			element.classList.toggle("is-shown", step !== null && elementStep <= step);
+			let hidden = step !== null && elementStep > step;
+			element.classList.toggle("is-shown", step !== null && !hidden);
+			if (hidden) element.setAttribute("aria-hidden", "true");
+			else element.removeAttribute("aria-hidden");
 		}
 	}, [step, playback]);
 
@@ -192,6 +203,8 @@ function DiagramView({
 		select(item);
 	};
 	let showStep = (next: number) => {
+		setPreview(null);
+		setSelected(null);
 		setLive(false);
 		setStep(Math.max(0, Math.min(maxStep, next)));
 	};
