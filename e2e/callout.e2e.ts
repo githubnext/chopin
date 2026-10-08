@@ -51,7 +51,9 @@ test("a callout type menu has one keyboard path", async ({ join, seed }) => {
 
 test("locking the plan closes an open callout type menu", async ({ join, page, seed }) => {
 	let sockets: WebSocketRoute[] = [];
+	let offline = false;
 	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -63,6 +65,8 @@ test("locking the plan closes an open callout type menu", async ({ join, page, s
 	await trigger.click();
 	await expect(page.getByRole("listbox", { name: "Callout type" })).toBeVisible();
 
+	// Held down past the grace period, which a blip would not outlast.
+	offline = true;
 	await sockets.at(-1)!.close();
 
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");

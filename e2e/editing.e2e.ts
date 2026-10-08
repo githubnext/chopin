@@ -236,13 +236,15 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(status).toContainText("Reconnecting…");
 	await expect(spoken).toHaveText("Reconnecting…");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
-	await expect(chat.getByText("Connection lost", { exact: true })).toBeVisible();
-	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "false");
+	// Chat says the same thing in its footer, and keeps the draft editable.
+	await expect(chat.locator(".composer-connection")).toHaveText("Reconnecting…");
+	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "true");
 	await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
 
 	// Lost for long enough, it stops promising and offers a way out.
 	await expect(status).toHaveAttribute("data-level", "alert", { timeout: 10_000 });
 	await expect(spoken).toHaveText("Offline");
+	await expect(chat.locator(".composer-connection")).toHaveText("Offline");
 	let reload = status.getByRole("button", { name: "Reload" });
 	await expect(reload).toBeVisible();
 	await expect(reload).toHaveAccessibleDescription(/Editing resumes once connected/);
@@ -252,7 +254,7 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(status).toHaveAttribute("data-level", "hidden");
 	await expect(spoken).toHaveText("Reconnected");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(0);
-	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "true");
+	await expect(chat.locator(".composer-connection")).toBeEmpty();
 });
 
 const PASSAGES = Array.from({ length: 40 }, (_, index) => `Passage ${index + 1}.`).join("\n\n")
