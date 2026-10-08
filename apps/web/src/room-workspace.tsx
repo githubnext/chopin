@@ -1006,6 +1006,7 @@ export function RoomWorkspace(
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}
 						onShowPlan={showPlan}
+						planner={agent}
 						questionMotion={QUESTION_MOTION}
 						reveal={reveal}
 						self={handle}
@@ -1019,6 +1020,7 @@ export function RoomWorkspace(
 						evidence={showEvidence}
 						onCardSource={showCardSource}
 						hasCardSource={hasCardSource}
+						planner={agent}
 						commentPresentation={mode === "split" ? "popover" : "sheet"}
 						connection={status === "deleted" ? "closed" : status}
 						key={workspaceArchivedAt ? "archived" : "active"}

@@ -1358,13 +1358,18 @@ button.question-add:disabled {
 	}
 }
 
+/* Resolved cards have no padded body, so their footer needs its own floor. */
+.question-actions[data-resolved-actions] {
+	padding-block-end: calc(var(--spacing) * 2.5);
+}
+
 /* A decision whose prose has not been reviewed yet: a calm pulse, not a spinner. */
 .question-relation-dot {
 	background: var(--color-text-tertiary);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.question-relation-dot {
+	.question-relation-dot:not([data-idle]) {
 		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
 	}
 }

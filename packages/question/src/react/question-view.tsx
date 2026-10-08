@@ -83,6 +83,8 @@ export type QuestionViewProps = {
 	places?: Record<string, number>;
 	/** Whether each answered decision is linked, pending, deliberately empty or orphaned. */
 	relations?: Record<string, Relation>;
+	/** What a pending relationship is waiting on, when the host knows better than "Linking…". */
+	pendingRelation?: string;
 	collaborators?: Collaborator[];
 	/**
 	 * Replaces the `@handle` pills for people on the current question. The view
@@ -704,6 +706,7 @@ export function QuestionView(props: QuestionViewProps) {
 		headerActions,
 		places,
 		relations,
+		pendingRelation,
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionFocus,
@@ -805,6 +808,7 @@ export function QuestionView(props: QuestionViewProps) {
 				onEnter={onQuestionEnter}
 				onLeave={onQuestionLeave}
 				onSelect={onQuestionSelect}
+				pending={pendingRelation}
 				question={related.question}
 				relation={related.relation}
 			/>
@@ -818,7 +822,8 @@ export function QuestionView(props: QuestionViewProps) {
 							aside={aside}
 							definition={definition}
 							resolver={resolver}
-							places={places}
+							// One control per destination: a linked note takes over the jump.
+							places={related?.relation === "linked" ? undefined : places}
 							onQuestionEnter={onQuestionEnter}
 							onQuestionLeave={onQuestionLeave}
 							onQuestionSelect={onQuestionSelect}
