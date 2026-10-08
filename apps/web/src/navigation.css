@@ -88,7 +88,6 @@
 	border-radius: var(--radius-xl);
 	background: var(--color-page);
 	box-shadow: var(--shadow-overlay);
-	outline: none;
 	transform-origin: 50% 100%;
 	animation: anchored-child-enter var(--modal-open-dur) var(--modal-ease) both;
 }
@@ -110,7 +109,6 @@
 	margin: 0;
 	border-radius: 0;
 	box-shadow: none;
-	outline: none;
 }
 
 @keyframes anchored-child-enter {
