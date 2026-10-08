@@ -25,7 +25,7 @@ import * as Y from "yjs";
 import { blockElement, planScroller } from "../scroll";
 import { useTransitionPresence } from "../transition-presence";
 import { ResearchComposer } from "../widgets/research";
-import { placeDraft } from "./placement";
+import { draftOverflow, placeDraft, revealTarget } from "./placement";
 import { $relativePosition } from "./position";
 import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 
@@ -37,7 +37,12 @@ import type { ResearchStore } from "../widget-options";
 import type { DOMRectLike, DraftPlacement, ViewportBox } from "./placement";
 
 type Attachment = { block: HTMLElement; rect: DOMRectLike };
-type Position = { left: number; top: number; side: DraftPlacement["side"] };
+type Position = {
+	left: number;
+	top: number;
+	side: DraftPlacement["side"];
+	clip?: string;
+};
 
 // Long enough to outlast the editor's own scroll after the slash command's Enter.
 const REVEAL_WINDOW = 600;
@@ -260,6 +265,7 @@ export function ResearchComposerSurface(
 	let [position, setPosition] = useState<Position>();
 	let [unresolved, setUnresolved] = useState(false);
 	let revealUntil = useRef(0);
+	let openedAt = useRef<number>(undefined);
 	let presence = useTransitionPresence(draft, 150, false);
 	let shown = presence.value;
 	let visible = !!draft;
@@ -269,6 +275,7 @@ export function ResearchComposerSurface(
 			OPEN_RESEARCH_COMMAND,
 			({ anchor, consume }) => {
 				if (disabled) return false;
+				openedAt.current = planScroller(editor.getRootElement())?.scrollTop;
 				return beginResearchDraft(drafts, () => {
 					if (!consume()) return;
 					return {
@@ -310,18 +317,36 @@ export function ResearchComposerSurface(
 		element.style.maxWidth = `${Math.max(0, Math.min(bounds.width - 16, column))}px`;
 		let height = element.offsetHeight;
 		reserve(attachment?.block, height);
-		let next = placeDraft(anchor, { width: element.offsetWidth, height }, bounds);
+		let surfaceSize = { width: element.offsetWidth, height };
+		let next = placeDraft(anchor, surfaceSize, bounds);
 		let scroller = planScroller(editor.getRootElement());
 		if (next.reveal !== 0 && scroller && performance.now() < revealUntil.current) {
-			scroller.scrollTo({
-				top: scroller.scrollTop + next.reveal,
-				behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-			});
+			let target = revealTarget(
+				scroller.scrollTop,
+				openedAt.current,
+				shift =>
+					placeDraft(
+						{ ...anchor, top: anchor.top + shift, bottom: anchor.bottom + shift },
+						surfaceSize,
+						bounds,
+					),
+				next.reveal,
+			);
+			// A long trip is a jump, not a glide past the whole document.
+			let far = Math.abs(target - scroller.scrollTop) > bounds.height;
+			let reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+			scroller.scrollTo({ top: target, behavior: far || reduced ? "auto" : "smooth" });
 		}
+		// The draft is fixed, so clip whatever has scrolled past the pane instead of drawing over its chrome.
+		let overflow = draftOverflow(next.top, height, bounds);
+		let clip = overflow.top || overflow.bottom
+			? `inset(${overflow.top || -8}px -8px ${overflow.bottom || -8}px)`
+			: undefined;
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top && current.side === next.side
+				&& current.clip === clip
 				? current
-				: { left: next.left, top: next.top, side: next.side }
+				: { left: next.left, top: next.top, side: next.side, clip }
 		);
 	}, [binding, draft, editor, reserve]);
 
@@ -370,6 +395,7 @@ export function ResearchComposerSurface(
 		// An on-screen keyboard shrinks the viewport after focus; bring the draft back.
 		let resized = () => {
 			if (!surface.current?.contains(document.activeElement)) return;
+			openedAt.current = undefined;
 			revealUntil.current = performance.now() + REVEAL_WINDOW;
 		};
 		// Any user input ends a reveal, so it never fights the reader's own scroll or click.
@@ -435,7 +461,7 @@ export function ResearchComposerSurface(
 			side={position?.side}
 			surfaceRef={surface}
 			style={position
-				? { top: position.top, left: position.left }
+				? { top: position.top, left: position.left, clipPath: position.clip }
 				: {
 					top: current.anchor.bottom,
 					left: current.anchor.left,
