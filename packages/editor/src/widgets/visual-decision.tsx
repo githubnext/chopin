@@ -28,7 +28,7 @@ export function VisualDecisionCard(
 	let state = draft.state;
 	let [peek, setPeek] = useState(false);
 	let [padding, setPadding] = useState<4 | 6 | 8>();
-	let [color, setColor] = useState("");
+	let [color, setColor] = useState<string>();
 	let paddingId = useId();
 	let colorId = useId();
 	let colorHelpId = useId();
@@ -36,14 +36,19 @@ export function VisualDecisionCard(
 	let saved = state?.saved;
 	let editable = canEdit && connected && !!wire && !!state && !saved && !draft.syncing
 		&& !draft.saving;
-	let validColor = /^#[0-9a-fA-F]{6}$/.test(color);
+	let displayedColor = color ?? state?.values.selectedColor ?? "";
+	let validColor = /^#[0-9a-fA-F]{6}$/.test(displayedColor);
 
 	useEffect(() => {
 		// Native inputs advance locally while acknowledgements catch up; the preview stays accepted.
 		if (draft.pending > 0 && !state?.saved) return;
 		setPadding(state?.values.optionPadding);
-		setColor(state?.values.selectedColor ?? "");
-	}, [draft.pending, state?.values.optionPadding, state?.values.selectedColor, state?.saved]);
+	}, [draft.pending, state?.values.optionPadding, state?.saved]);
+	useEffect(() => {
+		if (draft.pending > 0 && !state?.saved) return;
+		if (color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(color) && !state?.saved) return;
+		setColor(state?.values.selectedColor);
+	}, [color, draft.pending, state?.values.selectedColor, state?.saved]);
 	useEffect(() => {
 		let release = () => {
 			held.current = undefined;
@@ -174,7 +179,7 @@ export function VisualDecisionCard(
 									<label htmlFor={colorId}>Selected-option colour</label>
 									<input
 										aria-describedby={colorHelpId}
-										aria-invalid={color !== "" && !validColor ? true : undefined}
+										aria-invalid={displayedColor !== "" && !validColor ? true : undefined}
 										autoCapitalize="characters"
 										autoComplete="off"
 										className="visual-decision-color"
@@ -189,10 +194,10 @@ export function VisualDecisionCard(
 										pattern="#[0-9a-fA-F]{6}"
 										spellCheck={false}
 										type="text"
-										value={color}
+										value={displayedColor}
 									/>
 									<span className="visual-decision-control-help" id={colorHelpId}>
-										{color !== "" && !validColor
+										{displayedColor !== "" && !validColor
 											? "Enter six hex digits, starting with #."
 											: "#RRGGBB"}
 									</span>
