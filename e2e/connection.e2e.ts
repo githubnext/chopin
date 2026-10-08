@@ -205,3 +205,12 @@ test("edits made during a blip are dropped, and said to be, when the document wa
 	await page.getByRole("button", { name: "Dismiss", exact: true }).click();
 	await expect(page.getByRole("alert")).toHaveCount(0);
 });
+
+test("a reload keeps an unsent Chat message", async ({ join, page }) => {
+	await join("ana");
+	let input = chatInput(chatPane(page));
+	await input.fill("Not sent before the reload");
+	await page.reload();
+	await ready(page);
+	await expectChatValue(chatInput(chatPane(page)), "Not sent before the reload");
+});

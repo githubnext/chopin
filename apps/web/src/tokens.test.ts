@@ -723,13 +723,13 @@ describe("migration", () => {
 			}],
 			["apps/web/src/chat/chat.tsx", {
 				action: "Stop Chopin",
-				marker: 'wire?.send("chat:abort")',
+				marker: 'control("chat:abort")',
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
 				action: "Resume Planner",
-				marker: 'wire?.send("chat:resume")',
+				marker: 'control("chat:resume")',
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],

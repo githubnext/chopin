@@ -138,6 +138,45 @@ export function runCounts(runs: Wire.Runs | undefined): { active: number; paused
 	};
 }
 
+function draftKey(room: string): string {
+	return `chopin:chat-draft:${room}`;
+}
+
+/** Holds an unsent message across a reload of this tab; storage may refuse. */
+function keepDraft(room: string, draft: ComposerDraft): void {
+	try {
+		if (!draft.text.trim()) return sessionStorage.removeItem(draftKey(room));
+		sessionStorage.setItem(
+			draftKey(room),
+			JSON.stringify({ text: draft.text, references: draft.references }),
+		);
+	} catch {
+		// Private windows and blocked storage: the draft is lost as it was before.
+	}
+}
+
+/** The message a reload interrupted, once; anything malformed starts empty. */
+function restoreDraft(room: string): ComposerDraft {
+	let empty = { text: "", references: [] };
+	try {
+		let raw = sessionStorage.getItem(draftKey(room));
+		sessionStorage.removeItem(draftKey(room));
+		if (!raw) return empty;
+		let saved = JSON.parse(raw) as Partial<ComposerDraft>;
+		if (typeof saved.text !== "string") return empty;
+		let references = Array.isArray(saved.references)
+				&& saved.references.every(reference =>
+					typeof reference?.start === "number" && typeof reference.end === "number"
+					&& reference.end <= saved.text!.length
+				)
+			? saved.references
+			: [];
+		return { text: saved.text, references };
+	} catch {
+		return empty;
+	}
+}
+
 export function Chat(
 	{
 		active = true,
@@ -176,10 +215,7 @@ export function Chat(
 	let [busy, setBusy] = useState(false);
 	let [runs, setRuns] = useState<Wire.Runs>();
 	let counts = runCounts(runs);
-	let [draft, setDraft] = useState<ComposerDraft>({
-		text: "",
-		references: [],
-	});
+	let [draft, setDraft] = useState<ComposerDraft>(() => restoreDraft(room));
 	let [submitting, setSubmitting] = useState(false);
 	// A send pressed during a blip, made once the connection is back.
 	let [held, setHeld] = useState(false);
@@ -199,6 +235,13 @@ export function Chat(
 	let submission = useRef<object | undefined>(undefined);
 	let draftRef = useRef(draft);
 	draftRef.current = draft;
+	// A reload, including the header's fallback when reconnecting keeps
+	// failing, must not take an unsent message with it.
+	useEffect(() => {
+		let save = () => keepDraft(room, draftRef.current);
+		addEventListener("pagehide", save);
+		return () => removeEventListener("pagehide", save);
+	}, [room]);
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let commandPickerId = useId();
@@ -473,6 +516,20 @@ export function Chat(
 			restoreComposerFocus();
 		});
 	};
+
+	// Stop and Resume pressed during a blip are sent once it is over, or never.
+	let heldControl = useRef<"chat:abort" | "chat:resume">(undefined);
+	let control = (kind: "chat:abort" | "chat:resume") => {
+		if (wire?.connected) wire.send(kind);
+		else heldControl.current = kind;
+	};
+	useEffect(() => {
+		if (connectionNotice !== "none") heldControl.current = undefined;
+		else if (connected && heldControl.current && wire?.connected) {
+			wire.send(heldControl.current);
+			heldControl.current = undefined;
+		}
+	});
 
 	// Never held longer than the grace period, however the wait ends.
 	useEffect(() => {
@@ -940,9 +997,9 @@ export function Chat(
 											{agent && (busy || counts.active > 0) && (
 												<button
 													aria-label="Stop Chopin"
-													disabled={!composerReady}
+													disabled={!composerReady && connectionNotice !== "none"}
 													className="btn btn-icon btn-secondary"
-													onClick={() => wire?.send("chat:abort")}
+													onClick={() => control("chat:abort")}
 													title="Stop Chopin"
 													type="button"
 												>
@@ -952,9 +1009,9 @@ export function Chat(
 											{agent && !busy && !counts.active && counts.paused > 0 && (
 												<button
 													aria-label="Resume Chopin"
-													disabled={!composerReady}
+													disabled={!composerReady && connectionNotice !== "none"}
 													className="btn btn-icon btn-secondary"
-													onClick={() => wire?.send("chat:resume")}
+													onClick={() => control("chat:resume")}
 													title="Resume Chopin"
 													type="button"
 												>

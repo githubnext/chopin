@@ -215,8 +215,12 @@ test("Tab over a selection from a list into a paragraph leaves it alone", async 
 test("a lost connection is said in the document header and the composer", async ({ join, page }) => {
 	let sockets: WebSocketRoute[] = [];
 	let offline = false;
+	let refused = 0;
 	await page.routeWebSocket("**/ws?**", route => {
-		if (offline) return route.close();
+		if (offline) {
+			refused++;
+			return route.close();
+		}
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -245,9 +249,19 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(status).toHaveAttribute("data-level", "alert", { timeout: 10_000 });
 	await expect(spoken).toHaveText("Offline");
 	await expect(chat.locator(".composer-connection")).toHaveText("Offline");
-	let reload = status.getByRole("button", { name: "Reload" });
-	await expect(reload).toBeVisible();
-	await expect(reload).toHaveAccessibleDescription(/Editing resumes once connected/);
+	// Reconnecting in place keeps a Chat draft a reload would lose. Only after
+	// it keeps failing does the page offer to reload.
+	let reconnect = status.getByRole("button", { name: "Reconnect", exact: true });
+	await expect(reconnect).toBeVisible();
+	await expect(reconnect).toHaveAccessibleDescription(/Editing resumes once connected/);
+	await expect(status.getByRole("button", { name: "Reload" })).toHaveCount(0);
+	for (let attempt = 0; attempt < 3; attempt++) {
+		let before = refused;
+		await status.getByRole("button", { name: "Reconnect", exact: true }).click();
+		await expect.poll(() => refused).toBeGreaterThan(before);
+	}
+	await expect(status.getByRole("button", { name: "Reload" })).toBeVisible();
+	await expect(status.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(0);
 
 	offline = false;
 	await ready(page);
