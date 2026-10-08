@@ -59,7 +59,8 @@ import type { ElementNode, LexicalNode, TextFormatType } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 /** Block shapes the bubble can switch between. */
-export type Block = "paragraph" | "quote" | "bullet" | "number" | HeadingTagType;
+/** `task` is shown but not offered: the menu has no way to build a check list. */
+export type Block = "paragraph" | "quote" | "bullet" | "number" | "task" | HeadingTagType;
 
 /** `glyph` is what shows; `label` is what it means, for hover and assistive tech. */
 const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
@@ -87,6 +88,7 @@ const SHORT: Partial<Record<Block, string>> = {
  * claim the selection is something it is not.
  */
 function describe(block: Block): { short: string; label: string } {
+	if (block === "task") return { short: "Task list", label: "Task list" };
 	let known = BLOCKS.find(item => item.id === block);
 	if (known) return { short: SHORT[block] ?? known.glyph, label: known.label };
 	return { short: block.toUpperCase(), label: `Heading ${block.slice(1)}` };
@@ -133,7 +135,10 @@ export function $block(node: LexicalNode | null): Block {
 	// A list item's shape belongs to the list around it, not the item.
 	if ($isListItemNode(block)) {
 		let list = block.getParent();
-		if ($isListNode(list)) return list.getListType() === "number" ? "number" : "bullet";
+		if ($isListNode(list)) {
+			let type = list.getListType();
+			return type === "number" ? "number" : type === "check" ? "task" : "bullet";
+		}
 	}
 	if ($isHeadingNode(block)) return block.getTag();
 	if (quoted(block)) return "quote";
@@ -254,7 +259,7 @@ export function SelectionBubble(
 	let convert = useCallback((next: Block) => {
 		setChoosing(false);
 		// Already a quote: converting again would nest one inside the other.
-		if (next === block) return;
+		if (next === block || next === "task") return;
 
 		if (next === "bullet") {
 			return editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
@@ -264,7 +269,7 @@ export function SelectionBubble(
 		}
 		// Containers are unwrapped, not swapped: `$setBlocksType` converts the
 		// block it finds and leaves the list or quote standing around it.
-		if (block === "bullet" || block === "number") {
+		if (block === "bullet" || block === "number" || block === "task") {
 			editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
 		}
 		if (block === "quote") {
