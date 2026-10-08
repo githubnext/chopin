@@ -19,31 +19,20 @@ export function EmptyWorkspace(
 						: "m-2 overflow-hidden rounded-[12px] bg-ground shadow-resting ring-hairline"
 				}`}
 			>
-				<h2
-					className={`font-semibold text-text-primary ${hasProjects ? "text-sm" : "text-base"}`}
-				>
-					{hasProjects ? "No document open" : "Start with a repository"}
-				</h2>
-				<p className="max-w-[44ch] text-sm text-text-tertiary">
+				<h2 className="text-sm font-semibold text-text-primary">No document open</h2>
+				<p className="text-sm text-text-tertiary">
 					{hasProjects
 						? "Pick one from the sidebar or start a new one."
-						: "Documents in Chopin belong to a GitHub repository, so you, your team and Chopin can write against the code."}
+						: "Add a project to start your first document."}
 				</p>
-				<div className="mt-3 flex items-center gap-2">
-					<button
-						className="btn btn-sm btn-primary"
-						disabled={hasProjects && disabled}
-						onClick={hasProjects ? onNewDocument : onAddProject}
-						type="button"
-					>
-						{hasProjects ? "New document" : "Add project"}
-					</button>
-					{!hasProjects && (
-						<a className="btn btn-sm btn-ghost" href="/auth/github/install">
-							Manage repository access
-						</a>
-					)}
-				</div>
+				<button
+					className="btn btn-sm btn-secondary mt-3"
+					disabled={hasProjects && disabled}
+					onClick={hasProjects ? onNewDocument : onAddProject}
+					type="button"
+				>
+					{hasProjects ? "New document" : "Add project"}
+				</button>
 			</div>
 		</div>
 	);
