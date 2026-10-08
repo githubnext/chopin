@@ -234,8 +234,8 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 		);
 		if (!channel?.archivedAt) {
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
-			if (Inject.enabled()) Inject.ask(opened, server, room.id);
-			if (Marks.enabled()) await Marks.mark(opened);
+			if (Inject.enabled(opened)) Inject.ask(opened, server, room.id);
+			if (Marks.enabled(opened)) await Marks.mark(opened);
 		}
 		return opened;
 	});
