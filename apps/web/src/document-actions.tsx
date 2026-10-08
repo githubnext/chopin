@@ -18,6 +18,14 @@ export type DecisionCounts = Pick<
 	"channelId" | "repositoryId" | "unanswered" | "repositoryUnanswered" | "revision"
 >;
 
+export type DecisionSnapshot = Pick<
+	Session.DecisionsSnapshot,
+	"repositoryId" | "repositoryUnanswered" | "documents"
+>;
+
+export const MAX_WATCHED_REPOSITORIES = 50;
+export const MAX_WATCHED_DOCUMENTS = 500;
+
 export type LoadedDocuments = Record<string, DocumentLoadState>;
 
 export type ProjectDocuments = {
@@ -287,4 +295,50 @@ export function applyDecisionCounts(
 			unansweredDecisions: counts.repositoryUnanswered,
 		},
 	};
+}
+
+export function snapshotDecisionCounts(snapshot: DecisionSnapshot): DecisionCounts[] {
+	return snapshot.documents.map(document => ({
+		...document,
+		repositoryId: snapshot.repositoryId,
+		repositoryUnanswered: snapshot.repositoryUnanswered,
+	}));
+}
+
+export function applyDecisionSnapshot(
+	documents: LoadedDocuments,
+	snapshot: DecisionSnapshot,
+): LoadedDocuments {
+	let current = documents[snapshot.repositoryId];
+	if (!current) return documents;
+	let counts = new Map(
+		snapshotDecisionCounts(snapshot).map(document => [document.channelId, document]),
+	);
+	let changed = false;
+	let channels = current.channels.map(channel => {
+		let next = acceptDecisionCounts(channel, counts.get(channel.id));
+		if (next !== channel) changed = true;
+		return next;
+	});
+	if (!changed && current.unansweredDecisions === snapshot.repositoryUnanswered) return documents;
+	return {
+		...documents,
+		[snapshot.repositoryId]: {
+			...current,
+			channels: changed ? channels : current.channels,
+			unansweredDecisions: snapshot.repositoryUnanswered,
+		},
+	};
+}
+
+export function watchedRepositories(projects: ProjectDocuments[]): Session.WatchedRepository[] {
+	return projects
+		.filter(({ project }) => project.available)
+		.slice(0, MAX_WATCHED_REPOSITORIES)
+		.map(({ project, documents }) => ({
+			repositoryId: project.repositoryId,
+			owner: project.repositoryOwner,
+			name: project.repositoryName,
+			channelIds: documents.channels.slice(0, MAX_WATCHED_DOCUMENTS).map(channel => channel.id),
+		}));
 }

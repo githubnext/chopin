@@ -1,8 +1,8 @@
-import { createChannel } from "./database";
-import { expect, ready, roomPath, test } from "./room";
+import { createChannel, testChannelSlug } from "./database";
+import { content, expect, ready, roomPath, test } from "./room";
 import { installPointerMedia } from "./pointer-media";
 
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, WebSocketRoute } from "@playwright/test";
 
 const repository = {
 	defaultBranch: "main",
@@ -39,6 +39,8 @@ const CHILD = channel("cccccccc-0000-4000-8000-000000000002", "Fencing tokens", 
 const QUIET = channel("cccccccc-0000-4000-8000-000000000003", "Settled plan", 0);
 const LATER = channel("cccccccc-0000-4000-8000-000000000004", "Later page", 5);
 
+const LIVE_COUNTS = new Set(["session:decisions", "session:decisions-snapshot"]);
+
 function sidebar(page: Page) {
 	return page.getByRole("complementary", { name: "Projects" });
 }
@@ -66,7 +68,7 @@ async function mockCatalogue(page: Page) {
 		let server = route.connectToServer();
 		route.onMessage(message => server.send(message));
 		server.onMessage(message => {
-			if (typeof message === "string" && JSON.parse(message).kind === "session:decisions") return;
+			if (typeof message === "string" && LIVE_COUNTS.has(JSON.parse(message).kind)) return;
 			route.send(message);
 		});
 	});
@@ -299,4 +301,128 @@ test("another document's count follows its decisions while the viewer stays else
 	await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
 	await expect(count(row)).toHaveText("1");
 	expect(sockets.map(socketChannel).every(channel => channel === room)).toBe(true);
+});
+
+const ARCHIVE = { id: "R_archive_1", owner: "octo-org", name: "archive-1" };
+
+function countLabel(name: string, unanswered: number): string {
+	if (unanswered === 0) return name;
+	return `${name}, ${unanswered} unanswered decision${unanswered === 1 ? "" : "s"}`;
+}
+
+async function catalogueTotal(page: Page, repository: string): Promise<number> {
+	let listed = await page.request.get(`/api/repositories/octo-org/${repository}/channels`);
+	expect(listed.ok()).toBe(true);
+	return (await listed.json() as { unansweredDecisions: number }).unansweredDecisions;
+}
+
+async function storedCount(
+	page: Page,
+	repository: string,
+	id: string,
+): Promise<number | undefined> {
+	let listed = await page.request.get(
+		`/api/repositories/octo-org/${repository}/channels?limit=100`,
+	);
+	let catalogue = await listed.json() as {
+		channels: Array<{ id: string; unansweredDecisions: number }>;
+	};
+	return catalogue.channels.find(item => item.id === id)?.unansweredDecisions;
+}
+
+async function answerFirstDecision(page: Page) {
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = page.locator(
+		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
+	)
+		.filter({ hasText: "Where should room state live?" });
+	await card.getByText("In SQLite", { exact: true }).click();
+	await card.getByRole("button", { name: "Save", exact: true }).click();
+}
+
+test("a project in another repository follows its decisions while the viewer stays elsewhere", async ({ baseURL, join, page: first, room }) => {
+	let other = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), other, ARCHIVE);
+	let sockets: string[] = [];
+	first.on("websocket", socket => sockets.push(socket.url()));
+	let viewer = await join(`watcher-${room.slice(0, 8)}`);
+	let added = await viewer.request.post("/api/navigation/projects", {
+		data: { owner: ARCHIVE.owner, repository: ARCHIVE.name },
+		headers: { origin: baseURL! },
+	});
+	expect(added.status()).toBe(201);
+	let baseline = await catalogueTotal(viewer, ARCHIVE.name);
+	await viewer.reload();
+	await ready(viewer);
+	let projects = sidebar(viewer);
+	let title = `Test ${other.slice(0, 8)}`;
+	let link = projects.getByRole("link", { name: new RegExp(`^${title}`) });
+	let row = link.locator("..");
+	await expect(link).toHaveAccessibleName(title);
+	await expect(
+		projects.getByRole("button", { name: countLabel(ARCHIVE.name, baseline), exact: true }),
+	)
+		.toBeVisible();
+
+	let editor = await join(`document-creator-${crypto.randomUUID()}`);
+	await editor.goto(`/documents/${ARCHIVE.owner}/${ARCHIVE.name}/${testChannelSlug(other)}`);
+	await ready(editor);
+	await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+	await expect(count(row)).toHaveText("2");
+	await expect(
+		projects.getByRole("button", { name: countLabel(ARCHIVE.name, baseline + 2), exact: true }),
+	).toBeVisible();
+
+	await answerFirstDecision(editor);
+	await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
+	await expect(count(row)).toHaveText("1");
+	await expect(
+		projects.getByRole("button", { name: countLabel(ARCHIVE.name, baseline + 1), exact: true }),
+	).toBeVisible();
+	expect(sockets.length).toBeGreaterThan(0);
+	expect(sockets.map(socketChannel).every(channel => channel === room)).toBe(true);
+});
+
+test("sidebar counts catch up on decisions answered while the viewer was disconnected", async ({ baseURL, join, page: first }) => {
+	let other = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), other);
+	let dropping = false;
+	let connections: Array<{ page: WebSocketRoute; server: WebSocketRoute }> = [];
+	await first.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		connections.push({ page: route, server });
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (dropping && typeof message === "string" && LIVE_COUNTS.has(JSON.parse(message).kind)) {
+				return;
+			}
+			route.send(message);
+		});
+	});
+	let viewer = await join("ana");
+	let projects = sidebar(viewer);
+	let title = `Test ${other.slice(0, 8)}`;
+	let link = projects.getByRole("link", { name: new RegExp(`^${title}`) });
+	let row = link.locator("..");
+
+	let editor = await join("bob");
+	await editor.goto(roomPath(other));
+	await ready(editor);
+	await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+	await expect(count(row)).toHaveText("2");
+
+	dropping = true;
+	await answerFirstDecision(editor);
+	await expect.poll(() => storedCount(editor, "score", other)).toBe(1);
+	await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+
+	dropping = false;
+	let dropped = connections.at(-1)!;
+	await dropped.page.close();
+	await dropped.server.close();
+	await expect(content(viewer)).toHaveAttribute("contenteditable", "false");
+	await ready(viewer);
+	await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
+	await expect(count(row)).toHaveText("1");
+	expect(connections.length).toBeGreaterThan(1);
 });

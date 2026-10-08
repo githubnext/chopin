@@ -78,19 +78,38 @@ reopened questions in its sidecar question records, the same number its
 Decisions tab shows. The unfiltered active listing (no `query`, no
 `includeArchived`) adds a top-level `unansweredDecisions` total across the whole
 active catalogue, including documents on pages the client has not loaded. The
-Projects sidebar shows both without opening a room per row. When a commit changes
-an open document's count, or a document is archived or restored, the server
-publishes `session:decisions` to every socket open on any document in that
-repository, not just the changed document's room. A socket that opens a document
-also receives the current counts. Each frame carries the document count, the
-repository total, and the storage revision the count was committed at. Frames for
-one repository are read and sent one at a time, so a later frame never carries an
-older total, and a client ignores a frame older than the revision it already holds
-for that document, including its total. Archive and restore responses also carry
-the repository's active total, so the client that moved a document updates its
-project row even when it has no socket in that repository. Archived catalogue
-views show no counts.
-Projects in other repositories update when their listing next loads.
+Projects sidebar shows both without opening a room per row.
+
+Live counts travel on repository decision topics. A socket always subscribes to
+its own document's repository. After every connection, and whenever the list of
+sidebar projects changes, the client sends `session:decisions-watch` with up to
+50 repositories it shows, each with up to 500 loaded document IDs. The server
+treats the list as a replacement. For each repository other than the socket's
+own, it rechecks GitHub read access through the same repository check as
+admission and requires the resolved node ID to match the requested one. It
+subscribes the readable repositories, refuses the rest in the reply, and
+unsubscribes repositories that left the list. The socket's periodic
+authorization recheck drops any watched repository whose access was revoked, and
+closing the socket drops them all. A malformed or oversized list is refused
+whole.
+
+When a commit changes an open document's count, or a document is archived or
+restored, the server publishes `session:decisions` to that repository's topic, so
+every socket open on one of its documents or watching it receives the update.
+Each frame carries the document count, the repository total, and the storage
+revision the count was committed at. After a watch is accepted, the server sends
+a `session:decisions-snapshot` for each watched repository with its current total
+and the current counts of the listed documents. A reconnecting socket therefore
+reconciles updates it missed while disconnected without refetching the
+catalogue. A socket that opens a document also receives that document's current
+counts. Frames and snapshots for one repository are read and sent one at a time,
+so a later frame never carries an older total, and a client ignores a count older
+than the revision it already holds for that document. Archive and restore
+responses also carry the repository's active total, so the client that moved a
+document updates its project row even when it has no socket in that repository.
+Archived catalogue views show no counts and watch no repositories. With no
+document open there is no socket, and the sidebar refreshes counts when a
+listing loads.
 
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per

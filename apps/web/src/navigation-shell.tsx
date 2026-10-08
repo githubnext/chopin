@@ -18,7 +18,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
-import { newestDocument, updateDocumentMetadata } from "./document-actions";
+import { newestDocument, updateDocumentMetadata, watchedRepositories } from "./document-actions";
 import { WorkspaceNotice } from "./workspace-notice";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
@@ -51,11 +51,11 @@ import { useProjectDocuments } from "./use-project-documents";
 import { useDocumentCreation } from "./use-document-creation";
 import { requestTitleEdit } from "./title-edit";
 
-import type { Research } from "@chopin/protocol";
+import type { Research, Session } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import type { DecisionCounts, DocumentMetadata } from "./document-actions";
+import type { DecisionCounts, DecisionSnapshot, DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { ShortcutActions } from "./global-shortcuts";
 import type { NavigationMode, NavigationRoute } from "./navigation-model";
@@ -123,6 +123,9 @@ let NavigationDocument = createContext<{
 		update: DocumentMetadata,
 	) => void;
 	onDecisionCounts: (counts: DecisionCounts) => void;
+	onDecisionSnapshot: (snapshot: DecisionSnapshot) => void;
+	decisionWatchKey: string;
+	watchedDecisionRepositories: () => Session.WatchedRepository[];
 	onDocumentAction: (documentId: string, action: DocumentAction) => void;
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
@@ -137,6 +140,9 @@ let NavigationDocument = createContext<{
 	onResearchChildPublished: (parentId: string, child: Research.ReadyChild) => void;
 }>({
 	onDecisionCounts() {},
+	onDecisionSnapshot() {},
+	decisionWatchKey: "",
+	watchedDecisionRepositories: () => [],
 	onDocumentChanged() {},
 	onDocumentAction() {},
 	onDocumentDeleted() {},
@@ -358,9 +364,18 @@ export function NavigationShell(
 		refreshProject,
 		removeDocument,
 		updateDecisionCounts,
+		updateDecisionSnapshot,
 		updateDocument,
 		upsertDocument,
 	} = useProjectDocuments(navigation, catalogueMode === "archived");
+	let decisionRepositories = useMemo(
+		() => catalogueMode === "archived" ? [] : watchedRepositories(projects),
+		[catalogueMode, projects],
+	);
+	let decisionRepositoriesRef = useRef(decisionRepositories);
+	decisionRepositoriesRef.current = decisionRepositories;
+	let decisionWatchKey = decisionRepositories.map(repository => repository.repositoryId).join(" ");
+	let watchedDecisionRepositories = useCallback(() => decisionRepositoriesRef.current, []);
 	let routeKey = isDocumentWorkspaceRoute(route)
 		? documentRouteIdentity(route)
 		: route.page === "repository"
@@ -760,7 +775,9 @@ export function NavigationShell(
 	}, [mode]);
 	let navigationDocument = useMemo(() => ({
 		channel: currentChannel,
+		decisionWatchKey,
 		onDecisionCounts: updateDecisionCounts,
+		onDecisionSnapshot: updateDecisionSnapshot,
 		onDocumentAction: workspaceDocumentAction,
 		onDocumentChanged: documentChanged,
 		onDocumentDeleted: documentDeleted,
@@ -770,8 +787,10 @@ export function NavigationShell(
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchChildOpen: researchChildOpen,
 		onResearchChildPublished: researchChildPublished,
+		watchedDecisionRepositories,
 	}), [
 		currentChannel,
+		decisionWatchKey,
 		documentChanged,
 		documentDeleted,
 		documentLoaded,
@@ -781,6 +800,8 @@ export function NavigationShell(
 		researchChildOpen,
 		researchChildPublished,
 		updateDecisionCounts,
+		updateDecisionSnapshot,
+		watchedDecisionRepositories,
 		workspaceDocumentAction,
 	]);
 

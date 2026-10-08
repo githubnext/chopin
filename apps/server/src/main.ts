@@ -54,11 +54,20 @@ import { placeResearchReference as placeResearch } from "./research/placement";
 import * as Rooms from "./rooms";
 import { admit } from "./socket/admission";
 import { refreshAuthorization } from "./socket/authorization";
+import {
+	decisionWatch,
+	recheckDecisionWatch,
+	releaseDecisionWatch,
+	repositoryReader,
+	watchDecisions,
+	watchedRepositories,
+} from "./socket/decision-watch";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
 
 import type { Server } from "bun";
+import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
 import type { ChannelRecord, Lease } from "./storage/model";
@@ -379,6 +388,9 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "session:ping":
 			return tell(ws, { kind: "session:ping", ts: 0, rid: frame.rid });
 
+		case "session:decisions-watch":
+			return watchSocketDecisions(ws, frame.rid, frame.repositories);
+
 		case "plan:open": {
 			try {
 				let opened = await plan(room, server);
@@ -610,12 +622,89 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 const VIEWER_ALLOWED = new Set([
 	"session:ping",
+	"session:decisions-watch",
 	"plan:open",
 	"plan:close",
 	"job:list",
 	"job:get",
 	"conversation-plan:research-link",
 ]);
+
+function decisionTopics(ws: Socket): WatchTopics {
+	return {
+		subscribe: repositoryId => ws.subscribe(repositoryTopic(repositoryId)),
+		unsubscribe: repositoryId => ws.unsubscribe(repositoryTopic(repositoryId)),
+	};
+}
+
+function watchingRepository(ws: Socket, repositoryId: string): boolean {
+	return !ws.data.closed
+		&& (repositoryId === ws.data.repositoryId
+			|| !!ws.data.decisionWatch?.repositories.has(repositoryId));
+}
+
+async function socketRepositoryReader(ws: Socket): Promise<RepositoryAuthorizer | undefined> {
+	let data = ws.data;
+	if (data.closed || !data.credential || (data.authorizedUntil ?? 0) <= Date.now()) {
+		return undefined;
+	}
+	let request = new Request(hostedAuth.config.origin, { headers: { cookie: data.credential } });
+	let session = await hostedAuth.sessions.authenticate(request);
+	if (!session || session.user.id !== data.principalId) return undefined;
+	return repositoryReader(async (owner, name) => {
+		let access = await hostedAuth.sessions.use(
+			session,
+			token => hostedAuth.github.repositoryAccess(token, owner, name),
+		);
+		return access.value;
+	});
+}
+
+async function watchSocketDecisions(ws: Socket, rid: string, value: unknown): Promise<void> {
+	let requested = watchedRepositories(value);
+	if (!requested) return fail(ws, rid, "invalid decision watch");
+	let authorize: RepositoryAuthorizer | undefined;
+	try {
+		authorize = await socketRepositoryReader(ws);
+	} catch {
+		return fail(ws, rid, "authorization is temporarily unavailable");
+	}
+	if (!authorize) return fail(ws, rid, "authorization expired");
+	let outcome = await watchDecisions(
+		ws.data.decisionWatch ??= decisionWatch(),
+		ws.data.repositoryId,
+		requested,
+		authorize,
+		decisionTopics(ws),
+		() => !ws.data.closed,
+	);
+	if (!outcome) return fail(ws, rid, "decision watch was superseded");
+	reply(ws, rid, {
+		kind: "session:decisions-watched",
+		ts: 0,
+		watched: outcome.watched.map(repository => repository.repositoryId),
+		refused: outcome.refused,
+	});
+	for (let { repositoryId, channelIds } of outcome.watched) {
+		void Service.tellRepositoryUnanswered(
+			storage,
+			ws,
+			repositoryId,
+			channelIds,
+			() => watchingRepository(ws, repositoryId),
+		).catch(err => {
+			if (!ws.data.closed) console.warn("chopin: could not send decision snapshot -", err);
+		});
+	}
+}
+
+async function recheckWatchedDecisions(ws: Socket): Promise<void> {
+	let watch = ws.data.decisionWatch;
+	if (!watch || watch.repositories.size === 0) return;
+	let authorize = await socketRepositoryReader(ws);
+	if (!authorize) return;
+	await recheckDecisionWatch(watch, authorize, decisionTopics(ws), () => !ws.data.closed);
+}
 
 async function refreshAccess(ws: Socket, forceGitHub = false): Promise<AuthorizationResult> {
 	return refreshAuthorization(ws.data, forceGitHub, forced => checkAccess(ws, forced));
@@ -722,8 +811,14 @@ function scheduleAuthorization(ws: Socket): void {
 	ws.data.authorizationTimer = setTimeout(() => {
 		void refreshAccess(ws, true).then(result => {
 			if (ws.data.closed) return;
-			if (result === "denied") ws.close(4403, "authorization expired");
-			else scheduleAuthorization(ws);
+			if (result === "denied") {
+				ws.close(4403, "authorization expired");
+				return;
+			}
+			void recheckWatchedDecisions(ws).catch(err => {
+				console.warn("chopin: could not recheck decision subscriptions -", err);
+			});
+			scheduleAuthorization(ws);
 		});
 	}, ACCESS_RECHECK_MS);
 }
@@ -822,6 +917,7 @@ function listen(): Server<SocketData> {
 				let room = Rooms.leave(ws);
 				ws.unsubscribe(topic(ws.data.room));
 				ws.unsubscribe(repositoryTopic(ws.data.repositoryId));
+				if (ws.data.decisionWatch) releaseDecisionWatch(ws.data.decisionWatch, decisionTopics(ws));
 				if (!room) return;
 				if (room.plan) {
 					Service.departed(room.plan, ws);

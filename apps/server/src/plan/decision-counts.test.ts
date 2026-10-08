@@ -274,3 +274,49 @@ test("announces the repository total when a document leaves the active catalogue
 		await Service.close(plan);
 	}
 });
+
+test("sends a watching socket current counts for its loaded documents and repository", async () => {
+	let { channel, plan, server, storage } = await openPlan();
+	try {
+		await askDecisions(plan, server);
+		await answerFirst(plan, server);
+		await eventually(() => plan.persistence.committedUnanswered === 1 || undefined);
+		await Service.drain(plan);
+		await Service.persist(plan);
+		let stored = await storage.channels.get(channel.id);
+		let frames: Array<Record<string, unknown>> = [];
+		let ws = { send: (raw: string) => frames.push(JSON.parse(raw)) } as unknown as Socket;
+
+		await Service.tellRepositoryUnanswered(
+			storage,
+			ws,
+			channel.repositoryId,
+			[channel.id, "cccccccc-0000-4000-8000-000000000009"],
+			() => true,
+		);
+		await Service.tellRepositoryUnanswered(
+			storage,
+			ws,
+			"R_elsewhere",
+			[channel.id],
+			() => true,
+		);
+		await Service.tellRepositoryUnanswered(storage, ws, channel.repositoryId, [], () => false);
+
+		expect(frames).toEqual([{
+			kind: "session:decisions-snapshot",
+			ts: expect.any(Number),
+			repositoryId: channel.repositoryId,
+			repositoryUnanswered: 1,
+			documents: [{ channelId: channel.id, unanswered: 1, revision: stored!.revision }],
+		}, {
+			kind: "session:decisions-snapshot",
+			ts: expect.any(Number),
+			repositoryId: "R_elsewhere",
+			repositoryUnanswered: 0,
+			documents: [],
+		}]);
+	} finally {
+		await Service.close(plan);
+	}
+});

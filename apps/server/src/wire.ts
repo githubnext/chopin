@@ -12,6 +12,7 @@
 
 import type { Server, ServerWebSocket } from "bun";
 import type { Frame, Outgoing } from "@chopin/protocol";
+import type { DecisionWatch } from "./socket/decision-watch";
 
 export type Identity = {
 	/** Verified GitHub login. */
@@ -43,6 +44,7 @@ export type SocketData = Identity & {
 	accessCheckedAt: number;
 	authorizationTimer?: ReturnType<typeof setTimeout>;
 	authorizationRefresh?: Promise<AuthorizationResult>;
+	decisionWatch?: DecisionWatch;
 	closed?: boolean;
 };
 
@@ -82,7 +84,7 @@ export function relay<T extends Outgoing>(ws: Socket, frame: T): void {
 	ws.publish(topic(ws.data.room), stamp(frame, { sender: ws.data.handle }));
 }
 
-/** Every socket open on any document in one repository, whichever room it joined. */
+/** Every socket open on a document in one repository or watching its decision counts. */
 export function repositoryTopic(repositoryId: string): string {
 	return `repository:${repositoryId}`;
 }

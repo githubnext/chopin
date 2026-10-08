@@ -70,6 +70,27 @@ export const UNANSWERED_SIDECARS: Array<{ name: string; sidecar: JsonValue; expe
 		},
 		expected: 0,
 	},
+	{
+		name: "counts a sidecar whose text contains NUL",
+		sidecar: {
+			questions: [{ id: "nul", status: "open", definition: definition("a\u0000", "b") }],
+			transcript: [{ role: "user", text: "before\u0000after" }],
+		},
+		expected: 2,
+	},
+	{
+		name: "counts a sidecar whose text contains unpaired surrogates",
+		sidecar: {
+			questions: [{
+				id: "surrogate",
+				status: "open",
+				definition: definition("\ud800", "\udfff"),
+				answers: { "\udfff": "Chosen" },
+			}, { id: "lone", status: "reopened", definition: definition("c") }],
+			transcript: [{ role: "user", text: "high \ud800 low \udc00 reversed \udc00\ud800" }],
+		},
+		expected: 2,
+	},
 	{ name: "reads an empty sidecar as zero", sidecar: null, expected: 0 },
 	{ name: "reads a sidecar without records as zero", sidecar: { version: 1 }, expected: 0 },
 	{ name: "reads a non-list question field as zero", sidecar: { questions: {} }, expected: 0 },

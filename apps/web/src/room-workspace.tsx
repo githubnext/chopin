@@ -316,13 +316,16 @@ export function RoomWorkspace(
 		} | undefined
 	>(undefined);
 	let {
+		decisionWatchKey,
 		onDecisionCounts,
+		onDecisionSnapshot,
 		onDocumentAction,
 		onDocumentChanged,
 		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		onResearchChildOpen,
 		onResearchChildPublished,
+		watchedDecisionRepositories,
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [planState, setPlanState] = useState<PlanState>({ synced: false });
@@ -798,6 +801,7 @@ export function RoomWorkspace(
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
 			socket.on<Session.Decisions>("session:decisions", onDecisionCounts),
+			socket.on<Session.DecisionsSnapshot>("session:decisions-snapshot", onDecisionSnapshot),
 			socket.on<ManagedAccess>("session:access", frame => {
 				latestCanEdit.current = frame.canEdit;
 				latestCanManage.current = frame.canManage;
@@ -821,6 +825,7 @@ export function RoomWorkspace(
 	}, [
 		handle,
 		onDecisionCounts,
+		onDecisionSnapshot,
 		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		research,
@@ -832,6 +837,13 @@ export function RoomWorkspace(
 		conversationStore,
 		updateMetadata,
 	]);
+
+	useEffect(() => {
+		if (!wire || status !== "connected") return;
+		wire.ask<Session.DecisionsWatched>("session:decisions-watch", {
+			repositories: watchedDecisionRepositories(),
+		}).catch(() => {});
+	}, [decisionWatchKey, status, watchedDecisionRepositories, wire]);
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;

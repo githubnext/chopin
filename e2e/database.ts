@@ -32,7 +32,15 @@ async function sql<T>(port: number, action: (database: SQL) => Promise<T>): Prom
 	}
 }
 
-export async function createChannel(port: number, id: string): Promise<void> {
+export type TestRepository = { id: string; owner: string; name: string };
+
+const SCORE: TestRepository = { id: "R_score", owner: "octo-org", name: "score" };
+
+export async function createChannel(
+	port: number,
+	id: string,
+	repository = SCORE,
+): Promise<void> {
 	await sql(port, async database => {
 		let now = new Date();
 		let slug = testChannelSlug(id);
@@ -47,14 +55,15 @@ export async function createChannel(port: number, id: string): Promise<void> {
 					id, repository_id, repository_owner, repository_name, title,
 					created_by, revision, next_sequence, created_at, updated_at
 				) VALUES (
-					${id}, 'R_score', 'octo-org', 'score', ${`Test ${id.slice(0, 8)}`},
+					${id}, ${repository.id}, ${repository.owner}, ${repository.name},
+					${`Test ${id.slice(0, 8)}`},
 					'U_e2e', 0, 1, ${now}, ${now}
 				)
 			`;
 			await transaction`
 				INSERT INTO channel_slugs (
 					repository_id, slug, channel_id, canonical, created_at
-				) VALUES ('R_score', ${slug}, ${id}, true, ${now})
+				) VALUES (${repository.id}, ${slug}, ${id}, true, ${now})
 			`;
 			await transaction`
 				INSERT INTO channel_state (channel_id, sidecar) VALUES (${id}, 'null'::jsonb)
