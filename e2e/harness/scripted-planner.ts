@@ -5,10 +5,7 @@ import {
 } from "../../apps/server/src/conversation-plan/scripted-script";
 import { readRevision, scriptContext } from "./scripted-context";
 
-import type {
-	HarnessV1,
-	HarnessV1StreamPart,
-} from "../../apps/server/node_modules/@ai-sdk/harness";
+import type { HarnessV1, HarnessV1StreamPart } from "../../apps/server/src/harness/harness-v1";
 
 type Result = { toolCallId: string; toolName: string; output: unknown; isError?: boolean };
 type ToolResult = Extract<HarnessV1StreamPart, { type: "tool-result" }>;
