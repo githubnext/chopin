@@ -359,7 +359,7 @@ export function Transcript(
 			messageId: string,
 			actionId: string,
 			lane?: "decision" | "research",
-				) => Promise<void>;
+		) => Promise<void>;
 		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
 		empty?: string;
