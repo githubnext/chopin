@@ -25,9 +25,11 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import {
+	$getNearestNodeFromDOMNode,
 	$getNodeByKey,
 	$getRoot,
 	$getSelection,
+	$isDecoratorNode,
 	$isElementNode,
 	$isRangeSelection,
 	$isRootNode,
@@ -38,6 +40,7 @@ import {
 	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_LOW,
 	COMMAND_PRIORITY_NORMAL,
+	COPY_COMMAND,
 	FOCUS_COMMAND,
 	HISTORIC_TAG,
 	KEY_ARROW_DOWN_COMMAND,
@@ -46,12 +49,14 @@ import {
 	KEY_ESCAPE_COMMAND,
 	mergeRegister,
 } from "lexical";
+import { $isTableCellNode, $isTableRowNode } from "@lexical/table";
 import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
 import { describeDiagramError, kindOf, languageOptions, titleOf } from "./code";
 import { CodeView } from "./code-view";
 import { LanguageMenu } from "./language-menu";
+import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
 import { CodeIcon, WarningIcon } from "@chopin/icons";
 
@@ -599,25 +604,99 @@ function clickedOffset(block: Block, event: MouseEvent): number | undefined {
 	return index === undefined ? undefined : offsetOfLine(block.source, index, column + 1);
 }
 
+/** The caret's rectangle, and the height of the line it sits on. */
+function caretLine(document: Document): { rect: DOMRect; height: number } | undefined {
+	let selection = document.getSelection();
+	if (!selection?.rangeCount) return undefined;
+	let rects = selection.getRangeAt(0).getClientRects();
+	let rect: DOMRect | undefined = rects[rects.length - 1];
+	let node = selection.focusNode;
+	let line = node instanceof Element ? node : node?.parentElement;
+	// A collapsed range at an empty line has no rectangle; its line stands in.
+	if (!rect || rect.height === 0) rect = line?.getBoundingClientRect();
+	if (!rect || rect.height === 0 || !line) return undefined;
+	// The caret's box is the font's, shorter than the line it sits on.
+	return {
+		rect,
+		height: Math.max(rect.height, parseFloat(getComputedStyle(line).lineHeight) || 0),
+	};
+}
+
 /**
  * Whether the caret is on the first or last line of a block.
  *
- * Measured, because only layout knows where a wrapped line ends. A collapsed
- * range at an empty line has no rectangle, so its line's element stands in.
+ * Measured, because only layout knows where a wrapped line ends.
  */
 function atEdge(element: HTMLElement, direction: Direction): boolean {
-	let selection = element.ownerDocument.getSelection();
-	if (!selection?.rangeCount) return false;
-	let rects = selection.getRangeAt(0).getClientRects();
-	let rect: DOMRect | undefined = rects[direction === "next" ? rects.length - 1 : 0];
-	let node = selection.focusNode;
-	let line = node instanceof Element ? node : node?.parentElement;
-	if (!rect || rect.height === 0) rect = line?.getBoundingClientRect();
-	if (!rect || rect.height === 0 || !line) return false;
-	// The caret's box is the font's, shorter than the line it sits on.
-	let height = Math.max(rect.height, parseFloat(getComputedStyle(line).lineHeight) || 0);
+	let caret = caretLine(element.ownerDocument);
+	if (!caret) return false;
+	let { rect, height } = caret;
 	let box = element.getBoundingClientRect();
 	return direction === "next" ? box.bottom - rect.bottom < height : rect.top - box.top < height;
+}
+
+/**
+ * Whether no other line sits between the caret and a block it shares a parent
+ * with, such as the text of a list item and the code under it.
+ */
+function besideBlock(element: HTMLElement, direction: Direction): boolean {
+	let caret = caretLine(element.ownerDocument);
+	if (!caret) return false;
+	let { rect, height } = caret;
+	let box = element.getBoundingClientRect();
+	let style = getComputedStyle(element);
+	return direction === "next"
+		? box.top - rect.bottom < height + parseFloat(style.marginBlockStart)
+		: rect.top - box.bottom < height + parseFloat(style.marginBlockEnd);
+}
+
+function $isInlineNode(node: LexicalNode): boolean {
+	return ($isElementNode(node) || $isDecoratorNode(node)) ? node.isInline() : true;
+}
+
+/** Rows and cells are a table's layout, not blocks read one after another. */
+function $isTablePart(node: LexicalNode): boolean {
+	return $isTableRowNode(node) || $isTableCellNode(node);
+}
+
+/**
+ * The block an arrow key reads next, across the containers that callouts and
+ * list items make: the nearest sibling of the caret's line or of one of its
+ * ancestors. `level` is the node that sibling sits beside.
+ */
+function $following(
+	from: LexicalNode,
+	direction: Direction,
+	skipInline: boolean,
+): { level: LexicalNode; node: LexicalNode } | undefined {
+	let step = (node: LexicalNode) =>
+		direction === "next" ? node.getNextSibling() : node.getPreviousSibling();
+	for (
+		let level: LexicalNode | null = from;
+		level && !$isRootNode(level);
+		level = level.getParent()
+	) {
+		if ($isTablePart(level)) continue;
+		let node = step(level);
+		if (skipInline) { while (node && $isInlineNode(node)) node = step(node); }
+		if (node) return { level, node };
+	}
+	return undefined;
+}
+
+/** The first (or last) block inside a container, down to one that holds text. */
+function $edgeBlock(
+	node: LexicalNode,
+	direction: Direction,
+	folded: (key: string) => boolean,
+): LexicalNode {
+	let at = node;
+	while ($isElementNode(at) && !folded(at.getKey())) {
+		let child = direction === "next" ? at.getFirstChild() : at.getLastChild();
+		if (!child || $isInlineNode(child)) break;
+		at = child;
+	}
+	return at;
 }
 
 /** Something a reader can hold focus on in place of a caret. */
@@ -637,6 +716,8 @@ export function PreviewPlugin() {
 	/** Read by listeners that must not re-register whenever one is toggled. */
 	let current = useRef(shown);
 	current.current = shown;
+	/** A press that began on a preview, until its click has decided what it was. */
+	let pressing = useRef(false);
 	let latest = useRef({ blocks, hidable, disabled });
 	latest.current = { blocks, hidable, disabled };
 
@@ -682,6 +763,9 @@ export function PreviewPlugin() {
 			if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) return;
 			// Pressing on a preview resolves to its block, but is a click or a
 			// copy, not the caret arriving; the click decides what that opens.
+			// While the press lasts the browser may report the selection in the
+			// hidden source, so the press itself is what is checked first.
+			if (pressing.current) return;
 			let anchor = editor.getRootElement()?.ownerDocument.getSelection()?.anchorNode;
 			let at = anchor instanceof Element ? anchor : anchor?.parentElement;
 			if (at?.closest("[data-plan-preview]")) return;
@@ -773,10 +857,17 @@ export function PreviewPlugin() {
 		let $leave = (key: string, direction: Direction) => {
 			let node = $getNodeByKey(key);
 			if (!node) return;
-			let neighbor = direction === "next" ? node.getNextSibling() : node.getPreviousSibling();
-			if (neighbor && folded(neighbor.getKey())) return $enter(neighbor.getKey(), direction);
+			let found = $following(node, direction, false);
+			let land = found && $edgeBlock(found.node, direction, folded);
+			if (land && folded(land.getKey())) return $enter(land.getKey(), direction);
 			root()?.focus({ preventScroll: true });
-			if (direction === "next") node.selectNext(0, 0);
+			if ($isTextNode(land)) {
+				if (direction === "next") land.select(0, 0);
+				else land.select();
+			} else if ($isElementNode(land)) {
+				if (direction === "next") land.selectStart();
+				else land.selectEnd();
+			} else if (direction === "next") node.selectNext(0, 0);
 			else node.selectPrevious();
 		};
 
@@ -801,26 +892,28 @@ export function PreviewPlugin() {
 				event => {
 					if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false;
 					if (latest.current.disabled) return false;
-					let selection = $getSelection();
-					if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
-					// Not `getTopLevelElement`, which stops at a table cell.
-					let top: LexicalNode = selection.focus.getNode();
-					for (
-						let parent = top.getParent();
-						parent && !$isRootNode(parent);
-						parent = top.getParent()
-					) {
-						top = parent;
-					}
-					if ($isRootNode(top)) return false;
-					let neighbor = direction === "next" ? top.getNextSibling() : top.getPreviousSibling();
-					if (!neighbor || !folded(neighbor.getKey())) return false;
+					// The DOM's selection rather than Lexical's, which trails a
+					// click by a task: an arrow pressed straight after one would
+					// otherwise be measured from where the caret used to be.
+					let dom = editor.getRootElement()?.ownerDocument.getSelection();
+					if (!dom?.isCollapsed || !dom.focusNode) return false;
+					let from = $getNearestNodeFromDOMNode(dom.focusNode);
+					if (!from) return false;
+					let found = $following(from, direction, true);
+					if (!found) return false;
+					let target = $edgeBlock(found.node, direction, folded);
+					if (!folded(target.getKey())) return false;
 					// A hidden source has no layout, so the browser's own move
-					// would step right over the block.
-					let element = editor.getElementByKey(top.getKey());
-					if (!element || !atEdge(element, direction)) return false;
+					// would step right over the block. Only the caret's last
+					// (or first) line may step into it.
+					let level = editor.getElementByKey(found.level.getKey());
+					let block = editor.getElementByKey(target.getKey());
+					let edge = $isInlineNode(found.level)
+						? block && besideBlock(block, direction)
+						: level && atEdge(level, direction);
+					if (!edge) return false;
 					event.preventDefault();
-					$enter(neighbor.getKey(), direction);
+					$enter(target.getKey(), direction);
 					return true;
 				},
 				// Ahead of the table's own arrows, which select the end of
@@ -833,6 +926,7 @@ export function PreviewPlugin() {
 		let down = (event: MouseEvent) => {
 			let target = event.target instanceof Element ? event.target : null;
 			let block = blockAt(target?.closest("[data-plan-preview]")?.parentElement);
+			if (block) pressing.current = true;
 			pressed = {
 				x: event.clientX,
 				y: event.clientY,
@@ -855,10 +949,17 @@ export function PreviewPlugin() {
 			editor.update(() => $open(block.key, offset));
 		};
 
+		// After the click that follows, which may not land on the editor at all.
+		let up = () => setTimeout(() => (pressing.current = false));
+
 		let attached: HTMLElement | null = null;
+		let unselect: (() => void) | undefined;
 		let detach = () => {
+			unselect?.();
+			unselect = undefined;
 			attached?.removeEventListener("mousedown", down);
 			attached?.removeEventListener("click", click);
+			attached?.ownerDocument.removeEventListener("mouseup", up);
 			attached = null;
 		};
 
@@ -868,6 +969,16 @@ export function PreviewPlugin() {
 				attached = next;
 				next?.addEventListener("mousedown", down);
 				next?.addEventListener("click", click);
+				next?.ownerDocument.addEventListener("mouseup", up);
+				if (next) {
+					unselect = registerPreviewSelection(
+						next,
+						target =>
+							blockAt(target.closest("[data-plan-preview]")?.parentElement)
+								? target.closest<HTMLElement>(FOCUSABLE_PREVIEW)
+								: null,
+					);
+				}
 			}),
 			detach,
 			editor.registerCommand(
@@ -893,17 +1004,30 @@ export function PreviewPlugin() {
 				},
 				COMMAND_PRIORITY_CRITICAL,
 			),
+			// Text selected in a preview is the browser's to copy; Lexical would
+			// copy its own selection, left somewhere else in the document.
+			editor.registerCommand(
+				COPY_COMMAND,
+				event =>
+					event instanceof ClipboardEvent && event.target instanceof Element
+					&& !!event.target.closest(FOCUSABLE_PREVIEW),
+				COMMAND_PRIORITY_CRITICAL,
+			),
 			arrow(KEY_ARROW_DOWN_COMMAND, "next"),
 			arrow(KEY_ARROW_UP_COMMAND, "previous"),
 			editor.registerCommand(
 				KEY_ESCAPE_COMMAND,
-				() => {
+				event => {
 					if (latest.current.disabled) return false;
 					let selection = $getSelection();
 					if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
 					let key = enclosing(selection.anchor.getNode());
 					let block = key ? blockAt(editor.getElementByKey(key)) : undefined;
 					if (!block || !latest.current.hidable.has(block.key)) return false;
+					// Spent here: a comment preview open on the same passage would
+					// otherwise also close, and send focus back to its marker.
+					event?.preventDefault();
+					event?.stopPropagation();
 					$close(block);
 					return true;
 				},
