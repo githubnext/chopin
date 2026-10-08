@@ -82,8 +82,6 @@ export type PointerAction =
 	| { type: "leave"; key: string }
 	/** The marker: pressing it again lets go. */
 	| { type: "toggle"; key: string }
-	/** The prose: pressing it never lets go, so a second click is not a dismissal. */
-	| { type: "pin"; key: string }
 	/** Escape, the close button, or a press outside. */
 	| { type: "dismiss" }
 	/** The document moved: drop whatever no longer has prose to point at. */
@@ -101,8 +99,6 @@ export function point(state: PointerState, event: PointerAction): PointerState {
 			return state.pinned === event.key
 				? { hover: state.hover }
 				: { hover: state.hover, pinned: event.key };
-		case "pin":
-			return state.pinned === event.key ? state : { hover: state.hover, pinned: event.key };
 		case "dismiss":
 			return {};
 	}
@@ -115,7 +111,7 @@ export function ownedPoint(
 	action: PointerAction,
 ): PointerState {
 	let next = point(state, action);
-	if (action.type === "pin" || action.type === "toggle" || action.type === "dismiss") {
+	if (action.type === "toggle" || action.type === "dismiss") {
 		if (next.pinned) claimDecision(owner, next.pinned);
 		else releaseDecision(owner);
 	} else if (action.type === "prune" && !next.pinned) releaseDecision(owner);
@@ -139,8 +135,8 @@ export function prune(state: PointerState, live: ReadonlySet<string>): PointerSt
 }
 
 export const MARKER_SIZE = 20;
-/** The same hit size as the comment button on a touch screen. */
-export const MARKER_TOUCH_SIZE = 44;
+/** How far past its drawn edge the marker still answers a pointer. */
+export const MARKER_REACH = 12;
 const GAP = 8;
 /** What a slim marker needs beside the prose: its bar and a little air. */
 export const COMPACT_GUTTER = 12;
@@ -156,8 +152,7 @@ export type MarkerPlace = Point & {
  *
  * When the gutter cannot hold the disc and its gap — a phone, or a split
  * pane — the marker becomes a slim bar the height of the first line, hugging
- * the prose instead of covering the start of it. A tap on the prose opens the
- * same popover, so nothing depends on the bar being easy to hit.
+ * the prose instead of covering the start of it.
  */
 export function markerPoint(
 	block: Rect,
@@ -188,4 +183,21 @@ export function popoverBelow(block: Rect, host: Rect, width: number, height: num
 	let above = block.top - host.top - GAP - height;
 	let top = below + height > host.height && above >= 0 ? above : below;
 	return { top, left };
+}
+
+/**
+ * The marker's invisible reach to each side of its drawn box. It reaches
+ * `MARKER_REACH` above and below, but sideways only as far as the gutter
+ * allows: never past the page edge, and never over the prose, so a press on
+ * the first letters still lands in the text.
+ */
+export function markerReach(
+	left: number,
+	width: number,
+	prose: number,
+): { start: number; end: number } {
+	return {
+		start: Math.min(MARKER_REACH, Math.max(0, left)),
+		end: Math.min(MARKER_REACH, Math.max(0, prose - left - width)),
+	};
 }

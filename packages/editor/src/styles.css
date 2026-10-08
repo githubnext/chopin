@@ -2484,23 +2484,30 @@
 }
 
 .plan-decision-marker {
-	--plan-decision-hit: 1.25rem;
 	pointer-events: auto;
 	position: absolute;
 	display: grid;
 	place-items: center;
-	inline-size: var(--plan-decision-hit);
-	block-size: var(--plan-decision-hit);
+	inline-size: 1.25rem;
+	block-size: 1.25rem;
 	padding: 0;
 	border-radius: var(--radius-full);
 }
 
-/* A touch screen gets the comment button's 44px target around the same disc. */
-:root[data-plan-coarse-pointer] .plan-decision-marker {
-	--plan-decision-hit: 2.75rem;
+/*
+ * Getting close is enough: the hit area reaches past the drawn marker, but the
+ * layer measures how far it may go sideways so it never covers the prose.
+ */
+.plan-decision-marker::before {
+	content: "";
+	position: absolute;
+	inset-block: calc(-1 * var(--spacing) * 3);
+	inset-inline-start: calc(-1 * var(--plan-decision-reach-start, 0px));
+	inset-inline-end: calc(-1 * var(--plan-decision-reach-end, 0px));
 }
 
 .plan-decision-disc {
+	--color-icon: var(--color-success);
 	display: grid;
 	place-items: center;
 	inline-size: 1.25rem;
@@ -2519,7 +2526,7 @@
 .plan-decision-marker[data-compact] .plan-decision-disc {
 	inline-size: 0.25rem;
 	block-size: var(--plan-decision-line, 1lh);
-	margin-inline-start: var(--plan-decision-bar, 0px);
+	margin-inline-start: calc(var(--spacing) * 1);
 	background: var(--color-success);
 }
 
@@ -2528,7 +2535,9 @@
 }
 
 .plan-decision-marker:hover .plan-decision-disc,
+.plan-decision-marker:focus-visible .plan-decision-disc,
 .plan-decision-marker[aria-expanded="true"] .plan-decision-disc {
+	--color-icon: var(--color-success-ink);
 	outline: var(--edge-width) solid var(--color-success);
 }
 

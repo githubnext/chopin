@@ -109,11 +109,11 @@ test("Save writes prose, collapses the card, marks its margin, and records activ
 	await expect(hidden).toBeHidden();
 });
 
-test("hover previews and washes prose; pin exposes source and Escape restores marker focus", async ({ join, room }) => {
+test("marker hover previews and washes prose; pin exposes source and Escape restores marker focus", async ({ join, room }) => {
 	let page = await join("ana");
 	let source = await decide(page, room);
 
-	await prose(page).hover();
+	await marker(page).hover();
 	let preview = page.getByRole("tooltip");
 	await expect(preview).toContainText(QUESTION);
 	await expect(preview).toHaveCSS("opacity", "1");

@@ -13,10 +13,13 @@ test.afterEach(async ({ page }) => {
 	await assertReaderErrors(page);
 });
 
-test("real paragraph hover previews its anchored decision and Escape suppresses stationary hover", async ({ page }) => {
+test("only the marker previews its decision and Escape suppresses stationary hover", async ({ page }) => {
 	let errors = await loadReader(page);
 	let prose = reader(page).getByText("We use GitHub Apps for authentication.", { exact: true });
 	await prose.hover();
+	await page.waitForTimeout(180);
+	await expect(tooltip(page)).toHaveCount(0);
+	await marker(page).hover();
 	await expect(tooltip(page)).toBeVisible();
 	await expect(tooltip(page)).toContainText("Auth0");
 	await expect(tooltip(page).locator(".plan-decision-answer > span").first()).toHaveText(
@@ -32,7 +35,7 @@ test("real paragraph hover previews its anchored decision and Escape suppresses 
 	await page.waitForTimeout(180);
 	await expect(tooltip(page)).toHaveCount(0);
 	await page.mouse.move(2, 2);
-	await prose.hover();
+	await marker(page).hover();
 	await expect(tooltip(page)).toBeVisible();
 	expect(errors).toEqual([]);
 });

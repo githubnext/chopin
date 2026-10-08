@@ -411,6 +411,9 @@ test(
 		expect(glyph.hitsProse).toBe(true);
 		await page.mouse.move(5, 5);
 		await page.mouse.move(glyph.x, glyph.y);
+		await page.waitForTimeout(200);
+		await expect(page.getByRole("tooltip")).toHaveCount(0);
+		await marker(page).hover();
 		await expect(page.getByRole("tooltip")).toContainText(QUESTION);
 		await page.screenshot({ path: testInfo.outputPath("decision-anchor-after-move-hover.png") });
 		expectLinked(await latestDocumentSnapshot(page, room), widget);
