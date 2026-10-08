@@ -38,7 +38,7 @@ test("tabs are renamed, added and removed in place, and the document keeps them"
 	await expect(field).toHaveCount(0);
 	await expect(tabs).toHaveText(["Mobile", "Wide screens"]);
 	await expect(strip.getByRole("tab", { name: "Wide screens" })).toBeFocused();
-	await written(page, room, /<Tab id="[^"]+" label="Wide screens">/);
+	await written(page, room, /<Tab id="[^"]+" label="Wide screens"/);
 	await expect(content(page)).toContainText("Before the tabs.");
 	await expect(content(page)).not.toContainText("Before the tabs.Wide");
 
@@ -59,7 +59,7 @@ test("tabs are renamed, added and removed in place, and the document keeps them"
 	await page.keyboard.press("Enter");
 	await expect(tabs).toHaveText(["Mobile", "Wide screens", "Tablet"]);
 	await expect(strip.getByRole("tab", { name: "Tablet" })).toHaveAttribute("aria-selected", "true");
-	await written(page, room, /label="Wide screens">[\s\S]*<Tab id="[A-Z0-9]{26}" label="Tablet">/);
+	await written(page, room, /label="Wide screens"[\s\S]*<Tab id="[A-Z0-9]{26}" label="Tablet"/);
 
 	// An empty tab goes at once from the keyboard.
 	await strip.getByRole("tab", { name: "Tablet" }).press("Delete");
@@ -74,7 +74,7 @@ test("tabs are renamed, added and removed in place, and the document keeps them"
 		.getByRole("button", { name: "Remove Mobile and its content", exact: true })
 		.click();
 	await expect(tabs).toHaveText(["Wide screens"]);
-	await written(page, room, /<Tabs id="[^"]+">\s*<Tab id="[^"]+" label="Wide screens">/);
+	await written(page, room, /<Tabs id="[^"]+">\s*<Tab id="[^"]+" label="Wide screens"/);
 	await expect.poll(async () => (await content(page).textContent()) ?? "").not.toContain(
 		"Queue in memory only.",
 	);

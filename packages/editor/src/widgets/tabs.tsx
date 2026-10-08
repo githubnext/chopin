@@ -371,7 +371,7 @@ function Strip(
 								onDoubleClick={() => {
 									if (editable) setRenaming(tab.key);
 								}}
-								className="max-w-64 shrink-0 truncate px-2.5 py-1 text-left text-sm font-medium"
+								className="min-w-0 max-w-64 truncate px-2.5 py-1 text-left text-sm font-medium"
 							>
 								{name}
 							</button>
@@ -388,7 +388,7 @@ function Strip(
 									onClick={() => remove(position)}
 									className="plan-tab-remove"
 								>
-									<CloseIcon aria-hidden="true" size={10} />
+									<CloseIcon aria-hidden="true" />
 								</button>
 							)}
 						</div>
@@ -403,7 +403,7 @@ function Strip(
 					onClick={add}
 					className="plan-tab-add btn btn-icon btn-ghost"
 				>
-					<PlusIcon aria-hidden="true" size={14} />
+					<PlusIcon aria-hidden="true" />
 				</button>
 			)}
 		</div>
