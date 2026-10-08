@@ -35,7 +35,7 @@ comes from the operator's `HARNESS_AUTH` mode. The user must pass instance
 admission and have repository push or administration access. Ownership is
 assigned atomically in storage and guarded by a generation token.
 
-That process-local login owns the channel's model usage until it expires, logs
+That login owns the channel's model usage in this process until it expires, logs
 out, the server restarts, or the authenticated reset API releases it. The
 current web application does not expose a reset control. Under `copilot-sdk`, a
 user without Copilot entitlement sees the provider failure on the first
@@ -48,11 +48,12 @@ message; the turn runs under the channel's current owner, whoever that is. A
 channel without one is claimed for the caller's live browser login, hosted or
 local, and without such a login the call is refused and nothing is posted.
 
-PostgreSQL stores the owner session ID only so durable ownership can refer to an
-active process session. The cookie verifier and GitHub credential remain in
-memory. Startup clears every browser-session registry row and owner reference,
-while preserving the document, transcript, reserved context fields, and
-ownership generation.
+Planner ownership stores only the owner session ID, referring to a login loaded
+in this process. Hosted logins separately persist encrypted credentials in
+PostgreSQL. Startup clears every owner reference while preserving valid hosted
+sessions, the document, transcript, reserved context fields, and ownership
+generation. A returning browser must present its cookie and pass authorization
+before that session is available for a new Planner claim.
 
 ## Runtime isolation
 

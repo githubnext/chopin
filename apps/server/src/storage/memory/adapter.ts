@@ -32,11 +32,11 @@ import type {
 	SaveCheckpoint,
 	StoredChannel,
 	StoredEvent,
+	StoredWebSession,
 	UpdateAgentContext,
 	UserNavigation,
 	UserProject,
 	UserRecord,
-	WebSession,
 } from "../model";
 import type {
 	BackgroundJobStore,
@@ -62,11 +62,20 @@ function user(value: UserRecord): UserRecord {
 	return { ...value, createdAt: new Date(value.createdAt), updatedAt: new Date(value.updatedAt) };
 }
 
-function session(value: WebSession): WebSession {
+function session(value: StoredWebSession): StoredWebSession {
 	return {
 		...value,
 		expiresAt: new Date(value.expiresAt),
 		createdAt: new Date(value.createdAt),
+		...(value.credentials
+			? {
+				credentials: {
+					...value.credentials,
+					secretHash: bytes(value.credentials.secretHash),
+					ciphertext: bytes(value.credentials.ciphertext),
+				},
+			}
+			: {}),
 	};
 }
 
@@ -115,7 +124,7 @@ export class MemoryStorage implements StorageAdapter {
 	readonly driver = "memory";
 
 	#users = new Map<string, UserRecord>();
-	#sessions = new Map<string, WebSession>();
+	#sessions = new Map<string, StoredWebSession>();
 	#projects = new Map<string, UserProject[]>();
 	#navigation = new Map<string, UserNavigation>();
 	#channels = new Map<string, ChannelRecord>();
@@ -156,6 +165,15 @@ export class MemoryStorage implements StorageAdapter {
 			let found = this.#sessions.get(id);
 			return Promise.resolve(found && found.expiresAt > now ? session(found) : undefined);
 		},
+		rotate: (id, expectedRevision, credentials) => {
+			let current = this.#sessions.get(id);
+			if (current?.credentials?.revision !== expectedRevision) return Promise.resolve(false);
+			if (credentials.revision !== expectedRevision + 1) {
+				throw conflict("invalid credential revision");
+			}
+			this.#sessions.set(id, session({ ...current, credentials }));
+			return Promise.resolve(true);
+		},
 		delete: id => {
 			let deleted = this.#sessions.delete(id);
 			if (deleted) this.#expireOwners(new Set([id]), new Date());
@@ -172,14 +190,19 @@ export class MemoryStorage implements StorageAdapter {
 			this.#expireOwners(expired, now);
 			return Promise.resolve(expired.size);
 		},
-		deleteAll: async (now, held, ttlMs) => {
+		reset: async (now, held, ttlMs) => {
 			this.#assertLease(held);
-			let deleted = new Set(this.#sessions.keys());
-			this.#sessions.clear();
-			this.#expireOwners(deleted, now);
+			this.#expireOwners(new Set(this.#sessions.keys()), now);
+			let deleted = 0;
+			for (let [id, value] of this.#sessions) {
+				if (!value.credentials || value.expiresAt <= now) {
+					this.#sessions.delete(id);
+					deleted++;
+				}
+			}
 			let renewed = await this.#renew(held, ttlMs);
 			if (!renewed) throw conflict(`storage lease ${held.name} is no longer held`);
-			return { deleted: deleted.size, lease: renewed };
+			return { deleted, lease: renewed };
 		},
 	};
 

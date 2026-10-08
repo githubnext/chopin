@@ -22,7 +22,7 @@ function attempt<T>(action: () => Promise<T>): Promise<T> {
 /** The behavioral gate every built-in storage adapter must pass. */
 export function storageContract(name: string, factory: Factory): void {
 	describe(`${name} storage`, () => {
-		it("keeps only process-lifetime registry metadata for a login session", async () => {
+		it("supports expiring metadata-only sessions for local authentication", async () => {
 			let storage = await opened(factory);
 			try {
 				let now = new Date("2026-01-02T03:04:05.000Z");
@@ -57,7 +57,7 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
-		it("deletes all session registries while preserving durable agent context", async () => {
+		it("deletes process-only sessions while preserving durable agent context", async () => {
 			let storage = await opened(factory);
 			try {
 				let { sessionId, channelId, lease } = await userAndChannel(storage);
@@ -72,7 +72,7 @@ export function storageContract(name: string, factory: Factory): void {
 					status: "ready",
 					now,
 				});
-				let reset = await storage.sessions.deleteAll(now, lease, 60_000);
+				let reset = await storage.sessions.reset(now, lease, 60_000);
 				expect(reset.deleted).toBeGreaterThan(0);
 				expect(reset.lease.fencing).toBe(lease.fencing);
 				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
@@ -84,6 +84,79 @@ export function storageContract(name: string, factory: Factory): void {
 					status: "unavailable",
 				});
 				expect(saved!.agent!.ownerSessionId).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("preserves encrypted sessions across a fenced reset and clears their Planner ownership", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, sessionId, channelId, lease } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let persistentId = id("persistent-session");
+				let credentials = {
+					secretHash: new Uint8Array(32).fill(1),
+					ciphertext: new Uint8Array(64).fill(2),
+					revision: 1,
+				};
+				let persistent = {
+					id: persistentId,
+					userId,
+					createdAt: now,
+					expiresAt: new Date(now.getTime() + 60_000),
+					credentials,
+				};
+				await storage.sessions.create(persistent);
+				let expiredId = id("expired-persistent-session");
+				await storage.sessions.create({ ...persistent, id: expiredId, expiresAt: now });
+				await storage.channels.claimAgentOwner(channelId, persistentId, now);
+				await expect(storage.sessions.reset(now, { ...lease, fencing: lease.fencing + 1 }, 60_000))
+					.rejects.toBeInstanceOf(StorageError);
+				expect((await storage.channels.readAgent(channelId, now))?.agent?.ownerSessionId).toBe(
+					persistentId,
+				);
+				await storage.sessions.reset(now, lease, 60_000);
+				expect(await storage.sessions.get(persistentId, now)).toEqual(persistent);
+				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
+				expect(await storage.sessions.get(expiredId, new Date(now.getTime() - 1))).toBeUndefined();
+				expect((await storage.channels.readAgent(channelId, now))?.agent?.ownerSessionId)
+					.toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("rotates encrypted credentials by revision without recreating deleted sessions", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let sessionId = id("persistent-session");
+				let credentials = {
+					secretHash: new Uint8Array(32).fill(1),
+					ciphertext: new Uint8Array(64).fill(2),
+					revision: 1,
+				};
+				await storage.sessions.create({
+					id: sessionId,
+					userId,
+					createdAt: now,
+					expiresAt: new Date(now.getTime() + 60_000),
+					credentials,
+				});
+				let next = { ...credentials, ciphertext: new Uint8Array(64).fill(3), revision: 2 };
+				expect(await storage.sessions.rotate(sessionId, 1, next)).toBe(true);
+				expect(
+					await storage.sessions.rotate(sessionId, 1, {
+						...next,
+						ciphertext: new Uint8Array(64).fill(4),
+					}),
+				).toBe(false);
+				expect((await storage.sessions.get(sessionId, now))?.credentials).toEqual(next);
+				await storage.sessions.delete(sessionId);
+				expect(await storage.sessions.rotate(sessionId, 2, { ...next, revision: 3 })).toBe(false);
+				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
 			} finally {
 				await storage.close();
 			}

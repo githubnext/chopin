@@ -58,7 +58,8 @@ flowchart LR
 	S --> W[Built web client]
 ```
 
-The browser uses a process-local GitHub App user session. Browser HTTP routes
+The browser uses a GitHub App user session backed by encrypted hosted credentials.
+Browser HTTP routes
 and the WebSocket intersect that identity's repository role with repositories
 selected in a GitHub App installation. The external MCP endpoint instead checks
 its caller-supplied GitHub bearer token directly. Both paths apply the instance
@@ -100,7 +101,7 @@ dialect and pass server-side validation.
 
 ### Browser and WebSocket
 
-A browser request needs a valid process-local session, current instance
+A browser request needs a valid session, current instance
 admission, a matching GitHub App installation, and the required repository role.
 Open sockets periodically recheck those conditions. Pull access is read-only;
 push or administration access permits mutation.
@@ -136,7 +137,7 @@ harness sessions; see [Background jobs](background-jobs.md).
 
 ### Durable PostgreSQL state
 
-- user identity records and token-free process-session registry rows;
+- user identity records, session metadata, and encrypted hosted session credentials;
 - channel metadata and repository identity, including an optional generated
   description with source and job provenance;
 - complete Yjs checkpoints and the accepted update journal after each
@@ -155,13 +156,14 @@ harness sessions; see [Background jobs](background-jobs.md).
 
 ### Process-local state
 
-- browser cookie verifiers and GitHub access and refresh tokens;
+- loaded browser cookie verifiers and plaintext GitHub access and refresh tokens;
 - open rooms, pending update batches, and persistence coordinators;
 - disposable harness sessions and copied credentials; and
 - repository and admission caches.
 
-Startup deliberately clears every process-session registry row and Planner
-owner reference. Transcripts, document state, reserved context fields, generated
+Startup clears expired and metadata-only local session rows and every Planner
+owner reference. Hosted sessions restore lazily from a browser cookie and
+encrypted credentials. Transcripts, document state, reserved context fields, generated
 descriptions, and implementation runs remain. The current runtime does not
 generate the reserved Planner transcript summary or advance its transcript
 cursor; `document-summary@1` artifacts and their catalogue projection are a
