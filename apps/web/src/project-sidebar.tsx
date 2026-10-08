@@ -471,22 +471,41 @@ export function ProjectSidebar(
 	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
 	let platform = currentShortcutPlatform();
+	let firstMode = useRef(catalogueMode);
+	let hasSwitched = useRef(false);
+	if (catalogueMode !== firstMode.current) hasSwitched.current = true;
+	let switched = hasSwitched.current ? catalogueMode : undefined;
+	let searchButton = (
+		<button className="project-sidebar-primary-action" onClick={onSearch} type="button">
+			<SearchIcon />
+			<span>Search</span>
+			<kbd aria-hidden="true" className="project-sidebar-hint">
+				{shortcutLabel("search", platform)}
+			</kbd>
+		</button>
+	);
 	let primaryActions = (
-		<div className="project-sidebar-primary-actions project-sidebar-mode" key={catalogueMode}>
+		<div
+			className="project-sidebar-primary-actions project-sidebar-mode"
+			data-mode={switched}
+		>
 			{archiveMode
 				? (
-					<button
-						className="project-sidebar-primary-action"
-						onClick={() => {
-							onCatalogueModeChange("active");
-							requestAnimationFrame(() => archivedButton.current?.focus({ preventScroll: true }));
-						}}
-						ref={allDocumentsButton}
-						type="button"
-					>
-						<ChevronIcon aria-hidden="true" className="rotate-180" size={14} />
-						<span>All documents</span>
-					</button>
+					<>
+						<button
+							className="project-sidebar-primary-action"
+							onClick={() => {
+								onCatalogueModeChange("active");
+								requestAnimationFrame(() => archivedButton.current?.focus({ preventScroll: true }));
+							}}
+							ref={allDocumentsButton}
+							type="button"
+						>
+							<ChevronIcon aria-hidden="true" className="rotate-180" size={14} />
+							<span>All documents</span>
+						</button>
+						{searchButton}
+					</>
 				)
 				: (
 					<>
@@ -578,7 +597,7 @@ export function ProjectSidebar(
 				<nav
 					className="project-sidebar-mode px-2 py-2"
 					aria-label={archiveMode ? "Archived documents" : "Projects"}
-					key={catalogueMode}
+					data-mode={switched}
 				>
 					<div className="project-sidebar-projects-heading group/projects-heading">
 						<span>{archiveMode ? "Archived" : "Projects"}</span>
