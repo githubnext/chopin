@@ -170,7 +170,9 @@ describe("the Figma navigation chrome", () => {
 		};
 		let markup = renderToStaticMarkup(createElement(Header, props));
 
-		expect(markup.split(renderToStaticMarkup(createElement(DocumentIcon)))).toHaveLength(2);
+		expect(markup.split(renderToStaticMarkup(createElement(DocumentIcon, {
+			className: "shrink-0",
+		})))).toHaveLength(2);
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toContain('aria-label="Document: Hushed mountain"');
 		expect(markup).toContain('aria-label="Actions for Hushed mountain"');
