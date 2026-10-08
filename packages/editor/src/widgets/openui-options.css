@@ -168,10 +168,6 @@
 	padding: 0 0 0.75rem 1.25rem;
 	color: var(--color-text-secondary);
 }
-.openui-options :is(select, summary, [tabindex]):focus-visible {
-	outline: 2px solid var(--focus-ring-color);
-	outline-offset: 2px;
-}
 .openui-options-loading, .openui-options-error {
 	padding: 1rem;
 	color: var(--color-text-secondary);

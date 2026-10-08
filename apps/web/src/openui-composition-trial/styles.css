@@ -49,10 +49,6 @@
 	color: var(--color-brand-ink);
 	background: var(--color-brand-wash);
 }
-.openui-trial-header button:focus-visible, .openui-trial-source summary:focus-visible {
-	outline: 2px solid var(--focus-ring-color);
-	outline-offset: 2px;
-}
 .openui-trial-document {
 	max-width: 100%;
 	background: var(--color-page);
