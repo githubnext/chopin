@@ -81,6 +81,10 @@ bun apps/server/src/visual-selection-eval/review.ts \
   --registry data/visual-selection/frozen-development/registry.json \
   --results data/visual-selection/baseline.jsonl \
   --output data/visual-selection/review.md
+bun apps/server/src/visual-selection-eval/repair.ts \
+  --registry data/visual-selection/frozen-development/registry.json \
+  --baseline data/visual-selection/baseline.jsonl \
+  --output data/visual-selection/repair.jsonl
 ```
 
 The default Copilot harness reads a GitHub user token from `GITHUB_TOKEN`, `GH_TOKEN`, or the

@@ -14,7 +14,7 @@ export type SourceCase = {
 
 export type ModelAnswer = {
 	choice: Choice;
-	specJson: string | null;
+	specJson: Record<string, unknown> | null;
 	content: string;
 	evidenceIds: string[];
 	rationale: string;
@@ -101,21 +101,7 @@ export async function runCase(source: SourceCase, deps: ExperimentDeps): Promise
 				});
 				return;
 			}
-			let spec: unknown;
-			try {
-				spec = JSON.parse(answer.specJson ?? "");
-			} catch {
-				await deps.record({
-					kind: "strategy",
-					caseId: source.id,
-					strategy,
-					allowed,
-					status: "invalid-output",
-					model,
-					problem: "specJson is not JSON",
-				});
-				return;
-			}
+			let spec = answer.specJson;
 			if (
 				!spec || typeof spec !== "object" || Array.isArray(spec)
 				|| (spec as { type?: unknown }).type !== answer.choice

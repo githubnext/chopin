@@ -11,7 +11,7 @@ import type { ModelAttempt } from "./experiment";
 
 let output = z.object({
 	choice: z.enum(CHOICES),
-	specJson: z.string().max(20_000).nullable(),
+	specJson: z.record(z.string(), z.unknown()).nullable(),
 	content: z.string().max(4_000),
 	evidenceIds: z.array(z.string().max(240)).max(20),
 	rationale: z.string().max(1_000),
@@ -54,7 +54,7 @@ export function modelGenerator(settings: ModelSettings) {
 		try {
 			worker = await openWorkerSession(agent, {
 				token: () => settings.token,
-				maxAiCredits: 1,
+				maxAiCredits: 30,
 				aborted,
 			});
 			let result = await Promise.race([

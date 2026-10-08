@@ -48,7 +48,7 @@ test("direct, single choice, and shortlist share source and generator instructio
 				answer: {
 					choice: allowed[0]!,
 					specJson: allowed[0] === "dependency"
-						? JSON.stringify({ type: "dependency", nodes: [{ id: "a", label: "A" }] })
+						? { type: "dependency", nodes: [{ id: "a", label: "A" }] }
 						: null,
 					content: "A depends on B.",
 					evidenceIds: ["e1"],
