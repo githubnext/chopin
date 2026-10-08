@@ -86,7 +86,33 @@ type Metrics = {
 	height: number;
 	columns: Track[];
 	rows: Track[];
+	/** The visible rect of the scroller the table is in, which rails never draw past. */
+	clip: { top: number; right: number; bottom: number; left: number };
 };
+
+/** The nearest ancestor that scrolls vertically, or the viewport. */
+function visibleRect(element: HTMLElement): Metrics["clip"] {
+	for (let node = element.parentElement; node; node = node.parentElement) {
+		if (!/auto|scroll/.test(getComputedStyle(node).overflowY)) continue;
+		let { top, right, bottom, left } = node.getBoundingClientRect();
+		return { top, right, bottom, left };
+	}
+	return { top: 0, right: innerWidth, bottom: innerHeight, left: 0 };
+}
+
+/** A fixed overlay's `clip-path`, cutting off whatever falls outside `clip`. */
+function clipTo(
+	clip: Metrics["clip"],
+	box: { left: number; top: number; width: number; height: number },
+) {
+	let inset = [
+		clip.top - box.top,
+		box.left + box.width - clip.right,
+		box.top + box.height - clip.bottom,
+		clip.left - box.left,
+	].map(edge => `${Math.max(edge, 0)}px`);
+	return `inset(${inset.join(" ")})`;
+}
 
 /** A drag in progress. */
 type Drag = { axis: Axis; from: number; seam: number };
@@ -96,6 +122,10 @@ type Cell = { table: NodeKey; row: number; column: number };
 
 /** The seam an insert button is aimed at, drawn across the table. */
 type Aim = { axis: Axis; seam: number };
+
+function same(a: Cell | undefined, b: Cell | undefined): boolean {
+	return a?.table === b?.table && a?.row === b?.row && a?.column === b?.column;
+}
 
 function cellAt(tables: Table[], key: NodeKey): Cell | undefined {
 	for (let table of tables) {
@@ -151,6 +181,7 @@ function measure(editor: LexicalEditor, table: Table): Metrics | undefined {
 		height: frame.height,
 		columns,
 		rows,
+		clip: visibleRect(element),
 	};
 }
 
@@ -270,7 +301,8 @@ export function TableRails(
 			let key = found && cell
 				? found.cells.flat().find(item => editor.getElementByKey(item) === cell)
 				: undefined;
-			setPointed(key ? cellAt([found!], key) : undefined);
+			let at = key ? cellAt([found!], key) : undefined;
+			setPointed(last => same(last, at) ? last : at);
 		};
 		let out = () => {
 			hover(undefined);
@@ -303,11 +335,7 @@ export function TableRails(
 				let found = node ? $findTableNode(node)?.getKey() : undefined;
 				let cell = node ? $findMatchingParent(node, $isTableCellNode)?.getKey() : undefined;
 				let at = cell ? cellAt(tablesRef.current, cell) : undefined;
-				setCaretCell(last =>
-					last?.table === at?.table && last?.row === at?.row && last?.column === at?.column
-						? last
-						: at
-				);
+				setCaretCell(last => same(last, at) ? last : at);
 				if (found === caret.current) return;
 				caret.current = found;
 				if (found) setActive(found);
@@ -323,11 +351,8 @@ export function TableRails(
 	// table's rectangles would put the rails somewhere they do not belong.
 	if (disabled || !table || !metrics || metrics.key !== table.key) return null;
 	let tools = mode === "full";
-	let hot = pointed?.table === table.key
-		? pointed
-		: caretCell?.table === table.key
-		? caretCell
-		: undefined;
+	let aimed = pointed?.table === table.key ? pointed : undefined;
+	let hot = aimed ?? (caretCell?.table === table.key ? caretCell : undefined);
 	let holding = caretCell?.table === table.key;
 
 	let line = aim
@@ -342,14 +367,14 @@ export function TableRails(
 						aria-hidden="true"
 						className="plan-seam-line"
 						data-plan-seam-line={aim.axis}
-						style={aim.axis === "column"
-							? { left: line - 1, top: metrics.top, width: 2, height: metrics.height }
-							: { left: metrics.left, top: line - 1, width: metrics.width, height: 2 }}
+						style={seamLine(aim.axis, line, metrics)}
 					/>
 				)
 				: null}
 			<Rail
 				axis="column"
+				aim={aim}
+				aimed={aimed?.column}
 				caret={holding}
 				drag={drag}
 				hot={hot?.column}
@@ -364,6 +389,8 @@ export function TableRails(
 			/>
 			<Rail
 				axis="row"
+				aim={aim}
+				aimed={aimed?.row}
 				caret={holding}
 				drag={drag}
 				hot={hot?.row}
@@ -380,7 +407,18 @@ export function TableRails(
 	);
 }
 
+function seamLine(axis: Axis, line: number, metrics: Metrics) {
+	let box = axis === "column"
+		? { left: line - 1, top: metrics.top, width: 2, height: metrics.height }
+		: { left: metrics.left, top: line - 1, width: metrics.width, height: 2 };
+	return { ...box, clipPath: clipTo(metrics.clip, box) };
+}
+
 type RailProps = {
+	/** The seam an insert is aimed at, on either rail. */
+	aim: Aim | undefined;
+	/** The track the pointer is on in the table; the caret alone does not count. */
+	aimed: number | undefined;
 	axis: Axis;
 	/** Whether the caret is in this table, which keeps every grip faintly drawn. */
 	caret: boolean;
@@ -398,8 +436,22 @@ type RailProps = {
 };
 
 function Rail(
-	{ axis, caret, drag, hot, metrics, onAct, onAim, onDrag, onHover, table, tracks, tools }:
-		RailProps,
+	{
+		aim,
+		aimed,
+		axis,
+		caret,
+		drag,
+		hot,
+		metrics,
+		onAct,
+		onAim,
+		onDrag,
+		onHover,
+		table,
+		tracks,
+		tools,
+	}: RailProps,
 ) {
 	let column = axis === "column";
 	let key = table.key;
@@ -471,6 +523,13 @@ function Rail(
 	// A row rail is beside the table, so its tooltips go further out to the left;
 	// a column rail's already open above it.
 	let side = column ? undefined : "left";
+	/*
+	 * Only the seams either side of the track being pointed at take the pointer.
+	 * The rest of the button lane lets clicks through to whatever it overlaps —
+	 * on a column rail, the last line of the paragraph above the table.
+	 */
+	let near = under ?? aimed;
+	let live = (seam: number) => near !== undefined && (seam === near || seam === near + 1);
 
 	return (
 		<div
@@ -481,7 +540,7 @@ function Rail(
 			// Tooltips sit beyond the rail, so none covers a control in it.
 			data-tooltip-edge=""
 			// Placement is measured, so it is a style rather than a class.
-			style={frame}
+			style={{ ...frame, clipPath: clipTo(metrics.clip, frame) }}
 			onPointerOver={() => onHover(key)}
 			onPointerLeave={() => {
 				onHover(undefined);
@@ -578,7 +637,9 @@ function Rail(
 				// track's middle rather than both on it; a row has only the one.
 				let place = (offset: number) =>
 					seamBox(axis, middle + (column ? offset : 0), origin, TOOL, BUTTON);
-				let shown = under === index ? "" : undefined;
+				// Never under an aimed insert: a click meant for adding must not
+				// land on removing.
+				let shown = under === index && aim?.axis !== axis ? "" : undefined;
 
 				return (
 					<Fragment key={`tools-${index}`}>
@@ -638,6 +699,7 @@ function Rail(
 								? `Insert ${noun} before the first`
 								: `Insert ${noun} after ${noun} ${seam}`}
 							className="plan-insert"
+							data-plan-live={live(seam) || undefined}
 							data-press="small"
 							data-tooltip={`Insert ${column ? "column" : "row"}`}
 							data-tooltip-side={side}

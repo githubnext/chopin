@@ -1620,19 +1620,19 @@
  * than replacing it.
  */
 /*
- * The rail takes pointer events across the whole of itself, holes included.
+ * The rail itself lets the pointer through; only its controls take it.
  *
- * It is tempting to pass the gaps through so the prose behind stays clickable,
- * and that is what this did first. But `pointerleave` fires the instant the
- * pointer crosses anything untargetable, so every hole was somewhere the rails
- * blinked out from under a hand on its way across them. A rail exists only
- * while its table is being pointed at, and it is 28 pixels of a 32-pixel
- * gutter; the prose it covers for that moment is not worth the flicker.
+ * Its button lane reaches past the gap above a table into the block above,
+ * which is usually the paragraph somebody wants to click next. The grip lane
+ * is unbroken and lies against the table, and the buttons a pointer heads for
+ * sit beside the grip it came from, so crossing from table to control never
+ * passes through a hole that would end the hover.
  */
 .plan-rail {
 	position: fixed;
 	z-index: 40;
 	overflow: hidden;
+	pointer-events: none;
 	animation: plan-rail-in var(--duration-fast) var(--ease-out);
 }
 
@@ -1655,6 +1655,7 @@
  * keyboard user can still see where every row and column can be taken from.
  */
 .plan-grip {
+	pointer-events: auto;
 	opacity: 0;
 	border-radius: var(--radius-sm);
 	background: var(--color-hover);
@@ -1688,16 +1689,17 @@
 	position: absolute;
 	top: 50%;
 	left: 50%;
-	width: 8px;
-	height: 12px;
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 3);
 	translate: -50% -50%;
-	background-image: radial-gradient(circle, currentcolor 1px, transparent 1.25px);
-	background-size: 4px 4px;
+	/* Stops are fractions of the tile's half-diagonal: a dot of about a pixel. */
+	background-image: radial-gradient(circle, currentcolor 35%, transparent 45%);
+	background-size: var(--spacing) var(--spacing);
 }
 
 [data-plan-rail="column"] .plan-grip::before {
-	width: 12px;
-	height: 8px;
+	width: calc(var(--spacing) * 3);
+	height: calc(var(--spacing) * 2);
 }
 
 [data-plan-rail="column"] .plan-grip {
@@ -1738,7 +1740,7 @@
 .plan-align {
 	opacity: 0;
 	pointer-events: none;
-	padding: 2px;
+	padding: calc(var(--spacing) / 2);
 	border-radius: var(--radius-sm);
 	background-clip: content-box;
 	color: var(--color-text-tertiary);
@@ -1748,17 +1750,12 @@
 		color var(--duration-fast) var(--ease-out);
 }
 
-/* An insert shows only while its own seam is aimed at, so it stays live
-   while invisible; the rail around it is already the hover area. */
-.plan-insert {
+/* An insert shows only while its own seam is aimed at, so beside the track
+   being pointed at it takes the pointer while still invisible. It is later in
+   the rail than a remove button, so where the two meet on a short row the
+   insert wins, and the remove hides while an insert is aimed. */
+.plan-insert[data-plan-live] {
 	pointer-events: auto;
-}
-
-/* Over an insert where the two overlap on a short row: a shown remove or
-   align button is what the pointer came to the track for. */
-.plan-grip-remove[data-plan-shown],
-.plan-align[data-plan-shown] {
-	z-index: 1;
 }
 
 .plan-grip-remove[data-plan-shown],
