@@ -531,19 +531,6 @@ export function NavigationShell(
 		}
 	}, [navigation?.projects.length, route.page]);
 
-	useEffect(() => {
-		if (!focusProjectId) return;
-		let frame = requestAnimationFrame(() => {
-			let project = document.querySelector<HTMLElement>(
-				`[data-project-id="${CSS.escape(focusProjectId)}"]`,
-			);
-			if (!project) return;
-			project.focus({ preventScroll: true });
-			setFocusProjectId(undefined);
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [focusProjectId, projects]);
-
 	let navigateToDocument = (documentId: string, path?: string) => {
 		setError(undefined);
 		setDialog(undefined);
