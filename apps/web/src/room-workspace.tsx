@@ -22,6 +22,7 @@ import {
 } from "@chopin/editor";
 
 import { Chat } from "./chat/chat";
+import { ChildProvenance } from "./child-provenance";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
 import type { ResearchDraftController } from "./chat/research-draft-controller";
 import { advanceConversationAnnouncement } from "./conversation-plan/announcements";
@@ -815,6 +816,9 @@ export function RoomWorkspace(
 							: !workspaceCanEdit
 							? "You have read-only access to this document."
 							: undefined}
+						emptyNotice={presentation.type === "child"
+							? "Discuss this report here. Messages stay with the report."
+							: undefined}
 						onShowDecisions={() => selectDestination("decisions")}
 						people={peopleHere(members)}
 						conversationPlan={conversation.state}
@@ -919,6 +923,9 @@ export function RoomWorkspace(
 						motionImmediately={settleMotionImmediately}
 						onScrollTop={setPlanScrollTop}
 						onState={setPlanState}
+						preface={presentation.type === "child" && presentation.parent
+							? <ChildProvenance channelId={room} parent={presentation.parent} />
+							: undefined}
 						questionMotion={QUESTION_MOTION}
 						questions={questions}
 						readOnly={!workspaceCanEdit}

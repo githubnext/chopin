@@ -96,6 +96,8 @@ export type ChatProps = {
 	onShowDecisions?: () => void;
 	/** Replaces the composer when this viewer cannot chat at all, such as in an archived document. */
 	notice?: string;
+	/** One calm line shown while the transcript has loaded and is still empty. */
+	emptyNotice?: string;
 };
 
 /** How many runs are still live, and how many are paused and resumable. */
@@ -127,6 +129,7 @@ export function Chat(
 		sourceDestination,
 		people = [],
 		notice,
+		emptyNotice,
 		onShowDecisions,
 		referencesEnabled,
 		repository,
@@ -445,6 +448,9 @@ export function Chat(
 			onRetryJob={onRetryJob}
 			conversationPlan={conversationPlan}
 			decisions={decisions}
+			empty={transcriptReady && entries.length === 0 && queue.length === 0 && !turn
+				? emptyNotice
+				: undefined}
 			researchOffers={researchOffers}
 			sourceDestination={sourceDestination}
 			entries={entries}

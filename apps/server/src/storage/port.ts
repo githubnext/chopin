@@ -222,6 +222,11 @@ export interface ResearchWorkspaceStore {
 		channelId: string,
 		idempotencyKey: string,
 	): Promise<ResearchWorkspaceDetail | undefined>;
+	/** The workspace in `channelId` whose report became the child document `publishedChannelId`. */
+	findPublished(
+		channelId: string,
+		publishedChannelId: string,
+	): Promise<ResearchWorkspaceDetail | undefined>;
 	findTurnByJob(channelId: string, jobId: string): Promise<ResearchTurn | undefined>;
 }
 

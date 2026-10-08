@@ -189,6 +189,9 @@ export function researchPublicationContract(factory: StorageFactory): void {
 				sidecar: ready.initial.sidecar,
 			});
 			expect([...stored!.snapshot!.document]).toEqual([7, 8, 9]);
+			expect((await storage.research.findPublished(channelId, childId))?.workspace.id)
+				.toBe(ready.workspaceId);
+			expect(await storage.research.findPublished(childId, childId)).toBeUndefined();
 
 			await storage.channels.archive({
 				id: channelId,

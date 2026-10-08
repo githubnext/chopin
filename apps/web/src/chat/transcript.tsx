@@ -287,6 +287,7 @@ export function Transcript(
 		conversationPlan,
 		conversationPlanJobs,
 		decisions,
+		empty,
 		researchOffers,
 		entries,
 		handle,
@@ -314,6 +315,7 @@ export function Transcript(
 		) => Promise<void>;
 		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
+		empty?: string;
 		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
@@ -413,6 +415,11 @@ export function Transcript(
 				className="flex min-h-full flex-col gap-4 [&>*:first-child]:mt-auto"
 				data-chat-stack
 			>
+				{empty && (
+					<p className="px-1 text-center text-sm text-text-tertiary" data-chat-empty="">
+						{empty}
+					</p>
+				)}
 				{groups.map(item =>
 					item.kind === "research"
 						? (

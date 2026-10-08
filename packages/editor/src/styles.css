@@ -441,12 +441,13 @@
 /* A narrow document needs breathing room, but never a 32px tax on each side. */
 @container (max-width: 40rem) {
 	.plan-content,
+	.plan-preface,
 	.plan-decisions-content {
 		--plan-gutter: 1rem;
 	}
 
 	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
-	.plan-document[data-plan-decision-lane] .plan-content {
+	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface) {
 		--plan-leading-gutter: 2rem;
 	}
 
@@ -1135,6 +1136,19 @@
 	/* Prose wants looser leading than the UI rhythm the token pairs with. */
 	line-height: 1.6;
 	color: var(--color-text-primary);
+}
+
+/* Host context above the document shares the prose column and pulls the title up under it. */
+.plan .plan-preface {
+	--plan-leading-gutter: var(--plan-gutter);
+	padding: 2rem var(--plan-gutter) 0;
+	padding-inline-start: var(--plan-leading-gutter);
+	margin-inline: auto;
+	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
+}
+
+.plan [data-plan-scroll]:has(> .plan-preface) .plan-content {
+	padding-block-start: 1rem;
 }
 
 /*

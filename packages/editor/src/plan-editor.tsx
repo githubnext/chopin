@@ -91,6 +91,8 @@ export type PlanEditorProps = {
 	onScrollTop?: (top: number) => void;
 	/** Whether the document has opened, for status chrome the host renders. */
 	onState?: (state: PlanState) => void;
+	/** Host-owned context shown above the document, in the prose column. */
+	preface?: ReactNode;
 	className?: string;
 };
 
@@ -112,6 +114,7 @@ export function PlanEditor(
 		motionImmediately,
 		onScrollTop,
 		onState,
+		preface,
 		questionMotion,
 		questions,
 		cardMeta,
@@ -195,6 +198,18 @@ export function PlanEditor(
 		let element = scroller.current;
 		if (element && scrollTop !== undefined) element.scrollTop = scrollTop;
 	}, [generation, scrollTop]);
+
+	// A preface that changes height moves the document without resizing or scrolling it; overlays
+	// that track the prose (comment markers, rails) re-measure on scroll, so announce one.
+	let hasPreface = !!preface;
+	useEffect(() => {
+		let element = scroller.current;
+		let content = element?.querySelector(":scope > .plan-preface");
+		if (!element || !content) return;
+		let observer = new ResizeObserver(() => element.dispatchEvent(new Event("scroll")));
+		observer.observe(content);
+		return () => observer.disconnect();
+	}, [generation, hasPreface, wire]);
 
 	useEffect(() => () => changes.dispose(), [changes]);
 
@@ -368,6 +383,7 @@ export function PlanEditor(
 						data-plan-scroll=""
 						data-plan-synced={state.synced || undefined}
 					>
+						{hasPreface && <div className="plan-preface">{preface}</div>}
 						<MDXEditor
 							// Remounting on epoch rotation is deliberate: the previous
 							// document no longer exists, so there is nothing to reconcile.

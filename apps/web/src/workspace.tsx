@@ -89,11 +89,8 @@ export function useWorkspaceState(
 	let [state, dispatch] = useReducer(
 		transitionWorkspace,
 		undefined,
-		() =>
-			initialWorkspaceState(
-				profile,
-				localStorage.getItem("chopin:pane:chat:open") !== "false",
-			),
+		// A child opens with its parent's saved Chat preference but never saves its own.
+		() => initialWorkspaceState(localStorage.getItem("chopin:pane:chat:open") !== "false"),
 	);
 
 	useEffect(() => {

@@ -340,6 +340,7 @@ export function ResearchCard(
 			<SidecarCard
 				className={`plan-research-card${ready ? " relative" : ""}`}
 				data-research-ready={ready ? "" : undefined}
+				data-research-request={request.id}
 				data-stage={stage}
 				label="Research"
 				tabIndex={-1}

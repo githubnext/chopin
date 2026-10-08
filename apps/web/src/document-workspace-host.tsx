@@ -16,6 +16,7 @@ import {
 } from "./document-workspace-state";
 
 import type { ComponentType } from "react";
+import type { ResearchOpener } from "@chopin/editor";
 import type { ChildFocusToken } from "./anchored-child-surface";
 import type { DocumentWorkspaceAction } from "./document-workspace-state";
 import type { DocumentRouteIdentity } from "./document-route-swap";
@@ -102,7 +103,7 @@ export default function DocumentWorkspaceHost(
 			routeKey: DocumentRouteIdentity,
 			pathname: string,
 		) => void;
-		onChildClose: (parentId: string, parentPath: string) => void;
+		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
 		onParentRestored: (token: ChildFocusToken) => void;
 		onReady: (
@@ -405,7 +406,16 @@ export default function DocumentWorkspaceHost(
 						loaded.child,
 						agent,
 						user,
-						{ label: loaded.child.channel.title, onClose: closeChild, type: "child" },
+						{
+							label: loaded.child.channel.title,
+							onClose: closeChild,
+							parent: {
+								id: loaded.parent.channel.id,
+								label: loaded.parent.channel.title,
+								onReturn: opener => onChildClose(loaded.parent.channel.id, parentPath, opener),
+							},
+							type: "child",
+						},
 						childMetadataChanged,
 					)}
 					key={loaded.child.channel.id}
