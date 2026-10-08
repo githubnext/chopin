@@ -117,6 +117,9 @@ jobs:
       - name: Diagram gallery (rendering and keyboard behaviour)
         run: bun run diagrams:test
 
+      - name: App preview toolkit (static resources and browser behaviour)
+        run: bun run preview-toolkit:test
+
       # Builds the client, then runs it. The build is deliberately here rather
       # than inside the Playwright config: web servers start before any global
       # setup, so a build racing them would leave the suite on the previous

@@ -25,7 +25,8 @@
 		"design:behavior": "bun node_modules/@playwright/test/cli.js test --config e2e/design/behavior.config.ts",
 		"diagrams:test": "bun node_modules/@playwright/test/cli.js test --config e2e/diagram-gallery/playwright.config.ts",
 		"design:browser": "bun scripts/design-browser.ts",
-		"preview-toolkit:dev": "bun e2e/app-preview-toolkit/server.ts"
+		"preview-toolkit:dev": "bun e2e/app-preview-toolkit/server.ts",
+		"preview-toolkit:test": "bun node_modules/@playwright/test/cli.js test --config e2e/app-preview-toolkit/playwright.config.ts"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "4.13.0",
