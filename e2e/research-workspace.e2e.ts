@@ -193,8 +193,10 @@ test("the research draft stays fully visible as its anchor nears an edge", async
 	await seed(WORKSPACE_SOURCE);
 	let page = await join("ana");
 	let editor = content(page);
-	await page.getByText("Workspace passage 12.", { exact: true }).click();
-	await page.keyboard.press("End");
+	// Place the caret by clicking the end of the line; End scrolls the document on macOS.
+	let passage = page.getByText("Workspace passage 12.", { exact: true });
+	let box = (await passage.boundingBox())!;
+	await passage.click({ position: { x: box.width - 1, y: box.height / 2 } });
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
 	await page.keyboard.press("Enter");
@@ -206,8 +208,29 @@ test("the research draft stays fully visible as its anchor nears an edge", async
 		return geometry.inside && geometry.side === "below";
 	}).toBe(true);
 
-	// Scroll the anchor to just above the bottom edge: the draft flips above it.
+	// Scrolled partly past the top, the draft is clipped to the pane rather than drawn over its tabs.
 	let scroller = page.locator("[data-plan-scroll]");
+	// Wheel input, like a reader's, also ends the opening reveal.
+	let pane = (await scroller.boundingBox())!;
+	await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+	await page.mouse.wheel(
+		0,
+		await scroller.evaluate(element => {
+			let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
+			return anchor.getBoundingClientRect().bottom - element.getBoundingClientRect().top + 40;
+		}),
+	);
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let draft = document.querySelector<HTMLElement>(".plan-research-draft")!;
+			let scroller = document.querySelector<HTMLElement>("[data-plan-scroll]")!;
+			let hidden = Number(/inset\((-?[\d.]+)px/.exec(draft.style.clipPath)?.[1] ?? 0);
+			return draft.getBoundingClientRect().top + Math.max(0, hidden)
+					>= scroller.getBoundingClientRect().top - 1 && hidden > 0;
+		})
+	).toBe(true);
+
+	// Scroll the anchor to just above the bottom edge: the draft flips above it.
 	await scroller.evaluate(element => {
 		let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
 		element.scrollTop -= element.getBoundingClientRect().bottom - 48

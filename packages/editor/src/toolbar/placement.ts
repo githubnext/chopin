@@ -130,3 +130,33 @@ export function placeDraft(
 		reveal,
 	};
 }
+
+/** How far a placed draft overflows the visible bounds at its top and bottom edges. */
+export function draftOverflow(
+	top: number,
+	height: number,
+	bounds: ViewportBox,
+): { top: number; bottom: number } {
+	return {
+		top: Math.max(0, bounds.top - top),
+		bottom: Math.max(0, top + height - (bounds.top + bounds.height)),
+	};
+}
+
+/**
+ * Where to scroll to reveal a draft: back to where the reader was when it
+ * opened if the draft fits there, otherwise the smallest scroll that shows it.
+ */
+export function revealTarget(
+	scrollTop: number,
+	openedAt: number | undefined,
+	placeAt: (shift: number) => DraftPlacement,
+	reveal: number,
+): number {
+	if (openedAt !== undefined && openedAt !== scrollTop) {
+		let shift = scrollTop - openedAt;
+		let back = placeAt(shift);
+		if (back.side === "below" && back.reveal === 0) return openedAt;
+	}
+	return scrollTop + reveal;
+}

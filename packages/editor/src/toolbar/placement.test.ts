@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 
-import { intersectViewport, placeDraft, placeSurface, visibleAnchor } from "./placement";
+import {
+	draftOverflow,
+	intersectViewport,
+	placeDraft,
+	placeSurface,
+	revealTarget,
+	visibleAnchor,
+} from "./placement";
 
 test("intersects the visual viewport with the editor host", () => {
 	expect(
@@ -148,4 +155,27 @@ test("reveals only enough to fit a draft above the keyboard", () => {
 
 test("keeps a draft inside narrow bounds horizontally", () => {
 	expect(placeDraft(block(300, 26, 1100), DRAFT, BOUNDS).left).toBe(1420 - 8 - 450);
+});
+
+test("measures how far a draft overflows the visible scroller", () => {
+	expect(draftOverflow(28, 120, BOUNDS)).toEqual({ top: 68, bottom: 0 });
+	expect(draftOverflow(300, 120, BOUNDS)).toEqual({ top: 0, bottom: 0 });
+	expect(draftOverflow(820, 120, BOUNDS)).toEqual({ top: 0, bottom: 54 });
+});
+
+test("reveals by returning to the reader's position when the draft fits there", () => {
+	// The editor jumped 2000px after opening; at the original offset the draft sat at 300.
+	let anchorNow = block(300 - 2000);
+	let placeAt = (shift: number) => placeDraft(block(anchorNow.top + shift), DRAFT, BOUNDS);
+	let now = placeDraft(anchorNow, DRAFT, BOUNDS);
+	expect(revealTarget(3000, 1000, placeAt, now.reveal)).toBe(1000);
+});
+
+test("reveals minimally when the draft did not fit at the opening offset", () => {
+	let anchorNow = block(-85);
+	let placeAt = (shift: number) => placeDraft(block(anchorNow.top + shift), DRAFT, BOUNDS);
+	let now = placeDraft(anchorNow, DRAFT, BOUNDS);
+	// At the opening offset (20px further down the document) the anchor is still above the edge.
+	expect(revealTarget(1000, 980, placeAt, now.reveal)).toBe(1000 + now.reveal);
+	expect(revealTarget(1000, undefined, placeAt, now.reveal)).toBe(1000 + now.reveal);
 });
