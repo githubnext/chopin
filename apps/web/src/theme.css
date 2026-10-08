@@ -710,6 +710,38 @@ body {
 	}
 }
 
+/* Jump-to-source: a tint behind the message that fades; the message itself never moves. */
+.chat-message-body[data-chat-source] {
+	isolation: isolate;
+}
+
+.chat-message-body[data-chat-source]::before {
+	content: "";
+	position: absolute;
+	inset: -2px -6px;
+	z-index: -1;
+	border-radius: var(--radius-md);
+	background: var(--color-brand-wash);
+	pointer-events: none;
+	animation: chat-source-tint calc(var(--duration-linger) * 2) var(--ease-out) forwards;
+}
+
+@keyframes chat-source-tint {
+	0%,
+	40% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-message-body[data-chat-source]::before {
+		animation: none;
+	}
+}
+
 .chat-message-body:has([data-analysis-trigger]) {
 	min-height: calc(var(--spacing) * 7);
 }

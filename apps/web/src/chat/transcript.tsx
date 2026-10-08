@@ -166,12 +166,9 @@ function MessageBody(
 
 	return (
 		<div
-			className={`chat-message-body relative ${
-				markers.sourceDestination?.source.messageId === message.id
-					? "rounded-md bg-inset px-1"
-					: ""
-			}`}
+			className="chat-message-body relative"
 			data-chat-enter={enter || undefined}
+			data-chat-source={markers.sourceDestination?.source.messageId === message.id || undefined}
 			data-chat-message-id={message.id}
 			data-chat-raw={message.text}
 			data-chat-state={message.working
@@ -189,6 +186,14 @@ function MessageBody(
 					streaming={!!message.workStreaming || !!message.streaming}
 					tools={message.tools ?? []}
 				/>
+			)}
+			{message.to === "planner" && message.author.kind === "member" && (
+				<p className="chat-message-to m-0 mb-0.5 flex items-center gap-1 text-2xs text-text-tertiary">
+					<span aria-hidden="true" className="inline-flex">
+						<ChopinMark />
+					</span>
+					To Chopin
+				</p>
 			)}
 			{text && (
 				<div className="flex items-start gap-1">
@@ -214,11 +219,6 @@ function MessageBody(
 							</button>
 						)}
 				</div>
-			)}
-			{markers.sourceDestination?.source.messageId === message.id && (
-				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
-					Source: “{markers.sourceDestination.source.quote}”
-				</p>
 			)}
 			{!message.queued && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers

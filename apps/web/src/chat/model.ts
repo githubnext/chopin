@@ -13,6 +13,8 @@ export type Message = {
 	streaming?: boolean;
 	tools?: Chat.Activity[];
 	references?: Chat.Reference[];
+	/** Set only when the sender addressed the Planner. */
+	to?: Chat.Destination;
 	queued: boolean;
 	working?: boolean;
 	workDisconnected?: boolean;

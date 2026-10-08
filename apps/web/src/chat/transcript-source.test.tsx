@@ -33,22 +33,38 @@ test("saved text and its rendered container retain exact UTF-16 source metadata"
 	let result = markup();
 	expect(result).toContain('data-chat-raw="A\u{1F9EA} pilot"');
 	expect(result).toContain("data-chat-message-text");
-	expect(result).not.toContain("data-source-preview");
 	expect(result).not.toContain("data-source-exact");
 });
 
-test("only the destination message gets its exact source preview and target class", () => {
+test("only the destination message is marked, without a repeated caption", () => {
 	let selected = markup(destination);
-	expect(selected).toContain("rounded-md bg-inset px-1");
-	expect(selected).toContain("data-source-preview");
-	expect(selected).toContain("Source: “A\u{1F9EA} pilot”");
+	expect(selected).toContain("data-chat-source");
+	expect(selected).not.toContain("Source:");
 	let missing = markup({ ...destination, source: { ...destination.source, messageId: "other" } });
-	expect(missing).not.toContain("data-source-preview");
-	expect(missing).not.toContain("rounded-md bg-inset px-1");
+	expect(missing).not.toContain("data-chat-source");
 });
 
 test("source metadata preserves current Markdown rendering instead of flattening text", () => {
 	let result = markup(destination, "**A\u{1F9EA} pilot**");
 	expect(result).toContain('data-chat-raw="**A\u{1F9EA} pilot**"');
 	expect(result).toContain("<strong>A\u{1F9EA} pilot</strong>");
+});
+
+test("a message sent to the Planner is labelled; room messages are not", () => {
+	let render = (to?: "planner") =>
+		renderToStaticMarkup(createElement(Transcript, {
+			active: true,
+			entries: [{
+				id: "m",
+				author: { kind: "member", handle: "ana" },
+				text: "tighten it",
+				ts: 1,
+				...(to ? { to } : {}),
+			}],
+			handle: "ana",
+			onWithdraw: () => {},
+			queued: [],
+		}));
+	expect(render("planner")).toContain("To Chopin");
+	expect(render()).not.toContain("To Chopin");
 });
