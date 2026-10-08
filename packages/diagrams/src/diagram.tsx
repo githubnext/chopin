@@ -43,6 +43,8 @@ function DiagramView({
 	let prefix = `chd-${idPrefix?.replace(/[^a-zA-Z0-9_-]/g, "") || "view"}-${id}`;
 	let titleId = `${prefix}-title`;
 	let descriptionId = `${prefix}-description`;
+	let scrollHintId = `${prefix}-scroll-hint`;
+	let stageRef = useRef<HTMLDivElement>(null);
 	let svgRef = useRef<SVGSVGElement>(null);
 	let [preview, setPreview] = useState<Item | null>(null);
 	let [selected, setSelected] = useState<Item | null>(null);
@@ -50,6 +52,7 @@ function DiagramView({
 	let [live, setLive] = useState(true);
 	let [playback, setPlayback] = useState(0);
 	let [reduced, setReduced] = useState(false);
+	let [overflowing, setOverflowing] = useState(false);
 	let graph = result.graph;
 	let nodes = graph?.nodes ?? [];
 	let edges = graph?.edges ?? [];
@@ -74,6 +77,18 @@ function DiagramView({
 		query.addEventListener("change", update);
 		return () => query.removeEventListener("change", update);
 	}, []);
+
+	useEffect(() => {
+		let stage = stageRef.current;
+		let svg = svgRef.current;
+		if (!stage || !svg) return;
+		let measure = () => setOverflowing(stage.scrollWidth > stage.clientWidth + 1);
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(stage);
+		observer.observe(svg);
+		return () => observer.disconnect();
+	}, [body, playback]);
 
 	useEffect(() => {
 		let svg = svgRef.current;
@@ -241,7 +256,13 @@ function DiagramView({
 					<button type="button" onClick={reset} aria-label="Reset diagram">Reset</button>
 				</div>
 			)}
-			<div className="ch-diagram__stage">
+			<div
+				ref={stageRef}
+				className="ch-diagram__stage"
+				tabIndex={overflowing ? 0 : undefined}
+				aria-label={overflowing ? "Diagram, scroll horizontally" : undefined}
+				aria-describedby={overflowing ? scrollHintId : undefined}
+			>
 				<svg
 					ref={svgRef}
 					className="sc-svg"
@@ -263,6 +284,11 @@ function DiagramView({
 					<DiagramBody key={playback} body={body} />
 				</svg>
 			</div>
+			{overflowing && (
+				<p className="ch-diagram__scroll-hint" id={scrollHintId}>
+					Scroll sideways to see the full diagram. Use the left and right arrow keys when focused.
+				</p>
+			)}
 			{selected && (
 				<aside className="ch-diagram__inspector" aria-label="Diagram details">
 					<div className="ch-diagram__inspector-head">

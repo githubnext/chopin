@@ -1373,6 +1373,18 @@
 	background: var(--color-page);
 }
 
+.ch-diagram__stage:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+.ch-diagram__scroll-hint {
+	margin: 0.375rem 0 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
 .ch-diagram .sc-svg {
 	display: block;
 	width: 100%;
@@ -1494,7 +1506,7 @@
 }
 
 @media print {
-	.ch-diagram__controls, .ch-diagram__inspector {
+	.ch-diagram__controls, .ch-diagram__inspector, .ch-diagram__scroll-hint {
 		display: none;
 	}
 	.ch-diagram .sc-svg {
