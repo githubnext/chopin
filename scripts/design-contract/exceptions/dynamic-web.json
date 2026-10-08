@@ -32,7 +32,7 @@
 				1
 			]
 		],
-		"sourceHash": "f4ec8e83f5ebcaa77846909abf5285f60591c6b617ad23afc4b09780996d3112"
+		"sourceHash": "c9df5d5496e382136786e52f65a0d7a096baecd1d9e42ac860579b1b2d7ddd25"
 	},
 	{
 		"file": "apps/web/src/chat/markdown.tsx",
@@ -186,7 +186,7 @@
 				1
 			]
 		],
-		"sourceHash": "ac53c1c31058e9f1d55f263554122ab1b245d07c9646d699780f1e89b9c5bf42"
+		"sourceHash": "e978c2739846dc0e08c514a0293bb5218a2384abd775d770a4dec859686e7177"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
