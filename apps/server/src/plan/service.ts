@@ -34,13 +34,14 @@ import * as Chat from "../chat/service";
 import { restoreReferences } from "../chat/references";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
+import { sidecarUnansweredDecisions } from "../questions/unanswered";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
 import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
 import { broadcast, fail, relay, reply, tell } from "../wire";
 import { documentUrl } from "../channels/document-url";
 
 import type { Server } from "bun";
-import type { ConversationPlan, Plan as Wire, Request } from "@chopin/protocol";
+import type { ConversationPlan, Plan as Wire, Request, Session } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
 import type { Document } from "./room";
@@ -140,6 +141,9 @@ export type McpUpdateRecord = {
 
 type Persistence = Backend & {
 	channelId: string;
+	repositoryId: string;
+	committedUnanswered: number;
+	unansweredAnnouncements: Promise<void>;
 	revision: number;
 	sequence: number;
 	lastSidecar: string;
@@ -892,6 +896,7 @@ async function commitHosted(
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		announceUnanswered(plan);
 		if (plan.document.epoch === captured.epoch) {
 			plan.document.checkpoint = new Uint8Array(captured.document);
 		}
@@ -912,6 +917,47 @@ async function commitHosted(
 		if (!(err instanceof ResearchProjectionConflict)) durable.fatal(err);
 		throw err;
 	}
+}
+
+function unansweredFrame(
+	plan: Plan,
+	unanswered: number,
+	revision: number,
+): Promise<Session.Decisions> {
+	let durable = plan.persistence;
+	return durable.storage.channels.unansweredDecisions(durable.repositoryId).then(
+		repositoryUnanswered => ({
+			kind: "session:decisions",
+			ts: 0,
+			channelId: durable.channelId,
+			repositoryId: durable.repositoryId,
+			unanswered,
+			repositoryUnanswered,
+			revision,
+		}),
+	);
+}
+
+function announceUnanswered(plan: Plan): void {
+	let durable = plan.persistence;
+	let unanswered = sidecarUnansweredDecisions(durable.committedSidecar);
+	if (unanswered === durable.committedUnanswered) return;
+	durable.committedUnanswered = unanswered;
+	let revision = durable.revision;
+	durable.unansweredAnnouncements = durable.unansweredAnnouncements
+		.then(() => unansweredFrame(plan, unanswered, revision))
+		.then(frame => broadcast(plan.server, plan.id, frame))
+		.catch(err => {
+			console.warn(`[plan] could not announce decision counts for ${durable.channelId}:`, err);
+		});
+}
+
+/** Give a joining socket the committed counts the sidebar shows for this document. */
+export function tellUnanswered(plan: Plan, ws: Socket): Promise<void> {
+	let durable = plan.persistence;
+	return durable.unansweredAnnouncements
+		.then(() => unansweredFrame(plan, durable.committedUnanswered, durable.revision))
+		.then(frame => tell(ws, frame));
 }
 
 async function checkpointHosted(plan: Plan): Promise<void> {
@@ -963,6 +1009,7 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		announceUnanswered(plan);
 		plan.document.checkpoint = new Uint8Array(captured.document);
 		if (durable.checkpointTimer) clearTimeout(durable.checkpointTimer);
 		durable.checkpointTimer = undefined;
@@ -1238,6 +1285,9 @@ export async function open(
 	plan.persistence = {
 		...backend,
 		channelId: id,
+		repositoryId: loaded.channel.repositoryId,
+		committedUnanswered: sidecarUnansweredDecisions(committed.sidecar),
+		unansweredAnnouncements: Promise.resolve(),
 		revision: loaded.channel.revision,
 		sequence: loaded.latestSequence,
 		lastSidecar: committed.sidecarText,

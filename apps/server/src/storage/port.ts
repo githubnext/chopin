@@ -135,6 +135,8 @@ export interface ChannelStore {
 		after?: ChannelScanCursor,
 		includeArchived?: boolean,
 	): Promise<ChannelScanPage>;
+	/** Totals the repository's active catalogue: what `list` returns without archived rows. */
+	unansweredDecisions(repositoryId: string): Promise<number>;
 	claimAgentOwner(channelId: string, sessionId: string, now: Date): Promise<AgentState>;
 	clearAgentOwner(
 		channelId: string,

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as Api from "./api";
 import {
+	acceptDecisionCounts,
+	applyDecisionCounts,
 	beginDocumentLoad,
 	completeDocumentPage,
 	failDocumentLoad,
@@ -13,7 +15,12 @@ import {
 	updateLoadedDocument,
 } from "./document-actions";
 
-import type { DocumentMetadata, LoadedDocuments, ProjectDocuments } from "./document-actions";
+import type {
+	DecisionCounts,
+	DocumentMetadata,
+	LoadedDocuments,
+	ProjectDocuments,
+} from "./document-actions";
 
 type CatalogueLoad = {
 	controller: AbortController;
@@ -30,6 +37,8 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	let documents = catalogue.includeArchived === includeArchived ? catalogue.documents : {};
 	let loads = useRef(new Map<string, CatalogueLoad>());
 	let latestDocuments = useRef(new Map<string, Api.Channel>());
+	let liveCounts = useRef(new Map<string, DecisionCounts>());
+	let liveTotals = useRef(new Map<string, { updates: number; total: number }>());
 
 	let load = useCallback(async (
 		project: Api.NavigationProject,
@@ -48,6 +57,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		let knownDocuments = cursor === undefined
 			? new Set(latestDocuments.current.keys())
 			: undefined;
+		let liveUpdatesAtRequest = liveTotals.current.get(id)?.updates;
 		loads.current.set(key, currentLoad);
 		setCatalogue(current => {
 			let catalogueDocuments = current.includeArchived === includeArchived
@@ -68,9 +78,16 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				{ cursor, includeArchived, signal: controller.signal },
 			);
 			if (loads.current.get(key) !== currentLoad) return;
+			let live = liveTotals.current.get(id);
+			let unansweredDecisions = live && live.updates !== liveUpdatesAtRequest
+				? live.total
+				: page.unansweredDecisions;
 			let channels = page.channels.map(channel => {
 				let latest = latestDocuments.current.get(channel.id);
-				let accepted = latest ? newestDocument(latest, channel) : channel;
+				let accepted = acceptDecisionCounts(
+					latest ? newestDocument(latest, channel) : channel,
+					liveCounts.current.get(channel.id),
+				);
 				latestDocuments.current.set(channel.id, accepted);
 				return accepted;
 			}).filter(channel =>
@@ -95,6 +112,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 							page.nextCursor,
 							cursor === undefined,
 							preserveMissing,
+							unansweredDecisions,
 						),
 					},
 				};
@@ -190,7 +208,10 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, [load]);
 	let upsertDocument = useCallback((channel: Api.Channel) => {
 		let latest = latestDocuments.current.get(channel.id);
-		let accepted = latest ? newestDocument(latest, channel) : channel;
+		let accepted = acceptDecisionCounts(
+			latest ? newestDocument(latest, channel) : channel,
+			liveCounts.current.get(channel.id),
+		);
 		latestDocuments.current.set(channel.id, accepted);
 		setCatalogue(current => {
 			let visible = current.includeArchived === includeArchivedRef.current;
@@ -228,6 +249,24 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 			return documents === current.documents ? current : { ...current, documents };
 		});
 	}, []);
+	let updateDecisionCounts = useCallback((counts: DecisionCounts) => {
+		let known = liveCounts.current.get(counts.channelId);
+		if (!known || known.revision <= counts.revision) {
+			liveCounts.current.set(counts.channelId, counts);
+		}
+		let latest = latestDocuments.current.get(counts.channelId);
+		if (latest) {
+			latestDocuments.current.set(counts.channelId, acceptDecisionCounts(latest, counts));
+		}
+		liveTotals.current.set(counts.repositoryId, {
+			updates: (liveTotals.current.get(counts.repositoryId)?.updates ?? 0) + 1,
+			total: counts.repositoryUnanswered,
+		});
+		setCatalogue(current => {
+			let documents = applyDecisionCounts(current.documents, counts);
+			return documents === current.documents ? current : { ...current, documents };
+		});
+	}, []);
 	let removeDocument = useCallback((documentId: string) => {
 		latestDocuments.current.delete(documentId);
 		for (let active of loads.current.values()) {
@@ -243,6 +282,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		projects,
 		refreshProject,
 		removeDocument,
+		updateDecisionCounts,
 		updateDocument,
 		upsertDocument,
 	};

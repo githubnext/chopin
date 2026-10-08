@@ -39,6 +39,7 @@ export type Channel = {
 	descriptionRevision: number;
 	description?: string;
 	archivedAt?: string;
+	unansweredDecisions?: number;
 };
 
 export type RepositoryPage = {
@@ -78,6 +79,8 @@ export type ChannelPage = {
 	canEdit: boolean;
 	channels: Channel[];
 	nextCursor?: string;
+	/** Present only for the unfiltered active catalogue, including documents on later pages. */
+	unansweredDecisions?: number;
 };
 
 export type ChannelDetail = {

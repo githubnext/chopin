@@ -1,9 +1,22 @@
 import * as Api from "./api";
 
+import type { Session } from "@chopin/protocol";
+
+type LoadedPages = {
+	channels: Api.Channel[];
+	nextCursor?: string;
+	unansweredDecisions?: number;
+};
+
 export type DocumentLoadState =
-	| { status: "loading"; channels: Api.Channel[]; nextCursor?: string }
-	| { status: "ready"; channels: Api.Channel[]; nextCursor?: string }
-	| { status: "error"; channels: Api.Channel[]; nextCursor?: string; message: string };
+	| LoadedPages & { status: "loading" }
+	| LoadedPages & { status: "ready" }
+	| LoadedPages & { status: "error"; message: string };
+
+export type DecisionCounts = Pick<
+	Session.Decisions,
+	"channelId" | "repositoryId" | "unanswered" | "repositoryUnanswered" | "revision"
+>;
 
 export type LoadedDocuments = Record<string, DocumentLoadState>;
 
@@ -29,11 +42,18 @@ export function projectDocuments(
 	}));
 }
 
+function retainedTotal(current?: DocumentLoadState) {
+	return current?.unansweredDecisions === undefined
+		? {}
+		: { unansweredDecisions: current.unansweredDecisions };
+}
+
 export function beginDocumentLoad(current?: DocumentLoadState): DocumentLoadState {
 	return {
 		status: "loading",
 		channels: current?.channels ?? [],
 		...(current?.nextCursor ? { nextCursor: current.nextCursor } : {}),
+		...retainedTotal(current),
 	};
 }
 
@@ -43,6 +63,7 @@ export function completeDocumentPage(
 	nextCursor?: string,
 	replace = false,
 	preserveMissing?: ReadonlySet<string>,
+	unansweredDecisions = current.unansweredDecisions,
 ): DocumentLoadState {
 	let retained = replace
 		? current.channels.filter(channel => preserveMissing?.has(channel.id))
@@ -57,6 +78,7 @@ export function completeDocumentPage(
 		status: "ready",
 		channels: [...byId.values()],
 		...(nextCursor ? { nextCursor } : {}),
+		...(unansweredDecisions === undefined ? {} : { unansweredDecisions }),
 	};
 }
 
@@ -68,6 +90,7 @@ export function failDocumentLoad(
 		status: "error",
 		channels: current.channels,
 		...(current.nextCursor ? { nextCursor: current.nextCursor } : {}),
+		...retainedTotal(current),
 		message: error instanceof Error ? error.message : "Could not load documents",
 	};
 }
@@ -121,10 +144,29 @@ export function updateDocumentMetadata(
 	return next;
 }
 
+function withDecisions(
+	channel: Api.Channel,
+	revision: number,
+	unansweredDecisions: number | undefined,
+): Api.Channel {
+	if (channel.revision === revision && channel.unansweredDecisions === unansweredDecisions) {
+		return channel;
+	}
+	let next: Api.Channel = { ...channel, revision };
+	if (unansweredDecisions === undefined) delete next.unansweredDecisions;
+	else next.unansweredDecisions = unansweredDecisions;
+	return next;
+}
+
 export function newestDocument(current: Api.Channel, replacement: Api.Channel): Api.Channel {
 	if (current.id !== replacement.id) return replacement;
 	let core = current.updatedAt > replacement.updatedAt ? current : replacement;
-	return updateDocumentMetadata(core, newestDocumentMetadata(current, replacement));
+	let decisions = current.revision > replacement.revision ? current : replacement;
+	return withDecisions(
+		updateDocumentMetadata(core, newestDocumentMetadata(current, replacement)),
+		decisions.revision,
+		decisions.unansweredDecisions,
+	);
 }
 
 export function replaceLoadedDocument(
@@ -193,4 +235,37 @@ export function updateLoadedDocument(
 		};
 	}
 	return documents;
+}
+
+export function acceptDecisionCounts(
+	channel: Api.Channel,
+	counts: DecisionCounts | undefined,
+): Api.Channel {
+	if (!counts || counts.channelId !== channel.id || channel.revision > counts.revision) {
+		return channel;
+	}
+	return withDecisions(channel, counts.revision, counts.unanswered);
+}
+
+export function applyDecisionCounts(
+	documents: LoadedDocuments,
+	counts: DecisionCounts,
+): LoadedDocuments {
+	let current = documents[counts.repositoryId];
+	if (!current) return documents;
+	let changed = false;
+	let channels = current.channels.map(channel => {
+		let next = acceptDecisionCounts(channel, counts);
+		if (next !== channel) changed = true;
+		return next;
+	});
+	if (!changed && current.unansweredDecisions === counts.repositoryUnanswered) return documents;
+	return {
+		...documents,
+		[counts.repositoryId]: {
+			...current,
+			channels: changed ? channels : current.channels,
+			unansweredDecisions: counts.repositoryUnanswered,
+		},
+	};
 }

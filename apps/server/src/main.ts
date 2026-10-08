@@ -393,6 +393,9 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						&& !ws.data.closed && ws.data.room === room.id
 						&& room.members.get(ws.data.client) === ws,
 				);
+				void Service.tellUnanswered(opened, ws).catch(err => {
+					if (!ws.data.closed) console.warn("chopin: could not send decision counts -", err);
+				});
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
 			}

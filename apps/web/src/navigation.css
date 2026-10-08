@@ -430,8 +430,8 @@
 	visibility: hidden;
 }
 
-.group\/document:hover .project-sidebar-document-actions,
-.group\/document:focus-within .project-sidebar-document-actions,
+.project-sidebar-document:is(:hover, :focus-within) > .project-sidebar-document-actions,
+.project-sidebar-child:is(:hover, :focus-within) > .project-sidebar-document-actions,
 :root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
 	width: auto;
 	overflow: visible;
@@ -472,6 +472,42 @@
 .project-sidebar-child:hover .project-sidebar-document-action,
 .project-sidebar-child:focus-within .project-sidebar-document-action {
 	opacity: 1;
+}
+
+.project-sidebar-project-row > .project-sidebar-action {
+	width: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+.project-sidebar-project-row:is(:hover, :focus-within) > .project-sidebar-action,
+.project-sidebar-project-row > .project-sidebar-action-pending,
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-project-row
+	> .project-sidebar-action {
+	width: calc(var(--spacing) * 6);
+	padding: calc(var(--spacing) * 1.25);
+	overflow: visible;
+}
+
+.project-sidebar-count {
+	display: flex;
+	min-width: calc(var(--spacing) * 6);
+	flex: 0 0 auto;
+	justify-content: flex-end;
+}
+
+:root:not([data-plan-coarse-pointer])
+	:is(.project-sidebar-project-row:has(> .project-sidebar-action):is(:hover, :focus-within), .project-sidebar-project-row:has(> .project-sidebar-action-pending), .project-sidebar-document:has(> .project-sidebar-document-actions):is(:hover, :focus-within), .project-sidebar-child:has(> .project-sidebar-document-actions):is(:hover, :focus-within))
+	> .project-sidebar-count {
+	display: none;
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	:is(.project-sidebar-document-actions, .project-sidebar-project-row > .project-sidebar-action) {
+	order: 1;
 }
 
 .project-sidebar-status,

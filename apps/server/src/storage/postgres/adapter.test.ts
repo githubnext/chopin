@@ -10,6 +10,8 @@ import { contractId, userAndChannel } from "../contract-support";
 import { PostgresStorage } from "./adapter";
 import { migrate, verifyMigrations } from "./migrations";
 import { backfillDocumentSlugs } from "./migrations/002_document_slugs";
+import { sidecarUnansweredDecisions } from "../../questions/unanswered";
+import { UNANSWERED_SIDECARS } from "../../questions/unanswered.test-fixtures";
 
 let url = process.env.TEST_DATABASE_URL;
 
@@ -40,6 +42,27 @@ if (url) {
 				"secret_hash",
 				"user_id",
 			]);
+		} finally {
+			await sql.close();
+		}
+	});
+
+	it("counts unanswered decisions in SQL exactly as the domain does", async () => {
+		let storage = new PostgresStorage(url);
+		await storage.migrate();
+		await storage.close();
+		let sql = new SQL(url);
+		try {
+			for (let { name, sidecar, expected } of UNANSWERED_SIDECARS) {
+				let source = JSON.stringify(sidecar);
+				let [row] = await sql<{ stored: number; parsed: number }[]>`
+					SELECT
+						chopin_unanswered_decisions(${source}::jsonb) AS stored,
+						chopin_unanswered_decisions(${source}::text::jsonb) AS parsed
+				`;
+				expect({ name, ...row }).toEqual({ name, stored: expected, parsed: expected });
+				expect(sidecarUnansweredDecisions(sidecar)).toBe(expected);
+			}
 		} finally {
 			await sql.close();
 		}
@@ -622,6 +645,7 @@ if (url) {
 				"014_inline_research",
 				"015_planner_inline_reference",
 				"016_persistent_sessions",
+				"017_unanswered_decisions",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

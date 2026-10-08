@@ -41,7 +41,15 @@ export type Request<T> = T & { rid: string };
 export declare namespace Session {
 	export type Incoming = Request<Ping>;
 
-	export type Outgoing = Hello | Presence | Access | Channel | Deleted | Failure | Ping;
+	export type Outgoing =
+		| Hello
+		| Presence
+		| Access
+		| Channel
+		| Decisions
+		| Deleted
+		| Failure
+		| Ping;
 
 	/** A member, as everyone else sees them. */
 	export type Member = {
@@ -82,6 +90,22 @@ export declare namespace Session {
 		description?: string;
 		canManage: boolean;
 		archivedAt?: string;
+	};
+
+	/**
+	 * Unanswered decision counts read from authoritative question records after
+	 * they were committed. Sent when the room opens and whenever a commit changes
+	 * this document's count, so the Projects sidebar never opens other rooms.
+	 */
+	export type Decisions = KIND<"session:decisions"> & {
+		channelId: string;
+		repositoryId: string;
+		/** Unanswered decisions in this document, the number its Decisions tab shows. */
+		unanswered: number;
+		/** Unanswered decisions across every document in the repository's active catalogue. */
+		repositoryUnanswered: number;
+		/** The channel storage revision `unanswered` was committed at, matching `Channel.revision`. */
+		revision: number;
 	};
 
 	/** Repository or document permission changed while the socket was open. */

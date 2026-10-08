@@ -97,6 +97,7 @@ type PublicationChannelRow = {
 	createdAt: unknown;
 	updatedAt: unknown;
 	archivedAt: unknown;
+	unansweredDecisions: unknown;
 };
 
 type PublicationJobRow = {
@@ -249,7 +250,12 @@ const PUBLICATION_CHANNEL_COLUMNS = `
 	channels.revision,
 	channels.created_at AS "createdAt",
 	channels.updated_at AS "updatedAt",
-	channels.archived_at AS "archivedAt"
+	channels.archived_at AS "archivedAt",
+	coalesce((
+		SELECT channel_state.unanswered_decisions
+		FROM channel_state
+		WHERE channel_state.channel_id = channels.id
+	), 0) AS "unansweredDecisions"
 `;
 
 const ORIGINS = new Set<ResearchWorkspaceOrigin>(["inline", "sidebar", "planner"]);
@@ -365,6 +371,7 @@ function publicationChannel(row: PublicationChannelRow): ChannelRecord {
 		createdAt: date(row.createdAt, "published channel creation time"),
 		updatedAt: date(row.updatedAt, "published channel update time"),
 		...(archivedAt ? { archivedAt } : {}),
+		unansweredDecisions: integer(row.unansweredDecisions, "published channel unanswered decisions"),
 	};
 }
 
