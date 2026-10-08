@@ -420,6 +420,37 @@ test("typing with a visible decision card selected never lands at the document s
 	await expect(content(page).locator("p").first()).toHaveText(FIRST);
 });
 
+/** Let the browser dispatch the `selectionchange` an input queued, if it queued one. */
+function settle(page: Page) {
+	return page.evaluate(() =>
+		new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))
+	);
+}
+
+test("a second click where the caret already is does not send typing on a selected card to the document start", async ({ join, seed }) => {
+	let orphan = {
+		...STATE.questions[0]!,
+		anchors: { widget: WIDGET_A, questions: { [QUESTION_A]: { anchors: [], pending: false } } },
+	};
+	await seed(SOURCE, { revision: 1, questions: [orphan, STATE.questions[1]] });
+	let page = await join("ana");
+	await open(page, "Two weeks");
+
+	// The repeat click changes no selection, so no selectionchange clears the
+	// pointer's claim on the next one, which the node selection then fires.
+	for (let attempt = 0; attempt < 5; attempt++) {
+		await clickEdge(prose(page, FIRST), "end");
+		await settle(page);
+		await clickEdge(prose(page, FIRST), "end");
+		await settle(page);
+		await page.keyboard.press("ArrowDown");
+		await settle(page);
+		await page.keyboard.type("xyz");
+		await expect(content(page).locator("p").first()).toHaveText(FIRST);
+	}
+	await expect(content(page)).not.toContainText("xyz");
+});
+
 const hiddenCard = (page: Page, widget: string) =>
 	page.locator(`[data-plan-collapsed][data-plan-sidecar-questionnaire="${widget}"]`);
 
