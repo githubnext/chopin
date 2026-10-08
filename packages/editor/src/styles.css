@@ -2463,26 +2463,6 @@
 	background: var(--color-page);
 }
 
-/*
- * A focused preview is the block held as a whole, between the prose around it
- * and its source. The block clips its corners and the renderer paints over its
- * own box, so the ring goes on the block.
- */
-.plan-content .planCode :is(.plan-code-view, .plan-diagram):focus-visible {
-	outline: none;
-}
-
-:root:not([data-focus-input="pointer"])
-	.plan-content
-	.planCode:has(> [data-plan-preview] :is(.plan-code-view, .plan-diagram):focus-visible) {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	/*
-	 * On the border, not inside it, where the controls in the top-end corner
-	 * would paint over it. The document's inset ring offset does not apply.
-	 */
-	outline-offset: 0;
-}
-
 @media (prefers-reduced-motion: no-preference) {
 	.plan-content .planCode[data-plan-swapped] [data-plan-source] {
 		animation: plan-source-in var(--duration-fast) var(--ease-out);
