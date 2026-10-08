@@ -70,16 +70,16 @@ test("enabled canary reserves only selected PR", async () => {
 	expect(result.rows.map(row => row.number)).toEqual([1]);
 	expect(result.payload.prs[2]).toBeUndefined();
 });
-test("worker dispatch uses the trigger credential separately from state and reporting", async () => {
+test("worker dispatch uses the built-in GitHub request", async () => {
 	let calls = [];
 	let value = config({
 		enabled: true,
 		prs: "1",
-		dispatchRequest: async (method, path, body) => {
-			calls.push({ method, path, body });
-			return null;
-		},
 	});
+	value.request = async (method, path, body) => {
+		if (method === "POST") calls.push({ method, path, body });
+		return { state: "closed" };
+	};
 	let result = await runCoordinator(value);
 	expect(result.dispatches).toHaveLength(1);
 	expect(calls).toHaveLength(1);
@@ -88,21 +88,20 @@ test("worker dispatch uses the trigger credential separately from state and repo
 		"/repos/a/b/actions/workflows/pr-readiness-worker.lock.yml/dispatches",
 	);
 	expect(calls[0].body.inputs.pr).toBe("1");
-	expect(value.writes.some(write => write?.path?.endsWith("/dispatches"))).toBe(false);
 });
-test("missing CI is dispatched with the trigger credential", async () => {
+test("missing CI is dispatched with the built-in GitHub request", async () => {
 	let dispatched = [];
 	let waiting = { ...rows[0], action: "waiting-ci" };
 	let value = config({
 		enabled: true,
 		prs: "1",
 		inspect: async () => [waiting],
-		dispatchRequest: async (method, path, body) => {
+	});
+	value.request = async (method, path, body) => {
+		if (method === "POST") {
 			dispatched.push({ method, path, body });
 			return null;
-		},
-	});
-	value.request = async (_method, path) => {
+		}
 		if (path.includes("/pulls/")) {
 			return {
 				state: "open",
@@ -130,6 +129,48 @@ test("unauthorized manual retry fails before mutations", async () => {
 	});
 	await expect(runCoordinator(value)).rejects.toThrow("not authorized");
 	expect(value.writes).toEqual([]);
+});
+
+test("authorized manual retry rediscovers runs before replacing an abandoned reservation", async () => {
+	let { begin, initialState } = await import("./state.mjs");
+	let attempt = "12345678-1234-1234-1234-123456789abc";
+	let active = begin(
+		initialState({
+			number: 1,
+			head: rows[0].head,
+			baseHead: rows[0].baseHead,
+			action: "repair",
+		}, 1),
+		attempt,
+		2,
+	);
+	let payload = { schemaVersion: 1, repository: "a/b", revision: 0, prs: { 1: active } };
+	let requests = [];
+	let value = config({
+		enabled: true,
+		prs: "1",
+		now: 5 * 60_000 + 2,
+		event: { inputs: { pr: "1" }, sender: { login: "writer" } },
+		eventName: "workflow_dispatch",
+		store: {
+			load: async () => ({ sha: "a".repeat(40), payload }),
+			save: async (_old, next) => {
+				payload = next;
+				return { sha: "b".repeat(40), payload };
+			},
+		},
+		request: async (method, path, body) => {
+			requests.push({ method, path, body });
+			if (path.includes("/permission")) return { permission: "write" };
+			if (path.includes("/runs?")) return { workflow_runs: [] };
+			return { state: "closed" };
+		},
+	});
+	let result = await runCoordinator(value);
+	expect(requests.find(call => call.path.includes("/runs?"))).toBeTruthy();
+	expect(result.dispatches).toHaveLength(1);
+	expect(result.payload.prs[1].active.id).not.toBe(attempt);
+	expect(result.payload.prs[1].episode).toBe(2);
 });
 
 test("authenticated result must match actual GitHub run identity", async () => {

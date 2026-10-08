@@ -7,6 +7,8 @@ on:
     branches: [main]
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled, edited, ready_for_review]
+  # Workers dispatched with GITHUB_TOKEN do not emit this completion event.
+  # PR head updates, CI completion, and the hourly sweep reconcile their results.
   workflow_run:
     workflows: [ci, PR readiness worker]
     types: [completed]
@@ -99,7 +101,6 @@ jobs:
         run: node scripts/pr-maintenance/coordinator-run.mjs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_MAITENANCE_TOKEN: ${{ secrets.PR_MAITENANCE_TOKEN }}
           PR_MAINTENANCE_STATE_KEY: ${{ secrets.PR_MAINTENANCE_STATE_KEY }}
           PR_READINESS_ENABLED: ${{ vars.PR_READINESS_ENABLED }}
           PR_READINESS_PRS: ${{ vars.PR_READINESS_PRS }}

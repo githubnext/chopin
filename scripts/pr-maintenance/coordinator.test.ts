@@ -129,6 +129,36 @@ test("unknown timeout releases lock while known running lock survives", async ()
 	}
 });
 
+test("authenticated retry recovers only a missing run after five minutes", async () => {
+	let f = fixture();
+	await coordinate(f.options);
+	let first = f.sent[0].attempt;
+	f.options.now = 5 * 60_000;
+	await coordinate({ ...f.options, retryPR: 1 });
+	expect(f.sent).toHaveLength(1);
+	expect(f.durable.payload.prs[1].active.id).toBe(first);
+	expect(f.durable.payload.prs[1].episode).toBe(1);
+	f.options.now++;
+	await coordinate({ ...f.options, retryPR: 1 });
+	expect(f.sent).toHaveLength(2);
+	expect(f.durable.payload.prs[1].active.id).not.toBe(first);
+	expect(f.durable.payload.prs[1].episode).toBe(2);
+	expect(f.durable.payload.prs[1].transientCount).toBe(0);
+});
+
+test("authenticated retry preserves a discovered running worker", async () => {
+	let f = fixture();
+	await coordinate(f.options);
+	let first = f.sent[0].attempt;
+	f.runs.push({ id: "run1", attempt: first, status: "in_progress" });
+	f.options.now = 46 * 60_000;
+	await coordinate({ ...f.options, retryPR: 1 });
+	expect(f.sent).toHaveLength(1);
+	expect(f.durable.payload.prs[1].active.id).toBe(first);
+	expect(f.durable.payload.prs[1].active.runId).toBe("run1");
+	expect(f.durable.payload.prs[1].episode).toBe(1);
+});
+
 test("closed and opted out attempts still occupy capacity", async () => {
 	let f = fixture(5);
 	await coordinate(f.options);
