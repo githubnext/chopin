@@ -1,3 +1,5 @@
+import { MENU_ROW, MENU_ROW_OFF, MENU_ROW_ON, MENU_SURFACE } from "@chopin/editor";
+
 import { referenceOptionId } from "./reference-picker";
 
 import type { ChatCommand } from "./commands";
@@ -20,7 +22,7 @@ export function CommandPicker(
 ) {
 	return (
 		<div
-			className="absolute bottom-full left-2.5 z-30 mb-1 w-56 max-w-[calc(100%-1.25rem)] rounded-lg bg-page p-1 ring-hairline shadow-raised"
+			className={`absolute bottom-full left-2.5 z-30 mb-1 w-56 max-w-[calc(100%-1.25rem)] ${MENU_SURFACE}`}
 			data-chat-command-picker=""
 			data-focus-boundary=""
 		>
@@ -28,9 +30,7 @@ export function CommandPicker(
 				{options.map((option, index) => (
 					<button
 						aria-selected={index === active}
-						className={`plan-menu-row flex h-8 w-full items-center rounded-sm px-2 text-left text-sm ${
-							index === active ? "bg-selected text-text-primary" : "text-text-tertiary"
-						}`}
+						className={`${MENU_ROW} ${index === active ? MENU_ROW_ON : MENU_ROW_OFF}`}
 						data-press="wide"
 						id={referenceOptionId(id, index)}
 						key={option.id}

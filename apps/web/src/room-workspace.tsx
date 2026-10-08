@@ -14,6 +14,7 @@ import {
 	PlanEditor,
 	PlanStatus,
 	QuestionnaireStore,
+	ResearchLauncher,
 	selectDecisionView,
 	ThreadStore,
 	useHasPlanContent,
@@ -44,7 +45,6 @@ import { useNavigationDocument } from "./navigation-shell";
 import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
-import { focusDocumentEnd } from "./document-end";
 import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
@@ -326,6 +326,7 @@ export function RoomWorkspace(
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [cardMeta] = useState(() => new CardMetaStore());
 	let [threads] = useState(() => new ThreadStore());
+	let [researchLauncher] = useState(() => new ResearchLauncher());
 	let research = useMemo(
 		() =>
 			new ResearchRequestStore({
@@ -604,16 +605,12 @@ export function RoomWorkspace(
 		});
 	};
 
-	let showDocumentEnd = () => {
+	let startResearch = (brief: string) => {
+		if (!researchLauncher.available()) return false;
 		selectDestination("plan");
-		requestAnimationFrame(() => {
-			let root = document.querySelector<HTMLElement>(
-				`[data-workspace-room="${
-					CSS.escape(room)
-				}"] [data-document-view="plan"] .plan-content[contenteditable="true"]`,
-			);
-			if (root) focusDocumentEnd(root);
-		});
+		// The document may have been hidden; open once it has laid out.
+		requestAnimationFrame(() => researchLauncher.open(brief));
+		return true;
 	};
 
 	useEffect(() => {
@@ -833,8 +830,7 @@ export function RoomWorkspace(
 							? "Discuss this report here. Messages stay with the report."
 							: undefined}
 						onShowDecisions={() => selectDestination("decisions")}
-						onOpenDocument={showDocumentEnd}
-						research={researchEnabled}
+						onResearch={researchEnabled ? startResearch : undefined}
 						people={peopleHere(members)}
 						conversationPlan={conversation.state}
 						conversationPlanJobs={conversation.jobs}
@@ -945,6 +941,7 @@ export function RoomWorkspace(
 						questions={questions}
 						readOnly={!workspaceCanEdit}
 						research={profile.research ? research : undefined}
+						researchLauncher={researchLauncher}
 						scrollTop={planScrollTop}
 						threads={threads}
 						user={user}

@@ -41,11 +41,18 @@ export {
 	useQuestionnaires,
 } from "./questionnaires";
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
+export { ResearchLauncher } from "./research-launcher";
 export { SendAction } from "./send-action";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
 export { ThreadObserver, ThreadStore, useThreads } from "./threads";
 export type { Draft, ThreadState, ThreadView } from "./threads";
+export {
+	MENU_SURFACE,
+	ROW as MENU_ROW,
+	ROW_OFF as MENU_ROW_OFF,
+	ROW_ON as MENU_ROW_ON,
+} from "./toolbar/surface";
 export { presenceClass, transitionPresence, useTransitionPresence } from "./transition-presence";
 export type { PresenceAction, PresencePhase, TransitionPresence } from "./transition-presence";
 export type { Connection, Transport, Unsubscribe } from "./transport";

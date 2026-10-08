@@ -11,9 +11,9 @@ export type ChatCommand = {
 /**
  * What `/` offers in Chat.
  *
- * Only commands that mean something here. Research starts in the document,
- * where its request card is placed, so Chat points there rather than posting
- * the command as a message.
+ * Only commands that mean something here. Research is placed in the
+ * document, so Chat opens the document's research composer with the brief
+ * rather than posting the command as a message.
  */
 export const CHAT_COMMANDS: readonly ChatCommand[] = [
 	{ id: "research", label: "Research", keywords: ["research", "web search"] },
