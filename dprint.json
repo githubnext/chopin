@@ -24,6 +24,7 @@
 		"**/*-lock.json",
 		"**/*.lock",
 		"data/**",
+		"evals/datasets/registry.json",
 		"e2e/.scratch/**",
 		"e2e/test-results/**",
 		"e2e/playwright-report/**"
