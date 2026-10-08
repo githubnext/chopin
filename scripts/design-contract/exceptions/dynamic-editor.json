@@ -361,7 +361,7 @@
 				2
 			]
 		],
-		"sourceHash": "bf8064142b596023133937df32f02b81885646187bb2b6b7b5355d5992bfb7da"
+		"sourceHash": "51ac54fbe62946cfd9225c1658537cfdb43432b6f380e187b126b8eff31a043d"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "248c66d30232a46a4d5513b53e27e125e527a0365f90be5c922bf695f0331c90"
+		"sourceHash": "674c07598a41099218bcb407303ff517c65b29a2c9e165d43a33c074f14499ab"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -466,7 +466,7 @@
 				1
 			]
 		],
-		"sourceHash": "248c66d30232a46a4d5513b53e27e125e527a0365f90be5c922bf695f0331c90"
+		"sourceHash": "674c07598a41099218bcb407303ff517c65b29a2c9e165d43a33c074f14499ab"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -487,7 +487,7 @@
 				1
 			]
 		],
-		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
+		"sourceHash": "1267a15ad057c3d48bc475e033c5970731e97dcf8ac0baa212726b225c38e377"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -501,6 +501,6 @@
 				1
 			]
 		],
-		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
+		"sourceHash": "1267a15ad057c3d48bc475e033c5970731e97dcf8ac0baa212726b225c38e377"
 	}
 ]
