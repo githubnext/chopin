@@ -10,8 +10,8 @@
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import {
-	MAX_RESEARCH_BRIEF,
 	CONNECTION_GRACE,
+	MAX_RESEARCH_BRIEF,
 	SendAction,
 	useConnectionNotice,
 	usePopoverDismissal,
@@ -965,7 +965,8 @@ export function Chat(
 										<SendAction
 											busy={sending}
 											disabled={!draftable || sending || !draft.text.trim()
-												|| blockedCommand || (connectionNotice !== "none" && !draftCommand(draft.text))}
+												|| blockedCommand
+												|| (connectionNotice !== "none" && !draftCommand(draft.text))}
 											onClick={submit}
 											label="Send message"
 										/>
