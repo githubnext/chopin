@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 
-import { devNetwork } from "./vite.config";
+import config, { devNetwork } from "./vite.config";
+
+import type { UserConfig } from "vite";
 
 describe("the Vite development network", () => {
 	it("keeps ordinary development on loopback", () => {
@@ -32,4 +35,15 @@ describe("the Vite development network", () => {
 			expect(() => devNetwork(host)).toThrow("one exact");
 		}
 	});
+});
+
+it("uses OpenUI's pinned published native entry without the CDN bootstrap", () => {
+	let aliases = (config as UserConfig).resolve?.alias;
+	expect(Array.isArray(aliases)).toBe(true);
+	if (!Array.isArray(aliases)) return;
+	let entry = aliases.find(alias =>
+		alias.find instanceof RegExp && alias.find.test("@openuidev/react-lang")
+	);
+	expect(entry?.replacement).toMatch(/\/dist\/index\.native\.mjs$/);
+	expect(readFileSync(entry!.replacement, "utf8")).not.toContain("cdn.jsdelivr.net");
 });

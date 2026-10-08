@@ -31,8 +31,8 @@ Ids use 1–24 lowercase ASCII letters, digits, or hyphens. Titles use 1–90
 characters for the section and 1–70 elsewhere. Introduction uses 1–240;
 strength and tradeoff 1–180 each; detail 1–500; category 1–32; image alt
 1–180; preview text 1–240; media caption 1–100. An image URL is at most 2,048
-characters and follows the document's HTTPS-only image URL rule, including its
-hidden-character check. The complete fence is at most 12,000 characters and
+characters and follows the document's HTTPS-only image URL rule, with no
+whitespace or hidden characters. The complete fence is at most 12,000 characters and
 contains at most six images. The category powers a private filter; it is not a
 saved answer. Preview text is rendered as text, never HTML or executable code.
 
@@ -83,6 +83,21 @@ duplicate, or mismatched references; invalid field or image URL; OpenUI parse
 failure; or unsupported runtime statements. The editable source and neighboring
 prose remain intact after an error. A valid edit restores the preview. The
 renderer loads only when a document contains this fence.
+
+OpenUI is pinned to `@openuidev/react-lang@0.3.0`. Vite selects that package's
+published `react-native` conditional entry for this one dependency because its
+web entry starts development tools from a CDN. The selected entry exposes the
+same API in this version, but upstream documents it for React Native rather
+than web use. The adapter checks the installed version and export shape; an
+upgrade needs an entry/API review and development network check.
+
+Building the starting commit `37b4efdd` and this feature with Bun 1.4.2
+measured all emitted JavaScript at 16,321,335 → 16,454,457 bytes raw
+(**+133,122**) and 3,676,855 → 3,717,928 bytes gzip (**+41,073**). CSS grew
+3,492 raw / 955 gzip bytes. Initial JavaScript stayed 251,015 bytes raw and
+changed 79,206 → 79,198 bytes gzip. The lazy `openui-options` chunk itself is
+126,895 raw / 38,739 gzip bytes, including runtime and component code; it is
+not the full-build delta.
 
 The first product slice supports one comparison composition with images or
 text previews, a table, expandable details, and a per-reader category filter.

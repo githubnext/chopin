@@ -21,9 +21,10 @@ import {
 } from "./code";
 
 describe("what a fence is", () => {
-	it("tells the two rendered languages apart from ordinary code", () => {
+	it("tells rendered languages apart from ordinary code", () => {
 		expect(kindOf(MERMAID_LANGUAGE)).toBe("mermaid");
 		expect(kindOf(DIFF_LANGUAGE)).toBe("diff");
+		expect(kindOf("openui-options")).toBe("openui-options");
 		expect(kindOf("typescript")).toBe("code");
 	});
 

@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -9,6 +12,23 @@ import type { ServerOptions } from "vite";
 
 const PORT = Number(process.env.CHOPIN_DEV_WEB_PORT ?? "5173");
 const EXE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.exe\.xyz$/;
+
+function openUIRuntimeEntry(): string {
+	let require = createRequire(new URL("../../packages/editor/package.json", import.meta.url));
+	let packageRoot = dirname(dirname(require.resolve("@openuidev/react-lang")));
+	let manifest = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8"));
+	let native = manifest.exports?.["."]?.["react-native"]?.import?.default;
+	let web = manifest.exports?.["."]?.import?.default;
+	if (
+		manifest.version !== "0.3.0" || typeof native !== "string" || typeof web !== "string"
+		|| !existsSync(resolve(packageRoot, native))
+	) {
+		throw new Error("Review the OpenUI runtime exports before changing its pinned version");
+	}
+	// The published native condition has the same API without the web entry's
+	// development devtools bootstrap, which fetches code from a CDN.
+	return resolve(packageRoot, native);
+}
 
 type DevNetwork = Pick<ServerOptions, "host" | "allowedHosts" | "hmr">;
 
@@ -34,6 +54,7 @@ export default defineConfig({
 	plugins: [react(), tailwindcss(), tsconfigPaths(), initialJavaScriptBudget()],
 
 	resolve: {
+		alias: [{ find: /^@openuidev\/react-lang$/, replacement: openUIRuntimeEntry() }],
 		// Only what this app resolves itself. Lexical and Yjs belong to the
 		// editor package, and listing them here would ask Vite to resolve them
 		// from a root that does not have them. Their single-copy guarantee comes

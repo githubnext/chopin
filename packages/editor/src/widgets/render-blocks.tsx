@@ -19,7 +19,7 @@
  * race.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
@@ -48,6 +48,10 @@ import { CodeIcon, WarningIcon } from "@chopin/icons";
 import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
 import type { Kind } from "./code";
 
+const OpenUIOptionsPreview = lazy(async () => ({
+	default: (await import("./openui-options")).OpenUIOptionsPreview,
+}));
+
 type Block = {
 	key: string;
 	kind: Kind | "math";
@@ -62,6 +66,7 @@ type Block = {
 function renders(block: Block, html: string | undefined): boolean {
 	if (!block.source.trim()) return false;
 	if (block.kind === "math" || block.kind === "mermaid") return !!html;
+	if (block.kind === "openui-options") return true;
 	return block.kind === "code" || block.kind === "diff";
 }
 
@@ -376,6 +381,13 @@ function Rendered(
 ) {
 	if (error && block.kind === "mermaid") return <DiagramError message={error} />;
 	if (error) return <div data-plan-error="">{error}</div>;
+	if (block.kind === "openui-options") {
+		return (
+			<Suspense fallback={<div className="openui-options-loading">Loading options…</div>}>
+				<OpenUIOptionsPreview key={block.source} source={block.source} />
+			</Suspense>
+		);
+	}
 	if (!block.source.trim()) return null;
 
 	if (block.kind === "code" || block.kind === "diff") {

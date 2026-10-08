@@ -53,13 +53,15 @@
 		"@lexical/yjs": "catalog:mdx",
 		"@mdxeditor/editor": "catalog:mdx",
 		"@mdxeditor/gurx": "catalog:mdx",
+		"@openuidev/react-lang": "0.3.0",
 		"@pierre/diffs": "catalog:diffs",
 		"@radix-ui/react-select": "2.3.7",
 		"katex": "catalog:mdx",
 		"lexical": "catalog:mdx",
 		"mermaid": "catalog:mdx",
 		"y-protocols": "catalog:mdx",
-		"yjs": "catalog:mdx"
+		"yjs": "catalog:mdx",
+		"zod": "4.4.3"
 	},
 	"peerDependencies": {
 		"react": "catalog:react",
