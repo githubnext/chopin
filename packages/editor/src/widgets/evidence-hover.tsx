@@ -58,7 +58,7 @@ export function EvidenceTrigger() {
 		>
 			<span className="sr-only">Evidence:</span>
 			{evidence.summary}
-			<ChevronIcon aria-hidden="true" size={12} />
+			<ChevronIcon aria-hidden="true" />
 		</button>
 	);
 }

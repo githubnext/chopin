@@ -24,6 +24,7 @@ import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
 
+import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";

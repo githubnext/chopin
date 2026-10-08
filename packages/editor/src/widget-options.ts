@@ -1,7 +1,6 @@
 import { Cell } from "@mdxeditor/gurx";
 
 import type { ResearchLauncher } from "./research-launcher";
-import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
