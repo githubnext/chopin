@@ -19,7 +19,7 @@ function source(entryId: string, text: string) {
 }
 
 test("one member message records one pending request across retries and restart", async () => {
-	let firstId = ulid();
+	let firstId = crypto.randomUUID();
 	let secondId = ulid();
 	let firstText = "Explore spacing, density and type scale in the billing card.";
 	let secondText = "Explore colour temperature in the billing card.";
@@ -59,7 +59,7 @@ test("one member message records one pending request across retries and restart"
 });
 
 test("forged, oversized and implementation-locked requests leave no record", async () => {
-	let entryId = ulid();
+	let entryId = crypto.randomUUID();
 	let text = "Explore the card spacing.";
 	let context = await openPlan("# Billing", { transcript: [message(entryId, text)] });
 	plans.push(context.plan);

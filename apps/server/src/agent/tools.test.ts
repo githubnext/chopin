@@ -91,7 +91,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 test("visual preview tool captures only the current member message and committed request", async () => {
 	let errors = spyOn(console, "error").mockImplementation(() => {});
 	try {
-		let entryId = ulid();
+		let entryId = crypto.randomUUID();
 		let text = "Explore the card's continuous spacing and type scale.";
 		let { plan, server, channel } = await opened("# Billing", {
 			transcript: [{ id: entryId, ts: 1, author: { kind: "member", handle: "ana" }, text }],

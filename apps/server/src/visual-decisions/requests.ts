@@ -1,4 +1,5 @@
 import { ULID, ulid } from "@chopin/dialect";
+import { REQUEST_ID } from "../chat/limits";
 import * as Service from "../plan/service";
 
 export type PendingVisualRequest = {
@@ -39,6 +40,11 @@ function instruction(value: unknown): value is string {
 		&& Buffer.byteLength(value, "utf8") <= MAX_INSTRUCTION_BYTES;
 }
 
+function messageId(value: unknown): value is string {
+	// Browser Chat messages use UUIDv4; MCP invoke messages use ULIDs.
+	return typeof value === "string" && (REQUEST_ID.test(value) || ULID.test(value));
+}
+
 function sourceEntry(
 	transcript: Service.Plan["chat"]["entries"],
 	entryId: string,
@@ -72,7 +78,7 @@ export function restore(
 			keys.length !== FIELDS.length || keys.some((key, index) => key !== FIELDS[index])
 			|| !bounded(item.id, 26) || !ULID.test(item.id)
 			|| item.channelId !== channelId
-			|| !bounded(item.originMessageId, 26) || !ULID.test(item.originMessageId)
+			|| !messageId(item.originMessageId)
 			|| !instruction(item.instruction)
 			|| !bounded(item.requestedBy, 200)
 			|| !bounded(item.requestedByHandle, 100)
@@ -108,7 +114,7 @@ export function create(
 			throw new Error("The member request is no longer driving the current Planner turn");
 		}
 		if (
-			!ULID.test(source.entryId) || !bounded(source.userId, 200)
+			!messageId(source.entryId) || !bounded(source.userId, 200)
 			|| !bounded(source.handle, 100) || !instruction(source.text)
 			|| !sourceEntry(plan.chat.entries, source.entryId, source.text, source.handle)
 		) throw new Error("A saved member message is required for a visual preview request");

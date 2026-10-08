@@ -40,7 +40,7 @@ import { JOB_TOOLS } from "../agent/job-scope";
 import type { JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
 import { broadcast, fail, reply, tell } from "../wire";
-import { MAX_MESSAGE_BYTES } from "./limits";
+import { MAX_MESSAGE_BYTES, REQUEST_ID } from "./limits";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -58,7 +58,6 @@ import type { Socket, SocketData } from "../wire";
 const MAX_QUEUE = 20;
 const MAX_PENDING_SENDS = 20;
 const MAX_SESSION_REFERENCES = 50;
-const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
 
 type Delivery = {
