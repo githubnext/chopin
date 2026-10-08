@@ -37,6 +37,7 @@ import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overv
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import { advanceDocumentActivity, documentActivity, QUIET_DOCUMENT } from "./document-activity";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
@@ -50,7 +51,7 @@ import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
-import type { ConversationPlan, Research, Session } from "@chopin/protocol";
+import type { ConversationPlan, Plan, Research, Session } from "@chopin/protocol";
 import type {
 	DecisionView,
 	DecisionViewState,
@@ -425,6 +426,11 @@ export function RoomWorkspace(
 		},
 		[chatActive],
 	);
+	let planVisible = workspacePresentation.documentVisible && view === "plan";
+	let latestPlanVisible = useRef(planVisible);
+	latestPlanVisible.current = planVisible;
+	let answeredBefore = useRef(unanswered);
+	let [documentWatch, setDocumentWatch] = useState(QUIET_DOCUMENT);
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
 		let previous = metadataRef.current;
 		let metadata = newestDocumentMetadata(previous, next);
@@ -462,6 +468,30 @@ export function RoomWorkspace(
 		if (!chatActive) return;
 		setChatActivity(current => current.unread === 0 ? current : { ...current, unread: 0 });
 	}, [chatActive]);
+
+	useEffect(() => {
+		if (planVisible) setDocumentWatch(state => advanceDocumentActivity(state, { type: "seen" }));
+	}, [planVisible]);
+
+	useEffect(() => {
+		if (chatActivity.busy) return;
+		setDocumentWatch(state => advanceDocumentActivity(state, { type: "idle" }));
+	}, [chatActivity.busy]);
+
+	useEffect(() => {
+		if (!wire) return;
+		return wire.on<Plan.Changes>("plan:changes", () => {
+			if (latestPlanVisible.current) return;
+			setDocumentWatch(state => advanceDocumentActivity(state, { type: "changes" }));
+		});
+	}, [wire]);
+
+	useEffect(() => {
+		let previous = answeredBefore.current;
+		answeredBefore.current = unanswered;
+		if (unanswered >= previous || latestPlanVisible.current) return;
+		setDocumentWatch(state => advanceDocumentActivity(state, { type: "answered" }));
+	}, [unanswered]);
 
 	useEffect(() => {
 		let previous = previousUnanswered.current;
@@ -909,6 +939,7 @@ export function RoomWorkspace(
 					/>
 				}
 				chatActivity={chatActivity}
+				documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 				header={
 					<Header
 						archivedAt={workspaceArchivedAt}
@@ -926,6 +957,7 @@ export function RoomWorkspace(
 				controls={
 					<DecisionViewControl
 						attention={attention}
+						documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 						onView={selectDestination}
 						unanswered={unanswered}
 						view={view}
