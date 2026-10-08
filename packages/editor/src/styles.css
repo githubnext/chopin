@@ -2611,10 +2611,13 @@
 }
 
 .plan-decision-marker:hover .plan-decision-disc,
-.plan-decision-marker:focus-visible .plan-decision-disc,
 .plan-decision-marker[aria-expanded="true"] .plan-decision-disc {
 	--color-icon: var(--color-success-ink);
 	outline: var(--edge-width) solid var(--color-success);
+}
+
+.plan-decision-marker:focus-visible .plan-decision-disc {
+	--color-icon: var(--color-success-ink);
 }
 
 .plan-decision-pop {
