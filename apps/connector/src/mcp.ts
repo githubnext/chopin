@@ -10,9 +10,10 @@ export async function remote(origin: string, token: string) {
 	);
 	return {
 		close: () => client.close(),
-		async call(name: string, args: Record<string, unknown> = {}) {
+		async call(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal) {
 			let response = await client.callTool({ name, arguments: args }, undefined, {
 				timeout: 45_000,
+				signal,
 			});
 			if (response.isError) throw new Error(JSON.stringify(response.content));
 			let content = response.content as Array<{ type: string; text?: string }>;
