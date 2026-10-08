@@ -21,26 +21,46 @@ let reply = {
 test("only the current opaque frame can acknowledge its current parameters", () => {
 	let event = { source, origin: "null", data: reply };
 	expect(acceptFrameMessage(event, current)).toEqual(reply);
-	for (let change of [
-		{ source: {} as MessageEventSource },
-		{ origin: "http://localhost:8793" },
-		{ data: { ...reply, session: "old0123456789abcdef" } },
-		{ data: { ...reply, revision: 6 } },
-		{ data: { ...reply, values: { ...reply.values, optionPadding: 6 } } },
-		{ data: { ...reply, height: 4097 } },
-		{ data: { ...reply, extra: "ignored?" } },
-		{ data: "x".repeat(1_000_000) },
-	]) expect(acceptFrameMessage({ ...event, ...change }, current)).toBeUndefined();
+	for (
+		let change of [
+			{ source: {} as MessageEventSource },
+			{ origin: "http://localhost:8793" },
+			{ data: { ...reply, session: "old0123456789abcdef" } },
+			{ data: { ...reply, revision: 6 } },
+			{ data: { ...reply, values: { ...reply.values, optionPadding: 6 } } },
+			{ data: { ...reply, height: 4097 } },
+			{ data: { ...reply, extra: "ignored?" } },
+			{ data: "x".repeat(1_000_000) },
+		]
+	) expect(acceptFrameMessage({ ...event, ...change }, current)).toBeUndefined();
 });
 
 test("parent messages accept only bounded known control values", () => {
 	let { height: _height, ...message } = reply;
 	let input = { ...message, type: "init" };
 	expect(messageValid(input, "parent")).toBe(true);
-	for (let values of [
-		{ optionPadding: 5, selectedColor: "#123456" },
-		{ optionPadding: 6, selectedColor: "red" },
-		{ optionPadding: 6, selectedColor: "#123456", secret: "token" },
-	]) expect(messageValid({ ...input, values }, "parent")).toBe(false);
+	for (
+		let values of [
+			{ optionPadding: 5, selectedColor: "#123456" },
+			{ optionPadding: 6, selectedColor: "red" },
+			{ optionPadding: 6, selectedColor: "#123456", secret: "token" },
+		]
+	) expect(messageValid({ ...input, values }, "parent")).toBe(false);
 	expect(messageValid({ ...input, revision: -1 }, "parent")).toBe(false);
+});
+
+test("preview revisions accept the full nonnegative safe-integer range", () => {
+	let { height: _height, ...parent } = reply;
+	for (let revision of [1_000_001, Number.MAX_SAFE_INTEGER]) {
+		let next = { ...reply, revision };
+		expect(messageValid({ ...parent, type: "set", revision }, "parent")).toBe(true);
+		expect(acceptFrameMessage({ source, origin: "null", data: next }, { ...current, revision }))
+			.toEqual(next);
+	}
+	for (
+		let revision of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]
+	) {
+		expect(messageValid({ ...parent, type: "set", revision }, "parent")).toBe(false);
+		expect(messageValid({ ...reply, revision }, "frame")).toBe(false);
+	}
 });

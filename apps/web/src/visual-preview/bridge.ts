@@ -32,9 +32,18 @@ window.addEventListener("message", event => {
 		revision: message.revision,
 		values: message.values,
 	};
-	document.documentElement.style.setProperty("--visual-option-padding", `${message.values.optionPadding}px`);
-	document.documentElement.style.setProperty("--visual-selected-color", message.values.selectedColor);
-	window.parent.postMessage({ ...current, type: message.type === "init" ? "ready" : "ack" }, parentOrigin!);
+	document.documentElement.style.setProperty(
+		"--visual-option-padding",
+		`${message.values.optionPadding}px`,
+	);
+	document.documentElement.style.setProperty(
+		"--visual-selected-color",
+		message.values.selectedColor,
+	);
+	window.parent.postMessage(
+		{ ...current, type: message.type === "init" ? "ready" : "ack" },
+		parentOrigin!,
+	);
 	requestAnimationFrame(size);
 });
 new ResizeObserver(size).observe(document.body);

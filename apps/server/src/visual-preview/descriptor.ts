@@ -34,7 +34,9 @@ export async function visualDefinition(): Promise<VisualDecision.Definition> {
 
 export async function previewResponse(appOrigin: string) {
 	let descriptor = await visualPreviewDescriptor(appOrigin);
-	if (!descriptor) return Response.json({ error: "Visual preview is not configured" }, { status: 503 });
+	if (!descriptor) {
+		return Response.json({ error: "Visual preview is not configured" }, { status: 503 });
+	}
 	return Response.json(descriptor, { headers: { "cache-control": "no-store" } });
 }
 

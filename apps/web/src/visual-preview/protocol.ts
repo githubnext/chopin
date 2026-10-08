@@ -8,10 +8,12 @@ export type Envelope = {
 	values: PreviewValues;
 };
 export type ParentMessage = Envelope & { type: "init" | "set" };
-export type FrameMessage = Envelope & (
-	| { type: "ready" | "ack" }
-	| { type: "size"; height: number }
-);
+export type FrameMessage =
+	& Envelope
+	& (
+		| { type: "ready" | "ack" }
+		| { type: "size"; height: number }
+	);
 
 export function valuesValid(value: unknown): value is VisualDecision.Values {
 	if (!value || typeof value !== "object") return false;
@@ -29,10 +31,14 @@ export function messageValid(value: unknown, from: "parent" | "frame") {
 		message.version !== 1 || typeof message.session !== "string"
 		|| !/^[A-Za-z0-9_-]{16,64}$/.test(message.session)
 		|| !Number.isSafeInteger(message.revision) || message.revision < 0
-		|| message.revision > 1_000_000 || !valuesValid(message.values)
+		|| !valuesValid(message.values)
 	) return false;
 	let type = message.type;
-	if (from === "parent" ? type !== "init" && type !== "set" : !["ready", "ack", "size"].includes(type)) {
+	if (
+		from === "parent"
+			? type !== "init" && type !== "set"
+			: !["ready", "ack", "size"].includes(type)
+	) {
 		return false;
 	}
 	let keys = type === "size"

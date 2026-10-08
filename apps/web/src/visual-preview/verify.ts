@@ -9,7 +9,10 @@ export type Manifest = {
 };
 export type Descriptor = { origin: string; manifest: Manifest };
 
-export function descriptorValid(value: unknown, definition: VisualDecision.Definition): value is Descriptor {
+export function descriptorValid(
+	value: unknown,
+	definition: VisualDecision.Definition,
+): value is Descriptor {
 	if (!value || typeof value !== "object") return false;
 	let descriptor = value as Descriptor;
 	try {
@@ -37,7 +40,9 @@ export async function verifiedPreview(definition: VisualDecision.Definition, sig
 	let response = await fetch("/api/visual-preview", { signal, redirect: "error" });
 	if (!response.ok) throw new Error("Preview is not available");
 	let descriptor: unknown = await response.json();
-	if (!descriptorValid(descriptor, definition)) throw new Error("Preview definition does not match this decision");
+	if (!descriptorValid(descriptor, definition)) {
+		throw new Error("Preview definition does not match this decision");
+	}
 	let { manifest, origin } = descriptor;
 	let path = `${origin}/bundles/${manifest.bundle.sha256}/`;
 	let options = { credentials: "omit" as const, signal, redirect: "error" as const };
@@ -46,12 +51,17 @@ export async function verifiedPreview(definition: VisualDecision.Definition, sig
 		fetch(`${path}bundle.html`, options),
 	]);
 	if (!manifestResponse.ok || !bundleResponse.ok) throw new Error("Preview could not be verified");
-	if (bundleResponse.headers.get("content-security-policy") !== `${manifest.csp}; frame-ancestors ${location.origin}`) {
+	if (
+		bundleResponse.headers.get("content-security-policy")
+			!== `${manifest.csp}; frame-ancestors ${location.origin}`
+	) {
 		throw new Error("Preview response policy changed");
 	}
 	let remote: unknown = await manifestResponse.json();
-	if (!descriptorValid({ origin, manifest: remote }, definition)
-		|| JSON.stringify(remote) !== JSON.stringify(manifest)) throw new Error("Preview manifest changed");
+	if (
+		!descriptorValid({ origin, manifest: remote }, definition)
+		|| JSON.stringify(remote) !== JSON.stringify(manifest)
+	) throw new Error("Preview manifest changed");
 	let bytes = await bundleResponse.arrayBuffer();
 	if (bytes.byteLength !== manifest.bundle.bytes) throw new Error("Preview bundle length changed");
 	let digest = await crypto.subtle.digest("SHA-256", bytes);

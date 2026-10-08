@@ -25,8 +25,12 @@ export function VisualPreview({ definition, values }: Props) {
 		setUrl(undefined);
 		setError(undefined);
 		setAttempt(0);
-		void verifiedPreview(definition, abort.signal).then(setUrl).catch(failure => {
-			if (!abort.signal.aborted) setError(failure instanceof Error ? failure.message : "Preview unavailable");
+		void verifiedPreview(definition, abort.signal).then(verified => {
+			if (!abort.signal.aborted) setUrl(verified);
+		}).catch(failure => {
+			if (!abort.signal.aborted) {
+				setError(failure instanceof Error ? failure.message : "Preview unavailable");
+			}
 		});
 		return () => abort.abort();
 	}, [definition.bundleDigest, cycle]);
@@ -96,7 +100,10 @@ export function VisualPreview({ definition, values }: Props) {
 	}, [values]);
 
 	return (
-		<div className="relative min-w-0" data-visual-preview-state={error ? "failed" : ready ? "ready" : "loading"}>
+		<div
+			className="relative min-w-0"
+			data-visual-preview-state={error ? "failed" : ready ? "ready" : "loading"}
+		>
 			{url && !error && (
 				<iframe
 					key={`${cycle}:${attempt}`}
@@ -108,7 +115,9 @@ export function VisualPreview({ definition, values }: Props) {
 					style={{ height }}
 				/>
 			)}
-			{!ready && !error && <p role="status" className="m-0 text-sm text-text-tertiary">Loading preview…</p>}
+			{!ready && !error && (
+				<p role="status" className="m-0 text-sm text-text-tertiary">Loading preview…</p>
+			)}
 			{error && (
 				<div role="alert" className="flex flex-col items-start gap-2 text-sm text-text-secondary">
 					<p className="m-0">{error}</p>
@@ -116,7 +125,9 @@ export function VisualPreview({ definition, values }: Props) {
 						type="button"
 						className="btn-outline btn-sm"
 						onClick={() => {
-							setCycle(previous => previous + 1);
+							setCycle(previous =>
+								previous + 1
+							);
 						}}
 					>
 						Retry preview

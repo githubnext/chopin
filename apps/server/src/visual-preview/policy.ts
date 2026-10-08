@@ -43,7 +43,8 @@ export function verifyBundle(value: unknown, bytes: Uint8Array): PreviewManifest
 		|| !manifest.bundle || Object.keys(manifest.bundle).sort().join(",") !== "bytes,sha256"
 		|| manifest.bundle.bytes !== bytes.byteLength || bytes.byteLength > 3_000_000
 		|| manifest.bundle.sha256 !== sha256(bytes)
-		|| !manifest.baseline || Object.keys(manifest.baseline).sort().join(",") !== "optionPadding,selectedColor"
+		|| !manifest.baseline
+		|| Object.keys(manifest.baseline).sort().join(",") !== "optionPadding,selectedColor"
 		|| manifest.baseline.optionPadding !== 6 || manifest.baseline.selectedColor !== "#E1ECEF"
 	) throw new Error("Preview manifest does not match immutable bundle");
 	let html = new TextDecoder("utf-8", { fatal: true }).decode(bytes);

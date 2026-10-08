@@ -385,7 +385,7 @@
 		"producers": [
 			{
 				"file": "apps/web/src/visual-preview/protocol.ts",
-				"sourceHash": "d322937983a1cbb9e731288c548d5fd6e40963bf433860ca3d35a8b561543902"
+				"sourceHash": "3047d5f7def64bedfc536b189429ae39831cdd4781e2a2674b9c286816a3f618"
 			}
 		]
 	}

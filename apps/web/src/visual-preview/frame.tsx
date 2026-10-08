@@ -15,7 +15,11 @@ let definition = {
 		options: [
 			{ id: "github", label: "GitHub App", description: "Use existing repository permissions." },
 			{ id: "oauth", label: "OAuth", description: "Ask each person to authorise access." },
-			{ id: "local", label: "Local accounts", description: "Keep identities within this prototype." },
+			{
+				id: "local",
+				label: "Local accounts",
+				description: "Keep identities within this prototype.",
+			},
 		],
 	}],
 };

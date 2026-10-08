@@ -23,6 +23,10 @@ export function previewOrigin(
 	if (
 		app.protocol !== "https:" || preview.protocol !== "https:"
 		|| !appSite || !previewSite || appSite === previewSite || credentialFree !== "1"
-	) throw new Error("Visual preview requires HTTPS, a separate registrable site, and credential-free operator approval");
+	) {
+		throw new Error(
+			"Visual preview requires HTTPS, a separate registrable site, and credential-free operator approval",
+		);
+	}
 	return preview.origin;
 }
