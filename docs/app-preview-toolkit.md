@@ -93,9 +93,47 @@ checksums, excluding itself. Generated builds, screenshots and traces remain
 ignored. Reports also record source commit/dirty state, component/token references,
 control units/baseline, commands, browser evidence and limitations.
 
-The second independent authoring trial uses raw UsageCard app source with its own
-theme, deterministic usage and required Units provider. Trial evidence will be
-recorded after the fresh agent's actual output is built and browser-checked.
+## Independent authoring trial
+
+A fresh coding agent received the whole installed skill and only the
+[raw UsageCard app](../e2e/app-preview-toolkit/trial-source/), with its own theme,
+deterministic usage and required Units provider. Its disposable source commit was
+`a99336844fac22f24723b687514b80eab66b9641` on `master`, with no remote and a clean
+initial state. The agent prepared a separate preview in ignored `.preview/`;
+all five app files stayed unchanged and both copied helpers were byte-identical.
+
+Agent types, build, nine helper tests and browser/resource checks passed. The parent
+independently checked the actual source imports and Chromium output at host widths
+1008px and 360px: source and preview baseline PNG bytes matched, Units context
+rendered `requests`, and controls produced real meter height 19px and accent
+`#ab4e39`. Space comparison restored chosen values; Reset returned to 8px. All 11
+built resource paths and served SHA-256 checksums matched. Both inspected layouts
+had no horizontal overflow, and there were zero unexpected browser errors.
+
+The agent additionally checked invalid snapshots, local exports and an actual
+missing-provider render failure. Retry observed a fresh frame attempt and resource
+loads before verifying retained 16px / `#c05a38`. No observed skill failure required
+an instruction revision.
+
+The retained local trial workspace is `/private/tmp/chopin-preview-skill-trial`.
+Its generated adapter, scripts and screenshots are evidence artifacts, excluded
+from this repository. These commands apply to that workspace:
+
+```bash
+bun run types
+bunx vite build --config .preview/vite.config.ts
+bunx vite preview --config .preview/vite.config.ts --host 127.0.0.1 --port 8821 --strictPort
+# With the built server running, in another terminal:
+bun .preview/browser-check.ts
+bun .preview/check-resources.ts
+bun test ./.agents/skills/building-app-previews/assets/controls.test.ts ./.agents/skills/building-app-previews/assets/preview.test.ts
+```
+
+Trial frames were same-origin on loopback; this adds authoring/fidelity evidence,
+not isolation certification. Some cancellation/visibility checks used injected
+events. The source uses platform fonts and no portals or image assets; those
+requirements are covered by the separate Billing example. No MCP preview contract
+was supplied and no publication occurred.
 
 ## Delivery boundary
 
