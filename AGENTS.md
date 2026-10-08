@@ -80,7 +80,8 @@ harnesses as runtime package boundaries.
 
 The browser edits Lexical bound to Yjs. One WebSocket multiplexes session,
 document (`plan:*` on the wire), conversation, questions, comments, and
-implementation lifecycle messages. The server keeps each open channel as an
+implementation lifecycle messages; the Projects sidebar's own `/ws/sidebar`
+socket carries only decision counts. The server keeps each open channel as an
 authoritative Y.Doc with a headless Lexical mirror so it can validate and
 serialize the document without trusting a browser.
 

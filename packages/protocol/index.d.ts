@@ -39,16 +39,13 @@ export type Request<T> = T & { rid: string };
  * invite frames that disagree with the connection that carried them.
  */
 export declare namespace Session {
-	export type Incoming = Request<Ping> | Request<WatchDecisions>;
+	export type Incoming = Request<Ping>;
 
 	export type Outgoing =
 		| Hello
 		| Presence
 		| Access
 		| Channel
-		| Decisions
-		| DecisionsWatched
-		| DecisionsSnapshot
 		| Deleted
 		| Failure
 		| Ping;
@@ -94,66 +91,6 @@ export declare namespace Session {
 		archivedAt?: string;
 	};
 
-	/**
-	 * Unanswered decision counts read from authoritative question records after
-	 * they were committed. Sent to the opening socket when a document opens, and to
-	 * every socket open on a document in the repository or watching it through
-	 * `WatchDecisions` whenever a commit changes a document's count or a document
-	 * leaves or rejoins the active catalogue, so the Projects sidebar never opens
-	 * other rooms. Frames for one repository are sent in the order their totals were
-	 * read.
-	 */
-	export type Decisions = KIND<"session:decisions"> & {
-		channelId: string;
-		repositoryId: string;
-		/** Unanswered decisions in this document, the number its Decisions tab shows. */
-		unanswered: number;
-		/** Unanswered decisions across every document in the repository's active catalogue. */
-		repositoryUnanswered: number;
-		/** The channel storage revision `unanswered` was committed at, matching `Channel.revision`. */
-		revision: number;
-	};
-
-	/** One repository the Projects sidebar shows, and the documents it has loaded there. */
-	export type WatchedRepository = {
-		/** GitHub node ID; authoritative, and must match what `owner/name` resolves to. */
-		repositoryId: string;
-		owner: string;
-		name: string;
-		/** Loaded documents whose counts the snapshot reconciles, at most 500. */
-		channelIds: string[];
-	};
-
-	/**
-	 * Replace this socket's decision-count subscriptions with the repositories the
-	 * Projects sidebar shows, at most 50. The server rechecks GitHub read access for
-	 * each before subscribing, refuses the rest, and drops a subscription when a later
-	 * recheck fails or the socket closes. Send it after every connection and whenever
-	 * the list changes; an empty list unsubscribes everything but the socket's own
-	 * repository.
-	 */
-	export type WatchDecisions = KIND<"session:decisions-watch"> & {
-		repositories: WatchedRepository[];
-	};
-
-	/** The reply to `WatchDecisions`. A `DecisionsSnapshot` follows for each watched repository. */
-	export type DecisionsWatched = KIND<"session:decisions-watched"> & {
-		watched: string[];
-		refused: string[];
-	};
-
-	/**
-	 * Current counts for one watched repository, so a socket reconciles updates it
-	 * missed while disconnected or before it subscribed. Ordered with `Decisions`
-	 * frames for the same repository.
-	 */
-	export type DecisionsSnapshot = KIND<"session:decisions-snapshot"> & {
-		repositoryId: string;
-		repositoryUnanswered: number;
-		/** The requested documents that still belong to the repository. */
-		documents: Array<{ channelId: string; unanswered: number; revision: number }>;
-	};
-
 	/** Repository or document permission changed while the socket was open. */
 	export type Access = KIND<"session:access"> & {
 		canEdit: boolean;
@@ -179,6 +116,88 @@ export declare namespace Session {
 	export type Ping = KIND<"session:ping">;
 }
 
+/**
+ * The Projects sidebar's own socket at `/ws/sidebar`, which carries unanswered
+ * decision counts for every repository the sidebar shows whether or not a
+ * document is open. Admission authenticates the browser session only; each
+ * repository is authorized when it is watched. Room sockets carry none of these
+ * frames. Requests fail with `Session.Failure`, and `Session.Ping` works here too.
+ */
+export declare namespace Sidebar {
+	export type Incoming = Request<Session.Ping> | Request<Watch> | Request<Unwatch>;
+
+	export type Outgoing = Decisions | Watched | Snapshot | Session.Failure | Session.Ping;
+
+	/**
+	 * Unanswered decision counts read from authoritative question records after they
+	 * were committed. Sent to every socket watching the repository whenever a commit
+	 * changes a document's count, or a document leaves, rejoins, or is deleted from
+	 * the active catalogue. Frames for one repository, including snapshots, are sent
+	 * in the order their totals were read.
+	 */
+	export type Decisions = KIND<"sidebar:decisions"> & {
+		channelId: string;
+		repositoryId: string;
+		/** Unanswered decisions in this document, the number its Decisions tab shows. */
+		unanswered: number;
+		/** Unanswered decisions across every document in the repository's active catalogue. */
+		repositoryUnanswered: number;
+		/** The channel storage revision `unanswered` was committed at, matching `Channel.revision`. */
+		revision: number;
+	};
+
+	/** One repository the Projects sidebar shows, and loaded documents to reconcile there. */
+	export type WatchedRepository = {
+		/** GitHub node ID; authoritative, and must match what `owner/name` resolves to. */
+		repositoryId: string;
+		owner: string;
+		name: string;
+		/** Loaded documents whose counts the snapshot reconciles, at most 500. */
+		channelIds: string[];
+	};
+
+	/**
+	 * Watch decision counts for up to 50 repositories, each listed once. Watching is
+	 * additive: a socket watches at most 200 repositories and refuses the excess.
+	 * The server checks GitHub read access before subscribing a repository it is not
+	 * already watching under the same name, and rechecks every watched repository
+	 * periodically, dropping it when access is denied. Repeat a watched repository
+	 * to reconcile documents loaded since; send more than 500 documents for one
+	 * repository across several frames. Send the full list after every connection.
+	 */
+	export type Watch = KIND<"sidebar:watch"> & {
+		repositories: WatchedRepository[];
+	};
+
+	/** Stop watching repositories the sidebar no longer shows, at most 200. Not answered. */
+	export type Unwatch = KIND<"sidebar:unwatch"> & {
+		repositoryIds: string[];
+	};
+
+	/**
+	 * The reply to `Watch`. A `Snapshot` follows for each watched repository. Refused
+	 * repositories are denied or over the limit; unavailable ones could not be checked
+	 * because GitHub was temporarily unavailable and should be watched again later.
+	 * A repository unwatched while it was being checked appears in no list.
+	 */
+	export type Watched = KIND<"sidebar:watched"> & {
+		watched: string[];
+		refused: string[];
+		unavailable: string[];
+	};
+
+	/**
+	 * Current counts for one watched repository, so a socket reconciles updates it
+	 * missed while disconnected, before it subscribed, or before a document loaded.
+	 */
+	export type Snapshot = KIND<"sidebar:snapshot"> & {
+		repositoryId: string;
+		repositoryUnanswered: number;
+		/** The requested documents that still belong to the repository. */
+		documents: Array<{ channelId: string; unanswered: number; revision: number }>;
+	};
+}
+
 export type { Chat } from "./chat";
 export type { Comment } from "./comment";
 export type { ConversationPlan } from "./conversation-plan";
@@ -187,7 +206,7 @@ export type { Plan } from "./plan";
 export type { Question } from "./question";
 export type { Research } from "./research";
 
-/** Everything a client may send. */
+/** Everything a client may send on a room socket; the sidebar socket accepts `Sidebar.Incoming`. */
 export type Incoming =
 	| Session.Incoming
 	| import("./chat").Chat.Incoming
@@ -197,9 +216,10 @@ export type Incoming =
 	| import("./plan").Plan.Incoming
 	| import("./question").Question.Incoming;
 
-/** Everything a client may receive. */
+/** Everything a client may receive, on a room socket or the sidebar socket. */
 export type Outgoing =
 	| Session.Outgoing
+	| Sidebar.Outgoing
 	| import("./chat").Chat.Outgoing
 	| import("./comment").Comment.Outgoing
 	| import("./conversation-plan").ConversationPlan.Outgoing

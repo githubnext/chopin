@@ -406,7 +406,10 @@ UUID routes remain internal API and collaboration entry points.
 API and authentication paths are owned by the server in development and
 production.
 
-Live collaboration is multiplexed over `/ws`. External coding agents use the
+Live collaboration is multiplexed over `/ws`. The Projects sidebar's
+`/ws/sidebar` socket admits any authenticated browser session with the exact
+Origin, then checks GitHub read access for each repository before it delivers
+that repository's decision counts; see [Repository channels](channels.md). External coding agents use the
 separate Streamable HTTP endpoint at `/mcp`; unlike the browser API, its
 caller-supplied bearer is independent of the GitHub App installation and can
 perform write-authorized document and implementation lifecycle operations.

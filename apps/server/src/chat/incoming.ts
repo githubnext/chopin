@@ -1,4 +1,4 @@
-import type { Incoming } from "@chopin/protocol";
+import type { Incoming, Sidebar } from "@chopin/protocol";
 
 export const MAX_SOCKET_FRAME_BYTES = 2 * 1024 * 1024;
 export const CHAT_CAPABILITIES = { chatReferences: true, chatSendAcks: true } as const;
@@ -6,8 +6,7 @@ export const CHAT_CAPABILITIES = { chatReferences: true, chatSendAcks: true } as
 const KIND = /^[a-z][a-z0-9:-]{0,63}$/;
 const RID = /^[A-Za-z0-9._:-]{1,128}$/;
 
-/** Parse only the bounded request envelope; domain handlers validate their own payloads. */
-export function incomingFrame(raw: string): Incoming | undefined {
+function requestEnvelope(raw: string): Record<string, unknown> | undefined {
 	if (Buffer.byteLength(raw) > MAX_SOCKET_FRAME_BYTES) return undefined;
 	let value: unknown;
 	try {
@@ -19,5 +18,15 @@ export function incomingFrame(raw: string): Incoming | undefined {
 	let frame = value as Record<string, unknown>;
 	if (typeof frame.kind !== "string" || !KIND.test(frame.kind)) return undefined;
 	if (typeof frame.rid !== "string" || !RID.test(frame.rid)) return undefined;
-	return frame as Incoming;
+	return frame;
+}
+
+/** Parse only the bounded request envelope; domain handlers validate their own payloads. */
+export function incomingFrame(raw: string): Incoming | undefined {
+	return requestEnvelope(raw) as Incoming | undefined;
+}
+
+/** The same bounded envelope for the sidebar socket's requests. */
+export function sidebarFrame(raw: string): Sidebar.Incoming | undefined {
+	return requestEnvelope(raw) as Sidebar.Incoming | undefined;
 }

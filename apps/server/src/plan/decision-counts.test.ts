@@ -40,7 +40,7 @@ async function eventually<T>(read: () => T | undefined): Promise<T> {
 }
 
 function decisionFrames(broadcasts: Array<Record<string, unknown>>) {
-	return broadcasts.filter(frame => frame.kind === "session:decisions");
+	return broadcasts.filter(frame => frame.kind === "sidebar:decisions");
 }
 
 function member(): Socket {
@@ -120,7 +120,7 @@ test("announces committed unanswered counts when decisions are asked and answere
 			decisionFrames(broadcasts).find(frame => frame.unanswered === 2)
 		);
 		expect(asked).toEqual({
-			kind: "session:decisions",
+			kind: "sidebar:decisions",
 			ts: expect.any(Number),
 			channelId: channel.id,
 			repositoryId: channel.repositoryId,
@@ -146,53 +146,20 @@ test("announces committed unanswered counts when decisions are asked and answere
 	}
 });
 
-test("tells a joining socket the committed counts for its document", async () => {
-	let { channel, plan, server } = await openPlan();
-	try {
-		let created = Promise.withResolvers<void>();
-		void Questions.ask(
-			plan,
-			server,
-			plan.id,
-			Questions.identify(DECISIONS),
-			undefined,
-			created.resolve,
-		);
-		await created.promise;
-		await eventually(() => plan.persistence.committedUnanswered === 2 || undefined);
-
-		let frames: Array<Record<string, unknown>> = [];
-		let ws = { send: (raw: string) => frames.push(JSON.parse(raw)) } as unknown as Socket;
-		await Service.tellUnanswered(plan, ws);
-
-		expect(frames).toEqual([{
-			kind: "session:decisions",
-			ts: expect.any(Number),
-			channelId: channel.id,
-			repositoryId: channel.repositoryId,
-			unanswered: 2,
-			repositoryUnanswered: 2,
-			revision: plan.persistence.revision,
-		}]);
-	} finally {
-		await Service.close(plan);
-	}
-});
-
-test("publishes decision counts to every socket in the repository, not only the document's room", async () => {
+test("publishes decision counts to the repository topic sidebars watch, not the document's room", async () => {
 	let { channel, plan, server } = await openPlan();
 	let published = recordTopics(server);
 	try {
 		await askDecisions(plan, server);
 		let announced = await eventually(() =>
-			published.find(entry => entry.frame.kind === "session:decisions")
+			published.find(entry => entry.frame.kind === "sidebar:decisions")
 		);
 
 		expect(announced.topic).toBe(repositoryTopic(channel.repositoryId));
 		expect(announced.frame).toMatchObject({ channelId: channel.id, unanswered: 2 });
 		expect(
 			published.filter(entry =>
-				entry.frame.kind === "session:decisions" && entry.topic === topic(plan.id)
+				entry.frame.kind === "sidebar:decisions" && entry.topic === topic(plan.id)
 			),
 		).toEqual([]);
 	} finally {
@@ -222,21 +189,28 @@ test("never sends a repository total older than one already sent", async () => {
 		return total;
 	};
 	try {
-		let told = Service.tellUnanswered(plan, ws);
+		let told = Service.tellRepositoryUnanswered(
+			storage,
+			ws,
+			channel.repositoryId,
+			[channel.id],
+			() => true,
+		);
 		await firstRead.promise;
 		await askDecisions(plan, server);
 		await eventually(() => plan.persistence.committedUnanswered === 2 || undefined);
 		released.resolve();
 		await told;
-		await eventually(() => decisionFrames(delivered).length === 2 || undefined);
+		await eventually(() => decisionFrames(delivered).length === 1 || undefined);
 
-		let frames = decisionFrames(delivered);
-		expect(frames.map(frame => [frame.unanswered, frame.repositoryUnanswered])).toEqual([
-			[0, 0],
-			[2, 2],
+		let frames = delivered.filter(frame =>
+			frame.kind === "sidebar:snapshot" || frame.kind === "sidebar:decisions"
+		);
+		expect(frames.map(frame => [frame.kind, frame.repositoryUnanswered])).toEqual([
+			["sidebar:snapshot", 0],
+			["sidebar:decisions", 2],
 		]);
-		expect(frames[1]!.revision as number).toBeGreaterThan(frames[0]!.revision as number);
-		expect(frames.every(frame => frame.channelId === channel.id)).toBe(true);
+		expect(frames[1]).toMatchObject({ channelId: channel.id, unanswered: 2 });
 	} finally {
 		await Service.close(plan);
 	}
@@ -249,7 +223,7 @@ test("announces the repository total when a document leaves the active catalogue
 		await askDecisions(plan, server);
 		await eventually(() =>
 			published.find(entry =>
-				entry.frame.kind === "session:decisions" && entry.frame.repositoryUnanswered === 2
+				entry.frame.kind === "sidebar:decisions" && entry.frame.repositoryUnanswered === 2
 			)
 		);
 		await Service.drain(plan);
@@ -257,11 +231,11 @@ test("announces the repository total when a document leaves the active catalogue
 		let archived = await storage.channels.archive({ id: channel.id, now });
 		await Service.announceCatalogueUnanswered(server, storage, archived.channel);
 
-		let frames = published.filter(entry => entry.frame.kind === "session:decisions");
+		let frames = published.filter(entry => entry.frame.kind === "sidebar:decisions");
 		expect(frames.at(-1)).toEqual({
 			topic: repositoryTopic(channel.repositoryId),
 			frame: {
-				kind: "session:decisions",
+				kind: "sidebar:decisions",
 				ts: expect.any(Number),
 				channelId: channel.id,
 				repositoryId: channel.repositoryId,
@@ -304,13 +278,13 @@ test("sends a watching socket current counts for its loaded documents and reposi
 		await Service.tellRepositoryUnanswered(storage, ws, channel.repositoryId, [], () => false);
 
 		expect(frames).toEqual([{
-			kind: "session:decisions-snapshot",
+			kind: "sidebar:snapshot",
 			ts: expect.any(Number),
 			repositoryId: channel.repositoryId,
 			repositoryUnanswered: 1,
 			documents: [{ channelId: channel.id, unanswered: 1, revision: stored!.revision }],
 		}, {
-			kind: "session:decisions-snapshot",
+			kind: "sidebar:snapshot",
 			ts: expect.any(Number),
 			repositoryId: "R_elsewhere",
 			repositoryUnanswered: 0,
@@ -318,5 +292,38 @@ test("sends a watching socket current counts for its loaded documents and reposi
 		}]);
 	} finally {
 		await Service.close(plan);
+	}
+});
+
+test("announces the repository total after a document is permanently deleted", async () => {
+	let { channel, plan, server, storage, now } = await openPlan();
+	let published = recordTopics(server);
+	let closed = false;
+	try {
+		await askDecisions(plan, server);
+		await eventually(() => plan.persistence.committedUnanswered === 2 || undefined);
+		await Service.drain(plan);
+		await Service.persist(plan);
+		let archived = await storage.channels.archive({ id: channel.id, now });
+		await Service.close(plan);
+		closed = true;
+		expect(await storage.channels.delete(channel.id)).toBe(true);
+		await Service.announceDeletedUnanswered(server, storage, archived.channel);
+
+		let frames = published.filter(entry => entry.frame.kind === "sidebar:decisions");
+		expect(frames.at(-1)).toEqual({
+			topic: repositoryTopic(channel.repositoryId),
+			frame: {
+				kind: "sidebar:decisions",
+				ts: expect.any(Number),
+				channelId: channel.id,
+				repositoryId: channel.repositoryId,
+				unanswered: 0,
+				repositoryUnanswered: 0,
+				revision: archived.channel.revision,
+			},
+		});
+	} finally {
+		if (!closed) await Service.close(plan);
 	}
 });

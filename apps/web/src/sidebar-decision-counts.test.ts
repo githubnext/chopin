@@ -10,8 +10,6 @@ import {
 	beginDocumentLoad,
 	completeDocumentPage,
 	failDocumentLoad,
-	MAX_WATCHED_DOCUMENTS,
-	MAX_WATCHED_REPOSITORIES,
 	newestDocument,
 	projectDocuments,
 	removeLoadedDocument,
@@ -20,6 +18,7 @@ import {
 	watchedRepositories,
 } from "./document-actions";
 import { ProjectSidebar } from "./project-sidebar";
+import { MAX_WATCHED_DOCUMENTS, MAX_WATCHED_REPOSITORIES } from "./sidebar-decision-watch";
 
 import type { ComponentProps } from "react";
 import type * as Api from "./api";
@@ -376,7 +375,7 @@ describe("decision count catch-up", () => {
 		expect(total.R_chopin!.channels[0]).toBe(parent);
 	});
 
-	it("watches every available sidebar project with its loaded documents, within bounds", () => {
+	it("watches every available sidebar project, up to the limit, with all its loaded documents", () => {
 		let projects = Array.from(
 			{ length: MAX_WATCHED_REPOSITORIES + 2 },
 			(_, index) => navigationProject(index, index !== 1),
@@ -398,7 +397,7 @@ describe("decision count catch-up", () => {
 			channelIds: [parent.id, child.id],
 		});
 		expect(watched.some(repository => repository.repositoryId === "R_1")).toBe(false);
-		expect(watched[1]!.channelIds).toHaveLength(MAX_WATCHED_DOCUMENTS);
+		expect(watched[1]!.channelIds).toHaveLength(MAX_WATCHED_DOCUMENTS + 1);
 		expect(watched[2]!.channelIds).toEqual([]);
 	});
 });

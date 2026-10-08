@@ -1,6 +1,7 @@
 import * as Api from "./api";
+import { MAX_WATCHED_REPOSITORIES } from "./sidebar-decision-watch";
 
-import type { Session } from "@chopin/protocol";
+import type { Sidebar } from "@chopin/protocol";
 
 type LoadedPages = {
 	channels: Api.Channel[];
@@ -14,17 +15,14 @@ export type DocumentLoadState =
 	| LoadedPages & { status: "error"; message: string };
 
 export type DecisionCounts = Pick<
-	Session.Decisions,
+	Sidebar.Decisions,
 	"channelId" | "repositoryId" | "unanswered" | "repositoryUnanswered" | "revision"
 >;
 
 export type DecisionSnapshot = Pick<
-	Session.DecisionsSnapshot,
+	Sidebar.Snapshot,
 	"repositoryId" | "repositoryUnanswered" | "documents"
 >;
-
-export const MAX_WATCHED_REPOSITORIES = 50;
-export const MAX_WATCHED_DOCUMENTS = 500;
 
 export type LoadedDocuments = Record<string, DocumentLoadState>;
 
@@ -331,7 +329,7 @@ export function applyDecisionSnapshot(
 	};
 }
 
-export function watchedRepositories(projects: ProjectDocuments[]): Session.WatchedRepository[] {
+export function watchedRepositories(projects: ProjectDocuments[]): Sidebar.WatchedRepository[] {
 	return projects
 		.filter(({ project }) => project.available)
 		.slice(0, MAX_WATCHED_REPOSITORIES)
@@ -339,6 +337,6 @@ export function watchedRepositories(projects: ProjectDocuments[]): Session.Watch
 			repositoryId: project.repositoryId,
 			owner: project.repositoryOwner,
 			name: project.repositoryName,
-			channelIds: documents.channels.slice(0, MAX_WATCHED_DOCUMENTS).map(channel => channel.id),
+			channelIds: documents.channels.map(channel => channel.id),
 		}));
 }
