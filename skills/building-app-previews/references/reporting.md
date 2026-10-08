@@ -28,6 +28,14 @@ and narrow layout, including clipping and horizontal overflow.
 Exercise each control through the actual host; inspect the real affected prop or
 computed style. Check invalid snapshots are refused, Reset restores baseline,
 and supported pointer/keyboard comparison restores chosen values on every exit.
+Assert restored styles, chosen snapshot and comparison state immediately after
+each exit, before another exit or cleanup can mask a failure. For cancellation,
+capture loss, blur or visibility checks, keep the pointer held until that assertion;
+check keyboard focus loss before key-up. For native capture loss, move while held
+to activate pending capture, call `releasePointerCapture`, then move outside while
+still held and assert restoration before release cleanup. Distinguish injected
+event-handler checks from native browser or physical device/OS evidence.
+
 Test visible rendering failure and recovery with retained chosen values. After
 Retry, observe the replacement frame/attempt and successful fresh resource loads
 before asserting the component; old repaired DOM can pass value assertions while

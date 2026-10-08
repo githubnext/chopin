@@ -112,8 +112,13 @@ had no horizontal overflow, and there were zero unexpected browser errors.
 
 The agent additionally checked invalid snapshots, local exports and an actual
 missing-provider render failure. Retry observed a fresh frame attempt and resource
-loads before verifying retained 16px / `#c05a38`. No observed skill failure required
-an instruction revision.
+loads before verifying retained 16px / `#c05a38`. Review found that mouse-up could
+mask the trial's earlier
+cancellation, capture-loss, blur and visibility assertions. Corrected Chromium
+checks passed with chosen styles, snapshot and comparison state asserted while
+the pointer remained held, before cleanup; real focus loss was checked before
+release too. That evidence correction informed the skill's reporting guidance.
+No UI failure was observed.
 
 The retained local trial workspace is `/private/tmp/chopin-preview-skill-trial`.
 Its generated adapter, scripts and screenshots are evidence artifacts, excluded
