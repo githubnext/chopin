@@ -43,8 +43,13 @@ function decode(value: string): Uint8Array {
 export type PlanProviderOptions = {
 	wire: Transport;
 	doc: Y.Doc;
-	/** Told when the server rotates the epoch and local state must be discarded. */
-	onReset?: (reason: Plan.Reset["reason"]) => void;
+	/**
+	 * Told when the server rotates the epoch and local state must be discarded.
+	 *
+	 * `lost` is true when edits the server never acknowledged went with it, so
+	 * the person can be told rather than finding out later.
+	 */
+	onReset?: (reason: Plan.Reset["reason"], lost: boolean) => void;
 	/**
 	 * Authoritative snapshot of which prose each decision and comment names.
 	 *
@@ -347,7 +352,17 @@ export class PlanProvider implements Provider {
 		let reply = await this.#wire.ask<Plan.Open.Reply>("plan:open", { ...resume });
 		if (!this.#connected || generation !== this.#generation) return;
 
-		let rotated = this.#epoch !== undefined && this.#epoch !== reply.epoch;
+		/*
+		 * The epoch rotated while this client was away, so it never heard the
+		 * reset. Its document and outbox describe a history that no longer
+		 * exists: merging the new state into it keeps edits nobody else has,
+		 * and every later edit is acknowledged but never applies, because it
+		 * builds on them. Rebuild from the server instead, as a reset would.
+		 */
+		if (this.#epoch !== undefined && this.#epoch !== reply.epoch) {
+			this.#discard("replaced");
+			return;
+		}
 		this.#epoch = reply.epoch;
 
 		// Server state never originates locally, so it must not be echoed back.
@@ -357,15 +372,7 @@ export class PlanProvider implements Provider {
 			applyAwarenessUpdate(this.awareness, decode(reply.awareness), this);
 		}
 
-		if (rotated) {
-			this.#outbox.clear();
-			this.#outboxBytes = 0;
-			this.#unsent.clear();
-			this.#overdue.clear();
-			this.#sends.clear();
-		} else {
-			this.#replay();
-		}
+		this.#replay();
 
 		this.#synced = true;
 		this.#emit("status", { status: "connected" });
@@ -555,7 +562,11 @@ export class PlanProvider implements Provider {
 		// The same epoch is the server refusing an oversized update while
 		// keeping the document. Sending it again would be refused again.
 		if (event.epoch === this.#epoch) return this.#park();
+		this.#discard(event.reason);
+	}
 
+	#discard(reason: Plan.Reset["reason"]): void {
+		let lost = this.#outbox.size > 0;
 		this.#outbox.clear();
 		this.#stopTimers();
 		this.#generation++;
@@ -564,7 +575,7 @@ export class PlanProvider implements Provider {
 		this.#synced = false;
 
 		this.#emit("sync", false);
-		this.#options.onReset?.(event.reason);
+		this.#options.onReset?.(reason, lost);
 	}
 
 	get synced(): boolean {

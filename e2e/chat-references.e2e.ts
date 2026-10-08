@@ -379,7 +379,7 @@ test("legacy delivery clears immediately without waiting for an acknowledgement"
 	await expect(draft).toBeFocused();
 });
 
-test("the composer drafts but cannot send until fresh chat history arrives", async ({ join, page, seed }) => {
+test("a send made before fresh chat history arrives waits for it", async ({ join, page, seed }) => {
 	await seed("# Delayed chat history\n");
 	let releaseHistory: (() => void) | undefined;
 	await page.routeWebSocket("**/ws?**", route => {
@@ -403,8 +403,11 @@ test("the composer drafts but cannot send until fresh chat history arrives", asy
 	await expect(draft).toBeEditable();
 	await expect(draft).toHaveAttribute("aria-disabled", "false");
 	await draft.fill("Now synchronized");
-	await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();
-	releaseHistory!();
-	await expect(chat.getByRole("button", { name: "Send message" })).toBeEnabled();
+	await draft.press("Enter");
+	// Held, not refused, and not sent against a transcript that is not current.
+	await expect(chat.locator(".composer-surface")).toHaveAttribute("aria-busy", "true");
 	await expectChatValue(draft, "Now synchronized");
+	releaseHistory!();
+	await expectChatValue(draft, "");
+	await expect(chat.getByText("Now synchronized", { exact: true })).toBeVisible();
 });

@@ -258,16 +258,64 @@ describe("status", () => {
 		try {
 			service.drop();
 			await until(() => wire.status === "reconnecting", "backoff");
-			await Bun.sleep(100);
-			expect(wire.status).toBe("reconnecting");
+			let woken = Date.now();
 			dispatchEvent(new Event("online"));
 			await until(() => wire.status === "connected", "woken reconnect");
+			// Well before the attempt the backoff would otherwise make at 1.2 s.
+			expect(Date.now() - woken).toBeLessThan(500);
 		} finally {
 			Math.random = random;
 		}
 		await Bun.sleep(100);
 		expect(seen.filter(status => status === "connected")).toHaveLength(2);
 	});
+
+	it("lands an attempt inside the grace period however long the backoff", async () => {
+		let service = restartable();
+		let seen: Status[] = [];
+		let wire = connect(service.port, seen);
+		await until(() => wire.status === "connected", "connected");
+
+		let random = Math.random;
+		Math.random = () => 100;
+		try {
+			let lost = Date.now();
+			service.drop();
+			await until(() => seen.filter(status => status === "connected").length === 2, "rescued");
+			expect(Date.now() - lost).toBeLessThan(1500);
+		} finally {
+			Math.random = random;
+		}
+	});
+
+	it("does not turn a burst of focus events into a burst of attempts", async () => {
+		let attempts = 0;
+		let server = Bun.serve({
+			port: 0,
+			hostname: "127.0.0.1",
+			fetch(request) {
+				if (request.headers.get("x-chopin-socket-probe") !== "1") attempts++;
+				return new Response("try again", { status: 503 });
+			},
+		});
+		servers.push(server);
+		let wire = connect(server.port!, []);
+		await until(() => wire.status === "reconnecting", "backoff");
+
+		let random = Math.random;
+		Math.random = () => 100;
+		try {
+			let before = attempts;
+			for (let i = 0; i < 30; i++) {
+				dispatchEvent(new Event(i % 2 ? "focus" : "visibilitychange"));
+				await Bun.sleep(100);
+			}
+			// One per second at most, where every event used to start one.
+			expect(attempts - before).toBeLessThanOrEqual(4);
+		} finally {
+			Math.random = random;
+		}
+	}, 10_000);
 
 	it("ignores a superseded refusal probe after manual reconnection", async () => {
 		let probe = Promise.withResolvers<void>();

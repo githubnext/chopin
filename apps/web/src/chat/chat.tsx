@@ -11,6 +11,7 @@ import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from 
 
 import {
 	MAX_RESEARCH_BRIEF,
+	CONNECTION_GRACE,
 	SendAction,
 	useConnectionNotice,
 	usePopoverDismissal,
@@ -180,6 +181,9 @@ export function Chat(
 		references: [],
 	});
 	let [submitting, setSubmitting] = useState(false);
+	// A send pressed during a blip, made once the connection is back.
+	let [held, setHeld] = useState(false);
+	let sending = submitting || held;
 	let [sendError, setSendError] = useState<string>();
 	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
 	let researching = useRef(false);
@@ -402,15 +406,20 @@ export function Chat(
 	};
 
 	let submit = () => {
-		if (submission.current) return;
+		if (submission.current || !draftable) return;
 		let current = draftRef.current;
 		if (draftCommand(current.text)) {
 			// `#` references stay in the brief as their visible titles.
 			launchResearch(commandBrief(current.text));
 			return;
 		}
-		if (!composerReady || !wire?.connected) return;
 		if (!current.text.trim()) return;
+		if (!composerReady || !wire?.connected) {
+			// Inside the grace period nothing says the connection is down, so
+			// the send waits for it rather than being refused.
+			if (connectionNotice === "none") setHeld(true);
+			return;
+		}
 		let submitted = prepareDraftSubmission(current);
 		let prefix = effectiveMode && !addressedOutsideReferences(submitted.text, submitted.references)
 			? `${MENTION} `
@@ -465,8 +474,24 @@ export function Chat(
 		});
 	};
 
+	// Never held longer than the grace period, however the wait ends.
+	useEffect(() => {
+		if (!held) return;
+		let timer = setTimeout(() => setHeld(false), CONNECTION_GRACE);
+		return () => clearTimeout(timer);
+	}, [held]);
+	useEffect(() => {
+		if (!held) return;
+		if (connectionNotice !== "none") {
+			setHeld(false);
+		} else if (composerReady && wire?.connected) {
+			setHeld(false);
+			submit();
+		}
+	});
+
 	let toggleMode = () => {
-		if (!draftable || submitting || !agent) return;
+		if (!draftable || sending || !agent) return;
 		let current = draftRef.current;
 		let at = selection.start;
 		let end = selection.end;
@@ -651,7 +676,7 @@ export function Chat(
 					</div>
 				)}
 				<div
-					aria-busy={submitting}
+					aria-busy={sending}
 					className="composer-surface field"
 					data-mode={effectiveMode ? "chopin" : "chat"}
 					data-error={!!sendError || undefined}
@@ -723,10 +748,10 @@ export function Chat(
 											: undefined,
 										connectionLabel ? connectionId : undefined,
 									].filter(Boolean).join(" ") || undefined}
-									aria-disabled={!draftable || submitting}
+									aria-disabled={!draftable || sending}
 									aria-invalid={!!sendError || undefined}
 									aria-expanded={commandOpen || pickerOpen || mentionOpen}
-									readOnly={!draftable || submitting}
+									readOnly={!draftable || sending}
 									role="combobox"
 									resetKey={historyKey}
 									historyGroupKey={mode}
@@ -790,7 +815,7 @@ export function Chat(
 										}
 										if (
 											!composing && event.key === "Tab" && event.shiftKey && !event.metaKey
-											&& !event.ctrlKey && !event.altKey && agent && draftable && !submitting
+											&& !event.ctrlKey && !event.altKey && agent && draftable && !sending
 										) {
 											event.preventDefault();
 											if (!event.repeat) toggleMode();
@@ -872,7 +897,7 @@ export function Chat(
 									<div className="composer-left">
 										<ModeSwitch
 											effectiveMode={effectiveMode}
-											disabled={!draftable || submitting || !agent}
+											disabled={!draftable || sending || !agent}
 											onToggle={toggleMode}
 										/>
 
@@ -903,18 +928,14 @@ export function Chat(
 										{/* Always mounted, so the live region hears its first word. */}
 										<span className="composer-connection" id={connectionId} role="status">
 											{connectionLabel && (
-												<span className="composer-connection-label">{connectionLabel}</span>
+												<span
+													className="composer-connection-label"
+													data-offline={connectionLabel === "Offline" || undefined}
+												>
+													{connectionLabel}
+												</span>
 											)}
 										</span>
-										{connectionNotice === "offline" && wire && (
-											<button
-												className="btn btn-sm btn-ghost"
-												onClick={() => wire.reconnect()}
-												type="button"
-											>
-												Reconnect
-											</button>
-										)}
 										<span className="composer-run-control">
 											{agent && (busy || counts.active > 0) && (
 												<button
@@ -942,9 +963,9 @@ export function Chat(
 											)}
 										</span>
 										<SendAction
-											busy={submitting}
-											disabled={!composerReady || submitting || !draft.text.trim()
-												|| blockedCommand}
+											busy={sending}
+											disabled={!draftable || sending || !draft.text.trim()
+												|| blockedCommand || (connectionNotice !== "none" && !draftCommand(draft.text))}
 											onClick={submit}
 											label="Send message"
 										/>
