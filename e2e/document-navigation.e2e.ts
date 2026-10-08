@@ -186,6 +186,8 @@ test("account menu closes on Escape and outside click, and returns focus", async
 	await account.click();
 	await expect(menu).toBeVisible();
 	await page.keyboard.press("ArrowDown");
+	await expect(menu.getByRole("menuitem", { name: "Keyboard shortcuts" })).toBeFocused();
+	await page.keyboard.press("ArrowDown");
 	await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(menu).toHaveCount(0);
