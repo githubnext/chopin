@@ -193,7 +193,7 @@ export function parseResult(input: unknown): Result {
 export const requestSchema = z.object({
 	id: z.string().uuid(),
 	documentId: z.string().uuid(),
-	brief: z.string().trim().min(1).max(limits.brief),
+	brief: z.string().min(1).max(limits.brief).refine(value => value.trim().length > 0),
 	source: sourceSchema,
 	context: z.string().max(limits.context),
 	requester: z.string().min(1).max(200),

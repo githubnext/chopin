@@ -7,7 +7,11 @@ import { conflict, missing } from "../errors";
 export class MemoryExperimentStore implements ExperimentStore {
 	#records = new Map<string, Investigation>();
 	constructor(
-		private options: { exists: (id: string) => boolean; fence: (lease: Lease) => void },
+		private options: {
+			exists: (id: string) => boolean;
+			active: (id: string) => boolean;
+			fence: (lease: Lease) => void;
+		},
 	) {}
 	async get(id: string) {
 		let value = this.#records.get(id);
@@ -28,6 +32,10 @@ export class MemoryExperimentStore implements ExperimentStore {
 	async save(value: Investigation, expected: number | undefined, lease: Lease) {
 		this.options.fence(lease);
 		if (!this.options.exists(value.documentId)) throw missing("experiment document not found");
+		if (
+			!this.options.active(value.documentId)
+			&& !["failed", "cancelled", "interrupted"].includes(value.state)
+		) throw conflict("experiment document archived");
 		let previous = this.#records.get(value.id);
 		if (previous?.revision !== expected) return false;
 		if (

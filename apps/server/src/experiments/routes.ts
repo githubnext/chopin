@@ -9,6 +9,8 @@ import { parse } from "@chopin/dialect";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { Connections } from "./connections";
 import { Experiments, fail } from "./service";
+import { datasetCsv } from "./export";
+import { connectorSchemas } from "./mcp-schema";
 import type { Lease } from "../storage/model";
 
 export type ExperimentRuntime = ReturnType<typeof registerExperimentRoutes>;
@@ -253,6 +255,25 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		connections.touch(found.connection);
 		return found;
 	}
+	route(
+		"GET",
+		"/api/documents/:id/experiments/:experiment/export/:dataset",
+		async (request, params) => {
+			await access(await auth.sessions.authenticate(request), params.id, false);
+			let value = await service.store.get(params.experiment);
+			let dataset = value?.result?.datasets.find(item => item.key === params.dataset);
+			if (!value || value.documentId !== params.id || !dataset) fail("not-found");
+			let csv = new URL(request.url).searchParams.get("format") === "csv";
+			return new Response(csv ? datasetCsv(dataset) : JSON.stringify(dataset, null, 2), {
+				headers: {
+					"content-type": csv ? "text/csv; charset=utf-8" : "application/json",
+					"content-disposition": `attachment; filename="${dataset.key}.${csv ? "csv" : "json"}"`,
+					"cache-control": "no-store",
+					"x-content-type-options": "nosniff",
+				},
+			});
+		},
+	);
 	route("POST", "/api/documents/:id/experiments/:experiment/decision", async (request, params) => {
 		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
 		await mutationAllowed(params.id);
@@ -302,27 +323,19 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			publicInvestigation(await service.select(value.id, session.user.id, input.view, input.patch)),
 		);
 	});
-	let toolNames = [
-		"disconnect_workspace",
-		"wait_for_experiment",
-		"claim_experiment",
-		"renew_experiment",
-		"read_experiment",
-		"submit_experiment_result",
-		"complete_experiment",
-		"fail_experiment",
-	];
 	route("GET", "/connector/mcp", async () => new Response(null, { status: 405 }));
 	route("DELETE", "/connector/mcp", async request => {
 		let { connection, grant } = await connector(
 			(request.headers.get("authorization") ?? "").replace(/^Bearer /, ""),
 		);
 		if (!grant.run) connections.revoke(connection.id);
+		changed(connection.documentId);
 		return new Response(null, { status: 204 });
 	});
 	route("POST", "/connector/mcp", async request => {
 		let token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
 		let { connection, grant } = await connector(token);
+		let schemas = connectorSchemas(!!grant.run);
 		let call = z.object({
 			jsonrpc: z.literal("2.0"),
 			id: z.union([z.string(), z.number()]).optional(),
@@ -341,10 +354,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (call.method === "ping") return respond({});
 		if (call.method === "tools/list") {
 			return respond({
-				tools: toolNames.map(name => ({
+				tools: Object.entries(schemas).map(([name, schema]) => ({
 					name,
 					description: name.replaceAll("_", " "),
-					inputSchema: { type: "object" },
+					inputSchema: z.toJSONSchema(schema, { unrepresentable: "any" }),
 				})),
 			});
 		}
@@ -357,13 +370,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		try {
 			let name = String(call.params?.name);
-			let args = z.record(z.string(), z.unknown()).parse(call.params?.arguments ?? {});
-			if (grant.run && !["read_experiment", "submit_experiment_result"].includes(name)) {
-				fail("tool-forbidden");
-			}
+			if (!Object.hasOwn(schemas, name)) fail("tool-forbidden");
+			let args = schemas[name].parse(call.params?.arguments ?? {});
 			let value: unknown;
 			if (name === "disconnect_workspace") {
 				connections.revoke(connection.id);
+				changed(connection.documentId);
 				for (let active of await service.store.list(connection.documentId)) {
 					if (
 						active.connectionId === connection.id
@@ -424,7 +436,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						let result = args.result as { report?: unknown };
 						if (!result || typeof result.report !== "string") fail("invalid-result");
 						let source = canonicalReport(result.report);
-						if ("issues" in source) fail("invalid-report");
+						if ("issues" in source) {
+							fail(
+								"invalid-report",
+								source.issues.map(issue => issue.message).join("; ").slice(0, 4000),
+							);
+						}
 						if (
 							JSON.stringify(parse(source.source)).match(
 								/"name":"(Questionnaire|Question|Decision|Research|Experiment)"/,
@@ -448,10 +465,27 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				isError: true,
 				content: [{
 					type: "text",
-					text: error instanceof ExperimentError ? error.code : "invalid-request",
+					text: error instanceof ExperimentError
+						? `${error.code}: ${error.message}`
+						: error instanceof z.ZodError
+						? error.message.slice(0, 4000)
+						: "invalid-request",
 				}],
 			});
 		}
 	});
-	return { service, connections, access, mutationAllowed, route, body, json };
+	async function sweep() {
+		connections.sweep();
+		await service.recover();
+		for (let value of await service.store.active()) {
+			if (value.connectionId && !connections.get(value.connectionId)) {
+				await service.stop(
+					value.id,
+					"interrupted",
+					"Workspace connection expired. Propose a new attempt to retry.",
+				);
+			}
+		}
+	}
+	return { service, connections, access, mutationAllowed, route, body, json, sweep };
 }

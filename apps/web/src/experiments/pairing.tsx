@@ -72,10 +72,10 @@ export default function PairingPage() {
 						</select>
 					</label>
 					{url
-						? <a className="btn btn-primary" href={url}>Open document</a>
+						? <a className="btn btn-md btn-primary" href={url}>Open document</a>
 						: (
 							<button
-								className="btn btn-primary"
+								className="btn btn-md btn-primary"
 								disabled={!documentId || busy}
 								onClick={() => void connect()}
 							>

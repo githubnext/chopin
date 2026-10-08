@@ -18,8 +18,14 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"anchor_plan",
 	"edit_implementation_graph",
 	"create_research_workspace",
+	"propose_investigation",
 	"revise_open_decision",
 	...Object.values(JOB_TOOLS),
+]);
+
+export const INVESTIGATION_READS: ReadonlySet<string> = new Set([
+	"list_investigations",
+	"read_investigation",
 ]);
 
 export function refusal(job: Job | undefined, tool: string): string | undefined {
@@ -28,6 +34,9 @@ export function refusal(job: Job | undefined, tool: string): string | undefined 
 		return Object.values(JOB_TOOLS).includes(tool)
 			? `${tool} is only available to a background Planner job.`
 			: undefined;
+	}
+	if (INVESTIGATION_READS.has(tool)) {
+		return "Investigation tools are available only to member Planner turns.";
 	}
 	if (!WRITE_TOOLS.has(tool) || tool === own) return;
 	return `This is a background ${job.kind} job; use only ${own}. ${tool} is not available.`;

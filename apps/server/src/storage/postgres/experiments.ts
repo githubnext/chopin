@@ -39,8 +39,12 @@ export class PostgresExperimentStore implements ExperimentStore {
 		}
 		return await this.sql.begin(async sql => {
 			await this.fence(sql, lease);
-			let [channel] = await sql`SELECT id FROM channels WHERE id = ${value.documentId} FOR UPDATE`;
+			let [channel] =
+				await sql`SELECT id, archived_at FROM channels WHERE id = ${value.documentId} FOR UPDATE`;
 			if (!channel) throw missing("experiment document not found");
+			if (channel.archived_at && !["failed", "cancelled", "interrupted"].includes(value.state)) {
+				throw conflict("experiment document archived");
+			}
 			let rows = expected === undefined
 				? await sql`INSERT INTO experiments (id, channel_id, revision, state, created_at, payload)
 					VALUES (${value.id}, ${value.documentId}, 0, ${value.state}, ${new Date(
