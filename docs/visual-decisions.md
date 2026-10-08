@@ -50,7 +50,11 @@ creation is refused. Existing records remain durable.
 
 The authenticated trusted host obtains a fixed descriptor, fetches preview bytes
 with credentials omitted, checks the manifest, digest and response CSP, then
-loads an opaque `sandbox="allow-scripts"` iframe. The preview accepts only
+loads an opaque `sandbox="allow-scripts"` iframe. That navigation is a separate
+request: browsers do not enforce HTML subresource integrity. The trusted preview
+server holds verified bytes in memory and serves the same bytes for every request
+at the exact digest URL. The reviewed TLS and ingress boundary must preserve those
+bytes and CSP, without response rewriting or injection. The preview accepts only
 versioned messages from its parent. Replies must match the current frame source,
 opaque origin, session, revision and values; replies never update saved values.
 Host CSP restricts frame navigation to the configured preview origin. Each
@@ -71,7 +75,8 @@ preview site's ingress, cookies, authentication, redirects and response headers
 must be checked before setting it; runtime domain checks cannot establish those
 operational facts. The site must serve only the verified immutable bundle and
 manifest, with the expected CSP, no reusable Chopin credential, no Set-Cookie,
-and no bundle-controlled fetch targets. Set `VISUAL_PREVIEW_APP_ORIGIN` to the
+no response rewriting or injection, and no bundle-controlled fetch targets.
+Set `VISUAL_PREVIEW_APP_ORIGIN` to the
 exact application origin, and the preview host/port to its deployment bindings.
 The application's CSP and preview frame-ancestor policy bind those origins.
 

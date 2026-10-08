@@ -58,8 +58,11 @@ later source-app change.
 ## Preview boundary
 
 The first specimen can use a code-owned static bundle of the real decision card.
-The trusted host verifies its exact bytes and manifest, keeps credentials and
-control state outside the iframe, and uses an opaque sandbox, restrictive response
+The trusted host verifies fetched bytes and the manifest. The separate iframe
+navigation relies on the trusted preview server serving the same immutable bytes
+at that digest URL and on reviewed TLS and ingress preserving those bytes and CSP
+without rewriting or injection; browsers do not enforce HTML subresource integrity.
+The host keeps credentials and control state outside the iframe and uses an opaque sandbox, restrictive response
 CSP, and a versioned, source-checked bridge. The preview site must have a distinct
 registrable domain without reusable Chopin credentials before production delivery.
 An unexpected frame load must enter a bounded host-owned handshake and replacement

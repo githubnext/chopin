@@ -67,5 +67,7 @@ export async function verifiedPreview(definition: VisualDecision.Definition, sig
 	let digest = await crypto.subtle.digest("SHA-256", bytes);
 	let hex = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
 	if (hex !== manifest.bundle.sha256) throw new Error("Preview bundle changed");
+	// HTML navigation has no SRI: the trusted immutable server and reviewed ingress
+	// must serve these same bytes and CSP for the iframe's separate request.
 	return `${path}bundle.html`;
 }
