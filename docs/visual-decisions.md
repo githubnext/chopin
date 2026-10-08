@@ -1,5 +1,13 @@
 # Collaborative visual decisions
 
+This branch is a draft. The current implementation exposes a fixed Chopin
+specimen, which is not the intended production feature. Visual decisions must
+concern the user's own app. The corrected
+[rendering scope](superpowers/plans/2026-10-08-dynamic-design-card-rendering.md)
+removes that public example and accepts preview/control definitions as inputs;
+local-agent pickup and MCP publication follow separately. That generalization is
+not implemented yet. The behavior below describes the current specimen.
+
 In **Decisions**, a repository writer can choose **Tune decision card** to create
 the built-in visual decision. It renders Chopin's real decision options with two
 controls: vertical padding of 4, 6, or 8 px, and selected-option colour in
@@ -106,7 +114,8 @@ bun run e2e --config e2e/visual-decision.playwright.config.ts
 
 Its Save failure and in-flight claim probes use a test-only PostgreSQL trigger
 and advisory lock, never a production failure endpoint. It checks concurrent
-edits, stale and rolled-back Saves, reconnect/reload, write permissions, protected
+edits, stale and rolled-back Saves, short reconnects, retry after a peer edit,
+reload, write permissions, protected
 projections, wide/narrow placement, pointer/touch/Space/assistive peek, immutable
 bytes, cookies/storage, egress/navigation and bridge rejection/recovery.
 
@@ -118,8 +127,8 @@ quota. Schema-valid size claims can be false; the trusted host caps displayed
 height at 300–640 px. Browser evidence is Chromium-specific and does not certify
 arbitrary code, private bundles, or other browser engines.
 
-After integrating current main, the focused unit run passed 363 tests. All 72 PostgreSQL persistence/lifecycle
-tests passed, and all 11 Chromium integration scenarios passed. TypeScript,
+After the review fixes, the focused unit run passed 364 tests. All 72 PostgreSQL persistence/lifecycle
+tests passed, and all 14 Chromium integration scenarios passed. TypeScript,
 build and local CI validation passed. Before that integration, the container build passed with verbose
 install logging; a networking-disabled runtime check verified its packaged
 manifest, bytes, CSP and preview imports. The broader unit run

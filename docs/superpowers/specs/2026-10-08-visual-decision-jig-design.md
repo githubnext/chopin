@@ -1,5 +1,11 @@
 # Collaborative visual decision jig
 
+The specimen below is a test vehicle, not a production feature for tuning
+Chopin itself. Maggie clarified that the product must preview the user's own
+app, authored by a local coding agent which picks up Chopin's request through
+MCP. The [corrected rendering scope](../plans/2026-10-08-dynamic-design-card-rendering.md)
+separates that reusable capability from the later authoring/publication workflow.
+
 ## Goal and first specimen
 
 Let a team tune a component inside a Chopin decision, see each other's changes, and save
