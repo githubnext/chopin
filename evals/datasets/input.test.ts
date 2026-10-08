@@ -52,9 +52,12 @@ describe("development input registry", () => {
 		expect(reads).toBe(0);
 	});
 
-	localTest("verifies every imported byte hash, including provenance", async () => {
+	test("keeps the baseline registry byte-for-byte frozen", async () => {
 		let manifest = await readFile(new URL("registry.json", import.meta.url));
 		expect(createHash("sha256").update(manifest).digest("hex")).toBe(sources.registrySha256);
+	});
+
+	localTest("verifies every imported byte hash, including provenance", async () => {
 		for (let entry of registry.development) {
 			for (let file of [entry.file, ...(entry.files ?? []), entry.provenance].filter(Boolean)) {
 				let bytes = await readFile(new URL(file!.path, snapshotRoot));
