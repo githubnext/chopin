@@ -24,7 +24,7 @@ import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentCreationPhase } from "./use-document-creation";
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 
 export function NavigationIcon(
 	{ alt = "", className, src }: { alt?: string; className?: string; src: string },
