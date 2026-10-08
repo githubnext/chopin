@@ -502,7 +502,6 @@ describe("research workspace service", () => {
 			parentChannelId: context.channelId,
 			brief: "Which API contracts changed?",
 			sourceCount: 1,
-			startedAt: started.request.createdAt,
 			startedBy: "octocat",
 		});
 		expect(await context.service.provenance(childId, childId)).toBeUndefined();

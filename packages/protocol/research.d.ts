@@ -47,7 +47,6 @@ export declare namespace Research {
 		readonly parentChannelId: string;
 		readonly brief: string;
 		readonly sourceCount: number;
-		readonly startedAt: string;
 		readonly startedBy?: string;
 	};
 
