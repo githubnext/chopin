@@ -891,7 +891,9 @@ test(
 		await expect(chat.getByText("Edit plan", { exact: true })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
-		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "@chopin" });
+		let mine = chat.locator("[data-chat-entry]").filter({
+			has: page.getByText("Ana", { exact: true }),
+		});
 		let theirs = chat.locator("[data-chat-entry]").filter({
 			hasText: "Check the rollback path too.",
 		});
