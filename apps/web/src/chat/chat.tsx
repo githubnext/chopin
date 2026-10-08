@@ -9,7 +9,7 @@
 
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
-import { SendAction, usePopoverDismissal } from "@chopin/editor";
+import { MAX_RESEARCH_BRIEF, SendAction, usePopoverDismissal } from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
 import { ArchiveIcon, InfoIcon, LoaderIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
@@ -20,6 +20,7 @@ import "./composer.css";
 import { CommandPicker } from "./command-picker";
 import {
 	CHAT_COMMANDS,
+	commandBrief,
 	commandKeyAction,
 	commandText,
 	commandTrigger,
@@ -72,6 +73,7 @@ import plannerResume from "../assets/icons/planner-resume.svg";
 
 import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
+import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
 import type { ChatCommand } from "./commands";
 import type { MentionCandidate } from "./mentions";
 import type { ComposerDraft, ReferenceTarget } from "./references";
@@ -110,9 +112,11 @@ export type ChatProps = {
 	onShowDecisions?: () => void;
 	/**
 	 * Opens the document's research composer with this brief, when this
-	 * document offers research. False when it cannot open now.
+	 * document offers research, and says why when it cannot.
 	 */
-	onResearch?: (brief: string) => boolean;
+	onResearch?: (brief: string) => Promise<ResearchLaunchResult>;
+	/** Focuses the research draft already open in the document. */
+	onShowResearch?: () => void;
 	/** Replaces the composer when this viewer cannot chat at all, such as in an archived document. */
 	notice?: string;
 	/** One calm line shown while the transcript has loaded and is still empty. */
@@ -151,6 +155,7 @@ export function Chat(
 		emptyNotice,
 		onShowDecisions,
 		onResearch,
+		onShowResearch,
 		referencesEnabled,
 		repository,
 		room,
@@ -171,6 +176,8 @@ export function Chat(
 	});
 	let [submitting, setSubmitting] = useState(false);
 	let [sendError, setSendError] = useState<string>();
+	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
+	let researching = useRef(false);
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
@@ -353,30 +360,38 @@ export function Chat(
 		setHistoryKey(current => current + 1);
 	};
 
-	let launchResearch = (brief: string, text: string) => {
-		let current = draftRef.current;
-		if (onResearch?.(brief)) {
-			setDraft(reviseComposerDraft(current, "", []));
-			setSelection({ start: 0, end: 0 });
-			setSendError(undefined);
-			setDismissedPicker(undefined);
-			return;
-		}
-		// Keep the command in the draft so Retry can open it again.
-		setDraft(reviseComposerDraft(current, text, []));
-		setSelection({ start: text.length, end: text.length });
-		setDismissedPicker(undefined);
-		pendingCaret.current = text.length;
-		setSendError("Research couldn’t open in the document.");
+	/** `text` replaces a draft that is not yet the command, so Retry can reopen it. */
+	let launchResearch = (brief: string, text?: string) => {
+		if (!onResearch || researching.current) return;
+		researching.current = true;
+		setResearchBlock(undefined);
+		setSendError(undefined);
+		let started = draftRef.current;
+		void onResearch(brief).then(result => {
+			// The draft is cleared only once the document composer holds the brief.
+			// Compare text: hiding the pane can re-emit an unchanged draft.
+			if (draftRef.current.text !== started.text) return;
+			let next = result.ok ? "" : text;
+			if (next !== undefined) {
+				let revised = reviseComposerDraft(started, next, []);
+				draftRef.current = revised;
+				setDraft(revised);
+				setSelection({ start: next.length, end: next.length });
+				setDismissedPicker(undefined);
+				if (!result.ok) pendingCaret.current = next.length;
+			}
+			if (!result.ok) setResearchBlock(result.reason);
+		}).finally(() => {
+			researching.current = false;
+		});
 	};
 
 	let submit = () => {
 		if (submission.current || !composerReady || !wire) return;
 		let current = draftRef.current;
 		if (draftCommand(current.text)) {
-			if (onResearch) {
-				launchResearch(current.text.replace(/^\s*\/research\s*/i, ""), current.text);
-			}
+			// `#` references stay in the brief as their visible titles.
+			launchResearch(commandBrief(current.text));
 			return;
 		}
 		if (!current.text.trim()) return;
@@ -508,6 +523,14 @@ export function Chat(
 
 	let chooseCommand = (choice: ChatCommand) => launchResearch("", commandText(choice));
 
+	let researchCopy: Record<ResearchLaunchBlock, string> = {
+		"too-long": `Briefs can be up to ${MAX_RESEARCH_BRIEF.toLocaleString("en-US")} characters`,
+		drafting: "A research request is already being written in the document",
+		"read-only": "This document is read-only",
+		disconnected: "Reconnecting… try again in a moment",
+		unavailable: "Research couldn’t open in the document",
+	};
+
 	let transcriptView = (
 		<Transcript
 			active={active}
@@ -569,7 +592,8 @@ export function Chat(
 						Type # to reference a document.
 					</p>
 				)}
-				{!readonly && !archived && (sendError || !composerReady || blockedCommand || !agent) && (
+				{!readonly && !archived
+					&& (sendError || !composerReady || researchBlock || blockedCommand || !agent) && (
 					<div
 						className={sendError ? "composer-notice motion-feedback" : "composer-notice"}
 						data-motion-feedback={sendError ? "alert" : undefined}
@@ -587,6 +611,8 @@ export function Chat(
 						<span>
 							{sendError ?? (!composerReady
 								? connected ? "Synchronizing…" : connectionLost ? "Connection lost" : "Connecting…"
+								: researchBlock
+								? researchCopy[researchBlock]
 								: blockedCommand
 								? "Research isn’t available in this document"
 								: "Chopin unavailable")}
@@ -601,12 +627,24 @@ export function Chat(
 									Retry
 								</button>
 							)
-							: !composerReady && wire && (
+							: !composerReady
+							? wire && (
 								<button
 									className="btn btn-sm btn-ghost"
 									onClick={() => wire.reconnect()}
 								>
 									{connectionLost ? "Reconnect" : "Retry"}
+								</button>
+							)
+							: researchBlock === "drafting"
+							? onShowResearch && (
+								<button className="btn btn-sm btn-ghost" onClick={onShowResearch} type="button">
+									Go to it
+								</button>
+							)
+							: (researchBlock === "disconnected" || researchBlock === "unavailable") && (
+								<button className="btn btn-sm btn-ghost" onClick={submit} type="button">
+									Retry
 								</button>
 							)}
 					</div>
@@ -679,7 +717,9 @@ export function Chat(
 										: undefined}
 									aria-describedby={[
 										referencesEnabled ? instructionsId : undefined,
-										sendError || !composerReady || blockedCommand || !agent ? cueId : undefined,
+										sendError || !composerReady || researchBlock || blockedCommand || !agent
+											? cueId
+											: undefined,
 									].filter(Boolean).join(" ") || undefined}
 									aria-disabled={!composerReady || submitting}
 									aria-invalid={!!sendError || undefined}
@@ -707,6 +747,7 @@ export function Chat(
 											)
 										);
 										setSendError(undefined);
+										setResearchBlock(undefined);
 										setDismissedPicker(undefined);
 										setSelection({
 											start: event.currentTarget.selectionStart,
