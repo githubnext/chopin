@@ -13,12 +13,12 @@
 			[
 				"dynamic",
 				"*",
-				"workspaceProps(\n\t\t\t\t\t\tloaded.child,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\t{ label: loaded.child.channel.title, onClose: closeChild, type: \"child\" },\n\t\t\t\t\t\tchildMetadataChanged,\n\t\t\t\t\t)",
+				"workspaceProps(\n\t\t\t\t\t\tloaded.child,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlabel: loaded.child.channel.title,\n\t\t\t\t\t\t\tonClose: closeChild,\n\t\t\t\t\t\t\tparent: {\n\t\t\t\t\t\t\t\tid: loaded.parent.channel.id,\n\t\t\t\t\t\t\t\tlabel: loaded.parent.channel.title,\n\t\t\t\t\t\t\t\tonReturn: opener => onChildClose(loaded.parent.channel.id, parentPath, opener),\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\ttype: \"child\",\n\t\t\t\t\t\t},\n\t\t\t\t\t\tchildMetadataChanged,\n\t\t\t\t\t)",
 				"unresolved JSX props > DocumentWorkspaceHost > child > <RoomWorkspace>",
 				1
 			]
 		],
-		"sourceHash": "b3fd886de16a3d32875a61badcf7f0f40d48f60bf380e989dfd4efe14a03c20a"
+		"sourceHash": "901beece5ec4dc3c63b889d8f64de6c1de0bcdf435e4084db72aefb7b175dfc2"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -214,7 +214,7 @@
 				1
 			]
 		],
-		"sourceHash": "ef1c031250c269e06626d659a7f76addd678ab124bee7f78119b2715b1a44a15"
+		"sourceHash": "f1bf8bbfbfc51a635c86638e7ef915447e17e524bc309c3c0f5aceb3c390a530"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -242,7 +242,7 @@
 				1
 			]
 		],
-		"sourceHash": "ef1c031250c269e06626d659a7f76addd678ab124bee7f78119b2715b1a44a15"
+		"sourceHash": "f1bf8bbfbfc51a635c86638e7ef915447e17e524bc309c3c0f5aceb3c390a530"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
