@@ -59,12 +59,14 @@ type Root = ReturnType<typeof parse>;
 type Tree = { type: string; children?: Tree[] };
 
 /*
- * Lexical inserts inline runs in quadratic time, so thousands of formatted
- * runs would freeze the tab. A paste that big or that fragmented is not prose
- * anyone wrote by hand; it pastes literally.
+ * Lexical inserts inline runs in quadratic time, and the Markdown parser is
+ * quadratic on long runs of lone `*` or `_`, so thousands of either would
+ * freeze the tab. A paste that big or that fragmented is not prose anyone
+ * wrote by hand; it pastes literally.
  */
 const MAX_PASTE_CHARACTERS = 64 * 1024;
-const MAX_PASTE_NODES = 2_000;
+const MAX_PASTE_EMPHASIS = 4_000;
+const MAX_PASTE_NODES = 20_000;
 const MAX_PASTE_CHILDREN = 200;
 
 /** What the paste lands in: images already present and the nesting at the caret. */
@@ -235,6 +237,11 @@ export function pastedMarkdown(
 	into: Destination = { images: 0, depth: 0 },
 ): Root | undefined {
 	if (!looksLikeMarkdown(text)) return undefined;
+	let emphasis = 0;
+	for (let index = 0; index < text.length; index++) {
+		let code = text.charCodeAt(index);
+		if ((code === 42 || code === 95) && ++emphasis > MAX_PASTE_EMPHASIS) return undefined;
+	}
 	let bytes = new TextEncoder().encode(text).byteLength;
 	if (bytes > limits.MAX_SOURCE_BYTES) return undefined;
 	let tree: Root;

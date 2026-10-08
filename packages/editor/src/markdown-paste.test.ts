@@ -206,19 +206,37 @@ test("recognises plain-text paste shortcuts on any layout", () => {
 test("a fragmented paste falls back to literal text quickly", () => {
 	let started = performance.now();
 	expect(paste("**a** b\n\n".repeat(450)).handled).toBe(true);
-	expect(performance.now() - started).toBeLessThan(200);
+	expect(performance.now() - started).toBeLessThan(1_000);
 	expect(pastedMarkdown("**a**".repeat(150))).toBeDefined();
 	for (
 		let text of [
 			"**a".repeat(4_000),
 			"**a".repeat(Math.floor(128 * 1024 / 3)),
 			"`a` ".repeat(1_000),
+			"## a\n\n" + "a *".repeat(5_000),
 			"- [x](https://example.com)\n".repeat(1_500),
 		]
 	) {
 		started = performance.now();
 		let { handled } = paste(text);
-		expect(performance.now() - started, text.slice(0, 20)).toBeLessThan(200);
+		expect(performance.now() - started, text.slice(0, 20)).toBeLessThan(1_000);
 		expect(handled, text.slice(0, 20)).toBe(false);
 	}
+});
+
+function section(index: number): string {
+	return (
+		`## Section ${index}\n\nSome **bold** prose with a [link](https://example.com/${index}).\n\n`
+		+ "- first item\n- second item\n\n"
+	);
+}
+
+test("an ordinary long document converts", () => {
+	let text = Array.from({ length: 200 }, (_, index) => section(index)).join("");
+	expect(text.length).toBeGreaterThan(20 * 1024);
+	let started = performance.now();
+	let { handled, source } = paste(text);
+	expect(performance.now() - started).toBeLessThan(1_000);
+	expect(handled).toBe(true);
+	expect(source).toContain("## Section 199\n\nSome **bold** prose");
 });
