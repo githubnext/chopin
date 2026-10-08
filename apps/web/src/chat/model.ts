@@ -179,6 +179,7 @@ export function group(
 			author: { kind: "member" as const, handle: item.handle },
 			text: item.text,
 			references: item.references,
+			to: "planner" as const,
 			queued: true,
 		})),
 	];
