@@ -133,10 +133,11 @@ export function IconTooltip() {
 				// A row's description card sits beside its rail (data-tooltip-edge) when there is room.
 				if (button.dataset.tooltipSide === "right") {
 					tooltip.dataset.side = "right";
+					let tooltipBox = tooltip.getBoundingClientRect();
 					let right = (button.closest("[data-tooltip-edge]") ?? button).getBoundingClientRect()
 						.right;
-					if (right + GAP + tooltip.offsetWidth <= window.innerWidth - 8) {
-						let half = tooltip.offsetHeight / 2;
+					if (right + GAP + tooltipBox.width <= window.innerWidth - 8) {
+						let half = tooltipBox.height / 2;
 						tooltip.style.top = `${
 							Math.max(
 								8 + half,
@@ -148,15 +149,17 @@ export function IconTooltip() {
 						return;
 					}
 				}
-				let below = rect.top < tooltip.offsetHeight + GAP;
+				tooltip.dataset.side = "bottom";
+				let tooltipBox = tooltip.getBoundingClientRect();
+				let below = rect.top < tooltipBox.height + GAP;
 				tooltip.style.top = `${below ? rect.bottom + GAP : rect.top - GAP}px`;
 				tooltip.dataset.side = below ? "bottom" : "top";
 				tooltip.style.left = `${
 					Math.max(
 						8,
 						Math.min(
-							rect.left + rect.width / 2 - tooltip.offsetWidth / 2,
-							window.innerWidth - tooltip.offsetWidth - 8,
+							rect.left + rect.width / 2 - tooltipBox.width / 2,
+							window.innerWidth - tooltipBox.width - 8,
 						),
 					)
 				}px`;
