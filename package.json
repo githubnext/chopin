@@ -24,7 +24,8 @@
 		"design:test": "bun node_modules/@playwright/test/cli.js test --config e2e/design/playwright.config.ts",
 		"design:behavior": "bun node_modules/@playwright/test/cli.js test --config e2e/design/behavior.config.ts",
 		"diagrams:test": "bun node_modules/@playwright/test/cli.js test --config e2e/diagram-gallery/playwright.config.ts",
-		"design:browser": "bun scripts/design-browser.ts"
+		"design:browser": "bun scripts/design-browser.ts",
+		"preview-toolkit:dev": "bun e2e/app-preview-toolkit/server.ts"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "4.13.0",
@@ -38,7 +39,14 @@
 		"parse5": "8.0.0",
 		"postcss": "8.5.23",
 		"postcss-value-parser": "4.2.0",
-		"yaml": "2.9.0"
+		"yaml": "2.9.0",
+		"@base-ui/react": "1.7.0",
+		"@fontsource-variable/inter": "5.3.0",
+		"react": "catalog:react",
+		"react-dom": "catalog:react",
+		"@types/react": "catalog:react",
+		"@types/react-dom": "catalog:react",
+		"vite": "catalog:ui"
 	},
 	"patchedDependencies": {
 		"@mdxeditor/editor@4.1.0": "patches/@mdxeditor%2Feditor@4.1.0.patch",
