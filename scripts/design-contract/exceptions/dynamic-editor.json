@@ -340,7 +340,7 @@
 				2
 			]
 		],
-		"sourceHash": "85e5f52822e9f2c5445e6827f4af8b6e36bca14eadcad82eea617b2db2b0f58a"
+		"sourceHash": "177d677bca6f4c5b8ef99f1aa0f4eed88e6f303ad7bc93787d7b7435e3c6bedf"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -382,7 +382,7 @@
 				1
 			]
 		],
-		"sourceHash": "cda7747035e17442e6c9585491a1724bfe67529e723b4074b914adf65cabb400"
+		"sourceHash": "f74045ec11ce947c9db381c6e8f422950e284085fcadf87d5cb06b00ed8842d0"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -441,11 +441,11 @@
 				"dynamic",
 				"class",
 				"presence.className",
-				"class > QuestionnaireCard > <div>",
+				"class > QuestionnaireCardContent > <div>",
 				1
 			]
 		],
-		"sourceHash": "cda7747035e17442e6c9585491a1724bfe67529e723b4074b914adf65cabb400"
+		"sourceHash": "f74045ec11ce947c9db381c6e8f422950e284085fcadf87d5cb06b00ed8842d0"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -481,5 +481,19 @@
 			]
 		],
 		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
+	},
+	{
+		"file": "packages/editor/src/widgets/questionnaire.tsx",
+		"reason": "The visual-specimen discriminator forwards the existing typed questionnaire data, callbacks and motion contract to its ordinary renderer. QuestionnaireCardProps exposes no style or className; the new app-owned preview renderer is used only in the explicit visual branch.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > QuestionnaireCard > <QuestionnaireCardContent>",
+				1
+			]
+		],
+		"sourceHash": "f74045ec11ce947c9db381c6e8f422950e284085fcadf87d5cb06b00ed8842d0"
 	}
 ]

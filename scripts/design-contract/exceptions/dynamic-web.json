@@ -368,5 +368,25 @@
 			]
 		],
 		"sourceHash": "f6b56e35f4a84411532e598ef53c893966b496b001d3020a3f470d87bd3efd8e"
+	},
+	{
+		"file": "apps/web/src/visual-preview/bridge.ts",
+		"reason": "The approved visual decision tunes the selected-option colour itself, so a shared semantic role cannot represent the participant's chosen value. The opaque preview accepts only parent-source, versioned messages whose selectedColor passes the reviewed strict #RRGGBB validator; this exact custom property affects the built-in specimen and never Chopin's trusted controls.",
+		"cases": [
+			[
+				"color",
+				"--visual-selected-color",
+				"message.values.selectedColor",
+				"DOM setProperty > document.documentElement.style.setProperty",
+				1
+			]
+		],
+		"sourceHash": "d773e0d1d7315b1a7d15e5bec8eb61b9440881da983ab1a2c735a91fd18b4f48",
+		"producers": [
+			{
+				"file": "apps/web/src/visual-preview/protocol.ts",
+				"sourceHash": "d322937983a1cbb9e731288c548d5fd6e40963bf433860ca3d35a8b561543902"
+			}
+		]
 	}
 ]

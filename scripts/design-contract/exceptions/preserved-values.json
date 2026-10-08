@@ -487,6 +487,19 @@
 		]
 	},
 	{
+		"file": "apps/web/src/visual-preview/frame.css",
+		"reason": "The approved decision-card specimen previews the participant's chosen selected-option colour, not a semantic app role. The exact background is confined to selected specimen options; the reviewed bridge supplies validated #RRGGBB values, with the existing brand wash as its fallback.",
+		"cases": [
+			[
+				"color",
+				"background",
+				"var(--visual-selected-color, var(--color-brand-wash))",
+				"CSS > .question-option:has(.question-input:checked),\n.question-option[data-selected]",
+				1
+			]
+		]
+	},
+	{
 		"file": "packages/editor/src/styles.css",
 		"reason": "iOS Safari zooms the page when it focuses editable text under 16px; touch devices floor the existing token at 1rem.",
 		"cases": [
