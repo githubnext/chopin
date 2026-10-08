@@ -20,8 +20,10 @@ import * as Store from "./store";
 import type { Plan } from "../plan/service";
 import type { Record } from "./service";
 
-export function enabled(): boolean {
-	return !!process.env.DEV_COMMENTS;
+/** Seed a document once: its threads are durable, so any thread means it was marked. */
+export function enabled(plan: Pick<Plan, "threads">): boolean {
+	return !!process.env.DEV_COMMENTS && process.env.NODE_ENV !== "production"
+		&& plan.threads.size === 0;
 }
 
 /**
