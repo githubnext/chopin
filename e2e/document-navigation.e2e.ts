@@ -439,7 +439,7 @@ test("sidebar rows stay single-line and reveal descriptions beside the rail", as
 test("a tapped sidebar row does not open its description card", async ({ join }) => {
 	let title = "Release plan";
 	let listed = channel("cccccccc-0000-4000-8000-000000000000", title, "Touch never shows this.");
-	let page = await join("ana", { hasTouch: true, viewport: { width: 1180, height: 820 } });
+	let page = await join("ana", { hasTouch: true, viewport: { width: 1280, height: 820 } });
 	await page.context().route(
 		"**/api/repositories/octo-org/score/channels*",
 		route => route.fulfill({ json: { canEdit: true, channels: [listed], repository } }),
@@ -447,7 +447,10 @@ test("a tapped sidebar row does not open its description card", async ({ join })
 	await page.reload();
 	let link = sidebar(page).getByRole("link", { name: title, exact: true });
 	await link.evaluate(element =>
-		element.addEventListener("click", event => event.preventDefault())
+		element.addEventListener("click", event => {
+			event.preventDefault();
+			event.stopPropagation();
+		})
 	);
 	await link.tap();
 	await expect(link).toBeFocused();

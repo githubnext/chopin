@@ -27,7 +27,7 @@ import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
 import type { Research } from "@chopin/protocol";
 
-import { $consumeSlashTrigger, decide, trigger } from "./slash";
+import { $consumeSlashTrigger, availableCommands, decide, trigger } from "./slash";
 
 const PROVIDER = {
 	awareness: {
@@ -412,6 +412,29 @@ describe("slash menu commands", () => {
 			() => calls.push("dismiss"),
 		);
 		expect(calls).toEqual(["dismiss", "focus"]);
+	});
+});
+
+describe("slash menu order", () => {
+	it("lists ordinary blocks first and Research last, so a bare slash never preselects it", () => {
+		let ids = availableCommands("").map(command => command.id);
+		expect(ids.at(-1)).toBe("research");
+		expect(ids[0]).not.toBe("research");
+		expect(ids.filter(id => id === "research")).toHaveLength(1);
+	});
+
+	it("puts Research first only when the query narrows to it", () => {
+		expect(availableCommands("res").map(command => command.id)).toEqual(["research"]);
+		expect(availableCommands("web search")[0]?.id).toBe("research");
+		expect(availableCommands("call")[0]?.id).toBe("callout");
+	});
+
+	it("gives every command a one-line hint and an icon", () => {
+		for (let command of availableCommands("")) {
+			expect(command.hint).not.toContain("\n");
+			expect(command.hint.length).toBeGreaterThan(0);
+			expect(typeof command.icon).toBe("function");
+		}
 	});
 });
 

@@ -115,7 +115,7 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 		CHILD_SOURCE,
 	);
 	// A child inherits the parent's Chat state; closed here so the child toolbar shows its toggle.
-	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await join("ana");
 	await page.setViewportSize({ width: 1920, height: 1080 });
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
@@ -360,7 +360,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 		CHILD_SOURCE,
 	);
 	await page.addInitScript(() => {
-		localStorage.setItem("chopin:pane:chat:open", "true");
+		localStorage.setItem("chopin:pane:chat:choice", "true");
 		localStorage.setItem("chopin:pane:chat", "384");
 	});
 	await join("ana");

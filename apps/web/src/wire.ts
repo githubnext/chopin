@@ -40,6 +40,16 @@ type Refusal = { reason: string; authentication: boolean };
 
 const BASE_DELAY = 500;
 const MAX_DELAY = 15_000;
+/** The least time between attempts that a wake may start. */
+const WAKE_GAP = 1000;
+/**
+ * When, after a loss, one attempt is guaranteed to start.
+ *
+ * Just inside the 1.5 s grace the page waits out before saying anything
+ * (`CONNECTION_GRACE` in the editor), so a short outage reconnects before it
+ * is shown rather than flashing a notice, and a lock, for a moment past it.
+ */
+const RESCUE_AT = 1200;
 
 function endpoint(options: WireOptions): string {
 	let url = new URL("/ws", location.href);
@@ -58,6 +68,9 @@ export class Wire {
 	#listeners = new Map<string, Set<Listener>>();
 	#pending = new Map<string, Pending>();
 	#attempts = 0;
+	#attemptedAt = 0;
+	/** When the current outage began, or undefined while connected. */
+	#lostAt: number | undefined;
 	#timer: ReturnType<typeof setTimeout> | undefined;
 	/**
 	 * Undefined until the first transition, so the first one always announces.
@@ -77,7 +90,41 @@ export class Wire {
 
 	constructor(options: WireOptions) {
 		this.#options = options;
+		addEventListener("online", this.#wake);
+		addEventListener("focus", this.#wake);
+		globalThis.document?.addEventListener("visibilitychange", this.#wake);
 		this.#connect();
+	}
+
+	/**
+	 * Skip the rest of the backoff when the network or the person comes back.
+	 *
+	 * The timer alone can sit out most of its 15 s cap after the network has
+	 * already returned, with the page still saying it is offline. Only a wire
+	 * waiting on that timer is woken; an attempt already in flight is left to
+	 * finish.
+	 *
+	 * Focus and visibility say only that the person is back, not the network,
+	 * and they can fire in bursts. So they never wake the wire sooner than
+	 * `WAKE_GAP` after the last attempt, and only `online` forgets the
+	 * backoff: a deploy outage must not turn every tab switch on every client
+	 * into a fresh run of fast retries.
+	 */
+	#wake = (event: Event) => {
+		if (this.#disposed || this.#terminal || this.#timer === undefined) return;
+		if (globalThis.document?.visibilityState === "hidden") return;
+		let online = event.type === "online";
+		if (!online && Date.now() - this.#attemptedAt < WAKE_GAP) return;
+		clearTimeout(this.#timer);
+		this.#timer = undefined;
+		if (online) this.#attempts = 0;
+		this.#connect();
+	};
+
+	#unlisten(): void {
+		removeEventListener("online", this.#wake);
+		removeEventListener("focus", this.#wake);
+		globalThis.document?.removeEventListener("visibilitychange", this.#wake);
 	}
 
 	get status(): Status {
@@ -95,10 +142,18 @@ export class Wire {
 		return this.#socket?.readyState === WebSocket.OPEN;
 	}
 
+	/**
+	 * Try again now, at a person's request.
+	 *
+	 * The backoff starts over: someone who asks to reconnect is saying the
+	 * network may be back, and after a few failed asks the next automatic
+	 * attempt must not still be waiting out the cap.
+	 */
 	reconnect(): void {
 		if (this.#disposed || this.#terminal) return;
 		clearTimeout(this.#timer);
 		this.#timer = undefined;
+		this.#attempts = 0;
 		let previous = this.#socket;
 		this.#socket = undefined;
 		this.#abandon("connection restarted");
@@ -115,6 +170,7 @@ export class Wire {
 	#connect(): void {
 		if (this.#disposed || this.#terminal) return;
 		this.#connectionGeneration++;
+		this.#attemptedAt = Date.now();
 		this.#set(this.#everConnected ? "reconnecting" : "connecting");
 
 		let socket = new WebSocket(endpoint(this.#options));
@@ -124,6 +180,7 @@ export class Wire {
 			if (this.#socket !== socket) return;
 			this.#everConnected = true;
 			this.#attempts = 0;
+			this.#lostAt = undefined;
 			this.#set("connected");
 		});
 
@@ -141,6 +198,7 @@ export class Wire {
 				this.#deleted();
 				return;
 			}
+			this.#lostAt ??= Date.now();
 			this.#abandon("connection lost");
 			void this.#retry();
 		});
@@ -183,9 +241,16 @@ export class Wire {
 		}
 
 		let delay = Math.min(BASE_DELAY * 2 ** this.#attempts, MAX_DELAY) * (0.5 + Math.random());
+		if (this.#lostAt !== undefined) {
+			let rescue = this.#lostAt + RESCUE_AT - Date.now();
+			if (rescue > 0) delay = Math.min(delay, rescue);
+		}
 		this.#attempts++;
 		this.#set("reconnecting");
-		this.#timer = setTimeout(() => this.#connect(), delay);
+		this.#timer = setTimeout(() => {
+			this.#timer = undefined;
+			this.#connect();
+		}, delay);
 	}
 
 	#receive(raw: string): void {
@@ -229,6 +294,7 @@ export class Wire {
 	#deleted(): void {
 		if (this.#disposed || this.#terminal) return;
 		this.#terminal = true;
+		this.#unlisten();
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#timer = undefined;
 		let socket = this.#socket;
@@ -280,6 +346,7 @@ export class Wire {
 
 	dispose(): void {
 		this.#disposed = true;
+		this.#unlisten();
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#abandon("disposed");
 		this.#socket?.close();

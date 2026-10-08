@@ -43,8 +43,13 @@ function decode(value: string): Uint8Array {
 export type PlanProviderOptions = {
 	wire: Transport;
 	doc: Y.Doc;
-	/** Told when the server rotates the epoch and local state must be discarded. */
-	onReset?: (reason: Plan.Reset["reason"]) => void;
+	/**
+	 * Told when the server rotates the epoch and local state must be discarded.
+	 *
+	 * `lost` is true when edits the server never acknowledged went with it, so
+	 * the person can be told rather than finding out later.
+	 */
+	onReset?: (reason: Plan.Reset["reason"], lost: boolean) => void;
 	/**
 	 * Authoritative snapshot of which prose each decision and comment names.
 	 *
@@ -81,6 +86,32 @@ export type PlanProviderOptions = {
 const MAX_OUTBOX_BYTES = 2 * 1024 * 1024;
 const MAX_OUTBOX_ITEMS = 1_000;
 
+/**
+ * Pacing for outgoing updates.
+ *
+ * The server takes at most 200 updates a second from one socket and drops the
+ * rest without replying. Typing faster than that (a script, a held key with a
+ * fast repeat) lost the excess, and Yjs then held back every later update from
+ * this client until the missing one arrived, so the rest of the session never
+ * reached anyone. Updates made within one interval go out merged, which keeps
+ * this client well under the limit, and anything still unacknowledged after a
+ * while is sent again in case it was dropped anyway.
+ */
+const SEND_MS = 10;
+/**
+ * Resends back off from this, doubling up to `MAX_RESEND_MS`, so a server that
+ * is slow to commit is not also asked to take every backlog again.
+ */
+const RESEND_MS = 2_000;
+const MAX_RESEND_MS = 30_000;
+/**
+ * An update sent this many times without an acknowledgement is left for the
+ * next open to replay. Something other than a dropped frame is refusing it.
+ */
+const MAX_SENDS = 5;
+/** Merged updates stay far below the server's per-update limit. */
+const MERGE_BYTES = 64 * 1024;
+
 export class PlanProvider implements Provider {
 	/**
 	 * y-protocols' `Awareness` is structurally what Lexical wants, but its state
@@ -98,6 +129,15 @@ export class PlanProvider implements Provider {
 	/** Updates sent but not yet acknowledged, replayed after a reconnect. */
 	readonly #outbox = new Map<string, Uint8Array>();
 	#outboxBytes = 0;
+	/** Outbox entries waiting for the current send interval to end. */
+	readonly #unsent = new Set<string>();
+	/** Outbox entries already outstanding when the resend timer last fired. */
+	#overdue = new Set<string>();
+	/** How often each outbox entry has been sent since the last open. */
+	readonly #sends = new Map<string, number>();
+	#resendDelay = RESEND_MS;
+	#pacing: ReturnType<typeof setTimeout> | undefined;
+	#resending: ReturnType<typeof setTimeout> | undefined;
 
 	#epoch: string | undefined;
 	#synced = false;
@@ -131,11 +171,53 @@ export class PlanProvider implements Provider {
 	 * never be acknowledged, because they were never received.
 	 */
 	#coalesce(): void {
-		if (this.#outbox.size < 2) return;
-		let merged = Y.mergeUpdates([...this.#outbox.values()]);
-		this.#outbox.clear();
-		this.#outbox.set(`merged-${this.#counter++}`, merged);
-		this.#outboxBytes = merged.byteLength;
+		this.#merge([...this.#outbox.keys()]);
+	}
+
+	/**
+	 * Replace outbox entries with as few merged ones as stay under
+	 * `MERGE_BYTES`, and return the ids that now hold them.
+	 *
+	 * A merged entry carries a fresh id: acknowledgements for the ones it
+	 * replaces may still arrive and are ignored, and the merged one is only
+	 * settled by its own.
+	 */
+	#merge(ids: string[]): string[] {
+		let groups: string[][] = [];
+		let size = 0;
+		for (let id of ids) {
+			let bytes = this.#outbox.get(id)?.byteLength;
+			if (bytes === undefined) continue;
+			let group = groups.at(-1);
+			if (!group || size + bytes > MERGE_BYTES) {
+				groups.push([id]);
+				size = bytes;
+			} else {
+				group.push(id);
+				size += bytes;
+			}
+		}
+
+		return groups.map(group => {
+			if (group.length === 1) return group[0]!;
+			let merged = Y.mergeUpdates(group.map(id => this.#outbox.get(id)!));
+			let id = `merged-${this.#counter++}`;
+			let unsent = false;
+			let sends = 0;
+			for (let part of group) {
+				this.#outboxBytes -= this.#outbox.get(part)!.byteLength;
+				this.#outbox.delete(part);
+				if (this.#unsent.delete(part)) unsent = true;
+				this.#overdue.delete(part);
+				sends = Math.max(sends, this.#sends.get(part) ?? 0);
+				this.#sends.delete(part);
+			}
+			this.#outbox.set(id, merged);
+			this.#outboxBytes += merged.byteLength;
+			if (unsent) this.#unsent.add(id);
+			if (sends > 0) this.#sends.set(id, sends);
+			return id;
+		});
 	}
 
 	// -- provider surface ----------------------------------------------------
@@ -199,6 +281,10 @@ export class PlanProvider implements Provider {
 			this.#wire.on<Plan.Ack>("plan:ack", event => this.#settle(event.id)),
 			this.#wire.on<Plan.Awareness>("plan:awareness", event => this.#presence(event)),
 			this.#wire.on<Plan.Reset>("plan:reset", event => this.#reset(event)),
+			// Refused outright rather than dropped: repeating it changes nothing.
+			this.#wire.on<{ message?: string }>("session:error", event => {
+				if (event.message === "implementation is active") this.#park();
+			}),
 			this.#wire.on<Plan.Changes>("plan:changes", event => {
 				if (event.epoch === this.#epoch) this.#options.onChanges?.(event.changes);
 			}),
@@ -242,6 +328,7 @@ export class PlanProvider implements Provider {
 		this.#doc.off("update", this.#local);
 		this.awareness.off("update", this.#announce);
 		this.awareness.destroy();
+		this.#stopTimers();
 
 		this.#wire.send("plan:close", {});
 		this.#emit("status", { status: "disconnected" });
@@ -265,7 +352,17 @@ export class PlanProvider implements Provider {
 		let reply = await this.#wire.ask<Plan.Open.Reply>("plan:open", { ...resume });
 		if (!this.#connected || generation !== this.#generation) return;
 
-		let rotated = this.#epoch !== undefined && this.#epoch !== reply.epoch;
+		/*
+		 * The epoch rotated while this client was away, so it never heard the
+		 * reset. Its document and outbox describe a history that no longer
+		 * exists: merging the new state into it keeps edits nobody else has,
+		 * and every later edit is acknowledged but never applies, because it
+		 * builds on them. Rebuild from the server instead, as a reset would.
+		 */
+		if (this.#epoch !== undefined && this.#epoch !== reply.epoch) {
+			this.#discard("replaced");
+			return;
+		}
 		this.#epoch = reply.epoch;
 
 		// Server state never originates locally, so it must not be echoed back.
@@ -275,12 +372,7 @@ export class PlanProvider implements Provider {
 			applyAwarenessUpdate(this.awareness, decode(reply.awareness), this);
 		}
 
-		if (rotated) {
-			this.#outbox.clear();
-			this.#outboxBytes = 0;
-		} else {
-			this.#replay();
-		}
+		this.#replay();
 
 		this.#synced = true;
 		this.#emit("status", { status: "connected" });
@@ -321,9 +413,14 @@ export class PlanProvider implements Provider {
 	 *
 	 * Yjs updates are idempotent, so a duplicate is harmless — losing one is
 	 * not, which is why the outbox survives a reconnect on the same epoch.
+	 * Merged first, so a long backlog does not arrive faster than the server
+	 * accepts it.
 	 */
 	#replay(): void {
-		for (let [id, update] of this.#outbox) this.#send(id, update);
+		this.#unsent.clear();
+		this.#sends.clear();
+		this.#resendDelay = RESEND_MS;
+		for (let id of this.#merge([...this.#outbox.keys()])) this.#send(id);
 	}
 
 	#local = (update: Uint8Array, origin: unknown): void => {
@@ -333,22 +430,85 @@ export class PlanProvider implements Provider {
 		let id = `${Date.now().toString(36)}-${this.#counter++}`;
 		this.#outbox.set(id, update);
 		this.#outboxBytes += update.byteLength;
+		this.#unsent.add(id);
 		if (this.saturated) this.#coalesce();
 
-		this.#send(id, update);
+		if (!this.#pacing) this.#flush();
 	};
+
+	/** Send what this interval produced, and hold anything newer until it ends. */
+	#flush(): void {
+		if (!this.#epoch || this.#unsent.size === 0) return;
+		let ids = this.#merge([...this.#unsent]);
+		this.#unsent.clear();
+		for (let id of ids) this.#send(id);
+		this.#pacing = setTimeout(() => {
+			this.#pacing = undefined;
+			this.#flush();
+		}, SEND_MS);
+	}
+
+	/**
+	 * Send again whatever has gone a whole interval without an acknowledgement.
+	 *
+	 * Yjs updates are idempotent, so resending one that was merely slow costs
+	 * a duplicate; not resending one that was dropped costs everything after it.
+	 */
+	#resend(): void {
+		this.#resending = undefined;
+		if (!this.#connected || !this.#synced || !this.#epoch) {
+			// The next open replays the whole outbox.
+			this.#overdue.clear();
+			return;
+		}
+		let overdue = [...this.#outbox.keys()].filter(id =>
+			this.#overdue.has(id) && !this.#unsent.has(id) && (this.#sends.get(id) ?? 0) < MAX_SENDS
+		);
+		if (overdue.length > 0) {
+			this.#resendDelay = Math.min(this.#resendDelay * 2, MAX_RESEND_MS);
+			for (let id of this.#merge(overdue)) this.#send(id);
+		}
+		this.#overdue = new Set(this.#outbox.keys());
+		let waiting = [...this.#outbox.keys()].some(id => (this.#sends.get(id) ?? 0) < MAX_SENDS);
+		if (waiting) this.#armResend();
+	}
+
+	#armResend(): void {
+		this.#resending ??= setTimeout(() => this.#resend(), this.#resendDelay);
+	}
+
+	/** Stop resending what is outstanding now. The next open still replays it. */
+	#park(): void {
+		for (let id of this.#outbox.keys()) {
+			if (!this.#unsent.has(id)) this.#sends.set(id, MAX_SENDS);
+		}
+	}
+
+	#stopTimers(): void {
+		clearTimeout(this.#pacing);
+		clearTimeout(this.#resending);
+		this.#pacing = undefined;
+		this.#resending = undefined;
+		this.#unsent.clear();
+		this.#overdue.clear();
+		this.#sends.clear();
+		this.#resendDelay = RESEND_MS;
+	}
 
 	/**
 	 * Send one update.
 	 *
 	 * Fire-and-forget rather than a correlated request: acknowledgements arrive
 	 * as `plan:ack` and are matched by `id`, so a keystroke does not cost a
-	 * pending promise, and an update whose ack is lost simply stays in the
-	 * outbox until the next open replays it.
+	 * pending promise, and an update whose ack never arrives stays in the
+	 * outbox until `#resend` or the next open sends it again.
 	 */
-	#send(id: string, update: Uint8Array): void {
-		if (!this.#epoch) return;
+	#send(id: string): void {
+		let update = this.#outbox.get(id);
+		if (!this.#epoch || !update) return;
 		this.#wire.send("plan:update", { epoch: this.#epoch, id, update: encode(update) });
+		this.#sends.set(id, (this.#sends.get(id) ?? 0) + 1);
+		this.#armResend();
 	}
 
 	#settle(id: string): void {
@@ -356,6 +516,10 @@ export class PlanProvider implements Provider {
 		if (!update) return;
 		this.#outbox.delete(id);
 		this.#outboxBytes -= update.byteLength;
+		this.#overdue.delete(id);
+		this.#sends.delete(id);
+		// The server is accepting again, so the next resend need not wait long.
+		this.#resendDelay = RESEND_MS;
 	}
 
 	#remote(event: Plan.Update): void {
@@ -395,16 +559,23 @@ export class PlanProvider implements Provider {
 	 * boundary where continuity ends.
 	 */
 	#reset(event: Plan.Reset): void {
-		if (event.epoch === this.#epoch) return;
+		// The same epoch is the server refusing an oversized update while
+		// keeping the document. Sending it again would be refused again.
+		if (event.epoch === this.#epoch) return this.#park();
+		this.#discard(event.reason);
+	}
 
+	#discard(reason: Plan.Reset["reason"]): void {
+		let lost = this.#outbox.size > 0;
 		this.#outbox.clear();
+		this.#stopTimers();
 		this.#generation++;
 		this.#outboxBytes = 0;
 		this.#epoch = undefined;
 		this.#synced = false;
 
 		this.#emit("sync", false);
-		this.#options.onReset?.(event.reason);
+		this.#options.onReset?.(reason, lost);
 	}
 
 	get synced(): boolean {

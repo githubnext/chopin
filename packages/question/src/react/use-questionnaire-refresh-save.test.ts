@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { addOption as grow, create, decision } from "../index";
 import { QuestionnaireController } from "./use-questionnaire";
 import type { Transport } from "./use-questionnaire";
+import { OFFLINE } from "./questionnaire-controller";
 import { DEFINITION } from "./use-questionnaire.test-fixtures";
 
 // Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks, wrappers only.
@@ -128,6 +129,7 @@ describe("QuestionnaireController refresh-save", () => {
 		controller.configure(DEFINITION, false);
 		await Bun.sleep(0);
 		expect(controller.getSnapshot().submitting).toBe(false);
-		expect(controller.getSnapshot().error).toBe("Could not submit these answers.");
+		// A dropped connection says so, rather than sounding like a refusal.
+		expect(controller.getSnapshot().error).toBe(OFFLINE);
 	});
 });

@@ -94,8 +94,8 @@ describe("navigation model", () => {
 	});
 
 	it("uses the same drawer boundary as the shell", () => {
-		expect(navigationMode(mediaAt(1023))).toBe("drawer");
-		expect(navigationMode(mediaAt(1024))).toBe("inline");
+		expect(navigationMode(mediaAt(1197))).toBe("drawer");
+		expect(navigationMode(mediaAt(1198))).toBe("inline");
 	});
 
 	it("finds the Project containing the current document", () => {
