@@ -54,6 +54,20 @@ export const investigationSchema = z.object({
 }).strict();
 export type Investigation = z.infer<typeof investigationSchema>;
 export type InvestigationState = Investigation["state"];
+export type PublishedInvestigation = Omit<Investigation, "candidate" | "receipts">;
+export type InvestigationSummary = Pick<
+	Investigation,
+	"id" | "brief" | "state" | "revision" | "requester" | "progress" | "createdAt"
+>;
+export type WorkspaceConnection = {
+	id: string;
+	documentId: string;
+	owner: string;
+	login: string;
+	label: string;
+	source: import("./index").Source;
+	expiresAt: number;
+};
 
 export function publicInvestigation(
 	value: Investigation,
