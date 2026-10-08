@@ -1,0 +1,33 @@
+{
+	"type": "wardley",
+	"title": "Diagramming, mapped",
+	"components": [
+		{
+			"id": "user",
+			"label": "Engineer explaining a system",
+			"evo": 0.62,
+			"vis": 1,
+			"anchor": true
+		},
+		{
+			"id": "diagram",
+			"label": "Explorable diagram",
+			"evo": 0.35,
+			"vis": 0.82,
+			"focal": true,
+			"moveTo": 0.55
+		},
+		{ "id": "layout", "label": "Layout + routing", "evo": 0.45, "vis": 0.6 },
+		{ "id": "motion", "label": "Animation", "evo": 0.25, "vis": 0.55, "moveTo": 0.45 },
+		{ "id": "render", "label": "SVG rendering", "evo": 0.82, "vis": 0.35 },
+		{ "id": "browser", "label": "Headless browser", "evo": 0.9, "vis": 0.15 }
+	],
+	"links": [
+		["user", "diagram"],
+		["diagram", "layout"],
+		["diagram", "motion"],
+		["layout", "render"],
+		["motion", "render"],
+		["render", "browser"]
+	]
+}

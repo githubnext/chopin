@@ -1,0 +1,52 @@
+{
+	"type": "gantt",
+	"title": "SeeCode build plan",
+	"today": "2026-10-12",
+	"tasks": [
+		{
+			"id": "f",
+			"label": "Foundation",
+			"section": "Phase 1",
+			"start": "2026-10-02",
+			"days": 4,
+			"done": true
+		},
+		{
+			"id": "c",
+			"label": "Full catalog",
+			"section": "Phase 2",
+			"after": "f",
+			"days": 8,
+			"focal": true
+		},
+		{
+			"id": "x",
+			"label": "Export",
+			"section": "Phase 3",
+			"after": "f",
+			"days": 3,
+			"done": true
+		},
+		{
+			"id": "i",
+			"label": "Importers",
+			"section": "Phase 3",
+			"after": "c",
+			"days": 5
+		},
+		{
+			"id": "p",
+			"label": "Polish + benchmark",
+			"section": "Phase 4",
+			"after": "i",
+			"days": 4
+		}
+	],
+	"milestones": [
+		{
+			"label": "v1.0",
+			"date": "2026-10-25",
+			"focal": true
+		}
+	]
+}

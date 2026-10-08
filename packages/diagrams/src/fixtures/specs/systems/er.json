@@ -1,0 +1,40 @@
+{
+	"type": "er",
+	"title": "Shop data model",
+	"nodes": [
+		{
+			"id": "customer",
+			"label": "Customer",
+			"fields": ["id PK", "email UQ", "name"],
+			"row": 0,
+			"col": 0
+		},
+		{
+			"id": "order",
+			"label": "Order",
+			"focal": true,
+			"fields": ["id PK", "customer_id FK", "placed_at", "status"],
+			"row": 0,
+			"col": 1
+		},
+		{
+			"id": "item",
+			"label": "Line item",
+			"fields": ["order_id FK", "product_id FK", "qty"],
+			"row": 0,
+			"col": 2
+		},
+		{
+			"id": "product",
+			"label": "Product",
+			"fields": ["id PK", "sku UQ", "price"],
+			"row": 1,
+			"col": 2
+		}
+	],
+	"edges": [
+		["customer", "order", "places", "one-many"],
+		["order", "item", "contains", "one-many"],
+		["product", "item", "in", "one-many"]
+	]
+}

@@ -1,0 +1,72 @@
+{
+	"title": "Venn",
+	"required": [
+		"sets"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"sets": {
+			"type": "array",
+			"minItems": 2,
+			"maxItems": 3,
+			"items": {
+				"anyOf": [
+					{
+						"type": "string"
+					},
+					{
+						"type": "object",
+						"required": [
+							"label"
+						],
+						"additionalProperties": false,
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"label": {
+								"type": "string",
+								"maxLength": 24
+							},
+							"sub": {
+								"type": "string",
+								"maxLength": 32
+							},
+							"focal": {
+								"type": "boolean"
+							}
+						}
+					}
+				]
+			}
+		},
+		"overlaps": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": [
+					"sets",
+					"label"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"sets": {
+						"type": "array",
+						"minItems": 2,
+						"maxItems": 3,
+						"items": {
+							"type": "string"
+						}
+					},
+					"label": {
+						"type": "string",
+						"maxLength": 28
+					},
+					"focal": {
+						"type": "boolean"
+					}
+				}
+			}
+		}
+	}
+}

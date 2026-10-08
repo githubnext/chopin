@@ -1,0 +1,33 @@
+{
+	"type": "tree",
+	"title": "Where the skill's tokens go",
+	"root": {
+		"label": "One diagram",
+		"sub": "≈ 12k tokens",
+		"children": [
+			{
+				"label": "Instructions",
+				"sub": "SKILL.md + 1 guide",
+				"children": [
+					{ "label": "Router", "sub": "≤ 4 KB" },
+					{ "label": "Type guide", "sub": "≤ 1.5 KB" }
+				]
+			},
+			{
+				"label": "Spec",
+				"sub": "30–150 lines",
+				"focal": true,
+				"children": [
+					{ "label": "Nodes" },
+					{ "label": "Edges" },
+					{ "label": "Placement" }
+				]
+			},
+			{
+				"label": "Script output",
+				"sub": "1 line JSON",
+				"children": [{ "label": "Problems", "sub": "≤ 5 + fix" }]
+			}
+		]
+	}
+}

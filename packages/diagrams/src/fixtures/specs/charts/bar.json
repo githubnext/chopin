@@ -1,0 +1,14 @@
+{
+	"type": "bar",
+	"title": "Output tokens per diagram",
+	"subtitle": "Writing a spec instead of SVG is the single biggest saving.",
+	"unit": "k",
+	"axis": "tokens (thousands)",
+	"focal": "SeeCode spec",
+	"data": [
+		["Hand-written SVG", 14.2],
+		["SVG + templates", 9.8],
+		["Shorthand tags", 4.1],
+		["SeeCode spec", 1.6]
+	]
+}

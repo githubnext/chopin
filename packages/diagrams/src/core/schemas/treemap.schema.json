@@ -1,0 +1,61 @@
+{
+	"title": "Treemap",
+	"required": [
+		"data"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"unit": {
+			"type": "string"
+		},
+		"focal": {
+			"type": [
+				"string",
+				"array"
+			]
+		},
+		"data": {
+			"type": "array",
+			"minItems": 2,
+			"items": {
+				"anyOf": [
+					{
+						"type": "array",
+						"minItems": 2,
+						"maxItems": 2,
+						"items": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "number"
+							}
+						]
+					},
+					{
+						"type": "object",
+						"required": [
+							"label"
+						],
+						"additionalProperties": false,
+						"properties": {
+							"label": {
+								"type": "string",
+								"maxLength": 28
+							},
+							"value": {
+								"type": "number"
+							},
+							"focal": {
+								"type": "boolean"
+							},
+							"children": {
+								"type": "array"
+							}
+						}
+					}
+				]
+			}
+		}
+	}
+}

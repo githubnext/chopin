@@ -1,0 +1,55 @@
+{
+	"title": "Nested",
+	"required": [
+		"root"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"root": {
+			"$ref": "#/$defs/n"
+		}
+	},
+	"$defs": {
+		"n": {
+			"anyOf": [
+				{
+					"type": "string"
+				},
+				{
+					"type": "object",
+					"required": [
+						"label"
+					],
+					"additionalProperties": false,
+					"properties": {
+						"id": {
+							"type": "string"
+						},
+						"label": {
+							"type": "string",
+							"maxLength": 40
+						},
+						"sub": {
+							"type": "string",
+							"maxLength": 40
+						},
+						"focal": {
+							"type": "boolean"
+						},
+						"cols": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 6
+						},
+						"children": {
+							"type": "array",
+							"items": {
+								"$ref": "#/$defs/n"
+							}
+						}
+					}
+				}
+			]
+		}
+	}
+}

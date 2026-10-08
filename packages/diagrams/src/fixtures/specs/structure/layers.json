@@ -1,0 +1,43 @@
+{
+	"type": "layers",
+	"title": "The SeeCode stack",
+	"layers": [
+		{
+			"label": "Skill instructions",
+			"sub": "SKILL.md + type guides",
+			"items": [
+				"router",
+				"guides"
+			]
+		},
+		{
+			"label": "Spec",
+			"sub": "compact JSON",
+			"items": [
+				"nodes",
+				"edges",
+				"placement"
+			],
+			"focal": true
+		},
+		{
+			"label": "Renderers",
+			"sub": "layout · routing · motion",
+			"items": [
+				"graph",
+				"lanes",
+				"structure",
+				"charts"
+			]
+		},
+		{
+			"label": "Viewer + export",
+			"sub": "HTML · PNG · GIF · MP4",
+			"items": [
+				"focus",
+				"route",
+				"export"
+			]
+		}
+	]
+}

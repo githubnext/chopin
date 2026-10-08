@@ -1,0 +1,59 @@
+{
+	"type": "sankey",
+	"title": "Where a request's time goes",
+	"unit": "ms",
+	"nodes": [
+		{
+			"id": "db",
+			"label": "Database",
+			"focal": true
+		}
+	],
+	"links": [
+		[
+			"Request",
+			"Auth",
+			40
+		],
+		[
+			"Request",
+			"Handler",
+			260
+		],
+		[
+			"Handler",
+			"db",
+			150
+		],
+		[
+			"Handler",
+			"Render",
+			70
+		],
+		[
+			"Handler",
+			"Cache",
+			40
+		],
+		[
+			"Auth",
+			"Cache",
+			40
+		],
+		[
+			"db",
+			"Response",
+			150
+		],
+		[
+			"Render",
+			"Response",
+			70
+		],
+		[
+			"Cache",
+			"Response",
+			80
+		]
+	]
+}

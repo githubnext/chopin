@@ -1,0 +1,33 @@
+{
+	"type": "architecture-delta",
+	"title": "Moving search off the monolith",
+	"subtitle": "What changes in Q3.",
+	"nodes": [
+		{ "id": "web", "label": "Web app", "kind": "external", "row": 0, "col": 0 },
+		{ "id": "mono", "label": "Monolith", "sub": "Rails", "change": "changed", "row": 0, "col": 1 },
+		{
+			"id": "search",
+			"label": "Search service",
+			"sub": "Go",
+			"change": "added",
+			"focal": true,
+			"row": 1,
+			"col": 1
+		},
+		{ "id": "es", "label": "OpenSearch", "kind": "store", "change": "added", "row": 1, "col": 2 },
+		{
+			"id": "sql",
+			"label": "SQL LIKE queries",
+			"kind": "store",
+			"change": "removed",
+			"row": 0,
+			"col": 2
+		}
+	],
+	"edges": [
+		["web", "mono", "HTTPS"],
+		["web", "search", "/search", "primary"],
+		["search", "es", "query", "primary"],
+		{ "from": "mono", "to": "sql", "label": "search", "change": "removed" }
+	]
+}

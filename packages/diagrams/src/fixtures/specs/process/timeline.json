@@ -1,0 +1,50 @@
+{
+	"type": "timeline",
+	"title": "Diagram tools, briefly",
+	"events": [
+		{
+			"date": "1990",
+			"label": "Visio",
+			"sub": "desktop"
+		},
+		{
+			"date": "2000",
+			"label": "Graphviz 1.0"
+		},
+		{
+			"date": "2008",
+			"label": "PlantUML"
+		},
+		{
+			"date": "2014",
+			"label": "Mermaid"
+		},
+		{
+			"date": "2016",
+			"label": "draw.io"
+		},
+		{
+			"date": "2020",
+			"label": "Excalidraw"
+		},
+		{
+			"date": "2026",
+			"label": "SeeCode",
+			"focal": true,
+			"sub": "animated specs"
+		}
+	],
+	"periods": [
+		{
+			"from": "1990",
+			"to": "2008",
+			"label": "GUI era"
+		},
+		{
+			"from": "2008",
+			"to": "2026",
+			"label": "diagrams as code",
+			"focal": true
+		}
+	]
+}

@@ -1,0 +1,39 @@
+{
+	"type": "treemap",
+	"title": "Lines of code by area",
+	"focal": "Renderers",
+	"data": [
+		{
+			"label": "Renderers",
+			"value": 2400
+		},
+		{
+			"label": "Viewer",
+			"value": 420
+		},
+		{
+			"label": "Export",
+			"value": 330
+		},
+		{
+			"label": "Router",
+			"value": 310
+		},
+		{
+			"label": "Importers",
+			"value": 900
+		},
+		{
+			"label": "Tokens + CSS",
+			"value": 260
+		},
+		{
+			"label": "Config",
+			"value": 110
+		},
+		{
+			"label": "Scan",
+			"value": 180
+		}
+	]
+}

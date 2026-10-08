@@ -1,0 +1,46 @@
+{
+	"type": "uml-class",
+	"dir": "TB",
+	"title": "Payment providers",
+	"nodes": [
+		{
+			"id": "p",
+			"label": "PaymentProvider",
+			"tag": "«iface»",
+			"attrs": [],
+			"methods": ["charge(amount): Receipt", "refund(id): void"],
+			"row": 0,
+			"col": 1
+		},
+		{
+			"id": "stripe",
+			"label": "StripeProvider",
+			"attrs": ["- apiKey: string"],
+			"methods": ["+ charge(amount)"],
+			"row": 1,
+			"col": 0
+		},
+		{
+			"id": "adyen",
+			"label": "AdyenProvider",
+			"attrs": ["- merchant: string"],
+			"methods": ["+ charge(amount)"],
+			"row": 1,
+			"col": 2
+		},
+		{
+			"id": "svc",
+			"label": "CheckoutService",
+			"focal": true,
+			"attrs": ["- provider: PaymentProvider"],
+			"methods": ["+ pay(order)"],
+			"row": 0,
+			"col": 3
+		}
+	],
+	"edges": [
+		["stripe", "p", "", "implements"],
+		["adyen", "p", "", "implements"],
+		["svc", "p", "uses", "depends"]
+	]
+}

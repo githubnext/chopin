@@ -1,0 +1,49 @@
+{
+	"type": "heatmap",
+	"title": "Render time by type and size (ms)",
+	"rows": [
+		"architecture",
+		"sequence",
+		"tree",
+		"bar",
+		"sankey"
+	],
+	"cols": [
+		"5 nodes",
+		"10",
+		"20",
+		"40"
+	],
+	"values": [
+		[
+			4,
+			7,
+			15,
+			38
+		],
+		[
+			3,
+			5,
+			9,
+			17
+		],
+		[
+			2,
+			3,
+			6,
+			11
+		],
+		[
+			1,
+			2,
+			3,
+			5
+		],
+		[
+			3,
+			6,
+			12,
+			26
+		]
+	]
+}

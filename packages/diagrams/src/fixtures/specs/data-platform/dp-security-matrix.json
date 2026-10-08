@@ -1,0 +1,50 @@
+{
+	"type": "dp-security-matrix",
+	"title": "Who can see what",
+	"rows": [
+		"Analyst",
+		"Data engineer",
+		"Support agent",
+		"ML pipeline",
+		"Auditor"
+	],
+	"cols": [
+		"Orders",
+		"Customers PII",
+		"Payments",
+		"Events"
+	],
+	"cells": [
+		[
+			"read",
+			"masked",
+			"masked",
+			"read"
+		],
+		[
+			"write",
+			"write",
+			"write",
+			"write"
+		],
+		[
+			"read",
+			"read",
+			"none",
+			"none"
+		],
+		[
+			"read",
+			"masked",
+			"none",
+			"read"
+		],
+		[
+			"read",
+			"read",
+			"read",
+			"read"
+		]
+	],
+	"focal": "Support agent"
+}

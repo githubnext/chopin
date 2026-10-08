@@ -1,0 +1,21 @@
+{
+	"type": "org-chart",
+	"title": "Platform team",
+	"root": {
+		"label": "Dana Reyes",
+		"sub": "Head of Platform",
+		"children": [
+			{
+				"label": "Sam Okafor",
+				"sub": "Infra lead",
+				"children": [{ "label": "Ira", "sub": "SRE" }, { "label": "Lu", "sub": "SRE" }]
+			},
+			{
+				"label": "Mo Chen",
+				"sub": "DX lead",
+				"focal": true,
+				"children": [{ "label": "Ana", "sub": "Tooling" }, { "label": "Jo", "sub": "Docs" }]
+			}
+		]
+	}
+}

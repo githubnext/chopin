@@ -1,0 +1,52 @@
+{
+	"title": "Heatmap",
+	"required": [],
+	"additionalProperties": false,
+	"properties": {
+		"rows": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
+		"cols": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
+		"values": {
+			"type": "array",
+			"items": {
+				"type": "array",
+				"items": {
+					"type": [
+						"number",
+						"null"
+					]
+				}
+			}
+		},
+		"unit": {
+			"type": "string"
+		},
+		"min": {
+			"type": "number"
+		},
+		"max": {
+			"type": "number"
+		},
+		"scale": {
+			"enum": [
+				"sequential",
+				"diverging"
+			]
+		},
+		"labels": {
+			"type": "boolean"
+		},
+		"data": {
+			"type": "string"
+		}
+	}
+}

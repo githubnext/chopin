@@ -1,0 +1,13 @@
+{
+	"type": "pyramid",
+	"variant": "funnel",
+	"title": "Signup funnel",
+	"unit": "",
+	"levels": [
+		{ "label": "Visited", "value": 12000 },
+		{ "label": "Started signup", "value": 3100 },
+		{ "label": "Verified email", "value": 2200, "focal": true },
+		{ "label": "Created project", "value": 1400 },
+		{ "label": "Invited team", "value": 520 }
+	]
+}

@@ -1,0 +1,52 @@
+{
+	"type": "deployment",
+	"title": "Where checkout runs",
+	"nodes": [
+		{ "id": "lb", "label": "Load balancer", "sub": ":443", "row": 0, "col": 0 },
+		{
+			"id": "api1",
+			"label": "checkout-api",
+			"sub": "k8s · 3 pods",
+			"focal": true,
+			"row": 0,
+			"col": 1,
+			"group": "eu"
+		},
+		{
+			"id": "db",
+			"label": "Postgres",
+			"sub": "primary",
+			"kind": "store",
+			"row": 1,
+			"col": 1,
+			"group": "eu"
+		},
+		{
+			"id": "rep",
+			"label": "Postgres",
+			"sub": "replica",
+			"kind": "store",
+			"row": 1,
+			"col": 2,
+			"group": "us"
+		},
+		{
+			"id": "api2",
+			"label": "checkout-api",
+			"sub": "k8s · 2 pods",
+			"row": 0,
+			"col": 2,
+			"group": "us"
+		}
+	],
+	"groups": [
+		{ "id": "eu", "label": "eu-west-1" },
+		{ "id": "us", "label": "us-east-1", "style": "dashed" }
+	],
+	"edges": [
+		["lb", "api1", "HTTPS", "primary"],
+		["api1", "db", "SQL"],
+		["db", "rep", "WAL", "async"],
+		["api2", "rep", "reads"]
+	]
+}

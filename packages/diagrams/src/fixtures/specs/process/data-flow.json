@@ -1,0 +1,83 @@
+{
+	"type": "data-flow",
+	"title": "Product analytics pipeline",
+	"nodes": [
+		{
+			"id": "app",
+			"label": "App events",
+			"sub": "SDK",
+			"kind": "input",
+			"row": 0,
+			"col": 0
+		},
+		{
+			"id": "q",
+			"label": "Ingest queue",
+			"sub": "Kinesis",
+			"kind": "store",
+			"row": 0,
+			"col": 1
+		},
+		{
+			"id": "etl",
+			"label": "Sessionize",
+			"sub": "Flink",
+			"focal": true,
+			"row": 0,
+			"col": 2
+		},
+		{
+			"id": "wh",
+			"label": "Warehouse",
+			"sub": "BigQuery",
+			"kind": "store",
+			"row": 0,
+			"col": 3
+		},
+		{
+			"id": "ml",
+			"label": "Feature store",
+			"kind": "store",
+			"row": 1,
+			"col": 3
+		},
+		{
+			"id": "bi",
+			"label": "Dashboards",
+			"kind": "external",
+			"row": 0,
+			"col": 4
+		}
+	],
+	"edges": [
+		[
+			"app",
+			"q",
+			"events",
+			"primary"
+		],
+		[
+			"q",
+			"etl",
+			"batches",
+			"primary"
+		],
+		[
+			"etl",
+			"wh",
+			"sessions",
+			"primary"
+		],
+		[
+			"etl",
+			"ml",
+			"features",
+			"async"
+		],
+		[
+			"wh",
+			"bi",
+			"queries"
+		]
+	]
+}
