@@ -311,7 +311,7 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 	await expect(card.getByRole("radio", { name: "Anchors" })).not.toBeChecked();
 });
 
-test("an answered heading remains a keyboard link to its prose", async ({ join, seed }) => {
+test("a linked decision keeps a keyboard jump to its prose", async ({ join, seed }) => {
 	await seed(`Anchored paragraph.\n\n${DECIDED_CARD}`, {
 		questions: [{
 			...DECIDED_RECORD,
@@ -322,7 +322,7 @@ test("an answered heading remains a keyboard link to its prose", async ({ join, 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "1 resolved" }).click();
 	let card = cardByPrompt(page, "How should we deploy?");
-	let link = card.getByRole("button", { name: "How should we deploy? — show in plan" });
+	let link = card.getByRole("button", { name: "Show in document" });
 	await expect(link).toHaveCount(1);
 	await link.focus();
 	await link.press("Enter");
