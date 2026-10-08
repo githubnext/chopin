@@ -379,7 +379,7 @@ test("legacy delivery clears immediately without waiting for an acknowledgement"
 	await expect(draft).toBeFocused();
 });
 
-test("the composer stays read-only until fresh chat history arrives", async ({ join, page, seed }) => {
+test("the composer drafts but cannot send until fresh chat history arrives", async ({ join, page, seed }) => {
 	await seed("# Delayed chat history\n");
 	let releaseHistory: (() => void) | undefined;
 	await page.routeWebSocket("**/ws?**", route => {
@@ -400,12 +400,11 @@ test("the composer stays read-only until fresh chat history arrives", async ({ j
 	let chat = chatPane(await join("ana"));
 	let draft = chatInput(chat);
 	await expect.poll(() => releaseHistory !== undefined).toBe(true);
-	await expect(draft).toHaveAttribute("contenteditable", "false");
-	await expect(draft).toHaveAttribute("aria-disabled", "true");
-	await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();
-	releaseHistory!();
 	await expect(draft).toBeEditable();
 	await expect(draft).toHaveAttribute("aria-disabled", "false");
 	await draft.fill("Now synchronized");
+	await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();
+	releaseHistory!();
 	await expect(chat.getByRole("button", { name: "Send message" })).toBeEnabled();
+	await expectChatValue(draft, "Now synchronized");
 });
