@@ -1,22 +1,31 @@
 import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 
-import type { Session } from "@chopin/protocol";
+import type { Sidebar } from "@chopin/protocol";
 import type { AuthorizationResult } from "../wire";
 
-export const MAX_WATCHED_REPOSITORIES = 50;
+export const MAX_WATCH_FRAME_REPOSITORIES = 50;
+export const MAX_WATCHED_REPOSITORIES = 200;
 export const MAX_WATCHED_DOCUMENTS = 500;
 
 const REPOSITORY_ID = /^[A-Za-z0-9_=+/-]{1,200}$/;
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const REPOSITORY = /^[A-Za-z0-9._-]{1,100}$/;
 
-export type WatchedRepository = Session.WatchedRepository;
+export type WatchedRepository = Sidebar.WatchedRepository;
 export type RepositoryIdentity = Omit<WatchedRepository, "channelIds">;
 
+type RepositoryOutcome = "watched" | "refused" | "unavailable" | "superseded";
+
+type Authorization = {
+	identity: RepositoryIdentity;
+	outcome: Promise<RepositoryOutcome>;
+};
+
 export type DecisionWatch = {
-	generation: number;
 	repositories: Map<string, RepositoryIdentity>;
+	authorizing: Map<string, Authorization>;
+	released: boolean;
 };
 
 export type WatchTopics = {
@@ -26,10 +35,14 @@ export type WatchTopics = {
 
 export type RepositoryAuthorizer = (repository: RepositoryIdentity) => Promise<AuthorizationResult>;
 
-export type WatchOutcome = { watched: WatchedRepository[]; refused: string[] };
+export type WatchOutcome = {
+	watched: WatchedRepository[];
+	refused: string[];
+	unavailable: string[];
+};
 
 export function decisionWatch(): DecisionWatch {
-	return { generation: 0, repositories: new Map() };
+	return { repositories: new Map(), authorizing: new Map(), released: false };
 }
 
 type RepositoryRead = (
@@ -57,8 +70,8 @@ function text(value: unknown, pattern: RegExp): value is string {
 	return typeof value === "string" && pattern.test(value);
 }
 
-export function watchedRepositories(value: unknown): WatchedRepository[] | undefined {
-	if (!Array.isArray(value) || value.length > MAX_WATCHED_REPOSITORIES) return undefined;
+export function watchRequest(value: unknown): WatchedRepository[] | undefined {
+	if (!Array.isArray(value) || value.length > MAX_WATCH_FRAME_REPOSITORIES) return undefined;
 	let seen = new Set<string>();
 	let repositories: WatchedRepository[] = [];
 	for (let entry of value) {
@@ -76,73 +89,130 @@ export function watchedRepositories(value: unknown): WatchedRepository[] | undef
 	return repositories;
 }
 
-function authorizeAll(
-	repositories: RepositoryIdentity[],
+export function unwatchRequest(value: unknown): string[] | undefined {
+	if (!Array.isArray(value) || value.length > MAX_WATCHED_REPOSITORIES) return undefined;
+	if (!value.every(id => text(id, REPOSITORY_ID))) return undefined;
+	return [...new Set(value as string[])];
+}
+
+function sameRepository(
+	current: RepositoryIdentity | undefined,
+	requested: RepositoryIdentity,
+): boolean {
+	return current?.repositoryId === requested.repositoryId
+		&& current.owner === requested.owner
+		&& current.name === requested.name;
+}
+
+function tracked(watch: DecisionWatch): number {
+	let ids = new Set(watch.repositories.keys());
+	for (let id of watch.authorizing.keys()) ids.add(id);
+	return ids.size;
+}
+
+function drop(watch: DecisionWatch, repositoryId: string, topics: WatchTopics): void {
+	if (!watch.repositories.delete(repositoryId)) return;
+	topics.unsubscribe(repositoryId);
+}
+
+function authorizeRepository(
+	watch: DecisionWatch,
+	identity: RepositoryIdentity,
 	authorize: RepositoryAuthorizer,
-): Promise<AuthorizationResult[]> {
-	return Promise.all(
-		repositories.map(repository =>
-			authorize(repository).catch((): AuthorizationResult => "unavailable")
-		),
-	);
+	topics: WatchTopics,
+): Authorization {
+	let id = identity.repositoryId;
+	let authorization: Authorization = {
+		identity,
+		outcome: Promise.resolve()
+			.then(() => authorize(identity))
+			.catch((): AuthorizationResult => "unavailable")
+			.then(result => {
+				if (watch.released || watch.authorizing.get(id) !== authorization) return "superseded";
+				watch.authorizing.delete(id);
+				if (result === "unavailable") return "unavailable";
+				if (result === "denied") {
+					drop(watch, id, topics);
+					return "refused";
+				}
+				if (!watch.repositories.has(id)) topics.subscribe(id);
+				watch.repositories.set(id, identity);
+				return "watched";
+			}),
+	};
+	watch.authorizing.set(id, authorization);
+	return authorization;
+}
+
+function watchRepository(
+	watch: DecisionWatch,
+	{ repositoryId, owner, name }: WatchedRepository,
+	authorize: RepositoryAuthorizer,
+	topics: WatchTopics,
+): Promise<RepositoryOutcome> {
+	let identity = { repositoryId, owner, name };
+	if (watch.released) return Promise.resolve("superseded");
+	if (sameRepository(watch.repositories.get(repositoryId), identity)) {
+		return Promise.resolve("watched");
+	}
+	let pending = watch.authorizing.get(repositoryId);
+	if (pending && sameRepository(pending.identity, identity)) return pending.outcome;
+	let known = watch.repositories.has(repositoryId) || !!pending;
+	if (!known && tracked(watch) >= MAX_WATCHED_REPOSITORIES) return Promise.resolve("refused");
+	return authorizeRepository(watch, identity, authorize, topics).outcome;
 }
 
 export async function watchDecisions(
 	watch: DecisionWatch,
-	ownRepositoryId: string,
 	requested: WatchedRepository[],
 	authorize: RepositoryAuthorizer,
 	topics: WatchTopics,
-	open: () => boolean,
-): Promise<WatchOutcome | undefined> {
-	let generation = ++watch.generation;
-	let others = requested.filter(repository => repository.repositoryId !== ownRepositoryId);
-	let results = await authorizeAll(others, authorize);
-	if (!open() || watch.generation !== generation) return undefined;
-	let allowed = new Set(
-		others.filter((_, index) => results[index] === "allowed")
-			.map(repository => repository.repositoryId),
+): Promise<WatchOutcome> {
+	let outcomes = await Promise.all(
+		requested.map(repository => watchRepository(watch, repository, authorize, topics)),
 	);
-	let next = new Map<string, RepositoryIdentity>();
-	for (let { repositoryId, owner, name } of others) {
-		if (allowed.has(repositoryId)) next.set(repositoryId, { repositoryId, owner, name });
+	let result: WatchOutcome = { watched: [], refused: [], unavailable: [] };
+	requested.forEach((repository, index) => {
+		let outcome = outcomes[index];
+		if (outcome === "watched") result.watched.push(repository);
+		else if (outcome === "refused") result.refused.push(repository.repositoryId);
+		else if (outcome === "unavailable") result.unavailable.push(repository.repositoryId);
+	});
+	return result;
+}
+
+export function unwatchDecisions(
+	watch: DecisionWatch,
+	repositoryIds: string[],
+	topics: WatchTopics,
+): void {
+	for (let repositoryId of repositoryIds) {
+		watch.authorizing.delete(repositoryId);
+		drop(watch, repositoryId, topics);
 	}
-	for (let repositoryId of watch.repositories.keys()) {
-		if (!next.has(repositoryId)) topics.unsubscribe(repositoryId);
-	}
-	for (let repositoryId of next.keys()) {
-		if (!watch.repositories.has(repositoryId)) topics.subscribe(repositoryId);
-	}
-	watch.repositories = next;
-	return {
-		watched: requested.filter(repository =>
-			repository.repositoryId === ownRepositoryId || allowed.has(repository.repositoryId)
-		),
-		refused: others.filter(repository => !allowed.has(repository.repositoryId))
-			.map(repository => repository.repositoryId),
-	};
 }
 
 export async function recheckDecisionWatch(
 	watch: DecisionWatch,
 	authorize: RepositoryAuthorizer,
 	topics: WatchTopics,
-	open: () => boolean,
 ): Promise<void> {
-	let generation = watch.generation;
 	let current = [...watch.repositories.values()];
-	if (current.length === 0) return;
-	let results = await authorizeAll(current, authorize);
-	if (!open() || watch.generation !== generation) return;
+	let results = await Promise.all(
+		current.map(repository =>
+			authorize(repository).catch((): AuthorizationResult => "unavailable")
+		),
+	);
 	current.forEach((repository, index) => {
-		if (results[index] !== "denied") return;
-		watch.repositories.delete(repository.repositoryId);
-		topics.unsubscribe(repository.repositoryId);
+		if (results[index] !== "denied" || watch.released) return;
+		if (watch.repositories.get(repository.repositoryId) !== repository) return;
+		drop(watch, repository.repositoryId, topics);
 	});
 }
 
 export function releaseDecisionWatch(watch: DecisionWatch, topics: WatchTopics): void {
-	watch.generation++;
+	watch.released = true;
 	for (let repositoryId of watch.repositories.keys()) topics.unsubscribe(repositoryId);
 	watch.repositories.clear();
+	watch.authorizing.clear();
 }

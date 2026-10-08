@@ -1,8 +1,8 @@
-import { createChannel, testChannelSlug } from "./database";
-import { content, expect, ready, roomPath, test } from "./room";
+import { createChannel, createChildChannel, testChannelSlug } from "./database";
+import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { installPointerMedia } from "./pointer-media";
 
-import type { Locator, Page, WebSocketRoute } from "@playwright/test";
+import type { Browser, BrowserContext, Locator, Page, WebSocketRoute } from "@playwright/test";
 
 const repository = {
 	defaultBranch: "main",
@@ -39,7 +39,8 @@ const CHILD = channel("cccccccc-0000-4000-8000-000000000002", "Fencing tokens", 
 const QUIET = channel("cccccccc-0000-4000-8000-000000000003", "Settled plan", 0);
 const LATER = channel("cccccccc-0000-4000-8000-000000000004", "Later page", 5);
 
-const LIVE_COUNTS = new Set(["session:decisions", "session:decisions-snapshot"]);
+const LIVE_COUNTS = new Set(["sidebar:decisions", "sidebar:snapshot"]);
+const SIDEBAR_SOCKET = "**/ws/sidebar";
 
 function sidebar(page: Page) {
 	return page.getByRole("complementary", { name: "Projects" });
@@ -64,7 +65,7 @@ async function mockCatalogue(page: Page) {
 				},
 		});
 	});
-	await page.routeWebSocket("**/ws?**", route => {
+	await page.routeWebSocket(SIDEBAR_SOCKET, route => {
 		let server = route.connectToServer();
 		route.onMessage(message => server.send(message));
 		server.onMessage(message => {
@@ -232,8 +233,13 @@ test("touch keeps each count visible beside its always-shown action", async ({ j
 	await expect(parentActions).toBeVisible();
 });
 
-function socketChannel(url: string): string | null {
-	return new URL(url).searchParams.get("channel");
+function roomChannels(urls: string[]): Array<string | null> {
+	return urls.filter(url => new URL(url).pathname === "/ws")
+		.map(url => new URL(url).searchParams.get("channel"));
+}
+
+function sidebarSockets(urls: string[]): string[] {
+	return urls.filter(url => new URL(url).pathname === "/ws/sidebar");
 }
 
 test("a document's sidebar count follows decisions as they are asked and answered", async ({ join, page: first, room }) => {
@@ -267,8 +273,8 @@ test("a document's sidebar count follows decisions as they are asked and answere
 	};
 	expect(catalogue.channels.find(item => item.id === room)?.unansweredDecisions).toBe(1);
 	expect(catalogue.unansweredDecisions).toBeGreaterThanOrEqual(1);
-	expect(sockets.length).toBeGreaterThan(0);
-	expect(sockets.map(socketChannel).every(channel => channel === room)).toBe(true);
+	expect(sidebarSockets(sockets).length).toBeGreaterThan(0);
+	expect(roomChannels(sockets).every(channel => channel === room)).toBe(true);
 });
 
 test("another document's count follows its decisions while the viewer stays elsewhere", async ({ baseURL, join, page: first, room }) => {
@@ -300,7 +306,8 @@ test("another document's count follows its decisions while the viewer stays else
 
 	await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
 	await expect(count(row)).toHaveText("1");
-	expect(sockets.map(socketChannel).every(channel => channel === room)).toBe(true);
+	expect(sidebarSockets(sockets).length).toBeGreaterThan(0);
+	expect(roomChannels(sockets).every(channel => channel === room)).toBe(true);
 });
 
 const ARCHIVE = { id: "R_archive_1", owner: "octo-org", name: "archive-1" };
@@ -379,16 +386,16 @@ test("a project in another repository follows its decisions while the viewer sta
 	await expect(
 		projects.getByRole("button", { name: countLabel(ARCHIVE.name, baseline + 1), exact: true }),
 	).toBeVisible();
-	expect(sockets.length).toBeGreaterThan(0);
-	expect(sockets.map(socketChannel).every(channel => channel === room)).toBe(true);
+	expect(sidebarSockets(sockets).length).toBeGreaterThan(0);
+	expect(roomChannels(sockets).every(channel => channel === room)).toBe(true);
 });
 
-test("sidebar counts catch up on decisions answered while the viewer was disconnected", async ({ baseURL, join, page: first }) => {
+test("sidebar counts catch up on decisions answered while the sidebar was disconnected", async ({ baseURL, join, page: first }) => {
 	let other = crypto.randomUUID();
 	await createChannel(Number(new URL(baseURL!).port), other);
 	let dropping = false;
 	let connections: Array<{ page: WebSocketRoute; server: WebSocketRoute }> = [];
-	await first.routeWebSocket("**/ws?**", route => {
+	await first.routeWebSocket(SIDEBAR_SOCKET, route => {
 		let server = route.connectToServer();
 		connections.push({ page: route, server });
 		route.onMessage(message => server.send(message));
@@ -420,9 +427,197 @@ test("sidebar counts catch up on decisions answered while the viewer was disconn
 	let dropped = connections.at(-1)!;
 	await dropped.page.close();
 	await dropped.server.close();
-	await expect(content(viewer)).toHaveAttribute("contenteditable", "false");
-	await ready(viewer);
+	await expect.poll(() => connections.length).toBeGreaterThan(1);
 	await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
 	await expect(count(row)).toHaveText("1");
-	expect(connections.length).toBeGreaterThan(1);
+});
+
+const CATALOGUE = { id: "R_archive_9", owner: "octo-org", name: "archive-9" };
+const ARCHIVED_CHILD = { id: "R_archive_8", owner: "octo-org", name: "archive-8" };
+
+function documentPath(repository: { owner: string; name: string }, id: string): string {
+	return `/documents/${repository.owner}/${repository.name}/${testChannelSlug(id)}`;
+}
+
+async function openAs(
+	browser: Browser,
+	baseURL: string,
+	handle: string,
+	path: string,
+): Promise<{ context: BrowserContext; page: Page }> {
+	let context = await browser.newContext({ baseURL });
+	let page = await context.newPage();
+	await authenticate(page, handle, baseURL);
+	await page.goto(path);
+	await ready(page);
+	return { context, page };
+}
+
+async function addProject(
+	page: Page,
+	baseURL: string,
+	repository: { owner: string; name: string },
+) {
+	let added = await page.request.post("/api/navigation/projects", {
+		data: { owner: repository.owner, repository: repository.name },
+		headers: { origin: baseURL },
+	});
+	expect(added.status()).toBe(201);
+}
+
+test("project and document counts follow decisions while no document is open", async ({ baseURL, browser, join, room }) => {
+	let other = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), other, CATALOGUE);
+	let editor = await openAs(
+		browser,
+		baseURL!,
+		`document-creator-${crypto.randomUUID()}`,
+		documentPath(CATALOGUE, other),
+	);
+	try {
+		await expect.poll(() => storedCount(editor.page, CATALOGUE.name, other)).toBe(2);
+		let sockets: string[] = [];
+		let viewer = await join(`catalogue-viewer-${room.slice(0, 8)}`);
+		viewer.on("websocket", socket => sockets.push(socket.url()));
+		await addProject(viewer, baseURL!, CATALOGUE);
+		await viewer.goto(`/documents/${CATALOGUE.owner}/${CATALOGUE.name}`);
+		await expect(viewer.getByRole("heading", { name: "No document open" })).toBeVisible();
+		let baseline = await catalogueTotal(viewer, CATALOGUE.name);
+		let projects = sidebar(viewer);
+		let title = `Test ${other.slice(0, 8)}`;
+		let link = projects.getByRole("link", { name: new RegExp(`^${title}`) });
+		await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+		await expect(
+			projects.getByRole("button", { name: countLabel(CATALOGUE.name, baseline), exact: true }),
+		).toBeVisible();
+
+		await answerFirstDecision(editor.page);
+		await expect.poll(() => storedCount(viewer, CATALOGUE.name, other)).toBe(1);
+		await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
+		await expect(count(link.locator(".."))).toHaveText("1");
+		await expect(
+			projects.getByRole("button", {
+				name: countLabel(CATALOGUE.name, baseline - 1),
+				exact: true,
+			}),
+		).toBeVisible();
+		await expect(viewer.getByRole("heading", { name: "No document open" })).toBeVisible();
+		expect(roomChannels(sockets)).toEqual([]);
+	} finally {
+		await editor.context.close();
+	}
+});
+
+test("a document row loaded after the first watch reconciles a decision answered in between", async ({ baseURL, browser, join, page: first }) => {
+	let other = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), other);
+	let editor = await openAs(browser, baseURL!, "bob", roomPath(other));
+	try {
+		await expect.poll(() => storedCount(editor.page, "score", other)).toBe(2);
+
+		let listing = Promise.withResolvers<void>();
+		let listed = false;
+		let held = true;
+		await first.route("**/api/repositories/octo-org/score/channels*", async route => {
+			if (!held) return route.fallback();
+			held = false;
+			let response = await route.fetch();
+			listed = true;
+			await listing.promise;
+			await route.fulfill({ response });
+		});
+		let watches: string[] = [];
+		let holdingWatches = true;
+		let routes: Array<{ server: WebSocketRoute; held: string[] }> = [];
+		let snapshots = 0;
+		await first.routeWebSocket(SIDEBAR_SOCKET, route => {
+			let server = route.connectToServer();
+			let connection = { server, held: [] as string[] };
+			routes.push(connection);
+			route.onMessage(message => {
+				if (typeof message === "string" && JSON.parse(message).kind === "sidebar:watch") {
+					watches.push(message);
+					if (holdingWatches) {
+						connection.held.push(message);
+						return;
+					}
+				}
+				server.send(message);
+			});
+			server.onMessage(message => {
+				if (typeof message === "string" && JSON.parse(message).kind === "sidebar:snapshot") {
+					snapshots++;
+				}
+				route.send(message);
+			});
+		});
+
+		let viewer = await join("ana");
+		await expect.poll(() => listed).toBe(true);
+		await expect.poll(() => watches.length).toBeGreaterThan(0);
+		expect(watches.some(message => message.includes(other))).toBe(false);
+
+		await answerFirstDecision(editor.page);
+		await expect.poll(() => storedCount(editor.page, "score", other)).toBe(1);
+
+		holdingWatches = false;
+		for (let connection of routes) {
+			for (let message of connection.held.splice(0)) connection.server.send(message);
+		}
+		await expect.poll(() => snapshots).toBeGreaterThan(0);
+		listing.resolve();
+
+		let title = `Test ${other.slice(0, 8)}`;
+		let link = sidebar(viewer).getByRole("link", { name: new RegExp(`^${title}`) });
+		await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
+		await expect(count(link.locator(".."))).toHaveText("1");
+		expect(watches.some(message => message.includes(other))).toBe(true);
+	} finally {
+		await editor.context.close();
+	}
+});
+
+test("deleting an archived child updates the project total for a viewer in its parent", async ({ baseURL, browser, join, room }) => {
+	let port = Number(new URL(baseURL!).port);
+	let parent = crypto.randomUUID();
+	let child = crypto.randomUUID();
+	await createChannel(port, parent, ARCHIVED_CHILD);
+	await createChildChannel(port, parent, child, ARCHIVED_CHILD);
+	let parentPath = documentPath(ARCHIVED_CHILD, parent);
+	let editor = await openAs(
+		browser,
+		baseURL!,
+		`document-creator-${crypto.randomUUID()}`,
+		parentPath,
+	);
+	try {
+		await editor.page.goto(`${parentPath}/children/${testChannelSlug(child)}`);
+		await ready(editor.page);
+		await expect.poll(() => storedCount(editor.page, ARCHIVED_CHILD.name, parent)).toBe(2);
+		await expect.poll(() => storedCount(editor.page, ARCHIVED_CHILD.name, child)).toBe(2);
+
+		let viewer = await join(`parent-viewer-${room.slice(0, 8)}`);
+		await addProject(viewer, baseURL!, ARCHIVED_CHILD);
+		await viewer.goto(parentPath);
+		await expect(content(viewer)).toHaveAttribute("aria-readonly", "true");
+		await expect(viewer).toHaveURL(new RegExp(`${parentPath}$`));
+		let baseline = await catalogueTotal(viewer, ARCHIVED_CHILD.name);
+		let projects = sidebar(viewer);
+		let disclosure = (total: number) =>
+			projects.getByRole("button", { name: countLabel(ARCHIVED_CHILD.name, total), exact: true });
+		await expect(disclosure(baseline)).toBeVisible();
+
+		let headers = { origin: baseURL! };
+		let archived = await editor.page.request.post(`/api/channels/${child}/archive`, { headers });
+		expect(archived.ok()).toBe(true);
+		expect(await catalogueTotal(viewer, ARCHIVED_CHILD.name)).toBe(baseline);
+		await expect(disclosure(baseline)).toBeVisible();
+
+		let deleted = await editor.page.request.delete(`/api/channels/${child}`, { headers });
+		expect(deleted.status()).toBe(204);
+		await expect.poll(() => catalogueTotal(viewer, ARCHIVED_CHILD.name)).toBe(baseline - 2);
+		await expect(disclosure(baseline - 2)).toBeVisible();
+	} finally {
+		await editor.context.close();
+	}
 });

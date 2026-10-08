@@ -72,6 +72,19 @@ export async function createChannel(
 	});
 }
 
+export async function createChildChannel(
+	port: number,
+	parentId: string,
+	id: string,
+	repository = SCORE,
+): Promise<void> {
+	await createChannel(port, id, repository);
+	await sql(
+		port,
+		database => database`UPDATE channels SET parent_channel_id = ${parentId} WHERE id = ${id}`,
+	);
+}
+
 export async function seedChildChannel(
 	port: number,
 	parentId: string,

@@ -4,13 +4,16 @@ import { GitHubError } from "../github/client";
 
 import {
 	decisionWatch,
+	MAX_WATCH_FRAME_REPOSITORIES,
 	MAX_WATCHED_DOCUMENTS,
 	MAX_WATCHED_REPOSITORIES,
 	recheckDecisionWatch,
 	releaseDecisionWatch,
 	repositoryReader,
+	unwatchDecisions,
+	unwatchRequest,
 	watchDecisions,
-	watchedRepositories,
+	watchRequest,
 } from "./decision-watch";
 
 import type { AuthorizationResult } from "../wire";
@@ -52,36 +55,44 @@ function access(results: Record<string, AuthorizationResult>) {
 
 describe("decision watch requests", () => {
 	it("accepts bounded repository lists with loaded document ids", () => {
-		expect(watchedRepositories([repository("score", [DOCUMENT, DOCUMENT])])).toEqual([
+		expect(watchRequest([repository("score", [DOCUMENT, DOCUMENT])])).toEqual([
 			repository("score", [DOCUMENT]),
 		]);
-		expect(watchedRepositories([])).toEqual([]);
+		expect(watchRequest([])).toEqual([]);
 	});
 
-	it("refuses lists over the repository or document bound", () => {
+	it("refuses frames over the repository or document bound", () => {
 		let repositories = Array.from(
-			{ length: MAX_WATCHED_REPOSITORIES + 1 },
+			{ length: MAX_WATCH_FRAME_REPOSITORIES + 1 },
 			(_, index) => repository(`archive-${index}`),
 		);
-		expect(watchedRepositories(repositories)).toBeUndefined();
-		expect(watchedRepositories(repositories.slice(0, MAX_WATCHED_REPOSITORIES))).toHaveLength(
-			MAX_WATCHED_REPOSITORIES,
+		expect(watchRequest(repositories)).toBeUndefined();
+		expect(watchRequest(repositories.slice(0, MAX_WATCH_FRAME_REPOSITORIES))).toHaveLength(
+			MAX_WATCH_FRAME_REPOSITORIES,
 		);
 		let documents = Array.from(
 			{ length: MAX_WATCHED_DOCUMENTS + 1 },
 			(_, index) => `cccccccc-0000-4000-8000-${String(index).padStart(12, "0")}`,
 		);
-		expect(watchedRepositories([repository("score", documents)])).toBeUndefined();
+		expect(watchRequest([repository("score", documents)])).toBeUndefined();
 	});
 
 	it("refuses malformed or duplicate entries", () => {
-		expect(watchedRepositories("score")).toBeUndefined();
-		expect(watchedRepositories([repository("score"), repository("score")])).toBeUndefined();
-		expect(watchedRepositories([{ ...repository("score"), owner: "../octo" }])).toBeUndefined();
-		expect(watchedRepositories([{ ...repository("score"), name: "a/b" }])).toBeUndefined();
-		expect(watchedRepositories([{ ...repository("score"), channelIds: ["../x"] }]))
-			.toBeUndefined();
-		expect(watchedRepositories([{ ...repository("score"), repositoryId: "" }])).toBeUndefined();
+		expect(watchRequest("score")).toBeUndefined();
+		expect(watchRequest([repository("score"), repository("score")])).toBeUndefined();
+		expect(watchRequest([{ ...repository("score"), owner: "../octo" }])).toBeUndefined();
+		expect(watchRequest([{ ...repository("score"), name: "a/b" }])).toBeUndefined();
+		expect(watchRequest([{ ...repository("score"), channelIds: ["../x"] }])).toBeUndefined();
+		expect(watchRequest([{ ...repository("score"), repositoryId: "" }])).toBeUndefined();
+	});
+
+	it("bounds unwatch lists and rejects malformed repository ids", () => {
+		expect(unwatchRequest(["R_a", "R_a", "R_b"])).toEqual(["R_a", "R_b"]);
+		expect(unwatchRequest(["R a"])).toBeUndefined();
+		expect(unwatchRequest("R_a")).toBeUndefined();
+		let ids = Array.from({ length: MAX_WATCHED_REPOSITORIES + 1 }, (_, index) => `R_${index}`);
+		expect(unwatchRequest(ids)).toBeUndefined();
+		expect(unwatchRequest(ids.slice(1))).toHaveLength(MAX_WATCHED_REPOSITORIES);
 	});
 });
 
@@ -92,26 +103,19 @@ describe("decision watch subscriptions", () => {
 		let github = access({ R_archive: "allowed", R_secret: "denied", R_flaky: "unavailable" });
 		let outcome = await watchDecisions(
 			watch,
-			"R_score",
-			[
-				repository("score", [DOCUMENT]),
-				repository("archive"),
-				repository("secret"),
-				repository(
-					"flaky",
-				),
-			],
+			[repository("archive", [DOCUMENT]), repository("secret"), repository("flaky")],
 			github.authorize,
 			bus,
-			() => true,
 		);
 		expect(github.asked).toEqual(["octo-org/archive", "octo-org/secret", "octo-org/flaky"]);
 		expect(outcome).toEqual({
-			watched: [repository("score", [DOCUMENT]), repository("archive")],
-			refused: ["R_secret", "R_flaky"],
+			watched: [repository("archive", [DOCUMENT])],
+			refused: ["R_secret"],
+			unavailable: ["R_flaky"],
 		});
 		expect([...bus.subscribed]).toEqual(["R_archive"]);
 		expect([...watch.repositories.keys()]).toEqual(["R_archive"]);
+		expect(watch.authorizing.size).toBe(0);
 	});
 
 	it("reads access by name but trusts only the stored repository node ID", async () => {
@@ -136,79 +140,141 @@ describe("decision watch subscriptions", () => {
 		let bus = topics();
 		let outcome = await watchDecisions(
 			watch,
-			"R_score",
 			[repository("renamed"), repository("readable")],
 			authorize,
 			bus,
-			() => true,
 		);
-		expect(outcome?.refused).toEqual(["R_renamed"]);
+		expect(outcome.refused).toEqual(["R_renamed"]);
 		expect([...bus.subscribed]).toEqual(["R_readable"]);
 	});
 
-	it("unsubscribes repositories that leave the list and keeps the ones that stay", async () => {
+	it("adds repositories across frames and drops only the ones unwatched", async () => {
 		let watch = decisionWatch();
 		let bus = topics();
 		let github = access({ R_a: "allowed", R_b: "allowed", R_c: "allowed" });
-		await watchDecisions(
+		await watchDecisions(watch, [repository("a"), repository("b")], github.authorize, bus);
+		await watchDecisions(watch, [repository("c")], github.authorize, bus);
+		unwatchDecisions(watch, ["R_a", "R_missing"], bus);
+		expect(bus.log).toEqual(["+R_a", "+R_b", "+R_c", "-R_a"]);
+		expect([...watch.repositories.keys()].sort()).toEqual(["R_b", "R_c"]);
+	});
+
+	it("reconciles newly loaded documents of a watched repository without another GitHub check", async () => {
+		let watch = decisionWatch();
+		let bus = topics();
+		let github = access({ R_score: "allowed" });
+		await watchDecisions(watch, [repository("score")], github.authorize, bus);
+		let outcome = await watchDecisions(
 			watch,
-			"R_score",
-			[repository("a"), repository("b")],
+			[repository("score", [DOCUMENT])],
 			github.authorize,
 			bus,
-			() => true,
 		);
-		await watchDecisions(
-			watch,
-			"R_score",
-			[repository("b"), repository("c")],
-			github.authorize,
-			bus,
-			() => true,
-		);
-		expect(bus.log).toEqual(["+R_a", "+R_b", "-R_a", "+R_c"]);
-		await watchDecisions(watch, "R_score", [], github.authorize, bus, () => true);
+		expect(github.asked).toEqual(["octo-org/score"]);
+		expect(outcome.watched).toEqual([repository("score", [DOCUMENT])]);
+		expect(bus.log).toEqual(["+R_score"]);
+	});
+
+	it("rechecks a renamed repository and keeps its subscription through an outage", async () => {
+		let watch = decisionWatch();
+		let bus = topics();
+		await watchDecisions(watch, [repository("score")], () => Promise.resolve("allowed"), bus);
+		let renamed = { ...repository("score"), name: "score-renamed" };
+		let outage = await watchDecisions(watch, [renamed], () => Promise.resolve("unavailable"), bus);
+		expect(outage.unavailable).toEqual(["R_score"]);
+		expect([...bus.subscribed]).toEqual(["R_score"]);
+		expect(watch.repositories.get("R_score")?.name).toBe("score");
+		let denied = await watchDecisions(watch, [renamed], () => Promise.resolve("denied"), bus);
+		expect(denied.refused).toEqual(["R_score"]);
 		expect(bus.subscribed.size).toBe(0);
 	});
 
-	it("lets the latest request win when checks overlap", async () => {
+	it("shares one check between overlapping frames for the same repository", async () => {
 		let watch = decisionWatch();
 		let bus = topics();
-		let slow = Promise.withResolvers<AuthorizationResult>();
-		let first = watchDecisions(
-			watch,
-			"R_score",
-			[repository("slow")],
-			() => slow.promise,
-			bus,
-			() => true,
-		);
-		let second = await watchDecisions(
-			watch,
-			"R_score",
-			[repository("fast")],
-			() => Promise.resolve("allowed"),
-			bus,
-			() => true,
-		);
-		slow.resolve("allowed");
-		expect(await first).toBeUndefined();
-		expect(second?.watched).toEqual([repository("fast")]);
-		expect([...bus.subscribed]).toEqual(["R_fast"]);
+		let check = Promise.withResolvers<AuthorizationResult>();
+		let asked = 0;
+		let authorize = () => {
+			asked++;
+			return check.promise;
+		};
+		let first = watchDecisions(watch, [repository("score")], authorize, bus);
+		let second = watchDecisions(watch, [repository("score", [DOCUMENT])], authorize, bus);
+		check.resolve("allowed");
+		expect((await first).watched).toEqual([repository("score")]);
+		expect((await second).watched).toEqual([repository("score", [DOCUMENT])]);
+		expect(asked).toBe(1);
+		expect(bus.log).toEqual(["+R_score"]);
 	});
 
-	it("changes nothing for a socket that closed while checks ran", async () => {
+	it("refuses repositories beyond the per-socket limit", async () => {
+		let watch = decisionWatch();
+		let bus = topics();
+		let allowed = () => Promise.resolve<AuthorizationResult>("allowed");
+		for (let start = 0; start < MAX_WATCHED_REPOSITORIES; start += MAX_WATCH_FRAME_REPOSITORIES) {
+			await watchDecisions(
+				watch,
+				Array.from(
+					{ length: MAX_WATCH_FRAME_REPOSITORIES },
+					(_, index) => repository(`archive-${start + index}`),
+				),
+				allowed,
+				bus,
+			);
+		}
+		expect(watch.repositories.size).toBe(MAX_WATCHED_REPOSITORIES);
+		let outcome = await watchDecisions(
+			watch,
+			[repository("archive-0", [DOCUMENT]), repository("overflow")],
+			allowed,
+			bus,
+		);
+		expect(outcome.watched).toEqual([repository("archive-0", [DOCUMENT])]);
+		expect(outcome.refused).toEqual(["R_overflow"]);
+		expect(bus.subscribed.has("R_overflow")).toBe(false);
+	});
+
+	it("omits and never subscribes a repository unwatched while its check ran", async () => {
+		let watch = decisionWatch();
+		let bus = topics();
+		let check = Promise.withResolvers<AuthorizationResult>();
+		let pending = watchDecisions(watch, [repository("score")], () => check.promise, bus);
+		unwatchDecisions(watch, ["R_score"], bus);
+		check.resolve("allowed");
+		expect(await pending).toEqual({ watched: [], refused: [], unavailable: [] });
+		expect(bus.subscribed.size).toBe(0);
+	});
+
+	it("subscribes a repository refused during an outage once a later watch succeeds", async () => {
+		let watch = decisionWatch();
+		let bus = topics();
+		let outage = access({ R_other: "unavailable" });
+		let first = await watchDecisions(watch, [repository("other")], outage.authorize, bus);
+		expect(first.unavailable).toEqual(["R_other"]);
+		expect(bus.subscribed.size).toBe(0);
+		expect(watch.authorizing.size).toBe(0);
+		let recovered = access({ R_other: "allowed" });
+		let retry = await watchDecisions(
+			watch,
+			[repository("other", [DOCUMENT])],
+			recovered.authorize,
+			bus,
+		);
+		expect(recovered.asked).toEqual(["octo-org/other"]);
+		expect(retry.watched).toEqual([repository("other", [DOCUMENT])]);
+		expect([...bus.subscribed]).toEqual(["R_other"]);
+	});
+
+	it("treats a throwing check as unavailable rather than allowed", async () => {
 		let watch = decisionWatch();
 		let bus = topics();
 		let outcome = await watchDecisions(
 			watch,
-			"R_score",
-			[repository("archive")],
-			() => Promise.resolve("allowed"),
+			[repository("score")],
+			() => Promise.reject(new Error("socket reset")),
 			bus,
-			() => false,
 		);
-		expect(outcome).toBeUndefined();
+		expect(outcome.unavailable).toEqual(["R_score"]);
 		expect(bus.subscribed.size).toBe(0);
 	});
 
@@ -217,14 +283,12 @@ describe("decision watch subscriptions", () => {
 		let bus = topics();
 		await watchDecisions(
 			watch,
-			"R_score",
 			[repository("revoked"), repository("outage"), repository("kept")],
 			() => Promise.resolve("allowed"),
 			bus,
-			() => true,
 		);
 		let github = access({ R_revoked: "denied", R_outage: "unavailable", R_kept: "allowed" });
-		await recheckDecisionWatch(watch, github.authorize, bus, () => true);
+		await recheckDecisionWatch(watch, github.authorize, bus);
 		expect([...bus.subscribed].sort()).toEqual(["R_kept", "R_outage"]);
 		expect([...watch.repositories.keys()].sort()).toEqual(["R_kept", "R_outage"]);
 	});
@@ -232,27 +296,18 @@ describe("decision watch subscriptions", () => {
 	it("unsubscribes everything on release and ignores checks still in flight", async () => {
 		let watch = decisionWatch();
 		let bus = topics();
-		await watchDecisions(
-			watch,
-			"R_score",
-			[repository("a")],
-			() => Promise.resolve("allowed"),
-			bus,
-			() => true,
-		);
+		await watchDecisions(watch, [repository("a")], () => Promise.resolve("allowed"), bus);
 		let pending = Promise.withResolvers<AuthorizationResult>();
-		let late = watchDecisions(
-			watch,
-			"R_score",
-			[repository("b")],
-			() => pending.promise,
-			bus,
-			() => true,
-		);
+		let late = watchDecisions(watch, [repository("b")], () => pending.promise, bus);
 		releaseDecisionWatch(watch, bus);
 		pending.resolve("allowed");
-		expect(await late).toBeUndefined();
+		expect(await late).toEqual({ watched: [], refused: [], unavailable: [] });
 		expect(bus.subscribed.size).toBe(0);
 		expect(watch.repositories.size).toBe(0);
+		expect(
+			(await watchDecisions(watch, [repository("c")], () => Promise.resolve("allowed"), bus))
+				.watched,
+		)
+			.toEqual([]);
 	});
 });

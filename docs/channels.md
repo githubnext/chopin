@@ -80,36 +80,48 @@ Decisions tab shows. The unfiltered active listing (no `query`, no
 active catalogue, including documents on pages the client has not loaded. The
 Projects sidebar shows both without opening a room per row.
 
-Live counts travel on repository decision topics. A socket always subscribes to
-its own document's repository. After every connection, and whenever the list of
-sidebar projects changes, the client sends `session:decisions-watch` with up to
-50 repositories it shows, each with up to 500 loaded document IDs. The server
-treats the list as a replacement. For each repository other than the socket's
-own, it rechecks GitHub read access through the same repository check as
-admission and requires the resolved node ID to match the requested one. It
-subscribes the readable repositories, refuses the rest in the reply, and
-unsubscribes repositories that left the list. The socket's periodic
-authorization recheck drops any watched repository whose access was revoked, and
-closing the socket drops them all. A malformed or oversized list is refused
-whole.
+Live counts travel on a dedicated sidebar socket at `/ws/sidebar`, separate from
+document rooms, so they stay current whether or not a document is open. Admission
+checks the origin and the browser session only; it grants no repository. After
+every connection the client sends `sidebar:watch` frames covering every sidebar
+project, up to 200 repositories, with all of their loaded document IDs. A frame
+lists at most 50 repositories, each once, with at most 500 document IDs, so the
+client splits larger sidebars across frames. Watching is additive, and
+`sidebar:unwatch` removes repositories the sidebar stops showing. A malformed or
+oversized frame is refused whole, and repositories beyond the per-socket limit
+are refused.
 
-When a commit changes an open document's count, or a document is archived or
-restored, the server publishes `session:decisions` to that repository's topic, so
-every socket open on one of its documents or watching it receives the update.
-Each frame carries the document count, the repository total, and the storage
-revision the count was committed at. After a watch is accepted, the server sends
-a `session:decisions-snapshot` for each watched repository with its current total
-and the current counts of the listed documents. A reconnecting socket therefore
-reconciles updates it missed while disconnected without refetching the
-catalogue. A socket that opens a document also receives that document's current
-counts. Frames and snapshots for one repository are read and sent one at a time,
-so a later frame never carries an older total, and a client ignores a count older
-than the revision it already holds for that document. Archive and restore
-responses also carry the repository's active total, so the client that moved a
-document updates its project row even when it has no socket in that repository.
-Archived catalogue views show no counts and watch no repositories. With no
-document open there is no socket, and the sidebar refreshes counts when a
-listing loads.
+Before subscribing a repository the server checks GitHub read access through the
+same repository check as room admission and requires the resolved node ID to
+match the requested one. A repository already watched under the same name is not
+checked again when the client repeats it to reconcile newly loaded documents;
+overlapping requests share one check. The reply lists each repository as
+watched, refused, or unavailable. Refused means access was denied or the limit
+was reached, and the client leaves it alone until the name changes or the socket
+reconnects. Unavailable means GitHub could not answer, so nothing was
+subscribed; the client watches it again with every loaded document after a
+backoff from two seconds to a minute. Every minute the server rechecks the
+session and each watched repository. A denied repository is unsubscribed, an
+unavailable answer keeps an existing subscription, an expired session closes the
+socket, and closing the socket drops every subscription.
+
+When a commit changes a document's count, or a document is archived, restored or
+permanently deleted, the server publishes `sidebar:decisions` to that
+repository's topic, so every sidebar socket watching it receives the update. A
+deleted document is announced with a count of zero, which carries the repository
+total without it. Each frame carries the document count, the repository total,
+and the storage revision the count was committed at. After a watch is accepted,
+the server sends a `sidebar:snapshot` for each watched repository with its
+current total and the current counts of the listed documents. Because the client
+also watches again whenever new rows load, a document listed after the first
+snapshot is still reconciled, and a reconnecting socket reconciles every loaded
+row and project total without refetching the catalogue. Frames and snapshots for
+one repository are read and sent one at a time, so a later frame never carries an
+older total, and a client ignores a count older than the revision it already
+holds for that document. An archive response also carries the repository's
+active total, which the archiving client applies directly; restoring reloads the
+active catalogue. Archived catalogue views show no counts and watch no
+repositories.
 
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per
@@ -289,7 +301,8 @@ replaces its address with the current canonical `/documents/...` route while
 preserving the query and fragment.
 
 The application first authorizes metadata over HTTP, then opens one WebSocket
-for live channel traffic. Wide split mode shows Chat beside either Plan,
+for live channel traffic. The Projects sidebar keeps its own socket for decision
+counts, described above. Wide split mode shows Chat beside either Plan,
 the current label for the document-content view, or Decisions. Compact mode
 shows one destination at a time. Plan and Decisions are alternatives rather
 than simultaneous document panes.

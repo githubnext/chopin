@@ -24,6 +24,7 @@ export type Identity = {
 export type AuthorizationResult = "allowed" | "denied" | "unavailable";
 
 export type SocketData = Identity & {
+	sidebar?: undefined;
 	room: string;
 	channelTitle: string;
 	channelSlug: string;
@@ -44,11 +45,27 @@ export type SocketData = Identity & {
 	accessCheckedAt: number;
 	authorizationTimer?: ReturnType<typeof setTimeout>;
 	authorizationRefresh?: Promise<AuthorizationResult>;
-	decisionWatch?: DecisionWatch;
 	closed?: boolean;
 };
 
 export type Socket = ServerWebSocket<SocketData>;
+
+/** The Projects sidebar's socket: authenticated, bound to no room, and watching repositories. */
+export type SidebarSocketData = {
+	sidebar: true;
+	handle: string;
+	principalId: string;
+	sessionId: string;
+	authorizedUntil: number;
+	credential: string;
+	decisionWatch: DecisionWatch;
+	recheckTimer?: ReturnType<typeof setTimeout>;
+	closed?: boolean;
+};
+
+export type SidebarSocket = ServerWebSocket<SidebarSocketData>;
+
+type Sender = Pick<ServerWebSocket<unknown>, "send">;
 
 /** Frames are addressed by room, so the topic is simply the room id. */
 export function topic(room: string): string {
@@ -60,17 +77,17 @@ function stamp<T extends Outgoing>(frame: T, extra?: Partial<Frame>): string {
 }
 
 /** Answer one request, on the socket that made it. */
-export function reply<T extends Outgoing>(ws: Socket, rid: string, frame: T): void {
+export function reply<T extends Outgoing>(ws: Sender, rid: string, frame: T): void {
 	ws.send(stamp(frame, { rid }));
 }
 
 /** Refuse one request, on the socket that made it. */
-export function fail(ws: Socket, rid: string, message: string): void {
+export function fail(ws: Sender, rid: string, message: string): void {
 	ws.send(stamp({ kind: "session:error", ts: 0, message }, { rid }));
 }
 
 /** Tell one socket something it did not ask for. */
-export function tell<T extends Outgoing>(ws: Socket, frame: T): void {
+export function tell<T extends Outgoing>(ws: Sender, frame: T): void {
 	ws.send(stamp(frame));
 }
 
@@ -84,7 +101,7 @@ export function relay<T extends Outgoing>(ws: Socket, frame: T): void {
 	ws.publish(topic(ws.data.room), stamp(frame, { sender: ws.data.handle }));
 }
 
-/** Every socket open on a document in one repository or watching its decision counts. */
+/** Every sidebar socket watching one repository's decision counts. */
 export function repositoryTopic(repositoryId: string): string {
 	return `repository:${repositoryId}`;
 }
@@ -98,7 +115,7 @@ export function broadcast<T extends Outgoing>(
 	server.publish(topic(room), stamp(frame));
 }
 
-/** Tell every socket in a repository something the server decided. */
+/** Tell every sidebar socket watching a repository something the server decided. */
 export function broadcastRepository<T extends Outgoing>(
 	server: Server<SocketData>,
 	repositoryId: string,

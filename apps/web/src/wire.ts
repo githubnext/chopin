@@ -29,8 +29,9 @@ type Pending = {
 	reject: (error: Error) => void;
 };
 
-export type WireOptions = {
-	channelId: string;
+type WireTarget = { channelId: string } | { sidebar: true };
+
+export type WireOptions = WireTarget & {
 	onStatus?: (status: Status, reason?: string) => void;
 	onAuthenticationRequired?: () => void;
 	onDeleted?: () => void;
@@ -52,9 +53,9 @@ const WAKE_GAP = 1000;
 const RESCUE_AT = 1200;
 
 function endpoint(options: WireOptions): string {
-	let url = new URL("/ws", location.href);
+	let url = new URL("sidebar" in options ? "/ws/sidebar" : "/ws", location.href);
 	url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-	url.searchParams.set("channel", options.channelId);
+	if ("channelId" in options) url.searchParams.set("channel", options.channelId);
 	return url.href;
 }
 

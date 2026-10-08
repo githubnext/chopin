@@ -41,7 +41,7 @@ import { broadcast, broadcastRepository, fail, relay, reply, tell } from "../wir
 import { documentUrl } from "../channels/document-url";
 
 import type { Server } from "bun";
-import type { ConversationPlan, Plan as Wire, Request, Session } from "@chopin/protocol";
+import type { ConversationPlan, Plan as Wire, Request, Sidebar } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
 import type { Document } from "./room";
@@ -947,9 +947,9 @@ function inRepositoryOrder(repositoryId: string, send: () => Promise<void>): Pro
 async function unansweredFrame(
 	storage: StorageAdapter,
 	counts: UnansweredCounts,
-): Promise<Session.Decisions> {
+): Promise<Sidebar.Decisions> {
 	let repositoryUnanswered = await storage.channels.unansweredDecisions(counts.repositoryId);
-	return { kind: "session:decisions", ts: 0, ...counts, repositoryUnanswered };
+	return { kind: "sidebar:decisions", ts: 0, ...counts, repositoryUnanswered };
 }
 
 function announceCounts(
@@ -991,24 +991,24 @@ export function announceCatalogueUnanswered(
 	});
 }
 
-/** Give a joining socket the committed counts the sidebar shows for this document. */
-export function tellUnanswered(plan: Plan, ws: Socket): Promise<void> {
-	let durable = plan.persistence;
-	return inRepositoryOrder(durable.repositoryId, async () => {
-		let frame = await unansweredFrame(durable.storage, {
-			channelId: durable.channelId,
-			repositoryId: durable.repositoryId,
-			unanswered: durable.committedUnanswered,
-			revision: durable.revision,
-		});
-		tell(ws, frame);
+/** Refresh every sidebar watching the repository after a document leaves its catalogue for good. */
+export function announceDeletedUnanswered(
+	server: Server<SocketData>,
+	storage: StorageAdapter,
+	channel: ChannelRecord,
+): Promise<void> {
+	return announceCounts(server, storage, {
+		channelId: channel.id,
+		repositoryId: channel.repositoryId,
+		unanswered: 0,
+		revision: channel.revision,
 	});
 }
 
 /** Reconcile a watching socket with counts it missed, ordered with the repository's frames. */
 export function tellRepositoryUnanswered(
 	storage: StorageAdapter,
-	ws: Socket,
+	ws: Pick<Socket, "send">,
 	repositoryId: string,
 	channelIds: string[],
 	watching: () => boolean,
@@ -1021,7 +1021,7 @@ export function tellRepositoryUnanswered(
 		]);
 		if (!watching()) return;
 		tell(ws, {
-			kind: "session:decisions-snapshot",
+			kind: "sidebar:snapshot",
 			ts: 0,
 			repositoryId,
 			repositoryUnanswered,
