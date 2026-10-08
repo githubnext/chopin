@@ -7,7 +7,12 @@ import { join } from "node:path";
 import { applyProposal } from "./application.mjs";
 import { begin, initialState } from "./state.mjs";
 
-function fixture(protectedChange = false, contents = "repair", operation = "fix") {
+function fixture(
+	protectedChange = false,
+	contents = "repair",
+	operation = "fix",
+	baseExtraBytes = 0,
+) {
 	let source = mkdtempSync(join(tmpdir(), "application-source-"));
 	let directory = mkdtempSync(join(tmpdir(), "application-trusted-"));
 	let artifactDirectory = mkdtempSync(join(tmpdir(), "application-artifact-"));
@@ -39,6 +44,9 @@ function fixture(protectedChange = false, contents = "repair", operation = "fix"
 		head = git("rev-parse", "HEAD");
 		git("checkout", "-qb", "main", root);
 		writeFileSync(join(source, "apps/a.ts"), "base update");
+		if (baseExtraBytes > 0) {
+			writeFileSync(join(source, "apps/base-extra.ts"), "x".repeat(baseExtraBytes));
+		}
 		git("add", ".");
 		git("commit", "-qm", "base update");
 		expectedBase = git("rev-parse", "HEAD");
@@ -52,6 +60,26 @@ function fixture(protectedChange = false, contents = "repair", operation = "fix"
 	git("add", ".");
 	git("commit", "-qm", "proposal");
 	let proposalHead = git("rev-parse", "HEAD");
+	let reviewBase = head;
+	if (operation === "merge") {
+		let output: string;
+		try {
+			output = execFileSync("git", [
+				"merge-tree",
+				"--write-tree",
+				"-z",
+				"--name-only",
+				"--no-messages",
+				head,
+				expectedBase,
+			], { cwd: source, encoding: "utf8" });
+		} catch (error) {
+			let failed = error as { status?: number; stdout?: string };
+			if (failed.status !== 1 || typeof failed.stdout !== "string") throw error;
+			output = failed.stdout;
+		}
+		reviewBase = output.split("\0")[0];
+	}
 	git("update-ref", "refs/pr-maintenance/proposal", proposalHead);
 	git(
 		"bundle",
@@ -130,7 +158,7 @@ function fixture(protectedChange = false, contents = "repair", operation = "fix"
 			"--no-ext-diff",
 			"--no-textconv",
 			"--binary",
-			head,
+			reviewBase,
 			proposalHead,
 		], { cwd: source, encoding: "utf8" }),
 		now: 3,
@@ -150,6 +178,7 @@ function fixture(protectedChange = false, contents = "repair", operation = "fix"
 		options,
 		calls,
 		pr,
+		source,
 		head,
 		proposalHead,
 		record: () => record,
@@ -209,6 +238,26 @@ test("guarded publication accepts one reviewed conflict merge and rejects stale 
 	f.pr.head.sha = "c".repeat(40);
 	expect(await applyProposal(f.options)).toEqual({ kind: "superseded" });
 	expect(f.calls).not.toContain("push");
+}, 15_000);
+
+test("merge detector reviews only resolution over the synthetic merge tree", async () => {
+	let f = fixture(false, "combined", "merge", 20 * 1024);
+	let headDiff = execFileSync("git", ["diff", "--binary", f.head, f.proposalHead], {
+		cwd: f.source,
+	});
+	expect(headDiff.length).toBeGreaterThan(10 * 1024);
+	expect(Buffer.byteLength(f.options.review)).toBeLessThanOrEqual(10 * 1024);
+	expect((await applyProposal(f.options)).kind).toBe("applied");
+	let mismatch = fixture(false, "combined", "merge");
+	mismatch.options.review = execFileSync("git", [
+		"diff",
+		"--binary",
+		mismatch.head,
+		mismatch.proposalHead,
+	], { cwd: mismatch.source, encoding: "utf8" });
+	expect((await applyProposal(mismatch.options)).kind).toBe("blocked");
+	expect(mismatch.calls).not.toContain("save");
+	expect(mismatch.calls).not.toContain("push");
 }, 15_000);
 
 test("head/base drift and opt-out supersede without publication", async () => {
@@ -368,8 +417,10 @@ test("missing captured object is a trusted repository infrastructure failure", a
 	expect(f.calls).not.toContain("push");
 });
 
-test("compressible oversized proposal diff is a policy blocker before state writes", async () => {
-	let f = fixture(false, "x".repeat(512 * 1024));
+test("review over the safe-output limit blocks before state writes", async () => {
+	let f = fixture(false, "x".repeat(10 * 1024));
+	expect(Buffer.byteLength(f.options.review)).toBeGreaterThan(10 * 1024);
+	expect(Buffer.byteLength(f.options.review)).toBeLessThan(11 * 1024);
 	expect(await applyProposal(f.options)).toEqual({
 		kind: "blocked",
 		reason: "Detector review must exactly match the bounded proposal diff",

@@ -82,7 +82,7 @@ export async function applyProposal({
 	let git = (...args) =>
 		execFileSync("git", ["--no-replace-objects", "-c", "core.hooksPath=/dev/null", ...args], {
 			cwd: directory,
-			maxBuffer: args[0] === "diff" ? 200 * 1024 + 1024 : 50 * 1024 * 1024,
+			maxBuffer: args[0] === "diff" ? 10 * 1024 + 1024 : 50 * 1024 * 1024,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 	let stage = "repository";
@@ -115,8 +115,9 @@ export async function applyProposal({
 		);
 		stage = "guard";
 		let guarded = validateProposal({ directory, ...artifact.manifest });
+		let { reviewBase, ...verified } = guarded;
 		verification = {
-			...guarded,
+			...verified,
 			checks: artifact.manifest.checks,
 			hashReviews: artifact.manifest.hashReviews,
 		};
@@ -127,11 +128,11 @@ export async function applyProposal({
 			"--no-ext-diff",
 			"--no-textconv",
 			"--binary",
-			active.head,
+			reviewBase,
 			artifact.manifest.proposalHead,
 		);
 		if (
-			bytes.length > 200 * 1024 || typeof review !== "string"
+			bytes.length > 10 * 1024 || typeof review !== "string"
 			|| !bytes.equals(Buffer.from(review, "utf8"))
 		) {
 			return {

@@ -70,6 +70,57 @@ test("enabled canary reserves only selected PR", async () => {
 	expect(result.rows.map(row => row.number)).toEqual([1]);
 	expect(result.payload.prs[2]).toBeUndefined();
 });
+test("worker dispatch uses the trigger credential separately from state and reporting", async () => {
+	let calls = [];
+	let value = config({
+		enabled: true,
+		prs: "1",
+		dispatchRequest: async (method, path, body) => {
+			calls.push({ method, path, body });
+			return null;
+		},
+	});
+	let result = await runCoordinator(value);
+	expect(result.dispatches).toHaveLength(1);
+	expect(calls).toHaveLength(1);
+	expect(calls[0].method).toBe("POST");
+	expect(calls[0].path).toBe(
+		"/repos/a/b/actions/workflows/pr-readiness-worker.lock.yml/dispatches",
+	);
+	expect(calls[0].body.inputs.pr).toBe("1");
+	expect(value.writes.some(write => write?.path?.endsWith("/dispatches"))).toBe(false);
+});
+test("missing CI is dispatched with the trigger credential", async () => {
+	let dispatched = [];
+	let waiting = { ...rows[0], action: "waiting-ci" };
+	let value = config({
+		enabled: true,
+		prs: "1",
+		inspect: async () => [waiting],
+		dispatchRequest: async (method, path, body) => {
+			dispatched.push({ method, path, body });
+			return null;
+		},
+	});
+	value.request = async (_method, path) => {
+		if (path.includes("/pulls/")) {
+			return {
+				state: "open",
+				labels: [],
+				head: { sha: waiting.head, ref: waiting.branch, repo: { full_name: "a/b" } },
+				base: { ref: waiting.base },
+			};
+		}
+		if (path.includes("/commits/")) return { sha: waiting.baseHead };
+		return { workflow_runs: [] };
+	};
+	await runCoordinator(value);
+	expect(dispatched).toEqual([{
+		method: "POST",
+		path: "/repos/a/b/actions/workflows/ci.yml/dispatches",
+		body: { ref: waiting.branch },
+	}]);
+});
 test("unauthorized manual retry fails before mutations", async () => {
 	let value = config({
 		enabled: true,

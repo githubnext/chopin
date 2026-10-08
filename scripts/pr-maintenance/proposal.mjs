@@ -131,6 +131,7 @@ export function validateProposal({
 	};
 	let [f, h, b, p] = [boundary, expectedHead, expectedBase, proposalHead].map(tree);
 	let merged = null;
+	let reviewBase = expectedHead;
 	let conflicts = new Set();
 	if (operation === "merge") {
 		let output;
@@ -158,6 +159,7 @@ export function validateProposal({
 		) throw new Error("Captured heads have no unambiguous text conflict");
 		conflicts = new Set(parts);
 		merged = tree(sha);
+		reviewBase = sha;
 	}
 	let conflictText = (path, after) => {
 		let entries = [f, h, b, merged, p].map((items) => items.get(path));
@@ -341,5 +343,5 @@ export function validateProposal({
 		paths.push(path);
 	}
 	if (operation === "fix" && paths.length === 0) throw new Error("Empty proposal change");
-	return { head: proposalHead, operation, paths };
+	return { head: proposalHead, operation, paths, reviewBase };
 }
