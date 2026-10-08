@@ -58,6 +58,24 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 	await expect(page.getByRole("table", { name: "Median startup time", exact: true })).toContainText(
 		"183",
 	);
+	let peer = await join("leo");
+	await peer.getByRole("button", { name: "Investigations", exact: true }).click();
+	await peer.getByRole("combobox", { name: "Investigation", exact: true }).selectOption(
+		experiment.id,
+	);
+	await peer.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+		JSON.stringify("small"),
+	);
+	await expect(page.getByRole("combobox", { name: "Filter Workload", exact: true })).toHaveValue(
+		JSON.stringify("small"),
+	);
+	await expect(page.getByRole("table", { name: "Median startup time", exact: true })).not
+		.toContainText("410");
+	await peer.getByRole("button", { name: "Select Cached", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Select Cached", exact: true })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
 	await tool("disconnect_workspace", {});
 	await page.reload();
 	await page.getByRole("button", { name: "Investigations", exact: true }).click();

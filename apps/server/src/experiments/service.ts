@@ -8,6 +8,7 @@ import {
 } from "@chopin/experiment";
 import type { Investigation, InvestigationState } from "@chopin/experiment/records";
 import type { RunInput } from "@chopin/experiment";
+import { applySelection, selectionPatchSchema } from "@chopin/experiment/selection";
 import type { ExperimentStore } from "../storage/experiments";
 import type { Lease } from "../storage/model";
 
@@ -170,5 +171,22 @@ export class Experiments {
 				);
 			}
 		}
+	}
+	select(id: string, actor: string, viewKey: string, raw: unknown) {
+		let patch = selectionPatchSchema.parse(raw);
+		let key = `selection:${actor}:${patch.mutationId}`;
+		let digest = fingerprint({ viewKey, patch });
+		return this.mutate(id, value => {
+			if (Object.hasOwn(value.receipts, key)) {
+				if (value.receipts[key] !== digest) fail("idempotency-conflict");
+				return;
+			}
+			if (Object.keys(value.receipts).length >= 2048) fail("selection-limit");
+			let view = value.result?.views.find(view => view.key === viewKey);
+			let dataset = value.result?.datasets.find(dataset => dataset.key === view?.datasetKey);
+			if (value.state !== "completed" || !view || !dataset) fail("not-ready");
+			value.views[viewKey] = applySelection(value.views[viewKey], dataset, patch);
+			value.receipts[key] = digest;
+		});
 	}
 }

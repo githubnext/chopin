@@ -159,6 +159,22 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 										result={item.result!}
 										view={view}
 										state={item.views[view.key]}
+										disabled={busy || !canEdit}
+										onChange={(field, values) =>
+											void act(async () => {
+												try {
+													await store.action(item.id, "state", {
+														view: view.key,
+														patch: {
+															mutationId: crypto.randomUUID(),
+															expected: { [field]: item.views[view.key].fields[field].revision },
+															set: { [field]: values },
+														},
+													});
+												} finally {
+													await store.load(item.id);
+												}
+											})}
 									/>
 								))}
 								<p className="text-xs text-text-secondary">{item.result.provenance.environment}</p>
