@@ -17,7 +17,7 @@
 		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts && bun scripts/check-design-contract.ts && bun scripts/check-design-record.ts && bun run design:check",
 		"design:check": "node scripts/check-design.mjs",
 		"fix": "dprint fmt && oxlint --fix",
-		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
+		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e && tsgo --noEmit --skipLibCheck -p skills",
 		"e2e": "bun scripts/e2e.ts",
 		"e2e:ui": "bun scripts/e2e.ts --ui",
 		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium",
