@@ -306,30 +306,6 @@
 	color: color-mix(in srgb, var(--color-text-tertiary) 60%, transparent);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-	.project-sidebar-mode[data-mode="archived"] {
-		animation: project-sidebar-mode-in-archived var(--duration-base) var(--motion-smooth-out);
-	}
-
-	.project-sidebar-mode[data-mode="active"] {
-		animation: project-sidebar-mode-in-active var(--duration-base) var(--motion-smooth-out);
-	}
-}
-
-@keyframes project-sidebar-mode-in-archived {
-	from {
-		opacity: 0;
-		transform: translateX(8px);
-	}
-}
-
-@keyframes project-sidebar-mode-in-active {
-	from {
-		opacity: 0;
-		transform: translateX(8px);
-	}
-}
-
 .project-sidebar-projects,
 .project-sidebar-documents,
 .project-sidebar-children {
@@ -663,6 +639,43 @@
 	pointer-events: auto;
 	color: var(--color-text-primary);
 	text-decoration: underline;
+}
+
+.navigation-notice {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding-block: 2px;
+	pointer-events: auto;
+}
+
+.navigation-notice > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.navigation-notice button {
+	flex: none;
+	margin-left: 0;
+	min-height: 28px;
+	border-radius: var(--radius-sm);
+	padding: 0 8px;
+	font-weight: 500;
+	text-decoration: none;
+}
+
+.navigation-notice button:hover,
+.navigation-notice button:focus-visible {
+	background: var(--color-selected);
+}
+
+@media (pointer: coarse) {
+	.navigation-notice button {
+		min-height: 44px;
+		min-width: 44px;
+	}
 }
 
 .navigation-error {

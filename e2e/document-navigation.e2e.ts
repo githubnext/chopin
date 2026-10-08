@@ -955,7 +955,17 @@ test("archiving offers Undo and archived mode names itself", async ({ join, room
 	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);
 	await notice.getByRole("button", { name: "Undo", exact: true }).click();
 	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toHaveCount(0);
-	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeFocused();
+
+	await headerAction(ana, "Archive");
+	await expect(notice).toBeVisible();
+	await ana.keyboard.press("Shift+Tab");
+	let undo = notice.getByRole("button", { name: "Undo", exact: true });
+	await expect(undo).toBeFocused();
+	await ana.waitForTimeout(6000);
+	await expect(notice).toBeVisible();
+	await ana.keyboard.press("Enter");
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeFocused();
 
 	await projects.getByRole("button", { name: "Archived", exact: true }).click();
 	await expect(projects.getByRole("navigation", { name: "Archived documents" })).toBeVisible();
