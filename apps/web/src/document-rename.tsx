@@ -48,13 +48,31 @@ export function DocumentRename(
 	let cancelled = useRef(false);
 
 	useEffect(() => {
-		input.current?.focus();
-		input.current?.select();
-		// Taken in the same task as focus, so no key falls between the hold and the field.
-		let held = replay ? heldTyping : undefined;
-		if (replay) holdTyping(false);
-		if (held?.text) setTitle(held.text);
-		if (held?.enter) void save(held.text || channel.title);
+		let field = input.current;
+		let layer = field?.closest<HTMLElement>(".document-route-layer");
+		let observer: MutationObserver | undefined;
+		let focus = () => {
+			if (!field || layer?.inert || layer?.hidden) return;
+			field.focus();
+			if (document.activeElement !== field) return;
+			observer?.disconnect();
+			// Taken in the same task as focus, so no key falls between the hold and the field.
+			let held = replay ? heldTyping : undefined;
+			if (replay) holdTyping(false);
+			if (held?.text) {
+				// Key presses after focus append to the held prefix, not replace it.
+				field.value = held.text;
+				field.setSelectionRange(held.text.length, held.text.length);
+				setTitle(held.text);
+			} else field.select();
+			if (held?.enter) void save(held.text || channel.title);
+		};
+		if (layer) {
+			observer = new MutationObserver(focus);
+			observer.observe(layer, { attributes: true, attributeFilter: ["inert", "hidden"] });
+		}
+		focus();
+		return () => observer?.disconnect();
 	}, []);
 
 	function report(next: unknown) {
