@@ -504,7 +504,7 @@ test("a read-only prompt keeps Save disabled while Open in plan stays available"
 		await reader.goto(roomPath(room));
 		await expect(content(reader)).toHaveAttribute("contenteditable", "false");
 		await expect(prompt(reader)).toBeVisible();
-		await expect(prompt(reader).getByRole("button", { name: "Save decision" })).toBeDisabled();
+		await expect(prompt(reader).getByRole("button", { name: "Save decision" })).toHaveCount(0);
 		await prompt(reader).getByRole("button", { name: "Open in plan" }).click();
 		await expect(card(reader)).toBeFocused();
 	} finally {

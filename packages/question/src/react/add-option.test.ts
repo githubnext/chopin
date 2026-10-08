@@ -51,13 +51,12 @@ test("a temporarily locked composer trigger remains visible and disabled", () =>
 	expect(markup).toMatch(/<button[^>]*class="[^"]*question-add"[^>]*disabled=""/);
 });
 
-test("a composer trigger without an add handler is natively disabled", () => {
+test("a read-only card, with no way to add an option, hides the trigger", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: AUTH,
 		drafts: {},
 		disabled: true,
-		showActions: true,
 	}));
 
-	expect(markup).toMatch(/<button[^>]*class="[^"]*question-add"[^>]*disabled=""/);
+	expect(markup).not.toContain("Add an option");
 });

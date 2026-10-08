@@ -116,18 +116,25 @@ test.each(["missing card", "wrong card", "removed option", "changed label", "dup
 	},
 );
 
-test.each(["stale generation", "old prompt", "closed card", "disconnected", "read-only"])(
+test.each(["stale generation", "old prompt", "closed card", "disconnected"])(
 	"scoped Save retains its %s guard",
 	kind => {
 		let props = fixture();
 		if (kind === "stale generation") props.decision.generation = 1;
 		else if (kind === "old prompt") props.latest = false;
 		else if (kind === "closed card") props.meta!.status = "discarded";
-		else if (kind === "disconnected") props.connected = false;
-		else props.canEdit = false;
+		else props.connected = false;
 		expect(render(props)).toContain('disabled=""');
 	},
 );
+
+test("a read-only viewer sees the scoped choice without a Save button", () => {
+	let props = fixture();
+	props.canEdit = false;
+	let markup = render(props);
+	expect(markup).toContain("This document is read-only.");
+	expect(markup).not.toContain("Save for this spike");
+});
 
 test("an already saved scoped choice stays disabled without answering the card", () => {
 	let props = fixture();
