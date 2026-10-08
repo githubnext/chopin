@@ -116,6 +116,13 @@ describe("task rule", () => {
 		expect(types).toEqual(["check", "bullet"]);
 	});
 
+	it("leaves a nested item literal, even when it is the only one", async () => {
+		let editor = editorAt("- top\n  - Q", "[ ]");
+		expect(space(editor)).toBe(false);
+		await settle();
+		expect(markdown(editor)).toContain("\\[ ]");
+	});
+
 	it("ignores a space after other text, modifiers and composition", async () => {
 		let editor = editorAt("- Q", "a [ ]");
 		expect(space(editor)).toBe(false);

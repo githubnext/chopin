@@ -36,11 +36,12 @@ function $liftIntoTaskList(item: ListItemNode, checked: boolean): boolean {
 	let after = item.getNextSiblings();
 	let nested = $isListItemNode(list.getParent());
 
+	// A split would leave a list beside a list inside the wrapper item, and a
+	// lone nested item is kept literal too so nesting behaves one way.
+	if (nested) return false;
+
 	if (before.length === 0 && after.length === 0) {
 		list.setListType("check");
-	} else if (nested) {
-		// A split would leave a list beside a list inside the wrapper item.
-		return false;
 	} else {
 		let tasks = $createListNode("check");
 		if (before.length === 0) {
