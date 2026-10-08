@@ -361,7 +361,7 @@
 				2
 			]
 		],
-		"sourceHash": "c7b4773e11b6d776d7870857bc6975df4d8b174b2db356033a985a0bec85ffc8"
+		"sourceHash": "bf8064142b596023133937df32f02b81885646187bb2b6b7b5355d5992bfb7da"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -382,7 +382,7 @@
 				1
 			]
 		],
-		"sourceHash": "a38f3e8f5a0717897c6f828a8d64d636f49f684ee9f33c04b7a5ba94ddaba12b"
+		"sourceHash": "22c33a6f68fa66902159bda6643bc6d81acfa36107e722e428580d970f60e142"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
@@ -431,7 +431,7 @@
 				1
 			]
 		],
-		"sourceHash": "e14622f16d62dca66486a913fec462b1d5380c732c6f04b63e713c877302ded9"
+		"sourceHash": "a31a505282b9cbd25a0b3ebae1862d61b971aea30b40ec20462b9c3c84aef466"
 	},
 	{
 		"file": "packages/editor/src/widgets/language-menu.tsx",
