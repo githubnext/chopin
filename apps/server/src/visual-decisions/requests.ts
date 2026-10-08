@@ -98,8 +98,15 @@ export function dump(requests: Requests): PendingVisualRequest[] {
 }
 
 /** The source is supplied by the verified foreground Chat turn, never by tool arguments. */
-export function create(plan: Service.Plan, source: Source): Promise<PendingVisualRequest> {
+export function create(
+	plan: Service.Plan,
+	source: Source,
+	stillCurrent?: () => boolean,
+): Promise<PendingVisualRequest> {
 	return Service.exclusive(plan, async () => {
+		if (stillCurrent && !stillCurrent()) {
+			throw new Error("The member request is no longer driving the current Planner turn");
+		}
 		if (Service.implementationActive(plan)) throw new Error("Implementation is active");
 		if (
 			!ULID.test(source.entryId) || !bounded(source.userId, 200)

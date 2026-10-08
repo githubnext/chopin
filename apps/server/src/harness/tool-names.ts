@@ -7,6 +7,7 @@ export const PLANNER_TOOL_NAMES = [
 	"list_background_jobs",
 	"read_background_job",
 	"create_research_workspace",
+	"request_visual_preview",
 	"edit_plan",
 	"ask",
 	"read_implementation_graph",

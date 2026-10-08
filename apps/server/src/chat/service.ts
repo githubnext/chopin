@@ -478,6 +478,10 @@ export type Room = {
 		text: string;
 		question: string;
 	}) => Promise<ResearchWorkspaceRequest>;
+	createVisualRequest?: (
+		request: Pick<ActiveMemberRequest, "entryId" | "userId" | "handle" | "text">,
+		stillCurrent: () => boolean,
+	) => Promise<{ requestId: string; state: "pending" }>;
 	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
 	hold?: () => () => void;
 };
@@ -1240,6 +1244,17 @@ export function documentRoom(context: Room): DocumentRoom {
 				text: active.text,
 				question: active.text,
 			});
+		},
+		createVisualRequest: async () => {
+			let active = currentMemberRequest(chat);
+			if (!active || chat.job) {
+				throw new Error(
+					"a current foreground member request is required for a visual preview",
+				);
+			}
+			let createVisualRequest = context.createVisualRequest;
+			if (!createVisualRequest) throw new Error("visual preview requests are unavailable");
+			return createVisualRequest(active, () => !chat.job && currentMemberRequest(chat) === active);
 		},
 	};
 }

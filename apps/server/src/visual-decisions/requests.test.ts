@@ -39,6 +39,7 @@ test("one member message records one pending request across retries and restart"
 	});
 	expect(first.id).toHaveLength(26);
 	expect(new Date(first.createdAt).toISOString()).toBe(first.createdAt);
+	expect(context.plan.revision).toBe(0);
 	expect(await Requests.create(context.plan, source(firstId, firstText))).toEqual(first);
 	let second = await Requests.create(context.plan, source(secondId, secondText));
 	expect(second.id).not.toBe(first.id);
@@ -90,6 +91,27 @@ test("a failed fenced commit never accepts or reports a pending request", async 
 	let saved = await context.storage.collaboration.load(context.plan.id, context.now);
 	expect(saved?.sidecar).toBeNull();
 	expect((await Requests.create(context.plan, source(entryId, text))).state).toBe("pending");
+});
+
+test("a queued request refuses a member turn that ended before the document lock", async () => {
+	let entryId = ulid();
+	let text = "Explore the billing card.";
+	let context = await openPlan("# Billing", { transcript: [message(entryId, text)] });
+	plans.push(context.plan);
+	let release = Promise.withResolvers<void>();
+	let started = Promise.withResolvers<void>();
+	let held = Service.exclusive(context.plan, async () => {
+		started.resolve();
+		await release.promise;
+	});
+	await started.promise;
+	let current = true;
+	let pending = Requests.create(context.plan, source(entryId, text), () => current);
+	current = false;
+	release.resolve();
+	await held;
+	await expect(pending).rejects.toThrow("no longer driving");
+	expect(context.plan.visualRequests.size).toBe(0);
 });
 
 test("malformed durable request fails restoration rather than disappearing", async () => {

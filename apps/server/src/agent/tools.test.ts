@@ -8,6 +8,7 @@ import * as Chat from "../chat/service";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Store from "../questions/store";
+import * as Requests from "../visual-decisions/requests";
 import { openPlan } from "../testing/plan";
 
 import type { HostedAuth } from "../auth/routes";
@@ -77,6 +78,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"list_background_jobs",
 		"read_background_job",
 		"create_research_workspace",
+		"request_visual_preview",
 		"edit_plan",
 		"ask",
 		"read_implementation_graph",
@@ -84,6 +86,70 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"anchor_plan",
 	]);
 	expect(documentTools.edit_plan.inputSchema).toBeDefined();
+});
+
+test("visual preview tool captures only the current member message and committed request", async () => {
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	try {
+		let entryId = ulid();
+		let text = "Explore the card's continuous spacing and type scale.";
+		let { plan, server, channel } = await opened("# Billing", {
+			transcript: [{ id: entryId, ts: 1, author: { kind: "member", handle: "ana" }, text }],
+		});
+		plan.chat.busy = true;
+		plan.chat.turn = { id: "turn", handle: "ana", started: 1, entryOffset: 0, responded: false };
+		plan.chat.activeRequest = {
+			entryId,
+			userId: "U_test",
+			handle: "ana",
+			text,
+			claimantSessionId: "session",
+			turnId: "turn",
+			lifecycle: plan.chat.lifecycle,
+		};
+		let context = Chat.documentRoom({
+			chat: plan.chat,
+			plan,
+			server,
+			room: channel.id,
+			persist: () => Service.persist(plan),
+			createVisualRequest: async (source, stillCurrent) => {
+				let request = await Requests.create(plan, source, stillCurrent);
+				return { requestId: request.id, state: request.state };
+			},
+		} as Chat.Room);
+		let invoke = (raw: unknown) =>
+			documentTools.request_visual_preview.execute!(raw as never, {
+				context: { room: context },
+				toolCallId: "visual",
+				messages: [],
+			} as never);
+		expect((documentTools.request_visual_preview.inputSchema as { jsonSchema: unknown }).jsonSchema)
+			.toEqual({ type: "object", properties: {}, additionalProperties: false });
+		expect(await invoke({ brief: "A fabricated replacement" })).toContain("accepts no fields");
+		expect(plan.visualRequests.size).toBe(0);
+		let first = JSON.parse(String(await invoke({}))) as { requestId: string; state: string };
+		expect(first.state).toBe("pending");
+		expect(plan.visualRequests.get(first.requestId)?.instruction).toBe(text);
+		expect(JSON.parse(String(await invoke({}))).requestId).toBe(first.requestId);
+		expect(plan.visualRequests.size).toBe(1);
+		plan.chat.lifecycle++;
+		expect(await invoke({})).toContain("current foreground member request");
+		plan.chat.lifecycle--;
+		plan.chat.job = {
+			id: "heading:document:m0",
+			kind: "heading",
+			target: "document",
+			trigger: "m0",
+			status: "running",
+			attempts: 0,
+			at: new Date().toISOString(),
+		};
+		expect(await invoke({})).toContain("current foreground member request");
+		plan.chat.job = undefined;
+	} finally {
+		errors.mockRestore();
+	}
 });
 
 test("document tools use the room and repository supplied with each call", async () => {

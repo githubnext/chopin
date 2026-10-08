@@ -58,6 +58,7 @@ test("current Harness executes heading against durable memory before returning i
 				"anchor_plan",
 				"edit_implementation_graph",
 				"create_research_workspace",
+				"request_visual_preview",
 				"bash",
 				"read_file",
 				"web_search",
