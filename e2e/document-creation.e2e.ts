@@ -62,6 +62,8 @@ for (let action of ["global", "pencil", "empty"] as const) {
 		await authenticate(page, `document-creator-${crypto.randomUUID()}`, baseURL!);
 		let posts = creationRequests(page);
 		await page.goto("/");
+		await page.getByRole("heading", { name: "Start with a repository" }).locator("..")
+			.getByRole("button", { name: "Add project", exact: true }).click();
 		let add = page.getByRole("dialog", { name: "Add project", exact: true });
 		await add.getByRole("option", { name: "octo-org/score", exact: true }).click();
 		let projects = sidebar(page);
