@@ -753,7 +753,16 @@ export function PreviewPlugin() {
 			if (block.kind === "mermaid") {
 				let preview = editor.getElementByKey(key)?.querySelector<HTMLElement>(".plan-diagram");
 				if (preview) {
+					// No caret is left to close what it opened on the way here.
 					$setSelection(null);
+					flushSync(() =>
+						setShown(prev => {
+							let next = Object.fromEntries(
+								Object.entries(prev).filter(([, why]) => why !== "editing"),
+							);
+							return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+						})
+					);
 					preview.focus();
 					return;
 				}
