@@ -2,7 +2,7 @@ name: PR readiness coordinator
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0 * * * *"
   push:
     branches: [main]
   pull_request_target:
@@ -30,7 +30,65 @@ permissions:
 
 jobs:
   reconcile:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository
+    # workflow_run.pull_requests is empty on some same-repository PR CI runs, so
+    # pilot CI wakeups use the exact head refs recorded with the selected PRs.
+    if: >-
+      vars.PR_READINESS_ENABLED == 'true' &&
+      vars.PR_READINESS_PRS != '' &&
+      (
+        github.event_name == 'schedule' ||
+        github.event_name == 'push' ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (
+            !github.event.inputs.pr ||
+            vars.PR_READINESS_PRS == 'all' ||
+            (
+              vars.PR_READINESS_PRS != '' &&
+              contains(format(',{0},', vars.PR_READINESS_PRS), format(',{0},', github.event.inputs.pr))
+            )
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          (
+            vars.PR_READINESS_PRS == 'all' ||
+            (
+              vars.PR_READINESS_PRS != '' &&
+              contains(format(',{0},', vars.PR_READINESS_PRS), format(',{0},', github.event.pull_request.number))
+            )
+          )
+        ) ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.path == '.github/workflows/ci.yml' &&
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          (
+            vars.PR_READINESS_PRS == 'all' ||
+            (
+              vars.PR_READINESS_HEAD_REFS != '' &&
+              github.event.workflow_run.head_branch != '' &&
+              contains(format(',{0},', vars.PR_READINESS_HEAD_REFS), format(',{0},', github.event.workflow_run.head_branch))
+            )
+          )
+        ) ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.path == '.github/workflows/pr-readiness-worker.lock.yml' &&
+          github.event.workflow_run.event == 'workflow_dispatch' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          (
+            vars.PR_READINESS_PRS == 'all' ||
+            (
+              vars.PR_READINESS_PRS != '' &&
+              !contains(vars.PR_READINESS_PRS, ',') &&
+              startsWith(github.event.workflow_run.display_title, format('PR maintenance #{0} [', vars.PR_READINESS_PRS))
+            )
+          )
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

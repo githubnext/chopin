@@ -41,16 +41,34 @@ function config(extra = {}) {
 		...extra,
 	};
 }
-test("disabled is read only without key or store", async () => {
-	let value = config({ key: undefined, store: undefined });
-	await runCoordinator(value);
+test("disabled reads no inventory, state, or GitHub data", async () => {
+	let reads = [];
+	let value = config({
+		key: undefined,
+		store: { load: async () => reads.push("state") },
+		inspect: async () => reads.push("inventory"),
+		request: async () => reads.push("GitHub"),
+	});
+	let result = await runCoordinator(value);
+	expect(reads).toEqual([]);
+	expect(result.rows).toEqual([]);
 	expect(value.writes).toEqual([]);
 });
 test("enabled canary reserves only selected PR", async () => {
-	let value = config({ enabled: true, prs: "1" });
+	let confirmed = [];
+	let value = config({
+		enabled: true,
+		prs: "1",
+		confirm: async (_repo, row) => {
+			confirmed.push(row.number);
+			return row;
+		},
+	});
 	let result = await runCoordinator(value);
 	expect(result.dispatches.map(item => item.number)).toEqual([1]);
-	expect(result.payload.prs[2].active).toBeNull();
+	expect(confirmed).toEqual([1]);
+	expect(result.rows.map(row => row.number)).toEqual([1]);
+	expect(result.payload.prs[2]).toBeUndefined();
 });
 test("unauthorized manual retry fails before mutations", async () => {
 	let value = config({
@@ -110,6 +128,59 @@ test("authenticated result must match actual GitHub run identity", async () => {
 	let result = await runCoordinator(value);
 	expect(result.payload.prs[1].transientCount).toBe(1);
 	expect(result.payload.prs[1].head).toBe(rows[0].head);
+});
+
+test("lost dispatch response is recovered from recent matching runs", async () => {
+	let { sealResult } = await import("./actions.mjs");
+	let dispatched = null;
+	let listReads = [];
+	let value = config({
+		enabled: true,
+		prs: "1",
+		now: 60_000,
+		request: async (method, path, body) => {
+			if (path.includes("/runs?")) {
+				listReads.push(path);
+				return {
+					workflow_runs: dispatched
+						? [{
+							id: 22,
+							display_title: `PR maintenance #1 [${dispatched.attempt}]`,
+							path: ".github/workflows/pr-readiness-worker.lock.yml",
+							event: "workflow_dispatch",
+							repository: { full_name: "a/b" },
+							head_repository: { full_name: "a/b" },
+							status: "completed",
+						}]
+						: [],
+				};
+			}
+			if (method === "POST" && path.endsWith("/dispatches")) {
+				dispatched = body.inputs;
+				throw new Error("Lost dispatch response");
+			}
+			return {};
+		},
+		downloadResult: async (_repository, runId) =>
+			sealResult({
+				repository: "a/b",
+				number: 1,
+				attempt: dispatched.attempt,
+				runId,
+				outcome: { kind: "applied", head: "c".repeat(40) },
+			}, key),
+	});
+	let first = await runCoordinator(value);
+	expect(first.payload.prs[1].active?.runId).toBeNull();
+	expect(first.errors.join(" ")).toContain("dispatch response unavailable");
+	expect(listReads).toEqual([]);
+	value.now++;
+	let recovered = await runCoordinator(value);
+	expect(listReads).toHaveLength(1);
+	expect(listReads[0]).toContain("created=%3E%3D");
+	expect(recovered.payload.prs[1].active).toBeNull();
+	expect(recovered.payload.prs[1].head).toBe("c".repeat(40));
+	expect(recovered.dispatches).toEqual([]);
 });
 
 test("registered proposal head authored by PAT does not reset episode", async () => {
@@ -236,6 +307,7 @@ test("expired trusted queued/in-progress workers cancel without releasing lock",
 		let payload = { schemaVersion: 1, repository: "a/b", revision: 0, prs: { 1: state } };
 		if (scenario === "invalid-state") state.active.createdAt = -1;
 		let cancellations = [];
+		let reads = [];
 		let value = config({
 			enabled: true,
 			prs: "1",
@@ -245,24 +317,23 @@ test("expired trusted queued/in-progress workers cancel without releasing lock",
 				save: async (_old, next) => ({ sha: "b".repeat(40), payload: next }),
 			},
 			request: async (method, path) => {
+				if (method === "GET") reads.push(path);
 				if (method === "POST" && path.endsWith("/cancel")) {
 					cancellations.push(path);
 					if (scenario === "failure") throw new Error("credential-secret");
 					return null;
 				}
-				if (path.includes("/runs?")) {
+				if (path === "/repos/a/b/actions/runs/22") {
 					return {
-						workflow_runs: [{
-							id: 22,
-							display_title: `PR maintenance #1 [${
-								scenario === "mismatch" ? "87654321-1234-1234-1234-123456789abc" : attempt
-							}]`,
-							path: ".github/workflows/pr-readiness-worker.lock.yml",
-							event: "workflow_dispatch",
-							repository: { full_name: scenario === "foreign" ? "foreign/repo" : "a/b" },
-							head_repository: { full_name: "a/b" },
-							status: scenario === "queued" ? "queued" : "in_progress",
-						}],
+						id: 22,
+						display_title: `PR maintenance #1 [${
+							scenario === "mismatch" ? "87654321-1234-1234-1234-123456789abc" : attempt
+						}]`,
+						path: ".github/workflows/pr-readiness-worker.lock.yml",
+						event: "workflow_dispatch",
+						repository: { full_name: scenario === "foreign" ? "foreign/repo" : "a/b" },
+						head_repository: { full_name: "a/b" },
+						status: scenario === "queued" ? "queued" : "in_progress",
 					};
 				}
 				return {};
@@ -273,6 +344,11 @@ test("expired trusted queued/in-progress workers cancel without releasing lock",
 			expect(cancellations).toEqual([]);
 		} else {
 			let result = await runCoordinator(value);
+			expect(
+				reads.filter(path => path.includes("/actions/")).every(path =>
+					path === "/repos/a/b/actions/runs/22"
+				),
+			).toBe(true);
 			expect(cancellations).toHaveLength(scenario === "early" ? 0 : 1);
 			expect(result.payload.prs[1].active?.id).toBe(attempt);
 			expect(result.dispatches).toEqual([]);

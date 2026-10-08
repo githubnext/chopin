@@ -26,7 +26,7 @@ export function validateProposal({
 			throw new Error("Invalid commit SHA");
 		}
 	}
-	if (!["fix", "rebase"].includes(operation)) throw new Error("Unsupported operation");
+	if (!["fix", "merge", "rebase"].includes(operation)) throw new Error("Unsupported operation");
 	let git = (...args) =>
 		execFileSync("git", [
 			"--no-replace-objects",
@@ -67,10 +67,21 @@ export function validateProposal({
 	let boundary = expectedHead;
 	if (operation === "fix") {
 		if (!ancestor(expectedHead, proposalHead)) throw new Error("Fix diverges from expected head");
-		if (!ancestor(expectedBase, expectedHead)) throw new Error("Must rebase before fixing");
 		if (range(expectedHead, proposalHead).length !== 1) {
 			throw new Error("Fix requires exactly one commit");
 		}
+	} else if (operation === "merge") {
+		if (oldReplayBoundary !== null) throw new Error("Merge cannot set a replay boundary");
+		let parents = string("rev-list", "--parents", "-n", "1", proposalHead).split(" ");
+		if (
+			parents.length !== 3 || parents[0] !== proposalHead
+			|| parents[1] !== expectedHead || parents[2] !== expectedBase
+		) throw new Error("Merge must have captured head and base as its only ordered parents");
+		let bases = string("merge-base", "--all", expectedHead, expectedBase).split("\n");
+		if (bases.length !== 1 || !/^[a-f0-9]{40}$/.test(bases[0])) {
+			throw new Error("Ambiguous merge boundary");
+		}
+		boundary = bases[0];
 	} else {
 		if (!ancestor(expectedBase, proposalHead)) throw new Error("Rebase must include expected base");
 		if (oldReplayBoundary === null) {
@@ -119,8 +130,101 @@ export function validateProposal({
 		return result;
 	};
 	let [f, h, b, p] = [boundary, expectedHead, expectedBase, proposalHead].map(tree);
+	let merged = null;
+	let conflicts = new Set();
+	if (operation === "merge") {
+		let output;
+		try {
+			output = git(
+				"-c",
+				"merge.conflictStyle=merge",
+				"merge-tree",
+				"--write-tree",
+				"-z",
+				"--name-only",
+				"--no-messages",
+				expectedHead,
+				expectedBase,
+			);
+		} catch (error) {
+			if (error.status !== 1 || !Buffer.isBuffer(error.stdout)) throw error;
+			output = error.stdout;
+		}
+		let parts = new TextDecoder("utf-8", { fatal: true }).decode(output).split("\0");
+		let sha = parts.shift();
+		if (
+			!sha || !/^[a-f0-9]{40}$/.test(sha) || parts.pop() !== ""
+			|| parts.length === 0 || new Set(parts).size !== parts.length
+		) throw new Error("Captured heads have no unambiguous text conflict");
+		conflicts = new Set(parts);
+		merged = tree(sha);
+	}
+	let conflictText = (path, after) => {
+		let entries = [f, h, b, merged, p].map((items) => items.get(path));
+		if (entries.some((entry) => !regular(entry) || entry.mode !== after.mode)) {
+			throw new Error(`Nontext or mode conflict requires human: ${path}`);
+		}
+		let texts = entries.map((entry) =>
+			new TextDecoder("utf-8", { fatal: true }).decode(
+				git("cat-file", "blob", entry.blob),
+			)
+		);
+		let marker = (line) => /^(?:<<<<<<< |=======|>>>>>>> )/.test(line);
+		if (
+			texts.some((value) => value.includes("\0"))
+			|| texts.slice(0, 3).some((value) => value.split("\n").some(marker))
+			|| texts[4].split("\n").some(marker)
+		) throw new Error(`Ambiguous conflict marker requires human: ${path}`);
+		let fixed = [""];
+		let phase = 0;
+		let count = 0;
+		for (let line of texts[3].match(/[^\n]*(?:\n|$)/g)?.filter(Boolean) ?? []) {
+			let plain = line.replace(/\r?\n$/, "");
+			if (phase === 0 && plain.startsWith("<<<<<<< ")) {
+				phase = 1;
+				count++;
+			} else if (phase === 1 && plain === "=======") {
+				phase = 2;
+			} else if (phase === 2 && plain.startsWith(">>>>>>> ")) {
+				phase = 0;
+				fixed.push("");
+			} else if (phase !== 0) {
+				if (marker(plain)) throw new Error(`Invalid conflict marker sequence: ${path}`);
+			} else if (marker(plain)) {
+				throw new Error(`Invalid conflict marker sequence: ${path}`);
+			} else fixed[fixed.length - 1] += line;
+		}
+		if (phase !== 0 || count === 0) throw new Error(`Nontext conflict requires human: ${path}`);
+		let result = Buffer.from(texts[4]);
+		let spans = fixed.map((value) => Buffer.from(value));
+		if (
+			!result.subarray(0, spans[0].length).equals(spans[0])
+			|| !result.subarray(result.length - spans.at(-1).length).equals(spans.at(-1))
+		) throw new Error(`Merge changed content outside conflict markers: ${path}`);
+		let cursor = spans[0].length;
+		let suffix = result.length - spans.at(-1).length;
+		for (let span of spans.slice(1, -1)) {
+			if (span.length === 0) throw new Error(`Ambiguous adjacent conflict markers: ${path}`);
+			let at = result.indexOf(span, cursor);
+			if (at < cursor || at + span.length > suffix || result.indexOf(span, at + 1) !== -1) {
+				throw new Error(`Merge changed content outside conflict markers: ${path}`);
+			}
+			cursor = at + span.length;
+		}
+		if (cursor > suffix) throw new Error(`Merge changed content outside conflict markers: ${path}`);
+	};
 	let paths = [];
-	for (let path of [...new Set([...f.keys(), ...h.keys(), ...b.keys(), ...p.keys()])].sort()) {
+	for (
+		let path of [
+			...new Set([
+				...f.keys(),
+				...h.keys(),
+				...b.keys(),
+				...p.keys(),
+				...(merged?.keys() ?? []),
+			]),
+		].sort()
+	) {
 		let before = h.get(path);
 		let ambiguous = false;
 		if (operation === "rebase") {
@@ -129,10 +233,24 @@ export function validateProposal({
 			else if (same(h.get(path), b.get(path))) before = b.get(path);
 			else ambiguous = true;
 		}
+		if (operation === "merge") before = merged.get(path);
 		let after = p.get(path);
 		let repair = isRepairPath(path);
+		if (operation === "merge" && conflicts.has(path)) {
+			if (!repair) throw new Error(`Protected conflict requires human: ${path}`);
+			if (!regular(after)) throw new Error(`Nontext or mode conflict requires human: ${path}`);
+			if (same(after, h.get(path))) {
+				throw new Error(`Merge cannot silently retain head side of conflict: ${path}`);
+			}
+			conflictText(path, after);
+			paths.push(path);
+			continue;
+		}
 		if (ambiguous && !repair) throw new Error(`Protected conflict requires human: ${path}`);
 		if (!ambiguous && same(before, after)) continue;
+		if (operation === "merge" && !renewals.has(path)) {
+			throw new Error(`Merge changed a nonconflicting path: ${path}`);
+		}
 		if (after && !regular(after) && !same(after, before)) {
 			throw new Error(`Proposal may only introduce regular files: ${path}`);
 		}

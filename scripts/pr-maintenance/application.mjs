@@ -53,7 +53,7 @@ export async function applyProposal({
 		&& current.active.head === active?.head && current.active.baseHead === active?.baseHead
 		&& current.active.action === active?.action;
 	if (!matches(state)) return { kind: "superseded" };
-	let operation = active.action === "repair" ? "fix" : "rebase";
+	let operation = active.operation === "repair" ? "fix" : active.operation;
 	let observe = async () => {
 		let pr = await call(`${prefix}/pulls/${number}`);
 		if (

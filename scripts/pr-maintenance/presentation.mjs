@@ -30,7 +30,7 @@ function summary(value) {
 }
 
 export async function reportMaintenance(
-	{ repository, state, request, key, pr, runUrl, ciUrl = null },
+	{ repository, state, request, key, pr, ciUrl = null },
 ) {
 	let prefix = `/repos/${repository}`;
 	let issue = `${prefix}/issues/${state.number}`;
@@ -135,10 +135,13 @@ export async function reportMaintenance(
 				evidence += entry;
 			}
 			body += evidence;
-			if (omitted) body += "\n\nMore details in the coordinator run.";
+			if (omitted) body += "\n\nMore details in the PR readiness workflow history.";
 		}
 	}
-	body += `\n\n[Coordinator run](${runUrl})${ciUrl ? ` · [CI run](${ciUrl})` : ""}`;
+	body +=
+		`\n\n[PR readiness runs](https://github.com/${repository}/actions/workflows/pr-readiness.yml)${
+			ciUrl ? ` · [CI run](${ciUrl})` : ""
+		}`;
 	if (Buffer.byteLength(body) > 20 * 1024) {
 		throw new Error("Maintenance comment exceeds body budget");
 	}

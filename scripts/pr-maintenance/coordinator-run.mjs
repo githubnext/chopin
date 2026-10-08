@@ -57,9 +57,23 @@ export async function runCoordinator(config = {}) {
 		throw new Error("GITHUB_REPOSITORY is required");
 	}
 	let enabled = config.enabled ?? process.env.PR_READINESS_ENABLED === "true";
+	if (!enabled) return { rows: [], payload: null, dispatches: [], errors: [] };
+	let selection = config.prs ?? process.env.PR_READINESS_PRS ?? "";
+	if (selection !== "all" && !/^[1-9][0-9]*(,[1-9][0-9]*)*$/.test(selection)) {
+		throw new Error("PR_READINESS_PRS must specify canary PR numbers or all");
+	}
+	let numbers = new Set(selection.split(",").map(Number));
+	let selected = number => selection === "all" || numbers.has(number);
+	let key = config.key ?? process.env.PR_MAINTENANCE_STATE_KEY;
+	if (typeof key !== "string" || Buffer.byteLength(key) < 32) {
+		throw new Error(
+			"PR_MAINTENANCE_STATE_KEY must contain at least 32 bytes; authenticated state must preexist",
+		);
+	}
 	let request = config.request ?? createRequest(process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN);
-	let rows =
-		await (config.inspect ?? (() => inventory(repository, createInventoryRead(repository))))();
+	let rows = await (config.inspect
+		?? (() => inventory(repository, createInventoryRead(repository), selected)))();
+	rows = rows.filter(row => selected(row.number));
 	let confirm = config.confirm ?? inspectReadiness;
 	rows = await Promise.all(rows.map(row => confirm(repository, row, request)));
 	// Reapply parent ordering using confirmed checks, not the advisory inventory.
@@ -69,18 +83,6 @@ export async function runCoordinator(config = {}) {
 			&& row.action !== "opted-out"
 		) row.action = "waiting-parent";
 	}
-	if (!enabled) return { rows, payload: null, dispatches: [], errors: [] };
-	let key = config.key ?? process.env.PR_MAINTENANCE_STATE_KEY;
-	if (typeof key !== "string" || Buffer.byteLength(key) < 32) {
-		throw new Error(
-			"PR_MAINTENANCE_STATE_KEY must contain at least 32 bytes; authenticated state must preexist",
-		);
-	}
-	let selection = config.prs ?? process.env.PR_READINESS_PRS ?? "";
-	if (selection !== "all" && !/^[1-9][0-9]*(,[1-9][0-9]*)*$/.test(selection)) {
-		throw new Error("PR_READINESS_PRS must specify canary PR numbers or all");
-	}
-	let selected = number => selection === "all" || selection.split(",").includes(String(number));
 	let store = config.store ?? createStateStore(repository, key, request);
 	let previous = await store.load();
 	let now = config.now ?? Date.now();
@@ -135,18 +137,27 @@ export async function runCoordinator(config = {}) {
 			if (/^[0-9a-f]{64}$/.test(fingerprint ?? "")) row.failureFingerprint = fingerprint;
 		} catch { /* Missing trusted logs do not invent a repeated failure identity. */ }
 	}
+	let active = Object.values(previous.payload.prs).filter(state => state.active);
 	let rawRuns = [];
-	for (let page = 1;; page++) {
-		let response = await request(
-			"GET",
-			`${root}/actions/workflows/${workflow}/runs?event=workflow_dispatch&per_page=100&page=${page}`,
-		);
-		if (!Array.isArray(response.workflow_runs)) throw new Error("Invalid worker run inventory");
-		rawRuns.push(...response.workflow_runs);
-		if (response.workflow_runs.length < 100) break;
+	let unacknowledged = active.filter(state => state.active.runId === null);
+	if (unacknowledged.length) {
+		let earliest = Math.min(...unacknowledged.map(state => state.active.createdAt));
+		let since = new Date(Math.max(0, earliest - 5 * 60_000)).toISOString();
+		for (let page = 1; page <= 5; page++) {
+			let response = await request(
+				"GET",
+				`${root}/actions/workflows/${workflow}/runs?event=workflow_dispatch&created=${
+					encodeURIComponent(`>=${since}`)
+				}&per_page=100&page=${page}`,
+			);
+			if (!Array.isArray(response.workflow_runs)) throw new Error("Invalid worker run inventory");
+			rawRuns.push(...response.workflow_runs);
+			if (response.workflow_runs.length < 100) break;
+			if (page === 5) throw new Error("Recent worker run inventory exceeds safe page limit");
+		}
 	}
-	for (let state of Object.values(previous.payload.prs)) {
-		let id = state.active?.runId;
+	for (let state of active) {
+		let id = state.active.runId;
 		if (!id || rawRuns.some(run => String(run.id) === id)) continue;
 		let run = await request("GET", `${root}/actions/runs/${id}`);
 		if (String(run.id) !== id) throw new Error("Known worker run identity mismatch");
@@ -263,9 +274,6 @@ export async function runCoordinator(config = {}) {
 				request,
 				key,
 				pr,
-				runUrl: `https://github.com/${repository}/actions/runs/${
-					config.runId ?? process.env.GITHUB_RUN_ID
-				}`,
 				ciUrl: row.run?.html_url ?? null,
 			});
 		} catch {

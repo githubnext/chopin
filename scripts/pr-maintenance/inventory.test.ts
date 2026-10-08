@@ -123,12 +123,16 @@ test("an unreplayable parent still takes precedence over descendants and opt-out
 	expect(nextAction({ ...snapshot, rebaseRequired: null, rebaseable: false })).toBe("verify");
 });
 
-test("readiness requires current successful aggregate CI, no lag, and known mergeability", () => {
+test("mergeable lag does not hide current-head CI", () => {
 	expect(nextAction(snapshot)).toBe("ready");
 	for (let change of [{ mergeable: null }, { mergeable: undefined }, { behind: undefined }]) {
 		expect(nextAction({ ...snapshot, ...change })).toBe("verify");
 	}
-	expect(nextAction({ ...snapshot, behind: 1 })).toBe("rebase");
+	expect(nextAction({ ...snapshot, behind: 1 })).toBe("ready");
+	expect(nextAction({ ...snapshot, behind: 1, run: { ...run, conclusion: "failure" } }))
+		.toBe("repair");
+	expect(nextAction({ ...snapshot, behind: 1, rebaseRequired: true, rebaseable: false }))
+		.toBe("rebase");
 	expect(nextAction({ ...snapshot, mergeable: false })).toBe("conflict");
 	expect(nextAction({ ...snapshot, optedOut: true })).toBe("opted-out");
 	expect(nextAction({ ...snapshot, parentReady: false })).toBe("waiting-parent");
@@ -215,10 +219,9 @@ test("uses the intended base and places a refreshed stack parent before descenda
 	]);
 });
 
-test("descendants wait for a lagging, failed, pending, or opted-out parent", () => {
+test("descendants wait for a failed, pending, or opted-out parent", () => {
 	for (
 		let overrides of [
-			{ "compare/base-main...head-1": { behind_by: 1 } },
 			{ "runs/head-1": { workflow_runs: [{ ...run, conclusion: "failure" }] } },
 			{ "runs/head-1": { workflow_runs: [{ ...run, status: "queued" }] } },
 			{ "pulls/1": { ...pull(1), labels: [{ name: "no-babysit" }] } },
@@ -227,6 +230,20 @@ test("descendants wait for a lagging, failed, pending, or opted-out parent", () 
 		let { gh } = fixture([[pull(2, "branch-1"), pull(1)]], overrides);
 		expect(inventory(repository, gh)[1]?.action).toBe("waiting-parent");
 	}
+});
+
+test("selected inventory avoids unselected per-PR reads and waits for an unselected parent", () => {
+	let parent = pull(1);
+	let child = pull(2, parent.head.ref);
+	let { gh, calls } = fixture([[parent, child, pull(3)]]);
+	let rows = inventory(repository, gh, number => number === 2);
+	expect(rows.map(row => [row.number, row.parent, row.action])).toEqual([
+		[2, 1, "waiting-parent"],
+	]);
+	expect(calls.some(args => args[1] === `repos/${repository}/pulls/1`)).toBe(false);
+	expect(calls.some(args => args[1] === `repos/${repository}/pulls/3`)).toBe(false);
+	expect(calls.some(args => args[1]?.includes("head-1"))).toBe(false);
+	expect(calls.some(args => args[1]?.includes("head-3"))).toBe(false);
 });
 
 test("only the latest CI run for the refreshed head affects advice", () => {

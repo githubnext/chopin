@@ -187,7 +187,8 @@ test("prepare copies trusted main guidance and writes no credentials or state mu
 	expect(result.head).toBe(head);
 	expect(result.operation).toBe("fix");
 	state.action = state.active.action = "conflict";
-	expect((await runWorker("prepare", full)).operation).toBe("rebase");
+	state.active.operation = "merge";
+	expect((await runWorker("prepare", full)).operation).toBe("merge");
 	expect(readFileSync(join(full.dataDirectory, "trusted-AGENTS.md"), "utf8")).toBe(
 		"trusted guidance",
 	);

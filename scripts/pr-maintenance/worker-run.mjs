@@ -76,7 +76,7 @@ export async function runWorker(mode, config) {
 				head: active.head,
 				baseHead: active.baseHead,
 				branch: pr.head.ref,
-				operation: active.action === "repair" ? "fix" : "rebase",
+				operation: active.operation === "repair" ? "fix" : active.operation,
 				oldReplayBoundary: null,
 			};
 			writeFileSync(join(dataDirectory, "pr-attempt.json"), JSON.stringify(description));

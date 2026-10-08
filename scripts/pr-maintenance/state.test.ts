@@ -245,7 +245,13 @@ test("active action freezes dispatch mode independently of later observed action
 	for (let action of ["repair", "conflict", "rebase"]) {
 		let state = begin(initialState({ ...observation, action }, 0), "a", 1);
 		expect(state.active.action).toBe(action);
-		expect(state.active.operation).toBe(action === "rebase" ? "rebase" : "repair");
+		expect(state.active.operation).toBe(
+			action === "repair"
+				? "repair"
+				: action === "conflict"
+				? "merge"
+				: "rebase",
+		);
 		let changed = observe(state, { ...observation, action: "ready" }, { now: 2 });
 		expect(changed.active.action).toBe(action);
 		let invalid = { ...state, active: { ...state.active, action: "ready" } };
@@ -256,6 +262,28 @@ test("active action freezes dispatch mode independently of later observed action
 		};
 		expect(() => attachRun(invalid, "a", "run")).toThrow();
 	}
+});
+
+test("verified conflict merge consumes a bounded attempt and records its operation", () => {
+	let state = begin(initialState({ ...observation, action: "conflict" }, 0), "a", 1);
+	let evidence = {
+		head: "a".repeat(40),
+		operation: "merge",
+		paths: ["apps/a.ts"],
+		checks: [{ command: "bun test", result: "passed" }],
+		hashReviews: [],
+	};
+	expect(() =>
+		finish(state, "a", {
+			kind: "applied",
+			head: evidence.head,
+			verification: { ...evidence, operation: "fix" },
+		}, 2)
+	).toThrow("operation mismatch");
+	state = finish(state, "a", { kind: "applied", head: evidence.head, verification: evidence }, 2);
+	expect(state.repairCount).toBe(1);
+	expect(state.verification).toEqual(evidence);
+	expect(state.status).toBe("waiting-ci");
 });
 
 test("applied verification is durable evidence, not a readiness authorization", () => {
