@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import * as Api from "./api";
+import { heldTyping, holdTyping } from "./title-edit";
 import { TerminalAlert } from "./terminal-alert";
 
 import type { FormEvent, KeyboardEvent } from "react";
@@ -22,6 +23,7 @@ export function DocumentRename(
 		className = "",
 		inline = false,
 		onCancel,
+		replay = false,
 		onErrorChange,
 		onRenamed,
 		onSavingChange,
@@ -30,6 +32,8 @@ export function DocumentRename(
 		className?: string;
 		inline?: boolean;
 		onCancel: () => void;
+		/** Takes over typing held since New document, replacing the generated name. */
+		replay?: boolean;
 		onErrorChange?: (error: unknown) => void;
 		onRenamed: (detail: Api.ChannelDetail) => void;
 		onSavingChange?: (saving: boolean) => void;
@@ -46,6 +50,11 @@ export function DocumentRename(
 	useEffect(() => {
 		input.current?.focus();
 		input.current?.select();
+		// Taken in the same task as focus, so no key falls between the hold and the field.
+		let held = replay ? heldTyping : undefined;
+		if (replay) holdTyping(false);
+		if (held?.text) setTitle(held.text);
+		if (held?.enter) void save(held.text || channel.title);
 	}, []);
 
 	function report(next: unknown) {
@@ -53,9 +62,13 @@ export function DocumentRename(
 		onErrorChange?.(next);
 	}
 
-	async function submit(event?: FormEvent) {
+	function submit(event?: FormEvent) {
 		event?.preventDefault();
-		let next = title.trim();
+		return save(title);
+	}
+
+	async function save(value: string) {
+		let next = value.trim();
 		if (busy.current || cancelled.current) return;
 		if (inline && (!next || next === channel.title)) {
 			cancelled.current = true;

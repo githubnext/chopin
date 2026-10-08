@@ -40,7 +40,7 @@ import { DocumentRename } from "./document-rename";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
-import { TITLE_EDIT_EVENT, titleEdits } from "./title-edit";
+import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
@@ -163,6 +163,7 @@ export function Header(
 							channel={{ id: room, title: label }}
 							inline
 							onCancel={finishEdit}
+							replay={editing === "new"}
 							onRenamed={detail => {
 								onRenamed(detail.channel);
 								finishEdit();
@@ -290,8 +291,8 @@ export function RoomWorkspace(
 			let edit = claimTitleEdit(room);
 			if (edit) setTitleEdit(edit);
 		};
-		addEventListener(TITLE_EDIT_EVENT, listen);
-		return () => removeEventListener(TITLE_EDIT_EVENT, listen);
+		addEventListener("title-edit", listen);
+		return () => removeEventListener("title-edit", listen);
 	}, [room]);
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
