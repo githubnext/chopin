@@ -5,6 +5,7 @@ export function ChopinIcon({ size = 14, ...props }: IconProps) {
 	return (
 		<svg
 			aria-hidden={labelled ? undefined : true}
+			data-filled-icon=""
 			height={size}
 			viewBox="0 0 18 18"
 			width={size}
