@@ -125,7 +125,9 @@ test("touch removes the selected tab with one tap", async ({ join, seed }) => {
 
 test("a locked document offers no tab authoring", async ({ join, page, seed }) => {
 	let sockets: WebSocketRoute[] = [];
+	let offline = false;
 	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -135,6 +137,7 @@ test("a locked document offers no tab authoring", async ({ join, page, seed }) =
 	await strip.getByRole("tab", { name: "Desktop" }).hover();
 	await expect(content(page).getByRole("button", { name: "Remove Desktop" })).toBeAttached();
 
+	offline = true;
 	await sockets.at(-1)!.close();
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
 	await expect(content(page).getByRole("button", { name: "Add tab" })).toHaveCount(0);
