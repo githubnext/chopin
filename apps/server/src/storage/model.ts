@@ -104,6 +104,10 @@ export type ChannelRecord = {
 	unansweredDecisions: number;
 };
 
+export type ChannelDecisionCount = Pick<ChannelRecord, "revision" | "unansweredDecisions"> & {
+	channelId: string;
+};
+
 export type InitialChannel = Omit<
 	ChannelSnapshot,
 	"channelId" | "revision" | "throughSequence" | "createdAt"

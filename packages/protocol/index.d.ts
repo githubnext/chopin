@@ -39,7 +39,7 @@ export type Request<T> = T & { rid: string };
  * invite frames that disagree with the connection that carried them.
  */
 export declare namespace Session {
-	export type Incoming = Request<Ping>;
+	export type Incoming = Request<Ping> | Request<WatchDecisions>;
 
 	export type Outgoing =
 		| Hello
@@ -47,6 +47,8 @@ export declare namespace Session {
 		| Access
 		| Channel
 		| Decisions
+		| DecisionsWatched
+		| DecisionsSnapshot
 		| Deleted
 		| Failure
 		| Ping;
@@ -95,10 +97,11 @@ export declare namespace Session {
 	/**
 	 * Unanswered decision counts read from authoritative question records after
 	 * they were committed. Sent to the opening socket when a document opens, and to
-	 * every socket open anywhere in the repository whenever a commit changes a
-	 * document's count or a document leaves or rejoins the active catalogue, so the
-	 * Projects sidebar never opens other rooms. Frames for one repository are sent
-	 * in the order their totals were read.
+	 * every socket open on a document in the repository or watching it through
+	 * `WatchDecisions` whenever a commit changes a document's count or a document
+	 * leaves or rejoins the active catalogue, so the Projects sidebar never opens
+	 * other rooms. Frames for one repository are sent in the order their totals were
+	 * read.
 	 */
 	export type Decisions = KIND<"session:decisions"> & {
 		channelId: string;
@@ -109,6 +112,46 @@ export declare namespace Session {
 		repositoryUnanswered: number;
 		/** The channel storage revision `unanswered` was committed at, matching `Channel.revision`. */
 		revision: number;
+	};
+
+	/** One repository the Projects sidebar shows, and the documents it has loaded there. */
+	export type WatchedRepository = {
+		/** GitHub node ID; authoritative, and must match what `owner/name` resolves to. */
+		repositoryId: string;
+		owner: string;
+		name: string;
+		/** Loaded documents whose counts the snapshot reconciles, at most 500. */
+		channelIds: string[];
+	};
+
+	/**
+	 * Replace this socket's decision-count subscriptions with the repositories the
+	 * Projects sidebar shows, at most 50. The server rechecks GitHub read access for
+	 * each before subscribing, refuses the rest, and drops a subscription when a later
+	 * recheck fails or the socket closes. Send it after every connection and whenever
+	 * the list changes; an empty list unsubscribes everything but the socket's own
+	 * repository.
+	 */
+	export type WatchDecisions = KIND<"session:decisions-watch"> & {
+		repositories: WatchedRepository[];
+	};
+
+	/** The reply to `WatchDecisions`. A `DecisionsSnapshot` follows for each watched repository. */
+	export type DecisionsWatched = KIND<"session:decisions-watched"> & {
+		watched: string[];
+		refused: string[];
+	};
+
+	/**
+	 * Current counts for one watched repository, so a socket reconciles updates it
+	 * missed while disconnected or before it subscribed. Ordered with `Decisions`
+	 * frames for the same repository.
+	 */
+	export type DecisionsSnapshot = KIND<"session:decisions-snapshot"> & {
+		repositoryId: string;
+		repositoryUnanswered: number;
+		/** The requested documents that still belong to the repository. */
+		documents: Array<{ channelId: string; unanswered: number; revision: number }>;
 	};
 
 	/** Repository or document permission changed while the socket was open. */

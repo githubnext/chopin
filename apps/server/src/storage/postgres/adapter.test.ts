@@ -10,6 +10,7 @@ import { contractId, userAndChannel } from "../contract-support";
 import { PostgresStorage } from "./adapter";
 import { migrate, verifyMigrations } from "./migrations";
 import { backfillDocumentSlugs } from "./migrations/002_document_slugs";
+import { backfillUnansweredDecisions } from "./migrations/017_unanswered_decisions";
 import { sidecarUnansweredDecisions } from "../../questions/unanswered";
 import { UNANSWERED_SIDECARS } from "../../questions/unanswered.test-fixtures";
 
@@ -47,24 +48,71 @@ if (url) {
 		}
 	});
 
-	it("counts unanswered decisions in SQL exactly as the domain does", async () => {
+	it("stores the domain's unanswered count for every sidecar, including Unicode edge cases", async () => {
 		let storage = new PostgresStorage(url);
 		await storage.migrate();
-		await storage.close();
 		let sql = new SQL(url);
 		try {
-			for (let { name, sidecar, expected } of UNANSWERED_SIDECARS) {
-				let source = JSON.stringify(sidecar);
-				let [row] = await sql<{ stored: number; parsed: number }[]>`
-					SELECT
-						chopin_unanswered_decisions(${source}::jsonb) AS stored,
-						chopin_unanswered_decisions(${source}::text::jsonb) AS parsed
-				`;
-				expect({ name, ...row }).toEqual({ name, stored: expected, parsed: expected });
-				expect(sidecarUnansweredDecisions(sidecar)).toBe(expected);
+			let { channelId, repositoryId, userId, lease } = await userAndChannel(storage);
+			let channels = [channelId];
+			for (let index = 1; index < UNANSWERED_SIDECARS.length; index++) {
+				let created = await storage.channels.create({
+					id: contractId("parity-channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: `Parity ${index}`,
+					createdBy: userId,
+					now: new Date("2026-01-03T03:04:05.000Z"),
+				});
+				channels.push(created.id);
 			}
+			let total = 0;
+			for (let [index, { name, sidecar, expected }] of UNANSWERED_SIDECARS.entries()) {
+				let target = channels[index]!;
+				await storage.collaboration.commit({
+					channelId: target,
+					lease,
+					expectedRevision: 0,
+					operationId: contractId("parity"),
+					epoch: "epoch-parity",
+					sidecar,
+					events: [],
+					now: new Date("2026-01-06T03:04:05.000Z"),
+				});
+				expect({ name, domain: sidecarUnansweredDecisions(sidecar) }).toEqual({
+					name,
+					domain: expected,
+				});
+				expect({ name, stored: (await storage.channels.get(target))?.unansweredDecisions })
+					.toEqual({ name, stored: expected });
+				expect(await storage.channels.unansweredDecisionCounts(repositoryId, [target])).toEqual([
+					{ channelId: target, revision: 1, unansweredDecisions: expected },
+				]);
+				total += expected;
+			}
+			expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(total);
+
+			await sql`
+				UPDATE channel_state SET unanswered_decisions = 0
+				WHERE channel_id IN ${sql(channels)}
+			`;
+			await sql.begin(transaction => backfillUnansweredDecisions(transaction));
+			let backfilled = await sql<{ channelId: string; unanswered: number }[]>`
+				SELECT channel_id AS "channelId", unanswered_decisions AS unanswered
+				FROM channel_state
+				WHERE channel_id IN ${sql(channels)}
+			`;
+			expect(
+				Object.fromEntries(backfilled.map(row => [row.channelId, row.unanswered])),
+			).toEqual(
+				Object.fromEntries(
+					UNANSWERED_SIDECARS.map(({ expected }, index) => [channels[index], expected]),
+				),
+			);
 		} finally {
 			await sql.close();
+			await storage.close();
 		}
 	});
 

@@ -11,10 +11,7 @@ function questionId(question: unknown): string {
 	return typeof id === "string" ? id : "";
 }
 
-/**
- * Unanswered questions across stored decision records, matching the Decisions tab.
- * `chopin_unanswered_decisions` in the PostgreSQL migrations must count the same way.
- */
+/** Unanswered questions across stored decision records, matching the Decisions tab. */
 export function unansweredDecisions(records: unknown): number {
 	if (!Array.isArray(records)) return 0;
 	let total = 0;

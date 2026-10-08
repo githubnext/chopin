@@ -4,6 +4,7 @@ import * as Api from "./api";
 import {
 	acceptDecisionCounts,
 	applyDecisionCounts,
+	applyDecisionSnapshot,
 	beginDocumentLoad,
 	completeDocumentPage,
 	failDocumentLoad,
@@ -12,6 +13,7 @@ import {
 	removeLoadedDocument,
 	replaceLoadedDocument,
 	replaceProjectTotal,
+	snapshotDecisionCounts,
 	staleDecisionCounts,
 	updateDocumentMetadata,
 	updateLoadedDocument,
@@ -19,6 +21,7 @@ import {
 
 import type {
 	DecisionCounts,
+	DecisionSnapshot,
 	DocumentMetadata,
 	LoadedDocuments,
 	ProjectDocuments,
@@ -251,25 +254,40 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 			return documents === current.documents ? current : { ...current, documents };
 		});
 	}, []);
-	let updateDecisionCounts = useCallback((counts: DecisionCounts) => {
+	let acceptLiveCounts = useCallback((counts: DecisionCounts) => {
 		let known = liveCounts.current.get(counts.channelId);
 		let latest = latestDocuments.current.get(counts.channelId);
 		if (
 			(known && known.revision > counts.revision) || staleDecisionCounts(latest, counts)
-		) return;
+		) return false;
 		liveCounts.current.set(counts.channelId, counts);
 		if (latest) {
 			latestDocuments.current.set(counts.channelId, acceptDecisionCounts(latest, counts));
 		}
-		liveTotals.current.set(counts.repositoryId, {
-			updates: (liveTotals.current.get(counts.repositoryId)?.updates ?? 0) + 1,
-			total: counts.repositoryUnanswered,
+		return true;
+	}, []);
+	let acceptLiveTotal = useCallback((repositoryId: string, total: number) => {
+		liveTotals.current.set(repositoryId, {
+			updates: (liveTotals.current.get(repositoryId)?.updates ?? 0) + 1,
+			total,
 		});
+	}, []);
+	let updateDecisionCounts = useCallback((counts: DecisionCounts) => {
+		if (!acceptLiveCounts(counts)) return;
+		acceptLiveTotal(counts.repositoryId, counts.repositoryUnanswered);
 		setCatalogue(current => {
 			let documents = applyDecisionCounts(current.documents, counts);
 			return documents === current.documents ? current : { ...current, documents };
 		});
-	}, []);
+	}, [acceptLiveCounts, acceptLiveTotal]);
+	let updateDecisionSnapshot = useCallback((snapshot: DecisionSnapshot) => {
+		for (let counts of snapshotDecisionCounts(snapshot)) acceptLiveCounts(counts);
+		acceptLiveTotal(snapshot.repositoryId, snapshot.repositoryUnanswered);
+		setCatalogue(current => {
+			let documents = applyDecisionSnapshot(current.documents, snapshot);
+			return documents === current.documents ? current : { ...current, documents };
+		});
+	}, [acceptLiveCounts, acceptLiveTotal]);
 	let beginTotalRequest = useCallback((repositoryId: string) => {
 		let updatesAtRequest = liveTotals.current.get(repositoryId)?.updates;
 		return (total: number) => {
@@ -299,6 +317,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		refreshProject,
 		removeDocument,
 		updateDecisionCounts,
+		updateDecisionSnapshot,
 		updateDocument,
 		upsertDocument,
 	};

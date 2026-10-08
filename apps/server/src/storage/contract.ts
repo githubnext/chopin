@@ -581,6 +581,21 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(Object.fromEntries(pages.map(item => [item.id, item.unansweredDecisions])))
 					.toEqual({ [channelId]: 2, [child.id]: 1, [archivedChild.id]: 1 });
 				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(4);
+				let requested = await storage.channels.unansweredDecisionCounts(repositoryId, [
+					channelId,
+					child.id,
+					archived.id,
+					elsewhere.id,
+					id("missing-channel"),
+				]);
+				expect(requested.toSorted((a, b) => a.channelId.localeCompare(b.channelId))).toEqual(
+					[
+						{ channelId, revision: 1, unansweredDecisions: 2 },
+						{ channelId: child.id, revision: 1, unansweredDecisions: 1 },
+						{ channelId: archived.id, revision: 1, unansweredDecisions: 3 },
+					].toSorted((a, b) => a.channelId.localeCompare(b.channelId)),
+				);
+				expect(await storage.channels.unansweredDecisionCounts(repositoryId, [])).toEqual([]);
 
 				await storage.collaboration.replace({
 					channelId: child.id,

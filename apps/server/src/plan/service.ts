@@ -1005,6 +1005,35 @@ export function tellUnanswered(plan: Plan, ws: Socket): Promise<void> {
 	});
 }
 
+/** Reconcile a watching socket with counts it missed, ordered with the repository's frames. */
+export function tellRepositoryUnanswered(
+	storage: StorageAdapter,
+	ws: Socket,
+	repositoryId: string,
+	channelIds: string[],
+	watching: () => boolean,
+): Promise<void> {
+	return inRepositoryOrder(repositoryId, async () => {
+		if (!watching()) return;
+		let [documents, repositoryUnanswered] = await Promise.all([
+			storage.channels.unansweredDecisionCounts(repositoryId, channelIds),
+			storage.channels.unansweredDecisions(repositoryId),
+		]);
+		if (!watching()) return;
+		tell(ws, {
+			kind: "session:decisions-snapshot",
+			ts: 0,
+			repositoryId,
+			repositoryUnanswered,
+			documents: documents.map(document => ({
+				channelId: document.channelId,
+				unanswered: document.unansweredDecisions,
+				revision: document.revision,
+			})),
+		});
+	});
+}
+
 async function checkpointHosted(plan: Plan): Promise<void> {
 	let durable = plan.persistence;
 	try {

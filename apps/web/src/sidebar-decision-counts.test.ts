@@ -6,13 +6,18 @@ import { unansweredDecisionsLabel } from "./decision-view-control";
 import {
 	acceptDecisionCounts,
 	applyDecisionCounts,
+	applyDecisionSnapshot,
 	beginDocumentLoad,
 	completeDocumentPage,
 	failDocumentLoad,
+	MAX_WATCHED_DOCUMENTS,
+	MAX_WATCHED_REPOSITORIES,
 	newestDocument,
+	projectDocuments,
 	removeLoadedDocument,
 	replaceProjectTotal,
 	staleDecisionCounts,
+	watchedRepositories,
 } from "./document-actions";
 import { ProjectSidebar } from "./project-sidebar";
 
@@ -315,5 +320,85 @@ describe("catalogue decision totals", () => {
 		expect(sidebar(archived.R_chopin!)).not.toContain("unanswered decision");
 		expect(replaceProjectTotal(archived, "R_chopin", 0)).toBe(archived);
 		expect(replaceProjectTotal(archived, "R_other", 4)).toBe(archived);
+	});
+});
+
+function navigationProject(index: number, available: boolean): Api.NavigationProject {
+	return {
+		available,
+		position: index,
+		repositoryId: `R_${index}`,
+		repositoryName: `repository-${index}`,
+		repositoryOwner: "octo-org",
+	};
+}
+
+describe("decision count catch-up", () => {
+	it("reconciles every loaded row and the project total missed while disconnected", () => {
+		let documents = {
+			R_chopin: {
+				status: "ready" as const,
+				channels: [parent, child, quiet],
+				unansweredDecisions: 10,
+			},
+		};
+		let next = applyDecisionSnapshot(documents, {
+			repositoryId: "R_chopin",
+			repositoryUnanswered: 8,
+			documents: [
+				{ channelId: parent.id, unanswered: 2, revision: 5 },
+				{ channelId: child.id, unanswered: 1, revision: 3 },
+				{ channelId: quiet.id, unanswered: 1, revision: 4 },
+			],
+		});
+
+		expect(next.R_chopin!.unansweredDecisions).toBe(8);
+		expect(next.R_chopin!.channels.map(channel => channel.unansweredDecisions)).toEqual([2, 1, 1]);
+		expect(next.R_chopin!.channels[1]).toBe(child);
+		expect(counts(sidebar(next.R_chopin!))).toEqual(["8", "2", "1", "1"]);
+	});
+
+	it("keeps newer row counts and leaves other repositories alone", () => {
+		let documents = {
+			R_chopin: { status: "ready" as const, channels: [parent], unansweredDecisions: 4 },
+		};
+		let snapshot = {
+			repositoryId: "R_chopin",
+			repositoryUnanswered: 4,
+			documents: [{ channelId: parent.id, unanswered: 9, revision: 2 }],
+		};
+		expect(applyDecisionSnapshot(documents, snapshot)).toBe(documents);
+		expect(applyDecisionSnapshot(documents, { ...snapshot, repositoryId: "R_other" })).toBe(
+			documents,
+		);
+		let total = applyDecisionSnapshot(documents, { ...snapshot, repositoryUnanswered: 6 });
+		expect(total.R_chopin).toMatchObject({ unansweredDecisions: 6 });
+		expect(total.R_chopin!.channels[0]).toBe(parent);
+	});
+
+	it("watches every available sidebar project with its loaded documents, within bounds", () => {
+		let projects = Array.from(
+			{ length: MAX_WATCHED_REPOSITORIES + 2 },
+			(_, index) => navigationProject(index, index !== 1),
+		);
+		let many = Array.from(
+			{ length: MAX_WATCHED_DOCUMENTS + 1 },
+			(_, index) => ({ ...parent, id: `channel-${index}` }),
+		);
+		let watched = watchedRepositories(projectDocuments({ projects }, {
+			R_0: { status: "ready", channels: [parent, child] },
+			R_2: { status: "loading", channels: many },
+		}));
+
+		expect(watched).toHaveLength(MAX_WATCHED_REPOSITORIES);
+		expect(watched[0]).toEqual({
+			repositoryId: "R_0",
+			owner: "octo-org",
+			name: "repository-0",
+			channelIds: [parent.id, child.id],
+		});
+		expect(watched.some(repository => repository.repositoryId === "R_1")).toBe(false);
+		expect(watched[1]!.channelIds).toHaveLength(MAX_WATCHED_DOCUMENTS);
+		expect(watched[2]!.channelIds).toEqual([]);
 	});
 });

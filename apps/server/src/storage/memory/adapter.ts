@@ -13,6 +13,7 @@ import type {
 	ChannelArchiveInput,
 	ChannelArchiveResult,
 	ChannelCursor,
+	ChannelDecisionCount,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -282,6 +283,8 @@ export class MemoryStorage implements StorageAdapter {
 		scan: (repositoryId, limit, after, includeArchived) =>
 			this.#scanChannels(repositoryId, limit, after, includeArchived),
 		unansweredDecisions: repositoryId => Promise.resolve(this.#unansweredDecisions(repositoryId)),
+		unansweredDecisionCounts: (repositoryId, channelIds) =>
+			Promise.resolve(this.#unansweredDecisionCounts(repositoryId, channelIds)),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -638,6 +641,19 @@ export class MemoryStorage implements StorageAdapter {
 	#unansweredDecisions(repositoryId: string): number {
 		return this.#catalogue(repositoryId, false)
 			.reduce((total, value) => total + value.unansweredDecisions, 0);
+	}
+
+	#unansweredDecisionCounts(repositoryId: string, channelIds: string[]): ChannelDecisionCount[] {
+		return channelIds.flatMap(channelId => {
+			let found = this.#channels.get(channelId);
+			return found?.repositoryId === repositoryId
+				? [{
+					channelId,
+					revision: found.revision,
+					unansweredDecisions: found.unansweredDecisions,
+				}]
+				: [];
+		});
 	}
 
 	#scanChannels(

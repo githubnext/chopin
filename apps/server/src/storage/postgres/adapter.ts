@@ -2,6 +2,7 @@ import { SQL } from "bun";
 
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { availableChannelTitle } from "../../channels/title";
+import { sidecarUnansweredDecisions } from "../../questions/unanswered";
 import { conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
@@ -16,6 +17,7 @@ import type {
 	ChannelArchiveInput,
 	ChannelArchiveResult,
 	ChannelCursor,
+	ChannelDecisionCount,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -653,6 +655,8 @@ export class PostgresStorage implements StorageAdapter {
 		scan: (repositoryId, limit, after, includeArchived) =>
 			this.#scanChannels(repositoryId, limit, after, includeArchived),
 		unansweredDecisions: repositoryId => this.#unansweredDecisions(repositoryId),
+		unansweredDecisionCounts: (repositoryId, channelIds) =>
+			this.#unansweredDecisionCounts(repositoryId, channelIds),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -758,10 +762,11 @@ export class PostgresStorage implements StorageAdapter {
 			input.now,
 		);
 		await transaction`
-			INSERT INTO channel_state (channel_id, sidecar)
+			INSERT INTO channel_state (channel_id, sidecar, unanswered_decisions)
 			VALUES (
 				${input.id},
-				${input.initial ? JSON.stringify(input.initial.sidecar) : "null"}::jsonb
+				${input.initial ? JSON.stringify(input.initial.sidecar) : "null"}::jsonb,
+				${sidecarUnansweredDecisions(input.initial?.sidecar)}
 			)
 		`;
 		if (input.initial) {
@@ -1095,6 +1100,32 @@ export class PostgresStorage implements StorageAdapter {
 					)
 			`;
 			return integer(row?.total ?? 0, "unanswered decision total");
+		});
+	}
+
+	#unansweredDecisionCounts(
+		repositoryId: string,
+		channelIds: string[],
+	): Promise<ChannelDecisionCount[]> {
+		if (channelIds.length === 0) return Promise.resolve([]);
+		return this.#run("read unanswered decision counts", async () => {
+			let rows = await this.#sql<
+				{ channelId: string; revision: Integer; unansweredDecisions: Integer }[]
+			>`
+				SELECT
+					channels.id AS "channelId",
+					channels.revision,
+					coalesce(channel_state.unanswered_decisions, 0) AS "unansweredDecisions"
+				FROM channels
+				LEFT JOIN channel_state ON channel_state.channel_id = channels.id
+				WHERE channels.repository_id = ${repositoryId}
+					AND channels.id IN ${this.#sql(channelIds)}
+			`;
+			return rows.map(row => ({
+				channelId: row.channelId,
+				revision: integer(row.revision, "channel revision"),
+				unansweredDecisions: integer(row.unansweredDecisions, "channel unanswered decisions"),
+			}));
 		});
 	}
 
@@ -1441,7 +1472,9 @@ export class PostgresStorage implements StorageAdapter {
 				if (input.sidecar !== undefined) {
 					await transaction`
 					UPDATE channel_state
-					SET sidecar = ${JSON.stringify(input.sidecar)}::jsonb
+					SET
+						sidecar = ${JSON.stringify(input.sidecar)}::jsonb,
+						unanswered_decisions = ${sidecarUnansweredDecisions(input.sidecar)}
 					WHERE channel_id = ${input.channelId}
 				`;
 				}
@@ -1561,7 +1594,9 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 				await transaction`
 					UPDATE channel_state
-					SET sidecar = ${JSON.stringify(input.sidecar)}::jsonb
+					SET
+						sidecar = ${JSON.stringify(input.sidecar)}::jsonb,
+						unanswered_decisions = ${sidecarUnansweredDecisions(input.sidecar)}
 					WHERE channel_id = ${input.channelId}
 				`;
 				await transaction`

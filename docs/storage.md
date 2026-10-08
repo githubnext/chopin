@@ -111,7 +111,7 @@ applied migration. The application schema contains:
 | `web_sessions`             | Session metadata and optional browser-secret hashes, encrypted hosted credentials, and credential revisions. Planner ownership references session IDs.     |
 | `channels`                 | Repository identity, optional parent channel, title, creator, archive and generated-description metadata, storage revision, next sequence, and timestamps. |
 | `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                                                           |
-| `channel_state`            | Current sidecar JSON for a channel and its generated `unanswered_decisions` count, computed from the sidecar question records.                             |
+| `channel_state`            | Current sidecar JSON for a channel and its `unanswered_decisions` count, written with each sidecar from its question records.                              |
 | `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                                                           |
 | `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                                                                |
 | `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                                                                |
@@ -125,6 +125,12 @@ applied migration. The application schema contains:
 | `research_workspaces`      | Internal request staging: parent channel, exact brief fields, optional published child, attribution, revision, idempotency, and compatibility counters.    |
 | `research_turns`           | Internal initial attempt and compatibility turns with evidence and answer job links.                                                                       |
 | `research_messages`        | Compatibility transcript rows retained for historical workspace references; not a current product thread.                                                  |
+
+`channel_state.unanswered_decisions` is maintained in JavaScript rather than a
+generated column. Sidecar text may contain an escaped NUL or an unpaired UTF-16
+surrogate, which JSONB rejects, so SQL cannot re-parse every stored sidecar.
+Migration 017 backfills existing rows with the same rule, and every adapter write
+that replaces a sidecar writes its count in the same statement.
 
 The `channels.parent_channel_id` foreign key records navigational containment.
 Storage rejects a parent from another repository and rejects a grandchild.
