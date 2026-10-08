@@ -4,7 +4,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 import * as Api from "./api";
 import { documentRouteIdentity } from "./document-route-swap";
 import { canManageProject } from "./navigation-model";
-import { requestTitleEdit } from "./title-edit";
+import { holdTyping, requestTitleEdit } from "./title-edit";
 
 export type DocumentCreationPhase = "creating" | "opening";
 
@@ -47,7 +47,10 @@ export function useDocumentCreation(
 
 	useEffect(() => {
 		for (let [id, attempt] of attempts.current) {
-			if (attempt.phase === "opening" && attempt.destination !== routeKey) finish(id, attempt);
+			if (attempt.phase === "opening" && attempt.destination !== routeKey) {
+				finish(id, attempt);
+				holdTyping(false);
+			}
 		}
 		setError(undefined);
 	}, [finish, routeKey]);
@@ -65,6 +68,7 @@ export function useDocumentCreation(
 		let attempt: Attempt = { phase: "creating" };
 		let origin = location.current;
 		attempts.current.set(id, attempt);
+		holdTyping(true);
 		latest.current = attempt;
 		setError(undefined);
 		publish();
@@ -74,6 +78,7 @@ export function useDocumentCreation(
 			// A successful POST still belongs in the catalogue after the user moves on.
 			if (location.current !== origin || latest.current !== attempt) {
 				finish(id, attempt);
+				holdTyping(false);
 				return;
 			}
 			attempt.phase = "opening";
@@ -95,6 +100,7 @@ export function useDocumentCreation(
 			);
 		} catch (reason) {
 			finish(id, attempt);
+			holdTyping(false);
 			if (location.current === origin && latest.current === attempt) {
 				setError({
 					project,

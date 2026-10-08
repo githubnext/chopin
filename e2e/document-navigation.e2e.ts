@@ -268,13 +268,21 @@ test("the header title renames in place with click, F2, Escape, and blur", async
 
 test("typing straight after New document names it without losing a character", async ({ join }) => {
 	let page = await join("ana");
-	let field = page.getByRole("textbox", { name: "Document title" });
-	await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
-	await field.waitFor();
-	let name = `Quick ${crypto.randomUUID().slice(0, 8)}`;
-	await page.keyboard.type(name);
-	await page.keyboard.press("Enter");
-	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+	let cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+	try {
+		for (let delay of [0, 10]) {
+			// Sixteen characters typed while the document is still being created and opened.
+			let name = `Quick${crypto.randomUUID().replaceAll("-", "").slice(0, 11)}`;
+			await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
+			await page.keyboard.type(name, { delay });
+			await page.keyboard.press("Enter");
+			await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+			await expect(content(page)).not.toContainText(name.slice(0, 5));
+		}
+	} finally {
+		await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+	}
 });
 
 test("sidebar Rename opens that document with its title ready to edit", async ({ baseURL, join }) => {
