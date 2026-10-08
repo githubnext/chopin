@@ -1,5 +1,46 @@
 [
 	{
+		"file": "apps/web/src/chat/command-picker.tsx",
+		"reason": "Chat reuses the editor slash-menu class recipes; the imported constants are static token-based utilities in the reviewed editor producer.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"MENU_SURFACE",
+				"class > CommandPicker > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW",
+				"class > CommandPicker > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW_ON",
+				"class > CommandPicker > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW_OFF",
+				"class > CommandPicker > <button>",
+				1
+			]
+		],
+		"sourceHash": "9418b1cafede24f85820d9f2893e0f416412445dad0fcfc321e52bee4b9fea80",
+		"producers": [
+			{
+				"file": "packages/editor/src/toolbar/surface.ts",
+				"sourceHash": "ad3d483335b4dda9238fbcf529b79ad86320987accf3175d581a33d90f1c331b"
+			}
+		]
+	},
+	{
 		"file": "apps/web/src/document-workspace-host.tsx",
 		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function.",
 		"cases": [
