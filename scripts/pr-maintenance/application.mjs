@@ -74,7 +74,7 @@ export async function applyProposal({
 	if (!pr || (pr.head.sha !== active.head && pr.head.sha !== active.proposalHead)) {
 		return { kind: "superseded" };
 	}
-	if (pr.base.ref !== "main") {
+	if (pr.base.ref !== "main" && operation !== "fix") {
 		return { kind: "blocked", reason: "Stacked PR needs a recorded trusted replay boundary" };
 	}
 	let artifact;
