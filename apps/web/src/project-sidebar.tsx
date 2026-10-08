@@ -471,10 +471,25 @@ export function ProjectSidebar(
 	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
 	let platform = currentShortcutPlatform();
-	let firstMode = useRef(catalogueMode);
-	let hasSwitched = useRef(false);
-	if (catalogueMode !== firstMode.current) hasSwitched.current = true;
-	let switched = hasSwitched.current ? catalogueMode : undefined;
+	let actionsRef = useRef<HTMLDivElement>(null);
+	let listRef = useRef<HTMLElement>(null);
+	let shownMode = useRef(catalogueMode);
+	useEffect(() => {
+		if (shownMode.current === catalogueMode) return;
+		shownMode.current = catalogueMode;
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		let style = getComputedStyle(actionsRef.current ?? document.documentElement);
+		let offset = catalogueMode === "archived" ? "8px" : "-8px";
+		for (let element of [actionsRef.current, listRef.current]) {
+			element?.animate(
+				[{ opacity: 0, transform: `translateX(${offset})` }, { opacity: 1, transform: "none" }],
+				{
+					duration: parseFloat(style.getPropertyValue("--duration-base")) || 200,
+					easing: style.getPropertyValue("--motion-smooth-out").trim() || "ease-out",
+				},
+			);
+		}
+	}, [catalogueMode]);
 	let searchButton = (
 		<button className="project-sidebar-primary-action" onClick={onSearch} type="button">
 			<SearchIcon />
@@ -486,8 +501,8 @@ export function ProjectSidebar(
 	);
 	let primaryActions = (
 		<div
-			className="project-sidebar-primary-actions project-sidebar-mode"
-			data-mode={switched}
+			className="project-sidebar-primary-actions"
+			ref={actionsRef}
 		>
 			{archiveMode
 				? (
@@ -595,9 +610,9 @@ export function ProjectSidebar(
 				{primaryActions}
 
 				<nav
-					className="project-sidebar-mode px-2 py-2"
+					className="px-2 py-2"
 					aria-label={archiveMode ? "Archived documents" : "Projects"}
-					data-mode={switched}
+					ref={listRef}
 				>
 					<div className="project-sidebar-projects-heading group/projects-heading">
 						<span>{archiveMode ? "Archived" : "Projects"}</span>

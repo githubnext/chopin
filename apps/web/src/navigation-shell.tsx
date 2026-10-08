@@ -694,18 +694,21 @@ export function NavigationShell(
 					action: {
 						label: "Undo",
 						onAction: () => {
-							void Api.restoreChannel(detail.channel.id).then(
-								restored => acceptChannel(restored.channel),
-								reason => setError({ reason }),
-							);
-							requestAnimationFrame(() =>
-								document.querySelector<HTMLElement>(
-									"[data-project-sidebar] [aria-current=page]",
-								)?.focus({ preventScroll: true })
-							);
+							void Api.restoreChannel(detail.channel.id).then(restored => {
+								acceptChannel(restored.channel);
+								requestAnimationFrame(() =>
+									(document.querySelector<HTMLElement>(
+										`[data-project-sidebar] [data-document-id="${restored.channel.id}"] .project-sidebar-document-link`,
+									)
+										?? document.querySelector<HTMLElement>(
+											"header button[aria-label^='Actions for ']",
+										))
+										?.focus({ preventScroll: true })
+								);
+							}, reason => setError({ reason }));
 						},
 					},
-					duration: 5000,
+					duration: 8000,
 				});
 			}
 		}, reason => {
