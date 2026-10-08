@@ -88,35 +88,40 @@ function DocumentSpecimen() {
 			<div className="diagram-gallery-document plan" data-document-specimen="">
 				<StaticPlanEditor
 					source={"# A shared rendering language\n\nA diagram can sit alongside prose while the document keeps its familiar reading width. The two views below have independent controls, focus, and SVG resources."}
-				/>
-				<div className="plan-content diagram-gallery-document-diagrams">
-					<figure data-specimen-diagram="first">
-						<Diagram spec={first.spec} />
-						<figcaption>{label(first.type)} · first instance</figcaption>
-					</figure>
-					<div className="diagram-gallery-prose-probe">
-						<span>Editable prose keyboard probe · local only</span>
-						<p
-							aria-label="Editable prose keyboard probe"
-							aria-multiline="true"
-							contentEditable
-							role="textbox"
-							suppressContentEditableWarning
-							tabIndex={0}
-						>
-							The second view is independent. Exploring a step in one diagram leaves the other at
-							its own step.
-						</p>
+				>
+					<div className="plan-content diagram-gallery-document-diagrams">
+						<figure data-specimen-diagram="first">
+							<Diagram spec={first.spec} />
+							<figcaption>{label(first.type)} · first instance</figcaption>
+						</figure>
+						<div className="diagram-gallery-prose-probe">
+							<span>Editable prose keyboard probe · local only</span>
+							<p
+								aria-label="Editable prose keyboard probe"
+								aria-multiline="true"
+								contentEditable
+								role="textbox"
+								suppressContentEditableWarning
+								tabIndex={0}
+							>
+								The second view is independent. Exploring a step in one diagram leaves the other at
+								its own step.
+							</p>
+						</div>
+						{secondMounted
+							? (
+								<figure data-specimen-diagram="second">
+									<Diagram spec={second.spec} />
+									<figcaption>{label(second.type)} · second instance</figcaption>
+								</figure>
+							)
+							: (
+								<p className="diagram-gallery-unmounted" role="status">
+									Second diagram unmounted.
+								</p>
+							)}
 					</div>
-					{secondMounted
-						? (
-							<figure data-specimen-diagram="second">
-								<Diagram spec={second.spec} />
-								<figcaption>{label(second.type)} · second instance</figcaption>
-							</figure>
-						)
-						: <p className="diagram-gallery-unmounted" role="status">Second diagram unmounted.</p>}
-				</div>
+				</StaticPlanEditor>
 			</div>
 		</section>
 	);

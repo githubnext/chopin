@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { DIAGRAM_FIXTURES } from "../../packages/diagrams/src/fixtures";
 
 test.beforeEach(async ({ page }) => {
 	await page.goto("/diagram-gallery");
@@ -8,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 
 test("catalogue groups every fixture and renders representative families", async ({ page }) => {
 	let types = page.getByRole("navigation", { name: "Diagram types" });
-	await expect(types.getByRole("button")).toHaveCount(42);
+	await expect(types.getByRole("button")).toHaveCount(DIAGRAM_FIXTURES.length);
 	for (let family of ["Process", "Systems", "Structure", "Charts", "Data platform"]) {
 		await expect(types.getByRole("heading", { name: family, exact: true })).toBeVisible();
 	}
@@ -22,6 +23,8 @@ test("catalogue groups every fixture and renders representative families", async
 });
 
 test("document views use separate SVG resources and survive source changes", async ({ page }) => {
+	await expect(page.locator('[role="document"] .plan-document [data-specimen-diagram]'))
+		.toHaveCount(2);
 	let first = page.locator('[data-specimen-diagram="first"]');
 	let second = page.locator('[data-specimen-diagram="second"]');
 	await expect(first.locator(".ch-diagram svg")).toBeVisible();
@@ -46,6 +49,13 @@ test("document views use separate SVG resources and survive source changes", asy
 	await expect(second.getByRole("complementary", { name: "Diagram details" })).toHaveCount(0);
 	await first.getByRole("button", { name: "Next step" }).click();
 	await expect(first.locator(".ch-diagram__status")).toContainText("Step 1 of");
+	let future = await first.evaluate(element => {
+		let items = [...element.querySelectorAll<SVGElement>("[data-sc-node], [data-sc-edge]")];
+		return items.filter(item => item.closest('[data-sc-step][aria-hidden="true"]'))
+			.map(item => item.getAttribute("tabindex"));
+	});
+	expect(future.length).toBeGreaterThan(0);
+	expect(future.every(tabIndex => tabIndex === "-1")).toBe(true);
 
 	await page.getByRole("button", { name: "Replace first source" }).click();
 	await expect(first).toContainText("State · first instance");

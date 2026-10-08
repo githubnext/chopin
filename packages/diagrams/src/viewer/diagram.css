@@ -1244,7 +1244,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
 	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) [data-sc-step] {
-		--d: calc(var(--step) * var(--sc-stagger));
+		--d: calc(var(--step, 0) * var(--sc-stagger));
 	}
 	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-node[data-sc-step],
 	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-enter[data-sc-step] {
@@ -1426,6 +1426,7 @@
 
 .ch-diagram .sc-svg.sc-stepping [data-sc-step]:not(.is-shown) {
 	filter: opacity(0.06);
+	pointer-events: none;
 }
 
 .ch-diagram__status {

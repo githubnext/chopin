@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
 	addComposerChild$,
@@ -38,7 +39,8 @@ let staticSourcePlugin = realmPlugin<{ onError: (error: Error) => void; source: 
 });
 
 export function StaticPlanEditor(
-	{ questions, research, source }: {
+	{ children, questions, research, source }: {
+		children?: ReactNode;
 		questions?: QuestionnaireStore;
 		research?: ResearchStore;
 		source: string;
@@ -76,6 +78,7 @@ export function StaticPlanEditor(
 						spellCheck
 						suppressHtmlProcessing
 					/>
+					{children}
 				</div>
 			</div>
 		</section>
