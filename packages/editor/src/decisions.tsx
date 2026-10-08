@@ -107,6 +107,7 @@ export function Decisions(
 	let heading = useRef<HTMLHeadingElement>(null);
 	let focusedQuestionnaire = useRef<HTMLElement | undefined>(undefined);
 	let revealed = useRef<number | undefined>(undefined);
+	let openVisual = useRef(new Set<string>());
 	let [history, setHistory] = useHistory();
 	let historyId = useId();
 	let [creating, setCreating] = useState(false);
@@ -133,6 +134,21 @@ export function Decisions(
 	useEffect(() => () => {
 		store.release();
 	}, [store]);
+
+	useEffect(() => {
+		let visual = entries.filter(entry => entry.value.visual === "decision-card-v1");
+		// Keep a just-saved specimen and its attribution visible when it moves to history.
+		if (
+			visual.some(entry =>
+				openVisual.current.has(entry.id) && status(entry, metadata) === "decided"
+			)
+		) {
+			setHistory(true);
+		}
+		openVisual.current = new Set(
+			visual.filter(entry => waiting(entry, metadata)).map(entry => entry.id),
+		);
+	}, [entries, metadata]);
 
 	useEffect(() => {
 		if (!reveal || revealed.current === reveal.token) return;
