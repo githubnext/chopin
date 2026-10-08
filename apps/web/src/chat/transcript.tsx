@@ -131,8 +131,7 @@ function DecisionSystemEntry(
 		wire: decisions.wire,
 		connected: decisions.connected,
 		canEdit: decisions.canEdit,
-		objections: conversationPlan && threadForCard(conversationPlan, id)?.stances
-			.filter(stance => stance.position === "oppose").length,
+		stances: conversationPlan && threadForCard(conversationPlan, id)?.stances,
 		onOpenCard: decisions.onOpenCard,
 	};
 

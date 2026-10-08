@@ -204,9 +204,12 @@ function Choices(
 							<span className="question-label">
 								<InlineCode text={option.label} />
 								{!custom && selected && option.id === suggestedOptionId && (
-									<span className="text-xs font-normal text-text-tertiary">
-										{" · Suggested in Chat"}
-									</span>
+									<>
+										{" "}
+										<span className="whitespace-nowrap text-xs font-normal text-text-tertiary">
+											· Suggested in Chat
+										</span>
+									</>
 								)}
 							</span>
 							{option.description && (

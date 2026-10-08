@@ -1060,6 +1060,21 @@ button.chat-tool-call-toggle {
 		transform: translate(-50%, -50%);
 	}
 
+	/* An inline text link in a Chat row: a 44px-tall target without moving the line. */
+	:root[data-plan-coarse-pointer] .chat-inline-link {
+		position: relative;
+	}
+
+	:root[data-plan-coarse-pointer] .chat-inline-link::after {
+		content: "";
+		position: absolute;
+		top: 50%;
+		left: -0.25rem;
+		right: -0.25rem;
+		height: 44px;
+		transform: translateY(-50%);
+	}
+
 	/* Beside a comment marker: grow vertically only so the marker keeps its taps. */
 	:root[data-plan-coarse-pointer] .plan-code-toggle::after {
 		width: 100%;

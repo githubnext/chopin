@@ -33,7 +33,7 @@ async function expectRetiredPrompts(page: Page, cardId: string, summary: string)
 		let summaries = await prompts.allTextContents();
 		return summaries.length > 0 && summaries.every(text => text.includes(summary));
 	}).toBe(true);
-	await expect(prompts.filter({ hasText: "Ready to settle" })).toHaveCount(0);
+	await expect(prompts.and(page.getByRole("group"))).toHaveCount(0);
 }
 
 async function stateWith(page: Page, type: ConversationPlan.Event["type"], count = 1) {

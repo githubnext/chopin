@@ -41,7 +41,7 @@ async function expectRetiredPrompts(page: Page, summary: string) {
 		let summaries = await prompts.allTextContents();
 		return summaries.length > 0 && summaries.every(text => text.includes(summary));
 	}).toBe(true);
-	await expect(prompts.filter({ hasText: "Ready to settle" })).toHaveCount(0);
+	await expect(prompts.and(page.getByRole("group"))).toHaveCount(0);
 }
 
 function scopedPrompt(page: Page) {
@@ -374,7 +374,7 @@ test("repeated agreement does not duplicate a live prompt", async ({ join, room 
 	let repeatedState = (await wireState(ana))!;
 	expect(repeatedState.events.filter(event => event.type === "settle.agreed")).toHaveLength(2);
 	await expect(prompt(ana)).toHaveCount(1);
-	await expect(ana.locator("[data-decision-prompt]").filter({ hasText: "Ready to settle" }))
+	await expect(ana.locator("[data-decision-prompt]").and(ana.getByRole("group")))
 		.toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 });
@@ -482,13 +482,13 @@ test("an old prompt retires after Save and Reopen before a new suggestion", asyn
 	let retired = prompts.filter({ hasText: "Reopened" });
 	await expect(prompts).toHaveCount(retiredCount + 1);
 	await expect(retired).toHaveCount(retiredCount);
-	await expect(retired.filter({ hasText: "Ready to settle" })).toHaveCount(0);
+	await expect(retired.and(ana.getByRole("group"))).toHaveCount(0);
 	await expect(prompt(ana)).toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 	await ana.reload();
 	await expect(prompts).toHaveCount(retiredCount + 1);
 	await expect(retired).toHaveCount(retiredCount);
-	await expect(retired.filter({ hasText: "Ready to settle" })).toHaveCount(0);
+	await expect(retired.and(ana.getByRole("group"))).toHaveCount(0);
 	await expect(prompt(ana)).toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 });

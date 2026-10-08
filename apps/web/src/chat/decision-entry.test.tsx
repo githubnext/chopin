@@ -2,11 +2,17 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ActivityLine, DecisionPrompt, promptSelection, promptView } from "./decision-entry";
+import {
+	ActivityLine,
+	DecisionPrompt,
+	objectors,
+	promptSelection,
+	promptView,
+} from "./decision-entry";
 
 import type { Questionnaire } from "@chopin/dialect";
 import type { Definition, Drafts } from "@chopin/question";
-import type { Chat, Question } from "@chopin/protocol";
+import type { Chat, ConversationPlan, Question } from "@chopin/protocol";
 
 const VALUE: Questionnaire = {
 	id: "Q",
@@ -178,31 +184,55 @@ test("a live prompt points to the card instead of offering a second Save", () =>
 	expect(markup).not.toContain("<img");
 });
 
-test("a live prompt names open objections and works without a suggestion", () => {
-	let one = renderToStaticMarkup(createElement(DecisionPrompt, {
+function stance(
+	participant: string,
+	position: ConversationPlan.Stance["position"],
+	optionId?: string,
+): ConversationPlan.Stance {
+	return { id: `${participant}-${optionId}`, participant, position, optionId, sources: [], at: 1 };
+}
+
+test("without a selection the prompt asks for a choice and counts objecting people", () => {
+	let markup = renderToStaticMarkup(createElement(DecisionPrompt, {
 		entry: promptEntry(0),
 		latest: true,
 		value: VALUE,
 		meta: openMeta(),
 		connected: false,
 		canEdit: false,
-		objections: 1,
+		stances: [stance("cy", "oppose", "a"), stance("cy", "oppose", "b")],
 		onOpenCard() {},
 	}));
-	expect(one.replace(/<[^>]*>/g, "")).toBe("Ready to settle · 1 objection · Open card");
-	expect(one).toMatch(/class="text-warning-ink">1 objection</);
+	expect(markup.replace(/<[^>]*>/g, "")).toBe("Needs a choice · 1 objection · Open card");
+	expect(markup).toMatch(/class="text-warning-ink">1 objection</);
+	expect(markup).toContain('class="whitespace-nowrap">· <button');
+});
 
-	let two = renderToStaticMarkup(createElement(DecisionPrompt, {
+test("objections count distinct people on the shown option or the whole decision", () => {
+	let stances = [
+		stance("cy", "oppose", "a"),
+		stance("cy", "oppose", "b"),
+		stance("di", "oppose"),
+		stance("ed", "oppose", "a"),
+		stance("fa", "support", "b"),
+	];
+	expect(objectors(stances, "b")).toBe(2);
+	expect(objectors(stances, "a")).toBe(3);
+	expect(objectors(stances, undefined)).toBe(3);
+	expect(objectors([], "b")).toBe(0);
+
+	let markup = renderToStaticMarkup(createElement(DecisionPrompt, {
 		entry: promptEntry(0),
 		latest: true,
 		value: VALUE,
-		meta: openMeta(),
+		meta: openMeta({ suggested: { optionId: "b", messageIds: ["m2"], revision: 7 } }),
 		connected: true,
 		canEdit: true,
-		objections: 2,
+		stances,
 		onOpenCard() {},
 	}));
-	expect(two).toContain("2 objections");
+	expect(markup.replace(/<[^>]*>/g, ""))
+		.toBe("Ready to settle: GitHub Apps · 2 objections · Open card");
 });
 
 test("a collapsed prompt keeps its outcome and the card link", () => {
@@ -213,7 +243,7 @@ test("a collapsed prompt keeps its outcome and the card link", () => {
 		meta: openMeta({ status: "decided", owner: "mina" }),
 		connected: true,
 		canEdit: true,
-		objections: 1,
+		stances: [stance("cy", "oppose")],
 		onOpenCard() {},
 	}));
 	expect(markup.replace(/<[^>]*>/g, "")).toBe("Decided: GitHub Apps · @mina · Open card");

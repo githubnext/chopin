@@ -172,8 +172,46 @@ test("badges name accepted roles only", () => {
 	expect(labels("m7")).toEqual([]);
 	expect(labels("m8")).toEqual([]);
 	expect(labels("m9")).toEqual([]);
-	expect(labels("m10")).toEqual(["Suggested reopening"]);
+	expect(labels("m10")).toEqual(["Reopening"]);
 	expect(labels("m11")).toEqual(["Settle"]);
 	expect(labels("m12")).toEqual(["Reopening"]);
 	expect(labels("m13")).toEqual([]);
+});
+
+test("a reopening candidate reads as a suggestion only while the card stays decided", () => {
+	let thread = state.threads[0]!;
+	let candidate = thread.candidates.find(item => item.id === "ca2")!;
+	let proposed = {
+		id: "p1",
+		type: "candidate.proposed",
+		threadId: "t1",
+		observedThreadVersion: 2,
+		at: 5,
+		source: source("m10", "reopening"),
+		candidate: { id: "ca2", kind: "reopening", text: "reopen" },
+	};
+	let reopened = { ...state.events[1]!, id: "r2", source: undefined, at: 6 };
+	let variant = (
+		status: string,
+		candidateStatus: string,
+		events: unknown[],
+	) =>
+		({
+			...state,
+			threads: [{
+				...thread,
+				status,
+				candidates: [{ ...candidate, status: candidateStatus }],
+			}],
+			events,
+		}) as unknown as ConversationPlan.State;
+	let labels = (current: ConversationPlan.State) =>
+		messageLinks(current, "m10").map(link => link.label);
+
+	expect(labels(variant("decided", "pending", [proposed]))).toEqual(["Suggested reopening"]);
+	expect(labels(variant("decided", "rejected", [proposed]))).toEqual([]);
+	expect(labels(variant("reopened", "pending", [proposed, reopened]))).toEqual(["Reopening"]);
+	expect(labels(variant("decided", "pending", [reopened, proposed])))
+		.toEqual(["Suggested reopening"]);
+	expect(labels(variant("decided", "confirmed", [proposed]))).toEqual(["Reopening"]);
 });

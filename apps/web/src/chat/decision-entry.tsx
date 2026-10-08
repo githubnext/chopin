@@ -10,7 +10,7 @@ import {
 
 import type { Questionnaire } from "@chopin/dialect";
 import type { Definition, Drafts } from "@chopin/question";
-import type { Chat, Question } from "@chopin/protocol";
+import type { Chat, ConversationPlan, Question } from "@chopin/protocol";
 import type { Transport, VisibleSuggestion } from "@chopin/question/react";
 
 export type DecisionEntryProps = {
@@ -21,8 +21,8 @@ export type DecisionEntryProps = {
 	wire?: Transport;
 	connected: boolean;
 	canEdit: boolean;
-	/** Open objections on the card's conversation thread. */
-	objections?: number;
+	/** Current stances on the card's conversation thread. */
+	stances?: readonly ConversationPlan.Stance[];
 	onOpenCard: (questionnaireId: string) => void;
 };
 
@@ -110,26 +110,40 @@ export function promptView(
 	return { state: "live" };
 }
 
-const LINK = "font-medium text-text-secondary underline-offset-2 hover:underline";
+/** People objecting to the shown option, or to the decision when no option is shown. */
+export function objectors(
+	stances: readonly ConversationPlan.Stance[],
+	optionId: string | undefined,
+): number {
+	return new Set(
+		stances.filter(stance =>
+			stance.position === "oppose"
+			&& (!optionId || !stance.optionId || stance.optionId === optionId)
+		).map(stance => stance.participant),
+	).size;
+}
 
 /** The card is the one place to save or reopen; Chat only points to it. */
 function OpenCard(
 	{ id, onOpenCard, title }: { id: string; onOpenCard: (id: string) => void; title: string },
 ) {
 	return (
-		<button
-			aria-label={`Open card: ${plainInlineText(title)}`}
-			className={LINK}
-			onClick={() => onOpenCard(id)}
-			type="button"
-		>
-			Open card
-		</button>
+		<span className="whitespace-nowrap">
+			{"· "}
+			<button
+				aria-label={`Open card: ${plainInlineText(title)}`}
+				className="chat-inline-link font-medium text-brand-ink underline-offset-2 hover:underline"
+				onClick={() => onOpenCard(id)}
+				type="button"
+			>
+				Open card
+			</button>
+		</span>
 	);
 }
 
 export function DecisionPrompt(props: DecisionEntryProps) {
-	let { entry, latest, meta, value, wire, connected, canEdit, objections = 0, onOpenCard } = props;
+	let { entry, latest, meta, value, wire, connected, canEdit, stances = [], onOpenCard } = props;
 	let id = entry.decision.questionnaireId;
 	let view = promptView({ entry: entry as PromptEntry, latest, meta, value });
 	let definitionValue = definition(value);
@@ -144,6 +158,7 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 	let selection = live
 		? promptSelection(state.definition ?? definitionValue, state.drafts, meta?.suggested)
 		: {};
+	let objections = objectors(stances, selection.optionId);
 
 	return (
 		<div
@@ -157,27 +172,29 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 			<p className="m-0 min-w-0 flex-1 break-words">
 				{view.state === "collapsed" ? view.text : (
 					<>
-						Ready to settle
-						{selection.label && (
-							<>
-								{": "}
-								<span className="font-medium text-text-secondary">
-									<InlineCode text={selection.label} />
-								</span>
-							</>
-						)}
+						{selection.label
+							? (
+								<>
+									{"Ready to settle: "}
+									<span className="font-medium text-text-secondary">
+										<InlineCode text={selection.label} />
+									</span>
+								</>
+							)
+							: "Needs a choice"}
 						{objections > 0 && (
 							<>
-								{" · "}
-								<span className="text-warning-ink">
-									{objections} {objections === 1 ? "objection" : "objections"}
+								{" "}
+								<span className="whitespace-nowrap">
+									{"· "}
+									<span className="text-warning-ink">
+										{objections} {objections === 1 ? "objection" : "objections"}
+									</span>
 								</span>
 							</>
 						)}
 					</>
-				)}
-				{" · "}
-				<OpenCard id={id} onOpenCard={onOpenCard} title={title} />
+				)} <OpenCard id={id} onOpenCard={onOpenCard} title={title} />
 			</p>
 		</div>
 	);
