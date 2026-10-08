@@ -67,30 +67,30 @@ experiment are evidence; do not merge their fixture implementation into this PR.
 - Modify root `package.json`, `bun.lock` and `e2e/tsconfig.json` as needed for
   explicit test dependencies, JSX and the `preview-toolkit:dev` command.
 
-- [ ] Build an illustrative billing app with a price row, action button and Base
+- [x] Build an illustrative billing app with a price row, action button and Base
       UI popover. Use its own tokens, bundled mark and local font. Declare the
       fixture's test dependencies explicitly; do not resolve them through hidden
       imports into another workspace's `node_modules`.
-- [ ] Render the source-app view with fixture data. Render the preview by importing
+- [x] Render the source-app view with fixture data. Render the preview by importing
       the same billing card, children and theme. Only the preview entry imports
       the skill helper and maps spacing/accent values to actual props or tokens.
-- [ ] Build the source reference and preview with the pinned Vite dependencies.
+- [x] Build the source reference and preview with the pinned Vite dependencies.
       Reuse the target CSS/asset pipeline. Produce static resources with an exact
       file list and SHA-256 checksums; omit private paths, credentials and fixture
       data that was not selected for the preview. Do not claim this list is the
       engineer's eventual result schema or production integrity policy.
-- [ ] Serve built resources on loopback from a separate preview origin. The
+- [x] Serve built resources on loopback from a separate preview origin. The
       demonstration frame uses `sandbox="allow-scripts"`; the local-only message
       receiver checks its parent/source and validates snapshots. Keep that demo
       transport in `e2e/`, outside the portable authoring API.
-- [ ] Add native numeric/colour inputs, Reset, press-and-hold baseline peek and
+- [x] Add native numeric/colour inputs, Reset, press-and-hold baseline peek and
       wide/narrow layout. Provide Copy/Download values, clearly labelled local
       output. Never label this action Save decision or claim shared persistence.
-- [ ] Show build/load/render failures in the host with a retry path. Confirm a
+- [x] Show build/load/render failures in the host with a retry path. Confirm a
       failed render does not silently replace the user's requested values.
-- [ ] Run the built preview after stopping development compilation. Document
+- [x] Run the built preview after stopping development compilation. Document
       `bun run preview-toolkit:dev` as the direct local review command.
-- [ ] Run `bun run fix`, inspect changes, commit the working example.
+- [x] Run `bun run fix`, inspect changes, commit the working example.
 
 ## Task 3: Browser evidence and CI
 
@@ -99,29 +99,29 @@ experiment are evidence; do not merge their fixture implementation into this PR.
 - Create `e2e/app-preview-toolkit/playwright.config.ts` and `preview.e2e.ts`.
 - Modify `e2e/playwright.config.ts`, root `package.json` and `.github/workflows/ci.yml`.
 
-- [ ] Add a database-free Playwright configuration with fresh loopback servers,
+- [x] Add a database-free Playwright configuration with fresh loopback servers,
       `reuseExistingServer: false`, wide/narrow Chromium projects and ignored
       output directories. Add `preview-toolkit:test` and a browser CI step.
       Exclude these tests from the PostgreSQL suite's recursive discovery.
-- [ ] Compare screenshots of the source-app component and embedded baseline at
+- [x] Compare screenshots of the source-app component and embedded baseline at
       equal component widths after fonts load. Require equal output within a
       documented rendering tolerance; do not manufacture separate lookalike markup.
-- [ ] Check numeric and colour changes in computed styles and visible content,
+- [x] Check numeric and colour changes in computed styles and visible content,
       child rendering, portal visibility, font/asset loading and narrow overflow.
       Exercise pointer hold/release/cancel, Space hold/release, blur and Reset;
       peeking must leave exported chosen values unchanged.
-- [ ] Send malformed/out-of-range snapshots and a message from another window.
+- [x] Send malformed/out-of-range snapshots and a message from another window.
       Verify rejection and unchanged display. Exercise a failed render and retry
       with the last requested valid snapshot.
-- [ ] Observe console errors, failed resources and unexpected network attempts.
+- [x] Observe console errors, failed resources and unexpected network attempts.
       Check the frame cannot read parent DOM/storage. State that local browser
       checks do not certify production hosting or private-code publication.
-- [ ] Run `bun run preview-toolkit:test`, `bun test skills`, `bun run types`,
+- [x] Run `bun run preview-toolkit:test`, `bun test skills`, `bun run types`,
       `bun run ci` and `bun run build`. Inspect production output for fixture
       markers and toolkit imports; all demonstration UI must remain absent.
-- [ ] Capture and inspect real wide/narrow/baseline/adjusted screenshots for the
+- [x] Capture and inspect real wide/narrow/baseline/adjusted screenshots for the
       PR. Keep generated reports and screenshots out of the code diff.
-- [ ] Commit tested browser coverage and CI integration.
+- [x] Commit tested browser coverage and CI integration.
 
 ## Task 4: Skill, instructions and an independent agent trial
 
