@@ -16,6 +16,19 @@ const API = "https://api.github.com";
 const TIMEOUT_MS = 15_000;
 const MAX_FILE_BYTES = 256 * 1_024;
 const MAX_RESPONSE_BYTES = 5 * 1_024 * 1_024;
+const COMMIT = {
+	type: "string",
+	pattern: "^[a-f0-9]{40}([a-f0-9]{24})?$",
+	description: "Exact investigation source commit; omit for the session's default branch.",
+};
+
+function sourceRef(input: Record<string, unknown>, fallback: string): string {
+	if (input.commit === undefined) return fallback;
+	if (typeof input.commit !== "string" || !/^[a-f0-9]{40}([a-f0-9]{24})?$/.test(input.commit)) {
+		throw new Error("commit must be a full Git object ID");
+	}
+	return input.commit;
+}
 
 function root(repository: HostedRepository): string {
 	return `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`;
@@ -114,6 +127,7 @@ export function repositoryTools(options: Options = {}) {
 				type: "object",
 				properties: {
 					path: { type: "string" },
+					commit: COMMIT,
 					start: { type: "integer", minimum: 1 },
 					end: { type: "integer", minimum: 1 },
 				},
@@ -129,7 +143,7 @@ export function repositoryTools(options: Options = {}) {
 						await request(
 							context,
 							`${root(context.repository)}/contents/${encodedPath(file)}`,
-							new URLSearchParams({ ref: context.repository.defaultBranch }),
+							new URLSearchParams({ ref: sourceRef(input, context.repository.defaultBranch) }),
 						),
 					);
 					if (
@@ -148,6 +162,7 @@ export function repositoryTools(options: Options = {}) {
 					if (end < start) throw new Error("end must not be before start");
 					return {
 						path: file,
+						ref: sourceRef(input, context.repository.defaultBranch),
 						start,
 						end,
 						content: lines.slice(start - 1, end).map((line, index) => `${start + index}: ${line}`)
@@ -163,6 +178,7 @@ export function repositoryTools(options: Options = {}) {
 				type: "object",
 				properties: {
 					prefix: { type: "string" },
+					commit: COMMIT,
 					limit: { type: "integer", minimum: 1, maximum: 500 },
 				},
 				additionalProperties: false,
@@ -177,7 +193,7 @@ export function repositoryTools(options: Options = {}) {
 						await request(
 							context,
 							`${root(context.repository)}/git/trees/${
-								encodeURIComponent(context.repository.defaultBranch)
+								encodeURIComponent(sourceRef(input, context.repository.defaultBranch))
 							}`,
 							new URLSearchParams({ recursive: "1" }),
 						),
@@ -253,6 +269,7 @@ export function repositoryTools(options: Options = {}) {
 				properties: {
 					path: { type: "string" },
 					limit: { type: "integer", minimum: 1, maximum: 20 },
+					commit: COMMIT,
 				},
 				additionalProperties: false,
 			}),
@@ -262,7 +279,7 @@ export function repositoryTools(options: Options = {}) {
 					let input = raw as Record<string, unknown>;
 					let limit = bounded(input.limit, 10, 20);
 					let query = new URLSearchParams({
-						sha: context.repository.defaultBranch,
+						sha: sourceRef(input, context.repository.defaultBranch),
 						per_page: String(limit),
 					});
 					if (input.path !== undefined) query.set("path", path(input.path));

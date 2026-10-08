@@ -15,6 +15,8 @@ import * as Questions from "../questions/service";
 import { ULID } from "@chopin/dialect";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
 import { documentIdentity, implementationActive } from "../plan/service";
+import { experimentTools } from "./experiment-tools";
+import type { InvestigationTools } from "./experiment-tools";
 
 import type { Server } from "bun";
 import { jsonSchema, tool } from "ai";
@@ -70,6 +72,7 @@ export type ResearchWorkspaceRequest = {
 };
 
 export type DocumentRoom = {
+	investigations?: InvestigationTools;
 	id: string;
 	plan: Plan;
 	server: Server<SocketData>;
@@ -101,6 +104,7 @@ const roomContext = z.object({
 const referenceContext = roomContext.extend({ repository: z.object({ id: z.string() }) });
 
 export const documentTools = {
+	...experimentTools,
 	read_plan: tool({
 		contextSchema: roomContext,
 		description: "Read the plan: its revision, canonical source, the top-level blocks you can "

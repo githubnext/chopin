@@ -73,6 +73,9 @@ function fixtureTools({ room, ...dependencies }: Omit<DocumentRoom, "id"> & { ro
 
 test("document tool names and schemas remain available to the Planner", async () => {
 	expect(Object.keys(documentTools)).toEqual([
+		"list_investigations",
+		"read_investigation",
+		"propose_investigation",
 		"read_plan",
 		"read_reference",
 		"list_background_jobs",

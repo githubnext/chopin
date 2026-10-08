@@ -39,6 +39,24 @@ test("a generic ACP process receives a cwd and produces protocol updates", async
 	expect(updates).toHaveLength(1);
 });
 
+test("ACP cancellation finishes the active turn through the standard protocol", async () => {
+	let abort = new AbortController();
+	let stop = await runAgent({
+		command: [
+			process.execPath,
+			new URL("./testing/fake-agent.ts", import.meta.url).pathname,
+			"--hold",
+		],
+		cwd: process.cwd(),
+		prompt: "Wait",
+		mcpServers: [],
+		signal: abort.signal,
+		onUpdate: () => abort.abort(),
+		permission: async () => undefined,
+	});
+	expect(stop).toBe("cancelled");
+});
+
 test("run-scoped MCP tools accept typed evidence and expose no arbitrary host operations", async () => {
 	let received: unknown;
 	let server = createBridge({

@@ -97,6 +97,7 @@ async function connect(args: string[]) {
 			let runAbort = new AbortController();
 			let cancelRun = () => runAbort.abort();
 			abort.signal.addEventListener("abort", cancelRun, { once: true });
+			if (abort.signal.aborted) runAbort.abort();
 			let latestProgress = "Preparing checkout";
 			let renewal = false;
 			let heartbeat = setInterval(() => {
@@ -206,7 +207,9 @@ if (import.meta.main) {
 		else if (mode === "connect") await connect(args);
 		else throw new Error("Usage: chopin connect [checkout] -- agent [ACP arguments]");
 	} catch (error) {
-		console.error(error instanceof Error ? error.message : "Connector failed");
-		process.exitCode = 1;
+		if (!(error instanceof Error && error.name === "AbortError")) {
+			console.error(error instanceof Error ? error.message : "Connector failed");
+			process.exitCode = 1;
+		}
 	}
 }

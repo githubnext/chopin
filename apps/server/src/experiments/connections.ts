@@ -27,6 +27,7 @@ export class Connections {
 	#pending = new Map<string, Pending>();
 	#connections = new Map<string, Connection>();
 	#tokens = new Map<string, Grant>();
+	#runTokens = new Map<string, string>();
 	#waiters = new Map<string, Set<() => void>>();
 	#locks = new Map<string, Promise<unknown>>();
 	constructor(private now = () => Date.now()) {}
@@ -105,13 +106,20 @@ export class Connections {
 		);
 	}
 	runToken(connectionId: string, id: string, generation: number) {
+		let key = `${connectionId}:${id}:${generation}`;
+		let existing = this.#runTokens.get(key);
+		if (existing) return existing;
 		let token = randomBytes(32).toString("base64url");
+		this.#runTokens.set(key, token);
 		this.#tokens.set(fingerprint(token), { connectionId, run: { id, generation } });
 		return token;
 	}
 	revoke(id: string) {
 		let connection = this.#connections.get(id);
 		this.#connections.delete(id);
+		for (let key of this.#runTokens.keys()) {
+			if (key.startsWith(`${id}:`)) this.#runTokens.delete(key);
+		}
 		for (let [key, grant] of this.#tokens) if (grant.connectionId === id) this.#tokens.delete(key);
 		if (connection) this.wake(connection.documentId);
 	}
@@ -138,6 +146,7 @@ export class Connections {
 			let finish = () => {
 				clearTimeout(timer);
 				set.delete(finish);
+				if (!set.size) this.#waiters.delete(documentId);
 				signal.removeEventListener("abort", finish);
 				resolve();
 			};

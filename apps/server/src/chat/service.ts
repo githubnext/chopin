@@ -449,6 +449,7 @@ export function greet(chat: Chat, ws: Socket): void {
 }
 
 export type Room = {
+	investigations?: import("../agent/experiment-tools").InvestigationTools;
 	chat: Chat;
 	plan: Plan;
 	server: Server<SocketData>;
@@ -1204,6 +1205,7 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 export function documentRoom(context: Room): DocumentRoom {
 	let { chat, plan, room, server } = context;
 	return {
+		investigations: context.investigations,
 		id: room,
 		plan,
 		server,

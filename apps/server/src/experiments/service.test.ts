@@ -25,7 +25,7 @@ test("claims expire, stale workers cannot publish and completion replays atomica
 		id => published.push(id),
 		() => now,
 	);
-	let draft = await service.create(documentId, userId, "Measure startup");
+	let draft = await service.create(documentId, userId, "  Measure startup\n");
 	let input = {
 		id: draft.id,
 		documentId,

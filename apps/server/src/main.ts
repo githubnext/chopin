@@ -15,6 +15,7 @@ import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
+import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
@@ -299,6 +300,82 @@ function conversation(
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
+		investigations: experiments
+			? {
+				async list() {
+					return {
+						investigations: (await experiments!.service.store.list(room.id)).slice(0, 20).map(
+							value => ({ id: value.id, brief: value.brief.slice(0, 400), state: value.state }),
+						),
+						workspaces: experiments!.connections.list(room.id).map(value => ({
+							label: value.label,
+							owner: value.login,
+						})),
+					};
+				},
+				async read(id, dataset, offset = 0) {
+					let value = await experiments!.service.store.get(id);
+					if (!value || value.documentId !== room.id) throw new Error("Investigation unavailable");
+					if (dataset) {
+						let data = value.result?.datasets.find(item => item.key === dataset);
+						if (!data) throw new Error("Dataset unavailable");
+						let rows: typeof data.rows = [];
+						for (let row of data.rows.slice(offset, offset + 50)) {
+							if (JSON.stringify([...rows, row]).length > 40_000) break;
+							rows.push(row);
+						}
+						if (!rows.length && offset < data.rows.length) {
+							throw new Error(
+								"This row exceeds the tool response limit. Inspect the dataset download or request a later offset.",
+							);
+						}
+						return {
+							...data,
+							rows,
+							totalRows: data.rows.length,
+							nextOffset: offset + rows.length < data.rows.length
+								? offset + rows.length
+								: undefined,
+						};
+					}
+					return {
+						id: value.id,
+						state: value.state,
+						source: value.input?.source,
+						report: value.result?.report.slice(0, 16_000),
+						reportTruncated: (value.result?.report.length ?? 0) > 16_000,
+						datasets: value.result?.datasets.map(data => ({
+							key: data.key,
+							title: data.title,
+							rows: data.rows.length,
+						})),
+						decisions: value.decisions.slice(-10).map(decision => ({
+							...decision,
+							rationale: decision.rationale.slice(0, 2000),
+							rationaleTruncated: decision.rationale.length > 2000,
+						})),
+					};
+				},
+				async propose(request) {
+					await experiments!.access(
+						await hostedAuth.sessions.forUser(request.userId),
+						room.id,
+						true,
+					);
+					await experiments!.mutationAllowed(room.id);
+					let hash = fingerprint([room.id, request.entryId, request.key]);
+					let id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${
+						hash.slice(17, 20)
+					}-${hash.slice(20, 32)}`;
+					let value = await experiments!.service.create(room.id, request.userId, request.brief, id);
+					return {
+						id: value.id,
+						state: value.state,
+						message: "Open Investigations and authorize Run on my workspace to execute.",
+					};
+				},
+			}
+			: undefined,
 		hold: () => {
 			let held = Rooms.hold(room.id);
 			return () => {
@@ -1718,11 +1795,10 @@ sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 
 let listening: Server<SocketData> | undefined;
 try {
-	server = listening = listen();
 	await experiments.service.recover(true);
+	server = listening = listen();
 	experimentTimer = setInterval(() => {
-		experiments!.connections.sweep();
-		void experiments!.service.recover().catch(error =>
+		void experiments!.sweep().catch(error =>
 			console.error("chopin: experiment recovery failed", error)
 		);
 	}, 15_000);

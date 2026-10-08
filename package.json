@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
+		"connector": "bun apps/connector/src/main.ts",
 		"dev:exe": "bun scripts/dev.ts --exe",
 		"db:up": "docker compose -f compose.yaml -f compose.local.yaml up -d --wait db",
 		"db:down": "docker compose -f compose.yaml -f compose.local.yaml down",

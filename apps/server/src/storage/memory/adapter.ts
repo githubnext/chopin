@@ -127,6 +127,7 @@ export class MemoryStorage implements StorageAdapter {
 	readonly driver = "memory";
 	readonly experiments = new MemoryExperimentStore({
 		exists: id => this.#channels.has(id),
+		active: id => !this.#channels.get(id)?.archivedAt,
 		fence: lease => this.#assertLease(lease),
 	});
 

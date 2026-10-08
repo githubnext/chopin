@@ -3,6 +3,7 @@ import { ExperimentView } from "@chopin/experiment/react";
 import type { PublishedInvestigation } from "@chopin/experiment/records";
 import type { View } from "@chopin/experiment";
 import type { ExperimentStore } from "./store";
+import { RequestIdentity } from "./request-id";
 
 export function EvidenceActions({ store, item, view, disabled }: {
 	store: ExperimentStore;
@@ -16,6 +17,7 @@ export function EvidenceActions({ store, item, view, disabled }: {
 	let [rationale, setRationale] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState("");
+	let [operation] = useState(() => new RequestIdentity());
 	async function act(action: () => Promise<unknown>) {
 		setBusy(true);
 		setError("");
@@ -33,14 +35,14 @@ export function EvidenceActions({ store, item, view, disabled }: {
 			{error && <p role="alert" className="text-destructive-ink">{error}</p>}
 			<div className="flex flex-wrap gap-2">
 				<button
-					className="btn btn-outline"
+					className="btn btn-md btn-outline"
 					disabled={disabled || busy}
 					onClick={() => void act(() => store.place(item.id, view.key))}
 				>
 					Insert view in document
 				</button>
 				<button
-					className="btn btn-primary"
+					className="btn btn-md btn-primary"
 					disabled={disabled || busy}
 					onClick={() => {
 						setRevision(item.views[view.key].revision);
@@ -58,12 +60,13 @@ export function EvidenceActions({ store, item, view, disabled }: {
 						void act(async () => {
 							try {
 								await store.action(item.id, "decision", {
-									id: crypto.randomUUID(),
+									id: operation.key({ view: view.key, revision, conclusion, rationale }),
 									view: view.key,
 									revision,
 									conclusion,
 									rationale,
 								});
+								operation.clear();
 							} finally {
 								setOpen(false);
 							}
@@ -92,7 +95,10 @@ export function EvidenceActions({ store, item, view, disabled }: {
 					<p className="text-xs text-text-secondary">
 						Saves the exact evidence and selections shown when you opened this form.
 					</p>
-					<button className="btn btn-primary" disabled={disabled || busy || !conclusion.trim()}>
+					<button
+						className="btn btn-md btn-primary"
+						disabled={disabled || busy || !conclusion.trim()}
+					>
 						Save decision
 					</button>
 				</form>
@@ -132,7 +138,7 @@ export function EvidenceDecisions(
 						)}
 						{canEdit && (
 							<button
-								className="btn btn-outline"
+								className="btn btn-md btn-outline"
 								onClick={() => {
 									setError("");
 									void store.place(item.id, decision.view, decision.id).catch(error =>

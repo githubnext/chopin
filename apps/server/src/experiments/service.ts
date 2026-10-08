@@ -199,7 +199,7 @@ export class Experiments {
 			rationale: z.string().max(8000),
 		}).strict().parse(raw);
 		let key = `decision:${input.id}`;
-		let digest = fingerprint({ actor, input });
+		let digest = fingerprint({ actorId: actor.id, input });
 		return this.mutate(id, value => {
 			if (Object.hasOwn(value.receipts, key)) {
 				if (value.receipts[key] !== digest) fail("idempotency-conflict");

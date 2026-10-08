@@ -62,8 +62,9 @@ and tool vocabulary remain optimized for planning.
 
 - Chopin supports GitHub.com. GitHub Enterprise Server endpoints are not
   configurable.
-- The Planner's file, tree, and history tools read the default branch captured
-  when its session starts; code search is repository-scoped. Except under
+- The Planner's file, tree, and history tools normally read the default branch captured
+  when its session starts; investigation evidence can supply an exact commit instead.
+  Code search is repository-scoped. Except under
   `HARNESS=atomic`, it never reads a local checkout or uncommitted changes.
 - Every browser participant signs in, passes the instance admission policy, and
   needs repository access through the GitHub App installation. MCP callers also
@@ -197,6 +198,10 @@ created through MCP, and Chopin does not yet provide a user-facing way to approv
 a draft graph.
 
 ## Documentation
+
+For owner-authorized local prototypes, measurements, and service-data investigations,
+see [Local investigations](docs/local-experiments.md). An ACP-compatible agent works
+in a local checkout and publishes captured evidence to Chopin's native views.
 
 | Topic                                      | Document                                                     |
 | ------------------------------------------ | ------------------------------------------------------------ |

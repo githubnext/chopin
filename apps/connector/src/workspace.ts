@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdir, open, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import type { RunInput } from "@chopin/experiment";
 
 export function git(cwd: string, ...args: string[]): string {
@@ -77,9 +78,19 @@ export async function prepareWorkspace(root: string, directory: string, input: R
 	try {
 		git(root, "cat-file", "-e", `${input.source.commit}^{commit}`);
 	} catch {
-		git(root, "fetch", "origin", input.source.commit);
+		await promisify(execFile)("git", ["-C", root, "fetch", "origin", input.source.commit], {
+			timeout: 120_000,
+		});
 	}
 	let path = join(directory, "runs", input.id);
-	git(root, "worktree", "add", "--detach", path, input.source.commit);
+	await promisify(execFile)("git", [
+		"-C",
+		root,
+		"worktree",
+		"add",
+		"--detach",
+		path,
+		input.source.commit,
+	], { timeout: 120_000 });
 	return { path, journalPath };
 }

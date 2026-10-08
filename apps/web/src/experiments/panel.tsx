@@ -4,6 +4,7 @@ import { StaticPlanEditor } from "@chopin/editor/static";
 import { NavigationDialog } from "../navigation-dialog";
 import type { ExperimentStore } from "./store";
 import { EvidenceActions, EvidenceDecisions } from "./evidence";
+import { RequestIdentity } from "./request-id";
 
 export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 	store: ExperimentStore;
@@ -17,6 +18,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 	let [connectionId, setConnectionId] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState("");
+	let [creation] = useState(() => new RequestIdentity());
 	let item = store.get(selected);
 	let owned = store.connections.filter(connection => connection.owner === userId);
 	useEffect(() => {
@@ -56,7 +58,8 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 						onSubmit={event => {
 							event.preventDefault();
 							void act(async () => {
-								let value = await store.action("", "", { id: crypto.randomUUID(), brief });
+								let value = await store.action("", "", { id: creation.key({ brief }), brief });
+								creation.clear();
 								setSelected(value.id);
 								setBrief("");
 							});
@@ -71,7 +74,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 								onChange={event => setBrief(event.target.value)}
 							/>
 						</label>
-						<button className="btn btn-primary" disabled={busy || !brief.trim()}>
+						<button className="btn btn-md btn-primary" disabled={busy || !brief.trim()}>
 							Propose investigation
 						</button>
 					</form>
@@ -113,7 +116,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 									))}
 								</select>
 								<button
-									className="btn btn-primary"
+									className="btn btn-md btn-primary"
 									disabled={busy || !(connectionId || owned.length === 1)}
 									onClick={() =>
 										void act(() =>
@@ -127,7 +130,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 						{canEdit && ["queued", "running", "publishing"].includes(item.state)
 							&& item.input?.authorizer === userId && (
 							<button
-								className="btn btn-outline"
+								className="btn btn-md btn-outline"
 								disabled={busy}
 								onClick={() => void act(() => store.action(item.id, "cancel", {}))}
 							>
@@ -136,7 +139,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 						)}
 						{canEdit && ["failed", "cancelled", "interrupted"].includes(item.state) && (
 							<button
-								className="btn btn-outline"
+								className="btn btn-md btn-outline"
 								disabled={busy}
 								onClick={() =>
 									void act(async () => {
@@ -184,6 +187,18 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 											view={view}
 											disabled={busy || !canEdit}
 										/>
+										<div className="flex gap-3 text-sm">
+											<a
+												href={`/api/documents/${store.documentId}/experiments/${item.id}/export/${view.datasetKey}`}
+											>
+												Download JSON
+											</a>
+											<a
+												href={`/api/documents/${store.documentId}/experiments/${item.id}/export/${view.datasetKey}?format=csv`}
+											>
+												Download CSV
+											</a>
+										</div>
 									</div>
 								))}
 								<p className="text-xs text-text-secondary">{item.result.provenance.environment}</p>
@@ -201,7 +216,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 					</>
 				)}
 				<EvidenceDecisions store={store} canEdit={canEdit} />
-				<button className="btn btn-ghost" onClick={onClose}>Close investigations</button>
+				<button className="btn btn-md btn-ghost" onClick={onClose}>Close investigations</button>
 			</div>
 		</NavigationDialog>
 	);
