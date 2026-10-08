@@ -339,6 +339,9 @@ function Preview(
 					// The block clips its corners, so controls draw focus inside themselves.
 					data-focus-boundary=""
 					data-kind={block.kind}
+					// The caret lives in the editor root, so `:focus-within` never
+					// sees it; this is what reveals the controls while typing.
+					data-editing={editing ? "" : undefined}
 				>
 					{
 						// Tab indents code, so the way out has to be said
