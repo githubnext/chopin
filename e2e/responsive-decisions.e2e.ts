@@ -143,7 +143,7 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			}
 			await expect(
 				page.getByRole("navigation", { name: "Workspace view" })
-					.getByRole("button", { name: /Decisions, 8 unanswered/ }),
+					.getByRole("button", { name: `Decisions, ${LONG_QUESTIONS.length} unanswered` }),
 			).toBeVisible();
 
 			let addRow = card.getByRole("button", { name: "Add an option" });
