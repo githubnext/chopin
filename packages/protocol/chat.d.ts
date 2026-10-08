@@ -108,6 +108,8 @@ export declare namespace Chat {
 		streaming?: boolean;
 		tools?: Activity[];
 		references?: Reference[];
+		/** Present as `planner` on a member message sent to the Planner; the mention is stripped from `text`. */
+		to?: "planner";
 	};
 
 	/** Transient Planner turn state. */

@@ -318,8 +318,8 @@ function delivery(
 }
 
 function publicEntry(value: Wire.Entry): Wire.Entry {
-	let { delivery: _delivery, ...entry } = value as MemberEntry;
-	return entry;
+	let { delivery, ...entry } = value as MemberEntry;
+	return delivery?.destination === "planner" ? { ...entry, to: "planner" } : entry;
 }
 
 export function validateDelivery(entry: Wire.Entry): void {
