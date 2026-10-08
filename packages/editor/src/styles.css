@@ -2609,25 +2609,24 @@
 	}
 }
 
-/* Armed: the tab waits for a second remove (or, on touch, a tap after a long press). */
-.plan-content .plan-tab[data-armed] {
-	--plan-tab-surface: var(--color-danger-surface);
-	color: var(--color-danger-text);
-}
-
-.plan-content .plan-tab[data-armed] .plan-tab-remove {
-	color: var(--color-danger-icon);
+/* A long press reveals the remove control for a tab that is not selected. */
+.plan-content .plan-tab[data-revealed] .plan-tab-remove {
 	opacity: 1;
 	pointer-events: auto;
 }
 
-.plan-content .plan-tab:not([data-armed]) .plan-tab-remove:hover {
+.plan-content .plan-tab-remove:hover {
 	color: var(--color-text-primary);
 }
 
-/* Touch keeps tabs evenly padded at rest; the slot opens only once a long press arms one. */
+/* Touch shows removal on the selected tab; others stay compact until revealed. */
 @media (hover: none) {
-	.plan-content .plan-tab[data-removable]:not([data-armed]) > [role="tab"] {
+	.plan-content .plan-tab[data-selected] .plan-tab-remove {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.plan-content .plan-tab[data-removable]:not([data-selected]):not([data-revealed]) > [role="tab"] {
 		padding-inline-end: calc(var(--spacing) * 2.5);
 	}
 }

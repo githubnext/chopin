@@ -66,13 +66,9 @@ test("tabs are renamed, added and removed in place, and the document keeps them"
 	await expect(tabs).toHaveText(["Mobile", "Wide screens"]);
 	await expect(strip.getByRole("tab", { name: "Wide screens" })).toBeFocused();
 
-	// A tab with content asks once before it goes.
+	// A tab with content goes at once and can be recovered with Undo.
 	await strip.getByRole("tab", { name: "Mobile" }).hover();
 	await content(page).getByRole("button", { name: "Remove Mobile", exact: true }).click();
-	await expect(tabs).toHaveText(["Mobile", "Wide screens"]);
-	await content(page)
-		.getByRole("button", { name: "Remove Mobile and its content", exact: true })
-		.click();
 	await expect(tabs).toHaveText(["Wide screens"]);
 	await written(page, room, /<Tabs id="[^"]+">\s*<Tab id="[^"]+" label="Wide screens"/);
 	await expect.poll(async () => (await content(page).textContent()) ?? "").not.toContain(
@@ -86,6 +82,45 @@ test("tabs are renamed, added and removed in place, and the document keeps them"
 
 	await page.reload();
 	await expect(content(page).getByRole("tablist").getByRole("tab")).toHaveText(["Wide screens"]);
+});
+
+test("undo restores a removed tab with its content", async ({ join, room, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana");
+	let strip = content(page).getByRole("tablist");
+	let tabs = strip.getByRole("tab");
+
+	await strip.getByRole("tab", { name: "Mobile", exact: true }).press("Delete");
+	await expect(tabs).toHaveText(["Desktop"]);
+	await written(page, room, /<Tab id="[^"]+" label="Desktop"/);
+
+	await content(page).locator("p").filter({ hasText: "After the tabs." }).click();
+	await page.keyboard.press("ControlOrMeta+z");
+	await expect(tabs).toHaveText(["Mobile", "Desktop"]);
+	await strip.getByRole("tab", { name: "Mobile", exact: true }).click();
+	await expect(content(page).getByText("Queue in memory only.")).toBeVisible();
+	await written(page, room, /<Tab id="[^"]+" label="Mobile">[\s\S]*Queue in memory only\./);
+
+	await page.reload();
+	await expect(content(page).getByRole("tablist").getByRole("tab")).toHaveText([
+		"Mobile",
+		"Desktop",
+	]);
+	await expect(content(page).getByText("Queue in memory only.")).toBeVisible();
+});
+
+test("touch removes the selected tab with one tap", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana", {
+		viewport: { width: 390, height: 844 },
+		hasTouch: true,
+		isMobile: true,
+	});
+	let strip = content(page).getByRole("tablist");
+	let remove = content(page).getByRole("button", { name: "Remove Mobile", exact: true });
+	await expect(remove).toHaveCSS("opacity", "1");
+	await remove.tap();
+	await expect(strip.getByRole("tab")).toHaveText(["Desktop"]);
 });
 
 test("a locked document offers no tab authoring", async ({ join, page, seed }) => {
