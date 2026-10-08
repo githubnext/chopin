@@ -18,12 +18,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
-import {
-	decisionWatchPlan,
-	fallbackRefreshBatch,
-	newestDocument,
-	updateDocumentMetadata,
-} from "./document-actions";
+import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import { WorkspaceNotice } from "./workspace-notice";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
@@ -55,7 +50,6 @@ import { TerminalAlert } from "./terminal-alert";
 import { useProjectDocuments } from "./use-project-documents";
 import { useDocumentCreation } from "./use-document-creation";
 import { requestTitleEdit } from "./title-edit";
-import { useSidebarDecisions } from "./use-sidebar-decisions";
 
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
@@ -96,9 +90,23 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 }
 
 let NavigationNotice = lazy(() => import("./navigation-notice-view"));
+
+class SidebarDecisionBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+	override state = { failed: false };
+
+	static getDerivedStateFromError() {
+		return { failed: true };
+	}
+
+	override render() {
+		return this.state.failed ? null : <Suspense fallback={null}>{this.props.children}</Suspense>;
+	}
+}
+
 let ProjectSidebar = lazy(() =>
 	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
 );
+let SidebarDecisionCounts = lazy(() => import("./sidebar-decision-counts"));
 let EmptyWorkspace = lazy(() =>
 	import("./empty-workspace").then(module => ({ default: module.EmptyWorkspace }))
 );
@@ -262,9 +270,6 @@ function NavigationDrawer(
 	);
 }
 
-/** How often projects past the sidebar socket's watch cap refresh their counts over HTTP. */
-const UNWATCHED_REFRESH_MS = 60_000;
-
 export function NavigationShell(
 	{
 		children,
@@ -281,6 +286,13 @@ export function NavigationShell(
 	},
 ) {
 	let [navigation, setNavigation] = useState<Api.Navigation>();
+	let [countsReady, setCountsReady] = useState(false);
+	useEffect(() => {
+		let frame = requestAnimationFrame(() => {
+			frame = requestAnimationFrame(() => setCountsReady(true));
+		});
+		return () => cancelAnimationFrame(frame);
+	}, []);
 	let navigationRef = useRef<Api.Navigation | undefined>(undefined);
 	let navigationRequest = useRef<Promise<void> | undefined>(undefined);
 	let navigationRefreshQueued = useRef(false);
@@ -589,43 +601,6 @@ export function NavigationShell(
 	}, [creation.settled]);
 
 	let active = activeProject(projects, currentDocumentId, resolvedChannel?.repositoryId);
-	let decisionWatch = useMemo(
-		() =>
-			catalogueMode === "archived"
-				? { watched: [], unwatched: [] }
-				: decisionWatchPlan(projects, active?.repositoryId),
-		[active?.repositoryId, catalogueMode, projects],
-	);
-	resyncDecisions.current = useSidebarDecisions(decisionWatch.watched, {
-		onCounts: updateDecisionCounts,
-		onSnapshot: updateDecisionSnapshot,
-	});
-	let unwatchedProjects = useRef(decisionWatch.unwatched);
-	unwatchedProjects.current = decisionWatch.unwatched;
-	let fallbackAfter = useRef<string | undefined>(undefined);
-	let fallbackRefreshedAt = useRef(0);
-	// Projects past the watch cap get no live frames, so refresh a bounded batch of
-	// them over HTTP on focus, on becoming visible, and on a slow interval.
-	useEffect(() => {
-		let refreshUnwatched = () => {
-			if (document.visibilityState !== "visible") return;
-			let now = Date.now();
-			if (now - fallbackRefreshedAt.current < UNWATCHED_REFRESH_MS / 2) return;
-			let batch = fallbackRefreshBatch(unwatchedProjects.current, fallbackAfter.current);
-			if (batch.length === 0) return;
-			fallbackRefreshedAt.current = now;
-			fallbackAfter.current = batch.at(-1)!.repositoryId;
-			for (let project of batch) refreshProject(project);
-		};
-		let interval = setInterval(refreshUnwatched, UNWATCHED_REFRESH_MS);
-		window.addEventListener("focus", refreshUnwatched);
-		document.addEventListener("visibilitychange", refreshUnwatched);
-		return () => {
-			clearInterval(interval);
-			window.removeEventListener("focus", refreshUnwatched);
-			document.removeEventListener("visibilitychange", refreshUnwatched);
-		};
-	}, [refreshProject]);
 	let creationTarget = documentCreationTarget(
 		navigation?.projects,
 		active,
@@ -1034,6 +1009,19 @@ export function NavigationShell(
 
 	return (
 		<NavigationDocument.Provider value={navigationDocument}>
+			{countsReady && (
+				<SidebarDecisionBoundary>
+					<SidebarDecisionCounts
+						archived={catalogueMode === "archived"}
+						onCounts={updateDecisionCounts}
+						onSnapshot={updateDecisionSnapshot}
+						priorityRepositoryId={active?.repositoryId}
+						projects={projects}
+						refreshProject={refreshProject}
+						resync={resyncDecisions}
+					/>
+				</SidebarDecisionBoundary>
+			)}
 			<div
 				className="navigation-shell"
 				data-navigation-mode={mode}
