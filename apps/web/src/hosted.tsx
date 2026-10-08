@@ -256,6 +256,9 @@ function DocumentRouteSwap(
 			onDocumentRouteSettled(requestedRoute.current.routeKey);
 		}
 	}, [onDocumentRouteSettled]);
+	let channelResolved = useCallback((key: DocumentRouteIdentity, pathname: string) => {
+		if (requestedRoute.current.key === key) onCanonicalPath(pathname);
+	}, [onCanonicalPath]);
 	let metadataPath = useCallback((
 		key: DocumentRouteIdentity,
 		metadataRouteKey: DocumentRouteIdentity,
@@ -321,10 +324,10 @@ function DocumentRouteSwap(
 							: (
 								<Suspense fallback={<Loading label="Opening document…" />}>
 									<ChannelWorkspace
-										agent={agent}
 										Failure={Failure}
 										Loading={Loading}
 										onReady={ready}
+										onResolved={channelResolved}
 										retryable={retryableChannelFailure}
 										source={source}
 										user={user}
