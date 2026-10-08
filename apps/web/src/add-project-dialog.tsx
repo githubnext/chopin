@@ -127,9 +127,23 @@ export function AddProjectDialog(
 					</div>
 				)}
 				{snapshot && visible.length === 0 && error === undefined && (
-					<p className="navigation-palette-status" role="status">
-						{normalized ? "No matching repositories" : "No accessible repositories"}
-					</p>
+					normalized || repositories.length > 0
+						? (
+							<p className="navigation-palette-status" role="status">
+								No matching repositories
+							</p>
+						)
+						: (
+							<div className="navigation-palette-status flex-col gap-1 text-center" role="status">
+								<p className="font-medium text-text-primary">No repositories to add yet</p>
+								<p className="max-w-[40ch] text-text-tertiary">
+									Install the GitHub App for Chopin on the repositories you want to write about.
+								</p>
+								<a className="btn btn-sm btn-primary mt-2" href="/auth/github/install">
+									Install the GitHub App for Chopin
+								</a>
+							</div>
+						)
 				)}
 				{visible.length > 0 && (
 					<PaletteListbox
