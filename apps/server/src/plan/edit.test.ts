@@ -21,6 +21,9 @@ First paragraph.
 
 Second paragraph.
 `;
+const DIAGRAM =
+	'```seecode\n{"type":"architecture","nodes":[{"id":"web","label":"Browser","row":0,"col":0},{"id":"api","label":"API","row":0,"col":1}],"edges":[["web","api"]]}\n```\n';
+const MALFORMED_DIAGRAM = '```seecode\n{"type":\n```\n';
 
 /** Enough of a plan for the edit engine, which only needs these fields. */
 async function plan(source = SOURCE): Promise<Plan> {
@@ -49,6 +52,39 @@ describe("reading", () => {
 });
 
 describe("applying a batch", () => {
+	it("authors a valid diagram through the revision-checked edit path", () => {
+		let outcome = edit.apply(subject, 1, [{ op: "insert", index: 1, source: DIAGRAM }]);
+
+		expect(outcome).toMatchObject({ ok: true, touched: [2] });
+		expect(room.project(subject.document)).toContain(DIAGRAM.trim());
+	});
+
+	it("revises a diagram only when its new spec renders", async () => {
+		let held = await plan(`# Title\n\n${DIAGRAM}`);
+		expect(edit.apply(held, 1, [{ op: "replace", index: 1, source: MALFORMED_DIAGRAM }]))
+			.toMatchObject({ ok: false, reason: "invalid" });
+		expect(edit.source(held)).toContain(DIAGRAM.trim());
+		expect(
+			edit.apply(held, 1, [{
+				op: "replace",
+				index: 1,
+				source: DIAGRAM.replace("Browser", "Reader"),
+			}]).ok,
+		).toBe(true);
+		expect(edit.source(held)).toContain('"label":"Reader"');
+	});
+
+	it("moves a diagram without changing its canonical source", async () => {
+		let held = await plan(`# Title\n\n${DIAGRAM}\nSurrounding prose.\n`);
+		let outcome = edit.apply(held, 1, [{ op: "move", index: 1, to: 2 }]);
+
+		expect(outcome.ok).toBe(true);
+		expect(edit.source(held)).toContain(DIAGRAM.trim());
+		expect(edit.source(held).indexOf("Surrounding prose.")).toBeLessThan(
+			edit.source(held).indexOf("```seecode"),
+		);
+	});
+
 	it("inserts after the block it names", () => {
 		let outcome = edit.apply(subject, 1, [{ op: "insert", index: 0, source: "Inserted.\n" }]);
 
@@ -142,6 +178,40 @@ describe("reporting what a batch wrote", () => {
 });
 
 describe("refusing a batch", () => {
+	it("rejects a malformed new diagram without applying surrounding prose", () => {
+		let outcome = edit.apply(subject, 1, [
+			{ op: "insert", index: 0, source: "New explanation.\n" },
+			{ op: "insert", index: 1, source: MALFORMED_DIAGRAM },
+		]);
+
+		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+		if (outcome.ok || outcome.reason !== "invalid") return;
+		expect(outcome.message).toContain("valid JSON");
+		expect(outcome.message.length).toBeLessThan(300);
+		expect(room.project(subject.document)).toBe(SOURCE);
+	});
+
+	it("reports a diagram field error before changing the document", () => {
+		let outcome = edit.apply(subject, 1, [{
+			op: "insert",
+			index: 0,
+			source: '```seecode\n{"type":"architecture"}\n```\n',
+		}]);
+
+		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+		if (outcome.ok || outcome.reason !== "invalid") return;
+		expect(outcome.message).toContain("nodes");
+		expect(room.project(subject.document)).toBe(SOURCE);
+	});
+
+	it("allows unrelated edits and moves around an existing malformed diagram", async () => {
+		let held = await plan(`# Title\n\n${MALFORMED_DIAGRAM}\nSurrounding prose.\n`);
+		expect(edit.apply(held, 1, [{ op: "insert", index: 0, source: "Context.\n" }]).ok)
+			.toBe(true);
+		expect(edit.apply(held, 1, [{ op: "move", index: 1, to: 2 }]).ok).toBe(true);
+		expect(room.project(held.document)).toContain(MALFORMED_DIAGRAM.trim());
+	});
+
 	it("refuses one aimed at a revision that has moved, and says what changed", () => {
 		let outcome = edit.apply(subject, 0, [{ op: "delete", index: 0 }]);
 
@@ -505,6 +575,17 @@ describe("reporting what a batch did", () => {
 });
 
 describe("replacing canonical source", () => {
+	it("validates changed diagrams but carries unchanged malformed ones", async () => {
+		let held = await plan(`# Title\n\n${MALFORMED_DIAGRAM}\nSurrounding prose.\n`);
+		let current = edit.source(held);
+		expect(edit.replace(held, 1, current.replace("Surrounding", "Revised")).ok).toBe(true);
+		let before = edit.source(held);
+		let invalid = edit.replace(held, 1, `${before}\n${MALFORMED_DIAGRAM}`);
+		expect(invalid).toMatchObject({ ok: false, reason: "invalid" });
+		expect(edit.source(held)).toBe(before);
+		expect(edit.replace(held, 1, `${before}\n${DIAGRAM}`).ok).toBe(true);
+	});
+
 	it("rewrites prose while keeping unchanged block identity", () => {
 		let keys = () => {
 			let out: string[] = [];

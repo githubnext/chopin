@@ -14,7 +14,12 @@
 
 // The dialect only. The barrel reaches the Lexical registry, which would drag a
 // browser rich-text editor into a module that builds a prompt string.
-import { COMPONENTS, DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect/dialect";
+import {
+	COMPONENTS,
+	DIFF_LANGUAGE,
+	MERMAID_LANGUAGE,
+	SEECODE_LANGUAGE,
+} from "@chopin/dialect/dialect";
 
 import type { Component } from "@chopin/dialect/dialect";
 import type { PlannerWorkspace } from "../harness/atomic/workspace";
@@ -55,6 +60,29 @@ function reference(): string {
 		return `- \`${name}\`${attrs} — holds ${holds}${parent}.`;
 	}).filter(Boolean).join("\n");
 }
+
+/** Semantic choices and small, valid examples; the renderer owns visual details. */
+export const DIAGRAM_AUTHORING =
+	`Use a \`${SEECODE_LANGUAGE}\` fence for a compact, explanatory diagram
+when spatial relationships, message order, or state transitions make the plan
+easier to understand. Its body is one JSON object, at most 64 KiB. Ground every
+label and relationship in the document or repository evidence; explain the
+takeaway in nearby prose. Use plain prose or a list when a diagram adds no clarity.
+
+Architecture (nodes have positions; edges refer to their ids):
+\`\`\`${SEECODE_LANGUAGE}
+{"type":"architecture","nodes":[{"id":"web","label":"Browser","row":0,"col":0},{"id":"api","label":"API","row":0,"col":1}],"edges":[["web","api"]]}
+\`\`\`
+
+Sequence (messages refer to participant ids, in order):
+\`\`\`${SEECODE_LANGUAGE}
+{"type":"sequence","participants":[{"id":"reader","label":"Reader"},{"id":"api","label":"API"}],"messages":[["reader","api","Open document"]]}
+\`\`\`
+
+State (edges connect named states and may label transitions):
+\`\`\`${SEECODE_LANGUAGE}
+{"type":"state","nodes":[{"id":"draft","label":"Draft","row":0,"col":0},{"id":"saved","label":"Saved","row":0,"col":1}],"edges":[["draft","saved","publish"]]}
+\`\`\``;
 
 export const PROMPT = `You are the planner. You produce and maintain the plan — the shared document
 the team works from. You do not implement.
@@ -193,10 +221,10 @@ code fences, footnotes, links (\`https:\` and \`mailto:\` only, plus
 repository-relative paths), and images. Images are referenced by absolute
 \`https:\` URL.
 
-Diagrams and formulas both render, and both are worth reaching for. A
-\`${MERMAID_LANGUAGE}\` fence draws a diagram — use one wherever the plan
-describes a flow, a sequence or a state machine, where the shape carries what
-a paragraph can only approximate. Set a formula wherever the plan turns
+Diagrams and formulas can clarify a plan. Use a \`${SEECODE_LANGUAGE}\` fence
+for architecture, sequences, or state transitions when a compact structured
+view helps; \`${MERMAID_LANGUAGE}\` remains available for other simple flows.
+Set a formula wherever the plan turns
 quantitative — a cost model, a bound, a threshold — rather than spelling the
 arithmetic out in prose: \`$…$\` inline, and \`$$\` on its own lines around a
 displayed one.
@@ -205,6 +233,8 @@ Those delimiters and no others. \`\\(…\\)\` and \`\\[…\\]\` are not math her
 they parse as ordinary prose, nothing rejects them, and the backslashes are
 eaten on the way out — so \`\\(r = n/t\\)\` is saved as \`(r = n/t)\` and reads
 like prose somebody meant to write.
+
+${DIAGRAM_AUTHORING}
 
 Always name a fence's language — \`ts\`, \`python\`, \`sh\` — because the
 language is what colours it, and an unnamed fence is rendered as the grey text
