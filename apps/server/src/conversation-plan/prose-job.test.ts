@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { appendProseEffect, proseIntent, prosePrompt } from "./prose-job";
+import { appendProseEffect, proseIntent, prosePrompt, writeup } from "./prose-job";
 import { CARD, record } from "./prose-job.test-fixtures";
 
 test("proseIntent uses the immutable Save generation, even for same-second re-decisions", () => {
@@ -67,4 +67,34 @@ test("prosePrompt stays bounded, grounded, and names only its own writing tool",
 			reasons: Array.from({ length: 30 }, () => "R".repeat(1000)),
 		}).length,
 	).toBeLessThan(9000);
+});
+
+test("writeup projects only the current saved generation's unfinished prose job", () => {
+	let id = `prose:${CARD}:decided:${CARD}:1`;
+	let job = (status: string, trigger = `decided:${CARD}:1`) => ({
+		id: `prose:${CARD}:${trigger}`,
+		kind: "prose" as const,
+		target: CARD,
+		trigger,
+		status: status as never,
+		attempts: 0,
+		at: "2026-10-07T00:00:00.000Z",
+	});
+	let plan = (jobs: ReturnType<typeof job>[], pending = [] as never[]) => ({
+		conversationPlanJobs: jobs,
+		conversationPlanPendingEffects: pending,
+	});
+
+	expect(writeup(plan([]), record())).toBeUndefined();
+	expect(writeup(plan([], appendProseEffect([], [], record()) as never[]), record()))
+		.toEqual({ status: "writing", job: id });
+	expect(writeup(plan([job("pending")]), record())).toEqual({ status: "writing", job: id });
+	expect(writeup(plan([job("running")]), record())).toEqual({ status: "writing", job: id });
+	expect(writeup(plan([job("failed")]), record())).toEqual({ status: "failed", job: id });
+	expect(writeup(plan([job("done")]), record())).toBeUndefined();
+	expect(writeup(plan([job("skipped")]), record())).toBeUndefined();
+	// An earlier generation's failure does not describe a later save.
+	expect(writeup(plan([job("failed", `decided:${CARD}:0`)]), record())).toBeUndefined();
+	expect(writeup(plan([job("failed")]), record({ status: "reopened" }))).toBeUndefined();
+	expect(writeup(plan([job("failed")]), record({ origin: "planner" }))).toBeUndefined();
 });

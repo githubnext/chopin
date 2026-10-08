@@ -629,6 +629,9 @@ export function Chat(
 		<Transcript
 			active={active}
 			canEdit={composerReady}
+			emptyHint={readonly || archived
+				? undefined
+				: { planner: !!agent, references: referencesEnabled }}
 			conversationPlanJobs={conversationPlanJobs}
 			onCardLink={onCardLink}
 			onAddExcerpt={onAddExcerpt}

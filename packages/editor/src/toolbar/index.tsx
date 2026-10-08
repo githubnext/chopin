@@ -9,7 +9,7 @@ import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection } from "lexical";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
@@ -18,6 +18,7 @@ import { LinkSurface } from "./link";
 import { ResearchComposerSurface } from "./research";
 import { ResearchLaunchRegistration } from "./research-launch";
 import { SlashMenu } from "./slash";
+import { registerTaskRule } from "./task-rule";
 
 const RESEARCH_ACTIONS = new Set(["research"]);
 
@@ -32,6 +33,8 @@ export function Toolbar() {
 	let [editor] = useLexicalComposerContext();
 	// The link editor sits where the bubble would, so only one shows.
 	let [linking, setLinking] = useState(false);
+
+	useEffect(() => (disabled ? undefined : registerTaskRule(editor)), [editor, disabled]);
 
 	let threads = options.threads;
 

@@ -1,5 +1,5 @@
 /**
- * Fake only GitHub's network boundary. OAuth state, PKCE, process-local sessions,
+ * Fake only GitHub's network boundary. OAuth state, PKCE, persistent sessions,
  * channel authorization and WebSocket admission still run in the real server.
  */
 import { readFile } from "node:fs/promises";

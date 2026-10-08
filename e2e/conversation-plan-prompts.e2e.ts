@@ -101,7 +101,7 @@ test("one member's choice posts a live Save decision prompt for everyone", async
 		actor: { kind: "member", handle: "ana" },
 	});
 	for (let page of [ana, bo]) {
-		await expectRetiredPrompts(page, `Decided: ${OPTION} · ana`);
+		await expectRetiredPrompts(page, `Decided: ${OPTION} · @ana`);
 	}
 });
 
@@ -416,7 +416,7 @@ test("a remote human card selection overrides the live prompt", async ({ join, r
 		origin: "human",
 	});
 	for (let page of [ana, bo]) {
-		await expectRetiredPrompts(page, "Decided: Ship to everyone · ana");
+		await expectRetiredPrompts(page, "Decided: Ship to everyone · @ana");
 	}
 });
 
@@ -462,7 +462,7 @@ test("an old prompt retires after Save and Reopen before a new suggestion", asyn
 	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
 	let decided = await waitForEvent(ana, "decision.recorded");
 	let cardId = decided.threads[0]!.questionnaireId!;
-	await expectRetiredPrompts(ana, `Decided: ${OPTION} · ana`);
+	await expectRetiredPrompts(ana, `Decided: ${OPTION} · @ana`);
 	let retiredCount = await ana.locator("[data-decision-prompt]").count();
 
 	await ana.getByRole("button", { name: /^Decisions/ }).click();

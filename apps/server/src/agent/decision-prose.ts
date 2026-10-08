@@ -79,7 +79,9 @@ export async function write(
 			if (!block || block.type !== "paragraph") {
 				throw new Error("decision prose did not land as a paragraph");
 			}
-			await Service.publishStaged(plan, context.server, context.room, candidate, mutation);
+			await Service.publishStaged(plan, context.server, context.room, candidate, mutation, {
+				agent: true,
+			});
 			try {
 				context.changes([{
 					kind: "added",

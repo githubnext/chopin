@@ -19,7 +19,7 @@ function digest(source: string): string {
 
 if (url) {
 	storageContract("postgres", () => new PostgresStorage(url));
-	it("stores no browser verifier or GitHub credential columns", async () => {
+	it("stores only a verifier hash and opaque ciphertext for persistent credentials", async () => {
 		let storage = new PostgresStorage(url);
 		await storage.migrate();
 		await storage.close();
@@ -33,8 +33,11 @@ if (url) {
 			`;
 			expect(columns.map(column => column.name)).toEqual([
 				"created_at",
+				"credential_ciphertext",
+				"credential_revision",
 				"expires_at",
 				"id",
+				"secret_hash",
 				"user_id",
 			]);
 		} finally {
@@ -618,6 +621,7 @@ if (url) {
 				"013_research_child_publication",
 				"014_inline_research",
 				"015_planner_inline_reference",
+				"016_persistent_sessions",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

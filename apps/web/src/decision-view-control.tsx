@@ -1,6 +1,9 @@
 import { Count } from "@chopin/editor";
 
+import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
+
 import type { DecisionView } from "@chopin/editor";
+import type { DocumentActivity } from "./document-activity";
 
 export function decisionAttention(previous: number, current: number): boolean {
 	return current > previous;
@@ -9,11 +12,13 @@ export function decisionAttention(previous: number, current: number): boolean {
 export function DecisionViewControl(
 	{
 		attention,
+		documentActivity,
 		onView,
 		unanswered,
 		view,
 	}: {
 		attention?: boolean;
+		documentActivity?: DocumentActivity;
 		onView: (view: DecisionView) => void;
 		unanswered: number;
 		view: DecisionView;
@@ -28,8 +33,9 @@ export function DecisionViewControl(
 		>
 			<button
 				aria-current={view === "plan" ? "page" : undefined}
+				aria-label={view === "plan" ? undefined : documentActivityLabel(documentActivity)}
 				aria-pressed={view === "plan"}
-				className={`btn btn-sm transition-[background-color,box-shadow,color] ${
+				className={`btn btn-sm relative transition-[background-color,box-shadow,color] ${
 					view === "plan"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"
@@ -38,6 +44,7 @@ export function DecisionViewControl(
 				type="button"
 			>
 				Document
+				{view !== "plan" && <DocumentActivityDot activity={documentActivity} placement="corner" />}
 			</button>
 			<button
 				aria-current={view === "decisions" ? "page" : undefined}

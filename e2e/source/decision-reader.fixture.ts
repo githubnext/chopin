@@ -142,7 +142,8 @@ window.decisionReaderFixture = {
 			frame("question:metas", { cards: [{ id: value.id, meta }] });
 			let store = new NativeQuestionnaireStore(); let realm = new Realm();
 			realm.pub(widgets$, { cardMeta, questions: store, canEdit: !readonly, connected: true, wire,
-				onCardSource: id => window.decisionReaderFixture.sources.push(\`\${index}:\${id}\`) });
+				onCardSource: id => window.decisionReaderFixture.sources.push(\`\${index}:\${id}\`),
+				hasCardSource: () => true });
 			return { realm, store, meta: cardMeta, wire, frame, ready: false };
 		});
 		root = createRoot(document.querySelector("#fixture")!);

@@ -35,9 +35,9 @@ import type {
 	SaveCheckpoint,
 	StoredChannel,
 	StoredEvent,
+	StoredWebSession,
 	UpdateAgentContext,
 	UserRecord,
-	WebSession,
 } from "../model";
 import type {
 	BackgroundJobStore,
@@ -67,6 +67,9 @@ type SessionRow = {
 	userId: string;
 	expiresAt: Timestamp;
 	createdAt: Timestamp;
+	secretHash: Uint8Array | null;
+	ciphertext: Uint8Array | null;
+	credentialRevision: Integer | null;
 };
 
 type ChannelRow = {
@@ -200,11 +203,21 @@ function user(row: UserRow): UserRecord {
 	};
 }
 
-function session(row: SessionRow): WebSession {
+function session(row: SessionRow): StoredWebSession {
 	return {
-		...row,
+		id: row.id,
+		userId: row.userId,
 		expiresAt: date(row.expiresAt, "session expiry"),
 		createdAt: date(row.createdAt, "session creation time"),
+		...(row.ciphertext && row.secretHash && row.credentialRevision !== null
+			? {
+				credentials: {
+					secretHash: new Uint8Array(row.secretHash),
+					ciphertext: new Uint8Array(row.ciphertext),
+					revision: integer(row.credentialRevision, "session credential revision"),
+				},
+			}
+			: {}),
 	};
 }
 
@@ -340,7 +353,10 @@ const SESSION_COLUMNS = `
 	id,
 	user_id AS "userId",
 	expires_at AS "expiresAt",
-	created_at AS "createdAt"
+	created_at AS "createdAt",
+	secret_hash AS "secretHash",
+	credential_ciphertext AS "ciphertext",
+	credential_revision AS "credentialRevision"
 `;
 
 const CHANNEL_COLUMNS = `
@@ -501,9 +517,11 @@ export class PostgresStorage implements StorageAdapter {
 			this.#run("create login session", async () => {
 				await this.#sql`
 				INSERT INTO web_sessions (
-					id, user_id, expires_at, created_at
+					id, user_id, expires_at, created_at, secret_hash, credential_ciphertext, credential_revision
 				) VALUES (
-					${input.id}, ${input.userId}, ${input.expiresAt}, ${input.createdAt}
+					${input.id}, ${input.userId}, ${input.expiresAt}, ${input.createdAt},
+					${input.credentials?.secretHash ?? null}, ${input.credentials?.ciphertext ?? null},
+					${input.credentials?.revision ?? null}
 				)
 			`;
 			}),
@@ -515,6 +533,21 @@ export class PostgresStorage implements StorageAdapter {
 				WHERE id = ${id} AND expires_at > ${now}
 			`;
 				return found ? session(found) : undefined;
+			}),
+		rotate: (id, expectedRevision, credentials) =>
+			this.#run("rotate session credentials", async () => {
+				if (credentials.revision !== expectedRevision + 1) {
+					throw conflict("invalid credential revision");
+				}
+				let updated = await this.#sql<{ id: string }[]>`
+					UPDATE web_sessions
+					SET secret_hash = ${credentials.secretHash},
+						credential_ciphertext = ${credentials.ciphertext},
+						credential_revision = ${credentials.revision}
+					WHERE id = ${id} AND credential_revision = ${expectedRevision}
+					RETURNING id
+				`;
+				return updated.length > 0;
 			}),
 		delete: id =>
 			this.#run("delete login session", () =>
@@ -544,8 +577,8 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 					return deleted.length;
 				})),
-		deleteAll: (now, held, ttlMs) =>
-			this.#run("delete all login sessions", () =>
+		reset: (now, held, ttlMs) =>
+			this.#run("reset login sessions and owners", () =>
 				this.#sql.begin(async transaction => {
 					await this.#assertLease(transaction, held);
 					await transaction`
@@ -554,7 +587,9 @@ export class PostgresStorage implements StorageAdapter {
 					WHERE owner_session_id IS NOT NULL
 				`;
 					let deleted = await transaction<{ id: string }[]>`
-					DELETE FROM web_sessions RETURNING id
+					DELETE FROM web_sessions
+					WHERE credential_ciphertext IS NULL OR expires_at <= ${now}
+					RETURNING id
 					`;
 					let [renewed] = await transaction<LeaseRow[]>`
 					UPDATE storage_leases

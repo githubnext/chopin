@@ -87,6 +87,23 @@ describe("waiting to be seen", () => {
 
 		expect(marks.ids()).toEqual([]);
 	});
+
+	it("gives showing marks more time when the agent writes again", async () => {
+		let marks = trail(() => {}, LINGER);
+		marks.add(["a"]);
+		marks.saw(["a"]);
+
+		await sleep(LINGER * 0.6);
+		marks.renew();
+		marks.add(["b"]);
+		await sleep(LINGER * 0.6);
+
+		expect(marks.showing()).toEqual(["a"]);
+		expect(marks.pending()).toEqual(["b"]);
+
+		await sleep(LINGER);
+		expect(marks.ids()).toEqual(["b"]);
+	});
 });
 
 describe("keeping the set bounded", () => {

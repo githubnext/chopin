@@ -12,6 +12,7 @@ import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
 import {
 	describeDiagramError,
 	fileNameOf,
+	jumpTo,
 	kindOf,
 	languageOptions,
 	LANGUAGES,
@@ -224,6 +225,26 @@ describe("languageOptions", () => {
 		let options = languageOptions("brainfuck");
 		expect(options[1]).toEqual(["brainfuck", "brainfuck"]);
 		expect(options).toHaveLength(LANGUAGES.length + 2);
+	});
+});
+
+describe("jumpTo", () => {
+	let options = languageOptions("typescript");
+	let at = (id: string) => options.findIndex(([option]) => option === id);
+
+	it("reaches a diagram by its label or by Mermaid", () => {
+		expect(jumpTo(options, 0, "d")).toBe(at(MERMAID_LANGUAGE));
+		expect(jumpTo(options, 0, "M")).toBe(at(MERMAID_LANGUAGE));
+	});
+
+	it("moves on to the next match, and wraps round", () => {
+		let diagram = at(MERMAID_LANGUAGE);
+		expect(jumpTo(options, diagram, "m")).toBe(at("markdown"));
+		expect(jumpTo(options, at("markdown"), "m")).toBe(diagram);
+	});
+
+	it("finds nothing for a letter no row starts with", () => {
+		expect(jumpTo(options, 0, "q")).toBe(-1);
 	});
 });
 

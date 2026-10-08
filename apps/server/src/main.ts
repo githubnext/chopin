@@ -1480,7 +1480,7 @@ try {
 		LEASE_TTL_MS,
 	);
 	if (!heldLease) throw new Error("another Chopin instance owns the database");
-	let reset = await storage.sessions.deleteAll(new Date(), heldLease, LEASE_TTL_MS);
+	let reset = await storage.sessions.reset(new Date(), heldLease, LEASE_TTL_MS);
 	heldLease = reset.lease;
 } catch (err) {
 	await shutdownHarnesses();
