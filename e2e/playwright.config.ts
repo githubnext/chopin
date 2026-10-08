@@ -160,7 +160,15 @@ export default defineConfig({
 				"**/sidecar.e2e.ts",
 				"**/harness.e2e.ts",
 				"**/local-auth.e2e.ts",
+				"**/visual-decision*.e2e.ts",
 			],
+			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
+		},
+		{
+			name: "visual-decision",
+			testMatch: "**/visual-decision*.e2e.ts",
+			fullyParallel: false,
+			workers: 1,
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
 		},
 		{
@@ -193,11 +201,25 @@ export default defineConfig({
 	],
 
 	webServer: [
-		server(PLAIN, process.env.E2E_DATABASE_URL_0!, {}),
+		server(PLAIN, process.env.E2E_DATABASE_URL_0!, {
+			VISUAL_PREVIEW_ORIGIN: "http://localhost:8793",
+		}),
 		server(FIXTURES, process.env.E2E_DATABASE_URL_1!, {
 			DEV_QUESTIONS: "1",
 			DEV_COMMENTS: "1",
 		}),
 		harnessServer(HARNESS, process.env.E2E_DATABASE_URL_2!),
+		{
+			command: "bun apps/server/src/visual-preview/server.ts",
+			cwd: ROOT,
+			url: "http://localhost:8793/health",
+			env: {
+				VISUAL_PREVIEW_PORT: "8793",
+				VISUAL_PREVIEW_ORIGIN: "http://localhost:8793",
+				VISUAL_PREVIEW_APP_ORIGIN: `http://${HOST}:${PLAIN}`,
+			},
+			reuseExistingServer: !process.env.CI,
+			gracefulShutdown: { signal: "SIGTERM", timeout: 2_000 },
+		},
 	],
 });

@@ -203,6 +203,7 @@ not interchangeable:
 | Description revision       | Orders generated catalogue-description projections. It advances independently and does not change collaboration counters or channel activity time.            |
 | Graph version and revision | Identify one implementation graph generation and the edits within its current draft. A claim also binds the exact plan revision.                              |
 | Research revision          | Orders durable request, job-link, and internal staging changes independently from the parent document, background-job channel revision, and job revisions.    |
+| Visual draft revision      | Identifies accepted control values in one visual decision. Save claims this revision independently of document and storage counters.                          |
 
 Channel IDs, update IDs, operation IDs, component IDs, and lifecycle idempotency
 keys solve separate identity problems. See [Repository channels](channels.md) for
@@ -397,6 +398,13 @@ Research references may be added or removed only with durable request authority,
 rechecked at the fenced commit. This preserves the starting projections rather
 than independently rebuilding every projection from its record on each edit;
 records remain authoritative.
+
+Built-in [visual decisions](visual-decisions.md) also use a Questionnaire projection.
+Their immutable specimen definition, shared values, accepted revision and saved
+attribution live in a separate validated sidecar record. Save stages that record
+and its attributed Answer together, then publishes after the fenced commit. The
+trusted host owns controls and authority; a verified bundle on a separate,
+credential-free site renders the specimen in an opaque sandboxed iframe.
 
 A relationship points from one of those records to top-level document blocks.
 Each anchor combines a Yjs relative position with a digest of the canonical block.
