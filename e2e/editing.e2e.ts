@@ -12,7 +12,7 @@
 import { content, expect, ready, test, written } from "./room";
 import { chatInput } from "./chat-input";
 
-import type { WebSocketRoute } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 
 test("a reload shows what was typed", async ({ join, room }) => {
 	let page = await join("ana");
@@ -250,4 +250,68 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(spoken).toHaveText("Reconnected");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(0);
 	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "true");
+});
+
+const PASSAGES = Array.from({ length: 40 }, (_, index) => `Passage ${index + 1}.`).join("\n\n")
+	+ "\n";
+
+function passage(page: Page, number: number) {
+	return content(page).getByRole("paragraph").filter({
+		hasText: new RegExp(`^Passage ${number}\\.$`),
+	});
+}
+
+/*
+ * The right edge of a one-line block puts the caret at its end on every
+ * platform; macOS binds End to scrolling the document rather than the caret.
+ * Each test clicks once on a fresh page, so Lexical has no earlier selection
+ * for an immediate keystroke to outrun.
+ */
+async function caretAtEnd(page: Page, number: number) {
+	let line = passage(page, number);
+	let box = (await line.boundingBox())!;
+	await line.click({ position: { x: box.width - 4, y: box.height / 2 } });
+}
+
+function scrollTop(page: Page) {
+	return page.locator("[data-plan-scroll]").evaluate(element => element.scrollTop);
+}
+
+test("enter mid-document keeps the caret line where it was", async ({ join, seed }) => {
+	await seed(PASSAGES);
+	let page = await join("ana");
+	await page.locator("[data-plan-scroll]").evaluate(element =>
+		element.scrollTop = element.scrollHeight / 3
+	);
+	await caretAtEnd(page, 15);
+	let before = await scrollTop(page);
+	expect(before).toBeGreaterThan(0);
+	let y = (await passage(page, 15).boundingBox())!.y;
+
+	// A new block, then a slash command's Enter into another one.
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/code");
+	await page.keyboard.press("Enter");
+	await expect(content(page).getByRole("button", { name: /^Code language/ })).toBeVisible();
+
+	expect(Math.abs(await scrollTop(page) - before)).toBeLessThanOrEqual(4);
+	expect(Math.abs((await passage(page, 15).boundingBox())!.y - y)).toBeLessThanOrEqual(4);
+});
+
+test("typing past the bottom of the view scrolls the caret into it", async ({ join, seed }) => {
+	await seed(PASSAGES);
+	let page = await join("ana");
+	let scroller = page.locator("[data-plan-scroll]");
+	await scroller.evaluate(element => element.scrollTop = element.scrollHeight);
+	await caretAtEnd(page, 40);
+	let before = await scrollTop(page);
+
+	for (let index = 0; index < 20; index++) await page.keyboard.press("Enter");
+	await page.keyboard.type("Still in view");
+
+	await expect.poll(() => scrollTop(page)).toBeGreaterThan(before);
+	let typed = (await content(page).getByText("Still in view", { exact: true }).boundingBox())!;
+	let view = (await scroller.boundingBox())!;
+	expect(typed.y).toBeGreaterThanOrEqual(view.y);
+	expect(typed.y + typed.height).toBeLessThanOrEqual(view.y + view.height);
 });
