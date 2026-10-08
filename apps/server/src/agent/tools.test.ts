@@ -2,7 +2,6 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
 import { type DocumentRoom, documentTools } from "./tools";
-import { documentUrl } from "../channels/document-url";
 import { forgetWorkspaces, rememberCheckout } from "../harness/atomic/workspace";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
@@ -196,7 +195,6 @@ test("read_plan and edit_plan name the room's document as read_document does", a
 		return JSON.parse(result);
 	};
 	let identity = { id: channel.id, url: "/documents/owner/repository/test-plan" };
-	expect(documentUrl(channel)).toBe(identity.url);
 	expect((await call("read_plan", {})).document).toEqual(identity);
 
 	rememberCheckout(channel.id, process.cwd());
@@ -220,6 +218,37 @@ test("read_plan and edit_plan name the room's document as read_document does", a
 		operations: [{ op: "replace", index: 0, source: "Stale edit.\n" }],
 	});
 	expect(stale).toMatchObject({ ok: false, reason: "stale", document: renamed });
+});
+
+test("read_plan and edit_plan give a child document its nested canonical URL", async () => {
+	let { channel, plan, server } = await opened("Child document.\n", { parent: "Parent plan" });
+	let tools = fixtureTools({
+		plan,
+		server,
+		room: channel.id,
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	});
+	let call = async (name: "read_plan" | "edit_plan", input: unknown) =>
+		JSON.parse(
+			(await tools.find(tool => tool.name === name)!.handler(input, {
+				toolCallId: name,
+			})) as string,
+		);
+	let identity = {
+		id: channel.id,
+		url: "/documents/owner/repository/parent-plan/children/test-plan",
+	};
+	let read = await call("read_plan", {});
+	expect(read.document).toEqual(identity);
+	let edited = await call("edit_plan", {
+		revision: read.revision,
+		operations: [{ op: "replace", index: 0, source: "Edited child.\n" }],
+	});
+	expect(edited).toMatchObject({ ok: true, document: identity });
 });
 
 test("create_research_workspace validates one question and waits for immediate research start", async () => {
@@ -443,7 +472,7 @@ test("edit_plan refuses while an implementation claim drains", async () => {
 	expect(JSON.parse(response as string)).toEqual({
 		ok: false,
 		reason: "locked",
-		document: { id: channel.id, url: documentUrl(channel) },
+		document: { id: channel.id, url: "/documents/owner/repository/test-plan" },
 	});
 	expect(room.project(plan.document)).toBe("The plan is ready.\n");
 });
