@@ -60,7 +60,7 @@ inside an input. Use `listDevelopment()` and `loadInput(id, checkpointId)` from
 returning text. Unknown, validation, and reserved IDs fail before file reads.
 The discussion loader returns only the selected cutoff file and omits
 annotations, future events, and later outcomes. All links in returned inputs
-are inert: a runner must not follow them. In a clean checkout, the three
+are inert: a runner must not follow them. In a clean checkout, four
 manifest and access-boundary tests run; six local-fidelity tests skip until
 the ignored snapshot is restored.
 
