@@ -958,7 +958,13 @@ export function RoomWorkspace(
 							<div className="plan-status" data-level="notice">
 								<span aria-hidden="true" className="plan-status-dot" />
 								<span aria-hidden="true" className="plan-status-text">
-									<span className="plan-status-label">Can't undo</span>
+									<span
+										className="plan-status-label"
+										data-tooltip={UNDO_REFUSALS[planState.refused.reason]}
+										data-tooltip-verbatim=""
+									>
+										Can't undo
+									</span>
 									<span className="plan-status-detail">
 										{UNDO_REFUSALS[planState.refused.reason]}
 									</span>
