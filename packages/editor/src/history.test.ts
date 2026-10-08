@@ -37,8 +37,9 @@ import {
 	registry,
 } from "@chopin/dialect";
 
-import { registerPlanHistory } from "./history";
+import { registerPlanHistory, rehearse, typing } from "./history";
 
+import type { PlanHistory, Refusal } from "./history";
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
 
@@ -61,7 +62,13 @@ const PROVIDER = {
 
 const REMOTE = Symbol("remote");
 
-type Person = { editor: LexicalEditor; binding: Binding; doc: Y.Doc };
+type Person = {
+	editor: LexicalEditor;
+	binding: Binding;
+	doc: Y.Doc;
+	refusals?: Refusal[];
+	history?: PlanHistory;
+};
 
 function bound(doc: Y.Doc): Person {
 	let editor = createHeadlessEditor({
@@ -100,9 +107,13 @@ function follower(doc: Y.Doc): Person {
 
 /** A browser: the binding as `collaboration.tsx` wires it, plus MDXEditor's trailing paragraph. */
 function person(update: Uint8Array, captureTimeout?: number): Person {
-	let found = bound(new Y.Doc());
+	let found: Person = { ...bound(new Y.Doc()), refusals: [] };
 	let { editor, binding, doc } = found;
-	let history = registerPlanHistory(editor, binding, captureTimeout);
+	let history = registerPlanHistory(editor, binding, {
+		captureTimeout,
+		onRefused: reason => found.refusals!.push(reason),
+	});
+	found.history = history;
 	binding.root.getSharedType().observeDeep((events, transaction) => {
 		if (transaction.origin === binding) return;
 		let undone = transaction.origin instanceof Y.UndoManager;
@@ -327,6 +338,58 @@ describe("plan history", () => {
 });
 
 describe("plan history with peers", () => {
+	it("refuses only the step a peer has built on, and keeps older ones", async () => {
+		let { me, peer } = await room("Start here.\n", 2, 0);
+
+		type(me.editor, " Earlier.");
+		await settle();
+		me.editor.update(() => {
+			$getRoot().append($createParagraphNode().append($createTextNode("Mine.")));
+		}, { discrete: true });
+		await settle();
+		type(peer.editor, " Theirs.", 1);
+		await settle();
+
+		undo(me.editor);
+		await settle();
+		expect(me.refusals).toEqual(["others"]);
+		expect(text(me.editor)).toContain("Mine. Theirs.");
+
+		undo(me.editor);
+		await settle();
+		expect(text(me.editor)).not.toContain("Earlier.");
+		expect(text(me.editor)).toContain("Mine. Theirs.");
+		await consistent(me, peer);
+	});
+
+	it("will not restore a card a peer has since moved again", async () => {
+		let { me, peer, server } = await room("First.\n\nSecond.\n", 2, 0);
+		server.editor.update(() => {
+			$getRoot().append($createDecisionNode(DECISION));
+		}, { discrete: true });
+		await settle();
+
+		let move = (editor: LexicalEditor, where: "start" | "end") =>
+			editor.update(() => {
+				// In Yjs a move is a removal and a fresh insertion of the same card.
+				$getRoot().getChildren().find(node => node.getType() === "plan-decision")?.remove();
+				let card = $createDecisionNode(DECISION);
+				if (where === "start") $getRoot().getFirstChildOrThrow().insertBefore(card);
+				else $getRoot().getChildren().find($isParagraphNode)!.insertAfter(card);
+			}, { discrete: true });
+		move(me.editor, "start");
+		await settle();
+		move(peer.editor, "end");
+		await settle();
+		expect(count(server.editor, "plan-decision")).toBe(1);
+
+		undo(me.editor);
+		await settle();
+		expect(me.refusals).toEqual(["change"]);
+		expect(count(server.editor, "plan-decision")).toBe(1);
+		await consistent(me, peer, server);
+	});
+
 	it("will not delete a paragraph a peer has typed in", async () => {
 		let { me, peer } = await room("Start here.\n");
 
@@ -450,7 +513,7 @@ function texts(editor: LexicalEditor): LexicalNode[] {
 }
 
 describe("plan history under random editing", () => {
-	for (let seed of [1, 2, 3, 4, 5, 6]) {
+	for (let seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
 		it(`keeps the room openable and its projections intact (seed ${seed})`, async () => {
 			let next = random(seed);
 			let pick = <T>(items: T[]) => items[Math.floor(next() * items.length)]!;
@@ -461,6 +524,7 @@ describe("plan history under random editing", () => {
 			);
 			let research = 0;
 			let decisions = 0;
+			let quick = 0;
 
 			for (let round = 0; round < 60; round++) {
 				let who = pick(people);
@@ -492,6 +556,13 @@ describe("plan history under random editing", () => {
 						$getRoot().append($createDecisionNode({ ...DECISION, id }));
 					}, { discrete: true });
 				} else if (roll < 0.85) {
+					// Whatever the quick check lets through, the full rehearsal accepts.
+					let manager = who.history!.manager;
+					let top = manager.undoStack.at(-1);
+					if (top && typing(top, manager.doc)) {
+						quick++;
+						expect(rehearse(manager, "undo", false)).toEqual({ ok: true });
+					}
 					undo(who.editor);
 				} else {
 					redo(who.editor);
@@ -504,6 +575,7 @@ describe("plan history under random editing", () => {
 				expect(count(server.editor, "plan-questionnaire")).toBe(1);
 				await consistent(...people, server);
 			}
+			expect(quick).toBeGreaterThan(0);
 		});
 	}
 });

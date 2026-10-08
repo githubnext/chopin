@@ -34,6 +34,7 @@ import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
 import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
+import type { Refusal } from "./history";
 import type { ResearchLauncher } from "./research-launcher";
 
 /**
@@ -112,7 +113,15 @@ export type PlanState = {
 	lost?: number;
 	/** Why it could not be opened at all, if it could not. */
 	failed?: string;
+	/**
+	 * An undo or redo this person just asked for that could not be applied
+	 * safely, for the host to mention briefly. A new object for each refusal.
+	 */
+	refused?: { reason: Refusal };
 };
+
+/** How long a refused undo stays in the state, long enough to read and no longer. */
+const UNDO_NOTICE = 3000;
 
 export function PlanEditor(
 	{
@@ -191,6 +200,18 @@ export function PlanEditor(
 		},
 		[questions, threads],
 	);
+
+	let onUndoRefused = useCallback((reason: Refusal) => {
+		setState(prev => ({ ...prev, refused: { reason } }));
+	}, []);
+	useEffect(() => {
+		let refused = state.refused;
+		if (!refused) return;
+		let timer = setTimeout(() => {
+			setState(prev => prev.refused === refused ? { ...prev, refused: undefined } : prev);
+		}, UNDO_NOTICE);
+		return () => clearTimeout(timer);
+	}, [state.refused]);
 
 	let onChanges = useCallback((found: Plan.Change[]) => {
 		changes.mark(found);
@@ -321,6 +342,7 @@ export function PlanEditor(
 						onBinding,
 						onAnchors,
 						onChanges,
+						onUndoRefused,
 					}),
 					widgetsPlugin({
 						binding,
@@ -352,6 +374,7 @@ export function PlanEditor(
 			onBinding,
 			onAnchors,
 			onChanges,
+			onUndoRefused,
 			binding,
 			questions,
 			cardMeta,
