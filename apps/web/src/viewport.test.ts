@@ -4,7 +4,7 @@ import { viewportVars } from "./viewport";
 
 describe("viewport variables", () => {
 	it("uses the visible viewport and reports the covered keyboard area", () => {
-		expect(viewportVars(844, { height: 506, offsetTop: 0 })).toEqual({
+		expect(viewportVars(844, { height: 506, top: 0 })).toEqual({
 			"--app-left": "0px",
 			"--app-height": "506px",
 			"--app-top": "0px",
@@ -14,7 +14,7 @@ describe("viewport variables", () => {
 	});
 
 	it("accounts for a visual viewport offset", () => {
-		expect(viewportVars(844, { height: 506, offsetTop: 22 })).toEqual({
+		expect(viewportVars(844, { height: 506, top: 22 })).toEqual({
 			"--app-left": "0px",
 			"--app-height": "506px",
 			"--app-top": "22px",
@@ -35,7 +35,7 @@ describe("viewport variables", () => {
 
 	it("keeps the layout viewport while pinch zoomed", () => {
 		expect(
-			viewportVars(900, { height: 450, offsetLeft: 300, offsetTop: 200, scale: 2, width: 720 }),
+			viewportVars(900, { height: 450, left: 300, top: 200, width: 720 }, 2),
 		)
 			.toEqual({
 				"--app-left": "0px",
@@ -47,7 +47,7 @@ describe("viewport variables", () => {
 	});
 
 	it("follows a keyboard-shifted viewport at unit scale", () => {
-		expect(viewportVars(844, { height: 506, offsetLeft: 12, offsetTop: 22, scale: 1, width: 320 }))
+		expect(viewportVars(844, { height: 506, left: 12, top: 22, width: 320 }, 1))
 			.toEqual({
 				"--app-left": "12px",
 				"--app-height": "506px",
