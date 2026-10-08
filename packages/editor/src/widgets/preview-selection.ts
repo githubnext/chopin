@@ -79,6 +79,15 @@ export function registerPreviewSelection(
 			selection.addRange(range);
 			return;
 		}
+		// Shift extends a selection already in this preview, as it would in text.
+		let anchor = event.shiftKey && selection.anchorNode && inside(target, selection.anchorNode)
+			? { node: selection.anchorNode, offset: selection.anchorOffset }
+			: undefined;
+		if (anchor) {
+			selection.setBaseAndExtent(anchor.node, anchor.offset, point.node, point.offset);
+			drag = { preview: target, anchor };
+			return;
+		}
 		selection.collapse(point.node, point.offset);
 		if (event.detail === 2) {
 			selection.modify("move", "backward", "word");
