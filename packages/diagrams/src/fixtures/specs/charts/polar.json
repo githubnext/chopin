@@ -1,0 +1,56 @@
+{
+	"type": "polar",
+	"title": "Diagrams made per type",
+	"center": "42 types",
+	"focal": "architecture",
+	"data": [
+		[
+			"architecture",
+			34
+		],
+		[
+			"flowchart",
+			22
+		],
+		[
+			"sequence",
+			18
+		],
+		[
+			"data-flow",
+			12
+		],
+		[
+			"er",
+			11
+		],
+		[
+			"tree",
+			9
+		],
+		[
+			"bar",
+			8
+		],
+		[
+			"sankey",
+			6
+		],
+		[
+			"timeline",
+			6
+		],
+		[
+			"gantt",
+			5
+		],
+		[
+			"state",
+			5
+		],
+		[
+			"quadrant",
+			4
+		]
+	]
+}

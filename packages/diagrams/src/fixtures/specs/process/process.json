@@ -1,0 +1,27 @@
+{
+	"type": "process",
+	"title": "From request to diagram",
+	"steps": [
+		{
+			"label": "Ask",
+			"sub": "plain words"
+		},
+		{
+			"label": "Pick a type",
+			"sub": "router"
+		},
+		{
+			"label": "Write the spec",
+			"sub": "30–150 lines",
+			"focal": true
+		},
+		{
+			"label": "Render + fix",
+			"sub": "≤ 3 rounds"
+		},
+		{
+			"label": "Export",
+			"sub": "png · gif · mp4"
+		}
+	]
+}

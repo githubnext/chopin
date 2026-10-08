@@ -1,0 +1,47 @@
+{
+	"title": "Fishbone",
+	"required": [
+		"effect",
+		"categories"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"effect": {
+			"type": "string",
+			"maxLength": 40
+		},
+		"focal": {
+			"type": "boolean"
+		},
+		"categories": {
+			"type": "array",
+			"minItems": 2,
+			"items": {
+				"type": "object",
+				"required": [
+					"label"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string",
+						"maxLength": 24
+					},
+					"focal": {
+						"type": "boolean"
+					},
+					"causes": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"maxLength": 36
+						}
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,118 @@
+{
+	"title": "SeeCode spec envelope (fields shared by every type)",
+	"properties": {
+		"$schema": {
+			"type": "string"
+		},
+		"type": {
+			"type": "string"
+		},
+		"variant": {
+			"type": "string",
+			"maxLength": 40
+		},
+		"title": {
+			"type": "string",
+			"maxLength": 90
+		},
+		"subtitle": {
+			"type": "string",
+			"maxLength": 160
+		},
+		"eyebrow": {
+			"type": "string",
+			"maxLength": 40
+		},
+		"caption": {
+			"type": "string",
+			"maxLength": 280
+		},
+		"motion": {
+			"enum": [
+				"auto",
+				"none",
+				"reveal",
+				"trace",
+				"step",
+				"loop"
+			]
+		},
+		"order": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
+		"skin": {
+			"enum": [
+				"light",
+				"dark",
+				"terminal"
+			]
+		},
+		"size": {
+			"enum": [
+				"auto",
+				"wide",
+				"slide",
+				"square"
+			]
+		},
+		"budget": {
+			"enum": [
+				"strict",
+				"balanced",
+				"faithful",
+				"off"
+			]
+		},
+		"legend": {
+			"type": [
+				"boolean",
+				"string"
+			]
+		},
+		"notes": {
+			"type": "string"
+		},
+		"out": {
+			"type": "string"
+		},
+		"evidence": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": [
+					"id",
+					"file"
+				],
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"file": {
+						"type": "string"
+					},
+					"line": {
+						"type": "integer",
+						"minimum": 1
+					},
+					"note": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"style": {
+			"enum": [
+				"clean",
+				"sketchy"
+			]
+		},
+		"watermark": {
+			"type": "boolean",
+			"description": "SeeCode logo in the bottom-right corner (default true). Set false only when the user asks to remove it."
+		}
+	}
+}

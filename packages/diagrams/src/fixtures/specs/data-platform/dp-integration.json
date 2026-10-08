@@ -1,0 +1,89 @@
+{
+	"type": "dp-integration",
+	"title": "How data reaches the platform",
+	"stages": [
+		{
+			"label": "Source systems",
+			"plain": true,
+			"kind": "external",
+			"items": [
+				"CRM",
+				"ERP",
+				"Web app"
+			]
+		},
+		{
+			"label": "Integration",
+			"items": [
+				{
+					"id": "cdc",
+					"label": "CDC",
+					"sub": "Debezium"
+				},
+				{
+					"id": "api",
+					"label": "API pulls",
+					"sub": "Airbyte"
+				}
+			]
+		},
+		{
+			"label": "Platform",
+			"items": [
+				{
+					"id": "lake",
+					"label": "Lakehouse",
+					"focal": true,
+					"sub": "Delta"
+				}
+			]
+		},
+		{
+			"label": "Serving",
+			"plain": true,
+			"items": [
+				"BI",
+				"ML features",
+				"Reverse ETL"
+			]
+		}
+	],
+	"edges": [
+		[
+			"stage0_0",
+			"api"
+		],
+		[
+			"stage0_1",
+			"cdc"
+		],
+		[
+			"stage0_2",
+			"cdc"
+		],
+		[
+			"cdc",
+			"lake",
+			"",
+			"primary"
+		],
+		[
+			"api",
+			"lake",
+			"",
+			"primary"
+		],
+		[
+			"lake",
+			"stage3_0"
+		],
+		[
+			"lake",
+			"stage3_1"
+		],
+		[
+			"lake",
+			"stage3_2"
+		]
+	]
+}

@@ -1,0 +1,16 @@
+{
+	"type": "loop",
+	"title": "The content flywheel",
+	"center": "Audience",
+	"centerSub": "compounding",
+	"steps": [
+		"Publish",
+		"Distribute",
+		{
+			"label": "Collect feedback",
+			"focal": true
+		},
+		"Improve",
+		"Grow reach"
+	]
+}

@@ -1,0 +1,33 @@
+{
+	"type": "waterfall",
+	"title": "Where the token budget went",
+	"unit": "k",
+	"endLabel": "Per diagram",
+	"steps": [
+		[
+			"Hand-written SVG",
+			15
+		],
+		[
+			"Spec, not SVG",
+			-9.8
+		],
+		[
+			"Load 1 guide",
+			-1.6
+		],
+		{
+			"label": "Quiet scripts",
+			"value": -1.2,
+			"focal": true
+		},
+		[
+			"Patch fixes",
+			-0.6
+		],
+		[
+			"Repo scan",
+			0.4
+		]
+	]
+}

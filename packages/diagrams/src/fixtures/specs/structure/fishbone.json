@@ -1,0 +1,37 @@
+{
+	"type": "fishbone",
+	"title": "Why checkout is slow",
+	"effect": "p95 checkout > 2s",
+	"categories": [
+		{
+			"label": "Database",
+			"focal": true,
+			"causes": [
+				"N+1 on line items",
+				"missing index",
+				"lock waits"
+			]
+		},
+		{
+			"label": "Network",
+			"causes": [
+				"cross-region calls",
+				"TLS per request"
+			]
+		},
+		{
+			"label": "Code",
+			"causes": [
+				"sync fraud check",
+				"large JSON payload"
+			]
+		},
+		{
+			"label": "Third parties",
+			"causes": [
+				"tax API timeouts",
+				"retry storms"
+			]
+		}
+	]
+}

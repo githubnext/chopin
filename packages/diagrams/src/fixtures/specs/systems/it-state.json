@@ -1,0 +1,49 @@
+{
+	"type": "it-state",
+	"title": "Finance systems today",
+	"nodes": [
+		{
+			"id": "erp",
+			"label": "ERP",
+			"sub": "SAP ECC",
+			"status": "legacy",
+			"row": 0,
+			"col": 1,
+			"group": "core"
+		},
+		{ "id": "gl", "label": "General ledger", "status": "ok", "row": 1, "col": 1, "group": "core" },
+		{
+			"id": "exp",
+			"label": "Expenses",
+			"sub": "SaaS",
+			"status": "ok",
+			"kind": "external",
+			"row": 0,
+			"col": 0
+		},
+		{
+			"id": "rec",
+			"label": "Reconciliation",
+			"sub": "spreadsheets",
+			"status": "risk",
+			"focal": true,
+			"row": 1,
+			"col": 2
+		},
+		{
+			"id": "bi",
+			"label": "Reporting",
+			"sub": "Excel macros",
+			"status": "retire",
+			"row": 0,
+			"col": 2
+		}
+	],
+	"groups": [{ "id": "core", "label": "System of record" }],
+	"edges": [
+		["exp", "erp", "nightly CSV"],
+		["erp", "gl", "post"],
+		["gl", "rec", "export", "primary"],
+		["erp", "bi", "extract"]
+	]
+}

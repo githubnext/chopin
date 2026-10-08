@@ -1,0 +1,15 @@
+{
+	"type": "venn",
+	"title": "Why SeeCode",
+	"sets": [
+		{ "id": "ed", "label": "Editorial" },
+		{ "id": "an", "label": "Animated" },
+		{ "id": "ch", "label": "Cheap to run" }
+	],
+	"overlaps": [
+		{ "sets": ["ed", "an"], "label": "explainers" },
+		{ "sets": ["an", "ch"], "label": "GIFs" },
+		{ "sets": ["ed", "ch"], "label": "specs" },
+		{ "sets": ["ed", "an", "ch"], "label": "SeeCode", "focal": true }
+	]
+}

@@ -1,0 +1,38 @@
+{
+	"type": "db-schema",
+	"title": "Billing schema",
+	"nodes": [
+		{
+			"id": "accounts",
+			"label": "accounts",
+			"tag": "TABLE",
+			"fields": [["id", "uuid", "PK"], ["plan_id", "uuid", "FK"], ["created_at", "timestamptz"]],
+			"row": 0,
+			"col": 0
+		},
+		{
+			"id": "plans",
+			"label": "plans",
+			"fields": [["id", "uuid", "PK"], ["name", "text"], ["price_cents", "int"]],
+			"row": 1,
+			"col": 1
+		},
+		{
+			"id": "invoices",
+			"label": "invoices",
+			"focal": true,
+			"fields": [
+				["id", "uuid", "PK"],
+				["account_id", "uuid", "FK"],
+				["total_cents", "int"],
+				["status", "text"]
+			],
+			"row": 0,
+			"col": 1
+		}
+	],
+	"edges": [
+		["invoices.account_id", "accounts.id", "", "many-one"],
+		["accounts.plan_id", "plans.id", "", "many-one"]
+	]
+}

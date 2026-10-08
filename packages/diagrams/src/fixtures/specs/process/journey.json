@@ -1,0 +1,53 @@
+{
+	"type": "journey",
+	"title": "First diagram with SeeCode",
+	"stages": [
+		{
+			"label": "Discover",
+			"steps": [
+				{
+					"label": "Hears about it",
+					"score": 1
+				},
+				{
+					"label": "Installs skill",
+					"score": 0
+				}
+			]
+		},
+		{
+			"label": "First run",
+			"steps": [
+				{
+					"label": "Picks settings",
+					"score": 0
+				},
+				{
+					"label": "Asks for a diagram",
+					"score": 1
+				},
+				{
+					"label": "Missing Chrome for MP4",
+					"score": -2,
+					"pain": true,
+					"note": "needs doctor"
+				}
+			]
+		},
+		{
+			"label": "Share",
+			"steps": [
+				{
+					"label": "Exports GIF",
+					"score": 2,
+					"focal": true,
+					"note": "wow moment"
+				},
+				{
+					"label": "Posts it",
+					"score": 2
+				}
+			]
+		}
+	]
+}

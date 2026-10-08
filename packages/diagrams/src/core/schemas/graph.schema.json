@@ -1,0 +1,291 @@
+{
+	"title": "Graph family: architecture, flowchart, data-flow, dependency, deployment, high-level, state, er, db-schema, uml-class, swimlane, architecture-delta, it-state",
+	"required": [
+		"nodes"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"dir": {
+			"enum": [
+				"LR",
+				"TB"
+			]
+		},
+		"nodes": {
+			"type": "array",
+			"minItems": 1,
+			"items": {
+				"$ref": "#/$defs/node"
+			}
+		},
+		"edges": {
+			"type": "array",
+			"items": {
+				"$ref": "#/$defs/edge"
+			}
+		},
+		"groups": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": [
+					"id"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string",
+						"maxLength": 32
+					},
+					"style": {
+						"enum": [
+							"solid",
+							"dashed"
+						]
+					},
+					"nodes": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				}
+			}
+		},
+		"lanes": {
+			"type": "array",
+			"maxItems": 8,
+			"items": {
+				"anyOf": [
+					{
+						"type": "string"
+					},
+					{
+						"type": "object",
+						"required": [
+							"id"
+						],
+						"additionalProperties": false,
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"label": {
+								"type": "string",
+								"maxLength": 28
+							}
+						}
+					}
+				]
+			}
+		}
+	},
+	"$defs": {
+		"node": {
+			"type": "object",
+			"required": [
+				"id"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"id": {
+					"type": "string",
+					"pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+				},
+				"label": {
+					"type": "string",
+					"maxLength": 40
+				},
+				"sub": {
+					"type": "string",
+					"maxLength": 48
+				},
+				"tag": {
+					"type": "string",
+					"maxLength": 14
+				},
+				"kind": {
+					"enum": [
+						"backend",
+						"focal",
+						"store",
+						"external",
+						"input",
+						"optional",
+						"security",
+						"muted"
+					]
+				},
+				"focal": {
+					"type": "boolean"
+				},
+				"shape": {
+					"enum": [
+						"box",
+						"decision",
+						"terminal",
+						"io",
+						"store",
+						"state",
+						"start",
+						"end",
+						"entity",
+						"class"
+					]
+				},
+				"row": {
+					"type": "integer",
+					"minimum": 0,
+					"maximum": 40
+				},
+				"col": {
+					"type": "integer",
+					"minimum": 0,
+					"maximum": 40
+				},
+				"group": {
+					"type": "string"
+				},
+				"change": {
+					"enum": [
+						"added",
+						"removed",
+						"changed"
+					]
+				},
+				"fields": {
+					"type": "array",
+					"maxItems": 16,
+					"items": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 48
+							},
+							{
+								"type": "array",
+								"minItems": 1,
+								"maxItems": 3,
+								"items": {
+									"type": "string"
+								}
+							}
+						]
+					}
+				},
+				"attrs": {
+					"type": "array",
+					"maxItems": 10,
+					"items": {
+						"type": "string",
+						"maxLength": 48
+					}
+				},
+				"methods": {
+					"type": "array",
+					"maxItems": 10,
+					"items": {
+						"type": "string",
+						"maxLength": 48
+					}
+				},
+				"status": {
+					"enum": [
+						"ok",
+						"risk",
+						"legacy",
+						"retire"
+					]
+				},
+				"lane": {
+					"type": "string"
+				}
+			}
+		},
+		"edgeKind": {
+			"enum": [
+				"default",
+				"primary",
+				"link",
+				"async",
+				"return",
+				"muted",
+				"one-one",
+				"one-many",
+				"many-one",
+				"many-many",
+				"zero-many",
+				"one-zero",
+				"extends",
+				"implements",
+				"composes",
+				"aggregates",
+				"depends",
+				"assoc",
+				"line"
+			]
+		},
+		"edge": {
+			"anyOf": [
+				{
+					"type": "array",
+					"minItems": 2,
+					"maxItems": 4,
+					"items": [
+						{
+							"type": "string"
+						},
+						{
+							"type": "string"
+						},
+						{
+							"type": "string"
+						},
+						{
+							"$ref": "#/$defs/edgeKind"
+						}
+					]
+				},
+				{
+					"type": "object",
+					"required": [
+						"from",
+						"to"
+					],
+					"additionalProperties": false,
+					"properties": {
+						"id": {
+							"type": "string"
+						},
+						"from": {
+							"type": "string"
+						},
+						"to": {
+							"type": "string"
+						},
+						"label": {
+							"type": "string",
+							"maxLength": 28
+						},
+						"kind": {
+							"$ref": "#/$defs/edgeKind"
+						},
+						"both": {
+							"type": "boolean"
+						},
+						"change": {
+							"enum": [
+								"added",
+								"removed",
+								"changed"
+							]
+						}
+					}
+				}
+			]
+		}
+	}
+}

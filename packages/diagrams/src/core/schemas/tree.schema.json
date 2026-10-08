@@ -1,0 +1,36 @@
+{
+	"title": "Tree / org chart",
+	"required": ["root"],
+	"additionalProperties": false,
+	"properties": {
+		"dir": { "enum": ["TB", "LR"] },
+		"root": { "$ref": "#/$defs/tnode" }
+	},
+	"$defs": {
+		"tnode": {
+			"type": "object",
+			"required": ["label"],
+			"additionalProperties": false,
+			"properties": {
+				"id": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$" },
+				"label": { "type": "string", "maxLength": 36 },
+				"sub": { "type": "string", "maxLength": 40 },
+				"tag": { "type": "string", "maxLength": 8 },
+				"kind": {
+					"enum": [
+						"backend",
+						"focal",
+						"store",
+						"external",
+						"input",
+						"optional",
+						"security",
+						"muted"
+					]
+				},
+				"focal": { "type": "boolean" },
+				"children": { "type": "array", "items": { "$ref": "#/$defs/tnode" } }
+			}
+		}
+	}
+}

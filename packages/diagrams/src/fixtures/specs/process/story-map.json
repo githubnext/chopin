@@ -1,0 +1,74 @@
+{
+	"type": "story-map",
+	"title": "Diagram-from-code story map",
+	"releases": [
+		"MVP",
+		"Next"
+	],
+	"activities": [
+		{
+			"label": "Point at a repo",
+			"steps": [
+				{
+					"label": "Scan the code",
+					"stories": {
+						"MVP": [
+							"Detect modules",
+							"Find tech"
+						],
+						"Next": [
+							"Cite evidence"
+						]
+					}
+				}
+			]
+		},
+		{
+			"label": "Get a diagram",
+			"focal": true,
+			"steps": [
+				{
+					"label": "Write spec",
+					"stories": {
+						"MVP": [
+							"Graph types"
+						],
+						"Next": [
+							"All 42 types"
+						]
+					}
+				},
+				{
+					"label": "Render",
+					"focal": true,
+					"stories": {
+						"MVP": [
+							"Routing",
+							"Motion"
+						],
+						"Next": [
+							"Sketchy style"
+						]
+					}
+				}
+			]
+		},
+		{
+			"label": "Share it",
+			"steps": [
+				{
+					"label": "Export",
+					"stories": {
+						"MVP": [
+							"PNG",
+							"GIF"
+						],
+						"Next": [
+							"MP4"
+						]
+					}
+				}
+			]
+		}
+	]
+}

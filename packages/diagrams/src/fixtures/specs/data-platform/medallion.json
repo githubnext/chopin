@@ -1,0 +1,51 @@
+{
+	"type": "medallion",
+	"title": "Lakehouse layers",
+	"stages": [
+		{
+			"label": "Sources",
+			"plain": true,
+			"kind": "input",
+			"items": [
+				"Postgres CDC",
+				"Clickstream",
+				"Stripe"
+			]
+		},
+		{
+			"label": "Bronze",
+			"items": [
+				"raw_orders",
+				"raw_events",
+				"raw_payments"
+			]
+		},
+		{
+			"label": "Silver",
+			"items": [
+				"orders",
+				"sessions",
+				"payments"
+			]
+		},
+		{
+			"label": "Gold",
+			"items": [
+				{
+					"label": "revenue_daily",
+					"focal": true
+				},
+				"funnel"
+			]
+		},
+		{
+			"label": "Consumers",
+			"plain": true,
+			"kind": "external",
+			"items": [
+				"Finance BI",
+				"Growth"
+			]
+		}
+	]
+}

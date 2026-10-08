@@ -1,0 +1,60 @@
+{
+	"title": "Wardley map",
+	"required": [
+		"components"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"components": {
+			"type": "array",
+			"minItems": 2,
+			"items": {
+				"type": "object",
+				"required": [
+					"label",
+					"evo",
+					"vis"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string",
+						"maxLength": 28
+					},
+					"evo": {
+						"type": "number"
+					},
+					"vis": {
+						"type": "number"
+					},
+					"focal": {
+						"type": "boolean"
+					},
+					"anchor": {
+						"type": "boolean"
+					},
+					"inertia": {
+						"type": "boolean"
+					},
+					"moveTo": {
+						"type": "number"
+					}
+				}
+			}
+		},
+		"links": {
+			"type": "array",
+			"items": {
+				"type": "array",
+				"minItems": 2,
+				"maxItems": 2,
+				"items": {
+					"type": "string"
+				}
+			}
+		}
+	}
+}
