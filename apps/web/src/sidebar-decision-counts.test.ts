@@ -10,6 +10,9 @@ import {
 	completeDocumentPage,
 	failDocumentLoad,
 	newestDocument,
+	removeLoadedDocument,
+	replaceProjectTotal,
+	staleDecisionCounts,
 } from "./document-actions";
 import { ProjectSidebar } from "./project-sidebar";
 
@@ -215,18 +218,40 @@ describe("catalogue decision totals", () => {
 		expect(next.R_chopin!.channels[0]).toBe(parent);
 	});
 
-	it("never lets an older commit's count replace a newer one", () => {
+	it("never lets an older commit's count or total replace a newer one", () => {
 		let documents = {
 			R_chopin: { status: "ready" as const, channels: [parent], unansweredDecisions: 10 },
 		};
-		let stale = applyDecisionCounts(documents, {
+		let stale = {
 			channelId: parent.id,
 			repositoryId: "R_chopin",
 			unanswered: 7,
 			repositoryUnanswered: 13,
 			revision: 2,
+		};
+		expect(applyDecisionCounts(documents, stale)).toBe(documents);
+		expect(staleDecisionCounts(parent, stale)).toBe(true);
+		expect(staleDecisionCounts(parent, { ...stale, revision: 3 })).toBe(false);
+		expect(staleDecisionCounts(undefined, stale)).toBe(false);
+
+		let asked = applyDecisionCounts(documents, {
+			...stale,
+			unanswered: 5,
+			repositoryUnanswered: 11,
+			revision: 4,
 		});
-		expect(stale.R_chopin!.channels[0]).toBe(parent);
+		let openedEarlier = applyDecisionCounts(asked, {
+			...stale,
+			unanswered: 4,
+			repositoryUnanswered: 10,
+			revision: 3,
+		});
+		expect(openedEarlier).toBe(asked);
+		expect(openedEarlier.R_chopin).toMatchObject({ unansweredDecisions: 11 });
+		expect(openedEarlier.R_chopin!.channels[0]).toMatchObject({
+			revision: 4,
+			unansweredDecisions: 5,
+		});
 		expect(acceptDecisionCounts(parent, undefined)).toBe(parent);
 		expect(acceptDecisionCounts(parent, {
 			channelId: child.id,
@@ -276,5 +301,19 @@ describe("catalogue decision totals", () => {
 			repositoryUnanswered: 1,
 			revision: 9,
 		})).toBe(unloaded);
+	});
+
+	it("replaces the project total once an archived document leaves its rows", () => {
+		let documents = {
+			R_chopin: { status: "ready" as const, channels: [parent, child], unansweredDecisions: 5 },
+		};
+		let removed = removeLoadedDocument(documents, parent.id);
+		expect(removed.R_chopin).toMatchObject({ unansweredDecisions: 5 });
+		let archived = replaceProjectTotal(removed, "R_chopin", 0);
+
+		expect(archived.R_chopin).toMatchObject({ unansweredDecisions: 0 });
+		expect(sidebar(archived.R_chopin!)).not.toContain("unanswered decision");
+		expect(replaceProjectTotal(archived, "R_chopin", 0)).toBe(archived);
+		expect(replaceProjectTotal(archived, "R_other", 4)).toBe(archived);
 	});
 });

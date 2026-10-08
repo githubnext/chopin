@@ -82,6 +82,11 @@ export function relay<T extends Outgoing>(ws: Socket, frame: T): void {
 	ws.publish(topic(ws.data.room), stamp(frame, { sender: ws.data.handle }));
 }
 
+/** Every socket open on any document in one repository, whichever room it joined. */
+export function repositoryTopic(repositoryId: string): string {
+	return `repository:${repositoryId}`;
+}
+
 /** Tell the whole room something the server decided. */
 export function broadcast<T extends Outgoing>(
 	server: Server<SocketData>,
@@ -89,4 +94,13 @@ export function broadcast<T extends Outgoing>(
 	frame: T,
 ): void {
 	server.publish(topic(room), stamp(frame));
+}
+
+/** Tell every socket in a repository something the server decided. */
+export function broadcastRepository<T extends Outgoing>(
+	server: Server<SocketData>,
+	repositoryId: string,
+	frame: T,
+): void {
+	server.publish(repositoryTopic(repositoryId), stamp(frame));
 }

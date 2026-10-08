@@ -79,10 +79,18 @@ Decisions tab shows. The unfiltered active listing (no `query`, no
 `includeArchived`) adds a top-level `unansweredDecisions` total across the whole
 active catalogue, including documents on pages the client has not loaded. The
 Projects sidebar shows both without opening a room per row. When a commit changes
-an open document's count, and when a socket opens the document, the server sends
-`session:decisions` with the document count, the repository total, and the storage
-revision the count was committed at, so a client can ignore an older listing.
-Archived catalogue views show no counts.
+an open document's count, or a document is archived or restored, the server
+publishes `session:decisions` to every socket open on any document in that
+repository, not just the changed document's room. A socket that opens a document
+also receives the current counts. Each frame carries the document count, the
+repository total, and the storage revision the count was committed at. Frames for
+one repository are read and sent one at a time, so a later frame never carries an
+older total, and a client ignores a frame older than the revision it already holds
+for that document, including its total. Archive and restore responses also carry
+the repository's active total, so the client that moved a document updates its
+project row even when it has no socket in that repository. Archived catalogue
+views show no counts.
+Projects in other repositories update when their listing next loads.
 
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per

@@ -1,4 +1,5 @@
-import { expect, test } from "./room";
+import { createChannel } from "./database";
+import { expect, ready, roomPath, test } from "./room";
 import { installPointerMedia } from "./pointer-media";
 
 import type { Locator, Page } from "@playwright/test";
@@ -71,9 +72,8 @@ async function mockCatalogue(page: Page) {
 	});
 }
 
-async function settlePointer(page: Page) {
+async function movePointerAway(page: Page) {
 	await page.mouse.move(900, 700);
-	await page.locator("body").evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 }
 
 async function right(locator: Locator): Promise<number> {
@@ -139,15 +139,38 @@ test("sidebar counts share one trailing slot with the hover and focus actions", 
 	await expect(newDocument).toBeVisible();
 	expect(Math.abs(await right(newDocument) - edge)).toBeLessThanOrEqual(1);
 
-	await settlePointer(page);
+	await movePointerAway(page);
 	await expect(count(projectRow)).toHaveText("10");
 	await expect(count(parentRow)).toHaveText("4");
 	await expect(count(childRow)).toHaveText("1");
 	await expect(newDocument).toBeHidden();
 
+	await disclosure.click();
+	await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+	await expect(disclosure).toBeFocused();
+	await movePointerAway(page);
+	await expect(count(projectRow)).toHaveText("10");
+	await expect(newDocument).toBeHidden();
+	await disclosure.click();
+	await expect(parentLink).toBeVisible();
+	await movePointerAway(page);
+	await expect(disclosure).toBeFocused();
+	await expect(count(projectRow)).toHaveText("10");
+	await expect(newDocument).toBeHidden();
+
+	await page.keyboard.press("Tab");
+	await expect(newDocument).toBeFocused();
+	await expect(count(projectRow)).toBeHidden();
+	await page.keyboard.press("Shift+Tab");
+	await expect(disclosure).toBeFocused();
+	await expect(count(projectRow)).toBeHidden();
+	await expect(newDocument).toBeVisible();
+	await expect(count(parentRow)).toBeVisible();
+
 	await parentLink.focus();
 	await expect(count(parentRow)).toBeHidden();
 	await expect(parentActions).toBeVisible();
+	await expect(count(projectRow)).toHaveText("10");
 	await page.keyboard.press("Tab");
 	await expect(parentActions).toBeFocused();
 	await expect(count(parentRow)).toBeHidden();
@@ -160,17 +183,16 @@ test("sidebar counts share one trailing slot with the hover and focus actions", 
 	await disclosure.press("Enter");
 	await expect(disclosure).toHaveAttribute("aria-expanded", "false");
 	await expect(parentLink).toBeHidden();
-	await settlePointer(page);
 	await expect(disclosure).toHaveAccessibleName("score, 10 unanswered decisions");
-	await expect(count(projectRow)).toHaveText("10");
-
-	await disclosure.click();
+	await disclosure.press("Enter");
 	await expect(parentLink).toBeVisible();
+
 	await projects.getByRole("button", { name: "Load more documents in score" }).click();
 	await expect(projects.getByRole("link", { name: "Later page, 5 unanswered decisions" }))
 		.toBeVisible();
-	await settlePointer(page);
+	await movePointerAway(page);
 	await expect(count(projectRow)).toHaveText("10");
+	await expect(newDocument).toBeHidden();
 });
 
 test("touch keeps each count visible beside its always-shown action", async ({ join }) => {
@@ -208,10 +230,14 @@ test("touch keeps each count visible beside its always-shown action", async ({ j
 	await expect(parentActions).toBeVisible();
 });
 
-test("a document's sidebar count follows decisions as they are asked and answered", async ({ join, room }) => {
+function socketChannel(url: string): string | null {
+	return new URL(url).searchParams.get("channel");
+}
+
+test("a document's sidebar count follows decisions as they are asked and answered", async ({ join, page: first, room }) => {
 	let sockets: string[] = [];
+	first.on("websocket", socket => sockets.push(socket.url()));
 	let page = await join("ana");
-	page.on("websocket", socket => sockets.push(socket.url()));
 	let projects = sidebar(page);
 	let title = `Test ${room.slice(0, 8)}`;
 	let link = projects.getByRole("link", { name: new RegExp(`^${title}`) });
@@ -239,5 +265,38 @@ test("a document's sidebar count follows decisions as they are asked and answere
 	};
 	expect(catalogue.channels.find(item => item.id === room)?.unansweredDecisions).toBe(1);
 	expect(catalogue.unansweredDecisions).toBeGreaterThanOrEqual(1);
-	expect(sockets).toEqual([]);
+	expect(sockets.length).toBeGreaterThan(0);
+	expect(sockets.map(socketChannel).every(channel => channel === room)).toBe(true);
+});
+
+test("another document's count follows its decisions while the viewer stays elsewhere", async ({ baseURL, join, page: first, room }) => {
+	let other = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), other);
+	let sockets: string[] = [];
+	first.on("websocket", socket => sockets.push(socket.url()));
+	let viewer = await join("ana");
+	let projects = sidebar(viewer);
+	let title = `Test ${other.slice(0, 8)}`;
+	let link = projects.getByRole("link", { name: new RegExp(`^${title}`) });
+	let row = link.locator("..");
+	await expect(link).toHaveAccessibleName(title);
+	await expect(count(row)).toHaveCount(0);
+
+	let editor = await join("bob");
+	await editor.goto(roomPath(other));
+	await ready(editor);
+	await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+	await expect(count(row)).toHaveText("2");
+
+	await editor.getByRole("button", { name: /^Decisions/ }).click();
+	let card = editor.locator(
+		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
+	)
+		.filter({ hasText: "Where should room state live?" });
+	await card.getByText("In SQLite", { exact: true }).click();
+	await card.getByRole("button", { name: "Save", exact: true }).click();
+
+	await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
+	await expect(count(row)).toHaveText("1");
+	expect(sockets.map(socketChannel).every(channel => channel === room)).toBe(true);
 });

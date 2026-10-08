@@ -56,7 +56,7 @@ import { admit } from "./socket/admission";
 import { refreshAuthorization } from "./socket/authorization";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
-import { broadcast, fail, relay, reply, tell, topic } from "./wire";
+import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
 
 import type { Server } from "bun";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
@@ -779,6 +779,7 @@ function listen(): Server<SocketData> {
 					&& !archivingChannels.has(ws.data.room)
 					&& !deletingChannels.has(ws.data.room);
 				ws.subscribe(topic(ws.data.room));
+				ws.subscribe(repositoryTopic(ws.data.repositoryId));
 				let room = Rooms.join(ws);
 				tell(ws, {
 					kind: "session:hello",
@@ -820,6 +821,7 @@ function listen(): Server<SocketData> {
 				if (ws.data.authorizationTimer) clearTimeout(ws.data.authorizationTimer);
 				let room = Rooms.leave(ws);
 				ws.unsubscribe(topic(ws.data.room));
+				ws.unsubscribe(repositoryTopic(ws.data.repositoryId));
 				if (!room) return;
 				if (room.plan) {
 					Service.departed(room.plan, ws);
@@ -1004,6 +1006,7 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 			return storage.channels.archive({ id: channelId, now });
 		});
 		announceChannel(result.channel);
+		void Service.announceCatalogueUnanswered(server, storage, result.channel);
 		return result;
 	} catch (err) {
 		summaryCoordinator?.resume(channelId);
@@ -1053,6 +1056,7 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 		await conversationRuntime.attach(current, current.plan, false, !result.channel.parentChannelId);
 	}
 	announceChannel(result.channel);
+	void Service.announceCatalogueUnanswered(server, storage, result.channel);
 	if (summaryCoordinator) void summaryCoordinator.ensure(channelId).catch(() => {});
 	return result;
 }
