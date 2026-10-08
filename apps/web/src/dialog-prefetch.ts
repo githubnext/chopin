@@ -10,7 +10,6 @@ export function prefetchDialogs(
 ) {
 	void import("./add-project-dialog");
 	void import("./new-document-dialog");
-	void import("./rename-document-dialog");
 	void import("./delete-document-dialog");
 	if (projects) return warmRecentSearch(userId, projects, includeArchived, source);
 }
