@@ -2048,6 +2048,8 @@
 
 	max-inline-size: 100%;
 	overflow-x: auto;
+	/* The renderer raises its header; keep that inside, under the block's controls. */
+	isolation: isolate;
 }
 
 /* The renderer's shadow root owns syntax painting; this host supplies the
@@ -2127,18 +2129,6 @@
 	z-index: 1;
 }
 
-/* Revealed on hover or focus where a pointer can hover; always shown on touch. */
-@media (hover: hover) and (pointer: fine) {
-	.plan-content .planMath[data-plan-inline="false"] .plan-code-toggle[aria-expanded="false"] {
-		opacity: 0;
-		transition: opacity var(--duration-fast) var(--ease-out);
-	}
-
-	.plan-content .planMath[data-plan-inline="false"]:is(:hover, :focus-within) .plan-code-toggle {
-		opacity: 1;
-	}
-}
-
 /*
  * Say what belongs in an empty one. Lexical fills an empty block with a managed
  * line break, so `:empty` never matches and the placeholder keys off that
@@ -2171,11 +2161,19 @@
 	height: auto;
 }
 
+/*
+ * A diagram a little wider than the measure shrinks to fit; one that would
+ * have to shrink past legibility keeps its drawn size and scrolls, with the
+ * hidden side faded so the cut reads as "more this way" rather than a crop.
+ */
 .plan-content .plan-diagram {
+	--ace-diagram-fade: calc(var(--spacing) * 8);
+
 	max-inline-size: 100%;
 	overflow-x: auto;
 	overflow-y: hidden;
 	overscroll-behavior-inline: contain;
+	transition: opacity var(--duration-base) var(--ease-out);
 }
 
 .plan-content .plan-diagram svg {
@@ -2184,11 +2182,39 @@
 	margin-inline: auto;
 }
 
+.plan-content .plan-diagram[data-fit] svg {
+	max-width: 100%;
+}
+
+.plan-content .plan-diagram[data-more="end"] {
+	mask-image: linear-gradient(to right, black calc(100% - var(--ace-diagram-fade)), transparent);
+}
+
+.plan-content .plan-diagram[data-more="start"] {
+	mask-image: linear-gradient(to right, transparent, black var(--ace-diagram-fade));
+}
+
+.plan-content .plan-diagram[data-more="both"] {
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		black var(--ace-diagram-fade),
+		black calc(100% - var(--ace-diagram-fade)),
+		transparent
+	);
+}
+
+/* The last drawing that worked, kept while its source is mid-edit. */
+.plan-content .plan-diagram[data-stale] {
+	opacity: 0.4;
+}
+
 /*
  * A code block is one box: header, rendered code, source. A border rather than
  * an outline, because the renderer paints over an inset outline.
  */
 .plan-content .planCode {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	margin-block: 1em;
@@ -2198,11 +2224,136 @@
 	background: var(--color-page);
 }
 
+/*
+ * A block's controls float in its top-end corner rather than on a bar of their
+ * own, the same place a formula's toggle sits. At rest a code block shows only
+ * its language, as quiet text; the menu and the source toggle arrive on hover
+ * or focus. The fill fades in from the start so a long first line runs under
+ * the label instead of colliding with it.
+ */
 .plan-content .planCode [data-plan-chrome="block"] {
-	order: -1;
-	padding: 0.25rem;
-	border-block-end: var(--edge-width) solid var(--color-edge);
-	background: var(--color-inset);
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	z-index: 1;
+}
+
+/* Room for the controls, so they never sit on a drawing or a diff's counts. */
+.plan-content .planCode .plan-diagram {
+	padding-block-start: calc(var(--spacing) * 8);
+}
+
+.plan-content .plan-diff-chrome-room {
+	display: block;
+	inline-size: calc(var(--spacing) * 26);
+}
+
+.plan-content .planCode .plan-code-chrome {
+	position: relative;
+	padding: calc(var(--spacing) * 1.5);
+	background-color: var(--color-page);
+}
+
+.plan-content .planCode .plan-code-chrome::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-end: 100%;
+	inline-size: calc(var(--spacing) * 6);
+	background: linear-gradient(to right, transparent, var(--color-page));
+	pointer-events: none;
+}
+
+.plan-content .plan-code-chrome :is(.plan-code-language, .plan-code-language-label) {
+	font-size: var(--text-xs);
+}
+
+.plan-content .plan-code-chrome,
+.plan-content .plan-code-chrome .plan-code-toggle,
+.plan-content .plan-code-chrome .plan-code-language [data-nucleo-icon] {
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-content .plan-code-chrome,
+	.plan-content .plan-code-chrome .plan-code-toggle,
+	.plan-content .plan-code-chrome .plan-code-language [data-nucleo-icon],
+	.plan-content .plan-diagram {
+		transition: none;
+	}
+}
+
+/*
+ * Without hover the controls never leave, so on touch they get a band of their
+ * own above the content instead of sitting on its first line.
+ */
+@media not ((hover: hover) and (pointer: fine)) {
+	.plan-content .planCode {
+		padding-block-start: calc(var(--spacing) * 9);
+	}
+
+	.plan-content .planCode .plan-diagram {
+		padding-block-start: 0;
+	}
+
+	.plan-content .planCode .plan-code-chrome {
+		background: none;
+	}
+
+	.plan-content .plan-diff-chrome-room {
+		display: none;
+	}
+}
+
+/* Revealed on hover or focus where a pointer can hover; always shown on touch. */
+@media (hover: hover) and (pointer: fine) {
+	:is(.plan-content .planCode, .plan-content
+		.planMath[data-plan-inline="false"]):not(:hover, :focus-within, :has(.plan-code-chrome
+		[aria-expanded="true"])) {
+		/* Only a named language says something the rendering does not. */
+		& .plan-code-chrome:not([data-kind="code"]),
+		& .plan-code-toggle,
+		& .plan-code-language [data-nucleo-icon] {
+			opacity: 0;
+		}
+
+		/*
+		 * The hidden toggle keeps its place, so at rest only the label carries
+		 * a fill, reaching to the block's edge; code runs on under the empty
+		 * slot beside it.
+		 */
+		& .plan-code-chrome {
+			background: none;
+		}
+
+		& .plan-code-chrome::before {
+			content: none;
+		}
+
+		& .plan-code-chrome :is(.plan-code-language, .plan-code-language-label) {
+			position: relative;
+			background-color: var(--color-page);
+
+			&::before {
+				content: "";
+				position: absolute;
+				inset-block: 0;
+				inset-inline-end: 100%;
+				inline-size: calc(var(--spacing) * 6);
+				background: linear-gradient(to right, transparent, var(--color-page));
+				pointer-events: none;
+			}
+
+			&::after {
+				content: "";
+				position: absolute;
+				inset-block: 0;
+				inset-inline-start: 100%;
+				inline-size: calc(var(--spacing) * 1.5);
+				background-color: var(--color-page);
+			}
+		}
+	}
 }
 
 .plan-content .plan-code-toggle[aria-expanded="true"] {
@@ -2217,7 +2368,7 @@
 
 .plan-content .plan-code-language-label {
 	padding-inline: 0.5rem;
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	color: var(--color-text-tertiary);
 }
 
@@ -2262,6 +2413,34 @@
 	background: var(--color-page);
 }
 
+/* Like a formula's: say what belongs in an empty fence. See that rule for the line break. */
+.plan-content .planCode [data-plan-source] {
+	position: relative;
+}
+
+.plan-content
+	.planCode
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "Code";
+	position: absolute;
+	inset-block-start: 0.75rem;
+	inset-inline-start: 0.75rem;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
+}
+
+.plan-content
+	.planCode[data-plan-language="diff"]
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "Paste a unified diff";
+}
+
+.plan-content
+	.planCode[data-plan-language="mermaid"]
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "Mermaid, e.g. flowchart TD; A-->B";
+}
+
 .plan-content .planCode [data-plan-preview]:not(:empty) ~ [data-plan-source] {
 	border-block-start: var(--edge-width) solid var(--color-edge);
 	background: var(--color-inset);
@@ -2271,25 +2450,22 @@
 	padding-inline: 0.75rem;
 }
 
-/* Diagram error callout. */
+/*
+ * Diagram error: a quiet note under the last drawing that worked, not a panel.
+ * It only arrives once the author pauses, so it reads as a hint, not an alarm.
+ */
 .plan-content .planCode [data-plan-preview] [data-plan-error]:has(.plan-error-badge) {
 	display: flex;
 	align-items: flex-start;
-	gap: 0.625rem;
-	margin: 0.75rem;
-	padding: 0.625rem 0.75rem;
-	border-radius: var(--radius-md);
-	background: var(--color-ruby-2);
+	gap: calc(var(--spacing) * 2);
+	padding-block: calc(var(--spacing) * 2.5);
 }
 
 .plan-content .plan-error-badge {
 	display: grid;
 	flex-shrink: 0;
 	place-items: center;
-	width: 1.5rem;
-	height: 1.5rem;
-	border-radius: 50%;
-	background: var(--color-danger-surface);
+	height: var(--text-sm--line-height);
 	color: var(--color-destructive);
 }
 
@@ -2302,50 +2478,49 @@
 }
 
 .plan-content .plan-error-title {
-	display: block;
 	font-size: var(--text-sm);
-	font-weight: 600;
+	font-weight: 500;
 	color: var(--color-destructive-ink);
 }
 
 .plan-content .plan-error-message {
-	margin: 0.125rem 0 0;
+	display: inline;
+	margin: 0;
 	font-size: var(--text-sm);
-	color: var(--color-destructive-ink);
+	color: var(--color-text-tertiary);
 	overflow-wrap: anywhere;
 	line-height: var(--text-sm--line-height);
 }
 
+.plan-content .plan-error-message::before {
+	content: "·";
+	margin-inline: 0.375rem;
+	color: var(--color-text-quaternary);
+}
+
 .plan-content .plan-error-detail {
-	margin: 0.5rem 0 0;
+	margin: calc(var(--spacing) * 1) 0 0;
 	padding: 0;
 	overflow-x: auto;
 	background: transparent;
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
-	color: var(--color-destructive-ink);
-}
-
-.plan-content .plan-error-expected {
-	margin: 0.375rem 0 0;
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
-	color: var(--color-destructive-ink);
-	overflow-wrap: anywhere;
+	color: var(--color-text-tertiary);
 }
 
 .plan-content .plan-code-title {
 	min-width: 0;
+	max-inline-size: 16rem;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	color: var(--color-text-secondary);
 }
 
-.plan-content .plan-code-title::before {
+.plan-content .plan-code-title::after {
 	content: "·";
-	margin-inline: 0.125rem 0.375rem;
+	margin-inline: 0.375rem 0.125rem;
 	color: var(--color-text-quaternary);
 }
 

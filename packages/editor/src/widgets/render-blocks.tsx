@@ -48,6 +48,12 @@ import { CodeIcon, WarningIcon } from "@chopin/icons";
 import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
 import type { Kind } from "./code";
 
+/** How long the source must sit still before a failed drawing is reported. */
+const ERROR_DELAY = 600;
+
+/** Below this, a scaled-down diagram's labels stop being comfortably legible. */
+const MIN_DIAGRAM_SCALE = 0.75;
+
 type Block = {
 	key: string;
 	kind: Kind | "math";
@@ -251,10 +257,12 @@ function Preview(
 			return;
 		}
 		let cancelled = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 
 		let run = async () => {
 			if (!block.source.trim()) {
 				setHtml(undefined);
+				setError(undefined);
 				return;
 			}
 			try {
@@ -266,14 +274,17 @@ function Preview(
 				setError(undefined);
 			} catch (err) {
 				if (cancelled) return;
-				setHtml(undefined);
-				setError(err instanceof Error ? err.message : "could not be rendered");
+				// Half-typed source fails on nearly every keystroke. Keep the last
+				// drawing and only say what is wrong once the author pauses.
+				let message = err instanceof Error ? err.message : "could not be rendered";
+				timer = setTimeout(() => setError(message), ERROR_DELAY);
 			}
 		};
 
 		void run();
 		return () => {
 			cancelled = true;
+			clearTimeout(timer);
 		};
 	}, [drawn, block.key, block.kind, block.inline, block.source]);
 
@@ -309,6 +320,8 @@ function Preview(
 		return () => onHidable(block.key, false);
 	}, [block.key, hidable, onHidable]);
 
+	let title = block.kind !== "diff" ? titleOf(block.meta) : undefined;
+
 	// These portals are siblings, so their stable keys also need distinct roles.
 	return (
 		<>
@@ -322,26 +335,21 @@ function Preview(
 				<div
 					// Chrome, not content: keep it out of the editable tree.
 					contentEditable={false}
-					className="plan-code-chrome flex items-center justify-between gap-2"
+					className="plan-code-chrome flex min-w-0 items-center gap-1"
 					// The block clips its corners, so controls draw focus inside themselves.
 					data-focus-boundary=""
+					data-kind={block.kind}
 				>
-					<div className="flex min-w-0 items-center">
-						{named && <Language block={block} editor={editor} disabled={disabled} />}
-						{block.kind !== "diff" && titleOf(block.meta) && (
-							<span className="plan-code-title">{titleOf(block.meta)}</span>
-						)}
-					</div>
-					<div className="flex shrink-0 items-center gap-2">
-						{
-							// Tab indents code, so the way out has to be said
-							// where someone is typing it.
-							editing && !disabled && block.kind !== "math" && (
-								<span className="text-xs text-text-tertiary">Esc then Tab to leave</span>
-							)
-						}
-						{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
-					</div>
+					{
+						// Tab indents code, so the way out has to be said
+						// where someone is typing it.
+						editing && !disabled && block.kind !== "math" && (
+							<span className="text-xs text-text-tertiary">Esc then Tab to leave</span>
+						)
+					}
+					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
+					{title && <span className="plan-code-title">{title}</span>}
+					{named && <Language block={block} editor={editor} disabled={disabled} />}
 				</div>,
 				chrome,
 				`${block.key}:chrome`,
@@ -353,9 +361,12 @@ function Preview(
 /**
  * Not a live region: the diagram re-renders on every keystroke, and each
  * intermediate error would be announced.
+ *
+ * The parser's list of expected tokens is left out: the excerpt already points
+ * at the place, and the token names mean nothing to someone drawing a chart.
  */
 function DiagramError({ message }: { message: string }) {
-	let { summary, excerpt, expected } = describeDiagramError(message);
+	let { summary, excerpt } = describeDiagramError(message);
 	return (
 		<div data-plan-error="">
 			<span aria-hidden="true" className="plan-error-badge">
@@ -365,16 +376,86 @@ function DiagramError({ message }: { message: string }) {
 				<strong className="plan-error-title">This diagram could not be drawn</strong>
 				<p className="plan-error-message">{summary}</p>
 				{excerpt && <pre className="plan-error-detail">{excerpt}</pre>}
-				{expected && <p className="plan-error-expected">{expected}</p>}
 			</div>
 		</div>
+	);
+}
+
+/** Which sides of a scroller still hide some of the drawing. */
+function hiddenSides(element: HTMLElement): "start" | "end" | "both" | undefined {
+	let start = element.scrollLeft > 1;
+	let end = element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+	if (start && end) return "both";
+	return start ? "start" : end ? "end" : undefined;
+}
+
+/**
+ * A drawn diagram in its own horizontal scroller.
+ *
+ * Mermaid lays text out at its authored size, so shrinking a wide chart to the
+ * measure makes its labels unreadable. A modest overshoot is scaled to fit;
+ * anything wider keeps its size and scrolls, fading the side with more to see.
+ */
+function Diagram({ html, stale }: { html: string; stale: boolean }) {
+	let region = useRef<HTMLDivElement>(null);
+	let [fit, setFit] = useState(false);
+	let [more, setMore] = useState<ReturnType<typeof hiddenSides>>();
+
+	useEffect(() => {
+		let element = region.current;
+		let svg = element?.querySelector("svg");
+		if (!element || !svg) return;
+		let authored = Number(svg.getAttribute("width"));
+		let measure = () => {
+			let style = getComputedStyle(element);
+			let room = element.clientWidth - parseFloat(style.paddingInlineStart)
+				- parseFloat(style.paddingInlineEnd);
+			setFit(!(authored > 0) || room >= authored * MIN_DIAGRAM_SCALE);
+			setMore(hiddenSides(element));
+		};
+		let scrolled = () => setMore(hiddenSides(element));
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(element);
+		element.addEventListener("scroll", scrolled, { passive: true });
+		return () => {
+			observer.disconnect();
+			element.removeEventListener("scroll", scrolled);
+		};
+	}, [html]);
+
+	// Fitting changes the drawing's width, so whether anything is hidden is
+	// only known after that has been laid out.
+	useEffect(() => {
+		if (region.current) setMore(hiddenSides(region.current));
+	}, [fit, html]);
+
+	return (
+		<div
+			ref={region}
+			aria-label="Diagram preview"
+			className="plan-diagram"
+			data-fit={fit ? "" : undefined}
+			data-more={more}
+			data-stale={stale ? "" : undefined}
+			role="region"
+			tabIndex={0}
+			dangerouslySetInnerHTML={{ __html: html }}
+		/>
 	);
 }
 
 function Rendered(
 	{ block, html, error }: { block: Block; html: string | undefined; error: string | undefined },
 ) {
-	if (error && block.kind === "mermaid") return <DiagramError message={error} />;
+	if (block.kind === "mermaid" && (html || error)) {
+		return (
+			<>
+				{html && <Diagram html={html} stale={!!error} />}
+				{error && <DiagramError message={error} />}
+			</>
+		);
+	}
 	if (error) return <div data-plan-error="">{error}</div>;
 	if (!block.source.trim()) return null;
 
@@ -390,17 +471,6 @@ function Rendered(
 	}
 
 	if (!html) return null;
-	if (block.kind === "mermaid") {
-		return (
-			<div
-				aria-label="Diagram preview"
-				className="plan-diagram"
-				role="region"
-				tabIndex={0}
-				dangerouslySetInnerHTML={{ __html: html }}
-			/>
-		);
-	}
 
 	// Produced by KaTeX from validated source under its strict mode, not by
 	// anything the author wrote.
