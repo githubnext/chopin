@@ -165,11 +165,11 @@ test("refuses a paste that would push the document past its limits", () => {
 	expect(pastedMarkdown(nested, { images: 0, depth: 2 })).toBeDefined();
 	expect(pastedMarkdown(nested, { images: 0, depth: limits.MAX_DEPTH - 2 })).toBeUndefined();
 
-	let large = "- item\n".repeat(Math.ceil(limits.MAX_SOURCE_BYTES / 7) + 1);
+	let large = "- item\n".repeat(Math.ceil(64 * 1024 / 7) + 1);
 	expect(looksLikeMarkdown(large)).toBe(false);
 	expect(pastedMarkdown(large)).toBeUndefined();
-	let multibyte = "- é\n".repeat(Math.ceil(limits.MAX_SOURCE_BYTES / 5) + 1);
-	expect(multibyte.length).toBeLessThan(limits.MAX_SOURCE_BYTES);
+	let multibyte = "**é** ".repeat(Math.ceil(limits.MAX_SOURCE_BYTES / 8) + 1);
+	expect(multibyte.length).toBeGreaterThan(limits.MAX_SOURCE_BYTES / 2);
 	expect(pastedMarkdown(multibyte)).toBeUndefined();
 });
 
@@ -201,4 +201,24 @@ test("recognises plain-text paste shortcuts on any layout", () => {
 	expect(isPlainPasteKey({ ...key, key: "◊" })).toBe(true);
 	expect(isPlainPasteKey({ ...key, metaKey: false, ctrlKey: true })).toBe(true);
 	expect(isPlainPasteKey({ ...key, shiftKey: false })).toBe(false);
+});
+
+test("a fragmented paste falls back to literal text quickly", () => {
+	let started = performance.now();
+	expect(paste("**a** b\n\n".repeat(450)).handled).toBe(true);
+	expect(performance.now() - started).toBeLessThan(200);
+	expect(pastedMarkdown("**a**".repeat(150))).toBeDefined();
+	for (
+		let text of [
+			"**a".repeat(4_000),
+			"**a".repeat(Math.floor(128 * 1024 / 3)),
+			"`a` ".repeat(1_000),
+			"- [x](https://example.com)\n".repeat(1_500),
+		]
+	) {
+		started = performance.now();
+		let { handled } = paste(text);
+		expect(performance.now() - started, text.slice(0, 20)).toBeLessThan(200);
+		expect(handled, text.slice(0, 20)).toBe(false);
+	}
 });

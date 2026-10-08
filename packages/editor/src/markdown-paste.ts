@@ -58,6 +58,15 @@ import type { Registry } from "@chopin/dialect";
 type Root = ReturnType<typeof parse>;
 type Tree = { type: string; children?: Tree[] };
 
+/*
+ * Lexical inserts inline runs in quadratic time, so thousands of formatted
+ * runs would freeze the tab. A paste that big or that fragmented is not prose
+ * anyone wrote by hand; it pastes literally.
+ */
+const MAX_PASTE_CHARACTERS = 64 * 1024;
+const MAX_PASTE_NODES = 2_000;
+const MAX_PASTE_CHILDREN = 200;
+
 /** What the paste lands in: images already present and the nesting at the caret. */
 export type Destination = { images: number; depth: number };
 
@@ -86,7 +95,7 @@ function closes(line: string, open: string): boolean {
 
 /** True when plain text carries unambiguous Markdown syntax. */
 export function looksLikeMarkdown(text: string): boolean {
-	if (text.length > limits.MAX_SOURCE_BYTES) return false;
+	if (text.length > MAX_PASTE_CHARACTERS) return false;
 	let items = 0;
 	let ordered = false;
 	let open: string | undefined;
@@ -150,6 +159,15 @@ function depth(node: Tree): number {
 	let deepest = 0;
 	for (let child of node.children ?? []) deepest = Math.max(deepest, depth(child) + 1);
 	return deepest;
+}
+
+/** Node count, or Infinity once any one block holds too many children. */
+function size(node: Tree): number {
+	let children = node.children ?? [];
+	if (node.type !== "root" && children.length > MAX_PASTE_CHILDREN) return Infinity;
+	let count = 1;
+	for (let child of children) count += size(child);
+	return count;
 }
 
 function images(node: Tree): number {
@@ -222,6 +240,7 @@ export function pastedMarkdown(
 	let tree: Root;
 	try {
 		tree = parse(separateLists(text), { jsx: false, singleDollarMath: false });
+		if (size(tree as Tree) > MAX_PASTE_NODES) return undefined;
 		if (!keepNumbers(tree as Tree)) return undefined;
 		assertIntroducedUrls([], tree.children);
 	} catch {
