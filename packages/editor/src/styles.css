@@ -2236,6 +2236,20 @@
 	inset-block-start: 0;
 	inset-inline-end: 0;
 	z-index: 1;
+	max-inline-size: 100%;
+}
+
+/* A long title is the one thing that gives way, from its end. */
+.plan-content .planCode .plan-code-chrome {
+	max-inline-size: 100%;
+
+	& > * {
+		flex-shrink: 0;
+	}
+
+	& > .plan-code-title {
+		flex-shrink: 1;
+	}
 }
 
 /* Room for the controls, so they never sit on a drawing or a diff's counts. */
@@ -2448,6 +2462,20 @@
 
 .plan-content .planCode [data-plan-preview] :is(.plan-diagram, [data-plan-error]) {
 	padding-inline: 0.75rem;
+}
+
+/*
+ * While its source is open, a drawn diagram keeps the error line's room, so a
+ * mistake arriving after a pause does not push the source down under the caret.
+ */
+.plan-content
+	.planCode[data-plan-language="mermaid"]:not([data-plan-collapsed])
+	[data-plan-preview]:has(> .plan-diagram):not(:has(> [data-plan-error])) {
+	padding-block-end: calc(var(--spacing) * 20);
+}
+
+.plan-content .planCode[data-plan-language="mermaid"] [data-plan-preview] > [data-plan-error] {
+	min-block-size: calc(var(--spacing) * 20);
 }
 
 /*

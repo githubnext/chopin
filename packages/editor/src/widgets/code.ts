@@ -39,14 +39,20 @@ export function kindOf(language: string): Kind {
  * The ids are the highlighter's own, so a plan written elsewhere and opened
  * here colours without translation.
  */
-export const LANGUAGES: readonly (readonly [id: string, label: string])[] = Object.freeze(
+/**
+ * A row in the language menu. Aliases are other names a person may type to
+ * reach it: a diagram is labelled for what it is, but people know it as Mermaid.
+ */
+export type LanguageOption = readonly [id: string, label: string, aliases?: readonly string[]];
+
+export const LANGUAGES: readonly LanguageOption[] = Object.freeze(
 	[
 		["bash", "Shell"],
 		["c", "C"],
 		["cpp", "C++"],
 		["csharp", "C#"],
 		["css", "CSS"],
-		[MERMAID_LANGUAGE, "Diagram"],
+		[MERMAID_LANGUAGE, "Diagram", ["mermaid"]],
 		[DIFF_LANGUAGE, "Diff"],
 		["dockerfile", "Dockerfile"],
 		["go", "Go"],
@@ -243,13 +249,25 @@ function named(line: string): string {
 }
 
 /** The language menu's rows: plain text, then a fence's own unlisted language, then the list. */
-export function languageOptions(language: string): (readonly [string, string])[] {
+export function languageOptions(language: string): LanguageOption[] {
 	let listed = LANGUAGES.some(([id]) => id === language);
 	return [
 		["", "Plain text"],
 		...(!listed && language ? [[language, language] as const] : []),
 		...LANGUAGES,
 	];
+}
+
+/**
+ * Type-to-jump, as a native select does: the next row after `active` whose
+ * label or an alias starts with `letter`, wrapping round. -1 when none does.
+ */
+export function jumpTo(options: readonly LanguageOption[], active: number, letter: string): number {
+	let key = letter.toLowerCase();
+	let matches = ([, label, aliases = []]: LanguageOption) =>
+		[label, ...aliases].some(name => name.toLowerCase().startsWith(key));
+	let after = options.findIndex((option, index) => index > active && matches(option));
+	return after >= 0 ? after : options.findIndex(matches);
 }
 
 /**

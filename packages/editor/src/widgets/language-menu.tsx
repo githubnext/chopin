@@ -12,11 +12,11 @@ import { createPortal } from "react-dom";
 import { CheckIcon, ChevronIcon } from "@chopin/icons";
 
 import { usePopoverDismissal } from "../popover-dismissal";
+import { jumpTo } from "./code";
 import { useTransitionPresence } from "../transition-presence";
 
 import type { CSSProperties, KeyboardEvent } from "react";
-
-export type LanguageOption = readonly [id: string, label: string];
+import type { LanguageOption } from "./code";
 
 const GAP = 4;
 const MARGIN = 8;
@@ -138,13 +138,8 @@ export function LanguageMenu(
 			action();
 			return;
 		}
-		// Type to jump, as a native select does.
 		if (event.key.length === 1) {
-			let letter = event.key.toLowerCase();
-			let found = options.findIndex(([, name], index) =>
-				index > active && name.toLowerCase().startsWith(letter)
-			);
-			if (found < 0) found = options.findIndex(([, name]) => name.toLowerCase().startsWith(letter));
+			let found = jumpTo(options, active, event.key);
 			if (found >= 0) setActive(found);
 		}
 	};
