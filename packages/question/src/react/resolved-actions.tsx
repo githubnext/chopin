@@ -21,6 +21,7 @@ export function ResolvedActions(
 
 	return (
 		<footer
+			data-resolved-actions=""
 			className={className
 				?? "question-actions flex flex-wrap items-center justify-end gap-2 px-4 pt-3"}
 		>

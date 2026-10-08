@@ -2,6 +2,9 @@ import { DocumentIcon, WarningIcon } from "@chopin/icons";
 
 import type { Relation } from "../relation";
 
+/** Pending with nobody to do the work: said plainly, and without a pulse. */
+export const NOT_LINKED = "Not linked yet";
+
 const ORDER: Relation[] = ["orphaned", "pending", "linked", "empty"];
 
 /** One state for a card, and the question a linked card points through. */
@@ -58,7 +61,11 @@ export function RelationNote(
 	if (relation === "pending") {
 		return (
 			<span className={`${ROW} px-1 text-text-tertiary`} data-relation="pending" role="status">
-				<span aria-hidden="true" className="question-relation-dot size-1.5 rounded-full" />
+				<span
+					aria-hidden="true"
+					className="question-relation-dot size-1.5 rounded-full"
+					data-idle={pending === NOT_LINKED ? "" : undefined}
+				/>
 				<span>{pending}</span>
 			</span>
 		);

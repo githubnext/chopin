@@ -87,6 +87,8 @@ export type PlanEditorProps = {
 	onCardSource?: (questionnaireId: string) => void;
 	/** Whether a card has a Chat message to go back to; without one it offers no jump. */
 	hasCardSource?: (questionnaireId: string) => boolean;
+	/** False when no Planner will review where decisions live. */
+	planner?: boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
@@ -144,6 +146,7 @@ export function PlanEditor(
 		onCardSource,
 		hasCardSource,
 		evidence,
+		planner,
 		readOnly,
 		research,
 		researchLauncher,
@@ -370,6 +373,7 @@ export function PlanEditor(
 						onCardSource,
 						hasCardSource,
 						evidence,
+						planner,
 						research,
 						researchDrafts,
 						researchLauncher,
@@ -399,6 +403,7 @@ export function PlanEditor(
 			onCardSource,
 			hasCardSource,
 			evidence,
+			planner,
 			research,
 			researchDrafts,
 			researchLauncher,

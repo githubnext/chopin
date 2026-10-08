@@ -85,3 +85,14 @@ test("a Planner settled line names each relationship state", () => {
 	expect(line("orphaned")).toMatch(/>Reopen<\/button>/);
 	expect(line("empty")).not.toContain("Reopen");
 });
+
+test("a pending line without a Planner does not promise linking", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		meta: { ...META, origin: "planner" },
+		planner: false,
+		relations: { [DECIDED.questions[0]!.id]: "pending" },
+		value: DECIDED,
+	}));
+	expect(markup).toContain("Not linked yet");
+	expect(markup).not.toContain("Linking…");
+});

@@ -176,3 +176,16 @@ test("a decided card says how it relates to the document, even without actions",
 	expect(card("empty")).toContain("No related text");
 	expect(card("orphaned")).toContain("Related text was removed");
 });
+
+test("a linked note is the only way to the document", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: AUTH,
+		drafts: {},
+		status: "answered",
+		answers: [{ question: "What auth system should we use?", choices: ["GitHub Apps"] }],
+		places: { [AUTH.questions[0]!.id]: 1 },
+		relations: { [AUTH.questions[0]!.id]: "linked" },
+		onQuestionSelect: () => {},
+	}));
+	expect(markup.match(/aria-label="[^"]*how in document/g)).toHaveLength(1);
+});
