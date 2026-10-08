@@ -152,19 +152,25 @@ function DecisionSystemEntry(
 		: <ActivityLine {...props} />;
 }
 
+/** A leading @chopin is the Planner address; the prefix is drawn from `to`, so it is not shown twice. */
+let LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
+
 function MessageBody(
-	{ enter, handle, message, onWithdraw, label, ...markers }: {
+	{ enter, handle, message, onWithdraw, ...markers }: {
 		enter: boolean;
-		/** Shows "To Chopin"; false inside a run already labelled or in persistent Chopin mode. */
-		label: boolean;
 		handle: string;
 		message: Message;
 		onWithdraw: (id: string) => void;
 	} & PlanMarkers,
 ) {
-	let text = displayText(message.text) ? message.text : message.author.kind === "member"
-		? "Ask Chopin"
-		: "";
+	let toPlanner = message.to === "planner" && message.author.kind === "member";
+	let lead = toPlanner ? LEADING_MENTION.exec(message.text)?.[0].length ?? 0 : 0;
+	let text = toPlanner ? message.text.slice(lead) : message.text;
+	let references = lead
+		? message.references?.filter(item => item.start >= lead)
+			.map(item => ({ ...item, start: item.start - lead, end: item.end - lead }))
+		: message.references;
+	if (!toPlanner && !displayText(text) && message.author.kind === "member") text = "Ask Chopin";
 
 	return (
 		<div
@@ -196,20 +202,13 @@ function MessageBody(
 					key={markers.sourceDestination.token}
 				/>
 			)}
-			{label && (
-				<p className="chat-message-to m-0 mb-0.5 flex items-center gap-1 text-2xs text-text-tertiary">
-					<span aria-hidden="true" className="inline-flex">
-						<ChopinMark />
-					</span>
-					To Chopin
-				</p>
-			)}
-			{text && (
+			{(text || toPlanner) && (
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1" data-chat-message-text>
 						<MessageMarkdown
 							className="break-words text-chat-body [overflow-wrap:anywhere]"
-							references={message.references}
+							mention={toPlanner ? "@chopin" : undefined}
+							references={references}
 							source={text}
 						/>
 						{message.streaming && <span className="ml-0.5">▍</span>}
@@ -247,9 +246,7 @@ function MessageBody(
 }
 
 function MessageGroup(
-	{ enter, entering, group: item, handle, onWithdraw, talkingToChopin, ...markers }: {
-		/** Persistent Chopin mode already says every message is for Chopin. */
-		talkingToChopin?: boolean;
+	{ enter, entering, group: item, handle, onWithdraw, ...markers }: {
 		/** The whole group entered; `entering` holds messages that joined it later. */
 		enter: boolean;
 		entering: ReadonlySet<string>;
@@ -297,10 +294,8 @@ function MessageGroup(
 						</span>
 					</div>
 				)}
-				{item.messages.map((message, index) => (
+				{item.messages.map(message => (
 					<MessageBody
-						label={message.to === "planner" && message.author.kind === "member"
-							&& !talkingToChopin && item.messages[index - 1]?.to !== "planner"}
 						enter={entering.has(message.id)}
 						decisions={markers.decisions}
 						canEdit={markers.canEdit}
@@ -345,7 +340,6 @@ export function Transcript(
 		queued,
 		sourceDestination,
 		suspendedWork,
-		talkingToChopin,
 		working,
 	}: {
 		active: boolean;
@@ -374,7 +368,6 @@ export function Transcript(
 		suspendedWork?: CompletedWork;
 		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
 		sourceDestination?: ChatDestination;
-		talkingToChopin?: boolean;
 	},
 ) {
 	let scroller = useRef<HTMLDivElement>(null);
@@ -658,7 +651,6 @@ export function Transcript(
 								key={key}
 								onWithdraw={onWithdraw}
 								sourceDestination={sourceDestination}
-								talkingToChopin={talkingToChopin}
 							/>
 						)
 				)}

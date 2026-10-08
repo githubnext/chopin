@@ -84,3 +84,12 @@
 .chat-message-body:has([data-analysis-trigger]) {
 	padding-inline-end: 2rem;
 }
+
+.chat-markdown .chat-mention {
+	font-weight: 600;
+	color: var(--color-brand);
+}
+
+.chat-markdown[data-chat-mention-lead] > p:first-of-type {
+	display: inline;
+}
