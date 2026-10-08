@@ -13,13 +13,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { CloseIcon, PlusIcon } from "@chopin/icons";
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
-import {
-	$createParagraphNode,
-	$getNodeByKey,
-	$getRoot,
-	$isElementNode,
-	$isParagraphNode,
-} from "lexical";
+import { $createParagraphNode, $getNodeByKey, $getRoot, $isElementNode } from "lexical";
 import { $createTabNode, $isTabNode, $isTabsNode, limits, ulid } from "@chopin/dialect";
 
 import { newTabLabel, stripKey, successor, tabLabel } from "./tab-authoring";
@@ -30,8 +24,7 @@ import type { ElementNode, LexicalEditor } from "lexical";
 type Group = {
 	id: string;
 	key: string;
-	/** `empty` tabs hold nothing but empty paragraphs, so removing one loses nothing. */
-	tabs: Array<{ id: string; key: string; label: string; empty: boolean }>;
+	tabs: Array<{ id: string; key: string; label: string }>;
 };
 
 /** Reveal a tab without moving any scroll ancestor outside its own strip. */
@@ -65,9 +58,6 @@ function collect(editor: LexicalEditor): Group[] {
 							id: tab.getId(),
 							key: tab.getKey(),
 							label: tab.getLabel(),
-							empty: tab.getChildren().every(
-								block => $isParagraphNode(block) && block.isEmpty(),
-							),
 						})),
 					});
 				}
@@ -185,8 +175,8 @@ function Strip(
 	let buttons = useRef<Array<HTMLButtonElement | null>>([]);
 	let [mask, setMask] = useState<string | undefined>();
 	let [renaming, setRenaming] = useState<string | undefined>();
-	/** A tab with content asks once before it goes: there is no undo for it yet. */
-	let [armed, setArmed] = useState<string | undefined>();
+	/** A long press reveals the remove control on touch. */
+	let [revealed, setRevealed] = useState<string | undefined>();
 	let pointer = useRef("mouse");
 	let press = useRef<ReturnType<typeof setTimeout>>(undefined);
 	let pressed = useRef(false);
@@ -218,11 +208,7 @@ function Strip(
 	let remove = (index: number) => {
 		let tab = group.tabs[index];
 		if (!tab || !canRemove) return;
-		if (!tab.empty && armed !== tab.key) {
-			setArmed(tab.key);
-			return;
-		}
-		setArmed(undefined);
+		setRevealed(undefined);
 		let rest = group.tabs.filter(other => other.key !== tab.key);
 		let next = tab.key === active ? rest[successor(group.tabs.length, index)] : rest.find(
 			other => other.key === active,
@@ -254,10 +240,10 @@ function Strip(
 	};
 
 	useEffect(() => {
-		if (!armed) return;
-		let timer = setTimeout(() => setArmed(undefined), 4000);
+		if (!revealed) return;
+		let timer = setTimeout(() => setRevealed(undefined), 4000);
 		return () => clearTimeout(timer);
-	}, [armed]);
+	}, [revealed]);
 
 	let handlers = useRef<(event: KeyboardEvent) => void>(() => {});
 	handlers.current = event => {
@@ -342,11 +328,11 @@ function Strip(
 							key={tab.key}
 							className="plan-tab"
 							data-selected={selected ? "" : undefined}
-							data-armed={armed === tab.key ? "" : undefined}
+							data-revealed={revealed === tab.key ? "" : undefined}
 							data-removable={canRemove ? "" : undefined}
 							onPointerLeave={event => {
 								// Touch reports a leave as the finger lifts, which would undo a long press.
-								if (event.pointerType !== "touch" && armed === tab.key) setArmed(undefined);
+								if (event.pointerType !== "touch" && revealed === tab.key) setRevealed(undefined);
 							}}
 						>
 							<button
@@ -360,9 +346,6 @@ function Strip(
 								aria-selected={selected}
 								aria-controls={`ace-panel-${tab.key}`}
 								aria-keyshortcuts={editable ? "Enter Delete" : undefined}
-								aria-description={armed === tab.key
-									? "Press Delete again to remove this tab and its content"
-									: undefined}
 								tabIndex={selected ? 0 : -1}
 								onPointerDown={event => {
 									pointer.current = event.pointerType;
@@ -371,7 +354,7 @@ function Strip(
 										press.current = setTimeout(() => {
 											press.current = undefined;
 											pressed.current = true;
-											setArmed(key);
+											setRevealed(key);
 										}, LONG_PRESS);
 									}
 								}}
@@ -381,7 +364,7 @@ function Strip(
 									if (pointer.current === "touch" && canRemove) event.preventDefault();
 								}}
 								onClick={() => {
-									// A long press arms removal; the tap that ends it does nothing else.
+									// A long press reveals removal; the tap that ends it does nothing else.
 									if (pressed.current) {
 										pressed.current = false;
 										return;
@@ -401,12 +384,8 @@ function Strip(
 								<button
 									type="button"
 									tabIndex={-1}
-									aria-label={armed === tab.key && !tab.empty
-										? `Remove ${name} and its content`
-										: `Remove ${name}`}
-									title={armed === tab.key && !tab.empty
-										? `Click again to remove ${name} and its content`
-										: `Remove ${name}`}
+									aria-label={`Remove ${name}`}
+									title={`Remove ${name}`}
 									onClick={() => remove(position)}
 									className="plan-tab-remove"
 								>
