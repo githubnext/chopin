@@ -25,7 +25,7 @@ export type Shortcut = {
 	/** ⌘ on a Mac, Ctrl elsewhere. */
 	mod?: boolean;
 	shift?: boolean;
-	/** Physical key, so a chord still matches on layouts that type another character. */
+	/** Physical fallback when the layout cannot report a printable ASCII character. */
 	code?: string;
 	/** Listed in the sheet only; the editor owns the key. */
 	display?: boolean;
@@ -128,16 +128,19 @@ export function matchShortcut(
 	let other = platform === "mac" ? event.ctrlKey : event.metaKey;
 	if (other) return;
 	let key = event.key.toLowerCase();
-	// A Latin letter or digit is what the user meant, wherever the key sits (Dvorak's ⌘V is
-	// on the physical Period key). The physical key is only a fallback for other characters.
-	let latin = /^[a-z0-9]$/.test(key);
+	// Prefer the typed character, including ASCII punctuation. The physical key is only
+	// a fallback for dead keys, unidentified keys, and non-ASCII layouts.
+	let physicalFallback = !/^[\x20-\x7e]$/.test(event.key) && !event.shiftKey;
 	for (let entry of SHORTCUTS) {
 		if (entry.display || !!entry.mod !== mod) continue;
 		if (!entry.mod && context.typing) continue;
 		// Punctuation needs Shift on some layouts (`.` on AZERTY, `?` nearly everywhere), so
 		// Shift only distinguishes letter chords.
 		if (/^[a-z0-9]$/.test(entry.key) && !!entry.shift !== event.shiftKey) continue;
-		if (key === entry.key || (!latin && entry.code !== undefined && event.code === entry.code)) {
+		if (
+			key === entry.key
+			|| (physicalFallback && entry.code !== undefined && event.code === entry.code)
+		) {
 			return entry.id;
 		}
 	}

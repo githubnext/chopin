@@ -89,8 +89,8 @@ describe("matchShortcut", () => {
 		expect(matchShortcut(key("?", { shiftKey: true }), "mac", idle)).toBe("shortcuts");
 	});
 
-	test("matches the physical key when the layout types another character", () => {
-		expect(matchShortcut(key("#", { code: "Backslash", metaKey: true }), "mac", idle))
+	test("matches the physical key when the layout cannot report an ASCII character", () => {
+		expect(matchShortcut(key("Dead", { code: "Backslash", metaKey: true }), "mac", idle))
 			.toBe("toggle-sidebar");
 		expect(matchShortcut(key("\\", { metaKey: true }), "mac", idle)).toBe("toggle-sidebar");
 	});
@@ -110,6 +110,11 @@ describe("matchShortcut", () => {
 		expect(
 			matchShortcut(key(".", { code: "Comma", metaKey: true, shiftKey: true }), "mac", idle),
 		).toBe("toggle-chat");
+		// Its unshifted physical Period key types `:` and must not toggle Chat.
+		expect(matchShortcut(key(":", { code: "Period", metaKey: true }), "mac", idle))
+			.toBeUndefined();
+		expect(matchShortcut(key("#", { code: "Backslash", metaKey: true }), "mac", idle))
+			.toBeUndefined();
 		expect(matchShortcut(key("?", { code: "KeyM", shiftKey: true }), "other", idle))
 			.toBe("shortcuts");
 		// AZERTY's A sits on the physical Q key; letters stay letters.
