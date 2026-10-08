@@ -253,6 +253,28 @@ describe("reference picker accessibility", () => {
 		expect(markup).not.toContain("-slug");
 	});
 
+	test("omits a child document's internal slug", () => {
+		let markup = renderToStaticMarkup(createElement(ReferencePicker, {
+			active: 0,
+			id: "reference-list",
+			onActive: () => {},
+			onSelect: () => {},
+			state: {
+				status: "ready",
+				options: [{
+					kind: "document",
+					channelId: "child",
+					title: "Jev alternatives",
+					slug: "child-3f6c1e69",
+					child: true,
+				}],
+			},
+		}));
+
+		expect(markup).toContain("Jev alternatives");
+		expect(markup).not.toContain("child-3f6c1e69");
+	});
+
 	test("announces loading, empty, errors, and the reference limit", () => {
 		let render = (state: Parameters<typeof ReferencePicker>[0]["state"]) =>
 			renderToStaticMarkup(createElement(ReferencePicker, {

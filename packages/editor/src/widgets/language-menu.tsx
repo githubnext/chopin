@@ -172,7 +172,7 @@ export function LanguageMenu(
 				<div
 					aria-activedescendant={`${listId}-${active}`}
 					aria-label="Code language"
-					className={`plan-language-menu motion-dropdown ${presence.className} fixed z-50 min-w-40 overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-overlay`}
+					className={`plan-language-menu motion-dropdown ${presence.className} fixed z-50 min-w-40 overflow-y-auto menu-surface`}
 					id={listId}
 					onKeyDown={onKey}
 					ref={panel}
@@ -183,9 +183,8 @@ export function LanguageMenu(
 					{options.map(([id, name], index) => (
 						<div
 							aria-selected={index === selected}
-							className={`motion-picker-option flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm ${
-								index === active ? "bg-selected" : ""
-							}`}
+							className="motion-picker-option menu-item cursor-pointer"
+							data-active={index === active || undefined}
 							data-index={index}
 							id={`${listId}-${index}`}
 							key={id || "plain"}

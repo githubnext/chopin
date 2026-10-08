@@ -100,6 +100,7 @@ export async function searchReferenceTargets(
 			channelId: channel.id,
 			title: channel.title,
 			slug: channel.slug,
+			...(channel.parentChannelId ? { child: true } : {}),
 			...(channel.description ? { description: channel.description } : {}),
 		})),
 		truncated: omitted || !!cursor,
@@ -232,9 +233,10 @@ export function ReferencePicker(
 
 	return (
 		<div
-			className="absolute inset-x-2.5 bottom-full z-30 mb-1 overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-resting-strong"
+			className="absolute inset-x-2.5 bottom-full z-30 mb-1 overflow-y-auto menu-surface"
 			data-chat-reference-picker="document"
 			data-animate={animate || undefined}
+			data-menu-enter=""
 			data-focus-boundary=""
 			style={{ maxHeight: "min(16rem, 45dvh, 45vh)" }}
 		>
@@ -270,7 +272,8 @@ export function ReferencePicker(
 					let generatedDescription = option.description
 						? `${referenceOptionId(id, index)}-description`
 						: undefined;
-					let showSlug = !!option.slug && option.slug !== option.title;
+					// A child document's slug is an internal id; its title already names it.
+					let showSlug = !option.child && !!option.slug && option.slug !== option.title;
 					let slugDescription = showSlug
 						? `${referenceOptionId(id, index)}-slug`
 						: undefined;
@@ -281,9 +284,8 @@ export function ReferencePicker(
 							aria-describedby={describedBy}
 							aria-label={option.title}
 							aria-selected={index === active}
-							className={`flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left ${
-								index === active ? "bg-selected" : "hover:bg-hover"
-							}`}
+							className="menu-item"
+							data-active={index === active || undefined}
 							id={referenceOptionId(id, index)}
 							key={option.channelId}
 							onClick={() => onSelect(option)}

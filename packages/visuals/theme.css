@@ -219,6 +219,9 @@
 	--modal-scale: 0.96;
 	--modal-scale-close: 0.96;
 	--modal-ease: var(--motion-smooth-out);
+	/* One recipe for every menu and listbox: `.menu-surface` holds `.menu-item` rows. */
+	--menu-padding: 0.25rem;
+	--menu-item-height: 2rem;
 	--sidebar-open-dur: 250ms;
 	--sidebar-close-dur: 180ms;
 	--drawer-open-dur: 250ms;
