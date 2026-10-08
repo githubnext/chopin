@@ -160,10 +160,10 @@ experiment are evidence; do not merge their fixture implementation into this PR.
 
 ## Task 5: Reviewable PR handoff
 
-- [ ] Run the focused units and browser suite, `bun run types`, `bun run ci` and
+- [x] Run the focused units and browser suite, `bun run types`, `bun run ci` and
       `bun run build`. Run the normal unit suite once before handoff; investigate
       actual new failures and report any unrelated baseline failures accurately.
-- [ ] Request two independent code reviews: toolkit/skill usability and browser
+- [x] Request two independent code reviews: toolkit/skill usability and browser
       behaviour/boundary correctness. Resolve material findings in small commits.
 - [ ] Use `pr-visual-preview` to attach real UI images and a compact architecture
       diagram; verify the images render in the published description.
