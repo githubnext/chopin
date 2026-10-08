@@ -19,11 +19,12 @@ import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
  * preview of uncoloured text beside the same uncoloured text is two of the
  * same thing and an invitation to edit the wrong one.
  */
-export type Kind = "plain" | "code" | "diff" | "mermaid";
+export type Kind = "plain" | "code" | "diff" | "mermaid" | "openui-options";
 
 export function kindOf(language: string): Kind {
 	if (!language) return "plain";
 	if (language === MERMAID_LANGUAGE) return "mermaid";
+	if (language === "openui-options") return "openui-options";
 	if (language === DIFF_LANGUAGE) return "diff";
 	return "code";
 }
@@ -57,6 +58,7 @@ export const LANGUAGES: readonly (readonly [id: string, label: string])[] = Obje
 		["kotlin", "Kotlin"],
 		["markdown", "Markdown"],
 		[MERMAID_LANGUAGE, "Mermaid"],
+		["openui-options", "Design options (trial)"],
 		["php", "PHP"],
 		["python", "Python"],
 		["ruby", "Ruby"],

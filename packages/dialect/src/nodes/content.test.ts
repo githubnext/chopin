@@ -36,6 +36,11 @@ describe("content nodes", () => {
 		expect(through(source)).toBe(source);
 	});
 
+	it("round-trips a composed options section as collaborative code source", () => {
+		let source = '```openui-options\nroot = OptionsSection("x", "y", [])\n```\n';
+		expect(through(source)).toBe(source);
+	});
+
 	/**
 	 * A patch is mostly `-` and `+` at the start of lines, which is a list
 	 * everywhere else in the dialect. Inside a fence it has to survive as the

@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
@@ -34,6 +35,15 @@ export default defineConfig({
 	plugins: [react(), tailwindcss(), tsconfigPaths(), initialJavaScriptBudget()],
 
 	resolve: {
+		alias: {
+			// The public web entry mounts OpenUI devtools from a CDN in development.
+			"@openuidev/react-lang": fileURLToPath(
+				new URL(
+					"../../packages/editor/node_modules/@openuidev/react-lang/dist/index.native.mjs",
+					import.meta.url,
+				),
+			),
+		},
 		// Only what this app resolves itself. Lexical and Yjs belong to the
 		// editor package, and listing them here would ask Vite to resolve them
 		// from a root that does not have them. Their single-copy guarantee comes

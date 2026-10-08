@@ -1,0 +1,106 @@
+#root:has(.openui-trial-page) {
+	position: static;
+	width: 100%;
+	height: auto;
+}
+.openui-trial-page {
+	min-height: 100vh;
+	padding: 3rem 1.5rem;
+	overflow-x: clip;
+	background: var(--color-ground);
+	color: var(--color-text-primary);
+}
+.openui-trial-header, .openui-trial-document, .openui-trial-source, .openui-trial-note {
+	width: min(100%, 58rem);
+	margin-inline: auto;
+}
+.openui-trial-header {
+	margin-bottom: 1.5rem;
+}
+.openui-trial-kicker {
+	color: var(--color-brand-ink);
+	font-size: var(--text-xs);
+	font-weight: 600;
+}
+.openui-trial-header h1 {
+	margin: 0.5rem 0;
+	font-size: var(--text-2xl);
+	font-weight: 600;
+}
+.openui-trial-header > p:last-of-type {
+	max-width: 42rem;
+	color: var(--color-text-secondary);
+}
+.openui-trial-header nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin-top: 1.5rem;
+}
+.openui-trial-header button {
+	padding: 0.5rem 0.75rem;
+	border: 1px solid var(--color-gray-300);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	font-size: var(--text-sm);
+}
+.openui-trial-header button[aria-current="page"] {
+	border-color: var(--color-brand);
+	color: var(--color-brand-ink);
+	background: var(--color-brand-wash);
+}
+.openui-trial-header button:focus-visible, .openui-trial-source summary:focus-visible {
+	outline: 2px solid var(--focus-ring-color);
+	outline-offset: 2px;
+}
+.openui-trial-document {
+	max-width: 100%;
+	background: var(--color-page);
+	border-radius: var(--radius-xl);
+}
+.openui-trial-document .design-audit-static-plan {
+	min-height: 0;
+}
+.openui-trial-document .plan-workspace,
+.openui-trial-document .plan-document {
+	height: auto;
+	min-height: 0;
+	overflow: visible;
+}
+.openui-trial-document .plan .plan-content {
+	min-height: 0;
+	padding: 1.5rem 2rem 2rem;
+}
+.openui-trial-document .mdxeditor {
+	min-height: 0;
+}
+.openui-trial-document .plan-content .planCode [data-plan-source] {
+	display: none;
+}
+.openui-trial-source {
+	margin-top: 1rem;
+	padding: 1rem;
+	border: 1px solid var(--color-gray-300);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	font-size: var(--text-sm);
+}
+.openui-trial-source summary {
+	cursor: pointer;
+}
+.openui-trial-source pre {
+	margin-top: 1rem;
+	overflow-x: auto;
+	white-space: pre;
+	font-size: var(--text-xs);
+}
+.openui-trial-note {
+	margin-top: 1rem;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+@media (max-width: 600px) {
+	.openui-trial-page {
+		padding: 1.5rem 0.5rem;
+	}
+}

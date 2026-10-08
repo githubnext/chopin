@@ -1,0 +1,202 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"type": "object",
+	"properties": {
+		"OptionsSection": {
+			"$ref": "#/$defs/OptionsSection"
+		},
+		"OptionGallery": {
+			"$ref": "#/$defs/OptionGallery"
+		},
+		"OptionComparison": {
+			"$ref": "#/$defs/OptionComparison"
+		},
+		"OptionDetails": {
+			"$ref": "#/$defs/OptionDetails"
+		},
+		"DesignOption": {
+			"$ref": "#/$defs/DesignOption"
+		}
+	},
+	"required": [
+		"OptionsSection",
+		"OptionGallery",
+		"OptionComparison",
+		"OptionDetails",
+		"DesignOption"
+	],
+	"additionalProperties": false,
+	"$defs": {
+		"OptionsSection": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 90
+				},
+				"introduction": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 240
+				},
+				"items": {
+					"minItems": 3,
+					"maxItems": 3,
+					"type": "array",
+					"items": {
+						"anyOf": [
+							{
+								"$ref": "#/$defs/OptionGallery"
+							},
+							{
+								"$ref": "#/$defs/OptionComparison"
+							},
+							{
+								"$ref": "#/$defs/OptionDetails"
+							}
+						]
+					}
+				}
+			},
+			"required": [
+				"title",
+				"introduction",
+				"items"
+			],
+			"additionalProperties": false,
+			"description": "One document section with an ephemeral local filter and three authored views."
+		},
+		"OptionGallery": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 70
+				},
+				"layout": {
+					"type": "string",
+					"enum": [
+						"grid",
+						"rail"
+					]
+				},
+				"items": {
+					"minItems": 3,
+					"maxItems": 3,
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/DesignOption"
+					}
+				}
+			},
+			"required": [
+				"title",
+				"layout",
+				"items"
+			],
+			"additionalProperties": false,
+			"description": "Gallery of local illustrative specimens; grid or horizontally scrollable rail."
+		},
+		"DesignOption": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"enum": [
+						"a",
+						"b",
+						"c"
+					]
+				},
+				"title": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 70
+				},
+				"strength": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 180
+				},
+				"tradeoff": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 180
+				},
+				"detail": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 500
+				},
+				"specimen": {
+					"type": "string",
+					"enum": [
+						"current",
+						"plain",
+						"styled"
+					]
+				}
+			},
+			"required": [
+				"id",
+				"title",
+				"strength",
+				"tradeoff",
+				"detail",
+				"specimen"
+			],
+			"additionalProperties": false,
+			"description": "One design option reused as a gallery card, comparison row, and expandable detail."
+		},
+		"OptionComparison": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 70
+				},
+				"items": {
+					"minItems": 3,
+					"maxItems": 3,
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/DesignOption"
+					}
+				}
+			},
+			"required": [
+				"title",
+				"items"
+			],
+			"additionalProperties": false,
+			"description": "Semantic comparison table using the same option records as the gallery."
+		},
+		"OptionDetails": {
+			"type": "object",
+			"properties": {
+				"title": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 70
+				},
+				"items": {
+					"minItems": 3,
+					"maxItems": 3,
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/DesignOption"
+					}
+				}
+			},
+			"required": [
+				"title",
+				"items"
+			],
+			"additionalProperties": false,
+			"description": "Expandable supporting detail using the same option records."
+		}
+	}
+}

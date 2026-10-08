@@ -1,0 +1,16 @@
+root = OptionsSection("Chopin: pandas Excel header styling", "Checkpoint c1 (2023-07-16): a
+proposal—not a decision—asks whether DataFrame.to_excel should stop applying bold and borders to
+headers by default. Specimens are illustrative, not source screenshots.", [gallery, comparison,
+details])
+gallery = OptionGallery("Illustrative options", "grid", [optionA, optionB, optionC])
+comparison = OptionComparison("Compare the proposals", [optionA, optionB, optionC])
+details = OptionDetails("Supporting detail", [optionA, optionB, optionC])
+optionA = DesignOption("a", "Keep the current default", "Preserves familiar styled headers in
+DataFrame.to_excel.", "Default exports retain bold and borders.", "Continue applying bold and
+bordered styling to column and row headers by default.", "current")
+optionB = DesignOption("b", "Use a plain default", "Simplifies code and makes an unstyled Styler
+export more consistent.", "Exports no longer receive styled headers automatically.", "Stop applying
+bold and borders to column and row headers by default.", "plain")
+optionC = DesignOption("c", "Style with Styler", "Makes Styler.to_excel the explicit route for
+formatting.", "Formatting requires using Styler.", "Use Styler.to_excel when styled Excel output is
+desired.", "styled")

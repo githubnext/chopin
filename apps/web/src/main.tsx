@@ -34,6 +34,10 @@ let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
 	? import("./design-audit/page").then(({ DesignAuditPage }) => <DesignAuditPage />)
 	: isDiagramGalleryRoute(location.pathname, import.meta.env.DEV)
 	? import("./diagram-gallery/page").then(({ DiagramGalleryPage }) => <DiagramGalleryPage />)
+	: import.meta.env.DEV && location.pathname === "/openui-composition-trial"
+	? import("./openui-composition-trial/page").then(({ OpenUICompositionTrial }) => (
+		<OpenUICompositionTrial />
+	))
 	: Promise.resolve(<Root />);
 
 void Promise.all([content, import("./icon-tooltip")]).then(([value, { IconTooltip }]) => {
