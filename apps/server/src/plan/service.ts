@@ -1971,7 +1971,7 @@ export function source(plan: Plan): string {
 export async function documentIdentity(plan: Plan): Promise<{ id: string; url: string }> {
 	let channel = await plan.persistence.storage.channels.get(plan.id);
 	if (!channel) throw new Error("document is unavailable");
-	return { id: channel.id, url: documentUrl(channel) };
+	return { id: channel.id, url: await documentUrl(channel, plan.persistence.storage.channels) };
 }
 
 /** Size of the Yjs history, for the idle compaction check. */
