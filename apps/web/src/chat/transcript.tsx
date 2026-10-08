@@ -416,7 +416,10 @@ export function Transcript(
 				data-chat-stack
 			>
 				{empty && (
-					<p className="px-1 text-center text-sm text-text-tertiary" data-chat-empty="">
+					<p
+						className="px-1 text-center text-sm text-balance text-text-tertiary"
+						data-chat-empty=""
+					>
 						{empty}
 					</p>
 				)}

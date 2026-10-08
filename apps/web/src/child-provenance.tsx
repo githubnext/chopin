@@ -54,11 +54,17 @@ export function ChildProvenance({ channelId, parent }: { channelId: string; pare
 						{parent.label}
 					</button>
 					<span className="plan-research-meta">
-						{provenance.startedBy && <>{" · by "}{provenance.startedBy}</>}
-						{" · "}
-						{provenance.sourceCount === 0
-							? "No sources"
-							: plural(provenance.sourceCount, "source")}
+						{provenance.startedBy && (
+							<>
+								{" "}
+								<span className="child-provenance-segment">· by {provenance.startedBy}</span>
+							</>
+						)}{" "}
+						<span className="child-provenance-segment">
+							· {provenance.sourceCount === 0
+								? "No sources"
+								: plural(provenance.sourceCount, "source")}
+						</span>
 					</span>
 				</span>
 				<button

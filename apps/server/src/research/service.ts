@@ -841,7 +841,6 @@ export class ResearchWorkspaceService {
 			parentChannelId,
 			brief: view.question,
 			sourceCount: view.child.sourceCount,
-			startedAt: view.createdAt,
 			...(user ? { startedBy: user.login } : {}),
 		};
 	}

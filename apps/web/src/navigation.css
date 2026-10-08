@@ -1054,7 +1054,7 @@
 .child-provenance-line {
 	display: flex;
 	align-items: center;
-	gap: 0.5rem;
+	gap: calc(var(--spacing) * 2);
 	margin: 0;
 	font-size: var(--text-sm);
 	color: var(--color-text-tertiary);
@@ -1065,9 +1065,13 @@
 	color: var(--color-text-secondary);
 	text-decoration: underline;
 	text-decoration-color: var(--color-text-quaternary);
-	text-decoration-thickness: 1px;
-	text-underline-offset: 3px;
+	text-decoration-thickness: var(--edge-width);
+	text-underline-offset: calc(var(--spacing) * 0.75);
 	cursor: pointer;
+}
+
+.child-provenance-segment {
+	white-space: nowrap;
 }
 
 .child-provenance-parent:hover {
@@ -1076,16 +1080,16 @@
 
 .child-provenance-toggle {
 	flex-shrink: 0;
-	gap: 0.25rem;
+	gap: var(--spacing);
 	margin-inline-start: auto;
 	color: var(--color-text-tertiary);
 }
 
 .child-provenance-brief {
-	margin: 0.5rem 0 0;
-	padding-inline-start: 2rem;
+	margin: calc(var(--spacing) * 2) 0 0;
+	padding-inline-start: calc(var(--spacing) * 8);
 	font-size: var(--text-sm);
-	line-height: 1.5;
+	line-height: var(--text-sm--line-height);
 	color: var(--color-text-secondary);
 }
 
