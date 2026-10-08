@@ -101,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "7c7b0017691294d712285273fa3e90ee65409d5e05619eb824223582d6bfdde3"
+		"sourceHash": "e7e5e693585dab7990271c52bf30e5cd5fcab9844688179c80cec75dcd57b67e"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -227,7 +227,7 @@
 				1
 			]
 		],
-		"sourceHash": "e978c2739846dc0e08c514a0293bb5218a2384abd775d770a4dec859686e7177"
+		"sourceHash": "4d0977b12ca65b5c2bdbcc79e85a7ecbd260690269d74476d627576b265fe28d"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
