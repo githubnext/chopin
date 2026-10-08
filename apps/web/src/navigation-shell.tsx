@@ -126,6 +126,7 @@ let NavigationDocument = createContext<{
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onDocumentRouteSettled: (routeKey: DocumentRouteIdentity) => void;
+	onProjectReveal: (repositoryId: string) => void;
 	onRepositoryAccessChanged: () => void;
 	onResearchChildOpen: (
 		parentId: string,
@@ -139,6 +140,7 @@ let NavigationDocument = createContext<{
 	onDocumentDeleted() {},
 	async onDocumentLoaded() {},
 	onDocumentRouteSettled() {},
+	onProjectReveal() {},
 	onRepositoryAccessChanged() {},
 	onResearchChildOpen() {},
 	onResearchChildPublished() {},
@@ -302,6 +304,7 @@ export function NavigationShell(
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [notice, showNotice] = useState<NoticeOptions>();
+	let [reveal, setReveal] = useState<{ id: string; nonce: number }>();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
@@ -744,6 +747,11 @@ export function NavigationShell(
 	let repositoryAccessChanged = useCallback(() => {
 		void refresh();
 	}, [refresh]);
+	let projectReveal = useCallback((id: string) => {
+		setCollapsed(false);
+		if (mode === "drawer") setDrawerOpen(true);
+		setReveal(current => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
+	}, [mode]);
 	let navigationDocument = useMemo(() => ({
 		channel: currentChannel,
 		onDocumentAction: workspaceDocumentAction,
@@ -751,6 +759,7 @@ export function NavigationShell(
 		onDocumentDeleted: documentDeleted,
 		onDocumentLoaded: documentLoaded,
 		onDocumentRouteSettled: documentRouteSettled,
+		onProjectReveal: projectReveal,
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchChildOpen: researchChildOpen,
 		onResearchChildPublished: researchChildPublished,
@@ -760,6 +769,7 @@ export function NavigationShell(
 		documentDeleted,
 		documentLoaded,
 		documentRouteSettled,
+		projectReveal,
 		repositoryAccessChanged,
 		researchChildOpen,
 		researchChildPublished,
@@ -868,6 +878,8 @@ export function NavigationShell(
 				focusProjectId={focusProjectId}
 				onAddProject={() => showDialog("add")}
 				onFocusedProject={() => setFocusProjectId(undefined)}
+				onRevealed={() => setReveal(undefined)}
+				reveal={reveal}
 				onCollapse={collapseSidebar}
 				onCreateDocument={project => void createDocument(project)}
 				onDocumentAction={documentAction}

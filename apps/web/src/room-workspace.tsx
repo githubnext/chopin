@@ -106,6 +106,7 @@ export function Header(
 		onEditingChange,
 		onRenamed,
 		presentation,
+		project,
 		room,
 	}: {
 		archivedAt?: string;
@@ -117,9 +118,11 @@ export function Header(
 		onEditingChange: (editing?: TitleEdit) => void;
 		onRenamed: (channel: DocumentMetadata) => void;
 		presentation: WorkspacePresentation;
+		project?: { id: string; name: string };
 		room: string;
 	},
 ) {
+	let { onProjectReveal } = useNavigationDocument();
 	let people = peopleHere(members);
 	let header = useRef<HTMLElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
@@ -149,6 +152,19 @@ export function Header(
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
 				<DocumentIcon className="shrink-0" />
+				{project && presentation.type !== "parent-with-child" && (
+					<>
+						<button
+							aria-label={`Show ${project.name} in the sidebar`}
+							className="document-project-prefix"
+							onClick={() => onProjectReveal(project.id)}
+							type="button"
+						>
+							<span className="truncate">{project.name}</span>
+						</button>
+						<span aria-hidden="true" className="document-project-separator">/</span>
+					</>
+				)}
 				{presentation.type === "parent-with-child"
 					? (
 						<>
@@ -975,6 +991,7 @@ export function RoomWorkspace(
 						onEditingChange={setTitleEdit}
 						onRenamed={updateMetadata}
 						presentation={presentation}
+						project={{ id: repository.id, name: repository.name }}
 						room={room}
 					/>
 				}

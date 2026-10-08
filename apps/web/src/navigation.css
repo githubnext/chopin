@@ -325,6 +325,33 @@
 	align-self: stretch;
 }
 
+.project-sidebar-project-row {
+	position: relative;
+}
+
+/* Reveal from the document header: a wash that fades out; opacity is the only motion. */
+.project-sidebar-project[data-revealed] > .project-sidebar-project-row::after {
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: var(--project-sidebar-selected);
+	content: "";
+	pointer-events: none;
+	animation: project-reveal var(--duration-linger) var(--ease-out) var(--duration-linger) forwards;
+}
+
+@keyframes project-reveal {
+	to {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.project-sidebar-project[data-revealed] > .project-sidebar-project-row::after {
+		animation: none;
+	}
+}
+
 .project-sidebar-document {
 	min-height: var(--project-sidebar-row);
 	gap: var(--spacing);
@@ -1234,6 +1261,36 @@
 	font-size: var(--text-sm);
 	font-weight: 500;
 	color: var(--color-text-secondary);
+}
+
+.document-project-prefix {
+	min-width: 0;
+	max-width: 10rem;
+	flex: 0 1 auto;
+	border-radius: var(--radius-sm);
+	padding: 4px;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.document-project-prefix:hover,
+.document-project-prefix:focus-visible {
+	background: var(--color-selected);
+	color: var(--color-text-secondary);
+}
+
+.document-project-separator {
+	flex: none;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+	opacity: 0.45;
+}
+
+@media (max-width: 639px) {
+	.document-project-prefix,
+	.document-project-separator {
+		display: none;
+	}
 }
 
 .document-breadcrumb-separator {
