@@ -18,6 +18,9 @@ import { COMPONENTS, DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect/dia
 
 import type { Component } from "@chopin/dialect/dialect";
 import type { PlannerWorkspace } from "../harness/atomic/workspace";
+import { PREVIEW_REQUEST_AUTHORING } from "./preview-request-authoring";
+
+export { PREVIEW_REQUEST_AUTHORING };
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -205,6 +208,8 @@ Those delimiters and no others. \`\\(…\\)\` and \`\\[…\\]\` are not math her
 they parse as ordinary prose, nothing rejects them, and the backslashes are
 eaten on the way out — so \`\\(r = n/t\\)\` is saved as \`(r = n/t)\` and reads
 like prose somebody meant to write.
+
+${PREVIEW_REQUEST_AUTHORING}
 
 Always name a fence's language — \`ts\`, \`python\`, \`sh\` — because the
 language is what colours it, and an unnamed fence is rendered as the grey text

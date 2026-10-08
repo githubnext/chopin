@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test";
 
-import { PROMPT } from "./planner";
+import { PREVIEW_REQUEST_AUTHORING, PROMPT } from "./planner";
+
+test("routes continuous preview requests and discrete team choices", () => {
+	expect(PROMPT).toContain(PREVIEW_REQUEST_AUTHORING);
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("continuously adjustable");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("request_visual_preview");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("with `{}`");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("ordinary `ask`");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("request is pending");
+});
 
 test("settles blocking opening choices before writing a first plan", () => {
 	expect(PROMPT).toContain(
