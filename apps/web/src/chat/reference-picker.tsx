@@ -70,6 +70,7 @@ export async function searchReferenceTargets(
 	api: ReferenceSearchApi = Api,
 ): Promise<ReferenceSearchResult> {
 	let channels = new Map<string, Api.Channel>();
+	let titles = new Map<string, string>();
 	let cursor: string | undefined;
 	let pages = 0;
 	let omitted = false;
@@ -84,6 +85,7 @@ export async function searchReferenceTargets(
 				signal,
 			},
 		);
+		for (let channel of page.channels) titles.set(channel.id, channel.title);
 		for (let [index, channel] of page.channels.entries()) {
 			if (channel.id !== room) channels.set(channel.id, channel);
 			if (channels.size >= MAX_REFERENCES) {
@@ -100,7 +102,14 @@ export async function searchReferenceTargets(
 			channelId: channel.id,
 			title: channel.title,
 			slug: channel.slug,
-			...(channel.parentChannelId ? { child: true } : {}),
+			...(channel.parentChannelId
+				? {
+					child: true,
+					...(titles.get(channel.parentChannelId)
+						? { parentTitle: titles.get(channel.parentChannelId) }
+						: {}),
+				}
+				: {}),
 			...(channel.description ? { description: channel.description } : {}),
 		})),
 		truncated: omitted || !!cursor,
@@ -307,6 +316,9 @@ export function ReferencePicker(
 									</span>
 								)}
 							</span>
+							{option.child && option.parentTitle && (
+								<span className="shrink-0 text-text-tertiary">in {option.parentTitle}</span>
+							)}
 							{showSlug && (
 								<span
 									className="shrink-0 font-mono text-sm text-text-quaternary"

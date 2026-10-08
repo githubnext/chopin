@@ -267,12 +267,14 @@ describe("reference picker accessibility", () => {
 					title: "Jev alternatives",
 					slug: "child-3f6c1e69",
 					child: true,
+					parentTitle: "warm-bridge",
 				}],
 			},
 		}));
 
 		expect(markup).toContain("Jev alternatives");
 		expect(markup).not.toContain("child-3f6c1e69");
+		expect(markup).toContain("in warm-bridge");
 	});
 
 	test("announces loading, empty, errors, and the reference limit", () => {
