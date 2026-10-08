@@ -364,6 +364,194 @@ test("merge renews an existing design hash only with matching source and review"
 	).toEqual(["apps/a.ts", path]);
 });
 
+function hashConflictFixture(baseReason = "existing", bothAddEntry = false) {
+	let f = fixture();
+	let path = "scripts/design-contract/exceptions/dynamic-web.json";
+	let hash = (value: string) => createHash("sha256").update(value).digest("hex");
+	f.put("apps/b.ts", "initial b");
+	if (bothAddEntry) f.put("apps/c.ts", "source c");
+	let entries = [
+		{
+			file: "apps/a.ts",
+			reason: "existing",
+			cases: [["dynamic", "class"]],
+			sourceHash: hash("initial"),
+		},
+		{
+			file: "apps/b.ts",
+			reason: "existing",
+			cases: [["dynamic", "class"]],
+			sourceHash: hash("initial b"),
+		},
+	];
+	f.put(path, JSON.stringify(entries));
+	let root = f.commit("existing exceptions");
+	let newEntry = {
+		file: "apps/c.ts",
+		reason: "new exception",
+		cases: [["dynamic", "class"]],
+		sourceHash: hash("source c"),
+	};
+	f.put("apps/a.ts", "head a");
+	f.put(
+		path,
+		JSON.stringify([
+			{ ...entries[0], sourceHash: hash("head a") },
+			entries[1],
+			...(bothAddEntry ? [newEntry] : []),
+		]),
+	);
+	let head = f.commit("feature");
+	f.git("checkout", "--detach", root);
+	f.put("apps/b.ts", "base b");
+	f.put(
+		path,
+		JSON.stringify([
+			entries[0],
+			{ ...entries[1], reason: baseReason, sourceHash: hash("base b") },
+			...(bothAddEntry ? [newEntry] : []),
+		]),
+	);
+	let base = f.commit("base update");
+	f.git("checkout", "--detach", head);
+	expect(() => f.git("merge", "--no-ff", "--no-commit", base)).toThrow();
+	let proposalEntries = [
+		{ ...entries[0], sourceHash: hash("head a") },
+		{ ...entries[1], sourceHash: hash("base b") },
+		...(bothAddEntry ? [newEntry] : []),
+	];
+	f.put(path, JSON.stringify(proposalEntries));
+	let proposal = f.commit("merge reviewed hashes");
+	let options = {
+		directory: f.directory,
+		operation: "merge",
+		expectedHead: head,
+		expectedBase: base,
+		proposalHead: proposal,
+		hashReviews: [
+			{ file: "apps/a.ts", sourceHash: hash("head a"), rationale: "Existing exception preserved" },
+			{ file: "apps/b.ts", sourceHash: hash("base b"), rationale: "Existing exception preserved" },
+		],
+	};
+	return { ...f, path, options, proposalEntries };
+}
+
+test("merge resolves a protected design hash conflict with exact source reviews", () => {
+	let f = hashConflictFixture();
+	expect(validateProposal(f.options).paths).toEqual([f.path]);
+	expect(() => validateProposal({ ...f.options, hashReviews: [] })).toThrow("review");
+	expect(() =>
+		validateProposal({
+			...f.options,
+			hashReviews: f.options.hashReviews.slice(1),
+		})
+	).toThrow("review");
+	let entries = [
+		f.proposalEntries[0],
+		{ ...f.proposalEntries[1], sourceHash: "a".repeat(64) },
+	];
+	f.put(f.path, JSON.stringify(entries));
+	f.git("add", ".");
+	f.git("commit", "--amend", "--no-edit");
+	expect(() =>
+		validateProposal({
+			...f.options,
+			proposalHead: f.git("rev-parse", "HEAD"),
+		})
+	).toThrow("sourceHash does not match");
+});
+
+test("merge rejects design hash conflicts that alter structure or file mode", () => {
+	let f = hashConflictFixture("base changed reason");
+	expect(() => validateProposal(f.options)).toThrow("beyond sourceHash");
+	f = hashConflictFixture("existing", true);
+	expect(() => validateProposal(f.options)).toThrow("entry count changed");
+	f = hashConflictFixture();
+	for (
+		let entries of [
+			[{ ...f.proposalEntries[0], reason: "broadened" }, f.proposalEntries[1]],
+			[{ ...f.proposalEntries[0], cases: [["dynamic", "different"]] }, f.proposalEntries[1]],
+			[...f.proposalEntries, { ...f.proposalEntries[0], file: "apps/new.ts" }],
+		]
+	) {
+		f.git("reset", "--hard", f.options.proposalHead);
+		f.put(f.path, JSON.stringify(entries));
+		f.git("add", ".");
+		f.git("commit", "--amend", "--no-edit");
+		expect(() =>
+			validateProposal({
+				...f.options,
+				proposalHead: f.git("rev-parse", "HEAD"),
+			})
+		).toThrow();
+	}
+	f.git("reset", "--hard", f.options.proposalHead);
+	f.git("update-index", "--chmod=+x", f.path);
+	f.git("commit", "--amend", "--no-edit");
+	expect(() =>
+		validateProposal({
+			...f.options,
+			proposalHead: f.git("rev-parse", "HEAD"),
+		})
+	).toThrow("mode");
+});
+
+function discardedBaseHashFixture(mixed: boolean) {
+	let f = fixture();
+	let path = "scripts/design-contract/exceptions/dynamic-web.json";
+	let hash = (value: string) => createHash("sha256").update(value).digest("hex");
+	f.put("apps/b.ts", "initial b");
+	let entries = [
+		{ file: "apps/a.ts", reason: "existing", sourceHash: hash("initial") },
+		{ file: "apps/b.ts", reason: "existing", sourceHash: hash("initial b") },
+	];
+	f.put(path, JSON.stringify(entries));
+	let root = f.commit("exceptions");
+	f.put("apps/a.ts", "head a");
+	f.put(path, JSON.stringify([{ ...entries[0], sourceHash: hash("head a") }, entries[1]]));
+	let head = f.commit("feature");
+	f.git("checkout", "--detach", root);
+	if (mixed) f.put("apps/a.ts", "base a");
+	f.put(
+		path,
+		JSON.stringify([
+			mixed ? { ...entries[0], sourceHash: hash("base a") } : entries[0],
+			{ ...entries[1], sourceHash: hash("stale b") },
+		]),
+	);
+	let base = f.commit("base");
+	f.git("checkout", "--detach", head);
+	expect(() => f.git("merge", "--no-ff", "--no-commit", base)).toThrow();
+	if (mixed) f.put("apps/a.ts", "combined a");
+	let proposed = [
+		{ ...entries[0], sourceHash: hash(mixed ? "combined a" : "head a") },
+		entries[1],
+	];
+	f.put(path, JSON.stringify(proposed, null, mixed ? 0 : 2));
+	let proposal = f.commit("merge");
+	return {
+		...f,
+		options: {
+			directory: f.directory,
+			operation: "merge",
+			expectedHead: head,
+			expectedBase: base,
+			proposalHead: proposal,
+			hashReviews: [
+				{ file: "apps/a.ts", sourceHash: proposed[0].sourceHash, rationale: "Existing exception" },
+				{ file: "apps/b.ts", sourceHash: proposed[1].sourceHash, rationale: "Existing exception" },
+			],
+		},
+	};
+}
+
+test("protected hash conflict rejects semantic head-only and partially head-only resolutions", () => {
+	for (let mixed of [false, true]) {
+		let f = discardedBaseHashFixture(mixed);
+		expect(() => validateProposal(f.options)).toThrow("silently retain head hash");
+	}
+});
+
 function rebaseFixture() {
 	let f = fixture();
 	f.put("apps/a.ts", "feature");

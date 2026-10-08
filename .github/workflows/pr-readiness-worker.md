@@ -182,10 +182,21 @@ job owns publication; a proposal is not proof of publication or passing CI.
    `bun install --frozen-lockfile` and relevant verification on the merged tree.
    Do not add a separate CI repair commit:
    the coordinator will schedule one if current-head CI fails afterward.
-   Report a human blocker for a protected-path conflict, competing intentions,
-   or an ambiguous merge base. A conflicted file cannot retain the exact
-   captured-head blob because the review diff would hide the discarded base
-   change; report a human blocker when that is the only valid resolution.
+   Report a human blocker for competing intentions, an ambiguous merge base,
+   or a protected-path conflict outside an existing design-contract exception
+   JSON file. For that exception-only case, compare the merge-base, captured
+   head, and captured base JSON: every field, entry, order, reason, and case
+   must be identical except `sourceHash` values. Preserve those fields and
+   the file mode in the proposal.
+   Renew each hash from the proposed source bytes and record a rationale review
+   for every hash changed relative to either parent. If the shapes differ,
+   report a human blocker. Run `bun run ci` on a merge that renews design hashes
+   and record its actual result in `checks`. A conflicted file cannot retain the
+   exact captured-head blob because the review diff would hide the discarded base
+   change. If the base changed a `sourceHash` since the merge-base and the head
+   has a different value, the proposal cannot keep the head's value for that
+   field, even when another hash changes. Report a human blocker when that is
+   the only valid resolution.
    Do not silently edit nonconflicting files.
 4. If `operation` is `fix`, run `bun install --frozen-lockfile` inside the sandbox
    against the captured working head, then reproduce its actual CI failure first.
@@ -202,6 +213,8 @@ job owns publication; a proposal is not proof of publication or passing CI.
    exception. Preserve all other JSON fields and entries. Record each renewal as
    `{file, sourceHash, rationale}` in `hashReviews`; hash actual source bytes with
    SHA-256. Changed expectations or a broader exception need a human decision.
+   The merge exception above permits only those reviewed hash renewals in a
+   protected conflict.
 6. When intent is ambiguous or protected edits are needed, call `finish_attempt`
    once with kind `human`, the exact attempt, and a nonempty concise reason:
    conflicting files, both competing intentions, the precise decision needed,

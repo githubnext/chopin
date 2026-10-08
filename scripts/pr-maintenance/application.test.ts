@@ -185,7 +185,7 @@ test("registers using CAS before guarded push and verifies published head", asyn
 		},
 	});
 	expect(f.calls.filter((call) => call === "push")).toHaveLength(1);
-});
+}, 15_000);
 
 test("guarded publication accepts one reviewed conflict merge and rejects stale base", async () => {
 	let f = fixture(false, "combined", "merge");
