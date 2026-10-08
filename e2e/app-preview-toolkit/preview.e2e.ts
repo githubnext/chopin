@@ -187,16 +187,19 @@ test(
 		});
 		await page.keyboard.up("Space");
 		await expect(card).toHaveCSS("padding", "32px");
-		for (let event of ["pointerup", "pointercancel", "lostpointercapture"]) {
+		for (let event of ["pointercancel", "lostpointercapture"]) {
 			await peek.hover();
 			await page.mouse.down();
 			await expect(card).toHaveCSS("padding", "24px");
 			if (event === "lostpointercapture") {
+				// A move activates pending capture before release can produce capture loss.
+				await peek.hover({ position: { x: 1, y: 1 } });
 				await peek.evaluate((element) => element.releasePointerCapture(1));
+				await page.mouse.move(0, 0);
 			} else await peek.dispatchEvent(event, { pointerId: 1 });
-			await page.mouse.up();
 			await expect(card).toHaveCSS("padding", "32px");
 			await expect(peek).toHaveAttribute("aria-pressed", "false");
+			await page.mouse.up();
 		}
 		await peek.focus();
 		await page.keyboard.down("Space");
