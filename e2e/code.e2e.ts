@@ -426,13 +426,20 @@ test("dragging across drawn code selects it to copy, without opening", async ({ 
 	let box = (await line.boundingBox())!;
 	await page.mouse.move(box.x + 16, box.y + box.height / 2);
 	await page.mouse.down();
-	await page.mouse.move(box.x + 200, box.y + box.height / 2, { steps: 8 });
+	await page.mouse.move(box.x + 120, box.y + box.height / 2, { steps: 8 });
 	await page.mouse.up();
+	let dragged = await page.evaluate(() => document.getSelection()?.toString() ?? "");
+
+	// Shift extends it from where the drag began, as it would in text.
+	await page.keyboard.down("Shift");
+	await page.mouse.click(box.x + 200, box.y + box.height / 2);
+	await page.keyboard.up("Shift");
 
 	await expect(block.locator("[data-plan-source]")).toBeHidden();
 	await expect(block.locator("[data-file]")).toBeVisible();
 	let selected = await page.evaluate(() => document.getSelection()?.toString() ?? "");
-	expect(selected.length).toBeGreaterThan(3);
+	expect(selected.length).toBeGreaterThan(dragged.length);
+	expect(selected.startsWith(dragged)).toBe(true);
 	expect("export function open(room: string) {}").toContain(selected);
 
 	// The browser copies what is selected; Lexical must not swap in its own.
