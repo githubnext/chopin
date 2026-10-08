@@ -262,7 +262,7 @@
 				1
 			]
 		],
-		"sourceHash": "973c5a8c65eb88d21d497eeee70e7be62c9b6d0b538d9af104fd5a92699a6550"
+		"sourceHash": "c67c1e2ab9c4cf2886619429a10451766d50f964f5839a87deb35526e7f124e9"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -290,7 +290,7 @@
 				1
 			]
 		],
-		"sourceHash": "973c5a8c65eb88d21d497eeee70e7be62c9b6d0b538d9af104fd5a92699a6550"
+		"sourceHash": "c67c1e2ab9c4cf2886619429a10451766d50f964f5839a87deb35526e7f124e9"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
