@@ -37,7 +37,12 @@ import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overv
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
-import { advanceDocumentActivity, documentActivity, QUIET_DOCUMENT } from "./document-activity";
+import {
+	advanceDocumentActivity,
+	ANSWER_FOLLOW_MS,
+	documentActivity,
+	QUIET_DOCUMENT,
+} from "./document-activity";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
@@ -51,7 +56,7 @@ import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
-import type { ConversationPlan, Plan, Research, Session } from "@chopin/protocol";
+import type { ConversationPlan, Plan, Question, Research, Session } from "@chopin/protocol";
 import type {
 	DecisionView,
 	DecisionViewState,
@@ -429,7 +434,8 @@ export function RoomWorkspace(
 	let planVisible = workspacePresentation.documentVisible && view === "plan";
 	let latestPlanVisible = useRef(planVisible);
 	latestPlanVisible.current = planVisible;
-	let answeredBefore = useRef(unanswered);
+	let latestBusy = useRef(chatActivity.busy);
+	latestBusy.current = chatActivity.busy;
 	let [documentWatch, setDocumentWatch] = useState(QUIET_DOCUMENT);
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
 		let previous = metadataRef.current;
@@ -474,24 +480,42 @@ export function RoomWorkspace(
 	}, [planVisible]);
 
 	useEffect(() => {
-		if (chatActivity.busy) return;
-		setDocumentWatch(state => advanceDocumentActivity(state, { type: "idle" }));
+		setDocumentWatch(state =>
+			advanceDocumentActivity(state, { type: chatActivity.busy ? "started" : "idle" })
+		);
 	}, [chatActivity.busy]);
 
 	useEffect(() => {
-		if (!wire) return;
-		return wire.on<Plan.Changes>("plan:changes", () => {
-			if (latestPlanVisible.current) return;
-			setDocumentWatch(state => advanceDocumentActivity(state, { type: "changes" }));
-		});
-	}, [wire]);
+		if (documentWatch.following !== "awaiting") return;
+		let timer = window.setTimeout(
+			() => setDocumentWatch(state => advanceDocumentActivity(state, { type: "expired" })),
+			ANSWER_FOLLOW_MS,
+		);
+		return () => window.clearTimeout(timer);
+	}, [documentWatch.following]);
 
 	useEffect(() => {
-		let previous = answeredBefore.current;
-		answeredBefore.current = unanswered;
-		if (unanswered >= previous || latestPlanVisible.current) return;
-		setDocumentWatch(state => advanceDocumentActivity(state, { type: "answered" }));
-	}, [unanswered]);
+		if (!wire) return;
+		let offChanges = wire.on<Plan.Changes>("plan:changes", () => {
+			if (latestPlanVisible.current) return;
+			setDocumentWatch(state =>
+				advanceDocumentActivity(state, { type: "changes", busy: latestBusy.current })
+			);
+		});
+		// Only this viewer's own answer resumes a turn worth following; a discard
+		// or someone else's answer may start nothing.
+		let offResolved = wire.on<Question.Resolved>("question:resolved", event => {
+			if (event.status !== "answered" || event.resolver !== handle) return;
+			if (latestPlanVisible.current) return;
+			setDocumentWatch(state =>
+				advanceDocumentActivity(state, { type: "answered", busy: latestBusy.current })
+			);
+		});
+		return () => {
+			offChanges();
+			offResolved();
+		};
+	}, [wire, handle]);
 
 	useEffect(() => {
 		let previous = previousUnanswered.current;
