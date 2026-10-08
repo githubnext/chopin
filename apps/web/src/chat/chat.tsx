@@ -476,6 +476,7 @@ export function Chat(
 			live={transcriptReady}
 			onWithdraw={id => wire?.send("chat:unqueue", { id })}
 			queued={queue}
+			talkingToChopin={mode}
 			working={workingTurn}
 		/>
 	);

@@ -68,3 +68,24 @@ test("a message sent to the Planner is labelled; room messages are not", () => {
 	expect(render("planner")).toContain("To Chopin");
 	expect(render()).not.toContain("To Chopin");
 });
+
+test("To Chopin appears once per run and never in persistent Chopin mode", () => {
+	let entry = (id: string) => ({
+		id,
+		author: { kind: "member" as const, handle: "ana" },
+		text: id,
+		ts: 1,
+		to: "planner" as const,
+	});
+	let render = (talkingToChopin?: boolean) =>
+		renderToStaticMarkup(createElement(Transcript, {
+			active: true,
+			entries: [entry("a"), entry("b")],
+			handle: "ana",
+			onWithdraw: () => {},
+			queued: [{ id: "q", handle: "ana", text: "queued" }],
+			talkingToChopin,
+		})).split("To Chopin").length - 1;
+	expect(render()).toBe(2); // the sent run, then the queued message
+	expect(render(true)).toBe(0);
+});

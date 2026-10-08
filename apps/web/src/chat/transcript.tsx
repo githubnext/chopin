@@ -153,8 +153,10 @@ function DecisionSystemEntry(
 }
 
 function MessageBody(
-	{ enter, handle, message, onWithdraw, ...markers }: {
+	{ enter, handle, message, onWithdraw, label, ...markers }: {
 		enter: boolean;
+		/** Shows "To Chopin"; false inside a run already labelled or in persistent Chopin mode. */
+		label: boolean;
 		handle: string;
 		message: Message;
 		onWithdraw: (id: string) => void;
@@ -187,7 +189,14 @@ function MessageBody(
 					tools={message.tools ?? []}
 				/>
 			)}
-			{message.to === "planner" && message.author.kind === "member" && (
+			{markers.sourceDestination?.source.messageId === message.id && (
+				<span
+					aria-hidden="true"
+					className="chat-source-tint"
+					key={markers.sourceDestination.token}
+				/>
+			)}
+			{label && (
 				<p className="chat-message-to m-0 mb-0.5 flex items-center gap-1 text-2xs text-text-tertiary">
 					<span aria-hidden="true" className="inline-flex">
 						<ChopinMark />
@@ -238,7 +247,9 @@ function MessageBody(
 }
 
 function MessageGroup(
-	{ enter, entering, group: item, handle, onWithdraw, ...markers }: {
+	{ enter, entering, group: item, handle, onWithdraw, talkingToChopin, ...markers }: {
+		/** Persistent Chopin mode already says every message is for Chopin. */
+		talkingToChopin?: boolean;
 		/** The whole group entered; `entering` holds messages that joined it later. */
 		enter: boolean;
 		entering: ReadonlySet<string>;
@@ -286,8 +297,10 @@ function MessageGroup(
 						</span>
 					</div>
 				)}
-				{item.messages.map(message => (
+				{item.messages.map((message, index) => (
 					<MessageBody
+						label={message.to === "planner" && message.author.kind === "member"
+							&& !talkingToChopin && item.messages[index - 1]?.to !== "planner"}
 						enter={entering.has(message.id)}
 						decisions={markers.decisions}
 						canEdit={markers.canEdit}
@@ -331,6 +344,7 @@ export function Transcript(
 		queued,
 		sourceDestination,
 		suspendedWork,
+		talkingToChopin,
 		working,
 	}: {
 		active: boolean;
@@ -358,6 +372,7 @@ export function Transcript(
 		suspendedWork?: CompletedWork;
 		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
 		sourceDestination?: ChatDestination;
+		talkingToChopin?: boolean;
 	},
 ) {
 	let scroller = useRef<HTMLDivElement>(null);
@@ -641,6 +656,7 @@ export function Transcript(
 								key={key}
 								onWithdraw={onWithdraw}
 								sourceDestination={sourceDestination}
+								talkingToChopin={talkingToChopin}
 							/>
 						)
 				)}
