@@ -417,7 +417,7 @@
 				1
 			]
 		],
-		"sourceHash": "c336f006257672b5930becbe3c246a862dbf0311483cde1992c329a6f723e5d1"
+		"sourceHash": "01110b02afe3ac02bea7998cac3ade4c0cdf4b0948204190d4b773aafeeaa4f5"
 	},
 	{
 		"file": "packages/editor/src/changes.ts",
@@ -452,7 +452,7 @@
 				1
 			]
 		],
-		"sourceHash": "482a607c538b870d82602302e1ece86e6b35d60367a2616658ab1eea1e6c95d9"
+		"sourceHash": "8002821314753401ea03aeaca2d8fa839b139d1f84ece7731b9c399bed16bf64"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
