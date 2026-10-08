@@ -14,6 +14,7 @@
 		"migrate": "bun apps/server/src/storage/migrate.ts",
 		"build": "bun run --filter '@chopin/web' build",
 		"start": "bun run --filter '@chopin/server' start",
+		"start:visual-preview": "bun apps/server/src/visual-preview/server.ts",
 		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts && bun scripts/check-design-contract.ts && bun scripts/check-design-record.ts && bun run design:check",
 		"design:check": "node scripts/check-design.mjs",
 		"fix": "dprint fmt && oxlint --fix",

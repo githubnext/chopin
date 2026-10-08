@@ -5,7 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build",
+		"build": "vite build --config visual-preview.vite.config.ts && bun produce-visual-preview.ts && vite build",
+		"build:visual-preview": "vite build --config visual-preview.vite.config.ts && bun produce-visual-preview.ts",
 		"preview": "vite preview",
 		"types": "tsgo --noEmit --skipLibCheck"
 	},

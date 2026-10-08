@@ -49,6 +49,7 @@ COPY --from=production-dependencies --chown=bun:bun /app/packages/question/node_
 COPY --chown=bun:bun package.json bun.lock ./
 COPY --chown=bun:bun apps/server ./apps/server
 COPY --from=build --chown=bun:bun /app/apps/web/dist ./apps/web/dist
+COPY --from=build --chown=bun:bun /app/apps/web/preview/dist ./apps/web/preview/dist
 COPY --chown=bun:bun apps/web/package.json ./apps/web/package.json
 COPY --chown=bun:bun packages ./packages
 

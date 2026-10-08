@@ -1,0 +1,13 @@
+body {
+	margin: 0;
+	background: var(--color-page);
+}
+
+.question-option {
+	padding-block: var(--visual-option-padding, 0.375rem);
+}
+
+.question-option:has(.question-input:checked),
+.question-option[data-selected] {
+	background: var(--visual-selected-color, var(--color-brand-wash));
+}

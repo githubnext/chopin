@@ -4,7 +4,9 @@
 	],
 	"include": [
 		"src",
-		"vite.config.ts"
+		"vite.config.ts",
+		"visual-preview.vite.config.ts",
+		"produce-visual-preview.ts"
 	],
 	"compilerOptions": {
 		"target": "esnext",
