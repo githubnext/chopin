@@ -1,13 +1,15 @@
 // Process: a numbered linear sequence of steps drawn as chevrons.
 import { el, text } from "../../svg.mjs";
 import { ceil4, textWidth } from "../../text.mjs";
-import { bounds, group, item, LABEL, labelBlock, stepOf } from "./common.mjs";
+import { bounds, group, item, itemIdProblems, LABEL, labelBlock, stepOf } from "./common.mjs";
 
 export const family = "structure";
 
 export function render(spec) {
 	const problems = [];
 	const steps = spec.steps.map((s, i) => item(s, i, "s"));
+	const identityProblems = itemIdProblems(steps, "steps");
+	if (identityProblems.length) return { problems: identityProblems };
 	if (steps.length > 7) {
 		problems.push({
 			code: "W_BUDGET",

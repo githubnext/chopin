@@ -11,6 +11,23 @@ export function item(v, i, prefix = "i") {
 	return o;
 }
 
+export function itemIdProblems(items, field) {
+	const seen = new Set();
+	const problems = [];
+	items.forEach((entry, index) => {
+		if (seen.has(entry.id)) {
+			problems.push({
+				code: "E_DUP_ID",
+				at: `${field}[${index}].id`,
+				msg: `duplicate id "${entry.id}"`,
+				fix: "use a unique item id",
+			});
+		}
+		seen.add(entry.id);
+	});
+	return problems;
+}
+
 // Centered multi-line label block (label lines + optional sub) at cx, cy.
 export function labelBlock(
 	cx,

@@ -2,7 +2,7 @@
 // chips inside each band. Builds bottom-up (foundation first).
 import { el, text } from "../../svg.mjs";
 import { ceil4, textWidth } from "../../text.mjs";
-import { bounds, group, item } from "./common.mjs";
+import { bounds, group, item, itemIdProblems } from "./common.mjs";
 
 export const family = "structure";
 
@@ -11,6 +11,8 @@ const CHIP = { size: 10 };
 export function render(spec) {
 	const problems = [];
 	const layers = spec.layers.map((l, i) => item(l, i, "l"));
+	const identityProblems = itemIdProblems(layers, "layers");
+	if (identityProblems.length) return { problems: identityProblems };
 	if (layers.length > 7) {
 		problems.push({
 			code: "W_BUDGET",
