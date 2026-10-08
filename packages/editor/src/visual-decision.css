@@ -145,7 +145,7 @@
 	font-size: var(--text-sm);
 }
 
-@container visual-decision (min-width: 38rem) {
+@container visual-decision (min-width: 32rem) {
 	.visual-decision-body {
 		grid-template-columns: minmax(0, 1fr) 13rem;
 	}
