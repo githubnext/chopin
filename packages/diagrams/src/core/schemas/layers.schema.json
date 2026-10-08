@@ -1,0 +1,54 @@
+{
+	"title": "Layer stack",
+	"required": [
+		"layers"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"layers": {
+			"type": "array",
+			"minItems": 2,
+			"items": {
+				"anyOf": [
+					{
+						"type": "string"
+					},
+					{
+						"type": "object",
+						"required": [
+							"label"
+						],
+						"additionalProperties": false,
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"label": {
+								"type": "string",
+								"maxLength": 40
+							},
+							"sub": {
+								"type": "string",
+								"maxLength": 56
+							},
+							"focal": {
+								"type": "boolean"
+							},
+							"kind": {
+								"type": "string"
+							},
+							"items": {
+								"type": "array",
+								"maxItems": 6,
+								"items": {
+									"type": "string",
+									"maxLength": 24
+								}
+							}
+						}
+					}
+				]
+			}
+		}
+	}
+}

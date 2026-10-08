@@ -315,6 +315,7 @@ export default function DocumentWorkspaceHost(
 	}, [onChildClose, presentation]);
 
 	let metadataChanged = useCallback((kind: "parent" | "child", metadata: Metadata) => {
+		if (documentRouteIdentity(routeRef.current) !== routeKey) return;
 		let current = stateRef.current;
 		if (current.status === "empty") return;
 		let target = kind === "parent" ? current.loaded.parent : current.loaded.child;
@@ -336,8 +337,8 @@ export default function DocumentWorkspaceHost(
 		if (kind === "parent" && routeRef.current.page === "child") {
 			history.replaceState(rebaseChildHistoryState(history.state, paths.parent), "");
 		}
-		onCanonicalPath(layerKey, documentRouteIdentity(routeRef.current), pathname);
-	}, [layerKey, onCanonicalPath, send]);
+		onCanonicalPath(layerKey, routeKey, pathname);
+	}, [layerKey, onCanonicalPath, routeKey, send]);
 	let parentMetadataChanged = useCallback(
 		(metadata: Metadata) => metadataChanged("parent", metadata),
 		[metadataChanged],
@@ -383,7 +384,7 @@ export default function DocumentWorkspaceHost(
 	let childLabel = loaded.child?.channel.title ?? (route.page === "child" ? route.childSlug : "");
 	let closeChild = () => onChildClose(loaded.parent.channel.id, parentPath);
 	let parent = (
-		<Suspense fallback={<Loading label="Opening parent document..." />}>
+		<Suspense fallback={<Loading label="Opening document…" />}>
 			<RoomWorkspace
 				{...workspaceProps(
 					loaded.parent,
@@ -400,7 +401,7 @@ export default function DocumentWorkspaceHost(
 	);
 	let child = loaded.child
 		? (
-			<Suspense fallback={<Loading label="Opening child document..." />}>
+			<Suspense fallback={<Loading label="Opening child document…" />}>
 				<RoomWorkspace
 					{...workspaceProps(
 						loaded.child,
@@ -425,7 +426,7 @@ export default function DocumentWorkspaceHost(
 		: route.page === "child" && presentation === "open"
 		? error
 			? <Failure error={error} onRetry={retryFailure} />
-			: <Loading label="Opening child document..." />
+			: <Loading label="Opening child document…" />
 		: undefined;
 	return (
 		<AnchoredChildSurface

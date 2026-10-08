@@ -35,7 +35,7 @@ test("concurrent create retries accept one server-generated card and commit once
 	expect(commits).toBe(1);
 	expect(context.plan.visualDecisions.size).toBe(2);
 	expect(room.questionnaireProjections(context.plan.document)).toHaveLength(2);
-	expect(result?.state?.id).not.toBe(key);
+	expect((result?.state as { id: string } | undefined)?.id).not.toBe(key);
 });
 
 test("a lost create reply replays the same saved card after reload without publishing", async () => {

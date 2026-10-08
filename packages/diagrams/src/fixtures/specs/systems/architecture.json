@@ -1,0 +1,57 @@
+{
+	"type": "architecture",
+	"title": "Checkout in production",
+	"subtitle": "How an order travels from the browser to the payment provider.",
+	"motion": "trace",
+	"nodes": [
+		{
+			"id": "web",
+			"label": "Storefront",
+			"sub": "Next.js",
+			"tag": "WEB",
+			"kind": "external",
+			"row": 1,
+			"col": 0
+		},
+		{ "id": "edge", "label": "Edge cache", "sub": "CDN · WAF", "row": 1, "col": 1 },
+		{
+			"id": "api",
+			"label": "Checkout API",
+			"sub": "Go · :8080",
+			"tag": "API",
+			"focal": true,
+			"row": 1,
+			"col": 2,
+			"group": "core"
+		},
+		{
+			"id": "orders",
+			"label": "Orders DB",
+			"sub": "Postgres 16",
+			"kind": "store",
+			"row": 0,
+			"col": 3,
+			"group": "core"
+		},
+		{
+			"id": "queue",
+			"label": "Event bus",
+			"sub": "Kafka",
+			"kind": "store",
+			"row": 2,
+			"col": 3,
+			"group": "core"
+		},
+		{ "id": "pay", "label": "Payments", "sub": "Stripe", "kind": "external", "row": 1, "col": 4 },
+		{ "id": "mail", "label": "Receipts", "sub": "worker", "row": 2, "col": 4 }
+	],
+	"groups": [{ "id": "core", "label": "Core services" }],
+	"edges": [
+		["web", "edge", "HTTPS", "link"],
+		["edge", "api", "POST /order", "primary"],
+		["api", "orders", "write"],
+		["api", "queue", "order.placed", "async"],
+		["api", "pay", "charge", "primary"],
+		["queue", "mail", "consume", "async"]
+	]
+}

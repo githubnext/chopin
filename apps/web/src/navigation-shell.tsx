@@ -19,8 +19,10 @@ import { documentPath } from "@chopin/protocol/document-url";
 import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
+import { WorkspaceNotice } from "./workspace-notice";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
+import type { NoticeOptions } from "./navigation-notice";
 import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
 import { useMenuDismissal } from "./menu-dismissal";
@@ -55,6 +57,7 @@ import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
+import type { ShortcutActions } from "./global-shortcuts";
 import type { NavigationMode, NavigationRoute } from "./navigation-model";
 
 export type Navigate = (
@@ -86,6 +89,7 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 	}
 }
 
+let NavigationNotice = lazy(() => import("./navigation-notice-view"));
 let ProjectSidebar = lazy(() =>
 	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
 );
@@ -103,6 +107,11 @@ let DocumentSearchDialog = lazy(() =>
 );
 let DeleteDocumentDialog = lazy(() =>
 	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
+);
+let KeyboardShortcutsDialog = lazy(() =>
+	import("./keyboard-shortcuts-dialog").then(module => ({
+		default: module.KeyboardShortcutsDialog,
+	}))
 );
 
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
@@ -286,11 +295,13 @@ export function NavigationShell(
 		| "add"
 		| "new"
 		| "search"
+		| "shortcuts"
 		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
+	let [notice, showNotice] = useState<NoticeOptions>();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
@@ -520,19 +531,6 @@ export function NavigationShell(
 		}
 	}, [navigation?.projects.length, route.page]);
 
-	useEffect(() => {
-		if (!focusProjectId) return;
-		let frame = requestAnimationFrame(() => {
-			let project = document.querySelector<HTMLElement>(
-				`[data-project-id="${CSS.escape(focusProjectId)}"]`,
-			);
-			if (!project) return;
-			project.focus({ preventScroll: true });
-			setFocusProjectId(undefined);
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [focusProjectId, projects]);
-
 	let navigateToDocument = (documentId: string, path?: string) => {
 		setError(undefined);
 		setDialog(undefined);
@@ -666,6 +664,12 @@ export function NavigationShell(
 	let documentAction = useCallback((channel: Api.Channel, action: DocumentAction) => {
 		setDrawerOpen(false);
 		setAccountOpen(false);
+		if (action === "copy-link") {
+			let href =
+				new URL(documentDestination(projectsRef.current, channel.id), location.origin).href;
+			void import("./copy-link").then(module => module.copyLink(href, showNotice));
+			return;
+		}
 		if (action === "rename") {
 			requestTitleEdit(channel.id, "rename");
 			if (currentDocumentIdRef.current !== channel.id) {
@@ -687,7 +691,7 @@ export function NavigationShell(
 		}, reason => {
 			setError({ reason });
 		});
-	}, [acceptChannel, navigate, showDialog]);
+	}, [acceptChannel, navigate, showDialog, showNotice]);
 	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
@@ -760,6 +764,34 @@ export function NavigationShell(
 		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
 	};
 	let dismissDialog = () => setDialog(undefined);
+	let [sidebarShortcut, setSidebarShortcut] = useState<string>();
+	let shortcutActions = useRef<ShortcutActions>({});
+	shortcutActions.current = {
+		search: () => showDialog("search"),
+		"new-document": newDocument,
+		shortcuts: () => showDialog("shortcuts"),
+		"toggle-sidebar": () => {
+			if (mode === "drawer") return setDrawerOpen(true);
+			if (collapsed) return setCollapsed(false);
+			let inside = document.activeElement?.closest(".project-sidebar-frame");
+			setCollapsed(true);
+			if (inside) requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
+		},
+	};
+	// The listener and its registry load after first paint; the shell only names its actions.
+	useEffect(() => {
+		let stop: (() => void) | undefined;
+		let live = true;
+		void import("./global-shortcuts").then(module => {
+			if (!live) return;
+			stop = module.listenForShortcuts(() => shortcutActions.current);
+			setSidebarShortcut(module.shortcutHint("toggle-sidebar"));
+		});
+		return () => {
+			live = false;
+			stop?.();
+		};
+	}, []);
 	let collapseSidebar = () => {
 		setCollapsed(true);
 		dismissDrawer();
@@ -786,26 +818,17 @@ export function NavigationShell(
 		setDrawerOpen(false);
 		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
+	let sidebarLoading = <ProjectSidebarLoading onCollapse={collapseSidebar} user={user} />;
 	let sidebar = (
-		<Suspense fallback={<ProjectSidebarLoading onCollapse={collapseSidebar} />}>
+		<Suspense fallback={sidebarLoading}>
 			<ProjectSidebar
-				accountMenu={accountPresence.phase !== "closed" && (
-					<div
-						aria-hidden={accountPresence.phase === "closing" ? "true" : undefined}
-						className={`navigation-account-menu motion-dropdown ${accountPresence.className}`}
-						id={accountMenuId}
-						inert={accountPresence.phase === "closing"}
-						onKeyDown={event => {
-							if (event.key === "Tab") return closeAccount(false);
-							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-							event.preventDefault();
-							event.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus();
-						}}
-						role="menu"
-					>
-						<button onClick={() => void signOut()} role="menuitem" type="button">Sign out</button>
-					</div>
-				)}
+				accountMenu={accountPresence.phase !== "closed" && {
+					className: accountPresence.className,
+					closing: accountPresence.phase === "closing",
+					onDismiss: () => closeAccount(false),
+					onShortcuts: () => showDialog("shortcuts"),
+					onSignOut: () => void signOut(),
+				}}
 				accountMenuId={accountMenuId}
 				accountMenuOpen={accountOpen}
 				accountTriggerRef={accountTrigger}
@@ -819,7 +842,9 @@ export function NavigationShell(
 					: undefined}
 				currentDocumentId={currentDocumentId}
 				onAccount={() => setAccountOpen(open => !open)}
+				focusProjectId={focusProjectId}
 				onAddProject={() => showDialog("add")}
+				onFocusedProject={() => setFocusProjectId(undefined)}
 				onCollapse={collapseSidebar}
 				onCreateDocument={project => void createDocument(project)}
 				onDocumentAction={documentAction}
@@ -833,8 +858,20 @@ export function NavigationShell(
 			/>
 		</Suspense>
 	);
+	let unknownRepository = route.page === "repository" && navigation
+			&& !navigation.projects.some(project =>
+				project.repositoryOwner.toLowerCase() === route.owner.toLowerCase()
+				&& project.repositoryName.toLowerCase() === route.repository.toLowerCase()
+			)
+		? `${route.owner}/${route.repository}`
+		: undefined;
 	let content = (
 		<>
+			{notice && (
+				<Suspense>
+					<NavigationNotice notice={notice} show={showNotice} />
+				</Suspense>
+			)}
 			{!sidebarVisible && !drawerOpen && presentedDialog !== "new" && creation.pending.size > 0 && (
 				<div className="navigation-creation-status" role="status">
 					{[...creation.pending].map(([id, phase]) => (
@@ -875,16 +912,32 @@ export function NavigationShell(
 					)}
 				</TerminalAlert>
 			)}
-			{children ?? (
-				<Suspense fallback={null}>
-					<EmptyWorkspace
-						disabled={creationTarget.type === "loading" || creation.pending.size > 0}
-						hasProjects={navigation?.projects.length !== 0}
-						onAddProject={() => showDialog("add")}
-						onNewDocument={newDocument}
+			{children ?? (unknownRepository
+				? (
+					<WorkspaceNotice
+						actions={
+							<button
+								className="btn btn-md btn-primary"
+								onClick={() => showDialog("add")}
+								type="button"
+							>
+								Add project
+							</button>
+						}
+						body="Add it to open its documents."
+						title={`${unknownRepository} isn't one of your projects`}
 					/>
-				</Suspense>
-			)}
+				)
+				: (
+					<Suspense fallback={null}>
+						<EmptyWorkspace
+							disabled={creationTarget.type === "loading" || creation.pending.size > 0}
+							hasProjects={navigation?.projects.length !== 0}
+							onAddProject={() => showDialog("add")}
+							onNewDocument={newDocument}
+						/>
+					</Suspense>
+				))}
 		</>
 	);
 
@@ -910,6 +963,7 @@ export function NavigationShell(
 					<ProjectSidebarExpandButton
 						buttonRef={drawerOpener}
 						onExpand={() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false)}
+						shortcut={sidebarShortcut}
 					/>
 				)}
 				{drawerPresence.phase !== "closed" && (
@@ -983,6 +1037,11 @@ export function NavigationShell(
 							source={projects}
 							userId={user.id}
 						/>
+					</LazyDialogBoundary>
+				)}
+				{dialogMotion && presentedDialog === "shortcuts" && (
+					<LazyDialogBoundary>
+						<KeyboardShortcutsDialog motion={dialogMotion} onDismiss={dismissDialog} />
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && typeof presentedDialog === "object"

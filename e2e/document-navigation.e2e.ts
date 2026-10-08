@@ -185,6 +185,10 @@ test("account menu closes on Escape and outside click, and returns focus", async
 	});
 	await account.click();
 	await expect(menu).toBeVisible();
+	await page.keyboard.press("ArrowDown");
+	await expect(menu.getByRole("menuitem", { name: "Keyboard shortcuts" })).toBeFocused();
+	await page.keyboard.press("ArrowDown");
+	await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(menu).toHaveCount(0);
 	await expect(account).toBeFocused();
@@ -201,10 +205,10 @@ test("document action menu motion settles keyboard opening immediately", async (
 	await trigger.focus();
 	await trigger.press("ArrowDown");
 	let menu = page.getByRole("menu", { name: /^Actions for / });
-	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+	await expect(page.getByRole("menuitem", { name: "Copy link", exact: true })).toBeFocused();
 	await expect(menu).toHaveCSS("transition-duration", "0s");
 	await page.keyboard.press("ArrowDown");
-	await expect(page.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
+	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
 });
 
 test("a pointer-collapsed Project stays inert through exit and restores in place", async ({ join }) => {
@@ -1029,8 +1033,10 @@ test("archiving a sidebar row by keyboard moves focus to a neighbouring row", as
 	await row.hover();
 	await trigger.focus();
 	await trigger.press("ArrowDown");
-	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+	await expect(page.getByRole("menuitem", { name: "Copy link", exact: true })).toBeFocused();
 	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await expect(page.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
 	await page.keyboard.press("Enter");
 	await expect(links).toHaveCount(names.length - 1);
 	await expect(sidebar(page).locator(".project-sidebar-document-link", { hasText: neighbour! }))

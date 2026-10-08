@@ -4,6 +4,7 @@ import { usePointerCapabilities } from "@chopin/editor/pointer";
 
 import { App } from "./app";
 import { isDesignAuditRoute } from "./design-audit/route";
+import { isDiagramGalleryRoute } from "./diagram-gallery/route";
 import { useFocusInput } from "./focus-input";
 import { useMotionInput } from "./motion-input";
 import { useVisualViewport } from "./viewport";
@@ -31,6 +32,8 @@ function Root() {
 
 let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
 	? import("./design-audit/page").then(({ DesignAuditPage }) => <DesignAuditPage />)
+	: isDiagramGalleryRoute(location.pathname, import.meta.env.DEV)
+	? import("./diagram-gallery/page").then(({ DiagramGalleryPage }) => <DiagramGalleryPage />)
 	: Promise.resolve(<Root />);
 
 void Promise.all([content, import("./icon-tooltip")]).then(([value, { IconTooltip }]) => {

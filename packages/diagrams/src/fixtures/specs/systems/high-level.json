@@ -1,0 +1,12 @@
+{
+	"type": "high-level",
+	"title": "What SeeCode does",
+	"motion": "reveal",
+	"nodes": [
+		{ "id": "ask", "label": "You ask", "kind": "external", "row": 0, "col": 0 },
+		{ "id": "spec", "label": "Claude writes a spec", "row": 0, "col": 1 },
+		{ "id": "sc", "label": "SeeCode renders", "focal": true, "row": 0, "col": 2 },
+		{ "id": "out", "label": "Animated diagram", "kind": "external", "row": 0, "col": 3 }
+	],
+	"edges": [["ask", "spec"], ["spec", "sc", "", "primary"], ["sc", "out", "", "primary"]]
+}

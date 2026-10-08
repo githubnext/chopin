@@ -25,6 +25,12 @@ export function presenceSplit(
 	return { shown: unique.slice(0, max), hidden: unique.slice(max) };
 }
 
+/** Presence is about other people: drop the viewer's own handle. */
+export function withoutSelf(handles: readonly string[], self?: string): string[] {
+	let own = self?.toLowerCase();
+	return handles.filter(handle => handle.toLowerCase() !== own);
+}
+
 export function PresenceFaces({ handles, label = "Editing this question" }: {
 	handles: readonly string[];
 	label?: string;

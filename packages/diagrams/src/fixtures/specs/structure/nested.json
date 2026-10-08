@@ -1,0 +1,24 @@
+{
+	"type": "nested",
+	"title": "Where code runs",
+	"root": {
+		"label": "AWS account",
+		"children": [
+			{
+				"label": "VPC",
+				"sub": "10.0.0.0/16",
+				"children": [
+					{ "label": "Public subnet", "children": [{ "label": "ALB" }, { "label": "NAT" }] },
+					{
+						"label": "Private subnet",
+						"children": [
+							{ "label": "API pods", "focal": true },
+							{ "label": "Postgres", "sub": "RDS" }
+						]
+					}
+				]
+			},
+			{ "label": "Global", "children": [{ "label": "CloudFront" }, { "label": "S3" }] }
+		]
+	}
+}

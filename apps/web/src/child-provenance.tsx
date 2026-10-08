@@ -30,12 +30,16 @@ export function ChildProvenance({ channelId, parent }: { channelId: string; pare
 	if (!provenance || provenance.parentChannelId !== parent.id) return null;
 	let requestId = provenance.requestId;
 	let returnToCard = () => {
-		let card = document.querySelector<HTMLElement>(
-			`[data-workspace-room="${CSS.escape(parent.id)}"] [data-research-request="${
-				CSS.escape(requestId)
-			}"]`,
-		);
-		parent.onReturn(card ? { current: card } : undefined);
+		// The parent card may still be loading while the child closes.
+		parent.onReturn({
+			get current() {
+				return document.querySelector<HTMLElement>(
+					`[data-workspace-room="${CSS.escape(parent.id)}"] [data-research-request="${
+						CSS.escape(requestId)
+					}"]`,
+				);
+			},
+		});
 	};
 	return (
 		<div className="child-provenance" data-child-provenance="">

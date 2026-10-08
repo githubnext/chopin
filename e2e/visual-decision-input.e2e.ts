@@ -73,6 +73,9 @@ test("one adjusted preview, inspector responsive placement, pointer/Space/access
 		path: "/private/tmp/chopin-visual-decision-screenshots/wide.png",
 		fullPage: true,
 	});
+	await card(ana).screenshot({
+		path: "/private/tmp/chopin-visual-decision-screenshots/wide-card.png",
+	});
 	await ana.setViewportSize({ width: 390, height: 844 });
 	await expect.poll(async () => {
 		let previewBox = (await preview.boundingBox())!;
@@ -107,6 +110,10 @@ test("one adjusted preview, inspector responsive placement, pointer/Space/access
 	await ana.screenshot({
 		path: "/private/tmp/chopin-visual-decision-screenshots/saved.png",
 		fullPage: true,
+		animations: "disabled",
+	});
+	await card(ana).screenshot({
+		path: "/private/tmp/chopin-visual-decision-screenshots/saved-card.png",
 		animations: "disabled",
 	});
 });

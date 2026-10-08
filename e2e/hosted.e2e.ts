@@ -1,6 +1,7 @@
 import { createChannel } from "./database";
 import { authenticate, expect, roomPath, test } from "./room";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
+import { recordRoomMounts } from "./room-mounts";
 import { installVisualViewport } from "./visual-viewport";
 
 const score = {
@@ -82,6 +83,43 @@ test("an authenticated user adds a Project and creates its first document", asyn
 	await expect(activeRoute.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(activeRoute.getByRole("textbox", { name: "editable markdown" })).toBeVisible();
 	await expect(activeRoute.locator("[data-plan-decisions-scroll]")).toBeAttached();
+});
+
+test("the Add project redirect through a channel link mounts its document once", async ({ baseURL, page, room }) => {
+	// The room fixture gives the project a saved document to land on.
+	void room;
+	let recorded = await recordRoomMounts(page);
+	let entered: string[] = [];
+	page.on("framenavigated", frame => {
+		let match = /^\/channels\/([^/]+)$/.exec(new URL(frame.url()).pathname);
+		if (frame === page.mainFrame() && match) entered.push(match[1]!);
+	});
+	// Holding the project's document list makes the landing redirect use the saved
+	// document's channel link, as it does when that list is slower than navigation.
+	await page.route("**/api/repositories/octo-org/score/channels", async route => {
+		await expect.poll(() => entered.length).toBeGreaterThan(0);
+		await route.continue();
+	});
+	await authenticate(page, `project-redirect-${crypto.randomUUID()}`, baseURL!);
+	await page.goto("/");
+	let documentRead = page.waitForResponse(response =>
+		new URL(response.url()).pathname.startsWith("/api/repositories/octo-org/score/documents/")
+	);
+	await repositoryOption(page, "score").click();
+
+	await expect(page).toHaveURL(url => url.pathname.startsWith("/documents/octo-org/score/"));
+	await documentRead;
+	let landed = entered[0]!;
+	// Wait until the route swap has settled on a single layer showing the synced document.
+	await page.waitForFunction(id => {
+		let layers = document.querySelectorAll(".document-route-swap > [data-content-swap-state]");
+		return layers.length === 1
+			&& !!layers[0]!.querySelector(`[data-workspace-room="${id}"] [data-plan-synced]`);
+	}, landed);
+	let mounts = await recorded.mounts();
+	expect(mounts.filter(entry => entry.startsWith("unmount "))).toEqual([]);
+	expect(mounts.filter(entry => entry === `mount ${landed}`)).toHaveLength(1);
+	expect(recorded.reads(landed)).toBe(1);
 });
 
 test("a signed-out document link returns to the document after OAuth", async ({ baseURL, page, room }) => {
@@ -257,13 +295,12 @@ test("a known deleted channel keeps its context and routes back without retry", 
 	deleted = true;
 	await page.reload();
 
-	await expect(page.getByRole("heading", { name: "Cannot open Chopin" })).toBeVisible();
-	await expect(page.getByText(recoveryChannel.title, { exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Document not found" })).toBeVisible();
+	await expect(page.getByText(`We couldn't find "${recoveryChannel.title}" in ${score.fullName}.`))
+		.toBeVisible();
 	await expect(page.getByText(recoveryChannel.id, { exact: true })).toHaveCount(0);
-	await expect(page.getByText(recoveryChannel.slug, { exact: true })).toBeVisible();
-	await expect(page.getByText(score.fullName, { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
-	let channels = page.getByRole("link", { name: `View ${score.fullName} documents` });
+	let channels = page.getByRole("link", { name: `Open ${score.fullName}` });
 	await expect(channels).toHaveAttribute("href", "/documents/octo-org/score");
 	await channels.click();
 	await expect(page).toHaveURL("/documents/octo-org/score");
@@ -288,7 +325,7 @@ test("a transient channel failure retries the safe read", async ({ baseURL, page
 	);
 	await showKnownChannel(page);
 
-	await expect(page.getByText("storage is unavailable", { exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Couldn't open this document" })).toBeVisible();
 	await page.getByRole("button", { name: "Try again" }).click();
 	await expect(page.getByRole("banner").getByLabel(`Document: ${recoveryChannel.title}`))
 		.toBeVisible();
@@ -309,7 +346,7 @@ test("an unknown direct channel link stays privacy-safe", async ({ baseURL, page
 	await expect(page.getByText(score.fullName, { exact: true })).toHaveCount(0);
 	await expect(page.getByRole("link", { name: /channels$/ })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
-	await expect(page.getByRole("link", { name: "Back to repositories" })).toBeVisible();
+	await expect(page.getByRole("link", { name: "Go to Chopin" })).toBeVisible();
 });
 
 test("the Add project dialog traps focus, dismisses, and filters repositories", async ({ baseURL, page }) => {

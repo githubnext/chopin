@@ -1,6 +1,7 @@
 import { chatInput } from "./chat-input";
 import { seedChildChannel } from "./database";
 import { installPointerMedia } from "./pointer-media";
+import { recordRoomMounts } from "./room-mounts";
 import { authenticate, expect, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
@@ -163,7 +164,7 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 
 	let childClose = surface.getByRole("button", { name: `Close ${childTitle}`, exact: true });
 	let childChatToggle = surface.getByRole("button", {
-		name: "Show chat pane",
+		name: "Show chat",
 		exact: true,
 	});
 	await expect(childChatToggle).toBeVisible();
@@ -265,7 +266,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect(parentChat).not.toContainText(childRoomMessage);
 	await expect(parentChat).not.toContainText(childPlannerTranscript);
 	await childChat.getByRole("button", {
-		name: "Close sidebar",
+		name: "Hide chat",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();
@@ -304,7 +305,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect(childChat.getByText(childRoomMessage, { exact: true })).toBeVisible();
 	await expect(childChat.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
 	await childChat.getByRole("button", {
-		name: "Close sidebar",
+		name: "Hide chat",
 		exact: true,
 	}).click();
 	await parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }).click();
@@ -394,7 +395,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("inert", "");
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("aria-hidden", "true");
 	let childChatToggle = surface.getByRole("button", {
-		name: "Show chat pane",
+		name: "Show chat",
 		exact: true,
 	});
 	let childChat = surface.getByRole("complementary", { name: "Chat" });
@@ -411,7 +412,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeHidden();
 	await childChat.getByRole("button", {
-		name: "Close sidebar",
+		name: "Hide chat",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();
@@ -518,7 +519,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 	await childLink(secondTitle).click();
 	await expect(page).toHaveURL(url => url.pathname === second.path);
 	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toHaveCount(0);
-	await expect(page.locator(".anchored-child-surface")).toContainText("Opening child document...");
+	await expect(page.locator(".anchored-child-surface")).toContainText("Opening child document…");
 
 	release();
 	let secondSurface = page.getByRole("region", { name: `Child document: ${secondTitle}` });
@@ -692,6 +693,42 @@ test("a recovered child id enters the canonical anchored child workspace", async
 	await expect(surface).toHaveCount(0);
 });
 
+test("a channel link opens one parent room that a child opens and closes over", async ({ baseURL, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let childTitle = `Channel link child ${room.slice(0, 8)}`;
+	let child = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		childTitle,
+		CHILD_SOURCE,
+	);
+	let recorded = await recordRoomMounts(page);
+	await authenticate(page, "ana", baseURL!);
+	await page.goto(`/channels/${room}`);
+
+	let parentPath = `/documents/octo-org/score/test-${room.slice(0, 8)}`;
+	await expect(page).toHaveURL(url => url.pathname === parentPath);
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await expect(parent.locator("[data-plan-synced]")).toBeAttached();
+	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
+
+	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
+	await page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: childTitle, exact: true }).click();
+	await expect(page).toHaveURL(url => url.pathname === child.path);
+	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(page).toHaveURL(url => url.pathname === parentPath);
+	await expect(surface).toHaveCount(0);
+
+	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
+	expect((await recorded.mounts()).filter(entry => entry.endsWith(room))).toEqual([
+		`mount ${room}`,
+	]);
+	expect(recorded.reads(room)).toBe(1);
+});
+
 test("a child load failure preserves its mounted parent through back and retry", async ({ baseURL, join, page, room, seed }) => {
 	await seed(PARENT_SOURCE);
 	let childTitle = `Unreliable source ${room.slice(0, 8)}`;
@@ -726,8 +763,7 @@ test("a child load failure preserves its mounted parent through back and retry",
 
 	await childLink.click();
 	let surface = page.locator(".anchored-child-surface");
-	await expect(surface).toContainText("Cannot open Chopin");
-	await expect(surface).toContainText("Child temporarily unavailable");
+	await expect(surface).toContainText("Couldn't open this document");
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("inert", "");
 	await parent.locator(".room-header")
@@ -736,7 +772,7 @@ test("a child load failure preserves its mounted parent through back and retry",
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 
 	await childLink.click();
-	await expect(surface).toContainText("Child temporarily unavailable");
+	await expect(surface).toContainText("Couldn't open this document");
 	await surface.getByRole("button", { name: "Try again" }).click();
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");

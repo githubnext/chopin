@@ -1,0 +1,1148 @@
+/* SeeCode rendering rules, derived from Aryanutkarsh/SeeCode at 8c48bb8804a5e531ea718edecedd10200ddbcb31 (MIT). See ../../LICENSE. */
+.ch-diagram {
+	--sc-paper: var(--color-page);
+	--sc-paper-2: var(--color-inset);
+	--sc-ink: var(--color-text-primary);
+	--sc-ink-strong: var(--color-text-primary);
+	--sc-muted: var(--color-text-secondary);
+	--sc-soft: var(--color-text-tertiary);
+	--sc-rule: var(--color-edge);
+	--sc-rule-solid: var(--color-control-edge);
+	--sc-accent: var(--color-brand);
+	--sc-accent-tint: var(--color-brand-wash);
+	--sc-link: var(--color-brand);
+	--sc-node: var(--color-page);
+	--sc-store: var(--color-neutral-surface);
+	--sc-external: var(--color-inset);
+	--sc-series-1: var(--color-success-graphic);
+	--sc-series-2: var(--color-warning-graphic);
+	--sc-series-3: var(--color-brand);
+	--sc-series-4: var(--color-danger-graphic);
+	--sc-series-5: var(--color-text-tertiary);
+	--sc-stagger: calc(var(--duration-base) * 2.1);
+	--sc-enter: calc(var(--duration-base) * 2.6);
+	--sc-draw: calc(var(--duration-base) * 3.2);
+	--sc-settle: calc(var(--duration-base) * 33);
+}
+
+.ch-diagram .sc-svg {
+	font-family: var(--font-sans);
+	color: var(--sc-ink);
+}
+.ch-diagram .sc-mark {
+	opacity: 0.88;
+	pointer-events: none;
+}
+.ch-diagram .sc-mark-word {
+	fill: var(--sc-ink);
+}
+.ch-diagram .sc-bg {
+	fill: var(--sc-paper);
+}
+.ch-diagram .n-mask {
+	fill: var(--sc-paper);
+}
+.ch-diagram .n-box {
+	fill: var(--sc-node);
+	stroke: var(--sc-ink);
+	stroke-width: 1;
+}
+.ch-diagram .k-focal .n-box {
+	fill: var(--sc-accent-tint);
+	stroke: var(--sc-accent);
+	stroke-width: 1.2;
+}
+.ch-diagram .k-store .n-box {
+	fill: var(--sc-store);
+	stroke: var(--sc-muted);
+}
+.ch-diagram .k-external .n-box {
+	fill: var(--sc-external);
+	stroke: var(--sc-soft);
+}
+.ch-diagram .k-input .n-box {
+	fill: var(--sc-external);
+	stroke: var(--sc-soft);
+}
+.ch-diagram .k-optional .n-box {
+	fill: transparent;
+	stroke: var(--sc-soft);
+	stroke-dasharray: 4 3;
+}
+.ch-diagram .k-security .n-box {
+	fill: var(--sc-accent-tint);
+	stroke: var(--sc-accent);
+	stroke-opacity: 0.55;
+	stroke-dasharray: 4 4;
+}
+.ch-diagram .k-muted .n-box {
+	fill: var(--sc-store);
+	stroke: var(--sc-rule-solid);
+}
+.ch-diagram .n-label {
+	fill: var(--sc-ink);
+	font-size: 12px;
+	font-weight: 600;
+}
+.ch-diagram .n-sub {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+}
+.ch-diagram .n-tag {
+	fill: var(--sc-soft);
+	font-family: var(--font-mono);
+	font-size: 7px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+.ch-diagram .n-tag-box {
+	fill: none;
+	stroke: var(--sc-rule-solid);
+	stroke-width: 0.8;
+}
+.ch-diagram .k-focal .n-tag {
+	fill: var(--sc-accent);
+}
+.ch-diagram .k-focal .n-tag-box {
+	stroke: var(--sc-accent);
+	stroke-opacity: 0.5;
+}
+.ch-diagram .e-line {
+	fill: none;
+	stroke: var(--sc-muted);
+	stroke-width: 1.1;
+}
+.ch-diagram .ek-primary .e-line {
+	stroke: var(--sc-accent);
+	stroke-width: 1.4;
+}
+.ch-diagram .ek-link .e-line {
+	stroke: var(--sc-link);
+	stroke-width: 1.2;
+}
+.ch-diagram .ek-async .e-line, .ch-diagram .ek-return .e-line {
+	stroke-width: 1;
+}
+.ch-diagram .ek-muted .e-line {
+	stroke: var(--sc-soft);
+	stroke-width: 1;
+}
+.ch-diagram .e-label {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.ch-diagram .ek-primary .e-label {
+	fill: var(--sc-accent);
+}
+.ch-diagram .ek-link .e-label {
+	fill: var(--sc-link);
+}
+.ch-diagram .e-label-bg {
+	fill: var(--sc-paper);
+}
+.ch-diagram .m-default {
+	fill: var(--sc-muted);
+}
+.ch-diagram .m-primary {
+	fill: var(--sc-accent);
+}
+.ch-diagram .m-link {
+	fill: var(--sc-link);
+}
+.ch-diagram .m-muted {
+	fill: var(--sc-soft);
+}
+.ch-diagram .g-box {
+	fill: var(--sc-ink);
+	fill-opacity: 0.018;
+	stroke: var(--sc-rule);
+	stroke-width: 0.8;
+}
+.ch-diagram .g-box.g-dashed {
+	stroke-dasharray: 4 4;
+	stroke: var(--sc-soft);
+	stroke-opacity: 0.6;
+}
+.ch-diagram .g-label {
+	fill: var(--sc-soft);
+	font-family: var(--font-mono);
+	font-size: 7px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+.ch-diagram .g-label-bg {
+	fill: var(--sc-paper);
+}
+.ch-diagram .lg-rule {
+	stroke: var(--sc-rule);
+	stroke-width: 0.8;
+}
+.ch-diagram .lg-title {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.18em;
+}
+.ch-diagram .lg-text {
+	fill: var(--sc-muted);
+	font-size: 9px;
+}
+.ch-diagram .ax-line {
+	stroke: var(--sc-rule-solid);
+	stroke-width: 1;
+}
+.ch-diagram .ax-grid {
+	stroke: var(--sc-rule);
+	stroke-width: 0.8;
+}
+.ch-diagram .ax-text {
+	fill: var(--sc-soft);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.04em;
+}
+.ch-diagram .ax-label {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+.ch-diagram .c-cat {
+	fill: var(--sc-muted);
+	font-size: 10px;
+}
+.ch-diagram .c-val {
+	fill: var(--sc-ink);
+	font-family: var(--font-mono);
+	font-size: 9px;
+}
+.ch-diagram .c-bar {
+	fill: var(--sc-muted);
+	fill-opacity: 0.38;
+}
+.ch-diagram .c-bar.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 1;
+}
+.ch-diagram .c-val.is-focal {
+	fill: var(--sc-accent);
+	font-weight: 500;
+}
+.ch-diagram .s-1 {
+	fill: var(--sc-series-1);
+}
+.ch-diagram .s-2 {
+	fill: var(--sc-series-2);
+}
+.ch-diagram .s-3 {
+	fill: var(--sc-series-3);
+}
+.ch-diagram .s-4 {
+	fill: var(--sc-series-4);
+}
+.ch-diagram .s-5 {
+	fill: var(--sc-series-5);
+}
+.ch-diagram .sk-node {
+	fill: var(--sc-muted);
+}
+.ch-diagram .sk-node.is-focal {
+	fill: var(--sc-accent);
+}
+.ch-diagram .sk-link {
+	fill: var(--sc-muted);
+	fill-opacity: 0.14;
+}
+.ch-diagram .sk-link.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.28;
+}
+.ch-diagram .sk-label {
+	fill: var(--sc-ink);
+	font-size: 11px;
+	font-weight: 500;
+	paint-order: stroke;
+	stroke: var(--sc-paper);
+	stroke-width: 3px;
+	stroke-linejoin: round;
+}
+.ch-diagram .sk-val {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+	paint-order: stroke;
+	stroke: var(--sc-paper);
+	stroke-width: 3px;
+	stroke-linejoin: round;
+}
+.ch-diagram .q-life {
+	stroke: var(--sc-rule-solid);
+	stroke-width: 1;
+	stroke-dasharray: 3 4;
+}
+.ch-diagram .q-frag {
+	fill: none;
+	stroke: var(--sc-soft);
+	stroke-width: 0.8;
+}
+.ch-diagram .q-frag-tag {
+	fill: var(--sc-paper-2);
+	stroke: var(--sc-soft);
+	stroke-width: 0.8;
+}
+.ch-diagram .q-frag-text {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+.ch-diagram .q-num {
+	fill: var(--sc-soft);
+	font-family: var(--font-mono);
+	font-size: 8px;
+}
+.ch-diagram .q-note {
+	fill: var(--sc-paper-2);
+	stroke: var(--sc-rule-solid);
+	stroke-width: 0.8;
+}
+.ch-diagram .q-note-text {
+	fill: var(--sc-muted);
+	font-size: 10px;
+	font-style: italic;
+	font-family: var(--font-sans);
+}
+.ch-diagram .n-head {
+	fill: var(--sc-ink);
+	fill-opacity: 0.035;
+	stroke: none;
+}
+.ch-diagram .k-focal .n-head {
+	fill: var(--sc-accent);
+	fill-opacity: 0.08;
+}
+.ch-diagram .n-rule {
+	stroke: var(--sc-rule-solid);
+	stroke-width: 0.8;
+}
+.ch-diagram .n-field {
+	fill: var(--sc-ink);
+	font-size: 10px;
+}
+.ch-diagram .n-field-t {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+}
+.ch-diagram .n-key {
+	font-family: var(--font-mono);
+	font-size: 7.5px;
+	letter-spacing: 0.06em;
+	fill: var(--sc-soft);
+}
+.ch-diagram .n-key-pk {
+	fill: var(--sc-accent);
+}
+.ch-diagram .n-key-fk {
+	fill: var(--sc-link);
+}
+.ch-diagram .sh-start .n-box {
+	fill: var(--sc-ink);
+	stroke: none;
+}
+.ch-diagram .sh-end .n-box {
+	fill: var(--sc-paper);
+	stroke: var(--sc-ink);
+	stroke-width: 1.2;
+}
+.ch-diagram .n-dot {
+	fill: var(--sc-ink);
+}
+.ch-diagram .n-status {
+	stroke: var(--sc-paper);
+	stroke-width: 1.5;
+}
+.ch-diagram .st-ok {
+	fill: var(--sc-series-1);
+}
+.ch-diagram .st-risk {
+	fill: var(--sc-series-2);
+}
+.ch-diagram .st-legacy {
+	fill: var(--sc-series-5);
+}
+.ch-diagram .st-retire {
+	fill: var(--sc-series-4);
+}
+.ch-diagram .n-change {
+	fill: var(--sc-accent);
+	font-family: var(--font-mono);
+	font-size: 7.5px;
+	letter-spacing: 0.12em;
+}
+.ch-diagram .ch-added .n-box {
+	stroke: var(--sc-accent);
+	stroke-width: 1.3;
+}
+.ch-diagram .ch-removed {
+	opacity: 0.55;
+}
+.ch-diagram .ch-removed .n-box {
+	stroke-dasharray: 4 3;
+	stroke: var(--sc-soft);
+}
+.ch-diagram .ch-removed .n-label {
+	text-decoration: line-through;
+}
+.ch-diagram .ch-removed .n-change {
+	fill: var(--sc-soft);
+}
+.ch-diagram .ch-changed .n-box {
+	stroke: var(--sc-accent);
+	stroke-dasharray: 6 2;
+}
+.ch-diagram .sc-edge.ch-added .e-line {
+	stroke: var(--sc-accent);
+}
+.ch-diagram .sc-edge.ch-removed .e-line {
+	stroke-dasharray: 3 3;
+}
+.ch-diagram .e-line.dashed {
+	stroke-dasharray: 4 3;
+}
+.ch-diagram .ek-rel .e-line {
+	stroke: var(--sc-muted);
+	stroke-width: 1;
+}
+.ch-diagram .e-glyph.stroke {
+	fill: none;
+	stroke: var(--sc-muted);
+	stroke-width: 1;
+}
+.ch-diagram .e-glyph.hollow {
+	fill: var(--sc-paper);
+	stroke: var(--sc-muted);
+	stroke-width: 1;
+}
+.ch-diagram .e-glyph.filled {
+	fill: var(--sc-muted);
+	stroke: var(--sc-muted);
+	stroke-width: 1;
+}
+.ch-diagram .lane-band {
+	fill: var(--sc-ink);
+	fill-opacity: 0.022;
+}
+.ch-diagram .lane-band.alt {
+	fill-opacity: 0;
+}
+.ch-diagram .lane-rule {
+	stroke: var(--sc-rule);
+	stroke-width: 0.8;
+}
+.ch-diagram .lane-label {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+.ch-diagram .loop-center {
+	fill: var(--sc-ink);
+	font-family: var(--font-sans);
+	font-size: 20px;
+}
+.ch-diagram .nest-mask {
+	fill: var(--sc-paper);
+}
+.ch-diagram .nest-box {
+	fill: var(--sc-ink);
+	fill-opacity: 0.025;
+	stroke: var(--sc-rule-solid);
+	stroke-width: 0.9;
+}
+.ch-diagram .nest-d0 .nest-box {
+	fill-opacity: 0.012;
+}
+.ch-diagram .nest-d2 .nest-box {
+	fill-opacity: 0.04;
+}
+.ch-diagram .nest-d3 .nest-box {
+	fill-opacity: 0.055;
+}
+.ch-diagram .k-focal .nest-box {
+	fill: var(--sc-accent-tint);
+	fill-opacity: 1;
+	stroke: var(--sc-accent);
+}
+.ch-diagram .nest-label {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.ch-diagram .chip {
+	fill: var(--sc-paper-2);
+	stroke: var(--sc-rule);
+	stroke-width: 0.8;
+}
+.ch-diagram .chip-text {
+	fill: var(--sc-ink);
+	font-size: 10px;
+}
+.ch-diagram .k-focal .chip {
+	fill: var(--sc-paper);
+	stroke: var(--sc-accent);
+	stroke-opacity: 0.4;
+}
+.ch-diagram .venn-c {
+	fill: var(--sc-muted);
+	fill-opacity: 0.07;
+	stroke: var(--sc-muted);
+	stroke-width: 1;
+}
+.ch-diagram .vs-2 .venn-c {
+	fill: var(--sc-series-2);
+	stroke: var(--sc-series-2);
+	fill-opacity: 0.09;
+}
+.ch-diagram .vs-3 .venn-c {
+	fill: var(--sc-series-1);
+	stroke: var(--sc-series-1);
+	fill-opacity: 0.09;
+}
+.ch-diagram .venn.k-focal .venn-c {
+	fill: var(--sc-accent);
+	stroke: var(--sc-accent);
+	fill-opacity: 0.09;
+}
+.ch-diagram .venn-label {
+	fill: var(--sc-ink);
+	font-size: 13px;
+	font-weight: 600;
+}
+.ch-diagram .venn-ov {
+	fill: var(--sc-muted);
+	font-family: var(--font-sans);
+	font-style: italic;
+	font-size: 13px;
+}
+.ch-diagram .venn-ov.is-focal {
+	fill: var(--sc-accent);
+}
+.ch-diagram .fb-spine {
+	stroke-width: 1.6;
+}
+.ch-diagram .fb-tick {
+	stroke: var(--sc-rule-solid);
+	stroke-width: 0.8;
+}
+.ch-diagram .fb-cat {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+	letter-spacing: 0.14em;
+}
+.ch-diagram .fb-cat.is-focal {
+	fill: var(--sc-accent);
+}
+.ch-diagram .fb-cause {
+	fill: var(--sc-ink);
+	font-size: 10px;
+}
+.ch-diagram .kb-col {
+	fill: var(--sc-ink);
+	fill-opacity: 0.025;
+	stroke: var(--sc-rule);
+	stroke-width: 0.8;
+	rx: 8;
+}
+.ch-diagram .kb-col.is-over {
+	stroke: var(--sc-accent);
+	stroke-opacity: 0.6;
+}
+.ch-diagram .kb-head {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8.5px;
+	letter-spacing: 0.14em;
+}
+.ch-diagram .kb-count {
+	fill: var(--sc-soft);
+	font-family: var(--font-mono);
+	font-size: 9px;
+}
+.ch-diagram .kb-count.is-over {
+	fill: var(--sc-accent);
+}
+.ch-diagram .kb-card {
+	fill: var(--sc-ink);
+	font-size: 11px;
+	font-weight: 500;
+}
+.ch-diagram .sm-act {
+	fill: var(--sc-ink);
+}
+.ch-diagram .sm-activity.k-focal .sm-act {
+	fill: var(--sc-accent);
+}
+.ch-diagram .sm-act-text {
+	fill: var(--sc-paper);
+	font-size: 11px;
+	font-weight: 600;
+}
+.ch-diagram .q-frame {
+	fill: none;
+	stroke: var(--sc-rule-solid);
+	stroke-width: 1;
+}
+.ch-diagram .q-focal {
+	fill: var(--sc-accent-tint);
+}
+.ch-diagram .q-title {
+	fill: var(--sc-soft);
+	font-family: var(--font-mono);
+	font-size: 8.5px;
+	letter-spacing: 0.14em;
+}
+.ch-diagram .quad.k-focal .q-title, .ch-diagram .quad.k-focal .q-title-big {
+	fill: var(--sc-accent);
+}
+.ch-diagram .q-title-big {
+	fill: var(--sc-ink);
+	font-family: var(--font-sans);
+	font-size: 19px;
+}
+.ch-diagram .q-item {
+	fill: var(--sc-muted);
+	font-size: 11px;
+}
+.ch-diagram .q-dot {
+	fill: var(--sc-muted);
+}
+.ch-diagram .q-pt.k-focal .q-dot {
+	fill: var(--sc-accent);
+}
+.ch-diagram .q-pt-label {
+	fill: var(--sc-ink);
+	font-size: 10.5px;
+	font-weight: 500;
+}
+.ch-diagram .q-pt.k-focal .q-pt-label {
+	fill: var(--sc-accent);
+}
+.ch-diagram .mx-col {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.08em;
+}
+.ch-diagram .mx-row {
+	fill: var(--sc-ink);
+	font-size: 11px;
+	font-weight: 500;
+}
+.ch-diagram .mx-band {
+	fill: var(--sc-ink);
+	fill-opacity: 0.025;
+}
+.ch-diagram .mx-g.fill {
+	fill: var(--sc-ink);
+}
+.ch-diagram .mx-g.ring {
+	fill: none;
+	stroke: var(--sc-ink);
+	stroke-width: 1;
+}
+.ch-diagram .mx-g.dashed {
+	stroke-dasharray: 2 2;
+}
+.ch-diagram .mx-g.admin {
+	fill: var(--sc-accent);
+}
+.ch-diagram .mx-g.none {
+	fill: var(--sc-soft);
+}
+.ch-diagram .mx-r.k-focal .mx-row {
+	fill: var(--sc-accent);
+}
+.ch-diagram .tl-axis {
+	stroke: var(--sc-ink);
+	stroke-width: 1.2;
+}
+.ch-diagram .tl-stem {
+	stroke: var(--sc-rule-solid);
+	stroke-width: 0.8;
+}
+.ch-diagram .tl-dot {
+	fill: var(--sc-paper);
+	stroke: var(--sc-ink);
+	stroke-width: 1.4;
+}
+.ch-diagram .tl-ev.k-focal .tl-dot {
+	fill: var(--sc-accent);
+	stroke: var(--sc-accent);
+}
+.ch-diagram .tl-ev.k-focal .tl-label {
+	fill: var(--sc-accent);
+}
+.ch-diagram .tl-label {
+	font-size: 11px;
+}
+.ch-diagram .tl-when {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+	letter-spacing: 0.04em;
+}
+.ch-diagram .tl-period {
+	fill: var(--sc-ink);
+	fill-opacity: 0.07;
+}
+.ch-diagram .tl-period.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.16;
+}
+.ch-diagram .tl-period-text {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8px;
+	letter-spacing: 0.08em;
+}
+.ch-diagram .g-task {
+	fill: var(--sc-ink);
+	font-size: 11px;
+}
+.ch-diagram .g-bar {
+	fill: var(--sc-muted);
+	fill-opacity: 0.45;
+}
+.ch-diagram .g-bar.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 1;
+}
+.ch-diagram .g-bar.is-done {
+	fill-opacity: 0.2;
+}
+.ch-diagram .g-done {
+	fill: var(--sc-muted);
+	font-size: 10px;
+}
+.ch-diagram .g-mile {
+	fill: var(--sc-ink);
+}
+.ch-diagram .k-focal .g-mile {
+	fill: var(--sc-accent);
+}
+.ch-diagram .g-today {
+	stroke: var(--sc-accent);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+}
+.ch-diagram .g-today-text {
+	fill: var(--sc-accent);
+	font-family: var(--font-mono);
+	font-size: 7.5px;
+	letter-spacing: 0.14em;
+}
+.ch-diagram .jr-band {
+	fill: var(--sc-ink);
+	fill-opacity: 0.025;
+}
+.ch-diagram .jr-band.alt {
+	fill-opacity: 0;
+}
+.ch-diagram .jr-stage {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 8.5px;
+	letter-spacing: 0.14em;
+}
+.ch-diagram .jr-curve {
+	stroke: var(--sc-ink);
+	stroke-width: 1.6;
+}
+.ch-diagram .jr-dot {
+	fill: var(--sc-paper);
+	stroke: var(--sc-ink);
+	stroke-width: 1.4;
+}
+.ch-diagram .jr-dot.is-pain, .ch-diagram .jr-dot.is-focal {
+	fill: var(--sc-accent);
+	stroke: var(--sc-accent);
+}
+.ch-diagram .jr-step {
+	fill: var(--sc-ink);
+	font-size: 10.5px;
+	font-weight: 500;
+}
+.ch-diagram .jr-note {
+	fill: var(--sc-muted);
+	font-family: var(--font-sans);
+	font-style: italic;
+	font-size: 11px;
+	paint-order: stroke;
+	stroke: var(--sc-paper);
+	stroke-width: 4px;
+	stroke-linejoin: round;
+}
+.ch-diagram .jr-note.is-pain {
+	fill: var(--sc-accent);
+}
+.ch-diagram .ln {
+	fill: none;
+	stroke-width: 1.6;
+	stroke: var(--sc-muted);
+}
+.ch-diagram .ln.is-focal {
+	stroke: var(--sc-accent);
+	stroke-width: 2.2;
+}
+.ch-diagram .ln.is-muted {
+	stroke: var(--sc-soft);
+	stroke-opacity: 0.55;
+}
+.ch-diagram .ln-1 {
+	stroke: var(--sc-series-1);
+}
+.ch-diagram .ln-2 {
+	stroke: var(--sc-series-2);
+}
+.ch-diagram .ln-3 {
+	stroke: var(--sc-series-3);
+}
+.ch-diagram .ln-4 {
+	stroke: var(--sc-series-4);
+}
+.ch-diagram .ln-5 {
+	stroke: var(--sc-series-5);
+}
+.ch-diagram .ln-pt {
+	fill: var(--sc-paper);
+	stroke-width: 1.4;
+}
+.ch-diagram .ln-pt.is-focal {
+	fill: var(--sc-accent);
+}
+.ch-diagram .ln-label {
+	font-size: 10.5px;
+	font-weight: 500;
+	fill: var(--sc-muted);
+}
+.ch-diagram .is-muted-t {
+	fill: var(--sc-soft);
+}
+.ch-diagram .ln-1-t {
+	fill: var(--sc-series-1);
+}
+.ch-diagram .ln-2-t {
+	fill: var(--sc-series-2);
+}
+.ch-diagram .ln-3-t {
+	fill: var(--sc-series-3);
+}
+.ch-diagram .ln-4-t {
+	fill: var(--sc-series-4);
+}
+.ch-diagram .ln-5-t {
+	fill: var(--sc-series-5);
+}
+.ch-diagram .ln-area {
+	fill: var(--sc-muted);
+	fill-opacity: 0.08;
+}
+.ch-diagram .ln-area.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.1;
+}
+.ch-diagram .rg-area {
+	fill: var(--sc-muted);
+	fill-opacity: 0.18;
+}
+.ch-diagram .rg-area.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.28;
+}
+.ch-diagram .rg-line {
+	fill: none;
+	stroke: var(--sc-ink);
+	stroke-width: 1.1;
+}
+.ch-diagram .rg-line.is-focal {
+	stroke: var(--sc-accent);
+}
+.ch-diagram .st-area {
+	fill-opacity: 0.55;
+	stroke: var(--sc-paper);
+	stroke-width: 1;
+}
+.ch-diagram .st-area.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.75;
+}
+.ch-diagram .st-label {
+	fill: var(--sc-ink-strong);
+	font-size: 10px;
+	font-weight: 600;
+}
+.ch-diagram .is-focal-t {
+	fill: var(--sc-accent) !important;
+}
+.ch-diagram .sp-dot {
+	fill: var(--sc-muted);
+	fill-opacity: 0.55;
+	stroke: var(--sc-paper);
+	stroke-width: 0.8;
+}
+.ch-diagram .sp-dot.is-bubble {
+	fill-opacity: 0.25;
+	stroke: var(--sc-muted);
+	stroke-opacity: 0.7;
+}
+.ch-diagram .sp-dot.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.9;
+	stroke: var(--sc-accent);
+}
+.ch-diagram .sp-label {
+	fill: var(--sc-ink);
+	font-size: 10px;
+	font-weight: 500;
+}
+.ch-diagram .rd-area {
+	fill: var(--sc-muted);
+	fill-opacity: 0.1;
+}
+.ch-diagram .rd-line {
+	fill: none;
+	stroke: var(--sc-muted);
+	stroke-width: 1.4;
+}
+.ch-diagram .rd-area.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.16;
+}
+.ch-diagram .rd-line.is-focal {
+	stroke: var(--sc-accent);
+	stroke-width: 2;
+}
+.ch-diagram .rd-area.is-muted {
+	fill-opacity: 0.04;
+}
+.ch-diagram .rd-line.is-muted {
+	stroke: var(--sc-soft);
+}
+.ch-diagram .rd-area.s-1,
+.ch-diagram .rd-area.s-2,
+.ch-diagram .rd-area.s-3,
+.ch-diagram .rd-area.s-4,
+.ch-diagram .rd-area.s-5 {
+	fill-opacity: 0.14;
+}
+.ch-diagram .rd-line.s-1 {
+	stroke: var(--sc-series-1);
+}
+.ch-diagram .rd-line.s-2 {
+	stroke: var(--sc-series-2);
+}
+.ch-diagram .rd-line.s-3 {
+	stroke: var(--sc-series-3);
+}
+.ch-diagram .rd-line.s-4 {
+	stroke: var(--sc-series-4);
+}
+.ch-diagram .rd-line.s-5 {
+	stroke: var(--sc-series-5);
+}
+.ch-diagram .rd-pt {
+	fill: var(--sc-paper);
+	stroke: var(--sc-muted);
+}
+.ch-diagram .rd-pt.is-focal {
+	stroke: var(--sc-accent);
+}
+.ch-diagram .rd-key {
+	fill: var(--sc-muted);
+}
+.ch-diagram .rd-key.is-focal {
+	fill: var(--sc-accent);
+}
+.ch-diagram .rd-key.is-muted {
+	fill: var(--sc-soft);
+}
+.ch-diagram .rd-ring {
+	fill: none;
+}
+.ch-diagram .pl-stem {
+	stroke: var(--sc-muted);
+	stroke-width: 1.4;
+}
+.ch-diagram .pl-stem.is-focal {
+	stroke: var(--sc-accent);
+	stroke-width: 2;
+}
+.ch-diagram .pl-dot {
+	fill: var(--sc-muted);
+}
+.ch-diagram .pl-dot.is-focal {
+	fill: var(--sc-accent);
+}
+.ch-diagram .wf-bar {
+	fill: var(--sc-muted);
+	fill-opacity: 0.4;
+}
+.ch-diagram .wf-up {
+	fill: var(--sc-series-1);
+	fill-opacity: 0.75;
+}
+.ch-diagram .wf-down {
+	fill: var(--sc-series-4);
+	fill-opacity: 0.75;
+}
+.ch-diagram .wf-total {
+	fill: var(--sc-ink);
+	fill-opacity: 0.82;
+}
+.ch-diagram .wf-bar.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 1;
+}
+.ch-diagram .wf-link {
+	stroke: var(--sc-soft);
+	stroke-width: 0.8;
+	stroke-dasharray: 2 2;
+}
+.ch-diagram .tm-cell {
+	fill: var(--sc-muted);
+	fill-opacity: 0.16;
+	stroke: var(--sc-paper);
+	stroke-width: 1;
+}
+.ch-diagram .tm-cell.is-focal {
+	fill: var(--sc-accent);
+	fill-opacity: 0.85;
+}
+.ch-diagram .tm-sub {
+	fill: var(--sc-paper);
+	fill-opacity: 0.55;
+}
+.ch-diagram .tm-label {
+	fill: var(--sc-ink);
+	font-size: 11px;
+	font-weight: 600;
+}
+.ch-diagram .tm-label.is-focal {
+	fill: var(--sc-paper);
+}
+.ch-diagram .tm-val {
+	fill: var(--sc-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+}
+.ch-diagram .tm-val.is-focal {
+	fill: var(--sc-paper);
+	fill-opacity: 0.85;
+}
+.ch-diagram .tm-sub-label {
+	fill: var(--sc-muted);
+	font-size: 9.5px;
+}
+.ch-diagram .hm-cell.hm-pos {
+	fill: var(--sc-accent);
+}
+.ch-diagram .hm-cell.hm-neg {
+	fill: var(--sc-series-4);
+}
+.ch-diagram .hm-val {
+	fill: var(--sc-ink);
+	font-family: var(--font-mono);
+	font-size: 8.5px;
+}
+.ch-diagram .hm-val.on-dark {
+	fill: var(--sc-paper);
+}
+.ch-diagram .db-line {
+	stroke: var(--sc-rule-solid);
+	stroke-width: 2.4;
+}
+.ch-diagram .db-line.is-focal {
+	stroke: var(--sc-accent);
+	stroke-opacity: 0.45;
+}
+.ch-diagram .db-a {
+	fill: var(--sc-paper);
+	stroke: var(--sc-muted);
+	stroke-width: 1.4;
+}
+.ch-diagram .db-b {
+	fill: var(--sc-muted);
+}
+.ch-diagram .db-b.is-focal {
+	fill: var(--sc-accent);
+}
+.ch-diagram .mk-seg {
+	fill-opacity: 0.7;
+	stroke: var(--sc-paper);
+}
+.ch-diagram .mk-pct {
+	fill: var(--sc-ink-strong);
+	font-family: var(--font-mono);
+	font-size: 8.5px;
+}
+.ch-diagram .wm-link {
+	stroke: var(--sc-soft) !important;
+	stroke-width: 1 !important;
+}
+.ch-diagram .wm-dot {
+	fill: var(--sc-paper);
+	stroke: var(--sc-ink);
+	stroke-width: 1.4;
+}
+.ch-diagram .wm-dot.is-focal {
+	fill: var(--sc-accent);
+	stroke: var(--sc-accent);
+}
+.ch-diagram .wm-label {
+	fill: var(--sc-ink);
+	font-size: 10.5px;
+	font-weight: 500;
+	paint-order: stroke;
+	stroke: var(--sc-paper);
+	stroke-width: 3px;
+	stroke-linejoin: round;
+}
+.ch-diagram .wm-label.is-anchor {
+	font-weight: 700;
+	font-size: 12px;
+}
+.ch-diagram .wm-move {
+	stroke: var(--sc-accent);
+	stroke-width: 1.2;
+	stroke-dasharray: 4 3;
+	fill: none;
+}
+.ch-diagram .wm-move-head {
+	fill: var(--sc-accent);
+}
+.ch-diagram .wm-ghost {
+	fill: none;
+	stroke: var(--sc-accent);
+	stroke-dasharray: 2 2;
+}
+.ch-diagram .wm-inertia {
+	stroke: var(--sc-ink);
+	stroke-width: 3;
+}
+.ch-diagram .callout {
+	fill: var(--sc-muted);
+	font-family: var(--font-sans);
+	font-style: italic;
+	font-size: 13px;
+}

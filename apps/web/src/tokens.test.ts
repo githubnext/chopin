@@ -446,6 +446,8 @@ describe("consumer roles", () => {
 		let offenders: string[] = [];
 		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
 			if (file.startsWith(join(ROOT, "packages/icons/"))) continue;
+			// The diagram viewer owns an SVG canvas, not interface icon artwork.
+			if (file === join(ROOT, "packages/diagrams/src/diagram.tsx")) continue;
 			let content = withoutComments(readFileSync(file, "utf8"));
 			if (/<svg\b/.test(content) || /[\u{1F300}-\u{1FAFF}]/u.test(content)) {
 				offenders.push(relative(ROOT, file));

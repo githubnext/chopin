@@ -17,7 +17,7 @@ import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
-import { PresenceFaces } from "../presence-faces";
+import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
@@ -71,6 +71,8 @@ export type QuestionnaireCardProps = {
 	presentation?: "inline" | "list";
 	motionImmediately?: () => boolean;
 	onCardSource?: (questionnaireId: string) => void;
+	/** The viewer's own handle, who is never shown as present on a card. */
+	self?: string;
 	evidence?: ReactNode | null;
 	wire?: Transport;
 	connected?: boolean;
@@ -125,6 +127,7 @@ function QuestionnaireCardContent(
 		motionImmediately,
 		onCardSource,
 		presentation = "inline",
+		self,
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionSelect,
@@ -170,6 +173,7 @@ function QuestionnaireCardContent(
 		: (
 			<Undecided
 				onCardSource={onCardSource}
+				self={self}
 				canEdit={canEdit}
 				connected={connected}
 				motion={motion}
@@ -277,13 +281,14 @@ function QuestionStepSwap(
 }
 
 function Undecided(
-	{ canEdit, connected, meta, motion, onCardSource, value, wire, ...pointing }:
+	{ canEdit, connected, meta, motion, onCardSource, self, value, wire, ...pointing }:
 		& {
 			canEdit: boolean;
 			connected: boolean;
 			meta?: Question.CardMeta;
 			motion?: QuestionStepMotion;
 			onCardSource?: (questionnaireId: string) => void;
+			self?: string;
 			value: Questionnaire;
 			wire?: Transport;
 		}
@@ -340,7 +345,10 @@ function Undecided(
 				onSubmit={editable ? state.submit : undefined}
 				renderPeople={people => (
 					<PresenceFaces
-						handles={[...(meta?.involved ?? []), ...people.map(person => person.handle)]}
+						handles={withoutSelf(
+							[...(meta?.involved ?? []), ...people.map(person => person.handle)],
+							self,
+						)}
 						label={meta ? "In this decision" : undefined}
 					/>
 				)}
@@ -574,6 +582,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			visualPreview={options.visualPreview}
 			motionImmediately={options.motionImmediately}
 			onCardSource={options.onCardSource}
+			self={options.self}
 			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}

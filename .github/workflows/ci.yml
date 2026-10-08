@@ -114,6 +114,9 @@ jobs:
       - name: Design behaviour (keyboard, focus, motion, and scrolling)
         run: bun run design:behavior
 
+      - name: Diagram gallery (rendering and keyboard behaviour)
+        run: bun run diagrams:test
+
       # Builds the client, then runs it. The build is deliberately here rather
       # than inside the Playwright config: web servers start before any global
       # setup, so a build racing them would leave the suite on the previous

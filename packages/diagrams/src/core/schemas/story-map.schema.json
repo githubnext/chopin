@@ -1,0 +1,90 @@
+{
+	"title": "Story map",
+	"required": [
+		"activities"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"releases": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"maxLength": 20
+			}
+		},
+		"activities": {
+			"type": "array",
+			"minItems": 1,
+			"items": {
+				"type": "object",
+				"required": [
+					"label"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"label": {
+						"type": "string",
+						"maxLength": 32
+					},
+					"focal": {
+						"type": "boolean"
+					},
+					"steps": {
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "object",
+									"required": [
+										"label"
+									],
+									"additionalProperties": false,
+									"properties": {
+										"label": {
+											"type": "string",
+											"maxLength": 40
+										},
+										"focal": {
+											"type": "boolean"
+										},
+										"stories": {
+											"type": "object",
+											"additionalProperties": {
+												"type": "array",
+												"items": {
+													"anyOf": [
+														{
+															"type": "string",
+															"maxLength": 60
+														},
+														{
+															"type": "object",
+															"required": [
+																"label"
+															],
+															"properties": {
+																"label": {
+																	"type": "string"
+																},
+																"focal": {
+																	"type": "boolean"
+																}
+															}
+														}
+													]
+												}
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				}
+			}
+		}
+	}
+}

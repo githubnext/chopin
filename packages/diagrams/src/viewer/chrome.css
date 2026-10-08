@@ -1,0 +1,189 @@
+/* Local browser adapter. The authored document retains its own keyboard and scroll behavior. */
+.ch-diagram {
+	width: 100%;
+	margin: 0;
+	font-family: var(--font-sans);
+	color: var(--color-text-primary);
+}
+
+.ch-diagram__controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.375rem;
+	margin-bottom: 0.75rem;
+}
+
+.ch-diagram__controls button,
+.ch-diagram__inspector button {
+	font-family: var(--font-sans);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-secondary);
+	background: var(--color-page);
+	border: var(--button-edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-md);
+	padding: 0.375rem 0.625rem;
+	cursor: pointer;
+}
+
+.ch-diagram__controls button:hover:not(:disabled),
+.ch-diagram__inspector button:hover {
+	color: var(--color-brand-ink);
+	border-color: var(--color-brand);
+}
+
+.ch-diagram__controls button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.ch-diagram__stage {
+	width: 100%;
+	overflow-x: auto;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+}
+
+.ch-diagram__scroll-hint {
+	margin: 0.375rem 0 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.ch-diagram .sc-svg {
+	display: block;
+	width: 100%;
+	min-width: 32.5rem;
+	height: auto;
+	max-height: 82vh;
+	margin: 0 auto;
+	user-select: none;
+}
+
+.ch-diagram .sc-node,
+.ch-diagram .sc-edge[role="button"] {
+	cursor: pointer;
+}
+
+.ch-diagram .sc-node:focus-visible .n-box,
+.ch-diagram .sc-edge:focus-visible .e-line,
+.ch-diagram .sc-node.is-current .n-box,
+.ch-diagram .sc-edge.is-current .e-line {
+	stroke: var(--color-brand);
+	stroke-width: 2;
+}
+
+.ch-diagram .sc-svg.is-dim .sc-node:not(.is-lit),
+.ch-diagram .sc-svg.is-dim .sc-edge:not(.is-lit) {
+	filter: opacity(0.16);
+}
+
+.ch-diagram .sc-svg.is-dim .sc-groups,
+.ch-diagram .sc-svg.is-dim .sc-legend,
+.ch-diagram .sc-svg.is-dim .sc-lanes {
+	filter: opacity(0.45);
+}
+
+.ch-diagram .sc-svg.is-dim .e-token,
+.ch-diagram .sc-svg.sc-stepping .e-token {
+	display: none;
+}
+
+.ch-diagram .sc-svg.sc-stepping [data-sc-step]:not(.is-shown) {
+	filter: opacity(0.06);
+	pointer-events: none;
+}
+
+.ch-diagram__status {
+	margin-top: 0.5rem;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.ch-diagram__inspector {
+	margin-top: 0.75rem;
+	padding: 0.75rem;
+	background: var(--color-inset);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+}
+
+.ch-diagram__inspector-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.ch-diagram__inspector-head p,
+.ch-diagram__group {
+	margin: 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.ch-diagram__inspector-head h3 {
+	margin: 0.25rem 0 0;
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	font-weight: 600;
+}
+
+.ch-diagram__group {
+	margin-top: 0.5rem;
+}
+
+.ch-diagram__inspector ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.375rem;
+	list-style: none;
+	margin: 0.75rem 0 0;
+	padding: 0;
+}
+
+.ch-diagram--error {
+	padding: 0.75rem;
+	background: var(--color-danger-surface);
+	color: var(--color-danger-text);
+	border-radius: var(--radius-md);
+}
+
+.ch-diagram--error p {
+	margin: 0;
+	font-weight: 600;
+}
+.ch-diagram--error ul {
+	margin: 0.5rem 0 0;
+	padding-left: 1.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ch-diagram .sc-svg * {
+		animation: none !important;
+		transition: none !important;
+	}
+	.ch-diagram .e-token {
+		display: none !important;
+	}
+}
+
+@media print {
+	.ch-diagram__controls, .ch-diagram__inspector, .ch-diagram__scroll-hint {
+		display: none;
+	}
+	.ch-diagram .sc-svg {
+		min-width: 0;
+		max-height: none;
+	}
+	.ch-diagram .sc-svg.is-dim .sc-node,
+	.ch-diagram .sc-svg.is-dim .sc-edge,
+	.ch-diagram .sc-svg.sc-stepping [data-sc-step] {
+		filter: none;
+	}
+}

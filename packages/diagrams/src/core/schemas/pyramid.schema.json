@@ -1,0 +1,54 @@
+{
+	"title": "Pyramid / funnel",
+	"required": [
+		"levels"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"levels": {
+			"type": "array",
+			"minItems": 2,
+			"items": {
+				"anyOf": [
+					{
+						"type": "string",
+						"maxLength": 48
+					},
+					{
+						"type": "object",
+						"required": [
+							"label"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"label": {
+								"type": "string",
+								"maxLength": 48
+							},
+							"sub": {
+								"type": "string",
+								"maxLength": 56
+							},
+							"focal": {
+								"type": "boolean"
+							},
+							"kind": {
+								"type": "string"
+							},
+							"value": {
+								"type": "number"
+							}
+						},
+						"additionalProperties": false
+					}
+				]
+			}
+		},
+		"unit": {
+			"type": "string",
+			"maxLength": 12
+		}
+	}
+}

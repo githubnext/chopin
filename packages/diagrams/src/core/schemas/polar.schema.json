@@ -1,0 +1,65 @@
+{
+	"title": "Polar",
+	"required": [
+		"data"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"max": {
+			"type": "number"
+		},
+		"unit": {
+			"type": "string"
+		},
+		"center": {
+			"type": "string",
+			"maxLength": 20
+		},
+		"focal": {
+			"type": [
+				"string",
+				"array"
+			]
+		},
+		"data": {
+			"type": "array",
+			"minItems": 3,
+			"items": {
+				"anyOf": [
+					{
+						"type": "array",
+						"minItems": 2,
+						"maxItems": 2,
+						"items": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "number"
+							}
+						]
+					},
+					{
+						"type": "object",
+						"required": [
+							"label",
+							"value"
+						],
+						"additionalProperties": false,
+						"properties": {
+							"label": {
+								"type": "string"
+							},
+							"value": {
+								"type": "number"
+							},
+							"focal": {
+								"type": "boolean"
+							}
+						}
+					}
+				]
+			}
+		}
+	}
+}

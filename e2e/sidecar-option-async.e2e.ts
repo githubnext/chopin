@@ -110,8 +110,8 @@ test("Escape during a delayed option reply restores focus and respects moving aw
 	await ana.keyboard.press("Escape");
 	await expect(field).toHaveCount(0);
 	await expect(trigger).toBeFocused();
-	await ana.getByRole("button", { name: "Close sidebar" }).click();
-	let chatOpener = ana.getByRole("button", { name: "Show chat pane" });
+	await ana.getByRole("button", { name: "Hide chat" }).click();
+	let chatOpener = ana.getByRole("button", { name: "Show chat" });
 	await expect(chatOpener).toHaveAttribute("aria-expanded", "false");
 	await expect(chatOpener).toBeFocused();
 
@@ -123,11 +123,11 @@ test("Escape during a delayed option reply restores focus and respects moving aw
 	await expect(chatOpener).toBeFocused();
 });
 
-test("Escape during a duplicate request clears its late error", async ({ join, page, seed }) => {
+test("Escape during a pending request leaves the reopened field empty", async ({ join, page, seed }) => {
 	await seed(PROSE);
 	let held = await holdOptionReply(page);
 	let ana = await join("ana");
-	let { card, field, trigger } = await openOption(ana, held, "in sqlite");
+	let { card, field, trigger } = await openOption(ana, held, "A pending option");
 	await expect(field).toHaveAttribute("aria-disabled", "true");
 	await expect(field).toHaveJSProperty("readOnly", true);
 	await ana.keyboard.press("Escape");
@@ -144,7 +144,7 @@ test("a late add reply does not steal focus after reopening and tabbing away", a
 	await seed(PROSE);
 	let held = await holdOptionReply(page);
 	let ana = await join("ana");
-	let { card, field, trigger } = await openOption(ana, held, "in sqlite");
+	let { card, field, trigger } = await openOption(ana, held, "A pending option");
 	await ana.keyboard.press("Escape");
 	await expect(field).toHaveCount(0);
 	await expect(trigger).toBeEnabled();

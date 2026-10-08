@@ -26,6 +26,8 @@ export type DecisionsProps = {
 	store: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
 	canEdit?: boolean;
+	/** The viewer's own handle, who is never shown as present on a card. */
+	self?: string;
 	motion: MotionDisclosureContract;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
@@ -88,6 +90,7 @@ export function Decisions(
 		questionMotion,
 		visualPreview,
 		reveal,
+		self,
 		store,
 		wire,
 	}: DecisionsProps,
@@ -210,6 +213,7 @@ export function Decisions(
 			}}
 			places={store.counts(entry.id)}
 			presentation="list"
+			self={self}
 			value={entry.value}
 			wire={wire}
 		/>

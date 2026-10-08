@@ -1,0 +1,68 @@
+{
+	"title": "Line family",
+	"required": [],
+	"additionalProperties": false,
+	"properties": {
+		"x": {
+			"type": "array",
+			"items": {
+				"type": [
+					"string",
+					"number"
+				]
+			}
+		},
+		"categories": {
+			"type": "array"
+		},
+		"unit": {
+			"type": "string",
+			"maxLength": 12
+		},
+		"smooth": {
+			"type": "boolean"
+		},
+		"area": {
+			"type": "boolean"
+		},
+		"zero": {
+			"type": "boolean"
+		},
+		"series": {
+			"type": "array",
+			"minItems": 1,
+			"items": {
+				"type": "object",
+				"required": [
+					"name",
+					"values"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 24
+					},
+					"values": {
+						"type": "array",
+						"items": {
+							"type": [
+								"number",
+								"null"
+							]
+						}
+					},
+					"focal": {
+						"type": "boolean"
+					}
+				}
+			}
+		},
+		"data": {
+			"type": "string"
+		},
+		"xCol": {
+			"type": "string"
+		}
+	}
+}

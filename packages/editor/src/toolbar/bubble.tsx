@@ -7,18 +7,23 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
+import { ChevronIcon, CodeIcon, LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
 
 import { $linkAt, OPEN_LINK_EDITOR_COMMAND } from "./link";
-import { placeSurface } from "./placement";
+import { placeSurface, visibleAnchor } from "./placement";
+import { shortcut } from "./shortcut";
+import { PRIMARY_COARSE_POINTER_QUERY } from "../pointer";
 import {
 	CELL,
 	CELL_OFF,
 	CELL_ON,
+	DIVIDER,
 	editorSurfaceViewport,
 	listenToEditorGeometry,
 	nativeSelectionRect,
+	ROW,
 	SEAM,
 	SHELL,
 } from "./surface";
@@ -54,7 +59,8 @@ import type { ElementNode, LexicalNode, TextFormatType } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 /** Block shapes the bubble can switch between. */
-export type Block = "paragraph" | "quote" | "bullet" | "number" | HeadingTagType;
+/** `task` is shown but not offered: the menu has no way to build a check list. */
+export type Block = "paragraph" | "quote" | "bullet" | "number" | "task" | HeadingTagType;
 
 /** `glyph` is what shows; `label` is what it means, for hover and assistive tech. */
 const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
@@ -62,10 +68,17 @@ const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
 	{ id: "h1", glyph: "H1", label: "Heading 1" },
 	{ id: "h2", glyph: "H2", label: "Heading 2" },
 	{ id: "h3", glyph: "H3", label: "Heading 3" },
-	{ id: "quote", glyph: ">", label: "Blockquote" },
+	{ id: "quote", glyph: ">", label: "Quote" },
 	{ id: "bullet", glyph: "UL", label: "Bulleted list" },
 	{ id: "number", glyph: "OL", label: "Numbered list" },
 ];
+
+const SHORT: Partial<Record<Block, string>> = {
+	paragraph: "Text",
+	quote: "Quote",
+	bullet: "List",
+	number: "Numbered",
+};
 
 /**
  * How to show a block the menu does not offer.
@@ -74,10 +87,11 @@ const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
  * an agent may hold any of them, and the trigger has to say so rather than
  * claim the selection is something it is not.
  */
-function describe(block: Block): { glyph: string; label: string } {
+function describe(block: Block): { short: string; label: string } {
+	if (block === "task") return { short: "Task list", label: "Task list" };
 	let known = BLOCKS.find(item => item.id === block);
-	if (known) return known;
-	return { glyph: block.toUpperCase(), label: `Heading ${block.slice(1)}` };
+	if (known) return { short: SHORT[block] ?? known.glyph, label: known.label };
+	return { short: block.toUpperCase(), label: `Heading ${block.slice(1)}` };
 }
 
 /**
@@ -121,22 +135,60 @@ export function $block(node: LexicalNode | null): Block {
 	// A list item's shape belongs to the list around it, not the item.
 	if ($isListItemNode(block)) {
 		let list = block.getParent();
-		if ($isListNode(list)) return list.getListType() === "number" ? "number" : "bullet";
+		if ($isListNode(list)) {
+			let type = list.getListType();
+			return type === "number" ? "number" : type === "check" ? "task" : "bullet";
+		}
 	}
 	if ($isHeadingNode(block)) return block.getTag();
 	if (quoted(block)) return "quote";
 	return "paragraph";
 }
 
-type Mark = { format: TextFormatType; label: string; glyph: string; shortcut: string };
+type Mark = { format: TextFormatType; label: string; glyph: ReactNode; shortcut: string };
 
+/** Each letter is drawn in the style it applies, so the row reads as a format bar. */
 const MARKS: Mark[] = [
-	{ format: "bold", label: "Bold", glyph: "B", shortcut: "⌘B" },
-	{ format: "italic", label: "Italic", glyph: "I", shortcut: "⌘I" },
-	{ format: "strikethrough", label: "Strikethrough", glyph: "S", shortcut: "⌘⇧X" },
-	{ format: "underline", label: "Underline", glyph: "U", shortcut: "⌘U" },
-	{ format: "code", label: "Inline code", glyph: "<>", shortcut: "⌘E" },
+	{
+		format: "bold",
+		label: "Bold",
+		glyph: <span className="font-bold">B</span>,
+		shortcut: shortcut("B"),
+	},
+	{
+		format: "italic",
+		label: "Italic",
+		glyph: <span className="italic">I</span>,
+		shortcut: shortcut("I"),
+	},
+	{
+		format: "strikethrough",
+		label: "Strikethrough",
+		glyph: <span className="line-through">S</span>,
+		shortcut: shortcut("X", { shift: true }),
+	},
+	{
+		format: "underline",
+		label: "Underline",
+		glyph: <span className="underline underline-offset-2">U</span>,
+		shortcut: shortcut("U"),
+	},
+	{ format: "code", label: "Inline code", glyph: <CodeIcon />, shortcut: shortcut("E") },
 ];
+
+/** Marks a phone keeps on the row; the rest move into the block menu. */
+const PHONE_ROW = new Set<TextFormatType>(["bold", "italic"]);
+
+function usePrimaryCoarse(): boolean {
+	let [coarse, setCoarse] = useState(() => matchMedia(PRIMARY_COARSE_POINTER_QUERY).matches);
+	useEffect(() => {
+		let query = matchMedia(PRIMARY_COARSE_POINTER_QUERY);
+		let update = () => setCoarse(query.matches);
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
+	}, []);
+	return coarse;
+}
 
 export function SelectionBubble(
 	{ disabled, hidden, onComment }: {
@@ -155,6 +207,7 @@ export function SelectionBubble(
 	/** Whether the bubble is showing block types instead of its marks. */
 	let [choosing, setChoosing] = useState(false);
 	let ref = useRef<HTMLDivElement>(null);
+	let coarse = usePrimaryCoarse();
 
 	let sync = useCallback(() => {
 		editor.getEditorState().read(() => {
@@ -206,7 +259,7 @@ export function SelectionBubble(
 	let convert = useCallback((next: Block) => {
 		setChoosing(false);
 		// Already a quote: converting again would nest one inside the other.
-		if (next === block) return;
+		if (next === block || next === "task") return;
 
 		if (next === "bullet") {
 			return editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
@@ -216,7 +269,7 @@ export function SelectionBubble(
 		}
 		// Containers are unwrapped, not swapped: `$setBlocksType` converts the
 		// block it finds and leaves the list or quote standing around it.
-		if (block === "bullet" || block === "number") {
+		if (block === "bullet" || block === "number" || block === "task") {
 			editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
 		}
 		if (block === "quote") {
@@ -286,20 +339,33 @@ export function SelectionBubble(
 			return;
 		}
 		let viewport = editorSurfaceViewport(editor);
+		let visible = visibleAnchor(liveAnchor, viewport);
+		if (!visible) {
+			setPosition(undefined);
+			return;
+		}
+		// Measure the natural height: a stale cap from the last placement would shrink the menu.
+		let capped = element.style.maxHeight;
+		element.style.maxHeight = "";
 		element.style.maxWidth = `${Math.max(0, viewport.width - 16)}px`;
 		let width = element.offsetWidth;
-		let centre = liveAnchor.left + liveAnchor.width / 2;
+		let height = element.offsetHeight;
+		element.style.maxHeight = capped;
+		let centre = visible.left + visible.width / 2;
 		let next = placeSurface(
 			{
-				bottom: liveAnchor.bottom,
-				height: liveAnchor.height,
+				bottom: visible.bottom,
+				height: visible.height,
 				left: centre - width / 2,
 				right: centre + width / 2,
-				top: liveAnchor.top,
-				width: liveAnchor.width,
+				top: visible.top,
+				width: visible.width,
 			},
-			{ width, height: element.offsetHeight },
+			{ width, height },
 			viewport,
+			8,
+			// A touch selection has the system's own callout above it.
+			coarse ? "auto" : "above",
 		);
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top
@@ -307,8 +373,8 @@ export function SelectionBubble(
 				? current
 				: next
 		);
-	}, [anchor]);
-	useLayoutEffect(place, [place, choosing]);
+	}, [anchor, coarse]);
+	useLayoutEffect(place, [place, choosing, coarse]);
 
 	useEffect(() => {
 		if (!anchor) return;
@@ -326,7 +392,9 @@ export function SelectionBubble(
 			contentEditable={false}
 			// No translate utilities here: placement belongs to the layout effect,
 			// and Tailwind's would compose with its transform rather than replace it.
-			className={`${SHELL} plan-formatting-toolbar flex max-w-[calc(100vw-1rem)] items-center gap-0.5 overflow-x-auto`}
+			className={`${SHELL} plan-formatting-toolbar flex max-w-[calc(100vw-1rem)] ${
+				choosing ? "flex-col items-stretch" : "flex-wrap items-center"
+			} gap-0.5 overflow-y-auto`}
 			style={position
 				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
 				: { top: anchor.bottom + 8, left: anchor.left, visibility: "hidden" }}
@@ -345,14 +413,44 @@ export function SelectionBubble(
 						type="button"
 						aria-label={item.label}
 						aria-current={item.id === block}
-						title={item.label}
 						onClick={() => convert(item.id)}
-						className={`${CELL} ${item.id === block ? CELL_ON : CELL_OFF}`}
+						className={`${ROW} gap-2 ${item.id === block ? CELL_ON : CELL_OFF}`}
 						data-press="small"
 					>
-						<span aria-hidden="true">{item.glyph}</span>
+						<span
+							aria-hidden="true"
+							className="w-5 shrink-0 text-center text-xs font-medium text-text-quaternary"
+						>
+							{item.glyph}
+						</span>
+						<span>{item.label}</span>
 					</button>
-				))
+				)).concat(
+					coarse
+						? [
+							<span key="rule" aria-hidden="true" className={DIVIDER} />,
+							...MARKS.filter(mark => !PHONE_ROW.has(mark.format)).map(mark => (
+								<button
+									key={mark.format}
+									type="button"
+									aria-label={mark.label}
+									aria-pressed={active.has(mark.format)}
+									onClick={() => {
+										setChoosing(false);
+										editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format);
+									}}
+									className={`${ROW} gap-2 ${active.has(mark.format) ? CELL_ON : CELL_OFF}`}
+									data-press="small"
+								>
+									<span aria-hidden="true" className="flex w-5 shrink-0 justify-center">
+										{mark.glyph}
+									</span>
+									<span>{mark.label}</span>
+								</button>
+							)),
+						]
+						: [],
+				)
 				: (
 					<>
 						<button
@@ -362,20 +460,22 @@ export function SelectionBubble(
 							data-tooltip="Block type"
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
-							className={`${CELL} ${CELL_OFF}`}
+							className={`plan-menu-cell plan-bubble-trigger inline-flex h-7 shrink-0 items-center gap-0.5 rounded-sm pl-2 pr-1 text-sm font-semibold ${CELL_OFF}`}
 							data-press="small"
 						>
-							<span aria-hidden="true">{describe(block).glyph}</span>
+							<span aria-hidden="true">{describe(block).short}</span>
+							<ChevronIcon aria-hidden="true" className="size-3.5 rotate-90" />
 						</button>
 
-						<span aria-hidden="true" className={SEAM} />
+						<span aria-hidden="true" className={`${SEAM}`} />
 
-						{MARKS.map(mark => (
+						{MARKS.filter(mark => !coarse || PHONE_ROW.has(mark.format)).map(mark => (
 							<button
 								key={mark.format}
 								type="button"
 								aria-label={mark.label}
 								aria-pressed={active.has(mark.format)}
+								data-tooltip={`${mark.label} ${mark.shortcut}`}
 								title={`${mark.label} (${mark.shortcut})`}
 								onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format)}
 								className={`${CELL} ${active.has(mark.format) ? CELL_ON : CELL_OFF}`}
@@ -385,12 +485,12 @@ export function SelectionBubble(
 							</button>
 						))}
 
-						<span aria-hidden="true" className={SEAM} />
+						<span aria-hidden="true" className={`${SEAM}`} />
 
 						<button
 							type="button"
 							aria-label={linked ? "Edit link" : "Add link"}
-							title={`${linked ? "Edit link" : "Add link"} (⌘K)`}
+							title={`${linked ? "Edit link" : "Add link"} (${shortcut("K")})`}
 							onClick={() => editor.dispatchCommand(OPEN_LINK_EDITOR_COMMAND, undefined)}
 							className={`${CELL} ${CELL_OFF}`}
 							data-press="small"
@@ -400,7 +500,7 @@ export function SelectionBubble(
 
 						{onComment && (
 							<>
-								<span aria-hidden="true" className={SEAM} />
+								<span aria-hidden="true" className={`${SEAM}`} />
 								<button
 									type="button"
 									aria-label="Comment on this passage"

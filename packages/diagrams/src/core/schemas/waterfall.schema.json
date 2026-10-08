@@ -1,0 +1,61 @@
+{
+	"title": "Waterfall",
+	"required": [
+		"steps"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"unit": {
+			"type": "string"
+		},
+		"end": {
+			"type": "boolean"
+		},
+		"endLabel": {
+			"type": "string"
+		},
+		"steps": {
+			"type": "array",
+			"minItems": 2,
+			"items": {
+				"anyOf": [
+					{
+						"type": "array",
+						"minItems": 2,
+						"maxItems": 2,
+						"items": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "number"
+							}
+						]
+					},
+					{
+						"type": "object",
+						"required": [
+							"label"
+						],
+						"additionalProperties": false,
+						"properties": {
+							"label": {
+								"type": "string",
+								"maxLength": 20
+							},
+							"value": {
+								"type": "number"
+							},
+							"total": {
+								"type": "boolean"
+							},
+							"focal": {
+								"type": "boolean"
+							}
+						}
+					}
+				]
+			}
+		}
+	}
+}

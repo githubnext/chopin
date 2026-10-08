@@ -1196,6 +1196,12 @@
 	min-width: 44px;
 }
 
+/* The bubble's block trigger carries a label, and its seams cost width a phone lacks. */
+:root[data-plan-coarse-pointer] .plan-bubble-trigger {
+	width: auto;
+	padding-inline: 0.5rem 0.25rem;
+}
+
 /*
  * Document typography.
  *
@@ -2525,6 +2531,19 @@
 	block-size: 1.5rem;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+	.presence-face {
+		animation: presence-face-in var(--badge-pop-dur) var(--motion-smooth-out) both;
+	}
+}
+
+@keyframes presence-face-in {
+	from {
+		opacity: 0;
+		scale: 0.85;
+	}
+}
+
 .presence-face + .presence-face {
 	margin-inline-start: -0.375rem;
 }
@@ -2832,5 +2851,27 @@
 
 	.plan-content :is([class*="_listItemUnchecked"], [class*="_listItemChecked"]):before {
 		transition: none;
+	}
+}
+
+@keyframes plan-bubble-enter {
+	from {
+		opacity: 0;
+		transform: translateY(4px) scale(var(--dropdown-pre-scale));
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.plan-formatting-toolbar {
+	animation: plan-bubble-enter var(--duration-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-formatting-toolbar {
+		animation: none;
 	}
 }

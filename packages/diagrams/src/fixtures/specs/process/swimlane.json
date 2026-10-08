@@ -1,0 +1,79 @@
+{
+	"type": "swimlane",
+	"title": "Refund request",
+	"lanes": [
+		{
+			"id": "cust",
+			"label": "Customer"
+		},
+		{
+			"id": "support",
+			"label": "Support"
+		},
+		{
+			"id": "fin",
+			"label": "Finance"
+		}
+	],
+	"nodes": [
+		{
+			"id": "ask",
+			"label": "Requests refund",
+			"lane": "cust",
+			"col": 0
+		},
+		{
+			"id": "triage",
+			"label": "Triage ticket",
+			"lane": "support",
+			"col": 1
+		},
+		{
+			"id": "ok",
+			"label": "Eligible?",
+			"shape": "decision",
+			"lane": "support",
+			"col": 2
+		},
+		{
+			"id": "pay",
+			"label": "Issue refund",
+			"focal": true,
+			"lane": "fin",
+			"col": 3
+		},
+		{
+			"id": "tell",
+			"label": "Notified",
+			"lane": "cust",
+			"col": 4
+		}
+	],
+	"edges": [
+		[
+			"ask",
+			"triage"
+		],
+		[
+			"triage",
+			"ok"
+		],
+		[
+			"ok",
+			"pay",
+			"yes",
+			"primary"
+		],
+		[
+			"pay",
+			"tell",
+			"",
+			"primary"
+		],
+		[
+			"ok",
+			"tell",
+			"no"
+		]
+	]
+}

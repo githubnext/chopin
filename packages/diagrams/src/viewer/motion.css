@@ -1,0 +1,172 @@
+@keyframes sc-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes sc-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes sc-draw {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+@keyframes sc-grow-y {
+	from {
+		transform: scaleY(0);
+	}
+	to {
+		transform: scaleY(1);
+	}
+}
+@keyframes sc-grow-x {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+@keyframes sc-wipe {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@keyframes sc-wipe-down {
+	from {
+		clip-path: inset(0 0 100% 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@keyframes sc-pop {
+	from {
+		opacity: 0;
+		transform: scale(0.4);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+@keyframes sc-token {
+	from {
+		offset-distance: 0%;
+		opacity: 0;
+	}
+	8% {
+		opacity: 1;
+	}
+	92% {
+		opacity: 1;
+	}
+	to {
+		offset-distance: 100%;
+		opacity: 0;
+	}
+}
+@keyframes sc-pulse {
+	0%, 100% {
+		stroke-opacity: 1;
+	}
+	50% {
+		stroke-opacity: 0.35;
+	}
+}
+.ch-diagram .e-token {
+	display: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) [data-sc-step] {
+		--d: calc(var(--step, 0) * var(--sc-stagger));
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-node[data-sc-step],
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-enter[data-sc-step] {
+		animation: sc-in var(--sc-enter) var(--motion-smooth-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step] {
+		animation: sc-fade calc(var(--duration-base) * 1.2) var(--ease-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step] .e-head,
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step] .e-glyph,
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step] .e-label-g {
+		animation: sc-fade calc(var(--duration-base) * 1) var(--ease-out)
+			calc(var(--d) + var(--sc-draw) * 0.8) both;
+	}
+	.ch-diagram
+		.sc-svg:is([data-sc-motion="trace"], [data-sc-motion="loop"]):not(.sc-still)
+		.sc-edge[data-sc-step]
+		.e-line.sc-draw {
+		stroke-dasharray: 1;
+		animation: sc-draw var(--sc-draw) var(--motion-smooth-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-grow-y[data-sc-step] {
+		transform-box: fill-box;
+		transform-origin: 50% 100%;
+		animation: sc-grow-y var(--sc-enter) var(--motion-smooth-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-grow-x[data-sc-step] {
+		transform-box: fill-box;
+		transform-origin: 0 50%;
+		animation: sc-grow-x var(--sc-enter) var(--motion-smooth-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-wipe[data-sc-step] {
+		animation: sc-wipe var(--sc-draw) var(--motion-smooth-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-wipe-down[data-sc-step] {
+		animation: sc-wipe-down var(--sc-draw) var(--motion-smooth-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-pop[data-sc-step] {
+		transform-box: fill-box;
+		transform-origin: 50% 50%;
+		animation: sc-pop var(--sc-enter) var(--motion-smooth-out) var(--d) both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-fade[data-sc-step] {
+		animation: sc-fade var(--sc-enter) var(--ease-out) var(--d) both;
+	}
+	.ch-diagram
+		.sc-svg:is([data-sc-motion="trace"], [data-sc-motion="loop"]):not(.sc-still)
+		.e-token {
+		display: inline;
+		offset-rotate: 0deg;
+		animation: sc-token var(--tok-dur, calc(var(--duration-base) * 9)) linear
+			calc(var(--sc-settle) + var(--tok-delay, 0ms)) infinite both;
+	}
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .k-change .n-box {
+		animation: sc-pulse calc(var(--duration-base) * 8) var(--ease-out) var(--sc-settle) 3;
+	}
+}
+@media print {
+	.ch-diagram .sc-svg * {
+		animation: none !important;
+	}
+	.ch-diagram .e-token {
+		display: none !important;
+	}
+}
+.ch-diagram .sc-still .e-token {
+	display: none;
+}
+.ch-diagram .e-token {
+	fill: var(--sc-accent);
+}
+.ch-diagram .ek-link .e-token, .ch-diagram .e-token.t-link {
+	fill: var(--sc-link);
+}

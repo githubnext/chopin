@@ -1,0 +1,14 @@
+{
+	"type": "quadrant",
+	"title": "Which diagram tool for what",
+	"x": { "label": "Effort to make", "low": "low", "high": "high" },
+	"y": { "label": "Quality", "low": "rough", "high": "polished" },
+	"quadrants": ["Craft tools", "Best of both", "Sketches", "Avoid"],
+	"items": [
+		{ "label": "Whiteboard photo", "x": 0.15, "y": 0.12 },
+		{ "label": "Mermaid", "x": 0.25, "y": 0.35 },
+		{ "label": "Figma", "x": 0.85, "y": 0.88 },
+		{ "label": "SeeCode", "x": 0.22, "y": 0.82, "focal": true },
+		{ "label": "Hand-made SVG", "x": 0.8, "y": 0.7 }
+	]
+}

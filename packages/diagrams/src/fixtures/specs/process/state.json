@@ -1,0 +1,92 @@
+{
+	"type": "state",
+	"title": "Order lifecycle",
+	"nodes": [
+		{
+			"id": "s",
+			"shape": "start",
+			"row": 0,
+			"col": 0
+		},
+		{
+			"id": "cart",
+			"label": "In cart",
+			"row": 0,
+			"col": 1
+		},
+		{
+			"id": "pending",
+			"label": "Pending payment",
+			"row": 0,
+			"col": 2
+		},
+		{
+			"id": "paid",
+			"label": "Paid",
+			"focal": true,
+			"row": 0,
+			"col": 3
+		},
+		{
+			"id": "failed",
+			"label": "Payment failed",
+			"kind": "muted",
+			"row": 1,
+			"col": 2
+		},
+		{
+			"id": "shipped",
+			"label": "Shipped",
+			"row": 1,
+			"col": 3
+		},
+		{
+			"id": "e",
+			"shape": "end",
+			"row": 1,
+			"col": 4
+		}
+	],
+	"edges": [
+		[
+			"s",
+			"cart"
+		],
+		[
+			"cart",
+			"pending",
+			"checkout"
+		],
+		[
+			"pending",
+			"paid",
+			"charge ok",
+			"primary"
+		],
+		[
+			"pending",
+			"failed",
+			"declined"
+		],
+		[
+			"failed",
+			"pending",
+			"retry"
+		],
+		[
+			"paid",
+			"shipped",
+			"dispatch",
+			"primary"
+		],
+		[
+			"shipped",
+			"e"
+		],
+		[
+			"cart",
+			"cart",
+			"edit"
+		]
+	]
+}

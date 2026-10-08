@@ -11,6 +11,7 @@ import { childCloseAction, childFocusTransition, childHistoryState } from "./chi
 import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
+import { WorkspaceNotice } from "./workspace-notice";
 import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
 import type { ReactNode } from "react";
@@ -144,8 +145,9 @@ export function retryableChannelFailure(error: unknown): boolean {
 function Loading({ label = "Loading" }: { label?: string }) {
 	return (
 		<div
-			className="flex h-full items-center justify-center bg-ground px-4 text-sm text-text-tertiary"
+			className="hosted-loading flex h-full items-center justify-center bg-ground px-4 text-sm text-text-tertiary"
 			data-hosted=""
+			role="status"
 		>
 			{label}
 		</div>
@@ -154,6 +156,33 @@ function Loading({ label = "Loading" }: { label?: string }) {
 
 function repositoryHref(repository: { owner: string; name: string }): string {
 	return documentsPath(repository.owner, repository.name);
+}
+
+function failureCopy(
+	error: unknown,
+	channel: { title?: string; slug?: string } | undefined,
+	repository: Pick<Api.Repository, "fullName"> | undefined,
+): { body: string; title: string } {
+	let status = error instanceof Api.ApiError ? error.status : undefined;
+	let where = repository ? ` in ${repository.fullName}` : "";
+	if (status === 404) {
+		let name = channel?.title ?? channel?.slug;
+		return {
+			title: "Document not found",
+			body: `We couldn't find ${name ? `"${name}"` : "this document"}${where}. `
+				+ "It may have been renamed or deleted.",
+		};
+	}
+	if (status === 401 || status === 403) {
+		return {
+			title: repository ? `You don't have access to ${repository.fullName}` : "No access",
+			body: "Ask a repository admin to give you access.",
+		};
+	}
+	return {
+		title: "Couldn't open this document",
+		body: "Check your connection and try again.",
+	};
 }
 
 function Failure(
@@ -169,43 +198,33 @@ function Failure(
 		repository?: Pick<Api.Repository, "owner" | "name" | "fullName">;
 	},
 ) {
-	let message = error instanceof Error ? error.message : "Something went wrong";
+	let { body, title } = failureCopy(error, channel, repository);
+	let denied = error instanceof Api.ApiError && (error.status === 401 || error.status === 403);
 	return (
-		<div className="flex h-full items-center justify-center bg-ground p-4 sm:p-6" data-hosted="">
-			<div className="ring-hairline max-w-md rounded-lg bg-page p-4 shadow-resting sm:p-6">
-				<h1 className="text-xl font-semibold">Cannot open Chopin</h1>
-				<p className="mt-2 text-sm text-text-secondary">{message}</p>
-				{channel && (
-					<div className="mt-4 min-w-0">
-						{channel.title && <p className="break-words text-sm font-medium">{channel.title}</p>}
-						{channel.slug && (
-							<p className="mt-1 break-all text-sm text-text-tertiary">{channel.slug}</p>
-						)}
-						{repository && (
-							<p className="mt-2 break-words text-sm text-text-secondary">
-								{repository.fullName}
-							</p>
-						)}
-					</div>
-				)}
-				<div className="mt-5 flex flex-wrap gap-2">
+		<WorkspaceNotice
+			actions={
+				<>
 					{onRetry && (
 						<button className="btn btn-md btn-primary" onClick={onRetry} type="button">
 							Try again
 						</button>
 					)}
-					{repository && (
+					{repository && !denied && (
 						<a
-							className={`btn btn-md ${onRetry ? "btn-secondary" : "btn-primary"}`}
+							className={`btn btn-md ${onRetry ? "btn-ghost" : "btn-primary"}`}
 							href={repositoryHref(repository)}
 						>
-							View {repository.fullName} documents
+							Open {repository.fullName}
 						</a>
 					)}
-					<a className="btn btn-md btn-secondary" href="/">Back to repositories</a>
-				</div>
-			</div>
-		</div>
+					{(!repository || denied) && !onRetry && (
+						<a className="btn btn-md btn-primary" href="/">Go to Chopin</a>
+					)}
+				</>
+			}
+			body={body}
+			title={title}
+		/>
 	);
 }
 
@@ -256,6 +275,9 @@ function DocumentRouteSwap(
 			onDocumentRouteSettled(requestedRoute.current.routeKey);
 		}
 	}, [onDocumentRouteSettled]);
+	let channelResolved = useCallback((key: DocumentRouteIdentity, pathname: string) => {
+		if (requestedRoute.current.key === key) onCanonicalPath(pathname);
+	}, [onCanonicalPath]);
 	let metadataPath = useCallback((
 		key: DocumentRouteIdentity,
 		metadataRouteKey: DocumentRouteIdentity,
@@ -321,10 +343,10 @@ function DocumentRouteSwap(
 							: (
 								<Suspense fallback={<Loading label="Opening document…" />}>
 									<ChannelWorkspace
-										agent={agent}
 										Failure={Failure}
 										Loading={Loading}
 										onReady={ready}
+										onResolved={channelResolved}
 										retryable={retryableChannelFailure}
 										source={source}
 										user={user}
@@ -492,11 +514,17 @@ export function HostedApp(
 		};
 	}, [cancelChildFocusFrame, childRouteChanged, moveChildFocus]);
 
-	if (route.page === "missing") {
-		return <Failure error={new Error("This page does not exist.")} />;
-	}
 	let workspace: ReactNode;
 	switch (route.page) {
+		case "missing":
+			workspace = (
+				<WorkspaceNotice
+					actions={<a className="btn btn-md btn-primary" href="/">Go to Chopin</a>}
+					body="This page doesn't exist."
+					title="Page not found"
+				/>
+			);
+			break;
 		case "repositories":
 		case "repository":
 			break;

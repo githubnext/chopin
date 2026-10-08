@@ -4,13 +4,16 @@ import { documentMenuItems, documentMenuKeyAction } from "./document-actions-men
 
 describe("document actions menu", () => {
 	it("offers only lifecycle-valid actions", () => {
-		expect(documentMenuItems({})).toEqual([
-			{ action: "rename", label: "Rename" },
-			{ action: "archive", label: "Archive" },
+		let summary = (channel: Parameters<typeof documentMenuItems>[0]) =>
+			documentMenuItems(channel).map(item => [item.action, item.label, !!item.destructive]);
+		expect(summary({})).toEqual([
+			["copy-link", "Copy link", false],
+			["rename", "Rename", false],
+			["archive", "Archive", false],
 		]);
-		expect(documentMenuItems({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual([
-			{ action: "restore", label: "Restore" },
-			{ action: "delete", label: "Delete permanently", destructive: true },
+		expect(summary({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual([
+			["restore", "Restore", false],
+			["delete", "Delete permanently", true],
 		]);
 	});
 

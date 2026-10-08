@@ -242,7 +242,7 @@ test("a failed opening retries the created document without another POST", async
 		await route.continue();
 	});
 	await createButton(page).click();
-	await expect(page.getByRole("heading", { name: "Cannot open Chopin", exact: true }))
+	await expect(page.getByRole("heading", { name: "Couldn't open this document", exact: true }))
 		.toBeVisible();
 	await expect(createButton(page)).toBeEnabled();
 	let path = page.url();

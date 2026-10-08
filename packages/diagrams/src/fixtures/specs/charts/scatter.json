@@ -1,0 +1,36 @@
+{
+	"type": "scatter",
+	"title": "Tokens vs. first-pass success",
+	"xLabel": "tokens per diagram (k)",
+	"yLabel": "FIRST-PASS OK %",
+	"unitY": "%",
+	"zero": false,
+	"points": [
+		[
+			"Hand SVG",
+			15.2,
+			61
+		],
+		[
+			"SVG+templates",
+			10.1,
+			70
+		],
+		[
+			"Shorthand",
+			4.6,
+			78
+		],
+		{
+			"label": "SeeCode spec",
+			"x": 2.1,
+			"y": 91,
+			"focal": true
+		},
+		[
+			"Mermaid",
+			1.4,
+			55
+		]
+	]
+}

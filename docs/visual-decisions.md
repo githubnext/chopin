@@ -13,6 +13,13 @@ the shared draft. Native controls follow input immediately while acknowledgement
 catch up; the preview shows accepted values. Unfinished colour text stays local
 and survives unrelated padding updates. Viewers observe updates and can peek,
 but cannot edit or save.
+
+This first specimen's interface is ordinary checked-in React and CSS. Humans
+create the card and tune its controls; neither the hosted Planner nor a local
+coding agent publishes a component through MCP in this version. Saving records
+the agreed values in the document, rather than restyling the app or committing
+code. A later implementation can apply that recorded decision.
+
 Reconnect restores accepted state before replaying unacknowledged edits. Durable
 client sequence high-water marks prevent a lost acknowledgement from replaying
 an old value over a collaborator's newer edit.
@@ -111,9 +118,9 @@ quota. Schema-valid size claims can be false; the trusted host caps displayed
 height at 300–640 px. Browser evidence is Chromium-specific and does not certify
 arbitrary code, private bundles, or other browser engines.
 
-The focused unit run passed 356 tests, all 72 PostgreSQL persistence/lifecycle
+After integrating current main, the focused unit run passed 363 tests. All 72 PostgreSQL persistence/lifecycle
 tests passed, and all 11 Chromium integration scenarios passed. TypeScript,
-build and local CI validation passed. The container build passed with verbose
+build and local CI validation passed. Before that integration, the container build passed with verbose
 install logging; a networking-disabled runtime check verified its packaged
 manifest, bytes, CSP and preview imports. The broader unit run
 passed 4,187 tests with three skips and four timing failures in existing

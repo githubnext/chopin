@@ -1,0 +1,86 @@
+{
+	"title": "Timeline",
+	"required": [
+		"events"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"layout": {
+			"enum": [
+				"alternate",
+				"above"
+			]
+		},
+		"events": {
+			"type": "array",
+			"minItems": 2,
+			"items": {
+				"type": "object",
+				"required": [
+					"label"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"date": {
+						"type": [
+							"string",
+							"number"
+						]
+					},
+					"when": {
+						"type": "string",
+						"maxLength": 24
+					},
+					"label": {
+						"type": "string",
+						"maxLength": 32
+					},
+					"sub": {
+						"type": "string",
+						"maxLength": 40
+					},
+					"focal": {
+						"type": "boolean"
+					}
+				}
+			}
+		},
+		"periods": {
+			"type": "array",
+			"maxItems": 6,
+			"items": {
+				"type": "object",
+				"required": [
+					"from",
+					"to",
+					"label"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"from": {
+						"type": [
+							"string",
+							"number"
+						]
+					},
+					"to": {
+						"type": [
+							"string",
+							"number"
+						]
+					},
+					"label": {
+						"type": "string",
+						"maxLength": 32
+					},
+					"focal": {
+						"type": "boolean"
+					}
+				}
+			}
+		}
+	}
+}

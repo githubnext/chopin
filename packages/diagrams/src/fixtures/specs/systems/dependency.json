@@ -1,0 +1,24 @@
+{
+	"type": "dependency",
+	"dir": "TB",
+	"title": "SeeCode script modules",
+	"nodes": [
+		{ "id": "cli", "label": "seecode.mjs", "sub": "entry" },
+		{ "id": "render", "label": "render", "focal": true },
+		{ "id": "types", "label": "types" },
+		{ "id": "graph", "label": "graph renderer" },
+		{ "id": "charts", "label": "chart renderers" },
+		{ "id": "page", "label": "page + viewer" },
+		{ "id": "svg", "label": "svg + text", "kind": "muted" }
+	],
+	"edges": [
+		["cli", "render"],
+		["render", "types"],
+		["render", "page"],
+		["types", "graph"],
+		["types", "charts"],
+		["graph", "svg"],
+		["charts", "svg"],
+		["page", "svg"]
+	]
+}

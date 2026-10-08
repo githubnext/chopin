@@ -59,7 +59,7 @@
 				1
 			]
 		],
-		"sourceHash": "901beece5ec4dc3c63b889d8f64de6c1de0bcdf435e4084db72aefb7b175dfc2"
+		"sourceHash": "890443cedd0584c3e57e5295f4fafff7f0bc8231c818cb706c061d097991b49a"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -101,7 +101,21 @@
 				1
 			]
 		],
-		"sourceHash": "e7e5e693585dab7990271c52bf30e5cd5fcab9844688179c80cec75dcd57b67e"
+		"sourceHash": "e56d9f4bb36178da09f5519784cc93bcf1d23f8d8b07d674f1ef39212cb0ecd5"
+	},
+	{
+		"file": "apps/web/src/project-sidebar.tsx",
+		"reason": "Account menu receives the finite transition-presence class from NavigationShell; the sidebar adds only fixed menu classes.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"accountMenu.className",
+				"class > ProjectSidebar > <div>",
+				1
+			]
+		],
+		"sourceHash": "e56d9f4bb36178da09f5519784cc93bcf1d23f8d8b07d674f1ef39212cb0ecd5"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -143,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "aec94eefd5ec1bffefd5c3c7c5b559346972f17ee9c4d372437c58f92e042376"
+		"sourceHash": "fb330a89359e98822a720be68add8398dcad5a434788c1a96947a15b0f06f770"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -157,7 +171,7 @@
 				1
 			]
 		],
-		"sourceHash": "aec94eefd5ec1bffefd5c3c7c5b559346972f17ee9c4d372437c58f92e042376"
+		"sourceHash": "fb330a89359e98822a720be68add8398dcad5a434788c1a96947a15b0f06f770"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -178,7 +192,7 @@
 				1
 			]
 		],
-		"sourceHash": "aec94eefd5ec1bffefd5c3c7c5b559346972f17ee9c4d372437c58f92e042376"
+		"sourceHash": "fb330a89359e98822a720be68add8398dcad5a434788c1a96947a15b0f06f770"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -208,13 +222,6 @@
 			[
 				"dynamic",
 				"class",
-				"accountPresence.className",
-				"class > NavigationShell > sidebar > <ProjectSidebar> > <div>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
 				"sidebarMotion.className",
 				"class > NavigationShell > <div>",
 				1
@@ -227,7 +234,7 @@
 				1
 			]
 		],
-		"sourceHash": "4d0977b12ca65b5c2bdbcc79e85a7ecbd260690269d74476d627576b265fe28d"
+		"sourceHash": "72625cd60f700e539287fae982e7bf955314566944b77f2cd109821435453d44"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
@@ -255,7 +262,7 @@
 				1
 			]
 		],
-		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
+		"sourceHash": "973c5a8c65eb88d21d497eeee70e7be62c9b6d0b538d9af104fd5a92699a6550"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -283,7 +290,7 @@
 				1
 			]
 		],
-		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
+		"sourceHash": "973c5a8c65eb88d21d497eeee70e7be62c9b6d0b538d9af104fd5a92699a6550"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",

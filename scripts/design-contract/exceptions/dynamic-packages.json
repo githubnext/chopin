@@ -32,7 +32,7 @@
 				1
 			]
 		],
-		"sourceHash": "d6e6b425723f532a6842849808a9c42d53526ef4cdba98d66c5c08bee84b63ea"
+		"sourceHash": "677c962460578011ba2edac90720110d6da695e364ad1c9868cb9d9cd5a225ef"
 	},
 	{
 		"file": "packages/question/src/react/resolved-actions.tsx",
@@ -266,6 +266,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > LinkIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > DiagramIcon > <LineIcon>",
 				1
 			],
@@ -296,9 +303,16 @@
 				"props",
 				"unresolved JSX props > DiffIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PencilIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "751c15f0f701cc37590be4ae69a498f8ba6a13708715239b3a2d645c2b799681"
+		"sourceHash": "464a7ac73e3c46a69f97381648ad09a66a71f896abcfc30394a8266a63d64f6d"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

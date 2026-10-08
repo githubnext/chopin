@@ -1284,6 +1284,21 @@ button.question-add:disabled {
 	outline-color: var(--color-brand);
 }
 
+/* The hint's line is always reserved while the field is open, so a duplicate never moves the card. */
+.question-add-hint {
+	margin: 0;
+	min-block-size: 1.25rem;
+	padding-inline: 0.75rem;
+	font-size: var(--text-xs);
+	line-height: 1.25rem;
+	color: var(--color-danger-text);
+}
+
+.question-add-hint:not(:empty) {
+	border-radius: var(--radius-sm);
+	background: var(--color-danger-surface);
+}
+
 .question-field {
 	flex: 1;
 	min-width: 0;

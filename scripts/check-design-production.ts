@@ -10,9 +10,12 @@ if (!bundles.length) {
 for (let file of bundles) {
 	let source = await readFile(resolve(directory, file), "utf8");
 	if (
-		/data-design-audit|Chopin design audit|interactive-document-actions|\.design-audit/.test(source)
+		/data-design-audit|Chopin design audit|interactive-document-actions|\.design-audit|diagram-gallery|SeeCode rendering gallery/
+			.test(source)
 	) {
-		throw new Error(`Development design audit leaked into production bundle: ${file}`);
+		throw new Error(`Development preview leaked into production bundle: ${file}`);
 	}
 }
-console.log(`Production audit exclusion verified across ${bundles.length} JavaScript/CSS assets.`);
+console.log(
+	`Production preview exclusion verified across ${bundles.length} JavaScript/CSS assets.`,
+);

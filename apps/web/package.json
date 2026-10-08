@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@chopin/dialect": "workspace:*",
+		"@chopin/diagrams": "workspace:*",
 		"@chopin/draft": "workspace:*",
 		"@chopin/editor": "workspace:*",
 		"@chopin/icons": "workspace:*",

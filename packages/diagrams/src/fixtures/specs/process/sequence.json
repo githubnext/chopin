@@ -1,0 +1,84 @@
+{
+	"type": "sequence",
+	"title": "Cache-miss read path",
+	"participants": [
+		{
+			"id": "client",
+			"label": "Client",
+			"kind": "external"
+		},
+		{
+			"id": "api",
+			"label": "API",
+			"sub": "Node",
+			"focal": true
+		},
+		{
+			"id": "cache",
+			"label": "Cache",
+			"sub": "Redis",
+			"kind": "store"
+		},
+		{
+			"id": "db",
+			"label": "Database",
+			"sub": "Postgres",
+			"kind": "store"
+		}
+	],
+	"messages": [
+		[
+			"client",
+			"api",
+			"GET /items/42"
+		],
+		[
+			"api",
+			"cache",
+			"get item:42"
+		],
+		[
+			"cache",
+			"api",
+			"miss",
+			"reply"
+		],
+		[
+			"api",
+			"db",
+			"SELECT … WHERE id=42"
+		],
+		[
+			"db",
+			"api",
+			"row",
+			"reply"
+		],
+		[
+			"api",
+			"cache",
+			"set item:42 ttl=60",
+			"async"
+		],
+		[
+			"api",
+			"api",
+			"serialize"
+		],
+		[
+			"api",
+			"client",
+			"200 OK",
+			"reply"
+		]
+	],
+	"fragments": [
+		{
+			"kind": "opt",
+			"label": "cache miss",
+			"from": 3,
+			"to": 5
+		}
+	],
+	"numbered": true
+}

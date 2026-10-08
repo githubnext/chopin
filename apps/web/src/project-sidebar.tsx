@@ -4,15 +4,24 @@ import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
+import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ArchiveIcon, ChevronIcon, DocumentIcon, SearchIcon } from "@chopin/icons";
+import {
+	ArchiveIcon,
+	ChevronIcon,
+	DocumentIcon,
+	LockIcon,
+	SearchIcon,
+	SignInIcon,
+} from "@chopin/icons";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
@@ -128,6 +137,14 @@ function DocumentRow(
 	);
 }
 
+export function menuItemTarget(key: string, current: number, count: number): number {
+	if (key === "Home") return 0;
+	if (key === "End") return count - 1;
+	return (current + (key === "ArrowDown" ? 1 : -1) + count) % count;
+}
+
+function noop() {}
+
 function Project(
 	{
 		archiveMode,
@@ -135,8 +152,10 @@ function Project(
 		currentDocumentId,
 		entry,
 		expanded,
+		focus,
 		onCreateDocument,
 		onDocumentAction,
+		onFocused,
 		onLoadMore,
 		onToggle,
 	}: {
@@ -145,12 +164,29 @@ function Project(
 		currentDocumentId?: string;
 		entry: ProjectDocuments;
 		expanded: boolean;
+		focus: boolean;
 		onCreateDocument: (project: Api.NavigationProject) => void;
 		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
+		onFocused: () => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onToggle: () => void;
 	},
 ) {
+	let item = useRef<HTMLLIElement>(null);
+	let disclosure = useRef<HTMLButtonElement>(null);
+	let [flash, setFlash] = useState(false);
+	useEffect(() => {
+		if (!focus) return;
+		disclosure.current?.focus({ preventScroll: true });
+		item.current?.scrollIntoView({ block: "nearest" });
+		setFlash(true);
+		onFocused();
+	}, [focus, onFocused]);
+	useEffect(() => {
+		if (!flash) return;
+		let timer = setTimeout(setFlash, 900, false);
+		return () => clearTimeout(timer);
+	}, [flash]);
 	let { documents, project } = entry;
 	let groups = documentGroups(documents.channels, archiveMode);
 	let presence = useSidebarRowPresence(groups, {
@@ -305,14 +341,16 @@ function Project(
 		<li
 			className="project-sidebar-project group/project"
 			data-project-id={project.repositoryId}
+			ref={item}
 			tabIndex={-1}
 		>
-			<div className="project-sidebar-project-row">
+			<div className="project-sidebar-project-row" data-flash={flash || undefined}>
 				<button
 					aria-controls={expanded ? contentId : undefined}
 					aria-expanded={expanded}
 					className="project-sidebar-project-disclosure flex min-w-0 flex-1 items-center gap-2 text-left"
 					onClick={onToggle}
+					ref={disclosure}
 					type="button"
 				>
 					<MotionDisclosureIcon
@@ -368,7 +406,9 @@ export function ProjectSidebar(
 		pendingCreations,
 		currentDocumentId,
 		onAccount,
+		focusProjectId,
 		onAddProject,
+		onFocusedProject,
 		onCollapse,
 		onCreateDocument,
 		onDocumentAction,
@@ -380,7 +420,13 @@ export function ProjectSidebar(
 		catalogueMode,
 		user,
 	}: {
-		accountMenu?: ReactNode;
+		accountMenu?: false | {
+			className: string;
+			closing: boolean;
+			onDismiss: () => void;
+			onShortcuts: () => void;
+			onSignOut: () => void;
+		};
 		accountMenuOpen?: boolean;
 		accountMenuId?: string;
 		accountTriggerRef?: Ref<HTMLButtonElement>;
@@ -391,7 +437,9 @@ export function ProjectSidebar(
 		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
 		currentDocumentId?: string;
 		onAccount: () => void;
+		focusProjectId?: string;
 		onAddProject: () => void;
+		onFocusedProject?: () => void;
 		onCollapse: () => void;
 		onCreateDocument: (project: Api.NavigationProject) => void;
 		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
@@ -422,6 +470,7 @@ export function ProjectSidebar(
 	let archivedButton = useRef<HTMLButtonElement>(null);
 	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
+	let platform = currentShortcutPlatform();
 	let primaryActions = (
 		<div className="project-sidebar-primary-actions">
 			{archiveMode
@@ -459,6 +508,11 @@ export function ProjectSidebar(
 									? "Loading projects…"
 									: "New document"}
 							</span>
+							{!newDocumentPhase && (
+								<kbd aria-hidden="true" className="project-sidebar-hint">
+									{shortcutLabel("new-document", platform)}
+								</kbd>
+							)}
 						</button>
 						<button
 							className="project-sidebar-primary-action"
@@ -467,6 +521,9 @@ export function ProjectSidebar(
 						>
 							<SearchIcon />
 							<span>Search</span>
+							<kbd aria-hidden="true" className="project-sidebar-hint">
+								{shortcutLabel("search", platform)}
+							</kbd>
 						</button>
 					</>
 				)}
@@ -508,6 +565,7 @@ export function ProjectSidebar(
 						className="project-sidebar-action"
 						data-press="small"
 						data-tooltip="Hide sidebar"
+						data-tooltip-shortcut={shortcutLabel("toggle-sidebar", platform)}
 						onClick={onCollapse}
 						type="button"
 					>
@@ -533,6 +591,7 @@ export function ProjectSidebar(
 							</button>
 						)}
 					</div>
+					{newDocumentPhase === "loading" && projects.length === 0 && <ProjectSidebarSkeleton />}
 					<ul className="project-sidebar-projects gap-2">
 						{[...projects].sort((first, second) => first.project.position - second.project.position)
 							.map(entry => (
@@ -542,9 +601,11 @@ export function ProjectSidebar(
 									currentDocumentId={currentDocumentId}
 									entry={entry}
 									expanded={!collapsedProjectIds.has(entry.project.repositoryId)}
+									focus={focusProjectId === entry.project.repositoryId}
 									key={entry.project.repositoryId}
 									onCreateDocument={onCreateDocument}
 									onDocumentAction={onDocumentAction}
+									onFocused={onFocusedProject ?? noop}
 									onLoadMore={onLoadMore}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
@@ -569,7 +630,47 @@ export function ProjectSidebar(
 					<Face decorative handle={user.login} size={20} titled={false} />
 					<span className="truncate">{user.login}</span>
 				</button>
-				{accountMenu}
+				{accountMenu && (
+					<div
+						aria-hidden={accountMenu.closing ? "true" : undefined}
+						className={`navigation-account-menu motion-dropdown ${accountMenu.className}`}
+						id={accountMenuId}
+						inert={accountMenu.closing}
+						onKeyDown={event => {
+							if (event.key === "Tab") return accountMenu.onDismiss();
+							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+							event.preventDefault();
+							let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+							items[
+								menuItemTarget(
+									event.key,
+									items.indexOf(document.activeElement as HTMLElement),
+									items.length,
+								)
+							]
+								?.focus();
+						}}
+						role="menu"
+					>
+						<a href="/auth/github/install" rel="noopener" role="menuitem" target="_blank">
+							<LockIcon aria-hidden="true" size={14} />
+							Manage repository access
+						</a>
+						<button
+							className="navigation-account-menu-item"
+							onClick={accountMenu.onShortcuts}
+							role="menuitem"
+							type="button"
+						>
+							Keyboard shortcuts<kbd aria-hidden="true">?</kbd>
+						</button>
+						<div role="separator" />
+						<button onClick={accountMenu.onSignOut} role="menuitem" type="button">
+							<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
+							Sign out
+						</button>
+					</div>
+				)}
 			</div>
 		</aside>
 	);

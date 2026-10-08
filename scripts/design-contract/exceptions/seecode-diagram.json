@@ -1,0 +1,497 @@
+[
+	{
+		"file": "packages/diagrams/src/viewer/drawing.css",
+		"reason": "SeeCode-derived SVG drawing sizes are retained for the first Chopin font and colour pass because they are coupled to renderer geometry; all selectors are scoped to .ch-diagram and will be tuned with that geometry later.",
+		"cases": [
+			[
+				"typography",
+				"font-size",
+				"12px",
+				"CSS > .ch-diagram .n-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .n-sub",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"7px",
+				"CSS > .ch-diagram .n-tag",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .e-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"7px",
+				"CSS > .ch-diagram .g-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .lg-title",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .lg-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .ax-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .ax-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .c-cat",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .c-val",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .sk-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .sk-val",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .q-frag-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .q-num",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .q-note-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .n-field",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .n-field-t",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"7.5px",
+				"CSS > .ch-diagram .n-key",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"7.5px",
+				"CSS > .ch-diagram .n-change",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .lane-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"20px",
+				"CSS > .ch-diagram .loop-center",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .nest-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .chip-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"13px",
+				"CSS > .ch-diagram .venn-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"13px",
+				"CSS > .ch-diagram .venn-ov",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .fb-cat",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .fb-cause",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8.5px",
+				"CSS > .ch-diagram .kb-head",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .kb-count",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .kb-card",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .sm-act-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8.5px",
+				"CSS > .ch-diagram .q-title",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"19px",
+				"CSS > .ch-diagram .q-title-big",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .q-item",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10.5px",
+				"CSS > .ch-diagram .q-pt-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .mx-col",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .mx-row",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .tl-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .tl-when",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8px",
+				"CSS > .ch-diagram .tl-period-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .g-task",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .g-done",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"7.5px",
+				"CSS > .ch-diagram .g-today-text",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8.5px",
+				"CSS > .ch-diagram .jr-stage",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10.5px",
+				"CSS > .ch-diagram .jr-step",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .jr-note",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10.5px",
+				"CSS > .ch-diagram .ln-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .st-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10px",
+				"CSS > .ch-diagram .sp-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"11px",
+				"CSS > .ch-diagram .tm-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9px",
+				"CSS > .ch-diagram .tm-val",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"9.5px",
+				"CSS > .ch-diagram .tm-sub-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8.5px",
+				"CSS > .ch-diagram .hm-val",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"8.5px",
+				"CSS > .ch-diagram .mk-pct",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"10.5px",
+				"CSS > .ch-diagram .wm-label",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"12px",
+				"CSS > .ch-diagram .wm-label.is-anchor",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"13px",
+				"CSS > .ch-diagram .callout",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/diagrams/src/viewer/motion.css",
+		"reason": "SeeCode-derived step and trace motion keeps renderer-specific delays under reduced-motion gating; these exact scoped declarations are reviewed during the extraction.",
+		"cases": [
+			[
+				"motion",
+				"animation",
+				"sc-in var(--sc-enter) var(--motion-smooth-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-node[data-sc-step],\n\t.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-enter[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-fade calc(var(--duration-base) * 1.2) var(--ease-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-fade calc(var(--duration-base) * 1) var(--ease-out)\n\t\t\tcalc(var(--d) + var(--sc-draw) * 0.8) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step] .e-head,\n\t.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step] .e-glyph,\n\t.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-edge[data-sc-step] .e-label-g",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-draw var(--sc-draw) var(--motion-smooth-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram\n\t\t.sc-svg:is([data-sc-motion=\"trace\"], [data-sc-motion=\"loop\"]):not(.sc-still)\n\t\t.sc-edge[data-sc-step]\n\t\t.e-line.sc-draw",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-grow-y var(--sc-enter) var(--motion-smooth-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-grow-y[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-grow-x var(--sc-enter) var(--motion-smooth-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-grow-x[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-wipe var(--sc-draw) var(--motion-smooth-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-wipe[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-wipe-down var(--sc-draw) var(--motion-smooth-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-wipe-down[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-pop var(--sc-enter) var(--motion-smooth-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-pop[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-fade var(--sc-enter) var(--ease-out) var(--d) both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-fade[data-sc-step]",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"sc-token var(--tok-dur, calc(var(--duration-base) * 9)) linear\n\t\t\tcalc(var(--sc-settle) + var(--tok-delay, 0ms)) infinite both",
+				"CSS > @media (prefers-reduced-motion: no-preference) > .ch-diagram\n\t\t.sc-svg:is([data-sc-motion=\"trace\"], [data-sc-motion=\"loop\"]):not(.sc-still)\n\t\t.e-token",
+				1
+			]
+		]
+	}
+]

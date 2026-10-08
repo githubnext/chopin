@@ -1,31 +1,35 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
+import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
 
 import { motionContract } from "./motion-contract";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 
+import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 
-export type DocumentAction = "rename" | "archive" | "restore" | "delete";
+export type DocumentAction = "copy-link" | "rename" | "archive" | "restore" | "delete";
 
 export type DocumentMenuItem = {
 	action: DocumentAction;
 	label: string;
 	destructive?: boolean;
+	icon: (props: IconProps) => ReactNode;
 };
 
 export function documentMenuItems(channel: Pick<Api.Channel, "archivedAt">): DocumentMenuItem[] {
 	return channel.archivedAt
 		? [
-			{ action: "restore", label: "Restore" },
-			{ action: "delete", label: "Delete permanently", destructive: true },
+			{ action: "restore", label: "Restore", icon: ArrowUpIcon },
+			{ action: "delete", label: "Delete permanently", destructive: true, icon: CloseIcon },
 		]
 		: [
-			{ action: "rename", label: "Rename" },
-			{ action: "archive", label: "Archive" },
+			{ action: "copy-link", label: "Copy link", icon: LinkIcon },
+			{ action: "rename", label: "Rename", icon: PencilIcon },
+			{ action: "archive", label: "Archive", icon: ArchiveIcon },
 		];
 }
 
@@ -218,6 +222,7 @@ export function DocumentActionsMenu(
 							role="menuitem"
 							type="button"
 						>
+							<item.icon aria-hidden="true" size={14} />
 							{item.label}
 						</button>
 					))}

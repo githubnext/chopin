@@ -56,6 +56,7 @@ import type {
 	DecisionView,
 	DecisionViewState,
 	PlanState,
+	Refusal,
 	ResearchLaunchResult,
 } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
@@ -251,6 +252,11 @@ export function Header(
 
 const LOST_EDITS =
 	"Your last edits couldn't be saved because the document changed while you were offline.";
+
+const UNDO_REFUSALS: Record<Refusal, string> = {
+	others: "Others have edited this since.",
+	change: "This change can't be reversed here.",
+};
 
 /** Reconnect attempts a person can make in one outage before Reload is offered. */
 const RECONNECTS_BEFORE_RELOAD = 3;
@@ -948,6 +954,27 @@ export function RoomWorkspace(
 								</button>
 							</div>
 						)}
+						{/* Apart from PlanStatus, which would announce its end as "Reconnected". */}
+						{planState.refused && (
+							<div className="plan-status" data-level="notice">
+								<span aria-hidden="true" className="plan-status-dot" />
+								<span aria-hidden="true" className="plan-status-text">
+									<span
+										className="plan-status-label"
+										data-tooltip={UNDO_REFUSALS[planState.refused.reason]}
+										data-tooltip-verbatim=""
+									>
+										Can't undo
+									</span>
+									<span className="plan-status-detail">
+										{UNDO_REFUSALS[planState.refused.reason]}
+									</span>
+								</span>
+							</div>
+						)}
+						<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
+							{planState.refused && `Can't undo. ${UNDO_REFUSALS[planState.refused.reason]}`}
+						</span>
 						<PlanStatus
 							connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
 							failed={planState.failed}
@@ -979,6 +1006,7 @@ export function RoomWorkspace(
 						questionMotion={QUESTION_MOTION}
 						visualPreview={VisualPreview}
 						reveal={reveal}
+						self={handle}
 						store={questions}
 						wire={wire}
 					/>

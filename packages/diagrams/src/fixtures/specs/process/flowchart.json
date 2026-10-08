@@ -1,0 +1,88 @@
+{
+	"type": "flowchart",
+	"title": "Should this become a diagram?",
+	"nodes": [
+		{
+			"id": "start",
+			"label": "New idea to explain",
+			"shape": "terminal",
+			"row": 0,
+			"col": 1
+		},
+		{
+			"id": "table",
+			"label": "Would a table do?",
+			"shape": "decision",
+			"row": 1,
+			"col": 1
+		},
+		{
+			"id": "usetable",
+			"label": "Write a table",
+			"kind": "muted",
+			"row": 1,
+			"col": 0
+		},
+		{
+			"id": "rel",
+			"label": "Relationships matter?",
+			"shape": "decision",
+			"row": 2,
+			"col": 1
+		},
+		{
+			"id": "prose",
+			"label": "Write a paragraph",
+			"kind": "muted",
+			"row": 2,
+			"col": 2
+		},
+		{
+			"id": "draw",
+			"label": "Draw the diagram",
+			"focal": true,
+			"row": 3,
+			"col": 1
+		},
+		{
+			"id": "done",
+			"label": "Ship it",
+			"shape": "terminal",
+			"row": 4,
+			"col": 1
+		}
+	],
+	"edges": [
+		[
+			"start",
+			"table"
+		],
+		[
+			"table",
+			"usetable",
+			"yes"
+		],
+		[
+			"table",
+			"rel",
+			"no"
+		],
+		[
+			"rel",
+			"prose",
+			"no"
+		],
+		[
+			"rel",
+			"draw",
+			"yes",
+			"primary"
+		],
+		[
+			"draw",
+			"done",
+			"",
+			"primary"
+		]
+	]
+}

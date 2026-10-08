@@ -251,6 +251,12 @@ function LegacyCustom(
 	);
 }
 
+/** The existing option a typed label would repeat, matched like the server does. */
+export function duplicateOf(question: Item, label: string) {
+	let key = label.toLowerCase();
+	return question.options.find(option => option.label.trim().toLowerCase() === key);
+}
+
 /**
  * The last row: a prompt to add an option, which becomes the field for it.
  *
@@ -273,11 +279,13 @@ function AddOption(
 ) {
 	let [text, setText] = useState<string | null>(null);
 	let [pending, setPending] = useState<string | null>(null);
+	let hintId = useId();
 	let input = useRef<HTMLInputElement>(null);
 	let trigger = useRef<HTMLButtonElement>(null);
 	let focus = useRef<"field" | "trigger">(undefined);
 	let edit = useRef(0);
 	let letterIndex = question.options.length + offset;
+	let duplicate = text ? duplicateOf(question, text.trim()) : undefined;
 	useEffect(() => () => {
 		edit.current++;
 	}, []);
@@ -311,7 +319,7 @@ function AddOption(
 
 	let add = async () => {
 		let label = text?.trim();
-		if (!label || !onAdd || pending !== null) return;
+		if (!label || !onAdd || pending !== null || duplicateOf(question, label)) return;
 		let submittedEdit = edit.current;
 		setPending(label);
 		onFailed(undefined);
@@ -357,52 +365,63 @@ function AddOption(
 	}
 
 	return (
-		<div
-			aria-busy={pending !== null || undefined}
-			className="question-choice-row question-option question-adding"
-		>
-			<Key>{letter(letterIndex)}</Key>
-			<input
-				aria-disabled={pending !== null || undefined}
-				aria-label="New option"
-				autoComplete="off"
-				className="question-field"
-				disabled={disabled}
-				maxLength={MAX_LABEL}
-				onBlur={() => {
-					// Only an empty field collapses by itself. Typed text is kept, because
-					// adding an option is visible to everyone and should be deliberate.
-					if (!text.trim() && pending === null) {
-						edit.current++;
-						onCancelEdit?.();
-						setText(null);
-					}
-				}}
-				onChange={event => {
-					onEdit?.();
-					setText(event.currentTarget.value);
-					onFailed(undefined);
-				}}
-				onKeyDown={event => {
-					if (event.key === "Escape") {
-						event.preventDefault();
-						event.stopPropagation();
-						edit.current++;
-						onCancelEdit?.();
-						setText(null);
+		<div className="question-adding-group">
+			<div
+				aria-busy={pending !== null || undefined}
+				className="question-choice-row question-option question-adding"
+			>
+				<Key>{letter(letterIndex)}</Key>
+				<input
+					aria-disabled={pending !== null || undefined}
+					aria-describedby={hintId}
+					aria-invalid={duplicate ? true : undefined}
+					aria-label="New option"
+					autoComplete="off"
+					className="question-field"
+					disabled={disabled}
+					maxLength={MAX_LABEL}
+					onBlur={() => {
+						// Only an empty field collapses by itself. Typed text is kept, because
+						// adding an option is visible to everyone and should be deliberate.
+						if (!text.trim() && pending === null) {
+							edit.current++;
+							onCancelEdit?.();
+							setText(null);
+						}
+					}}
+					onChange={event => {
+						onEdit?.();
+						setText(event.currentTarget.value);
 						onFailed(undefined);
-						focus.current = "trigger";
-					} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-						event.preventDefault();
-						void add();
-					}
-				}}
-				placeholder="Add an option"
-				readOnly={pending !== null}
-				ref={input}
-				value={text}
-			/>
-			{pending !== null && <span className="sr-only" role="status">Adding option</span>}
+					}}
+					onKeyDown={event => {
+						if (event.key === "Escape") {
+							event.preventDefault();
+							event.stopPropagation();
+							edit.current++;
+							onCancelEdit?.();
+							setText(null);
+							onFailed(undefined);
+							focus.current = "trigger";
+						} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+							event.preventDefault();
+							void add();
+						}
+					}}
+					placeholder="Add an option"
+					readOnly={pending !== null}
+					ref={input}
+					value={text}
+				/>
+				{pending !== null && <span className="sr-only" role="status">Adding option</span>}
+			</div>
+			<p
+				className="question-add-hint"
+				id={hintId}
+				role="status"
+			>
+				{duplicate ? `Already an option: ${duplicate.label}` : ""}
+			</p>
 		</div>
 	);
 }
@@ -880,13 +899,13 @@ export function QuestionView(props: QuestionViewProps) {
 								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
 							</div>
 							<span className="flex shrink-0 items-center gap-2">
-								{headerActions}
 								<Presence
 									people={collaborators.filter(person =>
 										person.question === current.id
 									)}
 									render={renderPeople}
 								/>
+								{headerActions}
 							</span>
 						</header>
 

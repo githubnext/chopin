@@ -1,3 +1,4 @@
+export { GitHubIcon } from "./brand";
 export { ChopinIcon } from "./filled";
 export type { IconProps } from "./icon";
 export {
@@ -15,12 +16,14 @@ export {
 	ImageIcon,
 	InfoIcon,
 	LightbulbIcon,
+	LinkIcon,
 	LinkPlusIcon,
 	LockIcon,
 	MagnifierIcon,
 	MessageForwardIcon,
 	MessageIcon,
 	MessagePlusIcon,
+	PencilIcon,
 	PlusIcon,
 	SignInIcon,
 	SirenIcon,

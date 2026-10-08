@@ -66,6 +66,7 @@ image build. A documentation-only change should still pass `bun run ci`.
 | `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                           |
 | `packages/draft`    | Bounded collaborative plain-text drafts                | none                                                 |
 | `packages/viewport` | Browser geometry and subscriptions                     | none                                                 |
+| `packages/diagrams` | Bounded diagram rendering and scoped React viewing     | none (React peer)                                    |
 | `packages/editor`   | Collaborative editor, decisions, comments, and widgets | `dialect`, `question`, `protocol`, `viewport`        |
 | `apps/server`       | Auth, channels, rooms, storage, Planner, MCP, tasks    | `dialect`, `draft`, `question`, `protocol`           |
 | `apps/web`          | Repository picker, navigation, conversation, workspace | `dialect`, `draft`, `editor`, `protocol`, `viewport` |

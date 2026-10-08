@@ -1,0 +1,49 @@
+{
+	"type": "kanban",
+	"title": "SeeCode build board",
+	"columns": [
+		{
+			"label": "Backlog",
+			"cards": [
+				"Gallery page",
+				"Brand onboarding",
+				{
+					"label": "Token benchmark",
+					"tag": "P2"
+				}
+			]
+		},
+		{
+			"label": "In progress",
+			"wip": 2,
+			"cards": [
+				{
+					"label": "Full diagram catalog",
+					"focal": true,
+					"tag": "P0"
+				},
+				{
+					"label": "Importers",
+					"tag": "P1"
+				},
+				{
+					"label": "Docs pass"
+				}
+			]
+		},
+		{
+			"label": "Review",
+			"cards": [
+				"GIF/MP4 export"
+			]
+		},
+		{
+			"label": "Done",
+			"cards": [
+				"Graph router",
+				"Viewer",
+				"Settings"
+			]
+		}
+	]
+}

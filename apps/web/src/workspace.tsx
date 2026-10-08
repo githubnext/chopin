@@ -24,6 +24,8 @@ import "./workspace-sizing.css";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { sidebarMoving, usePaneMotion, usePaneSettledWidth } from "./pane-motion";
+import { listenForShortcuts } from "./global-shortcuts";
+import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 
 import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
 import type {
@@ -162,9 +164,10 @@ export function ChatToggle(
 			aria-controls={controls}
 			aria-description={open ? status : undefined}
 			aria-expanded={open}
-			aria-label={open ? "Close sidebar" : `Show chat pane${status ? `, ${status}` : ""}`}
+			aria-label={open ? "Hide chat" : `Show chat${status ? `, ${status}` : ""}`}
 			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
-			data-tooltip={open ? "Close sidebar" : "Show chat"}
+			data-tooltip={open ? "Hide chat" : "Show chat"}
+			data-tooltip-shortcut={shortcutLabel("toggle-chat", currentShortcutPlatform())}
 			data-tooltip-verbatim={open ? "" : undefined}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
@@ -353,6 +356,24 @@ export function Workspace(
 			focusDestination("chat");
 		});
 	};
+
+	let toggleChat = useRef(() => {});
+	toggleChat.current = () => {
+		if (!presentation.chatVisible) {
+			if (mode === "split") showDesktopChat();
+			else navigate("chat");
+			return;
+		}
+		let pane = root.current?.querySelector(`#${CSS.escape(ids.pane.chat)}`);
+		// Keep focus where it was unless closing the pane would strand it.
+		if (mode !== "split" || pane?.contains(document.activeElement)) dismissChat();
+		else onDesktopChatOpen(false);
+	};
+	let chatShortcutEnabled = !!chat && !paperObscured;
+	useEffect(() => {
+		if (!chatShortcutEnabled) return;
+		return listenForShortcuts(() => ({ "toggle-chat": () => toggleChat.current() }));
+	}, [chatShortcutEnabled]);
 
 	return (
 		<div

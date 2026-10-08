@@ -13,6 +13,8 @@ test(
 		await page.keyboard.press("ArrowDown");
 		let menu = page.getByRole("menu", { name: actions, exact: true });
 		await expect(menu).toBeVisible();
+		await expect(menu.getByRole("menuitem", { name: "Copy link", exact: true })).toBeFocused();
+		await page.keyboard.press("ArrowDown");
 		await expect(menu.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
 		await page.keyboard.press("ArrowDown");
 		let archive = menu.getByRole("menuitem", { name: "Archive", exact: true });
