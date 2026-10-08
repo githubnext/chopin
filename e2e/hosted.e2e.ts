@@ -524,6 +524,7 @@ test("returning from GitHub App setup invalidates the tab cache", async ({ baseU
 
 	await page.goto("/auth/github/setup?installation_id=101");
 	await expect(page).toHaveURL("/");
+	await openAddProject(page);
 	await expect(repositoryOption(page, "archive-12")).toBeVisible();
 });
 
@@ -606,6 +607,7 @@ test("the Add project dialog retries and appends unique background pages", async
 		}
 	});
 	await page.goto("/");
+	await openAddProject(page);
 
 	await expect(page.getByRole("alert")).toBeVisible();
 	await page.getByRole("button", { name: "Try again" }).click();
