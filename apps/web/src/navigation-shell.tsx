@@ -523,6 +523,15 @@ export function NavigationShell(
 	}, [mode]);
 
 	useEffect(() => {
+		if (
+			route.page !== "channel" && route.page !== "document" && route.page !== "child"
+			&& navigation?.projects.length === 0
+		) {
+			showDialog("add");
+		}
+	}, [navigation?.projects.length, route.page]);
+
+	useEffect(() => {
 		if (!focusProjectId) return;
 		let frame = requestAnimationFrame(() => {
 			let project = document.querySelector<HTMLElement>(
@@ -534,15 +543,6 @@ export function NavigationShell(
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [focusProjectId, projects]);
-
-	useEffect(() => {
-		if (
-			route.page !== "channel" && route.page !== "document" && route.page !== "child"
-			&& navigation?.projects.length === 0
-		) {
-			showDialog("add");
-		}
-	}, [navigation?.projects.length, route.page]);
 
 	let navigateToDocument = (documentId: string, path?: string) => {
 		setError(undefined);
