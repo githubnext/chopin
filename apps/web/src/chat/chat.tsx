@@ -155,12 +155,11 @@ function keepDraft(room: string, draft: ComposerDraft): void {
 	}
 }
 
-/** The message a reload interrupted, once; anything malformed starts empty. */
+/** The message a reload interrupted; anything malformed starts empty. */
 function restoreDraft(room: string): ComposerDraft {
 	let empty = { text: "", references: [] };
 	try {
 		let raw = sessionStorage.getItem(draftKey(room));
-		sessionStorage.removeItem(draftKey(room));
 		if (!raw) return empty;
 		let saved = JSON.parse(raw) as Partial<ComposerDraft>;
 		if (typeof saved.text !== "string") return empty;
@@ -236,12 +235,9 @@ export function Chat(
 	let draftRef = useRef(draft);
 	draftRef.current = draft;
 	// A reload, including the header's fallback when reconnecting keeps
-	// failing, must not take an unsent message with it.
-	useEffect(() => {
-		let save = () => keepDraft(room, draftRef.current);
-		addEventListener("pagehide", save);
-		return () => removeEventListener("pagehide", save);
-	}, [room]);
+	// failing, must not take an unsent message with it. Kept as it changes
+	// rather than on unload, which a browser does not promise to announce.
+	useEffect(() => keepDraft(room, draft), [room, draft]);
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let commandPickerId = useId();
