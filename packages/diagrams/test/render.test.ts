@@ -63,6 +63,118 @@ test("geometry checks do not reject ordinary text that names an invalid number",
 	expect(result.ok).toBe(true);
 });
 
+test("missing chart data suggests inline data only", () => {
+	let result = renderDiagram({ type: "bar" });
+	expect(result.ok).toBe(false);
+	if (result.ok) return;
+	expect(result.problems[0]?.fix).toContain('"data"');
+	expect(result.problems[0]?.fix).not.toContain("path");
+});
+
+test("inherited object property names cannot bypass closed schemas", () => {
+	let input = JSON.parse(
+		'{"type":"architecture","nodes":[{"id":"a","label":"A","row":0,"col":0,"toString":"hidden"}]}',
+	);
+	let result = renderDiagram(input);
+	expect(result.ok).toBe(false);
+	if (result.ok) return;
+	expect(result.problems[0]).toMatchObject({
+		code: "E_SPEC",
+		at: "nodes[0].toString",
+		msg: "unknown field",
+	});
+});
+
+test("parallel graph edges have distinct tracing IDs in metadata and SVG", () => {
+	let result = renderDiagram({
+		type: "architecture",
+		nodes: [
+			{ id: "a", label: "A", row: 0, col: 0 },
+			{ id: "b", label: "B", row: 0, col: 1 },
+		],
+		edges: [["a", "b"], ["a", "b"], ["a", "b"]],
+	});
+	expect(result.ok).toBe(true);
+	if (!result.ok) return;
+	let ids = result.graph?.edges.map((edge) => edge.id);
+	expect(ids).toEqual(["a-b", "a-b-2", "a-b-3"]);
+	expect([...result.body.matchAll(/data-sc-edge="([^"]+)"/g)].map((match) => match[1])).toEqual(
+		ids,
+	);
+
+	let withExplicit = renderDiagram({
+		type: "architecture",
+		nodes: [
+			{ id: "a", label: "A", row: 0, col: 0 },
+			{ id: "b", label: "B", row: 0, col: 1 },
+		],
+		edges: [{ id: "a-b-2", from: "a", to: "b" }, ["a", "b"], ["a", "b"], {
+			id: "a-b",
+			from: "a",
+			to: "b",
+		}],
+	});
+	expect(withExplicit.ok).toBe(true);
+	if (withExplicit.ok) {
+		let explicitIds = withExplicit.graph?.edges.map((edge) => edge.id);
+		expect(explicitIds).toEqual(["a-b-2", "a-b-3", "a-b-4", "a-b"]);
+		expect([...withExplicit.body.matchAll(/data-sc-edge="([^"]+)"/g)].map((match) => match[1]))
+			.toEqual(explicitIds);
+	}
+});
+
+test("kanban card IDs are nonempty and unique, and duplicate explicit IDs fail", () => {
+	let valid = renderDiagram({
+		type: "kanban",
+		columns: [
+			{ label: "Doing", cards: [{ id: "", label: "First" }, { id: "c0_0", label: "Second" }] },
+			{ label: "Done", cards: ["Third"] },
+		],
+	});
+	expect(valid.ok).toBe(true);
+	if (valid.ok) {
+		let ids = valid.graph?.nodes.map((node) => node.id) || [];
+		expect(ids.every(Boolean)).toBe(true);
+		expect(new Set(ids).size).toBe(ids.length);
+		expect([...valid.body.matchAll(/data-sc-node="([^"]+)"/g)].map((match) => match[1]))
+			.toEqual(ids);
+	}
+	let duplicate = renderDiagram({
+		type: "kanban",
+		columns: [
+			{ label: "Doing", cards: [{ id: "same", label: "First" }] },
+			{ label: "Done", cards: [{ id: "same", label: "Second" }] },
+		],
+	});
+	expect(duplicate.ok).toBe(false);
+	if (!duplicate.ok) {
+		expect(duplicate.problems[0]).toMatchObject({
+			code: "E_DUP_ID",
+			at: "columns[1].cards[0].id",
+		});
+	}
+});
+
+test("tree edge IDs stay unique when node IDs contain hyphens", () => {
+	let result = renderDiagram({
+		type: "tree",
+		root: {
+			id: "root",
+			label: "Root",
+			children: [
+				{ id: "a-b", label: "First", children: [{ id: "c", label: "Leaf one" }] },
+				{ id: "a", label: "Second", children: [{ id: "b-c", label: "Leaf two" }] },
+			],
+		},
+	});
+	expect(result.ok).toBe(true);
+	if (!result.ok) return;
+	let ids = result.graph?.edges.map((edge) => edge.id) || [];
+	expect(ids).toEqual(["e0", "e1", "e2", "e3"]);
+	expect([...result.body.matchAll(/data-sc-edge="([^"]+)"/g)].map((match) => match[1]))
+		.toEqual(ids);
+});
+
 test("invalid and privileged input fails with structured problems", () => {
 	let cases: Array<[unknown, string]> = [
 		[{ type: "constructor" }, "E_TYPE"],

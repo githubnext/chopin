@@ -105,7 +105,7 @@ export function render(spec) {
 	const edgeNodes = all.filter((n) => n.parent);
 	edgeNodes.forEach((n, i) => (n.edgeStep = steps[all.length + i]));
 
-	const edges = edgeNodes.map((n) => {
+	const edges = edgeNodes.map((n, i) => {
 		const p = n.parent;
 		let pts;
 		if (horiz) {
@@ -123,7 +123,7 @@ export function render(spec) {
 		}
 		return el("g", {
 			class: `sc-edge ek-${n.kind === "focal" ? "primary" : "muted"}`,
-			"data-sc-edge": `${p.id}-${n.id}`,
+			"data-sc-edge": `e${i}`,
 			"data-from": p.id,
 			"data-to": n.id,
 			"data-sc-step": n.edgeStep,
@@ -143,7 +143,7 @@ export function render(spec) {
 		problems,
 		graph: {
 			nodes: all.map((n) => ({ id: n.id, label: n.label })),
-			edges: edgeNodes.map((n) => ({ id: `${n.parent.id}-${n.id}`, from: n.parent.id, to: n.id })),
+			edges: edgeNodes.map((n, i) => ({ id: `e${i}`, from: n.parent.id, to: n.id })),
 		},
 	};
 }
