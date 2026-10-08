@@ -212,7 +212,8 @@ test("the research draft stays fully visible as its anchor nears an edge", async
 	let scroller = page.locator("[data-plan-scroll]");
 	// Wheel input, like a reader's, also ends the opening reveal.
 	let pane = (await scroller.boundingBox())!;
-	await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+	// Use the pane gutter so the draft's textarea does not consume the wheel gesture.
+	await page.mouse.move(pane.x + 8, pane.y + pane.height / 2);
 	await page.mouse.wheel(
 		0,
 		await scroller.evaluate(element => {
