@@ -26,6 +26,36 @@ async function capture(view: Locator, name: string) {
 	mkdirSync(captureDirectory, { recursive: true });
 	try {
 		await page.setViewportSize({ ...viewport, height: 2200 });
+		await view.scrollIntoViewIfNeeded();
+		let images = await view.locator("img").evaluateAll(async elements =>
+			Promise.all(elements.map(async element => {
+				let image = element as HTMLImageElement;
+				let timer: ReturnType<typeof setTimeout> | undefined;
+				let state = await Promise.race([
+					image.decode().then(() => "decoded" as const, () => "unavailable" as const),
+					new Promise<"timeout">(resolve => {
+						timer = setTimeout(() => resolve("timeout"), 10_000);
+					}),
+				]);
+				if (timer) clearTimeout(timer);
+				return { alt: image.alt, state, width: image.naturalWidth };
+			}))
+		);
+		let failed = images.find(image => image.state !== "decoded" || image.width === 0);
+		let fallback = await view.getByRole("img", { name: /^Image unavailable:/ }).count();
+		if (failed || fallback) {
+			let reason = failed
+				? `Image ${failed.state} (${failed.width}px): ${failed.alt}`
+				: `${fallback} image-unavailable fallback(s) shown`;
+			let path = fileURLToPath(
+				new URL(name.replace(/\.png$/, "-image-failure.png"), captureDirectory),
+			);
+			let saved = await view.screenshot({ path, animations: "disabled" }).then(
+				() => path,
+				() => undefined,
+			);
+			throw new Error(`OpenUI capture failed: ${reason}${saved ? `; diagnostic: ${saved}` : ""}`);
+		}
 		await view.screenshot({
 			path: fileURLToPath(new URL(name, captureDirectory)),
 			animations: "disabled",
