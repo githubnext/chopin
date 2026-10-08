@@ -84,3 +84,21 @@ test("rejects reserved IDs even when their baseline values exist", () => {
 		).toBe(false);
 	}
 });
+
+test("rejects half-step values when the step count is large", () => {
+	let result = validateDefinition({
+		controls: [{
+			type: "number",
+			id: "distance",
+			label: "Distance",
+			unit: "m",
+			min: 0,
+			max: 1e9,
+			step: 1e-6,
+		}],
+		baseline: { distance: 0 },
+	});
+	if (!result.ok) throw new Error(result.error.message);
+	expect(validateSnapshot(result.value, { distance: 500000000.0000005 }).ok).toBe(false);
+	expect(validateSnapshot(result.value, { distance: 500000000 }).ok).toBe(true);
+});
