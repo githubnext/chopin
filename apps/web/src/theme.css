@@ -492,6 +492,54 @@ body {
 		scale var(--duration-fast) var(--ease-out);
 }
 
+/*
+ * The shared menu recipe. Items mark the keyboard or pointer row with
+ * `data-active`; `aria-selected` stays free for a chosen value.
+ */
+.menu-surface {
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-overlay);
+	font-size: var(--text-sm);
+}
+
+.menu-item {
+	display: flex;
+	min-height: var(--menu-item-height);
+	width: 100%;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	border-radius: var(--radius-sm);
+	padding: 0 calc(var(--spacing) * 2);
+	text-align: left;
+	font-size: var(--text-sm);
+	color: var(--color-text-primary);
+}
+
+.menu-item:hover {
+	background: var(--color-hover);
+}
+
+.menu-item[data-active] {
+	background: var(--color-selected);
+}
+
+/* Surfaces that mount already open (no presence class) ease in the same way. */
+.menu-surface[data-menu-enter] {
+	transform-origin: bottom left;
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+
+	@starting-style {
+		opacity: 0;
+		transform: scale(var(--dropdown-pre-scale));
+	}
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -1507,6 +1555,7 @@ button.question-add:disabled {
 		animation: none;
 	}
 
+	.menu-surface[data-menu-enter],
 	.motion-dropdown,
 	.motion-popover,
 	.motion-panel,

@@ -18,6 +18,7 @@ export type ReferenceTarget = {
 	channelId: string;
 	title: string;
 	slug?: string;
+	child?: boolean;
 	description?: string;
 };
 

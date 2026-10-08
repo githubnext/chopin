@@ -33,8 +33,9 @@ export function MentionPicker(
 
 	return (
 		<div
-			className="absolute bottom-full left-2.5 z-30 mb-1 w-max min-w-48 max-w-[calc(100%-1.25rem)] overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-resting-strong"
+			className="absolute bottom-full left-2.5 z-30 mb-1 w-max min-w-48 max-w-[calc(100%-1.25rem)] overflow-y-auto menu-surface"
 			data-chat-mention-picker=""
+			data-menu-enter=""
 			data-focus-boundary=""
 			style={{ maxHeight: `min(${LIST_HEIGHT}, 45dvh, 45vh)` }}
 		>
@@ -43,9 +44,8 @@ export function MentionPicker(
 					<button
 						aria-label={option.login}
 						aria-selected={index === active}
-						className={`flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-sm ${
-							index === active ? "bg-selected" : "hover:bg-hover"
-						}`}
+						className="menu-item"
+						data-active={index === active || undefined}
 						id={referenceOptionId(id, index)}
 						key={option.login.toLowerCase()}
 						onClick={() => onSelect(option)}
