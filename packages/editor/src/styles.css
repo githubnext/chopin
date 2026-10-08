@@ -1501,6 +1501,28 @@
 	--plan-table-columns: 6;
 }
 
+/* Name an empty header for what it holds. Counted per header cell, out of flow. */
+.plan-content table tr:first-of-type {
+	counter-reset: plan-column;
+}
+
+.plan-content table tr:first-of-type > th {
+	counter-increment: plan-column;
+}
+
+.plan-content[contenteditable="true"] th > p:only-child:has(> br:only-child) {
+	position: relative;
+}
+
+.plan-content[contenteditable="true"] th > p:only-child:has(> br:only-child)::before {
+	content: "Column " counter(plan-column);
+	position: absolute;
+	inset-inline-start: 0;
+	color: var(--color-text-quaternary);
+	font-weight: 500;
+	pointer-events: none;
+}
+
 /* The paragraph owns the wide row; the image keeps its intrinsic size inside it. */
 .plan-content
 	> p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child) {
@@ -2558,8 +2580,160 @@
 	margin-block-end: 0.5rem;
 }
 
+.plan-content .plan-tab-strip {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1);
+	padding-block-end: calc(var(--spacing) * 1);
+	border-block-end: var(--edge-width) solid var(--color-edge);
+}
+
+.plan-content .plan-tab {
+	--plan-tab-surface: var(--color-page);
+	position: relative;
+	display: flex;
+	flex-shrink: 0;
+	border-radius: var(--radius-md);
+	background: var(--plan-tab-surface);
+	color: var(--color-text-quaternary);
+	transition:
+		color var(--duration-fast) var(--ease-out),
+		background-color var(--duration-fast) var(--ease-out);
+}
+
+.plan-content .plan-tab:hover {
+	--plan-tab-surface: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.plan-content .plan-tab[data-selected] {
+	--plan-tab-surface: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+/*
+ * Remove sits over the end of the label rather than in reserved space, so a
+ * strip at rest keeps its even padding. The surface colour and a short fade
+ * cover the letters it overlaps.
+ */
+.plan-content .plan-tab-remove {
+	position: absolute;
+	inset-block-start: calc(50% - var(--spacing) * 2);
+	inset-inline-end: calc(var(--spacing) * 1);
+	display: grid;
+	place-items: center;
+	inline-size: calc(var(--spacing) * 4);
+	block-size: calc(var(--spacing) * 4);
+	border-radius: var(--radius-sm);
+	background: var(--plan-tab-surface);
+	color: var(--color-text-tertiary);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* Fades the label out ahead of the button; not part of its target. */
+.plan-content .plan-tab-remove::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-end: 100%;
+	inline-size: calc(var(--spacing) * 2);
+	background: linear-gradient(to right, transparent, var(--plan-tab-surface));
+	pointer-events: none;
+}
+
+.plan-content .plan-tab:hover .plan-tab-remove {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+/* Armed: a tab with content waits for a second remove. */
+.plan-content .plan-tab[data-armed] {
+	--plan-tab-surface: var(--color-danger-surface);
+	color: var(--color-danger-text);
+}
+
+/* Make room so the whole label stays readable while it asks. */
+.plan-content .plan-tab[data-armed] > [role="tab"] {
+	padding-inline-end: calc(var(--spacing) * 6);
+}
+
+.plan-content .plan-tab[data-armed] .plan-tab-remove {
+	color: var(--color-danger-icon);
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.plan-content .plan-tab:not([data-armed]) .plan-tab-remove:hover {
+	color: var(--color-text-primary);
+}
+
+.plan-content .plan-tab-add {
+	flex-shrink: 0;
+	opacity: 0;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.plan-content .planTabs:hover .plan-tab-add,
+.plan-content .plan-tab-strip:focus-within .plan-tab-add {
+	opacity: 1;
+}
+
+/* Without hover, show what a tap can reach: add, and remove on the open tab. */
+@media (hover: none) {
+	.plan-content .plan-tab-add,
+	.plan-content .plan-tab[data-selected] .plan-tab-remove {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+/* The field sizes to its text: the hidden copy sets the width the input fills. */
+.plan-content .plan-tab-rename {
+	display: inline-grid;
+	flex-shrink: 0;
+	max-inline-size: 16rem;
+}
+
+.plan-content .plan-tab-rename > * {
+	grid-area: 1 / 1;
+	min-inline-size: 4rem;
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2.5);
+}
+
+.plan-content .plan-tab-rename > span {
+	visibility: hidden;
+	overflow: hidden;
+	white-space: pre;
+}
+
+.plan-content .plan-tab-rename > input {
+	inline-size: 100%;
+	font: inherit;
+}
+
+/* A rule closes the panel so the block after it reads as outside the tabs. */
+.plan-content [data-plan-panels] {
+	padding-block-end: calc(var(--spacing) * 2);
+	border-block-end: var(--edge-width) solid var(--color-edge);
+}
+
 .plan-content [data-plan-panels] > [hidden] {
 	display: none;
+}
+
+/* Like the formula placeholder: out of flow, so the caret stays where it is. */
+.plan-content[contenteditable="true"] .planTab > p:only-child:has(> br:only-child) {
+	position: relative;
+}
+
+.plan-content[contenteditable="true"] .planTab > p:only-child:has(> br:only-child)::before {
+	content: "Write in this tab…";
+	position: absolute;
+	inset-inline-start: 0;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
 }
 
 /* Status ----------------------------------------------------------------- */
