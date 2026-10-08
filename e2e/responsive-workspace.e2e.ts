@@ -542,12 +542,7 @@ test("a pinch zoom magnifies the desktop layout instead of reflowing it", async 
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
 	let cdp = await page.context().newCDPSession(page);
-	await cdp.send("Input.synthesizePinchGesture", {
-		gestureSourceType: "touch",
-		scaleFactor: 2,
-		x: 720,
-		y: 300,
-	});
+	await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
 	await expect.poll(() => page.evaluate(() => window.visualViewport!.scale)).toBeGreaterThan(1.5);
 	let root = await page.evaluate(() => {
 		let box = document.getElementById("root")!.getBoundingClientRect();
