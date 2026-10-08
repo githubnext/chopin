@@ -42,6 +42,7 @@ import type {
 	UserState,
 } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
+import type { Refusal } from "./history";
 import type { PlanProviderOptions } from "./provider";
 
 export type CollaborationOptions = Omit<PlanProviderOptions, "doc"> & {
@@ -49,6 +50,8 @@ export type CollaborationOptions = Omit<PlanProviderOptions, "doc"> & {
 	user: { name: string; color: string };
 	onProvider?: (provider: PlanProvider | undefined) => void;
 	onBinding?: (binding: Binding | undefined) => void;
+	/** An undo or redo this person asked for could not be applied safely. */
+	onUndoRefused?: (reason: Refusal) => void;
 };
 
 const DOC = "plan";
@@ -135,7 +138,9 @@ function Collaboration(options: CollaborationOptions) {
 			},
 		);
 
-		let history = registerPlanHistory(editor, binding);
+		let history = registerPlanHistory(editor, binding, {
+			onRefused: reason => options.onUndoRefused?.(reason),
+		});
 		let observer = (events: unknown[], transaction: { origin: unknown }) => {
 			if (transaction.origin !== binding) {
 				let undone = transaction.origin instanceof Y.UndoManager;

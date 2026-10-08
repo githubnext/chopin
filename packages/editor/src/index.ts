@@ -32,6 +32,7 @@ export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
+export type { Refusal } from "./history";
 export { usePointerCapabilities } from "./pointer";
 export { usePopoverDismissal } from "./popover-dismissal";
 export { PlanProvider } from "./provider";
