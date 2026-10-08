@@ -303,6 +303,112 @@ test("hiding the source leaves what was drawn from it", async ({ join, seed }) =
 });
 
 /*
+ * Getting into a rendered block.
+ *
+ * The preview is derived and cannot take a caret, so every way of arriving at
+ * one has to end with the caret in the source, or with focus on the preview
+ * and a key that leads into the source from there. Typing is how each test
+ * proves where the caret went: the file is the only witness that cannot be
+ * fooled by a caret drawn somewhere it is not.
+ */
+
+test("clicking drawn code opens its source at the clicked line", async ({ join, room, seed }) => {
+	await seed("```ts\nlet a = 1;\nlet b = 2;\n```\n");
+	let page = await join("ana");
+	let block = content(page).locator(".planCode");
+
+	await block.locator("[data-line='2']").click();
+
+	// One copy: the source replaces the coloured lines rather than joining them.
+	await expect(block.locator("[data-plan-source]")).toBeVisible();
+	await expect(block.locator("[data-file]")).toBeHidden();
+	await expect(content(page)).toBeFocused();
+	await page.keyboard.type("X");
+	await written(page, room, /^let a = 1;\n[^\n]*X[^\n]*\n```/m);
+
+	await page.keyboard.press("Escape");
+	await expect(block.locator("[data-plan-source]")).toBeHidden();
+	await expect(block.getByRole("group", { name: "Code preview" })).toBeFocused();
+});
+
+test("clicking a drawn diff line opens the patch at that line", async ({ join, room, seed }) => {
+	await seed(PATCH);
+	let page = await join("ana");
+
+	await content(page).locator("[data-line][data-line-type='change-addition']").first().click();
+	await page.keyboard.type("X");
+
+	await written(page, room, /^\+(?=[^\n]*rotate)[^\n]*X[^\n]*$/m);
+});
+
+test("a focused preview opens on Enter, Space or typing, and never scrolls", async ({ join, room, seed }) => {
+	await seed("```ts\nlet a = 1;\n```\n");
+	let page = await join("ana");
+	let block = content(page).locator(".planCode");
+	let preview = block.getByRole("group", { name: "Code preview" });
+	let scroller = page.locator("[data-plan-scroll]");
+
+	await preview.focus();
+	let before = await scroller.evaluate(node => node.scrollTop);
+	await page.keyboard.press("Space");
+	await expect(block.locator("[data-plan-source]")).toBeVisible();
+	expect(await scroller.evaluate(node => node.scrollTop)).toBe(before);
+
+	await page.keyboard.press("Escape");
+	await expect(preview).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(content(page)).toBeFocused();
+
+	await page.keyboard.press("Escape");
+	await expect(preview).toBeFocused();
+	await page.keyboard.type("Z");
+	await written(page, room, /^let a = 1;Z$/m);
+});
+
+test("arrows step into code, onto a diagram, and out again", async ({ join, room, seed }) => {
+	await seed("Before\n\n```ts\nlet a = 1;\n```\n\n```mermaid\ngraph TD;\nA-->B;\n```\n\nAfter\n");
+	let page = await join("ana");
+	let [code, diagram] = [
+		content(page).locator(".planCode").nth(0),
+		content(page).locator(".planCode").nth(1),
+	];
+	let region = diagram.getByRole("region", { name: "Diagram preview" });
+	await expect(region).toBeVisible();
+	await expect(code.locator("[data-file]")).toBeVisible();
+
+	// A hidden source has no layout, so the browser alone would skip both.
+	await content(page).getByText("Before").click();
+	await page.keyboard.press("ArrowDown");
+	await expect(code.locator("[data-plan-source]")).toBeVisible();
+	await page.keyboard.type("Q");
+	await written(page, room, /^Qlet a = 1;$/m);
+
+	// A drawing is held as a block, not opened: arrowing past it is reading.
+	await page.keyboard.press("ArrowDown");
+	await expect(region).toBeFocused();
+	await expect(code.locator("[data-plan-source]")).toBeHidden();
+	await expect(diagram.locator("[data-plan-source]")).toBeHidden();
+
+	// Enter edits it, with the drawing kept above; Escape comes back.
+	await page.keyboard.press("Enter");
+	await expect(diagram.locator("[data-plan-source]")).toBeVisible();
+	await expect(region).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(region).toBeFocused();
+	await expect(diagram.locator("[data-plan-source]")).toBeHidden();
+
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.type("!");
+	await written(page, room, /^!After$/m);
+
+	await page.keyboard.press("ArrowUp");
+	await expect(region).toBeFocused();
+	await page.keyboard.press("ArrowUp");
+	await page.keyboard.type("R");
+	await written(page, room, /^RQlet a = 1;$/m);
+});
+
+/*
  * Two people in one fence.
  *
  * What is drawn is a projection of the shared source, so the thing worth
