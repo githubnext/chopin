@@ -158,7 +158,8 @@ test("inventory rebase advice is freshly confirmed before scheduling history rep
 			{ rebaseable: null, behind: 0, mergeable: true, action: "verify" },
 			{ rebaseable: true, behind: 0, mergeable: true, action: "ready" },
 			{ rebaseable: false, behind: 0, mergeable: true, action: "rebase" },
-			{ rebaseable: null, behind: 1, mergeable: true, action: "rebase" },
+			{ rebaseable: null, behind: 1, mergeable: true, action: "verify" },
+			{ rebaseable: true, behind: 1, mergeable: true, action: "ready" },
 			{ rebaseable: true, behind: 1, mergeable: false, action: "conflict" },
 		]
 	) {
@@ -176,6 +177,73 @@ test("inventory rebase advice is freshly confirmed before scheduling history rep
 		expect((await inspectReadiness("a/b", { ...row, action: "rebase" }, request)).action)
 			.toBe(state.action);
 	}
+});
+
+test("behind mergeable branches repair failed CI unless the base must be current", async () => {
+	for (let strict of [false, true]) {
+		let base = transport();
+		let request = async (method, path) => {
+			if (path.includes("/compare/")) return { behind_by: 1 };
+			if (path.includes("/runs?")) {
+				let response = await base(method, path);
+				return {
+					workflow_runs: response.workflow_runs.map(run => ({ ...run, conclusion: "failure" })),
+				};
+			}
+			if (path.includes("/rules/")) {
+				return [{
+					type: "required_status_checks",
+					parameters: {
+						strict_required_status_checks_policy: strict,
+						required_status_checks: [],
+					},
+				}];
+			}
+			return base(method, path);
+		};
+		expect((await inspectReadiness("a/b", { ...row, action: "repair" }, request)).action)
+			.toBe(strict ? "rebase" : "repair");
+	}
+});
+
+test("classic branch protection can require an up-to-date head", async () => {
+	let base = transport();
+	let request = async (method, path) => {
+		if (path.includes("/compare/")) return { behind_by: 1 };
+		if (path === "/repos/a/b/branches/main") {
+			return {
+				commit: { sha: "base" },
+				protection: {
+					enabled: true,
+					required_status_checks: { strict: true, checks: [], contexts: [] },
+				},
+			};
+		}
+		return base(method, path);
+	};
+	expect((await inspectReadiness("a/b", row, request)).action).toBe("rebase");
+});
+
+test("a true conflict supersedes a stale inventory CI action", async () => {
+	let base = transport();
+	let request = async (method, path) => {
+		let response = await base(method, path);
+		return path.includes("/pulls/") ? { ...response, mergeable: false } : response;
+	};
+	expect((await inspectReadiness("a/b", { ...row, action: "repair" }, request)).action)
+		.toBe("conflict");
+});
+
+test("a conflict first seen on the final PR read dispatches conflict repair", async () => {
+	let base = transport();
+	let pulls = 0;
+	let request = async (method, path) => {
+		let response = await base(method, path);
+		if (!path.includes("/pulls/")) return response;
+		return { ...response, mergeable: ++pulls !== 2 };
+	};
+	expect((await inspectReadiness("a/b", row, request)).action).toBe("conflict");
+	expect(pulls).toBe(2);
 });
 test("required rules are app bound and failures override green CI", async () => {
 	expect((await inspectReadiness("a/b", row, transport({ required: true, failed: true }))).action)

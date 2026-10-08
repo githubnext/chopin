@@ -41,16 +41,35 @@ export async function inspectReadiness(repository, row, request) {
 			|| pr.head.sha !== row.head || pr.head.ref !== row.branch || pr.base.ref !== row.base
 			|| base.sha !== row.baseHead
 		) return { ...result, action: "verify" };
-		if (!["ready", "waiting-ci", "repair", "waiting-parent", "rebase"].includes(row.action)) {
+		if (
+			!["ready", "waiting-ci", "repair", "waiting-parent", "rebase", "conflict"]
+				.includes(row.action)
+		) {
 			return result;
 		}
+		if (pr.mergeable === false) return { ...result, action: "conflict" };
+		if (pr.mergeable !== true) return { ...result, action: "verify" };
 		let comparison = await get(`/compare/${base.sha}...${row.head}`);
-		if (["waiting-parent", "rebase"].includes(row.action)) {
-			if (pr.mergeable === false) return { ...result, action: "conflict" };
-			if (comparison.behind_by > 0) return { ...result, action: "rebase" };
+		if (!Number.isSafeInteger(comparison.behind_by) || comparison.behind_by < 0) {
+			return { ...result, action: "verify" };
 		}
-		if (pr.mergeable !== true || comparison.behind_by !== 0) return { ...result, action: "verify" };
+		let branch = await get(`/branches/${encodeURIComponent(row.base)}`);
+		if (branch.commit?.sha !== row.baseHead) return { ...result, action: "verify" };
+		let protection = branch.protection;
+		if (protection?.enabled !== true && protection?.enabled !== false) {
+			throw new Error("Unknown classic protection");
+		}
+		rules ??= await pages(`/rules/branches/${encodeURIComponent(row.base)}`);
 		let replay = await replayAction(pr);
+		if (
+			!replay && comparison.behind_by > 0 && (
+				protection?.enabled === true && protection.required_status_checks?.strict === true
+				|| rules.some(rule =>
+					rule.type === "required_status_checks"
+					&& rule.parameters?.strict_required_status_checks_policy === true
+				)
+			)
+		) replay = "rebase";
 		if (replay) {
 			let fresh = await get(`/pulls/${row.number}`);
 			let currentBase = await get(`/commits/${encodeURIComponent(row.base)}`);
@@ -78,9 +97,6 @@ export async function inspectReadiness(repository, row, request) {
 		)
 			.sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null;
 		let required = [];
-		let branch = await get(`/branches/${encodeURIComponent(row.base)}`);
-		if (branch.commit?.sha !== row.baseHead) return { ...result, action: "verify" };
-		let protection = branch.protection;
 		if (protection?.enabled === true) {
 			let checks = protection.required_status_checks?.checks;
 			let contexts = protection.required_status_checks?.contexts;
@@ -92,8 +108,7 @@ export async function inspectReadiness(repository, row, request) {
 			required.push(
 				...checks.map(check => ({ context: check.context, integration_id: check.app_id })),
 			);
-		} else if (protection?.enabled !== false) throw new Error("Unknown classic protection");
-		rules ??= await pages(`/rules/branches/${encodeURIComponent(row.base)}`);
+		}
 		for (let rule of rules) {
 			if (rule.type !== "required_status_checks") continue;
 			if (!Array.isArray(rule.parameters?.required_status_checks)) {
@@ -154,8 +169,10 @@ export async function inspectReadiness(repository, row, request) {
 		if (
 			fresh.state !== "open" || fresh.head.repo?.full_name !== repository
 			|| fresh.head.sha !== row.head || fresh.base.ref !== row.base || fresh.head.ref !== row.branch
-			|| fresh.mergeable !== true || currentBase.sha !== row.baseHead
+			|| currentBase.sha !== row.baseHead
 		) result.action = "verify";
+		else if (fresh.mergeable === false) result.action = "conflict";
+		else if (fresh.mergeable !== true) result.action = "verify";
 		else {
 			let replay = await replayAction(fresh);
 			if (replay) result.action = replay;

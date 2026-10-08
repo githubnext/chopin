@@ -120,7 +120,7 @@ export async function coordinate({
 			head: next.active.head,
 			baseHead: next.active.baseHead,
 			action: next.active.action,
-			operation: next.active.action === "repair" ? "fix" : "rebase",
+			operation: next.active.operation === "repair" ? "fix" : next.active.operation,
 		});
 	}
 	payload.revision++;

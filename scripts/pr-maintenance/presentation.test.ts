@@ -92,6 +92,22 @@ test("label permissions propagate rather than creating labels", async () => {
 	await expect(reportMaintenance(config)).rejects.toThrow("forbidden");
 });
 
+test("unchanged state does not rewrite a comment for a new coordinator run", async () => {
+	let config = fixture();
+	let state = {
+		...config.state,
+		status: "working",
+		blocker: null,
+		head: "a".repeat(40),
+		baseHead: "b".repeat(40),
+	};
+	await reportMaintenance({ ...config, state });
+	config.pr.labels.push({ name: "maintenance:working" });
+	config.writes.length = 0;
+	await reportMaintenance({ ...config, state, runUrl: "https://example.test/another-run" });
+	expect(config.writes).toHaveLength(0);
+});
+
 test("reports only matching-head verification with escaped untrusted text", async () => {
 	let config = fixture();
 	let head = "a".repeat(40);
@@ -148,7 +164,7 @@ test("escaped evidence remains within GitHub's comment limit including signed fo
 	await reportMaintenance({ ...config, state });
 	let body = config.comments[0].body;
 	expect(Buffer.byteLength(body)).toBeLessThan(65_000);
-	expect(body).toContain("More details in the coordinator run.");
+	expect(body).toContain("More details in the PR readiness workflow history.");
 	expect(body).toContain(`Inspected head: ${head}`);
-	expect(body).toContain("[Coordinator run]");
+	expect(body).toContain("[PR readiness runs]");
 });

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { applyProposal } from "./application.mjs";
 import { begin, initialState } from "./state.mjs";
 
-function fixture(protectedChange = false, contents = "repair") {
+function fixture(protectedChange = false, contents = "repair", operation = "fix") {
 	let source = mkdtempSync(join(tmpdir(), "application-source-"));
 	let directory = mkdtempSync(join(tmpdir(), "application-trusted-"));
 	let artifactDirectory = mkdtempSync(join(tmpdir(), "application-artifact-"));
@@ -28,8 +28,26 @@ function fixture(protectedChange = false, contents = "repair") {
 	writeFileSync(join(source, "apps/a.ts"), "initial");
 	git("add", ".");
 	git("commit", "-qm", "base");
-	let head = git("rev-parse", "HEAD");
+	let root = git("rev-parse", "HEAD");
+	let head = root;
+	let expectedBase = root;
+	if (operation === "merge") {
+		git("checkout", "-qb", "feature");
+		writeFileSync(join(source, "apps/a.ts"), "feature");
+		git("add", ".");
+		git("commit", "-qm", "feature");
+		head = git("rev-parse", "HEAD");
+		git("checkout", "-qb", "main", root);
+		writeFileSync(join(source, "apps/a.ts"), "base update");
+		git("add", ".");
+		git("commit", "-qm", "base update");
+		expectedBase = git("rev-parse", "HEAD");
+		git("checkout", "-q", "feature");
+	}
 	execFileSync("git", ["clone", "-q", source, directory]);
+	if (operation === "merge") {
+		expect(() => git("merge", "--no-ff", "--no-commit", "main")).toThrow();
+	}
 	writeFileSync(join(source, protectedChange ? "package.json" : "apps/a.ts"), contents);
 	git("add", ".");
 	git("commit", "-qm", "proposal");
@@ -41,14 +59,15 @@ function fixture(protectedChange = false, contents = "repair") {
 		join(artifactDirectory, "proposal.bundle"),
 		"refs/pr-maintenance/proposal",
 		`^${head}`,
+		...(operation === "merge" ? [`^${expectedBase}`] : []),
 	);
 	let manifest = {
 		schemaVersion: 1,
 		attempt: "attempt",
-		operation: "fix",
+		operation,
 		pr: 1,
 		expectedHead: head,
-		expectedBase: head,
+		expectedBase,
 		proposalHead,
 		oldReplayBoundary: null,
 		bundleSha256: createHash("sha256").update(
@@ -66,7 +85,12 @@ function fixture(protectedChange = false, contents = "repair") {
 			revision: 0,
 			prs: {
 				"1": begin(
-					initialState({ number: 1, head, baseHead: head, action: "repair" }, 1),
+					initialState({
+						number: 1,
+						head,
+						baseHead: expectedBase,
+						action: operation === "merge" ? "conflict" : "repair",
+					}, 1),
 					"attempt",
 					2,
 				),
@@ -80,7 +104,7 @@ function fixture(protectedChange = false, contents = "repair") {
 		base: { ref: "main", repo: { full_name: "owner/repo" } },
 	};
 	let calls: string[] = [];
-	let baseHead = head;
+	let baseHead = expectedBase;
 	let store = {
 		async load() {
 			calls.push("load");
@@ -162,6 +186,30 @@ test("registers using CAS before guarded push and verifies published head", asyn
 	});
 	expect(f.calls.filter((call) => call === "push")).toHaveLength(1);
 });
+
+test("guarded publication accepts one reviewed conflict merge and rejects stale base", async () => {
+	let f = fixture(false, "combined", "merge");
+	expect(await applyProposal(f.options)).toEqual({
+		kind: "applied",
+		head: f.proposalHead,
+		verification: {
+			head: f.proposalHead,
+			operation: "merge",
+			paths: ["apps/a.ts"],
+			checks: [{ command: "bun test", result: "passed" }],
+			hashReviews: [],
+		},
+	});
+	expect(f.calls.indexOf("save")).toBeLessThan(f.calls.indexOf("push"));
+	f = fixture(false, "combined", "merge");
+	f.setBase("c".repeat(40));
+	expect(await applyProposal(f.options)).toEqual({ kind: "superseded" });
+	expect(f.calls).not.toContain("push");
+	f = fixture(false, "combined", "merge");
+	f.pr.head.sha = "c".repeat(40);
+	expect(await applyProposal(f.options)).toEqual({ kind: "superseded" });
+	expect(f.calls).not.toContain("push");
+}, 15_000);
 
 test("head/base drift and opt-out supersede without publication", async () => {
 	for (let drift of ["head", "base", "opt-out"]) {

@@ -55,7 +55,7 @@ export function validateVerification(value) {
 		&& !/^[A-Za-z]:/.test(value)
 		&& value.split("/").every((part) => part && part !== "." && part !== "..");
 	if (
-		!/^[a-f0-9]{40}$/.test(value.head) || !["fix", "rebase"].includes(value.operation)
+		!/^[a-f0-9]{40}$/.test(value.head) || !["fix", "merge", "rebase"].includes(value.operation)
 		|| !Array.isArray(value.paths) || value.paths.length > 1000
 		|| value.paths.some((entry) => !path(entry)) || new Set(value.paths).size !== value.paths.length
 		|| !Array.isArray(value.checks) || !value.checks.length || value.checks.length > 100
@@ -155,7 +155,11 @@ export function validateState(state) {
 			!Number.isSafeInteger(state.active.episode) || state.active.episode < 1
 			|| state.active.episode > state.episode
 			|| !["repair", "conflict", "rebase"].includes(state.active.action)
-			|| state.active.operation !== (state.active.action === "rebase" ? "rebase" : "repair")
+			|| state.active.operation !== (state.active.action === "rebase"
+					? "rebase"
+					: state.active.action === "conflict"
+					? "merge"
+					: "repair")
 		) {
 			throw new Error("Invalid active attempt");
 		}
@@ -275,7 +279,11 @@ export function begin(state, attemptId, now) {
 			createdAt: now,
 			runId: null,
 			proposalHead: null,
-			operation: state.action === "rebase" ? "rebase" : "repair",
+			operation: state.action === "rebase"
+				? "rebase"
+				: state.action === "conflict"
+				? "merge"
+				: "repair",
 			action: state.action,
 		},
 		status: "working",
@@ -323,6 +331,13 @@ export function finish(state, attemptId, outcome, now) {
 	if (["transient", "blocked"].includes(outcome.kind)) identity(outcome.reason);
 	let active = state.active;
 	if (active?.id !== attemptId) return state;
+	if (
+		outcome.kind === "applied" && outcome.verification
+		&& outcome.verification.operation !== (active.operation === "repair"
+				? "fix"
+				: active.operation)
+	) throw new Error("Verification operation mismatch");
+	let budgeted = active.operation === "repair" || active.operation === "merge";
 	let next = { ...state, active: null, updatedAt: now };
 	if (
 		outcome.kind === "applied" && active.proposalHead !== null
@@ -342,7 +357,7 @@ export function finish(state, attemptId, outcome, now) {
 		return next;
 	}
 	if (active.baseHead !== state.baseHead && outcome.kind !== "applied" && !published) {
-		if (outcome.kind === "failed" && active.operation === "repair") next.repairCount++;
+		if (outcome.kind === "failed" && budgeted) next.repairCount++;
 		if (next.repairCount >= 3 && ["repair", "conflict"].includes(next.action)) {
 			next.blocker = { id: attemptId, kind: "human", reason: "Repair budget exhausted" };
 		}
@@ -350,7 +365,7 @@ export function finish(state, attemptId, outcome, now) {
 		return next;
 	}
 	if (
-		published && active.operation === "repair" && outcome.kind !== "applied"
+		published && budgeted && outcome.kind !== "applied"
 		&& outcome.kind !== "failed"
 	) next.repairCount++;
 	if (outcome.kind === "transient") {
@@ -362,7 +377,7 @@ export function finish(state, attemptId, outcome, now) {
 		next.blocker = { id: attemptId, kind: "human", reason: outcome.reason };
 	} else {
 		next.transientCount = 0;
-		if (active.operation === "repair") next.repairCount++;
+		if (budgeted) next.repairCount++;
 		if (outcome.kind === "applied") {
 			next.head = outcome.head;
 			next.verification = outcome.verification ? structuredClone(outcome.verification) : null;

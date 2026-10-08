@@ -228,7 +228,7 @@ test("immutable dispatch action selects graph mode", async () => {
 	let result = await coordinate(f.options);
 	expect(result.dispatches.map((intent: any) => [intent.action, intent.operation])).toEqual([
 		["repair", "fix"],
-		["conflict", "rebase"],
+		["conflict", "merge"],
 		["rebase", "rebase"],
 	]);
 });
