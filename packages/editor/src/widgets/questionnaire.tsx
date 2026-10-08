@@ -452,15 +452,15 @@ function SettledLine(
 			{writeup && meta
 				? <WriteupStatus canEdit={canEdit} connected={connected} meta={meta} wire={wire} />
 				: related && (
-				<RelationNote
-					count={pointing.places?.[related.question]}
-					onEnter={pointing.onQuestionEnter}
-					onLeave={pointing.onQuestionLeave}
-					onSelect={pointing.onQuestionSelect}
-					pending={pointing.pendingRelation}
-					question={related.question}
-					relation={related.relation}
-				/>
+					<RelationNote
+						count={pointing.places?.[related.question]}
+						onEnter={pointing.onQuestionEnter}
+						onLeave={pointing.onQuestionLeave}
+						onSelect={pointing.onQuestionSelect}
+						pending={pointing.pendingRelation}
+						question={related.question}
+						relation={related.relation}
+					/>
 				)}
 			{related?.relation === "orphaned" && (
 				<button

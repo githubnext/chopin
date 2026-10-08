@@ -21,6 +21,7 @@ test("a settled line says a conversation decision is being written up only while
 	let idle = renderToStaticMarkup(createElement(QuestionnaireCard, { meta: META, value: DECIDED }));
 	expect(idle).toContain("Decided: GitHub Apps · @ana");
 	expect(idle).not.toContain("Writing up…");
+	expect(idle).toContain("Not linked yet");
 });
 
 test("a failed write-up says so and offers Retry only to an editable connected viewer", () => {
@@ -46,6 +47,18 @@ test("a failed write-up says so and offers Retry only to an editable connected v
 	expect(reader).toMatch(
 		/<button aria-label="Retry write-up"[^>]*disabled=""[^>]*>Retry<\/button>/,
 	);
+});
+
+test("a linked relation stays the sole control after a write-up failure", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		meta: { ...META, writeup: { status: "failed", job: JOB } },
+		onQuestionSelect: () => {},
+		relations: { [DECIDED.questions[0]!.id]: "linked" },
+		value: DECIDED,
+	}));
+	expect(markup).toContain("Show in document");
+	expect(markup).not.toContain("Retry write-up");
+	expect(markup).not.toContain("Couldn&#x27;t write this up");
 });
 
 test("an orphaned settled line says the prose was removed", () => {
