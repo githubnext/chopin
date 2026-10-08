@@ -11,8 +11,17 @@ export type ViewportVariables = {
 
 export function viewportVars(
 	layoutHeight: number,
-	viewport?: { height: number; offsetLeft?: number; offsetTop: number; width?: number },
+	visual?: {
+		height: number;
+		offsetLeft?: number;
+		offsetTop: number;
+		scale?: number;
+		width?: number;
+	},
 ): ViewportVariables {
+	// A pinch zoom shrinks and moves the visual viewport. Following it would lay the workspace out
+	// again inside the zoomed region, so keep the layout viewport and let the browser zoom optically.
+	let viewport = visual && Math.abs((visual.scale ?? 1) - 1) < 0.01 ? visual : undefined;
 	let height = viewport?.height ?? layoutHeight;
 	let covered = viewport ? layoutHeight - viewport.height - viewport.offsetTop : 0;
 	return {
@@ -35,6 +44,7 @@ export function useVisualViewport(): void {
 					height: viewport.height,
 					offsetLeft: viewport.left,
 					offsetTop: viewport.top,
+					scale: window.visualViewport?.scale,
 					width: viewport.width,
 				},
 			);
