@@ -106,10 +106,10 @@ test("MCP changes identify the client and revision transition in the change list
 	expect(updated.result.isError).toBeUndefined();
 	await expect(content(page)).toContainText("Revised ending.");
 	await page.getByRole("button", { name: "What the agent changed", exact: true }).click();
-	let label = page.getByText("Written by Review bot", { exact: true });
+	let label = page.getByText("Written by @ana via Review bot", { exact: true });
 	await expect(label).toBeVisible();
 	await expect(label).toHaveAttribute(
 		"title",
-		`Review bot 1.2.3 for @ana, revisions ${revision} to ${revision + 1}`,
+		`Review bot 1.2.3, revisions ${revision} to ${revision + 1}`,
 	);
 });

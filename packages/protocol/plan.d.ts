@@ -280,6 +280,11 @@ export declare namespace Plan {
 		/** base64 Yjs update */
 		update: string;
 		seq: number;
+		/**
+		 * The Planner or an MCP client wrote this, not a person. Descriptive
+		 * only, for how the change is shown; it grants and proves nothing.
+		 */
+		agent?: true;
 	};
 
 	/** Ephemeral presence: cursors, selections, focus. Never persisted. */

@@ -73,6 +73,8 @@ export type PlanProviderOptions = {
 	 * afterwards is reading the plan, not watching it being written.
 	 */
 	onChanges?: (changes: Plan.Change[]) => void;
+	/** Called just before a peer's update is applied, with whether an agent wrote it. */
+	onRemoteUpdate?: (agent: boolean) => void;
 };
 
 /**
@@ -524,6 +526,7 @@ export class PlanProvider implements Provider {
 
 	#remote(event: Plan.Update): void {
 		if (event.epoch !== this.#epoch) return;
+		this.#options.onRemoteUpdate?.(event.agent === true);
 		Y.applyUpdate(this.#doc, decode(event.update), this);
 	}
 

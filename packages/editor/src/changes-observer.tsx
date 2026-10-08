@@ -9,7 +9,7 @@
 
 import { useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getRoot, COLLABORATION_TAG } from "lexical";
+import { $getRoot, $getSelection, $isRangeSelection, COLLABORATION_TAG } from "lexical";
 
 import type { ChangeStore } from "./changes";
 
@@ -34,9 +34,18 @@ export function ChangeObserver({ store }: { store: ChangeStore }) {
 		// The first updates are the document arriving, not anybody adding to it.
 		let since = performance.now();
 		let offArrivals = editor.registerUpdateListener(({ editorState, prevEditorState, tags }) => {
-			if (!tags.has(COLLABORATION_TAG) || performance.now() - since < SETTLE) return;
+			// Only the agent's writing. A person's Enter is part of their typing,
+			// and drawing it out would make everyone else's text drift with it.
+			if (!tags.has(COLLABORATION_TAG) || !store.agentWriting) return;
+			if (performance.now() - since < SETTLE) return;
 			let before = prevEditorState.read(() => $getRoot().getChildrenKeys());
-			let after = editorState.read(() => $getRoot().getChildrenKeys());
+			let [after, caret] = editorState.read(() => {
+				let selection = $getSelection();
+				let block = $isRangeSelection(selection)
+					? selection.focus.getNode().getTopLevelElement()?.getKey()
+					: undefined;
+				return [$getRoot().getChildrenKeys(), block] as const;
+			});
 			if (before.length === 0) return;
 
 			// Where blocks went, by the block that survived just above them.
@@ -50,12 +59,19 @@ export function ChangeObserver({ store }: { store: ChangeStore }) {
 				else vacated.add(above);
 			}
 
+			// Nothing above the reader's own line opens: it would carry that line
+			// down under them for as long as it ran. Without focus, being on
+			// screen is the test, which the store applies.
+			let focused = editor.getRootElement()?.contains(document.activeElement) === true;
+			let below = !focused || caret === undefined;
+
 			let old = new Set(before);
 			let added: string[] = [];
 			above = undefined;
 			for (let key of after) {
+				if (key === caret) below = true;
 				if (old.has(key)) above = key;
-				else if (!vacated.has(above)) added.push(key);
+				else if (below && !vacated.has(above)) added.push(key);
 			}
 			if (added.length === 0 || added.length > MOST) return;
 			store.arrived(added.flatMap(key => editor.getElementByKey(key) ?? []));

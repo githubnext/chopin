@@ -220,6 +220,10 @@ export function PlanEditor(
 		changes.mark(found);
 	}, [changes]);
 
+	let onRemoteUpdate = useCallback((agent: boolean) => {
+		changes.authored(agent);
+	}, [changes]);
+
 	// The scroll container is what "in view" is measured against, and it only
 	// exists once the editor has rendered.
 	useEffect(() => {
@@ -350,6 +354,7 @@ export function PlanEditor(
 						onAnchors,
 						onChanges,
 						onUndoRefused,
+						onRemoteUpdate,
 					}),
 					widgetsPlugin({
 						binding,
@@ -383,6 +388,7 @@ export function PlanEditor(
 			onAnchors,
 			onChanges,
 			onUndoRefused,
+			onRemoteUpdate,
 			binding,
 			questions,
 			cardMeta,

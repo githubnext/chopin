@@ -44,7 +44,7 @@ function attributed(name: string) {
 	};
 }
 
-test("an MCP change names the caller when the client never introduced itself", () => {
+test("an MCP change names the verified caller before the client they used", () => {
 	expect(author(attributed("unknown"))).toBe("@ana");
-	expect(author(attributed("Review bot"))).toBe("Review bot");
+	expect(author(attributed("Review bot"))).toBe("@ana via Review bot");
 });
