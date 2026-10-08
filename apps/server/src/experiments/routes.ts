@@ -246,6 +246,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return found;
 	}
 	let toolNames = [
+		"disconnect_workspace",
 		"wait_for_experiment",
 		"claim_experiment",
 		"renew_experiment",
@@ -304,7 +305,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				fail("tool-forbidden");
 			}
 			let value: unknown;
-			if (name === "wait_for_experiment") {
+			if (name === "disconnect_workspace") {
+				connections.revoke(connection.id);
+				for (let active of await service.store.list(connection.documentId)) {
+					if (
+						active.connectionId === connection.id
+						&& ["queued", "running", "publishing"].includes(active.state)
+					) await service.stop(active.id, "interrupted", "Workspace disconnected.");
+				}
+				value = { disconnected: true };
+			} else if (name === "wait_for_experiment") {
 				let queued = async () =>
 					(await service.store.list(connection.documentId)).find(item =>
 						item.connectionId === connection.id && item.state === "queued"

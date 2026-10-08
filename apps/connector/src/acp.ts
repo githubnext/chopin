@@ -27,10 +27,10 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		stdio: ["pipe", "pipe", "pipe"],
 		detached: process.platform !== "win32",
 	});
-	let kill = () => {
+	let kill = (signal: NodeJS.Signals = "SIGTERM") => {
 		try {
-			if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGTERM");
-			else child.kill();
+			if (process.platform !== "win32" && child.pid) process.kill(-child.pid, signal);
+			else child.kill(signal);
 		} catch { /* Process may have already exited. */ }
 	};
 	child.stderr.on("data", chunk => options.stderr?.(String(chunk)));
@@ -59,7 +59,7 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 	let cancel = () => {
 		if (sessionId) void connection.agent.notify("session/cancel", { sessionId }).catch(() => {});
 		timer = setTimeout(() => {
-			kill();
+			kill("SIGKILL");
 			connection.close();
 		}, 3000);
 	};
@@ -100,5 +100,8 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		clearTimeout(deadline);
 		connection.close();
 		kill();
+		let force = setTimeout(() => kill("SIGKILL"), 1000);
+		force.unref();
+		child.once("exit", () => clearTimeout(force));
 	}
 }

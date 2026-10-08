@@ -5,6 +5,25 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { performance } from "@chopin/experiment/fixtures";
 
+test.skipIf(!process.env.CHOPIN_TEST_ACP_COMMAND)(
+	"real ACP implementation smoke check",
+	async () => {
+		let updates: unknown[] = [];
+		let stop = await runAgent({
+			command: JSON.parse(process.env.CHOPIN_TEST_ACP_COMMAND!),
+			cwd: process.cwd(),
+			prompt: "Respond with ACP smoke check passed. Do not use tools or edit any files.",
+			mcpServers: [],
+			signal: AbortSignal.timeout(60_000),
+			onUpdate: value => updates.push(value),
+			permission: async () => undefined,
+		});
+		expect(stop).toBe("end_turn");
+		expect(updates.length).toBeGreaterThan(0);
+	},
+	70_000,
+);
+
 test("a generic ACP process receives a cwd and produces protocol updates", async () => {
 	let updates: unknown[] = [];
 	let stop = await runAgent({
