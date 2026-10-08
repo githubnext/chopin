@@ -237,7 +237,73 @@ export function validateProposal({
 		let after = p.get(path);
 		let repair = isRepairPath(path);
 		if (operation === "merge" && conflicts.has(path)) {
-			if (!repair) throw new Error(`Protected conflict requires human: ${path}`);
+			if (!repair) {
+				if (!renewals.has(path)) throw new Error(`Protected conflict requires human: ${path}`);
+				let entries = [f, h, b, merged, p].map((items) => items.get(path));
+				if (
+					!regular(after)
+					|| entries.some((entry) => !regular(entry) || entry.mode !== after.mode)
+				) throw new Error(`Protected mode conflict requires human: ${path}`);
+				if (same(after, h.get(path))) {
+					throw new Error(`Merge cannot silently retain head side of conflict: ${path}`);
+				}
+				let json = (entry) =>
+					JSON.parse(
+						new TextDecoder("utf-8", { fatal: true }).decode(git("cat-file", "blob", entry.blob)),
+					);
+				let proposed = json(after);
+				let source = (file) => {
+					let entry = p.get(file);
+					if (!isRepairPath(file) || !regular(entry)) {
+						throw new Error(`Hash source must be a regular repair path: ${file}`);
+					}
+					return git("cat-file", "blob", entry.blob);
+				};
+				let headJSON = json(h.get(path));
+				let baseJSON = json(b.get(path));
+				let ancestorJSON = json(f.get(path));
+				let fromHead = validateHashRenewal(headJSON, proposed, source, hashReviews);
+				let fromBase = validateHashRenewal(baseJSON, proposed, source, hashReviews);
+				let fromAncestor = validateHashRenewal(ancestorJSON, proposed, source, hashReviews);
+				let retainsHeadHash = (ancestorValue, headValue, baseValue, proposalValue) => {
+					if (Array.isArray(headValue)) {
+						return headValue.some((value, index) =>
+							retainsHeadHash(
+								ancestorValue[index],
+								value,
+								baseValue[index],
+								proposalValue[index],
+							)
+						);
+					}
+					if (headValue !== null && typeof headValue === "object") {
+						return Object.keys(headValue).some((key) => {
+							if (
+								key === "sourceHash" && baseValue[key] !== ancestorValue[key]
+								&& headValue[key] !== baseValue[key]
+								&& proposalValue[key] === headValue[key]
+							) return true;
+							return retainsHeadHash(
+								ancestorValue[key],
+								headValue[key],
+								baseValue[key],
+								proposalValue[key],
+							);
+						});
+					}
+					return false;
+				};
+				if (retainsHeadHash(ancestorJSON, headJSON, baseJSON, proposed)) {
+					throw new Error(`Merge cannot silently retain head hash in conflict: ${path}`);
+				}
+				if (
+					fromHead.length === 0 && fromBase.length === 0 && fromAncestor.length === 0
+				) {
+					throw new Error(`Protected conflict has no reviewed hash renewal: ${path}`);
+				}
+				paths.push(path);
+				continue;
+			}
 			if (!regular(after)) throw new Error(`Nontext or mode conflict requires human: ${path}`);
 			if (same(after, h.get(path))) {
 				throw new Error(`Merge cannot silently retain head side of conflict: ${path}`);

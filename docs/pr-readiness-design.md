@@ -89,7 +89,10 @@ Waiting for a repairable parent is automatic work, not a human blocker.
 Agents may renew a stale hash after inspecting the protected source and
 confirming that its existing exception still describes its current data flow,
 scope, and intended behavior. Report the reviewed source, rationale, and checks
-in the PR's maintenance comment.
+in the PR's maintenance comment. A conflict in an existing exception JSON file
+may be resolved this way only when the merge base and both sides retain
+identical exception structure and the resulting hashes match the merged source
+bytes.
 
 Renewal does not authorize adding or broadening exceptions, removing findings,
 weakening tests, or changing design rules. A new exception, disputed behavior,
