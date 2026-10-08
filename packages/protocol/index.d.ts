@@ -204,6 +204,7 @@ export declare namespace Sidebar {
 export type { Chat } from "./chat";
 export type { Comment } from "./comment";
 export type { ConversationPlan } from "./conversation-plan";
+export type { Experiment } from "./experiment";
 export type { Job } from "./job";
 export type { Plan } from "./plan";
 export type { Question } from "./question";
@@ -221,6 +222,7 @@ export type Incoming =
 
 /** Everything a client may receive, on a room socket or the sidebar socket. */
 export type Outgoing =
+	| import("./experiment").Experiment.Changed
 	| Session.Outgoing
 	| Sidebar.Outgoing
 	| import("./chat").Chat.Outgoing

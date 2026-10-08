@@ -13,6 +13,8 @@ import { ulid } from "@chopin/dialect";
 import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
+import { registerExperimentRoutes } from "./experiments/routes";
+import type { ExperimentRuntime } from "./experiments/routes";
 import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
@@ -104,6 +106,8 @@ const RESEARCH_RECOVERY_RETRY_MS = 10_000;
 
 let server: Server<SocketData>;
 let heldLease: Lease | undefined;
+let experiments: ExperimentRuntime | undefined;
+let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let leaseRenewal: ReturnType<typeof setInterval> | undefined;
 let leaseWatchdog: ReturnType<typeof setTimeout> | undefined;
 let renewingLease: Promise<void> | undefined;
@@ -1022,6 +1026,7 @@ function drain(): Promise<void> {
 		};
 		await attempt(() => server.stop(true));
 		if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
+		if (experimentTimer) clearInterval(experimentTimer);
 		if (recoveringResearch) await attempt(() => recoveringResearch!);
 		if (sessionCleanup) clearInterval(sessionCleanup);
 		for (let result of await Promise.allSettled([cleaningSessions])) {
@@ -1407,6 +1412,7 @@ async function commitCurrentSummary(
 }
 
 async function sessionRevoked(sessionId: string): Promise<void> {
+	experiments?.connections.revokeSession(sessionId);
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);
 	await Promise.all([resetOpenAgents(() => true, sessionId), jobs]);
@@ -1438,6 +1444,24 @@ let hostedAuth = registerAuthRoutes(router, {
 	agent: config.agent,
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
+});
+experiments = registerExperimentRoutes(router, hostedAuth, {
+	lease() {
+		if (!heldLease) throw new Error("storage writer lease is unavailable");
+		return heldLease;
+	},
+	context: currentDocumentTarget,
+	changed(documentId) {
+		if (server && !draining) {
+			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
+		}
+	},
+	async canMutate(id) {
+		let active = Rooms.get(id)?.plan;
+		if (active) return !Service.implementationActive(active);
+		let stored = await storage.collaboration.load(id, new Date());
+		return !stored || !(stored.sidecar as { execution?: unknown }).execution;
+	},
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
 let definitions: JobDefinition[] = [];
@@ -1674,6 +1698,14 @@ sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 let listening: Server<SocketData> | undefined;
 try {
 	server = listening = listen();
+	await experiments.service.recover(true);
+	experimentTimer = setInterval(() => {
+		experiments!.connections.sweep();
+		void experiments!.service.recover().catch(error =>
+			console.error("chopin: experiment recovery failed", error)
+		);
+	}, 15_000);
+	experimentTimer.unref();
 	let recovery = await researchService.recoverPendingPlannerInline(placeResearchReference);
 	scheduleResearchRecovery(recovery.deferred);
 	await researchService.recoverTerminalPlannerInline();
