@@ -340,7 +340,7 @@
 				2
 			]
 		],
-		"sourceHash": "85e5f52822e9f2c5445e6827f4af8b6e36bca14eadcad82eea617b2db2b0f58a"
+		"sourceHash": "e8e499ff45f4d86300c0a7067eb4786cc903c874a64f845d86774abf640e99d8"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -382,7 +382,7 @@
 				1
 			]
 		],
-		"sourceHash": "190cce4ad05296adc8c945d21755b3b26804b7542b7b30cda9667ba1e77e98cb"
+		"sourceHash": "29b4922ac4d10405d577cd63b70821eb97d0070d8919042bb5af6f3439205366"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -445,7 +445,7 @@
 				1
 			]
 		],
-		"sourceHash": "190cce4ad05296adc8c945d21755b3b26804b7542b7b30cda9667ba1e77e98cb"
+		"sourceHash": "29b4922ac4d10405d577cd63b70821eb97d0070d8919042bb5af6f3439205366"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -481,5 +481,26 @@
 			]
 		],
 		"sourceHash": "d6976f81401b6563b3b68c38364b94bab169b30eed0038ed1f788f4025488260"
+	},
+	{
+		"file": "packages/editor/src/widgets/evidence-hover.tsx",
+		"reason": "The evidence host supplies the finite popover motion class; transition presence adds only is-open or is-closing. Position styles use measured browser geometry and motion origin.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"motion?.className",
+				"class > EvidenceHover > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > EvidenceHover > <div>",
+				1
+			]
+		],
+		"sourceHash": "26c9e52db31d4e5d9c85ed11786e85ea580ddbb2dfcc607bf7c7aa738d5669a8"
 	}
 ]
