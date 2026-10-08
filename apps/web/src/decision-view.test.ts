@@ -4,7 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { visibleDecisionView } from "@chopin/editor";
 
-import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import {
+	decisionAttention,
+	decisionBadgeCount,
+	DecisionViewControl,
+} from "./decision-view-control";
 import { storedDocumentView } from "./workspace-model";
 
 test("a questionnaire-only document opens Decisions while prose keeps Plan visible", () => {
@@ -29,6 +33,20 @@ test("zero unanswered decisions suppresses the badge", () => {
 	);
 
 	expect(markup).not.toContain("data-plan-decision-count");
+});
+
+test("archived documents show no decision count", () => {
+	expect(decisionBadgeCount(8, true)).toBe(0);
+	expect(decisionBadgeCount(8, false)).toBe(8);
+	let markup = renderToStaticMarkup(
+		createElement(DecisionViewControl, {
+			onView: () => {},
+			unanswered: decisionBadgeCount(8, true),
+			view: "plan",
+		}),
+	);
+	expect(markup).not.toContain("data-plan-decision-count");
+	expect(markup).toContain('aria-label="Decisions"');
 });
 
 test("the document tab uses the public Document name", () => {

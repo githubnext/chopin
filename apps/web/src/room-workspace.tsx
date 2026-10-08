@@ -32,7 +32,11 @@ import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
-import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import {
+	decisionAttention,
+	decisionBadgeCount,
+	DecisionViewControl,
+} from "./decision-view-control";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
@@ -648,6 +652,7 @@ export function RoomWorkspace(
 	]);
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
+	let badgeCount = decisionBadgeCount(unanswered, !!workspaceArchivedAt);
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
 	let actOnResearchOffer = (
 		offerId: string,
@@ -795,7 +800,7 @@ export function RoomWorkspace(
 					<DecisionViewControl
 						attention={attention}
 						onView={selectDestination}
-						unanswered={unanswered}
+						unanswered={badgeCount}
 						view={view}
 					/>
 				}
@@ -842,7 +847,7 @@ export function RoomWorkspace(
 				}
 				state={workspace}
 				presentation={presentation}
-				unanswered={unanswered}
+				unanswered={badgeCount}
 				view={view}
 			/>
 		</>

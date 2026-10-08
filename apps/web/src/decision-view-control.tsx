@@ -6,6 +6,10 @@ export function decisionAttention(previous: number, current: number): boolean {
 	return current > previous;
 }
 
+export function decisionBadgeCount(unanswered: number, archived: boolean): number {
+	return archived ? 0 : unanswered;
+}
+
 export function DecisionViewControl(
 	{
 		attention,
