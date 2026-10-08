@@ -7,12 +7,14 @@ WORKDIR /app
 
 COPY package.json bun.lock ./
 COPY patches ./patches
+COPY apps/connector/package.json ./apps/connector/package.json
 COPY apps/server/package.json ./apps/server/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/dialect/package.json ./packages/dialect/package.json
 COPY packages/diagrams/package.json ./packages/diagrams/package.json
 COPY packages/draft/package.json ./packages/draft/package.json
 COPY packages/editor/package.json ./packages/editor/package.json
+COPY packages/experiment/package.json ./packages/experiment/package.json
 COPY packages/icons/package.json ./packages/icons/package.json
 COPY packages/protocol/package.json ./packages/protocol/package.json
 COPY packages/question/package.json ./packages/question/package.json
@@ -46,6 +48,7 @@ COPY --from=production-dependencies --chown=bun:bun /app/node_modules ./node_mod
 COPY --from=production-dependencies --chown=bun:bun /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=production-dependencies --chown=bun:bun /app/packages/dialect/node_modules ./packages/dialect/node_modules
 COPY --from=production-dependencies --chown=bun:bun /app/packages/draft/node_modules ./packages/draft/node_modules
+COPY --from=production-dependencies --chown=bun:bun /app/packages/experiment/node_modules ./packages/experiment/node_modules
 COPY --from=production-dependencies --chown=bun:bun /app/packages/question/node_modules ./packages/question/node_modules
 COPY --chown=bun:bun package.json bun.lock ./
 COPY --chown=bun:bun apps/server ./apps/server
