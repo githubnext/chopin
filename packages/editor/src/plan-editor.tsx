@@ -33,6 +33,7 @@ import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
 import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
+import type { ResearchLauncher } from "./research-launcher";
 
 /**
  * Lexical paints remote cursors with inline styles unless the theme names a
@@ -83,6 +84,8 @@ export type PlanEditorProps = {
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
+	/** Lets the host open the research composer at the end of the document. */
+	researchLauncher?: ResearchLauncher;
 	/** The same arrangement for comment threads. */
 	threads?: ThreadStore;
 	/** Remembered by the document host while this surface is hidden. */
@@ -122,6 +125,7 @@ export function PlanEditor(
 		evidence,
 		readOnly,
 		research,
+		researchLauncher,
 		scrollTop,
 		threads,
 		user,
@@ -315,6 +319,7 @@ export function PlanEditor(
 						evidence,
 						research,
 						researchDrafts,
+						researchLauncher,
 						threads,
 						changes,
 						wire,
@@ -339,6 +344,7 @@ export function PlanEditor(
 			evidence,
 			research,
 			researchDrafts,
+			researchLauncher,
 			commentPresentation,
 			motionImmediately,
 			questionMotion,

@@ -7,7 +7,12 @@ function chatPane(page: Page) {
 	return page.getByRole("complementary", { includeHidden: true, name: "Chat" });
 }
 
-test("/ in Chat offers Research, which points to the document instead of posting", async ({ join, page: first, seed }) => {
+function researchQuestion(page: Page) {
+	return page.getByRole("region", { name: "Research question", exact: true })
+		.getByRole("textbox", { name: "Research question", exact: true });
+}
+
+test("/research in Chat opens the document's research composer instead of posting", async ({ join, page: first, seed }) => {
 	await seed("# Slash commands\n\nSome prose.\n");
 	let sent: string[] = [];
 	first.on("websocket", socket => {
@@ -21,7 +26,7 @@ test("/ in Chat offers Research, which points to the document instead of posting
 	let chat = chatPane(page);
 	let draft = chatInput(chat);
 	let menu = chat.getByRole("listbox", { name: "Commands" });
-	let hint = chat.getByRole("status").filter({ hasText: "Use /research in the document" });
+	let question = researchQuestion(page);
 
 	await draft.click();
 	await page.keyboard.type("/");
@@ -36,40 +41,30 @@ test("/ in Chat offers Research, which points to the document instead of posting
 	await expect(draft).toBeFocused();
 	await expectChatValue(draft, "/");
 
-	await page.keyboard.type("res");
-	await expect(menu).toBeVisible();
-	await page.keyboard.press("Enter");
-	await expect(menu).toHaveCount(0);
-	await expectChatValue(draft, "/research ");
-	await expect(hint).toBeVisible();
-	await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();
-
-	// A typed brief is never posted as a literal message either.
-	await page.keyboard.type("what changed?");
-	await page.keyboard.press("Enter");
-	await expect(hint).toBeVisible();
-	await expectChatValue(draft, "/research what changed?");
-
-	// No command menu for a path or a later slash.
+	// No command menu for a path.
 	await draft.fill("/usr/bin");
 	await expect(menu).toHaveCount(0);
-	await expect(hint).toHaveCount(0);
 
-	await draft.fill("/research");
-	await chat.getByRole("button", { name: "Go to document" }).click();
-	await expectChatValue(draft, "");
-	let editor = content(page);
-	await expect(editor).toBeFocused();
-	await page.keyboard.type("!");
-	await expect(editor.getByText("Some prose.!", { exact: true })).toBeVisible();
+	// Choosing Research opens an empty composer after the last paragraph.
+	await draft.fill("");
+	await page.keyboard.type("/res");
 	await page.keyboard.press("Enter");
-	await page.keyboard.type("/research");
-	await page.keyboard.press("Tab");
-	await expect(
-		page.getByRole("region", { name: "Research question", exact: true })
-			.getByRole("textbox", { name: "Research question", exact: true }),
-	).toBeFocused();
+	await expect(question).toBeFocused();
+	await expect(question).toHaveValue("");
+	await expectChatValue(draft, "");
+	await page.keyboard.press("Escape");
+	await expect(question).toHaveCount(0);
+	await expect(content(page).getByText("Some prose.", { exact: true })).toBeVisible();
+
+	// Sending a typed brief opens the composer with it, reusing the empty last paragraph.
+	await draft.fill("/research what changed upstream?");
+	await expect(menu).toHaveCount(0);
+	await draft.press("Enter");
+	await expect(question).toBeFocused();
+	await expect(question).toHaveValue("what changed upstream?");
+	await expectChatValue(draft, "");
+	await expect(content(page).locator(":scope > p")).toHaveCount(2);
 
 	expect(sent).toEqual([]);
-	await expect(chat.getByText("/research", { exact: true })).toHaveCount(0);
+	await expect(chat.getByText("/research", { exact: false })).toHaveCount(0);
 });

@@ -16,6 +16,7 @@ import { widgets$ } from "../widgets-plugin";
 import { SelectionBubble } from "./bubble";
 import { LinkSurface } from "./link";
 import { ResearchComposerSurface } from "./research";
+import { ResearchLaunchRegistration } from "./research-launch";
 import { SlashMenu } from "./slash";
 
 const RESEARCH_ACTIONS = new Set(["research"]);
@@ -80,6 +81,14 @@ export function Toolbar() {
 					disabled={disabled}
 					drafts={options.researchDrafts}
 					research={options.research}
+				/>
+			)}
+			{options.research && options.researchDrafts && options.researchLauncher && (
+				<ResearchLaunchRegistration
+					binding={options.binding}
+					disabled={disabled}
+					drafts={options.researchDrafts}
+					launcher={options.researchLauncher}
 				/>
 			)}
 		</>

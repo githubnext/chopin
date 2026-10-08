@@ -108,10 +108,11 @@ export type ChatProps = {
 	sourceDestination?: ChatDestination;
 	/** Opens Decisions, where a waiting workflow's questions are. */
 	onShowDecisions?: () => void;
-	/** Whether this document can start research, which happens in the document itself. */
-	research?: boolean;
-	/** Puts the caret at the end of the document. */
-	onOpenDocument?: () => void;
+	/**
+	 * Opens the document's research composer with this brief, when this
+	 * document offers research. False when it cannot open now.
+	 */
+	onResearch?: (brief: string) => boolean;
 	/** Replaces the composer when this viewer cannot chat at all, such as in an archived document. */
 	notice?: string;
 	/** One calm line shown while the transcript has loaded and is still empty. */
@@ -149,8 +150,7 @@ export function Chat(
 		notice,
 		emptyNotice,
 		onShowDecisions,
-		research = false,
-		onOpenDocument,
+		onResearch,
 		referencesEnabled,
 		repository,
 		room,
@@ -250,12 +250,13 @@ export function Chat(
 		? commandTrigger(draft.text, selection.start, selection.end)
 		: undefined;
 	let commandKey = command ? commandTriggerKey(command) : undefined;
-	let commandOptions = command && research ? filterCommands(CHAT_COMMANDS, command.query) : [];
+	let commandOptions = command && onResearch ? filterCommands(CHAT_COMMANDS, command.query) : [];
 	let commandOpen = commandOptions.length > 0 && commandKey !== dismissedPicker;
 	let commandActive = commandCursor.key === commandKey
 		? Math.min(commandCursor.index, commandOptions.length - 1)
 		: 0;
-	let pendingCommand = draftCommand(draft.text);
+	// Without research here, a `/research` draft is held with a notice rather than posted.
+	let blockedCommand = !onResearch && !!draftCommand(draft.text);
 	// Escape keeps the draft and the composer's focus; only the picker closes.
 	usePopoverDismissal(
 		commandOpen || mentionOpen || pickerOpen,
@@ -352,10 +353,33 @@ export function Chat(
 		setHistoryKey(current => current + 1);
 	};
 
+	let launchResearch = (brief: string, text: string) => {
+		let current = draftRef.current;
+		if (onResearch?.(brief)) {
+			setDraft(reviseComposerDraft(current, "", []));
+			setSelection({ start: 0, end: 0 });
+			setSendError(undefined);
+			setDismissedPicker(undefined);
+			return;
+		}
+		// Keep the command in the draft so Retry can open it again.
+		setDraft(reviseComposerDraft(current, text, []));
+		setSelection({ start: text.length, end: text.length });
+		setDismissedPicker(undefined);
+		pendingCaret.current = text.length;
+		setSendError("Research couldn’t open in the document.");
+	};
+
 	let submit = () => {
 		if (submission.current || !composerReady || !wire) return;
 		let current = draftRef.current;
-		if (!current.text.trim() || draftCommand(current.text)) return;
+		if (draftCommand(current.text)) {
+			if (onResearch) {
+				launchResearch(current.text.replace(/^\s*\/research\s*/i, ""), current.text);
+			}
+			return;
+		}
+		if (!current.text.trim()) return;
 		let submitted = prepareDraftSubmission(current);
 		let prefix = effectiveMode && !addressedOutsideReferences(submitted.text, submitted.references)
 			? `${MENTION} `
@@ -482,24 +506,7 @@ export function Chat(
 	let moveMention = (to: (index: number) => number) =>
 		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
 
-	let chooseCommand = (choice: ChatCommand) => {
-		let next = commandText(choice);
-		setDraft(current => reviseComposerDraft(current, next, []));
-		setSelection({ start: next.length, end: next.length });
-		setSendError(undefined);
-		setDismissedPicker(undefined);
-		pendingCaret.current = next.length;
-	};
-
-	let openDocument = () => {
-		let current = draftRef.current;
-		// A bare command has nothing worth keeping; a typed brief stays for copying.
-		if (current.text.trim().toLowerCase() === "/research") {
-			setDraft(reviseComposerDraft(current, "", []));
-			setSelection({ start: 0, end: 0 });
-		}
-		onOpenDocument?.();
-	};
+	let chooseCommand = (choice: ChatCommand) => launchResearch("", commandText(choice));
 
 	let transcriptView = (
 		<Transcript
@@ -562,7 +569,7 @@ export function Chat(
 						Type # to reference a document.
 					</p>
 				)}
-				{!readonly && !archived && (sendError || !composerReady || pendingCommand || !agent) && (
+				{!readonly && !archived && (sendError || !composerReady || blockedCommand || !agent) && (
 					<div
 						className={sendError ? "composer-notice motion-feedback" : "composer-notice"}
 						data-motion-feedback={sendError ? "alert" : undefined}
@@ -580,10 +587,8 @@ export function Chat(
 						<span>
 							{sendError ?? (!composerReady
 								? connected ? "Synchronizing…" : connectionLost ? "Connection lost" : "Connecting…"
-								: pendingCommand
-								? research
-									? "Use /research in the document"
-									: "Research isn’t available in this document"
+								: blockedCommand
+								? "Research isn’t available in this document"
 								: "Chopin unavailable")}
 						</span>
 						{sendError
@@ -596,18 +601,12 @@ export function Chat(
 									Retry
 								</button>
 							)
-							: !composerReady
-							? wire && (
+							: !composerReady && wire && (
 								<button
 									className="btn btn-sm btn-ghost"
 									onClick={() => wire.reconnect()}
 								>
 									{connectionLost ? "Reconnect" : "Retry"}
-								</button>
-							)
-							: pendingCommand && research && onOpenDocument && (
-								<button className="btn btn-sm btn-ghost" onClick={openDocument} type="button">
-									Go to document
 								</button>
 							)}
 					</div>
@@ -680,7 +679,7 @@ export function Chat(
 										: undefined}
 									aria-describedby={[
 										referencesEnabled ? instructionsId : undefined,
-										sendError || !composerReady || pendingCommand || !agent ? cueId : undefined,
+										sendError || !composerReady || blockedCommand || !agent ? cueId : undefined,
 									].filter(Boolean).join(" ") || undefined}
 									aria-disabled={!composerReady || submitting}
 									aria-invalid={!!sendError || undefined}
@@ -887,7 +886,7 @@ export function Chat(
 										<SendAction
 											busy={submitting}
 											disabled={!composerReady || submitting || !draft.text.trim()
-												|| !!pendingCommand}
+												|| blockedCommand}
 											onClick={submit}
 											label="Send message"
 										/>
