@@ -89,10 +89,17 @@ export async function edit(
 				revision: stored.revision + (moved ? 1 : 0),
 				edits: { ...stored.edits, [key.client]: key.sequence },
 			};
-			await Service.publishStaged(plan, plan.server, plan.id, {
-				...plan,
-				visualDecisions: new Map(plan.visualDecisions).set(id, next),
-			});
+			await Service.publishStaged(
+				plan,
+				plan.server,
+				plan.id,
+				{
+					...plan,
+					visualDecisions: new Map(plan.visualDecisions).set(id, next),
+				},
+				undefined,
+				{ retryRejectedCommit: true },
+			);
 			result = { ok: true, state: State.snapshot(next) };
 			accepted = moved;
 		}, lifecycle);

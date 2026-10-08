@@ -71,11 +71,18 @@ export async function create(
 				) {
 					throw new Error("The document has no room for another visual decision");
 				}
-				await Service.publishStaged(plan, plan.server, plan.id, {
-					...plan,
-					document,
-					visualDecisions: new Map(plan.visualDecisions).set(id, stored),
-				}, mutation);
+				await Service.publishStaged(
+					plan,
+					plan.server,
+					plan.id,
+					{
+						...plan,
+						document,
+						visualDecisions: new Map(plan.visualDecisions).set(id, stored),
+					},
+					mutation,
+					{ retryRejectedCommit: true },
+				);
 				state = State.snapshot(stored);
 			} finally {
 				document.doc.destroy();

@@ -182,6 +182,11 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 	if (children.length === 0) {
 		return { ok: false, reason: "invalid", message: "The planner cannot clear the plan." };
 	}
+	let protectedVisual = protectProjections(
+		visualProjections(root.children),
+		visualProjections(children),
+	);
+	if (protectedVisual) return { ok: false, reason: "invalid", message: protectedVisual };
 
 	let duplicate = repeated(children);
 	if (duplicate) {
@@ -369,6 +374,28 @@ function protectProjections(base: RootContent[], next: RootContent[]): string | 
 		}
 	}
 	return undefined;
+}
+
+/** Visual decisions have no Planner detach transition; keep their entire projection exact. */
+function visualProjections(nodes: RootContent[]): RootContent[] {
+	let found: RootContent[] = [];
+	let walk = (node: RootContent) => {
+		if (
+			(node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement")
+			&& node.name === "Questionnaire"
+			&& node.attributes.some(attribute =>
+				attribute.type === "mdxJsxAttribute" && attribute.name === "visual"
+			)
+		) {
+			found.push(node);
+			return;
+		}
+		if ("children" in node && Array.isArray(node.children)) {
+			for (let child of node.children) walk(child as RootContent);
+		}
+	};
+	for (let node of nodes) walk(node);
+	return found;
 }
 
 function align(base: RootContent[], next: RootContent[]): RootContent[] {

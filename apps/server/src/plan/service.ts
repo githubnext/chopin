@@ -859,6 +859,7 @@ async function commitHosted(
 	allowArchived = false,
 	researchProjections: ResearchProjectionChange[] = [],
 	notifyDocumentPersisted = true,
+	retryRejectedCommit = false,
 ): Promise<void> {
 	let durable = plan.persistence;
 	if (!update && captured.sidecarText === durable.lastSidecar) {
@@ -921,7 +922,10 @@ async function commitHosted(
 		}
 		scheduleCheckpoint(plan);
 	} catch (err) {
-		if (!(err instanceof ResearchProjectionConflict) && !(err instanceof CommitRejected)) {
+		if (
+			!(err instanceof ResearchProjectionConflict)
+			&& !(retryRejectedCommit && err instanceof CommitRejected)
+		) {
 			durable.fatal(err);
 		}
 		throw err;
@@ -1585,7 +1589,7 @@ export async function publishStaged(
 	roomId: string,
 	candidate: Plan,
 	mutation?: room.Mutation,
-	options?: { notifyDocumentPersisted?: boolean },
+	options?: { notifyDocumentPersisted?: boolean; retryRejectedCommit?: boolean },
 ): Promise<void> {
 	if (implementationActive(plan)) throw new ImplementationActiveError();
 	let source = room.project(candidate.document);
@@ -1607,6 +1611,7 @@ export async function publishStaged(
 		false,
 		[],
 		options?.notifyDocumentPersisted !== false,
+		options?.retryRejectedCommit === true,
 	);
 	if (mutation) {
 		Y.applyUpdate(plan.document.doc, mutation.update);

@@ -38,10 +38,18 @@ export async function save(
 		claimed(plan).set(id, captured);
 		ownsClaim = true;
 		let result: VisualDecision.State | undefined;
+		let stale: VisualDecision.State | undefined;
 		await queued(plan, async () => {
 			writable(plan, ws);
 			if (plan.visualDecisions.get(id!) !== captured) {
-				throw new Error("Visual decision changed while saving");
+				let latest = plan.visualDecisions.get(id!);
+				if (!latest) throw new Error("Visual decision is unavailable");
+				if (latest.revision !== revision || latest.saved) {
+					stale = State.snapshot(latest);
+					return;
+				}
+				captured = latest;
+				claimed(plan).set(id!, latest);
 			}
 			let at = new Date().toISOString();
 			let saved: VisualDecision.Saved = {
@@ -70,16 +78,27 @@ export async function save(
 						plan.questions.open.size,
 					)
 				) throw new Error("The saved values would exceed the document limit");
-				await Service.publishStaged(plan, plan.server, plan.id, {
-					...plan,
-					document,
-					visualDecisions: new Map(plan.visualDecisions).set(id!, next),
-				}, mutation);
+				await Service.publishStaged(
+					plan,
+					plan.server,
+					plan.id,
+					{
+						...plan,
+						document,
+						visualDecisions: new Map(plan.visualDecisions).set(id!, next),
+					},
+					mutation,
+					{ retryRejectedCommit: true },
+				);
 				result = State.snapshot(next);
 			} finally {
 				document.doc.destroy();
 			}
 		}, lifecycle);
+		if (stale) {
+			reply(ws, msg.rid, { kind: msg.kind, ts: 0, ok: false, reason: "stale", state: stale });
+			return;
+		}
 		reply(ws, msg.rid, { kind: msg.kind, ts: 0, ok: true, state: result! });
 		changed(plan, result!);
 	} catch (error) {
