@@ -214,3 +214,23 @@ test("a reload keeps an unsent Chat message", async ({ join, page }) => {
 	await ready(page);
 	await expectChatValue(chatInput(chatPane(page)), "Not sent before the reload");
 });
+
+test("on a phone, Chat offers Reconnect when offline", async ({ join, page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	let wire = route(page);
+	await wire.ready;
+	await join("ana");
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).click();
+	let chat = chatPane(page);
+
+	wire.state.offline = true;
+	await wire.sockets.at(-1)!.close();
+	await expect(chat.locator(".composer-connection")).toHaveText("Offline", { timeout: 10_000 });
+	let reconnect = chat.getByRole("button", { name: "Reconnect", exact: true });
+	await expect(reconnect).toBeVisible();
+
+	wire.state.offline = false;
+	await reconnect.click();
+	await expect(chat.locator(".composer-connection")).toBeEmpty();
+});

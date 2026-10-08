@@ -105,6 +105,11 @@ export type PlanState = {
 	synced: boolean;
 	/** Why the document was last replaced, if it was. */
 	reset?: Plan.Reset["reason"];
+	/**
+	 * Counts replacements that dropped edits the server never acknowledged,
+	 * so the host can say so once for each, until it is dismissed.
+	 */
+	lost?: number;
 	/** Why it could not be opened at all, if it could not. */
 	failed?: string;
 };
@@ -136,8 +141,6 @@ export function PlanEditor(
 	let ref = useRef<MDXEditorMethods>(null);
 	let scroller = useRef<HTMLDivElement>(null);
 	let [state, setState] = useState<PlanState>({ synced: false });
-	// Unsent edits a rebuilt document could not keep, said until dismissed.
-	let [lost, setLost] = useState(false);
 	let [generation, setGeneration] = useState(0);
 	let provider = useRef<PlanProvider>(undefined);
 	// Presence renders, so it needs the provider as state; edits need it
@@ -155,10 +158,15 @@ export function PlanEditor(
 	// rebuilt rather than reconciled — that is what "reset" means. The marks
 	// describe a history that no longer exists, so they go with it.
 	let onReset = useCallback((reason: Plan.Reset["reason"], lost: boolean) => {
-		if (lost) setLost(true);
 		changes.clear();
 		questions?.resetDocument();
-		setState(prev => ({ ...prev, synced: false, reset: reason, failed: undefined }));
+		setState(prev => ({
+			...prev,
+			synced: false,
+			reset: reason,
+			failed: undefined,
+			lost: lost ? (prev.lost ?? 0) + 1 : prev.lost,
+		}));
 		setGeneration(value => value + 1);
 	}, [changes, questions]);
 
@@ -419,17 +427,6 @@ export function PlanEditor(
 					</div>
 					{/* In the document column, so they track the prose, not the pane. */}
 					<PlanChanges motionImmediately={motionImmediately} store={changes} />
-					{lost && (
-						<div className="plan-lost" role="alert">
-							<span>
-								Your last edits couldn't be saved because the document changed while you were
-								offline.
-							</span>
-							<button className="btn btn-sm btn-ghost" onClick={() => setLost(false)} type="button">
-								Dismiss
-							</button>
-						</div>
-					)}
 				</div>
 			</div>
 		</div>

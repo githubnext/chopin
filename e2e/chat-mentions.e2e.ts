@@ -217,7 +217,10 @@ test("without a Planner a manually addressed message gets a local notice", async
 	await expect(chat.getByRole("listbox", { name: "Mentions" })).toHaveCount(0);
 	await input.fill("@chopin are you there?");
 	await chat.getByRole("button", { name: "Send message" }).click();
-	await expect(chat.getByText("@chopin are you there?", { exact: true })).toBeVisible();
+	// The transcript drops the leading mention from what it shows, so find the
+	// sent message by what was sent rather than by the draft still on screen.
+	await expectChatValue(input, "");
+	await expect(chat.locator('[data-chat-raw="@chopin are you there?"]')).toBeVisible();
 	let notice = chat.getByText("Chopin is off on this server. Your message went to the room only.", {
 		exact: true,
 	});
