@@ -2448,6 +2448,49 @@
 	background: var(--color-inset);
 }
 
+/*
+ * Editing code or a diff swaps the coloured copy for its source in the same
+ * box, so a line is never on screen twice. The source is the text now, not a
+ * footnote to it.
+ */
+.plan-content .planCode[data-plan-swapped] [data-plan-preview] {
+	display: none;
+}
+
+.plan-content .planCode[data-plan-swapped] [data-plan-preview]:not(:empty) ~ [data-plan-source] {
+	opacity: 1;
+	border-block-start: 0;
+	background: var(--color-page);
+}
+
+/*
+ * A focused preview is the block held as a whole, between the prose around it
+ * and its source. The block clips its corners and the renderer paints over its
+ * own box, so the ring goes on the block.
+ */
+.plan-content .planCode :is(.plan-code-view, .plan-diagram):focus-visible {
+	outline: none;
+}
+
+:root:not([data-focus-input="pointer"])
+	.plan-content
+	.planCode:has(> [data-plan-preview] :is(.plan-code-view, .plan-diagram):focus-visible) {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.plan-content .planCode[data-plan-swapped] [data-plan-source] {
+		animation: plan-source-in var(--duration-fast) var(--ease-out);
+	}
+}
+
+@keyframes plan-source-in {
+	from {
+		opacity: 0;
+	}
+}
+
 .plan-content .planCode [data-plan-preview] :is(.plan-diagram, [data-plan-error]) {
 	padding-inline: 0.75rem;
 }

@@ -19,8 +19,8 @@
  * race.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal, flushSync } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
@@ -30,11 +30,20 @@ import {
 	$getSelection,
 	$isElementNode,
 	$isRangeSelection,
+	$isRootNode,
+	$isTextNode,
+	$setSelection,
 	BLUR_COMMAND,
 	COLLABORATION_TAG,
+	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_LOW,
+	COMMAND_PRIORITY_NORMAL,
 	FOCUS_COMMAND,
 	HISTORIC_TAG,
+	KEY_ARROW_DOWN_COMMAND,
+	KEY_ARROW_UP_COMMAND,
+	KEY_DOWN_COMMAND,
+	KEY_ESCAPE_COMMAND,
 	mergeRegister,
 } from "lexical";
 import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
@@ -43,9 +52,10 @@ import { enclosing, remember } from "../collapse";
 import { describeDiagramError, kindOf, languageOptions, titleOf } from "./code";
 import { CodeView } from "./code-view";
 import { LanguageMenu } from "./language-menu";
+import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
 import { CodeIcon, WarningIcon } from "@chopin/icons";
 
-import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
+import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
 import type { Kind } from "./code";
 
 /** How long the source must sit still before a failed drawing is reported. */
@@ -296,13 +306,24 @@ function Preview(
 	 * replaces the element whenever `updateDOM` returns true — a code block
 	 * changing language, math flipping inline — which would drop the attribute
 	 * while this still believed it had been set.
+	 *
+	 * A layout effect, because opening a block and putting the caret in its
+	 * source happen in one gesture, and a caret cannot land in a hidden box.
+	 *
+	 * Code and diffs swap: their preview is the same text, coloured, so
+	 * showing both would put every line on screen twice. A drawing is a
+	 * different reading of its source, and stays above it while it is edited.
 	 */
 	let hide = collapsed && renders(block, html);
-	useEffect(() => {
+	let swap = !collapsed && renders(block, html)
+		&& (block.kind === "code" || block.kind === "diff");
+	useLayoutEffect(() => {
 		let element = editor.getElementByKey(block.key);
 		if (!element) return;
 		if (hide) element.dataset.planCollapsed = "";
 		else delete element.dataset.planCollapsed;
+		if (swap) element.dataset.planSwapped = "";
+		else delete element.dataset.planSwapped;
 	});
 
 	let element = editor.getElementByKey(block.key);
@@ -345,9 +366,12 @@ function Preview(
 				>
 					{
 						// Tab indents code, so the way out has to be said
-						// where someone is typing it.
+						// where someone is typing it. A block with a preview
+						// returns to it on Escape, and Tab leaves from there.
 						editing && !disabled && block.kind !== "math" && (
-							<span className="text-xs text-text-tertiary">Esc then Tab to leave</span>
+							<span className="text-xs text-text-tertiary">
+								{hidable ? "Esc to preview" : "Esc then Tab to leave"}
+							</span>
 						)
 					}
 					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
@@ -443,6 +467,9 @@ function Diagram({ html, stale }: { html: string; stale: boolean }) {
 			data-stale={stale ? "" : undefined}
 			role="region"
 			tabIndex={0}
+			// Mermaid draws its labels as HTML. Inside the editable root, a
+			// click would otherwise put a caret in a label and type into it.
+			contentEditable={false}
 			dangerouslySetInnerHTML={{ __html: html }}
 		/>
 	);
@@ -482,15 +509,126 @@ function Rendered(
 	// too: a block element here would put a formula somebody wrote mid-clause
 	// on a line of its own, and the rest of the sentence after it.
 	if (block.inline) return <span dangerouslySetInnerHTML={{ __html: html }} />;
-	return <div dangerouslySetInnerHTML={{ __html: html }} />;
+	return <div contentEditable={false} dangerouslySetInnerHTML={{ __html: html }} />;
 }
+
+/** Asked for with the toggle, or opened by going into the block. */
+type Shown = "pinned" | "editing";
+
+type Direction = "next" | "previous";
+
+/** A collapsed caret at a text offset inside a block's source. */
+function $caretAt(block: ElementNode, offset: number): void {
+	let start = 0;
+	for (let child of block.getChildren()) {
+		let size = child.getTextContentSize();
+		if ($isTextNode(child) && offset <= start + size) {
+			child.select(offset - start, offset - start);
+			return;
+		}
+		if (offset <= start) {
+			let index = child.getIndexWithinParent();
+			block.select(index, index);
+			return;
+		}
+		start += size;
+	}
+	block.selectEnd();
+}
+
+type CaretPositionAt = (
+	x: number,
+	y: number,
+	options?: { shadowRoots?: ShadowRoot[] },
+) => { offsetNode: Node; offset: number } | null;
+
+/** The character offset of a point inside one drawn line, if the browser can say. */
+function columnAt(line: HTMLElement, x: number, y: number): number | undefined {
+	let root = line.getRootNode();
+	let at = (document as unknown as { caretPositionFromPoint?: CaretPositionAt })
+		.caretPositionFromPoint?.(x, y, root instanceof ShadowRoot ? { shadowRoots: [root] } : {});
+	if (!at || !line.contains(at.offsetNode)) return undefined;
+	let column = 0;
+	let walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		if (node === at.offsetNode) return column + at.offset;
+		column += node.textContent?.length ?? 0;
+	}
+	return undefined;
+}
+
+/**
+ * Where a click on drawn code lands in its source.
+ *
+ * The renderer paints into shadow roots and marks each line, so the event's
+ * composed path names the line. A file keeps the source's lines one for one; a
+ * patch is matched line by line. Diagrams and formulas have no lines to map.
+ */
+function clickedOffset(block: Block, event: MouseEvent): number | undefined {
+	if (block.kind !== "code" && block.kind !== "diff") return undefined;
+	let path = event.composedPath();
+	let marked = path.find((target): target is HTMLElement =>
+		target instanceof HTMLElement
+		&& (target.hasAttribute("data-line") || target.hasAttribute("data-column-number"))
+	);
+	let view = path.find((target): target is HTMLElement =>
+		target instanceof HTMLElement && target.classList.contains("plan-code-view")
+	);
+	if (!marked || !view) return undefined;
+	// A line number in a diff's gutter stands for the start of its line.
+	let line = marked.hasAttribute("data-line")
+		? marked
+		: (marked.getRootNode() as ParentNode).querySelector<HTMLElement>(
+			`[data-line][data-line-index="${marked.dataset.lineIndex}"]`,
+		);
+	if (!line) return undefined;
+	let column = line === marked ? columnAt(line, event.clientX, event.clientY) ?? Infinity : 0;
+	if (view.dataset.view !== "diff") {
+		return offsetOfLine(block.source, Number(line.dataset.line) - 1, column);
+	}
+
+	let type = line.dataset.lineType ?? "";
+	let text = line.textContent ?? "";
+	let drawn = [...view.querySelectorAll("diffs-container")].flatMap(container => [
+		...(container.shadowRoot?.querySelectorAll<HTMLElement>("[data-line]") ?? []),
+	]);
+	let before = drawn.slice(0, Math.max(0, drawn.indexOf(line)));
+	let occurrence =
+		before.filter(other => other.dataset.lineType === type && other.textContent === text).length;
+	let index = diffSourceLine(block.source, type, text, occurrence);
+	return index === undefined ? undefined : offsetOfLine(block.source, index, column + 1);
+}
+
+/**
+ * Whether the caret is on the first or last line of a block.
+ *
+ * Measured, because only layout knows where a wrapped line ends. A collapsed
+ * range at an empty line has no rectangle, so its line's element stands in.
+ */
+function atEdge(element: HTMLElement, direction: Direction): boolean {
+	let selection = element.ownerDocument.getSelection();
+	if (!selection?.rangeCount) return false;
+	let rects = selection.getRangeAt(0).getClientRects();
+	let rect: DOMRect | undefined = rects[direction === "next" ? rects.length - 1 : 0];
+	let node = selection.focusNode;
+	let line = node instanceof Element ? node : node?.parentElement;
+	if (!rect || rect.height === 0) rect = line?.getBoundingClientRect();
+	if (!rect || rect.height === 0 || !line) return false;
+	// The caret's box is the font's, shorter than the line it sits on.
+	let height = Math.max(rect.height, parseFloat(getComputedStyle(line).lineHeight) || 0);
+	let box = element.getBoundingClientRect();
+	return direction === "next" ? box.bottom - rect.bottom < height : rect.top - box.top < height;
+}
+
+/** Something a reader can hold focus on in place of a caret. */
+const FOCUSABLE_PREVIEW = ".plan-code-view, .plan-diagram";
 
 export function PreviewPlugin() {
 	let [editor] = useLexicalComposerContext();
 	let disabled = useCellValue(readOnly$);
 	let [blocks, setBlocks] = useState<Block[]>([]);
-	/** Blocks this viewer explicitly chose to reveal. */
-	let [shown, setShown] = useState<Record<string, boolean>>({});
+	/** Blocks whose source this viewer is looking at, and why. */
+	let [shown, setShown] = useState<Record<string, Shown>>({});
 	/** Blocks that currently have a rendered preview. */
 	let [hidable, setHidable] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -499,6 +637,8 @@ export function PreviewPlugin() {
 	/** Read by listeners that must not re-register whenever one is toggled. */
 	let current = useRef(shown);
 	current.current = shown;
+	let latest = useRef({ blocks, hidable, disabled });
+	latest.current = { blocks, hidable, disabled };
 
 	let reportHidable = useCallback((key: string, value: boolean) => {
 		setHidable(previous => {
@@ -525,11 +665,14 @@ export function PreviewPlugin() {
 	}, [editor, hidable, shown]);
 
 	/*
-	 * Arrowing into a hidden block opens it.
+	 * The caret going into a hidden block opens it, and leaving closes it again.
 	 *
 	 * The source is the block's only editable region, so leaving it hidden with
 	 * the caret inside would mean typing into somewhere invisible. A tab strip
 	 * never has to deal with this — a hidden panel is never the selection.
+	 *
+	 * Only what the caret opened closes behind it. A source somebody asked to
+	 * see with the toggle stays until they hide it.
 	 */
 	useEffect(() => {
 		return editor.registerUpdateListener(({ tags }) => {
@@ -537,14 +680,227 @@ export function PreviewPlugin() {
 			// can recover the local selection into a block, and that should not
 			// reopen one they chose to close.
 			if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) return;
-			editor.getEditorState().read(() => {
+			// Pressing on a preview resolves to its block, but is a click or a
+			// copy, not the caret arriving; the click decides what that opens.
+			let anchor = editor.getRootElement()?.ownerDocument.getSelection()?.anchorNode;
+			let at = anchor instanceof Element ? anchor : anchor?.parentElement;
+			if (at?.closest("[data-plan-preview]")) return;
+			let key = editor.getEditorState().read(() => {
 				let selection = $getSelection();
-				if (!$isRangeSelection(selection)) return;
-				let key = enclosing(selection.anchor.getNode());
-				if (!key || current.current[key]) return;
-				setShown(prev => ({ ...prev, [key]: true }));
+				if (!$isRangeSelection(selection)) return undefined;
+				return enclosing(selection.anchor.getNode()) ?? "";
+			});
+			// No caret is not somewhere else: the reader may be on a preview
+			// or a control of the block they were editing.
+			if (key === undefined) return;
+			setShown(prev => {
+				let next = { ...prev };
+				let changed = false;
+				for (let [other, why] of Object.entries(prev)) {
+					if (why !== "editing" || other === key) continue;
+					delete next[other];
+					changed = true;
+				}
+				if (key && !prev[key]) {
+					next[key] = "editing";
+					changed = true;
+				}
+				return changed ? next : prev;
 			});
 		});
+	}, [editor]);
+
+	/*
+	 * Getting into a rendered block, and back out, without hunting for its
+	 * toggle.
+	 *
+	 * A click on a preview opens the source with the caret where the click
+	 * was, as near as the drawing can say. Arrowing up or down into a block
+	 * puts the caret in code, and focus on a drawing, which takes Enter (or any
+	 * typing) to edit and another arrow to move on. Escape from a source goes
+	 * back to the preview, holding focus there.
+	 *
+	 * A focused preview is not an editable position, so Lexical's own handling
+	 * of a key there would act on the caret it left behind somewhere else. Every
+	 * key aimed at a preview stops here.
+	 */
+	useEffect(() => {
+		let blockAt = (element: Element | null | undefined) =>
+			element
+				? latest.current.blocks.find(block =>
+					!block.inline && editor.getElementByKey(block.key) === element
+				)
+				: undefined;
+		let folded = (key: string) => latest.current.hidable.has(key) && !current.current[key];
+		let root = () => editor.getRootElement();
+
+		/** Show a source and put the caret in it. Runs inside an update. */
+		let $open = (key: string, offset: number, typed?: string) => {
+			// Synchronously, so the source is laid out before Lexical puts the
+			// DOM selection in it at the end of this update.
+			flushSync(() => setShown(prev => (prev[key] ? prev : { ...prev, [key]: "editing" })));
+			root()?.focus({ preventScroll: true });
+			let node = $getNodeByKey(key);
+			if (!$isElementNode(node)) return;
+			$caretAt(node, offset);
+			let selection = $getSelection();
+			if (typed && $isRangeSelection(selection)) selection.insertText(typed);
+		};
+
+		let $enter = (key: string, direction: Direction) => {
+			let block = latest.current.blocks.find(candidate => candidate.key === key);
+			if (!block) return;
+			if (block.kind === "mermaid") {
+				let preview = editor.getElementByKey(key)?.querySelector<HTMLElement>(".plan-diagram");
+				if (preview) {
+					$setSelection(null);
+					preview.focus();
+					return;
+				}
+			}
+			$open(key, direction === "next" ? 0 : lastLineStart(block.source));
+		};
+
+		let $leave = (key: string, direction: Direction) => {
+			let node = $getNodeByKey(key);
+			if (!node) return;
+			let neighbor = direction === "next" ? node.getNextSibling() : node.getPreviousSibling();
+			if (neighbor && folded(neighbor.getKey())) return $enter(neighbor.getKey(), direction);
+			root()?.focus({ preventScroll: true });
+			if (direction === "next") node.selectNext(0, 0);
+			else node.selectPrevious();
+		};
+
+		let $close = (block: Block) => {
+			let node = $getNodeByKey(block.key);
+			let preview = editor.getElementByKey(block.key);
+			if (block.kind === "math") node?.selectNext(0, 0);
+			else $setSelection(null);
+			flushSync(() =>
+				setShown(prev => {
+					let next = { ...prev };
+					delete next[block.key];
+					return next;
+				})
+			);
+			preview?.querySelector<HTMLElement>(FOCUSABLE_PREVIEW)?.focus({ preventScroll: true });
+		};
+
+		let arrow = (command: LexicalCommand<KeyboardEvent>, direction: Direction) =>
+			editor.registerCommand(
+				command,
+				event => {
+					if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false;
+					if (latest.current.disabled) return false;
+					let selection = $getSelection();
+					if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+					// Not `getTopLevelElement`, which stops at a table cell.
+					let top: LexicalNode = selection.focus.getNode();
+					for (
+						let parent = top.getParent();
+						parent && !$isRootNode(parent);
+						parent = top.getParent()
+					) {
+						top = parent;
+					}
+					if ($isRootNode(top)) return false;
+					let neighbor = direction === "next" ? top.getNextSibling() : top.getPreviousSibling();
+					if (!neighbor || !folded(neighbor.getKey())) return false;
+					// A hidden source has no layout, so the browser's own move
+					// would step right over the block.
+					let element = editor.getElementByKey(top.getKey());
+					if (!element || !atEdge(element, direction)) return false;
+					event.preventDefault();
+					$enter(neighbor.getKey(), direction);
+					return true;
+				},
+				// Ahead of the table's own arrows, which select the end of
+				// whatever precedes a table: a hidden source.
+				COMMAND_PRIORITY_CRITICAL,
+			);
+
+		/** Measured on the way down, while the preview is still the one on screen. */
+		let pressed: { x: number; y: number; offset: number | undefined } | undefined;
+		let down = (event: MouseEvent) => {
+			let target = event.target instanceof Element ? event.target : null;
+			let block = blockAt(target?.closest("[data-plan-preview]")?.parentElement);
+			pressed = {
+				x: event.clientX,
+				y: event.clientY,
+				offset: block && clickedOffset(block, event),
+			};
+		};
+		let click = (event: MouseEvent) => {
+			if (event.button !== 0 || event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) {
+				return;
+			}
+			if (latest.current.disabled || !editor.isEditable()) return;
+			// A drag or a double click is someone selecting text to copy.
+			let moved = pressed
+				&& Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 4;
+			if (moved || event.detail > 1) return;
+			if (!(event.target instanceof Element) || event.target.closest("[data-plan-chrome]")) return;
+			let block = blockAt(event.target.closest("[data-plan-preview]")?.parentElement);
+			if (!block || !latest.current.hidable.has(block.key)) return;
+			let offset = pressed?.offset ?? block.source.length;
+			editor.update(() => $open(block.key, offset));
+		};
+
+		let attached: HTMLElement | null = null;
+		let detach = () => {
+			attached?.removeEventListener("mousedown", down);
+			attached?.removeEventListener("click", click);
+			attached = null;
+		};
+
+		return mergeRegister(
+			editor.registerRootListener(next => {
+				detach();
+				attached = next;
+				next?.addEventListener("mousedown", down);
+				next?.addEventListener("click", click);
+			}),
+			detach,
+			editor.registerCommand(
+				KEY_DOWN_COMMAND,
+				event => {
+					if (!(event.target instanceof Element)) return false;
+					let preview = event.target.closest(FOCUSABLE_PREVIEW);
+					let block = blockAt(preview?.closest("[data-plan-preview]")?.parentElement);
+					if (!block) return false;
+					if (event.metaKey || event.ctrlKey || event.altKey) return true;
+					if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+						event.preventDefault();
+						$leave(block.key, event.key === "ArrowDown" ? "next" : "previous");
+					} else if (event.key === "Enter" || event.key === " ") {
+						// Space too: on a focused box it would scroll the page.
+						event.preventDefault();
+						$open(block.key, block.source.length);
+					} else if (event.key.length === 1) {
+						event.preventDefault();
+						$open(block.key, block.source.length, event.key);
+					}
+					return true;
+				},
+				COMMAND_PRIORITY_CRITICAL,
+			),
+			arrow(KEY_ARROW_DOWN_COMMAND, "next"),
+			arrow(KEY_ARROW_UP_COMMAND, "previous"),
+			editor.registerCommand(
+				KEY_ESCAPE_COMMAND,
+				() => {
+					if (latest.current.disabled) return false;
+					let selection = $getSelection();
+					if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+					let key = enclosing(selection.anchor.getNode());
+					let block = key ? blockAt(editor.getElementByKey(key)) : undefined;
+					if (!block || !latest.current.hidable.has(block.key)) return false;
+					$close(block);
+					return true;
+				},
+				COMMAND_PRIORITY_NORMAL,
+			),
+		);
 	}, [editor]);
 
 	useEffect(() => {
@@ -588,7 +944,12 @@ export function PreviewPlugin() {
 				$getNodeByKey(key)?.selectNext(0, 0);
 			});
 		}
-		setShown(prev => ({ ...prev, [key]: collapsed }));
+		setShown(prev => {
+			let next = { ...prev };
+			if (collapsed) next[key] = "pinned";
+			else delete next[key];
+			return next;
+		});
 	}, [editor]);
 
 	return (
