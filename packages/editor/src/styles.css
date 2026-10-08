@@ -2580,10 +2580,13 @@
 }
 
 /*
- * Remove sits over the end of the label rather than in reserved space, so a
- * strip at rest keeps its even padding. The surface colour and a short fade
- * cover the letters it overlaps.
+ * A removable tab always keeps a slot at its end for remove, so showing the
+ * button never covers the label or moves the tabs beside it.
  */
+.plan-content .plan-tab[data-removable] > [role="tab"] {
+	padding-inline-end: calc(var(--spacing) * 6);
+}
+
 .plan-content .plan-tab-remove {
 	position: absolute;
 	inset-block-start: calc(50% - var(--spacing) * 2);
@@ -2593,38 +2596,23 @@
 	inline-size: calc(var(--spacing) * 4);
 	block-size: calc(var(--spacing) * 4);
 	border-radius: var(--radius-sm);
-	background: var(--plan-tab-surface);
 	color: var(--color-text-tertiary);
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-/* Fades the label out ahead of the button; not part of its target. */
-.plan-content .plan-tab-remove::before {
-	content: "";
-	position: absolute;
-	inset-block: 0;
-	inset-inline-end: 100%;
-	inline-size: calc(var(--spacing) * 2);
-	background: linear-gradient(to right, transparent, var(--plan-tab-surface));
-	pointer-events: none;
+@media (hover: hover) {
+	.plan-content .plan-tab:hover .plan-tab-remove {
+		opacity: 1;
+		pointer-events: auto;
+	}
 }
 
-.plan-content .plan-tab:hover .plan-tab-remove {
-	opacity: 1;
-	pointer-events: auto;
-}
-
-/* Armed: a tab with content waits for a second remove. */
+/* Armed: the tab waits for a second remove (or, on touch, a tap after a long press). */
 .plan-content .plan-tab[data-armed] {
 	--plan-tab-surface: var(--color-danger-surface);
 	color: var(--color-danger-text);
-}
-
-/* Make room so the whole label stays readable while it asks. */
-.plan-content .plan-tab[data-armed] > [role="tab"] {
-	padding-inline-end: calc(var(--spacing) * 6);
 }
 
 .plan-content .plan-tab[data-armed] .plan-tab-remove {
@@ -2635,6 +2623,20 @@
 
 .plan-content .plan-tab:not([data-armed]) .plan-tab-remove:hover {
 	color: var(--color-text-primary);
+}
+
+/* Touch keeps tabs evenly padded at rest; the slot opens only once a long press arms one. */
+@media (hover: none) {
+	.plan-content .plan-tab[data-removable]:not([data-armed]) > [role="tab"] {
+		padding-inline-end: calc(var(--spacing) * 2.5);
+	}
+}
+
+/* Coarse pointers: a 44px target around the small remove button. */
+:root[data-plan-coarse-pointer] .plan-content .plan-tab-remove::after {
+	content: "";
+	position: absolute;
+	inset: calc(50% - 22px);
 }
 
 .plan-content .plan-tab-add {
@@ -2648,12 +2650,9 @@
 	opacity: 1;
 }
 
-/* Without hover, show what a tap can reach: add, and remove on the open tab. */
 @media (hover: none) {
-	.plan-content .plan-tab-add,
-	.plan-content .plan-tab[data-selected] .plan-tab-remove {
+	.plan-content .plan-tab-add {
 		opacity: 1;
-		pointer-events: auto;
 	}
 }
 
@@ -2694,6 +2693,14 @@
 /* Like the formula placeholder: out of flow, so the caret stays where it is. */
 .plan-content[contenteditable="true"] .planTab > p:only-child:has(> br:only-child) {
 	position: relative;
+}
+
+/* A tab with no blocks at all, as the Planner or MDX can write one. */
+.plan-content[contenteditable="true"] .planTab:not(:has(> :not(br)))::before {
+	content: "Write in this tab…";
+	display: block;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
 }
 
 .plan-content[contenteditable="true"] .planTab > p:only-child:has(> br:only-child)::before {
