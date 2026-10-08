@@ -1,6 +1,6 @@
 [
 	{
-		"file": "packages/diagrams/src/viewer/diagram.css",
+		"file": "packages/diagrams/src/viewer/drawing.css",
 		"reason": "SeeCode-derived SVG drawing sizes are retained for the first Chopin font and colour pass because they are coupled to renderer geometry; all selectors are scoped to .ch-diagram and will be tuned with that geometry later.",
 		"cases": [
 			[
@@ -412,7 +412,7 @@
 		]
 	},
 	{
-		"file": "packages/diagrams/src/viewer/diagram.css",
+		"file": "packages/diagrams/src/viewer/motion.css",
 		"reason": "SeeCode-derived step and trace motion keeps renderer-specific delays under reduced-motion gating; these exact scoped declarations are reviewed during the extraction.",
 		"cases": [
 			[

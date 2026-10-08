@@ -23,6 +23,7 @@
 		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium",
 		"design:test": "bun node_modules/@playwright/test/cli.js test --config e2e/design/playwright.config.ts",
 		"design:behavior": "bun node_modules/@playwright/test/cli.js test --config e2e/design/behavior.config.ts",
+		"diagrams:test": "bun node_modules/@playwright/test/cli.js test --config e2e/diagram-gallery/playwright.config.ts",
 		"design:browser": "bun scripts/design-browser.ts"
 	},
 	"devDependencies": {

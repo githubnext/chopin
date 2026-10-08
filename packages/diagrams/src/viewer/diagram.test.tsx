@@ -47,7 +47,11 @@ test("renderer errors appear as escaped text and chart remains a semantic graphi
 });
 
 test("viewer style maps color and font roles to Chopin tokens", async () => {
-	let css = await Bun.file(new URL("./diagram.css", import.meta.url)).text();
+	let entry = await Bun.file(new URL("./diagram.css", import.meta.url)).text();
+	let css = await Bun.file(new URL("./drawing.css", import.meta.url)).text();
+	expect(entry).toContain('@import "./drawing.css";');
+	expect(entry).toContain('@import "./motion.css";');
+	expect(entry).toContain('@import "./chrome.css";');
 	expect(css).toContain("--sc-accent: var(--color-brand);");
 	expect(css).toContain("--sc-paper: var(--color-page);");
 	expect(css).toMatch(/font-family:\s*var\(--font-sans\)/);

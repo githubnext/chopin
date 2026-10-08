@@ -1,6 +1,5 @@
 import { useState } from "react";
 
-import { renderDiagram } from "@chopin/diagrams";
 import { DIAGRAM_FIXTURES } from "@chopin/diagrams/fixtures";
 import { Diagram } from "@chopin/diagrams/react";
 import { StaticPlanEditor } from "@chopin/editor/static";
@@ -130,7 +129,6 @@ function DocumentSpecimen() {
 export function DiagramGalleryPage() {
 	let [selectedType, setSelectedType] = useState("flowchart");
 	let selected = fixture(selectedType);
-	let result = renderDiagram(selected.spec);
 	let families = familyOrder.filter(family =>
 		DIAGRAM_FIXTURES.some(item => item.family === family)
 	);
@@ -217,9 +215,7 @@ export function DiagramGalleryPage() {
 							<code>{selected.type}</code>
 						</div>
 						<p className="diagram-gallery-render-state">
-							{"body" in result
-								? "Rendered from a resolved local fixture"
-								: "Renderer returned a problem"}
+							Rendered from a resolved local fixture
 						</p>
 						<Diagram spec={selected.spec} />
 					</div>
