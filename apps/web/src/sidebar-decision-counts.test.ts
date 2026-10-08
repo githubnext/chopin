@@ -9,13 +9,15 @@ import {
 	applyDecisionSnapshot,
 	beginDocumentLoad,
 	completeDocumentPage,
+	decisionWatchPlan,
 	failDocumentLoad,
+	fallbackRefreshBatch,
 	newestDocument,
 	projectDocuments,
 	removeLoadedDocument,
 	replaceProjectTotal,
+	settleHttpTotal,
 	staleDecisionCounts,
-	watchedRepositories,
 } from "./document-actions";
 import { ProjectSidebar } from "./project-sidebar";
 import { MAX_WATCHED_DOCUMENTS, MAX_WATCHED_REPOSITORIES } from "./sidebar-decision-watch";
@@ -332,6 +334,10 @@ function navigationProject(index: number, available: boolean): Api.NavigationPro
 	};
 }
 
+function ids(projects: Api.NavigationProject[]): string[] {
+	return projects.map(project => project.repositoryId);
+}
+
 describe("decision count catch-up", () => {
 	it("reconciles every loaded row and the project total missed while disconnected", () => {
 		let documents = {
@@ -384,7 +390,7 @@ describe("decision count catch-up", () => {
 			{ length: MAX_WATCHED_DOCUMENTS + 1 },
 			(_, index) => ({ ...parent, id: `channel-${index}` }),
 		);
-		let watched = watchedRepositories(projectDocuments({ projects }, {
+		let { watched } = decisionWatchPlan(projectDocuments({ projects }, {
 			R_0: { status: "ready", channels: [parent, child] },
 			R_2: { status: "loading", channels: many },
 		}));
@@ -399,5 +405,65 @@ describe("decision count catch-up", () => {
 		expect(watched.some(repository => repository.repositoryId === "R_1")).toBe(false);
 		expect(watched[1]!.channelIds).toHaveLength(MAX_WATCHED_DOCUMENTS + 1);
 		expect(watched[2]!.channelIds).toEqual([]);
+	});
+
+	it("watches the open document's project and the first projects on screen, refreshing the rest", () => {
+		let projects = Array.from(
+			{ length: MAX_WATCHED_REPOSITORIES + 3 },
+			(_, index) => navigationProject(index, true),
+		).toReversed();
+		let open = `R_${MAX_WATCHED_REPOSITORIES + 1}`;
+		let plan = decisionWatchPlan(projectDocuments({ projects }, {}), open);
+
+		expect(plan.watched).toHaveLength(MAX_WATCHED_REPOSITORIES);
+		expect(plan.watched.map(repository => repository.repositoryId).slice(0, 3)).toEqual([
+			open,
+			"R_0",
+			"R_1",
+		]);
+		expect(plan.unwatched.map(project => project.repositoryId)).toEqual([
+			`R_${MAX_WATCHED_REPOSITORIES - 1}`,
+			`R_${MAX_WATCHED_REPOSITORIES}`,
+			`R_${MAX_WATCHED_REPOSITORIES + 2}`,
+		]);
+		expect(decisionWatchPlan(projectDocuments({ projects: projects.slice(0, 3) }, {})).unwatched)
+			.toEqual([]);
+	});
+
+	it("refreshes unwatched projects in bounded batches that reach each one in turn", () => {
+		let unwatched = Array.from({ length: 5 }, (_, index) => navigationProject(index, true));
+
+		expect(ids(fallbackRefreshBatch(unwatched, undefined, 2))).toEqual(["R_0", "R_1"]);
+		expect(ids(fallbackRefreshBatch(unwatched, "R_1", 2))).toEqual(["R_2", "R_3"]);
+		expect(ids(fallbackRefreshBatch(unwatched, "R_3", 2))).toEqual(["R_4", "R_0"]);
+		expect(ids(fallbackRefreshBatch(unwatched, "R_gone", 2))).toEqual(["R_0", "R_1"]);
+		expect(ids(fallbackRefreshBatch(unwatched.slice(0, 2), "R_0", 10))).toEqual(["R_1", "R_0"]);
+		expect(fallbackRefreshBatch([], undefined)).toEqual([]);
+	});
+
+	it("keeps a live total that arrived during an HTTP read and flags a disagreement", () => {
+		expect(settleHttpTotal(undefined, undefined, 4)).toEqual({
+			total: 4,
+			superseded: false,
+			conflict: false,
+		});
+		expect(settleHttpTotal({ updates: 2, total: 5 }, 2, 4)).toEqual({
+			total: 4,
+			superseded: false,
+			conflict: false,
+		});
+		expect(settleHttpTotal({ updates: 3, total: 5 }, 2, 4)).toEqual({
+			total: 5,
+			superseded: true,
+			conflict: true,
+		});
+		expect(settleHttpTotal({ updates: 1, total: 5 }, undefined, 5)).toMatchObject({
+			superseded: true,
+			conflict: false,
+		});
+		expect(settleHttpTotal({ updates: 1, total: 5 }, undefined, undefined)).toMatchObject({
+			total: 5,
+			conflict: false,
+		});
 	});
 });

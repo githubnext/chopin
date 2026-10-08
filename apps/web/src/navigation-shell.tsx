@@ -18,7 +18,12 @@ import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
-import { newestDocument, updateDocumentMetadata, watchedRepositories } from "./document-actions";
+import {
+	decisionWatchPlan,
+	fallbackRefreshBatch,
+	newestDocument,
+	updateDocumentMetadata,
+} from "./document-actions";
 import { WorkspaceNotice } from "./workspace-notice";
 import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
@@ -257,6 +262,9 @@ function NavigationDrawer(
 	);
 }
 
+/** How often projects past the sidebar socket's watch cap refresh their counts over HTTP. */
+const UNWATCHED_REFRESH_MS = 60_000;
+
 export function NavigationShell(
 	{
 		children,
@@ -350,6 +358,7 @@ export function NavigationShell(
 	let dialogMotion = dialogPresence.phase === "closed" ? undefined : dialogPresence;
 	let presentedDialog = dialogMotion?.value;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
+	let resyncDecisions = useRef<(repositoryId: string) => void>(() => {});
 	let {
 		beginTotalRequest,
 		loadMore,
@@ -360,15 +369,11 @@ export function NavigationShell(
 		updateDecisionSnapshot,
 		updateDocument,
 		upsertDocument,
-	} = useProjectDocuments(navigation, catalogueMode === "archived");
-	let decisionRepositories = useMemo(
-		() => catalogueMode === "archived" ? [] : watchedRepositories(projects),
-		[catalogueMode, projects],
+	} = useProjectDocuments(
+		navigation,
+		catalogueMode === "archived",
+		repositoryId => resyncDecisions.current(repositoryId),
 	);
-	useSidebarDecisions(decisionRepositories, {
-		onCounts: updateDecisionCounts,
-		onSnapshot: updateDecisionSnapshot,
-	});
 	let routeKey = isDocumentWorkspaceRoute(route)
 		? documentRouteIdentity(route)
 		: route.page === "repository"
@@ -584,6 +589,43 @@ export function NavigationShell(
 	}, [creation.settled]);
 
 	let active = activeProject(projects, currentDocumentId, resolvedChannel?.repositoryId);
+	let decisionWatch = useMemo(
+		() =>
+			catalogueMode === "archived"
+				? { watched: [], unwatched: [] }
+				: decisionWatchPlan(projects, active?.repositoryId),
+		[active?.repositoryId, catalogueMode, projects],
+	);
+	resyncDecisions.current = useSidebarDecisions(decisionWatch.watched, {
+		onCounts: updateDecisionCounts,
+		onSnapshot: updateDecisionSnapshot,
+	});
+	let unwatchedProjects = useRef(decisionWatch.unwatched);
+	unwatchedProjects.current = decisionWatch.unwatched;
+	let fallbackAfter = useRef<string | undefined>(undefined);
+	let fallbackRefreshedAt = useRef(0);
+	// Projects past the watch cap get no live frames, so refresh a bounded batch of
+	// them over HTTP on focus, on becoming visible, and on a slow interval.
+	useEffect(() => {
+		let refreshUnwatched = () => {
+			if (document.visibilityState !== "visible") return;
+			let now = Date.now();
+			if (now - fallbackRefreshedAt.current < UNWATCHED_REFRESH_MS / 2) return;
+			let batch = fallbackRefreshBatch(unwatchedProjects.current, fallbackAfter.current);
+			if (batch.length === 0) return;
+			fallbackRefreshedAt.current = now;
+			fallbackAfter.current = batch.at(-1)!.repositoryId;
+			for (let project of batch) refreshProject(project);
+		};
+		let interval = setInterval(refreshUnwatched, UNWATCHED_REFRESH_MS);
+		window.addEventListener("focus", refreshUnwatched);
+		document.addEventListener("visibilitychange", refreshUnwatched);
+		return () => {
+			clearInterval(interval);
+			window.removeEventListener("focus", refreshUnwatched);
+			document.removeEventListener("visibilitychange", refreshUnwatched);
+		};
+	}, [refreshProject]);
 	let creationTarget = documentCreationTarget(
 		navigation?.projects,
 		active,

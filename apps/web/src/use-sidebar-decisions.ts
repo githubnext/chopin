@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
 	awaitingRetry,
+	emptyResyncQueue,
 	planDecisionWatch,
+	requestResync,
 	retryDecisionWatch,
 	retryDelay,
 	settleDecisionWatch,
+	takeResyncs,
 } from "./sidebar-decision-watch";
 import { Wire } from "./wire";
 
 import type { Sidebar } from "@chopin/protocol";
-import type { WatchLedger } from "./sidebar-decision-watch";
+import type { ResyncQueue, WatchLedger } from "./sidebar-decision-watch";
 
 type Handlers = {
 	onCounts: (counts: Sidebar.Decisions) => void;
@@ -19,21 +22,28 @@ type Handlers = {
 
 /**
  * Keep the Projects sidebar's decision counts live through its own socket, whether or
- * not a document is open, watching every repository the sidebar shows.
+ * not a document is open, watching every repository the sidebar shows. Returns a
+ * function that asks for a fresh snapshot of a repository whose total conflicts.
  */
 export function useSidebarDecisions(
 	repositories: Sidebar.WatchedRepository[],
 	handlers: Handlers,
-): void {
+): (repositoryId: string) => void {
 	let [wire, setWire] = useState<Wire>();
 	let [connection, setConnection] = useState(0);
 	let [retry, setRetry] = useState(0);
 	let latestHandlers = useRef(handlers);
 	latestHandlers.current = handlers;
+	let latestRepositories = useRef(repositories);
+	latestRepositories.current = repositories;
+	let latestWire = useRef<Wire | undefined>(undefined);
+	latestWire.current = wire;
 	let ledger = useRef<WatchLedger>(new Map());
 	let generation = useRef(0);
 	let retryAttempts = useRef(0);
 	let retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	let resyncs = useRef<ResyncQueue>(emptyResyncQueue());
+	let resyncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 	useEffect(() => {
 		let socket = new Wire({
@@ -41,8 +51,11 @@ export function useSidebarDecisions(
 			onStatus: status => {
 				generation.current++;
 				ledger.current = new Map();
+				resyncs.current = emptyResyncQueue();
 				clearTimeout(retryTimer.current);
 				retryTimer.current = undefined;
+				clearTimeout(resyncTimer.current);
+				resyncTimer.current = undefined;
 				if (status === "connected") setConnection(current => current + 1);
 			},
 		});
@@ -59,6 +72,8 @@ export function useSidebarDecisions(
 			for (let stop of unsubscribe) stop();
 			clearTimeout(retryTimer.current);
 			retryTimer.current = undefined;
+			clearTimeout(resyncTimer.current);
+			resyncTimer.current = undefined;
 			socket.dispose();
 			setWire(undefined);
 		};
@@ -90,4 +105,30 @@ export function useSidebarDecisions(
 				});
 		}
 	}, [connection, repositories, retry, wire]);
+
+	let flushResyncs = useCallback(() => {
+		let socket = latestWire.current;
+		if (!socket?.connected) return;
+		let plan = takeResyncs(
+			resyncs.current,
+			ledger.current,
+			latestRepositories.current,
+			Date.now(),
+		);
+		resyncs.current = plan.queue;
+		// The watch reply needs no settling: the ledger already holds these repositories.
+		for (let repositories of plan.frames) {
+			socket.ask<Sidebar.Watched>("sidebar:watch", { repositories }).catch(() => undefined);
+		}
+		if (plan.wait === undefined || resyncTimer.current) return;
+		resyncTimer.current = setTimeout(() => {
+			resyncTimer.current = undefined;
+			flushResyncs();
+		}, plan.wait);
+	}, []);
+
+	return useCallback((repositoryId: string) => {
+		resyncs.current = requestResync(resyncs.current, repositoryId);
+		flushResyncs();
+	}, [flushResyncs]);
 }

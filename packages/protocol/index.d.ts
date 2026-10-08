@@ -163,7 +163,10 @@ export declare namespace Sidebar {
 	 * already watching under the same name, and rechecks every watched repository
 	 * periodically, dropping it when access is denied. Repeat a watched repository
 	 * to reconcile documents loaded since; send more than 500 documents for one
-	 * repository across several frames. Send the full list after every connection.
+	 * repository across several frames. Repeating a watched repository, even with no
+	 * documents, also sends a fresh `Snapshot` ordered after every earlier frame, so
+	 * a client can resynchronize a total it can no longer order. Send the full list
+	 * after every connection.
 	 */
 	export type Watch = KIND<"sidebar:watch"> & {
 		repositories: WatchedRepository[];

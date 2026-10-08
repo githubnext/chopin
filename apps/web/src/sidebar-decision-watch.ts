@@ -6,6 +6,7 @@ export const MAX_WATCHED_DOCUMENTS = 500;
 
 const FIRST_RETRY_MS = 2_000;
 const LAST_RETRY_MS = 60_000;
+export const RESYNC_INTERVAL_MS = 1_000;
 
 export type WatchStatus = "requested" | "watched" | "refused" | "unavailable";
 
@@ -148,4 +149,66 @@ export function retryDecisionWatch(ledger: WatchLedger): WatchLedger {
 
 export function retryDelay(attempt: number): number {
 	return Math.min(FIRST_RETRY_MS * 2 ** attempt, LAST_RETRY_MS);
+}
+
+export type ResyncQueue = {
+	pending: ReadonlySet<string>;
+	sentAt: ReadonlyMap<string, number>;
+};
+
+export type ResyncPlan = {
+	queue: ResyncQueue;
+	frames: Sidebar.WatchedRepository[][];
+	/** Milliseconds until the next pending repository may be requested again. */
+	wait?: number;
+};
+
+export function emptyResyncQueue(): ResyncQueue {
+	return { pending: new Set(), sentAt: new Map() };
+}
+
+/** Ask for a fresh snapshot of a repository whose total the client can no longer order. */
+export function requestResync(queue: ResyncQueue, repositoryId: string): ResyncQueue {
+	if (queue.pending.has(repositoryId)) return queue;
+	return { ...queue, pending: new Set([...queue.pending, repositoryId]) };
+}
+
+/**
+ * Re-watch pending repositories with no documents, which makes the server send a
+ * snapshot ordered after every frame it sent before. Each repository is requested
+ * at most once a second, so a burst of conflicts costs one snapshot. Repositories
+ * this connection does not watch are dropped: no snapshot would answer them.
+ */
+export function takeResyncs(
+	queue: ResyncQueue,
+	ledger: WatchLedger,
+	desired: Sidebar.WatchedRepository[],
+	now: number,
+): ResyncPlan {
+	let byId = new Map(desired.map(repository => [repository.repositoryId, repository]));
+	let pending = new Set<string>();
+	let sentAt = new Map(queue.sentAt);
+	let due: Sidebar.WatchedRepository[] = [];
+	let wait: number | undefined;
+	for (let repositoryId of queue.pending) {
+		let repository = byId.get(repositoryId);
+		let entry = ledger.get(repositoryId);
+		if (
+			!repository || entry?.identity !== identityOf(repository)
+			|| (entry.status !== "requested" && entry.status !== "watched")
+		) continue;
+		let remaining = (sentAt.get(repositoryId) ?? -Infinity) + RESYNC_INTERVAL_MS - now;
+		if (remaining > 0) {
+			pending.add(repositoryId);
+			wait = Math.min(wait ?? remaining, remaining);
+			continue;
+		}
+		sentAt.set(repositoryId, now);
+		due.push({ ...repository, channelIds: [] });
+	}
+	return {
+		queue: { pending, sentAt },
+		frames: chunks(due, MAX_WATCH_FRAME_REPOSITORIES),
+		...(wait === undefined ? {} : { wait }),
+	};
 }

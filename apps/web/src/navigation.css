@@ -518,6 +518,23 @@
 	order: 1;
 }
 
+/* Rows use different gaps, so pad touch counts to the project row's gap and share its edge. */
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-document
+	> .project-sidebar-document-actions
+	~ .project-sidebar-count {
+	margin-right: calc(var(--project-sidebar-gap) - var(--spacing));
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-child
+	> .project-sidebar-document-actions
+	~ .project-sidebar-count {
+	margin-right: var(--project-sidebar-gap);
+}
+
 .project-sidebar-status,
 .project-sidebar-load-more {
 	padding: 0 var(--project-sidebar-inset) var(--spacing) var(--project-sidebar-label);

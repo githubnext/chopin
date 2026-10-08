@@ -13,6 +13,7 @@ import {
 	removeLoadedDocument,
 	replaceLoadedDocument,
 	replaceProjectTotal,
+	settleHttpTotal,
 	snapshotDecisionCounts,
 	staleDecisionCounts,
 	updateDocumentMetadata,
@@ -23,6 +24,7 @@ import type {
 	DecisionCounts,
 	DecisionSnapshot,
 	DocumentMetadata,
+	LiveTotal,
 	LoadedDocuments,
 	ProjectDocuments,
 } from "./document-actions";
@@ -32,7 +34,16 @@ type CatalogueLoad = {
 	queued?: Api.NavigationProject;
 };
 
-export function useProjectDocuments(navigation?: Api.Navigation, includeArchived = false) {
+/**
+ * Load and keep each project's documents and decision counts. `onTotalConflict` is
+ * called when a repository total can no longer be ordered against a live one, so the
+ * caller can ask the sidebar socket for a fresh snapshot.
+ */
+export function useProjectDocuments(
+	navigation?: Api.Navigation,
+	includeArchived = false,
+	onTotalConflict?: (repositoryId: string) => void,
+) {
 	let [catalogue, setCatalogue] = useState<{
 		includeArchived: boolean;
 		documents: LoadedDocuments;
@@ -43,7 +54,9 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	let loads = useRef(new Map<string, CatalogueLoad>());
 	let latestDocuments = useRef(new Map<string, Api.Channel>());
 	let liveCounts = useRef(new Map<string, DecisionCounts>());
-	let liveTotals = useRef(new Map<string, { updates: number; total: number }>());
+	let liveTotals = useRef(new Map<string, LiveTotal>());
+	let totalConflict = useRef(onTotalConflict);
+	totalConflict.current = onTotalConflict;
 
 	let load = useCallback(async (
 		project: Api.NavigationProject,
@@ -83,10 +96,13 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				{ cursor, includeArchived, signal: controller.signal },
 			);
 			if (loads.current.get(key) !== currentLoad) return;
-			let live = liveTotals.current.get(id);
-			let unansweredDecisions = live && live.updates !== liveUpdatesAtRequest
-				? live.total
-				: page.unansweredDecisions;
+			let settled = settleHttpTotal(
+				liveTotals.current.get(id),
+				liveUpdatesAtRequest,
+				page.unansweredDecisions,
+			);
+			let unansweredDecisions = settled.total;
+			if (settled.conflict) totalConflict.current?.(id);
 			let channels = page.channels.map(channel => {
 				let latest = latestDocuments.current.get(channel.id);
 				let accepted = acceptDecisionCounts(
@@ -273,7 +289,11 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		});
 	}, []);
 	let updateDecisionCounts = useCallback((counts: DecisionCounts) => {
-		if (!acceptLiveCounts(counts)) return;
+		if (!acceptLiveCounts(counts)) {
+			// Dropping the frame also drops its total, which cannot be ordered against ours.
+			totalConflict.current?.(counts.repositoryId);
+			return;
+		}
 		acceptLiveTotal(counts.repositoryId, counts.repositoryUnanswered);
 		setCatalogue(current => {
 			let documents = applyDecisionCounts(current.documents, counts);
@@ -292,7 +312,9 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		let updatesAtRequest = liveTotals.current.get(repositoryId)?.updates;
 		return (total: number) => {
 			let live = liveTotals.current.get(repositoryId);
-			if (live?.updates !== updatesAtRequest) return;
+			let settled = settleHttpTotal(live, updatesAtRequest, total);
+			if (settled.conflict) totalConflict.current?.(repositoryId);
+			if (settled.superseded) return;
 			liveTotals.current.set(repositoryId, { updates: (live?.updates ?? 0) + 1, total });
 			setCatalogue(current => {
 				let documents = replaceProjectTotal(current.documents, repositoryId, total);
