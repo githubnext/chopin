@@ -461,12 +461,12 @@
 			[
 				"dynamic",
 				"*",
-				"markerStyle(marker, lineHeight, hit, inset)",
+				"markerStyle(marker, lineHeight, prose, vertical[index]!)",
 				"unresolved style > ResolvedLayer > <button>",
 				1
 			]
 		],
-		"sourceHash": "d6976f81401b6563b3b68c38364b94bab169b30eed0038ed1f788f4025488260"
+		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -480,6 +480,6 @@
 				1
 			]
 		],
-		"sourceHash": "d6976f81401b6563b3b68c38364b94bab169b30eed0038ed1f788f4025488260"
+		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
 	}
 ]
