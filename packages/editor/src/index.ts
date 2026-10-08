@@ -75,3 +75,4 @@ export {
 	ResearchReference,
 } from "./widgets";
 export { DecisionCard } from "./widgets/decision";
+export type { VisualPreviewComponent, VisualPreviewProps } from "./widgets/visual-decision";

@@ -20,6 +20,7 @@ import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
 import type { QuestionStepMotion } from "./widget-options";
+import type { VisualPreviewComponent } from "./widgets/visual-decision";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
@@ -30,6 +31,7 @@ export type DecisionsProps = {
 	motion: MotionDisclosureContract;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
+	visualPreview?: VisualPreviewComponent;
 	wire?: Transport;
 	connected?: boolean;
 	headingId?: string;
@@ -86,6 +88,7 @@ export function Decisions(
 		motionImmediately,
 		onShowPlan,
 		questionMotion,
+		visualPreview,
 		reveal,
 		self,
 		store,
@@ -108,6 +111,7 @@ export function Decisions(
 	let focusedQuestionnaire = useRef<HTMLElement | undefined>(undefined);
 	let revealed = useRef<number | undefined>(undefined);
 	let [history, setHistory] = useHistory();
+	let openVisual = useRef(new Set<string>());
 	let historyId = useId();
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
@@ -115,6 +119,18 @@ export function Decisions(
 	useEffect(() => () => {
 		store.release();
 	}, [store]);
+
+	useEffect(() => {
+		let visual = entries.filter(entry => entry.value.visual === "visual-decision@1");
+		if (
+			visual.some(entry =>
+				openVisual.current.has(entry.id) && status(entry, metadata) === "decided"
+			)
+		) setHistory(true);
+		openVisual.current = new Set(
+			visual.filter(entry => waiting(entry, metadata)).map(entry => entry.id),
+		);
+	}, [entries, metadata]);
 
 	useEffect(() => {
 		if (!reveal || revealed.current === reveal.token) return;
@@ -162,6 +178,7 @@ export function Decisions(
 			connected={connected}
 			key={entry.id}
 			motion={questionMotion}
+			visualPreview={visualPreview}
 			onQuestionEnter={question => store.highlight(entry.id, question)}
 			onQuestionLeave={() => store.clear()}
 			onQuestionSelect={question => {
