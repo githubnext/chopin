@@ -1526,6 +1526,7 @@ export async function publish(
 	server: Server<SocketData>,
 	roomId: string,
 	mutation: { update: Uint8Array; source: string },
+	options?: { agent?: boolean },
 ): Promise<void> {
 	if (implementationActive(plan)) throw new Error("implementation is active");
 	plan.document.seq++;
@@ -1541,6 +1542,7 @@ export async function publish(
 			epoch: plan.document.epoch,
 			update: encode(mutation.update),
 			seq: plan.document.seq,
+			...(options?.agent ? { agent: true as const } : {}),
 		});
 	} catch (err) {
 		console.error("[plan] could not broadcast a persisted update:", err);
@@ -1560,7 +1562,7 @@ export async function publishStaged(
 	roomId: string,
 	candidate: Plan,
 	mutation?: room.Mutation,
-	options?: { notifyDocumentPersisted?: boolean },
+	options?: { notifyDocumentPersisted?: boolean; agent?: boolean },
 ): Promise<void> {
 	if (implementationActive(plan)) throw new ImplementationActiveError();
 	let source = room.project(candidate.document);
@@ -1604,6 +1606,7 @@ export async function publishStaged(
 				epoch: plan.document.epoch,
 				update: encode(mutation.update),
 				seq: plan.document.seq,
+				...(options?.agent ? { agent: true as const } : {}),
 			});
 		} catch (err) {
 			console.error("[plan] could not broadcast a persisted update:", err);
@@ -1681,6 +1684,7 @@ export async function rewrite(
 					epoch: plan.document.epoch,
 					update: encode(outcome.mutation.update),
 					seq: plan.document.seq,
+					agent: true,
 				});
 			} catch (err) {
 				console.error("[plan] could not broadcast a persisted update:", err);

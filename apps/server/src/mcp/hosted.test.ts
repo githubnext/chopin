@@ -1620,6 +1620,7 @@ describe("the hosted MCP adapter", () => {
 				"plan:anchors",
 			]);
 			expect(frames.some(frame => frame.kind === "plan:awareness")).toBe(false);
+			expect(frames.find(frame => frame.kind === "plan:update")).toMatchObject({ agent: true });
 			let marked = frames.find(frame => frame.kind === "plan:changes") as
 				| { changes: Array<{ attribution?: unknown }> }
 				| undefined;

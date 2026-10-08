@@ -43,24 +43,24 @@ function label(entry: Entry): string {
 }
 
 /**
- * Who wrote it. A client that never introduced itself is reported by the
- * server as `unknown`, which names nothing a reader could act on; the person
- * whose credential made the call is always known.
+ * Who wrote it: the verified caller first, then the client they used. The
+ * client names itself and could claim to be anyone, so it never stands alone;
+ * one that gave no name is reported by the server as `unknown`.
  */
 export function author(entry: Entry): string | undefined {
 	let attribution = entry.attribution;
 	if (!attribution) return undefined;
-	if (attribution.client.name !== "unknown") return attribution.client.name;
-	return `@${attribution.user}`;
+	let user = `@${attribution.user}`;
+	return attribution.client.name === "unknown" ? user : `${user} via ${attribution.client.name}`;
 }
 
 function provenance(entry: Entry): string | undefined {
 	let attribution = entry.attribution;
 	if (!attribution) return undefined;
 	let client = attribution.client.name === "unknown"
-		? "MCP"
+		? "An unnamed MCP client"
 		: `${attribution.client.name} ${attribution.client.version}`;
-	return `${client} for @${attribution.user}, revisions ${attribution.fromRevision} to ${attribution.revision}`;
+	return `${client}, revisions ${attribution.fromRevision} to ${attribution.revision}`;
 }
 
 function describe(entry: Entry): string {

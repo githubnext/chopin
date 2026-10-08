@@ -91,36 +91,8 @@ function duration(style: CSSStyleDeclaration, token: string): number {
 	return value.endsWith("ms") ? number : number * 1000;
 }
 
-/**
- * Let a mark fade rather than vanish.
- *
- * A transition cannot do it. Its timing is read from the style being changed
- * to, which is the plain block's, and putting a transition on every block in
- * the document for the sake of this would slow down everything else they do.
- * Returns what to run once the attribute is off.
- */
-function settle(element: HTMLElement): (() => void) | undefined {
-	if (!element.isConnected || reduced()) return undefined;
-	let style = getComputedStyle(element);
-	let from = {
-		backgroundColor: style.backgroundColor,
-		boxShadow: style.boxShadow,
-		outlineColor: style.outlineColor,
-	};
-	let length = duration(style, "--duration-linger");
-	let easing = style.getPropertyValue("--ease-out").trim() || "ease-out";
-	return () => {
-		let to = getComputedStyle(element);
-		element.animate(
-			[from, {
-				backgroundColor: to.backgroundColor,
-				boxShadow: to.boxShadow,
-				outlineColor: to.outlineColor,
-			}],
-			{ duration: length, easing },
-		);
-	};
-}
+/** Longer than the fade, so a mark is taken off even if its animation never ends. */
+const FADED = 2_000;
 
 export class ChangeStore {
 	#listeners = new Set<() => void>();
@@ -143,6 +115,11 @@ export class ChangeStore {
 	#observed = new Map<Element, Set<string>>();
 	/** Attributes this store put on the document, so it can take them off. */
 	#painted = new Map<HTMLElement, Set<string>>();
+
+	/** Marks on their way out, and which attributes go once they have faded. */
+	#fading = new Map<HTMLElement, Set<string>>();
+	/** Whether the remote update being applied right now was the agent's. */
+	#agent = false;
 
 	#scrolled = 0;
 	#frame = 0;
@@ -408,26 +385,52 @@ export class ChangeStore {
 			let element = elements.get(id);
 			if (!placement || !element) continue;
 
+			// Marked again on its way out: back to an ordinary mark.
+			if (this.#fading.has(element)) this.#faded(element);
+
 			let names = next.get(element) ?? new Set();
 			names.add(attribute(placement));
 			next.set(element, names);
 			element.setAttribute(attribute(placement), value(placement));
 		}
 
+		let still = !reduced();
 		for (let [element, names] of this.#painted) {
-			for (let name of names) {
-				if (next.get(element)?.has(name)) continue;
-				// Read before the attribute goes: once it has, the wash it drew
-				// is no longer anywhere to fade from.
-				let from = settle(element);
-				element.removeAttribute(name);
-				from?.();
+			let staying = next.get(element);
+			let leaving = [...names].filter(name => !staying?.has(name));
+			if (leaving.length === 0) continue;
+
+			// The stylesheet fades the mark while every attribute is still on,
+			// so the wash keeps its shape to the end. Only a block losing all of
+			// its marks fades: fading one of two would take the other with it.
+			if (still && !staying && element.isConnected) {
+				this.#fading.set(element, new Set(leaving));
+				element.addEventListener("animationend", this.#ended);
+				setTimeout(() => this.#faded(element), FADED);
+				element.setAttribute("data-plan-fade", "");
+				continue;
 			}
+			for (let name of leaving) element.removeAttribute(name);
 		}
 		this.#painted = next;
 	}
 
+	#ended = (event: AnimationEvent): void => {
+		if (event.animationName !== "plan-change-out") return;
+		if (event.target instanceof HTMLElement) this.#faded(event.target);
+	};
+
+	#faded(element: HTMLElement): void {
+		let names = this.#fading.get(element);
+		if (!names) return;
+		this.#fading.delete(element);
+		element.removeEventListener("animationend", this.#ended);
+		element.removeAttribute("data-plan-fade");
+		for (let name of names) element.removeAttribute(name);
+	}
+
 	#unpaint(): void {
+		for (let element of this.#fading.keys()) this.#faded(element);
 		for (let [element, names] of this.#painted) {
 			for (let name of names) element.removeAttribute(name);
 		}
@@ -435,32 +438,59 @@ export class ChangeStore {
 	}
 
 	/**
-	 * Open up blocks that were just inserted in front of the reader.
+	 * Say who wrote the remote update about to be applied.
+	 *
+	 * Lexical applies it in a microtask, which is before this timer runs, so
+	 * the flag covers exactly that update and no later one.
+	 */
+	authored(agent: boolean): void {
+		this.#agent = agent;
+		if (agent) setTimeout(() => (this.#agent = false));
+	}
+
+	/** Whether the update Lexical is applying now came from the agent. */
+	get agentWriting(): boolean {
+		return this.#agent;
+	}
+
+	/**
+	 * Open up blocks the agent just inserted in front of the reader.
 	 *
 	 * A block that appears at full height shoves everything under it down in
 	 * one frame, which reads as the page lurching. Only blocks on screen are
 	 * worth it: one inserted out of view moves nothing anybody is looking at.
+	 * The caller decides which blocks are safe to open; this only animates.
 	 */
 	arrived(elements: HTMLElement[]): void {
 		let root = this.#scroller;
-		if (!root || reduced()) return;
+		if (!root || elements.length === 0 || reduced()) return;
 
+		// Every read before any write, so opening several costs one layout.
 		let bounds = root.getBoundingClientRect();
-		for (let element of elements) {
+		let opening = elements.flatMap(element => {
 			let rect = element.getBoundingClientRect();
-			if (rect.top >= bounds.bottom || rect.bottom <= bounds.top) continue;
+			if (rect.top >= bounds.bottom || rect.bottom <= bounds.top) return [];
+			return [{ element, height: rect.height, style: getComputedStyle(element) }];
+		});
 
-			let style = getComputedStyle(element);
-			let overflow = element.style.overflow;
-			element.style.overflow = "clip";
-			let opening = element.animate(
+		for (let { element, height, style } of opening) {
+			// Clipped through the keyframes rather than an inline style, so it
+			// cannot outlive the animation or overwrite one Lexical writes.
+			element.animate(
 				[
-					{ height: "0px", marginBlock: "0px", paddingBlock: "0px", opacity: 0 },
 					{
-						height: `${rect.height}px`,
+						height: "0px",
+						marginBlock: "0px",
+						paddingBlock: "0px",
+						opacity: 0,
+						overflow: "clip",
+					},
+					{
+						height: `${height}px`,
 						marginBlock: `${style.marginBlockStart} ${style.marginBlockEnd}`,
 						paddingBlock: `${style.paddingBlockStart} ${style.paddingBlockEnd}`,
 						opacity: 1,
+						overflow: "clip",
 					},
 				],
 				{
@@ -468,10 +498,6 @@ export class ChangeStore {
 					easing: style.getPropertyValue("--motion-move").trim() || "ease-out",
 				},
 			);
-			let done = () => {
-				element.style.overflow = overflow;
-			};
-			void opening.finished.then(done, done);
 		}
 	}
 

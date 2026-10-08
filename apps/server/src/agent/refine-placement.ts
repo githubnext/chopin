@@ -34,7 +34,9 @@ export async function placeCard(
 		let mutation = Questions.place(candidate, [{ widget: id, blocks: [at] }]);
 		if (!mutation) return false;
 		beforePublish();
-		await Service.publishStaged(plan, context.server, context.room, candidate, mutation);
+		await Service.publishStaged(plan, context.server, context.room, candidate, mutation, {
+			agent: true,
+		});
 		context.anchors();
 		return true;
 	} finally {

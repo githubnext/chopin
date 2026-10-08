@@ -2457,28 +2457,29 @@
  * its cursor, which comes and goes with the turn rather than waiting to be
  * read.
  */
-.plan .plan-content [data-plan-change] {
-	--plan-wash-color: color-mix(in oklch, var(--color-brand-wash) 65%, transparent);
-	background-color: var(--plan-wash-color);
-	animation: plan-change-in var(--duration-linger) var(--ease-out);
-}
-
 /*
- * Bled past the block in an outline, so the wash neither moves the text nor
- * stops hard at its edge, and two changed blocks in a row meet as one region.
- * `box-shadow` is the holes' below. Zero specificity, so a block that already
- * draws its own edge or corners keeps them.
+ * Registered so the colours can be animated: every part of a mark is drawn
+ * from these two, so fading them fades the whole mark at once, at its full
+ * shape, with nothing left to snap off at the end.
  */
-:where(.plan .plan-content [data-plan-change]) {
-	border-radius: var(--radius-sm);
-	outline: 0.375rem solid var(--plan-wash-color);
+@property --plan-wash {
+	syntax: "<color>";
+	inherits: false;
+	initial-value: transparent;
 }
 
-@keyframes plan-change-in {
-	from {
-		background-color: transparent;
-		outline-color: transparent;
-	}
+@property --plan-hole {
+	syntax: "<color>";
+	inherits: false;
+	initial-value: transparent;
+}
+
+.plan .plan-content [data-plan-change] {
+	/* What the wash fades from and back to. */
+	--plan-wash-rest: transparent;
+	--plan-wash: color-mix(in oklch, var(--color-brand-wash) 65%, transparent);
+	background-color: var(--plan-wash);
+	animation: plan-change-in var(--duration-linger) var(--ease-out);
 }
 
 /*
@@ -2487,7 +2488,49 @@
  * saying "new, but less so" about them would not be true.
  */
 .plan .plan-content [data-plan-change="moved"] {
-	--plan-wash-color: color-mix(in oklch, var(--color-text-quaternary) 9%, transparent);
+	--plan-wash: color-mix(in oklch, var(--color-text-quaternary) 9%, transparent);
+}
+
+/*
+ * Prose is washed past its edges by an outline, so the wash neither moves the
+ * text nor stops hard against it. Blocks that draw their own frame — code,
+ * tables, cards — are only tinted, or the two edges would read as a double
+ * border. Opaque over the page, so where the pieces below overlap they do not
+ * darken.
+ */
+.plan .plan-content :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote)[data-plan-change] {
+	--plan-wash-rest: var(--color-page);
+	--plan-wash: color-mix(in oklab, var(--color-brand-wash) 65%, var(--color-page));
+	border-radius: var(--radius-sm);
+	outline: 0.375rem solid var(--plan-wash);
+}
+
+.plan .plan-content :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote)[data-plan-change="moved"] {
+	--plan-wash: color-mix(in oklab, var(--color-text-quaternary) 9%, var(--color-page));
+}
+
+/*
+ * Two changed blocks in a row are one region. The later one fills the margin
+ * between them upward — an outset paints outside the box without taking any
+ * space — by enough to cover the largest margin a prose block has, 1.5em above
+ * a heading. Any excess lands on the block above, which is already washed the
+ * same colour. Not on a quote, whose bar is a border this would replace.
+ */
+.plan
+	.plan-content
+	:is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="added"]
+	+ :is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="added"],
+.plan
+	.plan-content
+	:is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="moved"]
+	+ :is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="moved"] {
+	border-image: linear-gradient(var(--plan-wash), var(--plan-wash)) fill 0 / 0 / 1.5em 0.375rem 0;
+}
+
+@keyframes plan-change-in {
+	from {
+		--plan-wash: var(--plan-wash-rest);
+	}
 }
 
 /*
@@ -2501,6 +2544,7 @@
  */
 .plan .plan-content [data-plan-gap-before],
 .plan .plan-content [data-plan-gap-after] {
+	--plan-hole: var(--color-text-quaternary);
 	box-shadow:
 		var(--plan-gap-above, 0 0 transparent),
 		var(--plan-gap-below, 0 0 transparent);
@@ -2512,16 +2556,16 @@
 
 @keyframes plan-gap-in {
 	from {
-		box-shadow: none;
+		--plan-hole: transparent;
 	}
 }
 
 .plan .plan-content [data-plan-gap-before="removed"] {
-	--plan-gap-above: 0 -0.375rem 0 -0.3125rem var(--color-text-quaternary);
+	--plan-gap-above: 0 -0.375rem 0 -0.3125rem var(--plan-hole);
 }
 
 .plan .plan-content [data-plan-gap-after="removed"] {
-	--plan-gap-below: 0 0.375rem 0 -0.3125rem var(--color-text-quaternary);
+	--plan-gap-below: 0 0.375rem 0 -0.3125rem var(--plan-hole);
 }
 
 /*
@@ -2531,17 +2575,30 @@
 .plan .plan-content [data-plan-gap-before="vacated"] {
 	--plan-gap-above: 0 -0.375rem 0 -0.34375rem color-mix(
 		in oklch,
-		var(--color-text-quaternary) 55%,
+		var(--plan-hole) 55%,
 		transparent
 	);
 }
 
 .plan .plan-content [data-plan-gap-after="vacated"] {
-	--plan-gap-below: 0 0.375rem 0 -0.34375rem color-mix(
-		in oklch,
-		var(--color-text-quaternary) 55%,
-		transparent
-	);
+	--plan-gap-below: 0 0.375rem 0 -0.34375rem color-mix(in oklch, var(--plan-hole) 55%, transparent);
+}
+
+/*
+ * Expired. The store keeps every attribute on until this has run, so the mark
+ * fades at its full shape and is only then taken off.
+ */
+.plan
+	.plan-content
+	:is([data-plan-change], [data-plan-gap-before], [data-plan-gap-after])[data-plan-fade] {
+	animation: plan-change-out var(--duration-linger) var(--ease-out) forwards;
+}
+
+@keyframes plan-change-out {
+	to {
+		--plan-wash: var(--plan-wash-rest);
+		--plan-hole: transparent;
+	}
 }
 
 /*
@@ -2584,6 +2641,18 @@
 .plan-changes[data-side="below"] {
 	inset-block-end: 0.75rem;
 	flex-direction: column-reverse;
+}
+
+/*
+ * A narrow pane has no margin to sit in, and a chip pinned there covers the
+ * first word of a line. Centred, it reads as floating over the document.
+ */
+@container (max-width: 40rem) {
+	.plan-changes {
+		inset-inline-start: 50%;
+		translate: -50% 0;
+		align-items: center;
+	}
 }
 
 .plan-changes-bar {
