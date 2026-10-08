@@ -45,7 +45,9 @@ export async function memoryJobs() {
 		let captured = plan;
 		let committedJobs = structuredClone(captured.conversationPlanJobs);
 		let committedState = structuredClone(captured.conversationPlan);
-		let exclusive = <T>(action: () => Promise<T>) => Plan.exclusive(captured, action);
+		function exclusive<T>(action: () => Promise<T>) {
+			return Plan.exclusive(captured, action);
+		}
 		let persist = async () => {
 			await Plan.persistExclusive(captured);
 			let sidecar = await saved();
