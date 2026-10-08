@@ -266,6 +266,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > LinkIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > DiagramIcon > <LineIcon>",
 				1
 			],
@@ -296,9 +303,16 @@
 				"props",
 				"unresolved JSX props > DiffIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PencilIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "751c15f0f701cc37590be4ae69a498f8ba6a13708715239b3a2d645c2b799681"
+		"sourceHash": "464a7ac73e3c46a69f97381648ad09a66a71f896abcfc30394a8266a63d64f6d"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",
