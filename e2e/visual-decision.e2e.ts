@@ -204,7 +204,7 @@ test("viewers observe live values but raw mutation requests and controls require
 	let latest = await state(reader, id);
 	for (
 		let frame of [
-			{ kind: "visual-decision:create" },
+			{ kind: "visual-decision:create", key: crypto.randomUUID() },
 			{
 				kind: "visual-decision:edit",
 				id,

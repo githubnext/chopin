@@ -18,11 +18,18 @@ export async function create(
 	lifecycle?: Lifecycle,
 ): Promise<void> {
 	try {
-		fields(msg, []);
+		fields(msg, ["key"]);
+		let key = State.createKey(msg.key);
 		let definition = Visual.definition(builtin);
 		let state: VisualDecision.State | undefined;
+		let added = false;
 		await queued(plan, async () => {
 			writable(plan, ws);
+			let existing = [...plan.visualDecisions.values()].find(record => record.createKey === key);
+			if (existing) {
+				state = State.snapshot(existing);
+				return;
+			}
 			if (plan.visualDecisions.size >= State.MAX_DECISIONS) {
 				throw new Error("This document already has 20 visual decisions");
 			}
@@ -30,6 +37,7 @@ export async function create(
 			let stored: State.Stored = {
 				id,
 				questionId: ulid(),
+				createKey: key,
 				definition,
 				revision: 0,
 				values: { ...definition.baseline },
@@ -84,12 +92,13 @@ export async function create(
 					{ retryRejectedCommit: true },
 				);
 				state = State.snapshot(stored);
+				added = true;
 			} finally {
 				document.doc.destroy();
 			}
 		}, lifecycle);
 		reply(ws, msg.rid, { kind: msg.kind, ts: 0, ok: true, state: state! });
-		changed(plan, state!);
+		if (added) changed(plan, state!);
 	} catch (error) {
 		fail(ws, msg.rid, error instanceof Error ? error.message : "Could not create visual decision");
 	}

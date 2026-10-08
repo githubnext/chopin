@@ -3,10 +3,22 @@ import type { VisualDecision } from "@chopin/protocol";
 import type { Questionnaire } from "@chopin/dialect";
 import { ULID } from "@chopin/dialect";
 
-export type Stored = VisualDecision.State & { questionId: string; edits: Record<string, number> };
+export type Stored = VisualDecision.State & {
+	questionId: string;
+	createKey?: string;
+	edits: Record<string, number>;
+};
 export type Decisions = Map<string, Stored>;
 export const MAX_CLIENTS = 512;
 export const MAX_DECISIONS = 20;
+
+export function createKey(raw: unknown): string {
+	if (
+		typeof raw !== "string"
+		|| !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw)
+	) throw new Error("Invalid visual creation key");
+	return raw;
+}
 
 export function editKey(raw: unknown): { client: string; sequence: number } {
 	if (typeof raw !== "string") throw new Error("Invalid visual edit key");
@@ -17,7 +29,7 @@ export function editKey(raw: unknown): { client: string; sequence: number } {
 }
 
 export function snapshot(stored: Stored): VisualDecision.State {
-	let { edits: _edits, questionId: _questionId, ...state } = stored;
+	let { edits: _edits, questionId: _questionId, createKey: _createKey, ...state } = stored;
 	return state;
 }
 
@@ -31,12 +43,18 @@ export function restore(raw: unknown): Decisions {
 		throw new Error("Invalid visual decisions");
 	}
 	let decisions: Decisions = new Map();
+	let creationKeys = new Set<string>();
 	for (let entry of raw) {
 		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
 			throw new Error("Invalid visual decision");
 		}
-		let { edits, questionId, ...candidate } = entry;
+		let { edits, questionId, createKey: key, ...candidate } = entry;
 		let state = Visual.state(candidate);
+		if (Object.hasOwn(entry, "createKey")) {
+			createKey(key);
+			if (creationKeys.has(key)) throw new Error("Duplicate visual creation key");
+			creationKeys.add(key);
+		}
 		if (
 			decisions.has(state.id) || typeof questionId !== "string" || !ULID.test(questionId)
 			|| !edits || typeof edits !== "object" || Array.isArray(edits)
@@ -46,7 +64,12 @@ export function restore(raw: unknown): Decisions {
 			if (typeof sequence !== "number") throw new Error("Invalid visual edit history");
 			editKey(`${client}:${sequence}`);
 		}
-		decisions.set(state.id, { ...state, questionId, edits });
+		decisions.set(state.id, {
+			...state,
+			questionId,
+			edits,
+			...(key === undefined ? {} : { createKey: key }),
+		});
 	}
 	return decisions;
 }

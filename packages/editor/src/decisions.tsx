@@ -113,14 +113,19 @@ export function Decisions(
 	let [creating, setCreating] = useState(false);
 	let [createError, setCreateError] = useState<string>();
 	let createPending = useRef(false);
+	let createKey = useRef<string | undefined>(undefined);
 	let create = async () => {
 		if (!wire || !connected || !canEdit || createPending.current) return;
 		createPending.current = true;
 		setCreating(true);
 		setCreateError(undefined);
 		try {
-			let result = await wire.ask("visual-decision:create", {}) as VisualDecision.Result;
+			createKey.current ??= crypto.randomUUID();
+			let result = await wire.ask("visual-decision:create", {
+				key: createKey.current,
+			}) as VisualDecision.Result;
 			if (!result.ok) throw new Error("Decision not created");
+			createKey.current = undefined;
 		} catch {
 			setCreateError("The decision could not be created. Try again.");
 		} finally {

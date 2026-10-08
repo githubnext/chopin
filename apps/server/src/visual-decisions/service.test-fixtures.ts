@@ -37,14 +37,16 @@ export async function fixture() {
 	let context = await openPlan("Neighbor prose.");
 	plans.push(context.plan);
 	let ana = member(context.plan);
+	let createKey = crypto.randomUUID();
 	await Decisions.create(context.plan, ana.ws, {
 		kind: "visual-decision:create",
 		ts: 0,
 		rid: "create",
+		key: createKey,
 	}, definition);
 	if (ana.frames.at(-1)?.ok !== true) throw new Error(JSON.stringify(ana.frames.at(-1)));
 	let id = [...context.plan.visualDecisions.keys()][0]!;
-	return { ...context, ana, id };
+	return { ...context, ana, id, createKey };
 }
 
 export async function edit(

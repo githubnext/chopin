@@ -28,7 +28,7 @@ export declare namespace VisualDecision {
 			message?: string;
 		};
 	export type Incoming =
-		| Request<Frame & { kind: "visual-decision:create" }>
+		| Request<Frame & { kind: "visual-decision:create"; key: string }>
 		| Request<Frame & { kind: "visual-decision:open"; id: string }>
 		| Request<
 			Frame & { kind: "visual-decision:edit"; id: string; key: string; patch: Partial<Values> }

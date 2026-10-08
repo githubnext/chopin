@@ -7,6 +7,143 @@ import { CommitRejected } from "../storage/errors";
 import * as Edit from "../plan/edit";
 import { definition, edit, fixture, member, restart } from "./service.test-fixtures";
 
+test("concurrent create retries accept one server-generated card and commit once", async () => {
+	let context = await fixture();
+	let bram = member(context.plan, "bram");
+	let key = crypto.randomUUID();
+	let commits = 0;
+	let original = context.storage.collaboration.commit;
+	context.storage.collaboration.commit = async input => {
+		commits++;
+		return original(input);
+	};
+	try {
+		await Promise.all([context.ana, bram].map(actor =>
+			Decisions.create(
+				context.plan,
+				actor.ws,
+				{ kind: "visual-decision:create", ts: 0, rid: key, key },
+				definition,
+			)
+		));
+	} finally {
+		context.storage.collaboration.commit = original;
+	}
+	let result = context.ana.frames.at(-1);
+	expect(result).toMatchObject({ ok: true, state: { id: expect.any(String) } });
+	expect(bram.frames.at(-1)).toEqual(result);
+	expect(commits).toBe(1);
+	expect(context.plan.visualDecisions.size).toBe(2);
+	expect(room.questionnaireProjections(context.plan.document)).toHaveLength(2);
+	expect(result?.state?.id).not.toBe(key);
+});
+
+test("a lost create reply replays the same saved card after reload without publishing", async () => {
+	let context = await fixture();
+	context.ana.frames.length = 0;
+	await edit(context, context.ana, { selectedColor: "#123456", optionPadding: 8 });
+	await Decisions.save(context.plan, context.ana.ws, {
+		kind: "visual-decision:save",
+		ts: 0,
+		rid: "save",
+		id: context.id,
+		revision: 1,
+	});
+	let expected = State.snapshot(context.plan.visualDecisions.get(context.id)!);
+	let restored = await restart(context);
+	let bram = member(restored, "bram");
+	let source = room.project(restored.document);
+	let stored = await context.storage.collaboration.load(context.channel.id, context.now);
+	let count = context.broadcasts.length;
+	await Decisions.create(restored, bram.ws, {
+		kind: "visual-decision:create",
+		ts: 0,
+		rid: "retry",
+		key: context.createKey,
+	}, { ...definition, bundleDigest: `sha256:${"b".repeat(64)}` });
+	expect(bram.frames.at(-1)).toMatchObject({ ok: true, state: expected });
+	expect(restored.visualDecisions.size).toBe(1);
+	expect(room.project(restored.document)).toBe(source);
+	expect(context.broadcasts).toHaveLength(count);
+	expect(await context.storage.collaboration.load(context.channel.id, context.now)).toEqual(stored);
+	expect(expected).not.toHaveProperty("createKey");
+});
+
+test("create validates bounded keys before accepting a new card", async () => {
+	let context = await fixture();
+	let stored = await context.storage.collaboration.load(context.channel.id, context.now);
+	for (let key of [undefined, null, "", "a".repeat(1000), "not-a-uuid", 3]) {
+		await Decisions.create(context.plan, context.ana.ws, {
+			kind: "visual-decision:create",
+			ts: 0,
+			rid: "invalid",
+			key: key as string,
+		}, definition);
+		expect(context.ana.frames.at(-1)).toMatchObject({ kind: "session:error" });
+	}
+	expect(context.plan.visualDecisions.size).toBe(1);
+	expect(await context.storage.collaboration.load(context.channel.id, context.now)).toEqual(stored);
+});
+
+test("create retries still resolve at the card cap while new requests refuse", async () => {
+	let context = await fixture();
+	for (let index = 1; index < State.MAX_DECISIONS; index++) {
+		await Decisions.create(context.plan, context.ana.ws, {
+			kind: "visual-decision:create",
+			ts: 0,
+			rid: `create:${index}`,
+			key: crypto.randomUUID(),
+		}, definition);
+		expect(context.ana.frames.at(-1)).toMatchObject({ ok: true });
+	}
+	await Decisions.create(context.plan, context.ana.ws, {
+		kind: "visual-decision:create",
+		ts: 0,
+		rid: "over-cap",
+		key: crypto.randomUUID(),
+	}, definition);
+	expect(context.ana.frames.at(-1)).toMatchObject({ kind: "session:error" });
+	let source = room.project(context.plan.document);
+	await Decisions.create(context.plan, context.ana.ws, {
+		kind: "visual-decision:create",
+		ts: 0,
+		rid: "retry-at-cap",
+		key: context.createKey,
+	}, definition);
+	expect(context.ana.frames.at(-1)).toMatchObject({ ok: true, state: { id: context.id } });
+	expect(context.plan.visualDecisions.size).toBe(State.MAX_DECISIONS);
+	expect(room.project(context.plan.document)).toBe(source);
+});
+
+test("restoration allows branch records without creation keys but rejects malformed or duplicate keys", async () => {
+	let context = await fixture();
+	let stored = State.dump(context.plan.visualDecisions)[0]!;
+	let { createKey: _key, ...existing } = stored;
+	expect(State.restore([existing]).get(context.id)).toEqual(existing);
+	expect(() => State.restore([{ ...stored, createKey: "invalid" }])).toThrow();
+	expect(() => State.restore([stored, { ...stored, id: "other-card" }])).toThrow();
+});
+
+test("rejected create commit keeps its key available for the same retry", async () => {
+	let context = await fixture();
+	let original = context.storage.collaboration.commit;
+	let key = crypto.randomUUID();
+	let input = { kind: "visual-decision:create" as const, ts: 0, rid: "create", key };
+	context.storage.collaboration.commit = async () => {
+		throw new CommitRejected();
+	};
+	try {
+		await Decisions.create(context.plan, context.ana.ws, input, definition);
+	} finally {
+		context.storage.collaboration.commit = original;
+	}
+	expect(context.ana.frames.at(-1)).toMatchObject({ kind: "session:error" });
+	expect(context.plan.visualDecisions.size).toBe(1);
+	await Decisions.create(context.plan, context.ana.ws, input, definition);
+	expect(context.ana.frames.at(-1)).toMatchObject({ ok: true });
+	expect(context.plan.visualDecisions.size).toBe(2);
+});
+
 test("accepted per-control edits converge, replay cannot overwrite a newer peer, and reload restores", async () => {
 	let context = await fixture();
 	let bram = member(context.plan, "bram");
