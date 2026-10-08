@@ -2,9 +2,10 @@
  * Remote cursor name labels.
  *
  * A label pinned over every caret buries the prose it is pointing at, and a
- * plan is read far more often than it is written. So a label appears while its
- * peer is moving or typing and fades once they settle, which is also how the
- * document editor behaves. Pointing at a caret brings its label back.
+ * document is read far more often than it is written. So a label briefly
+ * introduces a peer on arrival, when they resume after being idle, or when
+ * they move to another block. Continued typing does not keep the name up.
+ * Pointing at a caret brings its label back.
  *
  * Movement is read back from the caret's own rendered position rather than
  * from awareness. Awareness churns on a renewal timer whether or not anyone
@@ -27,8 +28,9 @@
  */
 
 import type { Binding, Provider } from "@lexical/yjs";
+import { $getNodeByKey, $isElementNode } from "lexical";
 
-/** How long a label stays up after its peer stops moving. */
+/** How long a person's name flashes, and how long a pause counts as idle. */
 const LINGER = 1500;
 
 /** How long the agent's stays, for the same reason it is louder at all. */
@@ -79,7 +81,7 @@ export function labels(
 	let caretOf = (client: number): HTMLElement | undefined =>
 		binding.cursors.get(client)?.selection?.caret;
 
-	let seen = new Map<number, string>();
+	let seen = new Map<number, { at: string; block: string | undefined; active: number }>();
 	let timers = new Map<number, ReturnType<typeof setTimeout>>();
 	let pointer: { x: number; y: number } | null = null;
 
@@ -109,19 +111,31 @@ export function labels(
 	};
 
 	let sync = () => {
+		let now = performance.now();
 		for (let [client, cursor] of binding.cursors) {
-			let caret = cursor.selection?.caret;
-			if (!caret) {
+			let selection = cursor.selection;
+			if (!selection) {
 				forget(client);
 				continue;
 			}
 
-			let at = `${caret.style.left}|${caret.style.top}|${caret.style.height}`;
+			let caret = selection.caret;
+			let at =
+				`${selection.focus.key}|${selection.focus.offset}|${caret.style.left}|${caret.style.top}|${caret.style.height}`;
+			let block = binding.editor.getEditorState().read(() => {
+				let node = $getNodeByKey(selection.focus.key);
+				while (node && (!$isElementNode(node) || node.isInline())) node = node.getParent();
+				return node?.getKey();
+			});
 			let previous = seen.get(client);
-			seen.set(client, at);
-			// A peer appearing for the first time has no previous position
-			// and so introduces itself, which is what we want.
-			if (previous !== at) {
+			let moved = !previous || previous.at !== at || previous.block !== block;
+			if (moved) seen.set(client, { at, block, active: now });
+			// Track every movement, but only renew a person's name for a new
+			// activity burst or block. Wrapping and inline formatting stay quiet.
+			if (
+				moved && (!previous || agent(client) || previous.block !== block
+					|| now - previous.active >= linger)
+			) {
 				stop(client);
 				timers.set(
 					client,
@@ -135,7 +149,7 @@ export function labels(
 			if (timers.has(client)) {
 				caret.dataset.planActive = "";
 				place(caret);
-			}
+			} else caret.removeAttribute("data-plan-active");
 		}
 
 		for (let client of seen.keys()) {
