@@ -12,7 +12,15 @@ function Media({ media }: { media: OptionModel["media"] }) {
 	return (
 		<figure className="openui-options-media">
 			{media.kind === "image" && !failed
-				? <img src={media.url} alt={media.alt} loading="lazy" onError={() => setFailed(true)} />
+				? (
+					<img
+						src={media.url}
+						alt={media.alt}
+						loading="lazy"
+						referrerPolicy="no-referrer"
+						onError={() => setFailed(true)}
+					/>
+				)
 				: (
 					<div
 						className="openui-options-media-text"

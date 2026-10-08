@@ -188,10 +188,6 @@
 }
 
 @container (max-width: 39rem) {
-	.openui-options {
-		padding: 1rem;
-	}
-
 	.openui-options-header {
 		align-items: stretch;
 		flex-direction: column;

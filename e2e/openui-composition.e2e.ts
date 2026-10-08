@@ -56,6 +56,7 @@ test("the saved pandas document shows grounded media, a table and keyboard detai
 	await expect(view.getByRole("article")).toHaveCount(2);
 	await expect(view.getByRole("img", { name: /Spreadsheet with styled row and column headers/ }))
 		.toBeVisible();
+	await expect(view.locator("img")).toHaveAttribute("referrerpolicy", "no-referrer");
 	await expect(view.getByText("Illustrative reconstruction; not a source screenshot"))
 		.toBeVisible();
 	await expect(view.getByRole("region", { name: "Comparison table" }).getByRole("row"))

@@ -92,11 +92,11 @@ than web use. The adapter checks the installed version and export shape; an
 upgrade needs an entry/API review and development network check.
 
 Building the starting commit `37b4efdd` and this feature with Bun 1.4.2
-measured all emitted JavaScript at 16,321,335 → 16,454,457 bytes raw
-(**+133,122**) and 3,676,855 → 3,717,928 bytes gzip (**+41,073**). CSS grew
-3,492 raw / 955 gzip bytes. Initial JavaScript stayed 251,015 bytes raw and
-changed 79,206 → 79,198 bytes gzip. The lazy `openui-options` chunk itself is
-126,895 raw / 38,739 gzip bytes, including runtime and component code; it is
+measured all emitted JavaScript at 16,321,335 → 16,454,486 bytes raw
+(**+133,151**) and 3,676,855 → 3,718,005 bytes gzip (**+41,150**). CSS grew
+3,463 raw / 951 gzip bytes. Initial JavaScript stayed 251,015 bytes raw and
+changed 79,206 → 79,203 bytes gzip. The lazy `openui-options` chunk itself is
+126,924 raw / 38,760 gzip bytes, including runtime and component code; it is
 not the full-build delta.
 
 The first product slice supports one comparison composition with images or
