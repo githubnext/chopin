@@ -1498,6 +1498,18 @@ button.question-add:disabled {
 	outline: none;
 }
 
+/* A rendered block clips its preview's ring, so show the same ring on the outer block. */
+.plan-content .planCode :is(.plan-code-view, .plan-diagram):focus-visible {
+	outline: none;
+}
+
+:root:not([data-focus-input="pointer"])
+	.plan-content
+	.planCode:has(> [data-plan-preview] :is(.plan-code-view, .plan-diagram):focus-visible) {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: 0;
+}
+
 /*
  * The ring answers "where am I?" for keyboard users, so it hides after a pointer
  * press. Text fields keep theirs: a caret alone is easy to lose.
