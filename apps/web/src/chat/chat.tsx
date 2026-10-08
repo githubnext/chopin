@@ -9,7 +9,12 @@
 
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
-import { MAX_RESEARCH_BRIEF, SendAction, useConnectionNotice, usePopoverDismissal } from "@chopin/editor";
+import {
+	MAX_RESEARCH_BRIEF,
+	SendAction,
+	useConnectionNotice,
+	usePopoverDismissal,
+} from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
 import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
@@ -785,7 +790,7 @@ export function Chat(
 										}
 										if (
 											!composing && event.key === "Tab" && event.shiftKey && !event.metaKey
-											&& !event.ctrlKey && !event.altKey && agent && composerReady && !submitting
+											&& !event.ctrlKey && !event.altKey && agent && draftable && !submitting
 										) {
 											event.preventDefault();
 											if (!event.repeat) toggleMode();
