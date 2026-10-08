@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
 	CHAT_COMMANDS,
+	commandBrief,
 	commandKeyAction,
 	commandText,
 	commandTrigger,
@@ -33,7 +34,17 @@ describe("chat commands", () => {
 		expect(draftCommand("  /Research what changed?")).toBe("research");
 		expect(draftCommand("/researcher")).toBeUndefined();
 		expect(draftCommand("please /research this")).toBeUndefined();
+		expect(draftCommand("@chopin /research pricing")).toBe("research");
+		expect(draftCommand("@chopin please /research")).toBeUndefined();
 		expect(commandText(CHAT_COMMANDS[0]!)).toBe("/research ");
+	});
+
+	test("the brief is what follows the command, references included as text", () => {
+		expect(commandBrief("/research")).toBe("");
+		expect(commandBrief("  /research   what changed in #Pricing?  ")).toBe(
+			"what changed in #Pricing?",
+		);
+		expect(commandBrief("@Chopin /research pricing\nand limits")).toBe("pricing\nand limits");
 	});
 
 	test("Tab and Enter select; arrows move", () => {

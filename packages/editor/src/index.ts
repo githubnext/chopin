@@ -41,7 +41,8 @@ export {
 	useQuestionnaires,
 } from "./questionnaires";
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
-export { ResearchLauncher } from "./research-launcher";
+export { MAX_RESEARCH_BRIEF, ResearchLauncher } from "./research-launcher";
+export type { ResearchLaunchBlock, ResearchLaunchResult } from "./research-launcher";
 export { SendAction } from "./send-action";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";

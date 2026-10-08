@@ -64,7 +64,32 @@ test("/research in Chat opens the document's research composer instead of postin
 	await expect(question).toHaveValue("what changed upstream?");
 	await expectChatValue(draft, "");
 	await expect(content(page).locator(":scope > p")).toHaveCount(2);
+	// The caret follows the prefilled brief.
+	await page.keyboard.type("!");
+	await expect(question).toHaveValue("what changed upstream?!");
+
+	// With a draft already open, Chat keeps its draft and points to that draft.
+	let notice = chat.getByRole("status").filter({
+		hasText: "already being written in the document",
+	});
+	await draft.fill("@chopin /research another question");
+	await draft.press("Enter");
+	await expect(notice).toBeVisible();
+	await expectChatValue(draft, "@chopin /research another question");
+	await chat.getByRole("button", { name: "Go to it", exact: true }).click();
+	await expect(question).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(question).toHaveCount(0);
+
+	// A brief longer than the composer accepts is refused in Chat.
+	await draft.fill(`/research ${"a".repeat(4097)}`);
+	await draft.press("Enter");
+	await expect(chat.getByRole("status").filter({ hasText: "Briefs can be up to 4,096 characters" }))
+		.toBeVisible();
+	await expect(question).toHaveCount(0);
+	await draft.fill("");
 
 	expect(sent).toEqual([]);
-	await expect(chat.getByText("/research", { exact: false })).toHaveCount(0);
+	await expect(chat.locator("[data-chat-stack]").getByText("/research", { exact: false }))
+		.toHaveCount(0);
 });

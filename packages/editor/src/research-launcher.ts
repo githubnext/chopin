@@ -1,7 +1,22 @@
+/** Matches the research composer's own `maxLength`. */
+export const MAX_RESEARCH_BRIEF = 4096;
+
+export type ResearchLaunchBlock =
+	| "too-long"
+	| "drafting"
+	| "read-only"
+	| "disconnected"
+	| "unavailable";
+
+export type ResearchLaunchResult = { ok: true } | { ok: false; reason: ResearchLaunchBlock };
+
 type Launch = {
-	available: () => boolean;
-	open: (brief: string) => boolean;
+	check: () => ResearchLaunchResult;
+	open: (brief: string) => ResearchLaunchResult;
+	reveal: () => boolean;
 };
+
+const UNAVAILABLE: ResearchLaunchResult = { ok: false, reason: "unavailable" };
 
 /**
  * Lets a host outside the editor open the document's research composer.
@@ -19,13 +34,21 @@ export class ResearchLauncher {
 		};
 	}
 
-	/** Whether a draft could open now: an editable, connected editor with no draft already open. */
-	available(): boolean {
-		return this.#launch?.available() ?? false;
+	/** Why a brief could not open now, before the host changes anything. */
+	check(brief: string): ResearchLaunchResult {
+		if (brief.length > MAX_RESEARCH_BRIEF) return { ok: false, reason: "too-long" };
+		return this.#launch?.check() ?? UNAVAILABLE;
 	}
 
 	/** Open the composer at the end of the document with `brief` filled in. */
-	open(brief: string): boolean {
-		return this.#launch?.open(brief) ?? false;
+	open(brief: string): ResearchLaunchResult {
+		let checked = this.check(brief);
+		if (!checked.ok) return checked;
+		return this.#launch?.open(brief) ?? UNAVAILABLE;
+	}
+
+	/** Focus the research draft that is already open. */
+	reveal(): boolean {
+		return this.#launch?.reveal() ?? false;
 	}
 }

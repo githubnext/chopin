@@ -50,7 +50,12 @@ import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } fro
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
 import type { ConversationPlan, Research, Session } from "@chopin/protocol";
-import type { DecisionView, DecisionViewState, PlanState } from "@chopin/editor";
+import type {
+	DecisionView,
+	DecisionViewState,
+	PlanState,
+	ResearchLaunchResult,
+} from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { TitleEdit } from "./title-edit";
@@ -605,12 +610,17 @@ export function RoomWorkspace(
 		});
 	};
 
-	let startResearch = (brief: string) => {
-		if (!researchLauncher.available()) return false;
+	let startResearch = async (brief: string): Promise<ResearchLaunchResult> => {
+		let checked = researchLauncher.check(brief);
+		if (!checked.ok) return checked;
 		selectDestination("plan");
 		// The document may have been hidden; open once it has laid out.
-		requestAnimationFrame(() => researchLauncher.open(brief));
-		return true;
+		await new Promise(resolve => requestAnimationFrame(resolve));
+		return researchLauncher.open(brief);
+	};
+	let showResearchDraft = () => {
+		selectDestination("plan");
+		requestAnimationFrame(() => researchLauncher.reveal());
 	};
 
 	useEffect(() => {
@@ -831,6 +841,7 @@ export function RoomWorkspace(
 							: undefined}
 						onShowDecisions={() => selectDestination("decisions")}
 						onResearch={researchEnabled ? startResearch : undefined}
+						onShowResearch={showResearchDraft}
 						people={peopleHere(members)}
 						conversationPlan={conversation.state}
 						conversationPlanJobs={conversation.jobs}

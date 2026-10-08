@@ -86,6 +86,8 @@ export function Toolbar() {
 			{options.research && options.researchDrafts && options.researchLauncher && (
 				<ResearchLaunchRegistration
 					binding={options.binding}
+					canEdit={options.canEdit}
+					connected={options.connected}
 					disabled={disabled}
 					drafts={options.researchDrafts}
 					launcher={options.researchLauncher}

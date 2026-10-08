@@ -45,9 +45,19 @@ export function filterCommands(
 	return commands.filter(command => command.keywords.some(keyword => keyword.startsWith(prefix)));
 }
 
-/** The command a draft starts with, which must never be posted as a message. */
+const RESEARCH_COMMAND = /^\s*(?:@chopin\s+)?\/research(?=\s|$)\s*/i;
+
+/**
+ * The command a draft starts with, which must never be posted as a message.
+ * An `@chopin` in front is the same command, not a question for the Planner.
+ */
 export function draftCommand(text: string): ChatCommand["id"] | undefined {
-	return /^\s*\/research(?=\s|$)/i.test(text) ? "research" : undefined;
+	return RESEARCH_COMMAND.test(text) ? "research" : undefined;
+}
+
+/** What follows the command: the research brief. */
+export function commandBrief(text: string): string {
+	return text.replace(RESEARCH_COMMAND, "").trim();
 }
 
 export function commandText(command: ChatCommand): string {
