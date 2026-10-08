@@ -64,6 +64,15 @@ const GROUP_MS = 5;
 /** Per-connection ceiling, generous enough that typing never reaches it. */
 const RATE_LIMIT = 200;
 const RATE_WINDOW_MS = 1_000;
+/**
+ * Consecutive windows over the limit before the connection is closed.
+ *
+ * A dropped update strands every later one from the same client, because Yjs
+ * holds an update until its predecessor arrives. A current client resends what
+ * was never acknowledged; an older bundle only replays its outbox when it
+ * reopens, so closing is what gets its edits through.
+ */
+const RATE_STRIKES = 3;
 
 /** Invalid batches tolerated from one connection before it is disconnected. */
 const INVALID_LIMIT = 3;
@@ -71,6 +80,9 @@ const INVALID_WINDOW_MS = 10 * 60 * 1_000;
 
 /** Close code for a client that keeps sending updates the document rejects. */
 const ABUSIVE = 4003;
+
+/** Close code for a client that keeps sending updates faster than the limit. */
+const TOO_FAST = 4429;
 
 type Queued = {
 	ws: Socket;
@@ -84,6 +96,10 @@ type Meter = {
 	recent: number[];
 	/** Timestamps of recent rejections, for the strike count. */
 	invalid: number[];
+	/** When the current window of dropped updates began. */
+	limitedAt?: number;
+	/** Consecutive windows in which updates were dropped. */
+	limitedWindows?: number;
 };
 
 export type Backend = {
@@ -1328,11 +1344,28 @@ export function submit(plan: Plan, ws: Socket, msg: Request<Wire.Submit>): void 
 
 	let gauge = meter(plan, ws);
 	gauge.recent = recent(gauge.recent, RATE_WINDOW_MS);
-	if (gauge.recent.length >= RATE_LIMIT) return;
+	if (gauge.recent.length >= RATE_LIMIT) return limited(plan, ws, msg.rid, gauge);
 	gauge.recent.push(Date.now());
 
 	plan.queue.push({ ws, rid: msg.rid, id: msg.id, update });
 	schedule(plan);
+}
+
+/** Refuse an update over the rate limit, and close a connection that keeps it up. */
+function limited(plan: Plan, ws: Socket, rid: string, gauge: Meter): void {
+	fail(ws, rid, "rate limited");
+	let now = Date.now();
+	let since = gauge.limitedAt === undefined ? Infinity : now - gauge.limitedAt;
+	if (since < RATE_WINDOW_MS) return;
+
+	gauge.limitedWindows = since < 2 * RATE_WINDOW_MS ? (gauge.limitedWindows ?? 0) + 1 : 1;
+	gauge.limitedAt = now;
+	console.warn(
+		`[plan] dropping updates from ${ws.data.handle} in ${plan.id}: over ${RATE_LIMIT} a second`,
+	);
+	if (gauge.limitedWindows >= RATE_STRIKES) {
+		ws.close(TOO_FAST, "plan updates too fast");
+	}
 }
 
 function schedule(plan: Plan): void {
