@@ -107,7 +107,6 @@ export function create(
 		if (stillCurrent && !stillCurrent()) {
 			throw new Error("The member request is no longer driving the current Planner turn");
 		}
-		if (Service.implementationActive(plan)) throw new Error("Implementation is active");
 		if (
 			!ULID.test(source.entryId) || !bounded(source.userId, 200)
 			|| !bounded(source.handle, 100) || !instruction(source.text)
@@ -123,6 +122,7 @@ export function create(
 			) throw new Error("Visual preview request source changed");
 			return existing;
 		}
+		if (Service.implementationActive(plan)) throw new Error("Implementation is active");
 		if (plan.visualRequests.size >= MAX_REQUESTS) {
 			throw new Error("This document already has 20 visual preview requests");
 		}

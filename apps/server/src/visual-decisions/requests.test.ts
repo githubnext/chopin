@@ -43,6 +43,9 @@ test("one member message records one pending request across retries and restart"
 	expect(await Requests.create(context.plan, source(firstId, firstText))).toEqual(first);
 	let second = await Requests.create(context.plan, source(secondId, secondText));
 	expect(second.id).not.toBe(first.id);
+	context.plan.claiming = true;
+	expect(await Requests.create(context.plan, source(firstId, firstText))).toEqual(first);
+	context.plan.claiming = false;
 	expect(context.plan.visualRequests.size).toBe(2);
 	let saved = await context.storage.collaboration.load(context.plan.id, context.now);
 	expect(saved).toBeDefined();
