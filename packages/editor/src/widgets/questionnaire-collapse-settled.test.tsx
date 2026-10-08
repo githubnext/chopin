@@ -40,8 +40,12 @@ test("a failed write-up says so and offers Retry only to an editable connected v
 	}));
 	expect(editable).toContain("Couldn&#x27;t write this up");
 	expect(editable).not.toContain("Writing up…");
-	expect(editable).toMatch(/<button(?![^>]*disabled)[^>]*>Retry<\/button>/);
-	expect(reader).toMatch(/<button[^>]*disabled=""[^>]*>Retry<\/button>/);
+	expect(editable).toMatch(
+		/<button aria-label="Retry write-up"(?![^>]*disabled)[^>]*>Retry<\/button>/,
+	);
+	expect(reader).toMatch(
+		/<button aria-label="Retry write-up"[^>]*disabled=""[^>]*>Retry<\/button>/,
+	);
 });
 
 test("an orphaned settled line says the prose was removed", () => {
