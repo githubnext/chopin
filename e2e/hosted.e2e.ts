@@ -69,6 +69,22 @@ test("organization admission rejects outsiders and pending members", async ({ ba
 });
 
 test("an authenticated user adds a Project and creates its first document", async ({ baseURL, page }) => {
+	// The shared repository may hold other tests' documents; the landing redirect would open one.
+	await page.route("**/api/navigation", async route => {
+		if (route.request().method() !== "GET") return route.fallback();
+		let response = await route.fetch();
+		let navigation = await response.json();
+		delete navigation.lastDocumentId;
+		await route.fulfill({ response, json: navigation });
+	});
+	await page.route("**/api/repositories/*/*/channels*", async route => {
+		if (route.request().method() !== "GET") return route.fallback();
+		let response = await route.fetch();
+		await route.fulfill({
+			response,
+			json: { ...await response.json(), channels: [], nextCursor: undefined },
+		});
+	});
 	await authenticate(page, `project-creator-${crypto.randomUUID()}`, baseURL!);
 	await page.goto("/");
 	await openAddProject(page);
