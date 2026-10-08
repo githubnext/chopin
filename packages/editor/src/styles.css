@@ -2593,6 +2593,8 @@
 	position: relative;
 	display: flex;
 	flex-shrink: 0;
+	/* Never wider than the strip, so a selected tab can always be shown whole. */
+	max-inline-size: 100%;
 	border-radius: var(--radius-md);
 	background: var(--plan-tab-surface);
 	color: var(--color-text-quaternary);
