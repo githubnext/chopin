@@ -181,3 +181,10 @@ test("directional controls reuse one chevron and one panel icon", () => {
 	expect(existsSync(join(root, "assets/icons/tool-chevron-right.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/figma/navigation/sidebar-right-3-hide.svg"))).toBe(false);
 });
+
+test("icons never shrink beside wrapping text", () => {
+	let css = readFileSync(join(root, "theme.css"), "utf8");
+	expect(css).toMatch(
+		/@layer base \{\s*:is\(\[data-nucleo-icon\], \[data-filled-icon\]\) \{\s*flex-shrink: 0;/,
+	);
+});

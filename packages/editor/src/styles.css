@@ -3367,10 +3367,6 @@
 	flex: none;
 }
 
-.plan-decision-meta > p > svg {
-	margin-block: calc((1lh - 0.875rem) / 2);
-}
-
 .plan-decision-meta > p > :is(img, [role="img"]) {
 	margin-block: calc((1lh - 1.125rem) / 2);
 }

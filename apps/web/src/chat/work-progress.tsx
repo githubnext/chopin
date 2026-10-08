@@ -47,7 +47,11 @@ function ToolCall(
 	let row = (
 		<>
 			{hasDetails && (
-				<ChevronIcon aria-hidden="true" className={open ? "rotate-90" : ""} size={14} />
+				<ChevronIcon
+					aria-hidden="true"
+					className={open ? "icon-first-line rotate-90" : "icon-first-line"}
+					size={14}
+				/>
 			)}
 			<span className="min-w-0 flex-1 break-words font-mono text-text-secondary">
 				{toolCopy(tool.name)}

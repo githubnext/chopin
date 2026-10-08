@@ -444,7 +444,7 @@ function SettledLine(
 			data-card-settled=""
 			data-plan-sidecar-questionnaire={value.id}
 		>
-			<DecisionIcon aria-hidden="true" size={14} />
+			<DecisionIcon aria-hidden="true" className="icon-first-line" size={14} />
 			<span>
 				Decided: {chosen.length ? chosen.join(", ") : "Saved decision"}
 				{owner ? ` · @${owner}` : ""}
