@@ -1291,7 +1291,12 @@ button.question-add:disabled {
 	padding-inline: 0.75rem;
 	font-size: var(--text-xs);
 	line-height: 1.25rem;
-	color: var(--color-destructive-ink);
+	color: var(--color-danger-text);
+}
+
+.question-add-hint:not(:empty) {
+	border-radius: var(--radius-sm);
+	background: var(--color-danger-surface);
 }
 
 .question-field {
