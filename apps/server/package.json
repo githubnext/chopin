@@ -26,6 +26,7 @@
 		"@lexical/yjs": "catalog:mdx",
 		"ai": "catalog:harness",
 		"lexical": "catalog:mdx",
+		"tldts": "7.0.17",
 		"y-protocols": "catalog:mdx",
 		"typebox": "catalog:harness",
 		"yjs": "catalog:mdx",

@@ -86,7 +86,10 @@ function pair(cookie: string): string {
 	return cookie.split(";", 1)[0]!;
 }
 
-async function setup(random?: () => number) {
+async function setup(
+	random?: () => number,
+	onVisualPreview?: (channelId: string, decisionId: string) => Promise<Response>,
+) {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
@@ -135,6 +138,7 @@ async function setup(random?: () => number) {
 			restored.push({ id, changed: result.changed });
 			return result;
 		},
+		onVisualPreview,
 		random,
 	});
 	return {
@@ -171,6 +175,38 @@ function createChannel(storage: MemoryStorage, now: Date, title: string) {
 }
 
 describe("channel routes", () => {
+	it("authorizes preview descriptors through the owning channel", async () => {
+		let calls: Array<[string, string]> = [];
+		let { router, storage, cookie, now, github } = await setup(
+			undefined,
+			async (channel, decision) => {
+				calls.push([channel, decision]);
+				return Response.json({ ready: true });
+			},
+		);
+		let channel = await createChannel(storage, now, "Preview owner");
+		let path = `/api/channels/${channel.id}/visual-preview/decision-one`;
+		expect((await router.handle(request(path)))!.status).toBe(401);
+		github.repo = {
+			...github.repo,
+			permissions: { pull: false, push: false, admin: false },
+		};
+		expect((await router.handle(request(path, cookie)))!.status).toBe(404);
+		expect(calls).toHaveLength(0);
+		github.repo = {
+			...github.repo,
+			permissions: { pull: true, push: false, admin: false },
+		};
+		expect((await router.handle(request(path, cookie)))!.status).toBe(200);
+		expect(calls).toEqual([[channel.id, "decision-one"]]);
+		expect(
+			(await router.handle(request(
+				`/api/channels/${crypto.randomUUID()}/visual-preview/decision-one`,
+				cookie,
+			)))!.status,
+		).toBe(404);
+	});
+
 	it("requires authentication and current repository access", async () => {
 		let { router, github, cookie } = await setup();
 		let anonymous = await router.handle(request("/api/repositories/octo-org/score/channels"));
