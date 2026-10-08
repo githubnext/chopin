@@ -10,6 +10,7 @@ import {
 	prune,
 	shown,
 	unchosen,
+	verticalReach,
 } from "./resolved";
 
 import type { Question, Questionnaire } from "@chopin/dialect";
@@ -145,6 +146,17 @@ describe("marker and popover placement", () => {
 		expect(markerReach(100, 20, 200)).toEqual({ start: 12, end: 12 });
 		expect(markerReach(4, 12, 16)).toEqual({ start: 4, end: 0 });
 		expect(markerReach(0, 12, 8)).toEqual({ start: 0, end: 0 });
+	});
+
+	it("splits the gap between markers closer than their reach", () => {
+		expect(verticalReach([{ top: 0, height: 20 }, { top: 36, height: 20 }])).toEqual([
+			{ top: 12, bottom: 8 },
+			{ top: 8, bottom: 12 },
+		]);
+		expect(verticalReach([{ top: 0, height: 20 }, { top: 100, height: 20 }])).toEqual([
+			{ top: 12, bottom: 12 },
+			{ top: 12, bottom: 12 },
+		]);
 	});
 
 	it("opens under the block, aligned to its start, and flips at the bottom", () => {

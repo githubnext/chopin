@@ -43,6 +43,7 @@ import {
 	resolvedKeys,
 	shown,
 	unchosen,
+	verticalReach,
 } from "./resolved";
 import { useQuestionnaires, useRelations } from "./questionnaires";
 import { blockElement } from "./scroll";
@@ -109,7 +110,12 @@ function lineHeightOf(element: HTMLElement): number {
  * The marker's drawn box, and how far its invisible reach may extend sideways
  * without leaving the gutter. A slim bar is drawn at its box's left edge.
  */
-function markerStyle(marker: MarkerPlace, lineHeight: number, prose: number): CSSProperties {
+function markerStyle(
+	marker: MarkerPlace,
+	lineHeight: number,
+	prose: number,
+	vertical: { top: number; bottom: number },
+): CSSProperties {
 	let width = marker.compact ? COMPACT_GUTTER : MARKER_SIZE;
 	let reach = markerReach(marker.left, width, prose);
 	return {
@@ -117,6 +123,8 @@ function markerStyle(marker: MarkerPlace, lineHeight: number, prose: number): CS
 		left: marker.left,
 		"--plan-decision-reach-start": `${reach.start}px`,
 		"--plan-decision-reach-end": `${reach.end}px`,
+		"--plan-decision-reach-top": `${vertical.top}px`,
+		"--plan-decision-reach-bottom": `${vertical.bottom}px`,
 		...(marker.compact && {
 			width,
 			height: lineHeight,
@@ -528,12 +536,18 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 			style: { ...at, width, ...(open.decision.meta ? { maxHeight, overflowY: "auto" } : {}) },
 		};
 	}
+	let vertical = verticalReach(
+		placed.map(({ lineHeight, marker }) => ({
+			top: marker.top,
+			height: marker.compact ? lineHeight : MARKER_SIZE,
+		})),
+	);
 	let popoverId = "plan-decision-pop";
 	let immediately = options.motionImmediately?.() ?? false;
 
 	return createPortal(
 		<div className="plan-decision-layer" ref={root}>
-			{placed.map(({ decision, lineHeight, marker, prose }) => {
+			{placed.map(({ decision, lineHeight, marker, prose }, index) => {
 				let isPinned = pointer.pinned === decision.key;
 				let previewing = view?.key === decision.key && !view.pinned;
 				return (
@@ -566,7 +580,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 						onPointerEnter={event => event.pointerType !== "touch" && enter(decision.key)}
 						onPointerLeave={() => leave(decision.key)}
 						data-compact={marker.compact || undefined}
-						style={markerStyle(marker, lineHeight, prose)}
+						style={markerStyle(marker, lineHeight, prose, vertical[index]!)}
 						type="button"
 					>
 						<span className="plan-decision-disc">

@@ -201,3 +201,26 @@ export function markerReach(
 		end: Math.min(MARKER_REACH, Math.max(0, prose - left - width)),
 	};
 }
+
+/**
+ * How far each marker reaches up and down: `MARKER_REACH`, or half the gap to
+ * the nearest marker when two sit closer than that, so the space between
+ * them is split rather than won by whichever was drawn last.
+ */
+export function verticalReach(
+	boxes: readonly { top: number; height: number }[],
+): { top: number; bottom: number }[] {
+	return boxes.map(box => {
+		let top = MARKER_REACH;
+		let bottom = MARKER_REACH;
+		for (let other of boxes) {
+			if (other === box) continue;
+			if (other.top + other.height <= box.top) {
+				top = Math.min(top, (box.top - other.top - other.height) / 2);
+			} else if (other.top >= box.top + box.height) {
+				bottom = Math.min(bottom, (other.top - box.top - box.height) / 2);
+			}
+		}
+		return { top, bottom };
+	});
+}
