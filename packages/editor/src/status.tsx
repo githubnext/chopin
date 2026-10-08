@@ -14,9 +14,14 @@ export type PlanStatusProps = {
 	busy?: boolean;
 	/** Recovers from a terminal state. Reloads the page unless the host supplies one. */
 	onReload?: () => void;
+	/**
+	 * Tries the connection again in place. When given, an offline document
+	 * offers this instead of a reload, which would throw away unsent work.
+	 */
+	onReconnect?: () => void;
 };
 
-export type StatusInput = Omit<PlanStatusProps, "onReload"> & {
+export type StatusInput = Omit<PlanStatusProps, "onReload" | "onReconnect"> & {
 	/** True once a lost connection has stayed lost long enough to call it offline. */
 	stalled?: boolean;
 };
@@ -32,6 +37,8 @@ export type StatusDescription = {
 	label: string;
 	detail?: string;
 	reload?: boolean;
+	/** A lost connection, which reconnecting in place can recover. */
+	reconnect?: boolean;
 };
 
 /** How long a lost connection stays "Reconnecting" before it reads as offline. */
@@ -62,6 +69,7 @@ export function describeStatus(input: StatusInput): StatusDescription {
 				label: "Offline",
 				detail: "Editing resumes once connected. Reloading may help.",
 				reload: true,
+				reconnect: true,
 			};
 		}
 		// The first connection of a fresh page is ordinary loading, not a loss.
@@ -116,10 +124,13 @@ function reloadPage() {
 	location.reload();
 }
 
-export function PlanStatus({ onReload = reloadPage, ...props }: PlanStatusProps) {
+export function PlanStatus({ onReload = reloadPage, onReconnect, ...props }: PlanStatusProps) {
 	let stalled = useStalled(props.connection);
 	let status = describeStatus({ ...props, stalled });
-	let { label, level, detail, reload } = status;
+	let { label, level, reload } = status;
+	let detail = status.detail;
+	let reconnect = status.reconnect && onReconnect;
+	if (reconnect) detail = "Editing resumes once connected.";
 	let detailId = useId();
 	let previous = useRef<StatusLevel>(level);
 	let [spoken, setSpoken] = useState("");
@@ -157,10 +168,10 @@ export function PlanStatus({ onReload = reloadPage, ...props }: PlanStatusProps)
 					data-tooltip={detail}
 					data-tooltip-detail=""
 					data-tooltip-verbatim=""
-					onClick={onReload}
+					onClick={reconnect || onReload}
 					type="button"
 				>
-					Reload
+					{reconnect ? "Reconnect" : "Reload"}
 				</button>
 			)}
 			<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">

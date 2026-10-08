@@ -248,6 +248,9 @@ export function Header(
 	);
 }
 
+/** Reconnect attempts a person can make in one outage before Reload is offered. */
+const RECONNECTS_BEFORE_RELOAD = 3;
+
 export function RoomWorkspace(
 	{
 		agent = true,
@@ -304,6 +307,10 @@ export function RoomWorkspace(
 	}, [room]);
 	// Controls dim only once a loss outlasts a blip; actions still read `status`.
 	let treatAsConnected = useConnectionNotice(status !== "connected") === "none";
+	// Reconnecting in place keeps unsent work, so it is offered first. A reload
+	// is the fallback once it has failed this often in one outage.
+	let [reconnects, setReconnects] = useState(0);
+	if (status === "connected" && reconnects) setReconnects(0);
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
 	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
@@ -913,6 +920,12 @@ export function RoomWorkspace(
 					<PlanStatus
 						connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
 						failed={planState.failed}
+						onReconnect={wire && reconnects < RECONNECTS_BEFORE_RELOAD
+							? () => {
+								setReconnects(count => count + 1);
+								wire.reconnect();
+							}
+							: undefined}
 						synced={planState.synced}
 					/>
 				}
