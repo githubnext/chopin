@@ -165,14 +165,27 @@ experiment are evidence; do not merge their fixture implementation into this PR.
       actual new failures and report any unrelated baseline failures accurately.
 - [x] Request two independent code reviews: toolkit/skill usability and browser
       behaviour/boundary correctness. Resolve material findings in small commits.
-- [ ] Use `pr-visual-preview` to attach real UI images and a compact architecture
+- [x] Use `pr-visual-preview` to attach real UI images and a compact architecture
       diagram; verify the images render in the published description.
-- [ ] Open a draft PR from `maggie/app-preview-toolkit`. Explain that this adds
+- [x] Open a draft PR from `maggie/app-preview-toolkit`. Explain that this adds
       agent-side authoring tools and a tested local example, with no production
       Chopin feature, MCP publication, durable Save or private hosting.
-- [ ] Check GitHub validation, browser and container jobs. Hand Maggie and
+- [x] Check GitHub validation, browser and container jobs. Hand Maggie and
       Krzysztof the PR, local review command, screenshots, remaining limits and
       the narrow next integration step: map these authoring outputs and render
       callback into the supplied request/result and production preview contracts.
       The user explicitly authorized draft PRs and autonomous work while away. Do not make
       the PR ready for review, send a Slack/email message, merge or deploy.
+
+## Handoff checkpoint
+
+[Draft PR #416](https://github.com/githubnext/chopin/pull/416) contains the actual
+wide/narrow preview, independent trial and integration diagram. Published images
+were verified in Chromium and matched the original PNG bytes. Two independent
+reviews and the scoped fix review passed.
+
+At this checkpoint, GitHub validation (including units and PostgreSQL), the toolkit
+browser step and container build passed; the main integration browser suite is
+still running. Final results belong to the PR checks and description. The local
+broad-suite timeouts remain disclosed there. Production MCP delivery, shared
+decisions and isolated hosting remain separate work.
