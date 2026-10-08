@@ -27,6 +27,7 @@ export function VisualDecisionCard(
 	let draft = useVisualDecision(id, wire, connected);
 	let state = draft.state;
 	let [peek, setPeek] = useState(false);
+	let [padding, setPadding] = useState<4 | 6 | 8>();
 	let [color, setColor] = useState("");
 	let paddingId = useId();
 	let colorId = useId();
@@ -38,8 +39,11 @@ export function VisualDecisionCard(
 	let validColor = /^#[0-9a-fA-F]{6}$/.test(color);
 
 	useEffect(() => {
+		// Native inputs advance locally while acknowledgements catch up; the preview stays accepted.
+		if (draft.pending > 0 && !state?.saved) return;
+		setPadding(state?.values.optionPadding);
 		setColor(state?.values.selectedColor ?? "");
-	}, [state?.values.selectedColor, state?.saved]);
+	}, [draft.pending, state?.values.optionPadding, state?.values.selectedColor, state?.saved]);
 	useEffect(() => {
 		let release = () => {
 			held.current = undefined;
@@ -149,18 +153,21 @@ export function VisualDecisionCard(
 							<aside aria-label="Decision card controls" className="visual-decision-inspector">
 								<div className="visual-decision-control">
 									<label htmlFor={paddingId}>Option vertical padding</label>
-									<output htmlFor={paddingId}>{state.values.optionPadding} px</output>
+									<output htmlFor={paddingId}>{padding ?? state.values.optionPadding} px</output>
 									<input
-										aria-valuetext={`${state.values.optionPadding} px`}
+										aria-valuetext={`${padding ?? state.values.optionPadding} px`}
 										disabled={!editable}
 										id={paddingId}
 										max={8}
 										min={4}
-										onChange={event =>
-											draft.change({ optionPadding: Number(event.target.value) as 4 | 6 | 8 })}
+										onChange={event => {
+											let value = Number(event.target.value) as 4 | 6 | 8;
+											setPadding(value);
+											draft.change({ optionPadding: value });
+										}}
 										step={2}
 										type="range"
-										value={state.values.optionPadding}
+										value={padding ?? state.values.optionPadding}
 									/>
 								</div>
 								<div className="visual-decision-control">
@@ -195,6 +202,7 @@ export function VisualDecisionCard(
 										className="btn btn-sm btn-ghost"
 										disabled={!editable}
 										onClick={() => {
+											setPadding(state.definition.baseline.optionPadding);
 											setColor(state.definition.baseline.selectedColor);
 											draft.reset();
 										}}
