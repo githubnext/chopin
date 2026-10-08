@@ -180,14 +180,53 @@ test("hovering the marker washes the prose and previews the decision", async ({ 
 	await expect.poll(() => washed(page)).toBe(0);
 });
 
-test("hovering the anchored prose previews it without taking the text selection", async ({ join, seed }) => {
+test("the anchored prose stays quiet under the pointer and a click in it only places the caret", async ({ join, seed }) => {
 	await seed(SOURCE, STATE);
 	let page = await join("ana");
 	await open(page);
 
 	await prose(page, FIRST).hover();
+	// Give a would-be preview the time a marker hover takes to show one.
+	await page.waitForTimeout(400);
+	await expect(page.getByRole("tooltip")).toHaveCount(0);
+	expect(await washed(page)).toBe(0);
+
+	await prose(page, FIRST).click();
+	await page.waitForTimeout(300);
+	await expect(page.getByRole("dialog", { name: "Decision" })).toHaveCount(0);
+	await expect(marker(page)).toHaveAttribute("aria-expanded", "false");
+});
+
+test("the marker answers within 12px of its edge but never over the prose", async ({ join, seed }) => {
+	await seed(SOURCE, STATE);
+	let page = await join("ana");
+	await open(page);
+
+	let box = (await marker(page).boundingBox())!;
+	let line = (await prose(page, FIRST).boundingBox())!;
+	let centre = box.y + box.height / 2;
+
+	await page.mouse.move(box.x - 10, box.y - 10);
 	await expect(page.getByRole("tooltip")).toContainText("How should we roll this out?");
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
+
+	// Just past the reach lets go.
+	await page.mouse.move(box.x - 16, centre);
+	await expect(page.getByRole("tooltip")).toHaveCount(0);
+	await expect.poll(() => washed(page)).toBe(0);
+
+	// The first letter of the prose belongs to the text, not the marker.
+	let hit = await page.evaluate(
+		({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-plan-decision-marker]"),
+		{ x: line.x + 1, y: centre },
+	);
+	expect(hit).toBe(false);
+
+	await page.mouse.click(box.x + box.width + 4, box.y + box.height + 8);
+	let dialog = page.getByRole("dialog", { name: "Decision" });
+	await expect(dialog).toBeVisible();
+	await expect(dialog.getByText("All at once")).toBeVisible();
+	await expect(marker(page)).toHaveAttribute("aria-expanded", "true");
 });
 
 test("pressing the marker pins the popover, which shows what was not chosen and dismisses", async ({ join, seed }) => {
@@ -225,24 +264,23 @@ test("pressing the marker pins the popover, which shows what was not chosen and 
 	await expect(page.getByRole("dialog", { name: "Decision" })).toHaveCount(0);
 });
 
-test("clicking the prose pins, and only one decision is pinned at a time", async ({ join, seed }) => {
+test("only one decision is pinned at a time, and a click in the prose lets go", async ({ join, seed }) => {
 	await seed(SOURCE, STATE);
 	let page = await join("ana");
 	await open(page);
 
-	await prose(page, FIRST).click();
+	await marker(page).click();
 	await expect(page.getByRole("dialog", { name: "Decision" })).toContainText("How should we roll");
-	// The same prose again is not a dismissal.
-	await prose(page, FIRST).click();
-	await expect(page.getByRole("dialog", { name: "Decision" })).toHaveCount(1);
 
-	// The popover covers the prose below it, so the next decision is reached by its marker.
 	await marker(page, "Two weeks").click();
 	let dialog = page.getByRole("dialog", { name: "Decision" });
 	await expect(dialog).toHaveCount(1);
 	await expect(dialog).toContainText("How long is the pilot?");
 	await expect(marker(page)).toHaveAttribute("aria-expanded", "false");
 	await expect(marker(page, "Two weeks")).toHaveAttribute("aria-expanded", "true");
+
+	await prose(page, FIRST).click();
+	await expect(page.getByRole("dialog", { name: "Decision" })).toHaveCount(0);
 });
 
 test("the marker is a keyboard control and its popover is reachable from it", async ({ join, seed }) => {
@@ -252,6 +290,7 @@ test("the marker is a keyboard control and its popover is reachable from it", as
 
 	await marker(page).focus();
 	await expect(page.getByRole("tooltip")).toContainText("Team by team");
+	await expect.poll(() => washed(page)).toBeGreaterThan(0);
 	await page.keyboard.press("Enter");
 	let dialog = page.getByRole("dialog", { name: "Decision" });
 	await expect(dialog).toBeVisible();
@@ -282,7 +321,7 @@ test("a narrow document keeps its marker on screen and opens the popover within 
 	let box = (await target.boundingBox())!;
 	expect(box.x).toBeGreaterThanOrEqual(0);
 
-	await prose(page, FIRST).click();
+	await target.click();
 	let dialog = page.getByRole("dialog", { name: "Decision" });
 	await expect(dialog).toBeVisible();
 	let pop = (await dialog.boundingBox())!;
@@ -290,7 +329,7 @@ test("a narrow document keeps its marker on screen and opens the popover within 
 	expect(pop.x + pop.width).toBeLessThanOrEqual(390);
 });
 
-test("a touch marker has a 44px target", async ({ baseURL, browser, room, seed }) => {
+test("a touch marker reaches 44px tall within the gutter, and a tap pins without a preview", async ({ baseURL, browser, room, seed }) => {
 	await seed(SOURCE, STATE);
 	let context = await browser.newContext({
 		baseURL,
@@ -304,11 +343,20 @@ test("a touch marker has a 44px target", async ({ baseURL, browser, room, seed }
 		await page.goto(roomPath(room));
 		let target = marker(page);
 		await expect(target).toBeVisible();
-		let box = (await target.boundingBox())!;
-		expect(box.width).toBeGreaterThanOrEqual(44);
-		expect(box.height).toBeGreaterThanOrEqual(44);
+		let reach = await target.evaluate(element => {
+			let style = getComputedStyle(element, "::before");
+			let box = element.getBoundingClientRect();
+			return {
+				height: box.height - 2 * Number.parseFloat(style.top),
+				right: box.right - Number.parseFloat(style.right),
+			};
+		});
+		let line = (await prose(page, FIRST).boundingBox())!;
+		expect(reach.height).toBeGreaterThanOrEqual(44);
+		expect(reach.right).toBeLessThanOrEqual(line.x);
 		await target.tap();
 		await expect(page.getByRole("dialog", { name: "Decision" })).toBeVisible();
+		await expect(page.getByRole("tooltip")).toHaveCount(0);
 	} finally {
 		await context.close();
 	}

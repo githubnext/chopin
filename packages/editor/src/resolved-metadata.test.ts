@@ -37,7 +37,7 @@ test("legacy per-question links remain exact and orphaned prose never guesses", 
 test("the current pointer adapter transfers a pin between surfaces and rejects stale replies", () => {
 	let parent = {};
 	let child = {};
-	let state = ownedPoint(parent, {}, { type: "pin", key: "parent/q" });
+	let state = ownedPoint(parent, {}, { type: "toggle", key: "parent/q" });
 	expect(currentDecision()).toEqual({ owner: parent, id: "parent/q" });
 	ownedPoint(child, {}, { type: "toggle", key: "child/q" });
 	expect(decisionReplyCurrent(parent, "parent/q", 1, 1)).toBe(false);

@@ -2,10 +2,12 @@
  * A resolved decision, as a marker beside the prose it produced.
  *
  * Reader-local chrome, like the comment layer it is modelled on: it is drawn
- * over the document from measurements and never put in it. Hovering the marker
- * or the prose washes the passage and previews the decision; pressing either
- * pins the same popover open, where the options not chosen and the close
- * button appear. What each of those says and where it sits is `resolved.ts`.
+ * over the document from measurements and never put in it. Only the marker
+ * answers: hovering or focusing it washes the passage and previews the
+ * decision, and pressing it pins the same popover open, where the options not
+ * chosen and the close button appear. The prose itself stays quiet so reading
+ * it never pops anything up. What each of those says and where it sits is
+ * `resolved.ts`.
  */
 
 import {
@@ -28,15 +30,13 @@ import { currentDecision, releaseDecision, subscribeDecision } from "./decision-
 import { useResolvedActions } from "./resolved-actions";
 import { decisionHostVisible } from "./decision-placement";
 import { when } from "./card";
-import { containsHit, passageHits } from "./comment-hits";
 import { Face } from "./face";
-import { COARSE_POINTER_QUERY } from "./pointer";
 import {
 	COMPACT_GUTTER,
 	keyOf,
 	MARKER_SIZE,
-	MARKER_TOUCH_SIZE,
 	markerPoint,
+	markerReach,
 	ownedPoint,
 	point,
 	popoverBelow,
@@ -53,7 +53,6 @@ import type { CSSProperties, ReactNode } from "react";
 import type { Rect } from "./comment-geometry";
 import type { Question } from "@chopin/protocol";
 import type { MarkerPlace, PointerAction } from "./resolved";
-import type { PassageHit } from "./comment-hits";
 import type { QuestionnaireStore } from "./questionnaires";
 
 /** One answered question that has prose to sit beside. */
@@ -76,7 +75,8 @@ type Placed = {
 	marker: MarkerPlace;
 	lineHeight: number;
 	anchor: Rect;
-	hits: PassageHit[];
+	/** Where the prose starts, from the host's left edge. */
+	prose: number;
 };
 
 const POPOVER_WIDTH = 336;
@@ -106,26 +106,22 @@ function lineHeightOf(element: HTMLElement): number {
 }
 
 /**
- * The marker's box. A disc is padded out to the hit size around its centre; a
- * slim bar keeps its place in the gutter and only grows to a touch target
- * toward the prose side, where the bar is drawn at its left edge.
+ * The marker's drawn box, and how far its invisible reach may extend sideways
+ * without leaving the gutter. A slim bar is drawn at its box's left edge.
  */
-function markerStyle(
-	marker: MarkerPlace,
-	lineHeight: number,
-	hit: number,
-	inset: number,
-): CSSProperties {
-	if (!marker.compact) return { top: marker.top - inset, left: marker.left - inset };
-	let coarse = hit > MARKER_SIZE;
-	let height = coarse ? Math.max(hit, lineHeight) : lineHeight;
+function markerStyle(marker: MarkerPlace, lineHeight: number, prose: number): CSSProperties {
+	let width = marker.compact ? COMPACT_GUTTER : MARKER_SIZE;
+	let reach = markerReach(marker.left, width, prose);
 	return {
-		top: marker.top - (height - lineHeight) / 2,
-		left: coarse ? 0 : marker.left,
-		width: coarse ? hit : COMPACT_GUTTER,
-		height,
-		"--plan-decision-bar": `${coarse ? marker.left + 4 : 4}px`,
-		"--plan-decision-line": `${lineHeight}px`,
+		top: marker.top,
+		left: marker.left,
+		"--plan-decision-reach-start": `${reach.start}px`,
+		"--plan-decision-reach-end": `${reach.end}px`,
+		...(marker.compact && {
+			width,
+			height: lineHeight,
+			"--plan-decision-line": `${lineHeight}px`,
+		}),
 	} as CSSProperties;
 }
 
@@ -279,20 +275,18 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	let act = useCallback((action: PointerAction) => {
 		let next = ownedPoint(owner.current, pointerRef.current, action);
 		pointerRef.current = next;
-		if (action.type === "pin" || action.type === "toggle" || action.type === "dismiss") {
+		if (action.type === "toggle" || action.type === "dismiss") {
 			intent.current++;
 		}
 		dispatch(action);
 	}, []);
-	let [coarse, setCoarse] = useState(false);
 	let [height, setHeight] = useState(0);
 	let root = useRef<HTMLDivElement>(null);
-	let placedRef = useRef<Placed[]>([]);
 	let wasVisible = useRef(false);
 	let leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	let press = useRef<{ left: number; top: number; moved: boolean } | undefined>(undefined);
 	let painted = useRef(false);
 	let restoring = useRef(false);
+	let pressing = useRef(false);
 	let enterPopover = useRef(false);
 	let origin = useRef<HTMLElement | undefined>(undefined);
 
@@ -369,19 +363,10 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		});
 	}, [editor]);
 
-	useEffect(() => {
-		let query = matchMedia(COARSE_POINTER_QUERY);
-		let update = () => setCoarse(query.matches);
-		update();
-		query.addEventListener("change", update);
-		return () => query.removeEventListener("change", update);
-	}, []);
-
 	let measure = useCallback(() => {
 		if (!host || !decisionHostVisible(host)) {
 			if (wasVisible.current) act({ type: "dismiss" });
 			wasVisible.current = false;
-			placedRef.current = [];
 			setPlaced([]);
 			return;
 		}
@@ -406,20 +391,19 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 				let element = elements[rects.indexOf(first)]!;
 				let lineHeight = lineHeightOf(element);
 				let marker = markerPoint(first, lineHeight, page);
-				next.push({ decision, marker, lineHeight, anchor: first, hits: passageHits(page, rects) });
+				next.push({ decision, marker, lineHeight, anchor: first, prose: first.left - page.left });
 			} catch (error) {
 				// A bad anchor must not break Lexical's update listener.
 				console.error(`[plan] could not place decision ${decision.key}:`, error);
 			}
 		}
-		placedRef.current = next;
 		setPlaced(next);
 		act({ type: "prune", live: new Set(next.map(item => item.decision.key)) });
 	}, [act, editor, host]);
 
 	useLayoutEffect(() => {
 		measure();
-	}, [measure, decisions, coarse]);
+	}, [measure, decisions]);
 
 	useEffect(() => {
 		if (!host) return;
@@ -482,55 +466,6 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	}, [act, restoreFocus]);
 
 	useEffect(() => {
-		if (!host) return;
-		let over = (event: MouseEvent): Placed | undefined => {
-			let page = host.getBoundingClientRect();
-			let at = { top: event.clientY - page.top, left: event.clientX - page.left };
-			return placedRef.current.find(entry => containsHit(entry.hits, at));
-		};
-		let inProse = (target: EventTarget | null) =>
-			!!target && !!editor.getRootElement()?.contains(target as Node);
-		let down = (event: PointerEvent) => {
-			press.current = { left: event.clientX, top: event.clientY, moved: false };
-		};
-		let move = (event: PointerEvent) => {
-			let pending = press.current;
-			if (pending && Math.hypot(event.clientX - pending.left, event.clientY - pending.top) > 3) {
-				pending.moved = true;
-			}
-			if (root.current?.contains(event.target as Node)) return;
-			let entry = inProse(event.target) ? over(event) : undefined;
-			if (entry) enter(entry.decision.key);
-			else for (let item of placedRef.current) leave(item.decision.key);
-		};
-		let click = (event: MouseEvent) => {
-			let pending = press.current;
-			press.current = undefined;
-			if (!pending || pending.moved || !inProse(event.target)) return;
-			let entry = over(event);
-			let selection = getSelection();
-			if (!entry || (selection && !selection.isCollapsed)) return;
-			origin.current = root.current?.querySelector<HTMLElement>(
-				`[data-plan-decision-marker="${entry.decision.key}"]`,
-			) ?? undefined;
-			act({ type: "pin", key: entry.decision.key });
-		};
-		let out = () => {
-			for (let item of placedRef.current) leave(item.decision.key);
-		};
-		host.addEventListener("pointerdown", down);
-		host.addEventListener("pointermove", move);
-		host.addEventListener("click", click);
-		host.addEventListener("pointerleave", out);
-		return () => {
-			host.removeEventListener("pointerdown", down);
-			host.removeEventListener("pointermove", move);
-			host.removeEventListener("click", click);
-			host.removeEventListener("pointerleave", out);
-		};
-	}, [act, editor, enter, host, leave]);
-
-	useEffect(() => {
 		if (!pointer.pinned || !enterPopover.current) return;
 		enterPopover.current = false;
 		root.current?.querySelector<HTMLElement>("[data-plan-decision-close]")?.focus();
@@ -558,18 +493,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		if (!pointer.pinned && !pointer.hover) return;
 		let outside = (event: PointerEvent) => {
 			if (!pointer.pinned) return;
-			let target = event.target as Node;
-			if (root.current?.contains(target)) return;
-			// A press on the pinned prose is the click that pins it, not a dismissal.
-			let page = host?.getBoundingClientRect();
-			let entry = placedRef.current.find(item => item.decision.key === pointer.pinned);
-			if (
-				page && entry
-				&& containsHit(entry.hits, {
-					top: event.clientY - page.top,
-					left: event.clientX - page.left,
-				})
-			) return;
+			if (root.current?.contains(event.target as Node)) return;
 			act({ type: "dismiss" });
 		};
 		let escape = (event: KeyboardEvent) => {
@@ -585,13 +509,11 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 			document.removeEventListener("pointerdown", outside);
 			document.removeEventListener("keydown", escape);
 		};
-	}, [act, dismiss, host, pointer.hover, pointer.pinned]);
+	}, [act, dismiss, pointer.hover, pointer.pinned]);
 
 	if (!host) return null;
 
 	let page = rect(host.getBoundingClientRect());
-	let hit = coarse ? MARKER_TOUCH_SIZE : MARKER_SIZE;
-	let inset = (hit - MARKER_SIZE) / 2;
 	let width = Math.min(POPOVER_WIDTH, host.clientWidth - 16);
 	let value: PopoverValue | undefined;
 	if (open && view) {
@@ -611,7 +533,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 
 	return createPortal(
 		<div className="plan-decision-layer" ref={root}>
-			{placed.map(({ decision, lineHeight, marker }) => {
+			{placed.map(({ decision, lineHeight, marker, prose }) => {
 				let isPinned = pointer.pinned === decision.key;
 				let previewing = view?.key === decision.key && !view.pinned;
 				return (
@@ -624,19 +546,27 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 						data-plan-decision-marker={decision.key}
 						data-press="small"
 						key={decision.key}
-						onBlur={() => leave(decision.key)}
+						onBlur={() => {
+							pressing.current = false;
+							leave(decision.key);
+						}}
 						onClick={event => {
+							pressing.current = false;
 							origin.current = event.currentTarget;
 							// Detail 0 is a key press: the popover is not next in tab order,
 							// so focus goes to it rather than leaving the reader to find it.
 							enterPopover.current = event.detail === 0 && !isPinned;
 							act({ type: "toggle", key: decision.key });
 						}}
-						onFocus={() => !restoring.current && enter(decision.key)}
-						onMouseEnter={() => enter(decision.key)}
-						onMouseLeave={() => leave(decision.key)}
+						onFocus={() => !restoring.current && !pressing.current && enter(decision.key)}
+						onPointerDown={() => {
+							// A press focuses too; a mouse already showed the preview and touch has none.
+							pressing.current = true;
+						}}
+						onPointerEnter={event => event.pointerType !== "touch" && enter(decision.key)}
+						onPointerLeave={() => leave(decision.key)}
 						data-compact={marker.compact || undefined}
-						style={markerStyle(marker, lineHeight, hit, inset)}
+						style={markerStyle(marker, lineHeight, prose)}
 						type="button"
 					>
 						<span className="plan-decision-disc">
