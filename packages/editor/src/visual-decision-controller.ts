@@ -32,10 +32,19 @@ export class VisualDecisionController {
 	subscribe = (listener: () => void): () => void => {
 		this.#listeners.add(listener);
 		if (!this.#off && this.wire) {
-			this.#off = this.wire.on<{ state: VisualDecision.State }>(
+			let offChanged = this.wire.on<{ state: VisualDecision.State }>(
 				"visual-decision:changed",
 				frame => this.#accept(frame.state),
 			);
+			// Display connection flags can hide a short outage; every socket admission must reopen.
+			let offHello = this.wire.on("session:hello", () => {
+				this.configure(false);
+				this.configure(true);
+			});
+			this.#off = () => {
+				offChanged();
+				offHello();
+			};
 		}
 		return () => {
 			this.#listeners.delete(listener);
@@ -184,7 +193,9 @@ export class VisualDecisionController {
 		this.#set({
 			state,
 			pending: this.#queue.length,
-			...(previous && state.revision > previous.revision ? { error: undefined } : {}),
+			...(previous && state.revision > previous.revision && !(this.#blocked && this.#queue.length)
+				? { error: undefined }
+				: {}),
 		});
 	}
 

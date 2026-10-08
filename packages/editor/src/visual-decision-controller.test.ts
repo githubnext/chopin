@@ -32,9 +32,14 @@ type Request = {
 function setup() {
 	let requests: Request[] = [];
 	let changed: ((frame: { state: VisualDecision.State }) => void) | undefined;
+	let hello: (() => void) | undefined;
 	let wire: Transport = {
-		on: (_kind, listener) => {
-			changed = listener as (frame: { state: VisualDecision.State }) => void;
+		on: (kind, listener) => {
+			if (kind === "visual-decision:changed") {
+				changed = listener as (frame: { state: VisualDecision.State }) => void;
+			} else if (kind === "session:hello") {
+				hello = listener as () => void;
+			}
 			return () => {};
 		},
 		send: () => {},
@@ -51,6 +56,7 @@ function setup() {
 		controller,
 		requests,
 		changed: (next: VisualDecision.State) => changed?.({ state: next }),
+		hello: () => hello?.(),
 	};
 }
 
@@ -142,20 +148,62 @@ test("Save waits for local acknowledgements and claims the accepted revision", a
 	expect(requests[4].kind).toBe("visual-decision:edit");
 });
 
-test("failed edits remain available for explicit retry and newer state clears errors", async () => {
+test("a peer update keeps failed local edits actionable until explicit retry succeeds", async () => {
 	let { controller, requests, changed } = await opened();
 	controller.change({ optionPadding: 8 });
 	requests[1].reject(new Error("commit failed"));
 	await tick();
 	expect(controller.getSnapshot().pending).toBe(1);
 	expect(controller.getSnapshot().error).toContain("waiting to sync");
-	changed(state(1, 4));
-	expect(controller.getSnapshot().error).toBeUndefined();
+	changed({ ...state(1), values: { optionPadding: 6, selectedColor: "#123456" } });
+	expect(controller.getSnapshot().state?.values.selectedColor).toBe("#123456");
+	expect(controller.getSnapshot().pending).toBe(1);
+	expect(controller.getSnapshot().error).toContain("waiting to sync");
+	await controller.save();
+	expect(requests).toHaveLength(2);
 	controller.retry();
 	expect(requests[2].payload.key).toBe(requests[1].payload.key);
-	requests[2].resolve({ ok: true, state: state(2, 8) });
+	expect(requests[2].payload.patch).toEqual({ optionPadding: 8 });
+	requests[2].resolve({
+		ok: true,
+		state: { ...state(2, 8), values: { optionPadding: 8, selectedColor: "#123456" } },
+	});
 	await tick();
 	expect(controller.getSnapshot().pending).toBe(0);
+	expect(controller.getSnapshot().error).toBeUndefined();
+	let saving = controller.save();
+	expect(requests[3].payload.revision).toBe(2);
+	let accepted = controller.getSnapshot().state!;
+	requests[3].resolve({
+		ok: true,
+		state: {
+			...accepted,
+			saved: { revision: 2, values: accepted.values, by: "ana", at: "2026-10-08T12:00:00Z" },
+		},
+	});
+	await saving;
+});
+
+test("a new socket admission reopens a shared controller before replaying its unacknowledged edit", async () => {
+	let { controller, requests, hello } = await opened();
+	controller.subscribe(() => {});
+	controller.change({ optionPadding: 8 });
+	let key = requests[1].payload.key;
+	requests[1].reject(new Error("connection lost"));
+	await tick();
+	hello();
+	expect(requests).toHaveLength(3);
+	expect(requests[2].kind).toBe("visual-decision:open");
+	expect(controller.getSnapshot().pending).toBe(1);
+	requests[2].resolve({ ok: true, state: state(1, 4) });
+	await tick();
+	expect(requests[3].kind).toBe("visual-decision:edit");
+	expect(requests[3].payload.key).toBe(key);
+	requests[3].resolve({ ok: true, state: state(1, 4) });
+	await tick();
+	expect(controller.getSnapshot().state?.values.optionPadding).toBe(4);
+	expect(controller.getSnapshot().pending).toBe(0);
+	expect(controller.getSnapshot().error).toBeUndefined();
 });
 
 test("a saved broadcast is terminal even if an older open reply has the same revision", async () => {

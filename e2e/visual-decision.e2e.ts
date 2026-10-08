@@ -147,6 +147,81 @@ test("collaborators converge per control, reconnect, then save attributed values
 	);
 });
 
+for (let destination of ["decisions", "plan"]) {
+	test(`a brief reconnect restores missed values and acknowledges the outbox in ${destination}`, async ({ join, page, room }) => {
+		let lost = Promise.withResolvers<void>();
+		let resume = Promise.withResolvers<void>();
+		let rejoined = Promise.withResolvers<void>();
+		let drop = false;
+		let lostAt: number | undefined;
+		let rejoinedAt: number | undefined;
+		let edits: string[] = [];
+		await page.routeWebSocket("**/ws?**", async route => {
+			if (lostAt !== undefined) await resume.promise;
+			let server = route.connectToServer();
+			route.onMessage(message => {
+				if (typeof message === "string") {
+					let frame = JSON.parse(message);
+					if (frame.kind === "visual-decision:edit") edits.push(frame.key);
+				}
+				server.send(message);
+			});
+			server.onMessage(message => {
+				let kind = typeof message === "string" ? JSON.parse(message).kind : undefined;
+				if (drop && (kind === "visual-decision:edit" || kind === "visual-decision:changed")) {
+					if (kind === "visual-decision:edit") {
+						drop = false;
+						lostAt = Date.now();
+						route.close();
+						server.close();
+						lost.resolve();
+					}
+					return;
+				}
+				if (lostAt !== undefined && kind === "session:hello") {
+					rejoinedAt = Date.now();
+					rejoined.resolve();
+				}
+				route.send(message);
+			});
+		});
+		let ana = await join("ana");
+		let id = await createDecision(ana);
+		let ben = await join("ben");
+		await openWire(ben, room);
+		await ana.getByRole("button", {
+			name: destination === "plan" ? "Document" : /^Decisions/,
+			exact: destination === "plan",
+		}).click();
+		let specimen = ana.locator(`[data-document-view="${destination}"]`).getByRole("article", {
+			name: "Visual decision",
+			exact: true,
+		});
+		let color = specimen.getByRole("textbox", { name: "Selected-option colour", exact: true });
+		drop = true;
+		await color.fill("#112233");
+		await lost.promise;
+		let latest = await request(ben, {
+			kind: "visual-decision:edit",
+			id,
+			key: `${crypto.randomUUID()}:1`,
+			patch: { optionPadding: 8, selectedColor: "#AABBCC" },
+		});
+		expect(latest.ok).toBe(true);
+		resume.resolve();
+		await rejoined.promise;
+		expect(rejoinedAt! - lostAt!).toBeLessThan(1_500);
+		await expect(specimen.getByRole("slider", { name: "Option vertical padding", exact: true }))
+			.toHaveValue("8");
+		await expect(color).toHaveValue("#AABBCC");
+		await expect(specimen.getByRole("button", { name: "Save decision", exact: true }))
+			.toBeEnabled();
+		expect(edits).toHaveLength(2);
+		expect(edits[1]).toBe(edits[0]);
+		expect((await state(ben, id)).values).toEqual({ optionPadding: 8, selectedColor: "#AABBCC" });
+	});
+}
+
 test("a concurrent accepted edit makes Save refuse the stale revision for review", async ({ join, page, room }) => {
 	let hold = false;
 	await page.routeWebSocket("**/ws?**", route => {
