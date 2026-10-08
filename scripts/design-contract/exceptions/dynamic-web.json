@@ -59,7 +59,7 @@
 				1
 			]
 		],
-		"sourceHash": "901beece5ec4dc3c63b889d8f64de6c1de0bcdf435e4084db72aefb7b175dfc2"
+		"sourceHash": "18d229959db00ac1a909e34270ef9519466fc48047bffbcf4a01786a7fdc7d40"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -101,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "093520771401fb60ffc1924a3ba1052aece4db912dbf97afdfc9fc2d7646c7bd"
+		"sourceHash": "71da0b32af267f6bf549cb2a4825b7d8ea13a3cb476674cc5dca4ee6fc5cabb9"
 	},
 	{
 		"file": "apps/web/src/project-sidebar.tsx",
@@ -115,7 +115,7 @@
 				1
 			]
 		],
-		"sourceHash": "093520771401fb60ffc1924a3ba1052aece4db912dbf97afdfc9fc2d7646c7bd"
+		"sourceHash": "71da0b32af267f6bf549cb2a4825b7d8ea13a3cb476674cc5dca4ee6fc5cabb9"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -234,7 +234,7 @@
 				1
 			]
 		],
-		"sourceHash": "d9735da11e4049baae8a820fca54a21c7bef7336f859af9a0c5cbcaa892a4004"
+		"sourceHash": "460a146f66832be548bac2c90f22faed448cf7114db4b9bace02fefe7c626709"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
