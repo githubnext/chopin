@@ -181,6 +181,16 @@
         "react-dom": "catalog:react",
       },
     },
+    "packages/experiment": {
+      "name": "@chopin/experiment",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "catalog:harness",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:bun",
+      },
+    },
     "packages/icons": {
       "name": "@chopin/icons",
       "version": "0.0.0",
@@ -451,6 +461,8 @@
     "@chopin/draft": ["@chopin/draft@workspace:packages/draft"],
 
     "@chopin/editor": ["@chopin/editor@workspace:packages/editor"],
+
+    "@chopin/experiment": ["@chopin/experiment@workspace:packages/experiment"],
 
     "@chopin/icons": ["@chopin/icons@workspace:packages/icons"],
 

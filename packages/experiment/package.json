@@ -1,0 +1,13 @@
+{
+	"name": "@chopin/experiment",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": { "types": "tsgo --noEmit --skipLibCheck" },
+	"exports": {
+		".": "./src/index.ts",
+		"./fixtures": "./src/fixtures.ts"
+	},
+	"dependencies": { "zod": "catalog:harness" },
+	"devDependencies": { "@types/bun": "catalog:bun" }
+}
