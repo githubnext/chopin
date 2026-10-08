@@ -16,6 +16,15 @@ small local report when integration is absent:
   Distinguish observations, interpretations and unresolved choices.
 - Compatibility limits, missing capabilities and untested behaviour.
 
+## Typecheck coverage
+
+Confirm the typecheck includes generated adapters, hosts, copied helpers and
+verification scripts alongside the raw app. Root include globs can skip hidden
+output such as `.preview/`. Inspect the compiler's actual file list with
+`--listFilesOnly -p <config>`; if generated files are absent, add an explicit
+preview config, then run and record both its typecheck and file-list command.
+Attribute each passing check to the files it actually covered.
+
 ## Browser verification
 
 Serve built resources after the compiler/development server has stopped. Observe

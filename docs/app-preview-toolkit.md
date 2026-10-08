@@ -54,7 +54,9 @@ The host owns chosen values. Number/range controls stay synchronized; Reset
 selects baseline; holding **Show current** temporarily renders baseline. Pointer
 and keyboard release, cancellation, capture loss, blur and visibility loss restore
 chosen values. Copy/Download values exports local JSON. Retry rebuilds and reloads
-while retaining chosen values; four-second load/render timeouts surface failure.
+while retaining chosen values and restoring controls to those values. An earlier
+valid render result preserves a newer input error until correction, Reset or Retry.
+Four-second load/render timeouts surface failure.
 The transport checks sender identity, origin, request order and frame attempt.
 
 The local harness has fixed loopback ports and supports one illustrative component.
@@ -77,7 +79,7 @@ the same component viewport after font readiness and passed with zero differing
 pixels above Playwright's 0.1 perceptual threshold. Checks cover actual children,
 SVG/font resources, Base UI portal, controls, comparison exits, JSON exports,
 invalid values, stale/foreign replies, sandbox restrictions and exact resources.
-All 12 cases passed with zero unexpected browser errors, failed resources, bad
+All 14 cases passed with zero unexpected browser errors, failed resources, bad
 HTTP responses or off-origin requests. The capture-loss/cancellation assertions
 also passed in both layouts while the pointer remained held.
 
@@ -102,8 +104,13 @@ deterministic usage and required Units provider. Its disposable source commit wa
 initial state. The agent prepared a separate preview in ignored `.preview/`;
 all five app files stayed unchanged and both copied helpers were byte-identical.
 
-Agent types, build, nine helper tests and browser/resource checks passed. The parent
-independently checked the actual source imports and Chromium output at host widths
+Build, nine helper tests and browser/resource checks passed. The initial root
+`bun run types` covered only the raw app: its include globs skipped hidden
+`.preview/` output. An explicit `.preview/tsconfig.json` now passes and its actual
+compiler file list includes the generated adapter, host, definition, copied
+helpers, configuration, browser/resource checkers and raw app sources. This
+corrects the typecheck coverage evidence; no generated-code type bug was found.
+The parent independently checked the actual source imports and Chromium output at host widths
 1008px and 360px: source and preview baseline PNG bytes matched, Units context
 rendered `requests`, and controls produced real meter height 19px and accent
 `#ab4e39`. Space comparison restored chosen values; Reset returned to 8px. All 11
@@ -126,6 +133,8 @@ from this repository. These commands apply to that workspace:
 
 ```bash
 bun run types
+bun node_modules/@typescript/native-preview/bin/tsgo.js --noEmit -p .preview/tsconfig.json
+bun node_modules/@typescript/native-preview/bin/tsgo.js --listFilesOnly -p .preview/tsconfig.json > .preview/evidence/preview-type-files.txt
 bunx vite build --config .preview/vite.config.ts
 bunx vite preview --config .preview/vite.config.ts --host 127.0.0.1 --port 8821 --strictPort
 # With the built server running, in another terminal:
