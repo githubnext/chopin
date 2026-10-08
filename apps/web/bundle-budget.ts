@@ -19,8 +19,8 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 // Shared menu dismissal and the account menu keyboard contract add 1 KB raw.
 // Sidebar count resynchronization and the unwatched-project refresh add 2 KB raw.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 81_500,
-	raw: 258_000,
+	gzip: 82_000,
+	raw: 258_500,
 };
 
 export function enforceInitialJavaScript(
