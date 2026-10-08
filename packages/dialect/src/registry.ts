@@ -45,6 +45,11 @@ import {
 	QuestionnaireNode,
 } from "./nodes/questionnaire";
 import { ResearchNode } from "./nodes/research";
+import {
+	ExperimentNode,
+	LexicalExperimentVisitor,
+	MdastExperimentVisitor,
+} from "./nodes/experiment";
 import { LexicalResearchVisitor, MdastResearchVisitor } from "./nodes/research-visitors";
 import { LexicalTableVisitor, MdastTableVisitor, TABLE_NODES } from "./nodes/table";
 import { MdastUnderlineVisitor } from "./nodes/underline";
@@ -179,6 +184,16 @@ export const researchPlugin = realmPlugin({
 	},
 });
 
+export const experimentPlugin = realmPlugin({
+	init(realm) {
+		realm.pubIn({
+			[addLexicalNode$]: [ExperimentNode],
+			[addImportVisitor$]: MdastExperimentVisitor,
+			[addExportVisitor$]: LexicalExperimentVisitor,
+		});
+	},
+});
+
 /** Underline, mapped to Lexical's native text format rather than a wrapper node. */
 export const underlinePlugin = realmPlugin({
 	init(realm) {
@@ -264,6 +279,7 @@ export function plugins({ core: withCore = true } = {}): RealmPlugin[] {
 		questionnairePlugin(),
 		decisionPlugin(),
 		researchPlugin(),
+		experimentPlugin(),
 		underlinePlugin(),
 		markdownPlugin(),
 	];

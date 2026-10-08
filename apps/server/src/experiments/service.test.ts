@@ -44,6 +44,31 @@ test("claims expire, stale workers cannot publish and completion replays atomica
 	expect(completed.result).toEqual(performance);
 	expect(completed.views.comparison.revision).toBe(0);
 	expect(await service.complete(draft.id, "connection", claimed.generation)).toEqual(completed);
+	let decisionId = crypto.randomUUID();
+	await service.decide(draft.id, { id: "alice", login: "alice" }, {
+		id: decisionId,
+		view: "comparison",
+		revision: 0,
+		conclusion: "Choose cached",
+		rationale: "Lower median",
+	});
+	await service.select(draft.id, "bob", "comparison", {
+		mutationId: crypto.randomUUID(),
+		expected: { "filter:workload": 0 },
+		set: { "filter:workload": ["large"] },
+	});
+	let revised = (await service.store.get(draft.id))!;
+	expect(revised.decisions[0].state.revision).toBe(0);
+	expect(revised.views.comparison.revision).toBe(1);
+	await expect(
+		service.decide(draft.id, { id: "alice", login: "alice" }, {
+			id: crypto.randomUUID(),
+			view: "comparison",
+			revision: 0,
+			conclusion: "Stale",
+			rationale: "",
+		}),
+	).rejects.toThrow("Shared selections changed");
 	let another = await service.create(documentId, userId, "Try another");
 	await service.authorize(another.id, "connection", {
 		...input,

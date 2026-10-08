@@ -163,6 +163,7 @@
         "@base-ui/react": "1.7.0",
         "@chopin/diagrams": "workspace:*",
         "@chopin/dialect": "workspace:*",
+        "@chopin/experiment": "workspace:*",
         "@chopin/icons": "workspace:*",
         "@chopin/protocol": "workspace:*",
         "@chopin/question": "workspace:*",

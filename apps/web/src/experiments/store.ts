@@ -5,6 +5,7 @@ import type {
 } from "@chopin/experiment/records";
 import { experimentRequest } from "./api";
 import type { Wire } from "../wire";
+import type { SelectionPatch } from "@chopin/experiment";
 
 export class ExperimentStore {
 	#listeners = new Set<() => void>();
@@ -43,6 +44,9 @@ export class ExperimentStore {
 			this.connections = result.connections;
 			this.error = "";
 			this.changed();
+			for (let item of result.experiments) {
+				if (item.decisionCount && !this.values.has(item.id)) void this.load(item.id);
+			}
 			for (let [id, value] of this.values) {
 				if (result.experiments.find(item => item.id === id)?.revision !== value.revision) {
 					void this.load(id);
@@ -101,5 +105,15 @@ export class ExperimentStore {
 			clearInterval(timer);
 			this.#controller.abort();
 		};
+	}
+	async change(id: string, view: string, patch: SelectionPatch) {
+		try {
+			await this.action(id, "state", { view, patch });
+		} finally {
+			await this.load(id);
+		}
+	}
+	async place(id: string, view: string, decision?: string, remove = false) {
+		await this.action(id, "placement", { view, ...(decision ? { decision } : {}), remove });
 	}
 }

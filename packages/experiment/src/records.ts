@@ -18,6 +18,7 @@ export const decisionSchema = z.object({
 	conclusion: z.string().min(1).max(4000),
 	rationale: z.string().max(8000),
 	by: z.string(),
+	userId: z.string(),
 	at: z.number(),
 }).strict();
 export type EvidenceDecision = z.infer<typeof decisionSchema>;
@@ -55,10 +56,12 @@ export const investigationSchema = z.object({
 export type Investigation = z.infer<typeof investigationSchema>;
 export type InvestigationState = Investigation["state"];
 export type PublishedInvestigation = Omit<Investigation, "candidate" | "receipts">;
-export type InvestigationSummary = Pick<
-	Investigation,
-	"id" | "brief" | "state" | "revision" | "requester" | "progress" | "createdAt"
->;
+export type InvestigationSummary =
+	& { decisionCount: number }
+	& Pick<
+		Investigation,
+		"id" | "brief" | "state" | "revision" | "requester" | "progress" | "createdAt"
+	>;
 export type WorkspaceConnection = {
 	id: string;
 	documentId: string;

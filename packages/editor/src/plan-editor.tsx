@@ -61,6 +61,7 @@ function resume(provider: PlanProvider): void {
 }
 
 export type PlanEditorProps = {
+	experiments?: import("./widget-options").ExperimentResources;
 	wire: Transport | undefined;
 	connection?: Connection;
 	/** How comment threads are presented by the surrounding workspace. */
@@ -133,6 +134,7 @@ const UNDO_NOTICE = 3000;
 export function PlanEditor(
 	{
 		busy,
+		experiments,
 		className,
 		commentPresentation = "popover",
 		connection,
@@ -364,6 +366,7 @@ export function PlanEditor(
 						onRemoteUpdate,
 					}),
 					widgetsPlugin({
+						experiments,
 						binding,
 						commentPresentation,
 						disclosureMotion,
@@ -389,6 +392,7 @@ export function PlanEditor(
 				]
 				: [],
 		[
+			experiments,
 			wire,
 			user,
 			onReset,

@@ -55,6 +55,7 @@ import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
 import { ExperimentStore } from "./experiments/store";
 import { ExperimentsPanel } from "./experiments/panel";
+import { EvidenceDecisions } from "./experiments/evidence";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
@@ -375,6 +376,7 @@ export function RoomWorkspace(
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
 	let experiments = useMemo(() => new ExperimentStore(room), [room]);
+	useSyncExternalStore(experiments.subscribe, experiments.snapshot);
 	let [showExperiments, setShowExperiments] = useState(false);
 	useEffect(() => experiments.connect(wire), [experiments, wire]);
 	let [cardMeta] = useState(() => new CardMetaStore());
@@ -1080,6 +1082,13 @@ export function RoomWorkspace(
 				onDestination={selectDestination}
 				decisions={
 					<Decisions
+						additional={
+							<EvidenceDecisions
+								store={experiments}
+								canEdit={!!workspaceCanEdit && status === "connected"}
+							/>
+						}
+						hasAdditional={[...experiments.values.values()].some(item => item.decisions.length > 0)}
 						cardMeta={cardMeta}
 						canEdit={workspaceCanEdit}
 						connected={treatAsConnected && workspaceCanEdit}
@@ -1097,6 +1106,7 @@ export function RoomWorkspace(
 				}
 				plan={
 					<PlanEditor
+						experiments={experiments}
 						cardMeta={cardMeta}
 						evidence={showEvidence}
 						onCardSource={showCardSource}

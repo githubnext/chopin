@@ -12,6 +12,8 @@ import { renderDecision } from "./decision";
 import { renderImage } from "./image";
 import { renderQuestionnaire } from "./questionnaire";
 import { renderResearch } from "./research";
+import { renderExperiment } from "./experiment";
+import type { ExperimentNode } from "@chopin/dialect";
 
 import type { DecisionNode, ImageNode, QuestionnaireNode, ResearchNode } from "@chopin/dialect";
 
@@ -26,6 +28,7 @@ export function register(): void {
 	setRenderer<QuestionnaireNode>("plan-questionnaire", renderQuestionnaire);
 	setRenderer<DecisionNode>("plan-decision", renderDecision);
 	setRenderer<ResearchNode>("plan-research", renderResearch);
+	setRenderer<ExperimentNode>("plan-experiment", renderExperiment);
 }
 
 export { CalloutPlugin } from "./callout";
