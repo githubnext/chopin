@@ -1,13 +1,15 @@
 // Loop / flywheel: steps on a ring joined by arcs; one token circulates.
 import { el, text } from "../../svg.mjs";
 import { textWidth } from "../../text.mjs";
-import { group, item, LABEL, labelBlock, stepOf } from "./common.mjs";
+import { group, item, itemIdProblems, LABEL, labelBlock, stepOf } from "./common.mjs";
 
 export const family = "structure";
 
 export function render(spec) {
 	const problems = [];
 	const steps = spec.steps.map((s, i) => item(s, i, "s"));
+	const identityProblems = itemIdProblems(steps, "steps");
+	if (identityProblems.length) return { problems: identityProblems };
 	const n = steps.length;
 	if (n < 3 || n > 8) {
 		problems.push({

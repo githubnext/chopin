@@ -1,6 +1,6 @@
 // Pyramid (ranked hierarchy, narrow top) or funnel (wide top, values + drop-off).
 import { el, text } from "../../svg.mjs";
-import { group, item, LABEL } from "./common.mjs";
+import { group, item, itemIdProblems, LABEL } from "./common.mjs";
 import { textWidth } from "../../text.mjs";
 import { fmt } from "../charts/scale.mjs";
 
@@ -9,6 +9,8 @@ export const family = "structure";
 export function render(spec) {
 	const problems = [];
 	const levels = spec.levels.map((l, i) => item(l, i, "l"));
+	const identityProblems = itemIdProblems(levels, "levels");
+	if (identityProblems.length) return { problems: identityProblems };
 	const n = levels.length;
 	if (n > 7) {
 		problems.push({ code: "W_BUDGET", at: "levels", msg: `${n} levels`, fix: "keep ≤ 7 levels" });

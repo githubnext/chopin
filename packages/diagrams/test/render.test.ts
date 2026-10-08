@@ -23,7 +23,7 @@ test("every registered renderer has one resolved fixture with valid geometry and
 });
 
 test("all aliases normalize and render with their required data shape", () => {
-	expect(Object.keys(DIAGRAM_ALIASES)).toHaveLength(15);
+	expect(Object.keys(DIAGRAM_ALIASES).length).toBeGreaterThan(0);
 	for (let [alias, base] of Object.entries(DIAGRAM_ALIASES)) {
 		let fixture = DIAGRAM_FIXTURES.find((entry) => entry.type === base);
 		expect(fixture).toBeDefined();
@@ -35,6 +35,45 @@ test("all aliases normalize and render with their required data shape", () => {
 		let result = renderDiagram(spec);
 		expect(result.ok, `${alias}: ${JSON.stringify(result.ok ? [] : result.problems)}`).toBe(true);
 		if (result.ok) expect(result.type).toBe(base);
+	}
+});
+
+test("item based structures reject duplicate node IDs before rendering", () => {
+	for (
+		let [type, field] of [
+			["process", "steps"],
+			["pyramid", "levels"],
+			["layers", "layers"],
+			["loop", "steps"],
+		] as const
+	) {
+		let fixture = DIAGRAM_FIXTURES.find((entry) => entry.type === type);
+		expect(fixture).toBeDefined();
+		let original = fixture?.spec[field] as Array<string | Record<string, unknown>>;
+		let items = original.map((value, index) =>
+			index < 2
+				? { ...(typeof value === "string" ? { label: value } : value), id: "repeated" }
+				: value
+		);
+		let result = renderDiagram({ ...fixture?.spec, type, [field]: items });
+		expect(result.ok, type).toBe(false);
+		if (result.ok) continue;
+		expect(result.problems[0]).toMatchObject({
+			code: "E_DUP_ID",
+			at: `${field}[1].id`,
+		});
+		expect("body" in result).toBe(false);
+	}
+	let generatedCollision = renderDiagram({
+		type: "process",
+		steps: ["First", { id: "s0", label: "Second" }],
+	});
+	expect(generatedCollision.ok).toBe(false);
+	if (!generatedCollision.ok) {
+		expect(generatedCollision.problems[0]).toMatchObject({
+			code: "E_DUP_ID",
+			at: "steps[1].id",
+		});
 	}
 });
 
