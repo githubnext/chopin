@@ -10,6 +10,7 @@ COPY patches ./patches
 COPY apps/server/package.json ./apps/server/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/dialect/package.json ./packages/dialect/package.json
+COPY packages/diagrams/package.json ./packages/diagrams/package.json
 COPY packages/draft/package.json ./packages/draft/package.json
 COPY packages/editor/package.json ./packages/editor/package.json
 COPY packages/icons/package.json ./packages/icons/package.json
