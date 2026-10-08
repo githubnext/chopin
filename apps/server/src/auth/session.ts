@@ -1,10 +1,10 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, hkdfSync, timingSafeEqual } from "node:crypto";
 
 import { GitHubError, GitHubTokenError } from "../github/client";
 
 import type { GitHubTokenGrant } from "../github/client";
 import type { StorageAdapter } from "../storage/port";
-import type { UserRecord, WebSession } from "../storage/model";
+import type { SessionCredentials, UserRecord, WebSession } from "../storage/model";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const ATTEMPT_TTL_MS = 10 * 60 * 1_000;
@@ -12,6 +12,7 @@ const REFRESH_EARLY_MS = 5 * 60 * 1_000;
 const CIPHER_VERSION = 1;
 const NONCE_BYTES = 12;
 const SECRET_BYTES = 32;
+const SESSION_CONTEXT = "chopin:hosted-session:v1";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -64,6 +65,7 @@ type MemorySession = {
 };
 
 type SessionOptions = {
+	persistence?: { key: Uint8Array; origin: string; clientId: string };
 	refresh?: (refreshToken: string) => Promise<GitHubTokenGrant>;
 	authorize?: (user: UserRecord, accessToken: string) => Promise<boolean>;
 	beforeRefresh?: (sessionId: string, revision: number) => Promise<void>;
@@ -196,13 +198,15 @@ function attempt(value: unknown): StoredAttempt | undefined {
 	return stored;
 }
 
-/** Process-local browser and GitHub credentials backed by a token-free ownership registry. */
+/** Browser sessions with optional encrypted persistence and process-local Planner access. */
 export class Sessions {
 	readonly #storage: StorageAdapter;
 	readonly #secure: boolean;
 	readonly #clock: Clock;
 	readonly #options: SessionOptions;
+	readonly #key: Promise<CryptoKey> | undefined;
 	readonly #sessions = new Map<string, MemorySession>();
+	readonly #restores = new Map<string, Promise<MemorySession | undefined>>();
 	readonly #refreshes = new Map<string, Promise<MemorySession | undefined>>();
 	readonly #revocations = new Map<string, Promise<boolean>>();
 	readonly #pendingDeletes = new Set<string>();
@@ -218,6 +222,11 @@ export class Sessions {
 		this.#secure = secure;
 		this.#clock = clock;
 		this.#options = options;
+		this.#key = options.persistence
+			? imported(
+				new Uint8Array(hkdfSync("sha256", options.persistence.key, "", SESSION_CONTEXT, 32)),
+			)
+			: undefined;
 		this.cookieName = `${secure ? "__Host-chopin_session" : "chopin_session"}${
 			options.cookieSuffix ?? ""
 		}`;
@@ -231,8 +240,10 @@ export class Sessions {
 		let user = await this.#storage.users.get(userId);
 		if (!user) throw new Error("cannot create a session for a missing user");
 		let session = { id, userId, expiresAt, createdAt };
-		await this.#storage.sessions.create(session);
-		this.#sessions.set(id, this.#fromGrant(session, user, hash(secret), grant, 1, createdAt));
+		let current = this.#fromGrant(session, user, hash(secret), grant, 1, createdAt);
+		let credentials = this.#key ? await this.#encrypt(current) : undefined;
+		await this.#storage.sessions.create({ ...session, ...(credentials ? { credentials } : {}) });
+		this.#sessions.set(id, current);
 		return {
 			id,
 			cookie: serialized(
@@ -250,13 +261,102 @@ export class Sessions {
 	async authenticate(request: Request): Promise<AuthenticatedSession | undefined> {
 		let parsed = this.#parse(request);
 		if (!parsed) return undefined;
-		let current = this.#sessions.get(parsed.id);
+		let current = await this.#find(parsed);
 		if (
 			!current
 			|| current.session.expiresAt <= this.#clock()
 			|| !equal(hash(parsed.secret), current.secretHash)
 		) return undefined;
 		return this.#resolve(current);
+	}
+
+	#aad(session: WebSession, secretHash: Uint8Array, revision: number): string {
+		let scope = this.#options.persistence!;
+		return JSON.stringify([
+			SESSION_CONTEXT,
+			scope.origin,
+			scope.clientId,
+			session.id,
+			session.userId,
+			session.createdAt.toISOString(),
+			session.expiresAt.toISOString(),
+			base64(secretHash),
+			revision,
+		]);
+	}
+
+	async #encrypt(current: MemorySession): Promise<SessionCredentials> {
+		return {
+			secretHash: current.secretHash,
+			revision: current.revision,
+			ciphertext: await encrypted(
+				await this.#key!,
+				this.#aad(current.session, current.secretHash, current.revision),
+				{
+					accessToken: current.accessToken,
+					accessExpiresAt: current.accessExpiresAt.getTime(),
+					refreshToken: current.refreshToken,
+					refreshExpiresAt: current.refreshExpiresAt.getTime(),
+				},
+			),
+		};
+	}
+
+	async #find(parsed: { id: string; secret: Uint8Array }): Promise<MemorySession | undefined> {
+		if (this.#pendingDeletes.has(parsed.id) || this.#revocations.has(parsed.id)) return undefined;
+		let current = this.#sessions.get(parsed.id);
+		if (current || !this.#key) return current;
+		let proof = hash(parsed.secret);
+		let key = `${parsed.id}.${base64(proof)}`;
+		let restoring = this.#restores.get(key);
+		if (restoring) return restoring;
+		let task = this.#restore(parsed.id, proof);
+		this.#restores.set(key, task);
+		try {
+			return await task;
+		} finally {
+			if (this.#restores.get(key) === task) this.#restores.delete(key);
+		}
+	}
+
+	async #restore(id: string, proof: Uint8Array): Promise<MemorySession | undefined> {
+		let stored = await this.#storage.sessions.get(id, this.#clock());
+		if (!stored?.credentials || !equal(proof, stored.credentials.secretHash)) return undefined;
+		let { credentials, ...session } = stored;
+		let payload: unknown;
+		try {
+			payload = await decrypted(
+				await this.#key!,
+				this.#aad(session, proof, credentials.revision),
+				credentials.ciphertext,
+			);
+		} catch {
+			return undefined;
+		}
+		if (!payload || typeof payload !== "object") return undefined;
+		let value = payload as Record<string, unknown>;
+		if (
+			typeof value.accessToken !== "string" || !value.accessToken
+			|| typeof value.refreshToken !== "string" || !value.refreshToken
+			|| typeof value.accessExpiresAt !== "number" || !Number.isSafeInteger(value.accessExpiresAt)
+			|| typeof value.refreshExpiresAt !== "number" || !Number.isSafeInteger(value.refreshExpiresAt)
+			|| !Number.isFinite(new Date(value.accessExpiresAt).getTime())
+			|| !Number.isFinite(new Date(value.refreshExpiresAt).getTime())
+		) return undefined;
+		let user = await this.#storage.users.get(session.userId);
+		if (!user || this.#pendingDeletes.has(id) || this.#revocations.has(id)) return undefined;
+		let current: MemorySession = {
+			session,
+			user,
+			secretHash: proof,
+			accessToken: value.accessToken,
+			accessExpiresAt: new Date(value.accessExpiresAt),
+			refreshToken: value.refreshToken,
+			refreshExpiresAt: new Date(value.refreshExpiresAt),
+			revision: credentials.revision,
+		};
+		this.#sessions.set(id, current);
+		return current;
 	}
 
 	/** Resolve an already-authorized internal owner from this process. */
@@ -453,6 +553,24 @@ export class Sessions {
 				current.revision + 1,
 				refreshedAt,
 			);
+			if (this.#key) {
+				try {
+					let saved = await this.#storage.sessions.rotate(
+						id,
+						current.revision,
+						await this.#encrypt(replacement),
+					);
+					if (!saved) {
+						if (this.#sessions.get(id) === current) this.#sessions.delete(id);
+						this.#options.invalidate?.(current.accessToken);
+						return undefined;
+					}
+				} catch {
+					await this.#revokeExact(current);
+					throw new GitHubTokenError("Could not persist refreshed credentials", 503, true);
+				}
+				if (this.#sessions.get(id) !== current) return this.#sessions.get(id);
+			}
 			if (this.#options.persist) {
 				try {
 					await this.#options.persist(id, grant, replacement.revision);
@@ -559,6 +677,7 @@ export class Sessions {
 	#deleteRegistry(id: string): Promise<boolean> {
 		let existing = this.#revocations.get(id);
 		if (existing) return existing;
+		this.#pendingDeletes.add(id);
 		let operation = (async () => {
 			let callbackError: unknown;
 			try {
@@ -587,7 +706,11 @@ export class Sessions {
 	async revoke(request: Request): Promise<string | undefined> {
 		let parsed = this.#parse(request);
 		if (!parsed) return undefined;
-		let current = this.#sessions.get(parsed.id);
+		if (this.#pendingDeletes.has(parsed.id)) {
+			await this.#deleteRegistry(parsed.id);
+			return parsed.id;
+		}
+		let current = await this.#find(parsed);
 		if (!current || !equal(hash(parsed.secret), current.secretHash)) return undefined;
 		await this.#revokeExact(current);
 		return current.session.id;

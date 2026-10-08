@@ -192,6 +192,46 @@ async function complete(
 }
 
 describe("hosted authentication routes", () => {
+	it("rechecks identity and current admission when restoring a persisted login", async () => {
+		for (let reason of ["identity", "policy", "unavailable"]) {
+			let storage = new MemoryStorage();
+			let github = new FakeGitHub();
+			let router = new Router();
+			registerAuthRoutes(router, { config: CONFIG, storage, github });
+			let signedIn = await callback(router);
+			let cookie = pair(
+				cookies(signedIn).find(value => value.startsWith("__Host-chopin_session="))!,
+			);
+			let sessionId = cookie.split("=", 2)[1]!.split(".")[0]!;
+			if (reason === "identity") {
+				github.user = async () => ({ id: "U_somebody_else", login: "other", avatarUrl: "" });
+			}
+			if (reason === "unavailable") {
+				github.user = async () => {
+					throw new GitHubError("unavailable", 503);
+				};
+			}
+			let restarted = new Router();
+			registerAuthRoutes(restarted, {
+				config: reason === "policy" ? { ...CONFIG, allowedUsers: new Set(["other"]) } : CONFIG,
+				storage,
+				github,
+			});
+			let response = (await restarted.handle(
+				new Request(`${CONFIG.origin}/api/session`, {
+					headers: { cookie },
+				}),
+			))!;
+			if (reason === "unavailable") {
+				expect(response.status).toBe(503);
+				expect(await storage.sessions.get(sessionId, new Date())).toBeDefined();
+			} else {
+				expect(await response.json()).toMatchObject({ user: null });
+				expect(await storage.sessions.get(sessionId, new Date())).toBeUndefined();
+			}
+		}
+	});
+
 	it("signs in, reports the session, lists repositories and logs out", async () => {
 		let now = new Date("2026-08-13T12:00:00.000Z");
 		let storage = new MemoryStorage();
@@ -282,12 +322,17 @@ describe("hosted authentication routes", () => {
 
 		let sessionId = sessionCookie.slice(sessionCookie.indexOf("=") + 1).split(".")[0]!;
 		let stored = await storage.sessions.get(sessionId, now);
-		expect(stored).toEqual({
+		expect(stored).toMatchObject({
 			id: sessionId,
 			userId: "U_octocat",
 			expiresAt: new Date("2026-09-12T12:00:00.000Z"),
 			createdAt: now,
 		});
+		expect(stored!.credentials?.secretHash).toHaveLength(32);
+		expect(stored!.credentials?.revision).toBe(1);
+		expect(Buffer.from(stored!.credentials!.ciphertext).toString()).not.toContain(
+			"ghu_route_secret",
+		);
 		let setup = await router.handle(
 			new Request(
 				"https://chopin.test/auth/github/setup?installation_id=spoofed&return_to=%2Fignored",

@@ -258,7 +258,7 @@ than simultaneous document panes.
 
 ## WebSocket lifecycle
 
-1. The HTTP upgrade validates the exact Origin, process-local session, instance
+1. The HTTP upgrade validates the exact Origin, browser session, instance
    admission, App installation, repository identity, and pull access.
 2. `session:hello` establishes the socket's identity and edit capability.
 3. The editor asks `plan:open` when the transport becomes available. Questions,

@@ -158,6 +158,11 @@ export function registerAuthRoutes(
 	let secure = new URL(config.origin).protocol === "https:";
 	let local: LocalAuth | undefined;
 	let sessions = new Sessions(storage, secure, clock, {
+		persistence: config.local ? undefined : {
+			key: config.encryptionKey,
+			origin: config.origin,
+			clientId: config.clientId,
+		},
 		refresh: refreshToken =>
 			github.refresh({
 				clientId: config.clientId,
@@ -173,9 +178,15 @@ export function registerAuthRoutes(
 			? (id, grant, revision) => local!.persist(id, grant, revision)
 			: undefined,
 		cookieSuffix: config.local ? `_${config.local.port}` : undefined,
-		authorize: admission.restricted
-			? (user, token) => admission.allowed(token, user.id)
-			: undefined,
+		authorize: async (user, token) => {
+			if (config.local) return admission.allowed(token, user.id);
+			try {
+				return (await admission.user(token)).id === user.id;
+			} catch (err) {
+				if (err instanceof AdmissionDenied) return false;
+				throw err;
+			}
+		},
 		invalidate: token => admission.invalidate(token),
 	});
 	if (config.local) {
