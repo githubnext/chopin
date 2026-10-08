@@ -10,8 +10,11 @@ import {
 
 import { $createCodeBlockNode, $exportPlan, registry } from "@chopin/dialect";
 
+import { limits } from "@chopin/dialect";
+
 import {
 	$pasteMarkdown,
+	isPlainPasteKey,
 	looksLikeMarkdown,
 	pastedMarkdown,
 	prefersMarkdown,
@@ -70,6 +73,8 @@ test("leaves ordinary prose alone", () => {
 			"It costs $5 and $10",
 			"```\nunclosed fence",
 			"Two\n\nparagraphs of prose",
+			"1986. A great year.\n1987. Another one.",
+			"snake __init__ name",
 		]
 	) expect(looksLikeMarkdown(text), text).toBe(false);
 });
@@ -141,4 +146,59 @@ test("inline Markdown joins the current paragraph", () => {
 test("pastes literally inside a code block", () => {
 	let { handled } = paste("## Heading", () => $createCodeBlockNode("md", "x"));
 	expect(handled).toBe(false);
+});
+
+test("refuses URLs the server would reject from a new batch", () => {
+	let hidden = `https://ex${String.fromCharCode(0x200b)}ample.com/a.png`;
+	expect(pastedMarkdown(`Look **here** ![i](${hidden})`)).toBeUndefined();
+	expect(pastedMarkdown("A [link](//evil.example) **x**")).toBeUndefined();
+	expect(pastedMarkdown("A [link](\\\\evil.example) **x**")).toBeUndefined();
+	expect(pastedMarkdown("![i](https://example.com/a.png) **x**")).toBeDefined();
+});
+
+test("refuses a paste that would push the document past its limits", () => {
+	let image = "**x** ![i](https://example.com/a.png)";
+	expect(pastedMarkdown(image, { images: limits.MAX_IMAGES - 1, depth: 2 })).toBeDefined();
+	expect(pastedMarkdown(image, { images: limits.MAX_IMAGES, depth: 2 })).toBeUndefined();
+
+	let nested = "- a\n  - b\n    - c";
+	expect(pastedMarkdown(nested, { images: 0, depth: 2 })).toBeDefined();
+	expect(pastedMarkdown(nested, { images: 0, depth: limits.MAX_DEPTH - 2 })).toBeUndefined();
+
+	let large = "- item\n".repeat(Math.ceil(limits.MAX_SOURCE_BYTES / 7) + 1);
+	expect(looksLikeMarkdown(large)).toBe(false);
+	expect(pastedMarkdown(large)).toBeUndefined();
+	let multibyte = "- é\n".repeat(Math.ceil(limits.MAX_SOURCE_BYTES / 5) + 1);
+	expect(multibyte.length).toBeLessThan(limits.MAX_SOURCE_BYTES);
+	expect(pastedMarkdown(multibyte)).toBeUndefined();
+});
+
+test("detection stays fast on pathological lines", () => {
+	for (let unit of ["a|", "[x](", "**a", "~~a", "[[[", "```\n"]) {
+		let text = unit.repeat(Math.floor(128 * 1024 / unit.length));
+		let started = performance.now();
+		looksLikeMarkdown(text);
+		expect(performance.now() - started, unit).toBeLessThan(200);
+	}
+});
+
+test("keeps the numbers of a list that does not start at one", () => {
+	let { source } = paste("## Years\n\n1986. A **great** year.\n1987. Another one.");
+	expect(source).toBe("## Years\n\n1986\\. A **great** year.\n\n1987\\. Another one.\n");
+	expect(paste("1. one\n2. two").source).toBe("1. one\n2. two\n");
+});
+
+test("ends a list at an unindented line", () => {
+	let { source } = paste("Remember:\n- tickets\n- hotel\nThanks");
+	expect(source).toBe("Remember:\n\n- tickets\n- hotel\n\nThanks\n");
+	expect(paste("- a\n  more of a\n- b").source).toBe("- a\n  more of a\n- b\n");
+});
+
+test("recognises plain-text paste shortcuts on any layout", () => {
+	let key = { shiftKey: true, metaKey: true, ctrlKey: false, key: "v", code: "KeyV" };
+	expect(isPlainPasteKey(key)).toBe(true);
+	expect(isPlainPasteKey({ ...key, key: "м" })).toBe(true);
+	expect(isPlainPasteKey({ ...key, key: "◊" })).toBe(true);
+	expect(isPlainPasteKey({ ...key, metaKey: false, ctrlKey: true })).toBe(true);
+	expect(isPlainPasteKey({ ...key, shiftKey: false })).toBe(false);
 });
