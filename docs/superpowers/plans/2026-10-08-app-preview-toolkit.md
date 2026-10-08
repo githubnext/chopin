@@ -132,31 +132,31 @@ experiment are evidence; do not merge their fixture implementation into this PR.
 - Create `.agents/skills/building-app-previews` as its canonical relative symlink.
 - Update `docs/app-preview-toolkit.md` and link it from `docs/local-agent-mcp.md`.
 
-- [ ] Write a short provider-neutral skill: inspect the target repo and real
+- [x] Write a short provider-neutral skill: inspect the target repo and real
       component, preserve required context, choose meaningful controls, prepare
       fixtures, build, verify fidelity, report resources/evidence/limits. Follow
       the target app's design instructions and currently supplied capabilities.
-- [ ] Document dependency/provider/portal/font requirements and extraction of
+- [x] Document dependency/provider/portal/font requirements and extraction of
       server-coupled views. Describe runtime CSS injection and large bundles as
       compatibility cases requiring evidence, not promises of universal support.
-- [ ] Give concrete helper usage and a starter request. Installation means the
+- [x] Give concrete helper usage and a starter request. Installation means the
       whole skill folder, including assets and references; verify harness
       discovery or explicitly read the skill. Do not prescribe global config
       changes or imply that copying a skill starts MCP work.
-- [ ] Document source commit/dirty state, component and token references,
+- [x] Document source commit/dirty state, component and token references,
       control units/baseline, built-resource checksums, browser evidence and
       limitations. Use the current supplied MCP descriptors for publication;
       otherwise return local resources and explicitly report integration absent.
-- [ ] Give a fresh subagent the skill, a small second component in a disposable
+- [x] Give a fresh subagent the skill, a small second component in a disposable
       app workspace and a realistic preview request. It owns only its temporary
       workspace and has no publication permissions. Do not give it the intended
       answer or the first fixture's completed adapter.
-- [ ] Build and browser-check its actual output; report fidelity, dependency and
+- [x] Build and browser-check its actual output; report fidelity, dependency and
       control errors. Revise instructions only for observed failures and repeat
       the affected checks. Record the trial's useful outcome in the toolkit docs.
-- [ ] Validate frontmatter, exact-case relative links and copied helper use;
+- [x] Validate frontmatter, exact-case relative links and copied helper use;
       run `bun run fix`, inspect its changes and run `bun run ci`.
-- [ ] Commit the skill and its documented evidence.
+- [x] Commit the skill and its documented evidence.
 
 ## Task 5: Reviewable PR handoff
 
