@@ -78,7 +78,7 @@ export function validate(schema, value, root = schema, path = "", out = []) {
 		const props = schema.properties || {};
 		for (const [k, v] of Object.entries(value)) {
 			const p = path ? `${path}.${k}` : k;
-			if (props[k]) validate(props[k], v, root, p, out);
+			if (Object.hasOwn(props, k)) validate(props[k], v, root, p, out);
 			else if (schema.additionalProperties === false) out.push({ at: p, msg: "unknown field" });
 			else if (typeof schema.additionalProperties === "object") {
 				validate(schema.additionalProperties, v, root, p, out);

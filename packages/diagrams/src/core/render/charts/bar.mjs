@@ -177,7 +177,7 @@ export function render(spec) {
 				code: "E_SPEC",
 				at: "data",
 				msg: "needs data, or categories + series",
-				fix: 'add "data":[["label",value],…] or a CSV path',
+				fix: 'add resolved "data":[["label",value],…] or "categories" and "series"',
 			}],
 		};
 	}

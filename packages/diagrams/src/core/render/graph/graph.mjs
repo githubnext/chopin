@@ -73,7 +73,10 @@ export function fromStages(spec) {
 }
 
 function normEdges(spec, ids, problems) {
-	const seen = new Map();
+	const seen = new Set();
+	const explicit = new Set(
+		(spec.edges || []).filter((edge) => !Array.isArray(edge) && edge.id).map((edge) => edge.id),
+	);
 	return (spec.edges || []).map((raw, i) => {
 		const e = Array.isArray(raw)
 			? { from: raw[0], to: raw[1], label: raw[2] || undefined, kind: raw[3] }
@@ -103,9 +106,13 @@ function normEdges(spec, ids, problems) {
 			}
 		}
 		if (e.from === e.to) e.self = true;
-		let id = e.id || `${e.from}-${e.to}`;
-		if (seen.has(id)) id = `${id}-${seen.get(id) + 1}`;
-		seen.set(id, (seen.get(id) || 0) + 1);
+		const base = e.id || `${e.from}-${e.to}`;
+		let id = base;
+		let suffix = 2;
+		while (seen.has(id) || ((!e.id || id !== base) && explicit.has(id))) {
+			id = `${base}-${suffix++}`;
+		}
+		seen.add(id);
 		e.id = id;
 		return e;
 	});

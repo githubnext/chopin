@@ -10,14 +10,36 @@ const CARD = { size: 11, weight: 500 };
 
 export function render(spec) {
 	const problems = [];
+	const explicitIds = new Set(
+		spec.columns.flatMap((c) =>
+			(c.cards || []).filter((card) => typeof card === "object" && card.id).map((card) => card.id)
+		),
+	);
+	const cardIds = new Set();
 	const cols = spec.columns.map((c, i) => ({
 		...c,
 		id: c.id || `col${i}`,
-		cards: (c.cards || []).map((k, j) => (typeof k === "string"
-			? { label: k, id: `c${i}_${j}` }
-			: { id: k.id || `c${i}_${j}`, ...k })
-		),
+		cards: (c.cards || []).map((k, j) => {
+			const explicit = typeof k === "object" && !!k.id;
+			const base = explicit ? k.id : `c${i}_${j}`;
+			let id = base;
+			let suffix = 2;
+			if (explicit && cardIds.has(id)) {
+				problems.push({
+					code: "E_DUP_ID",
+					at: `columns[${i}].cards[${j}].id`,
+					msg: `duplicate card id "${id}"`,
+					fix: "use a unique card id",
+				});
+			}
+			if (!explicit) {
+				while (cardIds.has(id) || explicitIds.has(id)) id = `${base}-${suffix++}`;
+			}
+			cardIds.add(id);
+			return typeof k === "string" ? { label: k, id } : { ...k, id };
+		}),
 	}));
+	if (problems.length) return { problems };
 	const maxCards = Math.max(...cols.map((c) => c.cards.length));
 	if (maxCards > 6) {
 		problems.push({
