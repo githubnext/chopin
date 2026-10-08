@@ -283,26 +283,29 @@ test("the header names the project and its prefix reveals it in the sidebar", as
 	let header = page.getByRole("banner");
 	let prefix = header.getByRole("button", { name: "Show score in the sidebar" });
 	let project = sidebar(page).locator('[data-project-id="R_score"]');
+	let disclosure = project.getByRole("button", {
+		name: /^score(?:, \d+ unanswered decisions?)?$/,
+	});
 
 	await expect(prefix).toHaveText("score");
-	await project.getByRole("button", { name: "score", exact: true }).click();
-	await expect(project.getByRole("button", { name: "score", exact: true })).toHaveAttribute(
+	await disclosure.click();
+	await expect(disclosure).toHaveAttribute(
 		"aria-expanded",
 		"false",
 	);
 
 	await prefix.click();
-	await expect(project.getByRole("button", { name: "score", exact: true })).toHaveAttribute(
+	await expect(disclosure).toHaveAttribute(
 		"aria-expanded",
 		"true",
 	);
-	await expect(project.getByRole("button", { name: "score", exact: true })).toBeFocused();
+	await expect(disclosure).toBeFocused();
 
 	await sidebar(page).getByRole("button", { name: "Hide sidebar" }).click();
 	await expect(sidebar(page)).toHaveCount(0);
 	await prefix.click();
 	await expect(sidebar(page)).toBeVisible();
-	await expect(project.getByRole("button", { name: "score", exact: true })).toBeFocused();
+	await expect(disclosure).toBeFocused();
 });
 
 test("the project prefix gives way on phones", async ({ join }) => {
