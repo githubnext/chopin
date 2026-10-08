@@ -115,17 +115,26 @@ export function Decisions(
 
 	useEffect(() => {
 		if (!reveal || revealed.current === reveal.token) return;
+		// A resolved item is inside closed history; open it, then reveal on the next render.
+		let item = entries.find(entry => entry.id === reveal.widget);
+		if (!history && item && !waiting(item, metadata)) {
+			setHistory(true);
+			return;
+		}
 		revealed.current = reveal.token;
 		let id = CSS.escape(reveal.widget);
 		let target = content.current?.querySelector<HTMLElement>(
 			`[data-plan-sidecar-questionnaire="${id}"]`,
 		);
-		if (target) {
-			target.scrollIntoView({ block: "center" });
+		let scroller = content.current;
+		if (target && scroller) {
+			// Scroll only the list: scrollIntoView also moves clipped ancestors and hides the tabs.
+			let offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+			scroller.scrollTop += offset - Math.max(0, (scroller.clientHeight - target.offsetHeight) / 2);
 			target.tabIndex = -1;
 			target.focus({ preventScroll: true });
 		} else heading.current?.focus();
-	}, [entries, metadata, reveal]);
+	}, [entries, history, metadata, reveal, setHistory]);
 
 	// Removing a focused card sends focus to body without a blur event. Remember
 	// the actual card so its removal can hand focus to the remaining work.

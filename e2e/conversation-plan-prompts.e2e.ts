@@ -461,11 +461,17 @@ test("an old prompt retires after Save and Reopen before a new suggestion", asyn
 	await expectRetiredPrompts(ana, `Decided: ${OPTION} · @ana`);
 	let retiredCount = await ana.locator("[data-decision-prompt]").count();
 
-	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	await ana.getByRole("button", { name: "1 resolved" }).click();
+	// A decided card's Open card goes to its history entry, where Reopen lives.
+	await ana.locator("[data-decision-prompt]").last()
+		.getByRole("button", { name: `Open card: ${QUESTION}` }).click();
 	let resolved = ana.locator(
 		`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${cardId}"]`,
 	);
+	await expect(ana.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
+	await expect(resolved).toBeFocused();
 	await resolved.getByRole("button", { name: "Reopen" }).click();
 	await waitForEvent(ana, "decision.reopened");
 	await expectRetiredPrompts(ana, "Reopened");

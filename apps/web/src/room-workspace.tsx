@@ -518,7 +518,14 @@ export function RoomWorkspace(
 	let showDecisionCard = (questionnaireId: string) => {
 		let entry = questions.snapshot().find(item => item.id === questionnaireId);
 		let question = entry?.value.questions[0]?.id;
-		if (entry && question) showPlan(entry.id, question);
+		if (!entry || !question) return;
+		let status = cardMetadata.get(entry.id)?.status;
+		// A resolved card's Reopen lives on its history entry, not its line in the document.
+		if (status === "decided" || status === "discarded") {
+			selectView("decisions", false);
+			dispatch({ type: "set-chat", open: false });
+			setReveal({ widget: entry.id, token: Date.now() });
+		} else showPlan(entry.id, question);
 	};
 
 	let setDesktopChatOpen = (open: boolean) => {
@@ -601,11 +608,7 @@ export function RoomWorkspace(
 	};
 	let showCard = (link: CardLink) => {
 		let thread = conversation.state?.threads.find(item => item.id === link.threadId);
-		let entry = thread?.questionnaireId
-			? questions.snapshot().find(item => item.id === thread.questionnaireId)
-			: undefined;
-		let question = entry?.value.questions[0]?.id;
-		if (entry && question) showPlan(entry.id, question);
+		if (thread?.questionnaireId) showDecisionCard(thread.questionnaireId);
 	};
 
 	let showPlan = (widget: string, question: string) => {
