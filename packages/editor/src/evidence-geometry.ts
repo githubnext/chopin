@@ -21,6 +21,11 @@ function clamp(value: number, lower: number, upper: number): number {
 	return Math.min(Math.max(value, lower), Math.max(lower, upper));
 }
 
+/** Below this width evidence opens as a bottom sheet rather than beside its card. */
+export const EVIDENCE_SHEET_WIDTH = 640;
+
+export type EvidenceSide = "right" | "left" | "below" | "above" | "sheet";
+
 export function evidencePoint(
 	card: Rect,
 	viewport: { width: number; height: number },
@@ -28,13 +33,21 @@ export function evidencePoint(
 	height: number,
 	gap = 8,
 	inset = 12,
-): { top: number; left: number; side: "right" | "left" } {
+): { top: number; left: number; side: EvidenceSide } {
+	if (viewport.width < EVIDENCE_SHEET_WIDTH) return { top: 0, left: 0, side: "sheet" };
 	let top = clamp(card.top, inset, viewport.height - height - inset);
 	if (card.right + gap + width <= viewport.width - inset) {
 		return { top, left: card.right + gap, side: "right" };
 	}
 	if (card.left - gap - width >= inset) {
 		return { top, left: card.left - gap - width, side: "left" };
+	}
+	let left = clamp(card.left, inset, viewport.width - width - inset);
+	if (card.bottom + gap + height <= viewport.height - inset) {
+		return { top: card.bottom + gap, left, side: "below" };
+	}
+	if (card.top - gap - height >= inset) {
+		return { top: card.top - gap - height, left, side: "above" };
 	}
 	return {
 		top,

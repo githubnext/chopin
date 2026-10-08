@@ -47,7 +47,7 @@ test("each row shows its label, stances, sourced evidence and Planner rationale"
 	expect(markup).toContain("GitHub Apps");
 	expect(markup).toContain("Supported by mina, jules");
 	expect(markup).toContain("Opposed by lee");
-	expect(markup).toContain("ring-2 ring-destructive");
+	expect(markup).toContain("ring-2 ring-warning");
 	expect(markup).toContain("People already have GitHub accounts.");
 	expect(markup).toContain('aria-label="Show “People already have GitHub accounts.” in chat"');
 	expect(markup).toContain("Planner suggested");
@@ -175,7 +175,7 @@ test("groups decision-wide evidence and marks objections", () => {
 	expect(markup).not.toContain("Should we ship a small pilot?");
 	expect(markup).toContain('text-warning-ink">Objection</span>');
 	expect(markup).toContain("A pilot excludes keyboard users.");
-	expect(markup).toContain(" @ana");
+	expect(markup).toContain(">@ana</span>");
 });
 
 test("summarises evidence counts with objections in warning ink", () => {

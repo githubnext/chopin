@@ -23,10 +23,27 @@ describe("evidencePoint", () => {
 		});
 	});
 
-	it("clamps both axes when neither side fits, using the measured panel size", () => {
+	it("opens below, then above, the card when neither side fits", () => {
+		let small = { width: 700, height: 900 };
+		let wide = { ...card, top: 100, bottom: 300, left: 40, right: 660 };
+		expect(evidencePoint(wide, small, 320, 300)).toEqual({ top: 308, left: 40, side: "below" });
+		let low = { ...wide, top: 560, bottom: 860 };
+		expect(evidencePoint(low, small, 320, 300)).toEqual({ top: 252, left: 40, side: "above" });
+	});
+
+	it("clamps both axes when no side fits, using the measured panel size", () => {
 		let small = { width: 700, height: 500 };
-		let point = evidencePoint({ ...card, top: 460, left: 40, right: 660 }, small, 510, 420);
-		expect(point).toEqual({ top: 68, left: 178, side: "right" });
+		let point = evidencePoint(
+			{ ...card, top: 60, bottom: 460, left: 40, right: 660 },
+			small,
+			510,
+			420,
+		);
+		expect(point).toEqual({ top: 60, left: 178, side: "right" });
+	});
+
+	it("uses a bottom sheet on narrow viewports", () => {
+		expect(evidencePoint(card, { width: 390, height: 844 }, 320, 300).side).toBe("sheet");
 	});
 
 	it("pins an over-tall panel to the top inset", () => {

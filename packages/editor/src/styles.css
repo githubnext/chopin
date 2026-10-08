@@ -29,6 +29,15 @@
 	outline-offset: calc(-1 * var(--edge-width));
 }
 
+/* Narrow screens: a bottom sheet, so the panel never covers its own card. */
+.plan-evidence-panel[data-side="sheet"] {
+	inset: auto 0 0;
+	width: 100%;
+	max-height: 70dvh;
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
 .plan-content [data-research-draft-anchor] {
 	margin-block-end: var(--research-draft-space, 0);
 }

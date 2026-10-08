@@ -18,7 +18,7 @@ declare global {
 	}
 }
 
-export let evidenceFixtureSource = `import { createElement } from "react";
+export let evidenceFixtureSource = `import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QuestionnaireCard } from "../../../../packages/editor/src/widgets/questionnaire";
 import { create } from "../../../../packages/question/src/draft";

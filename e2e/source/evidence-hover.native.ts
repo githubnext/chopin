@@ -96,25 +96,20 @@ test("actual Source falls back to the saved quote when current message text chan
 });
 
 for (let intent of ["source", "escape"] as const) {
-	test(`narrow overlapping panel does not reopen under a stationary pointer after ${intent}`, async ({ page }) => {
+	test(`narrow sheet leaves the card's actions clear and closes cleanly after ${intent}`, async ({ page }) => {
 		await page.setViewportSize({ width: 380, height: 480 });
 		await load(page);
 		await open(page);
-		let bounds = await card(page).boundingBox();
-		expect(bounds).not.toBeNull();
-		if (intent === "source") {
-			let button = await source(page).boundingBox();
-			expect(button).not.toBeNull();
-			// Confirm the source control actually overlaps the card; do not claim suppression otherwise.
-			expect(button!.x + button!.width / 2).toBeGreaterThanOrEqual(bounds!.x);
-			expect(button!.x + button!.width / 2).toBeLessThan(bounds!.x + bounds!.width);
-			expect(button!.y + button!.height / 2).toBeGreaterThanOrEqual(bounds!.y);
-			expect(button!.y + button!.height / 2).toBeLessThan(bounds!.y + bounds!.height);
-			await source(page).click();
-		} else {
-			await page.mouse.move(bounds!.x + 20, bounds!.y + 20);
-			await page.keyboard.press("Escape");
-		}
+		await expect(panel(page)).toHaveAttribute("data-side", "sheet");
+		let summary = card(page).getByRole("button", { name: /^Evidence:/ });
+		let [sheet, actions] = await Promise.all([panel(page).boundingBox(), summary.boundingBox()]);
+		expect(sheet).not.toBeNull();
+		expect(actions).not.toBeNull();
+		expect(sheet!.x).toBe(0);
+		expect(sheet!.width).toBe(380);
+		expect(actions!.y + actions!.height).toBeLessThanOrEqual(sheet!.y);
+		if (intent === "source") await source(page).click();
+		else await page.keyboard.press("Escape");
 		await expect(panel(page)).toHaveCount(0);
 		await page.waitForTimeout(500);
 		await expect(panel(page)).toHaveCount(0);
@@ -124,14 +119,14 @@ for (let intent of ["source", "escape"] as const) {
 }
 
 test("short viewport clamps evidence, in-view scroll repositions it and offscreen scroll closes it", async ({ page }) => {
-	await page.setViewportSize({ width: 560, height: 320 });
+	await page.setViewportSize({ width: 700, height: 320 });
 	await load(page);
 	await page.evaluate(() => window.evidenceFixture.long());
 	await open(page);
 	let bounds = await panel(page).boundingBox();
 	expect(bounds!.x).toBeGreaterThanOrEqual(12);
 	expect(bounds!.y).toBeGreaterThanOrEqual(12);
-	expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(548);
+	expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(688);
 	expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(308);
 	await panel(page).evaluate(element => element.scrollTop = 100);
 	expect(await panel(page).evaluate(element => element.scrollTop)).toBeGreaterThan(0);

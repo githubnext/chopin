@@ -9,6 +9,9 @@ export type EvidenceItem = {
 	by?: string;
 };
 
+/** A spoken marker that only repeats the row's "Objection" label. */
+const OBJECTION_MARKER = /^(?:I object|Objection)\s*:\s*/i;
+
 export type EvidenceCounts = { reasons: number; constraints: number; objections: number };
 
 export type EvidenceRow = {
@@ -84,7 +87,7 @@ export function evidenceRows(
 			let item: EvidenceItem = {
 				id: stance.id,
 				kind: "objection",
-				text: quote,
+				text: quote.replace(OBJECTION_MARKER, "") || quote,
 				sources: stance.sources,
 				by: stance.participant,
 			};

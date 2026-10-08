@@ -161,6 +161,23 @@ test("source navigation yields scrolling to the reader and expires its highlight
 		.toBe(0);
 });
 
+test("on a phone, evidence opens as a sheet that leaves the card's actions clear", async ({ join, room }) => {
+	let ana = await join("ana", { viewport: { width: 390, height: 844 } });
+	let bo = await join("bo");
+	await discuss(ana, bo, room);
+	let summary = card(ana).getByRole("button", { name: /^Evidence:/ });
+	await summary.scrollIntoViewIfNeeded();
+	let panel = await openEvidence(ana);
+	await expect(panel).toHaveAttribute("data-side", "sheet");
+	await expect.poll(async () => {
+		let [sheet, actions] = await Promise.all([panel.boundingBox(), summary.boundingBox()]);
+		return !!sheet && !!actions && actions.y + actions.height <= sheet.y;
+	}).toBe(true);
+	await ana.keyboard.press("Escape");
+	await expect(panel).toHaveCount(0);
+	await expect(summary).toBeFocused();
+});
+
 test("a narrow panel closes without stale hover after Source or Escape", async ({ join, room }) => {
 	let ana = await join("ana", { viewport: { width: 775, height: 863 } });
 	let bo = await join("bo");

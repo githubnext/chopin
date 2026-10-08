@@ -33,7 +33,7 @@ test("the evidence summary appears only on an open conversation card, inline or 
 		expect(markup).toContain("plan-evidence-host");
 	}
 	for (let markup of [eligible, list]) {
-		expect(markup).toContain('<span class="sr-only">Evidence:</span>1 objection</button>');
+		expect(markup).toContain('<span class="sr-only">Evidence:</span>1 objection<svg');
 		expect(markup).not.toContain("Listing");
 	}
 	for (let markup of [noThread, settled, noEvidence]) {

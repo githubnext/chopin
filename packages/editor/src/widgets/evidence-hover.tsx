@@ -1,4 +1,4 @@
-import { CloseIcon } from "@chopin/icons";
+import { ChevronIcon, CloseIcon } from "@chopin/icons";
 import {
 	createContext,
 	useCallback,
@@ -12,15 +12,21 @@ import {
 import { createPortal } from "react-dom";
 
 import { evidencePoint } from "../evidence-geometry";
+import type { EvidenceSide } from "../evidence-geometry";
 import { planScroller } from "../scroll";
 import { useTransitionPresence } from "../transition-presence";
 
 import type { CSSProperties, ReactNode } from "react";
 
 /** What a host knows about a card's evidence: a one-line summary and the full listing. */
-export type DecisionEvidence = { summary: ReactNode; content: ReactNode };
+export type DecisionEvidence = {
+	summary: ReactNode;
+	content: ReactNode;
+	/** The host's popover motion contract. */
+	motion?: { readonly className: string; readonly closeDuration: number };
+};
 
-type Position = { top: number; left: number; side: "right" | "left" };
+type Position = { top: number; left: number; side: EvidenceSide };
 type EvidenceControl = {
 	active: boolean;
 	summary: ReactNode;
@@ -52,6 +58,7 @@ export function EvidenceTrigger() {
 		>
 			<span className="sr-only">Evidence:</span>
 			{evidence.summary}
+			<ChevronIcon aria-hidden="true" size={12} />
 		</button>
 	);
 }
@@ -73,7 +80,13 @@ export function EvidenceHover({ active, children, evidence, question }: {
 	let id = useId();
 	let visible = active && !!content && open;
 	// The listing that is fading out keeps what it showed when it was dismissed.
-	let presence = useTransitionPresence(visible ? content : undefined, 150, false);
+	let motion = evidence?.motion;
+	let presence = useTransitionPresence(
+		visible ? content : undefined,
+		motion?.closeDuration ?? 0,
+		!motion,
+	);
+	let revealed = useRef(false);
 	let dismiss = useCallback((returnFocus = false) => {
 		focusPending.current = false;
 		setOpen(false);
@@ -86,7 +99,8 @@ export function EvidenceHover({ active, children, evidence, question }: {
 	useLayoutEffect(() => {
 		if (!visible || !position || !focusPending.current) return;
 		focusPending.current = false;
-		panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+		// The dialog takes focus itself, so its close control does not open with a tooltip.
+		panel.current?.focus();
 	}, [visible, position]);
 
 	useEffect(() => {
@@ -166,6 +180,19 @@ export function EvidenceHover({ active, children, evidence, question }: {
 		};
 	}, [visible, content, dismiss]);
 
+	// A sheet must not cover the card it explains: lift the card's actions above it once.
+	useLayoutEffect(() => {
+		if (!visible || position?.side !== "sheet" || revealed.current) return;
+		revealed.current = true;
+		let summary = trigger.current?.getBoundingClientRect();
+		let owner = planScroller(card.current)
+			?? card.current?.closest<HTMLElement>("[data-plan-decisions-scroll]");
+		let sheet = panel.current?.offsetHeight;
+		if (!summary || !owner || !sheet) return;
+		let overlap = summary.bottom + 12 - (innerHeight - sheet);
+		if (overlap > 0) owner.scrollTop += overlap;
+	}, [visible, position]);
+
 	return (
 		<EvidenceContext.Provider
 			value={{
@@ -178,6 +205,7 @@ export function EvidenceHover({ active, children, evidence, question }: {
 					if (visible) dismiss();
 					else {
 						focusPending.current = true;
+						revealed.current = false;
 						setPosition(undefined);
 						setOpen(true);
 					}
@@ -195,11 +223,8 @@ export function EvidenceHover({ active, children, evidence, question }: {
 						<div
 							aria-hidden={visible ? undefined : true}
 							aria-label={`Evidence for ${question}`}
-							className={presence.phase === "open"
-								? "plan-evidence-panel motion-popover is-open"
-								: presence.phase === "closing"
-								? "plan-evidence-panel motion-popover is-closing"
-								: "plan-evidence-panel motion-popover"}
+							className={`plan-evidence-panel ${motion?.className ?? ""} ${presence.className}`}
+							data-motion-presentation={position?.side === "sheet" ? "sheet" : undefined}
 							data-side={position?.side}
 							id={id}
 							inert={!visible}
@@ -208,14 +233,17 @@ export function EvidenceHover({ active, children, evidence, question }: {
 							}}
 							ref={panel}
 							role="dialog"
-							style={position
-								? {
+							style={!position
+								? { left: 0, top: 0, visibility: "hidden" }
+								: position.side === "sheet"
+								? undefined
+								: {
 									left: position.left,
 									top: position.top,
-									"--motion-origin-x": position.side === "right" ? "0%" : "100%",
-									"--motion-origin-y": "0%",
-								} as CSSProperties
-								: { left: 0, top: 0, visibility: "hidden" }}
+									"--motion-origin-x": position.side === "left" ? "100%" : "0%",
+									"--motion-origin-y": position.side === "above" ? "100%" : "0%",
+								} as CSSProperties}
+							tabIndex={-1}
 						>
 							<header className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-page py-1.5 pr-1.5 pl-3">
 								<h3 className="m-0 text-sm font-medium text-text-primary">Evidence</h3>
@@ -226,7 +254,6 @@ export function EvidenceHover({ active, children, evidence, question }: {
 										event.stopPropagation();
 										dismiss(true);
 									}}
-									title="Close evidence"
 									type="button"
 								>
 									<CloseIcon aria-hidden="true" size={14} />

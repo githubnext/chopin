@@ -228,7 +228,7 @@ describe("objections", () => {
 			stances: [
 				...THREAD.stances,
 				objection("ravi", "github", "GitHub Apps lock us to one forge."),
-				objection("suki", undefined, "We should not decide this yet."),
+				objection("suki", undefined, "I object: we should not decide this yet."),
 			],
 		};
 		let rows = evidenceRows(thread, META);
@@ -243,7 +243,7 @@ describe("objections", () => {
 		expect(general.optionId).toBeUndefined();
 		expect(general.items.at(-1)).toMatchObject({
 			kind: "objection",
-			text: "We should not decide this yet.",
+			text: "we should not decide this yet.",
 			by: "suki",
 		});
 		expect(evidenceCounts(rows)).toEqual({ reasons: 2, constraints: 1, objections: 2 });

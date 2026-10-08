@@ -57,7 +57,7 @@ function People({ handles, label, opposed = false }: {
 						aria-hidden="true"
 						className={`block rounded-md ${index > 0 ? "-ml-1" : ""} ${
 							opposed
-								? "ring-2 ring-destructive"
+								? "ring-2 ring-warning"
 								: ""
 						}`}
 						key={handle}
@@ -143,7 +143,10 @@ export function EvidencePopover({ rows, onSource }: {
 											</span>
 											<span className="min-w-0 flex-1 text-text-primary [overflow-wrap:anywhere]">
 												{item.text}
-												{item.by && <span className="text-text-tertiary">{` @${item.by}`}</span>}
+												{item.by && " "}
+												{item.by && (
+													<span className="whitespace-nowrap text-text-tertiary">@{item.by}</span>
+												)}
 											</span>
 											{source && (
 												<button

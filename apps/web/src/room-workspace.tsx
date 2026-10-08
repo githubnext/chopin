@@ -550,6 +550,7 @@ export function RoomWorkspace(
 		return {
 			summary: <EvidenceSummary counts={evidenceCounts(rows)} />,
 			content: <EvidencePopover onSource={showSource} rows={rows} />,
+			motion: motionContract("popover"),
 		};
 	}, [cardMetadata, conversation.enabled, conversation.state, entries, showSource]);
 
