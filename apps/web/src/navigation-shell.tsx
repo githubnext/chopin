@@ -352,6 +352,7 @@ export function NavigationShell(
 	let presentedDialog = dialogMotion?.value;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
 	let {
+		beginTotalRequest,
 		loadMore,
 		projects,
 		refreshProject,
@@ -688,11 +689,13 @@ export function NavigationShell(
 			return;
 		}
 		setError(undefined);
+		let acceptTotal = beginTotalRequest(channel.repositoryId);
 		let mutation = action === "archive"
 			? Api.archiveChannel(channel.id)
 			: Api.restoreChannel(channel.id);
 		void mutation.then(detail => {
 			acceptChannel(detail.channel);
+			if (action === "archive") acceptTotal(detail.unansweredDecisions);
 			if (action === "restore") setCatalogueMode("active");
 			else {
 				showNotice({
@@ -720,7 +723,7 @@ export function NavigationShell(
 		}, reason => {
 			setError({ reason });
 		});
-	}, [acceptChannel, navigate, showDialog, showNotice]);
+	}, [acceptChannel, beginTotalRequest, navigate, showDialog, showNotice]);
 	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);

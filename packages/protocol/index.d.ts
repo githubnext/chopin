@@ -94,8 +94,11 @@ export declare namespace Session {
 
 	/**
 	 * Unanswered decision counts read from authoritative question records after
-	 * they were committed. Sent when the room opens and whenever a commit changes
-	 * this document's count, so the Projects sidebar never opens other rooms.
+	 * they were committed. Sent to the opening socket when a document opens, and to
+	 * every socket open anywhere in the repository whenever a commit changes a
+	 * document's count or a document leaves or rejoins the active catalogue, so the
+	 * Projects sidebar never opens other rooms. Frames for one repository are sent
+	 * in the order their totals were read.
 	 */
 	export type Decisions = KIND<"session:decisions"> & {
 		channelId: string;

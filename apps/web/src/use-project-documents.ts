@@ -11,6 +11,8 @@ import {
 	projectDocuments,
 	removeLoadedDocument,
 	replaceLoadedDocument,
+	replaceProjectTotal,
+	staleDecisionCounts,
 	updateDocumentMetadata,
 	updateLoadedDocument,
 } from "./document-actions";
@@ -251,10 +253,11 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, []);
 	let updateDecisionCounts = useCallback((counts: DecisionCounts) => {
 		let known = liveCounts.current.get(counts.channelId);
-		if (!known || known.revision <= counts.revision) {
-			liveCounts.current.set(counts.channelId, counts);
-		}
 		let latest = latestDocuments.current.get(counts.channelId);
+		if (
+			(known && known.revision > counts.revision) || staleDecisionCounts(latest, counts)
+		) return;
+		liveCounts.current.set(counts.channelId, counts);
 		if (latest) {
 			latestDocuments.current.set(counts.channelId, acceptDecisionCounts(latest, counts));
 		}
@@ -267,6 +270,18 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 			return documents === current.documents ? current : { ...current, documents };
 		});
 	}, []);
+	let beginTotalRequest = useCallback((repositoryId: string) => {
+		let updatesAtRequest = liveTotals.current.get(repositoryId)?.updates;
+		return (total: number) => {
+			let live = liveTotals.current.get(repositoryId);
+			if (live?.updates !== updatesAtRequest) return;
+			liveTotals.current.set(repositoryId, { updates: (live?.updates ?? 0) + 1, total });
+			setCatalogue(current => {
+				let documents = replaceProjectTotal(current.documents, repositoryId, total);
+				return documents === current.documents ? current : { ...current, documents };
+			});
+		};
+	}, []);
 	let removeDocument = useCallback((documentId: string) => {
 		latestDocuments.current.delete(documentId);
 		for (let active of loads.current.values()) {
@@ -278,6 +293,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, []);
 
 	return {
+		beginTotalRequest,
 		loadMore,
 		projects,
 		refreshProject,

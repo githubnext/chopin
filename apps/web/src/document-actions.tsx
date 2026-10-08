@@ -237,11 +237,28 @@ export function updateLoadedDocument(
 	return documents;
 }
 
+export function replaceProjectTotal(
+	documents: LoadedDocuments,
+	repositoryId: string,
+	unansweredDecisions: number,
+): LoadedDocuments {
+	let current = documents[repositoryId];
+	if (!current || current.unansweredDecisions === unansweredDecisions) return documents;
+	return { ...documents, [repositoryId]: { ...current, unansweredDecisions } };
+}
+
+export function staleDecisionCounts(
+	known: Pick<Api.Channel, "id" | "revision"> | undefined,
+	counts: DecisionCounts,
+): boolean {
+	return known?.id === counts.channelId && known.revision > counts.revision;
+}
+
 export function acceptDecisionCounts(
 	channel: Api.Channel,
 	counts: DecisionCounts | undefined,
 ): Api.Channel {
-	if (!counts || counts.channelId !== channel.id || channel.revision > counts.revision) {
+	if (!counts || counts.channelId !== channel.id || staleDecisionCounts(channel, counts)) {
 		return channel;
 	}
 	return withDecisions(channel, counts.revision, counts.unanswered);
@@ -252,7 +269,9 @@ export function applyDecisionCounts(
 	counts: DecisionCounts,
 ): LoadedDocuments {
 	let current = documents[counts.repositoryId];
-	if (!current) return documents;
+	if (!current || current.channels.some(channel => staleDecisionCounts(channel, counts))) {
+		return documents;
+	}
 	let changed = false;
 	let channels = current.channels.map(channel => {
 		let next = acceptDecisionCounts(channel, counts);

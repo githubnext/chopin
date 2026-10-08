@@ -657,6 +657,44 @@ describe("channel routes", () => {
 		}
 	});
 
+	it("returns the active decision total after archiving or restoring a document", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let lease = (await storage.leases.acquire("writer", "routes-test", 60_000))!;
+		let leaving = await createChannel(storage, now, "Leaving plan");
+		let staying = await createChannel(storage, now, "Staying plan");
+		for (
+			let [channel, questions] of [
+				[leaving, [decisionRecord("one", "open"), decisionRecord("two", "reopened")]],
+				[staying, [decisionRecord("three", "open")]],
+			] as const
+		) {
+			await storage.collaboration.commit({
+				channelId: channel.id,
+				lease,
+				expectedRevision: 0,
+				operationId: crypto.randomUUID(),
+				epoch: "epoch",
+				sidecar: { questions: [...questions] },
+				events: [],
+				now,
+			});
+		}
+		let transition = async (action: "archive" | "restore") =>
+			(await router.handle(request(`/api/channels/${leaving.id}/${action}`, cookie, {
+				method: "POST",
+				headers: { origin: "https://chopin.test" },
+			})))!.json();
+
+		expect(await transition("archive")).toMatchObject({
+			channel: { id: leaving.id, unansweredDecisions: 2 },
+			unansweredDecisions: 1,
+		});
+		expect(await transition("restore")).toMatchObject({
+			channel: { id: leaving.id, unansweredDecisions: 2 },
+			unansweredDecisions: 3,
+		});
+	});
+
 	it("opens archived documents by slug and UUID as manageable but read-only", async () => {
 		let { router, storage, cookie, now } = await setup();
 		let channel = await createChannel(storage, now, "Archived direct read");

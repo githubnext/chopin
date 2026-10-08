@@ -797,9 +797,7 @@ export function RoomWorkspace(
 				if (accessChanged) onRepositoryAccessChanged();
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
-			socket.on<Session.Decisions>("session:decisions", frame => {
-				if (frame.channelId === room) onDecisionCounts(frame);
-			}),
+			socket.on<Session.Decisions>("session:decisions", onDecisionCounts),
 			socket.on<ManagedAccess>("session:access", frame => {
 				latestCanEdit.current = frame.canEdit;
 				latestCanManage.current = frame.canManage;

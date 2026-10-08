@@ -7,6 +7,8 @@ import * as Store from "../questions/store";
 import { openPlan } from "../testing/plan";
 import * as Service from "./service";
 
+import { repositoryTopic, topic } from "../wire";
+
 import type { Server } from "bun";
 import type { Socket, SocketData } from "../wire";
 import type { Plan } from "./service";
@@ -47,6 +49,29 @@ function member(): Socket {
 		send() {},
 		publish() {},
 	} as unknown as Socket;
+}
+
+function askDecisions(plan: Plan, server: Server<SocketData>): Promise<void> {
+	let created = Promise.withResolvers<void>();
+	void Questions.ask(
+		plan,
+		server,
+		plan.id,
+		Questions.identify(DECISIONS),
+		undefined,
+		created.resolve,
+	);
+	return created.promise;
+}
+
+function recordTopics(server: Server<SocketData>) {
+	let published: Array<{ topic: string; frame: Record<string, unknown> }> = [];
+	let publish = server.publish.bind(server);
+	server.publish = ((target: string, data: string) => {
+		published.push({ topic: target, frame: JSON.parse(data) });
+		return publish(target, data);
+	}) as typeof server.publish;
+	return published;
 }
 
 async function answerFirst(plan: Plan, server: Server<SocketData>): Promise<void> {
@@ -149,6 +174,102 @@ test("tells a joining socket the committed counts for its document", async () =>
 			repositoryUnanswered: 2,
 			revision: plan.persistence.revision,
 		}]);
+	} finally {
+		await Service.close(plan);
+	}
+});
+
+test("publishes decision counts to every socket in the repository, not only the document's room", async () => {
+	let { channel, plan, server } = await openPlan();
+	let published = recordTopics(server);
+	try {
+		await askDecisions(plan, server);
+		let announced = await eventually(() =>
+			published.find(entry => entry.frame.kind === "session:decisions")
+		);
+
+		expect(announced.topic).toBe(repositoryTopic(channel.repositoryId));
+		expect(announced.frame).toMatchObject({ channelId: channel.id, unanswered: 2 });
+		expect(
+			published.filter(entry =>
+				entry.frame.kind === "session:decisions" && entry.topic === topic(plan.id)
+			),
+		).toEqual([]);
+	} finally {
+		await Service.close(plan);
+	}
+});
+
+test("never sends a repository total older than one already sent", async () => {
+	let { channel, plan, server, storage } = await openPlan();
+	let delivered: Array<Record<string, unknown>> = [];
+	let publish = server.publish.bind(server);
+	server.publish = ((target: string, data: string) => {
+		delivered.push(JSON.parse(data));
+		return publish(target, data);
+	}) as typeof server.publish;
+	let ws = { send: (raw: string) => delivered.push(JSON.parse(raw)) } as unknown as Socket;
+	let readTotal = storage.channels.unansweredDecisions.bind(storage.channels);
+	let firstRead = Promise.withResolvers<void>();
+	let released = Promise.withResolvers<void>();
+	let reads = 0;
+	storage.channels.unansweredDecisions = async repositoryId => {
+		let total = await readTotal(repositoryId);
+		if (reads++ === 0) {
+			firstRead.resolve();
+			await released.promise;
+		}
+		return total;
+	};
+	try {
+		let told = Service.tellUnanswered(plan, ws);
+		await firstRead.promise;
+		await askDecisions(plan, server);
+		await eventually(() => plan.persistence.committedUnanswered === 2 || undefined);
+		released.resolve();
+		await told;
+		await eventually(() => decisionFrames(delivered).length === 2 || undefined);
+
+		let frames = decisionFrames(delivered);
+		expect(frames.map(frame => [frame.unanswered, frame.repositoryUnanswered])).toEqual([
+			[0, 0],
+			[2, 2],
+		]);
+		expect(frames[1]!.revision as number).toBeGreaterThan(frames[0]!.revision as number);
+		expect(frames.every(frame => frame.channelId === channel.id)).toBe(true);
+	} finally {
+		await Service.close(plan);
+	}
+});
+
+test("announces the repository total when a document leaves the active catalogue", async () => {
+	let { channel, plan, server, storage, now } = await openPlan();
+	let published = recordTopics(server);
+	try {
+		await askDecisions(plan, server);
+		await eventually(() =>
+			published.find(entry =>
+				entry.frame.kind === "session:decisions" && entry.frame.repositoryUnanswered === 2
+			)
+		);
+		await Service.drain(plan);
+		await Service.persist(plan);
+		let archived = await storage.channels.archive({ id: channel.id, now });
+		await Service.announceCatalogueUnanswered(server, storage, archived.channel);
+
+		let frames = published.filter(entry => entry.frame.kind === "session:decisions");
+		expect(frames.at(-1)).toEqual({
+			topic: repositoryTopic(channel.repositoryId),
+			frame: {
+				kind: "session:decisions",
+				ts: expect.any(Number),
+				channelId: channel.id,
+				repositoryId: channel.repositoryId,
+				unanswered: 2,
+				repositoryUnanswered: 0,
+				revision: archived.channel.revision,
+			},
+		});
 	} finally {
 		await Service.close(plan);
 	}

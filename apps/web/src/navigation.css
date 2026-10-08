@@ -433,9 +433,16 @@
 .project-sidebar-document:is(:hover, :focus-within) > .project-sidebar-document-actions,
 .project-sidebar-child:is(:hover, :focus-within) > .project-sidebar-document-actions,
 :root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
+	visibility: visible;
+}
+
+.project-sidebar-document:is(:hover, :has(:focus-visible, [aria-expanded="true"]))
+	> .project-sidebar-document-actions,
+.project-sidebar-child:is(:hover, :has(:focus-visible, [aria-expanded="true"]))
+	> .project-sidebar-document-actions,
+:root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
 	width: auto;
 	overflow: visible;
-	visibility: visible;
 }
 
 .project-sidebar-action,
@@ -470,7 +477,8 @@
 .project-sidebar-document:hover .project-sidebar-document-action,
 .project-sidebar-document:focus-within .project-sidebar-document-action,
 .project-sidebar-child:hover .project-sidebar-document-action,
-.project-sidebar-child:focus-within .project-sidebar-document-action {
+.project-sidebar-child:focus-within .project-sidebar-document-action,
+.project-sidebar-document-action[aria-expanded="true"] {
 	opacity: 1;
 }
 
@@ -480,7 +488,7 @@
 	overflow: hidden;
 }
 
-.project-sidebar-project-row:is(:hover, :focus-within) > .project-sidebar-action,
+.project-sidebar-project-row:is(:hover, :has(:focus-visible)) > .project-sidebar-action,
 .project-sidebar-project-row > .project-sidebar-action-pending,
 :root[data-plan-coarse-pointer]
 	.project-sidebar
@@ -499,7 +507,7 @@
 }
 
 :root:not([data-plan-coarse-pointer])
-	:is(.project-sidebar-project-row:has(> .project-sidebar-action):is(:hover, :focus-within), .project-sidebar-project-row:has(> .project-sidebar-action-pending), .project-sidebar-document:has(> .project-sidebar-document-actions):is(:hover, :focus-within), .project-sidebar-child:has(> .project-sidebar-document-actions):is(:hover, :focus-within))
+	:is(.project-sidebar-project-row:has(> .project-sidebar-action):is(:hover, :has(:focus-visible)), .project-sidebar-project-row:has(> .project-sidebar-action-pending), .project-sidebar-document:has(> .project-sidebar-document-actions):is(:hover, :has(:focus-visible, [aria-expanded="true"])), .project-sidebar-child:has(> .project-sidebar-document-actions):is(:hover, :has(:focus-visible, [aria-expanded="true"])))
 	> .project-sidebar-count {
 	display: none;
 }

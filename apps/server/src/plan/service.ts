@@ -37,7 +37,7 @@ import * as Questions from "../questions/service";
 import { sidecarUnansweredDecisions } from "../questions/unanswered";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
 import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
-import { broadcast, fail, relay, reply, tell } from "../wire";
+import { broadcast, broadcastRepository, fail, relay, reply, tell } from "../wire";
 import { documentUrl } from "../channels/document-url";
 
 import type { Server } from "bun";
@@ -49,6 +49,7 @@ import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../storage/model";
 import type {
+	ChannelRecord,
 	InitialChannel,
 	JsonValue,
 	Lease,
@@ -143,7 +144,6 @@ type Persistence = Backend & {
 	channelId: string;
 	repositoryId: string;
 	committedUnanswered: number;
-	unansweredAnnouncements: Promise<void>;
 	revision: number;
 	sequence: number;
 	lastSidecar: string;
@@ -919,23 +919,49 @@ async function commitHosted(
 	}
 }
 
-function unansweredFrame(
-	plan: Plan,
-	unanswered: number,
-	revision: number,
+type UnansweredCounts = {
+	channelId: string;
+	repositoryId: string;
+	unanswered: number;
+	revision: number;
+};
+
+let repositoryAnnouncements = new Map<string, Promise<void>>();
+
+/**
+ * Each frame carries a repository total read when its turn comes, so frames for one
+ * repository must be read and sent one at a time to never let an older total arrive last.
+ */
+function inRepositoryOrder(repositoryId: string, send: () => Promise<void>): Promise<void> {
+	let sent = (repositoryAnnouncements.get(repositoryId) ?? Promise.resolve()).then(send);
+	let settled = sent.catch(() => {});
+	repositoryAnnouncements.set(repositoryId, settled);
+	void settled.then(() => {
+		if (repositoryAnnouncements.get(repositoryId) === settled) {
+			repositoryAnnouncements.delete(repositoryId);
+		}
+	});
+	return sent;
+}
+
+async function unansweredFrame(
+	storage: StorageAdapter,
+	counts: UnansweredCounts,
 ): Promise<Session.Decisions> {
-	let durable = plan.persistence;
-	return durable.storage.channels.unansweredDecisions(durable.repositoryId).then(
-		repositoryUnanswered => ({
-			kind: "session:decisions",
-			ts: 0,
-			channelId: durable.channelId,
-			repositoryId: durable.repositoryId,
-			unanswered,
-			repositoryUnanswered,
-			revision,
-		}),
-	);
+	let repositoryUnanswered = await storage.channels.unansweredDecisions(counts.repositoryId);
+	return { kind: "session:decisions", ts: 0, ...counts, repositoryUnanswered };
+}
+
+function announceCounts(
+	server: Server<SocketData>,
+	storage: StorageAdapter,
+	counts: UnansweredCounts,
+): Promise<void> {
+	return inRepositoryOrder(counts.repositoryId, async () => {
+		broadcastRepository(server, counts.repositoryId, await unansweredFrame(storage, counts));
+	}).catch(err => {
+		console.warn(`[plan] could not announce decision counts for ${counts.channelId}:`, err);
+	});
 }
 
 function announceUnanswered(plan: Plan): void {
@@ -943,21 +969,40 @@ function announceUnanswered(plan: Plan): void {
 	let unanswered = sidecarUnansweredDecisions(durable.committedSidecar);
 	if (unanswered === durable.committedUnanswered) return;
 	durable.committedUnanswered = unanswered;
-	let revision = durable.revision;
-	durable.unansweredAnnouncements = durable.unansweredAnnouncements
-		.then(() => unansweredFrame(plan, unanswered, revision))
-		.then(frame => broadcast(plan.server, plan.id, frame))
-		.catch(err => {
-			console.warn(`[plan] could not announce decision counts for ${durable.channelId}:`, err);
-		});
+	void announceCounts(plan.server, durable.storage, {
+		channelId: durable.channelId,
+		repositoryId: durable.repositoryId,
+		unanswered,
+		revision: durable.revision,
+	});
+}
+
+/** Refresh every sidebar in the repository after a document leaves or rejoins its active catalogue. */
+export function announceCatalogueUnanswered(
+	server: Server<SocketData>,
+	storage: StorageAdapter,
+	channel: ChannelRecord,
+): Promise<void> {
+	return announceCounts(server, storage, {
+		channelId: channel.id,
+		repositoryId: channel.repositoryId,
+		unanswered: channel.unansweredDecisions,
+		revision: channel.revision,
+	});
 }
 
 /** Give a joining socket the committed counts the sidebar shows for this document. */
 export function tellUnanswered(plan: Plan, ws: Socket): Promise<void> {
 	let durable = plan.persistence;
-	return durable.unansweredAnnouncements
-		.then(() => unansweredFrame(plan, durable.committedUnanswered, durable.revision))
-		.then(frame => tell(ws, frame));
+	return inRepositoryOrder(durable.repositoryId, async () => {
+		let frame = await unansweredFrame(durable.storage, {
+			channelId: durable.channelId,
+			repositoryId: durable.repositoryId,
+			unanswered: durable.committedUnanswered,
+			revision: durable.revision,
+		});
+		tell(ws, frame);
+	});
 }
 
 async function checkpointHosted(plan: Plan): Promise<void> {
@@ -1287,7 +1332,6 @@ export async function open(
 		channelId: id,
 		repositoryId: loaded.channel.repositoryId,
 		committedUnanswered: sidecarUnansweredDecisions(committed.sidecar),
-		unansweredAnnouncements: Promise.resolve(),
 		revision: loaded.channel.revision,
 		sequence: loaded.latestSequence,
 		lastSidecar: committed.sidecarText,

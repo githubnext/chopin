@@ -467,7 +467,9 @@ export function registerChannelRoutes(
 						? options.onChannelRestored(id, now)
 						: auth.storage.channels.restore({ id, now }));
 				let opened = openedDocument(repo, result.channel);
-				return opened ? json(opened) : json({ error: "channel not found" }, 404);
+				if (!opened) return json({ error: "channel not found" }, 404);
+				let unansweredDecisions = await auth.storage.channels.unansweredDecisions(repo.id);
+				return json({ ...opened, unansweredDecisions });
 			} catch (err) {
 				return failure(err, request, auth);
 			}
