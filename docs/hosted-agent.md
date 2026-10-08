@@ -74,7 +74,7 @@ That isolated Planner has no:
 - shared embeddings or cross-session store; or
 - ability to change GitHub.
 
-Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.128 so Pi does not
+Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.148 so Pi does not
 load `AGENTS.md` or `CLAUDE.md` context files from the host filesystem. See
 [Self-hosting](self-hosting.md#choose-and-trust-a-harness).
 
