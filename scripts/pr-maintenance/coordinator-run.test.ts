@@ -82,6 +82,8 @@ function config(extra = {}) {
 	return {
 		repository: "a/b",
 		key,
+		eventName: "schedule",
+		event: {},
 		inspect: async () => rows,
 		confirm: async (_repo, row) => row,
 		request: async (method, path, body) => {
