@@ -245,6 +245,17 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		connections.touch(found.connection);
 		return found;
 	}
+	route("POST", "/api/documents/:id/experiments/:experiment/state", async (request, params) => {
+		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
+		let value = await service.store.get(params.experiment);
+		if (!value || value.documentId !== params.id) fail("not-found");
+		let input = z.object({ view: z.string().max(64), patch: z.unknown() }).strict().parse(
+			await body(request),
+		);
+		return json(
+			publicInvestigation(await service.select(value.id, session.user.id, input.view, input.patch)),
+		);
+	});
 	let toolNames = [
 		"disconnect_workspace",
 		"wait_for_experiment",

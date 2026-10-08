@@ -8,6 +8,7 @@
 		".": "./src/index.ts",
 		"./fixtures": "./src/fixtures.ts",
 		"./records": "./src/records.ts",
+		"./selection": "./src/selection.ts",
 		"./react": "./src/react.tsx"
 	},
 	"dependencies": { "@chopin/diagrams": "workspace:*", "zod": "catalog:harness" },

@@ -33,6 +33,7 @@ export class ExperimentStore {
 	}
 	async refresh() {
 		let request = ++this.#request;
+		let controller = this.#controller;
 		try {
 			let result = await experimentRequest<
 				{ experiments: InvestigationSummary[]; connections: WorkspaceConnection[] }
@@ -48,13 +49,16 @@ export class ExperimentStore {
 				}
 			}
 		} catch (error) {
-			if (!this.#controller.signal.aborted) {
+			if (
+				controller === this.#controller && !controller.signal.aborted && request === this.#request
+			) {
 				this.error = String((error as Error).message);
 				this.changed();
 			}
 		}
 	}
 	async load(id: string) {
+		let controller = this.#controller;
 		let sequence = (this.#details.get(id) ?? 0) + 1;
 		this.#details.set(id, sequence);
 		try {
@@ -68,7 +72,7 @@ export class ExperimentStore {
 			if (!current || value.revision >= current.revision) this.values.set(id, value);
 			this.changed();
 		} catch (error) {
-			if (!this.#controller.signal.aborted) {
+			if (controller === this.#controller && !controller.signal.aborted) {
 				this.error = String((error as Error).message);
 				this.changed();
 			}
