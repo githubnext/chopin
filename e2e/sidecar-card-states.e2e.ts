@@ -342,3 +342,34 @@ test("conversation decisions settle inline while their prose is being written up
 	await expect(settled).toContainText("Decided: Canary · @ana");
 	await expect(settled).toContainText("writing up…");
 });
+
+test("the settled line's icon keeps its size and first-line position when the text wraps", async ({ join, seed }) => {
+	await seed(`${PROSE}\n${DECIDED_CARD}`, { questions: [DECIDED_RECORD] });
+	let page = await join("ana");
+	let settled = content(page).locator("[data-card-settled]");
+	let icon = settled.locator("[data-settled-icon]");
+	await expect(settled).toContainText("Decided: Canary · @ana");
+	let measure = () =>
+		settled.evaluate(line => {
+			let box = line.querySelector("[data-settled-icon]")!.getBoundingClientRect();
+			let top = line.getBoundingClientRect().top;
+			return {
+				width: box.width,
+				height: box.height,
+				offset: box.top - top,
+				lines: line.clientHeight,
+			};
+		});
+	let single = await measure();
+	await settled.evaluate(line => {
+		line.style.width = "9rem";
+	});
+	let wrapped = await measure();
+	expect(wrapped.lines).toBeGreaterThan(single.lines);
+	expect(wrapped).toMatchObject({
+		width: single.width,
+		height: single.height,
+		offset: single.offset,
+	});
+	await expect(icon).toBeVisible();
+});

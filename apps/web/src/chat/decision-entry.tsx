@@ -139,7 +139,7 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 	if (view.state === "collapsed") {
 		return (
 			<div className="flex items-center gap-2 text-sm text-text-tertiary" data-decision-prompt={id}>
-				<DecisionIcon aria-hidden="true" size={14} />
+				<DecisionIcon aria-hidden="true" className="shrink-0" size={14} />
 				<span className="min-w-0 flex-1 truncate">{view.text}</span>
 				<OpenInPlan id={id} onOpenCard={onOpenCard} />
 			</div>
