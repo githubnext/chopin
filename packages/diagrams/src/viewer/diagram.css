@@ -1354,12 +1354,6 @@
 	border-color: var(--color-brand);
 }
 
-.ch-diagram__controls button:focus-visible,
-.ch-diagram__inspector button:focus-visible {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
-}
-
 .ch-diagram__controls button:disabled {
 	opacity: 0.45;
 	cursor: default;
@@ -1371,11 +1365,6 @@
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
-}
-
-.ch-diagram__stage:focus-visible {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
 }
 
 .ch-diagram__scroll-hint {
