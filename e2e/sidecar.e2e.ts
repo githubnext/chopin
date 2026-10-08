@@ -197,8 +197,6 @@ async function secondThread(page: import("@playwright/test").Page) {
 	await expect.poll(() => commentButton(page).count()).toBe(2);
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
-	// The pointer rests where the toolbar's Comment button was, over the block above.
-	await page.mouse.move(0, 0);
 }
 
 test("a wide desktop comment sits in the gutter beside its passage", async ({ join, seed }) => {
