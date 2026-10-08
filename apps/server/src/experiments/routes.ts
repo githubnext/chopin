@@ -17,6 +17,13 @@ type Options = {
 	context: (id: string) => Promise<{ source: string; revision: number } | undefined>;
 	changed: (id: string) => void;
 	canMutate?: (id: string) => Promise<boolean>;
+	place?: (
+		documentId: string,
+		experiment: string,
+		view: string,
+		decision: string,
+		remove: boolean,
+	) => Promise<void>;
 };
 const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
 	label: z.string().trim().min(1).max(100),
@@ -171,6 +178,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				state: value.state,
 				revision: value.revision,
 				requester: value.requester,
+				decisionCount: value.decisions.length,
 				progress: value.progress,
 				createdAt: value.createdAt,
 			})),
@@ -245,6 +253,44 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		connections.touch(found.connection);
 		return found;
 	}
+	route("POST", "/api/documents/:id/experiments/:experiment/decision", async (request, params) => {
+		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
+		await mutationAllowed(params.id);
+		let value = await service.store.get(params.experiment);
+		if (!value || value.documentId !== params.id) fail("not-found");
+		return json(
+			publicInvestigation(await service.decide(value.id, session.user, await body(request))),
+		);
+	});
+	route("POST", "/api/documents/:id/experiments/:experiment/placement", async (request, params) => {
+		await access(await auth.sessions.authenticate(request), params.id, true);
+		await mutationAllowed(params.id);
+		let input = z.object({
+			view: z.string().min(1).max(64),
+			decision: z.string().uuid().optional(),
+			remove: z.boolean().optional(),
+		}).strict().parse(await body(request));
+		let value = await service.store.get(params.experiment);
+		if (
+			!value || value.documentId !== params.id
+			|| !value.result?.views.some(view => view.key === input.view)
+		) fail("not-found");
+		if (
+			input.decision
+			&& !value.decisions.some(decision =>
+				decision.id === input.decision && decision.view === input.view
+			)
+		) fail("not-found");
+		if (!options.place) fail("unavailable");
+		await options.place(
+			params.id,
+			value.id,
+			input.view,
+			input.decision ?? "",
+			input.remove ?? false,
+		);
+		return json(publicInvestigation(value));
+	});
 	route("POST", "/api/documents/:id/experiments/:experiment/state", async (request, params) => {
 		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
 		let value = await service.store.get(params.experiment);
@@ -381,7 +427,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						if ("issues" in source) fail("invalid-report");
 						if (
 							JSON.stringify(parse(source.source)).match(
-								/"name":"(Questionnaire|Question|Decision|Research)"/,
+								/"name":"(Questionnaire|Question|Decision|Research|Experiment)"/,
 							)
 						) fail("protected-report");
 						value = await service.candidate(id, connection.id, generation, {

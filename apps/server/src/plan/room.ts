@@ -19,12 +19,14 @@ import * as Y from "yjs";
 
 import {
 	$createDecisionNode,
+	$createExperimentNode,
 	$createPlanNodes,
 	$createResearchNode,
 	$exportPlanTree,
 	$importPlan,
 	assert,
 	assertIntroducedUrls,
+	ExperimentNode,
 	exportPlan,
 	limits,
 	parse,
@@ -1243,6 +1245,29 @@ export function insertResearch(target: Document, id: string): Mutation | undefin
 	return mutate(target, () => {
 		if ($nodesOfType(ResearchNode).some(node => node.getId() === id)) return false;
 		$getRoot().append($createResearchNode(id));
+		return true;
+	});
+}
+
+export function placeExperiment(
+	target: Document,
+	experiment: string,
+	view: string,
+	decision: string,
+	remove = false,
+): Mutation | undefined {
+	return mutate(target, () => {
+		let existing = $nodesOfType(ExperimentNode).find(node =>
+			node.getExperiment() === experiment && node.getView() === view
+			&& node.getDecision() === decision
+		);
+		if (remove) {
+			if (!existing) return false;
+			existing.remove();
+			return true;
+		}
+		if (existing) return false;
+		$getRoot().append($createExperimentNode(ulid(), experiment, view, decision));
 		return true;
 	});
 }

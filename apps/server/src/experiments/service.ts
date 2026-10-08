@@ -11,6 +11,7 @@ import type { RunInput } from "@chopin/experiment";
 import { applySelection, selectionPatchSchema } from "@chopin/experiment/selection";
 import type { ExperimentStore } from "../storage/experiments";
 import type { Lease } from "../storage/model";
+import { z } from "zod";
 
 export const CLAIM_MS = 60_000;
 export function fingerprint(value: unknown) {
@@ -186,6 +187,45 @@ export class Experiments {
 			let dataset = value.result?.datasets.find(dataset => dataset.key === view?.datasetKey);
 			if (value.state !== "completed" || !view || !dataset) fail("not-ready");
 			value.views[viewKey] = applySelection(value.views[viewKey], dataset, patch);
+			value.receipts[key] = digest;
+		});
+	}
+	decide(id: string, actor: { id: string; login: string }, raw: unknown) {
+		let input = z.object({
+			id: z.string().uuid(),
+			view: z.string().min(1).max(64),
+			revision: z.number().int().nonnegative(),
+			conclusion: z.string().trim().min(1).max(4000),
+			rationale: z.string().max(8000),
+		}).strict().parse(raw);
+		let key = `decision:${input.id}`;
+		let digest = fingerprint({ actor, input });
+		return this.mutate(id, value => {
+			if (Object.hasOwn(value.receipts, key)) {
+				if (value.receipts[key] !== digest) fail("idempotency-conflict");
+				return;
+			}
+			if (value.decisions.length >= 100 || Object.keys(value.receipts).length >= 2048) {
+				fail("decision-limit");
+			}
+			if (!value.result || !Object.hasOwn(value.views, input.view)) fail("not-ready");
+			let state = value.views[input.view];
+			if (state.revision !== input.revision) {
+				fail(
+					"selection-conflict",
+					"Shared selections changed. Review them before recording a decision.",
+				);
+			}
+			value.decisions.push({
+				id: input.id,
+				view: input.view,
+				state: structuredClone(state),
+				conclusion: input.conclusion,
+				rationale: input.rationale,
+				by: actor.login,
+				userId: actor.id,
+				at: this.now(),
+			});
 			value.receipts[key] = digest;
 		});
 	}

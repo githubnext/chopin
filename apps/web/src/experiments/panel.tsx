@@ -3,6 +3,7 @@ import { ExperimentView } from "@chopin/experiment/react";
 import { StaticPlanEditor } from "@chopin/editor/static";
 import { NavigationDialog } from "../navigation-dialog";
 import type { ExperimentStore } from "./store";
+import { EvidenceActions, EvidenceDecisions } from "./evidence";
 
 export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 	store: ExperimentStore;
@@ -154,28 +155,36 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 							<>
 								<StaticPlanEditor source={item.result.report} />
 								{item.result.views.map(view => (
-									<ExperimentView
-										key={view.key}
-										result={item.result!}
-										view={view}
-										state={item.views[view.key]}
-										disabled={busy || !canEdit}
-										onChange={(field, values) =>
-											void act(async () => {
-												try {
-													await store.action(item.id, "state", {
-														view: view.key,
-														patch: {
-															mutationId: crypto.randomUUID(),
-															expected: { [field]: item.views[view.key].fields[field].revision },
-															set: { [field]: values },
-														},
-													});
-												} finally {
-													await store.load(item.id);
-												}
-											})}
-									/>
+									<div key={view.key} className="flex flex-col gap-3">
+										<ExperimentView
+											key={view.key}
+											result={item.result!}
+											view={view}
+											state={item.views[view.key]}
+											disabled={busy || !canEdit}
+											onChange={(field, values) =>
+												void act(async () => {
+													try {
+														await store.action(item.id, "state", {
+															view: view.key,
+															patch: {
+																mutationId: crypto.randomUUID(),
+																expected: { [field]: item.views[view.key].fields[field].revision },
+																set: { [field]: values },
+															},
+														});
+													} finally {
+														await store.load(item.id);
+													}
+												})}
+										/>
+										<EvidenceActions
+											store={store}
+											item={item}
+											view={view}
+											disabled={busy || !canEdit}
+										/>
+									</div>
 								))}
 								<p className="text-xs text-text-secondary">{item.result.provenance.environment}</p>
 								{item.result.provenance.limitations.map((value, index) => (
@@ -191,6 +200,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 						)}
 					</>
 				)}
+				<EvidenceDecisions store={store} canEdit={canEdit} />
 				<button className="btn btn-ghost" onClick={onClose}>Close investigations</button>
 			</div>
 		</NavigationDialog>

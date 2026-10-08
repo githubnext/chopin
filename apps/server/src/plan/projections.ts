@@ -2,7 +2,7 @@ import { serialize } from "@chopin/dialect/serialize";
 
 import type { RootContent } from "mdast";
 
-const PROTECTED = new Set(["Questionnaire", "Decision", "Research"]);
+const PROTECTED = new Set(["Questionnaire", "Decision", "Research", "Experiment"]);
 
 function collect(nodes: RootContent[]): Map<string, { type: string; source: string }> | string {
 	let found = new Map<string, { type: string; source: string }>();

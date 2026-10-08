@@ -76,13 +76,36 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 		"aria-pressed",
 		"true",
 	);
+	await peer.getByRole("button", { name: "Record decision", exact: true }).click();
+	await peer.getByRole("textbox", { name: "Decision conclusion", exact: true }).fill(
+		"Use cached startup",
+	);
+	await peer.getByRole("textbox", { name: "Decision rationale", exact: true }).fill(
+		"Lower median in the captured workload",
+	);
+	await peer.getByRole("button", { name: "Save decision", exact: true }).click();
+	await expect(peer.getByRole("heading", { name: "Use cached startup", exact: true }))
+		.toBeVisible();
+	await peer.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+		JSON.stringify("large"),
+	);
+	await peer.getByRole("button", { name: "Insert decision evidence in document", exact: true })
+		.click();
+	await page.getByRole("button", { name: "Close investigations", exact: true }).click();
+	let saved = page.getByRole("article", { name: "Saved investigation evidence", exact: true });
+	await expect(saved).toContainText("Use cached startup");
+	await expect(saved.getByRole("table")).toContainText("183");
+	await expect(saved.getByRole("table")).not.toContainText("410");
 	await tool("disconnect_workspace", {});
 	await page.reload();
 	await page.getByRole("button", { name: "Investigations", exact: true }).click();
 	await page.getByRole("combobox", { name: "Investigation", exact: true }).selectOption(
 		experiment.id,
 	);
-	await expect(page.getByRole("table", { name: "Median startup time", exact: true })).toContainText(
-		"183",
-	);
+	await expect(
+		page.getByRole("dialog", { name: "Investigations" }).getByRole("table", {
+			name: "Median startup time",
+			exact: true,
+		}),
+	).toContainText("410");
 });

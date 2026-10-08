@@ -1452,6 +1452,23 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 	context: currentDocumentTarget,
+	place: (id, experiment, view, decision, remove) =>
+		withDocumentTransition(id, async () => {
+			await Rooms.get(id)?.closing;
+			await Rooms.get(id)?.opening;
+			return withDocumentLock(id, async () => {
+				let active = Rooms.get(id)?.plan;
+				if (active) {
+					return Service.placeExperimentReference(active, experiment, view, decision, remove);
+				}
+				let detached = await Service.open(id, documentBackend(), server);
+				try {
+					await Service.placeExperimentReference(detached, experiment, view, decision, remove);
+				} finally {
+					await Service.close(detached);
+				}
+			});
+		}),
 	changed(documentId) {
 		if (server && !draining) {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });

@@ -72,6 +72,7 @@ export {
 	ImageNode,
 	MathNode,
 } from "./nodes/content";
+export { $createExperimentNode, $isExperimentNode, ExperimentNode } from "./nodes/experiment";
 export { $createResearchNode, $isResearchNode, ResearchNode } from "./nodes/research";
 export type { SerializedResearch } from "./nodes/research";
 
