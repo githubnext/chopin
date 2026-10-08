@@ -1491,14 +1491,15 @@ button.question-add:disabled {
 	border-radius: var(--radius-full);
 }
 
-.document-activity-dot[data-document-activity="writing"] {
-	animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
+@media (prefers-reduced-motion: no-preference) {
+	.document-activity-dot[data-document-activity="writing"] {
+		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
+	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.chat-work-lattice > span,
 	.chat-work-headline-motion,
-	.chat-source-tint,
-	.document-activity-dot {
+	.chat-source-tint {
 		animation: none;
 	}
 
