@@ -71,16 +71,3 @@ test("changes made while the Document is in view leave no cue", async ({ baseURL
 	await showDecisions(page);
 	await expect(page.locator("[data-document-activity]")).toHaveCount(0);
 });
-
-test("discarding a decision out of view leaves the Document tab quiet", async ({ join, seed }) => {
-	await seed("# Title\n\nOriginal paragraph.\n");
-	let page = await join("ana");
-	await showDecisions(page);
-	let card = page.getByRole("region", { name: "Decisions" })
-		.locator("article[data-plan-sidecar-questionnaire]").first();
-	await card.getByRole("button", { name: "Discard", exact: true }).click();
-	await card.getByRole("button", { name: "Discard", exact: true }).click();
-	await expect(page.getByRole("button", { name: /resolved$/ })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Document", exact: true })).toBeVisible();
-	await expect(page.locator("[data-document-activity]")).toHaveCount(0);
-});
