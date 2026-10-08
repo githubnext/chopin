@@ -215,6 +215,11 @@ test("read_plan and edit_plan name the room's document as read_document does", a
 		operations: [{ op: "replace", index: 0, source: "Edited document.\n" }],
 	});
 	expect(edited).toMatchObject({ ok: true, document: renamed });
+	let stale = await call("edit_plan", {
+		revision: read.revision + 1,
+		operations: [{ op: "replace", index: 0, source: "Stale edit.\n" }],
+	});
+	expect(stale).toMatchObject({ ok: false, reason: "stale", document: renamed });
 });
 
 test("create_research_workspace validates one question and waits for immediate research start", async () => {
@@ -410,7 +415,7 @@ test("anchor_plan waits for decision placement before persisting and broadcastin
 });
 
 test("edit_plan refuses while an implementation claim drains", async () => {
-	let { plan, server } = await opened("The plan is ready.\n");
+	let { channel, plan, server } = await opened("The plan is ready.\n");
 	(plan as typeof plan & { claiming: boolean }).claiming = true;
 	let editPlan = fixtureTools({
 		plan,
@@ -435,7 +440,11 @@ test("edit_plan refuses while an implementation claim drains", async () => {
 		arguments: args,
 	});
 
-	expect(JSON.parse(response as string)).toEqual({ ok: false, reason: "locked" });
+	expect(JSON.parse(response as string)).toEqual({
+		ok: false,
+		reason: "locked",
+		document: { id: channel.id, url: documentUrl(channel) },
+	});
 	expect(room.project(plan.document)).toBe("The plan is ready.\n");
 });
 

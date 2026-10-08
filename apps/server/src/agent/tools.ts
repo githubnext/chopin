@@ -283,7 +283,7 @@ export const documentTools = {
 		execute: (raw, { context: { room: context } }) =>
 			answer("edit_plan", async () => {
 				let document = await documentIdentity(context.plan);
-				return context.exclusive(async () => {
+				let result = await context.exclusive(async () => {
 					if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 					let args = Arguments.editPlan(raw);
 					let outcome = edit.apply(context.plan, args.revision, args.operations);
@@ -321,7 +321,6 @@ export const documentTools = {
 
 					return {
 						ok: true,
-						document,
 						revision: context.plan.revision,
 						blocks: outcome.blocks,
 						anchors_pending: [
@@ -330,6 +329,7 @@ export const documentTools = {
 						],
 					};
 				});
+				return { ...result, document };
 			}),
 	}),
 
