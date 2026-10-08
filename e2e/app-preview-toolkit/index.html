@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>Billing card preview</title>
+	</head>
+	<body>
+		<main>
+			<header>
+				<div>
+					<p class="eyebrow">Illustrative app</p>
+					<h1>Billing card</h1>
+				</div><a
+					href="http://127.0.0.1:8811/fixture-app/index.html"
+					target="_blank"
+					rel="noreferrer"
+				>Source reference ↗</a>
+			</header>
+			<div class="workspace">
+				<section class="stage">
+					<div class="toolbar">
+						<button
+							id="peek"
+							aria-pressed="false"
+							title="Hold to compare with the current source values"
+						>
+							Show current
+						</button>
+						<button id="layout" aria-pressed="false">Narrow layout</button>
+					</div><iframe title="Adjusted billing card" sandbox="allow-scripts"></iframe>
+				</section>
+				<aside>
+					<h2>Adjust</h2><label>Spacing <span>px</span><input
+							id="spacing"
+							type="number"
+							min="12"
+							max="40"
+							step="1"
+							value="24"
+						></label><input
+						id="spacing-slider"
+						type="range"
+						aria-label="Spacing slider"
+						min="12"
+						max="40"
+						step="1"
+						value="24"
+					><label>Accent<input
+							id="accent"
+							type="color"
+							value="#476b55"
+						></label><button id="reset">Reset</button>
+					<hr>
+					<p class="output-label">Local output</p>
+					<pre id="values"></pre>
+					<button id="copy" class="primary">Copy values</button>
+					<button id="download">Download values</button>
+					<p id="status" role="status"></p>
+					<p id="error" role="alert" hidden></p>
+					<button id="retry" hidden>Retry preview</button>
+				</aside>
+			</div>
+		</main>
+		<script type="module" src="./host.ts"></script>
+	</body>
+</html>

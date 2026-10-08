@@ -1,0 +1,160 @@
+@import "@fontsource-variable/inter";
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+	background: #f3f2ef;
+	color: #343631;
+	font: 14px "Inter Variable", sans-serif;
+}
+main {
+	max-width: 1100px;
+	margin: 64px auto;
+	padding: 0 32px;
+}
+header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 30px;
+}
+h1 {
+	font-size: 27px;
+	font-weight: 550;
+	letter-spacing: -0.8px;
+	margin: 6px 0 0;
+}
+.eyebrow, .output-label {
+	color: #777971;
+	font-size: 12px;
+	margin: 0;
+}
+a {
+	color: #6b6f65;
+	font-size: 13px;
+}
+.workspace {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 220px;
+	gap: 36px;
+}
+.stage {
+	border: 1px solid #e0e1da;
+	border-radius: 12px;
+	background: white;
+	overflow: hidden;
+}
+.toolbar {
+	display: flex;
+	gap: 8px;
+	padding: 12px;
+	border-bottom: 1px solid #e8e9e3;
+}
+iframe {
+	display: block;
+	width: 100%;
+	height: 600px;
+	border: 0;
+	margin: auto;
+}
+iframe.narrow {
+	width: 320px;
+	max-width: 100%;
+}
+h2 {
+	font-size: 14px;
+	margin: 4px 0 24px;
+	font-weight: 600;
+}
+label {
+	display: block;
+	margin-bottom: 22px;
+}
+label span {
+	color: #777971;
+	float: right;
+}
+input {
+	display: block;
+	width: 100%;
+	margin-top: 8px;
+	border: 1px solid #daddd3;
+	border-radius: 6px;
+	padding: 8px;
+	font: inherit;
+	background: white;
+}
+input[type="color"] {
+	height: 36px;
+	padding: 4px;
+}
+button {
+	font: inherit;
+	font-size: 12px;
+	border: 1px solid #daddd3;
+	padding: 8px 12px;
+	background: white;
+	border-radius: 6px;
+	cursor: pointer;
+}
+button:hover {
+	background: #f7f8f4;
+}
+button:focus-visible, input:focus-visible {
+	outline: 2px solid #476b55;
+	outline-offset: 2px;
+}
+.primary {
+	background: #343d33;
+	color: white;
+	width: 100%;
+	margin-bottom: 8px;
+}
+.primary:hover {
+	background: #465044;
+}
+hr {
+	border: 0;
+	border-top: 1px solid #daddd3;
+	margin: 28px 0;
+}
+pre {
+	font-size: 11px;
+	line-height: 1.8;
+}
+#status {
+	color: #6b6f65;
+	font-size: 12px;
+}
+#error {
+	color: #923f35;
+	line-height: 1.5;
+}
+@media (max-width: 720px) {
+	main {
+		margin: 28px auto;
+		padding: 0 16px;
+	}
+	.workspace {
+		grid-template-columns: 1fr;
+		gap: 24px;
+	}
+	header {
+		align-items: start;
+	}
+	iframe {
+		height: 560px;
+	}
+	aside {
+		max-width: 360px;
+		width: 100%;
+		margin: auto;
+	}
+}
+
+input[type="range"] {
+	padding: 0;
+	margin: -12px 0 22px;
+	accent-color: #476b55;
+}
