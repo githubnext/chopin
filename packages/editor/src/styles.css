@@ -2149,6 +2149,12 @@
 	height: auto;
 }
 
+/* A SeeCode diagram keeps its rendered width and scrolls inside its own stage. */
+.plan-content [data-plan-preview] .plan-seecode .sc-svg {
+	max-width: none;
+	max-inline-size: none;
+}
+
 /*
  * A diagram a little wider than the measure shrinks to fit; one that would
  * have to shrink past legibility keeps its drawn size and scrolls, with the
