@@ -71,6 +71,9 @@ export async function runCoordinator(config = {}) {
 		);
 	}
 	let request = config.request ?? createRequest(process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN);
+	// A worker dispatched with GITHUB_TOKEN cannot wake this coordinator via workflow_run.
+	let dispatchRequest = config.dispatchRequest
+		?? (config.request ? request : createRequest(process.env.PR_MAITENANCE_TOKEN));
 	let rows = await (config.inspect
 		?? (() => inventory(repository, createInventoryRead(repository), selected)))();
 	rows = rows.filter(row => selected(row.number));
@@ -237,7 +240,7 @@ export async function runCoordinator(config = {}) {
 			),
 		listRuns: async () => trustedRuns,
 		dispatch: intent =>
-			request("POST", `${root}/actions/workflows/${workflow}/dispatches`, {
+			dispatchRequest("POST", `${root}/actions/workflows/${workflow}/dispatches`, {
 				ref: "main",
 				inputs: { pr: String(intent.number), attempt: intent.attempt },
 			}),
@@ -283,10 +286,12 @@ export async function runCoordinator(config = {}) {
 		if (row.action !== "waiting-ci" || result.payload.prs[row.number]?.active) continue;
 		try {
 			if (!row.run) {
-				await request("POST", `${root}/actions/workflows/ci.yml/dispatches`, { ref: row.branch });
+				await dispatchRequest("POST", `${root}/actions/workflows/ci.yml/dispatches`, {
+					ref: row.branch,
+				});
 			} else if (
 				row.run.status === "completed" && ["cancelled", "timed_out"].includes(row.run.conclusion)
-			) await request("POST", `${root}/actions/runs/${row.run.id}/rerun`);
+			) await dispatchRequest("POST", `${root}/actions/runs/${row.run.id}/rerun`);
 		} catch {
 			result.errors.push(`PR #${row.number}: CI trigger unavailable`);
 		}
