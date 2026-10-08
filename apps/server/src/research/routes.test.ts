@@ -627,6 +627,11 @@ describe("research workspace routes", () => {
 			context.cookie,
 		));
 		expect(crossChannel?.status).toBe(404);
+		let topLevel = await context.router.handle(request(
+			`/api/channels/${context.channel.id}/research-provenance`,
+			context.cookie,
+		));
+		expect(topLevel?.status).toBe(404);
 
 		context.access.repository = {
 			...context.access.repository,

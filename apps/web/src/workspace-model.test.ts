@@ -28,8 +28,12 @@ describe("adaptive workspace", () => {
 			});
 	});
 
-	it("starts a child with Chat collapsed without inheriting the desktop preference", () => {
-		expect(initialWorkspaceState(workspaceProfile(childPresentation), true)).toEqual({
+	it("starts every surface with the saved desktop Chat preference", () => {
+		expect(initialWorkspaceState(true)).toEqual({
+			chatOpen: false,
+			desktopChatOpen: true,
+		});
+		expect(initialWorkspaceState(false)).toEqual({
 			chatOpen: false,
 			desktopChatOpen: false,
 		});

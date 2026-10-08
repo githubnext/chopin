@@ -1,7 +1,7 @@
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener, ResearchStore } from "@chopin/editor";
 
-import { response } from "./api";
+import { ApiError, response } from "./api";
 
 const POLL_INTERVAL = 2_000;
 
@@ -320,5 +320,21 @@ export class ResearchRequestStore implements ResearchStore {
 
 	#assertAvailable(): void {
 		if (this.#disposed) throw new Error("Research request store is disposed.");
+	}
+}
+
+/** Where a research child came from; undefined for a child no research request published. */
+export async function researchProvenance(
+	channelId: string,
+	signal?: AbortSignal,
+): Promise<Research.Provenance | undefined> {
+	try {
+		return await response(
+			`/api/channels/${encodeURIComponent(channelId)}/research-provenance`,
+			{ signal },
+		);
+	} catch (error) {
+		if (error instanceof ApiError && error.status === 404) return undefined;
+		throw error;
 	}
 }

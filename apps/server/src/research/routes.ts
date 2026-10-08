@@ -435,6 +435,26 @@ export function registerResearchWorkspaceRoutes(
 
 	router.on(
 		"GET",
+		"/api/channels/:channelId/research-provenance",
+		async (request, _url, params) => {
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let access = await channelAccess(auth, session, params.channelId!);
+				let parentId = access?.channel.parentChannelId;
+				let provenance = access && parentId
+					&& await service.provenance(parentId, access.channel.id);
+				return provenance
+					? json(provenance)
+					: json({ error: "research provenance not found" }, 404);
+			} catch (err) {
+				return failure(err, auth);
+			}
+		},
+	);
+
+	router.on(
+		"GET",
 		"/api/channels/:channelId/research-requests/:workspaceId",
 		async (request, _url, params) => {
 			try {

@@ -1050,6 +1050,45 @@
 	color: var(--color-text-primary);
 }
 
+/* A research child's provenance reads like the research card's own status line. */
+.child-provenance-line {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.child-provenance-parent {
+	font-weight: 500;
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+	text-decoration-color: var(--color-text-quaternary);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+	cursor: pointer;
+}
+
+.child-provenance-parent:hover {
+	color: var(--color-text-primary);
+}
+
+.child-provenance-toggle {
+	flex-shrink: 0;
+	gap: 0.25rem;
+	margin-inline-start: auto;
+	color: var(--color-text-tertiary);
+}
+
+.child-provenance-brief {
+	margin: 0.5rem 0 0;
+	padding-inline-start: 2rem;
+	font-size: var(--text-sm);
+	line-height: 1.5;
+	color: var(--color-text-secondary);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.motion-sidebar,
 	.motion-drawer,

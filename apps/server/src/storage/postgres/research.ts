@@ -1367,6 +1367,18 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 			return row ? this.get(channelId, text(row.id, "research workspace id")) : undefined;
 		});
 
+	readonly findPublished = (
+		channelId: string,
+		publishedChannelId: string,
+	): Promise<ResearchWorkspaceDetail | undefined> =>
+		this.#run("find published research workspace", async () => {
+			let [row] = await this.#sql<{ id: unknown }[]>`
+				SELECT id FROM research_workspaces
+				WHERE channel_id = ${channelId} AND published_channel_id = ${publishedChannelId}
+			`;
+			return row ? this.get(channelId, text(row.id, "research workspace id")) : undefined;
+		});
+
 	readonly findTurnByJob = (channelId: string, jobId: string): Promise<ResearchTurn | undefined> =>
 		this.#run("find research turn by job", async () => {
 			let rows = await this.#sql<
