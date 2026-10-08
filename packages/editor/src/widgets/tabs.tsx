@@ -80,6 +80,9 @@ function collect(editor: LexicalEditor): Group[] {
 	return groups;
 }
 
+/** How long a touch holds a tab before it offers removal. */
+const LONG_PRESS = 500;
+
 /** Keys a focused tab answers itself, so Lexical never acts on them against the document. */
 const STRIP_KEYS = new Set([
 	"ArrowLeft",
@@ -111,18 +114,16 @@ const FIELD_EVENTS = [
 ] as const;
 
 function RenameField(
-	{ label, canRemove, onDone, onRemove }: {
+	{ label, onDone }: {
 		label: string;
-		canRemove: boolean;
 		onDone: (label: string | undefined) => void;
-		onRemove: () => void;
 	},
 ) {
 	let field = useRef<HTMLInputElement>(null);
 	let [value, setValue] = useState(label);
 	let finished = useRef(false);
-	let actions = useRef({ onDone, onRemove, canRemove });
-	actions.current = { onDone, onRemove, canRemove };
+	let actions = useRef({ onDone });
+	actions.current = { onDone };
 
 	useLayoutEffect(() => {
 		let input = field.current;
@@ -141,10 +142,7 @@ function RenameField(
 			if (!(event instanceof KeyboardEvent) || event.isComposing) return;
 			if (event.key === "Enter") finish(tabLabel(input.value));
 			else if (event.key === "Escape") finish(undefined);
-			else if (event.key === "Backspace" && !input.value && actions.current.canRemove) {
-				finished.current = true;
-				actions.current.onRemove();
-			} else return;
+			else return;
 			event.preventDefault();
 		};
 		let blur = () => finish(tabLabel(input.value));
@@ -190,6 +188,12 @@ function Strip(
 	/** A tab with content asks once before it goes: there is no undo for it yet. */
 	let [armed, setArmed] = useState<string | undefined>();
 	let pointer = useRef("mouse");
+	let press = useRef<ReturnType<typeof setTimeout>>(undefined);
+	let pressed = useRef(false);
+	let release = () => {
+		clearTimeout(press.current);
+		press.current = undefined;
+	};
 	let activeIndex = group.tabs.findIndex(tab => tab.key === active);
 	let structure = group.tabs.map(tab => tab.key).join(" ");
 	let canRemove = editable && group.tabs.length > 1;
@@ -329,9 +333,7 @@ function Strip(
 							<RenameField
 								key={tab.key}
 								label={tab.label}
-								canRemove={canRemove && tab.empty}
 								onDone={label => rename(tab.key, label)}
-								onRemove={() => remove(position)}
 							/>
 						);
 					}
@@ -341,8 +343,10 @@ function Strip(
 							className="plan-tab"
 							data-selected={selected ? "" : undefined}
 							data-armed={armed === tab.key ? "" : undefined}
-							onPointerLeave={() => {
-								if (armed === tab.key) setArmed(undefined);
+							data-removable={canRemove ? "" : undefined}
+							onPointerLeave={event => {
+								// Touch reports a leave as the finger lifts, which would undo a long press.
+								if (event.pointerType !== "touch" && armed === tab.key) setArmed(undefined);
 							}}
 						>
 							<button
@@ -362,8 +366,26 @@ function Strip(
 								tabIndex={selected ? 0 : -1}
 								onPointerDown={event => {
 									pointer.current = event.pointerType;
+									if (event.pointerType === "touch" && canRemove) {
+										let key = tab.key;
+										press.current = setTimeout(() => {
+											press.current = undefined;
+											pressed.current = true;
+											setArmed(key);
+										}, LONG_PRESS);
+									}
+								}}
+								onPointerUp={release}
+								onPointerCancel={release}
+								onContextMenu={event => {
+									if (pointer.current === "touch" && canRemove) event.preventDefault();
 								}}
 								onClick={() => {
+									// A long press arms removal; the tap that ends it does nothing else.
+									if (pressed.current) {
+										pressed.current = false;
+										return;
+									}
 									// Touch has no double-click: a second tap on the open tab renames it.
 									if (editable && selected && pointer.current === "touch") setRenaming(tab.key);
 									else onSelect(tab.key);
@@ -379,10 +401,10 @@ function Strip(
 								<button
 									type="button"
 									tabIndex={-1}
-									aria-label={armed === tab.key
+									aria-label={armed === tab.key && !tab.empty
 										? `Remove ${name} and its content`
 										: `Remove ${name}`}
-									title={armed === tab.key
+									title={armed === tab.key && !tab.empty
 										? `Click again to remove ${name} and its content`
 										: `Remove ${name}`}
 									onClick={() => remove(position)}
