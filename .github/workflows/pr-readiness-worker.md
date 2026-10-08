@@ -224,7 +224,7 @@ job owns publication; a proposal is not proof of publication or passing CI.
 7. For a verified proposal, place only `proposal.json` and `proposal.bundle` in
    `/tmp/gh-aw/proposal/`. Set ref `refs/pr-maintenance/proposal` to the proposal
    commit and bundle that ref, excluding captured head and base prerequisites.
-The bundle must list exactly that one ref. The manifest has exactly these keys:
+   The bundle must list exactly that one ref. The manifest has exactly these keys:
    `schemaVersion: 1`, `attempt`, `operation`, `pr` (number), `expectedHead`,
    `expectedBase`, `proposalHead`, `bundleSha256` (SHA-256 of bundle bytes),
    `oldReplayBoundary: null`, `checks` (nonempty array of `{command, result}`),
