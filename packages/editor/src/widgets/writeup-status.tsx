@@ -34,10 +34,8 @@ export function WriteupStatus(
 		setError(undefined);
 		setRetrying(true);
 		try {
-			let reply = await wire.ask("conversation-plan:retry-job", { jobId: writeup.job }) as {
-				queued?: boolean;
-			};
-			if (!reply.queued) setError("Couldn't retry. Try again.");
+			// A false `queued` means another writer retried first; republished metadata shows that.
+			await wire.ask("conversation-plan:retry-job", { jobId: writeup.job });
 		} catch {
 			setError("Couldn't retry. Try again.");
 		}
@@ -47,6 +45,7 @@ export function WriteupStatus(
 		<span className="flex items-center gap-1 whitespace-nowrap">
 			<span className="text-text-tertiary" role="status">Couldn't write this up</span>
 			<button
+				aria-label="Retry write-up"
 				className="btn btn-sm btn-ghost"
 				disabled={!canEdit || !connected || !wire || retrying}
 				onClick={() => void retry()}

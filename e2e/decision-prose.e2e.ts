@@ -348,7 +348,7 @@ test("the settled line follows its prose job through failure, Retry, writing, an
 	await openJevWire(page, room);
 	await scriptProse(OPTION, "$target", { hold: true });
 	try {
-		await settled.getByRole("button", { name: "Retry", exact: true }).click();
+		await settled.getByRole("button", { name: "Retry write-up", exact: true }).click();
 		await expect(settled).toContainText("Writing up…");
 		await expect(settled).not.toContainText("Couldn't write this up");
 	} finally {
