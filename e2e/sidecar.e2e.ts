@@ -447,7 +447,7 @@ test("compact Chat returns to the document after a collaborator adds prose", asy
 		await expect(documentEditor(bo)).toBeVisible();
 		let paragraph = documentEditor(bo).locator(":scope > p").first();
 		await expect(paragraph).toBeEmpty();
-		await paragraph.click();
+		await documentEditor(bo).press("Home");
 		await bo.keyboard.type("Collaborative prose arrived.");
 		await expect(documentEditor(ana)).toContainText(
 			"Collaborative prose arrived.",
