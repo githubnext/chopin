@@ -7,6 +7,7 @@ import { conflict, corrupt, missing, StorageError, unavailable } from "../errors
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
 import { PostgresBackgroundJobStore } from "./jobs";
+import { PostgresExperimentStore } from "./experiments";
 import { PostgresResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -476,6 +477,10 @@ export class PostgresStorage implements StorageAdapter {
 
 	constructor(url: string) {
 		this.#sql = new SQL(url, { connectionTimeout: 10, idleTimeout: 30, max: 10 });
+		this.experiments = new PostgresExperimentStore(
+			this.#sql,
+			(sql, lease) => this.#assertLease(sql, lease),
+		);
 		this.navigation = new PostgresNavigationStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -620,6 +625,7 @@ export class PostgresStorage implements StorageAdapter {
 	};
 
 	readonly navigation: NavigationStore;
+	readonly experiments: PostgresExperimentStore;
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 

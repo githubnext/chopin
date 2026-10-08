@@ -43,6 +43,7 @@
         "@chopin/diagrams": "workspace:*",
         "@chopin/dialect": "workspace:*",
         "@chopin/draft": "workspace:*",
+        "@chopin/experiment": "workspace:*",
         "@chopin/protocol": "workspace:*",
         "@chopin/question": "workspace:*",
         "@earendil-works/pi-coding-agent": "catalog:harness",

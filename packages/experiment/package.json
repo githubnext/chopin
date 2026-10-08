@@ -6,7 +6,8 @@
 	"scripts": { "types": "tsgo --noEmit --skipLibCheck" },
 	"exports": {
 		".": "./src/index.ts",
-		"./fixtures": "./src/fixtures.ts"
+		"./fixtures": "./src/fixtures.ts",
+		"./records": "./src/records.ts"
 	},
 	"dependencies": { "zod": "catalog:harness" },
 	"devDependencies": { "@types/bun": "catalog:bun" }

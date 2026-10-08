@@ -693,6 +693,7 @@ if (url) {
 				"014_inline_research",
 				"015_planner_inline_reference",
 				"016_persistent_sessions",
+				"017_experiments",
 				"017_unanswered_decisions",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)

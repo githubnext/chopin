@@ -70,6 +70,9 @@ const MIGRATIONS = [{
 	applyPath: join(import.meta.dir, "migrations/017_unanswered_decisions.ts"),
 	checksumTag: "apply:backfillUnansweredDecisions:v1",
 	apply: backfillUnansweredDecisions,
+}, {
+	id: "017_experiments",
+	path: join(import.meta.dir, "migrations/017_experiments.sql"),
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */
