@@ -2323,7 +2323,7 @@
 @media (hover: hover) and (pointer: fine) {
 	:is(.plan-content .planCode, .plan-content
 		.planMath[data-plan-inline="false"]):not(:hover, :focus-within, :has(.plan-code-chrome
-		[aria-expanded="true"])) {
+		[aria-expanded="true"]), :has(.plan-code-chrome[data-editing])) {
 		/* Only a named language says something the rendering does not. */
 		& .plan-code-chrome:not([data-kind="code"]),
 		& .plan-code-toggle,
