@@ -263,7 +263,11 @@ every turn.
   descriptions and legacy summaries under durable `document-summary@1` are
   separate and are not bootstrap context.
 - The Planner reads the current document through the plan-named `read_plan` tool
-  instead of receiving a stale embedded copy.
+  instead of receiving a stale embedded copy. That result, and a successful
+  `edit_plan` result, carry `document: { id, url }`: the room's own document
+  id and the canonical URL MCP `read_document` returns for it. Code running
+  inside the session, such as an Atomic extension, can use either to address
+  that document over MCP.
 
 Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.
