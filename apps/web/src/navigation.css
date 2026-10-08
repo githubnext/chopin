@@ -621,7 +621,9 @@
 	.navigation-creation-status[data-leaving] {
 		opacity: 0;
 		transform: translateY(-4px);
-		transition: opacity var(--duration-fast) ease-out, transform var(--duration-fast) ease-out;
+		transition:
+			opacity var(--duration-fast) var(--ease-out),
+			transform var(--duration-fast) var(--ease-out);
 	}
 }
 
