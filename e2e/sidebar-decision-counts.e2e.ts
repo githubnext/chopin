@@ -199,7 +199,7 @@ test("sidebar counts share one trailing slot with the hover and focus actions", 
 });
 
 test("touch keeps each count visible beside its always-shown action", async ({ join }) => {
-	let page = await join("ana", { hasTouch: true, viewport: { width: 1180, height: 820 } });
+	let page = await join("ana", { hasTouch: true, viewport: { width: 1280, height: 820 } });
 	await installPointerMedia(page.context(), { coarse: true, primaryCoarse: true });
 	await mockCatalogue(page);
 	await page.reload();

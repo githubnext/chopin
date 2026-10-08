@@ -9,9 +9,7 @@ import {
 	applyDecisionSnapshot,
 	beginDocumentLoad,
 	completeDocumentPage,
-	decisionWatchPlan,
 	failDocumentLoad,
-	fallbackRefreshBatch,
 	newestDocument,
 	projectDocuments,
 	removeLoadedDocument,
@@ -20,6 +18,7 @@ import {
 	staleDecisionCounts,
 } from "./document-actions";
 import { ProjectSidebar } from "./project-sidebar";
+import { decisionWatchPlan, fallbackRefreshBatch } from "./sidebar-decision-plan";
 import { MAX_WATCHED_DOCUMENTS, MAX_WATCHED_REPOSITORIES } from "./sidebar-decision-watch";
 
 import type { ComponentProps } from "react";

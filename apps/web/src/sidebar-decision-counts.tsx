@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 
-import { decisionWatchPlan, fallbackRefreshBatch } from "./document-actions";
+import { decisionWatchPlan, fallbackRefreshBatch } from "./sidebar-decision-plan";
 import { useSidebarDecisions } from "./use-sidebar-decisions";
 
 import type { Sidebar } from "@chopin/protocol";
