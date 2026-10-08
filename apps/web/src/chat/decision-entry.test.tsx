@@ -80,7 +80,7 @@ test("the current prompt generation stays live across a same-second reopen", () 
 	let reopened = { ...saved, status: "reopened" as const };
 
 	expect(promptView({ entry: promptEntry(0), latest: true, meta: saved, value: savedValue }))
-		.toEqual({ state: "collapsed", text: "Decided: GitHub Apps · mina" });
+		.toEqual({ state: "collapsed", text: "Decided: GitHub Apps · @mina" });
 	expect(promptView({ entry: promptEntry(0), latest: true, meta: reopened, value: savedValue }))
 		.toEqual({ state: "collapsed", text: "Reopened" });
 	expect(promptView({ entry: promptEntry(0), latest: false, meta: reopened, value: savedValue }))
@@ -113,10 +113,10 @@ test("a decision without labels uses its saved-answer fallback and owner", () =>
 	};
 	let meta = openMeta({ status: "decided", owner: "jules" });
 	expect(promptView({ entry: promptEntry(0), latest: true, meta, value: custom }))
-		.toEqual({ state: "collapsed", text: "Decided: Use the hosted provider · jules" });
+		.toEqual({ state: "collapsed", text: "Decided: Use the hosted provider · @jules" });
 	let unanswered = { ...custom, questions: [{ ...custom.questions[0]!, answer: undefined }] };
 	expect(promptView({ entry: promptEntry(0), latest: true, meta, value: unanswered }))
-		.toEqual({ state: "collapsed", text: "Decided: Saved decision · jules" });
+		.toEqual({ state: "collapsed", text: "Decided: Saved decision · @jules" });
 });
 
 test("prompt selection shares the card projection and exact suggestion snapshot", () => {
@@ -159,38 +159,65 @@ test("prompt selection does not change multi-question or multi-select cards", ()
 	expect(promptSelection(multipleQuestions, EMPTY_DRAFTS, suggestion)).toEqual({});
 });
 
-test("a live prompt shows projected copy without avatars and disables Save when disconnected", () => {
+test("a live prompt points to the card instead of offering a second Save", () => {
 	let markup = renderToStaticMarkup(createElement(DecisionPrompt, {
 		entry: promptEntry(0),
 		latest: true,
 		value: VALUE,
 		meta: openMeta({ suggested: { optionId: "b", messageIds: ["m2"], revision: 7 } }),
-		connected: false,
+		connected: true,
 		canEdit: true,
 		onOpenCard() {},
 	}));
+	let text = markup.replace(/<[^>]*>/g, "");
 
-	expect(markup).toContain("Suggested: GitHub Apps");
-	expect(markup).toContain("Save decision");
-	expect(markup).toContain('aria-label="Open in plan"');
+	expect(text).toBe("Ready to settle: GitHub Apps · Open card");
+	expect(markup).not.toContain("Save");
+	expect(markup).toContain('aria-label="Open card: What auth system should we use?"');
 	expect(markup).toMatch(/aria-label="Decision prompt: What auth system should we use\?"/);
-	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Save decision<\/button>/);
 	expect(markup).not.toContain("<img");
 });
 
-test("a missing suggestion leaves Save disabled until a human chooses an option", () => {
-	let markup = renderToStaticMarkup(createElement(DecisionPrompt, {
+test("a live prompt names open objections and works without a suggestion", () => {
+	let one = renderToStaticMarkup(createElement(DecisionPrompt, {
 		entry: promptEntry(0),
 		latest: true,
 		value: VALUE,
 		meta: openMeta(),
 		connected: false,
 		canEdit: false,
+		objections: 1,
 		onOpenCard() {},
 	}));
+	expect(one.replace(/<[^>]*>/g, "")).toBe("Ready to settle · 1 objection · Open card");
+	expect(one).toMatch(/class="text-warning-ink">1 objection</);
 
-	expect(markup).toContain("Choose an option on the card");
-	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Save decision<\/button>/);
+	let two = renderToStaticMarkup(createElement(DecisionPrompt, {
+		entry: promptEntry(0),
+		latest: true,
+		value: VALUE,
+		meta: openMeta(),
+		connected: true,
+		canEdit: true,
+		objections: 2,
+		onOpenCard() {},
+	}));
+	expect(two).toContain("2 objections");
+});
+
+test("a collapsed prompt keeps its outcome and the card link", () => {
+	let markup = renderToStaticMarkup(createElement(DecisionPrompt, {
+		entry: promptEntry(0),
+		latest: true,
+		value: { ...VALUE, status: "decided", questions: [{ ...VALUE.questions[0]!, choices: ["b"] }] },
+		meta: openMeta({ status: "decided", owner: "mina" }),
+		connected: true,
+		canEdit: true,
+		objections: 1,
+		onOpenCard() {},
+	}));
+	expect(markup.replace(/<[^>]*>/g, "")).toBe("Decided: GitHub Apps · @mina · Open card");
+	expect(markup).not.toContain('role="group"');
 });
 
 test("activity labels remain text for the document sentinel and link card activities", () => {

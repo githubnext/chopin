@@ -37,8 +37,10 @@ export function messageLinks(state: ConversationPlan.State, messageId: string): 
 			if (label) add(thread.id, stance.id, label, stance.sources);
 		}
 		for (let candidate of thread.candidates) {
+			// A card-linked thread reopens only from the card, so a pending candidate is a suggestion.
 			if (candidate.kind === "reopening") {
-				add(thread.id, candidate.id, "Reopening", candidate.sources);
+				let label = candidate.status === "confirmed" ? "Reopening" : "Suggested reopening";
+				add(thread.id, candidate.id, label, candidate.sources);
 			}
 		}
 	}

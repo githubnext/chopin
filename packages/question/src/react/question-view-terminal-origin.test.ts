@@ -68,15 +68,17 @@ test("genuine cancellation keeps its existing summary and has no resolved action
 	expect(system).not.toContain("@system");
 });
 
-test("only the untouched projected suggestion row is labelled from chat without changing drafts", () => {
+test("only the untouched projected suggestion row is labelled as suggested in Chat without changing drafts", () => {
 	let drafts = {
 		q: { mode: "choices" as const, choice: null, options: { a: false, b: false }, custom: "" },
 	};
 	let before = structuredClone(drafts);
 	let markup = render({ definition: AUTH, drafts, suggested: { optionId: "b", revision: 7 } });
-	expect(markup.match(/from chat/g)).toHaveLength(1);
-	expect(markup).toMatch(/GitHub Apps[\s\S]*?from chat/);
-	expect(markup.replace(/<[^>]*>/g, "").replace(/\s+/g, " ")).toContain("GitHub Apps from chat");
+	expect(markup.match(/Suggested in Chat/g)).toHaveLength(1);
+	expect(markup).toMatch(/GitHub Apps[\s\S]*?Suggested in Chat/);
+	expect(markup.replace(/<[^>]*>/g, "").replace(/\s+/g, " ")).toContain(
+		"GitHub Apps · Suggested in Chat",
+	);
 	expect(markup).toMatch(/<input[^>]*checked=""[^>]*\/>/);
 	expect(drafts).toEqual(before);
 });
@@ -99,14 +101,14 @@ test("human choices and custom answers do not inherit suggestion provenance", ()
 			drafts: { q: draft },
 			suggested: { optionId: "b", revision: 7 },
 		});
-		expect(markup).not.toContain("from chat");
+		expect(markup).not.toContain("Suggested in Chat");
 		expect(draft).toEqual(before);
 	}
 });
 
-test("invalid and multi-question suggestions never gain a from chat label", () => {
+test("invalid and multi-question suggestions never gain a suggested-in-Chat label", () => {
 	for (let [definition, optionId] of [[AUTH, "missing"], [LEGACY, "b"], [MULTIPLE, "b"]] as const) {
 		let markup = render({ definition, drafts: {}, suggested: { optionId, revision: 7 } });
-		expect(markup).not.toContain("from chat");
+		expect(markup).not.toContain("Suggested in Chat");
 	}
 });

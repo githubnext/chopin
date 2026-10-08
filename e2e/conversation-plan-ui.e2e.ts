@@ -307,7 +307,7 @@ test("a proposal to settle pre-selects the option until a person saves", async (
 	await sendChat(bo, "Let's just go with a small pilot.");
 	await waitForEvent(ana, "settle.suggested");
 	await expect(option).toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toBeVisible();
 	await expect(card.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
 
 	await card.getByRole("button", { name: "Save", exact: true }).click();
@@ -337,11 +337,11 @@ test("a human choice overrides an advisory chat suggestion", async ({ join, room
 	await sendChat(bo, "Let's just go with Ship to everyone.");
 	await waitForEvent(ana, "settle.suggested");
 	await expect(suggestion).toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toBeVisible();
 	let humanChoice = card.getByRole("radio", { name: "Start with a small pilot." });
 	await card.getByText("Start with a small pilot.", { exact: true }).click();
 	await expect(humanChoice).toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toHaveCount(0);
 	await card.getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await waitForEvent(ana, "decision.recorded");
 	expect(decided.threads[0]!.decision).toMatchObject({
@@ -369,12 +369,12 @@ test("typing an option before a suggestion keeps the composer intent until Escap
 	await expect(field).toBeFocused();
 	await expect(field).toHaveValue("Ship to everyone");
 	await expect(option).not.toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toHaveCount(0);
 	await field.press("Escape");
 	let add = card.getByRole("button", { name: "Add an option", exact: true });
 	await expect(add).toBeFocused();
 	await expect(option).toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toBeVisible();
 });
 
 test("adding an option does not suppress a later chat suggestion", async ({ join, room }) => {
@@ -408,7 +408,7 @@ test("adding an option does not suppress a later chat suggestion", async ({ join
 	expect(label).toBeTruthy();
 	await expect(card.getByRole("radio", { name: label! })).toBeChecked();
 	await expect(card.getByRole("radio", { name: "Start with a small pilot." })).not.toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toBeVisible();
 });
 
 test("failed analysis retries in Chat while editor selection survives hiding Chat", async ({ join, room, seed }) => {

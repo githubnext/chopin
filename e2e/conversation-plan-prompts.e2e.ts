@@ -41,7 +41,7 @@ async function expectRetiredPrompts(page: Page, summary: string) {
 		let summaries = await prompts.allTextContents();
 		return summaries.length > 0 && summaries.every(text => text.includes(summary));
 	}).toBe(true);
-	await expect(prompts.getByRole("button", { name: "Save decision", exact: true })).toHaveCount(0);
+	await expect(prompts.filter({ hasText: "Ready to settle" })).toHaveCount(0);
 }
 
 function scopedPrompt(page: Page) {
@@ -83,7 +83,7 @@ async function settled(ana: Page, bo: Page, room: string) {
 	await waitForEvent(ana, "settle.suggested");
 }
 
-test("one member's choice posts a live Save decision prompt for everyone", async ({ join, room }) => {
+test("one member's choice posts a live prompt that points everyone to the card", async ({ join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
 	await settled(ana, bo, room);
@@ -91,17 +91,17 @@ test("one member's choice posts a live Save decision prompt for everyone", async
 	expect(suggested.events.some(event => event.type === "decision.recorded")).toBe(false);
 	await expect(prompt(ana)).toBeVisible();
 	await expect(prompt(bo)).toBeVisible();
-	await expect(prompt(ana)).toContainText(`Suggested: ${OPTION}`);
+	await expect(prompt(ana)).toContainText(`Ready to settle: ${OPTION}`);
 	await expect(prompt(ana).locator("img")).toHaveCount(0);
 
-	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
+	await card(ana).getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await waitForEvent(ana, "decision.recorded");
 	expect(decided.events.find(event => event.type === "decision.recorded")).toMatchObject({
 		origin: "human",
 		actor: { kind: "member", handle: "ana" },
 	});
 	for (let page of [ana, bo]) {
-		await expectRetiredPrompts(page, `Decided: ${OPTION} · ana`);
+		await expectRetiredPrompts(page, `Decided: ${OPTION} · @ana`);
 	}
 });
 
@@ -304,7 +304,7 @@ test("the Figma mixed reply settles the pending option and opens its sourced que
 	expect(events.some(event => event.type === "decision.recorded")).toBe(false);
 	await expect(prompt(ana)).toBeVisible();
 
-	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
+	await card(ana).getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await waitForEvent(ana, "decision.recorded");
 	expect(decided.events.find(event => event.type === "decision.recorded")).toMatchObject({
 		origin: "human",
@@ -374,12 +374,8 @@ test("repeated agreement does not duplicate a live prompt", async ({ join, room 
 	let repeatedState = (await wireState(ana))!;
 	expect(repeatedState.events.filter(event => event.type === "settle.agreed")).toHaveLength(2);
 	await expect(prompt(ana)).toHaveCount(1);
-	await expect(
-		ana.locator("[data-decision-prompt]").getByRole("button", {
-			name: "Save decision",
-			exact: true,
-		}),
-	).toHaveCount(1);
+	await expect(ana.locator("[data-decision-prompt]").filter({ hasText: "Ready to settle" }))
+		.toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 });
 
@@ -397,8 +393,8 @@ test("a remote human card selection overrides the live prompt", async ({ join, r
 	await decision.getByText("Ship to everyone", { exact: true }).click();
 	await expect(decision.getByRole("radio", { name: "Ship to everyone" })).toBeChecked();
 
-	await expect(prompt(ana)).toContainText("Selected: Ship to everyone");
-	await expect(prompt(ana)).not.toContainText(`Suggested: ${OPTION}`);
+	await expect(prompt(ana)).toContainText("Ready to settle: Ship to everyone");
+	await expect(prompt(ana)).not.toContainText(OPTION);
 	await expect.poll(async () =>
 		(await wireState(ana))?.threads[0]?.contributions.find(item =>
 			item.kind === "option" && item.text === "Ship to everyone"
@@ -408,7 +404,7 @@ test("a remote human card selection overrides the live prompt", async ({ join, r
 		(await wireState(ana))!.threads[0]!.contributions.find(item =>
 			item.kind === "option" && item.text === "Ship to everyone"
 		)!.id;
-	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
+	await card(ana).getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await waitForEvent(ana, "decision.recorded");
 	expect(decided.events.find(event => event.type === "decision.recorded")).toMatchObject({
 		actor: { kind: "member", handle: "ana" },
@@ -416,17 +412,17 @@ test("a remote human card selection overrides the live prompt", async ({ join, r
 		origin: "human",
 	});
 	for (let page of [ana, bo]) {
-		await expectRetiredPrompts(page, "Decided: Ship to everyone · ana");
+		await expectRetiredPrompts(page, "Decided: Ship to everyone · @ana");
 	}
 });
 
-test("Open in plan focuses the card and Discard collapses the prompt", async ({ join, room }) => {
+test("Open card focuses the card and Discard collapses the prompt", async ({ join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
 	await settled(ana, bo, room);
 	await sendChat(ana, "Sounds good to me.");
 	await waitForEvent(ana, "settle.agreed");
-	await prompt(ana).getByRole("button", { name: "Open in plan" }).click();
+	await prompt(ana).getByRole("button", { name: `Open card: ${QUESTION}` }).click();
 	let decision = card(ana);
 	await expect(decision).toBeFocused();
 	await decision.getByRole("button", { name: "Discard", exact: true }).click();
@@ -459,10 +455,10 @@ test("an old prompt retires after Save and Reopen before a new suggestion", asyn
 	await settled(ana, bo, room);
 	await sendChat(ana, "Sounds good to me.");
 	await waitForEvent(ana, "settle.agreed");
-	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
+	await card(ana).getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await waitForEvent(ana, "decision.recorded");
 	let cardId = decided.threads[0]!.questionnaireId!;
-	await expectRetiredPrompts(ana, `Decided: ${OPTION} · ana`);
+	await expectRetiredPrompts(ana, `Decided: ${OPTION} · @ana`);
 	let retiredCount = await ana.locator("[data-decision-prompt]").count();
 
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
@@ -480,18 +476,18 @@ test("an old prompt retires after Save and Reopen before a new suggestion", asyn
 	let retired = prompts.filter({ hasText: "Reopened" });
 	await expect(prompts).toHaveCount(retiredCount + 1);
 	await expect(retired).toHaveCount(retiredCount);
-	await expect(retired.getByRole("button", { name: "Save decision" })).toHaveCount(0);
+	await expect(retired.filter({ hasText: "Ready to settle" })).toHaveCount(0);
 	await expect(prompt(ana)).toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 	await ana.reload();
 	await expect(prompts).toHaveCount(retiredCount + 1);
 	await expect(retired).toHaveCount(retiredCount);
-	await expect(retired.getByRole("button", { name: "Save decision" })).toHaveCount(0);
+	await expect(retired.filter({ hasText: "Ready to settle" })).toHaveCount(0);
 	await expect(prompt(ana)).toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 });
 
-test("a read-only prompt keeps Save disabled while Open in plan stays available", async ({ baseURL, browser, join, room }) => {
+test("a read-only prompt offers only Open card", async ({ baseURL, browser, join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
 	await settled(ana, bo, room);
@@ -504,8 +500,8 @@ test("a read-only prompt keeps Save disabled while Open in plan stays available"
 		await reader.goto(roomPath(room));
 		await expect(content(reader)).toHaveAttribute("contenteditable", "false");
 		await expect(prompt(reader)).toBeVisible();
-		await expect(prompt(reader).getByRole("button", { name: "Save decision" })).toBeDisabled();
-		await prompt(reader).getByRole("button", { name: "Open in plan" }).click();
+		await expect(prompt(reader).getByRole("button")).toHaveCount(1);
+		await prompt(reader).getByRole("button", { name: `Open card: ${QUESTION}` }).click();
 		await expect(card(reader)).toBeFocused();
 	} finally {
 		await context.close();

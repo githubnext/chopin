@@ -65,6 +65,8 @@ test("change sentences use verbs with the card title as the object", () => {
 	expect(changeText(change(["Reason", "Support", "Objection"])))
 		.toBe("Added a reason, support and an objection to Should we ship a small pilot?");
 	expect(changeText(change(["Reopening"]))).toBe("Reopened Should we ship a small pilot?");
+	expect(changeText(change(["Objection", "Suggested reopening"])))
+		.toBe("Suggested reopening Should we ship a small pilot?");
 	expect(changeText(change(["Settle"])))
 		.toBe("Marked Should we ship a small pilot? ready to settle");
 });

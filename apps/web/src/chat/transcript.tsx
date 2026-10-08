@@ -9,6 +9,7 @@ import { Face, useCardMeta } from "@chopin/editor";
 import { ChopinMark } from "./agent-mark";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
+import { threadForCard } from "../conversation-plan/links";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
 import { capitalize, displayText, group, workAnnouncement, workPhase } from "./model";
@@ -130,6 +131,8 @@ function DecisionSystemEntry(
 		wire: decisions.wire,
 		connected: decisions.connected,
 		canEdit: decisions.canEdit,
+		objections: conversationPlan && threadForCard(conversationPlan, id)?.stances
+			.filter(stance => stance.position === "oppose").length,
 		onOpenCard: decisions.onOpenCard,
 	};
 

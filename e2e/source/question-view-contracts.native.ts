@@ -100,7 +100,7 @@ test("the current open card combines its header, human choice, people and action
 	await expect(choices.getByRole("radio")).toHaveCount(2);
 	await expect(choices.getByRole("radio", { name: "GitHub Apps", exact: true })).toBeChecked();
 	await expect(choices.getByRole("radio", { name: "Auth0", exact: true })).not.toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toHaveCount(0);
 	await expect(card.getByRole("group", { name: "In this decision: ana, bea", exact: true }))
 		.toBeVisible();
 	await expect(card.getByRole("radio", { name: "Write a custom answer", exact: true }))
@@ -260,21 +260,26 @@ for (let surface of ["chat", "sidebar"] as const) {
 			card.getByRole("heading", { name: "What auth system should we use?", exact: true }),
 		).toBeVisible();
 		await expect(card.getByRole("radio")).toHaveCount(2);
-		for (let label of ["Auth0", "GitHub Apps from chat"]) {
+		for (let label of ["Auth0", "GitHub Apps · Suggested in Chat"]) {
 			await expect(card.getByRole("radio", { name: label, exact: true })).toBeDisabled();
 		}
-		await expect(card.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
+		await expect(card.getByRole("radio", { name: "GitHub Apps · Suggested in Chat", exact: true }))
 			.toBeChecked();
 		await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeDisabled();
 		if (surface === "chat") {
-			await expect(page.getByRole("button", { name: "Save decision", exact: true })).toBeDisabled();
-			await expect(page.getByText("Suggested: GitHub Apps", { exact: true })).toBeVisible();
+			let prompt = page.locator("[data-decision-prompt]");
+			await expect(prompt.getByRole("button")).toHaveCount(1);
+			await expect(prompt).toContainText("Ready to settle: GitHub Apps");
 		} else {
 			let sidebar = page.getByRole("region", { name: "Decisions", exact: true });
-			await expect(sidebar.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
+			await expect(
+				sidebar.getByRole("radio", { name: "GitHub Apps · Suggested in Chat", exact: true }),
+			)
 				.toBeChecked();
-			await expect(sidebar.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
+			await expect(
+				sidebar.getByRole("radio", { name: "GitHub Apps · Suggested in Chat", exact: true }),
+			)
 				.toBeDisabled();
 		}
 		expect(errors).toEqual([]);

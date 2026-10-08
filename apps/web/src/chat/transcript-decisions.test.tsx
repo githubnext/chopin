@@ -43,8 +43,9 @@ test("transcript connects the newest prompt to the shared question and meta snap
 	}));
 
 	expect(markup).toContain("Superseded by a later prompt");
-	expect(markup).toContain("Suggested: GitHub Apps");
+	expect(markup).toContain("Ready to settle: <span");
+	expect(markup).toContain("GitHub Apps");
 	expect(markup).toContain("Decision prompt: What auth system should we use?");
-	expect(markup.match(/Save decision/g)).toHaveLength(1);
-	expect(markup).toContain('disabled=""');
+	expect(markup.match(/>Open card</g)).toHaveLength(2);
+	expect(markup).not.toContain("Save decision");
 });

@@ -172,7 +172,7 @@ test("badges name accepted roles only", () => {
 	expect(labels("m7")).toEqual([]);
 	expect(labels("m8")).toEqual([]);
 	expect(labels("m9")).toEqual([]);
-	expect(labels("m10")).toEqual(["Reopening"]);
+	expect(labels("m10")).toEqual(["Suggested reopening"]);
 	expect(labels("m11")).toEqual(["Settle"]);
 	expect(labels("m12")).toEqual(["Reopening"]);
 	expect(labels("m13")).toEqual([]);

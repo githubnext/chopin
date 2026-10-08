@@ -70,11 +70,11 @@ async function load(
 	return errors;
 }
 
-test("a real human edit removes from chat until the suggestion lifecycle is cleared", async ({ page }) => {
+test("a real human edit removes the Chat suggestion hint until the suggestion lifecycle is cleared", async ({ page }) => {
 	let errors = await load(page, "suggestion");
-	let badge = page.getByText("from chat", { exact: true });
+	let badge = page.getByText("· Suggested in Chat", { exact: true });
 	await expect(badge).toBeVisible();
-	await expect(page.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
+	await expect(page.getByRole("radio", { name: "GitHub Apps · Suggested in Chat", exact: true }))
 		.toBeChecked();
 	await expect(page.getByRole("radio", { name: /GitHub Apps/ })).toBeChecked();
 	expect((await page.evaluate(() => window.terminalOriginFixture.snapshot())).choice).toBeNull();
@@ -154,7 +154,7 @@ test("genuine cancellation remains separate in the styled real component gallery
 	await expect(
 		page.getByText("Discarded by @bea — What auth system should we use?", { exact: true }),
 	).toBeVisible();
-	let badge = page.getByText("from chat", { exact: true });
+	let badge = page.getByText("· Suggested in Chat", { exact: true });
 	await expect(badge).toBeVisible();
 	expect(
 		await badge.evaluate(element => {
@@ -177,7 +177,7 @@ test("a persisted legacy custom answer stays readable until a human chooses an o
 	let legacy = page.getByRole("radio", { name: "Another approach", exact: true });
 	let save = page.getByRole("button", { name: "Save", exact: true });
 	await expect(legacy).toBeChecked();
-	await expect(page.getByText("from chat", { exact: true })).toHaveCount(0);
+	await expect(page.getByText("· Suggested in Chat", { exact: true })).toHaveCount(0);
 	await expect(page.getByRole("radio", { name: "Write a custom answer", exact: true }))
 		.toHaveCount(0);
 	await expect(page.getByRole("textbox")).toHaveCount(0);

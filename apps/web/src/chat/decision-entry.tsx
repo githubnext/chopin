@@ -1,6 +1,6 @@
 /** System entries that show or link to a live decision card. */
 
-import { DecisionIcon, DocumentIcon, SparkleIcon } from "@chopin/icons";
+import { DecisionIcon, SparkleIcon } from "@chopin/icons";
 import {
 	InlineCode,
 	plainInlineText,
@@ -21,6 +21,8 @@ export type DecisionEntryProps = {
 	wire?: Transport;
 	connected: boolean;
 	canEdit: boolean;
+	/** Open objections on the card's conversation thread. */
+	objections?: number;
 	onOpenCard: (questionnaireId: string) => void;
 };
 
@@ -75,7 +77,7 @@ function decidedText(value: Questionnaire | undefined, meta: Question.CardMeta):
 	}) ?? [];
 	if (labels.length === 0 && question?.answer) labels = [question.answer];
 	let owner = meta.owner ?? value?.by;
-	return `Decided: ${labels.join(", ") || "Saved decision"}${owner ? ` · ${owner}` : ""}`;
+	return `Decided: ${labels.join(", ") || "Saved decision"}${owner ? ` · @${owner}` : ""}`;
 }
 
 export function promptView(
@@ -108,22 +110,26 @@ export function promptView(
 	return { state: "live" };
 }
 
-function OpenInPlan({ id, onOpenCard }: { id: string; onOpenCard: (id: string) => void }) {
+const LINK = "font-medium text-text-secondary underline-offset-2 hover:underline";
+
+/** The card is the one place to save or reopen; Chat only points to it. */
+function OpenCard(
+	{ id, onOpenCard, title }: { id: string; onOpenCard: (id: string) => void; title: string },
+) {
 	return (
 		<button
-			aria-label="Open in plan"
-			className="grid size-6 shrink-0 place-items-center rounded-md text-text-tertiary hover:bg-hover hover:text-text-secondary"
+			aria-label={`Open card: ${plainInlineText(title)}`}
+			className={LINK}
 			onClick={() => onOpenCard(id)}
-			title="Open in plan"
 			type="button"
 		>
-			<DocumentIcon aria-hidden="true" size={14} />
+			Open card
 		</button>
 	);
 }
 
 export function DecisionPrompt(props: DecisionEntryProps) {
-	let { entry, latest, meta, value, wire, connected, canEdit, onOpenCard } = props;
+	let { entry, latest, meta, value, wire, connected, canEdit, objections = 0, onOpenCard } = props;
 	let id = entry.decision.questionnaireId;
 	let view = promptView({ entry: entry as PromptEntry, latest, meta, value });
 	let definitionValue = definition(value);
@@ -135,63 +141,44 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 		connected: live && connected && canEdit,
 		definition: definitionValue,
 	});
-
-	if (view.state === "collapsed") {
-		return (
-			<div className="flex items-center gap-2 text-sm text-text-tertiary" data-decision-prompt={id}>
-				<DecisionIcon aria-hidden="true" size={14} />
-				<span className="min-w-0 flex-1 truncate">{view.text}</span>
-				<OpenInPlan id={id} onOpenCard={onOpenCard} />
-			</div>
-		);
-	}
-
-	let currentDefinition = state.definition ?? definitionValue;
-	let selection = promptSelection(currentDefinition, state.drafts, meta?.suggested);
-	let enabled = live && !!wire && !!meta && !!value && canEdit && connected
-		&& !state.syncing && !state.submitting && !!selection.optionId;
+	let selection = live
+		? promptSelection(state.definition ?? definitionValue, state.drafts, meta?.suggested)
+		: {};
 
 	return (
 		<div
-			aria-label={`Decision prompt: ${plainInlineText(title)}`}
-			className="flex flex-col gap-2 rounded-lg bg-inset px-3 py-2.5"
+			className="flex items-start gap-2 text-sm text-text-tertiary"
 			data-decision-prompt={id}
-			role="group"
+			{...(live
+				? { "aria-label": `Decision prompt: ${plainInlineText(title)}`, role: "group" }
+				: {})}
 		>
-			<div className="flex items-start gap-2">
-				<span className="grid size-5 shrink-0 place-items-center rounded-full bg-success-wash text-success-icon">
-					<DecisionIcon aria-hidden="true" size={12} />
-				</span>
-				<p className="m-0 min-w-0 flex-1 text-sm font-medium text-text-primary">
-					<InlineCode text={title} />
-				</p>
-				<OpenInPlan id={id} onOpenCard={onOpenCard} />
-			</div>
-			<p className="m-0 text-sm text-text-secondary">
-				{selection.label
-					? (
-						<>
-							{selection.visibleSuggestion ? "Suggested" : "Selected"}:{" "}
-							<InlineCode text={selection.label} />
-						</>
-					)
-					: "Choose an option on the card"}
+			<DecisionIcon aria-hidden="true" className="mt-0.5 shrink-0" size={14} />
+			<p className="m-0 min-w-0 flex-1 break-words">
+				{view.state === "collapsed" ? view.text : (
+					<>
+						Ready to settle
+						{selection.label && (
+							<>
+								{": "}
+								<span className="font-medium text-text-secondary">
+									<InlineCode text={selection.label} />
+								</span>
+							</>
+						)}
+						{objections > 0 && (
+							<>
+								{" · "}
+								<span className="text-warning-ink">
+									{objections} {objections === 1 ? "objection" : "objections"}
+								</span>
+							</>
+						)}
+					</>
+				)}
+				{" · "}
+				<OpenCard id={id} onOpenCard={onOpenCard} title={title} />
 			</p>
-			{state.error && <p className="m-0 text-sm text-destructive-ink" role="alert">{state.error}
-			</p>}
-			<div className="flex justify-end">
-				<button
-					className="btn btn-sm btn-primary"
-					disabled={!enabled}
-					onClick={() =>
-						selection.visibleSuggestion
-							? state.submit(selection.visibleSuggestion)
-							: state.submit()}
-					type="button"
-				>
-					{state.submitting ? "Saving…" : "Save decision"}
-				</button>
-			</div>
 		</div>
 	);
 }

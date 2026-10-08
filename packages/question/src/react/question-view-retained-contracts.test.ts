@@ -76,7 +76,7 @@ test("a single decision renders the card anatomy", () => {
 	expect(markup).not.toContain("<textarea");
 });
 
-test("a suggested option is selected, tagged from chat and ready to save", () => {
+test("a suggested option is selected, tagged as suggested in Chat and ready to save", () => {
 	let drafts = {};
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: AUTH,
@@ -86,7 +86,7 @@ test("a suggested option is selected, tagged from chat and ready to save", () =>
 	}));
 	let choices = markup.match(/<label[^>]*>[\s\S]*?<\/label>/g) ?? [];
 
-	expect(choices[1]).toMatch(/checked=""[\s\S]*GitHub Apps[\s\S]*from chat/);
+	expect(choices[1]).toMatch(/checked=""[\s\S]*GitHub Apps[\s\S]*Suggested in Chat/);
 	expect(save(markup)).not.toContain('disabled=""');
 	expect(drafts).toEqual({});
 });

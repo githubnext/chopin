@@ -33,7 +33,7 @@ async function expectRetiredPrompts(page: Page, cardId: string, summary: string)
 		let summaries = await prompts.allTextContents();
 		return summaries.length > 0 && summaries.every(text => text.includes(summary));
 	}).toBe(true);
-	await expect(prompts.getByRole("button", { name: "Save decision", exact: true })).toHaveCount(0);
+	await expect(prompts.filter({ hasText: "Ready to settle" })).toHaveCount(0);
 }
 
 async function stateWith(page: Page, type: ConversationPlan.Event["type"], count = 1) {
@@ -149,13 +149,13 @@ test("three members carry two sourced questions through a suggested and a human 
 	for (let page of [ana, bo, cam]) {
 		await expect(card(page, PILOT_QUESTION)).toBeVisible();
 		await expect(card(page, ACCESS_QUESTION)).toBeVisible();
-		await expect(prompt(page)).toContainText(`Suggested: ${suggestedOption.text}`);
+		await expect(prompt(page)).toContainText(`Ready to settle: ${suggestedOption.text}`);
 	}
 	await ana.screenshot({ path: "e2e/test-results/conversation-stress-before.png", fullPage: true });
 
 	await card(cam, PILOT_QUESTION).getByText(humanChoice, { exact: true }).click();
-	await expect(prompt(ana)).toContainText(`Selected: ${humanChoice}`);
-	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
+	await expect(prompt(ana)).toContainText(`Ready to settle: ${humanChoice}`);
+	await card(ana, PILOT_QUESTION).getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await stateWith(bo, "decision.recorded");
 	let chosen = decided.threads.find(thread => thread.id === first.id)!.contributions
 		.find(item => item.kind === "option" && item.text === humanChoice)!;
@@ -178,7 +178,7 @@ test("three members carry two sourced questions through a suggested and a human 
 		await expectRetiredPrompts(
 			page,
 			first.questionnaireId!,
-			`Decided: ${humanChoice} · ana`,
+			`Decided: ${humanChoice} · @ana`,
 		);
 	}
 	await ana.screenshot({ path: "e2e/test-results/conversation-stress-after.png", fullPage: true });
@@ -196,7 +196,7 @@ test("three members carry two sourced questions through a suggested and a human 
 	await expectRetiredPrompts(
 		bo,
 		first.questionnaireId!,
-		`Decided: ${humanChoice} · ana`,
+		`Decided: ${humanChoice} · @ana`,
 	);
 });
 
@@ -306,19 +306,19 @@ test("a direct recommendation adds and suggests a sourced choice until a member 
 	expect(emailThread.decision).toBeUndefined();
 	expect(suggested.events.some(event => event.type === "decision.recorded")).toBe(false);
 	let recommendedRadio = emailCard.getByRole("radio", {
-		name: `${EMAIL_RECOMMENDATION} from chat`,
+		name: `${EMAIL_RECOMMENDATION} · Suggested in Chat`,
 		exact: true,
 	});
 	await expect(recommendedRadio).toBeChecked();
-	await expect(emailCard.getByText("from chat", { exact: true })).toBeVisible();
-	await expect(prompt(ana, EMAIL_QUESTION)).toContainText(`Suggested: ${EMAIL_RECOMMENDATION}`);
-	await expect(prompt(ana, EMAIL_QUESTION).getByRole("button", { name: "Save decision" }))
-		.toBeVisible();
-	await expect(prompt(bo, EMAIL_QUESTION)).toContainText(`Suggested: ${EMAIL_RECOMMENDATION}`);
-	await expect(prompt(bo, EMAIL_QUESTION).getByRole("button", { name: "Save decision" }))
-		.toBeVisible();
+	await expect(emailCard.getByText("· Suggested in Chat", { exact: true })).toBeVisible();
+	for (let page of [ana, bo]) {
+		await expect(prompt(page, EMAIL_QUESTION))
+			.toContainText(`Ready to settle: ${EMAIL_RECOMMENDATION}`);
+		await expect(prompt(page, EMAIL_QUESTION).getByRole("button", { name: /^Save/ }))
+			.toHaveCount(0);
+	}
 
-	await prompt(ana, EMAIL_QUESTION).getByRole("button", { name: "Save decision" }).click();
+	await emailCard.getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await stateWith(bo, "decision.recorded");
 	expect(decided.events.find(event => event.type === "decision.recorded")).toMatchObject({
 		threadId: emailThread.id,
@@ -340,7 +340,7 @@ test("a direct recommendation adds and suggests a sourced choice until a member 
 	await expectRetiredPrompts(
 		bo,
 		emailThread.questionnaireId!,
-		`Decided: ${EMAIL_RECOMMENDATION} · ana`,
+		`Decided: ${EMAIL_RECOMMENDATION} · @ana`,
 	);
 });
 

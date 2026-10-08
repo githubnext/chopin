@@ -51,6 +51,9 @@ export function changeSentence(change: CardChange, messageText = ""): ChangeSent
 			: { before: "Started the decision", title, after: "" };
 	}
 	if (labels.includes("Reopening")) return { before: "Reopened", title, after: "" };
+	if (labels.includes("Suggested reopening")) {
+		return { before: "Suggested reopening", title, after: "" };
+	}
 	if (labels.includes("Settle")) return { before: "Marked", title, after: "ready to settle" };
 	let nouns = labels.filter(label => NOUNS[label]);
 	if (nouns.length === 1 && nouns[0] === "Support") {
@@ -107,7 +110,13 @@ export function messageOutcome(
 		: changes.length > 1
 		? `Added to ${changes.length} decisions`
 		: changes.length === 1
-		? changes[0]!.labels.includes("Question") ? "Started a decision" : "Added to a decision"
+		? changes[0]!.labels.includes("Question")
+			? "Started a decision"
+			: changes[0]!.labels.includes("Reopening")
+			? "Reopened a decision"
+			: changes[0]!.labels.includes("Suggested reopening")
+			? "Suggested reopening"
+			: "Added to a decision"
 		: researchState === "offered"
 		? "Research suggested"
 		: researchState === "failed"

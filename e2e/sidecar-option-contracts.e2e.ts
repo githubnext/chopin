@@ -166,7 +166,7 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	expect(after.questions[0]!.options[6]?.label).toBe("In a repository");
 	unanswered();
 	await checkVisible(7);
-	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
+	await expect(card.getByText("· Suggested in Chat", { exact: true })).toHaveCount(0);
 
 	let previousSnapshots = snapshots.length;
 	await ben.reload();
