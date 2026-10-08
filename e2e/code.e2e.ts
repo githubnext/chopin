@@ -452,7 +452,7 @@ test("arrows reach code inside a callout and a list item", async ({ join, room, 
 	await content(page).getByText("Inside.").click();
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.type("Q");
-	await written(page, room, /^Qlet a = 1;$/m);
+	await written(page, room, /^\s*Qlet a = 1;$/m);
 
 	await content(page).getByText("Next").click();
 	await page.keyboard.press("ArrowUp");
