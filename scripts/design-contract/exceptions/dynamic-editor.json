@@ -120,21 +120,35 @@
 				"class",
 				"CELL",
 				"class > SelectionBubble > <button>",
-				5
+				3
 			],
 			[
 				"dynamic",
 				"class",
 				"CELL_ON",
 				"class > SelectionBubble > <button>",
-				2
+				3
 			],
 			[
 				"dynamic",
 				"class",
 				"CELL_OFF",
 				"class > SelectionBubble > <button>",
-				5
+				6
+			],
+			[
+				"dynamic",
+				"class",
+				"ROW",
+				"class > SelectionBubble > <button>",
+				2
+			],
+			[
+				"dynamic",
+				"class",
+				"DIVIDER",
+				"class > SelectionBubble > <span>",
+				1
 			],
 			[
 				"dynamic",
@@ -144,7 +158,7 @@
 				3
 			]
 		],
-		"sourceHash": "01db79e7bf938cd5b01b3f3a446415cb88ca6e42100908d890b087b0b593d192"
+		"sourceHash": "0c55d7382e99b0fc885a47a127dd8f59bf9f50a49261ce7f14fcb0bdf78aff5d"
 	},
 	{
 		"file": "packages/editor/src/toolbar/research.tsx",
@@ -200,7 +214,7 @@
 				1
 			]
 		],
-		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
+		"sourceHash": "42d324e8f0d6553de93211b3e56e98026bb90f33e4a6f4b0b735bc9af4dbbbfb"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -228,7 +242,7 @@
 				1
 			]
 		],
-		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
+		"sourceHash": "42d324e8f0d6553de93211b3e56e98026bb90f33e4a6f4b0b735bc9af4dbbbfb"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
