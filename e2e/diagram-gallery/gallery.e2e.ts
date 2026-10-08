@@ -22,6 +22,15 @@ test("catalogue groups every fixture and renders representative families", async
 	await expect(page.locator("[data-featured-type] .ch-diagram svg")).toHaveCount(3);
 });
 
+test("decorative chart strokes do not open connection details", async ({ page }) => {
+	await page.getByRole("navigation", { name: "Diagram types" })
+		.getByRole("button", { name: "Line", exact: true }).click();
+	let preview = page.locator("[data-catalogue-preview]");
+	await expect(preview.locator('[data-sc-edge="s0"]')).toBeVisible();
+	await preview.locator('[data-sc-edge="s0"] circle').first().click({ force: true });
+	await expect(preview.getByRole("complementary", { name: "Diagram details" })).toHaveCount(0);
+});
+
 test("document views use separate SVG resources and survive source changes", async ({ page }) => {
 	await expect(page.locator('[role="document"] .plan-document [data-specimen-diagram]'))
 		.toHaveCount(2);

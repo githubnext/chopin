@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 
-import { type DiagramResult, renderDiagram } from "./render";
+import { type DiagramGraph, type DiagramResult, renderDiagram } from "./render";
 import { namespaceSvgIds } from "./viewer/namespace";
 
 export type DiagramProps = {
@@ -14,20 +14,25 @@ export type DiagramProps = {
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
 type Item = { kind: "node" | "edge"; id: string };
+type Playback = { kind: "playing" | "still" } | { kind: "step"; index: number };
 let diagramInstanceSequence = 0;
 
 const DiagramBody = memo(function DiagramBody({ body }: { body: string }) {
 	return <g dangerouslySetInnerHTML={{ __html: body }} />;
 });
 
-function itemAt(svg: SVGSVGElement | null, target: EventTarget | null): Item | null {
-	if (!(target instanceof Element) || !svg?.contains(target)) return null;
+function itemAt(
+	svg: SVGSVGElement | null,
+	target: EventTarget | null,
+	graph: DiagramGraph | undefined,
+): Item | null {
+	if (!(target instanceof Element) || !svg?.contains(target) || !graph) return null;
 	let element = target.closest<SVGElement>("[data-sc-node], [data-sc-edge]");
 	if (!element || !svg.contains(element)) return null;
 	let id = element.getAttribute("data-sc-node");
-	if (id !== null) return { kind: "node", id };
+	if (id !== null) return graph.nodes.some((node) => node.id === id) ? { kind: "node", id } : null;
 	id = element.getAttribute("data-sc-edge");
-	return id === null ? null : { kind: "edge", id };
+	return id !== null && graph.edges.some((edge) => edge.id === id) ? { kind: "edge", id } : null;
 }
 
 function sameItem(a: Item | null, b: Item | null): boolean {
@@ -50,8 +55,7 @@ function DiagramView({
 	let svgRef = useRef<SVGSVGElement>(null);
 	let [preview, setPreview] = useState<Item | null>(null);
 	let [selected, setSelected] = useState<Item | null>(null);
-	let [step, setStep] = useState<number | null>(null);
-	let [live, setLive] = useState(true);
+	let [mode, setMode] = useState<Playback>({ kind: "playing" });
 	let [playback, setPlayback] = useState(0);
 	let [reduced, setReduced] = useState(false);
 	let [overflowing, setOverflowing] = useState(false);
@@ -61,15 +65,9 @@ function DiagramView({
 	let interactive = nodes.length > 0;
 	let motion = result.motion && result.motion !== "none" ? result.motion : null;
 	let maxStep = motion ? Math.max(0, result.steps ?? 0) : 0;
+	let step = mode.kind === "step" ? mode.index : null;
 	let body = useMemo(() => namespaceSvgIds(result.body, prefix), [result.body, prefix]);
 	let active = preview ?? selected;
-
-	useEffect(() => {
-		let svg = svgRef.current;
-		if (!svg) return;
-		svg.classList.toggle("sc-still", !live || step !== null);
-		svg.classList.toggle("sc-stepping", step !== null);
-	}, [live, step]);
 
 	useEffect(() => {
 		if (typeof window.matchMedia !== "function") return;
@@ -180,24 +178,25 @@ function DiagramView({
 		if (item) setPreview(item);
 	};
 	let leave = (target: EventTarget | null, related: EventTarget | null) => {
-		let current = itemAt(svgRef.current, target);
-		let next = itemAt(svgRef.current, related);
+		let current = itemAt(svgRef.current, target, graph);
+		let next = itemAt(svgRef.current, related, graph);
 		if (current && !sameItem(current, next)) setPreview(null);
 	};
 	let onPointerOver = (event: PointerEvent<SVGSVGElement>) => {
-		if (event.pointerType !== "touch") enter(itemAt(svgRef.current, event.target));
+		if (event.pointerType !== "touch") enter(itemAt(svgRef.current, event.target, graph));
 	};
 	let onPointerOut = (event: PointerEvent<SVGSVGElement>) =>
 		leave(event.target, event.relatedTarget);
-	let onFocus = (event: FocusEvent<SVGSVGElement>) => enter(itemAt(svgRef.current, event.target));
+	let onFocus = (event: FocusEvent<SVGSVGElement>) =>
+		enter(itemAt(svgRef.current, event.target, graph));
 	let onBlur = (event: FocusEvent<SVGSVGElement>) => leave(event.target, event.relatedTarget);
 	let onClick = (event: MouseEvent<SVGSVGElement>) => {
-		let item = itemAt(svgRef.current, event.target);
+		let item = itemAt(svgRef.current, event.target, graph);
 		if (item) select(item);
 	};
 	let onKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
 		if (event.key !== "Enter" && event.key !== " ") return;
-		let item = itemAt(svgRef.current, event.target);
+		let item = itemAt(svgRef.current, event.target, graph);
 		if (!item) return;
 		event.preventDefault();
 		select(item);
@@ -205,19 +204,16 @@ function DiagramView({
 	let showStep = (next: number) => {
 		setPreview(null);
 		setSelected(null);
-		setLive(false);
-		setStep(Math.max(0, Math.min(maxStep, next)));
+		setMode({ kind: "step", index: Math.max(0, Math.min(maxStep, next)) });
 	};
 	let reset = () => {
 		setPreview(null);
 		setSelected(null);
-		setStep(null);
-		setLive(false);
+		setMode({ kind: "still" });
 	};
 	let replay = () => {
 		setPreview(null);
-		setStep(null);
-		setLive(true);
+		setMode({ kind: "playing" });
 		setPlayback((current) => current + 1);
 	};
 	let selectedNode = selected?.kind === "node"
@@ -278,7 +274,9 @@ function DiagramView({
 			>
 				<svg
 					ref={svgRef}
-					className="sc-svg"
+					className={`sc-svg${mode.kind === "playing" ? "" : " sc-still"}${
+						mode.kind === "step" ? " sc-stepping" : ""
+					}`}
 					viewBox={result.viewBox.join(" ")}
 					role={interactive ? "group" : "img"}
 					aria-labelledby={`${titleId} ${descriptionId}`}
