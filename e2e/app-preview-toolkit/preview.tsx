@@ -10,12 +10,19 @@ let request = 0;
 let rendering = false;
 let renderError: Error | undefined;
 let pending = Promise.resolve();
+function renderingFailed(error: unknown) {
+	let seen = new Set<Error>();
+	while (error instanceof Error && error.cause instanceof Error && !seen.has(error)) {
+		seen.add(error);
+		error = error.cause;
+	}
+	renderError = error instanceof Error ? error : new Error("React rendering failed.");
+	// React can report root errors after flushSync instead of throwing through it.
+	if (!rendering) reply({ type: "result", id: request, ok: false, error: renderError.message });
+}
 let root = createRoot(document.getElementById("app")!, {
-	onUncaughtError(error) {
-		renderError = error instanceof Error ? error : new Error("React rendering failed.");
-		// React can report root errors after flushSync instead of throwing through it.
-		if (!rendering) reply({ type: "result", id: request, ok: false, error: renderError.message });
-	},
+	onUncaughtError: renderingFailed,
+	onRecoverableError: renderingFailed,
 });
 let controller = createPreview(definition, async (values) => {
 	renderError = undefined;
