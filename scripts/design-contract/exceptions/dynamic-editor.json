@@ -172,7 +172,7 @@
 				1
 			]
 		],
-		"sourceHash": "adbf5fed0ed7f56653ce5b496714a92b640bcd2a3fce4a681f12ea1167887590"
+		"sourceHash": "9efb66508a77c1cce3bf057c61f62f50db047ab318b9928238aefc922a5afa4c"
 	},
 	{
 		"file": "packages/editor/src/widgets/research-motion.tsx",
@@ -354,7 +354,7 @@
 				2
 			]
 		],
-		"sourceHash": "59e79996b68dbfcc43c5f5f395e3b08b257dab751959f0627889afa34d649f89"
+		"sourceHash": "dc7f6b1f8437781a943724a6f7706350a9df2799daa0f5a6d8d17339e7484f47"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
