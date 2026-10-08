@@ -210,9 +210,12 @@ job owns publication; a proposal is not proof of publication or passing CI.
    files, manifests, lockfiles, agent instructions, maintenance scripts, or other
    protected paths. Existing design-contract exception `sourceHash` fields may
    be renewed only after checking the new source preserves that exact documented
-   exception. Preserve all other JSON fields and entries. Record each renewal as
-   `{file, sourceHash, rationale}` in `hashReviews`; hash actual source bytes with
-   SHA-256. Changed expectations or a broader exception need a human decision.
+   exception. Preserve all other JSON fields and entries. Changed expectations
+   or a broader exception need a human decision. For each renewed exception
+   record, add `{file, sourceHash, rationale}` to `hashReviews`: set `file` to that record's
+   `file` source path (for example `apps/web/src/workspace.tsx`), not the exception
+   JSON path; set `sourceHash` to the SHA-256 of that source blob in the proposed
+   tree; explain the renewed exception in `rationale`.
    The merge exception above permits only those reviewed hash renewals in a
    protected conflict.
 6. When intent is ambiguous or protected edits are needed, call `finish_attempt`
