@@ -29,7 +29,7 @@ experiment are evidence; do not merge their fixture implementation into this PR.
 - Keep the whole skill portable. Helpers use relative imports and browser types,
   not `@chopin/*`, server internals or paths to this checkout.
 
-## Slice 1: Portable control and preview helpers
+## Task 1: Portable control and preview helpers
 
 **Files:**
 
@@ -37,26 +37,26 @@ experiment are evidence; do not merge their fixture implementation into this PR.
 - Create `skills/building-app-previews/assets/preview.ts` and `preview.test.ts`.
 - Create `skills/tsconfig.json`; extend the root `package.json` types command.
 
-- [ ] Specify the authoring interface before implementation. Numeric controls have
+- [x] Specify the authoring interface before implementation. Numeric controls have
       an ID, label, unit, minimum, maximum and step; colours use `#RRGGBB`. A
       separate baseline supplies one value per declared control. This local API
       describes rendering inputs, not an MCP envelope.
-- [ ] Add failing unit cases for duplicate/unsafe IDs, unknown or missing values,
+- [x] Add failing unit cases for duplicate/unsafe IDs, unknown or missing values,
       non-finite numbers, range and step errors, invalid colours, invalid baseline
       and attempted mutation of retained definitions. Use two differently named
       definitions so no Chopin-specific parameter survives.
-- [ ] Implement validation and `createPreview(definition, render)`. Its `apply`
+- [x] Implement validation and `createPreview(definition, render)`. Its `apply`
       method accepts a complete snapshot and calls the supplied renderer only
       after validation; `reset` applies the immutable baseline. Return explicit
       failures. A callback receiving values is not proof of browser paint.
-- [ ] Test callback failure and retry, and verify invalid input never invokes it.
+- [x] Test callback failure and retry, and verify invalid input never invokes it.
       A fresh consumer must be able to copy the helpers together and typecheck
       without a Chopin runtime dependency.
-- [ ] Run `bun test skills/building-app-previews/assets` and `bun run types`.
+- [x] Run `bun test skills/building-app-previews/assets` and `bun run types`.
       Expected: helper tests and the new skill typecheck pass.
-- [ ] Run `bun run fix`, inspect the diff, commit this slice.
+- [x] Run `bun run fix`, inspect the diff, commit this slice.
 
-## Slice 2: One real component and a built local preview
+## Task 2: One real component and a built local preview
 
 **Files:**
 
@@ -92,7 +92,7 @@ experiment are evidence; do not merge their fixture implementation into this PR.
       `bun run preview-toolkit:dev` as the direct local review command.
 - [ ] Run `bun run fix`, inspect changes, commit the working example.
 
-## Slice 3: Browser evidence and CI
+## Task 3: Browser evidence and CI
 
 **Files:**
 
@@ -123,7 +123,7 @@ experiment are evidence; do not merge their fixture implementation into this PR.
       PR. Keep generated reports and screenshots out of the code diff.
 - [ ] Commit tested browser coverage and CI integration.
 
-## Slice 4: Skill, instructions and an independent agent trial
+## Task 4: Skill, instructions and an independent agent trial
 
 **Files:**
 
@@ -158,7 +158,7 @@ experiment are evidence; do not merge their fixture implementation into this PR.
       run `bun run fix`, inspect its changes and run `bun run ci`.
 - [ ] Commit the skill and its documented evidence.
 
-## Slice 5: Reviewable PR handoff
+## Task 5: Reviewable PR handoff
 
 - [ ] Run the focused units and browser suite, `bun run types`, `bun run ci` and
       `bun run build`. Run the normal unit suite once before handoff; investigate
@@ -167,11 +167,12 @@ experiment are evidence; do not merge their fixture implementation into this PR.
       behaviour/boundary correctness. Resolve material findings in small commits.
 - [ ] Use `pr-visual-preview` to attach real UI images and a compact architecture
       diagram; verify the images render in the published description.
-- [ ] Open a regular PR from `maggie/app-preview-toolkit`. Explain that this adds
+- [ ] Open a draft PR from `maggie/app-preview-toolkit`. Explain that this adds
       agent-side authoring tools and a tested local example, with no production
       Chopin feature, MCP publication, durable Save or private hosting.
 - [ ] Check GitHub validation, browser and container jobs. Hand Maggie and
       Krzysztof the PR, local review command, screenshots, remaining limits and
       the narrow next integration step: map these authoring outputs and render
       callback into the supplied request/result and production preview contracts.
-      Do not send a Slack/email message or merge/deploy without explicit instruction.
+      The user explicitly authorized draft PRs and autonomous work while away. Do not make
+      the PR ready for review, send a Slack/email message, merge or deploy.
