@@ -1,5 +1,6 @@
 import { documentPath, parseDocumentPath } from "@chopin/protocol/document-url";
 
+import { documentUrl } from "../channels/document-url";
 import { deterministicChannelId, isChannelId } from "../channels/id";
 import { documentSlug } from "../channels/slug";
 import { GitHubError } from "../github/client";
@@ -302,10 +303,7 @@ export function hosted(
 						kind: "invoked",
 						document: {
 							...summary(channel),
-							url: new URL(
-								documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug),
-								auth.config.origin,
-							).href,
+							url: new URL(documentUrl(channel), auth.config.origin).href,
 						},
 					};
 				},
@@ -347,7 +345,7 @@ export function hosted(
 				let located = await locatedChannel(caller, id);
 				if (!located || located === "forbidden") return undefined;
 				let { channel } = located;
-				let url = documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug);
+				let url = documentUrl(channel);
 
 				let live = Rooms.get(channel.id)?.plan;
 				if (live) {

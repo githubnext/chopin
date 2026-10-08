@@ -2,6 +2,8 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
 import { type DocumentRoom, documentTools } from "./tools";
+import { documentUrl } from "../channels/document-url";
+import { forgetWorkspaces, rememberCheckout } from "../harness/atomic/workspace";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import * as Chat from "../chat/service";
@@ -132,6 +134,8 @@ test("document tools use the room and repository supplied with each call", async
 	};
 	expect((await call("read_plan", a)).source).toContain("First document.");
 	expect((await call("read_plan", b)).source).toContain("Second document.");
+	expect((await call("read_plan", a)).document.id).toBe(first.channel.id);
+	expect((await call("read_plan", b)).document.id).toBe(second.channel.id);
 	expect((await call("read_implementation_graph", a)).source).toContain("First document.");
 	expect((await call("read_implementation_graph", b)).source).toContain("Second document.");
 	expect(await call("list_background_jobs", a)).toEqual({ room: "first" });
@@ -166,10 +170,51 @@ test("document tools use the room and repository supplied with each call", async
 		operations: [{ op: "replace", index: 0, source: "Changed second document.\n" }],
 	}, { context: { room: b }, toolCallId: "edit", messages: [] });
 	if (typeof result !== "string") throw new Error("edit_plan did not return text");
-	expect(JSON.parse(result).ok).toBe(true);
+	expect(JSON.parse(result)).toMatchObject({ ok: true, document: { id: second.channel.id } });
 	expect(room.project(first.plan.document)).toBe("First document.\n");
 	expect(room.project(second.plan.document)).toBe("Changed second document.\n");
 	expect(events).toEqual(["second:publish", "second:changes", "second:anchors"]);
+});
+
+test("read_plan and edit_plan name the room's document as read_document does", async () => {
+	let { channel, now, plan, server, storage } = await opened("Identified document.\n");
+	let tools = fixtureTools({
+		plan,
+		server,
+		room: channel.id,
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	});
+	let call = async (name: "read_plan" | "edit_plan", input: unknown) => {
+		let result = await tools.find(tool => tool.name === name)!.handler(input, {
+			toolCallId: name,
+		});
+		if (typeof result !== "string") throw new Error(`${name} did not return text`);
+		return JSON.parse(result);
+	};
+	let identity = { id: channel.id, url: "/documents/owner/repository/test-plan" };
+	expect(documentUrl(channel)).toBe(identity.url);
+	expect((await call("read_plan", {})).document).toEqual(identity);
+
+	rememberCheckout(channel.id, process.cwd());
+	try {
+		expect((await call("read_plan", {})).document).toEqual(identity);
+	} finally {
+		forgetWorkspaces();
+	}
+
+	await storage.channels.rename({ id: channel.id, title: "Renamed plan", now });
+	let renamed = { id: channel.id, url: "/documents/owner/repository/renamed-plan" };
+	let read = await call("read_plan", {});
+	expect(read.document).toEqual(renamed);
+	let edited = await call("edit_plan", {
+		revision: read.revision,
+		operations: [{ op: "replace", index: 0, source: "Edited document.\n" }],
+	});
+	expect(edited).toMatchObject({ ok: true, document: renamed });
 });
 
 test("create_research_workspace validates one question and waits for immediate research start", async () => {

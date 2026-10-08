@@ -37,6 +37,7 @@ import * as Questions from "../questions/service";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
 import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
 import { broadcast, fail, relay, reply, tell } from "../wire";
+import { documentUrl } from "../channels/document-url";
 
 import type { Server } from "bun";
 import type { ConversationPlan, Plan as Wire, Request } from "@chopin/protocol";
@@ -1965,6 +1966,12 @@ export async function close(plan: Plan): Promise<void> {
 /** Current canonical source. */
 export function source(plan: Plan): string {
 	return room.project(plan.document);
+}
+
+export async function documentIdentity(plan: Plan): Promise<{ id: string; url: string }> {
+	let channel = await plan.persistence.storage.channels.get(plan.id);
+	if (!channel) throw new Error("document is unavailable");
+	return { id: channel.id, url: documentUrl(channel) };
 }
 
 /** Size of the Yjs history, for the idle compaction check. */
