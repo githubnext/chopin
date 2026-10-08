@@ -11,6 +11,7 @@ import {
 	$isRangeSelection,
 	$isTextNode,
 	$setSelection,
+	KEY_DOWN_COMMAND,
 } from "lexical";
 
 import { $createQuestionnaireNode, registry } from "@chopin/dialect";
@@ -183,5 +184,18 @@ test("an unresolved node selection does not schedule a hidden-card correction", 
 	} finally {
 		unregister();
 		updates.mockRestore();
+	}
+});
+
+test("a key press ends a pointer press's claim on the next selection change", () => {
+	let editor = build();
+	let unregister = registerDecoratorSelection(editor, () => false);
+	try {
+		// Clicking where the caret already is sets this without a selectionchange to clear it.
+		editor._inputState.isSelectionChangeFromMouseDown = true;
+		editor.dispatchCommand(KEY_DOWN_COMMAND, { key: "ArrowDown" } as KeyboardEvent);
+		expect(editor._inputState.isSelectionChangeFromMouseDown).toBe(false);
+	} finally {
+		unregister();
 	}
 });
