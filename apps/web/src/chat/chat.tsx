@@ -9,9 +9,9 @@
 
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
-import { MAX_RESEARCH_BRIEF, SendAction, usePopoverDismissal } from "@chopin/editor";
+import { MAX_RESEARCH_BRIEF, SendAction, useConnectionNotice, usePopoverDismissal } from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
-import { ArchiveIcon, InfoIcon, LoaderIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
 import { ModeSwitch } from "./mode-switch";
@@ -195,6 +195,7 @@ export function Chat(
 	let commandPickerId = useId();
 	let instructionsId = useId();
 	let cueId = useId();
+	let connectionId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
 	let reportedBusy = useRef(false);
@@ -204,7 +205,16 @@ export function Chat(
 	if (!connected) synchronized.current = undefined;
 	let transcriptReady = connected && synchronized.current === wire;
 	let composerReady = transcriptReady && !readonly && !archived;
-	let connectionLost = !connected && ["reconnecting", "closed"].includes(wire?.status ?? "");
+	// A draft never waits on the connection; only sending does.
+	let draftable = !readonly && !archived;
+	let connectionNotice = useConnectionNotice(!connected);
+	let connectionLabel = connectionNotice === "none"
+		? undefined
+		: connectionNotice === "offline" || wire?.status === "closed" || wire?.status === "denied"
+		? "Offline"
+		: wire?.status === "connecting"
+		? "Connecting…"
+		: "Reconnecting…";
 	let effectiveMode = agent && (mode || addressedOutsideReferences(draft.text, draft.references));
 	let workingTurn = transcriptReady ? turn : undefined;
 	let suspendedWork = !transcriptReady && turn && transcript.activeAnchorId
@@ -387,13 +397,14 @@ export function Chat(
 	};
 
 	let submit = () => {
-		if (submission.current || !composerReady || !wire) return;
+		if (submission.current) return;
 		let current = draftRef.current;
 		if (draftCommand(current.text)) {
 			// `#` references stay in the brief as their visible titles.
 			launchResearch(commandBrief(current.text));
 			return;
 		}
+		if (!composerReady || !wire?.connected) return;
 		if (!current.text.trim()) return;
 		let submitted = prepareDraftSubmission(current);
 		let prefix = effectiveMode && !addressedOutsideReferences(submitted.text, submitted.references)
@@ -450,7 +461,7 @@ export function Chat(
 	};
 
 	let toggleMode = () => {
-		if (!composerReady || submitting || !agent) return;
+		if (!draftable || submitting || !agent) return;
 		let current = draftRef.current;
 		let at = selection.start;
 		let end = selection.end;
@@ -593,7 +604,7 @@ export function Chat(
 					</p>
 				)}
 				{!readonly && !archived
-					&& (sendError || !composerReady || researchBlock || blockedCommand || !agent) && (
+					&& (sendError || researchBlock || blockedCommand || !agent) && (
 					<div
 						className={sendError ? "composer-notice motion-feedback" : "composer-notice"}
 						data-motion-feedback={sendError ? "alert" : undefined}
@@ -603,15 +614,9 @@ export function Chat(
 					>
 						{sendError
 							? <WarningIcon className="icon-danger" size={14} />
-							: connectionLost
-							? <WarningIcon size={14} />
-							: !composerReady
-							? <LoaderIcon className="chat-tool-loader" size={14} />
 							: <InfoIcon size={14} />}
 						<span>
-							{sendError ?? (!composerReady
-								? connected ? "Synchronizing…" : connectionLost ? "Connection lost" : "Connecting…"
-								: researchBlock
+							{sendError ?? (researchBlock
 								? researchCopy[researchBlock]
 								: blockedCommand
 								? "Research isn’t available in this document"
@@ -625,15 +630,6 @@ export function Chat(
 									onClick={submit}
 								>
 									Retry
-								</button>
-							)
-							: !composerReady
-							? wire && (
-								<button
-									className="btn btn-sm btn-ghost"
-									onClick={() => wire.reconnect()}
-								>
-									{connectionLost ? "Reconnect" : "Retry"}
 								</button>
 							)
 							: researchBlock === "drafting"
@@ -717,14 +713,15 @@ export function Chat(
 										: undefined}
 									aria-describedby={[
 										referencesEnabled ? instructionsId : undefined,
-										sendError || !composerReady || researchBlock || blockedCommand || !agent
+										sendError || researchBlock || blockedCommand || !agent
 											? cueId
 											: undefined,
+										connectionLabel ? connectionId : undefined,
 									].filter(Boolean).join(" ") || undefined}
-									aria-disabled={!composerReady || submitting}
+									aria-disabled={!draftable || submitting}
 									aria-invalid={!!sendError || undefined}
 									aria-expanded={commandOpen || pickerOpen || mentionOpen}
-									readOnly={!composerReady || submitting}
+									readOnly={!draftable || submitting}
 									role="combobox"
 									resetKey={historyKey}
 									historyGroupKey={mode}
@@ -870,7 +867,7 @@ export function Chat(
 									<div className="composer-left">
 										<ModeSwitch
 											effectiveMode={effectiveMode}
-											disabled={!composerReady || submitting || !agent}
+											disabled={!draftable || submitting || !agent}
 											onToggle={toggleMode}
 										/>
 
@@ -898,6 +895,21 @@ export function Chat(
 										)}
 									</div>
 									<div className="composer-actions">
+										{/* Always mounted, so the live region hears its first word. */}
+										<span className="composer-connection" id={connectionId} role="status">
+											{connectionLabel && (
+												<span className="composer-connection-label">{connectionLabel}</span>
+											)}
+										</span>
+										{connectionNotice === "offline" && wire && (
+											<button
+												className="btn btn-sm btn-ghost"
+												onClick={() => wire.reconnect()}
+												type="button"
+											>
+												Reconnect
+											</button>
+										)}
 										<span className="composer-run-control">
 											{agent && (busy || counts.active > 0) && (
 												<button

@@ -53,7 +53,9 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	 * the only way to be the thing that drops it.
 	 */
 	let sockets: WebSocketRoute[] = [];
+	let offline = false;
 	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -63,21 +65,22 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	await content(page).click();
 	await page.keyboard.type("Before the wire went.");
 
+	offline = true;
 	await sockets.at(-1)!.close();
 
-	// Read-only is the point: an editor that keeps taking keystrokes it cannot
-	// send is worse than one that stops, because the typing looks like it
-	// worked right up until the reload that loses it.
+	// Read-only is the point once the loss outlasts a blip: an editor that
+	// keeps taking keystrokes it cannot send is worse than one that stops,
+	// because the typing looks like it worked right up until the reload that
+	// loses it.
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
-	await expect(page.locator(".plan-status")).toHaveAttribute(
-		"data-level",
-		"notice",
-	);
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
+	await expect(page.locator(".plan-status")).toHaveAttribute("data-level", /^(notice|alert)$/);
 
 	// The client retries on its own; nothing here reconnects it. Opening is
 	// driven by the connection rather than by the mount, and a socket that
 	// comes back without re-opening the document would leave the editor
 	// unlocked over a plan quietly short of everyone else's edits.
+	offline = false;
 	await ready(page);
 	expect(sockets.length).toBeGreaterThan(1);
 	await expect(content(page)).toContainText("Before the wire went.");
