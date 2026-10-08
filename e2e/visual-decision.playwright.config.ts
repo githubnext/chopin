@@ -9,6 +9,7 @@ let previewOrigin = "http://localhost:8841";
 export default defineConfig({
 	...normal,
 	testMatch: "**/visual-decision*.e2e.ts",
+	testIgnore: [],
 	fullyParallel: false,
 	workers: 1,
 	projects: [{

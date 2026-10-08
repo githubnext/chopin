@@ -123,6 +123,9 @@ jobs:
       # bundle — green, about code nobody changed.
       - run: bun run e2e
 
+      - name: Generic visual decisions (isolated preview fixtures)
+        run: E2E_SKIP_BUILD=1 bun scripts/e2e.ts --config e2e/visual-decision.playwright.config.ts
+
       - name: Verify design audit stays out of production
         run: bun scripts/check-design-production.ts
 
