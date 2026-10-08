@@ -1031,8 +1031,10 @@ test("archiving a sidebar row by keyboard moves focus to a neighbouring row", as
 	await row.hover();
 	await trigger.focus();
 	await trigger.press("ArrowDown");
-	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+	await expect(page.getByRole("menuitem", { name: "Copy link", exact: true })).toBeFocused();
 	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await expect(page.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
 	await page.keyboard.press("Enter");
 	await expect(links).toHaveCount(names.length - 1);
 	await expect(sidebar(page).locator(".project-sidebar-document-link", { hasText: neighbour! }))
