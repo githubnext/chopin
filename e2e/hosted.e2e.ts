@@ -32,11 +32,11 @@ async function showKnownChannel(page: Parameters<typeof authenticate>[0]) {
 }
 
 function addProjectDialog(page: Parameters<typeof authenticate>[0]) {
-	return page.getByRole("dialog", { name: "Add Project" });
+	return page.getByRole("dialog", { name: "Add project" });
 }
 
 function repositoryOption(page: Parameters<typeof authenticate>[0], name: string) {
-	return addProjectDialog(page).getByRole("button").filter({ hasText: name });
+	return addProjectDialog(page).getByRole("option").filter({ hasText: name });
 }
 
 test("organization admission rejects outsiders and pending members", async ({ baseURL }) => {
@@ -263,7 +263,7 @@ test("a known deleted channel keeps its context and routes back without retry", 
 	await expect(page.getByText(recoveryChannel.slug, { exact: true })).toBeVisible();
 	await expect(page.getByText(score.fullName, { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
-	let channels = page.getByRole("link", { name: `View ${score.fullName} channels` });
+	let channels = page.getByRole("link", { name: `View ${score.fullName} documents` });
 	await expect(channels).toHaveAttribute("href", "/documents/octo-org/score");
 	await channels.click();
 	await expect(page).toHaveURL("/documents/octo-org/score");
@@ -312,7 +312,7 @@ test("an unknown direct channel link stays privacy-safe", async ({ baseURL, page
 	await expect(page.getByRole("link", { name: "Back to repositories" })).toBeVisible();
 });
 
-test("the Add Project dialog traps focus, dismisses, and filters repositories", async ({ baseURL, page }) => {
+test("the Add project dialog traps focus, dismisses, and filters repositories", async ({ baseURL, page }) => {
 	await authenticate(page, "project-dialog", baseURL!);
 	await page.goto("/");
 
@@ -324,15 +324,23 @@ test("the Add Project dialog traps focus, dismisses, and filters repositories", 
 	await page.keyboard.press("Escape");
 	await expect(dialog).toBeHidden();
 
-	let trigger = page.getByRole("button", { name: "Add Project" });
+	let trigger = page.getByRole("complementary", { name: "Projects", exact: true }).getByRole(
+		"button",
+		{ exact: true, name: "Add project" },
+	);
 	await trigger.click();
 	await expect(search).toBeFocused();
 	await search.fill("notes");
 	await expect(repositoryOption(page, "notes")).toBeVisible();
+	await expect(repositoryOption(page, "notes")).toHaveAttribute("aria-selected", "true");
 	await expect(repositoryOption(page, "score")).toHaveCount(0);
+	await search.press("ArrowDown");
+	await expect(repositoryOption(page, "notes")).toBeFocused();
+	await page.keyboard.press("ArrowUp");
+	await expect(search).toBeFocused();
 });
 
-test("the Add Project dialog reuses a fresh tab cache", async ({ baseURL, page }) => {
+test("the Add project dialog reuses a fresh tab cache", async ({ baseURL, page }) => {
 	await authenticate(page, "paged", baseURL!);
 	await page.goto("/");
 	await expect(repositoryOption(page, "archive-12")).toBeVisible();
@@ -349,7 +357,10 @@ test("the Add Project dialog reuses a fresh tab cache", async ({ baseURL, page }
 	page.on("request", request => {
 		if (request.url().includes("/api/github/installations")) requests++;
 	});
-	await page.getByRole("button", { name: "Add Project" }).click();
+	await page.getByRole("complementary", { name: "Projects", exact: true }).getByRole("button", {
+		exact: true,
+		name: "Add project",
+	}).click();
 	await expect(repositoryOption(page, "archive-12")).toBeVisible();
 	await page.evaluate(() =>
 		new Promise<void>(resolve =>
@@ -359,7 +370,7 @@ test("the Add Project dialog reuses a fresh tab cache", async ({ baseURL, page }
 	expect(requests).toBe(0);
 });
 
-test("Add Project search stays reachable in a narrow visual viewport", async ({ baseURL, page }) => {
+test("Add project search stays reachable in a narrow visual viewport", async ({ baseURL, page }) => {
 	await page.setViewportSize({ width: 320, height: 568 });
 	await installVisualViewport(page, {
 		height: 300,
@@ -417,6 +428,28 @@ test("returning from GitHub App setup invalidates the tab cache", async ({ baseU
 	await expect(repositoryOption(page, "archive-12")).toBeVisible();
 });
 
+test("the Add project palette keeps one active row across keyboard and pointer", async ({ baseURL, page }) => {
+	await authenticate(page, "paged", baseURL!);
+	await page.goto("/");
+	let dialog = addProjectDialog(page);
+	let options = dialog.getByRole("option");
+	let selected = dialog.locator('[role="option"][aria-selected="true"]');
+	await expect(repositoryOption(page, "archive-12")).toBeVisible();
+	await expect(selected).toHaveCount(0);
+
+	await page.keyboard.press("ArrowDown");
+	await expect(options.first()).toBeFocused();
+	await page.keyboard.press("End");
+	await expect(options.last()).toBeFocused();
+	await page.keyboard.press("Home");
+	await expect(options.first()).toBeFocused();
+
+	await repositoryOption(page, "archive-3").hover();
+	await expect(selected).toHaveCount(1);
+	await expect(repositoryOption(page, "archive-3")).toHaveAttribute("aria-selected", "true");
+	await expect(repositoryOption(page, "archive-3")).toBeFocused();
+});
+
 test("repository search includes pages loaded in the background", async ({ baseURL, page }) => {
 	await authenticate(page, "paged", baseURL!);
 	await page.goto("/");
@@ -427,7 +460,7 @@ test("repository search includes pages loaded in the background", async ({ baseU
 	await expect(page.getByRole("button", { name: /More from/ })).toHaveCount(0);
 });
 
-test("the Add Project dialog retries and appends unique background pages", async ({ baseURL, page }) => {
+test("the Add project dialog retries and appends unique background pages", async ({ baseURL, page }) => {
 	await authenticate(page, "retry-project-dialog", baseURL!);
 	let fail = true;
 	await page.route("**/api/github/installations?*", async route => {

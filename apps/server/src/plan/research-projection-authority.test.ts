@@ -10,6 +10,31 @@ import { insertResearchProjection } from "./research-projection.test-fixtures";
 import { linkedResearchJob, setResearchJobState } from "./research-projection-jobs.test-fixtures";
 
 describe("hosted plan persistence", () => {
+	it("accepts a browser-placed Research reference for a request with active work", async () => {
+		let context = await hosted();
+		let plan = await Service.open(context.channel.id, context.backend, context.server);
+		// ResearchWorkspaceService mints UUID request ids, not ULIDs.
+		let request = await pendingInlineResearch(context, context.channel.id, crypto.randomUUID());
+		await linkedResearchJob(context, request.workspace.id, "evidence");
+		let peer = await Room.restore(
+			plan.document.epoch,
+			Y.encodeStateAsUpdate(plan.document.doc),
+			Service.source(plan),
+			[],
+		);
+		try {
+			let update = await insertResearchProjection(peer, request.workspace.id);
+			let replies = await submitResearchUpdate(context, plan, update, "uuid-research-insert");
+
+			expect(replies.some(frame => frame.kind === "plan:ack")).toBe(true);
+			expect(context.frames.some(frame => frame.kind === "plan:reset")).toBe(false);
+			expect(Service.source(plan)).toContain(`<Research id="${request.workspace.id}" />`);
+		} finally {
+			peer.doc.destroy();
+			await Service.close(plan);
+		}
+	});
+
 	it("rejects a Research projection for an inline request with no linked work", async () => {
 		let context = await hosted();
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
@@ -58,6 +83,7 @@ describe("hosted plan persistence", () => {
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
 		let originalSource = Service.source(plan);
 		let request = await pendingInlineResearch(context, otherChannel.id);
+		await linkedResearchJob(context, request.workspace.id, "evidence", otherChannel.id);
 		let peer = await Room.restore(
 			plan.document.epoch,
 			Y.encodeStateAsUpdate(plan.document.doc),

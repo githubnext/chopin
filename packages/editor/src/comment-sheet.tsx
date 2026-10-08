@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Drawer } from "@base-ui/react/drawer";
+import { CloseIcon } from "@chopin/icons";
 
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 
 import type { ReactNode } from "react";
 
-export const COMMENT_SHEET_SNAP_POINTS = [0.55, 0.92] as const;
+/** The medium detent fits the content between these fractions of the viewport. */
+export const COMMENT_SHEET_FIT_RANGE = [0.2, 0.85] as const;
+export const COMMENT_SHEET_LARGE = 0.92;
+export const COMMENT_SHEET_SNAP_POINTS = [COMMENT_SHEET_FIT_RANGE[1], COMMENT_SHEET_LARGE] as const;
 export const COMMENT_SHEET_MAX_WIDTH = 430;
 
 export function usesCommentSheet({
@@ -18,29 +22,64 @@ export function usesCommentSheet({
 	return coarse && width <= COMMENT_SHEET_MAX_WIDTH;
 }
 
-export function commentSheetTop(viewportHeight: number): number {
-	return viewportHeight * (1 - COMMENT_SHEET_SNAP_POINTS[0]);
+export function commentSheetTop(
+	viewportHeight: number,
+	fit: number = COMMENT_SHEET_FIT_RANGE[1],
+): number {
+	return viewportHeight * (1 - fit);
 }
 
-export function nextCommentSheetSnapPoint(current: number): number {
-	return current === COMMENT_SHEET_SNAP_POINTS[0]
-		? COMMENT_SHEET_SNAP_POINTS[1]
-		: COMMENT_SHEET_SNAP_POINTS[0];
+/** The medium detent: as tall as the content needs, within the fit range. */
+export function commentSheetFitSnapPoint(contentHeight: number, viewportHeight: number): number {
+	if (!(viewportHeight > 0) || !(contentHeight > 0)) return COMMENT_SHEET_FIT_RANGE[1];
+	return Math.min(
+		COMMENT_SHEET_FIT_RANGE[1],
+		Math.max(COMMENT_SHEET_FIT_RANGE[0], contentHeight / viewportHeight),
+	);
+}
+
+export function nextCommentSheetSnapPoint(current: number, fit: number): number {
+	return current === fit ? COMMENT_SHEET_LARGE : fit;
 }
 
 export type CommentSheetProps = {
 	children: ReactNode;
 	id: string;
 	label: string;
+	/** Visible heading, hidden from assistive tech; defaults to the label. */
+	title?: string;
 	onClose: () => void;
+	/** Show the close beside the grabber, for content with no header of its own. */
+	closeVisible?: boolean;
 };
 
-export function CommentSheet({ children, id, label, onClose }: CommentSheetProps) {
+export function CommentSheet(
+	{ children, closeVisible, id, label, onClose, title }: CommentSheetProps,
+) {
 	let [open, setOpen] = useState(false);
-	let [snapPoint, setSnapPoint] = useState<number | string | null>(
-		COMMENT_SHEET_SNAP_POINTS[0],
-	);
+	let [large, setLarge] = useState(false);
+	let [fit, setFit] = useState<number>(COMMENT_SHEET_FIT_RANGE[1]);
+	let snapPoint = large ? COMMENT_SHEET_LARGE : fit;
 	let viewportRef = useRef<HTMLDivElement>(null);
+	let [content, setContent] = useState<HTMLDivElement | null>(null);
+	let [body, setBody] = useState<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (!content || !body) return;
+		let measure = () => {
+			let padding = parseFloat(getComputedStyle(content).paddingBottom) || 0;
+			setFit(
+				commentSheetFitSnapPoint(
+					body.offsetHeight + content.offsetTop + padding,
+					currentViewport().height,
+				),
+			);
+		};
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(body);
+		return () => observer.disconnect();
+	}, [content, body]);
 
 	useEffect(() => {
 		let frame = requestAnimationFrame(() => setOpen(true));
@@ -57,7 +96,7 @@ export function CommentSheet({ children, id, label, onClose }: CommentSheetProps
 				&& active instanceof HTMLElement
 				&& viewportRef.current?.contains(active)
 			) {
-				setSnapPoint(COMMENT_SHEET_SNAP_POINTS[1]);
+				setLarge(true);
 			}
 		};
 
@@ -70,10 +109,10 @@ export function CommentSheet({ children, id, label, onClose }: CommentSheetProps
 			onOpenChangeComplete={next => {
 				if (!next) onClose();
 			}}
-			onSnapPointChange={setSnapPoint}
+			onSnapPointChange={next => setLarge(typeof next === "number" && next > fit)}
 			open={open}
 			snapPoint={snapPoint}
-			snapPoints={[...COMMENT_SHEET_SNAP_POINTS]}
+			snapPoints={[fit, COMMENT_SHEET_LARGE]}
 			snapToSequentialPoints
 		>
 			<Drawer.VirtualKeyboardProvider>
@@ -87,6 +126,7 @@ export function CommentSheet({ children, id, label, onClose }: CommentSheetProps
 						<Drawer.Popup
 							aria-modal="true"
 							className="plan-comment-sheet-popup"
+							data-fit={fit}
 							data-plan-comment-sheet
 							finalFocus={false}
 							id={id}
@@ -96,27 +136,37 @@ export function CommentSheet({ children, id, label, onClose }: CommentSheetProps
 								aria-label="Resize comment sheet"
 								className="plan-comment-sheet-grabber"
 								data-tooltip="Resize sheet"
-								onClick={() => {
-									let current = typeof snapPoint === "number"
-										? snapPoint
-										: COMMENT_SHEET_SNAP_POINTS[0];
-									setSnapPoint(nextCommentSheetSnapPoint(current));
-								}}
+								onClick={() => setLarge(nextCommentSheetSnapPoint(snapPoint, fit) > fit)}
 								type="button"
 							>
 								<span aria-hidden="true" />
 							</button>
+							{closeVisible && (
+								<Drawer.Close
+									aria-label="Close comment"
+									className="plan-comment-close plan-comment-sheet-close btn btn-icon btn-ghost"
+									title="Close comment"
+								>
+									<CloseIcon aria-hidden="true" size={14} />
+								</Drawer.Close>
+							)}
 							<Drawer.Title className="sr-only">{label}</Drawer.Title>
+							<div aria-hidden="true" className="plan-comment-sheet-title">
+								{title ?? label}
+							</div>
 							<Drawer.Content
 								className="plan-comment-sheet-content"
 								data-base-ui-swipe-ignore
+								ref={setContent}
 							>
-								{children}
-								<Drawer.Close
-									aria-label="Close comment"
-									className="sr-only"
-									tabIndex={-1}
-								/>
+								<div ref={setBody}>{children}</div>
+								{!closeVisible && (
+									<Drawer.Close
+										aria-label="Close comment"
+										className="sr-only"
+										tabIndex={-1}
+									/>
+								)}
 							</Drawer.Content>
 						</Drawer.Popup>
 					</Drawer.Viewport>

@@ -22,6 +22,7 @@ async function interceptBusyHistory(page: Page) {
 						handle: "ana",
 						responded: false,
 						started: 1_700_000_000,
+						entryOffset: (frame.entries as unknown[]).length,
 					},
 				};
 			}
@@ -47,7 +48,7 @@ test("the compact room header preserves member identity and secondary actions", 
 	let header = page.getByRole("banner");
 	await expect(header.locator('[aria-label^="Document:"]')).toBeVisible();
 	await expect(header.getByRole("button", { name: /^Actions for / })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Open Projects sidebar" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Show sidebar" })).toBeVisible();
 	let people = header.getByRole("group", { name: /People here:/ });
 	await expect(people).toBeVisible();
 	await expect(header.getByRole("button", { name: "More room actions" })).toHaveCount(0);
@@ -79,7 +80,13 @@ test("busy history exposes working state without creating false unread activity"
 		kind: "chat:state",
 		ts: 0,
 		busy: true,
-		turn: { id: "new-turn", handle: "ana", responded: false, started: 1_700_000_001 },
+		turn: {
+			id: "new-turn",
+			handle: "ana",
+			responded: false,
+			started: 1_700_000_001,
+			entryOffset: 0,
+		},
 	});
 	await expect(chat).toHaveAccessibleName("Chat, Planner working");
 });
@@ -87,7 +94,7 @@ test("busy history exposes working state without creating false unread activity"
 test("a closed desktop Chat toggle exposes initial planner activity", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await interceptBusyHistory(page);
 	page = await join("ana");
 	let toggle = page.getByRole("button", { name: "Show chat pane, Planner working" });
@@ -99,7 +106,7 @@ test("a closed desktop Chat toggle exposes initial planner activity", async ({ j
 test("a closed desktop Chat tab keeps unread activity visible", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	page = await join("ana");
 	await page.getByRole("button", { name: "Show chat pane" }).hover();
 	await page.evaluate(() => {
@@ -189,7 +196,7 @@ test("completed tool names wrap in compact Chat", async ({ join, seed }) => {
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
-	await page.getByRole("button", { name: /1 tool/ }).click();
+	await page.getByRole("button", { name: /Work details.*1 action/ }).click();
 	let name = page.getByText(`A${toolName.slice(1)}`);
 	let fragments = await name.evaluate(element => {
 		let range = document.createRange();

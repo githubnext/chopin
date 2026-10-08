@@ -29,7 +29,8 @@ export async function seedPendingInlineResearchRequest(
 	createdBy = "U_e2e",
 	plannerOriginMessageId?: string,
 ): Promise<{ jobId: string; workspaceId: string }> {
-	let workspaceId = ulid();
+	// The research service mints UUID request ids; the document must accept that shape.
+	let workspaceId = crypto.randomUUID();
 	let turnId = ulid();
 	let messageId = ulid();
 	let jobId = ulid();

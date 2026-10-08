@@ -1,17 +1,19 @@
+import { CheckIcon, LoaderIcon, SearchIcon } from "@chopin/icons";
 import { useEffect, useRef, useState } from "react";
 
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
+import { PaletteListbox } from "./navigation-palette";
 import {
 	installedRepositoryGroups,
 	loadRepositorySnapshot,
 	readRepositoryCache,
 	repositoryCacheIsStale,
 	writeRepositoryCache,
-} from "./repository-cache";
+} from "./repository-snapshot";
 import { TerminalAlert } from "./terminal-alert";
 
-import type { RepositorySnapshot } from "./repository-cache";
+import type { RepositorySnapshot } from "./repository-snapshot";
 import type { NavigationDialogMotion } from "./navigation-dialog";
 
 function message(error: unknown): string {
@@ -90,30 +92,33 @@ export function AddProjectDialog(
 			initialFocus={input}
 			motion={motion}
 			onDismiss={onDismiss}
-			title="Add Project"
+			palette
+			title="Add project"
 		>
-			<div className="mt-4">
+			<div className="navigation-palette-search">
+				<SearchIcon aria-hidden="true" />
 				<label className="sr-only" htmlFor="add-project-search">Search repositories</label>
 				<input
-					className="field h-9 w-full px-3 text-sm"
+					className="navigation-palette-input"
 					id="add-project-search"
 					onChange={event => setQuery(event.target.value)}
-					placeholder="Search repositories"
+					placeholder="Search repositories…"
 					ref={input}
 					value={query}
 				/>
 			</div>
-			<div className="navigation-dialog-list" aria-busy={!snapshot && error === undefined}>
+			<div className="navigation-palette-list" aria-busy={!snapshot && error === undefined}>
 				{!snapshot && error === undefined && (
-					<p className="text-sm text-text-tertiary">Loading repositories…</p>
+					<p className="navigation-palette-status" role="status">
+						<LoaderIcon aria-hidden="true" data-palette-loader="" />
+						Loading repositories
+					</p>
 				)}
 				{error !== undefined && (
-					<div>
-						<TerminalAlert className="text-sm text-destructive-ink">
-							{message(error)}
-						</TerminalAlert>
+					<div className="navigation-palette-status flex-col">
+						<TerminalAlert className="text-destructive-ink">{message(error)}</TerminalAlert>
 						<button
-							className="btn btn-sm btn-secondary mt-2"
+							className="btn btn-sm btn-secondary"
 							onClick={() => setRetry(value => value + 1)}
 							type="button"
 						>
@@ -122,37 +127,57 @@ export function AddProjectDialog(
 					</div>
 				)}
 				{snapshot && visible.length === 0 && error === undefined && (
-					<p className="text-sm text-text-tertiary">No accessible repositories found.</p>
+					<p className="navigation-palette-status" role="status">
+						{normalized ? "No matching repositories" : "No accessible repositories"}
+					</p>
 				)}
-				{visible.map(repository => {
-					let alreadyAdded = addedIds.has(repository.id);
-					return (
-						<button
-							className="navigation-dialog-option"
-							disabled={alreadyAdded || adding === repository.id}
-							key={repository.id}
-							onClick={() => void select(repository)}
-							type="button"
-						>
-							<span className="min-w-0">
-								<span className="block truncate text-sm font-medium">{repository.name}</span>
-								<span className="block truncate text-sm text-text-tertiary">
-									{repository.owner}
-								</span>
-							</span>
-							<span className="text-sm text-text-tertiary">
-								{alreadyAdded ? "Added" : adding === repository.id ? "Adding…" : "Add"}
-							</span>
-						</button>
-					);
-				})}
+				{visible.length > 0 && (
+					<PaletteListbox
+						enabled={repository => !addedIds.has(repository.id)}
+						input={input}
+						itemKey={repository => repository.id}
+						itemLabel={repository =>
+							`${repository.owner}/${repository.name}${
+								addedIds.has(repository.id) ? ", added" : ""
+							}`}
+						items={visible}
+						label="Repositories"
+						onChoose={repository => void select(repository)}
+						query={query}
+						renderItem={repository => {
+							let alreadyAdded = addedIds.has(repository.id);
+							let busy = adding === repository.id;
+							return (
+								<>
+									<span
+										className={`min-w-0 flex-1 truncate ${
+											alreadyAdded ? "text-text-tertiary" : "text-text-primary"
+										}`}
+									>
+										<span className="text-text-tertiary">{repository.owner}/</span>
+										{repository.name}
+									</span>
+									{alreadyAdded
+										? (
+											<span className="flex shrink-0 items-center gap-1 text-xs text-text-tertiary">
+												<CheckIcon aria-hidden="true" />
+												Added
+											</span>
+										)
+										: (
+											<span className="navigation-palette-hint" data-busy={busy || undefined}>
+												{busy ? "Adding…" : "Add"}
+											</span>
+										)}
+								</>
+							);
+						}}
+					/>
+				)}
 			</div>
-			<a
-				className="mt-4 inline-flex text-sm font-medium text-brand underline"
-				href="/auth/github/install"
-			>
-				Manage repository access
-			</a>
+			<div className="navigation-palette-footer">
+				<a href="/auth/github/install">Manage repository access</a>
+			</div>
 		</NavigationDialog>
 	);
 }

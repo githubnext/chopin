@@ -3,7 +3,9 @@ import { describe, expect, it } from "bun:test";
 import * as limits from "./limits";
 import { parse } from "./parse";
 import { serialize } from "./serialize";
-import { validate } from "./validate";
+import { assertIntroducedUrls, PlanValidationError, validate } from "./validate";
+
+import type { PhrasingContent, RootContent } from "mdast";
 
 const ID = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const ID2 = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
@@ -12,6 +14,26 @@ const ID3 = "01K0N4W3B7P27CBAEC7A8C8WEA";
 function codes(source: string): string[] {
 	let result = validate(parse(source));
 	return result.ok ? [] : result.issues.map(issue => issue.code);
+}
+
+function linkTo(url: string): PhrasingContent {
+	return { type: "link", url, children: [{ type: "text", value: "x" }] };
+}
+
+/** Issue codes for URLs that `after` brings in beyond `before`. */
+function introduced(before: RootContent[], after: Array<RootContent | PhrasingContent>): string[] {
+	let wrap = (nodes: Array<RootContent | PhrasingContent>): RootContent[] =>
+		nodes.map(node =>
+			node.type === "link" || node.type === "image"
+				? { type: "paragraph", children: [node] }
+				: node as RootContent
+		);
+	try {
+		assertIntroducedUrls(before, wrap(after));
+		return [];
+	} catch (err) {
+		return err instanceof PlanValidationError ? err.issues.map(issue => issue.code) : ["threw"];
+	}
 }
 
 function accepts(source: string): void {
@@ -109,6 +131,66 @@ describe("security boundary", () => {
 		expect(codes("[x](data:text/html;base64,PHA+)")).toContain("bad-link-protocol");
 	});
 
+	/**
+	 * Built as trees, not parsed: markdown refuses control characters in a
+	 * destination, but a Lexical export or an agent's operation does not.
+	 */
+	it("refuses introduced links that hide a scheme or name another host", () => {
+		for (
+			let url of [
+				"\u0001javascript:alert(1)",
+				"java\u0000script:alert(1)",
+				"java\u200bscript:alert(1)",
+				"https://ex\u200bample.com",
+				"\ufeffhttps://example.com",
+				"//evil.com",
+				"\\\\evil.com",
+				"/\\evil.com",
+				"docs\\a.md",
+				" javascript:alert(1)",
+				"https://example.com ",
+				"java script:alert(1)",
+			]
+		) {
+			expect(introduced([], [linkTo(url)])).toContain("bad-link");
+		}
+		expect(introduced([], [{ type: "image", url: "\u0001https://example.com/x.png", alt: "" }]))
+			.toContain("bad-image");
+		expect(introduced([], [linkTo("docs/a.md"), linkTo("https://example.com")])).toEqual([]);
+	});
+
+	it("names where an introduced link sits", () => {
+		try {
+			assertIntroducedUrls([], parse("Fine.\n\nSee [here](//evil.com).\n").children);
+			throw new Error("expected a refusal");
+		} catch (err) {
+			if (!(err instanceof PlanValidationError)) throw err;
+			expect(err.issues[0]?.path).toBe("root > paragraph[1] > link[0]");
+		}
+	});
+
+	/** Stored before the rule existed: refusing it on every open would lock the document. */
+	it("leaves a stored link alone that only the newer URL rules refuse", () => {
+		let stored = parse("Read [the notes](docs\\\\notes.md).\n");
+		expect((stored.children[0] as { children: Array<{ url?: string }> }).children[1]?.url)
+			.toBe("docs\\notes.md");
+		expect(validate(stored).ok).toBe(true);
+		expect(introduced(stored.children, [...stored.children, linkTo("https://example.com")]))
+			.toEqual([]);
+		expect(introduced(stored.children, [linkTo("//evil.com")])).toContain("bad-link");
+	});
+
+	/** Judged by URL, not position: a stored link may move or be copied, never be new. */
+	it("allows a stored link that only the newer rules refuse to move or be duplicated", () => {
+		let stored = parse("First.\n\nRead [the notes](docs\\\\notes.md).\n").children;
+		let moved = parse("Read [the notes](docs\\\\notes.md).\n\nFirst.\n").children;
+		let copied = parse(
+			"First.\n\nRead [the notes](docs\\\\notes.md).\n\nAgain [here](docs\\\\notes.md).\n",
+		).children;
+		expect(introduced(stored, moved)).toEqual([]);
+		expect(introduced(stored, copied)).toEqual([]);
+	});
+
 	it("allows https, mailto and repo-relative paths", () => {
 		accepts("[x](https://example.com)");
 		accepts("[x](mailto:a@b.com)");
@@ -160,6 +242,42 @@ describe("serialization safety", () => {
 				value,
 			});
 		}
+	});
+
+	// micromark looks back through the whole paragraph for an opener at every
+	// unescaped `]`, so a pasted run of them made the server's own projection
+	// quadratic to re-parse: tens of seconds with the event loop blocked.
+	it("escapes closing brackets so a document at the size limit re-parses quickly", () => {
+		for (let value of ["]", "a]", "[a]", "x] [y"]) {
+			let source = serialize({
+				type: "root",
+				children: [{ type: "paragraph", children: [{ type: "text", value }] }],
+			});
+			expect(source).not.toMatch(/(?<!\\)\]/);
+			let paragraph = parse(source).children[0];
+			expect(paragraph?.type === "paragraph" && paragraph.children[0]).toMatchObject({
+				type: "text",
+				value,
+			});
+		}
+
+		let value = "[a]".repeat(limits.MAX_SOURCE_BYTES / 6);
+		let source = serialize({
+			type: "root",
+			children: [{ type: "paragraph", children: [{ type: "text", value }] }],
+		});
+		let started = performance.now();
+		let paragraph = parse(source).children[0];
+		expect(performance.now() - started).toBeLessThan(5_000);
+		expect(paragraph?.type === "paragraph" && paragraph.children[0]).toMatchObject({
+			type: "text",
+			value,
+		});
+	});
+
+	it("leaves closing brackets in links, references and footnotes alone", () => {
+		let source = "[site](https://example.com) and [^1]\n\n[^1]: Note.\n";
+		expect(serialize(parse(source))).toBe(source);
 	});
 });
 

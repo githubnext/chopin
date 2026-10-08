@@ -18,12 +18,15 @@ export function NavigationDialog(
 		initialFocus,
 		motion,
 		onDismiss,
+		palette = false,
 		title,
 	}: {
 		children: ReactNode;
 		initialFocus?: RefObject<HTMLElement | null>;
 		motion: NavigationDialogMotion;
 		onDismiss: () => void;
+		/** A command palette: its search field is the visible header, so the title is only named. */
+		palette?: boolean;
 		title: string;
 	},
 ) {
@@ -49,12 +52,17 @@ export function NavigationDialog(
 				<div
 					aria-labelledby={titleId}
 					aria-modal="true"
-					className="navigation-modal-content"
+					className={`navigation-modal-content${palette ? " navigation-palette" : ""}`}
 					ref={dialog}
 					role="dialog"
 					tabIndex={-1}
 				>
-					<h2 className="text-xl font-semibold" id={titleId}>{title}</h2>
+					<h2
+						className={palette ? "sr-only" : "text-base font-semibold text-text-primary"}
+						id={titleId}
+					>
+						{title}
+					</h2>
 					{children}
 				</div>
 			</NavigationFocusScope>

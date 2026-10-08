@@ -1,4 +1,4 @@
-import { authenticate, expect, ready, roomPath, test } from "./room";
+import { authenticate, expect, roomPath, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -96,8 +96,7 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			let page = await context.newPage();
 			await authenticate(page, "ana", baseURL!);
 			await page.goto(roomPath(room));
-			await ready(page);
-			await page.getByRole("button", { name: /^Decisions/ }).click();
+			await expect(questionnaire(page)).toHaveCount(LONG_QUESTIONS.length);
 			let card = questionnaire(page).filter({
 				has: page.getByRole("heading", { name: LONG_QUESTIONS[0]!.question }),
 			});
@@ -144,7 +143,7 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			}
 			await expect(
 				page.getByRole("navigation", { name: "Workspace view" })
-					.getByRole("button", { name: /Decisions, 8 unanswered/ }),
+					.getByRole("button", { name: `Decisions, ${LONG_QUESTIONS.length} unanswered` }),
 			).toBeVisible();
 
 			let addRow = card.getByRole("button", { name: "Add an option" });

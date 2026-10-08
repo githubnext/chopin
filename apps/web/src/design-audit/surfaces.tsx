@@ -10,11 +10,13 @@ import {
 } from "@chopin/icons";
 
 import { DecisionCard, PlanStatus, SendAction, SidecarCard } from "@chopin/editor";
+import { DecisionViewControl } from "../decision-view-control";
 import { RunStack } from "../chat/run-card";
 import { Transcript } from "../chat/transcript";
 import { TerminalAlert } from "../terminal-alert";
 import { AuditPlate, StateLabel } from "./frame";
 
+import type { PlanStatusProps } from "@chopin/editor";
 import type { Chat } from "@chopin/protocol";
 
 let CHAT_ENTRIES: Chat.Entry[] = [
@@ -34,6 +36,15 @@ let CHAT_ENTRIES: Chat.Entry[] = [
 		],
 		ts: 1_787_913_660,
 	},
+];
+
+let STATUS_SPECIMENS: { label: string; status: PlanStatusProps }[] = [
+	{ label: "Connected", status: { connection: "connected", synced: true } },
+	{ label: "Loading", status: { synced: false } },
+	{ label: "Busy", status: { busy: true, synced: true } },
+	{ label: "Reconnect", status: { connection: "reconnecting", synced: true } },
+	{ label: "Error", status: { failed: "Permission denied", synced: false } },
+	{ label: "No access", status: { connection: "denied", synced: true } },
 ];
 
 function DialogSpecimens() {
@@ -136,18 +147,24 @@ function Lists() {
 function Navigation() {
 	return (
 		<AuditPlate
-			description="Current, ancestor, archived, and loading rows in one compact rail."
+			description="Current, ancestor, archived, and loading rows in one compact rail. Descriptions appear on hover or focus."
 			item="navigation"
 			title="Navigation"
 		>
-			<nav aria-label="Audit navigation" className="design-audit-sidebar">
+			<nav aria-label="Audit navigation" className="design-audit-sidebar" data-tooltip-edge="">
 				<div className="design-audit-sidebar-heading">
 					<span>Chopin</span>
 					<button aria-label="Add document" className="btn btn-icon btn-ghost" type="button">
 						<PlusIcon size={14} />
 					</button>
 				</div>
-				<a href="#surfaces">
+				<a
+					aria-description="Where the collaborative editor goes next"
+					data-tooltip="Where the collaborative editor goes next"
+					data-tooltip-side="right"
+					data-tooltip-verbatim=""
+					href="#surfaces"
+				>
 					<DocumentIcon size={14} />Product direction
 				</a>
 				<a aria-current="page" href="#surfaces">
@@ -414,27 +431,26 @@ function Feedback() {
 	return (
 		<>
 			<AuditPlate
-				description="Document-level asynchronous status from quiet through terminal."
+				description="Document status sits at the end of the document header row, silent while connected and idle."
 				item="loading"
 				title="Loading and status"
 			>
 				<div className="design-audit-status-grid">
-					<div>
-						<StateLabel>Loading · quiet dot, label on hover</StateLabel>
-						<PlanStatus synced={false} />
-					</div>
-					<div>
-						<StateLabel>Busy · quiet dot, label on hover</StateLabel>
-						<PlanStatus busy synced />
-					</div>
-					<div>
-						<StateLabel>Reconnect</StateLabel>
-						<PlanStatus connection="reconnecting" synced />
-					</div>
-					<div>
-						<StateLabel>Error</StateLabel>
-						<PlanStatus failed="Permission denied" synced={false} />
-					</div>
+					{STATUS_SPECIMENS.map(({ label, status }) => (
+						<div key={label}>
+							<StateLabel>{label}</StateLabel>
+							<div className="design-audit-status-header hairline-b">
+								<DecisionViewControl onView={() => {}} unanswered={0} view="plan" />
+								<PlanStatus
+									busy={status.busy}
+									connection={status.connection}
+									failed={status.failed}
+									onReload={() => {}}
+									synced={status.synced}
+								/>
+							</div>
+						</div>
+					))}
 				</div>
 			</AuditPlate>
 			<AuditPlate
@@ -444,10 +460,13 @@ function Feedback() {
 			>
 				<div className="design-audit-empty-grid">
 					<div>
-						<DocumentIcon size={24} />
-						<strong>No documents yet</strong>
-						<span>Create the first shared document for this project.</span>
-						<button className="btn btn-md btn-primary" type="button">Create document</button>
+						<strong>No document open</strong>
+						<span>Pick one from the sidebar or start a new one.</span>
+						<button className="btn btn-sm btn-secondary" type="button">New document</button>
+					</div>
+					<div>
+						<span className="design-audit-empty-sidebar-row">No documents</span>
+						<span className="design-audit-empty-sidebar-row">No archived documents</span>
 					</div>
 					<div>
 						<SearchIcon size={24} />

@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 
-import { limits, lookup, parse, serialize, ulid, validate } from "@chopin/dialect";
+import {
+	assertIntroducedUrls,
+	limits,
+	lookup,
+	parse,
+	PlanValidationError,
+	serialize,
+	ulid,
+	validate,
+} from "@chopin/dialect";
 
 import * as room from "../plan/room";
 
@@ -199,6 +208,14 @@ export function prepare(
 	if (!input) return undefined;
 	let prepared = canonical(input.plan);
 	if ("issues" in prepared) return prepared;
+	// A new document has no stored links to spare from the newer URL rules.
+	// Updates go through `edit.replace`, which judges against what is stored.
+	try {
+		assertIntroducedUrls([], parse(prepared.source).children);
+	} catch (err) {
+		if (err instanceof PlanValidationError) return { issues: err.issues };
+		throw err;
+	}
 	return {
 		input: {
 			...input,

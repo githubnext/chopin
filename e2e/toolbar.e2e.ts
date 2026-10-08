@@ -7,7 +7,7 @@
  * required. Everything here is on the other side of that line.
  */
 
-import { content, expect, openIsolatedRoom, test, written } from "./room";
+import { authenticate, content, expect, openIsolatedRoom, roomPath, test, written } from "./room";
 import { expectInsideViewport } from "./responsive";
 import { installVisualViewport } from "./visual-viewport";
 
@@ -108,7 +108,7 @@ test("filtering resets the option Enter will choose", async ({ join }) => {
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.type("call");
 
-	await expect(menu.getByRole("option", { selected: true })).toHaveText("Callout");
+	await expect(menu.getByRole("option", { selected: true })).toHaveAccessibleName("Callout");
 	await page.keyboard.press("Enter");
 	await expect(page.getByRole("combobox", { name: "Change callout type: Note" })).toBeVisible();
 });
@@ -317,33 +317,231 @@ test("the block type menu converts the block it names", async ({ join, room }) =
 	await written(page, room, /^## What we are building$/m);
 });
 
-test("the link prompt refuses a scheme the dialect will not carry", async ({ join, room }) => {
+test("escape lets go of a selection and keeps the caret in the editor", async ({ join }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("Let this selection go.");
+	await page.keyboard.press("Shift+Home");
+	await expect(page.getByRole("toolbar", BUBBLE)).toBeVisible();
+
+	await page.keyboard.press("Escape");
+
+	await expect(page.getByRole("toolbar", BUBBLE)).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
+	expect(await page.evaluate(() => getSelection()?.isCollapsed)).toBe(true);
+});
+
+test("a link is added, edited and removed in place", async ({ join, room }) => {
 	let page = await join("ana");
 
 	await content(page).click();
 	await page.keyboard.type("Read the docs.");
 	await page.keyboard.press("Shift+Home");
-
-	let said: string[] = [];
-	page.on("dialog", async dialog => {
-		said.push(dialog.message());
-		await (dialog.type() === "prompt"
-			? dialog.accept("javascript:alert(1)")
-			: dialog.dismiss());
-	});
-
 	await page.getByRole("toolbar", BUBBLE).getByRole("button", { name: "Add link" }).click();
 
+	let adding = page.getByRole("form", { name: "Add link" });
+	let field = adding.getByRole("textbox", { name: "Link URL" });
+	await expect(field).toBeFocused();
+	await expect(page.getByRole("toolbar", BUBBLE)).toHaveCount(0);
+
+	// Tab cycles inside the popover instead of leaving it open behind focus.
+	await page.keyboard.press("Tab");
+	await expect(adding.getByRole("button", { name: "Add link" })).toBeFocused();
+	await page.keyboard.press("Tab");
+	await expect(field).toBeFocused();
+
 	/*
-	 * Refused where the button is, not where the document is. A URL the
+	 * Refused where the field is, not where the document is. A URL the
 	 * dialect rejects applies locally, syncs, and is then refused by the
 	 * server — which cannot undo a Yjs transaction, so it rebuilds the room
 	 * under a fresh epoch and everybody in it loses their cursors.
 	 */
-	await expect.poll(() => said).toContain("Only https:, mailto:, relative paths are allowed here.");
+	await field.fill("javascript:alert(1)");
+	await page.keyboard.press("Enter");
+	await expect(adding.getByRole("alert")).toHaveText(
+		"Use an https:// or mailto: link, or a path in this repository.",
+	);
+	await expect(field).toHaveAttribute("aria-invalid", "true");
 	await expect(content(page).locator("a")).toHaveCount(0);
 
+	// A bare domain is taken to mean the web, not a repository path.
+	await field.fill("example.com/docs");
+	await page.keyboard.press("Enter");
+	await expect(adding).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
+	let link = content(page).getByRole("link", { name: "Read the docs." });
+	await expect(link).toHaveAttribute("href", "https://example.com/docs");
+	await written(page, room, /^\[Read the docs\.\]\(https:\/\/example\.com\/docs\)$/m);
+
+	// The caret on a link is enough to show where it goes.
+	await link.click();
+	let preview = page.getByRole("dialog", { name: "Link" });
+	await expect(preview).toContainText("https://example.com/docs");
+	await expect(preview.getByRole("button", { name: "Open" })).toBeVisible();
+
+	// And the keyboard can follow it without reaching for the preview.
+	await page.context().route(
+		"https://example.com/**",
+		route => route.fulfill({ contentType: "text/html", body: "<title>Docs</title>" }),
+	);
+	let popup = page.waitForEvent("popup");
+	await page.keyboard.press("ControlOrMeta+Enter");
+	let opened = await popup;
+	await expect(opened).toHaveURL("https://example.com/docs");
+	await opened.close();
+	await expect(content(page).getByRole("link")).toHaveCount(1);
+	await preview.getByRole("button", { name: "Edit" }).click();
+
+	let editing = page.getByRole("form", { name: "Edit link" });
+	await expect(editing.getByRole("textbox", { name: "Link URL" })).toHaveValue(
+		"https://example.com/docs",
+	);
+	await expect(editing.getByRole("textbox", { name: "Link URL" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(editing).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
+
+	// The shortcut opens the same editor from a caret inside the link.
+	await page.keyboard.press("ControlOrMeta+k");
+	await editing.getByRole("textbox", { name: "Link URL" }).fill("https://example.com/guide");
+	await page.keyboard.press("Enter");
+	await written(page, room, /^\[Read the docs\.\]\(https:\/\/example\.com\/guide\)$/m);
+
+	await link.click();
+	await preview.getByRole("button", { name: "Edit" }).click();
+	await editing.getByRole("button", { name: "Remove" }).click();
+	await expect(content(page).locator("a")).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
 	await written(page, room, /^Read the docs\.$/m);
+});
+
+/** Select a phrase by its text, as a person dragging across it would. */
+async function selectText(page: Page, text: string): Promise<void> {
+	await content(page).evaluate((root, target) => {
+		let walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			let index = node.textContent!.indexOf(target);
+			if (index < 0) continue;
+			let range = document.createRange();
+			range.setStart(node, index);
+			range.setEnd(node, index + target.length);
+			getSelection()!.removeAllRanges();
+			getSelection()!.addRange(range);
+			return;
+		}
+		throw new Error(`no text ${target}`);
+	}, text);
+}
+
+test("another writer's edit cannot move a new link onto other text", async ({ join, room }) => {
+	let ana = await join("ana");
+	let bo = await join("bo");
+
+	await content(ana).click();
+	await ana.keyboard.type("Alpha Bravo Zeb Delta.");
+	await expect(content(bo)).toContainText("Alpha Bravo Zeb Delta.");
+
+	await selectText(ana, "Zeb");
+	await ana.keyboard.press("ControlOrMeta+k");
+	let adding = ana.getByRole("form", { name: "Add link" });
+	await adding.getByRole("textbox", { name: "Link URL" }).fill("example.com/zeb");
+
+	// Text arrives earlier in the same paragraph while the field is open.
+	await selectText(bo, "Alpha");
+	await bo.keyboard.press("ArrowLeft");
+	await bo.keyboard.type("123456789 ");
+	await expect(content(ana)).toContainText("123456789 Alpha");
+	await expect(adding).toBeVisible();
+
+	await ana.keyboard.press("Enter");
+	await expect(content(ana).getByRole("link", { name: "Zeb", exact: true })).toHaveAttribute(
+		"href",
+		"https://example.com/zeb",
+	);
+	await written(
+		ana,
+		room,
+		/^123456789 Alpha Bravo \[Zeb\]\(https:\/\/example\.com\/zeb\) Delta\.$/m,
+	);
+
+	// If the text itself is replaced, nothing is linked and the editor says why.
+	await selectText(ana, "Delta");
+	await ana.keyboard.press("ControlOrMeta+k");
+	await adding.getByRole("textbox", { name: "Link URL" }).fill("example.com/delta");
+	await selectText(bo, "Delta");
+	await bo.keyboard.type("Echo");
+	await expect(content(ana)).toContainText("Zeb Echo.");
+
+	await ana.keyboard.press("Enter");
+	await expect(adding.getByRole("status")).toHaveText(
+		"Someone else changed this text. Select it again to add the link.",
+	);
+	await expect(content(ana).getByRole("link")).toHaveCount(1);
+	await adding.getByRole("button", { name: "Close" }).click();
+	await expect(adding).toHaveCount(0);
+	await written(
+		ana,
+		room,
+		/^123456789 Alpha Bravo \[Zeb\]\(https:\/\/example\.com\/zeb\) Echo\.$/m,
+	);
+});
+
+test("a pasted link the server would refuse arrives as plain text", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("Start.");
+	// A protocol-relative CDN address and a zero-width character: either would
+	// sync, be refused by the server, and rebuild the room for everyone.
+	await content(page).evaluate(root => {
+		let data = new DataTransfer();
+		let hidden = `https://ex${String.fromCharCode(0x200b)}ample.com`;
+		data.setData(
+			"text/html",
+			`<p> See <a href="//cdn.example.com/x.js">cdn</a>, <a href="${hidden}">hidden</a> and `
+				+ `<a href="https://example.com/ok">ok</a>.</p>`,
+		);
+		data.setData("text/plain", " See cdn, hidden and ok.");
+		root.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
+	});
+
+	await expect(content(page)).toContainText("cdn, hidden and ok.");
+	await expect(content(page).locator("a")).toHaveCount(1);
+	await expect(content(page).getByRole("link", { name: "ok" })).toHaveAttribute(
+		"href",
+		"https://example.com/ok",
+	);
+	await written(page, room, /cdn, hidden and \[ok\]\(https:\/\/example\.com\/ok\)\./);
+});
+
+test("a reader can open a link but not edit it", async ({ baseURL, browser, room, seed }) => {
+	await seed("Read [the docs](https://example.com/docs).\n");
+	let context = await browser.newContext({ baseURL });
+	await context.route(
+		"https://example.com/**",
+		route => route.fulfill({ contentType: "text/html", body: "<title>Docs</title>" }),
+	);
+	let page = await context.newPage();
+	await authenticate(page, "readonly", baseURL!);
+	await page.goto(roomPath(room));
+	await expect(content(page)).toHaveAttribute("contenteditable", "false", { timeout: 20_000 });
+
+	await content(page).getByRole("link", { name: "the docs" }).click();
+	let preview = page.getByRole("dialog", { name: "Link" });
+	await expect(preview).toContainText("https://example.com/docs");
+	await expect(preview.getByRole("button", { name: "Edit" })).toHaveCount(0);
+
+	let popup = page.waitForEvent("popup");
+	await preview.getByRole("button", { name: "Open" }).click();
+	let opened = await popup;
+	await expect(opened).toHaveURL("https://example.com/docs");
+	expect(await opened.evaluate(() => opener === null)).toBe(true);
+	await opened.close();
+
+	await page.keyboard.press("Escape");
+	await expect(preview).toHaveCount(0);
+	await context.close();
 });
 
 test("touch editor menus use reachable targets and stay inside the viewport", async ({ join }) => {

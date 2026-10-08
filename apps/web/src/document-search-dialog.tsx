@@ -1,7 +1,9 @@
+import { LoaderIcon, SearchIcon } from "@chopin/icons";
 import { useEffect, useRef, useState } from "react";
 
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
+import { PaletteListbox } from "./navigation-palette";
 
 import type { NavigationDialogMotion } from "./navigation-dialog";
 
@@ -108,33 +110,39 @@ export function DocumentSearchDialog(
 	}, [includeArchived, projects, query, retry]);
 
 	let results = search.status === "ready" ? search.results : [];
+	let manyProjects = projects.length > 1;
 	return (
 		<NavigationDialog
 			initialFocus={input}
 			motion={motion}
 			onDismiss={onDismiss}
+			palette
 			title="Search documents"
 		>
-			<div className="mt-4">
+			<div className="navigation-palette-search">
+				<SearchIcon aria-hidden="true" />
 				<label className="sr-only" htmlFor="document-search">Search documents</label>
 				<input
-					className="field h-9 w-full px-3 text-sm"
+					className="navigation-palette-input"
 					id="document-search"
 					onChange={event => setQuery(event.target.value)}
-					placeholder="Search documents"
+					placeholder="Search documents…"
 					ref={input}
 					value={query}
 				/>
 			</div>
-			<div className="navigation-dialog-list">
+			<div className="navigation-palette-list" aria-busy={search.status === "loading"}>
 				{search.status === "loading" && (
-					<p className="text-sm text-text-tertiary">Searching documents…</p>
+					<p className="navigation-palette-status" role="status">
+						<LoaderIcon aria-hidden="true" data-palette-loader="" />
+						Searching documents
+					</p>
 				)}
 				{search.status === "error" && (
-					<div>
-						<p className="text-sm text-destructive-ink" role="alert">{search.message}</p>
+					<div className="navigation-palette-status flex-col">
+						<p className="text-destructive-ink" role="alert">{search.message}</p>
 						<button
-							className="btn btn-sm btn-secondary mt-2"
+							className="btn btn-sm btn-secondary"
 							onClick={() => setRetry(value => value + 1)}
 							type="button"
 						>
@@ -143,39 +151,46 @@ export function DocumentSearchDialog(
 					</div>
 				)}
 				{search.status === "ready" && search.failedProjectIds.length > 0 && (
-					<p className="text-sm text-destructive-ink" role="status">
+					<p className="px-2.5 py-1.5 text-xs text-destructive-ink" role="status">
 						Some Projects could not be searched.
 					</p>
 				)}
 				{search.status === "ready" && results.length === 0 && (
-					<p className="text-sm text-text-tertiary">No documents found.</p>
+					<p className="navigation-palette-status" role="status">
+						{query.trim() ? "No matching documents" : "No documents yet"}
+					</p>
 				)}
-				{results.map(({ channel, project }) => (
-					<button
-						className="navigation-dialog-option"
-						key={channel.id}
-						onClick={() => {
+				{results.length > 0 && (
+					<PaletteListbox
+						input={input}
+						itemKey={({ channel }) => channel.id}
+						items={results}
+						label="Documents"
+						onChoose={({ channel }) => {
 							onSelect(channel.id);
 							onDismiss();
 						}}
-						type="button"
-					>
-						<span className="min-w-0 flex-1">
-							<span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-								<span className="truncate">{channel.title}</span>
-								{channel.archivedAt && <span className="document-status-badge">Archived</span>}
-							</span>
-							{channel.description && (
-								<span className="block truncate text-sm text-text-tertiary">
-									{channel.description}
+						query={query}
+						renderItem={({ channel, project }) => (
+							<>
+								<span className="flex min-w-0 flex-1 items-baseline gap-2">
+									<span className="min-w-0 truncate text-text-primary">{channel.title}</span>
+									{channel.description && (
+										<span className="min-w-0 flex-1 truncate text-text-tertiary">
+											{channel.description}
+										</span>
+									)}
 								</span>
-							)}
-							<span className="block truncate text-sm text-text-tertiary">
-								{project.repositoryOwner}/{project.repositoryName}
-							</span>
-						</span>
-					</button>
-				))}
+								{channel.archivedAt && <span className="document-status-badge">Archived</span>}
+								{manyProjects && (
+									<span className="shrink-0 text-xs text-text-tertiary">
+										{project.repositoryOwner}/{project.repositoryName}
+									</span>
+								)}
+							</>
+						)}
+					/>
+				)}
 			</div>
 		</NavigationDialog>
 	);

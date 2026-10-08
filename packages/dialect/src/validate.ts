@@ -520,3 +520,54 @@ export function assert(root: Root, options: Options = {}): void {
 	let result = validate(root, options);
 	if (!result.ok) throw new PlanValidationError(result.issues);
 }
+
+/** Every link and image URL under these nodes. */
+function urls(nodes: readonly Nodes[], found = new Set<string>()): Set<string> {
+	for (let node of nodes) {
+		if (node.type === "link" || node.type === "image") found.add(node.url);
+		urls(children(node), found);
+	}
+	return found;
+}
+
+/**
+ * Refuse unsafe link and image URLs that a change brings in.
+ *
+ * Hidden characters (which browsers strip or hide, so `\u0001javascript:`
+ * resolves to a scheme no pattern saw) and scheme-less links that name
+ * another host (`//host`, anything with `\`) were refused only after
+ * documents were already stored with them. Whole-document validation runs
+ * whenever a room opens, restores, rebuilds or checks a batch, so refusing
+ * them there would lock people out of their own documents. These rules judge
+ * what a change introduces instead: a URL already present in `before` is left
+ * alone, wherever it ends up.
+ *
+ * @throws {PlanValidationError}
+ */
+export function assertIntroducedUrls(before: readonly Nodes[], after: readonly Nodes[]): void {
+	let known = urls(before);
+	let issues: Issue[] = [];
+	let visit = (nodes: readonly Nodes[], path: string) => {
+		let counts = new Map<string, number>();
+		for (let node of nodes) {
+			let name = label(node);
+			let index = counts.get(name) ?? 0;
+			counts.set(name, index + 1);
+			let here = `${path} > ${name}[${index}]`;
+			if ((node.type === "link" || node.type === "image") && !known.has(node.url)) {
+				let problem = dialect.disguisedUrl(node.url, node.type);
+				if (problem) {
+					issues.push({
+						code: node.type === "image" ? "bad-image" : "bad-link",
+						message: problem,
+						path: here,
+						...(node.position ? { offset: node.position.start.offset } : {}),
+					});
+				}
+			}
+			visit(children(node), here);
+		}
+	};
+	visit(after, "root");
+	if (issues.length > 0) throw new PlanValidationError(issues);
+}

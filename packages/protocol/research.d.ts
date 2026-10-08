@@ -41,6 +41,15 @@ export declare namespace Research {
 		readonly sourceCount: number;
 	};
 
+	/** Where a published research child came from, read from the child's own route. */
+	export type Provenance = {
+		readonly requestId: string;
+		readonly parentChannelId: string;
+		readonly brief: string;
+		readonly sourceCount: number;
+		readonly startedBy?: string;
+	};
+
 	export type RequestViewBase = {
 		readonly id: string;
 		readonly channelId: string;

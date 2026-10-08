@@ -7,11 +7,14 @@ import {
 	atomicTurnExtension,
 	createAtomicAdapter,
 	hostLeak,
+	inputParts,
+	ownToolParts,
 	resolveModel,
+	resultText,
 	turnSystemPrompt,
 } from "./adapter";
 
-import type { ExtensionAPI } from "@bastani/atomic";
+import type { AgentSessionEvent, ExtensionAPI } from "@bastani/atomic";
 import type { AtomicAuthMode, TurnPolicy } from "./adapter";
 
 type Handler = (event: Record<string, unknown>) => unknown;
@@ -180,4 +183,85 @@ test("declares no built-ins and refuses an undefined auth mode", () => {
 		.toThrow("HARNESS_AUTH direct is not a supported atomic authentication mode");
 	expect(() => createAtomicAdapter({ auth: undefined as unknown as AtomicAuthMode }))
 		.toThrow("is not a supported atomic authentication mode");
+});
+
+function event(value: Record<string, unknown>): AgentSessionEvent {
+	return value as unknown as AgentSessionEvent;
+}
+
+test("translates a builtin tool's start, partial output and end into provider-executed parts", () => {
+	let own = { toolCallId: "c1", toolName: "bash" };
+	expect(ownToolParts(event({ type: "tool_execution_start", ...own, args: { command: "ls" } }), []))
+		.toEqual([{
+			type: "tool-call",
+			...own,
+			input: '{"command":"ls"}',
+			providerExecuted: true,
+			dynamic: true,
+		}]);
+	let partial = { content: [{ type: "text", text: "a.ts" }], details: {} };
+	expect(
+		ownToolParts(
+			event({ type: "tool_execution_update", ...own, args: {}, partialResult: partial }),
+			[],
+		),
+	)
+		.toEqual([{ type: "tool-result", ...own, result: "a.ts", preliminary: true, dynamic: true }]);
+	expect(
+		ownToolParts(
+			event({ type: "tool_execution_end", ...own, result: "boom", isError: true }),
+			[],
+		),
+	).toEqual([{ type: "tool-result", ...own, result: "boom", isError: true, dynamic: true }]);
+});
+
+test("leaves host tools, the result tool and nested calls to their own rows", () => {
+	let start = (extra: Record<string, unknown>) =>
+		event({ type: "tool_execution_start", toolCallId: "c1", args: {}, ...extra });
+	expect(ownToolParts(start({ toolName: "read_plan" }), ["read_plan"])).toEqual([]);
+	expect(ownToolParts(start({ toolName: ATOMIC_RESULT_TOOL_NAME }), [])).toEqual([]);
+	expect(ownToolParts(start({ toolName: "bash", parentToolCallId: "p" }), [])).toEqual([]);
+	expect(ownToolParts(event({ type: "turn_start" }), [])).toEqual([]);
+});
+
+test("streams a tool call's input from its first token, marking only Atomic's own tools", () => {
+	let inputs = new Map<number, string>();
+	let partial = (name: string) => ({ content: [{ type: "toolCall", id: "c1", name }] });
+	let update = (value: Record<string, unknown>) => value as Parameters<typeof inputParts>[0];
+	let start = update({ type: "toolcall_start", contentIndex: 0, partial: partial("bash") });
+	expect(inputParts(start, inputs, ["read_plan"], true)).toEqual([
+		{ type: "tool-input-start", id: "c1", toolName: "bash", providerExecuted: true, dynamic: true },
+	]);
+	expect(
+		inputParts(update({ type: "toolcall_delta", contentIndex: 0, delta: "{" }), inputs, [], true),
+	)
+		.toEqual([{ type: "tool-input-delta", id: "c1", delta: "{" }]);
+	expect(inputParts(update({ type: "toolcall_end", contentIndex: 0 }), inputs, [], true))
+		.toEqual([{ type: "tool-input-end", id: "c1" }]);
+	let host = update({
+		type: "toolcall_start",
+		contentIndex: 1,
+		partial: {
+			content: [undefined, { type: "toolCall", id: "c2", name: "read_plan" }],
+		},
+	});
+	expect(inputParts(host, inputs, ["read_plan"], false)).toEqual([
+		{ type: "tool-input-start", id: "c2", toolName: "read_plan" },
+	]);
+});
+
+test("an isolated session never streams the input of a tool it does not offer", () => {
+	let start = {
+		type: "toolcall_start",
+		contentIndex: 0,
+		partial: { content: [{ type: "toolCall", id: "c1", name: "bash" }] },
+	} as unknown as Parameters<typeof inputParts>[0];
+	expect(inputParts(start, new Map(), ["read_plan"], false)).toEqual([]);
+});
+
+test("reads a tool result's text content, else its JSON", () => {
+	expect(resultText({ content: [{ type: "text", text: "one" }, { type: "text", text: "two" }] }))
+		.toBe("one\ntwo");
+	expect(resultText({ details: { a: 1 } })).toBe('{"details":{"a":1}}');
+	expect(resultText("plain")).toBe("plain");
 });

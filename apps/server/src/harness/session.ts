@@ -44,7 +44,7 @@ function applied(outcome: { status: string; message: string }): void {
 }
 
 export type PlannerSession = {
-	/** Snapshot of the selected current static Planner profile. */
+	/** The tools this session offers; a full Atomic session reports the set of its running turn. */
 	activeTools?: readonly string[];
 	stream: (prompt: string, abortSignal: AbortSignal) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
@@ -136,6 +136,11 @@ export async function openPlannerSession(
 				onRuns: runs => {
 					for (let listener of listeners) listener(runs);
 				},
+				toolReport: (id, output, state) => {
+					let chat = channel.room.plan.chat;
+					if (state === "running") chat?.toolProgress?.(id, output);
+					else chat?.toolFinished?.(id, output, state === "done");
+				},
 			};
 			unregisterFull = registerFullPlanner(sessionId, planner);
 		}
@@ -185,12 +190,15 @@ export async function openPlannerSession(
 				resumeRun: async (runId: string) => applied(await workflows().resume(runId)),
 			}
 			: {};
+		let fixedTools = Object.freeze([
+			...(job ? BACKGROUND_TOOL_NAMES[job.kind] : PLANNER_TOOL_NAMES),
+		]);
 		return {
 			ok: true,
 			value: {
-				activeTools: Object.freeze([
-					...(job ? BACKGROUND_TOOL_NAMES[job.kind] : PLANNER_TOOL_NAMES),
-				]),
+				get activeTools() {
+					return planner?.activeTools ?? fixedTools;
+				},
 				...runControl,
 				stream: (prompt, abortSignal) =>
 					agent.stream({

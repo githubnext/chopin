@@ -34,6 +34,7 @@ import { annotatedText, compose, referenceCatalog, remember } from "./address";
 import { createNotices } from "./notices";
 import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
 import { translateJob } from "./job-translate";
+import { argsText, outputText } from "./activity";
 import { watchJobAbort } from "./job-fence";
 import { JOB_TOOLS } from "../agent/job-scope";
 import type { JobOutcome } from "../conversation-plan/jobs";
@@ -70,7 +71,6 @@ type MemberEntry = Wire.Entry & { delivery?: Delivery };
 
 /** How long the agent's cursor stays where it finished, after a turn ends. */
 const LINGER_MS = 5_000;
-const ACTIVE_TOOLS = new Set(PLANNER_TOOL_NAMES);
 
 /**
  * A queued message, with what the queue needs and clients do not.
@@ -164,6 +164,10 @@ export type Chat = {
 	lingering?: ReturnType<typeof setTimeout>;
 	/** When each running tool call started, for its duration. */
 	timings: Map<string, number>;
+	/** Settles a host tool's row when its own execution ends, ahead of the harness's step-end result. */
+	toolFinished?: (id: string, output: unknown, success: boolean) => void;
+	/** Shows a tool's partial output as it arrives, ahead of the harness's step-end part. */
+	toolProgress?: (id: string, output: unknown) => void;
 	/** Text part ids are adapter-local; transcript ids are unique across turns. */
 	messageIds?: Map<string, string>;
 	/** Owner identity for the running turn only. */
@@ -213,7 +217,14 @@ export function restore(entries: Wire.Entry[], runs?: Wire.Run[]): Chat {
 		...(restoredRuns ? { runs: restoredRuns } : {}),
 		entries: entries.map(entry => {
 			let { streaming: _streaming, ...rest } = entry;
-			return rest;
+			return rest.tools?.some(tool => tool.status === "running")
+				? {
+					...rest,
+					tools: rest.tools.map(tool =>
+						tool.status === "running" ? { ...tool, status: "failed" as const } : tool
+					),
+				}
+				: rest;
 		}),
 		waiting: [],
 		sending: Promise.resolve(),
@@ -229,6 +240,18 @@ export function restore(entries: Wire.Entry[], runs?: Wire.Run[]): Chat {
 
 function now(): number {
 	return Math.floor(Date.now() / 1000);
+}
+
+function begin(handle: string, entryOffset: number): Wire.Turn {
+	let startedAt = Date.now();
+	return {
+		id: ulid(),
+		handle,
+		started: Math.floor(startedAt / 1000),
+		entryOffset,
+		startedAt,
+		responded: false,
+	};
 }
 
 function digest(value: string): string {
@@ -295,8 +318,8 @@ function delivery(
 }
 
 function publicEntry(value: Wire.Entry): Wire.Entry {
-	let { delivery: _delivery, ...entry } = value as MemberEntry;
-	return entry;
+	let { delivery, ...entry } = value as MemberEntry;
+	return delivery?.destination === "planner" ? { ...entry, to: "planner" } : entry;
 }
 
 export function validateDelivery(entry: Wire.Entry): void {
@@ -712,7 +735,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		delivery: savedDelivery,
 	};
 	chat.busy = true;
-	chat.turn = { id: ulid(), handle, started: now(), responded: false };
+	chat.turn = begin(handle, chat.entries.length + 1);
 	state(chat, server, room);
 	chat.entries.push(entry);
 	try {
@@ -1458,9 +1481,10 @@ export async function resolveOwner(
  */
 function settle(chat: Chat, server: Server<SocketData>, room: string, stopped: boolean): void {
 	for (let entry of chat.entries) {
-		for (let activity of entry.tools ?? []) {
-			if (activity.status !== "running") continue;
-			let started = chat.timings.get(activity.id);
+		let running = entry.tools?.filter(tool => tool.status === "running");
+		if (!entry.streaming && !running?.length) continue;
+		for (let activity of running ?? []) {
+			let started = chat.timings.get(activity.id) ?? activity.startedAt;
 			let finished: Wire.Activity = {
 				...activity,
 				status: "failed",
@@ -1470,7 +1494,6 @@ function settle(chat: Chat, server: Server<SocketData>, room: string, stopped: b
 			Object.assign(activity, finished);
 			broadcast(server, room, { kind: "chat:tool", ts: 0, entry: entry.id, activity: finished });
 		}
-		if (!entry.streaming) continue;
 		delete entry.streaming;
 		announce(server, room, entry);
 	}
@@ -1497,7 +1520,7 @@ async function run(
 
 	if (!reserved) {
 		chat.busy = true;
-		chat.turn = { id: ulid(), handle, started: now(), responded: false };
+		chat.turn = begin(handle, chat.entries.length);
 		chat.acting = thread;
 		(jobTurn ? jobState : state)(chat, server, room);
 	} else chat.acting = thread;
@@ -1557,6 +1580,12 @@ async function run(
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 		}
 		sendStarted = true;
+		if (!jobTurn) {
+			chat.toolFinished = (id, output, success) => {
+				if (!turnController.signal.aborted) finished(context, id, output, success);
+			};
+			chat.toolProgress = (id, output) => progressed(context, id, output);
+		}
 		let signal = AbortSignal.any([opened.binding.signal, turnController.signal]);
 		if (jobTurn) releaseJobAbort = watchJobAbort(chat, jobTurn, signal);
 		let result = await opened.session.stream(prompt, signal);
@@ -1598,6 +1627,8 @@ async function run(
 		releaseJobAbort?.();
 		chat.activeRequest = undefined;
 		chat.turnController = undefined;
+		chat.toolFinished = undefined;
+		chat.toolProgress = undefined;
 		let kept = false;
 		try {
 			if (opened && !chat.closed && !jobTurn) kept = retain(context, opened);
@@ -1806,6 +1837,7 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			let id = ulid();
 			ids.set(part.id, id);
 			chat.writing = id;
+			chat.tooling = undefined;
 			return;
 		}
 		case "text-delta": {
@@ -1817,6 +1849,7 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			let entry = chat.entries.find(item => item.id === id);
 			if (!entry) {
 				chat.writing = id;
+				chat.tooling = undefined;
 				say(chat, server, room, {
 					id,
 					author: { kind: "agent" },
@@ -1841,60 +1874,47 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			if (chat.writing === id) chat.writing = undefined;
 			return;
 		}
+		case "tool-input-start": {
+			if (!permitted(context, part.toolName)) return;
+			begun(chat, part.id);
+			publish(context, {
+				id: part.id,
+				name: part.toolName,
+				status: "running",
+				startedAt: chat.timings.get(part.id),
+			});
+			return;
+		}
 		case "tool-call": {
-			if (!ACTIVE_TOOLS.has(part.toolName)) {
-				console.error(`[chat] boundary failure: inactive tool ${part.toolName}`);
-				chat.interruption = `Planner tool boundary failure: ${part.toolName}`;
-				chat.turnController?.abort();
-				return;
-			}
-			chat.timings.set(part.toolCallId, Date.now());
-			let activity: Wire.Activity = {
+			if (!permitted(context, part.toolName)) return;
+			begun(chat, part.toolCallId);
+			publish(context, {
 				id: part.toolCallId,
 				name: part.toolName,
 				status: "running",
-				args: JSON.stringify(part.input, null, 2),
-			};
-			broadcast(server, room, {
-				kind: "chat:tool",
-				ts: 0,
-				entry: attach(context, activity),
-				activity,
+				args: argsText(part.input),
+				startedAt: chat.timings.get(part.toolCallId),
 			});
 			return;
 		}
 		case "tool-result":
 		case "tool-error":
 		case "tool-output-denied": {
-			let started = chat.timings.get(part.toolCallId);
-			chat.timings.delete(part.toolCallId);
-			let name = named(chat, part.toolCallId);
+			let preliminary = part.type === "tool-result" && part.preliminary === true;
 			let success = part.type === "tool-result";
 			let output = part.type === "tool-result"
 				? part.output
 				: part.type === "tool-error"
 				? part.error
 				: "Refused.";
-			let detail = name === "read_reference"
-				? success
-					? "Reference content was returned privately to the Planner."
-					: "The reference could not be read."
-				: typeof output === "string"
-				? output
-				: JSON.stringify(output);
-			let activity: Wire.Activity = {
-				id: part.toolCallId,
-				name,
-				status: success ? "done" : "failed",
-				...(started ? { took: Date.now() - started } : {}),
-				...(detail ? { result: detail.slice(0, 4_000) } : {}),
-			};
-			broadcast(server, room, {
-				kind: "chat:tool",
-				ts: 0,
-				entry: attach(context, activity),
-				activity,
-			});
+			conclude(
+				context,
+				part.toolCallId,
+				output,
+				preliminary ? "running" : success ? "done" : "failed",
+				success,
+				part.type === "tool-output-denied",
+			);
 			return;
 		}
 		case "tool-approval-request":
@@ -1911,6 +1931,82 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			});
 			return;
 	}
+}
+
+/**
+ * Publish a tool's outcome once.
+ *
+ * The harness holds a host tool's result until its model step ends, so the
+ * tool's own execution reports first and the buffered part finds the row
+ * already settled with the real duration.
+ */
+function conclude(
+	context: Room,
+	id: string,
+	output: unknown,
+	status: Wire.ToolStatus,
+	success: boolean,
+	refused = false,
+): void {
+	let { chat } = context;
+	let name = named(chat, id);
+	let existing = tool(chat, id);
+	if (existing && existing.status !== "running") return;
+	let started = chat.timings.get(id);
+	if (status !== "running") chat.timings.delete(id);
+	let detail = name === "read_reference"
+		? success
+			? "Reference content was returned privately to the Planner."
+			: "The reference could not be read."
+		: outputText(output);
+	publish(context, {
+		id,
+		name,
+		status,
+		...(refused ? { refused: true as const } : {}),
+		...(started && status !== "running" ? { took: Date.now() - started } : {}),
+		...(detail ? { result: detail } : {}),
+	});
+}
+
+/** Whether the session offers this tool; one it does not offer ends the turn. */
+function permitted(context: Room, name: string): boolean {
+	let { chat } = context;
+	if ((chat.agent?.activeTools ?? PLANNER_TOOL_NAMES).includes(name)) return true;
+	console.error(`[chat] boundary failure: inactive tool ${name}`);
+	chat.interruption = `Planner tool boundary failure: ${name}`;
+	chat.turnController?.abort();
+	return false;
+}
+
+function begun(chat: Chat, id: string): void {
+	if (!chat.timings.has(id)) chat.timings.set(id, Date.now());
+}
+
+function publish(context: Room, activity: Wire.Activity): void {
+	let { room, server } = context;
+	broadcast(server, room, {
+		kind: "chat:tool",
+		ts: 0,
+		entry: attach(context, activity),
+		activity,
+	});
+}
+
+/** A host tool's own execution ended; settle its open row now rather than at step end. */
+export function finished(context: Room, id: string, output: unknown, success: boolean): void {
+	if (tool(context.chat, id)?.status !== "running") return;
+	conclude(context, id, output, success ? "done" : "failed", success);
+}
+
+/** A tool still running reported partial output; show it now. */
+export function progressed(context: Room, id: string, output: unknown): void {
+	if (tool(context.chat, id)?.status !== "running") return;
+	conclude(context, id, output, "running", true);
+}
+
+function tool(chat: Chat, id: string): Wire.Activity | undefined {
+	return chat.entries.flatMap(entry => entry.tools ?? []).find(item => item.id === id);
 }
 
 /** What a running tool call was called, from where it was filed. */

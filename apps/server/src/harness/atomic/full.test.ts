@@ -91,6 +91,7 @@ async function run(
 		operatorPackage = false,
 		askingWorkflow = false,
 		afterTurn,
+		events,
 	}: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
@@ -105,6 +106,8 @@ async function run(
 		askingWorkflow?: boolean;
 		/** Runs once the Planner's turn has ended, while its session and workflow runs are still live. */
 		afterTurn?: () => Promise<void>;
+		/** Collects, in order, the tool reports the adapter makes and the stream parts a tool yields. */
+		events?: string[];
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -269,7 +272,12 @@ export default workflow({
 			},
 		};
 		let sessionId = crypto.randomUUID();
-		if (registered) release = registerFullPlanner(sessionId, { cwd, humanInput });
+		let planner: FullPlanner = {
+			cwd,
+			humanInput,
+			toolReport: events && ((_id, _output, state) => events.push(`report:${state}`)),
+		};
+		if (registered) release = registerFullPlanner(sessionId, planner);
 		let agent = new HarnessAgent({
 			harness,
 			instructions: "CHOPIN-INSTRUCTIONS-MARKER",
@@ -286,7 +294,14 @@ export default workflow({
 		stub.requests.length = 0;
 		try {
 			let result = await agent.stream({ session, prompt });
-			await result.consumeStream();
+			let parts: { type: string; toolName?: string; dynamic?: boolean; preliminary?: boolean }[] =
+				[];
+			for await (let part of result.fullStream) {
+				parts.push(part as (typeof parts)[number]);
+				if (part.type === "tool-result" && part.dynamic) {
+					events?.push(part.preliminary ? "part:partial" : "part:final");
+				}
+			}
 			await result.text;
 			await afterTurn?.();
 			let requests = [...stub.requests];
@@ -297,14 +312,29 @@ export default workflow({
 						? await Bun.file(join(cwd, ".atomic", "settings.json")).text()
 						: undefined,
 				};
-				return { cwd, received, requests, workerRequests: [], files };
+				return {
+					cwd,
+					received,
+					requests,
+					workerRequests: [],
+					files,
+					parts,
+					offered: planner.activeTools,
+				};
 			}
 			let workerSession = await agent.createSession({ sandboxSession: sandbox });
 			try {
 				stub.requests.length = 0;
 				let output = await agent.stream({ session: workerSession, prompt: "plain" });
 				await output.consumeStream();
-				return { cwd, received, requests, workerRequests: [...stub.requests] };
+				return {
+					cwd,
+					received,
+					requests,
+					workerRequests: [...stub.requests],
+					parts,
+					offered: planner.activeTools,
+				};
 			} finally {
 				await workerSession.destroy();
 			}
@@ -353,6 +383,26 @@ test("registered Planner sessions load operator resources and offer only read-on
 		]
 	) expect(request.system).toContain(marker);
 	expect(request.system).not.toBe(ATOMIC_DEFAULT_SYSTEM_PROMPT);
+});
+
+test("a full Planner streams an Atomic builtin live and reports its tools as the turn's active set", async () => {
+	let result = await run(true, "cwd");
+	let builtin = result.parts.find(part => part.type === "tool-call" && part.dynamic)?.toolName;
+	expect(builtin).toBeDefined();
+	let own = result.parts.filter(part => part.toolName === builtin);
+	let types = own.map(part => part.type);
+	expect(types.slice(0, 2)).toEqual(["tool-input-start", "tool-call"]);
+	expect(types.at(-1)).toBe("tool-result");
+	expect(own.at(-1)?.preliminary).not.toBe(true);
+	expect(result.offered).toContain(builtin);
+	expect(result.offered).toContain("host_tool");
+});
+
+test("a full Planner reports an Atomic builtin's end before the harness yields its result", async () => {
+	let events: string[] = [];
+	await run(true, "cwd", { events });
+	expect(events).toContain("report:done");
+	expect(events.indexOf("report:done")).toBeLessThan(events.indexOf("part:final"));
 });
 
 test("Planner sessions use their checkout cwd and route ask_user_question through HostInput", async () => {

@@ -41,7 +41,7 @@ export function LocalLoginView(
 			{state.status === "idle" && (
 				<>
 					<p className="mt-2 text-sm text-text-secondary">
-						Sign in with GitHub to choose a repository and its planning channels.
+						Sign in with GitHub to open your projects and documents.
 					</p>
 					<Actions>
 						<PrimaryAction onClick={onStart}>Sign in with GitHub</PrimaryAction>

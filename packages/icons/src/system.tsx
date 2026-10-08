@@ -4,7 +4,7 @@ import type { IconProps } from "./icon";
 
 export function ArchiveIcon(props: IconProps) {
 	return (
-		<LineIcon title="box-archive" {...props}>
+		<LineIcon {...props}>
 			<path d="M14.75,6.25v7c0,1.105-.895,2-2,2H5.25c-1.105,0-2-.895-2-2V6.25" />
 			<rect height="3.5" rx="1" ry="1" width="14.5" x="1.75" y="2.75" />
 			<line x1="7" x2="11" y1="9.25" y2="9.25" />
@@ -14,7 +14,7 @@ export function ArchiveIcon(props: IconProps) {
 
 export function DocumentIcon(props: IconProps) {
 	return (
-		<LineIcon title="book-bookmark" {...props}>
+		<LineIcon {...props}>
 			<path d="M2.75,14V4.25c0-1.105,.895-2,2-2H15.25V12.25" />
 			<path
 				d="M11,14H7v3.5c0,.202,.122,.385,.309,.462,.187,.079,.401,.035,.545-.108l1.146-1.146,1.146,1.146c.096,.096,.224,.146,.354,.146,.064,0,.13-.012,.191-.038,.187-.077,.309-.26,.309-.462v-3.5Z"
@@ -31,7 +31,7 @@ export function DocumentIcon(props: IconProps) {
 
 export function SearchIcon(props: IconProps) {
 	return (
-		<LineIcon title="search" viewBox="0 0 15 15" {...props}>
+		<LineIcon viewBox="0 0 15 15" {...props}>
 			<path d="M14.25 14.25L10.1386 10.1386" />
 			<path d="M6.25 11.75C9.2875 11.75 11.75 9.2875 11.75 6.25C11.75 3.2125 9.2875 0.75 6.25 0.75C3.2125 0.75 0.75 3.2125 0.75 6.25C0.75 9.2875 3.2125 11.75 6.25 11.75Z" />
 		</LineIcon>
@@ -84,7 +84,6 @@ export function LoaderIcon({ size = 14, ...props }: IconProps) {
 			width={size}
 			{...props}
 		>
-			<title>loader</title>
 			{paths.map(([path, opacity]) => <path d={path} key={path} opacity={opacity} />)}
 		</svg>
 	);

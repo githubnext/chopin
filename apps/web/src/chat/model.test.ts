@@ -1,6 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
-import { displayText, duration, group, summarize } from "./model";
+import {
+	displayText,
+	duration,
+	group,
+	summarize,
+	waitingCards,
+	waitingPrompts,
+	waitingText,
+	workPhase,
+} from "./model";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -8,8 +17,12 @@ function entry(id: string, author: Chat.Author, text = id): Chat.Entry {
 	return { id, author, text, ts: 1_700_000_000 };
 }
 
-function working() {
-	return { id: "turn-1", started: 1_700_000_001 };
+function working(entryOffset = 1) {
+	return { id: "turn-1", started: 1_700_000_001, entryOffset };
+}
+
+function running(name: string): Chat.Activity[] {
+	return [{ id: "tool", name, status: "running" }];
 }
 
 function reference(): Chat.Reference {
@@ -35,7 +48,7 @@ describe("transcript groups", () => {
 			messages: [{
 				id: "turn-1",
 				author: { kind: "agent" },
-				text: "Working on it",
+				text: "",
 				ts: 1_700_000_001,
 				queued: false,
 				working: true,
@@ -51,7 +64,7 @@ describe("transcript groups", () => {
 			kind: "messages",
 			messages: [{ id: "a1", text: "I found it." }],
 		}]);
-		expect(JSON.stringify(result)).not.toContain("Working on it");
+		expect(JSON.stringify(result)).not.toContain('"working":true');
 	});
 
 	it("does not keep a temporary Planner message after a turn stops", () => {
@@ -120,6 +133,190 @@ describe("transcript groups", () => {
 			{ kind: "messages", messages: [{ id: "q1", references: [{ id: "reference-one" }] }] },
 		]);
 	});
+
+	it("promotes current tool activity without duplicating the work row", () => {
+		let result = group(
+			[
+				{
+					...entry("old", { kind: "agent" }, ""),
+					ts: 1_699_999_999,
+					tools: [{ id: "old-tool", name: "read_plan", status: "running" }],
+				},
+				entry("prompt", { kind: "member", handle: "ana" }),
+				{
+					...entry("current", { kind: "agent" }, ""),
+					ts: 1_700_000_001,
+					tools: [{ id: "new-tool", name: "edit_plan", status: "running" }],
+				},
+			],
+			[],
+			working(2),
+		);
+
+		expect(result).toMatchObject([
+			{ kind: "messages", messages: [{ id: "old" }] },
+			{ kind: "messages", messages: [{ id: "prompt" }] },
+			{ kind: "messages", messages: [{ id: "current", working: true }] },
+		]);
+		expect(JSON.stringify(result[0])).not.toContain('"working":true');
+		expect(JSON.stringify(result).match(/"working":true/g)).toHaveLength(1);
+	});
+
+	it("does not promote historical activity from the same second as a new turn", () => {
+		let result = group(
+			[
+				{
+					...entry("old", { kind: "agent" }, ""),
+					ts: 1_700_000_001,
+					tools: [{ id: "old-tool", name: "read_plan", status: "running" }],
+				},
+				{ ...entry("prompt", { kind: "member", handle: "ana" }), ts: 1_700_000_001 },
+				{ ...entry("room", { kind: "member", handle: "sam" }), ts: 1_700_000_001 },
+				{
+					...entry("current", { kind: "agent" }, ""),
+					ts: 1_700_000_001,
+					tools: [{ id: "current-tool", name: "edit_plan", status: "running" }],
+				},
+			],
+			[],
+			working(2),
+		);
+
+		expect(result.at(-1)).toMatchObject({
+			kind: "messages",
+			messages: [{ id: "current", working: true, tools: [{ id: "current-tool" }] }],
+		});
+		expect(JSON.stringify(result[0])).not.toContain('"working":true');
+	});
+
+	it("uses streamed prose as the active row instead of adding a second one", () => {
+		let result = group(
+			[
+				entry("prompt", { kind: "member", handle: "ana" }),
+				{
+					...entry("answer", { kind: "agent" }, "I found it."),
+					ts: 1_700_000_001,
+					streaming: true,
+				},
+			],
+			[],
+			working(),
+		);
+
+		expect(result.at(-1)).toMatchObject({
+			kind: "messages",
+			messages: [{ id: "answer", working: true, streaming: true }],
+		});
+		expect(JSON.stringify(result)).not.toContain('"id":"turn-1"');
+	});
+
+	it("keeps active work on its first entry as later tool entries arrive", () => {
+		let result = group(
+			[
+				entry("prompt", { kind: "member", handle: "ana" }),
+				{
+					...entry("first-tool", { kind: "agent" }, ""),
+					ts: 1_700_000_001,
+					tools: [{ id: "read", name: "read_plan", status: "done" }],
+				},
+				{ ...entry("response", { kind: "agent" }, "I found it."), ts: 1_700_000_002 },
+				{
+					...entry("later-tool", { kind: "agent" }, ""),
+					ts: 1_700_000_003,
+					tools: [{ id: "edit", name: "edit_plan", status: "running" }],
+				},
+			],
+			[],
+			working(),
+		);
+		let messages = result.flatMap(item => item.kind === "messages" ? item.messages : []);
+
+		expect(messages.find(item => item.id === "first-tool")).toMatchObject({
+			working: true,
+			tools: [{ id: "read" }, { id: "edit" }],
+		});
+		expect(messages.find(item => item.id === "later-tool")?.tools).toBeUndefined();
+		expect(messages.filter(item => item.working)).toHaveLength(1);
+
+		let completed = group(
+			[
+				entry("prompt", { kind: "member", handle: "ana" }),
+				{
+					...entry("first-tool", { kind: "agent" }, ""),
+					ts: 1_700_000_001,
+					tools: [{ id: "read", name: "read_plan", status: "done" }],
+				},
+				{
+					...entry("later-tool", { kind: "agent" }, ""),
+					ts: 1_700_000_003,
+					tools: [{ id: "edit", name: "edit_plan", status: "running" }],
+				},
+			],
+			[],
+			undefined,
+			[{
+				turnId: "turn-1",
+				entryOffset: 1,
+				endOffset: 3,
+				anchorId: "first-tool",
+			}],
+		);
+		let completedMessages = completed.flatMap(item =>
+			item.kind === "messages" ? item.messages : []
+		);
+		expect(completedMessages.find(item => item.id === "first-tool")?.tools).toMatchObject([
+			{ id: "read" },
+			{ id: "edit" },
+		]);
+		expect(completedMessages.find(item => item.id === "later-tool")?.tools).toBeUndefined();
+	});
+
+	it("keeps completed tools on earlier prose when a later entry owns the call", () => {
+		let entries = [
+			entry("prompt", { kind: "member", handle: "ana" }),
+			entry("prose", { kind: "agent" }, "I will inspect this."),
+			{
+				...entry("tool-entry", { kind: "agent" }, ""),
+				tools: [{ id: "read", name: "read_plan", status: "done" as const }],
+			},
+		];
+		let retained = [{
+			turnId: "turn-1",
+			entryOffset: 1,
+			endOffset: 3,
+			anchorId: "prose",
+		}];
+		let messages = group(entries, [], undefined, retained).flatMap(item =>
+			item.kind === "messages" ? item.messages : []
+		);
+		expect(messages.find(item => item.id === "prose")?.tools).toMatchObject([{ id: "read" }]);
+		expect(messages.find(item => item.id === "tool-entry")?.tools).toBeUndefined();
+	});
+
+	it("keeps one inspectable work anchor while its connection is offline", () => {
+		let entries = [
+			entry("prompt", { kind: "member", handle: "ana" }),
+			entry("prose", { kind: "agent" }, "I will inspect this."),
+			{
+				...entry("tool-entry", { kind: "agent" }, ""),
+				tools: [{ id: "read", name: "read_plan", status: "running" as const }],
+			},
+		];
+		let suspended = {
+			turnId: "turn-1",
+			entryOffset: 1,
+			endOffset: 3,
+			anchorId: "prose",
+		};
+		let messages = group(entries, [], undefined, [], suspended).flatMap(item =>
+			item.kind === "messages" ? item.messages : []
+		);
+		expect(messages.find(item => item.id === "prose")).toMatchObject({
+			workDisconnected: true,
+			tools: [{ id: "read" }],
+		});
+		expect(messages.find(item => item.id === "tool-entry")?.tools).toBeUndefined();
+	});
 });
 
 describe("rail copy", () => {
@@ -133,19 +330,43 @@ describe("rail copy", () => {
 	});
 });
 
-describe("tool-run summaries", () => {
-	it("names the live tool in reader-facing language", () => {
-		expect(summarize([
-			{ id: "t1", name: "read_file", status: "done", took: 38 },
-			{ id: "t2", name: "ask", status: "running" },
-		])).toEqual({ state: "running", name: "Questions", completed: 1 });
+describe("work progression", () => {
+	it("derives each active stage from real tool and stream events", () => {
+		expect(workPhase([], false, true)).toBe("Getting oriented");
+		expect(workPhase(running("read_plan"), false, true)).toBe("Gathering context");
+		expect(workPhase(running("list_files"), false, true)).toBe("Gathering context");
+		expect(workPhase(running("search_code"), false, true)).toBe("Gathering context");
+		expect(workPhase(running("ask"), false, true)).toBe("Waiting for an answer");
+		expect(workPhase(running("edit_plan"), false, true)).toBe("Making changes");
+		expect(workPhase(running("create_anchor"), false, true)).toBe("Making changes");
+		expect(workPhase(running("run_tests"), false, true)).toBe("Working through the request");
+		expect(workPhase([], true, true)).toBe("Writing a response");
+		expect(workPhase(running("read_plan"), true, true)).toBe("Gathering context");
+		expect(workPhase([{ id: "tool", name: "read_plan", status: "done" }], false, true))
+			.toBe("Reviewing the next step");
+		expect(workPhase([], false, false)).toBeUndefined();
 	});
 
-	it("reports counts, failures and elapsed time after the run", () => {
-		expect(summarize([
+	it("counts finished and interrupted actions without claiming turn duration", () => {
+		let tools: Chat.Activity[] = [
 			{ id: "t1", name: "read_file", status: "done", took: 38 },
 			{ id: "t2", name: "edit_plan", status: "failed", took: 1_200 },
-		])).toEqual({ state: "finished", count: 2, failures: 1, elapsed: 1_238 });
+			{ id: "t3", name: "ask", status: "running" },
+		];
+		expect(summarize(tools, true)).toEqual({
+			count: 3,
+			finished: 2,
+			failures: 1,
+			interrupted: 0,
+			toolTime: 1_238,
+		});
+		expect(summarize(tools, false)).toEqual({
+			count: 3,
+			finished: 2,
+			failures: 1,
+			interrupted: 1,
+			toolTime: 1_238,
+		});
 	});
 });
 
@@ -162,4 +383,41 @@ it("preserves decision metadata and timestamp on system groups", () => {
 		ts: 1_700_000_000,
 		decision: prompt.decision,
 	}]);
+});
+
+describe("waiting decisions in work progression", () => {
+	it("derives pending ask prompts without treating other tools as waits", () => {
+		expect(
+			waitingPrompts([{
+				id: "ask",
+				name: "ask",
+				status: "running",
+				args: JSON.stringify({ questions: [{ question: "Which database?" }] }),
+			}]),
+		).toEqual(["Which database?"]);
+		expect(waitingPrompts([{ id: "read", name: "read_plan", status: "running" }])).toBeUndefined();
+		expect(waitingPrompts([{ id: "ask", name: "ask", status: "done" }])).toBeUndefined();
+	});
+	it("matches distinct open cards when any of their questions was asked", () => {
+		let cards = [
+			{ id: "old", prompts: ["Which database?"], open: true },
+			{ id: "pair", prompts: ["Which cache?", " Which database? "], open: true },
+			{ id: "region", prompts: ["Which region?"], open: false },
+		];
+		expect(waitingCards(["Which database?", "Which region?"], cards))
+			.toEqual({ ids: ["old", "pair"], count: 2 });
+		expect(waitingCards(["Which cache?", "Which database?"], [cards[1]!]))
+			.toEqual({ ids: ["pair"], count: 1 });
+	});
+
+	it("counts distinct asked prompts until a card arrives", () => {
+		expect(waitingCards(["Which region?", " Which region?", "Which cache?"], []))
+			.toEqual({ ids: [], count: 2 });
+	});
+
+	it("words the wait for one or several decisions", () => {
+		expect(waitingText(1)).toBe("Waiting on your decision");
+		expect(waitingText(0)).toBe("Waiting on your decision");
+		expect(waitingText(3)).toBe("Waiting on 3 decisions");
+	});
 });

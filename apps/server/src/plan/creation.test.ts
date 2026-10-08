@@ -92,6 +92,18 @@ it("restores an MCP-created plan with its creation metadata", async () => {
 	});
 });
 
+/** A new document has no stored links, so every link in it meets the newer URL rules. */
+it("refuses to create a document with a link that names another host or hides a scheme", async () => {
+	await expect(Service.initial("Read [this](//evil.com).\n")).rejects.toThrow(
+		"Link without a protocol must stay in the repository",
+	);
+	let hidden = `https://ex${String.fromCharCode(0x200b)}ample.com`;
+	await expect(Service.initial(`Read [this](${hidden}).\n`)).rejects.toThrow(
+		"hidden or control characters",
+	);
+	await expect(Service.initial("Read [this](docs/a.md).\n")).resolves.toBeDefined();
+});
+
 it("builds a neutral revision-zero checkpoint for an ordinary document", async () => {
 	let initial = await Service.initial("# Research report\n");
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
@@ -627,6 +627,11 @@ describe("research workspace routes", () => {
 			context.cookie,
 		));
 		expect(crossChannel?.status).toBe(404);
+		let topLevel = await context.router.handle(request(
+			`/api/channels/${context.channel.id}/research-provenance`,
+			context.cookie,
+		));
+		expect(topLevel?.status).toBe(404);
 
 		context.access.repository = {
 			...context.access.repository,
@@ -648,6 +653,45 @@ describe("research workspace routes", () => {
 			context.cookie,
 		));
 		expect(noPull?.status).toBe(404);
+	});
+
+	it("returns provenance only for a readable child whose parent shares its repository", async () => {
+		let context = await setup();
+		let child = await createChild(childFixture(context));
+		let provenance = {
+			requestId: "workspace-1",
+			parentChannelId: context.channel.id,
+			brief: "What changed?",
+			sourceCount: 2,
+			startedBy: "octocat",
+		};
+		let lookup = spyOn(context.service, "provenance").mockResolvedValue(provenance);
+		let path = `/api/channels/${child.id}/research-provenance`;
+		let found = await context.router.handle(request(path, context.cookie));
+		expect(found?.status).toBe(200);
+		expect(await found!.json()).toEqual(provenance);
+		expect(lookup).toHaveBeenCalledWith(context.channel.id, child.id);
+
+		let read = context.storage.channels.get.bind(context.storage.channels);
+		let moved = spyOn(context.storage.channels, "get").mockImplementation(async id => {
+			let channel = await read(id);
+			return channel && id === context.channel.id
+				? { ...channel, repositoryId: OTHER_REPOSITORY_ID }
+				: channel;
+		});
+		expect((await context.router.handle(request(path, context.cookie)))?.status).toBe(404);
+		moved.mockRestore();
+
+		context.access.repository = {
+			...context.access.repository,
+			permissions: { pull: false, push: false, admin: false },
+		};
+		expect((await context.router.handle(request(path, context.cookie)))?.status).toBe(404);
+		context.access.affiliated = false;
+		expect((await context.router.handle(request(path, context.cookie)))?.status).toBe(404);
+		expect((await context.router.handle(request(path)))?.status).toBe(401);
+		expect(lookup).toHaveBeenCalledTimes(1);
+		lookup.mockRestore();
 	});
 
 	it("lists repository children in one bounded response without leaking another repository", async () => {

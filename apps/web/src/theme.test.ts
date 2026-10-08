@@ -198,8 +198,24 @@ describe("sidebar navigation", () => {
 		);
 	});
 
-	it("keeps project rows on the compact spacing scale", () => {
-		expect(NAVIGATION).toMatch(/\.project-sidebar-project-row\s*{[^}]*gap:\s*10px/s);
+	it("keeps every rail row on one compact height, inset, and gap", () => {
+		expect(NAVIGATION).toMatch(/--project-sidebar-row:\s*calc\(var\(--spacing\) \* 7\.5\)/);
+		for (
+			let row of [
+				"primary-action",
+				"project-row",
+				"document",
+				"child",
+				"account",
+			]
+		) {
+			expect(NAVIGATION).toMatch(
+				new RegExp(
+					`\\.project-sidebar-${row}\\s*{[^}]*min-height:\\s*var\\(--project-sidebar-row\\)`,
+					"s",
+				),
+			);
+		}
 	});
 });
 
@@ -219,7 +235,16 @@ describe("motion contracts", () => {
 	it("uses the movement curve for the overlay sidebar", () => {
 		expect(THEME).toMatch(/--motion-move:\s*cubic-bezier\([^)]+\);/);
 		expect(NAVIGATION).toMatch(
-			/\.motion-sidebar\s*{[^}]*transition:\s*transform var\(--sidebar-open-dur\) var\(--motion-move\)/s,
+			/\.motion-sidebar\s*{[^}]*transition:\s*width var\(--sidebar-open-dur\) var\(--motion-move\)/s,
+		);
+	});
+
+	it("moves the document with the split Chat track", () => {
+		expect(THEME).toMatch(
+			/\.workspace-chat-panel\[data-pane-moving\]\s*{[^}]*transition:\s*width var\(--panel-open-dur\) var\(--motion-move\)/s,
+		);
+		expect(THEME).toMatch(
+			/\.motion-content-swap\s*{[^}]*var\(--swap-direction, 1\)/s,
 		);
 	});
 
@@ -442,7 +467,7 @@ describe("child document shell", () => {
 			/\.room-header\s*\{[^}]*height:\s*var\(--document-shell-header-height\)/s,
 		);
 		expect(NAVIGATION).toMatch(
-			/@media \(max-width: 1023px\)[^{]*\{.*?\.anchored-child-surface\s*\{[^}]*inset:\s*var\(--document-shell-header-height\) 0 0/s,
+			/@media \(max-width: 1197px\)[^{]*\{.*?\.anchored-child-surface\s*\{[^}]*inset:\s*var\(--document-shell-header-height\) 0 0/s,
 		);
 	});
 });

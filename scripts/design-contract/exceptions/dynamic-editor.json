@@ -46,7 +46,7 @@
 				1
 			]
 		],
-		"sourceHash": "f285810ba8efe65355adea1f208e7d03c51d27ef66ab8da3579eff60cfaf3da3"
+		"sourceHash": "099ee516920e9e9f999b28cc1f8dd0b3b2a853697aa1b07429d0ffadb229cc64"
 	},
 	{
 		"file": "packages/editor/src/content-swap.tsx",
@@ -60,7 +60,7 @@
 				1
 			]
 		],
-		"sourceHash": "f285810ba8efe65355adea1f208e7d03c51d27ef66ab8da3579eff60cfaf3da3"
+		"sourceHash": "099ee516920e9e9f999b28cc1f8dd0b3b2a853697aa1b07429d0ffadb229cc64"
 	},
 	{
 		"file": "packages/editor/src/static-plan-editor.tsx",
@@ -102,7 +102,7 @@
 				1
 			]
 		],
-		"sourceHash": "93562ee92ff04a87622d531fb413cf3f7734e2830658e069706ce69ec25623c9"
+		"sourceHash": "0bdcf918d08f5913786cbe786e8f670ed9fdec9dceb86bb6f811b040b35aa4f3"
 	},
 	{
 		"file": "packages/editor/src/toolbar/bubble.tsx",
@@ -144,7 +144,7 @@
 				3
 			]
 		],
-		"sourceHash": "32ff112227ccbfe7943c8b55105deb5c51072b0c56b6e731a51c3332687f697b"
+		"sourceHash": "01db79e7bf938cd5b01b3f3a446415cb88ca6e42100908d890b087b0b593d192"
 	},
 	{
 		"file": "packages/editor/src/toolbar/research.tsx",
@@ -158,7 +158,7 @@
 				1
 			]
 		],
-		"sourceHash": "d428e68e8ef7e270474d5f42b6900891f2126073e33ab00a4716d8b38b5cc431"
+		"sourceHash": "adbf5fed0ed7f56653ce5b496714a92b640bcd2a3fce4a681f12ea1167887590"
 	},
 	{
 		"file": "packages/editor/src/widgets/research-motion.tsx",
@@ -200,7 +200,7 @@
 				1
 			]
 		],
-		"sourceHash": "de45eb676c49bcb1f0d96ae7ab241763284f57d446e8c32c073be7352b78b152"
+		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -228,7 +228,7 @@
 				1
 			]
 		],
-		"sourceHash": "de45eb676c49bcb1f0d96ae7ab241763284f57d446e8c32c073be7352b78b152"
+		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
@@ -340,7 +340,7 @@
 				2
 			]
 		],
-		"sourceHash": "ee7ea57437b86d6d007d03503ebd9d234380260cf50a9eb5a0f58adfb51d4626"
+		"sourceHash": "85e5f52822e9f2c5445e6827f4af8b6e36bca14eadcad82eea617b2db2b0f58a"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -431,7 +431,7 @@
 				1
 			]
 		],
-		"sourceHash": "ed1b5eb9ac3c88e823d46d5af6a43c5d21acffe81577e07f739a4a5701c81f73"
+		"sourceHash": "482a607c538b870d82602302e1ece86e6b35d60367a2616658ab1eea1e6c95d9"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",

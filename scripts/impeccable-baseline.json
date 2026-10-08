@@ -7,6 +7,27 @@
 			"snippet": "border-inline-start: 3px solid",
 			"count": 1,
 			"reason": "User-approved 3px quote edge in authored document prose; preserves the accepted document hierarchy rather than decorating a card."
+		},
+		{
+			"rule": "layout-transition",
+			"file": "apps/web/src/navigation.css",
+			"snippet": "transition: width",
+			"count": 1,
+			"reason": "The sidebar track moves document space with the panel; pointer resizing and reduced motion disable this bounded transition. Frame traces showed no long tasks."
+		},
+		{
+			"rule": "layout-transition",
+			"file": "apps/web/src/theme.css",
+			"snippet": "transition: width",
+			"count": 1,
+			"reason": "The split Chat track moves document space with the panel; pointer resizing and reduced motion disable this bounded transition. Frame traces showed no long tasks."
+		},
+		{
+			"rule": "layout-transition",
+			"file": "apps/web/src/theme.test.ts",
+			"snippet": "transition: width",
+			"count": 2,
+			"reason": "These are test assertions for the two reviewed pane tracks, not runtime style rules."
 		}
 	]
 }

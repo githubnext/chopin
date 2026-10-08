@@ -475,9 +475,13 @@ async function settle(
 }
 
 /** Enough of the passage to recognise it in a line of transcript. */
-function excerpt(quote: string): string {
+export function excerpt(quote: string): string {
 	let value = quote.replace(/\s+/g, " ").trim();
-	return value.length > 60 ? `${value.slice(0, 60)}…` : value;
+	if (value.length <= 60) return value;
+	let cut = value.slice(0, 60);
+	// Back up to a word boundary unless that would discard most of the excerpt.
+	let boundary = value[60] === " " ? 60 : cut.lastIndexOf(" ");
+	return `${(boundary > 30 ? cut.slice(0, boundary) : cut).replace(/[\s.,;:!?-]+$/, "")}…`;
 }
 
 export function accept(context: Chat.Room, ws: Socket, msg: Request<Wire.Accept.Ask>) {

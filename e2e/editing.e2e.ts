@@ -10,8 +10,9 @@
  */
 
 import { content, expect, ready, test, written } from "./room";
+import { chatInput } from "./chat-input";
 
-import type { WebSocketRoute } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 
 test("a reload shows what was typed", async ({ join, room }) => {
 	let page = await join("ana");
@@ -52,7 +53,9 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	 * the only way to be the thing that drops it.
 	 */
 	let sockets: WebSocketRoute[] = [];
+	let offline = false;
 	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -62,22 +65,274 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	await content(page).click();
 	await page.keyboard.type("Before the wire went.");
 
+	offline = true;
 	await sockets.at(-1)!.close();
 
-	// Read-only is the point: an editor that keeps taking keystrokes it cannot
-	// send is worse than one that stops, because the typing looks like it
-	// worked right up until the reload that loses it.
+	// Read-only is the point once the loss outlasts a blip: an editor that
+	// keeps taking keystrokes it cannot send is worse than one that stops,
+	// because the typing looks like it worked right up until the reload that
+	// loses it.
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
-	await expect(page.locator('[aria-live="polite"][data-level]')).toHaveAttribute(
-		"data-level",
-		"notice",
-	);
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
+	await expect(page.locator(".plan-status")).toHaveAttribute("data-level", /^(notice|alert)$/);
 
 	// The client retries on its own; nothing here reconnects it. Opening is
 	// driven by the connection rather than by the mount, and a socket that
 	// comes back without re-opening the document would leave the editor
 	// unlocked over a plan quietly short of everyone else's edits.
+	offline = false;
 	await ready(page);
 	expect(sockets.length).toBeGreaterThan(1);
 	await expect(content(page)).toContainText("Before the wire went.");
+});
+
+test("Tab leaves a heading instead of indenting it", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("# Title");
+	let heading = content(page).getByRole("heading", { level: 1 });
+	await expect(heading).toHaveText("Title");
+
+	// A keyboard user has to be able to get past the editor, and trying to
+	// must not edit a document everyone else is reading.
+	await page.keyboard.press("Tab");
+	await expect(content(page)).not.toBeFocused();
+	await expect(heading).toHaveText("Title");
+	await expect(heading).not.toHaveAttribute("style", /padding/);
+	await written(page, room, /^# Title\s*$/);
+});
+
+test("Tab nests a list item and Shift+Tab brings it back", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("- one\ntwo");
+	await written(page, room, /^- one\n- two$/m);
+
+	// From the end of the item, not only its start.
+	await page.keyboard.press("Tab");
+	await expect(content(page).locator("li li")).toHaveText("two");
+	await expect(content(page)).toBeFocused();
+	await written(page, room, /^- one\n {2}- two$/m);
+
+	await page.keyboard.press("Shift+Tab");
+	await expect(content(page).locator("li li")).toHaveCount(0);
+	await written(page, room, /^- one\n- two$/m);
+});
+
+test("Tab on a first list item leaves without a phantom indent", async ({ join, room }) => {
+	let ana = await join("ana");
+	let ben = await join("ben");
+
+	await content(ana).click();
+	await ana.keyboard.type("- one");
+	await written(ana, room, /^- one$/m);
+	let before = await content(ana).innerHTML();
+
+	// Lexical would nest it inside an empty item of its own, which the source
+	// cannot show but every collaborator would.
+	await ana.keyboard.press("Tab");
+	await expect(content(ana)).not.toBeFocused();
+	expect(await content(ana).innerHTML()).toBe(before);
+
+	// A later edit from the same author is the barrier: once Ben has it, he
+	// has everything Ana sent before it.
+	await content(ana).getByText("one", { exact: true }).click();
+	await ana.keyboard.press("End");
+	await ana.keyboard.type("!");
+	await expect(content(ben).getByRole("listitem")).toHaveText(["one!"]);
+	await expect(content(ben).locator("li li")).toHaveCount(0);
+	await written(ana, room, /^- one!$/m);
+});
+
+test("Tab indents code, Shift+Tab outdents, and Escape then Tab leaves", async ({ join, room }) => {
+	let page = await join("ana");
+	let hint = content(page).getByText("Esc then Tab to leave");
+
+	await content(page).click();
+	await page.keyboard.type("/code");
+	await page.getByRole("listbox", { name: "Insert block" }).getByRole("option", {
+		name: "Code block",
+	})
+		.click();
+	await page.keyboard.type("a();");
+	await page.keyboard.press("Enter");
+	await page.keyboard.press("Tab");
+	await page.keyboard.type("b();");
+	await written(page, room, /^a\(\);\n\tb\(\);$/m);
+	await expect(hint).toBeVisible();
+
+	await page.keyboard.press("Shift+Tab");
+	await expect(content(page)).toBeFocused();
+	await written(page, room, /^a\(\);\nb\(\);$/m);
+
+	await page.keyboard.press("Escape");
+	await page.keyboard.press("Tab");
+	await expect(content(page)).not.toBeFocused();
+	await expect(hint).toBeHidden();
+	await written(page, room, /^a\(\);\nb\(\);$/m);
+});
+
+test("Tab moves between table cells and out of the last one", async ({ join, room, seed }) => {
+	await seed("| Item | Note |\n| ---- | ---- |\n| one  | a    |\n\nAfter.\n");
+	let page = await join("ana");
+
+	await content(page).getByText("one", { exact: true }).click();
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
+	await page.keyboard.type("1");
+	await page.keyboard.press("Tab");
+	await page.keyboard.type("2");
+	await written(page, room, /one1\s*\|\s*a2/);
+
+	// The last cell hands the caret to the block after the table.
+	await page.keyboard.press("Tab");
+	await expect(content(page)).toBeFocused();
+	await page.keyboard.type("3");
+	await written(page, room, /^(3After\.|After\.3)$/m);
+	await written(page, room, /one1\s*\|\s*a2\s*\|/);
+});
+
+test("Tab over a selection from a list into a paragraph leaves it alone", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("- one\ntwo\n\nafter");
+	await written(page, room, /^- one\n- two\n\nafter$/m);
+
+	await page.keyboard.press("Shift+ArrowUp");
+	await expect.poll(() => page.evaluate(() => getSelection()?.isCollapsed)).toBe(false);
+	// Lexical reads the selection on `selectionchange`, a task after the key.
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+	let before = await content(page).innerHTML();
+
+	await page.keyboard.press("Tab");
+	await expect(content(page)).not.toBeFocused();
+	expect(await content(page).innerHTML()).toBe(before);
+	await written(page, room, /^- one\n- two\n\nafter$/m);
+});
+
+test("a lost connection is said in the document header and the composer", async ({ join, page }) => {
+	let sockets: WebSocketRoute[] = [];
+	let offline = false;
+	let refused = 0;
+	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) {
+			refused++;
+			return route.close();
+		}
+		route.connectToServer();
+		sockets.push(route);
+	});
+
+	await join("ana");
+	let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+	let status = page.locator("[data-document-toolbar] .plan-status");
+	let spoken = status.getByRole("status");
+	await expect(status).toHaveAttribute("data-level", "hidden");
+	// Opening a document is not news.
+	await expect(spoken).toHaveText("");
+
+	offline = true;
+	await sockets.at(-1)!.close();
+
+	await expect(status).toHaveAttribute("data-level", "notice");
+	await expect(status).toContainText("Reconnecting…");
+	await expect(spoken).toHaveText("Reconnecting…");
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
+	// Chat says the same thing in its footer, and keeps the draft editable.
+	await expect(chat.locator(".composer-connection")).toHaveText("Reconnecting…");
+	await expect(chatInput(chat)).toHaveAttribute("contenteditable", "true");
+	await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+	// Lost for long enough, it stops promising and offers a way out.
+	await expect(status).toHaveAttribute("data-level", "alert", { timeout: 10_000 });
+	await expect(spoken).toHaveText("Offline");
+	await expect(chat.locator(".composer-connection")).toHaveText("Offline");
+	// Reconnecting in place keeps a Chat draft a reload would lose. Only after
+	// it keeps failing does the page offer to reload.
+	let reconnect = status.getByRole("button", { name: "Reconnect", exact: true });
+	await expect(reconnect).toBeVisible();
+	await expect(reconnect).toHaveAccessibleDescription(/Editing resumes once connected/);
+	await expect(status.getByRole("button", { name: "Reload" })).toHaveCount(0);
+	for (let attempt = 0; attempt < 3; attempt++) {
+		let before = refused;
+		await status.getByRole("button", { name: "Reconnect", exact: true }).click();
+		await expect.poll(() => refused).toBeGreaterThan(before);
+	}
+	await expect(status.getByRole("button", { name: "Reload" })).toBeVisible();
+	await expect(status.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(0);
+
+	// No online event here: the wire's own retry has to bring it back, and
+	// asking to reconnect restarted the backoff rather than adding to it.
+	offline = false;
+	await ready(page);
+	await expect(status).toHaveAttribute("data-level", "hidden");
+	await expect(spoken).toHaveText("Reconnected");
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(0);
+	await expect(chat.locator(".composer-connection")).toBeEmpty();
+});
+
+const PASSAGES = Array.from({ length: 40 }, (_, index) => `Passage ${index + 1}.`).join("\n\n")
+	+ "\n";
+
+function passage(page: Page, number: number) {
+	return content(page).getByRole("paragraph").filter({
+		hasText: new RegExp(`^Passage ${number}\\.$`),
+	});
+}
+
+/*
+ * The right edge of a one-line block puts the caret at its end on every
+ * platform; macOS binds End to scrolling the document rather than the caret.
+ * Each test clicks once on a fresh page, so Lexical has no earlier selection
+ * for an immediate keystroke to outrun.
+ */
+async function caretAtEnd(page: Page, number: number) {
+	let line = passage(page, number);
+	let box = (await line.boundingBox())!;
+	await line.click({ position: { x: box.width - 4, y: box.height / 2 } });
+}
+
+function scrollTop(page: Page) {
+	return page.locator("[data-plan-scroll]").evaluate(element => element.scrollTop);
+}
+
+test("enter mid-document keeps the caret line where it was", async ({ join, seed }) => {
+	await seed(PASSAGES);
+	let page = await join("ana");
+	await page.locator("[data-plan-scroll]").evaluate(element =>
+		element.scrollTop = element.scrollHeight / 3
+	);
+	await caretAtEnd(page, 15);
+	let before = await scrollTop(page);
+	expect(before).toBeGreaterThan(0);
+	let y = (await passage(page, 15).boundingBox())!.y;
+
+	// A new block, then a slash command's Enter into another one.
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/code");
+	await page.keyboard.press("Enter");
+	await expect(content(page).getByRole("button", { name: /^Code language/ })).toBeVisible();
+
+	expect(Math.abs(await scrollTop(page) - before)).toBeLessThanOrEqual(4);
+	expect(Math.abs((await passage(page, 15).boundingBox())!.y - y)).toBeLessThanOrEqual(4);
+});
+
+test("typing past the bottom of the view scrolls the caret into it", async ({ join, seed }) => {
+	await seed(PASSAGES);
+	let page = await join("ana");
+	let scroller = page.locator("[data-plan-scroll]");
+	await scroller.evaluate(element => element.scrollTop = element.scrollHeight);
+	await caretAtEnd(page, 40);
+	let before = await scrollTop(page);
+
+	for (let index = 0; index < 20; index++) await page.keyboard.press("Enter");
+	await page.keyboard.type("Still in view");
+
+	await expect.poll(() => scrollTop(page)).toBeGreaterThan(before);
+	let typed = (await content(page).getByText("Still in view", { exact: true }).boundingBox())!;
+	let view = (await scroller.boundingBox())!;
+	expect(typed.y).toBeGreaterThanOrEqual(view.y);
+	expect(typed.y + typed.height).toBeLessThanOrEqual(view.y + view.height);
 });

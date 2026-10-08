@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DraftCard, ThreadCard } from "./comments";
+import { composerKey, DraftCard, ThreadCard } from "./comments";
+import { displayName } from "./display-name";
 
 import type { Comment } from "@chopin/protocol";
 import type { ThreadView } from "./threads";
@@ -82,7 +83,17 @@ describe("Comment card hierarchy", () => {
 		expect(markup.indexOf("@ana")).toBeLessThan(markup.indexOf("Close comment"));
 		expect(markup).not.toContain("data-plan-comment-context");
 		expect(markup).not.toContain('aria-label="the rollout');
-		expect(markup).toContain("text-brand-ink");
+	});
+
+	it("shows authors as chat does: a face, a display name and the handle for assistive tech", () => {
+		let markup = render(view("open"), true);
+
+		expect(markup).toContain('<span aria-hidden="true" class="relative grid');
+		expect(markup).toContain('alt=""');
+		expect(markup).not.toContain('aria-label="ana"');
+		expect(markup).toContain(">Ana<");
+		expect(markup).toContain("(@ana)");
+		expect(markup).not.toContain("text-brand-ink");
 	});
 
 	it("keeps a draft focused on writing rather than repeated context", () => {
@@ -95,7 +106,12 @@ describe("Comment card hierarchy", () => {
 
 		expect(markup).not.toContain("<h3");
 		expect(markup).toContain('aria-label="Close comment"');
+		expect(markup.split('aria-label="Close comment"')).toHaveLength(2);
 		expect(markup).toContain('data-plan-comment-draft-header="true"');
+		expect(markup).toContain('aria-label="Post comment"');
+		expect(markup).toContain('data-inset-send="true"');
+		expect(markup).not.toContain(">Comment</button>");
+		expect(markup).not.toContain(">Cancel</button>");
 		expect(markup).not.toContain("data-plan-comment-context");
 		expect(markup).not.toContain("the rollout");
 		expect(markup).not.toContain("resize-y");
@@ -114,6 +130,9 @@ describe("Comment card hierarchy", () => {
 		expect(markup).toContain('data-inset-send="true"');
 		expect(markup).not.toContain(">Comment</button>");
 		expect(markup).not.toContain(">Cancel</button>");
+		// The sheet shows its close beside the grabber, so no empty header row remains.
+		expect(markup).not.toContain("data-plan-comment-draft-header");
+		expect(markup).not.toContain("Close comment");
 	});
 
 	it("uses one inset reply action and orders resolution outcomes", () => {
@@ -125,5 +144,35 @@ describe("Comment card hierarchy", () => {
 		expect(markup).not.toContain(">Reply</button>");
 		expect(markup).toContain("Apply feedback");
 		expect(markup.indexOf("Dismiss")).toBeLessThan(markup.indexOf("Apply feedback"));
+	});
+});
+
+describe("Comment composer keys", () => {
+	let key = (
+		name: string,
+		extra: Partial<{ shiftKey: boolean; isComposing: boolean; keyCode: number }> = {},
+	) => ({ key: name, shiftKey: false, isComposing: false, ...extra });
+
+	it("sends on Enter and keeps Shift-Enter for a newline", () => {
+		expect(composerKey(key("Enter"), false)).toBe("send");
+		expect(composerKey(key("Enter", { shiftKey: true }), false)).toBeUndefined();
+		expect(composerKey(key("Escape"), false)).toBe("cancel");
+	});
+
+	it("never sends while an IME candidate is being confirmed", () => {
+		expect(composerKey(key("Enter", { isComposing: true }), false)).toBeUndefined();
+		expect(composerKey(key("Enter", { keyCode: 229 }), false)).toBeUndefined();
+	});
+
+	it("treats Enter as a newline on a coarse pointer, leaving sending to the button", () => {
+		expect(composerKey(key("Enter"), true)).toBeUndefined();
+		expect(composerKey(key("Escape"), true)).toBe("cancel");
+	});
+});
+
+describe("displayName", () => {
+	it("names a person as Chat does", () => {
+		expect(displayName("ana")).toBe("Ana");
+		expect(displayName("")).toBe("");
 	});
 });

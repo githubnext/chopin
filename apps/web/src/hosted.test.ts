@@ -12,7 +12,8 @@ import {
 	childPresentation,
 	rebaseChildHistoryState,
 } from "./anchored-child-surface";
-import { githubLoginHref, hostedRoute, retryableChannelFailure } from "./hosted";
+import { hostedRoute, retryableChannelFailure } from "./hosted";
+import { githubLoginHref } from "./hosted-login";
 import { prepareDocumentLoad, validatedChildPath } from "./document-loader";
 import { Workspace } from "./workspace";
 
@@ -403,7 +404,7 @@ describe("anchored child lifecycle", () => {
 
 		expect(child).toContain('aria-label="Close Source review"');
 		expect(child).toContain('data-child-document-close="true"');
-		expect(child).toContain("<title>xmark</title>");
+		expect(child).toContain('<line x1="14" x2="4" y1="4" y2="14"></line>');
 		expect(child).toContain('height="14"');
 		expect(child).toContain('width="14"');
 		expect(parent).not.toContain("data-child-document-close");

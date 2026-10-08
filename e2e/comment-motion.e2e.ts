@@ -13,7 +13,7 @@ async function secondThread(page: import("@playwright/test").Page) {
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this block as well.");
-	await draft.getByRole("button", { name: "Comment", exact: true }).click();
+	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 	await expect.poll(() => commentButton(page).count()).toBe(2);
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);

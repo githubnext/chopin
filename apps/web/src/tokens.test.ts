@@ -723,13 +723,13 @@ describe("migration", () => {
 			}],
 			["apps/web/src/chat/chat.tsx", {
 				action: "Stop Chopin",
-				marker: 'wire?.send("chat:abort")',
+				marker: 'control("chat:abort")',
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
 				action: "Resume Planner",
-				marker: 'wire?.send("chat:resume")',
+				marker: 'control("chat:resume")',
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],
@@ -740,22 +740,10 @@ describe("migration", () => {
 				tiers: ["btn-primary"],
 			}],
 			["packages/editor/src/comments.tsx", {
-				action: "comment submit",
-				marker: "data-plan-comment-submit",
-				size: "btn-sm",
-				tiers: ["btn-primary"],
-			}],
-			["packages/editor/src/comments.tsx", {
 				action: "comment composer send",
 				marker: 'className="plan-comment-send',
 				size: "btn-icon",
 				tiers: ["btn-primary"],
-			}],
-			["packages/editor/src/comments.tsx", {
-				action: "comment cancel",
-				marker: "onClick={onCancel}",
-				size: "btn-sm",
-				tiers: ["btn-secondary"],
 			}],
 			["packages/editor/src/comments.tsx", {
 				action: "Ask again",

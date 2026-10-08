@@ -268,7 +268,7 @@ test("mounted parent and child transcripts keep their own source ranges", async 
 	await expect.poll(highlightedRooms).toEqual([]);
 	let parentMessage = parent.locator(`[data-chat-message-id="${parentMessageId}"]`);
 	await expect(parentMessage).not.toHaveAttribute("data-source-exact", "true");
-	await expect(parentMessage.locator("[data-source-preview]")).toHaveCount(0);
+	await expect(parentMessage).not.toHaveAttribute("data-chat-source", "true");
 });
 
 test("an inline card arriving keeps the typist's caret", async ({ join, room }) => {

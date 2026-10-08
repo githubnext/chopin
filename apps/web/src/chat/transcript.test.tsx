@@ -47,7 +47,7 @@ test("queued messages use the standard icon-button glyph", () => {
 
 	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?height="14"/s);
 	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?width="14"/s);
-	expect(markup).toContain("<title>xmark</title>");
+	expect(markup).toContain('<line x1="14" x2="4" y1="4" y2="14"></line>');
 	expect(markup).not.toContain(">×</button>");
 });
 
@@ -199,4 +199,33 @@ test("a ready link with extra system prose remains plain text", () => {
 	expect(markup).not.toContain("<a");
 	expect(markup).not.toContain("data-chat-markdown");
 	expect(markup).toContain(text);
+});
+
+test("work announcements promise inspectable details only when the turn has tool calls", () => {
+	let span = { turnId: "turn", entryOffset: 0, endOffset: 1, anchorId: "agent" };
+	let entry: Chat.Entry = {
+		author: { kind: "agent" },
+		id: "agent",
+		text: "Here is the answer.",
+		ts: 1,
+	};
+	let render = (tools: Chat.Activity[] | undefined, suspended: boolean) =>
+		renderToStaticMarkup(createElement(Transcript, {
+			active: true,
+			entries: [{ ...entry, tools }],
+			handle: "ana",
+			onWithdraw() {},
+			queued: [],
+			...(suspended ? { suspendedWork: span } : { completedWork: [span] }),
+		}));
+	let tool: Chat.Activity = { id: "tool", name: "read_plan", status: "done" };
+
+	expect(render(undefined, false)).toContain("Chopin turn ended.</span>");
+	expect(render(undefined, true)).toContain("Chopin connection lost.</span>");
+	expect(render([tool], false)).toContain(
+		"Chopin turn ended. Work details remain available.</span>",
+	);
+	expect(render([tool], true)).toContain(
+		"Chopin connection lost. Work details remain available.</span>",
+	);
 });

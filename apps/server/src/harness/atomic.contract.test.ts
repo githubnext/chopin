@@ -148,6 +148,7 @@ describe("atomic worker turns", () => {
 		expect(stub.requests.map(request => request.hasPriorToolResult)).toEqual([false, true]);
 		expect(stub.requests[0]!.toolNames).toEqual(["first_host"]);
 		expect(result.parts.filter(part => part.toolName === "first_host")).toEqual([
+			{ type: "tool-input-start", toolName: "first_host" },
 			{ type: "tool-call", toolName: "first_host" },
 			{ type: "tool-result", toolName: "first_host", output: { found: true } },
 		]);

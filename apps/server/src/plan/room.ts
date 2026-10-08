@@ -24,6 +24,7 @@ import {
 	$exportPlanTree,
 	$importPlan,
 	assert,
+	assertIntroducedUrls,
 	exportPlan,
 	limits,
 	parse,
@@ -364,6 +365,7 @@ export async function apply(
 
 	try {
 		let after = parse(project(target)).children;
+		assertIntroducedUrls(before, after);
 		let added = new Set<string>();
 		let removed = new Set<string>();
 		for (

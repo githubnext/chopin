@@ -1,16 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import * as Api from "./api";
+import { archiveChannel, channels, deleteChannel, restoreChannel } from "./api";
 import {
-	archiveChannel,
 	cancelResearchRequest,
-	channels,
 	createResearchRequest,
-	deleteChannel,
 	researchRequest,
-	restoreChannel,
 	retryResearchRequest,
-} from "./api";
+} from "./research-requests";
 
 let originalFetch = globalThis.fetch;
 

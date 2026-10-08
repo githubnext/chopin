@@ -6,6 +6,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -22,6 +23,7 @@ import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
+import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 import {
 	activeProject,
@@ -45,6 +47,7 @@ import { clearRepositoryCache } from "./repository-cache";
 import { TerminalAlert } from "./terminal-alert";
 import { useProjectDocuments } from "./use-project-documents";
 import { useDocumentCreation } from "./use-document-creation";
+import { requestTitleEdit } from "./title-edit";
 
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
@@ -86,6 +89,9 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 let ProjectSidebar = lazy(() =>
 	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
 );
+let EmptyWorkspace = lazy(() =>
+	import("./empty-workspace").then(module => ({ default: module.EmptyWorkspace }))
+);
 let AddProjectDialog = lazy(() =>
 	import("./add-project-dialog").then(module => ({ default: module.AddProjectDialog }))
 );
@@ -94,9 +100,6 @@ let NewDocumentDialog = lazy(() =>
 );
 let DocumentSearchDialog = lazy(() =>
 	import("./document-search-dialog").then(module => ({ default: module.DocumentSearchDialog }))
-);
-let RenameDocumentDialog = lazy(() =>
-	import("./rename-document-dialog").then(module => ({ default: module.RenameDocumentDialog }))
 );
 let DeleteDocumentDialog = lazy(() =>
 	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
@@ -283,7 +286,7 @@ export function NavigationShell(
 		| "add"
 		| "new"
 		| "search"
-		| { channel: Api.Channel; type: "delete" | "rename" }
+		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
@@ -309,6 +312,21 @@ export function NavigationShell(
 		immediateMotion,
 	);
 	let dialogPresence = useTransitionPresence(dialog, 150, immediateMotion);
+	let accountWrap = useRef<HTMLDivElement>(null);
+	let accountTrigger = useRef<HTMLButtonElement>(null);
+	let accountMenuId = useId();
+	let closeAccount = (restoreFocus: boolean) => {
+		setAccountOpen(false);
+		if (restoreFocus) accountTrigger.current?.focus();
+	};
+	useMenuDismissal(accountOpen, [accountWrap], closeAccount);
+	useEffect(() => {
+		if (!accountOpen) return;
+		let frame = requestAnimationFrame(() => {
+			accountWrap.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [accountOpen]);
 	let accountPresence = useTransitionPresence(
 		accountOpen ? true : undefined,
 		150,
@@ -649,7 +667,10 @@ export function NavigationShell(
 		setDrawerOpen(false);
 		setAccountOpen(false);
 		if (action === "rename") {
-			showDialog({ type: "rename", channel });
+			requestTitleEdit(channel.id, "rename");
+			if (currentDocumentIdRef.current !== channel.id) {
+				navigate(documentDestination(projectsRef.current, channel.id));
+			}
 			return;
 		}
 		if (action === "delete") {
@@ -666,7 +687,7 @@ export function NavigationShell(
 		}, reason => {
 			setError({ reason });
 		});
-	}, [acceptChannel, showDialog]);
+	}, [acceptChannel, navigate, showDialog]);
 	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
@@ -772,13 +793,23 @@ export function NavigationShell(
 					<div
 						aria-hidden={accountPresence.phase === "closing" ? "true" : undefined}
 						className={`navigation-account-menu motion-dropdown ${accountPresence.className}`}
+						id={accountMenuId}
 						inert={accountPresence.phase === "closing"}
+						onKeyDown={event => {
+							if (event.key === "Tab") return closeAccount(false);
+							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+							event.preventDefault();
+							event.currentTarget.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+						}}
 						role="menu"
 					>
 						<button onClick={() => void signOut()} role="menuitem" type="button">Sign out</button>
 					</div>
 				)}
+				accountMenuId={accountMenuId}
 				accountMenuOpen={accountOpen}
+				accountTriggerRef={accountTrigger}
+				accountWrapRef={accountWrap}
 				canCreateDocument={creationTarget.type !== "loading"}
 				pendingCreations={creation.pending}
 				newDocumentPhase={creationTarget.type === "loading"
@@ -845,11 +876,14 @@ export function NavigationShell(
 				</TerminalAlert>
 			)}
 			{children ?? (
-				<div className="flex h-full items-center justify-center text-sm text-text-tertiary">
-					{navigation?.projects.length === 0
-						? "Add a Project to start your first document."
-						: "Choose or create a document."}
-				</div>
+				<Suspense fallback={null}>
+					<EmptyWorkspace
+						disabled={creationTarget.type === "loading" || creation.pending.size > 0}
+						hasProjects={navigation?.projects.length !== 0}
+						onAddProject={() => showDialog("add")}
+						onNewDocument={newDocument}
+					/>
+				</Suspense>
 			)}
 		</>
 	);
@@ -946,17 +980,6 @@ export function NavigationShell(
 							onDismiss={dismissDialog}
 							onSelect={navigateToDocument}
 							projects={navigation?.projects ?? []}
-						/>
-					</LazyDialogBoundary>
-				)}
-				{dialogMotion && typeof presentedDialog === "object"
-					&& presentedDialog.type === "rename" && (
-					<LazyDialogBoundary>
-						<RenameDocumentDialog
-							channel={presentedDialog.channel}
-							motion={dialogMotion}
-							onDismiss={dismissDialog}
-							onRenamed={acceptChannel}
 						/>
 					</LazyDialogBoundary>
 				)}

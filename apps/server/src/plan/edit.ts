@@ -19,7 +19,7 @@ import { lookup } from "@chopin/dialect/dialect";
 import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 import { ulid } from "@chopin/dialect/ulid";
-import { assert } from "@chopin/dialect/validate";
+import { assert, assertIntroducedUrls } from "@chopin/dialect/validate";
 
 import * as room from "./room";
 
@@ -201,6 +201,7 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 		// to write — a rejected batch is recoverable, a poisoned room is not.
 		let parsed = parse(next);
 		assert(parsed, { bytes: new TextEncoder().encode(next).byteLength });
+		assertIntroducedUrls(root.children, parsed.children);
 		if (!room.fitsOrShrinks(source(plan), next, plan.questions.open.size)) {
 			throw new Error(EXPIRY_ROOM);
 		}
@@ -279,6 +280,7 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 		let next = serialize({ ...root, children });
 		let parsed = parse(next);
 		assert(parsed, { bytes: new TextEncoder().encode(next).byteLength });
+		assertIntroducedUrls(root.children, parsed.children);
 		if (!room.fitsOrShrinks(source(plan), next, plan.questions.open.size)) {
 			throw new Error(EXPIRY_ROOM);
 		}

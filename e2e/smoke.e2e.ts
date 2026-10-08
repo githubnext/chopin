@@ -9,6 +9,7 @@ import { chatInput, expectChatValue, fillChat } from "./chat-input";
  */
 
 import { content, expect, ready, roomPath, test } from "./room";
+import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { Chat } from "../packages/protocol/index";
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -49,10 +50,17 @@ async function scriptPlanner(page: Page) {
 	let turn = 0;
 	let busy = false;
 	let queued: Chat.Waiting[] = [];
+	let toolCount = 0;
+	let toolEntry = "";
+	let toolEntrySent = false;
+	let toolNames = new Map<string, string>();
+	let toolEntries = new Map<string, string>();
+	let sentEntryIds = new Set<string>();
 	let active = () => ({
 		id: `turn-${++turn}`,
 		handle: "ana",
 		started: 1_700_000_001,
+		entryOffset: sentEntryIds.size,
 		responded: false,
 	});
 	let announce = (id: string, text: string) =>
@@ -68,7 +76,10 @@ async function scriptPlanner(page: Page) {
 		});
 	let start = () => {
 		busy = true;
-		send?.({ kind: "chat:state", ts: 0, busy: true, turn: active() });
+		let state = active();
+		toolEntry = `tools-${turn}`;
+		toolEntrySent = false;
+		send?.({ kind: "chat:state", ts: 0, busy: true, turn: state });
 	};
 	await page.route("**/api/session", async route => {
 		let response = await route.fetch();
@@ -78,7 +89,11 @@ async function scriptPlanner(page: Page) {
 
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
-		send = frame => route.send(JSON.stringify(frame));
+		send = frame => {
+			let entry = frame.entry as { id?: string } | undefined;
+			if (frame.kind === "chat:message" && entry?.id) sentEntryIds.add(entry.id);
+			route.send(JSON.stringify(frame));
+		};
 		route.onMessage(message => {
 			if (typeof message !== "string") return server.send(message);
 			try {
@@ -148,23 +163,56 @@ async function scriptPlanner(page: Page) {
 			busy = false;
 			send?.({ kind: "chat:state", ts: 0, busy: false });
 		},
-		tool() {
+		tool(name = "read_plan", args = '{ "path": "src/store.ts" }', separateEntry = false) {
+			if (separateEntry) {
+				toolEntry = `tools-${turn}-${toolCount + 1}`;
+				toolEntrySent = false;
+			}
+			if (!toolEntrySent) {
+				send?.({
+					kind: "chat:message",
+					ts: 0,
+					entry: {
+						id: toolEntry,
+						author: { kind: "agent" },
+						text: "",
+						ts: 1_700_000_001,
+					},
+				});
+				toolEntrySent = true;
+			}
+			let id = `tool-${++toolCount}`;
+			toolNames.set(id, name);
+			toolEntries.set(id, toolEntry);
+			send?.({
+				kind: "chat:tool",
+				ts: 0,
+				entry: toolEntry,
+				activity: { id, name, status: "running", args },
+			});
+			return id;
+		},
+		finishTool(id: string, status: "done" | "failed", result: string) {
+			send?.({
+				kind: "chat:tool",
+				ts: 0,
+				entry: toolEntries.get(id),
+				activity: { id, name: toolNames.get(id), status, result, took: 38 },
+			});
+		},
+		complete() {
 			send?.({
 				kind: "chat:message",
 				ts: 0,
 				entry: {
-					id: "tools",
+					id: "answer",
 					author: { kind: "agent" },
-					text: "",
-					ts: 1_700_000_001,
+					text: "I found it.",
+					ts: 1_700_000_002,
 				},
 			});
-			send?.({
-				kind: "chat:tool",
-				ts: 0,
-				entry: "tools",
-				activity: { id: "tool-1", name: "read_plan", status: "running" },
-			});
+			busy = false;
+			send?.({ kind: "chat:state", ts: 0, busy: false });
 		},
 		stream() {
 			send?.({
@@ -366,9 +414,11 @@ test("chat keeps both ends of a tall transcript clear across layouts", async ({ 
 	expect(position.messageBottom).toBeLessThanOrEqual(position.scrollerBottom);
 });
 
-test("chat disables Send when its socket disconnects", async ({ join, page }) => {
+test("chat disables Send once a lost socket outlasts a blip", async ({ join, page }) => {
 	let sockets: WebSocketRoute[] = [];
+	let offline = false;
 	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
 		route.connectToServer();
 		sockets.push(route);
 	});
@@ -379,8 +429,13 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 	await draft.fill("A draft left during reconnect.");
 	await expect(send).toBeEnabled();
 
+	offline = true;
 	await sockets.at(-1)!.close();
+	// Inside the grace period nothing changes; after it, Send waits and the
+	// draft stays.
+	await expect(send).toBeEnabled();
 	await expect(send).toBeDisabled();
+	await expectChatValue(draft, "A draft left during reconnect.");
 });
 
 test("chat routes one Send action by @chopin without blocking room messages or its queue", async ({ join, page }) => {
@@ -449,6 +504,7 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 
 	let working = chat.locator('[data-chat-state="working"]');
 	await expect(working).toBeVisible();
+	await expect(working.getByText("Getting oriented")).toBeVisible();
 	let timestamp = await page.evaluate(() =>
 		new Date(1_700_000_001 * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 	);
@@ -490,48 +546,227 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	await chatInput(chat).fill("@chopin Try again.");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
+	planner.tool();
+	await expect(chat.getByText("Gathering context", { exact: true })).toBeVisible();
 	planner.fail();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await expect(chat.getByText("Planner unavailable.")).toBeVisible();
+	await chat.getByRole("button", { name: /Work details.*1 action.*1 interrupted/ }).click();
+	await expect(chat.getByRole("button", { name: /Read plan.*Interrupted/ })).toBeVisible();
 
 	await page.reload();
 	await ready(page);
 	await expect(chatPane(page).locator('[data-chat-state="working"]')).toHaveCount(0);
 });
 
-test("chat keeps Working on it through tool activity and streamed prose", async ({ join, page }) => {
+test(
+	"chat progresses through real work and reveals tool input and results",
+	async ({ join, page }, testInfo) => {
+		let planner = await scriptPlanner(page);
+		let chat = chatPane(await join("ana"));
+
+		await chatInput(chat).fill(
+			"@chopin Check the current plan.",
+		);
+		await chat.getByRole("button", { name: "Send message" }).click();
+		await planner.started;
+		await expect(chat.getByText("Getting oriented")).toBeVisible();
+		let live = chat.locator("[data-chat-work-announcer]");
+		await expect(live).toHaveText("Chopin has started.");
+		await live.evaluate(element => element.setAttribute("data-live-node", "retained"));
+
+		let read = planner.tool("read_plan", '{ "path": "<store.ts>" }');
+		let work = chat.locator('[data-chat-state="working"]');
+		let disclosure = work.getByRole("button", { name: /Gathering context/ });
+		await expect(disclosure).toBeVisible();
+		await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+		await expect(live).toHaveText("Chopin is gathering context.");
+		await expect(live).toHaveAttribute("data-live-node", "retained");
+		let controlled = await disclosure.getAttribute("aria-controls");
+		await expect(chat.locator(`[id="${controlled}"]`)).toHaveCount(1);
+		await expect(work.getByText("Read plan", { exact: true })).toHaveCount(0);
+		await chat.screenshot({ path: testInfo.outputPath("work-active.png") });
+
+		await disclosure.focus();
+		await page.keyboard.press("Enter");
+		await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+		let tool = work.getByRole("button", { name: /Read plan.*Running/ });
+		await expect(tool).toBeVisible();
+		await expect(tool).toHaveAttribute("aria-expanded", "false");
+		await tool.click();
+		await expect(tool).toHaveAttribute("aria-expanded", "true");
+		await expect(work.getByText('"path": "<store.ts>"', { exact: false })).toBeVisible();
+		await chat.screenshot({ path: testInfo.outputPath("work-expanded.png") });
+
+		planner.finishTool(read, "done", "Found the storage adapter.");
+		await expect(work.getByText("Reviewing the next step")).toBeVisible();
+		await expect(live).toHaveText("Chopin is preparing to continue.");
+		await expect(live).toHaveAttribute("data-live-node", "retained");
+		await expect(work.getByText("1 finished")).toBeVisible();
+		await expect(work.getByText("Found the storage adapter.")).toBeVisible();
+		await expect(work.getByRole("button", { name: /Reviewing the next step/ })).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		);
+
+		let edit = planner.tool("edit_plan", '{ "block": "persistence" }');
+		await expect(work.getByText("Making changes")).toBeVisible();
+		await expect(live).toHaveText("Chopin is making changes.");
+		await expect(live).toHaveAttribute("data-live-node", "retained");
+		await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
+		planner.finishTool(edit, "done", "Document updated.");
+		planner.stream();
+		await expect(work.getByText("Writing a response")).toBeVisible();
+		await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
+		await expect(chat.getByText("I found it.")).toBeVisible();
+
+		planner.complete();
+		await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
+		let finished = chat.getByRole("button", { name: /Work details.*2 actions/ });
+		await expect(finished).toHaveAttribute("aria-expanded", "true");
+		await expect(live).toHaveText("Chopin turn ended. Work details remain available.");
+		await expect(live).toHaveAttribute("data-live-node", "retained");
+		await expect(chat.getByText("Document updated.")).not.toBeVisible();
+		await chat.screenshot({ path: testInfo.outputPath("work-completed.png") });
+	},
+);
+
+test("chat anchors active work when later tools arrive on another message", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
-
-	await chatInput(chat).fill(
-		"@chopin Check the current plan.",
-	);
+	await chatInput(chat).fill("@chopin Inspect and edit.");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 
-	planner.tool();
-	await expect(chat.getByText("Read plan", { exact: true })).toBeVisible();
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
-
-	planner.stream();
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
-	await expect(chat.getByText("I found it.")).toBeVisible();
-	await expect(
-		chat.locator('[data-chat-state="working"]')
-			.locator("xpath=ancestor::*[@data-chat-entry][1]")
-			.getByText(/^Started at /),
-	).toBeVisible();
+	let first = planner.tool();
+	let work = chat.locator('[data-chat-state="working"]');
+	await expect(work.getByText("Gathering context")).toBeVisible();
+	let anchor = await work.getAttribute("data-chat-message-id");
+	planner.finishTool(first, "done", "Read the document.");
+	planner.tool("edit_plan", '{ "block": "persistence" }', true);
+	await expect(work.getByText("Making changes")).toBeVisible();
+	await expect(work).toHaveAttribute("data-chat-message-id", anchor!);
+	await expect(work).toContainText("1 finished");
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
+	await work.getByRole("button", { name: /Making changes/ }).click();
+	await expect(work.getByText("Read plan", { exact: true })).toBeVisible();
+	await expect(work.getByText("Edit plan", { exact: true })).toBeVisible();
 
 	await chat.getByRole("button", { name: "Stop Chopin" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
+	let completed = chat.locator(`[data-chat-message-id="${anchor}"]`);
+	await expect(completed.getByRole("button", { name: /Work details.*2 actions/ })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
+	await expect(completed.getByText("Read plan", { exact: true })).toBeVisible();
+	await expect(completed.getByText("Edit plan", { exact: true })).toBeVisible();
 });
 
-test("chat history keeps Working on it after Planner prose and a later room message", async ({ join, page }) => {
+test("chat keeps an opened disclosure when prose precedes a separate tool entry", async ({ join, page }) => {
+	let planner = await scriptPlanner(page);
+	let chat = chatPane(await join("ana"));
+	await chatInput(chat).fill("@chopin Inspect this.");
+	await chat.getByRole("button", { name: "Send message" }).click();
+	await planner.started;
+	planner.stream();
+	let prose = chat.locator('[data-chat-message-id="answer"]');
+	await expect(prose.getByText("Writing a response")).toBeVisible();
+	let tool = planner.tool("read_plan", '{ "path": "src/store.ts" }', true);
+	await expect(prose.getByText("Gathering context")).toBeVisible();
+	let disclosure = prose.getByRole("button", { name: /Gathering context/ });
+	await disclosure.click();
+	await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+	await disclosure.evaluate(element => element.setAttribute("data-open-node", "retained"));
+	planner.finishTool(tool, "done", "Read the document.");
+	planner.complete();
+	let finished = prose.getByRole("button", { name: /Work details.*1 action/ });
+	await expect(finished).toHaveAttribute("aria-expanded", "true");
+	await expect(finished).toHaveAttribute("data-open-node", "retained");
+	await expect(prose.getByText("Read plan", { exact: true })).toBeVisible();
+	await expect(chat.getByRole("button", { name: /Work details.*1 action/ })).toHaveCount(1);
+});
+
+test("chat keeps opened work details on their prose anchor through a disconnect", async ({ join, page }) => {
+	let sockets: WebSocketRoute[] = [];
+	let reconnecting = Promise.withResolvers<void>();
+	let releaseHistory: (() => void) | undefined;
+	let turn: Chat.Turn = {
+		id: "turn-offline",
+		handle: "ana",
+		started: 1_700_000_001,
+		entryOffset: 1,
+		responded: true,
+	};
+	let entries: Chat.Entry[] = [
+		{
+			id: "prompt",
+			author: { kind: "member", handle: "ana" },
+			text: "@chopin Inspect this.",
+			ts: 1_700_000_000,
+		},
+		{ id: "prose", author: { kind: "agent" }, text: "I will inspect this.", ts: 1_700_000_001 },
+		{
+			id: "read-entry",
+			author: { kind: "agent" },
+			text: "",
+			ts: 1_700_000_001,
+			tools: [{ id: "read", name: "read_plan", status: "done", result: "Read it." }],
+		},
+		{
+			id: "edit-entry",
+			author: { kind: "agent" },
+			text: "",
+			ts: 1_700_000_001,
+			tools: [{ id: "edit", name: "edit_plan", status: "running", args: "{}" }],
+		},
+	];
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		sockets.push(route);
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message !== "string") return route.send(message);
+			let frame = JSON.parse(message) as Chat.History;
+			if (frame.kind !== "chat:history") return route.send(message);
+			let history = JSON.stringify({ ...frame, busy: true, turn, entries });
+			if (sockets.length === 2) {
+				releaseHistory = () => route.send(history);
+				reconnecting.resolve();
+				return;
+			}
+			route.send(history);
+		});
+	});
+
+	let chat = chatPane(await join("ana"));
+	let prose = chat.locator('[data-chat-message-id="prose"]');
+	let disclosure = prose.getByRole("button", { name: /Making changes/ });
+	await disclosure.click();
+	await disclosure.evaluate(element => element.setAttribute("data-open-node", "retained"));
+	await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+	await sockets[0]!.close();
+	await reconnecting.promise;
+	await expect(prose).toHaveAttribute("data-chat-state", "disconnected");
+	let offline = prose.getByRole("button", { name: /Work details.*2 actions.*Connection lost/ });
+	await expect(offline).toHaveAttribute("data-open-node", "retained");
+	await expect(offline).toHaveAttribute("aria-expanded", "true");
+	await expect(prose.locator('[data-work-active="false"][data-work-disconnected="true"]'))
+		.toHaveCount(1);
+	await expect(prose.getByRole("button", { name: /Edit plan.*Last seen running/ })).toBeVisible();
+	releaseHistory?.();
+	await expect(prose).toHaveAttribute("data-chat-state", "working");
+	await expect(prose.getByRole("button", { name: /Making changes/ })).toHaveAttribute(
+		"data-open-node",
+		"retained",
+	);
+});
+
+test("chat history keeps one active work row after Planner prose and a later room message", async ({ join, page }) => {
 	await injectChatHistory(page, frame => ({
 		...frame,
 		busy: true,
-		turn: { id: "turn-1", handle: "ana", started: 1_700_000_000, responded: true },
+		turn: { id: "turn-1", handle: "ana", started: 1_700_000_000, entryOffset: 1, responded: true },
 		entries: [
 			{
 				id: "prompt",
@@ -557,7 +792,8 @@ test("chat history keeps Working on it after Planner prose and a later room mess
 	let chat = chatPane(await join("ana"));
 	await expect(chat.getByText("I found the issue.")).toBeVisible();
 	await expect(chat.getByText("Please include the examples.")).toBeVisible();
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
+	await expect(chat.getByText("Reviewing the next step")).toBeVisible();
 });
 
 test("chat waits for fresh history after reconnect before projecting a stale turn", async ({ join, page }) => {
@@ -577,7 +813,13 @@ test("chat waits for fresh history after reconnect before projecting a stale tur
 					kind: "chat:state",
 					ts: 0,
 					busy: true,
-					turn: { id: "stale", handle: "ana", started: 1_700_000_000, responded: false },
+					turn: {
+						id: "stale",
+						handle: "ana",
+						started: 1_700_000_000,
+						entryOffset: 0,
+						responded: false,
+					},
 				}));
 				releaseHistory = () => route.send(message);
 				historyHeld.resolve();
@@ -604,6 +846,13 @@ test(
 		await injectChatHistory(page, frame => ({
 			...frame,
 			busy: true,
+			turn: {
+				id: "turn-1",
+				handle: "maggie",
+				started: 1_700_000_001,
+				entryOffset: 1,
+				responded: true,
+			},
 			entries: [
 				{
 					id: "m1",
@@ -636,10 +885,10 @@ test(
 
 		await join("ana");
 		let chat = chatPane(page);
-		let live = chat.getByText("Edit plan", { exact: true }).locator("..");
+		let live = chat.getByRole("button", { name: /Making changes/ });
 
-		await expect(live).toContainText("7 done");
-		await expect(chat.getByRole("button", { name: /Edit plan/ })).toHaveCount(0);
+		await expect(live).toContainText("7 finished");
+		await expect(chat.getByText("Edit plan", { exact: true })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
 		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "Ask Chopin" });
@@ -656,6 +905,95 @@ test(
 		});
 	},
 );
+
+test("a Planner question waits on people and opens its card", async ({ join, page, seed }) => {
+	let widget = "01K0N700000000000000000001";
+	let question = {
+		id: "01K0N700000000000000000002",
+		header: "Rollout",
+		question: "Should we ship a small pilot?",
+		multiple: false,
+		options: [{ id: "01K0N700000000000000000003", label: "Start small", description: "" }],
+	};
+	let definition = { questions: [question] };
+	await seed(
+		`# Migration
+
+<Questionnaire id="${widget}" by="chopin">
+<Question id="${question.id}" header="${question.header}" prompt="${question.question}" multiple="false">
+<Option id="${question.options[0]!.id}" label="Start small" />
+</Question>
+</Questionnaire>
+`,
+		{
+			revision: 1,
+			questions: [{
+				id: widget,
+				definition,
+				status: "open",
+				origin: "planner",
+				history: [],
+				optionOrigins: {},
+				editors: [],
+			}],
+			openQuestions: [{
+				definition,
+				id: widget,
+				model: storedQuestion(definition),
+				revision: 0,
+				widget,
+			}],
+		},
+	);
+	let wire = await injectChatHistory(page, frame => ({
+		...frame,
+		busy: true,
+		turn: {
+			id: "turn-wait",
+			handle: "ana",
+			started: 1_700_000_001,
+			entryOffset: 0,
+			responded: true,
+		},
+		entries: [{
+			id: "a1",
+			author: { kind: "agent" },
+			text: "I need a decision before I edit.",
+			ts: 1_700_000_001,
+			tools: [
+				{ id: "t1", name: "read_plan", status: "done", took: 20 },
+				{
+					id: "t2",
+					name: "ask",
+					status: "running",
+					args: JSON.stringify({ revision: 1, questions: [{ question: question.question }] }),
+				},
+			],
+		}],
+	}));
+
+	await join("ana");
+	let chat = chatPane(page);
+	let waiting = chat.locator("[data-tool-waiting]");
+	await expect(waiting).toHaveText(/Waiting on your decision/);
+	await expect(waiting.locator(".chat-work-lattice")).toHaveCount(0);
+	await waiting.getByRole("button", { name: "Open decision" }).click();
+	await expect(
+		page.locator(
+			`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${widget}"]`,
+		),
+	).toBeFocused();
+
+	wire.send({
+		kind: "chat:tool",
+		ts: 0,
+		entry: "a1",
+		activity: { id: "t2", name: "ask", status: "done", took: 4_000 },
+	});
+	wire.send({ kind: "chat:state", ts: 0, busy: false });
+	await expect(waiting).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: /Work details.*2 actions/ })).toBeVisible();
+});
 
 test(
 	"chat groups authors and collapses a finished tool run",
@@ -703,26 +1041,28 @@ test(
 		await expect(chat).not.toContainText("@");
 		await expect(chat.getByText("Read file", { exact: true })).toHaveCount(0);
 
-		let run = chat.getByRole("button", { name: /4 tools.*1 failed.*1\.3s/ });
+		let run = chat.getByRole("button", {
+			name: /Work details.*4 actions.*1 failed.*1\.3s tool time/,
+		});
 		await expect(run).toBeVisible();
-		await expect(run).not.toHaveAttribute("aria-controls");
+		let controlled = await run.getAttribute("aria-controls");
+		expect(controlled).toBeTruthy();
+		await expect(chat.locator(`[id="${controlled}"]`)).toHaveCount(1);
 		await run.click();
 		let toolLog = chat.locator('[data-motion-disclosure="chat-tools"]');
 		let icon = run.locator("[data-feedback-icon]");
-		let toolLogId = await toolLog.getAttribute("id");
-		expect(toolLogId).toBeTruthy();
-		await expect(run).toHaveAttribute("aria-controls", toolLogId!);
+		await expect(run).toHaveAttribute("aria-controls", controlled!);
 		await expect(icon).toHaveAttribute("data-feedback-icon", "open");
 		await expect(chat.getByText("Read file", { exact: true })).toBeVisible();
 		await expect(chat.getByText("Run tests", { exact: true })).toBeVisible();
 		let failed = chat.getByRole("listitem").filter({ hasText: "Run tests" });
 		await expect(failed).toHaveAttribute("data-tool-status", "failed");
 		await run.click();
-		await expect(run).not.toHaveAttribute("aria-controls");
+		await expect(run).toHaveAttribute("aria-controls", controlled!);
 		await expect(toolLog).toHaveAttribute("aria-hidden", "true");
 		await expect(toolLog).toHaveAttribute("inert", "");
 		await run.click();
-		await expect(run).toHaveAttribute("aria-controls", toolLogId!);
+		await expect(run).toHaveAttribute("aria-controls", controlled!);
 		await expect(toolLog).toHaveCount(1);
 		await expect(toolLog).not.toHaveAttribute("aria-hidden", "true");
 		await expect(toolLog).not.toHaveAttribute("inert", "");
@@ -740,7 +1080,7 @@ test(
 test("an empty room settles rather than loading forever", async ({ join }) => {
 	let page = await join("ana");
 
-	await expect(page.locator('[aria-live="polite"][data-level]')).toHaveAttribute(
+	await expect(page.locator(".plan-status")).toHaveAttribute(
 		"data-level",
 		"hidden",
 	);

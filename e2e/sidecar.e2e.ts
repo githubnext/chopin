@@ -199,23 +199,26 @@ async function secondThread(page: import("@playwright/test").Page) {
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 }
 
-test("a desktop comment uses a stable document-edge surface", async ({ join, seed }) => {
+test("a wide desktop comment sits in the gutter beside its passage", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_440, height: 900 });
 	await page.getByRole("button", { name: "Close sidebar" }).click();
-	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	let card = await thread(page);
+	let paragraph = content(page).locator("p").first();
 	let document = page.locator(".plan-document");
+	await expect(card).toHaveAttribute("data-side", "right");
 
 	await expect.poll(async () => {
 		let cardBox = await card.boundingBox();
+		let paragraphBox = await paragraph.boundingBox();
 		let documentBox = await document.boundingBox();
-		if (!cardBox || !documentBox) return Number.POSITIVE_INFINITY;
-		return Math.abs(
-			documentBox.x + documentBox.width - 12 - (cardBox.x + cardBox.width),
-		);
-	}).toBeLessThanOrEqual(1);
+		if (!cardBox || !paragraphBox || !documentBox) return false;
+		return cardBox.x >= paragraphBox.x + paragraphBox.width
+			&& cardBox.x + cardBox.width <= documentBox.x + documentBox.width
+			&& Math.abs(cardBox.y - paragraphBox.y) <= 4;
+	}).toBe(true);
 });
 
 test("a narrow split document keeps the desktop comment popover", async ({ join, seed }) => {
@@ -223,16 +226,19 @@ test("a narrow split document keeps the desktop comment popover", async ({ join,
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_024, height: 800 });
 	let card = await thread(page);
-	let document = page.locator(".plan-document");
+	let paragraph = content(page).locator("p").first();
 
 	await expect(card).not.toHaveAttribute("aria-modal", "true");
 	await expect(page.getByRole("button", { name: "Resize comment sheet" })).toHaveCount(0);
+	// No gutter is wide enough here, so the card sits below the passage inside its column.
 	await expect.poll(async () => {
 		let cardBox = await card.boundingBox();
-		let documentBox = await document.boundingBox();
-		if (!cardBox || !documentBox) return false;
+		let paragraphBox = await paragraph.boundingBox();
+		if (!cardBox || !paragraphBox) return false;
 		return cardBox.width <= 320
-			&& Math.abs(cardBox.x + cardBox.width - (documentBox.x + documentBox.width - 12)) <= 1;
+			&& cardBox.y >= paragraphBox.y + paragraphBox.height
+			&& cardBox.x >= paragraphBox.x - 1
+			&& cardBox.x + cardBox.width <= paragraphBox.x + paragraphBox.width + 1;
 	}).toBe(true);
 });
 
@@ -441,7 +447,7 @@ test("compact Chat returns to the document after a collaborator adds prose", asy
 		await expect(documentEditor(bo)).toBeVisible();
 		let paragraph = documentEditor(bo).locator(":scope > p").first();
 		await expect(paragraph).toBeEmpty();
-		await paragraph.click();
+		await documentEditor(bo).press("Home");
 		await bo.keyboard.type("Collaborative prose arrived.");
 		await expect(documentEditor(ana)).toContainText(
 			"Collaborative prose arrived.",
@@ -1055,47 +1061,34 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep the whole passage.");
-	let knownMarkers = await page.locator("[data-plan-comment-button]").evaluateAll(buttons =>
-		buttons.map(button => button.getAttribute("data-plan-comment-button"))
-	);
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 
-	let postedId: string | null | undefined;
-	await expect.poll(async () => {
-		let ids = await page.locator("[data-plan-comment-button]").evaluateAll(buttons =>
-			buttons.map(button => button.getAttribute("data-plan-comment-button"))
-		);
-		let posted = ids.filter(id => id && !knownMarkers.includes(id));
-		postedId = posted[0];
-		return posted.length;
-	}).toBe(1);
-	let marker = page.locator(`[data-plan-comment-button="${postedId}"]`);
-	await expect(marker).toBeAttached();
+	// Both threads mark the one block, so they share its marker.
+	// A modal sheet hides the document from the accessibility tree, so find the marker by its data.
+	let marker = page.locator("[data-plan-comment-button][data-plan-comment-count='2']");
+	await expect(marker).toHaveAttribute("aria-label", /^2 comments on “A selected passage/);
+	await expect(page.locator("[data-plan-comment-button]")).toHaveCount(1);
 	await marker.click();
+	await page.getByRole("dialog", { name: "Comments" })
+		.locator("[data-plan-comment-group-item]")
+		.filter({ hasText: "Keep the whole passage." })
+		.click();
 	let sheet = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(sheet).toContainText("Keep the whole passage.");
-	let grabber = sheet.getByRole("button", { name: "Resize comment sheet" });
-	await expect(grabber).toBeFocused();
+	let back = sheet.getByRole("button", { name: "All 2 comments" });
+	await expect(back).toBeFocused();
 
-	// No 44px point can fit inside this host. The marker moves beyond the passage,
-	// but the open sheet and its focus must not be unmounted while geometry changes.
+	// The open sheet and its focus must not be unmounted while geometry changes,
+	// even in a host too narrow to hold a marker beside the prose.
 	await page.setViewportSize({ width: 32, height: 300 });
 	await expect(marker).toBeAttached();
 	await expect(sheet).toBeVisible();
-	await expect(grabber).toBeFocused();
+	await expect(back).toBeFocused();
 	let host = page.locator(".plan-document");
-	await expect.poll(async () => {
-		let markerBox = await marker.boundingBox();
-		let documentBox = await host.boundingBox();
-		return !!markerBox && !!documentBox && documentBox.width < 44
-			&& markerBox.y >= documentBox.y + documentBox.height;
-	}).toBe(true);
 
-	// Recover with enough vertical room for the marker after the passage. Whether a
-	// 44px marker fits beside the wrapped text depends on platform font metrics.
 	await page.setViewportSize({ width: 430, height: 3_200 });
 	await expect(sheet).toBeVisible();
-	await expect(grabber).toBeFocused();
+	await expect(back).toBeFocused();
 	await expect(marker).toBeAttached();
 	await expect.poll(async () => {
 		let markerBox = await marker.boundingBox();
@@ -1118,7 +1111,9 @@ test("a touch comment opens as a modal sheet and restores its marker", async ({ 
 	let markerBox = await marker.boundingBox();
 	expect(markerBox).not.toBeNull();
 	expect(markerBox!.width).toBeGreaterThanOrEqual(44);
-	expect(markerBox!.height).toBeGreaterThanOrEqual(44);
+	// As tall as the first line, never more than 44px, so the next line keeps its taps.
+	expect(markerBox!.height).toBeGreaterThanOrEqual(24);
+	expect(markerBox!.height).toBeLessThanOrEqual(44);
 	let markerBoxes = await commentButton(page).evaluateAll(buttons =>
 		buttons.map(button => {
 			let box = button.getBoundingClientRect();
@@ -1139,11 +1134,14 @@ test("a touch comment opens as a modal sheet and restores its marker", async ({ 
 			return { bottom: box.bottom, left: box.left, right: box.right, top: box.top };
 		})
 	);
+	// The visible chip never covers prose; only its invisible touch area may reach the line end.
+	let chip = await marker.locator(".plan-comment-chip").boundingBox();
+	expect(chip).not.toBeNull();
 	expect(passages.every(passage =>
-		markerBox!.x >= passage.right
-		|| markerBox!.x + markerBox!.width <= passage.left
-		|| markerBox!.y >= passage.bottom
-		|| markerBox!.y + markerBox!.height <= passage.top
+		chip!.x >= passage.right
+		|| chip!.x + chip!.width <= passage.left
+		|| chip!.y >= passage.bottom
+		|| chip!.y + chip!.height <= passage.top
 	)).toBe(true);
 
 	await marker.tap();
@@ -1217,7 +1215,7 @@ test("clicking a comment button pins its document card and preserves the related
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_440, height: 900 });
 	await page.getByRole("button", { name: "Close sidebar" }).click();
-	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	let card = await thread(page);
 	await expect(card).toContainText("@dev");
 	await expect(card.getByPlaceholder("Reply…")).toBeVisible();

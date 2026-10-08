@@ -41,8 +41,13 @@ const SAMPLE = {
 	],
 };
 
-export function enabled(): boolean {
-	return !!process.env.DEV_QUESTIONS;
+/**
+ * Seed a document once. Its records outlive reopening, renaming and other
+ * clients, so an empty record map means the sample was never asked.
+ */
+export function enabled(plan: Pick<Plan, "records">): boolean {
+	return !!process.env.DEV_QUESTIONS && process.env.NODE_ENV !== "production"
+		&& plan.records.size === 0;
 }
 
 /** Ask the sample questionnaire, and log what comes back. */

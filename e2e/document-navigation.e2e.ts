@@ -1,5 +1,6 @@
 import { authenticate, content, expect, roomPath, test } from "./room";
 import { createChannel, seedChannel } from "./database";
+import { chatInput } from "./chat-input";
 
 function channel(id: string, title: string, description?: string) {
 	return {
@@ -48,6 +49,38 @@ function documentRouteLayers(page: import("@playwright/test").Page, selector: st
 	});
 }
 
+// Records visible route layers every frame; exit and entry are too brief to poll.
+async function recordRouteLayers(page: import("@playwright/test").Page) {
+	await page.evaluate(() => {
+		let samples: string[] = [];
+		(window as Window & { __routeSamples?: string[] }).__routeSamples = samples;
+		let sample = () => {
+			let layers = document.querySelectorAll<HTMLElement>(
+				".document-route-swap > [data-content-swap-state]:not([hidden])",
+			);
+			samples.push(
+				[...layers].map(layer =>
+					`${layer.dataset.contentSwapState}${layer.hasAttribute("inert") ? ":inert" : ""}`
+				).join(" "),
+			);
+			if (samples.length < 1200) requestAnimationFrame(sample);
+		};
+		requestAnimationFrame(sample);
+	});
+}
+
+async function routeLayerSamples(page: import("@playwright/test").Page) {
+	let samples = await page.evaluate(() =>
+		(window as Window & { __routeSamples?: string[] }).__routeSamples ?? []
+	);
+	// Two routes are never interactive at once.
+	for (let sample of samples) {
+		expect(sample.split(" ").filter(layer => layer && !layer.endsWith(":inert")).length)
+			.toBeLessThanOrEqual(1);
+	}
+	return samples;
+}
+
 async function headerAction(page: import("@playwright/test").Page, action: string) {
 	await headerActions(page).click();
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
@@ -76,7 +109,7 @@ test("a newly navigated parent document opens and submits its own comment compos
 
 	let draft = active.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this parent passage.");
-	await draft.getByRole("button", { name: "Comment", exact: true }).click();
+	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 	await expect(active.getByRole("button", { name: /Comment on “The destination parent/ }))
 		.toBeVisible();
 });
@@ -125,6 +158,41 @@ test("document action menu motion follows its pointer trigger and survives inter
 	await expect(retainedMenu).toHaveCount(1);
 	await page.keyboard.press("Escape");
 	await expect(menu).toHaveCount(0);
+});
+
+test("header actions menu is start-aligned to its trigger", async ({ join }) => {
+	let page = await join("ana");
+	let trigger = headerActions(page);
+	await trigger.click();
+	let menu = page.getByRole("menu", { name: /^Actions for / });
+	await expect(menu).toBeVisible();
+	let [triggerBox, layout] = await Promise.all([
+		trigger.boundingBox(),
+		menu.evaluate(element => ({
+			left: (element as HTMLElement).offsetLeft,
+			top: (element as HTMLElement).offsetTop,
+		})),
+	]);
+	expect(layout.left).toBeCloseTo(triggerBox!.x, 0);
+	expect(layout.top).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height);
+});
+
+test("account menu closes on Escape and outside click, and returns focus", async ({ join }) => {
+	let page = await join("ana");
+	let account = sidebar(page).locator(".project-sidebar-account");
+	let menu = page.getByRole("menu").filter({
+		has: page.getByRole("menuitem", { name: "Sign out" }),
+	});
+	await account.click();
+	await expect(menu).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(menu).toHaveCount(0);
+	await expect(account).toBeFocused();
+	await account.click();
+	await expect(menu).toBeVisible();
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(menu).toHaveCount(0);
+	await expect(account).toHaveAttribute("aria-expanded", "false");
 });
 
 test("document action menu motion settles keyboard opening immediately", async ({ join }) => {
@@ -180,15 +248,119 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toBeVisible();
 	await expect(projects.locator('[aria-current="page"]')).toHaveCount(1);
 	await expect(header.getByRole("button", { name: /planner session/i })).toHaveCount(0);
+	await expect(trigger).toBeVisible();
 	await headerAction(page, "Rename");
 	let title = page.getByRole("textbox", { name: "Document title" });
 	await expect(title).toBeFocused();
 	await title.press("Escape");
-	await expect(trigger).toBeFocused();
+	await expect(header.getByRole("button", { name: /^Rename / })).toBeFocused();
 
 	await projects.getByRole("button", { name: "New document", exact: true }).click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
+	// A new document opens with its generated name selected, ready to be replaced.
+	await expect(title).toBeFocused();
+	expect(
+		await title.evaluate(field => {
+			let input = field as HTMLInputElement;
+			return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+		}),
+	).toBe(true);
+	let name = `Named ${crypto.randomUUID().slice(0, 8)}`;
+	await page.keyboard.type(name);
+	await page.keyboard.press("Enter");
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+	await expect(content(page)).toBeFocused();
+	await expect(projects.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
+test("the header title renames in place with click, F2, Escape, and blur", async ({ join, room }) => {
+	let page = await join("ana");
+	let header = page.getByRole("banner");
+	let field = page.getByRole("textbox", { name: "Document title" });
+	let title = `Inline ${room.slice(0, 8)}`;
+
+	await header.getByRole("button", { name: /^Rename / }).click();
+	await expect(field).toBeFocused();
+	await field.fill("Discarded title");
+	await field.press("Escape");
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).not.toHaveAccessibleName("Document: Discarded title");
+
+	let button = header.getByRole("button", { name: /^Rename / });
+	await expect(button).toBeFocused();
+	await button.press("F2");
+	await expect(field).toBeFocused();
+	await field.fill(title);
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
+	await expect(header.getByRole("button", { name: `Rename ${title}`, exact: true })).toBeVisible();
+});
+
+test("typing straight after New document names it without losing a character", async ({ join }) => {
+	let page = await join("ana");
+	let cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+	try {
+		for (let delay of [0, 10]) {
+			// Sixteen characters typed while the document is still being created and opened.
+			let name = `Quick${crypto.randomUUID().replaceAll("-", "").slice(0, 11)}`;
+			await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
+			await page.keyboard.type(name, { delay });
+			await page.keyboard.press("Enter");
+			await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
+			await expect(content(page)).not.toContainText(name.slice(0, 5));
+		}
+	} finally {
+		await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+	}
+});
+
+test("sidebar Rename opens that document with its title ready to edit", async ({ baseURL, join }) => {
+	let other = crypto.randomUUID();
+	let otherTitle = `Test ${other.slice(0, 8)}`;
+	await createChannel(Number(new URL(baseURL!).port), other);
+	let page = await join("ana");
+	let projects = sidebar(page);
+
+	await projects.getByRole("link", { name: otherTitle, exact: true }).hover();
+	await projects.getByRole("button", { name: `Actions for ${otherTitle}` }).click();
+	await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${otherTitle}`);
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await expect(field).toBeFocused();
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	let renamed = `Renamed ${other.slice(0, 8)}`;
+	await field.fill(renamed);
+	await field.press("Enter");
+	await expect(projects.getByRole("link", { name: renamed, exact: true })).toBeVisible();
+});
+
+test("leaving a rejected title reverts it without retrying", async ({ join, room }) => {
+	let page = await join("ana");
+	let patches = 0;
+	await page.route("**/api/channels/*", async route => {
+		if (route.request().method() !== "PATCH") return route.continue();
+		patches += 1;
+		await route.fulfill({
+			status: 409,
+			json: { error: "a document with this title already exists" },
+		});
+	});
+	let before = await headerDocument(page).getAttribute("aria-label");
+	await page.getByRole("banner").getByRole("button", { name: /^Rename / }).click();
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await field.fill(`Taken ${room.slice(0, 8)}`);
+	await field.press("Enter");
+	await expect(page.getByRole("alert")).toHaveText(
+		"A document with this title already exists. Try a different title.",
+	);
+
+	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await expect(field).toHaveCount(0);
+	await expect(headerDocument(page)).toHaveAttribute("aria-label", before!);
+	expect(patches).toBe(1);
 });
 
 test("a pointer-dismissed navigation dialog releases focus while it exits", async ({ join }) => {
@@ -232,6 +404,92 @@ test("sidebar titles stay readable until hover reveals controls", async ({ join,
 	expect(await clipped()).toBe(true);
 	let [rowBox, actionsBox] = await Promise.all([row.boundingBox(), actions.boundingBox()]);
 	expect(rowBox!.x + rowBox!.width - actionsBox!.x - actionsBox!.width).toBeLessThanOrEqual(8);
+});
+
+test("sidebar rows stay single-line and reveal descriptions beside the rail", async ({ join, page }) => {
+	let title = "Release plan";
+	let description = "Coordinates the release readiness work across every team.";
+	let listed = channel("cccccccc-0000-4000-8000-000000000000", title, description);
+	await page.route(
+		"**/api/repositories/octo-org/score/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: [listed], repository } }),
+	);
+
+	page = await join("ana");
+	let projects = sidebar(page);
+	let link = projects.getByRole("link", { name: title, exact: true });
+	await expect(link).toHaveAccessibleDescription(description);
+	await expect(projects.getByText(description)).toHaveCount(0);
+	let row = link.locator("..");
+	expect((await row.boundingBox())!.height).toBe(30);
+
+	let pencil = projects.getByRole("button", { name: "New document in score", exact: true });
+	await row.hover();
+	await expect(pencil).toHaveCSS("opacity", "0");
+	let card = page.locator("[data-icon-tooltip]");
+	await expect(card).toHaveText(description);
+	await expect(card).toBeVisible();
+	let [cardBox, railBox] = await Promise.all([card.boundingBox(), projects.boundingBox()]);
+	expect(cardBox!.x).toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
+
+	await pencil.locator("..").hover();
+	await expect(pencil).toHaveCSS("opacity", "1");
+});
+
+test("a tapped sidebar row does not open its description card", async ({ join }) => {
+	let title = "Release plan";
+	let listed = channel("cccccccc-0000-4000-8000-000000000000", title, "Touch never shows this.");
+	let page = await join("ana", { hasTouch: true, viewport: { width: 1280, height: 820 } });
+	await page.context().route(
+		"**/api/repositories/octo-org/score/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: [listed], repository } }),
+	);
+	await page.reload();
+	let link = sidebar(page).getByRole("link", { name: title, exact: true });
+	await link.evaluate(element =>
+		element.addEventListener("click", event => {
+			event.preventDefault();
+			event.stopPropagation();
+		})
+	);
+	await link.tap();
+	await expect(link).toBeFocused();
+	await page.waitForTimeout(800);
+	await expect(page.locator("[data-icon-tooltip]")).toBeHidden();
+});
+
+test("a long description card stays inside the window beside a bottom row", async ({ join }) => {
+	let description = Array.from({ length: 12 }, () => "Coordinates release readiness work.")
+		.join(" ");
+	let listed = Array.from(
+		{ length: 12 },
+		(_, index) =>
+			channel(
+				`${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000000`,
+				`Note ${index + 1}`,
+				index === 11 ? description : undefined,
+			),
+	);
+	let height = 420;
+	let page = await join("ana", { viewport: { width: 1440, height } });
+	await page.context().route(
+		"**/api/repositories/octo-org/score/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: listed, repository } }),
+	);
+	await page.reload();
+	let link = sidebar(page).getByRole("link", { name: "Note 12", exact: true });
+	// Scrolling hides tooltips, so settle the rail before hovering.
+	await link.scrollIntoViewIfNeeded();
+	await page.evaluate(() =>
+		new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+	);
+	await link.hover();
+	let card = page.locator("[data-icon-tooltip]");
+	await expect(card).toBeVisible();
+	let box = (await card.boundingBox())!;
+	expect(box.height).toBeGreaterThan(100);
+	expect(box.y).toBeGreaterThanOrEqual(8);
+	expect(box.y + box.height).toBeLessThanOrEqual(height - 8);
 });
 
 test("a stale catalogue response cannot remove a newly created document", async ({ join, page }) => {
@@ -326,7 +584,7 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		page,
 		"[data-content-swap-state]:not([hidden]):not([inert])",
 	);
-	await expect(page.getByText("Opening channel...", { exact: true })).toBeHidden();
+	await expect(page.getByText("Opening document…", { exact: true })).toBeHidden();
 	await expect(interactiveRoutes).toHaveCount(1);
 	await expect(interactiveRoutes).toBeVisible();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
@@ -339,33 +597,26 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		),
 	).toBe("preserved");
 	await page.keyboard.press("Shift");
+	await recordRouteLayers(page);
 	release.resolve();
 	let visibleRoutes = documentRouteLayers(page, "[data-content-swap-state]:not([hidden])");
 	let outgoingRoutes = documentRouteLayers(
 		page,
 		'[data-content-swap-state="outgoing"]:not([hidden])',
 	);
-	// Inspect the short-lived exit layer in one browser turn, before its timer removes it.
-	await expect.poll(() =>
-		visibleRoutes.evaluateAll(routes =>
-			routes.map(route => ({
-				outgoing: route.getAttribute("data-content-swap-state") === "outgoing",
-				inert: route.hasAttribute("inert"),
-				hidden: route.getAttribute("aria-hidden"),
-			}))
-		)
-	).toEqual([
-		{ outgoing: true, inert: true, hidden: "true" },
-		{ outgoing: false, inert: false, hidden: null },
-	]);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
+	await expect(visibleRoutes).toHaveCount(1);
+	// The incoming route waits unseen and inert while the outgoing one leaves.
+	expect(await routeLayerSamples(page)).toContain("outgoing:inert staged:inert");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(page).toHaveURL(originalPath!);
 
 	let createdLink = projects.getByRole("link", { name: createdTitle, exact: true });
+	await recordRouteLayers(page);
 	await createdLink.click();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
-	await expect(visibleRoutes).toHaveCount(2);
 	await expect(visibleRoutes).toHaveCount(1);
+	expect(await routeLayerSamples(page)).toContain("outgoing:inert staged:inert");
 	await expect(page).toHaveURL(createdPath!);
 	await page.unroute(documentRoutePattern);
 
@@ -406,6 +657,52 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(visibleRoutes).toHaveCount(1, { timeout: 100 });
 	await expect(outgoingRoutes).toHaveCount(0);
+});
+
+test("rapid document switches and history jumps settle on one visible document", async ({ baseURL, join, seed }) => {
+	await seed("Burst origin document.\n");
+	let databasePort = Number(new URL(baseURL!).port);
+	let documents = await Promise.all([0, 1, 2, 3].map(async index => {
+		let id = crypto.randomUUID();
+		await createChannel(databasePort, id);
+		await seedChannel(databasePort, id, `Burst document ${index}.\n`);
+		return { text: `Burst document ${index}.`, title: `Test ${id.slice(0, 8)}` };
+	}));
+	let page = await join("ana");
+	let projects = sidebar(page);
+	for (let document of documents) {
+		await expect(projects.getByRole("link", { name: document.title, exact: true })).toBeVisible();
+	}
+	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
+	let interactive = page.locator(
+		".document-route-swap > [data-content-swap-state]:not([hidden]):not([inert])",
+	);
+	let settled = async (document: { text: string; title: string }) => {
+		await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${document.title}`);
+		await expect(routes).toHaveCount(1);
+		await expect(interactive).toHaveCount(1);
+		await expect(interactive.getByText(document.text, { exact: true })).toBeVisible();
+	};
+
+	// Clicks land faster than a route can finish leaving.
+	await page.evaluate(async titles => {
+		for (let title of titles) {
+			[...document.querySelectorAll<HTMLAnchorElement>("a")]
+				.find(link => link.textContent?.trim() === title)!.click();
+			await new Promise(resolve => setTimeout(resolve, 80));
+		}
+	}, documents.map(document => document.title));
+	await settled(documents[3]!);
+
+	await page.evaluate(async () => {
+		for (let step of [-1, 1, -1, -1]) {
+			history.go(step);
+			await new Promise(resolve => setTimeout(resolve, 60));
+		}
+	});
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\//);
+	let current = (await projects.locator('a[aria-current="page"]').textContent())!.trim();
+	await settled(documents.find(document => document.title === current)!);
 });
 
 test("overlapping document workspaces keep IDs, ARIA targets, and focus instance-scoped", async ({ baseURL, join }) => {
@@ -483,13 +780,13 @@ test("the archive view refreshes catalogues without reopening the document", asy
 	let projects = sidebar(page);
 
 	let archived = catalogue("channels", true);
-	await projects.getByRole("button", { name: "Archived chats", exact: true }).click();
+	await projects.getByRole("button", { name: "Archived", exact: true }).click();
 	await archived;
 	expect(page.url()).toBe(path);
 	expect(sockets).toBe(initialSockets);
 
 	let active = catalogue("channels", false);
-	await projects.getByRole("button", { name: "Back to active docs", exact: true }).click();
+	await projects.getByRole("button", { name: "All documents", exact: true }).click();
 	await active;
 	expect(page.url()).toBe(path);
 	expect(sockets).toBe(initialSockets);
@@ -527,7 +824,8 @@ test("the sidebar paginates documents and global search queries beyond the loade
 	page = await join("ana");
 	let projects = sidebar(page);
 	await expect(projects.getByRole("link", { name: "Note 2", exact: true })).toBeVisible();
-	await expect(projects.getByText("Plan for note taking", { exact: true })).toBeVisible();
+	await expect(projects.getByRole("link", { name: "Note 1", exact: true }))
+		.toHaveAccessibleDescription("Plan for note taking");
 	await projects.getByRole("button", { name: "Load more documents in score" }).click();
 	await expect(projects.getByRole("link", { name: "Continued document", exact: true }))
 		.toBeVisible();
@@ -536,7 +834,7 @@ test("the sidebar paginates documents and global search queries beyond the loade
 	let search = dialog.getByRole("textbox", { name: "Search documents" });
 	await expect(search).toBeFocused();
 	await search.fill("needle");
-	await expect(dialog.getByRole("button", { name: /Search needle/ })).toBeVisible();
+	await expect(dialog.getByRole("option", { name: /Search needle/ })).toBeVisible();
 	await expect(dialog.getByText("RFC about catalogue search", { exact: true })).toBeVisible();
 	expect(requests.some(url => url.searchParams.get("query") === "needle")).toBe(true);
 });
@@ -553,7 +851,7 @@ test("renaming the current document updates collaborators and survives reload", 
 	let input = ana.getByRole("textbox", { name: "Document title" });
 	await expect(input).toBeFocused();
 	await input.fill(title);
-	await ana.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${title}`);
 	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${title}`);
@@ -583,12 +881,12 @@ test("a delayed rename response cannot overwrite a newer collaborator rename", a
 
 	await headerAction(ana, "Rename");
 	await ana.getByRole("textbox", { name: "Document title" }).fill(first);
-	await ana.getByRole("button", { name: "Save" }).click();
+	await ana.getByRole("textbox", { name: "Document title" }).press("Enter");
 	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${first}`);
 
 	await headerAction(bo, "Rename");
 	await bo.getByRole("textbox", { name: "Document title" }).fill(latest);
-	await bo.getByRole("button", { name: "Save" }).click();
+	await bo.getByRole("textbox", { name: "Document title" }).press("Enter");
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${latest}`);
 
 	release.resolve();
@@ -604,6 +902,8 @@ test("read-only visitors can browse documents and get creation guidance", async 
 		"false",
 	);
 	await expect(headerActions(page)).toHaveCount(0);
+	await expect(page.getByText("You have read-only access to this document.")).toBeVisible();
+	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
 	await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
 	let creation = page.getByRole("dialog", { name: "New document", exact: true });
 	await expect(
@@ -631,11 +931,12 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 	await headerAction(page, "Rename");
 	let input = page.getByRole("textbox", { name: "Document title" });
 	await input.fill(title);
-	await page.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 	await expect(page.getByRole("alert")).toBeVisible();
 	await expect(input).toHaveValue(title);
+	await expect(input).toBeFocused();
 
-	await page.getByRole("button", { name: "Save" }).click();
+	await input.press("Enter");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
 });
 
@@ -647,8 +948,11 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	let projects = sidebar(ana);
 
 	await headerAction(ana, "Archive");
-	await expect(ana.getByText("Archived, read-only", { exact: true })).toBeVisible();
-	await expect(bo.getByText("Archived, read-only", { exact: true })).toBeVisible();
+	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toBeVisible();
+	await expect(bo.getByRole("banner").getByText("Archived", { exact: true })).toBeVisible();
+	await expect(ana.getByText("Archived. Restore it to keep chatting."))
+		.toBeVisible();
+	await expect(ana.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
 	await expect(content(ana)).toHaveAttribute("contenteditable", "false");
 	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
 	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);
@@ -657,20 +961,21 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	await expect(bo).toHaveURL(path);
 	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
 
-	await projects.getByRole("button", { name: "Archived chats", exact: true }).click();
-	let back = projects.getByRole("button", { name: "Back to active docs", exact: true });
+	await projects.getByRole("button", { name: "Archived", exact: true }).click();
+	let back = projects.getByRole("button", { name: "All documents", exact: true });
 	await expect(back).toBeFocused();
 	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
 	await back.click();
-	let archivedChats = projects.getByRole("button", { name: "Archived chats", exact: true });
-	await expect(archivedChats).toBeFocused();
-	await archivedChats.click();
+	let archivedButton = projects.getByRole("button", { name: "Archived", exact: true });
+	await expect(archivedButton).toBeFocused();
+	await archivedButton.click();
 
-	await headerAction(ana, "Restore");
+	await ana.getByRole("banner").getByRole("button", { name: "Restore", exact: true }).click();
 	await expect(content(ana)).toHaveAttribute("contenteditable", "true");
 	await expect(content(bo)).toHaveAttribute("contenteditable", "true");
-	await expect(ana.getByText("Archived, read-only", { exact: true })).toHaveCount(0);
-	await expect(projects.getByRole("button", { name: "Archived chats", exact: true })).toBeVisible();
+	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toHaveCount(0);
+	await expect(chatInput(ana)).toBeVisible();
+	await expect(projects.getByRole("button", { name: "Archived", exact: true })).toBeVisible();
 	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
 
 	await headerAction(ana, "Archive");
@@ -702,4 +1007,32 @@ test("sidebar creation failures remain retryable", async ({ join, page }) => {
 	await expect(create).toBeEnabled();
 	await create.click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
+});
+
+test("archiving a sidebar row by keyboard moves focus to a neighbouring row", async ({ baseURL, join }) => {
+	let page = await join("ana");
+	let port = Number(new URL(baseURL!).port);
+	await createChannel(port, crypto.randomUUID());
+	await createChannel(port, crypto.randomUUID());
+	await page.reload();
+	let links = sidebar(page).locator(".project-sidebar-document-link");
+	await expect.poll(() => links.count()).toBeGreaterThanOrEqual(3);
+	let names = (await links.allInnerTexts()).map(name => name.trim());
+	let index = await links.evaluateAll(elements =>
+		elements.findIndex(element => element.getAttribute("aria-current") !== "page")
+	);
+	let neighbour = names[index + 1] ?? names[index - 1];
+	let row = links.nth(index).locator(
+		"xpath=ancestor::div[contains(@class,'project-sidebar-document')][1]",
+	);
+	let trigger = row.getByRole("button", { name: /^Actions for / });
+	await row.hover();
+	await trigger.focus();
+	await trigger.press("ArrowDown");
+	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await expect(links).toHaveCount(names.length - 1);
+	await expect(sidebar(page).locator(".project-sidebar-document-link", { hasText: neighbour! }))
+		.toBeFocused();
 });

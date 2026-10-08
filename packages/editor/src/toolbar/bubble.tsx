@@ -8,11 +8,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { TOGGLE_LINK_COMMAND } from "@lexical/link";
-import { LINK_PROTOCOLS } from "@chopin/dialect";
 import { LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
 
-import { askForUrl } from "./url";
+import { $linkAt, OPEN_LINK_EDITOR_COMMAND } from "./link";
 import { placeSurface } from "./placement";
 import {
 	CELL,
@@ -44,9 +42,10 @@ import {
 	$isElementNode,
 	$isParagraphNode,
 	$isRangeSelection,
+	COMMAND_PRIORITY_HIGH,
 	COMMAND_PRIORITY_LOW,
 	FORMAT_TEXT_COMMAND,
-	KEY_DOWN_COMMAND,
+	KEY_ESCAPE_COMMAND,
 	SELECTION_CHANGE_COMMAND,
 } from "lexical";
 
@@ -140,13 +139,19 @@ const MARKS: Mark[] = [
 ];
 
 export function SelectionBubble(
-	{ disabled, onComment }: { disabled?: boolean; onComment?: () => void },
+	{ disabled, hidden, onComment }: {
+		disabled?: boolean;
+		/** Another surface has taken the bubble's place for now. */
+		hidden?: boolean;
+		onComment?: () => void;
+	},
 ) {
 	let [editor] = useLexicalComposerContext();
 	let [anchor, setAnchor] = useState<DOMRectLike>();
 	let [position, setPosition] = useState<SurfacePlacement>();
 	let [active, setActive] = useState<Set<TextFormatType>>(new Set());
 	let [block, setBlock] = useState<Block>("paragraph");
+	let [linked, setLinked] = useState(false);
 	/** Whether the bubble is showing block types instead of its marks. */
 	let [choosing, setChoosing] = useState(false);
 	let ref = useRef<HTMLDivElement>(null);
@@ -170,6 +175,7 @@ export function SelectionBubble(
 			}
 			setActive(marks);
 			setBlock($block(selection.anchor.getNode()));
+			setLinked(!!$linkAt(selection));
 
 			// Position against the live DOM selection: Lexical offsets do not
 			// map to screen coordinates, and the caret may span nodes.
@@ -241,25 +247,35 @@ export function SelectionBubble(
 	}, [editor, block]);
 
 	/*
-	 * Dismiss the menu with Escape.
+	 * Escape closes the block menu, or else lets go of the selection: it
+	 * collapses to where the caret was heading, and focus stays in the editor.
 	 *
 	 * Registered on the editor, not the bubble: nothing in the bubble can take
 	 * focus — that is the whole point of cancelling mousedown — so a handler
 	 * there would never see a key.
 	 */
 	useEffect(() => {
-		if (!choosing) return;
+		if (!anchor || disabled || hidden) return;
 		return editor.registerCommand(
-			KEY_DOWN_COMMAND,
+			KEY_ESCAPE_COMMAND,
 			(event: KeyboardEvent) => {
-				if (event.key !== "Escape") return false;
 				event.preventDefault();
-				setChoosing(false);
+				event.stopPropagation();
+				if (choosing) {
+					setChoosing(false);
+					return true;
+				}
+				editor.update(() => {
+					let selection = $getSelection();
+					if (!$isRangeSelection(selection)) return;
+					let { key, offset, type } = selection.focus;
+					selection.anchor.set(key, offset, type);
+				});
 				return true;
 			},
-			COMMAND_PRIORITY_LOW,
+			COMMAND_PRIORITY_HIGH,
 		);
-	}, [editor, choosing]);
+	}, [editor, anchor, disabled, hidden, choosing]);
 
 	let place = useCallback(() => {
 		let element = ref.current;
@@ -299,7 +315,7 @@ export function SelectionBubble(
 		return listenToEditorGeometry(editor, place);
 	}, [anchor, editor, place]);
 
-	if (!anchor || disabled) return null;
+	if (!anchor || disabled || hidden) return null;
 
 	return (
 		<div
@@ -373,14 +389,9 @@ export function SelectionBubble(
 
 						<button
 							type="button"
-							aria-label="Add link"
-							title="Add link (⌘K)"
-							onClick={() => {
-								// `undefined` means cancelled or refused; `null` means cleared.
-								let url = askForUrl("Link URL", { protocols: LINK_PROTOCOLS, relative: true });
-								if (url === undefined) return;
-								editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
-							}}
+							aria-label={linked ? "Edit link" : "Add link"}
+							title={`${linked ? "Edit link" : "Add link"} (⌘K)`}
+							onClick={() => editor.dispatchCommand(OPEN_LINK_EDITOR_COMMAND, undefined)}
 							className={`${CELL} ${CELL_OFF}`}
 							data-press="small"
 						>

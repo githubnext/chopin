@@ -1,5 +1,46 @@
 [
 	{
+		"file": "apps/web/src/chat/command-picker.tsx",
+		"reason": "Chat reuses the editor slash-menu class recipes; the imported constants are static token-based utilities in the reviewed editor producer.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"MENU_SURFACE",
+				"class > CommandPicker > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW",
+				"class > CommandPicker > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW_ON",
+				"class > CommandPicker > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MENU_ROW_OFF",
+				"class > CommandPicker > <button>",
+				1
+			]
+		],
+		"sourceHash": "9418b1cafede24f85820d9f2893e0f416412445dad0fcfc321e52bee4b9fea80",
+		"producers": [
+			{
+				"file": "packages/editor/src/toolbar/surface.ts",
+				"sourceHash": "ad3d483335b4dda9238fbcf529b79ad86320987accf3175d581a33d90f1c331b"
+			}
+		]
+	},
+	{
 		"file": "apps/web/src/document-workspace-host.tsx",
 		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function.",
 		"cases": [
@@ -13,12 +54,12 @@
 			[
 				"dynamic",
 				"*",
-				"workspaceProps(\n\t\t\t\t\t\tloaded.child,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\t{ label: loaded.child.channel.title, onClose: closeChild, type: \"child\" },\n\t\t\t\t\t\tchildMetadataChanged,\n\t\t\t\t\t)",
+				"workspaceProps(\n\t\t\t\t\t\tloaded.child,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlabel: loaded.child.channel.title,\n\t\t\t\t\t\t\tonClose: closeChild,\n\t\t\t\t\t\t\tparent: {\n\t\t\t\t\t\t\t\tid: loaded.parent.channel.id,\n\t\t\t\t\t\t\t\tlabel: loaded.parent.channel.title,\n\t\t\t\t\t\t\t\tonReturn: opener => onChildClose(loaded.parent.channel.id, parentPath, opener),\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\ttype: \"child\",\n\t\t\t\t\t\t},\n\t\t\t\t\t\tchildMetadataChanged,\n\t\t\t\t\t)",
 				"unresolved JSX props > DocumentWorkspaceHost > child > <RoomWorkspace>",
 				1
 			]
 		],
-		"sourceHash": "290fd2e09192f125e7ac058f2085d2576428e1f2aa6e32c3cdc6386dd8048019"
+		"sourceHash": "901beece5ec4dc3c63b889d8f64de6c1de0bcdf435e4084db72aefb7b175dfc2"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -32,7 +73,7 @@
 				1
 			]
 		],
-		"sourceHash": "f4ec8e83f5ebcaa77846909abf5285f60591c6b617ad23afc4b09780996d3112"
+		"sourceHash": "40ca22148b2b9580fa180823db072d1ba59234ba5f146c45bb98d94f9cc6a610"
 	},
 	{
 		"file": "apps/web/src/chat/markdown.tsx",
@@ -60,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "3f8559442bd2ffa008b2e7b3ba21dd213a9c77ee17678e24b90aeb2defaf794d"
+		"sourceHash": "7c7b0017691294d712285273fa3e90ee65409d5e05619eb824223582d6bfdde3"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -74,7 +115,7 @@
 				1
 			]
 		],
-		"sourceHash": "10f7e771ba853d037914f201ea45982b1cac877db64504532c30ce0488a0d647"
+		"sourceHash": "078a445e391d0b35a6a13244dd2a8009277ecd1ad2b815dd9ec3f2d747d1c980"
 	},
 	{
 		"file": "apps/web/src/design-audit/controls.tsx",
@@ -102,7 +143,7 @@
 				1
 			]
 		],
-		"sourceHash": "b2efc1fa6978396eec84405ad366cde2a8bf03437e1a312ebaac25fe8e5e09c5"
+		"sourceHash": "aec94eefd5ec1bffefd5c3c7c5b559346972f17ee9c4d372437c58f92e042376"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -116,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "b2efc1fa6978396eec84405ad366cde2a8bf03437e1a312ebaac25fe8e5e09c5"
+		"sourceHash": "aec94eefd5ec1bffefd5c3c7c5b559346972f17ee9c4d372437c58f92e042376"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -137,7 +178,7 @@
 				1
 			]
 		],
-		"sourceHash": "b2efc1fa6978396eec84405ad366cde2a8bf03437e1a312ebaac25fe8e5e09c5"
+		"sourceHash": "aec94eefd5ec1bffefd5c3c7c5b559346972f17ee9c4d372437c58f92e042376"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -186,7 +227,7 @@
 				1
 			]
 		],
-		"sourceHash": "358d930fa0b32ab47a1b255534804e6316298b9e62be9a39f1aac2eea93bbfc9"
+		"sourceHash": "e978c2739846dc0e08c514a0293bb5218a2384abd775d770a4dec859686e7177"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
@@ -214,7 +255,7 @@
 				1
 			]
 		],
-		"sourceHash": "28549d756455cf4e19bea534c70521fab7426e20bb9f88d85ef1b63c47c64734"
+		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -240,16 +281,9 @@
 				"chatPresence.className",
 				"class > Workspace > <aside>",
 				1
-			],
-			[
-				"dynamic",
-				"class",
-				"motionContract(\"feedback\").className",
-				"class > Workspace > <span>",
-				2
 			]
 		],
-		"sourceHash": "28549d756455cf4e19bea534c70521fab7426e20bb9f88d85ef1b63c47c64734"
+		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -263,7 +297,7 @@
 				1
 			]
 		],
-		"sourceHash": "be4b1a50e021d54ae4df59f855a37590de7bfbb96876ab950ca7082764f84906"
+		"sourceHash": "43604e407a85bfda98028185d27d2e6be744f490402c7b275b6dfa806a385612"
 	},
 	{
 		"file": "apps/web/src/repository-picker.tsx",
@@ -277,7 +311,7 @@
 				1
 			]
 		],
-		"sourceHash": "2faf001a9706655858f27b51818f9ea53bd3593aa53b77233ae61debe23cb8df"
+		"sourceHash": "abc9d2a5e3e05c195a599f1ef58f58f0dd1090b9507a0e1c20277fd4d7171a07"
 	},
 	{
 		"file": "apps/web/src/repository-picker.tsx",
@@ -291,7 +325,7 @@
 				1
 			]
 		],
-		"sourceHash": "2faf001a9706655858f27b51818f9ea53bd3593aa53b77233ae61debe23cb8df"
+		"sourceHash": "abc9d2a5e3e05c195a599f1ef58f58f0dd1090b9507a0e1c20277fd4d7171a07"
 	},
 	{
 		"file": "apps/web/src/document-picker.tsx",

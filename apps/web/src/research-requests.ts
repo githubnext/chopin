@@ -1,14 +1,48 @@
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener, ResearchStore } from "@chopin/editor";
 
-import {
-	cancelResearchRequest,
-	createResearchRequest,
-	researchRequest,
-	retryResearchRequest,
-} from "./api";
+import { ApiError, response } from "./api";
 
 const POLL_INTERVAL = 2_000;
+
+function researchRequestPath(channelId: string, requestId?: string): string {
+	let path = `/api/channels/${encodeURIComponent(channelId)}/research-requests`;
+	return requestId ? `${path}/${encodeURIComponent(requestId)}` : path;
+}
+
+export function createResearchRequest(
+	channelId: string,
+	question: string,
+	requestId: string,
+): Promise<{ request: Research.RequestView; repeated: boolean }> {
+	return response(researchRequestPath(channelId), {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ question, requestId }),
+	});
+}
+
+export function researchRequest(
+	channelId: string,
+	requestId: string,
+	signal?: AbortSignal,
+): Promise<Research.RequestView> {
+	return response(researchRequestPath(channelId, requestId), { signal });
+}
+
+export function cancelResearchRequest(
+	channelId: string,
+	requestId: string,
+): Promise<Research.RequestView> {
+	return response(`${researchRequestPath(channelId, requestId)}/cancel`, { method: "POST" });
+}
+
+export function retryResearchRequest(
+	channelId: string,
+	requestId: string,
+): Promise<Research.RequestView> {
+	return response(`${researchRequestPath(channelId, requestId)}/retry`, { method: "POST" });
+}
 
 export type ResearchRequestApi = {
 	create(
@@ -286,5 +320,21 @@ export class ResearchRequestStore implements ResearchStore {
 
 	#assertAvailable(): void {
 		if (this.#disposed) throw new Error("Research request store is disposed.");
+	}
+}
+
+/** Where a research child came from; undefined for a child no research request published. */
+export async function researchProvenance(
+	channelId: string,
+	signal?: AbortSignal,
+): Promise<Research.Provenance | undefined> {
+	try {
+		return await response(
+			`/api/channels/${encodeURIComponent(channelId)}/research-provenance`,
+			{ signal },
+		);
+	} catch (error) {
+		if (error instanceof ApiError && error.status === 404) return undefined;
+		throw error;
 	}
 }

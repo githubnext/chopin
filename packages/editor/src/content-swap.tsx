@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 import { useTransitionPresence } from "./transition-presence";
 
@@ -16,10 +16,12 @@ export type ContentSwapLayerProps = {
 	immediately: boolean;
 	motion: ContentSwapMotion;
 	onClosed?: () => void;
+	/** Laid out but unseen and inert, so it can load before it is revealed. */
+	staged?: boolean;
 };
 
 export function ContentSwapLayer(
-	{ active, children, className, immediately, motion, onClosed }: ContentSwapLayerProps,
+	{ active, children, className, immediately, motion, onClosed, staged }: ContentSwapLayerProps,
 ) {
 	let presence = useTransitionPresence(
 		active ? true : undefined,
@@ -30,23 +32,26 @@ export function ContentSwapLayer(
 	let onClosedRef = useRef(onClosed);
 	onClosedRef.current = onClosed;
 
-	useEffect(() => {
+	let closable = onClosed !== undefined;
+	// Before paint, so whatever replaces a closed layer lands in the same frame. A
+	// layer that closed before it had a listener reports once one arrives.
+	useLayoutEffect(() => {
 		if (active) {
 			notifiedClosed.current = false;
 			return;
 		}
-		if (presence.phase !== "closed" || notifiedClosed.current) return;
+		if (presence.phase !== "closed" || notifiedClosed.current || !onClosedRef.current) return;
 		notifiedClosed.current = true;
-		onClosedRef.current?.();
-	}, [active, presence.phase]);
+		onClosedRef.current();
+	}, [active, closable, presence.phase]);
 
 	let inactive = !active;
 	return (
 		<div
 			aria-hidden={inactive || undefined}
 			className={`${motion.className} ${presence.className}${className ? ` ${className}` : ""}`}
-			data-content-swap-state={active ? presence.phase : "outgoing"}
-			hidden={presence.phase === "closed"}
+			data-content-swap-state={staged ? "staged" : active ? presence.phase : "outgoing"}
+			hidden={presence.phase === "closed" && !staged}
 			inert={inactive}
 		>
 			{children}

@@ -109,13 +109,13 @@ describe("runJobTool", () => {
 	test("an awaited tool cannot record success for a replacement turn", async () => {
 		let chat = create();
 		chat.job = { ...JOB };
-		chat.turn = { id: "turn-1", handle: "chopin", started: 1, responded: false };
+		chat.turn = { id: "turn-1", handle: "chopin", started: 1, entryOffset: 0, responded: false };
 		let gate = Promise.withResolvers<void>();
 		let operation = runJobTool(chat, "refine_decision", async () => {
 			await gate.promise;
 			return { output: { added: 1 } };
 		});
-		chat.turn = { id: "turn-2", handle: "chopin", started: 2, responded: false };
+		chat.turn = { id: "turn-2", handle: "chopin", started: 2, entryOffset: 0, responded: false };
 		gate.resolve();
 		await expect(operation).rejects.toThrow("background Planner job changed");
 		expect(chat.jobOutput).toBeUndefined();

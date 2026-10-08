@@ -104,6 +104,14 @@ test("interface icons are decorative unless explicitly labelled", () => {
 
 	expect(decorative).toContain('aria-hidden="true"');
 	expect(labelled).not.toContain('aria-hidden="true"');
+	// A <title> shows the raw asset name as a native tooltip; IconTooltip labels controls.
+	expect(decorative).not.toContain("<title");
+	expect(labelled).not.toContain("<title");
+	for (let source of ["icon.tsx", "line.tsx", "system.tsx"]) {
+		expect(readFileSync(join(repository, "packages/icons/src", source), "utf8")).not.toContain(
+			"title",
+		);
+	}
 });
 
 test("interface icons share one neutral default colour", () => {
@@ -126,10 +134,10 @@ test("interface icons share one neutral default colour", () => {
 		for (let entry of readdirSync(assetRoot)) {
 			if (!entry.endsWith(".svg") || entry === "chopin.svg") continue;
 			let asset = readFileSync(join(assetRoot, entry), "utf8");
+			expect(asset).not.toContain("<title");
 			if (entry === "planner-stop.svg" || entry === "planner-resume.svg") {
 				expect(asset).toContain('<g fill="#212121">');
 				if (entry === "planner-stop.svg") {
-					expect(asset).toContain("<title>media-stop</title>");
 					expect(asset).toContain(
 						'<rect x="2" y="2" width="14" height="14" rx="2.75" ry="2.75"></rect>',
 					);

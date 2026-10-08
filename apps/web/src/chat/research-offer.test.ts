@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ResearchOfferCard, shouldShowResearchActionError } from "./research-offer";
+import { forwardStage, ResearchOfferCard, shouldShowResearchActionError } from "./research-offer";
 import { deferred } from "./research-offer.test-fixtures";
+import { researchBriefKey } from "./research-brief-editor";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { OfferLinkView } from "./research-offer";
 import type { ResearchRequestStore } from "../research-requests";
@@ -46,12 +47,11 @@ test("Resume appears only for a verified unresolved link and linked work hides s
 	for (let link of [undefined, { status: "checking" }, { status: "error" }] as const) {
 		expect(render(link)).not.toContain(">Resume</button>");
 	}
-	for (let status of ["pending", "unlinked"] as const) {
-		let link: OfferLinkView = status === "unlinked"
-			? { status, researchRequestId: "request-1" }
-			: { status };
-		expect(render(link)).toContain(">Resume</button>");
-	}
+	// A pending link usually links within moments; Resume waits until it stalls.
+	expect(render({ status: "pending" })).not.toContain(">Resume</button>");
+	expect(render({ status: "unlinked", researchRequestId: "request-1" })).toContain(
+		">Resume</button>",
+	);
 	let linked = render({ status: "linked", researchRequestId: "request-1" });
 	expect(linked).not.toContain(">Resume</button>");
 	expect(linked).not.toContain("Old Resume error");
@@ -77,12 +77,12 @@ test("a deferred Resume failure cannot create an error after the link becomes li
 	expect(shouldShowResearchActionError("research", "accepted", undefined)).toBe(false);
 });
 
-test("a failed brief projection exposes refinement failure and a writer-only retry", () => {
+test("a failed refinement with a usable brief offers a quiet writer-only retry", () => {
 	let offer = researchDraftHarness().offer();
 	offer.workflow!.preparation = "failed";
-	let render = (canAct: boolean) =>
+	let render = (canAct: boolean, brief = offer.brief) =>
 		renderToStaticMarkup(createElement(ResearchOfferCard, {
-			offer,
+			offer: { ...offer, brief },
 			controls: {
 				links: {},
 				busy: new Set<string>(),
@@ -94,8 +94,30 @@ test("a failed brief projection exposes refinement failure and a writer-only ret
 				onRetryLink() {},
 			},
 		}));
-	expect(render(true)).toContain("Brief refinement failed.");
-	expect(render(true)).toContain(">Retry refinement</button>");
-	expect(render(false)).toContain("Brief refinement failed.");
-	expect(render(false)).not.toContain(">Retry refinement</button>");
+	expect(render(true)).toContain('aria-label="Retry brief refinement"');
+	expect(render(true)).not.toContain(">Retry refinement</button>");
+	expect(render(false)).not.toContain("Retry brief refinement");
+	expect(render(true, "")).toContain("Brief refinement failed.");
+	expect(render(true, "")).toContain(">Retry refinement</button>");
+	expect(render(false, "")).not.toContain(">Retry refinement</button>");
+});
+
+test("the brief editor finishes on Escape and starts on Command or Control Enter", () => {
+	let key = (
+		key: string,
+		extra: { metaKey?: boolean; ctrlKey?: boolean; isComposing?: boolean } = {},
+	) => researchBriefKey({ key, metaKey: false, ctrlKey: false, isComposing: false, ...extra });
+	expect(key("Escape")).toBe("done");
+	expect(key("Enter", { metaKey: true })).toBe("start");
+	expect(key("Enter", { ctrlKey: true })).toBe("start");
+	expect(key("Enter")).toBeUndefined();
+	expect(key("Escape", { isComposing: true })).toBeUndefined();
+});
+
+test("an active request never shows an earlier stage, but terminal and retried stages do", () => {
+	expect(forwardStage(undefined, "searching")).toBe("searching");
+	expect(forwardStage("searching", "queued")).toBe("searching");
+	expect(forwardStage("searching", "analyzing")).toBe("analyzing");
+	expect(forwardStage("writing", "failed")).toBe("failed");
+	expect(forwardStage("failed", "queued")).toBe("queued");
 });

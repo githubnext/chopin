@@ -9,11 +9,14 @@ import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection } from "lexical";
+import { useState } from "react";
 
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
 import { SelectionBubble } from "./bubble";
+import { LinkSurface } from "./link";
 import { ResearchComposerSurface } from "./research";
+import { ResearchLaunchRegistration } from "./research-launch";
 import { SlashMenu } from "./slash";
 
 const RESEARCH_ACTIONS = new Set(["research"]);
@@ -27,6 +30,8 @@ export function Toolbar() {
 	let disabled = useCellValue(readOnly$);
 	let options = useCellValue(widgets$);
 	let [editor] = useLexicalComposerContext();
+	// The link editor sits where the bubble would, so only one shows.
+	let [linking, setLinking] = useState(false);
 
 	let threads = options.threads;
 
@@ -64,7 +69,8 @@ export function Toolbar() {
 
 	return (
 		<>
-			<SelectionBubble disabled={disabled} onComment={comment} />
+			<SelectionBubble disabled={disabled} hidden={linking} onComment={comment} />
+			<LinkSurface binding={options.binding} disabled={disabled} onEditing={setLinking} />
 			<SlashMenu
 				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}
 				disabled={disabled}
@@ -75,6 +81,16 @@ export function Toolbar() {
 					disabled={disabled}
 					drafts={options.researchDrafts}
 					research={options.research}
+				/>
+			)}
+			{options.research && options.researchDrafts && options.researchLauncher && (
+				<ResearchLaunchRegistration
+					binding={options.binding}
+					canEdit={options.canEdit}
+					connected={options.connected}
+					disabled={disabled}
+					drafts={options.researchDrafts}
+					launcher={options.researchLauncher}
 				/>
 			)}
 		</>

@@ -13,12 +13,9 @@
  * answered rather than who is speaking — and a person with a photograph would
  * be the same shape as the agent.
  *
- * No lettering. Initials were 8px inside a 20px mark and the scale now stops at
- * 13px, so they either sat off the scale or the mark grew to 28px and took that
- * width from every message in the rail. Identity rests on the photograph, the
- * shape, the account colour and the name — which is beside the mark everywhere
- * except the presence stack, where hovering is the only way to tell two people
- * on neighbouring account colours apart.
+ * Until the photograph arrives, and for good if it never does, the mark is a
+ * square tinted with the person's cursor colour and carrying their initial, so a
+ * dead URL never shows the browser's broken-image glyph.
  */
 
 import { useState } from "react";
@@ -38,6 +35,8 @@ export type FaceProps = {
 	ring?: "ground" | "page";
 	/** Set false where a design-system tooltip already names the face. */
 	titled?: boolean;
+	/** Set true where the name is written beside the face, so it is not read twice. */
+	decorative?: boolean;
 };
 
 export const FACE_RING_CLASS = {
@@ -55,33 +54,52 @@ export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
 	return size <= 18 ? "small" : "regular";
 }
 
-export function Face({ handle, ring, size = 20, titled = true }: FaceProps) {
-	let [failed, setFailed] = useState(false);
-	let edge = `shrink-0 ${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
-	let box = { width: size, height: size };
+/** Keyed by handle so a reused mount never carries one person's load state to another. */
+export function Face({ decorative, handle, ring, size, titled }: FaceProps) {
+	return (
+		<Portrait
+			decorative={decorative}
+			key={handle}
+			handle={handle}
+			ring={ring}
+			size={size}
+			titled={titled}
+		/>
+	);
+}
 
-	if (failed) {
-		return (
-			<span
-				aria-label={handle}
-				className={`block ${edge}`}
-				role="img"
-				style={{ ...box, background: color(handle) }}
-				title={titled ? handle : undefined}
-			/>
-		);
-	}
+function Portrait({ decorative, handle, ring, size = 20, titled = true }: FaceProps) {
+	let [failed, setFailed] = useState(false);
+	let [loaded, setLoaded] = useState(false);
+	let tone = color(handle);
+	let edge = `${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
 
 	return (
-		<img
-			alt={handle}
-			className={`block bg-selected ${edge}`}
-			onError={() => setFailed(true)}
-			referrerPolicy="no-referrer"
-			src={photograph(handle, size)}
-			style={box}
+		<span
+			aria-hidden={decorative || undefined}
+			aria-label={decorative ? undefined : handle}
+			role={decorative ? undefined : "img"}
+			className={`relative grid shrink-0 place-items-center overflow-hidden text-xs font-semibold uppercase ${edge}`}
+			style={{
+				width: size,
+				height: size,
+				background: `color-mix(in srgb, ${tone} 18%, var(--color-page))`,
+				color: `color-mix(in srgb, ${tone} 80%, var(--color-text-primary))`,
+			}}
 			title={titled ? handle : undefined}
-		/>
+		>
+			{!loaded && <span aria-hidden="true">{handle.slice(0, 1)}</span>}
+			{!failed && (
+				<img
+					alt=""
+					className={`absolute inset-0 size-full object-cover ${loaded ? "" : "opacity-0"}`}
+					onError={() => setFailed(true)}
+					onLoad={() => setLoaded(true)}
+					referrerPolicy="no-referrer"
+					src={photograph(handle, size)}
+				/>
+			)}
+		</span>
 	);
 }
 

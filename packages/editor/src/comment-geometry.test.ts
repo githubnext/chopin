@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
 
 import {
+	blockMarkerPoints,
+	commentCardPoint,
 	decisionPanelPoint,
-	edgePanelPoint,
 	marginPoint,
-	markerPoints,
 	markerRect,
 	popoverPoint,
 } from "./comment-geometry";
 
-import type { Rect } from "./comment-geometry";
+import type { BlockMarker, CardPoint, Rect } from "./comment-geometry";
 
 const host = {
 	top: 100,
@@ -20,244 +20,96 @@ const host = {
 	height: 600,
 };
 
-function place(target: Rect, size = 24, passages = [target]) {
-	return markerPoints([{ target, passages }], host, size)[0];
+function block(top: number, height: number, right = 700): Rect {
+	return { top, right, bottom: top + height, left: 200, width: right - 200, height };
 }
 
-test("places a gutter button beside the first line of an exact passage", () => {
-	let point = place({
-		top: 180,
-		right: 520,
-		bottom: 200,
-		left: 340,
-		width: 180,
-		height: 20,
-	});
+function marker(top: number, height: number, extra: Partial<BlockMarker> = {}): BlockMarker {
+	return { block: block(top, height), line: { top, height: 24 }, width: 24, ...extra };
+}
 
-	expect(point).toEqual({ top: 80, left: 428 });
+test("places one marker in the right gutter, centred on the block's first line", () => {
+	let [point] = blockMarkerPoints([
+		{ block: block(180, 120), line: { top: 180, height: 40 }, width: 24 },
+	], host);
+
+	expect(point).toEqual({ top: 88, left: 608, width: 24 });
 });
 
-test("places a gutter button at the top of a surviving block", () => {
-	let point = place({
-		top: 320,
-		right: 520,
-		bottom: 420,
-		left: 340,
-		width: 180,
-		height: 100,
-	});
+test("places a marker in the gutter however far the passage ends from the margin", () => {
+	// A short phrase used to pull its marker into the line, on top of the prose.
+	let [point] = blockMarkerPoints([marker(180, 24)], host);
 
-	expect(point).toEqual({ top: 220, left: 428 });
+	expect(point!.left + host.left).toBeGreaterThanOrEqual(700);
 });
 
-test("clamps a gutter button inside the document", () => {
-	let point = place({
-		top: 90,
-		right: 1_000,
-		bottom: 110,
-		left: 950,
-		width: 50,
-		height: 20,
-	});
+test("gives a grouped marker its wider chip in the gutter", () => {
+	let [point] = blockMarkerPoints([marker(180, 24, { width: 36 })], host);
 
-	expect(point).toEqual({ top: 0, left: 776 });
+	expect(point).toEqual({ top: 80, left: 608, width: 36 });
 });
 
-test("moves a coarse gutter button clear of a passage at the right edge", () => {
-	let point = place(
+test("narrows the chip into the content padding when the gutter is too narrow", () => {
+	let phone = { top: 0, right: 382, bottom: 800, left: 8, width: 374, height: 800 };
+	let [point] = blockMarkerPoints([
 		{
-			top: 180,
-			right: 890,
-			bottom: 200,
-			left: 700,
-			width: 190,
-			height: 20,
+			block: { top: 100, right: 366, bottom: 200, left: 24, width: 342, height: 100 },
+			line: { top: 100, height: 40 },
+			width: 24,
 		},
-		44,
-	);
+	], phone);
 
-	expect(point).toEqual({ top: 108, left: 756 });
+	// 16px of padding holds a 14px chip with a pixel either side, clear of the text.
+	expect(point).toEqual({ top: 108, left: 359, width: 14, slim: true });
+	expect(point!.left + phone.left).toBeGreaterThanOrEqual(366);
+	expect(point!.left + phone.left + point!.width).toBeLessThanOrEqual(phone.right);
 });
 
-test("places a tall right-edge passage's marker in the free left gutter", () => {
-	let point = place(
+test("widens a slim chip to its minimum so a two-digit count never clips", () => {
+	let phone = { top: 0, right: 382, bottom: 800, left: 8, width: 374, height: 800 };
+	let [point] = blockMarkerPoints([
 		{
-			top: 100,
-			right: 890,
-			bottom: 700,
-			left: 700,
-			width: 190,
-			height: 600,
+			block: { top: 100, right: 366, bottom: 200, left: 24, width: 342, height: 100 },
+			line: { top: 100, height: 40 },
+			width: 44,
+			minimum: 18,
 		},
-		44,
-	);
+	], phone);
 
-	expect(point).toEqual({ top: 0, left: 548 });
+	// 18px is wider than the padding, so it sits flush with the document's edge.
+	expect(point).toEqual({ top: 108, left: 356, width: 18, slim: true });
+	expect(point!.left + phone.left + point!.width).toBe(phone.right);
 });
 
-test("keeps an impossible marker mounted just beyond its passage", () => {
-	let point = place(
-		{
-			top: 100,
-			right: 900,
-			bottom: 700,
-			left: 100,
-			width: 800,
-			height: 600,
-		},
-		44,
-	);
+test("moves a marker below the one above when short blocks sit close together", () => {
+	let points = blockMarkerPoints([marker(180, 16), marker(200, 16)], host);
 
-	expect(point).toEqual({ top: 608, left: 756 });
+	expect(points[0]!.top).toBe(80);
+	expect(points[1]!.top).toBe(108);
 });
 
-test("lets a marker scroll above the document with its passage", () => {
-	let point = place({
-		top: -1_400,
-		right: 520,
-		bottom: -1_360,
-		left: 340,
-		width: 180,
-		height: 40,
-	});
+test("lets a marker scroll above or below the document with its block", () => {
+	let points = blockMarkerPoints([marker(20, 40), marker(760, 40)], host);
 
-	expect(point).toEqual({ top: -1_500, left: 428, offscreen: true });
+	expect(points[0]).toMatchObject({ top: -80, offscreen: true });
+	expect(points[1]).toMatchObject({ top: 660, offscreen: true });
 });
 
-test("lets a marker scroll below the document with its passage", () => {
-	let point = place({
-		top: 700,
-		right: 520,
-		bottom: 720,
-		left: 340,
-		width: 180,
-		height: 20,
-	});
+test("keeps a held marker at the nearest document edge after its block scrolls away", () => {
+	let points = blockMarkerPoints([
+		marker(20, 40, { held: true }),
+		marker(760, 40, { held: true }),
+	], host);
 
-	expect(point).toEqual({ top: 600, left: 428, offscreen: true });
-});
-
-test("keeps a held marker at the nearest document edge after its passage scrolls away", () => {
-	let above = { top: -1_400, right: 520, bottom: -1_360, left: 340, width: 180, height: 40 };
-	let below = { top: 700, right: 520, bottom: 720, left: 340, width: 180, height: 20 };
-
-	expect(markerPoints([{ target: above, passages: [above], held: true }], host)[0])
-		.toEqual({ top: 0, left: 428 });
-	expect(markerPoints([{ target: below, passages: [below], held: true }], host)[0])
-		.toEqual({ top: 576, left: 428 });
+	expect(points[0]).toEqual({ top: 0, left: 608, width: 24 });
+	expect(points[1]).toEqual({ top: 576, left: 608, width: 24 });
 });
 
 test("an off-document marker does not displace a visible one", () => {
-	let above = { top: 40, right: 520, bottom: 60, left: 340, width: 180, height: 20 };
-	let visible = { top: 100, right: 520, bottom: 120, left: 340, width: 180, height: 20 };
+	let points = blockMarkerPoints([marker(60, 20), marker(100, 20)], host);
 
-	expect(markerPoints(
-		[
-			{ target: above, passages: [above] },
-			{ target: visible, passages: [visible] },
-		],
-		host,
-	)).toEqual([
-		{ top: -60, left: 428, offscreen: true },
-		{ top: 0, left: 428 },
-	]);
-});
-
-test("finds a safe in-host point between full-height passage columns", () => {
-	let narrowHost = {
-		top: 0,
-		right: 400,
-		bottom: 200,
-		left: 0,
-		width: 400,
-		height: 200,
-	};
-	let target = {
-		top: 50,
-		right: 250,
-		bottom: 100,
-		left: 100,
-		width: 150,
-		height: 50,
-	};
-	let columns = [
-		{ top: 0, right: 100, bottom: 200, left: 0, width: 100, height: 200 },
-		{ top: 0, right: 300, bottom: 200, left: 250, width: 50, height: 200 },
-		{ top: 0, right: 400, bottom: 200, left: 356, width: 44, height: 200 },
-	];
-	let passages = [target, ...columns];
-
-	expect(markerPoints([{ target, passages }], narrowHost, 44)[0]).toEqual({
-		top: 50,
-		left: 304,
-	});
-	expect(markerPoints([{ target, passages: passages.toReversed() }], narrowHost, 44)[0])
-		.toEqual({ top: 50, left: 304 });
-});
-
-test("keeps stacked markers clear of both bottom-edge passages", () => {
-	let earlier = {
-		top: 608,
-		right: 900,
-		bottom: 652,
-		left: 856,
-		width: 44,
-		height: 44,
-	};
-	let target = {
-		top: 660,
-		right: 890,
-		bottom: 690,
-		left: 700,
-		width: 190,
-		height: 30,
-	};
-
-	expect(markerPoints(
-		[
-			{ target: earlier, passages: [earlier] },
-			{ target, passages: [target] },
-		],
-		host,
-		44,
-	)).toEqual([
-		{ top: 456, left: 756 },
-		{ top: 404, left: 756 },
-	]);
-});
-
-test("places an earlier marker clear of every later thread passage", () => {
-	let earlier = {
-		top: 180,
-		right: 520,
-		bottom: 200,
-		left: 340,
-		width: 180,
-		height: 20,
-	};
-	let later = {
-		top: 180,
-		right: 552,
-		bottom: 204,
-		left: 528,
-		width: 24,
-		height: 24,
-	};
-
-	expect(markerPoints([
-		{ target: earlier, passages: [earlier] },
-		{ target: later, passages: [later] },
-	], host)).toEqual([
-		{ top: 108, left: 428 },
-		{ top: 80, left: 460 },
-	]);
-	expect(markerPoints([
-		{ target: later, passages: [later] },
-		{ target: earlier, passages: [earlier] },
-	], host)).toEqual([
-		{ top: 80, left: 460 },
-		{ top: 108, left: 428 },
-	]);
+	expect(points[0]!.offscreen).toBe(true);
+	expect(points[1]).toEqual({ top: 0, left: 608, width: 24 });
 });
 
 test("places a popover to the left when the right side lacks room", () => {
@@ -334,33 +186,77 @@ test("fits a full preview beside a gutter button in a 400px document", () => {
 	expect(point).toEqual({ top: 200, left: 72 });
 });
 
-test("docks a comment panel at the document's right edge", () => {
-	let point = edgePanelPoint(
-		{ top: 260, right: 560, bottom: 284, left: 536, width: 24, height: 24 },
-		host,
-		320,
-		200,
-	);
+const column = { top: 100, right: 700, bottom: 700, left: 200, width: 500, height: 600 };
 
-	expect(point).toEqual({ top: 160, left: 468 });
+function passage(top: number, left = 300, right = 500, height = 24): Rect {
+	return { top, right, bottom: top + height, left, width: right - left, height };
+}
+
+function overlaps(card: CardPoint, height: number, target: Rect, page: Rect): boolean {
+	let top = page.top + card.top;
+	let bottom = top + Math.min(height, card.maxHeight ?? height);
+	let left = page.left + card.left;
+	let right = left + card.width;
+	return top < target.bottom && bottom > target.top && left < target.right
+		&& right > target.left;
+}
+
+test("places a comment card directly below its passage, at the passage's left edge", () => {
+	expect(commentCardPoint(passage(200), column, host, 320, 200))
+		.toEqual({ top: 132, left: 200, width: 320, side: "below" });
 });
 
-test("keeps an edge panel inside both vertical document edges", () => {
-	let above = edgePanelPoint(
-		{ top: 50, right: 560, bottom: 74, left: 536, width: 24, height: 24 },
-		host,
-		320,
-		200,
-	);
-	let below = edgePanelPoint(
-		{ top: 660, right: 560, bottom: 684, left: 536, width: 24, height: 24 },
-		host,
-		320,
-		240,
-	);
+test("keeps a comment card inside the prose column", () => {
+	expect(commentCardPoint(passage(200, 600, 690), column, host, 320, 200).left).toBe(280);
+	expect(commentCardPoint(passage(200), { ...column, width: 280 }, host, 320, 200).width)
+		.toBe(280);
+});
 
-	expect(above).toEqual({ top: 12, left: 468 });
-	expect(below).toEqual({ top: 348, left: 468 });
+test("flips a comment card above its passage when there is no room below", () => {
+	expect(commentCardPoint(passage(600), column, host, 320, 200))
+		.toEqual({ top: 292, left: 200, width: 320, side: "above" });
+});
+
+test("caps a card that fits neither side to the roomier side of its passage", () => {
+	expect(commentCardPoint(passage(300), column, host, 320, 500))
+		.toEqual({ top: 232, left: 200, width: 320, side: "below", maxHeight: 356 });
+	expect(commentCardPoint(passage(500), column, host, 320, 500))
+		.toEqual({ top: 12, left: 200, width: 320, side: "above", maxHeight: 380 });
+});
+
+test("puts a comment card in a wide gutter beside the passage's first line", () => {
+	let wide = { ...host, right: 1_300, width: 1_200 };
+	expect(commentCardPoint(passage(200), column, wide, 320, 200))
+		.toEqual({ top: 100, left: 656, width: 320, side: "right" });
+	let snug = { ...host, right: 1_036, width: 936 };
+	expect(commentCardPoint(passage(200), column, snug, 320, 200).width).toBe(268);
+});
+
+test("keeps a gutter card clear of the 56px marker lane", () => {
+	let wide = { ...host, right: 1_300, width: 1_200 };
+	let card = commentCardPoint(passage(200), column, wide, 320, 200);
+	expect(wide.left + card.left).toBe(column.right + 56);
+	// Room for the card only if the marker lane is ignored: it goes below instead.
+	let tight = { ...host, right: 1_020, width: 920 };
+	expect(commentCardPoint(passage(200), column, tight, 320, 200).side).toBe("below");
+});
+
+test("never covers a visible passage", () => {
+	for (let top = 112; top <= 664; top += 8) {
+		for (let height of [80, 200, 360, 700]) {
+			for (let tall of [24, 72]) {
+				let target = passage(top, 260, 640, tall);
+				if (target.bottom > host.bottom - 12) continue;
+				let card = commentCardPoint(target, column, host, 320, height);
+				expect(overlaps(card, height, target, host)).toBe(false);
+			}
+		}
+	}
+});
+
+test("keeps a card inside the document when its passage scrolls away", () => {
+	expect(commentCardPoint(passage(20), column, host, 320, 200).top).toBe(12);
+	expect(commentCardPoint(passage(900), column, host, 320, 200).top).toBe(388);
 });
 
 test("places a decision marker in the left margin at the paragraph's first line", () => {

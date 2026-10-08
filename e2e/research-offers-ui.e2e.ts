@@ -164,12 +164,12 @@ test("writers can dismiss offers while execution is disabled; viewers only read 
 	let dismissButton = dismissedCardA.getByRole("button", { name: "Dismiss", exact: true });
 	await dismissButton.focus();
 	await dismissButton.press("Space");
-	await expect(dismissedCardA).toContainText("Dismissed");
+	await expect(dismissedCardA).toContainText("Research suggestion dismissed");
 	expect(await researchWorkCounts(room)).toEqual(countsBeforeDismiss);
 	await writerB.reload();
 	await ready(writerB);
 	let dismissedCardB = offerCard(writerB, "ui-dismiss");
-	await expect(dismissedCardB).toContainText("Dismissed");
+	await expect(dismissedCardB).toContainText("Research suggestion dismissed");
 	await expect(dismissedCardB.getByRole("button", { name: "Start research", exact: true }))
 		.toHaveCount(0);
 	await expect(dismissedCardB.getByRole("button", { name: "Dismiss", exact: true }))
@@ -193,7 +193,7 @@ test("writers can dismiss offers while execution is disabled; viewers only read 
 		}
 		await readonly.reload();
 		await expect(offerCard(readonly, "ui-accept")).toContainText(specs[0]!.brief);
-		await expect(offerCard(readonly, "ui-dismiss")).toContainText("Dismissed");
+		await expect(offerCard(readonly, "ui-dismiss")).toContainText("Research suggestion dismissed");
 	} finally {
 		await viewerContext.close();
 	}
@@ -223,7 +223,7 @@ test("an accepted link arrives from the room event, reloads, and opens its ready
 	try {
 		let page = isolated.page;
 		let card = offerCard(page, spec.id);
-		await expect(card).toContainText("Research accepted");
+		await expect(card).toContainText("Waiting to start");
 		await expect.poll(() => socket?.initialLinkHeld()).toBe(true);
 		await expect(card.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
 		socket!.releaseInitialLink();
@@ -289,9 +289,10 @@ test("an accepted link arrives from the room event, reloads, and opens its ready
 				&& frame.researchRequestId === workspaceId
 			)
 		).toBe(true);
-		await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
-		await expect(card.getByRole("button", { name: "Open research", exact: true }))
-			.toBeVisible();
+		let open = () =>
+			card.getByRole("button", { name: "Open Synthetic ready research child", exact: true });
+		await expect(card.getByText("Synthetic ready research child", { exact: true })).toBeVisible();
+		await expect(open()).toBeVisible();
 		await expect.poll(() => requestReads).toBeGreaterThan(0);
 		await expect(card.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
 		await expect(card).toHaveAttribute("aria-busy", "true");
@@ -300,14 +301,14 @@ test("an accepted link arrives from the room event, reloads, and opens its ready
 		socket!.failHeldResume();
 		await expect(card).toHaveAttribute("aria-busy", "false");
 		await expect(card.getByRole("alert")).toHaveCount(0);
-		await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+		await expect(open()).toBeVisible();
 
 		await page.reload();
 		await ready(page);
 		card = offerCard(page, spec.id);
-		await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+		await expect(open()).toBeVisible();
 		await expect.poll(() => requestReads).toBeGreaterThan(1);
-		await card.getByRole("button", { name: "Open research", exact: true }).click();
+		await open().click();
 		await expect(page).toHaveURL(`${baseURL}${child.path}`);
 	} finally {
 		await isolated.close();

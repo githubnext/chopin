@@ -1,0 +1,89 @@
+import { expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { WorkProgress } from "./work-progress";
+
+test("active work exposes a stage and keeps tool details collapsed", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: true,
+		responseSeen: false,
+		streaming: false,
+		tools: [{
+			id: "tool-1",
+			name: "read_plan",
+			status: "running",
+			args: '{ "path": "<unsafe>" }',
+		}],
+	}));
+
+	expect(markup).toContain("Gathering context");
+	expect(markup).toContain('aria-expanded="false"');
+	expect(markup).toContain("Details");
+	expect(markup).not.toContain("&lt;unsafe&gt;");
+});
+
+test("completed work names action and tool-time totals", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: false,
+		responseSeen: true,
+		streaming: false,
+		tools: [
+			{ id: "one", name: "read_plan", status: "done", took: 38 },
+			{ id: "two", name: "edit_plan", status: "failed", took: 1_200 },
+		],
+	}));
+
+	expect(markup).toContain("Work details");
+	expect(markup).toContain("2 actions");
+	expect(markup).toContain("1 failed");
+	expect(markup).toContain("1.2s tool time");
+});
+
+test("active work counts failed calls as finished rather than done", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: true,
+		responseSeen: false,
+		streaming: false,
+		tools: [
+			{ id: "one", name: "read_plan", status: "done" },
+			{ id: "two", name: "edit_plan", status: "failed" },
+		],
+	}));
+
+	expect(markup).toContain("2 finished");
+	expect(markup).not.toContain("2 done");
+});
+
+test("disconnected work stays inspectable without claiming an active or interrupted call", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: false,
+		disconnected: true,
+		responseSeen: true,
+		streaming: false,
+		tools: [{ id: "one", name: "read_plan", status: "running", args: "{}" }],
+	}));
+
+	expect(markup).toContain("Connection lost");
+	expect(markup).toContain('aria-expanded="false"');
+	expect(markup).not.toContain("chat-work-lattice");
+	expect(markup).not.toContain("Interrupted");
+});
+
+test("an active ask preserves the static decision wait while keeping tool details", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: true,
+		responseSeen: true,
+		streaming: false,
+		tools: [{
+			id: "ask",
+			name: "ask",
+			status: "running",
+			args: JSON.stringify({ questions: [{ question: "Which database?" }] }),
+		}],
+	}));
+	expect(markup).toContain("Waiting on your decision");
+	expect(markup).toContain("data-tool-waiting");
+	expect(markup).not.toContain("chat-work-lattice");
+	expect(markup).toContain("Details");
+});

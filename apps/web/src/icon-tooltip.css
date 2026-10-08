@@ -15,16 +15,29 @@
 	pointer-events: none;
 	opacity: 0;
 	visibility: hidden;
-	transition: opacity var(--duration-fast) ease-out, visibility var(--duration-fast) ease-out;
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		visibility var(--duration-fast) var(--ease-out);
 }
 
 .icon-tooltip[data-side="top"] {
 	transform: translateY(-100%);
 }
 
+.icon-tooltip[data-side="right"] {
+	max-width: min(calc(var(--spacing) * 70), calc(100vw - 16px));
+	font-weight: 400;
+	text-align: left;
+	transform: translateY(-50%);
+}
+
 .icon-tooltip[data-visible] {
 	opacity: 1;
 	visibility: visible;
+}
+
+.icon-tooltip[data-instant] {
+	transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -111,7 +111,7 @@ test("the Chat edge grows right, keeps its left-side reopen control, and remembe
 	await expect(chat).toBeVisible();
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(rememberedWidth, 0);
 
-	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(rememberedWidth, 0);
 	await expectNoHorizontalOverflow(page);
 

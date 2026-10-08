@@ -1,5 +1,7 @@
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import { useMenuDismissal } from "./menu-dismissal";
 
 import type { CSSProperties } from "react";
 
@@ -77,33 +79,11 @@ export function useAnchoredPicker(
 		return () => cancelAnimationFrame(frame);
 	}, [open]);
 
-	useEffect(() => {
-		if (!open) return;
-		function closeOnPointer(event: PointerEvent) {
-			let target = event.target;
-			if (!(target instanceof Node)) return;
-			if (!trigger.current?.contains(target) && !panel.current?.contains(target)) setOpen(false);
-		}
-		function closeOnFocus(event: FocusEvent) {
-			let target = event.target;
-			if (!(target instanceof Node)) return;
-			if (!trigger.current?.contains(target) && !panel.current?.contains(target)) setOpen(false);
-		}
-		function closeOnEscape(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			setOpen(false);
-			trigger.current?.focus();
-		}
-		document.addEventListener("pointerdown", closeOnPointer);
-		document.addEventListener("focusin", closeOnFocus);
-		document.addEventListener("keydown", closeOnEscape);
-		return () => {
-			document.removeEventListener("pointerdown", closeOnPointer);
-			document.removeEventListener("focusin", closeOnFocus);
-			document.removeEventListener("keydown", closeOnEscape);
-		};
-	}, [open, setOpen]);
+	let close = useCallback((restoreFocus: boolean) => {
+		setOpen(false);
+		if (restoreFocus) trigger.current?.focus();
+	}, [setOpen]);
+	useMenuDismissal(open, [trigger, panel], close);
 
 	return { panel, position, search, trigger };
 }

@@ -1,0 +1,13 @@
+diff --git a/lib/util/safe.js b/lib/util/safe.js
+index 456fe215ae3d032ffaea4590f0d097bcb9195619..de65f4f4ff4a3a392cae95d146584504f431a50c 100644
+--- a/lib/util/safe.js
++++ b/lib/util/safe.js
+@@ -56,7 +56,7 @@ export function safe(state, input, config) {
+       const after = 'after' in pattern
+       const position = match.index + (before ? match[1].length : 0)
+ 
+-      if (positions.includes(position)) {
++      if (Object.hasOwn(infos, position)) {
+         if (infos[position].before && !before) {
+           infos[position].before = false
+         }

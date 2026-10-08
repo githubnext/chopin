@@ -266,6 +266,66 @@ describe("recovery", () => {
 		expect(outcome.issues.length).toBeGreaterThan(0);
 	});
 
+	/**
+	 * The stricter URL rules arrived after documents were stored. They judge
+	 * what a change brings in, so a document already holding such a link keeps
+	 * opening, restoring and taking edits instead of failing every projection.
+	 */
+	it("keeps opening and editing a stored document with a link the newer URL rules refuse", async () => {
+		let source = "Read [the notes](docs\\notes.md).\n";
+		let document = await room.create(source);
+		let stored = room.project(document);
+		expect(stored).toContain("docs\\");
+		room.mark(document);
+
+		let restored = await room.restore(
+			document.epoch,
+			Y.encodeStateAsUpdate(document.doc),
+			stored,
+			[],
+		);
+		try {
+			let client = peer();
+			Y.applyUpdate(client.doc, room.sync(restored), "remote");
+			await room.settle();
+			let before = Y.encodeStateVector(client.doc);
+			client.editor.update(() => {
+				$importPlan(`${stored}\nAdded.\n`, { registry: REGISTRY, validate: false });
+			}, { discrete: true });
+			let outcome = await room.apply(restored, [Y.encodeStateAsUpdate(client.doc, before)]);
+			expect(outcome.ok).toBe(true);
+			expect(room.project(restored)).toBe(`${stored}\nAdded.\n`);
+
+			// A new link of the same kind is still refused.
+			before = Y.encodeStateVector(client.doc);
+			client.editor.update(() => {
+				$importPlan(`${stored}\nAdded [elsewhere](//evil.com).\n`, {
+					registry: REGISTRY,
+					validate: false,
+				});
+			}, { discrete: true });
+			let refused = await room.apply(restored, [Y.encodeStateAsUpdate(client.doc, before)]);
+			expect(refused.ok).toBe(false);
+			if (!refused.ok) expect(refused.issues).toContain("bad-link");
+
+			// So is a hidden character, which the stored text did not carry.
+			let hidden = `https://ex${String.fromCharCode(0x200b)}ample.com`;
+			before = Y.encodeStateVector(client.doc);
+			client.editor.update(() => {
+				$importPlan(`${stored}\nAdded [elsewhere](${hidden}).\n`, {
+					registry: REGISTRY,
+					validate: false,
+				});
+			}, { discrete: true });
+			let hiding = await room.apply(restored, [Y.encodeStateAsUpdate(client.doc, before)]);
+			expect(hiding.ok).toBe(false);
+			if (!hiding.ok) expect(hiding.issues).toContain("bad-link");
+		} finally {
+			restored.doc.destroy();
+			document.doc.destroy();
+		}
+	});
+
 	it("with questions open, refuses a human edit that grows into the expiry reserve but allows one that shrinks", async () => {
 		let filler = "x".repeat(limits.MAX_SOURCE_BYTES - 40);
 		let document = await room.create(`# T\n\n${filler}\n\nTail.\n`);
@@ -306,6 +366,42 @@ describe("recovery", () => {
 		);
 		expect(shrunk.ok).toBe(true);
 		expect(room.project(fresh)).not.toContain("Tail.");
+	});
+
+	// Projection and its re-parse run on the event loop. Brackets used to make
+	// both quadratic, so one large paste held the loop for minutes and the
+	// storage writer lease, renewed on a timer, expired underneath the server.
+	it("accepts and refuses large bracket-heavy pastes without stalling the event loop", async () => {
+		let document = await room.create("# T\n");
+		room.mark(document);
+		let client = peer();
+		Y.applyUpdate(client.doc, room.sync(document), "remote");
+		await room.settle();
+
+		let longest = 0;
+		let last = performance.now();
+		let heartbeat = setInterval(() => {
+			let now = performance.now();
+			longest = Math.max(longest, now - last);
+			last = now;
+		}, 10);
+		try {
+			let paste = async () => {
+				let before = Y.encodeStateVector(client.doc);
+				client.editor.update(() => {
+					let paragraph = $createParagraphNode();
+					paragraph.append($createTextNode("[a]".repeat(limits.MAX_SOURCE_BYTES / 6)));
+					$getRoot().append(paragraph);
+				}, { discrete: true });
+				return room.apply(document, [Y.encodeStateAsUpdate(client.doc, before)], undefined, 1);
+			};
+			expect((await paste()).ok).toBe(true);
+			let refused = await paste();
+			expect(refused.ok ? [] : refused.issues).toEqual(["source-too-large"]);
+		} finally {
+			clearInterval(heartbeat);
+		}
+		expect(longest).toBeLessThan(5_000);
 	});
 
 	it("rebuilds to the last known-good state under a fresh epoch", async () => {

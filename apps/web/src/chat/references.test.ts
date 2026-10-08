@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
 	acknowledgeDraft,
+	addressesPlanner,
 	beforeInputSelection,
 	boundedChatError,
 	chatSendPayload,
@@ -15,6 +16,7 @@ import {
 	referenceTrigger,
 	reviseComposerDraft,
 	selectedReplacement,
+	withNoticesAfter,
 } from "./references";
 
 import type { ReferenceDraft, ReferenceTarget } from "./references";
@@ -218,6 +220,26 @@ describe("composer destination cue", () => {
 	test("says nothing for an empty draft or when the Planner is off", () => {
 		expect(destinationCue("  \n", [], true)).toBeUndefined();
 		expect(destinationCue("@chopin hello", [], false)).toBeUndefined();
+	});
+});
+
+describe("unavailable Planner notices", () => {
+	test("detects a Planner address on a payload routed to the room", () => {
+		let payload = (text: string) => chatSendPayload(text, [], false, REQUEST_ID)!;
+		expect(payload("@chopin hello").to).toBe("room");
+		expect(addressesPlanner(payload("@chopin hello"))).toBe(true);
+		expect(addressesPlanner(payload("hello team"))).toBe(false);
+	});
+
+	test("places a notice under its message only", () => {
+		let entry = (id: string) => ({ id, author: { kind: "system" as const }, text: id, ts: 1 });
+		let notice = entry("notice");
+		expect(withNoticesAfter([entry("a"), entry("b")], { a: notice }).map(e => e.id)).toEqual([
+			"a",
+			"notice",
+			"b",
+		]);
+		expect(withNoticesAfter([entry("b")], { a: notice }).map(e => e.id)).toEqual(["b"]);
 	});
 });
 

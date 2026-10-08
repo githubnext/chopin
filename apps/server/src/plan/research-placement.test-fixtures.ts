@@ -4,8 +4,8 @@ import { hosted } from "./conversation-persistence.test-fixtures";
 export async function pendingInlineResearch(
 	context: Awaited<ReturnType<typeof hosted>>,
 	channelId = context.channel.id,
+	id: string = crypto.randomUUID(),
 ) {
-	let id = ulid();
 	return context.storage.research.start({
 		id,
 		channelId,

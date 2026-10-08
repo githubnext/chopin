@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useCellValue } from "@mdxeditor/gurx";
 import {
@@ -247,6 +254,39 @@ function Indicator({ stage }: { stage: Research.RequestStage }) {
 	);
 }
 
+/** A question is context, not a heading: two quiet lines that open on request. */
+export function ResearchBrief({ text }: { text: string }) {
+	let [open, setOpen] = useState(false);
+	let [long, setLong] = useState(false);
+	let ref = useRef<HTMLSpanElement>(null);
+	useLayoutEffect(() => {
+		let element = ref.current;
+		if (!element || open) return;
+		let measure = () => setLong(element.scrollHeight > element.clientHeight + 1);
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [text, open]);
+	return (
+		<>
+			<span className="plan-research-brief" data-open={open ? "" : undefined} ref={ref}>
+				{text}
+			</span>
+			{(long || open) && (
+				<button
+					aria-expanded={open}
+					className="plan-research-more"
+					onClick={() => setOpen(!open)}
+					type="button"
+				>
+					{open ? "Show less" : "Show more"}
+				</button>
+			)}
+		</>
+	);
+}
+
 function plural(count: number, noun: string): string {
 	return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -300,6 +340,7 @@ export function ResearchCard(
 			<SidecarCard
 				className={`plan-research-card${ready ? " relative" : ""}`}
 				data-research-ready={ready ? "" : undefined}
+				data-research-request={request.id}
 				data-stage={stage}
 				label="Research"
 				tabIndex={-1}
@@ -339,7 +380,7 @@ export function ResearchCard(
 					</div>
 				</div>
 				<Swap className="plan-research-title" id={ready ? "report" : "question"}>
-					{ready ? ready.title : request.question}
+					{ready ? ready.title : <ResearchBrief text={request.question} />}
 				</Swap>
 				<Fold open={!!ready}>
 					{shownSummary !== undefined && <p className="plan-research-summary">{shownSummary}</p>}

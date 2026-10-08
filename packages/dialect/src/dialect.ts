@@ -303,6 +303,49 @@ export const FORBIDDEN_NODES: readonly string[] = Object.freeze([
 export const LINK_PROTOCOLS: readonly string[] = Object.freeze(["https:", "mailto:"]);
 
 /**
+ * Characters a URL must never carry: controls (C0, DEL, C1) and format
+ * characters (soft hyphen, zero-width and bidirectional marks, the byte-order
+ * mark), plus line and paragraph separators.
+ *
+ * Browsers strip some of these while parsing, so `\u0001javascript:` has no
+ * scheme to a pattern yet resolves to one; others hide a different address
+ * behind the one a reader sees.
+ */
+export const HIDDEN_URL_CHARACTERS: RegExp = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+/**
+ * Whether a value with no scheme still names another host.
+ *
+ * `//host` is protocol-relative, and browsers read `\` as `/`, so `\\host`
+ * and `/\host` are too. None of them is a path in the repository.
+ */
+export function leavesRepository(url: string): boolean {
+	return url.startsWith("//") || url.includes("\\");
+}
+
+/**
+ * Why a URL is unsafe to newly store, or nothing if it is fine.
+ *
+ * Browsers trim surrounding whitespace and drop tabs and newlines anywhere,
+ * so ` javascript:` or `java\tscript:` reach a scheme the plain check below
+ * never saw. Only images are absolute by rule, so only links can be
+ * scheme-less paths that wander off to another host.
+ */
+export function disguisedUrl(url: string, kind: "link" | "image" = "link"): string | undefined {
+	let noun = kind === "image" ? "Image URL" : "Link";
+	if (HIDDEN_URL_CHARACTERS.test(url)) return `${noun} contains hidden or control characters`;
+	if (/^\s|\s$/.test(url)) return `${noun} cannot start or end with whitespace`;
+	let scheme = /^[a-z][a-z0-9+.-]*:/i;
+	if (!scheme.test(url) && scheme.test(url.replace(/\s/g, ""))) {
+		return `${noun} hides a protocol behind whitespace`;
+	}
+	if (kind === "link" && !scheme.test(url) && leavesRepository(url)) {
+		return "Link without a protocol must stay in the repository";
+	}
+	return undefined;
+}
+
+/**
  * URL protocols permitted in images.
  *
  * Narrower than links, and absolute where a link need not be: there is no

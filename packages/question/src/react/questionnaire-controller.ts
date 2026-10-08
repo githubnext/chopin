@@ -9,6 +9,17 @@ type Model = crdt.Model<crdt.JsonNode<Drafts>>;
 
 const EMPTY_DRAFTS: Drafts = Object.freeze({});
 
+/** Said when a request never reached the server, which no retry here can fix. */
+export const OFFLINE = "Not connected. Try again when you're back online.";
+
+/** True when a request failed for want of a connection rather than being refused. */
+export function unreachable(error: unknown): boolean {
+	return error instanceof Error
+		&& /^(not connected|connection (lost|restarted)|questionnaire is disconnected)$/.test(
+			error.message,
+		);
+}
+
 function normalize(person: {
 	client: string;
 	handle?: string;
@@ -264,10 +275,10 @@ export class QuestionnaireController {
 					this.#set({ error: reply.message ?? "Could not submit these answers." });
 				}
 			})
-			.catch(() => {
+			.catch((error: unknown) => {
 				if (this.#snapshot.closed) return;
 				this.#terminal = false;
-				this.#set({ error: "Could not submit these answers." });
+				this.#set({ error: unreachable(error) ? OFFLINE : "Could not submit these answers." });
 			})
 			.finally(() => {
 				if (!this.#terminal) this.#set({ submitting: false });
@@ -292,9 +303,9 @@ export class QuestionnaireController {
 					this.#set({ error: "Could not discard this decision." });
 				}
 			})
-			.catch(() => {
+			.catch((error: unknown) => {
 				this.#terminal = false;
-				this.#set({ error: "Could not discard this decision." });
+				this.#set({ error: unreachable(error) ? OFFLINE : "Could not discard this decision." });
 			})
 			.finally(() => {
 				if (!this.#terminal) this.#set({ submitting: false });
@@ -319,9 +330,9 @@ export class QuestionnaireController {
 					this.#set({ error: "Could not cancel this question." });
 				}
 			})
-			.catch(() => {
+			.catch((error: unknown) => {
 				this.#terminal = false;
-				this.#set({ error: "Could not cancel this question." });
+				this.#set({ error: unreachable(error) ? OFFLINE : "Could not cancel this question." });
 			})
 			.finally(() => {
 				if (!this.#terminal) this.#set({ submitting: false });

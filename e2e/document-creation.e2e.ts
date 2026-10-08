@@ -62,17 +62,24 @@ for (let action of ["global", "pencil", "empty"] as const) {
 		await authenticate(page, `document-creator-${crypto.randomUUID()}`, baseURL!);
 		let posts = creationRequests(page);
 		await page.goto("/");
-		let add = page.getByRole("dialog", { name: "Add Project", exact: true });
-		await add.getByRole("button", { name: "score octo-org Add", exact: true }).click();
+		let add = page.getByRole("dialog", { name: "Add project", exact: true });
+		await add.getByRole("option", { name: "octo-org/score", exact: true }).click();
 		let projects = sidebar(page);
-		await expect(projects.getByText("No documents yet.", { exact: true })).toBeVisible();
+		await expect(projects.getByText("No documents", { exact: true })).toBeVisible();
 		let pencil = projects.getByRole("button", { name: "New document in score", exact: true });
 		await expect(pencil).toHaveAttribute("title", "New document in score");
 		let trigger = action === "global"
 			? createButton(page)
 			: action === "pencil"
 			? pencil
-			: projects.getByRole("button", { name: "Create document", exact: true });
+			: page.locator(".navigation-content").getByRole("button", {
+				name: "New document",
+				exact: true,
+			});
+		if (action === "empty") {
+			await page.keyboard.press("Escape");
+			await expect(page.getByRole("dialog", { name: "Projects", exact: true })).toBeHidden();
+		}
 		await trigger.click();
 		await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 		await expect(page.getByRole("textbox", { name: "editable markdown" })).toHaveAttribute(
@@ -85,7 +92,7 @@ for (let action of ["global", "pencil", "empty"] as const) {
 
 test("first-document creation stays guarded through both POST and opening", async ({ baseURL, page }) => {
 	await start(page, baseURL!);
-	await expect(sidebar(page).getByText("No documents yet.")).toBeVisible();
+	await expect(sidebar(page).getByText("No documents", { exact: true })).toBeVisible();
 	let posted = Promise.withResolvers<void>();
 	let releasePost = Promise.withResolvers<void>();
 	let opening = Promise.withResolvers<void>();
@@ -113,7 +120,9 @@ test("first-document creation stays guarded through both POST and opening", asyn
 	await posted.promise;
 	await expect(global).toBeDisabled();
 	await expect(pencil).toBeDisabled();
-	await expect(sidebar(page).getByRole("button", { name: "Create document", exact: true }))
+	await expect(
+		page.locator(".navigation-content").getByRole("button", { name: "New document", exact: true }),
+	)
 		.toBeDisabled();
 	await expect(sidebar(page).getByRole("status").filter({ hasText: "Creating document…" }))
 		.toBeVisible();
@@ -191,7 +200,7 @@ test("the project chooser supports keyboard selection and retry in the chosen pr
 test("compact creation restores focus on dismissal and shows progress after the drawer closes", async ({ baseURL, page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await start(page, baseURL!, ["score", "archive-1"]);
-	let opener = page.getByRole("button", { name: "Open Projects sidebar", exact: true });
+	let opener = page.getByRole("button", { name: "Show sidebar", exact: true });
 	await opener.click();
 	await createButton(page).click();
 	let dialog = page.getByRole("dialog", { name: "New document", exact: true });
@@ -292,19 +301,19 @@ test("global creation without projects explains the next step", async ({ baseURL
 	await authenticate(page, `document-creator-${crypto.randomUUID()}`, baseURL!);
 	let posts = creationRequests(page);
 	await page.goto("/");
-	await expect(page.getByRole("dialog", { name: "Add Project", exact: true })).toBeVisible();
+	await expect(page.getByRole("dialog", { name: "Add project", exact: true })).toBeVisible();
 	await page.keyboard.press("Escape");
 	await createButton(page).click();
 	let dialog = page.getByRole("dialog", { name: "New document", exact: true });
 	await expect(dialog.getByText("Add a project to create your first document.")).toBeVisible();
-	await dialog.getByRole("button", { name: "Add Project", exact: true }).click();
-	await expect(page.getByRole("dialog", { name: "Add Project", exact: true })).toBeVisible();
+	await dialog.getByRole("button", { name: "Add project", exact: true }).click();
+	await expect(page.getByRole("dialog", { name: "Add project", exact: true })).toBeVisible();
 	expect(posts).toHaveLength(0);
 });
 
 test("a rejected creation refreshes project permissions and offers access guidance", async ({ baseURL, page }) => {
 	await start(page, baseURL!);
-	await expect(sidebar(page).getByText("No documents yet.")).toBeVisible();
+	await expect(sidebar(page).getByText("No documents", { exact: true })).toBeVisible();
 	let posts = creationRequests(page);
 	await page.route("**/api/navigation", async route => {
 		if (route.request().method() !== "GET") return route.fallback();

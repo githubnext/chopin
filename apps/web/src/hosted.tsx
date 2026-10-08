@@ -7,18 +7,15 @@ import {
 } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import { childFocusTransition } from "./anchored-child-surface";
-import { readChannelRecovery, rememberChannel } from "./channel-recovery";
-import { childCloseAction, childHistoryState } from "./child-history";
+import { childCloseAction, childFocusTransition, childHistoryState } from "./child-history";
 import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
-import { newestDocument } from "./document-actions";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { ResearchOpener } from "@chopin/editor";
-import type { ChildFocusEvent, ChildFocusState, ChildFocusToken } from "./anchored-child-surface";
+import type { ChildFocusEvent, ChildFocusState, ChildFocusToken } from "./child-history";
 import type {
 	DocumentRouteIdentity,
 	DocumentRouteIdentitySource,
@@ -26,6 +23,7 @@ import type {
 } from "./document-route-swap";
 import type { WorkspacePresentation } from "./workspace-model";
 
+let ChannelWorkspace = lazy(() => import("./channel-workspace"));
 let DocumentWorkspaceHost = lazy(() => import("./document-workspace-host"));
 
 export type HostedWorkspaceProps = {
@@ -63,7 +61,7 @@ export type HostedRoute =
 	| { page: "missing" };
 
 type DocumentRoute = DocumentRouteIdentitySource;
-type ChannelSource = Extract<DocumentRouteIdentitySource, { page: "channel" }>;
+export type ChannelSource = Extract<DocumentRouteIdentitySource, { page: "channel" }>;
 type DocumentSource = DocumentRoute;
 type DocumentRouteRequest = {
 	immediately: boolean;
@@ -71,7 +69,7 @@ type DocumentRouteRequest = {
 	routeKey: DocumentRouteIdentity;
 	source: DocumentSource;
 };
-type DocumentRouteResolution = {
+export type DocumentRouteResolution = {
 	canonicalPath: string;
 	channel: Api.Channel;
 	routeKey: DocumentRouteIdentity;
@@ -201,7 +199,7 @@ function Failure(
 							className={`btn btn-md ${onRetry ? "btn-secondary" : "btn-primary"}`}
 							href={repositoryHref(repository)}
 						>
-							View {repository.fullName} channels
+							View {repository.fullName} documents
 						</a>
 					)}
 					<a className="btn btn-md btn-secondary" href="/">Back to repositories</a>
@@ -209,138 +207,6 @@ function Failure(
 			</div>
 		</div>
 	);
-}
-
-export function HostedLogin() {
-	let href = githubLoginHref(location.pathname, location.search, location.hash);
-	return (
-		<div className="grid h-full bg-ground lg:grid-cols-[1.15fr_0.85fr]" data-hosted="">
-			<section className="flex items-end bg-text-primary p-6 text-page sm:p-10 lg:p-16">
-				<div className="max-w-xl pb-8">
-					<p className="text-sm font-semibold text-brand-wash">chopin</p>
-					<h1 className="mt-4 text-2xl font-semibold">
-						Plan together, in the context of the code.
-					</h1>
-					<p className="mt-5 max-w-lg text-base text-gray-300">
-						A shared document, a visible chat, and an agent that can read the repository without
-						owning the decision.
-					</p>
-				</div>
-			</section>
-			<section className="flex items-center justify-center p-6 sm:p-8">
-				<div className="w-full max-w-sm">
-					<h2 className="text-xl font-semibold">Open your workspace</h2>
-					<p className="mt-2 text-sm text-text-secondary">
-						Sign in with GitHub to choose a repository and its planning channels.
-					</p>
-					<a className="btn btn-md btn-primary mt-6 w-full" href={href}>
-						Continue with GitHub
-					</a>
-				</div>
-			</section>
-		</div>
-	);
-}
-
-export function githubLoginHref(pathname: string, search = "", hash = ""): string {
-	let parameters = new URLSearchParams({ return_to: `${pathname}${search}${hash}` });
-	return `/auth/github?${parameters}`;
-}
-
-function ChannelWorkspace(
-	{ agent, onReady, source, user }: {
-		agent: boolean;
-		onReady?: (key: DocumentRouteIdentity, resolution?: DocumentRouteResolution) => void;
-		source: ChannelSource;
-		user: Api.User;
-	},
-) {
-	type LoadedWorkspace = {
-		detail: Api.ChannelDetail;
-		Workspace: ComponentType<HostedWorkspaceProps>;
-	};
-	let [loaded, setLoaded] = useState<LoadedWorkspace>();
-	let [error, setError] = useState<unknown>();
-	let [retry, setRetry] = useState(0);
-	let { channel: navigationChannel } = useNavigationDocument();
-	let routeKey = documentRouteIdentity(source);
-	let recovery = readChannelRecovery(user.id, source.id);
-
-	useEffect(() => {
-		let active = true;
-		let controller = new AbortController();
-		setLoaded(undefined);
-		setError(undefined);
-		let prepared = import("./document-loader").then(module =>
-			module.prepareDocumentLoad({ id: source.id }, controller.signal)
-		).then(({ detail, pathname }) => ({ canonicalPath: pathname, detail }));
-		prepared = prepared.then(resolved => {
-			if (active) {
-				rememberChannel(user.id, resolved.detail.channel, resolved.detail.repository);
-			}
-			return resolved;
-		});
-		let workspace = import("./room-workspace").then(module => ({
-			Workspace: module.RoomWorkspace,
-		}));
-		Promise.all([prepared, workspace]).then(([resolved, selected]) => {
-			if (active) {
-				setLoaded({ detail: resolved.detail, ...selected });
-				onReady?.(routeKey, {
-					canonicalPath: resolved.canonicalPath,
-					channel: resolved.detail.channel,
-					routeKey,
-				});
-			}
-		}, reason => {
-			if (active) {
-				setError(reason);
-				onReady?.(routeKey);
-			}
-		});
-		return () => {
-			active = false;
-			controller.abort();
-		};
-	}, [onReady, retry, routeKey, source, user.id]);
-	if (error) {
-		return (
-			<Failure
-				channel={recovery?.channel}
-				error={error}
-				onRetry={retryableChannelFailure(error)
-					? () => {
-						setError(undefined);
-						setRetry(value => value + 1);
-					}
-					: undefined}
-				repository={recovery?.repository}
-			/>
-		);
-	}
-	if (!loaded) return <Loading label="Opening channel..." />;
-	let { detail } = loaded;
-	let channel = navigationChannel?.id === detail.channel.id
-		? newestDocument(detail.channel, navigationChannel)
-		: detail.channel;
-	let props: HostedWorkspaceProps = {
-		agent,
-		archivedAt: channel.archivedAt,
-		canEdit: !channel.archivedAt && (detail.canEdit || detail.canManage),
-		canManage: detail.canManage,
-		description: channel.description,
-		descriptionRevision: channel.descriptionRevision,
-		handle: user.login,
-		label: channel.title,
-		presentation: { type: "document" },
-		slug: channel.slug,
-		updatedAt: channel.updatedAt,
-		repository: detail.repository,
-		room: detail.channel.id,
-		userId: user.id,
-	};
-	let Document = loaded.Workspace;
-	return <Document {...props} />;
 }
 
 function DocumentRouteSwap(
@@ -355,7 +221,7 @@ function DocumentRouteSwap(
 	}: {
 		agent: boolean;
 		onCanonicalPath: (pathname: string) => void;
-		onChildClose: (parentId: string, parentPath: string) => void;
+		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
 		onParentRestored: (token: ChildFocusToken) => void;
 		route: DocumentRoute;
@@ -378,7 +244,7 @@ function DocumentRouteSwap(
 	let layers = [state.previous, state.current, state.pending].filter(
 		(layer): layer is DocumentRouteLayer => layer !== undefined,
 	);
-	let motion = motionContract("content-swap");
+	let motion = motionContract("route-swap");
 	let { onDocumentLoaded, onDocumentRouteSettled } = useNavigationDocument();
 	let ready = useCallback((
 		key: DocumentRouteIdentity,
@@ -418,7 +284,12 @@ function DocumentRouteSwap(
 				let source = layer.source;
 				return (
 					<ContentSwapLayer
-						active={layer.key === state.current.key}
+						// The incoming route loads unseen and enters once the outgoing one has left.
+						// A newer request keeps the outgoing route on screen, so a route the user
+						// has already moved past never flashes in.
+						active={layer === state.current
+							? !state.previous
+							: layer === state.previous && !!state.pending}
 						className="document-route-layer h-full min-h-0"
 						immediately={state.current.immediately}
 						key={layer.key}
@@ -426,10 +297,11 @@ function DocumentRouteSwap(
 						onClosed={layer.key === state.previous?.key
 							? () => dispatch({ key: layer.key, type: "closed" })
 							: undefined}
+						staged={layer !== state.previous && (layer === state.pending || !!state.previous)}
 					>
 						{source.page === "document" || source.page === "child"
 							? (
-								<Suspense fallback={<Loading label="Opening document..." />}>
+								<Suspense fallback={<Loading label="Opening document…" />}>
 									<DocumentWorkspaceHost
 										agent={agent}
 										Failure={Failure}
@@ -447,12 +319,17 @@ function DocumentRouteSwap(
 								</Suspense>
 							)
 							: (
-								<ChannelWorkspace
-									agent={agent}
-									onReady={ready}
-									source={source}
-									user={user}
-								/>
+								<Suspense fallback={<Loading label="Opening document…" />}>
+									<ChannelWorkspace
+										agent={agent}
+										Failure={Failure}
+										Loading={Loading}
+										onReady={ready}
+										retryable={retryableChannelFailure}
+										source={source}
+										user={user}
+									/>
+								</Suspense>
 							)}
 					</ContentSwapLayer>
 				);
@@ -552,7 +429,9 @@ export function HostedApp(
 		if (started) childOpener.current = undefined;
 		return { started, token: { generation: next.generation, parentId } };
 	}, [cancelChildFocusFrame, moveChildFocus]);
-	let closeChild = useCallback((parentId: string, parentPath: string) => {
+	let closeChild = useCallback((parentId: string, parentPath: string, opener?: ResearchOpener) => {
+		// A provenance link returns focus to the parent's research card instead of the original opener.
+		if (opener) childOpener.current = opener;
 		let closing = beginChildClosing(parentId, parentPath);
 		if (!closing.started) return;
 		let action = childCloseAction(history.state, parentPath);
@@ -585,13 +464,16 @@ export function HostedApp(
 				moveChildFocus({ type: "cancel" });
 				return;
 			}
-			let target = attempt.opener?.current;
+			let opener = attempt.opener?.current;
+			let target = opener;
 			if (!target?.isConnected || target.closest("[inert]")) {
 				target = parent.querySelector<HTMLElement>(`[data-document-view="plan"] h2`);
 			}
 			moveChildFocus({ type: "finish", token });
 			if (target?.isConnected && !target.closest("[inert]")) {
 				target.focus({ preventScroll: true });
+				// An opener the reader clicked is already in view; a provenance target may not be.
+				if (target === opener) target.scrollIntoView({ block: "nearest" });
 			}
 		});
 	}, [cancelChildFocusFrame, moveChildFocus]);

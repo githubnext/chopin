@@ -167,3 +167,65 @@ test("the @ picker stays inside a narrow Chat panel", async ({ join, page }) => 
 	expect(box!.x).toBeGreaterThanOrEqual(panel!.x);
 	expect(box!.x + box!.width).toBeLessThanOrEqual(panel!.x + panel!.width);
 });
+
+test("the @ picker closes on Escape or an outside press and keeps the draft", async ({ join, page }) => {
+	await enablePlanner(page);
+	await stubAvatars(page);
+	let ana = await join("ana");
+	await join("cy");
+	let chat = chatPane(ana);
+	let draft = chatInput(chat);
+	let list = chat.getByRole("listbox", { name: "Mentions" });
+
+	await draft.fill("Ask @");
+	await expect(list).toBeVisible();
+	await draft.press("Escape");
+	await expect(list).toHaveCount(0);
+	await expectChatValue(draft, "Ask @");
+	await expect(draft).toBeFocused();
+
+	await draft.fill("Ask @c");
+	await expect(list).toBeVisible();
+	await ana.mouse.click(5, 5);
+	await expect(list).toHaveCount(0);
+	await expectChatValue(draft, "Ask @c");
+});
+
+test("the @ picker closes when focus leaves the composer", async ({ join, page }) => {
+	await enablePlanner(page);
+	await stubAvatars(page);
+	let ana = await join("ana");
+	await join("cy");
+	let chat = chatPane(ana);
+	let draft = chatInput(chat);
+	let list = chat.getByRole("listbox", { name: "Mentions" });
+
+	await draft.fill("Ask @c");
+	await expect(list).toBeVisible();
+
+	await chat.getByRole("button", { name: "Send message" }).focus();
+	await expect(list).toHaveCount(0);
+	await expectChatValue(draft, "Ask @c");
+});
+
+test("without a Planner a manually addressed message gets a local notice", async ({ join }) => {
+	let page = await join("ana");
+	let chat = chatPane(page);
+	let input = chatInput(chat);
+	await expect(chat.getByText("Chopin unavailable", { exact: true })).toBeVisible();
+	await input.fill("@");
+	await expect(chat.getByRole("listbox", { name: "Mentions" })).toHaveCount(0);
+	await input.fill("@chopin are you there?");
+	await chat.getByRole("button", { name: "Send message" }).click();
+	// The transcript drops the leading mention from what it shows, so find the
+	// sent message by what was sent rather than by the draft still on screen.
+	await expectChatValue(input, "");
+	await expect(chat.locator('[data-chat-raw="@chopin are you there?"]')).toBeVisible();
+	let notice = chat.getByText("Chopin is off on this server. Your message went to the room only.", {
+		exact: true,
+	});
+	await expect(notice).toBeVisible();
+	await page.reload();
+	await expect(chatInput(chat)).toBeVisible();
+	await expect(notice).toHaveCount(0);
+});

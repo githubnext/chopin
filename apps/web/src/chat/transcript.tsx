@@ -1,24 +1,23 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { CloseIcon, SignInIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
-import { Face, MotionDisclosure, MotionDisclosureIcon, useCardMeta } from "@chopin/editor";
+import { Face, useCardMeta } from "@chopin/editor";
 
 import { ChopinMark } from "./agent-mark";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
-import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
+import { capitalize, displayText, group, workAnnouncement, workPhase } from "./model";
+import { WorkProgress } from "./work-progress";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
-import { motionContract } from "../motion-contract";
-import { motionImmediately } from "../motion-input";
 
 import type { Chat, ConversationPlan } from "@chopin/protocol";
-import type { Group, Message } from "./model";
+import type { CompletedWork, Group, Message } from "./model";
 import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
 import type { Transport } from "@chopin/question/react";
 import { ActivityLine, DecisionPrompt } from "./decision-entry";
@@ -26,8 +25,10 @@ import { ScopedChoicePrompt } from "./scoped-choice-entry";
 import { ResearchOfferCard } from "./research-offer";
 import type { ResearchOfferControls } from "./research-offer";
 import { researchTranscript } from "./research-transcript";
+import type { ResearchTranscriptItem } from "./research-transcript";
 
 type PlanMarkers = {
+	decisions?: TranscriptDecisions;
 	canEdit?: boolean;
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
@@ -56,89 +57,31 @@ function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function ToolRun({ tools }: { tools: Chat.Activity[] }) {
-	let [open, setOpen] = useState(false);
-	let contentId = useId();
-	let summary = summarize(tools);
-	let motion = motionContract("collapse");
-	if (summary.state === "running") {
-		return (
-			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
-				<LoaderIcon aria-hidden="true" className="chat-tool-loader" size={14} />
-				<span className="min-w-0 break-all font-mono text-text-secondary">{summary.name}</span>
-				<span className="tabular-nums">{summary.completed} done</span>
-			</div>
-		);
-	}
+const READY = /^Research is ready\. \[Open the research document\]\((\/documents\/\S+)\)\.$/;
 
-	return (
-		<div>
-			<button
-				aria-controls={open ? contentId : undefined}
-				aria-expanded={open}
-				className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 bg-transparent py-1 text-sm text-text-quaternary"
-				onClick={() => setOpen(value => !value)}
-				type="button"
-			>
-				<MotionDisclosureIcon
-					className="motion-feedback size-[14px]"
-					closed={<ChevronIcon aria-hidden="true" size={14} />}
-					open={open}
-					opened={<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />}
-				/>
-				<span className="tabular-nums">
-					{summary.count} {summary.count === 1 ? "tool" : "tools"}
-				</span>
-				{summary.failures > 0 && (
-					<span className="text-destructive-ink tabular-nums">
-						{summary.failures} failed
-					</span>
-				)}
-				<span className="tabular-nums">{duration(summary.elapsed)}</span>
-			</button>
-
-			<MotionDisclosure
-				id={contentId}
-				immediately={motionImmediately()}
-				motion={motion}
-				open={open}
-				surface="chat-tools"
-			>
-				<ul
-					aria-label="Tool calls"
-					className="m-0 flex list-none flex-col pl-6 text-sm text-text-quaternary"
-				>
-					{tools.map(tool => (
-						<li
-							className="flex min-h-6 items-start gap-3"
-							data-tool-status={tool.status}
-							key={tool.id}
-						>
-							<span className="min-w-0 flex-1 break-all font-mono text-text-secondary">
-								{toolCopy(tool.name)}
-							</span>
-							{tool.status === "failed" && (
-								<span className="shrink-0 text-destructive-ink">Failed</span>
-							)}
-							<span className="shrink-0 tabular-nums">
-								{tool.took === undefined ? "—" : duration(tool.took)}
-							</span>
-						</li>
-					))}
-				</ul>
-			</MotionDisclosure>
-		</div>
-	);
+function readyChild(text: string): string | undefined {
+	let path = READY.exec(text)?.[1];
+	return path ? parseChildDocumentPath(path)?.childSlug : undefined;
 }
 
-function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
-	let readyPath = /^Research is ready\. \[Open the research document\]\((\/documents\/\S+)\)\.$/
-		.exec(item.text)?.[1];
+function SystemEntry(
+	{ enter, item }: { enter: boolean; item: Extract<Group, { kind: "system" }> },
+) {
+	let readyPath = READY.exec(item.text)?.[1];
 	let linked = readyPath !== undefined && parseChildDocumentPath(readyPath) !== undefined;
+	let Icon = readyPath
+		? SparkleIcon
+		: item.text.startsWith("Research could not be completed")
+		? WarningIcon
+		: SignInIcon;
 	return (
-		<div className="flex items-center justify-start gap-3 text-text-tertiary" data-chat-system>
+		<div
+			className="flex items-center justify-start gap-3 text-text-tertiary"
+			data-chat-enter={enter || undefined}
+			data-chat-system
+		>
 			<div className="shrink-0">
-				<SignInIcon aria-hidden="true" size={14} />
+				<Icon aria-hidden="true" size={14} />
 			</div>
 			{linked
 				? (
@@ -210,7 +153,10 @@ function DecisionSystemEntry(
 }
 
 function MessageBody(
-	{ handle, message, onWithdraw, ...markers }: {
+	{ enter, handle, message, onWithdraw, label, ...markers }: {
+		enter: boolean;
+		/** Shows "To Chopin"; false inside a run already labelled or in persistent Chopin mode. */
+		label: boolean;
 		handle: string;
 		message: Message;
 		onWithdraw: (id: string) => void;
@@ -222,15 +168,42 @@ function MessageBody(
 
 	return (
 		<div
-			className={`chat-message-body relative ${
-				markers.sourceDestination?.source.messageId === message.id
-					? "rounded-md bg-inset px-1"
-					: ""
-			}`}
+			className="chat-message-body relative"
+			data-chat-enter={enter || undefined}
+			data-chat-source={markers.sourceDestination?.source.messageId === message.id || undefined}
 			data-chat-message-id={message.id}
 			data-chat-raw={message.text}
-			data-chat-state={message.working ? "working" : undefined}
+			data-chat-state={message.working
+				? "working"
+				: message.workDisconnected
+				? "disconnected"
+				: undefined}
 		>
+			{(message.working || message.workDisconnected || !!message.tools?.length) && (
+				<WorkProgress
+					decisions={markers.decisions}
+					active={!!message.working}
+					disconnected={!!message.workDisconnected}
+					responseSeen={!!message.workResponseSeen}
+					streaming={!!message.workStreaming || !!message.streaming}
+					tools={message.tools ?? []}
+				/>
+			)}
+			{markers.sourceDestination?.source.messageId === message.id && (
+				<span
+					aria-hidden="true"
+					className="chat-source-tint"
+					key={markers.sourceDestination.token}
+				/>
+			)}
+			{label && (
+				<p className="chat-message-to m-0 mb-0.5 flex items-center gap-1 text-2xs text-text-tertiary">
+					<span aria-hidden="true" className="inline-flex">
+						<ChopinMark />
+					</span>
+					To Chopin
+				</p>
+			)}
 			{text && (
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1" data-chat-message-text>
@@ -256,12 +229,6 @@ function MessageBody(
 						)}
 				</div>
 			)}
-			{message.tools && message.tools.length > 0 && <ToolRun tools={message.tools} />}
-			{markers.sourceDestination?.source.messageId === message.id && (
-				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
-					Source: “{markers.sourceDestination.source.quote}”
-				</p>
-			)}
 			{!message.queued && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers
 					canEdit={!!markers.canEdit}
@@ -280,8 +247,13 @@ function MessageBody(
 }
 
 function MessageGroup(
-	{ group: item, handle, onWithdraw, ...markers }: {
-		group: Extract<Group, { kind: "messages" }>;
+	{ enter, entering, group: item, handle, onWithdraw, talkingToChopin, ...markers }: {
+		/** Persistent Chopin mode already says every message is for Chopin. */
+		talkingToChopin?: boolean;
+		/** The whole group entered; `entering` holds messages that joined it later. */
+		enter: boolean;
+		entering: ReadonlySet<string>;
+		group: Extract<ResearchTranscriptItem, { kind: "messages" }>;
 		handle: string;
 		onWithdraw: (id: string) => void;
 	} & PlanMarkers,
@@ -293,33 +265,44 @@ function MessageGroup(
 	return (
 		<div
 			className={`flex gap-3 ${item.queued ? "text-text-quaternary" : ""}`}
+			data-chat-enter={enter || undefined}
 			data-chat-entry
 			data-chat-state={item.queued ? "queued" : undefined}
 		>
-			<div className={`shrink-0 ${item.queued ? "opacity-45" : ""}`}>
-				{item.author.kind === "agent"
+			<div className={`w-6 shrink-0 ${item.queued ? "opacity-45" : ""}`}>
+				{item.continued
+					? null
+					: item.author.kind === "agent"
 					? <ChopinMark circle />
-					: <Face handle={item.author.handle} size={24} />}
+					: <Face decorative handle={item.author.handle} size={24} titled={false} />}
 			</div>
 			<div
-				className={`-mt-0.5 flex min-w-0 flex-1 flex-col gap-1 ${item.queued ? "opacity-60" : ""}`}
+				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"} ${
+					item.queued ? "opacity-60" : ""
+				}`}
 			>
-				<div className="flex items-baseline gap-1.5 text-sm">
-					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span
-						className={item.queued
-							? "text-sm text-text-quaternary tabular-nums"
-							: "text-2xs text-text-tertiary tabular-nums"}
-					>
-						{item.queued
-							? "queued"
-							: active
-							? `Started at ${when(active.ts!)}`
-							: when(first.ts!)}
-					</span>
-				</div>
-				{item.messages.map(message => (
+				{!item.continued && (
+					<div className="flex items-baseline gap-1.5 text-sm">
+						<span className="min-w-0 break-all font-semibold">{name}</span>
+						<span
+							className={item.queued
+								? "text-sm text-text-quaternary tabular-nums"
+								: "text-2xs text-text-tertiary tabular-nums"}
+						>
+							{item.queued
+								? "queued"
+								: active
+								? `Started at ${when(active.ts!)}`
+								: when(first.ts!)}
+						</span>
+					</div>
+				)}
+				{item.messages.map((message, index) => (
 					<MessageBody
+						label={message.to === "planner" && message.author.kind === "member"
+							&& !talkingToChopin && item.messages[index - 1]?.to !== "planner"}
+						enter={entering.has(message.id)}
+						decisions={markers.decisions}
 						canEdit={markers.canEdit}
 						conversationPlanJobs={markers.conversationPlanJobs}
 						onCardLink={markers.onCardLink}
@@ -344,12 +327,15 @@ export function Transcript(
 	{
 		active,
 		canEdit,
+		completedWork,
 		conversationPlan,
 		conversationPlanJobs,
 		decisions,
+		empty,
 		researchOffers,
 		entries,
 		handle,
+		live,
 		onCardLink,
 		onAddExcerpt,
 		onRetryAnalysis,
@@ -357,10 +343,13 @@ export function Transcript(
 		onWithdraw,
 		queued,
 		sourceDestination,
+		suspendedWork,
+		talkingToChopin,
 		working,
 	}: {
 		active: boolean;
 		canEdit?: boolean;
+		completedWork?: CompletedWork[];
 		conversationPlan?: ConversationPlan.State;
 		conversationPlanJobs?: ConversationPlan.Job[];
 		onCardLink?: (link: CardLink) => void;
@@ -372,23 +361,110 @@ export function Transcript(
 		) => Promise<void>;
 		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
+		empty?: string;
 		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
+		/** False until the current connection's history has arrived. */
+		live?: boolean;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
-		working?: Pick<Chat.Turn, "id" | "started">;
+		suspendedWork?: CompletedWork;
+		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
 		sourceDestination?: ChatDestination;
+		talkingToChopin?: boolean;
 	},
 ) {
-	let bottom = useRef<HTMLDivElement>(null);
 	let scroller = useRef<HTMLDivElement>(null);
+	let stack = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
+	// Growth follows only a reader resting on the last line, not one a few pixels up.
+	let flush = useRef(true);
+	let previous = useRef<{ groups: Set<string>; atoms: Set<string>; planned: boolean }>(undefined);
+	let entered = useRef(new Set<string>());
+	let places = useRef(new Map<string, { at: string; top: number }>());
 	let sourceOwner = useRef({});
 	let groups = researchTranscript(
-		group(entries, queued, working),
+		group(entries, queued, working, completedWork, suspendedWork),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
+	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
+	// A turn keeps one row from its placeholder through completion, so it enters once.
+	let turns = new Map(
+		[...completedWork ?? [], ...suspendedWork ? [suspendedWork] : []].map(work => [
+			work.anchorId,
+			work.turnId,
+		]),
+	);
+	let keyed = groups.map(item => {
+		if (item.kind === "research") return { item, key: `research:${item.offer.id}` };
+		if (item.kind === "system") return { item, key: item.id };
+		let first = item.messages[0]!;
+		let turn = first.working ? working?.id : turns.get(first.id);
+		return { item, key: turn ? `turn:${turn}` : `${item.queued ? "queued" : "sent"}-${first.id}` };
+	});
+	let atoms = new Set(
+		groups.flatMap(item =>
+			item.kind === "messages"
+				? item.messages.map(message => message.id)
+				: [item.kind === "research" ? `research:${item.offer.id}` : item.id]
+		),
+	);
+	let before = previous.current;
+	let entering = new Set(before ? [...atoms].filter(atom => !before.atoms.has(atom)) : []);
+	// History, reconnects and document switches arrive in bulk; only live arrivals move.
+	let animate = !!live && !!before && entering.size <= 3;
+	// Marks stay for the row's lifetime: dropping one on the next render would cut its fade short.
+	if (animate) {
+		for (let { item, key } of keyed) {
+			if (!before!.groups.has(key)) {
+				if (item.kind !== "research" || before!.planned) entered.current.add(`row:${key}`);
+			} else if (item.kind === "messages") {
+				for (let message of item.messages) {
+					if (entering.has(message.id)) entered.current.add(message.id);
+				}
+			}
+		}
+	}
+	let enters = (key: string) => entered.current.has(`row:${key}`);
+	let readySubscribe = useCallback(
+		(listener: () => void) => researchOffers?.store.subscribe(listener) ?? (() => {}),
+		[researchOffers?.store],
+	);
+	// A ready request linked from a visible offer card already says so there.
+	let readySnapshot = () =>
+		groups.flatMap(item => {
+			if (item.kind !== "research") return [];
+			let id = researchOffers?.links[item.offer.id]?.researchRequestId;
+			let slug = id ? researchOffers?.store.get(id)?.child?.slug : undefined;
+			return slug ? [slug] : [];
+		}).join("\n");
+	let readySlugs = useSyncExternalStore(readySubscribe, readySnapshot, readySnapshot);
+	let announced = new Set(readySlugs ? readySlugs.split("\n") : []);
+	let currentWork = messages.find(message => message.working);
+	let phase = currentWork
+		? workPhase(
+			currentWork.tools ?? [],
+			!!currentWork.workStreaming || !!currentWork.streaming,
+			true,
+			!!currentWork.workResponseSeen,
+		)
+		: undefined;
+	let announcement = "";
+	if (phase) announcement = workAnnouncement(phase);
+	else if (suspendedWork) {
+		let hasDetails = !!messages.find(message => message.id === suspendedWork.anchorId)?.tools
+			?.length;
+		announcement = hasDetails
+			? "Chopin connection lost. Work details remain available."
+			: "Chopin connection lost.";
+	} else if (completedWork?.length) {
+		let anchorId = completedWork.at(-1)?.anchorId;
+		let hasDetails = !!messages.find(message => message.id === anchorId)?.tools?.length;
+		announcement = hasDetails
+			? "Chopin turn ended. Work details remain available."
+			: "Chopin turn ended.";
+	}
 	let latestPrompt = new Map<string, string>();
 	let latestScoped = new Map<string, string>();
 	for (let entry of entries) {
@@ -400,9 +476,82 @@ export function Transcript(
 		}
 	}
 
-	useEffect(() => {
-		if (active && pinned.current) bottom.current?.scrollIntoView({ block: "end" });
+	useLayoutEffect(() => {
+		// Your own message always comes into view, wherever you had scrolled.
+		if (
+			messages.some(message =>
+				entering.has(message.id) && message.author.kind === "member"
+				&& message.author.handle === handle
+			)
+		) pinned.current = true;
+		// Rows that arrived behind a hidden Chat (the phone tab) are not news when it opens.
+		if (!active || !scroller.current?.getClientRects().length) {
+			entered.current.clear();
+			for (let row of stack.current?.querySelectorAll("[data-chat-enter]") ?? []) {
+				row.removeAttribute("data-chat-enter");
+			}
+		}
+		let rows = new Set(keyed.map(entry => entry.key));
+		previous.current = { groups: rows, atoms, planned: !!conversationPlan };
+		for (let mark of entered.current) {
+			if (!atoms.has(mark) && !rows.has(mark.slice(4))) entered.current.delete(mark);
+		}
+	});
+
+	// An offer that follows a newer message slides from where it was last painted rather than
+	// teleporting. Positions are kept content-relative so the reader's own scrolling is not motion.
+	useLayoutEffect(() => {
+		let element = scroller.current;
+		if (!element) return;
+		let scrolled = element.scrollTop;
+		if (active && pinned.current) element.scrollTop = element.scrollHeight;
+		let reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+		let cards = () => [
+			...element.querySelectorAll<HTMLElement>("[data-chat-placement]"),
+		];
+		let place = (card: HTMLElement) =>
+			card.getBoundingClientRect().top - element.getBoundingClientRect().top;
+		for (let card of cards()) {
+			let last = places.current.get(card.dataset.chatOffer!);
+			if (!last || last.at === card.dataset.chatPlacement || reduce) continue;
+			for (let running of card.getAnimations()) running.cancel();
+			let offset = last.top - scrolled - place(card);
+			if (Math.abs(offset) < 1) continue;
+			let tokens = getComputedStyle(card);
+			let duration = tokens.getPropertyValue("--acc-expand").trim();
+			card.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }], {
+				duration: parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000),
+				easing: tokens.getPropertyValue("--motion-move"),
+			});
+		}
+		let frame = requestAnimationFrame(() => {
+			places.current = new Map(
+				cards().map(card => [card.dataset.chatOffer!, {
+					at: card.dataset.chatPlacement!,
+					top: place(card) + element.scrollTop,
+				}]),
+			);
+		});
+		return () => cancelAnimationFrame(frame);
+	});
+
+	useLayoutEffect(() => {
+		let element = scroller.current;
+		if (active && pinned.current && element) element.scrollTop = element.scrollHeight;
 	}, [active, entries, queued]);
+
+	// Rows grow after they mount (streaming, work details, offer cards) and the pane resizes
+	// (phone keyboard, composer, window); a reader at the bottom stays on the newest line.
+	useLayoutEffect(() => {
+		let element = scroller.current;
+		if (!active || !element || !stack.current) return;
+		let observer = new ResizeObserver(() => {
+			if (flush.current) element.scrollTop = element.scrollHeight;
+		});
+		observer.observe(stack.current);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [active]);
 
 	useEffect(() => {
 		if (!active || !sourceDestination) return;
@@ -412,6 +561,7 @@ export function Transcript(
 			.find(element => element.dataset.chatMessageId === sourceDestination.source.messageId);
 		if (!message) return;
 		pinned.current = false;
+		flush.current = false;
 		message.scrollIntoView({ block: "center", inline: "nearest" });
 		let exact = highlightSource(sourceOwner.current, message, sourceDestination.source);
 		message.dataset.sourceExact = String(exact);
@@ -429,21 +579,44 @@ export function Transcript(
 			onScroll={event => {
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-				pinned.current = distance < 40;
+				pinned.current = distance < 48;
+				flush.current = distance <= 2;
 			}}
 		>
-			<div
-				className="flex min-h-full flex-col gap-4 [&>*:first-child]:mt-auto"
-				data-chat-stack
+			<span
+				aria-atomic="true"
+				aria-live="polite"
+				className="sr-only"
+				data-chat-work-announcer
+				role="status"
 			>
-				{groups.map(item =>
+				{announcement}
+			</span>
+			<div
+				className="flex min-h-full shrink-0 flex-col gap-4 [&>*:first-child]:mt-auto"
+				data-chat-stack
+				ref={stack}
+			>
+				{empty && (
+					<p
+						className="px-1 text-center text-sm text-balance text-text-tertiary"
+						data-chat-empty=""
+					>
+						{empty}
+					</p>
+				)}
+				{keyed.map(({ item, key }) =>
 					item.kind === "research"
 						? (
-							<ResearchOfferCard
-								key={`research:${item.offer.id}`}
-								controls={researchOffers!}
-								offer={item.offer}
-							/>
+							<div
+								data-chat-enter={enters(key) || undefined}
+								data-chat-offer={item.offer.id}
+								data-chat-placement={item.offer.workflow?.placementMessageId
+									?? item.offer.source.messageId}
+								key={key}
+							>
+								<ResearchOfferCard controls={researchOffers!} offer={item.offer} />
+							</div>
 						)
 						: item.kind === "system"
 						? decisions && item.decision && item.ts !== undefined
@@ -454,7 +627,7 @@ export function Transcript(
 									item={item as Extract<Group, { kind: "system" }> & {
 										decision: NonNullable<Chat.Entry["decision"]>;
 									}}
-									key={item.id}
+									key={key}
 									latest={item.decision.kind === "prompt"
 										? latestPrompt.get(item.decision.questionnaireId) === item.id
 										: item.decision.kind === "scoped-choice"
@@ -462,9 +635,12 @@ export function Transcript(
 										: true}
 								/>
 							)
-							: <SystemEntry item={item} key={item.id} />
+							: announced.has(readyChild(item.text) ?? "")
+							? null
+							: <SystemEntry enter={enters(key)} item={item} key={key} />
 						: (
 							<MessageGroup
+								decisions={decisions}
 								canEdit={canEdit}
 								conversationPlanJobs={conversationPlanJobs}
 								onCardLink={onCardLink}
@@ -473,15 +649,18 @@ export function Transcript(
 								onRetryJob={onRetryJob}
 								conversationPlan={conversationPlan}
 								researchOffers={researchOffers}
+								enter={enters(key)}
+								entering={entered.current}
 								group={item}
 								handle={handle}
-								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}
+								key={key}
 								onWithdraw={onWithdraw}
 								sourceDestination={sourceDestination}
+								talkingToChopin={talkingToChopin}
 							/>
 						)
 				)}
-				<div className="h-4 shrink-0" ref={bottom} />
+				<div className="h-4 shrink-0" />
 			</div>
 		</div>
 	);

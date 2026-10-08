@@ -271,6 +271,31 @@ async function startInlineResearch(page: Page, question: string) {
 	return card;
 }
 
+test("a submitted /research card stays in the document through reload", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let databasePort = port(baseURL!);
+	let research = await scriptResearch(page, room, databasePort);
+	let resets = 0;
+	page.on("websocket", socket => {
+		socket.on("framereceived", frame => {
+			if (String(frame.payload).includes('"kind":"plan:reset"')) resets++;
+		});
+	});
+	let opened = await join("ana");
+	let brief = "Compare evidence for keeping submitted research in place.";
+	let card = await startInlineResearch(opened, brief);
+	let id = [...research.requests.values()].find(request => request.question === brief)!.id;
+	await expect.poll(async () => readSource(databasePort, room)).toContain(
+		`<Research id="${id}" />`,
+	);
+	await expect(card).toBeVisible();
+	expect(resets).toBe(0);
+
+	await opened.reload();
+	await expect(opened.getByRole("article", { name: "Research" }).filter({ hasText: brief }))
+		.toBeVisible();
+});
+
 test("inline research publishes one ordinary child and opens it", async ({ baseURL, join, page, room, seed }) => {
 	test.slow();
 	await seed(PARENT_SOURCE);
@@ -509,6 +534,27 @@ test("a ready research card and its Chat notice survive reconnect without anothe
 	await assertRecovered();
 	await opened.reload();
 	await assertRecovered();
+
+	await opened.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: title, exact: true }).click();
+	let surface = opened.getByRole("region", { name: `Child document: ${title}` });
+	let provenance = surface.locator("[data-child-provenance]");
+	let parentTitle = `Test ${room.slice(0, 8)}`;
+	await expect(provenance).toContainText(`Research from ${parentTitle}`);
+	await expect(provenance).toContainText("by e2e");
+	await expect(provenance).toContainText("1 source");
+	let briefToggle = provenance.getByRole("button", { name: "Brief", exact: true });
+	await expect(briefToggle).toHaveAttribute("aria-expanded", "false");
+	await expect(provenance.getByText(brief, { exact: true })).toBeHidden();
+	await briefToggle.click();
+	await expect(provenance.getByText(brief, { exact: true })).toBeVisible();
+	await expect(surface.getByRole("complementary", { name: "Chat" }))
+		.toContainText("Discuss this report here.");
+	await provenance.getByRole("button", { name: parentTitle, exact: true }).click();
+	await expect(surface).toHaveCount(0);
+	await expect(
+		opened.getByRole("article", { name: "Research" }).filter({ hasText: title }),
+	).toBeFocused();
 	let response = await opened.context().request.get(
 		`/api/channels/${room}/research-requests/${workspaceId}`,
 	);

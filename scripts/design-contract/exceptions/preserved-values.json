@@ -113,19 +113,6 @@
 		]
 	},
 	{
-		"file": "apps/web/src/icon-tooltip.css",
-		"reason": "Native CSS ease-out differs from the shared custom ease-out curve; duration is migrated, original tooltip response curve is preserved.",
-		"cases": [
-			[
-				"motion",
-				"transition",
-				"opacity var(--duration-fast) ease-out, visibility var(--duration-fast) ease-out",
-				"CSS > .icon-tooltip",
-				1
-			]
-		]
-	},
-	{
 		"file": "apps/web/src/workspace.tsx",
 		"reason": "Existing workspace frame has an intentional 12px outer radius; preserve the approved layout/hierarchy rather than introducing a one-use scale token.",
 		"cases": [
@@ -136,46 +123,19 @@
 				"class > Workspace > <div>",
 				2
 			]
-		]
+		],
+		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
 	},
 	{
-		"file": "apps/web/src/navigation.css",
-		"reason": "Anchored navigation surface has settled asymmetric 240ms/170ms choreography and bespoke curves; preserve transform behavior rather than substituting a near-match.",
+		"file": "apps/web/src/empty-workspace.tsx",
+		"reason": "The empty workspace repeats the workspace frame's intentional 12px outer radius so the layout does not change when a document opens.",
 		"cases": [
 			[
-				"motion",
-				"transition",
-				"filter 240ms cubic-bezier(0.16, 1, 0.3, 1),\n\t\topacity 240ms cubic-bezier(0.16, 1, 0.3, 1),\n\t\ttransform 240ms cubic-bezier(0.16, 1, 0.3, 1)",
-				"CSS > .anchored-child-parent .workspace-frame",
-				1
-			],
-			[
-				"motion",
-				"transition-duration",
-				"170ms",
-				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-parent .workspace-frame",
-				1
-			],
-			[
-				"motion",
-				"transition-timing-function",
-				"cubic-bezier(0.55, 0, 1, 0.45)",
-				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-parent .workspace-frame",
-				1
-			],
-			[
-				"motion",
-				"animation",
-				"anchored-child-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both",
-				"CSS > .anchored-child-surface",
-				1
-			],
-			[
-				"motion",
-				"animation",
-				"anchored-child-exit 170ms cubic-bezier(0.55, 0, 1, 0.45) both",
-				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-surface",
-				1
+				"utility",
+				"class",
+				"rounded-[12px]",
+				"class > EmptyWorkspace > <div>",
+				2
 			]
 		]
 	},
@@ -372,12 +332,19 @@
 			[
 				"color",
 				"background",
-				"color(handle)",
-				"style object > Face > <span>",
+				"`color-mix(in srgb, ${tone} 18%, var(--color-page))`",
+				"style object > Portrait > <span>",
+				1
+			],
+			[
+				"color",
+				"color",
+				"`color-mix(in srgb, ${tone} 80%, var(--color-text-primary))`",
+				"style object > Portrait > <span>",
 				1
 			]
 		],
-		"sourceHash": "c48b0ab153ac5d663bad5f32412551d05c0c53e805abbd43d75fb3a2b4ee6576"
+		"sourceHash": "830c3d5275279f75c3fa0da9d01f5d4802daff0deb0923f95df1072150b9d11e"
 	},
 	{
 		"file": "packages/editor/src/callout.css",

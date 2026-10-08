@@ -473,6 +473,63 @@ test("a selected tab follows strip layout changes without moving the document", 
 	).toBeLessThanOrEqual(64);
 });
 
+test("authored blocks share the prose edge and unavailable images degrade in place", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.route(RESPONSIVE_IMAGE_URL, route => route.abort());
+	await seed(RESPONSIVE_SOURCE);
+	page = await join("unavailable-image-reader");
+	let document = content(page);
+	let block = document.getByRole("img", { name: "Responsive workspace reference" });
+	let inline = document.getByRole("img", { name: "Mixed prose reference" });
+	await expect(block).toHaveText("Responsive workspace reference");
+	await expect(inline).toHaveText("Mixed prose reference");
+	await expect(document.getByRole("img", { name: "Contained callout reference" })).toBeVisible();
+
+	let geometry = await document.evaluate(root => {
+		// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
+		let rectangle = (element: Element | null) => {
+			if (!element) throw new Error("authored block is missing");
+			let box = element.getBoundingClientRect();
+			return {
+				left: box.left,
+				top: box.top,
+				right: box.right,
+				width: box.width,
+				height: box.height,
+			};
+		};
+		let frame = root.querySelector('[aria-label="Responsive workspace reference"]');
+		let math = root.querySelector('.planMath[data-plan-inline="false"]');
+		return {
+			prose: rectangle(root.querySelector(":scope > p")),
+			table: rectangle(root.querySelector(":scope > table")),
+			block: rectangle(frame),
+			blockRow: rectangle(frame?.closest("p") ?? null),
+			inline: getComputedStyle(root.querySelector('[aria-label="Mixed prose reference"]')!)
+				.display,
+			math: rectangle(math),
+			toggle: rectangle(math?.querySelector('button[aria-label="Show source"]') ?? null),
+		};
+	});
+
+	expect(Math.abs(geometry.table.left - geometry.prose.left)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry.block.left - geometry.prose.left)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry.block.width - geometry.prose.width)).toBeLessThanOrEqual(1);
+	expect(geometry.inline).toBe("inline-flex");
+	expect(Math.abs(geometry.toggle.top - geometry.math.top)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry.toggle.right - geometry.math.right)).toBeLessThanOrEqual(1);
+	// The paragraph's managed line break must not add an empty line under the frame.
+	expect(Math.abs(geometry.blockRow.height - geometry.block.height)).toBeLessThanOrEqual(1);
+
+	// Revealed by focus within the block, not only by hover.
+	let formula = document.locator('.planMath[data-plan-inline="false"]').first();
+	let toggle = formula.getByRole("button", { name: "Show source" });
+	await page.mouse.move(0, 0);
+	await expect(toggle).toHaveCSS("opacity", "0");
+	await toggle.evaluate(node => (node as HTMLElement).focus());
+	await expect(toggle).toHaveCSS("opacity", "1");
+});
+
 test("rich surfaces stay contained within their document or callout", async ({ join, page, seed }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await routeResponsiveImage(page);

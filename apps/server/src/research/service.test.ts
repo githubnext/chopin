@@ -497,6 +497,14 @@ describe("research workspace service", () => {
 
 		let replayed = await context.restart().request(context.channelId, started.request.id);
 		expect(replayed?.child?.id).toBe(childId);
+		expect(await context.service.provenance(context.channelId, childId)).toEqual({
+			requestId: started.request.id,
+			parentChannelId: context.channelId,
+			brief: "Which API contracts changed?",
+			sourceCount: 1,
+			startedBy: "octocat",
+		});
+		expect(await context.service.provenance(childId, childId)).toBeUndefined();
 		let listed = await context.storage.channels.list(REPOSITORY_ID, 100);
 		expect(listed.channels.filter(value => value.parentChannelId === context.channelId))
 			.toHaveLength(1);

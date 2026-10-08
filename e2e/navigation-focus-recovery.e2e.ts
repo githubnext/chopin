@@ -9,11 +9,11 @@ test("Projects does not reclaim focus after it intentionally leaves the open dra
 	});
 	try {
 		await join("ana");
-		let opener = page.getByRole("button", { name: "Open Projects sidebar" });
+		let opener = page.getByRole("button", { name: "Show sidebar" });
 		await opener.click();
 		let drawer = page.getByRole("dialog", { name: "Projects", exact: true });
 		await expect(drawer.getByRole("status")).toContainText("Loading projects");
-		await expect(drawer.getByRole("button", { name: "Collapse Projects sidebar" })).toBeFocused();
+		await expect(drawer.getByRole("button", { name: "Hide sidebar" })).toBeFocused();
 
 		// Simulate a host moving focus outside the drawer, then returning it to body.
 		await page.getByRole("banner").getByRole("button", { name: /^Actions for / })

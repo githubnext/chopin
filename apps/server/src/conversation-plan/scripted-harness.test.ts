@@ -18,6 +18,7 @@ test("the scripted model contract drains an admitted result before destruction",
 			id: "contract-turn",
 			handle: "chopin",
 			started: 1,
+			entryOffset: 0,
 			responded: false,
 		};
 		h.onResult(async () => {
@@ -76,7 +77,7 @@ test("the scripted model stop cancels its held gate without aborting the caller 
 	let escape: ReturnType<typeof setTimeout> | undefined;
 	try {
 		let job = headingJob();
-		let turn = { id: "stop-turn", handle: "chopin", started: 1, responded: false };
+		let turn = { id: "stop-turn", handle: "chopin", started: 1, entryOffset: 0, responded: false };
 		h.opened.plan.chat.job = job;
 		h.opened.plan.chat.turn = turn;
 		session = await h.driver.fake.doStart({ sessionId: "stop-session" } as never);

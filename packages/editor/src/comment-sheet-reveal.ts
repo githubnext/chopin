@@ -35,13 +35,16 @@ export function useCommentSheetReveal({
 		let frame = requestAnimationFrame(() => {
 			if (!scroller.isConnected) return;
 			let viewport = currentViewport();
+			let fit = Number(
+				document.querySelector<HTMLElement>("[data-plan-comment-sheet]")?.dataset.fit,
+			) || undefined;
 			let next = commentRevealScroll({
 				currentScroll: scroller.scrollTop,
 				gap: 20,
 				maxScroll: scroller.scrollHeight - scroller.clientHeight,
 				passageBottom: Math.max(...passages.map(passage => passage.bottom)),
 				passageTop: Math.min(...passages.map(passage => passage.top)),
-				sheetTop: viewport.top + commentSheetTop(viewport.height),
+				sheetTop: viewport.top + commentSheetTop(viewport.height, fit),
 				viewportTop: host.getBoundingClientRect().top,
 			});
 			if (Math.abs(next - scroller.scrollTop) >= 1) scroller.scrollTop = next;

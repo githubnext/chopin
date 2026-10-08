@@ -1,4 +1,4 @@
-import type { DecisionView } from "@chopin/editor";
+import type { DecisionView, ResearchOpener } from "@chopin/editor";
 
 export type WorkspaceMode = "compact" | "split";
 
@@ -7,7 +7,14 @@ export type WorkspaceSurface = "document" | "child";
 export type WorkspacePresentation =
 	| { type: "document" }
 	| { childLabel: string; onChildClose: () => void; type: "parent-with-child" }
-	| { label: string; onClose: () => void; type: "child" };
+	| { label: string; onClose: () => void; parent?: ChildParent; type: "child" };
+
+/** The document a child opened from, and a way back to the place that produced it. */
+export type ChildParent = {
+	id: string;
+	label: string;
+	onReturn: (opener?: ResearchOpener) => void;
+};
 
 export type WorkspaceProfile = {
 	implementation: boolean;
@@ -22,20 +29,27 @@ export type WorkspaceDestination = "plan" | "decisions" | "chat";
 
 export type WorkspaceState = {
 	chatOpen: boolean;
-	desktopChatOpen: boolean;
+	/** Undefined until a person makes an explicit choice. */
+	desktopChatOpen: boolean | undefined;
 };
 
 export type WorkspaceEvent =
 	| { type: "set-chat"; open: boolean }
 	| { type: "set-desktop-chat"; open: boolean };
 
+export const CHAT_CHOICE_STORAGE_KEY = "chopin:pane:chat:choice";
+
+export function storedDesktopChat(value: string | null): boolean | undefined {
+	if (value === "true") return true;
+	if (value === "false") return false;
+}
+
 export function initialWorkspaceState(
-	profile: WorkspaceProfile,
-	desktopChatOpen: boolean,
+	desktopChatOpen: boolean | undefined,
 ): WorkspaceState {
 	return {
 		chatOpen: false,
-		desktopChatOpen: profile.persistChat && desktopChatOpen,
+		desktopChatOpen,
 	};
 }
 
@@ -84,7 +98,7 @@ export function presentWorkspace(
 	documentView: DecisionView,
 ) {
 	let chatVisible = mode === "split"
-		? state.desktopChatOpen || state.chatOpen
+		? (state.desktopChatOpen ?? true) || state.chatOpen
 		: state.chatOpen;
 	let documentVisible = mode === "compact" ? !chatVisible : true;
 

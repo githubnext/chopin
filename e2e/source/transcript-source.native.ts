@@ -76,7 +76,10 @@ async function ranges(page: Page) {
 
 async function select(page: Page, id: string) {
 	await page.evaluate(id => window.transcriptFixture.select(id), id);
-	await expect(page.locator(`[data-chat-message-id="${id}"] [data-source-preview]`)).toBeVisible();
+	await expect(page.locator(`[data-chat-message-id="${id}"]`)).toHaveAttribute(
+		"data-chat-source",
+		"true",
+	);
 }
 
 test("a destination scrolls its actual source into view and replaces only its highlight", async ({ page }) => {
@@ -94,7 +97,7 @@ test("a destination scrolls its actual source into view and replaces only its hi
 	expect(centered).toBeLessThan(3);
 	await select(page, "m8");
 	await expect(source).not.toHaveAttribute("data-source-exact", "true");
-	await expect(source.locator("[data-source-preview]")).toHaveCount(0);
+	await expect(source).not.toHaveAttribute("data-chat-source", "true");
 	await expect(page.locator('[data-chat-message-id="m8"]')).toHaveAttribute(
 		"data-source-exact",
 		"true",

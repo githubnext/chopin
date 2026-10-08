@@ -38,9 +38,11 @@ export { QuestionnaireCard } from "./questionnaire";
 export type { QuestionnaireCardProps } from "./questionnaire";
 export { PreviewPlugin } from "./render-blocks";
 export {
+	ResearchBrief,
 	ResearchCard,
 	ResearchComposer,
 	ResearchDeletionPlugin,
 	ResearchReference,
 } from "./research";
+export { TabKeyPlugin } from "./tab-key";
 export { TabsPlugin } from "./tabs";

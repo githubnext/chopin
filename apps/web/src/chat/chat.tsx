@@ -7,16 +7,33 @@
  * nobody is silenced because a colleague prompted first.
  */
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
-import { SendAction } from "@chopin/editor";
+import {
+	CONNECTION_GRACE,
+	MAX_RESEARCH_BRIEF,
+	SendAction,
+	useConnectionNotice,
+	usePopoverDismissal,
+} from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
-import { ArchiveIcon, InfoIcon, LoaderIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
 import { ModeSwitch } from "./mode-switch";
 import "./composer.css";
 
+import { CommandPicker } from "./command-picker";
+import {
+	CHAT_COMMANDS,
+	commandBrief,
+	commandKeyAction,
+	commandText,
+	commandTrigger,
+	commandTriggerKey,
+	draftCommand,
+	filterCommands,
+} from "./commands";
 import { MentionPicker } from "./mention-picker";
 import {
 	chatAuthors,
@@ -36,18 +53,22 @@ import {
 import {
 	acknowledgeDraft,
 	addressedOutsideReferences,
+	addressesPlanner,
 	boundedChatError,
 	chatSendPayload,
 	insertReference,
 	MAX_REFERENCES,
+	PLANNER_UNAVAILABLE_NOTICE,
 	prepareDraftSubmission,
 	reconcileReferenceDrafts,
 	referenceTrigger,
 	referenceTriggerKey,
 	reviseComposerDraft,
+	withNoticesAfter,
 } from "./references";
 import { RunStack } from "./run-card";
 import { Transcript } from "./transcript";
+import { initialTranscript, transcriptReducer } from "./transcript-state";
 import type { TranscriptDecisions } from "./transcript";
 import type { CardLink } from "../conversation-plan/links";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
@@ -58,6 +79,8 @@ import plannerResume from "../assets/icons/planner-resume.svg";
 
 import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
+import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
+import type { ChatCommand } from "./commands";
 import type { MentionCandidate } from "./mentions";
 import type { ComposerDraft, ReferenceTarget } from "./references";
 import type { Wire as Socket } from "../wire";
@@ -93,6 +116,17 @@ export type ChatProps = {
 	sourceDestination?: ChatDestination;
 	/** Opens Decisions, where a waiting workflow's questions are. */
 	onShowDecisions?: () => void;
+	/**
+	 * Opens the document's research composer with this brief, when this
+	 * document offers research, and says why when it cannot.
+	 */
+	onResearch?: (brief: string) => Promise<ResearchLaunchResult>;
+	/** Focuses the research draft already open in the document. */
+	onShowResearch?: () => void;
+	/** Replaces the composer when this viewer cannot chat at all, such as in an archived document. */
+	notice?: string;
+	/** One calm line shown while the transcript has loaded and is still empty. */
+	emptyNotice?: string;
 };
 
 /** How many runs are still live, and how many are paused and resumable. */
@@ -102,6 +136,44 @@ export function runCounts(runs: Wire.Runs | undefined): { active: number; paused
 		active: list.filter(run => run.status === "running" || run.status === "waiting").length,
 		paused: list.filter(run => run.status === "paused").length,
 	};
+}
+
+function draftKey(room: string): string {
+	return `chopin:chat-draft:${room}`;
+}
+
+/** Holds an unsent message across a reload of this tab; storage may refuse. */
+function keepDraft(room: string, draft: ComposerDraft): void {
+	try {
+		if (!draft.text.trim()) return sessionStorage.removeItem(draftKey(room));
+		sessionStorage.setItem(
+			draftKey(room),
+			JSON.stringify({ text: draft.text, references: draft.references }),
+		);
+	} catch {
+		// Private windows and blocked storage: the draft is lost as it was before.
+	}
+}
+
+/** The message a reload interrupted; anything malformed starts empty. */
+function restoreDraft(room: string): ComposerDraft {
+	let empty = { text: "", references: [] };
+	try {
+		let raw = sessionStorage.getItem(draftKey(room));
+		if (!raw) return empty;
+		let saved = JSON.parse(raw) as Partial<ComposerDraft>;
+		if (typeof saved.text !== "string") return empty;
+		let references = Array.isArray(saved.references)
+				&& saved.references.every(reference =>
+					typeof reference?.start === "number" && typeof reference.end === "number"
+					&& reference.end <= saved.text!.length
+				)
+			? saved.references
+			: [];
+		return { text: saved.text, references };
+	} catch {
+		return empty;
+	}
 }
 
 export function Chat(
@@ -123,7 +195,11 @@ export function Chat(
 		researchOffers,
 		sourceDestination,
 		people = [],
+		notice,
+		emptyNotice,
 		onShowDecisions,
+		onResearch,
+		onShowResearch,
 		referencesEnabled,
 		repository,
 		room,
@@ -131,32 +207,43 @@ export function Chat(
 		wire,
 	}: ChatProps,
 ) {
-	let [entries, setEntries] = useState<Wire.Entry[]>([]);
+	let [transcript, dispatchTranscript] = useReducer(transcriptReducer, initialTranscript);
+	let { entries, turn } = transcript;
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
+	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
 	let [busy, setBusy] = useState(false);
-	let [turn, setTurn] = useState<Wire.Turn>();
 	let [runs, setRuns] = useState<Wire.Runs>();
 	let counts = runCounts(runs);
-	let [draft, setDraft] = useState<ComposerDraft>({
-		text: "",
-		references: [],
-	});
+	let [draft, setDraft] = useState<ComposerDraft>(() => restoreDraft(room));
 	let [submitting, setSubmitting] = useState(false);
+	// A send pressed during a blip, made once the connection is back.
+	let [held, setHeld] = useState(false);
+	let sending = submitting || held;
 	let [sendError, setSendError] = useState<string>();
+	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
+	let researching = useRef(false);
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
+	let [commandCursor, setCommandCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
+	let composerRoot = useRef<HTMLDivElement>(null);
 	let [mode, setMode] = useState(false);
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
 	let draftRef = useRef(draft);
 	draftRef.current = draft;
+	// A reload, including the header's fallback when reconnecting keeps
+	// failing, must not take an unsent message with it. Kept as it changes
+	// rather than on unload, which a browser does not promise to announce.
+	useEffect(() => keepDraft(room, draft), [room, draft]);
 	let pickerId = useId();
 	let mentionPickerId = useId();
+	let commandPickerId = useId();
 	let instructionsId = useId();
 	let cueId = useId();
+	let connectionId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
 	let reportedBusy = useRef(false);
@@ -164,9 +251,28 @@ export function Chat(
 	// A socket opens before its fresh transcript arrives, and reconnects reuse
 	// the same Wire. Only that transcript makes this composer current.
 	if (!connected) synchronized.current = undefined;
-	let composerReady = connected && synchronized.current === wire && !readonly && !archived;
-	let connectionLost = !connected && ["reconnecting", "closed"].includes(wire?.status ?? "");
+	let transcriptReady = connected && synchronized.current === wire;
+	let composerReady = transcriptReady && !readonly && !archived;
+	// A draft never waits on the connection; only sending does.
+	let draftable = !readonly && !archived;
+	let connectionNotice = useConnectionNotice(!connected);
+	let connectionLabel = connectionNotice === "none"
+		? undefined
+		: connectionNotice === "offline" || wire?.status === "closed" || wire?.status === "denied"
+		? "Offline"
+		: wire?.status === "connecting"
+		? "Connecting…"
+		: "Reconnecting…";
 	let effectiveMode = agent && (mode || addressedOutsideReferences(draft.text, draft.references));
+	let workingTurn = transcriptReady ? turn : undefined;
+	let suspendedWork = !transcriptReady && turn && transcript.activeAnchorId
+		? {
+			turnId: turn.id,
+			entryOffset: turn.entryOffset,
+			endOffset: entries.length,
+			anchorId: transcript.activeAnchorId,
+		}
+		: undefined;
 	let detected = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
 		: undefined;
@@ -205,6 +311,27 @@ export function Chat(
 	let activeMention: MentionCandidate | undefined = mentionOpen
 		? mentionOptions[mentionActive]
 		: undefined;
+	let command = composerReady && !submitting
+		? commandTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let commandKey = command ? commandTriggerKey(command) : undefined;
+	let commandOptions = command && onResearch ? filterCommands(CHAT_COMMANDS, command.query) : [];
+	let commandOpen = commandOptions.length > 0 && commandKey !== dismissedPicker;
+	let commandActive = commandCursor.key === commandKey
+		? Math.min(commandCursor.index, commandOptions.length - 1)
+		: 0;
+	// Without research here, a `/research` draft is held with a notice rather than posted.
+	let blockedCommand = !onResearch && !!draftCommand(draft.text);
+	// Escape keeps the draft and the composer's focus; only the picker closes.
+	usePopoverDismissal(
+		commandOpen || mentionOpen || pickerOpen,
+		target =>
+			composerRoot.current?.contains(target)
+			&& !!(target as Element).closest?.(
+				"[contenteditable], [data-chat-command-picker], [data-chat-mention-picker], [data-chat-reference-picker]",
+			),
+		() => setDismissedPicker(commandOpen ? commandKey : mentionOpen ? mentionKey : triggerKey),
+	);
 	let activeOption = picker.options.length === 0
 		? undefined
 		: picker.options[Math.min(picker.active, picker.options.length - 1)];
@@ -216,7 +343,7 @@ export function Chat(
 		let seen = new Set<string>();
 		let response = (agent: boolean, value: string) => {
 			if (!agent || !value.trim()) return;
-			setTurn(current => current && !current.responded ? { ...current, responded: true } : current);
+			dispatchTranscript({ kind: "responded" });
 		};
 
 		// Streaming arrives as deltas against an entry already in the list, so
@@ -226,11 +353,10 @@ export function Chat(
 				loaded = true;
 				synchronized.current = wire;
 				seen = new Set(frame.entries.map(entry => entry.id));
-				setEntries(frame.entries);
+				dispatchTranscript({ kind: "history", entries: frame.entries, turn: frame.turn });
 				setQueue(frame.queued);
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
-				setTurn(frame.turn);
 				setRuns(frame.runs);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
@@ -241,39 +367,15 @@ export function Chat(
 					activity.current?.({ type: "message", busy: reportedBusy.current });
 				}
 				seen.add(frame.entry.id);
-				setEntries(current => {
-					let index = current.findIndex(entry => entry.id === frame.entry.id);
-					if (index < 0) return [...current, frame.entry];
-					let next = [...current];
-					next[index] = frame.entry;
-					return next;
-				});
+				dispatchTranscript({ kind: "message", entry: frame.entry });
 				response(frame.entry.author.kind === "agent", frame.entry.text);
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
-				setEntries(current =>
-					current.map(entry =>
-						entry.id === frame.id ? { ...entry, text: entry.text + frame.text } : entry
-					)
-				);
+				dispatchTranscript({ kind: "delta", id: frame.id, text: frame.text });
 				response(true, frame.text);
 			}),
 			wire.on<Wire.Tool>("chat:tool", frame => {
-				setEntries(current => {
-					let index = current.findIndex(entry => entry.id === frame.entry);
-					if (index < 0) return current;
-					let next = [...current];
-					let entry = next[index]!;
-					let tools = entry.tools ?? [];
-					let existing = tools.findIndex(item => item.id === frame.activity.id);
-					next[index] = {
-						...entry,
-						tools: existing < 0
-							? [...tools, frame.activity]
-							: tools.map((item, at) => at === existing ? { ...item, ...frame.activity } : item),
-					};
-					return next;
-				});
+				dispatchTranscript({ kind: "tool", entryId: frame.entry, activity: frame.activity });
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
 				if (loaded && reportedBusy.current !== frame.busy) {
@@ -281,7 +383,7 @@ export function Chat(
 				}
 				reportedBusy.current = frame.busy;
 				setBusy(frame.busy);
-				setTurn(frame.turn);
+				dispatchTranscript({ kind: "turn", turn: frame.turn });
 				setRuns(frame.runs);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
@@ -316,10 +418,47 @@ export function Chat(
 		setHistoryKey(current => current + 1);
 	};
 
+	/** `text` replaces a draft that is not yet the command, so Retry can reopen it. */
+	let launchResearch = (brief: string, text?: string) => {
+		if (!onResearch || researching.current) return;
+		researching.current = true;
+		setResearchBlock(undefined);
+		setSendError(undefined);
+		let started = draftRef.current;
+		void onResearch(brief).then(result => {
+			// The draft is cleared only once the document composer holds the brief.
+			// Compare text: hiding the pane can re-emit an unchanged draft.
+			if (draftRef.current.text !== started.text) return;
+			let next = result.ok ? "" : text;
+			if (next !== undefined) {
+				let revised = reviseComposerDraft(started, next, []);
+				draftRef.current = revised;
+				setDraft(revised);
+				setSelection({ start: next.length, end: next.length });
+				setDismissedPicker(undefined);
+				if (!result.ok) pendingCaret.current = next.length;
+			}
+			if (!result.ok) setResearchBlock(result.reason);
+		}).finally(() => {
+			researching.current = false;
+		});
+	};
+
 	let submit = () => {
-		if (submission.current || !composerReady || !wire) return;
+		if (submission.current || !draftable) return;
 		let current = draftRef.current;
+		if (draftCommand(current.text)) {
+			// `#` references stay in the brief as their visible titles.
+			launchResearch(commandBrief(current.text));
+			return;
+		}
 		if (!current.text.trim()) return;
+		if (!composerReady || !wire?.connected) {
+			// Inside the grace period nothing says the connection is down, so
+			// the send waits for it rather than being refused.
+			if (connectionNotice === "none") setHeld(true);
+			return;
+		}
 		let submitted = prepareDraftSubmission(current);
 		let prefix = effectiveMode && !addressedOutsideReferences(submitted.text, submitted.references)
 			? `${MENTION} `
@@ -342,6 +481,18 @@ export function Chat(
 		setDraft(submitted);
 		setSubmitting(true);
 		setSendError(undefined);
+
+		if (!agent && addressesPlanner(payload)) {
+			setUnanswered(current => ({
+				...current,
+				[payload.requestId]: {
+					id: `unanswered-${payload.requestId}`,
+					author: { kind: "system" },
+					text: PLANNER_UNAVAILABLE_NOTICE,
+					ts: Date.now(),
+				},
+			}));
+		}
 		if (!sendAcknowledgements) {
 			wire.send("chat:send", payload);
 			clearSubmittedDraft(submitted);
@@ -362,8 +513,38 @@ export function Chat(
 		});
 	};
 
+	// Stop and Resume pressed during a blip are sent once it is over, or never.
+	let heldControl = useRef<"chat:abort" | "chat:resume">(undefined);
+	let control = (kind: "chat:abort" | "chat:resume") => {
+		if (wire?.connected) wire.send(kind);
+		else heldControl.current = kind;
+	};
+	useEffect(() => {
+		if (connectionNotice !== "none") heldControl.current = undefined;
+		else if (connected && heldControl.current && wire?.connected) {
+			wire.send(heldControl.current);
+			heldControl.current = undefined;
+		}
+	});
+
+	// Never held longer than the grace period, however the wait ends.
+	useEffect(() => {
+		if (!held) return;
+		let timer = setTimeout(() => setHeld(false), CONNECTION_GRACE);
+		return () => clearTimeout(timer);
+	}, [held]);
+	useEffect(() => {
+		if (!held) return;
+		if (connectionNotice !== "none") {
+			setHeld(false);
+		} else if (composerReady && wire?.connected) {
+			setHeld(false);
+			submit();
+		}
+	});
+
 	let toggleMode = () => {
-		if (!composerReady || submitting || !agent) return;
+		if (!draftable || sending || !agent) return;
 		let current = draftRef.current;
 		let at = selection.start;
 		let end = selection.end;
@@ -434,28 +615,57 @@ export function Chat(
 	let moveMention = (to: (index: number) => number) =>
 		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
 
+	let chooseCommand = (choice: ChatCommand) => launchResearch("", commandText(choice));
+
+	let researchCopy: Record<ResearchLaunchBlock, string> = {
+		"too-long": `Briefs can be up to ${MAX_RESEARCH_BRIEF.toLocaleString("en-US")} characters`,
+		drafting: "A research request is already being written in the document",
+		"read-only": "This document is read-only",
+		disconnected: "Reconnecting… try again in a moment",
+		unavailable: "Research couldn’t open in the document",
+	};
+
+	let transcriptView = (
+		<Transcript
+			active={active}
+			canEdit={composerReady}
+			conversationPlanJobs={conversationPlanJobs}
+			onCardLink={onCardLink}
+			onAddExcerpt={onAddExcerpt}
+			onRetryAnalysis={onRetryAnalysis}
+			onRetryJob={onRetryJob}
+			conversationPlan={conversationPlan}
+			decisions={decisions}
+			empty={transcriptReady && entries.length === 0 && queue.length === 0 && !turn
+				? emptyNotice
+				: undefined}
+			researchOffers={researchOffers}
+			sourceDestination={sourceDestination}
+			entries={withNoticesAfter(entries, unanswered)}
+			completedWork={transcript.completedWork}
+			suspendedWork={suspendedWork}
+			handle={handle}
+			live={transcriptReady}
+			onWithdraw={id => wire?.send("chat:unqueue", { id })}
+			queued={queue}
+			talkingToChopin={mode}
+			working={workingTurn}
+		/>
+	);
+	if (notice) {
+		return (
+			<div className="flex h-full min-h-0 flex-col">
+				{transcriptView}
+				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
+					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<Transcript
-				active={active}
-				canEdit={composerReady}
-				conversationPlanJobs={conversationPlanJobs}
-				onCardLink={onCardLink}
-				onAddExcerpt={onAddExcerpt}
-				onRetryAnalysis={onRetryAnalysis}
-				onRetryJob={onRetryJob}
-				conversationPlan={conversationPlan}
-				decisions={decisions}
-				researchOffers={researchOffers}
-				sourceDestination={sourceDestination}
-				entries={entries}
-				handle={handle}
-				onWithdraw={id => wire?.send("chat:unqueue", { id })}
-				queued={queue}
-				working={connected && synchronized.current === wire && turn
-					? turn
-					: undefined}
-			/>
+			{transcriptView}
 
 			{agent && !!runs?.length && (
 				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
@@ -470,13 +680,14 @@ export function Chat(
 				</div>
 			)}
 
-			<div className="chat-composer relative shrink-0 px-2.5 pb-2.5">
+			<div ref={composerRoot} className="chat-composer relative shrink-0 px-2.5 pb-2.5">
 				{referencesEnabled && (
 					<p className="sr-only" id={instructionsId}>
 						Type # to reference a document.
 					</p>
 				)}
-				{!readonly && !archived && (sendError || !composerReady || !agent) && (
+				{!readonly && !archived
+					&& (sendError || researchBlock || blockedCommand || !agent) && (
 					<div
 						className={sendError ? "composer-notice motion-feedback" : "composer-notice"}
 						data-motion-feedback={sendError ? "alert" : undefined}
@@ -486,14 +697,12 @@ export function Chat(
 					>
 						{sendError
 							? <WarningIcon className="icon-danger" size={14} />
-							: connectionLost
-							? <WarningIcon size={14} />
-							: !composerReady
-							? <LoaderIcon className="chat-tool-loader" size={14} />
 							: <InfoIcon size={14} />}
 						<span>
-							{sendError ?? (!composerReady
-								? connected ? "Synchronizing…" : connectionLost ? "Connection lost" : "Connecting…"
+							{sendError ?? (researchBlock
+								? researchCopy[researchBlock]
+								: blockedCommand
+								? "Research isn’t available in this document"
 								: "Chopin unavailable")}
 						</span>
 						{sendError
@@ -506,18 +715,21 @@ export function Chat(
 									Retry
 								</button>
 							)
-							: !composerReady && wire && (
-								<button
-									className="btn btn-sm btn-ghost"
-									onClick={() => wire.reconnect()}
-								>
-									{connectionLost ? "Reconnect" : "Retry"}
+							: researchBlock === "drafting"
+							? onShowResearch && (
+								<button className="btn btn-sm btn-ghost" onClick={onShowResearch} type="button">
+									Go to it
+								</button>
+							)
+							: (researchBlock === "disconnected" || researchBlock === "unavailable") && (
+								<button className="btn btn-sm btn-ghost" onClick={submit} type="button">
+									Retry
 								</button>
 							)}
 					</div>
 				)}
 				<div
-					aria-busy={submitting}
+					aria-busy={sending}
 					className="composer-surface field"
 					data-mode={effectiveMode ? "chopin" : "chat"}
 					data-error={!!sendError || undefined}
@@ -531,6 +743,15 @@ export function Chat(
 							state={atReferenceLimit
 								? { status: "limit", options: [] }
 								: picker}
+						/>
+					)}
+					{commandOpen && (
+						<CommandPicker
+							active={commandActive}
+							id={commandPickerId}
+							onActive={index => setCommandCursor({ key: commandKey, index })}
+							onSelect={chooseCommand}
+							options={commandOptions}
 						/>
 					)}
 					{mentionOpen && (
@@ -558,21 +779,32 @@ export function Chat(
 							<>
 								<DraftInput
 									aria-label="Message"
-									aria-activedescendant={mentionOpen
+									aria-activedescendant={commandOpen
+										? referenceOptionId(commandPickerId, commandActive)
+										: mentionOpen
 										? referenceOptionId(mentionPickerId, mentionActive)
 										: pickerOpen && activeOption
 										? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
 										: undefined}
 									aria-autocomplete="list"
-									aria-controls={mentionOpen ? mentionPickerId : pickerOpen ? pickerId : undefined}
+									aria-controls={commandOpen
+										? commandPickerId
+										: mentionOpen
+										? mentionPickerId
+										: pickerOpen
+										? pickerId
+										: undefined}
 									aria-describedby={[
 										referencesEnabled ? instructionsId : undefined,
-										sendError || !composerReady || !agent ? cueId : undefined,
+										sendError || researchBlock || blockedCommand || !agent
+											? cueId
+											: undefined,
+										connectionLabel ? connectionId : undefined,
 									].filter(Boolean).join(" ") || undefined}
-									aria-disabled={!composerReady || submitting}
+									aria-disabled={!draftable || sending}
 									aria-invalid={!!sendError || undefined}
-									aria-expanded={pickerOpen || mentionOpen}
-									readOnly={!composerReady || submitting}
+									aria-expanded={commandOpen || pickerOpen || mentionOpen}
+									readOnly={!draftable || sending}
 									role="combobox"
 									resetKey={historyKey}
 									historyGroupKey={mode}
@@ -595,6 +827,7 @@ export function Chat(
 											)
 										);
 										setSendError(undefined);
+										setResearchBlock(undefined);
 										setDismissedPicker(undefined);
 										setSelection({
 											start: event.currentTarget.selectionStart,
@@ -603,13 +836,39 @@ export function Chat(
 									}}
 									onKeyDown={event => {
 										let composing = event.nativeEvent.isComposing || event.keyCode === 229;
+										let commandAction = commandOpen
+											? commandKeyAction({
+												key: event.key,
+												keyCode: event.keyCode,
+												isComposing: event.nativeEvent.isComposing,
+												shiftKey: event.shiftKey,
+												altKey: event.altKey,
+												ctrlKey: event.ctrlKey,
+												metaKey: event.metaKey,
+											}, true)
+											: undefined;
+										if (commandAction === "next" || commandAction === "previous") {
+											let step = commandAction === "next" ? 1 : -1;
+											setCommandCursor({
+												key: commandKey,
+												index: (commandActive + step + commandOptions.length)
+													% commandOptions.length,
+											});
+											event.preventDefault();
+											return;
+										}
+										if (commandAction === "select") {
+											chooseCommand(commandOptions[commandActive]!);
+											event.preventDefault();
+											return;
+										}
 										if (!composing && event.key === "Tab" && !event.shiftKey) {
 											setDismissedPicker(mentionKey ?? triggerKey);
 											return;
 										}
 										if (
 											!composing && event.key === "Tab" && event.shiftKey && !event.metaKey
-											&& !event.ctrlKey && !event.altKey && agent && composerReady && !submitting
+											&& !event.ctrlKey && !event.altKey && agent && draftable && !sending
 										) {
 											event.preventDefault();
 											if (!event.repeat) toggleMode();
@@ -636,12 +895,6 @@ export function Chat(
 												(index - 1 + mentionOptions.length) % mentionOptions.length
 											);
 											event.preventDefault();
-											return;
-										}
-										if (mentionAction === "dismiss") {
-											setDismissedPicker(mentionKey);
-											event.preventDefault();
-											event.stopPropagation();
 											return;
 										}
 										if (mentionAction === "select" && activeMention) {
@@ -673,12 +926,6 @@ export function Chat(
 											event.preventDefault();
 											return;
 										}
-										if (action === "dismiss") {
-											setDismissedPicker(triggerKey);
-											event.preventDefault();
-											event.stopPropagation();
-											return;
-										}
 										if (action === "select" && activeOption) {
 											chooseReference(activeOption);
 											event.preventDefault();
@@ -703,7 +950,7 @@ export function Chat(
 									<div className="composer-left">
 										<ModeSwitch
 											effectiveMode={effectiveMode}
-											disabled={!composerReady || submitting || !agent}
+											disabled={!draftable || sending || !agent}
 											onToggle={toggleMode}
 										/>
 
@@ -731,13 +978,34 @@ export function Chat(
 										)}
 									</div>
 									<div className="composer-actions">
+										{/* Always mounted, so the live region hears its first word. */}
+										<span className="composer-connection" id={connectionId} role="status">
+											{connectionLabel && (
+												<span
+													className="composer-connection-label"
+													data-offline={connectionLabel === "Offline" || undefined}
+												>
+													{connectionLabel}
+												</span>
+											)}
+										</span>
+										{/* Where the document header is out of view; see composer.css. */}
+										{connectionNotice === "offline" && wire && (
+											<button
+												className="composer-reconnect btn btn-sm btn-ghost"
+												onClick={() => wire.reconnect()}
+												type="button"
+											>
+												Reconnect
+											</button>
+										)}
 										<span className="composer-run-control">
 											{agent && (busy || counts.active > 0) && (
 												<button
 													aria-label="Stop Chopin"
-													disabled={!composerReady}
+													disabled={!composerReady && connectionNotice !== "none"}
 													className="btn btn-icon btn-secondary"
-													onClick={() => wire?.send("chat:abort")}
+													onClick={() => control("chat:abort")}
 													title="Stop Chopin"
 													type="button"
 												>
@@ -747,9 +1015,9 @@ export function Chat(
 											{agent && !busy && !counts.active && counts.paused > 0 && (
 												<button
 													aria-label="Resume Chopin"
-													disabled={!composerReady}
+													disabled={!composerReady && connectionNotice !== "none"}
 													className="btn btn-icon btn-secondary"
-													onClick={() => wire?.send("chat:resume")}
+													onClick={() => control("chat:resume")}
 													title="Resume Chopin"
 													type="button"
 												>
@@ -758,8 +1026,10 @@ export function Chat(
 											)}
 										</span>
 										<SendAction
-											busy={submitting}
-											disabled={!composerReady || submitting || !draft.text.trim()}
+											busy={sending}
+											disabled={!draftable || sending || !draft.text.trim()
+												|| blockedCommand
+												|| (connectionNotice !== "none" && !draftCommand(draft.text))}
 											onClick={submit}
 											label="Send message"
 										/>
