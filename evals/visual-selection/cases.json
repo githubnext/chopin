@@ -1,0 +1,13 @@
+{
+	"version": 1,
+	"registrySha256": "5cdc086840041f9b5c2140d90f9baa8355c7604b8b6fa46d991f09c9f3b889cb",
+	"cases": [
+		{ "id": "astro-production-deps", "checkpoint": "c2" },
+		{ "id": "vite-bundled-dev-hmr", "checkpoint": "c2" },
+		{ "id": "deno-run-task", "checkpoint": "c1" },
+		{ "id": "pandas-excel-style", "checkpoint": "c3" },
+		{ "id": "biome-fix-all", "checkpoint": "c2" },
+		{ "id": "typescript-assignment-narrowing", "checkpoint": "c1" },
+		{ "id": "eslint-per-rule-autofix", "checkpoint": "c1" }
+	]
+}
