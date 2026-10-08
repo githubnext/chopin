@@ -301,8 +301,8 @@ test("global creation without projects explains the next step", async ({ baseURL
 	await authenticate(page, `document-creator-${crypto.randomUUID()}`, baseURL!);
 	let posts = creationRequests(page);
 	await page.goto("/");
-	await expect(page.getByRole("dialog", { name: "Add project", exact: true })).toBeVisible();
-	await page.keyboard.press("Escape");
+	await expect(page.getByRole("heading", { name: "Start with a repository" })).toBeVisible();
+	await expect(page.getByRole("dialog", { name: "Add project", exact: true })).toHaveCount(0);
 	await createButton(page).click();
 	let dialog = page.getByRole("dialog", { name: "New document", exact: true });
 	await expect(dialog.getByText("Add a project to create your first document.")).toBeVisible();

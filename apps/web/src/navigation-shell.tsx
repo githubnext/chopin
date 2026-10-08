@@ -523,6 +523,19 @@ export function NavigationShell(
 	}, [mode]);
 
 	useEffect(() => {
+		if (!focusProjectId) return;
+		let frame = requestAnimationFrame(() => {
+			let project = document.querySelector<HTMLElement>(
+				`[data-project-id="${CSS.escape(focusProjectId)}"]`,
+			);
+			if (!project) return;
+			project.focus({ preventScroll: true });
+			setFocusProjectId(undefined);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [focusProjectId, projects]);
+
+	useEffect(() => {
 		if (
 			route.page !== "channel" && route.page !== "document" && route.page !== "child"
 			&& navigation?.projects.length === 0

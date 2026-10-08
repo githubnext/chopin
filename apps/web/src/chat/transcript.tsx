@@ -1,7 +1,7 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { CloseIcon, SignInIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
+import { CloseIcon, MessageIcon, SignInIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { Face, useCardMeta } from "@chopin/editor";
@@ -333,6 +333,7 @@ export function Transcript(
 		decisions,
 		empty,
 		researchOffers,
+		emptyHint,
 		entries,
 		handle,
 		live,
@@ -358,10 +359,11 @@ export function Transcript(
 			messageId: string,
 			actionId: string,
 			lane?: "decision" | "research",
-		) => Promise<void>;
+				) => Promise<void>;
 		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
 		empty?: string;
+		emptyHint?: { planner: boolean; references: boolean };
 		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
@@ -593,7 +595,7 @@ export function Transcript(
 				{announcement}
 			</span>
 			<div
-				className="flex min-h-full shrink-0 flex-col gap-4 [&>*:first-child]:mt-auto"
+				className="relative flex min-h-full shrink-0 flex-col gap-4 [&>*:first-child]:mt-auto"
 				data-chat-stack
 				ref={stack}
 			>
@@ -661,6 +663,35 @@ export function Transcript(
 						)
 				)}
 				<div className="h-4 shrink-0" />
+				{emptyHint && (
+					<div
+						aria-hidden={groups.length > 0 || undefined}
+						className={`pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center transition-opacity motion-reduce:transition-none ${
+							groups.length > 0 ? "opacity-0" : "opacity-100"
+						}`}
+						data-chat-empty=""
+					>
+						<MessageIcon aria-hidden="true" className="text-text-quaternary" />
+						<p className="max-w-[32ch] text-sm text-text-tertiary">
+							Talk it through with your collaborators.
+							{emptyHint.planner && (
+								<>
+									{" "}Mention <strong className="font-medium text-text-secondary">@chopin</strong>
+									{" "}
+									to ask the Planner
+									{emptyHint.references ? ", or " : "."}
+								</>
+							)}
+							{emptyHint.references && (
+								<>
+									{emptyHint.planner ? "" : " Use "}
+									<strong className="font-medium text-text-secondary">#</strong>{" "}
+									to point at a document.
+								</>
+							)}
+						</p>
+					</div>
+				)}
 			</div>
 		</div>
 	);
