@@ -2501,7 +2501,8 @@
 .plan-decision-marker::before {
 	content: "";
 	position: absolute;
-	inset-block: calc(-1 * var(--spacing) * 3);
+	inset-block-start: calc(-1 * var(--plan-decision-reach-top, 0px));
+	inset-block-end: calc(-1 * var(--plan-decision-reach-bottom, 0px));
 	inset-inline-start: calc(-1 * var(--plan-decision-reach-start, 0px));
 	inset-inline-end: calc(-1 * var(--plan-decision-reach-end, 0px));
 }
