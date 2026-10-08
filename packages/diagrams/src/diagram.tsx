@@ -1,5 +1,5 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 
 import { type DiagramGraph, type DiagramResult, renderDiagram } from "./render";
 import { namespaceSvgIds } from "./viewer/namespace";
@@ -274,6 +274,7 @@ function DiagramView({
 			>
 				<svg
 					ref={svgRef}
+					style={{ "--sc-native-width": `${result.viewBox[2]}px` } as CSSProperties}
 					className={`sc-svg${mode.kind === "playing" ? "" : " sc-still"}${
 						mode.kind === "step" ? " sc-stepping" : ""
 					}`}
