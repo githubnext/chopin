@@ -993,6 +993,12 @@ test("archiving offers Undo and archived mode names itself", async ({ join, room
 	await headerAction(ana, "Archive");
 	await expect(notice).toBeVisible();
 	await ana.keyboard.press("Shift+Tab");
+	await expect(
+		ana.getByRole("banner").getByRole("button", {
+			name: "Show score in the sidebar",
+		}),
+	).toBeFocused();
+	await ana.keyboard.press("Shift+Tab");
 	let undo = notice.getByRole("button", { name: "Undo", exact: true });
 	await expect(undo).toBeFocused();
 	await ana.waitForTimeout(6000);
