@@ -2,7 +2,7 @@
 
 import { content, expect, ready, test } from "./room";
 import { openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
-import { resetPlannerJobs, scriptJob } from "./planner-jobs";
+import { releasePlannerJob, resetPlannerJobs, scriptJob } from "./planner-jobs";
 
 import type { Locator, Page } from "@playwright/test";
 import type { Question } from "../packages/protocol/index";
@@ -41,11 +41,11 @@ function proseBlock(page: Page) {
 	return content(page).locator("p").filter({ hasText: "We decided:" });
 }
 
-async function scriptProse(option: string, target = "$target") {
+async function scriptProse(option: string, target = "$target", options: { hold?: boolean } = {}) {
 	await scriptJob("prose", [{
 		tool: "write_decision_prose",
 		args: { revision: "$revision", id: target, text: `We decided: ${option}` },
-	}]);
+	}], options);
 }
 
 async function waitForProseJob(page: Page, status: string) {
@@ -326,6 +326,37 @@ test("a failed prose job is visible on the opening message and Retry uses the co
 	await jobs.getByRole("button", { name: "Retry prose job", exact: true }).click();
 	await waitForProseJob(page, "done");
 	await expect(prose(page)).toBeVisible();
+});
+
+test("the settled line follows its prose job through failure, Retry, writing, and done", async ({ join, room }) => {
+	let page = await join("ana");
+	await scriptProse(OPTION, "another-card");
+	await openJevWire(page, room);
+	await sendChat(page, QUESTION);
+	await sendChat(page, OPTION);
+	await card(page).getByText(OPTION, { exact: true }).click();
+	await card(page).getByRole("button", { name: "Save", exact: true }).click();
+	await waitForProseJob(page, "failed");
+	let settled = content(page).locator("[data-card-settled]");
+	await expect(settled).toContainText(`Decided: ${OPTION} · @ana`);
+	await expect(settled).toContainText("Couldn't write this up");
+	await expect(settled).not.toContainText("Writing up…");
+
+	await page.reload();
+	await ready(page);
+	await expect(settled).toContainText("Couldn't write this up");
+	await openJevWire(page, room);
+	await scriptProse(OPTION, "$target", { hold: true });
+	try {
+		await settled.getByRole("button", { name: "Retry", exact: true }).click();
+		await expect(settled).toContainText("Writing up…");
+		await expect(settled).not.toContainText("Couldn't write this up");
+	} finally {
+		await releasePlannerJob("prose");
+	}
+	await waitForProseJob(page, "done");
+	await expect(prose(page)).toBeVisible();
+	await expect(settled).toHaveCount(0);
 });
 
 test("the collapse has an intermediate inert state, respects reduced motion, and rapid reopen remains usable", async ({ join, room }) => {

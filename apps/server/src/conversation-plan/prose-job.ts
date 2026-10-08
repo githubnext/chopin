@@ -3,6 +3,7 @@
 import { decisionGeneration, proseJobTrigger } from "../questions/card-actions";
 import * as Questions from "../questions/card-involved";
 import { type Effect, type JobIntent, MAX_EFFECTS } from "./effects";
+import { jobId } from "./jobs";
 
 import type { Plan } from "../plan/service";
 import type { Record as CardRecord } from "../questions/records";
@@ -17,6 +18,26 @@ export function proseIntent(record: CardRecord): JobIntent | undefined {
 		target: record.id,
 		trigger: proseJobTrigger(record.id, decisionGeneration(record)),
 	};
+}
+
+/** The current decision's write-up while it is unfinished. Done or skipped work has no status. */
+export function writeup(
+	plan: Pick<Plan, "conversationPlanJobs" | "conversationPlanPendingEffects">,
+	record: CardRecord,
+): { status: "writing" | "failed"; job: string } | undefined {
+	let intent = proseIntent(record);
+	if (!intent) return;
+	let id = jobId(intent);
+	let job = plan.conversationPlanJobs.find(item => item.id === id);
+	if (job?.status === "failed") return { status: "failed", job: id };
+	if (job?.status === "pending" || job?.status === "running") return { status: "writing", job: id };
+	if (job) return;
+	// Save commits the job effect before the queue accepts it.
+	let queued = plan.conversationPlanPendingEffects.some(effect =>
+		effect.kind === "job" && effect.intent.kind === "prose"
+		&& effect.intent.target === intent.target && effect.intent.trigger === intent.trigger
+	);
+	return queued ? { status: "writing", job: id } : undefined;
 }
 
 /** Save adds this to the same candidate as its answered record and mirror action. */
