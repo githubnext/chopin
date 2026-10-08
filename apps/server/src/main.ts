@@ -29,6 +29,13 @@ import { handleResearchCommand } from "./conversation-plan/research-commands";
 import { startAcceptedResearch } from "./conversation-plan/accepted-research";
 import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
+import * as VisualDecisions from "./visual-decisions/service";
+import {
+	previewFramePolicy,
+	previewResponse,
+	visualDefinition,
+	visualPreviewDescriptor,
+} from "./visual-preview/descriptor";
 import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubError } from "./github/client";
@@ -348,6 +355,26 @@ function evict(room: Rooms.Room): void {
 	}, EVICT_MS);
 }
 
+function visualLifecycle(
+	room: Rooms.Room,
+	ws: Socket,
+	opened: Service.Plan,
+): VisualDecisions.Lifecycle {
+	return action =>
+		withDocumentLock(room.id, async () => {
+			if (
+				Rooms.get(room.id) !== room || room.plan !== opened || room.closing
+				|| archivingChannels.has(room.id) || deletingChannels.has(room.id)
+				|| ws.data.closed || ws.data.room !== room.id || room.members.get(ws.data.client) !== ws
+			) {
+				throw new Error("Document is unavailable");
+			}
+			let access = await refreshAccess(ws);
+			if (access !== "allowed") throw new Error("Repository authorization is unavailable");
+			await action();
+		});
+}
+
 async function receive(ws: Socket, raw: string): Promise<void> {
 	let frame = incomingFrame(raw);
 	if (!frame) return;
@@ -505,6 +532,48 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			});
 			return;
 
+		case "visual-decision:create":
+			if (room.plan) {
+				try {
+					if (!await visualPreviewDescriptor(hostedAuth.config.origin)) {
+						fail(ws, frame.rid, "Visual preview is unavailable");
+						return;
+					}
+					await VisualDecisions.create(
+						room.plan,
+						ws,
+						frame,
+						await visualDefinition(),
+						visualLifecycle(room, ws, room.plan),
+					);
+				} catch (error) {
+					fail(
+						ws,
+						frame.rid,
+						error instanceof Error ? error.message : "Visual preview is unavailable",
+					);
+				}
+			}
+			return;
+
+		case "visual-decision:open":
+			if (room.plan) {
+				await VisualDecisions.open(room.plan, ws, frame, visualLifecycle(room, ws, room.plan));
+			}
+			return;
+
+		case "visual-decision:edit":
+			if (room.plan) {
+				await VisualDecisions.edit(room.plan, ws, frame, visualLifecycle(room, ws, room.plan));
+			}
+			return;
+
+		case "visual-decision:save":
+			if (room.plan) {
+				await VisualDecisions.save(room.plan, ws, frame, visualLifecycle(room, ws, room.plan));
+			}
+			return;
+
 		case "question:open":
 			if (room.plan) Questions.open(room.plan, ws, frame);
 			return;
@@ -609,6 +678,7 @@ const VIEWER_ALLOWED = new Set([
 	"session:ping",
 	"plan:open",
 	"plan:close",
+	"visual-decision:open",
 	"job:list",
 	"job:get",
 	"conversation-plan:research-link",
@@ -766,7 +836,9 @@ function listen(): Server<SocketData> {
 			let routed = await router.handle(req, url);
 			if (routed) return routed;
 
-			return config.devClient ? proxy(req, url, config.devClient) : serve(url, CLIENT);
+			return config.devClient
+				? proxy(req, url, config.devClient, hostedAuth.config.origin)
+				: serve(url, CLIENT, hostedAuth.config.origin);
 		},
 
 		websocket: {
@@ -1264,6 +1336,7 @@ let hostedAuth = registerAuthRoutes(router, {
 	onCredentialsWillRotate: credentialsWillRotate,
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
+previewFramePolicy(hostedAuth.config.origin);
 let definitions: JobDefinition[] = [];
 if (config.backgroundJobs) {
 	definitions.push(researchBriefDefinition({ config }));
@@ -1463,6 +1536,15 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 	},
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
+router.on("GET", "/api/visual-preview", async request => {
+	try {
+		let session = await hostedAuth.sessions.authenticate(request);
+		if (!session) return Response.json({ error: "authentication required" }, { status: 401 });
+		return await previewResponse(hostedAuth.config.origin);
+	} catch {
+		return Response.json({ error: "Visual preview is unavailable" }, { status: 503 });
+	}
+});
 
 try {
 	await storage.health();

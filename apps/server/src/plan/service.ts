@@ -34,6 +34,8 @@ import * as Chat from "../chat/service";
 import { restoreReferences } from "../chat/references";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
+import * as VisualDecisions from "../visual-decisions/state";
+import { CommitRejected } from "../storage/errors";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
 import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
 import { broadcast, fail, relay, reply, tell } from "../wire";
@@ -171,6 +173,7 @@ export type Plan = {
 	presence: Presence;
 	/** Open questionnaires and their shared answer drafts. */
 	questions: Questions.Questions;
+	visualDecisions: VisualDecisions.Decisions;
 	/** Resolutions in flight and who is typing. Nothing durable. */
 	comments: Comments.Threads;
 	/** The conversation driving the agent. */
@@ -253,6 +256,7 @@ type Sidecar = {
 	mcpUpdates?: McpUpdateRecord[];
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
+	visualDecisions?: VisualDecisions.Stored[];
 	threads: Comments.Record[];
 	transcript: Chat.Chat["entries"];
 	conversationPlan?: ConversationPlan.State;
@@ -280,6 +284,9 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		...(plan.mcpUpdates.length > 0 ? { mcpUpdates: plan.mcpUpdates } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
+		...(plan.visualDecisions.size
+			? { visualDecisions: VisualDecisions.dump(plan.visualDecisions) }
+			: {}),
 		threads: [...plan.threads.values()],
 		transcript: chat.entries,
 		conversationPlan: plan.conversationPlan,
@@ -478,6 +485,7 @@ function restoredState(
 	}
 	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
 	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
+	if (Object.hasOwn(item, "visualDecisions")) expected.push("visualDecisions");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -510,6 +518,10 @@ function restoredState(
 	let lifecycle = hasLifecycle ? restoredLifecycle : undefined;
 	let questions = objects(item.questions, "question record");
 	let records = questions.map(question => Questions.normalizeRecord(question));
+	let visualDecisions = VisualDecisions.restore(item.visualDecisions);
+	if ([...visualDecisions.keys()].some(id => records.some(record => record.id === id))) {
+		throw new Error("Visual decision identity conflicts with questionnaire record");
+	}
 	let openQuestions = objects(item.openQuestions, "open questionnaire");
 	let recordIds = new Set(records.map(record => record.id));
 	let openIds = new Set(openQuestions.map(entry => entry.id as string));
@@ -644,6 +656,7 @@ function restoredState(
 		...(mcpUpdates.length > 0 ? { mcpUpdates } : {}),
 		questions: records,
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
+		...(visualDecisions.size ? { visualDecisions: VisualDecisions.dump(visualDecisions) } : {}),
 		threads: threads as never[],
 		transcript: transcript as unknown as Chat.Chat["entries"],
 		conversationPlan,
@@ -908,7 +921,9 @@ async function commitHosted(
 		}
 		scheduleCheckpoint(plan);
 	} catch (err) {
-		if (!(err instanceof ResearchProjectionConflict)) durable.fatal(err);
+		if (!(err instanceof ResearchProjectionConflict) && !(err instanceof CommitRejected)) {
+			durable.fatal(err);
+		}
 		throw err;
 	}
 }
@@ -1158,6 +1173,15 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 		needsInitialCheckpoint = true;
 	}
 	document.seq = sidecar.documentSeq;
+	try {
+		VisualDecisions.validateProjections(
+			VisualDecisions.restore(sidecar.visualDecisions),
+			room.questionnaireProjections(document),
+		);
+	} catch (error) {
+		document.doc.destroy();
+		throw error;
+	}
 	return { document, needsInitialCheckpoint, sidecar, persistedSidecar, interruptedJobs };
 }
 
@@ -1207,6 +1231,7 @@ export async function open(
 		document,
 		presence: presence.create(),
 		questions: Questions.restore(sidecar.openQuestions),
+		visualDecisions: VisualDecisions.restore(sidecar.visualDecisions),
 		comments: Comments.create(),
 		chat: Chat.restore(sidecar.transcript, sidecar.workflowRuns),
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
@@ -1592,6 +1617,7 @@ export async function publishStaged(
 	plan.records = candidate.records;
 	plan.threads = candidate.threads;
 	plan.questions = candidate.questions;
+	plan.visualDecisions = candidate.visualDecisions;
 	plan.conversationPlan = candidate.conversationPlan;
 	plan.pendingCardActions = candidate.pendingCardActions;
 	plan.conversationPlanPendingEffects = candidate.conversationPlanPendingEffects;

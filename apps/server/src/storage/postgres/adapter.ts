@@ -2,7 +2,7 @@ import { SQL } from "bun";
 
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { availableChannelTitle } from "../../channels/title";
-import { conflict, corrupt, missing, StorageError, unavailable } from "../errors";
+import { CommitRejected, conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
 import { PostgresBackgroundJobStore } from "./jobs";
@@ -649,6 +649,9 @@ export class PostgresStorage implements StorageAdapter {
 		} catch (err) {
 			if (err instanceof StorageError) throw err;
 			let code = postgresCode(err);
+			if (action === "commit channel" && (code === "40001" || code === "40P01")) {
+				throw new CommitRejected(err);
+			}
 			if (code === "23505") throw conflict(`${action} conflicts with an existing record`);
 			if (code === "23503") throw missing(`${action} refers to a missing record`);
 			throw unavailable(`cannot ${action}`, err);
