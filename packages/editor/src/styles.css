@@ -103,11 +103,6 @@
 	box-shadow: var(--shadow-raised);
 }
 
-.plan-research-composer:focus-within {
-	outline: 2px solid var(--color-brand);
-	outline-offset: 2px;
-}
-
 .plan-research-composer textarea {
 	display: block;
 	width: 100%;
@@ -119,10 +114,6 @@
 	font: inherit;
 	font-size: var(--text-sm);
 	color: var(--color-text-primary);
-}
-
-.plan-research-composer textarea:focus {
-	outline: none;
 }
 
 .plan-research-composer textarea::placeholder {
