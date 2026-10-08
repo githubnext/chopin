@@ -328,6 +328,7 @@ test("a project total that conflicts with a live frame converges on a fresh snap
 	let parentLink = projects.getByRole("link", { name: /^Postgres writer lease/ });
 	await expect(count(projectRow)).toHaveText("10");
 	await expect(parentLink).toHaveAccessibleName("Postgres writer lease, 4 unanswered decisions");
+	await expect.poll(() => fake.watches.length).toBeGreaterThan(0);
 
 	// A frame read before the archive response's total lands while the archive is in flight.
 	await projects.getByRole("link", { name: "Settled plan", exact: true }).locator("..").hover();
@@ -636,6 +637,73 @@ test("project and document counts follow decisions while no document is open", a
 		expect(roomChannels(sockets)).toEqual([]);
 	} finally {
 		await editor.context.close();
+	}
+});
+
+test("a delayed sidebar count module catches up without blocking navigation", async ({ baseURL, browser, join, page: first }) => {
+	let other = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), other);
+	let editor = await openAs(browser, baseURL!, "bob", roomPath(other));
+	let module = Promise.withResolvers<void>();
+	let requested = false;
+	let sockets: string[] = [];
+	first.on("websocket", socket => sockets.push(socket.url()));
+	await first.route("**/assets/sidebar-decision-counts-*.js", async route => {
+		requested = true;
+		await module.promise;
+		await route.continue();
+	});
+	try {
+		await expect.poll(() => storedCount(editor.page, "score", other)).toBe(2);
+		let viewer = await join("ana");
+		await expect.poll(() => requested).toBe(true);
+		let projects = sidebar(viewer);
+		let title = `Test ${other.slice(0, 8)}`;
+		let link = projects.getByRole("link", { name: new RegExp(`^${title}`) });
+		await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+		expect(sidebarSockets(sockets)).toEqual([]);
+		await projects.getByRole("button", { name: "Archived", exact: true }).click();
+		await projects.getByRole("button", { name: "All documents", exact: true }).click();
+		await expect(link).toHaveAccessibleName(`${title}, 2 unanswered decisions`);
+		await projects.getByRole("button", { name: "Hide sidebar", exact: true }).click();
+		await expect(projects).toBeHidden();
+		await answerFirstDecision(editor.page);
+		await expect.poll(() => storedCount(editor.page, "score", other)).toBe(1);
+		module.resolve();
+		await expect.poll(() => sidebarSockets(sockets).length).toBeGreaterThan(0);
+		await viewer.getByRole("button", { name: "Show sidebar", exact: true }).click();
+		await expect(link).toHaveAccessibleName(`${title}, 1 unanswered decision`);
+		await expect(count(link.locator(".."))).toHaveText("1");
+		await ready(viewer);
+	} finally {
+		module.resolve();
+		await editor.context.close();
+	}
+});
+
+test("a failed sidebar count module leaves the document and navigation usable", async ({ join, page }) => {
+	let module = Promise.withResolvers<void>();
+	let requested = false;
+	let failed = false;
+	await page.route("**/assets/sidebar-decision-counts-*.js", async route => {
+		requested = true;
+		await module.promise;
+		await route.abort();
+		failed = true;
+	});
+	try {
+		page = await join("ana");
+		await expect.poll(() => requested).toBe(true);
+		module.resolve();
+		await expect.poll(() => failed).toBe(true);
+		await sidebar(page).getByRole("button", { name: "Archived", exact: true }).click();
+		await sidebar(page).getByRole("button", { name: "All documents", exact: true }).click();
+		await ready(page);
+		await answerFirstDecision(page);
+		await page.getByRole("button", { name: "Document", exact: true }).click();
+		await expect(content(page)).toBeVisible();
+	} finally {
+		module.resolve();
 	}
 });
 
