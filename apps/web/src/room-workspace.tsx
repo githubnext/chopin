@@ -44,6 +44,7 @@ import { useNavigationDocument } from "./navigation-shell";
 import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
+import { focusDocumentEnd } from "./document-end";
 import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
@@ -603,6 +604,18 @@ export function RoomWorkspace(
 		});
 	};
 
+	let showDocumentEnd = () => {
+		selectDestination("plan");
+		requestAnimationFrame(() => {
+			let root = document.querySelector<HTMLElement>(
+				`[data-workspace-room="${
+					CSS.escape(room)
+				}"] [data-document-view="plan"] .plan-content[contenteditable="true"]`,
+			);
+			if (root) focusDocumentEnd(root);
+		});
+	};
+
 	useEffect(() => {
 		let editable = canEdit && !archivedAt;
 		latestCanEdit.current = editable;
@@ -820,6 +833,8 @@ export function RoomWorkspace(
 							? "Discuss this report here. Messages stay with the report."
 							: undefined}
 						onShowDecisions={() => selectDestination("decisions")}
+						onOpenDocument={showDocumentEnd}
+						research={researchEnabled}
 						people={peopleHere(members)}
 						conversationPlan={conversation.state}
 						conversationPlanJobs={conversation.jobs}

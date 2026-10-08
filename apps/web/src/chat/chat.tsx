@@ -17,6 +17,16 @@ import type { DraftInputHandle } from "./draft-input";
 import { ModeSwitch } from "./mode-switch";
 import "./composer.css";
 
+import { CommandPicker } from "./command-picker";
+import {
+	CHAT_COMMANDS,
+	commandKeyAction,
+	commandText,
+	commandTrigger,
+	commandTriggerKey,
+	draftCommand,
+	filterCommands,
+} from "./commands";
 import { MentionPicker } from "./mention-picker";
 import {
 	chatAuthors,
@@ -62,6 +72,7 @@ import plannerResume from "../assets/icons/planner-resume.svg";
 
 import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
+import type { ChatCommand } from "./commands";
 import type { MentionCandidate } from "./mentions";
 import type { ComposerDraft, ReferenceTarget } from "./references";
 import type { Wire as Socket } from "../wire";
@@ -97,6 +108,10 @@ export type ChatProps = {
 	sourceDestination?: ChatDestination;
 	/** Opens Decisions, where a waiting workflow's questions are. */
 	onShowDecisions?: () => void;
+	/** Whether this document can start research, which happens in the document itself. */
+	research?: boolean;
+	/** Puts the caret at the end of the document. */
+	onOpenDocument?: () => void;
 	/** Replaces the composer when this viewer cannot chat at all, such as in an archived document. */
 	notice?: string;
 	/** One calm line shown while the transcript has loaded and is still empty. */
@@ -134,6 +149,8 @@ export function Chat(
 		notice,
 		emptyNotice,
 		onShowDecisions,
+		research = false,
+		onOpenDocument,
 		referencesEnabled,
 		repository,
 		room,
@@ -157,6 +174,7 @@ export function Chat(
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
+	let [commandCursor, setCommandCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
 	let composerRoot = useRef<HTMLDivElement>(null);
 	let [mode, setMode] = useState(false);
@@ -167,6 +185,7 @@ export function Chat(
 	draftRef.current = draft;
 	let pickerId = useId();
 	let mentionPickerId = useId();
+	let commandPickerId = useId();
 	let instructionsId = useId();
 	let cueId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
@@ -227,15 +246,25 @@ export function Chat(
 	let activeMention: MentionCandidate | undefined = mentionOpen
 		? mentionOptions[mentionActive]
 		: undefined;
+	let command = composerReady && !submitting
+		? commandTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let commandKey = command ? commandTriggerKey(command) : undefined;
+	let commandOptions = command && research ? filterCommands(CHAT_COMMANDS, command.query) : [];
+	let commandOpen = commandOptions.length > 0 && commandKey !== dismissedPicker;
+	let commandActive = commandCursor.key === commandKey
+		? Math.min(commandCursor.index, commandOptions.length - 1)
+		: 0;
+	let pendingCommand = draftCommand(draft.text);
 	// Escape keeps the draft and the composer's focus; only the picker closes.
 	usePopoverDismissal(
-		mentionOpen || pickerOpen,
+		commandOpen || mentionOpen || pickerOpen,
 		target =>
 			composerRoot.current?.contains(target)
 			&& !!(target as Element).closest?.(
-				"[contenteditable], [data-chat-mention-picker], [data-chat-reference-picker]",
+				"[contenteditable], [data-chat-command-picker], [data-chat-mention-picker], [data-chat-reference-picker]",
 			),
-		() => setDismissedPicker(mentionOpen ? mentionKey : triggerKey),
+		() => setDismissedPicker(commandOpen ? commandKey : mentionOpen ? mentionKey : triggerKey),
 	);
 	let activeOption = picker.options.length === 0
 		? undefined
@@ -326,7 +355,7 @@ export function Chat(
 	let submit = () => {
 		if (submission.current || !composerReady || !wire) return;
 		let current = draftRef.current;
-		if (!current.text.trim()) return;
+		if (!current.text.trim() || draftCommand(current.text)) return;
 		let submitted = prepareDraftSubmission(current);
 		let prefix = effectiveMode && !addressedOutsideReferences(submitted.text, submitted.references)
 			? `${MENTION} `
@@ -453,6 +482,25 @@ export function Chat(
 	let moveMention = (to: (index: number) => number) =>
 		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
 
+	let chooseCommand = (choice: ChatCommand) => {
+		let next = commandText(choice);
+		setDraft(current => reviseComposerDraft(current, next, []));
+		setSelection({ start: next.length, end: next.length });
+		setSendError(undefined);
+		setDismissedPicker(undefined);
+		pendingCaret.current = next.length;
+	};
+
+	let openDocument = () => {
+		let current = draftRef.current;
+		// A bare command has nothing worth keeping; a typed brief stays for copying.
+		if (current.text.trim().toLowerCase() === "/research") {
+			setDraft(reviseComposerDraft(current, "", []));
+			setSelection({ start: 0, end: 0 });
+		}
+		onOpenDocument?.();
+	};
+
 	let transcriptView = (
 		<Transcript
 			active={active}
@@ -514,7 +562,7 @@ export function Chat(
 						Type # to reference a document.
 					</p>
 				)}
-				{!readonly && !archived && (sendError || !composerReady || !agent) && (
+				{!readonly && !archived && (sendError || !composerReady || pendingCommand || !agent) && (
 					<div
 						className={sendError ? "composer-notice motion-feedback" : "composer-notice"}
 						data-motion-feedback={sendError ? "alert" : undefined}
@@ -532,6 +580,10 @@ export function Chat(
 						<span>
 							{sendError ?? (!composerReady
 								? connected ? "Synchronizing…" : connectionLost ? "Connection lost" : "Connecting…"
+								: pendingCommand
+								? research
+									? "Use /research in the document"
+									: "Research isn’t available in this document"
 								: "Chopin unavailable")}
 						</span>
 						{sendError
@@ -544,12 +596,18 @@ export function Chat(
 									Retry
 								</button>
 							)
-							: !composerReady && wire && (
+							: !composerReady
+							? wire && (
 								<button
 									className="btn btn-sm btn-ghost"
 									onClick={() => wire.reconnect()}
 								>
 									{connectionLost ? "Reconnect" : "Retry"}
+								</button>
+							)
+							: pendingCommand && research && onOpenDocument && (
+								<button className="btn btn-sm btn-ghost" onClick={openDocument} type="button">
+									Go to document
 								</button>
 							)}
 					</div>
@@ -569,6 +627,15 @@ export function Chat(
 							state={atReferenceLimit
 								? { status: "limit", options: [] }
 								: picker}
+						/>
+					)}
+					{commandOpen && (
+						<CommandPicker
+							active={commandActive}
+							id={commandPickerId}
+							onActive={index => setCommandCursor({ key: commandKey, index })}
+							onSelect={chooseCommand}
+							options={commandOptions}
 						/>
 					)}
 					{mentionOpen && (
@@ -596,20 +663,28 @@ export function Chat(
 							<>
 								<DraftInput
 									aria-label="Message"
-									aria-activedescendant={mentionOpen
+									aria-activedescendant={commandOpen
+										? referenceOptionId(commandPickerId, commandActive)
+										: mentionOpen
 										? referenceOptionId(mentionPickerId, mentionActive)
 										: pickerOpen && activeOption
 										? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
 										: undefined}
 									aria-autocomplete="list"
-									aria-controls={mentionOpen ? mentionPickerId : pickerOpen ? pickerId : undefined}
+									aria-controls={commandOpen
+										? commandPickerId
+										: mentionOpen
+										? mentionPickerId
+										: pickerOpen
+										? pickerId
+										: undefined}
 									aria-describedby={[
 										referencesEnabled ? instructionsId : undefined,
-										sendError || !composerReady || !agent ? cueId : undefined,
+										sendError || !composerReady || pendingCommand || !agent ? cueId : undefined,
 									].filter(Boolean).join(" ") || undefined}
 									aria-disabled={!composerReady || submitting}
 									aria-invalid={!!sendError || undefined}
-									aria-expanded={pickerOpen || mentionOpen}
+									aria-expanded={commandOpen || pickerOpen || mentionOpen}
 									readOnly={!composerReady || submitting}
 									role="combobox"
 									resetKey={historyKey}
@@ -641,6 +716,32 @@ export function Chat(
 									}}
 									onKeyDown={event => {
 										let composing = event.nativeEvent.isComposing || event.keyCode === 229;
+										let commandAction = commandOpen
+											? commandKeyAction({
+												key: event.key,
+												keyCode: event.keyCode,
+												isComposing: event.nativeEvent.isComposing,
+												shiftKey: event.shiftKey,
+												altKey: event.altKey,
+												ctrlKey: event.ctrlKey,
+												metaKey: event.metaKey,
+											}, true)
+											: undefined;
+										if (commandAction === "next" || commandAction === "previous") {
+											let step = commandAction === "next" ? 1 : -1;
+											setCommandCursor({
+												key: commandKey,
+												index: (commandActive + step + commandOptions.length)
+													% commandOptions.length,
+											});
+											event.preventDefault();
+											return;
+										}
+										if (commandAction === "select") {
+											chooseCommand(commandOptions[commandActive]!);
+											event.preventDefault();
+											return;
+										}
 										if (!composing && event.key === "Tab" && !event.shiftKey) {
 											setDismissedPicker(mentionKey ?? triggerKey);
 											return;
@@ -785,7 +886,8 @@ export function Chat(
 										</span>
 										<SendAction
 											busy={submitting}
-											disabled={!composerReady || submitting || !draft.text.trim()}
+											disabled={!composerReady || submitting || !draft.text.trim()
+												|| !!pendingCommand}
 											onClick={submit}
 											label="Send message"
 										/>
