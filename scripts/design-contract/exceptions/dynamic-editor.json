@@ -354,7 +354,7 @@
 				2
 			]
 		],
-		"sourceHash": "ce0b0cf0ffb540f1afbfa36383a5b96a407884d66f1e7b775fc0a2d34bec59ee"
+		"sourceHash": "59e79996b68dbfcc43c5f5f395e3b08b257dab751959f0627889afa34d649f89"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -375,7 +375,7 @@
 				1
 			]
 		],
-		"sourceHash": "d210230ab09b8560bb9e17286af0df2648beff3891e183eb8c87a46f390185f2"
+		"sourceHash": "a38f3e8f5a0717897c6f828a8d64d636f49f684ee9f33c04b7a5ba94ddaba12b"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
