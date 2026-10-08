@@ -246,7 +246,7 @@
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
-		"reason": "Table rail style is computed viewport geometry (position, size, transform); token policy deliberately does not ban measured dimensions.",
+		"reason": "Table rails and seam lines use measured viewport position and size, clipped to the document scroller; no semantic paint or typography values enter these styles.",
 		"cases": [
 			[
 				"dynamic",
@@ -289,9 +289,16 @@
 				"seamBox(axis, lines[at] ?? 0, origin, GRIP, 2, gripLane)",
 				"unresolved style > Rail > <div>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"seamLine(aim.axis, line, metrics)",
+				"unresolved style > TableRails > <div>",
+				1
 			]
 		],
-		"sourceHash": "7f56a600045b818225aa9752cdb32f174792dfe3269637cf6e6cea0e956f0bfc"
+		"sourceHash": "fadeb29730d5f0d73a55912d6f82d1e91cedab3675ec341f9320849e4702b184"
 	},
 	{
 		"file": "packages/editor/src/disclosure-motion.tsx",
