@@ -989,6 +989,16 @@ export function Chat(
 												</span>
 											)}
 										</span>
+										{/* Where the document header is out of view; see composer.css. */}
+										{connectionNotice === "offline" && wire && (
+											<button
+												className="composer-reconnect btn btn-sm btn-ghost"
+												onClick={() => wire.reconnect()}
+												type="button"
+											>
+												Reconnect
+											</button>
+										)}
 										<span className="composer-run-control">
 											{agent && (busy || counts.active > 0) && (
 												<button

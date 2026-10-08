@@ -263,6 +263,8 @@ test("a lost connection is said in the document header and the composer", async 
 	await expect(status.getByRole("button", { name: "Reload" })).toBeVisible();
 	await expect(status.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(0);
 
+	// No online event here: the wire's own retry has to bring it back, and
+	// asking to reconnect restarted the backoff rather than adding to it.
 	offline = false;
 	await ready(page);
 	await expect(status).toHaveAttribute("data-level", "hidden");

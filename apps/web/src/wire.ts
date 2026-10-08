@@ -142,10 +142,18 @@ export class Wire {
 		return this.#socket?.readyState === WebSocket.OPEN;
 	}
 
+	/**
+	 * Try again now, at a person's request.
+	 *
+	 * The backoff starts over: someone who asks to reconnect is saying the
+	 * network may be back, and after a few failed asks the next automatic
+	 * attempt must not still be waiting out the cap.
+	 */
 	reconnect(): void {
 		if (this.#disposed || this.#terminal) return;
 		clearTimeout(this.#timer);
 		this.#timer = undefined;
+		this.#attempts = 0;
 		let previous = this.#socket;
 		this.#socket = undefined;
 		this.#abandon("connection restarted");

@@ -278,3 +278,10 @@
 		animation: composer-connection-enter var(--duration-fast) var(--ease-out);
 	}
 }
+/*
+ * Side by side with the document, its header already offers Reconnect, and
+ * one state gets one action. Without it in view, as on a phone, Chat does.
+ */
+[data-workspace-mode="split"] .chat-composer .composer-reconnect {
+	display: none;
+}

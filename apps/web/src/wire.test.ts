@@ -317,6 +317,36 @@ describe("status", () => {
 		}
 	}, 10_000);
 
+	it("starts the backoff over when asked to reconnect", async () => {
+		let attempts = 0;
+		let server = Bun.serve({
+			port: 0,
+			hostname: "127.0.0.1",
+			fetch(request) {
+				if (request.headers.get("x-chopin-socket-probe") !== "1") attempts++;
+				return new Response("try again", { status: 503 });
+			},
+		});
+		servers.push(server);
+		let random = Math.random;
+		Math.random = () => 0.999;
+		try {
+			let wire = connect(server.port!, []);
+			await until(() => wire.status === "reconnecting", "backoff");
+			// Each failed ask would otherwise double the wait after it.
+			for (let i = 0; i < 5; i++) {
+				let before = attempts;
+				wire.reconnect();
+				await until(() => attempts > before, "asked attempt");
+				await Bun.sleep(50);
+			}
+			let before = attempts;
+			await until(() => attempts > before, "automatic attempt soon after");
+		} finally {
+			Math.random = random;
+		}
+	});
+
 	it("ignores a superseded refusal probe after manual reconnection", async () => {
 		let probe = Promise.withResolvers<void>();
 		let release = Promise.withResolvers<void>();

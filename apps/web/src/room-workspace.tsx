@@ -248,6 +248,9 @@ export function Header(
 	);
 }
 
+const LOST_EDITS =
+	"Your last edits couldn't be saved because the document changed while you were offline.";
+
 /** Reconnect attempts a person can make in one outage before Reload is offered. */
 const RECONNECTS_BEFORE_RELOAD = 3;
 
@@ -310,6 +313,8 @@ export function RoomWorkspace(
 	// Reconnecting in place keeps unsent work, so it is offered first. A reload
 	// is the fallback once it has failed this often in one outage.
 	let [reconnects, setReconnects] = useState(0);
+	// The last loss of unsent edits this person has dismissed.
+	let [lostSeen, setLostSeen] = useState(0);
 	if (status === "connected" && reconnects) setReconnects(0);
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
@@ -917,17 +922,43 @@ export function RoomWorkspace(
 					/>
 				}
 				status={
-					<PlanStatus
-						connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
-						failed={planState.failed}
-						onReconnect={wire && reconnects < RECONNECTS_BEFORE_RELOAD
-							? () => {
-								setReconnects(count => count + 1);
-								wire.reconnect();
-							}
-							: undefined}
-						synced={planState.synced}
-					/>
+					<>
+						{!!planState.lost && planState.lost !== lostSeen && (
+							<div className="plan-status" data-level="alert" role="alert">
+								<span className="plan-status-text">
+									<span
+										aria-hidden="true"
+										className="plan-status-label"
+										data-tooltip={LOST_EDITS}
+										data-tooltip-verbatim=""
+									>
+										Edits not saved
+									</span>
+									<span aria-hidden="true" className="plan-status-detail">{LOST_EDITS}</span>
+									<span className="sr-only">{LOST_EDITS}</span>
+								</span>
+								<button
+									className="btn btn-sm btn-ghost"
+									onClick={() =>
+										setLostSeen(planState.lost ?? 0)}
+									type="button"
+								>
+									Dismiss
+								</button>
+							</div>
+						)}
+						<PlanStatus
+							connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
+							failed={planState.failed}
+							onReconnect={wire && reconnects < RECONNECTS_BEFORE_RELOAD
+								? () => {
+									setReconnects(count => count + 1);
+									wire.reconnect();
+								}
+								: undefined}
+							synced={planState.synced}
+						/>
+					</>
 				}
 				ids={workspaceIds}
 				identity={room}
