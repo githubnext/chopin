@@ -408,6 +408,58 @@ test("arrows step into code, onto a diagram, and out again", async ({ join, room
 	await written(page, room, /^RQlet a = 1;$/m);
 });
 
+test("dragging across drawn code selects it to copy, without opening", async ({ join, seed }) => {
+	await seed("```ts\nlet a = 1;\nexport function open(room: string) {}\n```\n");
+	let page = await join("ana");
+	let block = content(page).locator(".planCode");
+	let line = block.locator("[data-line='2']");
+	await expect(line).toBeVisible();
+	await page.evaluate(() =>
+		window.addEventListener("copy", event => {
+			(window as unknown as { copied: unknown }).copied = {
+				prevented: event.defaultPrevented,
+				text: document.getSelection()?.toString(),
+			};
+		})
+	);
+
+	let box = (await line.boundingBox())!;
+	await page.mouse.move(box.x + 16, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + 200, box.y + box.height / 2, { steps: 8 });
+	await page.mouse.up();
+
+	await expect(block.locator("[data-plan-source]")).toBeHidden();
+	await expect(block.locator("[data-file]")).toBeVisible();
+	let selected = await page.evaluate(() => document.getSelection()?.toString() ?? "");
+	expect(selected.length).toBeGreaterThan(3);
+	expect("export function open(room: string) {}").toContain(selected);
+
+	// The browser copies what is selected; Lexical must not swap in its own.
+	await page.keyboard.press("ControlOrMeta+c");
+	await expect
+		.poll(() => page.evaluate(() => (window as unknown as { copied: unknown }).copied))
+		.toEqual({ prevented: false, text: selected });
+});
+
+test("arrows reach code inside a callout and a list item", async ({ join, room, seed }) => {
+	await seed(
+		'<Callout id="01K0N4Y9VG9DHBFZB6HC89E2AC" type="note" title="Nested">\n\nInside.\n\n```ts\nlet a = 1;\n```\n\n</Callout>\n\n- Item\n\n  ```ts\n  let b = 2;\n  ```\n\n- Next\n',
+	);
+	let page = await join("ana");
+	await expect(content(page).locator("[data-file]")).toHaveCount(2);
+
+	await content(page).getByText("Inside.").click();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.type("Q");
+	await written(page, room, /^Qlet a = 1;$/m);
+
+	await content(page).getByText("Next").click();
+	await page.keyboard.press("ArrowUp");
+	await page.keyboard.type("R");
+	await written(page, room, /^\s*Rlet b = 2;$/m);
+});
+
 /*
  * Two people in one fence.
  *

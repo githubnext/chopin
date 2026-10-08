@@ -2476,7 +2476,11 @@
 	.plan-content
 	.planCode:has(> [data-plan-preview] :is(.plan-code-view, .plan-diagram):focus-visible) {
 	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
+	/*
+	 * On the border, not inside it, where the controls in the top-end corner
+	 * would paint over it. The document's inset ring offset does not apply.
+	 */
+	outline-offset: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
