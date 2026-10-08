@@ -23,11 +23,18 @@ let peeking = false;
 let sequence = 0;
 let attempt = 0;
 let timer: ReturnType<typeof setTimeout>;
+let inputError: string | undefined;
+let failure: string | undefined;
+function showError() {
+	let message = inputError ?? failure;
+	error.textContent = message ?? "";
+	error.hidden = message === undefined;
+	retry.hidden = message === undefined;
+}
 function fail(message: string) {
 	clearTimeout(timer);
-	error.textContent = message;
-	error.hidden = false;
-	retry.hidden = false;
+	failure = message;
+	showError();
 }
 function display() {
 	element("values").textContent = JSON.stringify(chosen, null, 2);
@@ -50,8 +57,12 @@ function load() {
 	peeking = false;
 	element("peek").setAttribute("aria-pressed", "false");
 	attempt = ++sequence;
-	error.hidden = true;
-	retry.hidden = true;
+	spacing.value = String(chosen.spacing);
+	slider.value = String(chosen.spacing);
+	accent.value = String(chosen.accent);
+	inputError = undefined;
+	failure = undefined;
+	showError();
 	clearTimeout(timer);
 	frame.src = `${previewOrigin}/preview.html?attempt=${sequence}`;
 	timer = setTimeout(() => fail("Preview could not load. Retry to keep working."), 4000);
@@ -79,8 +90,8 @@ window.addEventListener("message", (event) => {
 	if (event.data.type === "result" && event.data.id === sequence) {
 		clearTimeout(timer);
 		if (event.data.ok === true) {
-			error.hidden = true;
-			retry.hidden = true;
+			failure = undefined;
+			showError();
 		} else fail(typeof event.data.error === "string" ? event.data.error : "Preview render failed.");
 	}
 });
@@ -92,9 +103,12 @@ for (let input of [spacing, slider, accent]) {
 			accent: accent.value,
 		});
 		if (!result.ok) {
-			fail(result.error.message);
+			inputError = result.error.message;
+			showError();
 			return;
 		}
+		inputError = undefined;
+		showError();
 		chosen = result.value;
 		slider.value = String(chosen.spacing);
 		display();
@@ -106,6 +120,8 @@ element("reset").addEventListener("click", () => {
 	spacing.value = String(chosen.spacing);
 	slider.value = String(chosen.spacing);
 	accent.value = String(chosen.accent);
+	inputError = undefined;
+	showError();
 	display();
 	send();
 });

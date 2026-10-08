@@ -235,6 +235,68 @@ test(
 	},
 );
 
+test("input errors survive earlier valid results; Retry reconciles retained choices", async ({ page }) => {
+	await open(page);
+	let number = page.getByRole("spinbutton", { name: "Spacing px", exact: true });
+	let slider = page.getByRole("slider", { name: "Spacing slider", exact: true });
+	let card = page.frameLocator("iframe").getByRole("article");
+	let alert = page.getByRole("alert");
+	await number.evaluate((input: HTMLInputElement, namespace) =>
+		new Promise<void>((resolve) => {
+			let frame = document.querySelector("iframe")!;
+			let initialResult = Number(new URL(frame.src).searchParams.get("attempt")) + 1;
+			let receive = (event: MessageEvent) => {
+				if (
+					event.source !== frame.contentWindow || event.data?.namespace !== namespace
+					|| event.data.type !== "result" || event.data.id <= initialResult
+					|| event.data.ok !== true
+				) return;
+				window.removeEventListener("message", receive);
+				resolve();
+			};
+			window.addEventListener("message", receive);
+			// Both inputs occur before the frame can reply to the real valid apply.
+			input.value = "31";
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+			input.value = "99";
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		}), namespace);
+	await expect(card).toHaveCSS("padding", "31px");
+	await expect.soft(alert, "An earlier valid render must preserve the newer input error")
+		.toBeVisible();
+	await expect(number).toHaveValue("99");
+	await expect(slider).toHaveValue("31");
+	let downloadValues = async () => {
+		let download = page.waitForEvent("download");
+		await page.getByRole("button", { name: "Download values", exact: true }).click();
+		expect(JSON.parse(await readFile((await (await download).path())!, "utf8"))).toEqual({
+			spacing: 31,
+			accent: "#476b55",
+		});
+	};
+	await downloadValues();
+	// Reject again after the valid reply so the original host still offers Retry.
+	await number.dispatchEvent("input");
+	await expect(alert).toBeVisible();
+	await expect(card).toHaveCSS("padding", "31px");
+	await expect(slider).toHaveValue("31");
+	await retry(page, 31);
+	await expect(number).toHaveValue("31");
+	await expect(slider).toHaveValue("31");
+	await downloadValues();
+	await number.fill("99");
+	await expect(alert).toBeVisible();
+	await spacing(page, 32);
+	await expect(alert).toBeHidden();
+	await number.fill("99");
+	await expect(alert).toBeVisible();
+	await page.getByRole("button", { name: "Reset", exact: true }).click();
+	await expect(card).toHaveCSS("padding", "24px");
+	await expect(number).toHaveValue("24");
+	await expect(slider).toHaveValue("24");
+	await expect(alert).toBeHidden();
+});
+
 test("malformed snapshots, wrong window and stale replies cannot alter chosen state", async ({ page }) => {
 	await open(page);
 	await spacing(page, 32);
