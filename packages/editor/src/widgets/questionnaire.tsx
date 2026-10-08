@@ -135,13 +135,13 @@ export function QuestionnaireCard(
 	if (value.status === "expired") return <Expired value={value} />;
 	let resolved = answers(value);
 	let current = meta?.status ?? cardStatus(value);
-	// "Linking…" is anchor review; "Writing up…" only while a conversation decision's
-	// paragraph is being written. Without a Planner neither will happen.
-	let pendingRelation = !planner
-		? NOT_LINKED
-		: meta?.origin === "conversation" && !meta.hasProse
+	// "Writing up…" only while a conversation decision's paragraph is being written,
+	// which runs as a background job; "Linking…" is anchor review, which needs a Planner.
+	let pendingRelation = meta?.origin === "conversation" && !meta.hasProse
 		? "Writing up…"
-		: "Linking…";
+		: planner
+		? "Linking…"
+		: NOT_LINKED;
 	let pointing = {
 		places,
 		relations,
