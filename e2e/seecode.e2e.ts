@@ -144,6 +144,20 @@ test("a saved SeeCode block renders for two readers and revises through shared s
 	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
 	await expect(preview(bo).getByRole("complementary", { name: "Diagram details" }))
 		.toHaveCount(0);
+	await expect(content(ana).getByRole("button", { name: "Show source" })).toBeVisible();
+	if (process.env.SEECODE_INTERACTION_EVIDENCE_PATH) {
+		await ana.screenshot({ path: process.env.SEECODE_INTERACTION_EVIDENCE_PATH });
+	}
+	await preview(ana).getByRole("button", { name: "Reset diagram" }).click();
+	await expect(preview(ana).getByRole("complementary", { name: "Diagram details" }))
+		.toHaveCount(0);
+	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
+	let web = preview(ana).getByRole("button", { name: "Web", exact: true });
+	await web.focus();
+	await web.press("Enter");
+	await expect(preview(ana).getByRole("complementary", { name: "Diagram details" }))
+		.toBeVisible();
+	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
 
 	await content(ana).getByRole("button", { name: "Show source" }).click();
 	let source = content(ana).locator("[data-plan-source]");
