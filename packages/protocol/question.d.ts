@@ -99,6 +99,8 @@ export declare namespace Question {
 		refining: boolean;
 		hasProse: boolean;
 		proseOrphaned: boolean;
+		/** The saved conversation decision's write-up job while it is queued, running, or failed. */
+		writeup?: { status: "writing" | "failed"; job: string };
 	};
 
 	export type Meta = KIND<"question:meta"> & { id: string; meta: CardMeta };

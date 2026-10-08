@@ -5,14 +5,43 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QuestionnaireCard } from "./questionnaire";
 import { DECIDED, META } from "./questionnaire-metadata.test-fixtures";
 
-test("a settled line names the decision and conversation cards awaiting prose", () => {
-	let markup = renderToStaticMarkup(
-		createElement(QuestionnaireCard, { meta: META, value: DECIDED }),
-	);
+const JOB = "prose:card:decided:card:1";
+
+test("a settled line says a conversation decision is being written up only while its job runs", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		meta: { ...META, writeup: { status: "writing", job: JOB } },
+		value: DECIDED,
+	}));
 	expect(markup).toContain('class="decision-collapse is-open"');
 	expect(markup).toContain("data-card-settled");
 	expect(markup).toContain("Decided: GitHub Apps · @ana");
 	expect(markup).toContain("Writing up…");
+	expect(markup).not.toContain("Retry");
+
+	let idle = renderToStaticMarkup(createElement(QuestionnaireCard, { meta: META, value: DECIDED }));
+	expect(idle).toContain("Decided: GitHub Apps · @ana");
+	expect(idle).not.toContain("Writing up…");
+});
+
+test("a failed write-up says so and offers Retry only to an editable connected viewer", () => {
+	let failed = { ...META, writeup: { status: "failed" as const, job: JOB } };
+	let editable = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		canEdit: true,
+		connected: true,
+		meta: failed,
+		value: DECIDED,
+		wire: { ask: async () => ({}), send() {}, on: () => () => {} } as never,
+	}));
+	let reader = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		canEdit: false,
+		connected: true,
+		meta: failed,
+		value: DECIDED,
+	}));
+	expect(editable).toContain("Couldn&#x27;t write this up");
+	expect(editable).not.toContain("Writing up…");
+	expect(editable).toMatch(/<button(?![^>]*disabled)[^>]*>Retry<\/button>/);
+	expect(reader).toMatch(/<button[^>]*disabled=""[^>]*>Retry<\/button>/);
 });
 
 test("an orphaned settled line says the prose was removed", () => {
@@ -51,7 +80,7 @@ test("an orphaned settled line offers Reopen only to an editable connected viewe
 
 test("a Planner settled line never claims it is writing prose", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
-		meta: { ...META, origin: "planner" },
+		meta: { ...META, origin: "planner", writeup: { status: "writing", job: JOB } },
 		value: DECIDED,
 	}));
 	expect(markup).toContain("data-card-settled");

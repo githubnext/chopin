@@ -4,6 +4,7 @@ import * as Prose from "./prose";
 
 import * as Store from "./store";
 import * as Jobs from "../conversation-plan/jobs";
+import { writeup } from "../conversation-plan/prose-job";
 
 import { broadcast } from "../wire";
 import type { Server } from "bun";
@@ -57,6 +58,7 @@ export function meta(plan: Plan, record: Record): Wire.CardMeta {
 	let prose = record.prose ?? [];
 	let decided = record.status === "answered";
 	let suggested = Store.get(plan.questions, record.id)?.suggested;
+	let written = writeup(plan, record);
 	return {
 		status: cardStatus(record),
 		origin: record.origin,
@@ -71,6 +73,7 @@ export function meta(plan: Plan, record: Record): Wire.CardMeta {
 		refining: Jobs.refining(plan.conversationPlanJobs, record.id),
 		hasProse: prose.length > 0 && !Prose.orphaned(prose),
 		proseOrphaned: Prose.orphaned(prose),
+		...(written ? { writeup: written } : {}),
 	};
 }
 

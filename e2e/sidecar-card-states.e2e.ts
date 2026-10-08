@@ -387,12 +387,12 @@ test("an orphaned prose anchor retains its authoritative state and resolved card
 		.toContainText("Canary");
 });
 
-test("conversation decisions settle inline while their prose is being written up", async ({ join, seed }) => {
+test("conversation decisions settle inline without claiming a write-up no job is doing", async ({ join, seed }) => {
 	await seed(`${PROSE}\n${DECIDED_CARD}`, {
 		questions: [{ ...DECIDED_RECORD, origin: "conversation" }],
 	});
 	let page = await join("ana");
 	let settled = content(page).locator("[data-card-settled]");
 	await expect(settled).toContainText("Decided: Canary · @ana");
-	await expect(settled).toContainText("Writing up…");
+	await expect(settled).not.toContainText("Writing up…");
 });

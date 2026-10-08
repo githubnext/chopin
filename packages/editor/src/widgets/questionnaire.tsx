@@ -27,6 +27,7 @@ import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
+import { WriteupStatus } from "./writeup-status";
 
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
@@ -135,10 +136,10 @@ export function QuestionnaireCard(
 	if (value.status === "expired") return <Expired value={value} />;
 	let resolved = answers(value);
 	let current = meta?.status ?? cardStatus(value);
-	// "Writing up…" only while a conversation decision's paragraph is being written,
-	// which runs as a background job; "Linking…" is anchor review, which needs a Planner.
+	// A conversation decision's write-up has its own durable job status below.
+	// "Linking…" is anchor review, which needs a Planner.
 	let pendingRelation = meta?.origin === "conversation" && !meta.hasProse
-		? "Writing up…"
+		? NOT_LINKED
 		: planner
 		? "Linking…"
 		: NOT_LINKED;
@@ -420,6 +421,8 @@ function SettledLine(
 			?? (meta?.origin === "conversation" && first
 				? { relation: "pending" as const, question: first }
 				: undefined);
+	let writeup = related?.relation === "pending" && meta?.origin === "conversation"
+		&& (meta.writeup?.status === "writing" || meta.writeup?.status === "failed");
 	let state = useQuestionnaire({
 		id: value.id,
 		bridge: wire,
@@ -437,7 +440,7 @@ function SettledLine(
 	};
 	return (
 		<p
-			className="m-0 flex items-center gap-2 text-sm text-text-secondary"
+			className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-secondary"
 			data-card-settled=""
 			data-plan-sidecar-questionnaire={value.id}
 		>
@@ -446,7 +449,9 @@ function SettledLine(
 				Decided: {chosen.length ? chosen.join(", ") : "Saved decision"}
 				{owner ? ` · @${owner}` : ""}
 			</span>
-			{related && (
+			{writeup && meta
+				? <WriteupStatus canEdit={canEdit} connected={connected} meta={meta} wire={wire} />
+				: related && (
 				<RelationNote
 					count={pointing.places?.[related.question]}
 					onEnter={pointing.onQuestionEnter}
@@ -456,7 +461,7 @@ function SettledLine(
 					question={related.question}
 					relation={related.relation}
 				/>
-			)}
+				)}
 			{related?.relation === "orphaned" && (
 				<button
 					className="btn btn-sm btn-secondary ml-auto"
