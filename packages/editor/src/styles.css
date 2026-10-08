@@ -2647,7 +2647,7 @@
  * A narrow pane has no margin to sit in, and a chip pinned there covers the
  * first word of a line. Centred, it reads as floating over the document.
  */
-@container (max-width: 40rem) {
+@container (max-width: 44rem) {
 	.plan-changes {
 		inset-inline-start: 50%;
 		translate: -50% 0;

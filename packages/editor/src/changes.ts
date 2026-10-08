@@ -117,7 +117,7 @@ export class ChangeStore {
 	#painted = new Map<HTMLElement, Set<string>>();
 
 	/** Marks on their way out, and which attributes go once they have faded. */
-	#fading = new Map<HTMLElement, Set<string>>();
+	#fading = new Map<HTMLElement, { names: Set<string>; timer: ReturnType<typeof setTimeout> }>();
 	/** Whether the remote update being applied right now was the agent's. */
 	#agent = false;
 
@@ -404,9 +404,11 @@ export class ChangeStore {
 			// so the wash keeps its shape to the end. Only a block losing all of
 			// its marks fades: fading one of two would take the other with it.
 			if (still && !staying && element.isConnected) {
-				this.#fading.set(element, new Set(leaving));
+				this.#fading.set(element, {
+					names: new Set(leaving),
+					timer: setTimeout(() => this.#faded(element), FADED),
+				});
 				element.addEventListener("animationend", this.#ended);
-				setTimeout(() => this.#faded(element), FADED);
 				element.setAttribute("data-plan-fade", "");
 				continue;
 			}
@@ -421,12 +423,13 @@ export class ChangeStore {
 	};
 
 	#faded(element: HTMLElement): void {
-		let names = this.#fading.get(element);
-		if (!names) return;
+		let fading = this.#fading.get(element);
+		if (!fading) return;
+		clearTimeout(fading.timer);
 		this.#fading.delete(element);
 		element.removeEventListener("animationend", this.#ended);
 		element.removeAttribute("data-plan-fade");
-		for (let name of names) element.removeAttribute(name);
+		for (let name of fading.names) element.removeAttribute(name);
 	}
 
 	#unpaint(): void {
