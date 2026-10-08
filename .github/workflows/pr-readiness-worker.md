@@ -254,9 +254,9 @@ and a repository write credential locally, run
 verified and never reset. Drain any running old writers before enabling the new
 coordinator. Select main-based canaries with
 `PR_READINESS_PRS` before expanding to `all`. The existing write secret is named
-`PR_MAITENANCE_TOKEN`; it needs Actions write to dispatch workers and CI, plus
-Contents and Pull requests write to publish guarded repairs. Non-main bases
-require a recorded stack replay boundary
+`PR_MAITENANCE_TOKEN`; it needs Contents and Pull requests write to publish
+guarded repairs. The coordinator dispatches workers and CI with its built-in
+`GITHUB_TOKEN`. Non-main bases require a recorded stack replay boundary
 and currently receive a human blocker. Enabling the coordinator disables the old
 rebase and CI-fixer writers. Manual coordinator dispatch with a PR number retries
 that PR only for a repository writer.

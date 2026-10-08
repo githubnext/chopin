@@ -37,7 +37,7 @@ export async function coordinate({
 			? observe(state, value, {
 				now,
 				humanChange: humanChanges.includes(row.number),
-				authenticatedRetry: retryPR === row.number,
+				authenticatedRetry: retryPR === row.number && !state.active,
 			})
 			: initialState(value, now);
 	}
@@ -87,11 +87,29 @@ export async function coordinate({
 					}, { now });
 				}
 			}
-		} else if (active.runId === null && now - active.createdAt > 45 * 60_000) {
+		} else if (
+			active.runId === null
+			&& (now - active.createdAt > 45 * 60_000
+				|| (retryPR === state.number && now - active.createdAt >= 5 * 60_000))
+		) {
+			let manualRecovery = retryPR === state.number && now - active.createdAt >= 5 * 60_000;
 			state = finish(state, active.id, {
 				kind: "transient",
-				reason: "Dispatch was not discovered within 45 minutes",
+				reason: manualRecovery
+					? "Manual retry of an undiscovered dispatch"
+					: "Dispatch was not discovered within 45 minutes",
 			}, now);
+			if (manualRecovery && state.episode === active.episode) {
+				let row = rows.find(row => row.number === state.number);
+				if (row) {
+					state = observe(state, {
+						number: row.number,
+						head: row.head,
+						baseHead: row.baseHead,
+						action: row.action,
+					}, { now, authenticatedRetry: true });
+				}
+			}
 		}
 		payload.prs[number] = state;
 	}
