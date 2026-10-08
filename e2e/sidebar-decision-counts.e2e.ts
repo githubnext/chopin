@@ -209,21 +209,35 @@ test("touch keeps each count visible beside its always-shown action", async ({ j
 		exact: true,
 	});
 	let parentRow = parentLink.locator("..");
+	let childRow = projects.getByRole("link", {
+		name: "Fencing tokens, 1 unanswered decision",
+		exact: true,
+	}).locator("..");
 	let parentActions = projects.getByRole("button", { name: "Actions for Postgres writer lease" });
+	let childActions = projects.getByRole("button", { name: "Actions for Fencing tokens" });
 	let disclosure = projects.getByRole("button", {
 		name: "score, 10 unanswered decisions",
 		exact: true,
 	});
+	let projectRow = disclosure.locator("..");
 	let newDocument = projects.getByRole("button", { name: "New document in score", exact: true });
 
 	await expect(page.locator(":root")).toHaveAttribute("data-plan-coarse-pointer", "");
 	await expect(parentActions).toBeVisible();
+	await expect(childActions).toBeVisible();
 	await expect(count(parentRow)).toHaveText("4");
+	await expect(count(childRow)).toHaveText("1");
 	await expect(newDocument).toBeVisible();
-	await expect(count(disclosure.locator(".."))).toHaveText("10");
+	await expect(count(projectRow)).toHaveText("10");
 	expect(await right(count(parentRow))).toBeLessThanOrEqual(
 		(await parentActions.boundingBox())!.x + 1,
 	);
+	expect(await right(count(childRow))).toBeLessThanOrEqual(
+		(await childActions.boundingBox())!.x + 1,
+	);
+	let edge = await right(count(projectRow));
+	expect(Math.abs(await right(count(parentRow)) - edge)).toBeLessThanOrEqual(1);
+	expect(Math.abs(await right(count(childRow)) - edge)).toBeLessThanOrEqual(1);
 
 	await parentLink.evaluate(element =>
 		element.addEventListener("click", event => event.preventDefault())
@@ -231,6 +245,123 @@ test("touch keeps each count visible beside its always-shown action", async ({ j
 	await parentLink.tap();
 	await expect(count(parentRow)).toHaveText("4");
 	await expect(parentActions).toBeVisible();
+});
+
+type FakeSidebar = {
+	/** Repositories listed by each `sidebar:watch` the client sent. */
+	watches: Array<Array<{ repositoryId: string; channelIds: string[] }>>;
+	/** The score total the fake server reports in each snapshot. */
+	total: number;
+	send(frame: Record<string, unknown>): void;
+};
+
+/** Answer the sidebar socket without a server, snapshotting score at `total`. */
+async function fakeSidebar(page: Page, total: number): Promise<FakeSidebar> {
+	let socket: WebSocketRoute | undefined;
+	let fake: FakeSidebar = {
+		watches: [],
+		total,
+		send: frame => socket!.send(JSON.stringify({ ts: 0, ...frame })),
+	};
+	await page.routeWebSocket(SIDEBAR_SOCKET, route => {
+		socket = route;
+		route.onMessage(message => {
+			let frame = JSON.parse(String(message));
+			if (frame.kind === "session:ping") return fake.send({ kind: "session:ping", rid: frame.rid });
+			if (frame.kind !== "sidebar:watch") return;
+			let repositories = frame.repositories as FakeSidebar["watches"][number];
+			fake.watches.push(repositories);
+			fake.send({
+				kind: "sidebar:watched",
+				rid: frame.rid,
+				watched: repositories.map(item => item.repositoryId),
+				refused: [],
+				unavailable: [],
+			});
+			if (!repositories.some(item => item.repositoryId === "R_score")) return;
+			fake.send({
+				kind: "sidebar:snapshot",
+				repositoryId: "R_score",
+				repositoryUnanswered: fake.total,
+				documents: [],
+			});
+		});
+	});
+	return fake;
+}
+
+function scoreResyncs(fake: FakeSidebar): number {
+	return fake.watches.filter(frame =>
+		frame.some(item => item.repositoryId === "R_score" && item.channelIds.length === 0)
+	).length;
+}
+
+test("a project total that conflicts with a live frame converges on a fresh snapshot", async ({ join, page }) => {
+	await page.route("**/api/repositories/octo-org/score/channels*", route =>
+		route.fulfill({
+			json: {
+				canEdit: true,
+				channels: [PARENT, CHILD, QUIET],
+				repository,
+				unansweredDecisions: 10,
+			},
+		}));
+	let archiving = Promise.withResolvers<void>();
+	let archiveRequested = false;
+	await page.route(`**/api/channels/${QUIET.id}/archive`, async route => {
+		archiveRequested = true;
+		await archiving.promise;
+		await route.fulfill({
+			json: {
+				canEdit: true,
+				canManage: true,
+				channel: { ...QUIET, archivedAt: "2026-08-20T12:00:00.000Z", revision: 2 },
+				repository,
+				unansweredDecisions: 10,
+			},
+		});
+	});
+	let fake = await fakeSidebar(page, 10);
+	page = await join("ana");
+	let projects = sidebar(page);
+	let projectRow = projects.getByRole("button", { name: /^score\b/ }).locator("..");
+	let parentLink = projects.getByRole("link", { name: /^Postgres writer lease/ });
+	await expect(count(projectRow)).toHaveText("10");
+	await expect(parentLink).toHaveAccessibleName("Postgres writer lease, 4 unanswered decisions");
+
+	// A frame read before the archive response's total lands while the archive is in flight.
+	await projects.getByRole("link", { name: "Settled plan", exact: true }).locator("..").hover();
+	await projects.getByRole("button", { name: "Actions for Settled plan" }).click();
+	await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
+	await expect.poll(() => archiveRequested).toBe(true);
+	let resyncs = scoreResyncs(fake);
+	fake.send({
+		kind: "sidebar:decisions",
+		channelId: PARENT.id,
+		repositoryId: "R_score",
+		unanswered: 4,
+		repositoryUnanswered: 12,
+		revision: 2,
+	});
+	await expect(count(projectRow)).toHaveText("12");
+	archiving.resolve();
+	await expect(projects.getByRole("link", { name: "Settled plan", exact: true })).toHaveCount(0);
+	await expect.poll(() => scoreResyncs(fake)).toBe(resyncs + 1);
+	await expect(count(projectRow)).toHaveText("10");
+
+	// A frame older than the row it describes is dropped, so its total is resynchronized too.
+	fake.total = 9;
+	fake.send({
+		kind: "sidebar:decisions",
+		channelId: PARENT.id,
+		repositoryId: "R_score",
+		unanswered: 7,
+		repositoryUnanswered: 13,
+		revision: 1,
+	});
+	await expect.poll(() => scoreResyncs(fake)).toBe(resyncs + 2);
+	await expect(count(projectRow)).toHaveText("9");
+	await expect(parentLink).toHaveAccessibleName("Postgres writer lease, 4 unanswered decisions");
 });
 
 function roomChannels(urls: string[]): Array<string | null> {

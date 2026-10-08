@@ -83,13 +83,17 @@ Projects sidebar shows both without opening a room per row.
 Live counts travel on a dedicated sidebar socket at `/ws/sidebar`, separate from
 document rooms, so they stay current whether or not a document is open. Admission
 checks the origin and the browser session only; it grants no repository. After
-every connection the client sends `sidebar:watch` frames covering every sidebar
-project, up to 200 repositories, with all of their loaded document IDs. A frame
-lists at most 50 repositories, each once, with at most 500 document IDs, so the
-client splits larger sidebars across frames. Watching is additive, and
-`sidebar:unwatch` removes repositories the sidebar stops showing. A malformed or
-oversized frame is refused whole, and repositories beyond the per-socket limit
-are refused.
+every connection the client sends `sidebar:watch` frames covering up to 200
+sidebar projects with all of their loaded document IDs. The project holding the
+open document comes first, then projects in sidebar order, so the cap covers what
+is on screen. Projects past the cap get no live frames; the client reloads their
+first catalogue page and total over HTTP, at most 10 projects at a time in
+rotation, when the window regains focus or becomes visible (at most every 30
+seconds) and once a minute while it stays visible. A frame lists at most 50
+repositories, each once, with at most 500 document IDs, so the client splits
+larger sidebars across frames. Watching is additive, and `sidebar:unwatch`
+removes repositories the sidebar stops showing. A malformed or oversized frame is
+refused whole, and repositories beyond the per-socket limit are refused.
 
 Before subscribing a repository the server checks GitHub read access through the
 same repository check as room admission and requires the resolved node ID to
@@ -118,10 +122,16 @@ snapshot is still reconciled, and a reconnecting socket reconciles every loaded
 row and project total without refetching the catalogue. Frames and snapshots for
 one repository are read and sent one at a time, so a later frame never carries an
 older total, and a client ignores a count older than the revision it already
-holds for that document. An archive response also carries the repository's
-active total, which the archiving client applies directly; restoring reloads the
-active catalogue. Archived catalogue views show no counts and watch no
-repositories.
+holds for that document. Totals themselves carry no ordering key, so when the
+client drops a frame as older than its row, or discards an HTTP total because a
+live total arrived while the request was in flight, it cannot tell which total is
+newer. It then repeats the repository in a `sidebar:watch` with no documents; the
+server answers a repository it already watches with a fresh snapshot, ordered
+after every earlier frame, so the total converges. The client requests at most
+one such snapshot per repository each second. An archive response also carries
+the repository's active total, which the archiving client applies directly;
+restoring reloads the active catalogue. Archived catalogue views show no counts
+and watch no repositories.
 
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per

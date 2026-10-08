@@ -2,13 +2,17 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	awaitingRetry,
+	emptyResyncQueue,
 	MAX_WATCH_FRAME_REPOSITORIES,
 	MAX_WATCHED_DOCUMENTS,
 	MAX_WATCHED_REPOSITORIES,
 	planDecisionWatch,
+	requestResync,
+	RESYNC_INTERVAL_MS,
 	retryDecisionWatch,
 	retryDelay,
 	settleDecisionWatch,
+	takeResyncs,
 } from "./sidebar-decision-watch";
 
 import type { Sidebar } from "@chopin/protocol";
@@ -179,6 +183,50 @@ describe("sidebar decision watch plans", () => {
 			32_000,
 			60_000,
 			60_000,
+		]);
+	});
+});
+
+describe("sidebar decision resynchronization", () => {
+	let desired = [repository("score", ["a", "b"]), repository("other"), repository("denied")];
+	let plan = planDecisionWatch(new Map(), desired);
+	let ledger = settleAll(plan, () => watched(["R_score", "R_other"], ["R_denied"]));
+
+	it("re-watches a conflicting repository with no documents to get a fresh snapshot", () => {
+		let queue = requestResync(emptyResyncQueue(), "R_score");
+		let taken = takeResyncs(queue, ledger, desired, 10_000);
+
+		expect(taken.frames).toEqual([[repository("score")]]);
+		expect(taken.wait).toBeUndefined();
+		expect(taken.queue.pending.size).toBe(0);
+	});
+
+	it("coalesces a burst of conflicts into one snapshot per repository each second", () => {
+		let queue = requestResync(requestResync(emptyResyncQueue(), "R_score"), "R_score");
+		let first = takeResyncs(queue, ledger, desired, 10_000);
+		expect(first.frames).toEqual([[repository("score")]]);
+
+		let burst = requestResync(requestResync(first.queue, "R_score"), "R_other");
+		let second = takeResyncs(burst, ledger, desired, 10_400);
+		expect(second.frames).toEqual([[repository("other")]]);
+		expect(second.wait).toBe(RESYNC_INTERVAL_MS - 400);
+		expect(takeResyncs(second.queue, ledger, desired, 10_900).frames).toEqual([]);
+
+		let due = takeResyncs(second.queue, ledger, desired, 10_000 + RESYNC_INTERVAL_MS);
+		expect(due.frames).toEqual([[repository("score")]]);
+		expect(due.queue.pending.size).toBe(0);
+	});
+
+	it("drops repositories this connection does not watch, since no snapshot would answer", () => {
+		let queue = ["R_denied", "R_missing", "R_score"].reduce(requestResync, emptyResyncQueue());
+		let renamed = [{ ...repository("score"), name: "renamed" }, ...desired.slice(1)];
+
+		let taken = takeResyncs(queue, ledger, renamed, 10_000);
+		expect(taken.frames).toEqual([]);
+		expect(taken.queue.pending.size).toBe(0);
+		let requested = planDecisionWatch(new Map(), [repository("score")]).ledger;
+		expect(takeResyncs(queue, requested, desired, 10_000).frames).toEqual([
+			[repository("score")],
 		]);
 	});
 });
