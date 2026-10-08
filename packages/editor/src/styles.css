@@ -1458,47 +1458,13 @@
 }
 
 /*
- * A table spans the prose measure like the paragraphs around it; a wide one
- * scrolls inside it. The row and column rails are fixed overlays and sit in the
- * gutter outside it.
- *
- * The rows live in an anonymous table box that shrink-wraps its columns, so a
- * few short columns would stop halfway across. Each column of a table with up
- * to six asks for an equal share of the measure (the container) instead; six
- * columns at their minimum already fill it. Longer content still widens its own
- * column and the table scrolls.
+ * A compact table shrink-wraps around its columns from the prose's start edge,
+ * like every other block; a wide one scrolls inside the prose measure. The row
+ * and column rails are fixed overlays and sit in the gutter outside it.
  */
-.plan-content table {
-	container-type: inline-size;
-}
-
-.plan-content table tr > :is(th, td) {
-	/* Less one hairline, which the collapsed outer borders add to the sum. */
-	min-inline-size: max(7rem, (100cqi - 1px) / var(--plan-table-columns, 7));
-}
-
-.plan-content table tr:has(> :last-child:nth-child(1)) {
-	--plan-table-columns: 1;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(2)) {
-	--plan-table-columns: 2;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(3)) {
-	--plan-table-columns: 3;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(4)) {
-	--plan-table-columns: 4;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(5)) {
-	--plan-table-columns: 5;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(6)) {
-	--plan-table-columns: 6;
+.plan-content > table {
+	inline-size: max-content;
+	max-inline-size: 100%;
 }
 
 /* Name an empty header for what it holds. Counted per header cell, out of flow. */
