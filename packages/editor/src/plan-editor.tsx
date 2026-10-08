@@ -18,6 +18,7 @@ import { plugins as dialectPlugins } from "@chopin/dialect";
 import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
+import { useConnectionNotice } from "./connection-notice";
 import { PLAN_LEXICAL_THEME } from "./plan-theme";
 import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
@@ -266,7 +267,9 @@ export function PlanEditor(
 		if (presence) resume(presence);
 	}, [presence, connection]);
 
-	let offline = connection !== undefined && connection !== "connected";
+	// Locking waits out a blip, and edits made meanwhile wait in the outbox.
+	let offline = useConnectionNotice(connection !== undefined && connection !== "connected")
+		!== "none";
 	let locked = offline || !!busy || !!readOnly || !state.synced;
 
 	// Empty without a connection, and never used: the editor is not rendered

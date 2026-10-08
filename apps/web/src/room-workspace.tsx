@@ -17,6 +17,7 @@ import {
 	ResearchLauncher,
 	selectDecisionView,
 	ThreadStore,
+	useConnectionNotice,
 	useHasPlanContent,
 	useQuestionnaires,
 	visibleDecisionView,
@@ -301,6 +302,8 @@ export function RoomWorkspace(
 		addEventListener("title-edit", listen);
 		return () => removeEventListener("title-edit", listen);
 	}, [room]);
+	// Controls dim only once a loss outlasts a blip; actions still read `status`.
+	let connectionShown = useConnectionNotice(status !== "connected") === "none";
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
 	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
@@ -872,7 +875,7 @@ export function RoomWorkspace(
 							questions,
 							meta: cardMeta,
 							wire,
-							connected: status === "connected",
+							connected: connectionShown,
 							canEdit: workspaceCanEdit,
 							onOpenCard: showDecisionCard,
 						}}
@@ -908,7 +911,7 @@ export function RoomWorkspace(
 				}
 				status={
 					<PlanStatus
-						connection={status === "deleted" ? "closed" : status}
+						connection={status === "deleted" ? "closed" : connectionShown ? undefined : status}
 						failed={planState.failed}
 						synced={planState.synced}
 					/>
@@ -923,7 +926,7 @@ export function RoomWorkspace(
 					<Decisions
 						cardMeta={cardMeta}
 						canEdit={workspaceCanEdit}
-						connected={status === "connected" && workspaceCanEdit}
+						connected={connectionShown && workspaceCanEdit}
 						headingId={workspaceIds.heading.decisions}
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}

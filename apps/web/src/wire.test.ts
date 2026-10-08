@@ -243,6 +243,32 @@ describe("status", () => {
 		expect(wire.status).toBe("closed");
 	});
 
+	it("skips the backoff when the network comes back", async () => {
+		let service = restartable();
+		let seen: Status[] = [];
+		let wire = connect(service.port, seen);
+		await until(() => wire.status === "connected", "connected");
+		// A wake while connected is not a reason to reconnect.
+		dispatchEvent(new Event("focus"));
+		await Bun.sleep(50);
+		expect(seen.filter(status => status === "connected")).toHaveLength(1);
+
+		let random = Math.random;
+		Math.random = () => 100;
+		try {
+			service.drop();
+			await until(() => wire.status === "reconnecting", "backoff");
+			await Bun.sleep(100);
+			expect(wire.status).toBe("reconnecting");
+			dispatchEvent(new Event("online"));
+			await until(() => wire.status === "connected", "woken reconnect");
+		} finally {
+			Math.random = random;
+		}
+		await Bun.sleep(100);
+		expect(seen.filter(status => status === "connected")).toHaveLength(2);
+	});
+
 	it("ignores a superseded refusal probe after manual reconnection", async () => {
 		let probe = Promise.withResolvers<void>();
 		let release = Promise.withResolvers<void>();

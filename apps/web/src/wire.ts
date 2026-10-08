@@ -77,7 +77,33 @@ export class Wire {
 
 	constructor(options: WireOptions) {
 		this.#options = options;
+		addEventListener("online", this.#wake);
+		addEventListener("focus", this.#wake);
+		globalThis.document?.addEventListener("visibilitychange", this.#wake);
 		this.#connect();
+	}
+
+	/**
+	 * Skip the rest of the backoff when the network or the person comes back.
+	 *
+	 * The timer alone can sit out most of its 15 s cap after the network has
+	 * already returned, with the page still saying it is offline. Only a wire
+	 * waiting on that timer is woken; an attempt already in flight is left to
+	 * finish.
+	 */
+	#wake = () => {
+		if (this.#disposed || this.#terminal || this.#timer === undefined) return;
+		if (globalThis.document?.visibilityState === "hidden") return;
+		clearTimeout(this.#timer);
+		this.#timer = undefined;
+		this.#attempts = 0;
+		this.#connect();
+	};
+
+	#unlisten(): void {
+		removeEventListener("online", this.#wake);
+		removeEventListener("focus", this.#wake);
+		globalThis.document?.removeEventListener("visibilitychange", this.#wake);
 	}
 
 	get status(): Status {
@@ -185,7 +211,10 @@ export class Wire {
 		let delay = Math.min(BASE_DELAY * 2 ** this.#attempts, MAX_DELAY) * (0.5 + Math.random());
 		this.#attempts++;
 		this.#set("reconnecting");
-		this.#timer = setTimeout(() => this.#connect(), delay);
+		this.#timer = setTimeout(() => {
+			this.#timer = undefined;
+			this.#connect();
+		}, delay);
 	}
 
 	#receive(raw: string): void {
@@ -229,6 +258,7 @@ export class Wire {
 	#deleted(): void {
 		if (this.#disposed || this.#terminal) return;
 		this.#terminal = true;
+		this.#unlisten();
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#timer = undefined;
 		let socket = this.#socket;
@@ -280,6 +310,7 @@ export class Wire {
 
 	dispose(): void {
 		this.#disposed = true;
+		this.#unlisten();
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#abandon("disposed");
 		this.#socket?.close();
