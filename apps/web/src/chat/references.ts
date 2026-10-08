@@ -19,6 +19,7 @@ export type ReferenceTarget = {
 	title: string;
 	slug?: string;
 	child?: boolean;
+	parentTitle?: string;
 	description?: string;
 };
 
