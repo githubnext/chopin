@@ -278,6 +278,39 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(projects.getByRole("link", { name, exact: true })).toBeVisible();
 });
 
+test("the header names the project and its prefix reveals it in the sidebar", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	let header = page.getByRole("banner");
+	let prefix = header.getByRole("button", { name: "Show score in the sidebar" });
+	let project = sidebar(page).locator('[data-project-id="R_score"]');
+
+	await expect(prefix).toHaveText("score");
+	await project.getByRole("button", { name: "score", exact: true }).click();
+	await expect(project.getByRole("button", { name: "score", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"false",
+	);
+
+	await prefix.click();
+	await expect(project.getByRole("button", { name: "score", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
+	await expect(project.getByRole("button", { name: "score", exact: true })).toBeFocused();
+
+	await sidebar(page).getByRole("button", { name: "Hide sidebar" }).click();
+	await expect(sidebar(page)).toHaveCount(0);
+	await prefix.click();
+	await expect(sidebar(page)).toBeVisible();
+	await expect(project.getByRole("button", { name: "score", exact: true })).toBeFocused();
+});
+
+test("the project prefix gives way on phones", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	await expect(headerDocument(page)).toBeVisible();
+	await expect(page.getByRole("banner").getByRole("button", { name: /^Show score/ })).toBeHidden();
+});
+
 test("the header title renames in place with click, F2, Escape, and blur", async ({ join, room }) => {
 	let page = await join("ana");
 	let header = page.getByRole("banner");

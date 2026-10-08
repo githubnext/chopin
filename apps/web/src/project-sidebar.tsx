@@ -158,6 +158,7 @@ function Project(
 		onFocused,
 		onLoadMore,
 		onToggle,
+		revealed,
 	}: {
 		archiveMode: boolean;
 		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
@@ -170,6 +171,7 @@ function Project(
 		onFocused: () => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onToggle: () => void;
+		revealed: boolean;
 	},
 ) {
 	let item = useRef<HTMLLIElement>(null);
@@ -342,6 +344,7 @@ function Project(
 			className="project-sidebar-project group/project"
 			data-project-id={project.repositoryId}
 			ref={item}
+			data-revealed={revealed || undefined}
 			tabIndex={-1}
 		>
 			<div className="project-sidebar-project-row" data-flash={flash || undefined}>
@@ -414,10 +417,12 @@ export function ProjectSidebar(
 		onDocumentAction,
 		onLoadMore,
 		onNewDocument,
+		onRevealed,
 		onSearch,
 		onCatalogueModeChange,
 		projects,
 		catalogueMode,
+		reveal,
 		user,
 	}: {
 		accountMenu?: false | {
@@ -445,9 +450,11 @@ export function ProjectSidebar(
 		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onNewDocument: () => void;
+		onRevealed?: () => void;
 		onSearch: () => void;
 		onCatalogueModeChange: (mode: "active" | "archived") => void;
 		projects: ProjectDocuments[];
+		reveal?: { id: string; nonce: number };
 		user: Api.User;
 	},
 ) {
@@ -467,6 +474,32 @@ export function ProjectSidebar(
 		}, 1500);
 		return () => window.clearTimeout(timer);
 	}, [catalogueMode, projects, user.id]);
+	let [revealedId, setRevealedId] = useState<string>();
+	useEffect(() => {
+		if (!reveal) return;
+		setCollapsedProjectIds(current => {
+			if (!current.has(reveal.id)) return current;
+			let next = new Set(current);
+			next.delete(reveal.id);
+			return next;
+		});
+		setRevealedId(reveal.id);
+		let frame = requestAnimationFrame(() => {
+			let row = document.querySelector<HTMLElement>(
+				`[data-project-id="${CSS.escape(reveal.id)}"] .project-sidebar-project-disclosure`,
+			);
+			row?.scrollIntoView({ block: "nearest" });
+			row?.focus({ preventScroll: true });
+		});
+		let timer = setTimeout(() => {
+			setRevealedId(undefined);
+			onRevealed?.();
+		}, 1400);
+		return () => {
+			cancelAnimationFrame(frame);
+			clearTimeout(timer);
+		};
+	}, [reveal]);
 	let archivedButton = useRef<HTMLButtonElement>(null);
 	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
@@ -645,6 +678,7 @@ export function ProjectSidebar(
 									onDocumentAction={onDocumentAction}
 									onFocused={onFocusedProject ?? noop}
 									onLoadMore={onLoadMore}
+									revealed={revealedId === entry.project.repositoryId}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
 											toggleCollapsedProjectIds(current, entry.project.repositoryId)
