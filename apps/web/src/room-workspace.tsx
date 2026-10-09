@@ -225,7 +225,7 @@ export function Header(
 						channel={{ archivedAt, title: label }}
 						className="document-title-menu"
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
-						trigger={<ChevronIcon aria-hidden="true" className="rotate-90" />}
+						trigger={<ChevronIcon aria-hidden="true" className="rotate-90" size={12} />}
 					/>
 				)}
 				{archivedAt && (
