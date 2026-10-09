@@ -23,6 +23,12 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 		body: JSON.stringify({ secret: pairing.secret }),
 	})).json();
 	await page.getByRole("button", { name: "Investigations", exact: true }).click();
+	let dialog = page.getByRole("dialog", { name: "Investigations", exact: true });
+	// Playwright's toBeVisible permits opacity-zero elements and their descendants.
+	await expect.poll(() =>
+		dialog.evaluate(element => element.checkVisibility({ checkOpacity: true }))
+	)
+		.toBe(true);
 	await page.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
 		"Compare startup approaches",
 	);
