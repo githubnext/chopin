@@ -18,6 +18,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"anchor_plan",
 	"edit_implementation_graph",
 	"create_research_workspace",
+	"request_visual_preview",
 	"revise_open_decision",
 	...Object.values(JOB_TOOLS),
 ]);

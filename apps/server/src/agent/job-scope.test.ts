@@ -24,6 +24,7 @@ describe("background Planner job scope", () => {
 			prose: "write_decision_prose",
 		});
 		expect(WRITE_TOOLS.has("create_research_workspace")).toBe(true);
+		expect(WRITE_TOOLS.has("request_visual_preview")).toBe(true);
 		expect(WRITE_TOOLS.has("revise_open_decision")).toBe(true);
 		expect(refusal(undefined, "read_plan")).toBeUndefined();
 		expect(refusal(undefined, "edit_plan")).toBeUndefined();
@@ -42,6 +43,7 @@ describe("background Planner job scope", () => {
 				"anchor_plan",
 				"edit_implementation_graph",
 				"create_research_workspace",
+				"request_visual_preview",
 				"revise_open_decision",
 				"draft_heading",
 				"write_decision_prose",

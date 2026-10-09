@@ -1,6 +1,16 @@
-import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES } from "./tool-names";
+import { BACKGROUND_TOOL_NAMES, plannerToolNames } from "./tool-names";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
-import { headingPlannerAgent, plannerAgent, prosePlannerAgent, refinePlannerAgent } from "./agents";
+import {
+	headingPlannerAgent,
+	plannerAgent,
+	prosePlannerAgent,
+	refinePlannerAgent,
+	visualPlannerAgent,
+} from "./agents";
+import {
+	availableVisualPreview,
+	type VisualPreviewCapability,
+} from "../visual-decisions/capability";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
 import {
@@ -33,6 +43,7 @@ export type PlannerChannel = {
 	room: DocumentRoom;
 	repository: HostedRepository;
 	instructions: string | ((workspace?: PlannerWorkspace) => string);
+	visualPreview?: VisualPreviewCapability;
 	model?: string;
 	/** `atomic` runs the session as a full Atomic session in the channel's workspace. */
 	harness?: string;
@@ -64,6 +75,7 @@ export type PlannerSession = {
 
 export type PlannerSessionDependencies = {
 	agent?: PlannerAgent;
+	visualPreviewAgent?: PlannerAgent;
 	headingAgent?: PlannerAgent;
 	refineAgent?: PlannerAgent;
 	proseAgent?: PlannerAgent;
@@ -79,6 +91,7 @@ export async function openPlannerSession(
 	deps: PlannerSessionDependencies = {},
 ): Promise<Result<PlannerSession, OpenError>> {
 	let job = channel.room.plan.chat?.job;
+	let preview = availableVisualPreview(channel.visualPreview) ? channel.visualPreview : undefined;
 	if (job && !Object.hasOwn(BACKGROUND_TOOL_NAMES, job.kind)) {
 		return {
 			ok: false,
@@ -153,6 +166,8 @@ export async function openPlannerSession(
 			? deps.refineAgent ?? refinePlannerAgent
 			: job?.kind === "prose"
 			? deps.proseAgent ?? prosePlannerAgent
+			: preview
+			? deps.visualPreviewAgent ?? visualPlannerAgent(preview)
 			: plannerAgent);
 		let opening = agent.createSession({ sessionId, sandboxSession: sandbox });
 		let deadline = new Promise<never>((_, reject) => {
@@ -191,7 +206,7 @@ export async function openPlannerSession(
 			}
 			: {};
 		let fixedTools = Object.freeze([
-			...(job ? BACKGROUND_TOOL_NAMES[job.kind] : PLANNER_TOOL_NAMES),
+			...(job ? BACKGROUND_TOOL_NAMES[job.kind] : plannerToolNames(preview)),
 		]);
 		return {
 			ok: true,

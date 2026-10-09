@@ -35,6 +35,7 @@ import { restoreReferences } from "../chat/references";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import * as VisualDecisions from "../visual-decisions/state";
+import * as VisualRequests from "../visual-decisions/requests";
 import { CommitRejected } from "../storage/errors";
 import { sidecarUnansweredDecisions } from "../questions/unanswered";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
@@ -179,6 +180,7 @@ export type Plan = {
 	/** Open questionnaires and their shared answer drafts. */
 	questions: Questions.Questions;
 	visualDecisions: VisualDecisions.Decisions;
+	visualRequests: VisualRequests.Requests;
 	/** Resolutions in flight and who is typing. Nothing durable. */
 	comments: Comments.Threads;
 	/** The conversation driving the agent. */
@@ -262,6 +264,7 @@ type Sidecar = {
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
 	visualDecisions?: VisualDecisions.Stored[];
+	visualRequests?: VisualRequests.PendingVisualRequest[];
 	threads: Comments.Record[];
 	transcript: Chat.Chat["entries"];
 	conversationPlan?: ConversationPlan.State;
@@ -291,6 +294,9 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		openQuestions: Questions.dump(plan.questions),
 		...(plan.visualDecisions.size
 			? { visualDecisions: VisualDecisions.dump(plan.visualDecisions) }
+			: {}),
+		...(plan.visualRequests.size
+			? { visualRequests: VisualRequests.dump(plan.visualRequests) }
 			: {}),
 		threads: [...plan.threads.values()],
 		transcript: chat.entries,
@@ -491,6 +497,7 @@ function restoredState(
 	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
 	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
 	if (Object.hasOwn(item, "visualDecisions")) expected.push("visualDecisions");
+	if (Object.hasOwn(item, "visualRequests")) expected.push("visualRequests");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -602,6 +609,12 @@ function restoredState(
 			throw new Error("hosted channel has invalid chat delivery metadata", { cause: err });
 		}
 	}
+	let visualRequests = VisualRequests.restore(
+		item.visualRequests,
+		scope?.channelId,
+		transcript as unknown as Chat.Chat["entries"],
+		item.revision,
+	);
 	let mcpUpdates = restoreMcpUpdates(item.mcpUpdates);
 	let conversationPlan = restoreConversationPlan(
 		item.conversationPlan,
@@ -662,6 +675,7 @@ function restoredState(
 		questions: records,
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		...(visualDecisions.size ? { visualDecisions: VisualDecisions.dump(visualDecisions) } : {}),
+		...(visualRequests.size ? { visualRequests: VisualRequests.dump(visualRequests) } : {}),
 		threads: threads as never[],
 		transcript: transcript as unknown as Chat.Chat["entries"],
 		conversationPlan,
@@ -1356,6 +1370,12 @@ export async function open(
 		presence: presence.create(),
 		questions: Questions.restore(sidecar.openQuestions),
 		visualDecisions: VisualDecisions.restore(sidecar.visualDecisions),
+		visualRequests: VisualRequests.restore(
+			sidecar.visualRequests,
+			id,
+			sidecar.transcript,
+			sidecar.revision,
+		),
 		comments: Comments.create(),
 		chat: Chat.restore(sidecar.transcript, sidecar.workflowRuns),
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
@@ -1747,6 +1767,7 @@ export async function publishStaged(
 	plan.threads = candidate.threads;
 	plan.questions = candidate.questions;
 	plan.visualDecisions = candidate.visualDecisions;
+	plan.visualRequests = candidate.visualRequests;
 	plan.conversationPlan = candidate.conversationPlan;
 	plan.pendingCardActions = candidate.pendingCardActions;
 	plan.conversationPlanPendingEffects = candidate.conversationPlanPendingEffects;

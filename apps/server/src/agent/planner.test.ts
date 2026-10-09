@@ -2,7 +2,35 @@ import { expect, test } from "bun:test";
 
 import { renderDiagram } from "@chopin/diagrams";
 
-import { DIAGRAM_AUTHORING, PROMPT } from "./planner";
+import {
+	DIAGRAM_AUTHORING,
+	plannerInstructions,
+	PREVIEW_REQUEST_AUTHORING,
+	PROMPT,
+} from "./planner";
+
+test("does not guide unavailable visual preview requests", () => {
+	expect(PROMPT).not.toContain(PREVIEW_REQUEST_AUTHORING);
+	expect(plannerInstructions("owner/repo")).not.toContain("request_visual_preview");
+});
+
+test("guides a preview request when a complete provider is installed", () => {
+	let provider = {
+		request: async () => ({ requestId: "test", state: "pending" as const }),
+		publish: async () => {},
+		resolve: async () => undefined,
+	};
+	expect(plannerInstructions("owner/repo", undefined, undefined, provider))
+		.toContain(PREVIEW_REQUEST_AUTHORING);
+});
+
+test("keeps continuous preview guidance distinct from discrete team choices", () => {
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("continuously adjustable");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("request_visual_preview");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("with `{}`");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("ordinary `ask`");
+	expect(PREVIEW_REQUEST_AUTHORING).toContain("request is pending");
+});
 
 test("offers grounded optional diagrams with three valid authoring examples", () => {
 	expect(PROMPT).toContain(DIAGRAM_AUTHORING);

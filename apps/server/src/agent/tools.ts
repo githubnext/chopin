@@ -88,6 +88,8 @@ export type DocumentRoom = {
 	currentMemberRequest?: () => ActiveMemberRequest | undefined;
 	/** Starts the exact research request represented by the current member turn. */
 	createResearch?: (question: string) => Promise<ResearchWorkspaceRequest>;
+	/** Records the active member's exact request before reporting a pending preview. */
+	createVisualRequest?: () => Promise<{ requestId: string; state: "pending" }>;
 	/** Reads one reference retained by this room's active Planner session. */
 	readReference?: (id: string, repositoryId: string) => Promise<unknown>;
 };
@@ -218,6 +220,27 @@ export const documentTools = {
 					throw new Error("a current member request is required to create a research workspace");
 				}
 				return context.createResearch(question);
+			}),
+	}),
+	request_visual_preview: tool({
+		contextSchema: roomContext,
+		description: "Record a pending visual preview request only when the current member "
+			+ "explicitly asks to explore continuous design settings. This records their exact "
+			+ "message; it does not create or publish a preview. Use `ask` for ordinary discrete "
+			+ "choices. The request has no input fields.",
+		inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
+		execute: (raw, { context: { room: context } }) =>
+			answer("request_visual_preview", () => {
+				if (
+					!raw || typeof raw !== "object" || Array.isArray(raw)
+					|| Object.keys(raw).length !== 0
+				) {
+					throw new Error("request_visual_preview accepts no fields");
+				}
+				if (!context.createVisualRequest) {
+					throw new Error("a current member request is required for a visual preview");
+				}
+				return context.createVisualRequest();
 			}),
 	}),
 

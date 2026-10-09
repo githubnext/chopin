@@ -23,6 +23,13 @@ import {
 
 import type { Component } from "@chopin/dialect/dialect";
 import type { PlannerWorkspace } from "../harness/atomic/workspace";
+import {
+	availableVisualPreview,
+	type VisualPreviewCapability,
+} from "../visual-decisions/capability";
+import { PREVIEW_REQUEST_AUTHORING } from "./preview-request-authoring";
+
+export { PREVIEW_REQUEST_AUTHORING };
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -265,7 +272,9 @@ export function plannerInstructions(
 	repository: string,
 	bootstrap?: string,
 	workspace?: PlannerWorkspace,
+	preview?: VisualPreviewCapability,
 ): string {
+	let previewGuide = availableVisualPreview(preview) ? PREVIEW_REQUEST_AUTHORING : undefined;
 	let reading = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and \`list_pull_requests\` and
@@ -273,7 +282,7 @@ export function plannerInstructions(
 	if (!workspace) {
 		let isolated = `You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-		return [PROMPT, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
+		return [PROMPT, previewGuide, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
 	}
 	let place = workspace.checkout
 		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
@@ -299,7 +308,9 @@ now, rather than prepare its task graph, your \`intercom\` tool can reach other 
 machine: one working in a checkout of ${repository}, such as a session that handed you this
 document, can take the request along with what it needs to find this document. Tell the member
 where the work continues, or that no session could take it.`;
-	return [PROMPT, reading, place, questions, surface, implementing, bootstrap].filter(Boolean).join(
+	return [PROMPT, previewGuide, reading, place, questions, surface, implementing, bootstrap].filter(
+		Boolean,
+	).join(
 		"\n\n",
 	);
 }

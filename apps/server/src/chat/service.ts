@@ -40,7 +40,11 @@ import { JOB_TOOLS } from "../agent/job-scope";
 import type { JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
 import { broadcast, fail, reply, tell } from "../wire";
-import { MAX_MESSAGE_BYTES } from "./limits";
+import { MAX_MESSAGE_BYTES, REQUEST_ID } from "./limits";
+import {
+	availableVisualPreview,
+	type VisualPreviewCapability,
+} from "../visual-decisions/capability";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -58,7 +62,6 @@ import type { Socket, SocketData } from "../wire";
 const MAX_QUEUE = 20;
 const MAX_PENDING_SENDS = 20;
 const MAX_SESSION_REFERENCES = 50;
-const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
 
 type Delivery = {
@@ -478,6 +481,7 @@ export type Room = {
 		text: string;
 		question: string;
 	}) => Promise<ResearchWorkspaceRequest>;
+	visualPreview?: VisualPreviewCapability;
 	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
 	hold?: () => () => void;
 };
@@ -1203,6 +1207,7 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 
 export function documentRoom(context: Room): DocumentRoom {
 	let { chat, plan, room, server } = context;
+	let preview = availableVisualPreview(context.visualPreview) ? context.visualPreview : undefined;
 	return {
 		id: room,
 		plan,
@@ -1241,6 +1246,25 @@ export function documentRoom(context: Room): DocumentRoom {
 				question: active.text,
 			});
 		},
+		...(preview
+			? {
+				createVisualRequest: async () => {
+					let active = currentMemberRequest(chat);
+					let controller = chat.turnController;
+					if (!active || chat.job || controller?.signal.aborted) {
+						throw new Error(
+							"a current foreground member request is required for a visual preview",
+						);
+					}
+					return preview.request(
+						active,
+						() =>
+							!chat.job && chat.turnController === controller
+							&& !controller?.signal.aborted && currentMemberRequest(chat) === active,
+					);
+				},
+			}
+			: {}),
 	};
 }
 
@@ -1397,11 +1421,13 @@ async function repositorySession(
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
+			visualPreview: context.visualPreview,
 			instructions: workspace =>
 				plannerInstructions(
 					`${repository.owner}/${repository.name}`,
 					bootstrap,
 					workspace,
+					context.visualPreview,
 				),
 			model: context.config.model,
 			harness: context.config.harness,
