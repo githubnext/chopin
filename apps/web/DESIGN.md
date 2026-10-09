@@ -18,19 +18,19 @@ colors:
   chat-divider: "rgb(0 0 0 / 9%)"
 typography:
   document-title:
-    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontFamily: '"Lora", Georgia, serif'
     fontSize: "var(--text-2xl)"
-    fontWeight: 600
+    fontWeight: 400
     lineHeight: 1.15
   section-heading:
-    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontFamily: '"Lora", Georgia, serif'
     fontSize: "var(--text-xl)"
-    fontWeight: 600
+    fontWeight: 400
     lineHeight: 1.25
   subheading:
-    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontFamily: '"Lora", Georgia, serif'
     fontSize: "var(--text-lg)"
-    fontWeight: 600
+    fontWeight: 400
     lineHeight: 1.4
   document-body:
     fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
@@ -136,7 +136,7 @@ The original destructive button red is an intentional visual exception: white te
 
 ## Typography
 
-Inter Variable is used for interface text and document prose. The mono stack is reserved for code and technical content. The shared theme defines a fluid modular scale across 360–1440px viewports. Its base is 15–16px and its ratio grows from 1.12 to 1.14. Each role uses `base × ratio^step` at each endpoint and a CSS `clamp()` between them. The seven named roles are small metadata `--text-2xs` (step −2.5, 11.3–11.5px), compact `--text-xs` (step −2, 12–12.3px), common interface `--text-sm` (step −1, 13.4–14px), document body `--text-base` (step 0, 15–16px), subheading `--text-lg` (step +2), section heading `--text-xl` (step +3, 21.1–23.7px), and title `--text-2xl` (step +5, 26.4–30.8px). The editor gives prose looser leading than the paired UI token and forwards the fluid tokens through MDXEditor's fixed variable scope.
+Inter Variable is used for interface text and document prose. Document headings H1–H4 use Lora at weight 400 through `--font-document-heading`; H4 keeps the body-size token. The mono stack is reserved for code and technical content. The shared theme defines a fluid modular scale across 360–1440px viewports. Its base is 15–16px and its ratio grows from 1.12 to 1.14. Each role uses `base × ratio^step` at each endpoint and a CSS `clamp()` between them. The seven named roles are small metadata `--text-2xs` (step −2.5, 11.3–11.5px), compact `--text-xs` (step −2, 12–12.3px), common interface `--text-sm` (step −1, 13.4–14px), document body `--text-base` (step 0, 15–16px), subheading `--text-lg` (step +2), section heading `--text-xl` (step +3, 21.1–23.7px), and title `--text-2xl` (step +5, 26.4–30.8px). The editor gives prose looser leading than the paired UI token and forwards the fluid tokens through MDXEditor's fixed variable scope.
 
 **The Fluid Type Rule.** Use a named text utility or `--text-*` token for every font size. The CI type-scale check rejects raw CSS font sizes, arbitrary Tailwind font sizes, and literal inline font sizes. Add a role in the shared theme and update its modular-scale test when the existing roles cannot serve the need. Inline code inherits the size of surrounding prose or a heading.
 
@@ -148,7 +148,7 @@ text only when people need it to act or recover.
 
 ## Layout
 
-The workspace places the document beside conversation when space permits. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 43.75rem and a 4rem gutter that contracts to 1rem in a narrow document container. Wide authored content such as tables and code keeps its own scroll lane.
+The workspace places the document beside conversation when space permits. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 40.625rem (650px), with 3.75rem (60px) of top padding and at least 3rem (48px) of padding on each side. At browser widths of 600px or less, the horizontal padding becomes 1.5rem (24px). Images and diagrams can extend beyond the prose measure within those gutters; tables can grow toward the trailing gutter and retain their own scroll lane.
 
 Spacing starts from a 4px unit and uses the measured steps shown in the frontmatter. App chrome is dense; prose has larger margins and trailing space so the caret remains comfortable near the end of a document. Layout responds to both viewport and document container width. Safe-area insets and larger coarse-pointer targets are accounted for in the web styles.
 
@@ -166,6 +166,7 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 - **Recovery actions:** Use `btn-outline-danger` on danger surfaces and `icon-danger` for error indicators. Hover and pressed states stay within the danger palette.
 - **Fields and selections:** White fields use the medium radius, control edge, and subtle resting shadow. Invalid fields use the destructive role. Disabled controls use neutral fill and muted text.
 - **Navigation:** The current location uses a white surface and primary ink. Other items stay quieter and reveal their affordance on hover or focus.
+- **Sidebar icons:** Icons normally use 14px glyphs. Compact Search, disclosure, add-project, project document-creation, and document-action controls use 12px glyphs while retaining 24px icon-button targets.
 - **Badges and status graphics:** Neutral, success, warning, and danger use paired semantic surface, icon, graphic, and text roles. A badge combines an icon and label in a pill.
 - **Document:** The authored page is white, readable, and wider only where content requires it. Headings, lists, tables, code, and callouts retain document semantics inside the editor.
 

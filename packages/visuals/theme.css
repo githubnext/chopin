@@ -251,5 +251,6 @@
 
 	/* Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack. */
 	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-document-heading: "Lora", Georgia, serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }

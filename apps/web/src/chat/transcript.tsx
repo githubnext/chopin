@@ -568,7 +568,7 @@ export function Transcript(
 
 	return (
 		<div
-			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-3"
+			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 py-3"
 			data-focus-boundary=""
 			ref={scroller}
 			onScroll={event => {

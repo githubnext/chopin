@@ -25,7 +25,7 @@ export function ProjectSidebarLoading(
 					<header className="project-sidebar-header">
 						<div className="flex items-center gap-2">
 							<span className="size-3.5 shrink-0" />
-							<span className="text-sm font-semibold text-brand">Chopin</span>
+							<span className="text-xs font-semibold text-brand">Chopin</span>
 						</div>
 						<button
 							aria-label="Hide sidebar"

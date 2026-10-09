@@ -2,7 +2,6 @@ import addProjectIcon from "./assets/figma/navigation/add-project.svg";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
-import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
@@ -20,6 +19,7 @@ import {
 	ChevronIcon,
 	DocumentIcon,
 	LockIcon,
+	PlusIcon,
 	SearchIcon,
 	SignInIcon,
 } from "@chopin/icons";
@@ -295,7 +295,7 @@ function Project(
 												className="project-sidebar-document-action"
 												onAction={action => documentAction(channel, action)}
 												trigger={
-													<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
+													<NavigationIcon className="h-auto w-3" src={documentActionsIcon} />
 												}
 											/>
 										</div>
@@ -336,7 +336,7 @@ function Project(
 																onAction={action => onDocumentAction(child, action)}
 																trigger={
 																	<NavigationIcon
-																		className="h-auto w-3.5"
+																		className="h-auto w-3"
 																		src={documentActionsIcon}
 																	/>
 																}
@@ -389,20 +389,26 @@ function Project(
 					ref={disclosure}
 					type="button"
 				>
-					<MotionDisclosureIcon
-						className="motion-feedback shrink-0"
-						closed={<ChevronIcon size={14} />}
-						open={expanded}
-						opened={<ChevronIcon className="rotate-90" size={14} />}
-					/>
-					<DocumentIcon />
-					<span className="truncate text-sm font-bold">{label}</span>
+					<span aria-hidden="true" className="project-sidebar-project-icon">
+						<DocumentIcon className="project-sidebar-project-repository-icon" />
+						<span className="project-sidebar-project-chevron">
+							<MotionDisclosureIcon
+								className="motion-feedback shrink-0"
+								closed={<ChevronIcon size={12} />}
+								open={expanded}
+								opened={<ChevronIcon className="rotate-90" size={12} />}
+							/>
+						</span>
+					</span>
+					<span className="truncate text-xs font-bold">{label}</span>
 				</button>
 				{!archiveMode && project.available && canManage && (
 					<button
 						aria-busy={!!phase}
 						aria-label={`New document in ${label}`}
-						className={`project-sidebar-action ${phase ? "project-sidebar-action-pending" : ""}`}
+						className={`project-sidebar-action project-sidebar-action-small-icon ${
+							phase ? "project-sidebar-action-pending" : ""
+						}`}
 						data-press="small"
 						data-tooltip="New document"
 						disabled={!!phase}
@@ -410,7 +416,7 @@ function Project(
 						title={`New document in ${label}`}
 						type="button"
 					>
-						<NavigationIcon src={newDocumentIcon} />
+						<PlusIcon size={12} />
 					</button>
 				)}
 				<UnansweredCount unanswered={projectUnanswered} />
@@ -559,7 +565,7 @@ export function ProjectSidebar(
 	}, [catalogueMode]);
 	let searchButton = (
 		<button className="project-sidebar-primary-action" onClick={onSearch} type="button">
-			<SearchIcon />
+			<SearchIcon size={12} />
 			<span>Search</span>
 			<kbd aria-hidden="true" className="project-sidebar-hint">
 				{shortcutLabel("search", platform)}
@@ -599,7 +605,7 @@ export function ProjectSidebar(
 							onClick={onNewDocument}
 							type="button"
 						>
-							<NavigationIcon src={newDocumentIcon} />
+							<PlusIcon />
 							<span>
 								{newDocumentPhase === "creating"
 									? "Creating document…"
@@ -620,7 +626,7 @@ export function ProjectSidebar(
 							onClick={onSearch}
 							type="button"
 						>
-							<SearchIcon />
+							<SearchIcon size={12} />
 							<span>Search</span>
 							<kbd aria-hidden="true" className="project-sidebar-hint">
 								{shortcutLabel("search", platform)}
@@ -659,7 +665,7 @@ export function ProjectSidebar(
 				<header className="project-sidebar-header group/sidebar-header">
 					<div className="flex items-center gap-2">
 						<img alt="" height={14} src={chopinIcon} width={14} />
-						<span className="text-sm font-semibold text-brand">Chopin</span>
+						<span className="text-xs font-semibold text-brand">Chopin</span>
 					</div>
 					<button
 						aria-label="Hide sidebar"
@@ -687,12 +693,12 @@ export function ProjectSidebar(
 							<button
 								aria-label="Add project"
 								data-tooltip="Add project"
-								className="project-sidebar-action"
+								className="project-sidebar-action project-sidebar-action-small-icon"
 								data-press="small"
 								onClick={onAddProject}
 								type="button"
 							>
-								<NavigationIcon className="size-3.5" src={addProjectIcon} />
+								<NavigationIcon className="size-3" src={addProjectIcon} />
 							</button>
 						)}
 					</div>
@@ -768,7 +774,7 @@ export function ProjectSidebar(
 							role="menuitem"
 							type="button"
 						>
-							Keyboard shortcuts<kbd aria-hidden="true">?</kbd>
+							<kbd aria-hidden="true">?</kbd>Keyboard shortcuts
 						</button>
 						<div role="separator" />
 						<button onClick={accountMenu.onSignOut} role="menuitem" type="button">
