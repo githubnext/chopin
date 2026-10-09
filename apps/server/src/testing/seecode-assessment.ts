@@ -17,9 +17,16 @@ let { openPlan } = await import("./plan");
 
 let manifestPath = process.argv[2];
 let outputPath = process.argv[3];
-if (!manifestPath || !outputPath) {
-	throw new Error("usage: bun seecode-assessment.ts DEVELOPMENT_REGISTRY OUTPUT_JSON");
+let fence = process.argv[4] ?? "seecode";
+if (!manifestPath || !outputPath || (fence !== "seecode" && fence !== "wireframe")) {
+	throw new Error(
+		"usage: bun seecode-assessment.ts DEVELOPMENT_REGISTRY OUTPUT_JSON [seecode|wireframe]",
+	);
 }
+let invitation = fence === "wireframe"
+	? `Sketch an interface the source describes in a wireframe fence only if it is
+discussed concretely; never draw one as box-drawing or ASCII art.`
+	: "Use an explanatory seecode diagram only if the source supports useful structure;";
 let manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
 	development: Array<{
 		id: string;
@@ -114,7 +121,7 @@ for (let selection of selected) {
 			session,
 			prompt: `Write a short, provisional explanation using only this frozen discussion excerpt.
 Its cutoff is ${snapshot.cutoff}. Links in the text are inert. Do not use later outcomes.
-Use an explanatory seecode diagram only if the source supports useful structure;
+${invitation}
 prose alone is a valid choice. Read the document, then edit it if warranted.\n\n${source}`,
 			options: documentRoom,
 			abortSignal: AbortSignal.timeout(180_000),
@@ -145,11 +152,17 @@ prose alone is a valid choice. Read the document, then edit it if warranted.\n\n
 		usage,
 		failure,
 		saved,
+		fenced: saved.includes(`\`\`\`${fence}`),
+		// Box-drawing characters mean the model sketched an interface outside a validated fence.
+		boxDrawing: [...saved].some(char => {
+			let code = char.codePointAt(0)!;
+			return code >= 0x2500 && code <= 0x257f;
+		}),
 	});
 	await Service.close(reopened);
 	console.log(
 		`${selection.id}/${selection.checkpoint}: ${failure ?? "turn finished"}, ${calls.length} calls`,
 	);
 }
-await Bun.write(outputPath, JSON.stringify({ model, results }, null, 2));
+await Bun.write(outputPath, JSON.stringify({ model, fence, results }, null, 2));
 await harness.shutdown();

@@ -27,6 +27,29 @@ Write a supported Chopin MDX plan. Use normal Markdown by default; use only
 documented components when they clarify the plan. Do not add imports, exports,
 expressions, raw HTML, arbitrary JSX, or component ids owned by Chopin.
 
+### Wireframes
+
+Sketch an interface layout in a `wireframe` fence, never with box-drawing
+characters or ASCII art. Each line is one part: a kind, an optional "quoted
+label", flags, `key=value` properties, and an optional `#id`. Indent children
+two spaces. Kinds: panel, header, row, stack, card, title, text, button, badge,
+disclosure, list, tabs, nav, input, image, divider, and `note "…" -> #id`. List,
+tabs, and nav hold `- item` lines.
+
+```wireframe
+panel "Review"
+  header
+    title "Pull request #42"
+    badge "open" tone=success
+  row
+    button "Approve" primary #approve
+    button "Request changes"
+  note "Disabled until checks pass" -> #approve
+```
+
+Chopin refuses an update that adds or changes an invalid wireframe and names the
+failing line, counted inside the fence.
+
 Generate one idempotency key for the attempt, then use the current
 `create_document` descriptor to submit the brief, provenance, title, and plan.
 If it reports validation issues, repair the relevant content and retry with the

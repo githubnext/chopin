@@ -24,6 +24,8 @@ Second paragraph.
 const DIAGRAM =
 	'```seecode\n{"type":"architecture","nodes":[{"id":"web","label":"Browser","row":0,"col":0},{"id":"api","label":"API","row":0,"col":1}],"edges":[["web","api"]]}\n```\n';
 const MALFORMED_DIAGRAM = '```seecode\n{"type":\n```\n';
+const WIREFRAME = '```wireframe\npanel "Review"\n  button "Approve" primary\n```\n';
+const MALFORMED_WIREFRAME = '```wireframe\npanel "Review"\n  slider "Volume"\n```\n';
 
 /** Enough of a plan for the edit engine, which only needs these fields. */
 async function plan(source = SOURCE): Promise<Plan> {
@@ -210,6 +212,41 @@ describe("refusing a batch", () => {
 			.toBe(true);
 		expect(edit.apply(held, 1, [{ op: "move", index: 1, to: 2 }]).ok).toBe(true);
 		expect(room.project(held.document)).toContain(MALFORMED_DIAGRAM.trim());
+	});
+
+	it("rejects a malformed new wireframe with the line the Planner must fix", () => {
+		let outcome = edit.apply(subject, 1, [
+			{ op: "insert", index: 0, source: "Context.\n" },
+			{ op: "insert", index: 1, source: MALFORMED_WIREFRAME },
+		]);
+
+		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+		if (outcome.ok || outcome.reason !== "invalid") return;
+		expect(outcome.message).toContain("Invalid wireframe");
+		expect(outcome.message).toContain('line 2: Unknown kind "slider".');
+		expect(outcome.message.length).toBeLessThan(600);
+		expect(room.project(subject.document)).toBe(SOURCE);
+	});
+
+	it("authors a valid wireframe and keeps a human-left broken one editable around", async () => {
+		expect(edit.apply(subject, 1, [{ op: "insert", index: 1, source: WIREFRAME }]).ok)
+			.toBe(true);
+		let held = await plan(`# Title\n\n${MALFORMED_WIREFRAME}\nSurrounding prose.\n`);
+		expect(edit.apply(held, 1, [{ op: "insert", index: 0, source: "Context.\n" }]).ok)
+			.toBe(true);
+		expect(edit.apply(held, 1, [{ op: "move", index: 1, to: 2 }]).ok).toBe(true);
+		expect(room.project(held.document)).toContain(MALFORMED_WIREFRAME.trim());
+	});
+
+	it("does not let a retained seecode fence excuse an identical wireframe body", async () => {
+		let body = '{"type":';
+		let held = await plan(`# Title\n\n\`\`\`seecode\n${body}\n\`\`\`\n`);
+		let outcome = edit.apply(held, 1, [{
+			op: "insert",
+			index: 1,
+			source: `\`\`\`wireframe\n${body}\n\`\`\`\n`,
+		}]);
+		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
 	});
 
 	it("refuses one aimed at a revision that has moved, and says what changed", () => {
@@ -584,6 +621,19 @@ describe("replacing canonical source", () => {
 		expect(invalid).toMatchObject({ ok: false, reason: "invalid" });
 		expect(edit.source(held)).toBe(before);
 		expect(edit.replace(held, 1, `${before}\n${DIAGRAM}`).ok).toBe(true);
+	});
+
+	it("validates changed wireframes but carries unchanged malformed ones", async () => {
+		let held = await plan(`# Title\n\n${MALFORMED_WIREFRAME}\nSurrounding prose.\n`);
+		let current = edit.source(held);
+		expect(edit.replace(held, 1, current.replace("Surrounding", "Revised")).ok).toBe(true);
+		let before = edit.source(held);
+		let changed = MALFORMED_WIREFRAME.replace("Volume", "Gain");
+		let invalid = edit.replace(held, 1, `${before}\n${changed}`);
+		expect(invalid).toMatchObject({ ok: false, reason: "invalid" });
+		if (!invalid.ok && invalid.reason === "invalid") expect(invalid.message).toContain("line 2");
+		expect(edit.source(held)).toBe(before);
+		expect(edit.replace(held, 1, `${before}\n${WIREFRAME}`).ok).toBe(true);
 	});
 
 	it("rewrites prose while keeping unchanged block identity", () => {

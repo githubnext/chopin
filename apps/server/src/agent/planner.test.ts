@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { renderDiagram } from "@chopin/diagrams";
+import { parseWireframe, renderDiagram, WIREFRAME_KINDS } from "@chopin/diagrams";
 
-import { DIAGRAM_AUTHORING, PROMPT } from "./planner";
+import { DIAGRAM_AUTHORING, PROMPT, WIREFRAME_AUTHORING } from "./planner";
 
 test("offers grounded optional diagrams with three valid authoring examples", () => {
 	expect(PROMPT).toContain(DIAGRAM_AUTHORING);
@@ -12,6 +12,20 @@ test("offers grounded optional diagrams with three valid authoring examples", ()
 	for (let [index, example] of examples.entries()) {
 		let rendered = renderDiagram(JSON.parse(example[1]!) as unknown);
 		expect(rendered.ok, `example ${index + 1}`).toBe(true);
+	}
+});
+
+test("teaches wireframe fences with a valid example and every kind", () => {
+	expect(PROMPT).toContain(WIREFRAME_AUTHORING);
+	expect(WIREFRAME_AUTHORING).toContain(
+		"Never draw one with box-drawing characters or ASCII art in a text fence.",
+	);
+	let examples = [...WIREFRAME_AUTHORING.matchAll(/```wireframe\n([^`]+)\n```/g)];
+	expect(examples).toHaveLength(1);
+	let parsed = parseWireframe(examples[0]![1]!);
+	expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+	for (let kind of Object.keys(WIREFRAME_KINDS)) {
+		expect(WIREFRAME_AUTHORING, kind).toMatch(new RegExp(`\\b${kind}\\b`));
 	}
 });
 

@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 
+import { parseWireframe } from "../../packages/diagrams/src/wireframe";
+
 import { handler } from "../../apps/server/src/mcp";
 
 import type { CreateDocument } from "../../apps/server/src/mcp";
@@ -67,3 +69,11 @@ test.each([false, true])(
 		);
 	},
 );
+
+test("the skill's wireframe example parses", async () => {
+	let skill = await Bun.file(new URL("SKILL.md", import.meta.url)).text();
+	let examples = [...skill.matchAll(/```wireframe\n([^`]+)\n```/g)];
+	expect(examples).toHaveLength(1);
+	let parsed = parseWireframe(examples[0]![1]!);
+	expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+});

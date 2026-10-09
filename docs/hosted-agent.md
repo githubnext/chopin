@@ -366,6 +366,17 @@ not establish Planner ownership, and there is no unattended scan of every
 document. Without an active owner, model-backed work cannot run; the last
 completed description, if any, remains visible while work is pending or failed.
 
+## Diagrams and wireframes
+
+The prompt teaches two validated fence languages. `seecode` holds a JSON spec
+for an architecture, sequence, or state diagram. `wireframe` holds an indented
+outline of interface parts for layouts and mockups, and the prompt forbids
+box-drawing or ASCII art in text fences. `edit_plan` and MCP `update_document`
+refuse a batch that introduces or changes an invalid fence of either language;
+a wireframe refusal names the failing lines, counted inside the fence. An
+unchanged malformed fence, such as one a person left mid-edit, is carried
+through unrelated edits and moves rather than blocking them.
+
 ## Implementation graph status
 
 The Planner can draft and revise a graph with `read_implementation_graph` and

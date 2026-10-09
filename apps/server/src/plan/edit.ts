@@ -15,8 +15,8 @@
 
 import { createHash } from "node:crypto";
 
-import { parseDiagramSource, renderDiagram } from "@chopin/diagrams";
-import { lookup, SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
+import { parseDiagramSource, parseWireframe, renderDiagram } from "@chopin/diagrams";
+import { lookup, SEECODE_LANGUAGE, WIREFRAME_LANGUAGE } from "@chopin/dialect/dialect";
 import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 import { ulid } from "@chopin/dialect/ulid";
@@ -193,7 +193,7 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 				+ "so insert new content rather than duplicating a block you read.",
 		};
 	}
-	let diagramError = introducedDiagramError(root.children, children);
+	let diagramError = introducedFenceError(root.children, children);
 	if (diagramError) return { ok: false, reason: "invalid", message: diagramError };
 
 	let next: string;
@@ -278,7 +278,7 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 				+ "so insert new content rather than duplicating a block you read.",
 		};
 	}
-	let diagramError = introducedDiagramError(root.children, children);
+	let diagramError = introducedFenceError(root.children, children);
 	if (diagramError) return { ok: false, reason: "invalid", message: diagramError };
 
 	try {
@@ -395,39 +395,57 @@ function align(base: RootContent[], next: RootContent[]): RootContent[] {
 	});
 }
 
-/** Existing human-edited fences remain editable around even if their spec is malformed. */
-function introducedDiagramError(base: RootContent[], next: RootContent[]): string | undefined {
+/** Each validated fence language returns the message the Planner sees, or nothing when valid. */
+const FENCE_VALIDATORS: Readonly<Record<string, (source: string) => string | undefined>> = {
+	[SEECODE_LANGUAGE]: source => {
+		let parsed = parseDiagramSource(source);
+		if (!parsed.ok) return `Invalid seecode diagram: ${parsed.message}`;
+		let rendered = renderDiagram(parsed.spec);
+		if (rendered.ok) return undefined;
+		let problem = rendered.problems[0];
+		return problem
+			? `Invalid seecode diagram at ${problem.at.slice(0, 80)}: ${problem.msg.slice(0, 160)}`
+			: "Invalid seecode diagram: the spec could not be rendered.";
+	},
+	[WIREFRAME_LANGUAGE]: source => {
+		let parsed = parseWireframe(source);
+		if (parsed.ok) return undefined;
+		let shown = parsed.problems.slice(0, 3)
+			.map(problem => `line ${problem.line}: ${problem.message.slice(0, 120)}`);
+		let more = parsed.problems.length - shown.length;
+		if (more > 0) shown.push(`${more} more`);
+		return `Invalid wireframe (lines count from inside the fence): ${shown.join("; ")}`;
+	},
+};
+
+/** Existing human-edited fences remain editable around even if their source is malformed. */
+function introducedFenceError(base: RootContent[], next: RootContent[]): string | undefined {
 	let previous = new Map<string, number>();
-	let collect = (nodes: RootContent[], visit: (source: string) => void): void => {
+	let collect = (nodes: RootContent[], visit: (lang: string, source: string) => void): void => {
 		let walk = (node: RootContent): void => {
-			if (node.type === "code" && node.lang === SEECODE_LANGUAGE) visit(node.value);
+			if (node.type === "code" && node.lang && Object.hasOwn(FENCE_VALIDATORS, node.lang)) {
+				visit(node.lang, node.value);
+			}
 			if ("children" in node && Array.isArray(node.children)) {
 				for (let child of node.children) walk(child as RootContent);
 			}
 		};
 		for (let node of nodes) walk(node);
 	};
-	collect(base, source => previous.set(source, (previous.get(source) ?? 0) + 1));
+	// The language is part of the key: a retained fence excuses only the same language and body.
+	let key = (lang: string, source: string) => `${lang}\n${source}`;
+	collect(base, (lang, source) => {
+		previous.set(key(lang, source), (previous.get(key(lang, source)) ?? 0) + 1);
+	});
 	let failure: string | undefined;
-	collect(next, source => {
+	collect(next, (lang, source) => {
 		if (failure) return;
-		let retained = previous.get(source) ?? 0;
+		let retained = previous.get(key(lang, source)) ?? 0;
 		if (retained > 0) {
-			previous.set(source, retained - 1);
+			previous.set(key(lang, source), retained - 1);
 			return;
 		}
-		let parsed = parseDiagramSource(source);
-		if (!parsed.ok) {
-			failure = `Invalid seecode diagram: ${parsed.message}`;
-			return;
-		}
-		let rendered = renderDiagram(parsed.spec);
-		if (!rendered.ok) {
-			let problem = rendered.problems[0];
-			failure = problem
-				? `Invalid seecode diagram at ${problem.at.slice(0, 80)}: ${problem.msg.slice(0, 160)}`
-				: "Invalid seecode diagram: the spec could not be rendered.";
-		}
+		failure = FENCE_VALIDATORS[lang]!(source);
 	});
 	return failure;
 }
