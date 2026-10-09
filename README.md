@@ -1,6 +1,7 @@
 # PR #419: live preview E2E report
 
-**Result: blocked at the real ACP-to-MCP handoff.**
+**Result: the requested live investigation/evidence flow passed with OpenCode ACP
+2.0.24. Copilot's stdio-injection incompatibility remains documented below.**
 
 - Date: 2026-10-09
 - PR: https://github.com/githubnext/chopin/pull/419
@@ -9,13 +10,56 @@
 - Sandbox: `KC-Test-OSS/TestRepo`
 - Exact sandbox revision: `f7aab2fc09f592e231658f91ae4b1c88128563ce`
 - Test document: https://419-chopin.githubnext.com/documents/KC-Test-OSS/TestRepo/pr-419-readme-compression-evidence
+- Successful OpenCode investigation: `495b71ff-39b2-410e-b573-0e5d649caf74`
 - Failed investigation: `dd54f77b-c57d-4657-972e-0aaf01c20411`
-- Real coding agent: GitHub Copilot CLI `1.0.8`, via ACP. The launcher reported
+- Initial coding agent: GitHub Copilot CLI `1.0.8`, via ACP. The launcher reported
   `1.0.80` for `copilot --version`, but the test's `--no-auto-update` flag selected
   its bundled `1.0.8` executable. Follow-up tests also reproduced the stdio
   limitation on actual `1.0.80`.
 
-## Passed
+## OpenCode follow-up: passed
+
+The same deployed application and generic connector were used with:
+
+```sh
+CHOPIN_URL=https://419-chopin.githubnext.com \
+  bun run connector connect /path/to/sandbox-worktree -- opencode acp
+```
+
+No harness-specific connector adapter or fabricated result was used. A real-tool
+probe first confirmed that OpenCode could discover and call the supplied stdio
+MCP server. The browser then paired the new connector and explicitly authorized
+the pending retry.
+
+1. The real OpenCode ACP turn completed and the connector published its submitted
+   result. The detached run worktree matched the exact sandbox revision above.
+2. Native chart and table rendering showed all six expected measured values:
+
+   | Workload | Raw | Gzip | Zlib |
+   | --- | ---: | ---: | ---: |
+   | Single five-byte README | 5 B | 25 B | 13 B |
+   | README repeated 100 times | 500 B | 30 B | 18 B |
+
+   These matched an independent Python standard-library check. They are tiny-file
+   size measurements, not a general compression-performance benchmark.
+3. Two tabs using the same authenticated test account synchronized workload filters
+   in both directions and the selected Raw row.
+4. The decision **Keep the tiny README uncompressed** saved the acknowledged
+   single-workload evidence and selection. Changing the live view to the repeated
+   workload and Gzip selection left the saved evidence unchanged and read-only.
+5. A saved-decision embed and a live-view embed were inserted into the document.
+   The live embed followed changes from the other tab; the saved embed retained
+   the original single-workload values. The decision appeared in Decisions.
+6. Both embeds and the decision survived a document reload.
+7. After stopping the connector, the published result, decision, and both embeds
+   survived another reload. Live filters still synchronized between tabs with
+   no local agent connected, while the saved snapshot remained immutable.
+
+The connector was stopped after the test. The supplied sandbox worktree and the
+successful run worktree were both clean. The document and its evidence remain
+available for inspection.
+
+## Initial Copilot attempt: passed checks
 
 1. Real GitHub authentication, including operator-completed device verification;
    secret-name substitution and account identity checks succeeded.
@@ -35,7 +79,7 @@
 9. Stopping the connector made the workspace unavailable for execution. The failed
    investigation and retry proposal persisted after another reload.
 
-## Blocking finding: the real agent did not receive the investigation tools
+## Copilot compatibility blocker: missing investigation tools
 
 The connector created the worktree and the Copilot turn completed, but Copilot
 reported that `read_investigation` and `submit_investigation_result` were absent
@@ -84,13 +128,13 @@ Relevant code: `apps/connector/src/acp.ts` (session setup/prompt),
 `apps/connector/src/main.ts` (bridge injection/completion), and
 `apps/connector/src/acp.test.ts` (current real-agent smoke test).
 
-## Not verified on the deployed application
+## Coverage limits
 
-The real run produced no result, so native result tables/charts, collaborative
-filtering and row selection, saved decisions, evidence embeds, and persistence
-of successfully published evidence remain unverified. No fixture result was
-substituted for the failed real-agent run. Cross-owner authorization was not
-tested with a second identity.
+Cross-owner authorization was not tested with a second identity. Cross-client
+collaboration was exercised using two tabs under the same test account. The
+successful data/evidence flow was verified with OpenCode; a full Copilot run
+using an HTTP bridge was not implemented or tested. Server-restart persistence
+was not part of this test; browser reload and local-connector disconnect were.
 
 ## Other observations
 
@@ -100,7 +144,8 @@ tested with a second identity.
   UI. The local skill was updated to use the actual guarded creation controls.
 - Playwright's explicit relative screenshot filenames were written relative to the
   checkout, despite `--output-dir`. The nine generated PNGs were moved to external
-  artifact storage before publication; no authentication pages were captured.
+  artifact storage before publication. Subsequent screenshots used absolute paths
+  under the configured output directory. No authentication pages were captured.
 
 ## Screenshots
 
@@ -139,3 +184,47 @@ tested with a second identity.
 ### 9. Disconnected workspace and persistent state
 
 ![Disconnected persistent state](screenshots/09-disconnected-persistent-state.png)
+
+### 10. OpenCode connector pairing
+
+![OpenCode connector pairing](screenshots/10-opencode-pairing.png)
+
+### 11. OpenCode authorized execution
+
+![OpenCode authorized execution](screenshots/11-opencode-running.png)
+
+### 12. Real published measurements
+
+![Published measurements](screenshots/12-opencode-published-results.png)
+
+### 13. Cross-tab shared selection
+
+![Cross-tab shared selection](screenshots/13-cross-tab-shared-selection.png)
+
+### 14. Saved evidence-backed decision
+
+![Saved evidence-backed decision](screenshots/14-saved-evidence-decision.png)
+
+### 15. Fixed evidence after changing the live view
+
+![Immutable saved evidence](screenshots/15-fixed-evidence-after-live-change.png)
+
+### 16. Live and saved document embeds
+
+![Live and saved document embeds](screenshots/16-live-and-saved-embeds.png)
+
+### 17. Decision in the Decisions surface
+
+![Investigation decision](screenshots/17-decision-surface.png)
+
+### 18. Embeds after reload
+
+![Embeds after reload](screenshots/18-embeds-after-reload.png)
+
+### 19. Published evidence after connector disconnect
+
+![Evidence after disconnect](screenshots/19-published-evidence-after-disconnect.png)
+
+### 20. Collaborative evidence without a local agent
+
+![Shared evidence without a local agent](screenshots/20-offline-connector-shared-evidence.png)
