@@ -225,6 +225,31 @@ test("naming a fence colours it, and the name reaches the file", async ({ join, 
 	await written(page, room, /^```typescript$/m);
 });
 
+test("a fence named as text is bare text until a writer is in it", async ({ join, room, seed }) => {
+	await seed("```text\n+--------+\n| Header |\n+--------+\n```\n\n```ts\nlet total = 1;\n```\n");
+	let page = await join("ana");
+	let drawing = content(page).getByText("| Header |");
+	let menus = content(page).getByRole("button", { name: /^Code language:/ });
+
+	// The drawing is its own source: no coloured copy and no toggle to swap
+	// between them. Only the TypeScript fence has either.
+	await expect(drawing).toBeVisible();
+	await expect(content(page).locator("[data-file]")).toHaveCount(1);
+	await expect(content(page).getByRole("button", { name: "Show source" })).toHaveCount(1);
+
+	// Its name already answers the menu's question, even under the pointer.
+	await drawing.hover();
+	await expect(menus).toHaveCount(1);
+	await expect(content(page).getByRole("button", { name: "Code language: ts", exact: true }))
+		.toBeAttached();
+
+	// A writer in the text can still make it code.
+	await drawing.click();
+	await chooseLanguage(content(page), "text", "TypeScript");
+	await written(page, room, /^```typescript$/m);
+	await expect(content(page).locator("[data-file]")).toHaveCount(2);
+});
+
 test("a patch is drawn as the change it describes", async ({ join, seed }) => {
 	await seed(PATCH);
 	let page = await join("ana");
