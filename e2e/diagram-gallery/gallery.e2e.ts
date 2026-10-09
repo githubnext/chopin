@@ -56,7 +56,7 @@ test("document views use separate SVG resources and survive source changes", asy
 
 	await page.getByRole("button", { name: "Replace first source" }).click();
 	await expect(first).toContainText("State · first instance");
-	await expect(first.locator(".ch-diagram__status")).toHaveCount(0);
+	await expect(first.locator(".ch-diagram__status")).toBeEmpty();
 	await expect(second).toContainText("Sequence · second instance");
 	await page.getByRole("button", { name: "Unmount second diagram" }).click();
 	await expect(second).toHaveCount(0);
@@ -95,7 +95,7 @@ test("reduced motion leaves diagram content readable", async ({ page }) => {
 	await controls.getByRole("button", { name: "Next step", exact: true }).click();
 	await expect(first.locator(".ch-diagram__status")).toContainText("Step 1 of");
 	await controls.getByRole("button", { name: "Restart diagram", exact: true }).click();
-	await expect(first.locator(".ch-diagram__status")).toHaveCount(0);
+	await expect(first.locator(".ch-diagram__status")).toBeEmpty();
 	await expect(first.locator("svg.sc-svg")).not.toHaveClass(/sc-stepping/);
 });
 
@@ -123,6 +123,7 @@ test("diagram controls sit centred below the drawing and step to either end", as
 		await expect(controls.getByText(`${index} / ${total}`, { exact: true })).toBeVisible();
 	}
 	await expect(next).toBeDisabled();
+	await expect(previous).toBeFocused();
 	await previous.click();
 	await expect(controls.getByText(`${total - 1} / ${total}`, { exact: true })).toBeVisible();
 	await expect(next).toBeEnabled();

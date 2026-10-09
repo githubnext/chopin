@@ -78,7 +78,7 @@ the lease. This is a single-writer design, not an application cluster.
 | `packages/question` | Questionnaire definitions, shared drafts, and answer derivation                            | `protocol`                                                           |
 | `packages/draft`    | Bounded collaborative plain-text draft codec                                               | none                                                                 |
 | `packages/viewport` | Browser viewport geometry and subscriptions                                                | none                                                                 |
-| `packages/diagrams` | SeeCode-derived, bounded diagram rendering and scoped React viewing                        | none (React peer)                                                    |
+| `packages/diagrams` | SeeCode-derived, bounded diagram rendering and scoped React viewing                        | `icons` (React peer)                                                 |
 | `packages/editor`   | Collaborative editor, cursors, decisions, comments, and widgets                            | `diagrams`, `dialect`, `question`, `protocol`, `viewport`, `visuals` |
 | `apps/server`       | Authentication, channels, rooms, storage, Planner, jobs, MCP, and implementation lifecycle | `diagrams`, `dialect`, `draft`, `question`, `protocol`               |
 | `apps/web`          | Repository picker, channel navigation, Chat, and workspace shell                           | `dialect`, `draft`, `editor`, `protocol`, `viewport`                 |
