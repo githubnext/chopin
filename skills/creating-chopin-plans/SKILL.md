@@ -30,11 +30,12 @@ expressions, raw HTML, arbitrary JSX, or component ids owned by Chopin.
 ### Wireframes
 
 Sketch an interface layout in a `wireframe` fence, never with box-drawing
-characters or ASCII art. Each line is one part: a kind, an optional "quoted
-label", flags, `key=value` properties, and an optional `#id`. Indent children
-two spaces. Kinds: panel, header, row, stack, card, title, text, button, badge,
-disclosure, list, tabs, nav, input, image, divider, and `note "…" -> #id`. List,
-tabs, and nav hold `- item` lines.
+characters or ASCII art. Each line is one part: a kind, a "quoted label",
+flags, `key=value` properties, and an optional `#id`. Indent children two
+spaces. Kinds: panel, header, row, stack, card, title, text, button, badge,
+disclosure, list, tabs, nav, input, image, divider, and `note "…" -> #id`.
+Title, text, button, badge, disclosure, and note need a label; row, stack,
+tabs, nav, and divider take none. List, tabs, and nav hold `- item` lines.
 
 ```wireframe
 panel "Review"
