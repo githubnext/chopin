@@ -17,7 +17,7 @@ CHOPIN_URL=https://your-chopin-instance.example \
 The command after `--` is your agent's ACP launch command. Chopin uses one ACP
 client implementation; it does not invoke a vendor-specific SDK. The connector
 requires Bun 1.4.2 and Git. The agent must support local stdio ACP sessions and
-stdio MCP tools. Authenticate the agent normally before connecting it.
+MCP tools through either advertised HTTP support or the default stdio transport. Authenticate the agent normally before connecting it.
 
 Open the printed pairing link, sign into Chopin, select a document in the same
 repository, and choose **Connect**. Both the browser and connector contact the
@@ -49,6 +49,11 @@ services. A worktree organizes edits; it is not a sandbox. Standard ACP permissi
 requests appear in the connector terminal and are declined when no interactive
 terminal is available. The connector does not advertise client-hosted filesystem
 or terminal tools; supported agents execute their own local tools.
+
+The connector chooses HTTP MCP when the ACP agent advertises it and otherwise
+uses its stdio bridge. Both transports expose the same investigation operations;
+HTTP also retains the connector's internal `read_experiment` and
+`submit_experiment_result` names.
 
 The agent reads its sealed brief and output schema through `read_investigation`,
 then calls `submit_investigation_result`. The server validates the candidate and

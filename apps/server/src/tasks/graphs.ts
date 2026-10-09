@@ -497,25 +497,7 @@ export class Graphs<Document> {
 	}
 
 	async approve(document: Document): Promise<Result<Graph>> {
-		return await this.#transact(document, ({ graph, revision }) => {
-			let version = graph && current(graph);
-			if (!graph || !version) return { ok: false, reason: "missing" };
-			if (version.state !== "draft") return { ok: false, reason: "not-draft" };
-			if (revision === undefined) return { ok: false, reason: "missing-document" };
-			if (version.planRevision !== revision) return { ok: false, reason: "stale-plan" };
-			let checked = validate(version.definition);
-			if (!checked.ok) return checked;
-
-			for (let prior of graph.versions) {
-				if (prior.state === "approved") prior.state = "superseded";
-			}
-			graph.versions[graph.versions.length - 1] = {
-				...graph.versions[graph.versions.length - 1],
-				state: "approved",
-				definition: checked.value,
-			};
-			return { ok: true, value: graph };
-		});
+		return this.#transact(document, approveGraph);
 	}
 
 	async start(document: Document): Promise<Result<Graph>> {
@@ -533,4 +515,27 @@ export class Graphs<Document> {
 			return { ok: true, value: graph };
 		});
 	}
+}
+
+export function approveGraph(
+	{ graph, revision }: { graph?: Graph; revision?: number },
+): Result<Graph> {
+	graph = graph ? copy(graph) : undefined;
+	let version = graph && current(graph);
+	if (!graph || !version) return { ok: false, reason: "missing" };
+	if (version.state !== "draft") return { ok: false, reason: "not-draft" };
+	if (revision === undefined) return { ok: false, reason: "missing-document" };
+	if (version.planRevision !== revision) return { ok: false, reason: "stale-plan" };
+	let checked = validate(version.definition);
+	if (!checked.ok) return checked;
+
+	for (let prior of graph.versions) {
+		if (prior.state === "approved") prior.state = "superseded";
+	}
+	graph.versions[graph.versions.length - 1] = {
+		...graph.versions[graph.versions.length - 1],
+		state: "approved",
+		definition: checked.value,
+	};
+	return { ok: true, value: graph };
 }

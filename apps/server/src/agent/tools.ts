@@ -481,6 +481,7 @@ export const documentTools = {
 		execute: (raw, { context: { room: context } }) =>
 			answer("edit_implementation_graph", async () => {
 				let args = Arguments.graphPlan(raw);
+				if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 				let ready = implementationReadiness(context.plan, args.planRevision);
 				if (!ready.ok) return { ok: false, reason: "not-ready", blockers: ready.blockers };
 				let result = await implementationGraphs().revise(context.plan, args);

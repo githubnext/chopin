@@ -1,11 +1,11 @@
 import { basename, resolve } from "node:path";
-import { createInterface } from "node:readline/promises";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { requestSchema } from "@chopin/experiment";
 import { createBridge } from "./bridge";
-import { remote } from "./mcp";
-import { runAgent } from "./acp";
-import { lockWorkspace, prepareWorkspace, stateDirectory, workspace } from "./workspace";
+import { ConnectorError, remote } from "./mcp";
+import { runWork } from "./run";
+import { implementationBridge } from "./implementation";
+import { lockWorkspace, stateDirectory, workspace } from "./workspace";
 
 function origin(value: string) {
 	let url = new URL(value);
@@ -24,10 +24,14 @@ async function bridge() {
 		origin(process.env.CHOPIN_BRIDGE_ORIGIN!),
 		process.env.CHOPIN_BRIDGE_TOKEN!,
 	);
-	let context = await api.call("read_experiment") as { input: unknown };
-	let server = createBridge(requestSchema.parse(context.input), async result => {
-		await api.call("submit_experiment_result", { result });
-	});
+	let server;
+	if (process.env.CHOPIN_BRIDGE_KIND === "implementation") server = await implementationBridge(api);
+	else {
+		let context = await api.call("read_experiment") as { input: unknown };
+		server = createBridge(requestSchema.parse(context.input), async result => {
+			await api.call("submit_experiment_result", { result });
+		});
+	}
 	await server.connect(new StdioServerTransport());
 	let close = async () => {
 		await server.close();
@@ -84,97 +88,37 @@ async function connect(args: string[]) {
 		}
 		if (!token) return;
 		api = await remote(url, token);
-		console.error("Connected. Waiting for owner-authorized investigations. Ctrl-C disconnects.");
+		console.error("Connected. Waiting for owner-authorized local work. Ctrl-C disconnects.");
 		while (!abort.signal.aborted) {
-			let offered = await api.call("wait_for_experiment", {}, abort.signal) as { id?: string };
-			if (!offered.id) continue;
-			let claim = await api.call("claim_experiment", { id: offered.id }) as {
-				input: unknown;
-				generation: number;
-				runToken: string;
+			let offered = await api.call("wait_for_work", {}, abort.signal) as {
+				id?: string;
+				kind?: "experiment" | "implementation";
 			};
-			let input = requestSchema.parse(claim.input);
-			let runAbort = new AbortController();
-			let cancelRun = () => runAbort.abort();
-			abort.signal.addEventListener("abort", cancelRun, { once: true });
-			if (abort.signal.aborted) runAbort.abort();
-			let latestProgress = "Preparing checkout";
-			let renewal = false;
-			let heartbeat = setInterval(() => {
-				if (renewal) return;
-				renewal = true;
-				void api!.call("renew_experiment", {
-					id: input.id,
-					generation: claim.generation,
-					progress: latestProgress,
-				})
-					.catch(() => runAbort.abort()).finally(() => {
-						renewal = false;
-					});
-			}, 10_000);
+			if (!offered.id || !offered.kind) continue;
+			let claim;
 			try {
-				let prepared = await prepareWorkspace(info.root, directory, input);
-				console.error(`Running ${input.id} in ${prepared.path}`);
-				let script = resolve(process.argv[1]);
-				let stopReason = await runAgent({
-					command,
-					cwd: prepared.path,
-					prompt:
-						"Use read_investigation from the Chopin MCP server to read the authorized request. "
-						+ "Perform that investigation using your normal project instructions and tools. "
-						+ "Submit a bounded result with submit_investigation_result, then finish. "
-						+ "Do not commit or push unless the authorized brief specifically requests it.",
-					mcpServers: [{
-						name: "chopin-investigation",
-						command: process.execPath,
-						args: [script, "bridge"],
-						env: [
-							{ name: "CHOPIN_BRIDGE_ORIGIN", value: url },
-							{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
-						],
-					}],
-					signal: runAbort.signal,
-					onUpdate(value) {
-						if (value.update.sessionUpdate === "tool_call") {
-							latestProgress = value.update.title.slice(0, 2000);
-						}
-					},
-					async permission(request) {
-						latestProgress = "Waiting for permission in the owner's terminal";
-						if (!process.stdin.isTTY) return undefined;
-						let terminal = createInterface({ input: process.stdin, output: process.stderr });
-						try {
-							console.error(request.toolCall.title ?? "Agent permission request");
-							request.options.forEach((option, index) =>
-								console.error(`${index + 1}. ${option.name}`)
-							);
-							let answer = await terminal.question("Select option (blank cancels): ", {
-								signal: runAbort.signal,
-							});
-							return request.options[Number(answer) - 1]?.optionId;
-						} finally {
-							terminal.close();
-						}
-					},
-					stderr: text => process.stderr.write(text),
-				});
-				if (stopReason !== "end_turn" || runAbort.signal.aborted) {
-					throw new Error(`Agent stopped: ${stopReason}`);
-				}
-				await api.call("complete_experiment", { id: input.id, generation: claim.generation });
-				console.error(`Published ${input.id}. Temporary workspace retained at ${prepared.path}`);
+				claim = await api.call(
+					offered.kind === "implementation" ? "claim_implementation_build" : "claim_experiment",
+					{ id: offered.id },
+				);
 			} catch (error) {
-				let message = error instanceof Error ? error.message : "Investigation failed";
-				console.error(message);
-				await api.call("fail_experiment", {
-					id: input.id,
-					generation: claim.generation,
-					error: message.slice(0, 2000),
-				}).catch(() => {});
-			} finally {
-				clearInterval(heartbeat);
-				abort.signal.removeEventListener("abort", cancelRun);
+				if (
+					error instanceof ConnectorError
+					&& ["workspace-busy", "build-already-claimed", "invalid-state"].includes(error.code)
+				) {
+					await delay(1000, abort.signal);
+					continue;
+				}
+				throw error;
 			}
+			await runWork(api, offered.kind, claim, {
+				root: info.root,
+				directory,
+				command,
+				url,
+				script: resolve(process.argv[1]),
+				signal: abort.signal,
+			});
 		}
 	} finally {
 		if (api) {

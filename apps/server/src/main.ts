@@ -1,3 +1,4 @@
+import { registerImplementationRoutes } from "./tasks/routes";
 /**
  * The server.
  *
@@ -109,6 +110,7 @@ const RESEARCH_RECOVERY_RETRY_MS = 10_000;
 let server: Server<SocketData>;
 let heldLease: Lease | undefined;
 let experiments: ExperimentRuntime | undefined;
+let implementations: ReturnType<typeof registerImplementationRoutes> | undefined;
 let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let leaseRenewal: ReturnType<typeof setInterval> | undefined;
 let leaseWatchdog: ReturnType<typeof setTimeout> | undefined;
@@ -1524,6 +1526,7 @@ let hostedAuth = registerAuthRoutes(router, {
 	onCredentialsWillRotate: credentialsWillRotate,
 });
 experiments = registerExperimentRoutes(router, hostedAuth, {
+	implementations: () => implementations,
 	lease() {
 		if (!heldLease) throw new Error("storage writer lease is unavailable");
 		return heldLease;
@@ -1555,7 +1558,11 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		let active = Rooms.get(id)?.plan;
 		if (active) return !Service.implementationActive(active);
 		let stored = await storage.collaboration.load(id, new Date());
-		return !stored || !(stored.sidecar as { execution?: unknown }).execution;
+		let sidecar = stored?.sidecar as
+			| { execution?: unknown; builds?: Array<{ state: string }> }
+			| undefined;
+		return !sidecar?.execution
+			&& !sidecar?.builds?.some(build => ["queued", "starting", "running"].includes(build.state));
 	},
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
@@ -1732,6 +1739,26 @@ registerMcpRoutes(router, hostedAuth, {
 	restoreChannel,
 	serializeDocument: (channelId, action) =>
 		withDocumentTransition(channelId, () => withDocumentLock(channelId, action)),
+});
+implementations = registerImplementationRoutes(router, hostedAuth, {
+	connections: experiments.connections,
+	busy: async id =>
+		(await experiments!.service.store.list(id)).filter(item =>
+			["running", "publishing"].includes(item.state)
+		).map(item => item.connectionId!),
+	withPlan: (id, action) =>
+		withDocumentTransition(id, async () => {
+			if (deletingChannels.has(id)) throw new Error("document is unavailable");
+			await Rooms.get(id)?.closing;
+			let held = Rooms.hold(id);
+			try {
+				let opened = await plan(held.room, server);
+				return await withDocumentLock(id, () => action(opened));
+			} finally {
+				held.release();
+				evict(held.room);
+			}
+		}),
 });
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,

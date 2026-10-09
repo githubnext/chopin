@@ -1,6 +1,7 @@
 import { AgentApp, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { Readable, Writable } from "node:stream";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { performance } from "@chopin/experiment/fixtures";
 import type { McpServer } from "@agentclientprotocol/sdk";
@@ -10,7 +11,13 @@ let cancelled = false;
 let release: (() => void) | undefined;
 
 let app = new AgentApp()
-	.onRequest("initialize", () => ({ protocolVersion: PROTOCOL_VERSION, agentCapabilities: {} }))
+	.onRequest(
+		"initialize",
+		() => ({
+			protocolVersion: PROTOCOL_VERSION,
+			agentCapabilities: process.argv.includes("--http") ? { mcpCapabilities: { http: true } } : {},
+		}),
+	)
 	.onRequest("session/new", ({ params: input }) => {
 		servers = input.mcpServers;
 		if (!input.cwd.startsWith("/")) throw new Error("Expected absolute cwd");
@@ -32,14 +39,20 @@ let app = new AgentApp()
 			return { stopReason: "cancelled" as const };
 		}
 		let config = servers.find(server => server.name === "chopin-investigation");
-		if (config && "command" in config) {
+		if (config && ("command" in config || "url" in config)) {
 			let bridge = new Client({ name: "fake-investigator", version: "1" });
 			await bridge.connect(
-				new StdioClientTransport({
-					command: config.command,
-					args: config.args,
-					env: Object.fromEntries(config.env.map(item => [item.name, item.value])),
-				}),
+				"command" in config
+					? new StdioClientTransport({
+						command: config.command,
+						args: config.args,
+						env: Object.fromEntries(config.env.map(item => [item.name, item.value])),
+					})
+					: new StreamableHTTPClientTransport(new URL(config.url), {
+						requestInit: {
+							headers: Object.fromEntries(config.headers.map(item => [item.name, item.value])),
+						},
+					}),
 			);
 			try {
 				await bridge.callTool({ name: "read_investigation", arguments: {} });

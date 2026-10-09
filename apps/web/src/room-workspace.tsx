@@ -1,3 +1,4 @@
+import { ImplementationPanel } from "./implementation-panel";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { documentPath } from "@chopin/protocol/document-url";
 import { ArchiveIcon, ChevronIcon, DocumentIcon } from "@chopin/icons";
@@ -379,6 +380,7 @@ export function RoomWorkspace(
 	let { available, frame, mode } = useWorkspaceLayout();
 	let workspaceIds = useWorkspaceIds();
 	let profile = workspaceProfile(presentation);
+	let [implementationLocked, setImplementationLocked] = useState(false);
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
@@ -1130,10 +1132,20 @@ export function RoomWorkspace(
 							onState={setPlanState}
 							preface={presentation.type === "child" && presentation.parent
 								? <ChildProvenance channelId={room} parent={presentation.parent} />
+								: profile.implementation && hasPlanContent
+								? (
+									<ImplementationPanel
+										id={room}
+										canEdit={workspaceCanEdit}
+										planner={agent}
+										wire={wire}
+										onLocked={setImplementationLocked}
+									/>
+								)
 								: undefined}
 							questionMotion={QUESTION_MOTION}
 							questions={questions}
-							readOnly={!workspaceCanEdit}
+							readOnly={!workspaceCanEdit || implementationLocked}
 							research={profile.research ? research : undefined}
 							researchLauncher={researchLauncher}
 							scrollTop={planScrollTop}

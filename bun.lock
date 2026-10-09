@@ -25,6 +25,7 @@
       "dependencies": {
         "@agentclientprotocol/sdk": "1.6.0",
         "@chopin/experiment": "workspace:*",
+        "@chopin/protocol": "workspace:*",
         "@modelcontextprotocol/sdk": "1.32.1",
       },
       "devDependencies": {

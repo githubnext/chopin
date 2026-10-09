@@ -65,11 +65,11 @@ The MCP surface uses document-oriented tool names, but `create_document` remains
 shaped around the current planning workflow: it requires a planning brief and a
 `plan` field. That API shape does not define Chopin's broader document model.
 
-Document creation is available now. The supported implementation handoff is
-experimental and limited to documents created through `create_document`, whose
-provenance `read_implementation` can return. The backend can execute an approved
-graph, but the product has no user-facing way to approve the Planner's draft.
-See
+Implementation remains experimental. A browser document can now use the
+[local launcher tracer](local-launcher.md): review prepared tasks, approve and
+build on an owner-paired ACP workspace, then watch task progress. That workflow
+uses a run-scoped connector bridge; the ordinary `/mcp` implementation read path
+continues to expose MCP-created documents using their creation provenance. See
 [Experimental implementation lifecycle](implementation-lifecycle.md).
 
 ## Hand an instruction to the Planner

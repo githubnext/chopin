@@ -10,11 +10,14 @@ import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { Connections } from "./connections";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
+import { implementationSchemas } from "../tasks/connector";
+import type { ImplementationConnector } from "../tasks/connector";
 import { connectorSchemas } from "./mcp-schema";
 import type { Lease } from "../storage/model";
 
 export type ExperimentRuntime = ReturnType<typeof registerExperimentRoutes>;
 type Options = {
+	implementations?: () => ImplementationConnector | undefined;
 	lease: () => Lease;
 	context: (id: string) => Promise<{ source: string; revision: number } | undefined>;
 	changed: (id: string) => void;
@@ -335,7 +338,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/connector/mcp", async request => {
 		let token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
 		let { connection, grant } = await connector(token);
-		let schemas = connectorSchemas(!!grant.run);
+		let implementation = options.implementations?.();
+		let implementationRun = grant.run?.kind === "implementation";
+		let schemas = implementationRun ? implementationSchemas(true) : {
+			...connectorSchemas(!!grant.run),
+			...(!grant.run && implementation ? implementationSchemas(false) : {}),
+		};
 		let call = z.object({
 			jsonrpc: z.literal("2.0"),
 			id: z.union([z.string(), z.number()]).optional(),
@@ -372,6 +380,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			let name = String(call.params?.name);
 			if (!Object.hasOwn(schemas, name)) fail("tool-forbidden");
 			let args = schemas[name].parse(call.params?.arguments ?? {});
+			if (name === "read_investigation") name = "read_experiment";
+			if (name === "submit_investigation_result") name = "submit_experiment_result";
 			let value: unknown;
 			if (name === "disconnect_workspace") {
 				connections.revoke(connection.id);
@@ -383,6 +393,34 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					) await service.stop(active.id, "interrupted", "Workspace disconnected.");
 				}
 				value = { disconnected: true };
+			} else if (name === "wait_for_work") {
+				let queued = async () =>
+					await implementation!.waiting(connection)
+						?? (await implementation!.busy(connection)
+							? undefined
+							: (await service.store.list(connection.documentId)).filter(item =>
+								item.connectionId === connection.id && item.state === "queued"
+							).map(item => ({ id: item.id, kind: "experiment" }))[0]);
+				value = await queued();
+				if (!value) {
+					await connections.wait(connection.documentId, request.signal);
+					await connector(token);
+					value = await queued();
+				}
+				value ??= { waiting: true };
+			} else if (implementationRun || Object.hasOwn(implementationSchemas(false), name)) {
+				if (!implementation) fail("tool-forbidden");
+				if (name === "claim_implementation_build") {
+					value = await connections.locked(connection.id, async () => {
+						if (
+							(await service.store.list(connection.documentId)).some(item =>
+								item.connectionId === connection.id
+								&& ["running", "publishing"].includes(item.state)
+							)
+						) fail("workspace-busy");
+						return implementation.call(connection, grant, name, args);
+					});
+				} else value = await implementation.call(connection, grant, name, args);
 			} else if (name === "wait_for_experiment") {
 				let queued = async () =>
 					(await service.store.list(connection.documentId)).find(item =>
@@ -401,7 +439,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					let active = (await service.store.list(connection.documentId)).find(item =>
 						item.connectionId === connection.id && ["running", "publishing"].includes(item.state)
 					);
-					if (active && active.id !== id) fail("workspace-busy");
+					if (active && active.id !== id || await implementation?.busy(connection)) {
+						fail("workspace-busy");
+					}
 					let claimed = await service.claim(id, connection.id);
 					return {
 						input: claimed.input,
@@ -477,6 +517,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	async function sweep() {
 		connections.sweep();
 		await service.recover();
+		await options.implementations?.()?.sweep();
 		for (let value of await service.store.active()) {
 			if (value.connectionId && !connections.get(value.connectionId)) {
 				await service.stop(

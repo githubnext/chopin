@@ -11,8 +11,9 @@ export type AgentOptions = {
 	command: string[];
 	cwd: string;
 	prompt: string;
-	mcpServers: McpServer[];
+	mcpServers: McpServer[] | ((http: boolean) => McpServer[]);
 	signal: AbortSignal;
+	onSession?: (id: string) => Promise<void>;
 	onUpdate: (value: SessionNotification) => void;
 	permission: (request: RequestPermissionRequest) => Promise<string | undefined>;
 	stderr?: (chunk: string) => void;
@@ -77,9 +78,12 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		}
 		let session = await connection.agent.request("session/new", {
 			cwd: options.cwd,
-			mcpServers: options.mcpServers,
+			mcpServers: typeof options.mcpServers === "function"
+				? options.mcpServers(initialized.agentCapabilities?.mcpCapabilities?.http === true)
+				: options.mcpServers,
 		});
 		sessionId = session.sessionId;
+		await options.onSession?.(sessionId);
 		clearTimeout(deadline);
 		deadline = setTimeout(
 			() => connection.close(new Error("Investigation timed out.")),

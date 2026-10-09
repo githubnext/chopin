@@ -14,6 +14,7 @@ import type { JsonValue } from "../storage/model";
 import type { SocketData } from "../wire";
 
 export type SeedState = {
+	graph?: import("../tasks/graphs").Graph;
 	revision?: number;
 	questions?: unknown[];
 	openQuestions?: unknown[];
@@ -97,6 +98,7 @@ export async function openPlan(source = "", state: SeedState = {}) {
 		openQuestions: state.openQuestions ?? [],
 		threads: state.threads ?? [],
 		transcript: state.transcript ?? [],
+		...(state.graph ? { graph: state.graph } : {}),
 	} as JsonValue;
 	let document = await Room.create(source);
 	let canonical = Room.project(document);
