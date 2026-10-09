@@ -93,9 +93,10 @@ describe("the Figma navigation chrome", () => {
 			})),
 		);
 		expect(markup).not.toContain('src="/repository.png"');
-		expect(markup).toMatch(
-			/aria-label="Add project"[^>]*>.*?class="size-3"[^>]*add-project\.svg/s,
-		);
+		let addProjectAction = markup.match(
+			/<button[^>]*aria-label="Add project"[^>]*>.*?<\/button>/s,
+		)?.[0];
+		expect(addProjectAction).toContain(renderToStaticMarkup(createElement(PlusIcon, { size: 12 })));
 		expect(markup).toMatch(
 			/<button[^>]*class="project-sidebar-primary-action"[^>]*>.*?Search<\/span>/s,
 		);

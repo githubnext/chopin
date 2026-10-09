@@ -1,4 +1,3 @@
-import addProjectIcon from "./assets/figma/navigation/add-project.svg";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
@@ -698,7 +697,7 @@ export function ProjectSidebar(
 								onClick={onAddProject}
 								type="button"
 							>
-								<NavigationIcon className="size-3" src={addProjectIcon} />
+								<PlusIcon size={12} />
 							</button>
 						)}
 					</div>
