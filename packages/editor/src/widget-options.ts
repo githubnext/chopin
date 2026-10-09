@@ -1,6 +1,8 @@
 import { Cell } from "@mdxeditor/gurx";
 
 import type { ResearchLauncher } from "./research-launcher";
+import type { PublishedInvestigation } from "@chopin/experiment/records";
+import type { SelectionPatch } from "@chopin/experiment";
 import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
@@ -37,6 +39,7 @@ export type ResearchStore = {
 };
 
 export type WidgetOptions = {
+	experiments?: ExperimentResources;
 	binding?: Binding;
 	commentPresentation?: CommentPresentation;
 	motionImmediately?: () => boolean;
@@ -61,6 +64,15 @@ export type WidgetOptions = {
 	canEdit?: boolean;
 	/** The viewer's own handle. */
 	self?: string;
+};
+
+export type ExperimentResources = {
+	subscribe(listener: () => void): () => void;
+	snapshot(): number;
+	get(id: string): PublishedInvestigation | undefined;
+	load(id: string): Promise<void>;
+	change(id: string, view: string, patch: SelectionPatch): Promise<void>;
+	place(id: string, view: string, decision?: string, remove?: boolean): Promise<void>;
 };
 
 export const widgets$ = Cell<WidgetOptions>({});

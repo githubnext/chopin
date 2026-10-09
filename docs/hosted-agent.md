@@ -82,8 +82,8 @@ Chopin's tools available to the Planner under every harness are:
 
 - Chopin document, question, relationship, and implementation-graph tools (with
   current plan-oriented tool names);
-- bounded file and tree reads plus commit history fixed to the default branch
-  captured when the session is created;
+- bounded file and tree reads plus commit history using the session's default
+  branch, or an explicitly supplied full commit ID when inspecting investigation evidence;
 - repository-scoped code search, post-filtered by repository node ID; and
 - bounded reads of document and historical research references attached to the
   current Chat context; and

@@ -137,6 +137,16 @@ harness sessions; see [Background jobs](background-jobs.md).
 
 ## State ownership
 
+### Local investigations
+
+An outbound local connector uses ACP to control a participant's coding agent and a
+separate, scoped `/connector/mcp` surface for work claims and bounded result data.
+Browser pairing binds the connector to an authenticated owner and document. Only
+that owner can authorize execution. Connector grants remain process-local; their
+durable investigations, captured results, shared view state and evidence decisions
+live in PostgreSQL. New native document references project these records without
+evaluating uploaded code. See [Local investigations](local-experiments.md).
+
 ### Durable PostgreSQL state
 
 - user identity records, session metadata, and encrypted hosted session credentials;

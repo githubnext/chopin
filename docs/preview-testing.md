@@ -12,7 +12,7 @@ general self-hosting prerequisite.
 
 This setup is independent of the agent harness. The harness needs to run one
 local stdio MCP server, pass it one environment variable, retain a browser
-profile, isolate provenance from browser execution, restrict tools, and load
+profile, separate provenance and browser-agent histories, restrict tools, and load
 the preview-testing instructions. The exact configuration file differs between
 clients.
 
@@ -58,20 +58,23 @@ interactively when GitHub requests it.
 
 ### Separate provenance from browsing
 
-Use two permission phases or two agents:
+Use two agents with separate conversation histories in the same harness instance:
 
 1. A provenance coordinator has `git`, authenticated `gh`, `jq`, and repository
-   read access, but no preview credentials and no authenticated browser. It
+   read access, but must not read preview credentials or use the browser. It
    validates the PR, head commit, trusted Coolify comment, hostname, and
    deployment ordering.
 2. A browser worker receives only the validated preview URL, expected commit and
    identity markers, and the requested test scope. It has the restricted
-   Playwright tools and secret file, but no shell, filesystem, GitHub CLI,
-   generic HTTP-fetch, or coding tools.
+   Playwright tools, whose MCP process loads the secret file, but no shell,
+   filesystem, GitHub CLI, Chopin MCP, generic HTTP-fetch, or coding tools.
 
-Never let an agent consuming untrusted preview content retain shell or workspace
-read access. Page text can contain prompt injection. If a harness cannot isolate
-these phases, do not give its browser process the login secret file.
+The agents can share an OpenCode server and Playwright MCP process. This is
+tool-permission separation, not process or credential isolation. A browser
+transcript stays with the restricted browser agent; do not switch that session
+back to a coding agent. Pass only check outcomes, status codes, and screenshot
+paths back to the coordinator. If a harness cannot enforce the browser agent's
+tool restrictions, do not give its browser process the login secret file.
 
 ## Deployment prerequisites
 
@@ -126,8 +129,9 @@ jq --version
 ```
 
 The GitHub CLI account needs read access to `githubnext/chopin` so it can inspect
-PR metadata and trusted bot comments. Do not pass its token or configuration to
-the browser worker.
+PR metadata and trusted bot comments. Do not include its token or configuration
+in the browser worker's prompt. Its tool permissions must deny GitHub CLI and
+Chopin MCP access even when those are available to other agents in the instance.
 
 ## Configure Playwright MCP
 
@@ -251,8 +255,8 @@ workspace `.env` file to an untrusted page.
 
 If a harness cannot deny individual tools, use a dedicated agent/profile that
 exposes only navigation, find, click, type/fill, selection, tabs, waiting,
-hover, key presses, and resizing. Do not provide login secrets to an
-unrestricted browser tool set.
+hover, key presses, resizing, and requested screenshots. Do not provide login
+secrets to an unrestricted browser tool set.
 
 Do not expose `browser_snapshot`, `browser_console_messages`, or
 `browser_network_requests` unless the harness can reject their optional
@@ -261,10 +265,25 @@ workspace even when ordinary filesystem tools are denied. `browser_find` and
 the automatic summaries returned by navigation and actions are sufficient for
 the preview workflow without granting a browser file-write path.
 
+Screenshot capture is allowed when the operator requests visual evidence. Save
+images outside the checkout and capture only the validated preview, never a
+GitHub authentication page. This is an explicit image-write permission; it does
+not enable snapshots, console dumps, or network-log exports.
+
+Review the rendered images before publication and make each caption describe
+what is actually visible. Accessibility-tree presence and automated interaction
+can succeed on opacity-zero UI; ordinary Playwright visibility assertions do not
+check opacity. For local browser regressions, use
+`element.checkVisibility({ checkOpacity: true })` when painted visibility is the
+behavior under test. If the browser tool returns only a file path, mark the
+image as unreviewed until its pixels have been checked. Use absolute screenshot
+paths under the configured output directory and keep scoped captures inside the
+visible scroll area to avoid clipping.
+
 The browser worker must also deny shell, terminal, file read/write/search,
 GitHub CLI, generic network fetch, code execution, subagent delegation, and
 repository editing tools. The provenance coordinator must not open the preview
-or receive the Playwright secret file. Pass validated metadata between them as
+or read the Playwright secret file. Pass validated metadata between them as
 plain task input.
 
 ### Load the operating instructions
@@ -296,26 +315,48 @@ refuses additional repositories.
 ## Harness notes
 
 The checked-in `opencode.json` is one implementation of the generic contract.
-Normal OpenCode agents are denied every Playwright tool. Run provenance in one
-ordinary session without the secret-file variable, then close it. The
-`preview-browser` primary agent allowlists only safe Playwright operations and
-the canonical skill. `opencode.preview.json` is a launch-only overlay that
-disables every other primary agent, denies default tools, and disables the
-GH-token Chopin MCP. Launch the isolated process with:
+It uses OpenCode V2 configuration and sets `mcp.servers.playwright.codemode` to
+`false`, exposing the allowed browser tools directly. Code Mode otherwise places
+MCP tools behind `execute`, which the browser worker deliberately denies.
+Normal OpenCode agents are denied every Playwright tool. The custom
+`preview-browser` agent has `mode: "all"`, so a coding agent can delegate the
+browser phase to it, or the operator can select it in a fresh browser-only
+session. Both run in the existing OpenCode instance. Its default-deny policy
+allows only the restricted Playwright operations, requested screenshots, and
+the canonical skill. The coding agent retains its ordinary tools, including
+Chopin MCP, while the browser agent cannot call them.
+
+After updating `opencode.json` or the skill, reload the checkout's configuration:
 
 ```bash
-CHOPIN_PREVIEW_SECRETS_FILE="$HOME/.config/chopin/preview-playwright.env" \
-  OPENCODE_CONFIG_CONTENT="$(<opencode.preview.json)" \
-  opencode --agent preview-browser
+opencode reload
 ```
+
+The existing OpenCode server must have `CHOPIN_PREVIEW_SECRETS_FILE` configured
+for the Playwright MCP environment mapping. Setting it in a new client shell
+does not change an already-running server's environment, and changing agents
+does not reload it. If the path is missing, configure it in the server's launch
+environment or a local MCP override, then reload and reconnect Playwright. A
+local override must include the complete server entry (`type`, `command`,
+`environment`, and `codemode: false`), because V2 replaces entries by server
+name. Keep host-specific paths out of the repository.
+
+Wait for Playwright to report connected in `/mcps` before delegating the browser
+phase; a prompt sent during MCP startup can have an incomplete tool catalogue.
+Hand off the validated preview URL, exact head commit, deployment ordering or
+operator attestation, and approved test scope. Verify that the browser agent
+exposes direct browser tools, including `playwright_browser_take_screenshot`,
+and the preview skill, with no `execute`, shell, filesystem, fetch, Chopin MCP,
+or delegation tools before authenticating.
 
 Other harnesses should set `PLAYWRIGHT_MCP_SECRETS_FILE` directly in their
 local-server environment unless they need a similar indirection, and create an
-equivalent separate browser-only process or session. Do not automatically return
-free-form browser content to a privileged provenance agent; return a fixed,
-concise status to the operator. Restart the harness after changing MCP
-configuration, environment variables, permissions, or skills; these are
-normally read only at startup.
+equivalent restricted browser agent with its own conversation history. Do not
+automatically return free-form browser content to a privileged provenance
+agent; return a fixed, concise status to the operator. Reload the harness's
+configuration after changing permissions or skills, and reconnect the MCP
+server after changing its environment. If a harness only reads these settings
+at startup, restart it once to apply them.
 
 ## Run the first smoke test
 
@@ -323,8 +364,8 @@ normally read only at startup.
 2. Confirm the PR head is reviewed and trusted.
 3. Run the provenance phase and retain its validated URL, exact head commit,
    trusted-comment timestamp, and allowed test scope.
-4. Start the browser worker with the MCP environment configured and all
-   non-browser tools denied.
+4. Delegate to `preview-browser`, or select it in a fresh browser-only session,
+   with the MCP environment configured and all non-browser tools denied.
 5. Give it only the validated metadata and state whether persistent changes,
    such as creating a channel, are allowed.
 6. Complete any GitHub device or second-factor verification when requested.
@@ -339,9 +380,21 @@ await page.getByLabel("Password").fill(process.env["CHOPIN_PREVIEW_GITHUB_PASSWO
 ```
 
 If it instead shows the literal key name, the secret file was not loaded. Do
-not submit the form; fix the child-process environment and restart the harness.
+not submit the form; fix the MCP environment, reload, and reconnect Playwright.
 
 ## Troubleshooting
+
+**Playwright connects, but the browser worker has no tools.** Confirm the
+Playwright server has `codemode: false`, reload the configuration, and wait for
+MCP startup before retrying. Allowing individual MCP tools is not enough when
+they are behind Code Mode and `execute` is denied. Keep the worker's default-deny
+permissions and use direct tools.
+
+**The browser agent exposes coding or Chopin MCP tools.** Check its effective
+permissions after reloading. Its agent-specific rules must start by denying all
+actions, followed only by the preview-skill and restricted Playwright allowlist.
+Global availability of Chopin MCP is expected; availability to `preview-browser`
+is not.
 
 **GitHub asks for device verification.** Complete the short-lived challenge and
 continue. The persistent profile should prevent repeated password prompts.
@@ -377,4 +430,4 @@ exact deployed commit.
 - [Claude Code MCP servers](https://docs.anthropic.com/en/docs/claude-code/mcp)
 - [Codex CLI MCP servers](https://developers.openai.com/codex/mcp/)
 - [GitHub Copilot CLI MCP servers](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers)
-- [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers/)
+- [OpenCode MCP servers](https://opencode.ai/v2/docs/mcp-servers)

@@ -13,6 +13,9 @@ import { ulid } from "@chopin/dialect";
 import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
+import { registerExperimentRoutes } from "./experiments/routes";
+import type { ExperimentRuntime } from "./experiments/routes";
+import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
@@ -105,6 +108,8 @@ const RESEARCH_RECOVERY_RETRY_MS = 10_000;
 
 let server: Server<SocketData>;
 let heldLease: Lease | undefined;
+let experiments: ExperimentRuntime | undefined;
+let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let leaseRenewal: ReturnType<typeof setInterval> | undefined;
 let leaseWatchdog: ReturnType<typeof setTimeout> | undefined;
 let renewingLease: Promise<void> | undefined;
@@ -295,6 +300,82 @@ function conversation(
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
+		investigations: experiments
+			? {
+				async list() {
+					return {
+						investigations: (await experiments!.service.store.list(room.id)).slice(0, 20).map(
+							value => ({ id: value.id, brief: value.brief.slice(0, 400), state: value.state }),
+						),
+						workspaces: experiments!.connections.list(room.id).map(value => ({
+							label: value.label,
+							owner: value.login,
+						})),
+					};
+				},
+				async read(id, dataset, offset = 0) {
+					let value = await experiments!.service.store.get(id);
+					if (!value || value.documentId !== room.id) throw new Error("Investigation unavailable");
+					if (dataset) {
+						let data = value.result?.datasets.find(item => item.key === dataset);
+						if (!data) throw new Error("Dataset unavailable");
+						let rows: typeof data.rows = [];
+						for (let row of data.rows.slice(offset, offset + 50)) {
+							if (JSON.stringify([...rows, row]).length > 40_000) break;
+							rows.push(row);
+						}
+						if (!rows.length && offset < data.rows.length) {
+							throw new Error(
+								"This row exceeds the tool response limit. Inspect the dataset download or request a later offset.",
+							);
+						}
+						return {
+							...data,
+							rows,
+							totalRows: data.rows.length,
+							nextOffset: offset + rows.length < data.rows.length
+								? offset + rows.length
+								: undefined,
+						};
+					}
+					return {
+						id: value.id,
+						state: value.state,
+						source: value.input?.source,
+						report: value.result?.report.slice(0, 16_000),
+						reportTruncated: (value.result?.report.length ?? 0) > 16_000,
+						datasets: value.result?.datasets.map(data => ({
+							key: data.key,
+							title: data.title,
+							rows: data.rows.length,
+						})),
+						decisions: value.decisions.slice(-10).map(decision => ({
+							...decision,
+							rationale: decision.rationale.slice(0, 2000),
+							rationaleTruncated: decision.rationale.length > 2000,
+						})),
+					};
+				},
+				async propose(request) {
+					await experiments!.access(
+						await hostedAuth.sessions.forUser(request.userId),
+						room.id,
+						true,
+					);
+					await experiments!.mutationAllowed(room.id);
+					let hash = fingerprint([room.id, request.entryId, request.key]);
+					let id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${
+						hash.slice(17, 20)
+					}-${hash.slice(20, 32)}`;
+					let value = await experiments!.service.create(room.id, request.userId, request.brief, id);
+					return {
+						id: value.id,
+						state: value.state,
+						message: "Open Investigations and authorize Run on my workspace to execute.",
+					};
+				},
+			}
+			: undefined,
 		hold: () => {
 			let held = Rooms.hold(room.id);
 			return () => {
@@ -1023,6 +1104,7 @@ function drain(): Promise<void> {
 		};
 		await attempt(() => server.stop(true));
 		if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
+		if (experimentTimer) clearInterval(experimentTimer);
 		if (recoveringResearch) await attempt(() => recoveringResearch!);
 		if (sessionCleanup) clearInterval(sessionCleanup);
 		for (let result of await Promise.allSettled([cleaningSessions])) {
@@ -1408,6 +1490,7 @@ async function commitCurrentSummary(
 }
 
 async function sessionRevoked(sessionId: string): Promise<void> {
+	experiments?.connections.revokeSession(sessionId);
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);
 	await Promise.all([resetOpenAgents(() => true, sessionId), jobs]);
@@ -1439,6 +1522,41 @@ let hostedAuth = registerAuthRoutes(router, {
 	agent: config.agent,
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
+});
+experiments = registerExperimentRoutes(router, hostedAuth, {
+	lease() {
+		if (!heldLease) throw new Error("storage writer lease is unavailable");
+		return heldLease;
+	},
+	context: currentDocumentTarget,
+	place: (id, experiment, view, decision, remove) =>
+		withDocumentTransition(id, async () => {
+			await Rooms.get(id)?.closing;
+			await Rooms.get(id)?.opening;
+			return withDocumentLock(id, async () => {
+				let active = Rooms.get(id)?.plan;
+				if (active) {
+					return Service.placeExperimentReference(active, experiment, view, decision, remove);
+				}
+				let detached = await Service.open(id, documentBackend(), server);
+				try {
+					await Service.placeExperimentReference(detached, experiment, view, decision, remove);
+				} finally {
+					await Service.close(detached);
+				}
+			});
+		}),
+	changed(documentId) {
+		if (server && !draining) {
+			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
+		}
+	},
+	async canMutate(id) {
+		let active = Rooms.get(id)?.plan;
+		if (active) return !Service.implementationActive(active);
+		let stored = await storage.collaboration.load(id, new Date());
+		return !stored || !(stored.sidecar as { execution?: unknown }).execution;
+	},
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
 let definitions: JobDefinition[] = [];
@@ -1677,7 +1795,14 @@ sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 
 let listening: Server<SocketData> | undefined;
 try {
+	await experiments.service.recover(true);
 	server = listening = listen();
+	experimentTimer = setInterval(() => {
+		void experiments!.sweep().catch(error =>
+			console.error("chopin: experiment recovery failed", error)
+		);
+	}, 15_000);
+	experimentTimer.unref();
 	let recovery = await researchService.recoverPendingPlannerInline(placeResearchReference);
 	scheduleResearchRecovery(recovery.deferred);
 	await researchService.recoverTerminalPlannerInline();

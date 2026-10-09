@@ -81,6 +81,16 @@ function plain(spec: Spec): Component {
 export const CALLOUT_TYPES = ["note", "tip", "important", "warning", "danger"] as const;
 
 export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
+	Experiment: component({
+		name: "Experiment",
+		kind: "flow",
+		content: { type: "empty" },
+		attributes: {
+			experiment: { type: "reference", required: true, max: 96 },
+			view: { type: "text", required: true, max: 64 },
+			decision: { type: "text", required: false, max: 96 },
+		},
+	}),
 	/**
 	 * A questionnaire, and who settled it.
 	 *
@@ -359,6 +369,9 @@ export const MERMAID_LANGUAGE = "mermaid";
 
 /** Fenced JSON source for a bounded SeeCode explanatory diagram. */
 export const SEECODE_LANGUAGE = "seecode";
+
+/** Fenced indented outline for a bounded interface wireframe. */
+export const WIREFRAME_LANGUAGE = "wireframe";
 
 /**
  * Fenced code language that renders as a diff.

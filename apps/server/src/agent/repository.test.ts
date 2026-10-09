@@ -3,6 +3,42 @@ import { describe, expect, it } from "bun:test";
 import { repositoryTools } from "./repository";
 
 describe("hosted repository tools", () => {
+	it("uses the recorded investigation commit for source reads", async () => {
+		let urls: URL[] = [];
+		let tools = repositoryTools({
+			fetch: async input => {
+				let url = new URL(String(input));
+				urls.push(url);
+				if (url.pathname.includes("/contents/")) {
+					return Response.json({
+						type: "file",
+						encoding: "base64",
+						content: Buffer.from("sample").toString("base64"),
+					});
+				}
+				if (url.pathname.includes("/git/trees/")) {
+					return Response.json({ tree: [], truncated: false });
+				}
+				return Response.json([]);
+			},
+		});
+		let context = {
+			repository: { id: "R", owner: "org", name: "repo", defaultBranch: "main" },
+			owner: { currentToken: () => "token" },
+		};
+		let options = { context, toolCallId: "test", messages: [] };
+		let commit = "a".repeat(40);
+		await tools.read_repository_file.execute!({ path: "source.ts", commit }, options);
+		await tools.list_repository_tree.execute!({ commit }, options);
+		await tools.repository_history.execute!({ commit }, options);
+		expect(urls[0].searchParams.get("ref")).toBe(commit);
+		expect(urls[1].pathname).toEndWith(commit);
+		expect(urls[2].searchParams.get("sha")).toBe(commit);
+		expect(
+			await tools.read_repository_file.execute!({ path: "source.ts", commit: "../other" }, options),
+		).toContain("full Git object ID");
+		expect(urls).toHaveLength(3);
+	});
 	it("binds every read to one repository and filters search results", async () => {
 		let urls: URL[] = [];
 		let tools = repositoryTools({

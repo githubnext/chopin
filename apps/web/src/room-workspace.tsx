@@ -53,6 +53,9 @@ import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
+import { ExperimentStore } from "./experiments/store";
+import { ExperimentsPanel } from "./experiments/panel";
+import { EvidenceDecisions } from "./experiments/evidence";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
@@ -377,6 +380,10 @@ export function RoomWorkspace(
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
+	let experiments = useMemo(() => new ExperimentStore(room), [room]);
+	useSyncExternalStore(experiments.subscribe, experiments.snapshot);
+	let [showExperiments, setShowExperiments] = useState(false);
+	useEffect(() => experiments.connect(wire), [experiments, wire]);
 	let [cardMeta] = useState(() => new CardMetaStore());
 	let [threads] = useState(() => new ThreadStore());
 	let [researchLauncher] = useState(() => new ResearchLauncher());
@@ -904,6 +911,14 @@ export function RoomWorkspace(
 
 	return (
 		<>
+			{showExperiments && (
+				<ExperimentsPanel
+					store={experiments}
+					userId={userId}
+					canEdit={!!workspaceCanEdit && status === "connected"}
+					onClose={() => setShowExperiments(false)}
+				/>
+			)}
 			<p aria-live="polite" className="sr-only" role="status">
 				<span key={announcement.sequence}>{announcement.text}</span>
 			</p>
@@ -991,13 +1006,18 @@ export function RoomWorkspace(
 					/>
 				}
 				controls={
-					<DecisionViewControl
-						attention={attention}
-						documentActivity={documentActivity(documentWatch, chatActivity.busy)}
-						onView={selectDestination}
-						unanswered={unanswered}
-						view={view}
-					/>
+					<>
+						<button className="btn btn-sm btn-ghost" onClick={() => setShowExperiments(true)}>
+							Investigations
+						</button>
+						<DecisionViewControl
+							attention={attention}
+							documentActivity={documentActivity(documentWatch, chatActivity.busy)}
+							onView={selectDestination}
+							unanswered={unanswered}
+							view={view}
+						/>
+					</>
 				}
 				status={
 					<>
@@ -1067,6 +1087,13 @@ export function RoomWorkspace(
 				onDestination={selectDestination}
 				decisions={
 					<Decisions
+						additional={
+							<EvidenceDecisions
+								store={experiments}
+								canEdit={!!workspaceCanEdit && status === "connected"}
+							/>
+						}
+						hasAdditional={[...experiments.values.values()].some(item => item.decisions.length > 0)}
 						cardMeta={cardMeta}
 						canEdit={workspaceCanEdit}
 						connected={treatAsConnected && workspaceCanEdit}
@@ -1084,6 +1111,7 @@ export function RoomWorkspace(
 				}
 				plan={
 					<PlanEditor
+						experiments={experiments}
 						cardMeta={cardMeta}
 						evidence={showEvidence}
 						onCardSource={showCardSource}

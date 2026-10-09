@@ -1,0 +1,13 @@
+{
+	"name": "@chopin/connector",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": { "types": "tsgo --noEmit --skipLibCheck", "start": "bun src/main.ts" },
+	"dependencies": {
+		"@agentclientprotocol/sdk": "1.6.0",
+		"@modelcontextprotocol/sdk": "1.32.1",
+		"@chopin/experiment": "workspace:*"
+	},
+	"devDependencies": { "@types/bun": "catalog:bun" }
+}

@@ -1,7 +1,10 @@
 import type { ConversationPlan } from "@chopin/protocol";
-import { WRITE_TOOLS } from "../agent/job-scope";
+import { INVESTIGATION_READS, WRITE_TOOLS } from "../agent/job-scope";
 
 export const PLANNER_TOOL_NAMES = [
+	"list_investigations",
+	"read_investigation",
+	"propose_investigation",
 	"read_plan",
 	"read_reference",
 	"list_background_jobs",
@@ -22,7 +25,10 @@ export const PLANNER_TOOL_NAMES = [
 ];
 
 function jobNames(own: string): readonly string[] {
-	return Object.freeze([...PLANNER_TOOL_NAMES.filter(name => !WRITE_TOOLS.has(name)), own]);
+	return Object.freeze([
+		...PLANNER_TOOL_NAMES.filter(name => !WRITE_TOOLS.has(name) && !INVESTIGATION_READS.has(name)),
+		own,
+	]);
 }
 
 export const BACKGROUND_TOOL_NAMES: Readonly<Record<ConversationPlan.JobKind, readonly string[]>> =

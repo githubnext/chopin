@@ -2127,3 +2127,30 @@ export function placeResearchReference(plan: Plan, id: string): Promise<"placed"
 		}
 	});
 }
+
+export function placeExperimentReference(
+	plan: Plan,
+	experiment: string,
+	view: string,
+	decision: string,
+	remove = false,
+): Promise<void> {
+	return exclusive(plan, async () => {
+		if (implementationActive(plan)) throw new ImplementationActiveError();
+		let document = await room.restore(
+			plan.document.epoch,
+			Y.encodeStateAsUpdate(plan.document.doc),
+			room.project(plan.document),
+			[],
+		);
+		document.seq = plan.document.seq;
+		try {
+			let mutation = room.placeExperiment(document, experiment, view, decision, remove);
+			if (mutation) {
+				await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation);
+			}
+		} finally {
+			document.doc.destroy();
+		}
+	});
+}

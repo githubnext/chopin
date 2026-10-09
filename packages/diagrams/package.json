@@ -19,6 +19,10 @@
 			"types": "./src/diagram.tsx",
 			"default": "./src/diagram.tsx"
 		},
+		"./wireframe": {
+			"types": "./src/wireframe/index.ts",
+			"default": "./src/wireframe/index.ts"
+		},
 		"./fixtures": {
 			"types": "./src/fixtures/index.ts",
 			"default": "./src/fixtures/index.ts"

@@ -16,6 +16,7 @@ import { useQuestionnaires } from "./questionnaires";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
 import type { Question } from "@chopin/protocol";
+import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
@@ -23,6 +24,8 @@ import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
 import type { QuestionStepMotion } from "./widget-options";
 
 export type DecisionsProps = {
+	additional?: ReactNode;
+	hasAdditional?: boolean;
 	store: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
 	canEdit?: boolean;
@@ -81,6 +84,8 @@ function useHistory() {
 
 export function Decisions(
 	{
+		additional,
+		hasAdditional = false,
 		cardMeta,
 		canEdit = true,
 		connected,
@@ -157,7 +162,7 @@ export function Decisions(
 
 	let outstanding = pending.length;
 	let resolved = settled.length;
-	let empty = outstanding === 0 && resolved === 0;
+	let empty = outstanding === 0 && resolved === 0 && !hasAdditional;
 
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
@@ -204,6 +209,7 @@ export function Decisions(
 				}}
 				ref={content}
 			>
+				{additional}
 				{empty
 					? (
 						<>

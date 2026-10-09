@@ -3,6 +3,7 @@ import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { availableChannelTitle } from "../../channels/title";
 import { sidecarUnansweredDecisions } from "../../questions/unanswered";
 import { MemoryBackgroundJobStore } from "./jobs";
+import { MemoryExperimentStore } from "./experiments";
 import { MemoryResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -124,6 +125,11 @@ type Operation = CommitResult;
 /** A strict in-memory adapter used by domain tests, not a production fallback. */
 export class MemoryStorage implements StorageAdapter {
 	readonly driver = "memory";
+	readonly experiments = new MemoryExperimentStore({
+		exists: id => this.#channels.has(id),
+		active: id => !this.#channels.get(id)?.archivedAt,
+		fence: lease => this.#assertLease(lease),
+	});
 
 	#users = new Map<string, UserRecord>();
 	#sessions = new Map<string, StoredWebSession>();
