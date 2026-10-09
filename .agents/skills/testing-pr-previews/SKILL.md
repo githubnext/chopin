@@ -34,7 +34,7 @@ fields in `browser_fill_form`. Playwright substitutes and redacts values only in
 those input paths; never read the file, resolve the variables with shell
 commands, ask for their values, or put a value directly in a tool call. If
 substitution is not active, stop and ask the user to configure the file and
-restart the agent harness.
+reconnect Playwright after reloading its configuration.
 
 The dedicated GitHub account is the security boundary. Before using it, require
 all of these external conditions:
@@ -70,17 +70,25 @@ so repeat the application OAuth flow for each preview and after a redeploy.
 ## Separate permission phases
 
 Run provenance and browser work under separate permission sets. The provenance
-coordinator may use repository reads, `git`, `gh`, and `jq`, but must not receive
+coordinator may use repository reads, `git`, `gh`, and `jq`, but must not read
 the Playwright secret file or open the preview. After validating the URL, commit
 and deployment ordering below, hand only that metadata and the approved test
 scope to a browser worker.
 
-The browser worker may use only the restricted Playwright tools. It must not
-have shell, filesystem, GitHub CLI, generic fetch, coding, or delegation tools.
-Use a separately launched `preview-browser` primary agent in OpenCode; other
-harnesses need an equivalent isolated process or session. Do not return
-free-form page content to a privileged provenance agent. If the harness cannot
-enforce that separation, stop before authentication.
+The browser worker may use only the restricted Playwright tools and this skill.
+It must not have shell, filesystem, GitHub CLI, Chopin MCP, generic fetch,
+coding, Code Mode, or delegation tools. Use the `preview-browser` custom agent
+in the existing OpenCode instance: delegate the browser phase to it or select it
+for a fresh browser-only session. A separate OpenCode process is not required.
+
+This is agent-level separation. The OpenCode server, MCP process, environment,
+and browser profile are shared; changing agents does not isolate credentials or
+clear conversation history. Keep browser transcripts in the browser-only
+session rather than switching that session back to a coding agent. Return only
+check outcomes, status codes, and screenshot paths to the provenance
+coordinator, never raw page content or instructions. Other harnesses need an
+equivalent restricted agent with separate conversation history. If the harness
+cannot enforce these tool restrictions, stop before authentication.
 
 ## Find the preview
 
@@ -164,20 +172,41 @@ the persistent profile unless the user explicitly asks.
 
 ## Select the sandbox
 
-1. Open the repository picker and wait for all repository loading and refreshing
-   to finish before entering a query. Require the complete picker to contain
-   exactly one repository option.
+1. Open **Add project** and wait for all repository loading and refreshing to
+   finish before entering a query. Require the complete picker to contain exactly
+   one repository option.
 2. Fill `Search repositories` with the literal name
    `CHOPIN_PREVIEW_REPOSITORY`, again requiring the generated action to use a
    secret reference.
 3. Require the same sole option to remain, with its full name represented by the
-   redacted repository value and the capability `Create and edit channels`.
-4. Select only that option. Stop on any additional repository, no match, an
-   installation prompt, or view-only access; do not choose a substitute
-   repository or change the GitHub App installation.
+   redacted repository value. The Add project picker does not display a write
+   capability label.
+4. Select only that option, or close the picker if the project is already added.
+   Verify write access through the enabled **New document in …** control for that
+   project or its eligible **Create document** entry in the **New document**
+   dialog. These controls require repository push or administration permission;
+   adding a project alone does not establish write access. Create a document
+   only when the requested test scope authorizes it.
+5. Stop on any additional repository, no match, an installation prompt, or
+   missing write access; do not choose a substitute repository or change the
+   GitHub App installation.
 
 Perform only the verification the user requested. Creating channels, editing a
 document, sending messages, accepting comments, and invoking `@chopin` are persistent
 actions and require explicit scope. Report the preview URL, authenticated user
 marker, sandbox marker, checks performed, page or interaction failures, and any
 manual authentication step that remains.
+
+## Screenshot evidence
+
+Capture the state named in the caption and review the rendered image before
+publishing it. Accessibility-tree presence and successful automated clicks do
+not establish painted visibility: an opacity-zero dialog can still satisfy
+ordinary Playwright visibility checks. If a screenshot tool returns only a
+path, report that the pixels are unreviewed rather than claiming visual success.
+
+Prefer a few distinct, readable captures over repeated full-page images. Keep
+the target card inside its scroll container's viewport before taking a scoped
+screenshot; otherwise the image can be clipped even when the DOM contains the
+whole card. Use absolute filenames under the configured external output
+directory. A current-state capture cannot prove an earlier transient state.
