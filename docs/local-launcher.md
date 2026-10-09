@@ -30,8 +30,8 @@ project instructions and configured services.
 ## Build a settled plan
 
 1. Resolve planning questions and accepted comments awaiting document updates.
-2. Select **Prepare tasks** to ask the hosted Planner for an implementation graph,
-   or use an existing draft graph.
+2. Open **Build** in the document controls. Select **Prepare tasks** to ask the
+   hosted Planner for an implementation graph, or review an existing graph.
 3. Review task goals, acceptance criteria and dependencies.
 4. Choose your connected workspace and **Approve and build this plan**. Approval
    persists the reviewed document and graph counters, checkout commit and
@@ -51,8 +51,14 @@ same workspace busy check. The connector uses HTTP MCP when advertised by the
 ACP agent, falling back to the stdio bridge otherwise. This also makes the
 investigation tools available to Copilot ACP versions that reject stdio MCP.
 
-Duplicate Build requests return the same durable intent. A picked-up build is
-never automatically replayed. Refresh retains task progress, blockers, session
+The Build dialog loads a snapshot when opened and refreshes on document,
+workspace and implementation notifications. It does not poll in the background
+or occupy space above the document. Closing it does not stop a run, and editing
+locks continue to update through the document socket.
+
+Duplicate Build requests for the same owner, workspace and reviewed graph return
+the same durable intent. A picked-up build is never automatically replayed.
+Refresh retains task progress, blockers, session
 identity and reported PRs. Expired connections or missing heartbeats mark tracked
 builds as needing attention; after a server restart, opening the document tracks
 its retained build again.
@@ -69,12 +75,20 @@ policy, human resolution/resume controls, automatic connector startup and a
 browser PR-creation action remain future work. Multiple reported PRs already
 appear beside their tasks; Chopin never merges them automatically.
 
-Inspect failures in the connector terminal and retained worktree. If a run is
-claimed, its graph remains locked after a stopped or failed process. An admitted
-repository writer may continue the existing lifecycle through ordinary `/mcp`,
-or use `request_revision` to release the lock and prepare a replacement graph.
-The connector's run credential stops accepting reports when its turn ends.
-There is no browser cancel/retry control yet. Failure does not undo local edits.
+Inspect failures in the connector terminal and retained worktree. If startup
+failed before the graph was claimed, **Retry build on my workspace** creates a
+new attempt after another explicit review. Repeating that retry request returns
+the same attempt; it does not start duplicate work.
+
+If a claimed run stops or fails, its graph remains locked. After inspecting the
+retained checkout, enter a reason and choose **Return plan for changes** to record
+a revision request and release the editing lock. Then use **Revise tasks** and
+review the replacement before building again. This action is unavailable while
+the agent is still running; stop the connector in its terminal first. An admitted
+repository writer can also continue the existing lifecycle through ordinary
+`/mcp`. The connector's run credential stops accepting reports when its turn ends.
+Failure does not undo local edits, and these controls do not automatically resume
+an interrupted agent session.
 
 ## Verification
 

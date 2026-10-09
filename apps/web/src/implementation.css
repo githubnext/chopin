@@ -1,10 +1,11 @@
+.navigation-modal-content:has(> .implementation-panel) {
+	width: min(100%, 48rem);
+	max-height: calc(100dvh - var(--spacing) * 8);
+	overflow: auto;
+}
+
 .implementation-panel {
-	margin: calc(var(--spacing) * 4) auto;
-	padding: calc(var(--spacing) * 4);
-	max-width: 43.75rem;
-	background: var(--color-inset);
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-lg);
+	margin-top: calc(var(--spacing) * 3);
 }
 
 .implementation-tasks {

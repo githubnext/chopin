@@ -2,7 +2,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
 import { checkoutSchema, queueBuild } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
-import { implementationReadiness } from "./plan-graphs";
+import { implementationReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
 import { GitHubError } from "../github/client";
 import { AdmissionDenied } from "../auth/admission";
@@ -19,6 +19,7 @@ type Options = {
 	busy?: (id: string) => Promise<string[]>;
 };
 let buildSchema = z.object({
+	retryOf: z.string().uuid().optional(),
 	connectionId: z.string().uuid(),
 	checkout: checkoutSchema,
 	planRevision: z.number().int().nonnegative(),
@@ -108,6 +109,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				exclusive(plan, async () => {
 					let ready = implementationReadiness(plan, plan.revision);
 					let snapshot: ImplementationSnapshot = {
+						revision: plan.persistence.revision,
 						planRevision: plan.revision,
 						graph: plan.graph?.versions.at(-1),
 						build: plan.builds.findLast(build => {
@@ -177,18 +179,58 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				}
 				return options.withPlan(id, async plan => {
 					try {
-						return json(
-							await queueBuild(plan, {
-								...input,
-								user: session.user.id,
-								repositoryId: channel.repositoryId,
-								checkout: input.checkout,
-							}),
-						);
+						let build = await queueBuild(plan, {
+							...input,
+							user: session.user.id,
+							repositoryId: channel.repositoryId,
+							checkout: input.checkout,
+						});
+						options.connections.wake(id);
+						return json(build);
 					} catch (error) {
 						throw new GitHubError(error instanceof Error ? error.message : "build refused", 409);
 					}
 				});
+			});
+		}),
+	);
+	router.on(
+		"POST",
+		"/api/channels/:id/implementation/revise",
+		safe(async (request, _url, { id }) => {
+			if (request.headers.get("origin") !== auth.config.origin) {
+				throw new GitHubError("origin is not allowed", 403);
+			}
+			let { channel, repository } = await browser(request, id);
+			if (!repository.permissions.push && !repository.permissions.admin || channel.archivedAt) {
+				throw new GitHubError("repository write access is required", 403);
+			}
+			let input = await body(
+				request,
+				z.object({
+					buildId: z.string().uuid(),
+					reason: z.string().trim().min(1).max(2000),
+				}).strict(),
+			);
+			return options.withPlan(id, async plan => {
+				let build = plan.builds.at(-1);
+				if (!build || build.id !== input.buildId || !["stopped", "failed"].includes(build.state)) {
+					throw new GitHubError("stop the local agent before returning the plan for changes", 409);
+				}
+				if (
+					plan.execution?.id !== build.id
+					&& !plan.lifecycle.history.some(item => item.run.id === build.id)
+				) {
+					throw new GitHubError("implementation is not awaiting changes", 409);
+				}
+				let result = await reportImplementationLifecycle(plan, {
+					kind: "request_revision",
+					runId: build.id,
+					idempotencyKey: `browser-review:${build.id}`,
+					reason: input.reason,
+				});
+				if (result.kind === "refused") throw new GitHubError(result.reason, 409);
+				return json({ accepted: true });
 			});
 		}),
 	);

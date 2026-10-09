@@ -482,6 +482,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "plan:open": {
 			try {
 				let opened = await plan(room, server);
+				implementations?.track(room.id);
 				await greetJoinedPlan(
 					opened,
 					ws,

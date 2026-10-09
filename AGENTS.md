@@ -68,7 +68,7 @@ image build. A documentation-only change should still pass `bun run ci`.
 | `packages/viewport`   | Browser geometry and subscriptions                        | none                                                                           |
 | `packages/diagrams`   | Bounded diagram rendering and scoped React viewing        | `icons` (React peer)                                                           |
 | `packages/experiment` | Investigation result schemas, selections and native views | `diagrams` (React peer)                                                        |
-| `apps/connector`      | Local ACP client and run-scoped MCP bridge                | `experiment`                                                                   |
+| `apps/connector`      | Local ACP client and run-scoped MCP bridge                | `experiment`, `protocol`                                                       |
 | `packages/editor`     | Collaborative editor, decisions, comments, and widgets    | `diagrams`, `dialect`, `experiment`, `question`, `protocol`, `viewport`        |
 | `apps/server`         | Auth, channels, rooms, storage, Planner, MCP, tasks       | `diagrams`, `dialect`, `draft`, `experiment`, `question`, `protocol`           |
 | `apps/web`            | Repository picker, navigation, conversation, workspace    | `dialect`, `diagrams`, `draft`, `editor`, `experiment`, `protocol`, `viewport` |

@@ -5,6 +5,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+if (process.argv.includes("--fail-start")) process.exit(1);
+
 let servers: McpServer[] = [];
 let app = new AgentApp()
 	.onRequest(

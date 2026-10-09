@@ -5,6 +5,7 @@ import { claimEligibility, implementationLifecycle, transition } from "./lifecyc
 import * as Comments from "../comments/service";
 import { drain, exclusive, persistExclusive } from "../plan/service";
 import { broadcast } from "../wire";
+import { announceImplementation } from "./notifications";
 
 import type { Plan } from "../plan/service";
 import type { ClaimInput, ClaimResult, Graph, GraphAdapter, Result } from "./graphs";
@@ -22,6 +23,7 @@ const adapter: GraphAdapter<Plan> = {
 			plan.graph = result.value;
 			try {
 				await persistExclusive(plan);
+				announceImplementation(plan);
 				return result;
 			} catch (error) {
 				plan.graph = previous;
@@ -62,6 +64,7 @@ export async function claimImplementation(plan: Plan, input: ClaimInput): Promis
 			plan.execution = result.run;
 			try {
 				await persistExclusive(plan);
+				announceImplementation(plan);
 				return result;
 			} catch {
 				plan.graph = previous;
@@ -103,6 +106,7 @@ export function reportImplementationLifecycle(
 			plan.lifecycle = previous.lifecycle;
 			return { kind: "refused", reason: "durability" };
 		}
+		announceImplementation(plan);
 		broadcast(plan.server, plan.id, {
 			kind: "plan:lifecycle",
 			ts: 0,
