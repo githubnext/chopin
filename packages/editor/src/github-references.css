@@ -1,0 +1,168 @@
+/*
+ * GitHub pull request and issue pills: tinted capsules over Lexical's own `<a>`.
+ *
+ * The anchor is the pill. Its glyph is a mask on `::before` (Lexical owns the
+ * anchor's children, so nothing can be inserted beside them) and its number is
+ * `::after` reading `data-gh-number`, which keeps the number whole and quieter
+ * while the authored title truncates.
+ */
+
+.plan-content a[data-gh-state] {
+	--gh-surface: var(--color-neutral-surface);
+	--gh-icon: var(--color-neutral-icon);
+	display: inline-flex;
+	align-items: center;
+	box-sizing: border-box;
+	/* 200px at the 16px root. */
+	max-width: min(12.5rem, 100%);
+	height: calc(var(--spacing) * 6);
+	padding-inline: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-full);
+	vertical-align: -0.4em;
+	background: color-mix(in srgb, var(--gh-surface) 50%, var(--color-page));
+	border: var(--edge-width) solid color-mix(in srgb, var(--gh-icon) 12%, transparent);
+	color: var(--color-text-primary);
+	font-family: var(--font-sans);
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-medium);
+	line-height: 1;
+	white-space: nowrap;
+	text-decoration: none;
+	overflow-wrap: normal;
+	transition-property: background-color;
+	transition-duration: var(--duration-fast);
+	transition-timing-function: var(--ease-out);
+	-webkit-font-smoothing: antialiased;
+}
+
+.plan-content a[data-gh-state]:hover {
+	background: var(--gh-surface);
+}
+
+/* 14px glyph, 6px to the title. */
+.plan-content a[data-gh-state]::before {
+	content: "";
+	flex: none;
+	width: calc(var(--spacing) * 3.5);
+	height: calc(var(--spacing) * 3.5);
+	margin-inline-end: calc(var(--spacing) * 1.5);
+	background: var(--gh-icon);
+	mask: var(--gh-glyph) center / contain no-repeat;
+}
+
+/* Each authored run is a flex item, so the title truncates instead of the number. */
+.plan-content a[data-gh-state] > * {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.plan-content a[data-gh-number]::after {
+	content: attr(data-gh-number);
+	flex: none;
+	margin-inline-start: 0.3em;
+	color: var(--color-text-tertiary);
+	font-weight: var(--font-weight-normal);
+	font-variant-numeric: tabular-nums;
+}
+
+/* With the caret inside, every character has to be reachable. */
+.plan-content a[data-gh-editing] {
+	max-width: 100%;
+}
+
+.plan-content a[data-gh-editing] > * {
+	overflow: visible;
+}
+
+.plan-content a:is([data-gh-state="loading"], [data-gh-state="unavailable"]) > * {
+	color: var(--color-text-tertiary);
+}
+
+.plan-content a[data-gh-state="loading"]::before {
+	animation: plan-gh-spin calc(var(--duration-linger) * 2.5) linear infinite;
+}
+
+@keyframes plan-gh-spin {
+	to {
+		rotate: 360deg;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-content a[data-gh-state="loading"]::before {
+		animation: none;
+	}
+}
+
+.plan-content a:is([data-gh-state="pr-open"], [data-gh-state="issue-open"]) {
+	--gh-surface: var(--color-success-surface);
+	--gh-icon: var(--color-success-icon);
+}
+
+.plan-content a:is([data-gh-state="pr-merged"], [data-gh-state="issue-completed"]) {
+	--gh-surface: var(--color-merged-surface);
+	--gh-icon: var(--color-merged-icon);
+}
+
+.plan-content a[data-gh-state="pr-closed"] {
+	--gh-surface: var(--color-danger-surface);
+	--gh-icon: var(--color-danger-icon);
+}
+
+/* Glyphs: the @chopin/icons GitHub glyphs, encoded. github-glyphs.test.tsx keeps them equal. */
+.plan-content {
+	--gh-glyph-pr-open: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%224%22%20cy%3D%223.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%224%22%20cy%3D%2212.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22M4%205.25v5.5%22%3E%3C%2Fpath%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22M12%2010.75V6.5a2%202%200%200%200-2-2H7.75%22%3E%3C%2Fpath%3E%3Cpath%20d%3D%22M9.25%203%207.75%204.5%209.25%206%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-pr-merged: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%224%22%20cy%3D%223.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%224%22%20cy%3D%2212.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%229%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22M4%205.25v5.5%22%3E%3C%2Fpath%3E%3Cpath%20d%3D%22M4%205.25c0%202.25%201.75%203.75%204%203.75h2.25%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-pr-closed: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%224%22%20cy%3D%223.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%224%22%20cy%3D%2212.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22M4%205.25v5.5%22%3E%3C%2Fpath%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22M12%2010.75V8.25%22%3E%3C%2Fpath%3E%3Cpath%20d%3D%22m10.5%202.75%203%203m0-3-3%203%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-pr-draft: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%224%22%20cy%3D%223.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%224%22%20cy%3D%2212.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22M4%205.25v5.5%22%3E%3C%2Fpath%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212.5%22%20r%3D%221.75%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%228%22%20fill%3D%22currentColor%22%20r%3D%220.5%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%224%22%20fill%3D%22currentColor%22%20r%3D%220.5%22%3E%3C%2Fcircle%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-issue-open: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%226.25%22%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20fill%3D%22currentColor%22%20r%3D%221%22%3E%3C%2Fcircle%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-issue-completed: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%226.25%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22m5.5%208.25%201.75%201.75%203.25-3.5%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-issue-not-planned: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%226.25%22%3E%3C%2Fcircle%3E%3Cpath%20d%3D%22M3.6%2012.4%2012.4%203.6%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-loading: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%226.25%22%20stroke-dasharray%3D%222%202.6%22%3E%3C%2Fcircle%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+	--gh-glyph-unavailable: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20aria-hidden%3D%22true%22%20data-nucleo-icon%3D%22%22%20height%3D%2214%22%20viewBox%3D%220%200%2016%2016%22%20width%3D%2214%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%3E%3Crect%20height%3D%226.75%22%20rx%3D%221.5%22%20width%3D%229.5%22%20x%3D%223.25%22%20y%3D%227%22%3E%3C%2Frect%3E%3Cpath%20d%3D%22M5.5%207V5.25a2.5%202.5%200%200%201%205%200V7%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+}
+
+.plan-content a[data-gh-state="pr-open"] {
+	--gh-glyph: var(--gh-glyph-pr-open);
+}
+
+.plan-content a[data-gh-state="pr-merged"] {
+	--gh-glyph: var(--gh-glyph-pr-merged);
+}
+
+.plan-content a[data-gh-state="pr-closed"] {
+	--gh-glyph: var(--gh-glyph-pr-closed);
+}
+
+.plan-content a[data-gh-state="pr-draft"] {
+	--gh-glyph: var(--gh-glyph-pr-draft);
+}
+
+.plan-content a[data-gh-state="issue-open"] {
+	--gh-glyph: var(--gh-glyph-issue-open);
+}
+
+.plan-content a[data-gh-state="issue-completed"] {
+	--gh-glyph: var(--gh-glyph-issue-completed);
+}
+
+.plan-content a[data-gh-state="issue-not-planned"] {
+	--gh-glyph: var(--gh-glyph-issue-not-planned);
+}
+
+.plan-content a[data-gh-state="loading"] {
+	--gh-glyph: var(--gh-glyph-loading);
+}
+
+.plan-content a[data-gh-state="unavailable"] {
+	--gh-glyph: var(--gh-glyph-unavailable);
+}
+
+.plan-content a[data-gh-state="unknown"][data-gh-kind="pull"] {
+	--gh-glyph: var(--gh-glyph-pr-open);
+}
+
+.plan-content a[data-gh-state="unknown"][data-gh-kind="issue"] {
+	--gh-glyph: var(--gh-glyph-issue-open);
+}

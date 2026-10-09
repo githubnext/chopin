@@ -15,6 +15,7 @@ colors:
   destructive: "oklch(0.60513 0.17178 24.175)"
   success: "oklch(0.51958 0.10966 145.072)"
   warning: "oklch(0.59898 0.12586 74.986)"
+  merged: "oklch(0.47500 0.17500 301)"
   chat-divider: "rgb(0 0 0 / 9%)"
 typography:
   document-title:
@@ -167,7 +168,8 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 - **Fields and selections:** White fields use the medium radius, control edge, and subtle resting shadow. Invalid fields use the destructive role. Disabled controls use neutral fill and muted text.
 - **Navigation:** The current location uses a white surface and primary ink. Other items stay quieter and reveal their affordance on hover or focus.
 - **Sidebar icons:** Icons normally use 14px glyphs. Compact Search, disclosure, add-project, project document-creation, and document-action controls use 12px glyphs while retaining 24px icon-button targets.
-- **Badges and status graphics:** Neutral, success, warning, and danger use paired semantic surface, icon, graphic, and text roles. A badge combines an icon and label in a pill.
+- **Badges and status graphics:** Neutral, success, warning, and danger use paired semantic surface, icon, graphic, and text roles. A badge combines an icon and label in a pill. Merged (plum) is the fifth quad, reserved for finished GitHub work: a merged pull request or a completed issue, as GitHub colours them.
+- **GitHub reference pills:** A pull request or issue link in a document is a tinted capsule over the link itself: the state surface mixed half with the page, a hairline at 12% of the state icon colour, a 14px state glyph, the authored title in primary ink and a never-truncated `#number` in tertiary ink. Open is success, merged and completed are merged, closed is danger, and draft, not planned, loading and no access stay neutral.
 - **Document:** The authored page is white, readable, and wider only where content requires it. Headings, lists, tables, code, and callouts retain document semantics inside the editor.
 
 ## Do's and Don'ts

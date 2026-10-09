@@ -199,6 +199,21 @@
 					"oklch(0.95 0.12586 74.986)"
 				]
 			},
+			"merged": {
+				"role": "semantic",
+				"displayName": "Merged",
+				"canonical": "oklch(0.47500 0.17500 301)",
+				"tonalRamp": [
+					"oklch(0.15 0.175 301)",
+					"oklch(0.25 0.175 301)",
+					"oklch(0.35 0.175 301)",
+					"oklch(0.45 0.175 301)",
+					"oklch(0.55 0.175 301)",
+					"oklch(0.68 0.175 301)",
+					"oklch(0.82 0.175 301)",
+					"oklch(0.95 0.175 301)"
+				]
+			},
 			"chat-divider": {
 				"role": "neutral",
 				"displayName": "Chat divider",

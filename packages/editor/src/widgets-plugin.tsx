@@ -15,6 +15,7 @@ import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 
 import { ChangeObserver } from "./changes-observer";
 import { CommentLayer } from "./comment-layer";
+import { GitHubReferencesPlugin } from "./github-references";
 import { MarkdownPastePlugin } from "./markdown-paste";
 import { QuestionnaireObserver } from "./questionnaires";
 import { ResolvedLayer } from "./resolved-layer";
@@ -59,6 +60,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 			let store = params.changes;
 			realm.pub(addComposerChild$, () => <ChangeObserver store={store} />);
 		}
+		realm.pub(addComposerChild$, GitHubReferencesPlugin);
 		realm.pub(addComposerChild$, TabsPlugin);
 		realm.pub(addComposerChild$, DiscardedNavigationPlugin);
 		realm.pub(addComposerChild$, CardGapPlugin);
