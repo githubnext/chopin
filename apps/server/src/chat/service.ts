@@ -1250,14 +1250,17 @@ export function documentRoom(context: Room): DocumentRoom {
 			? {
 				createVisualRequest: async () => {
 					let active = currentMemberRequest(chat);
-					if (!active || chat.job) {
+					let controller = chat.turnController;
+					if (!active || chat.job || controller?.signal.aborted) {
 						throw new Error(
 							"a current foreground member request is required for a visual preview",
 						);
 					}
 					return preview.request(
 						active,
-						() => !chat.job && currentMemberRequest(chat) === active,
+						() =>
+							!chat.job && chat.turnController === controller
+							&& !controller?.signal.aborted && currentMemberRequest(chat) === active,
 					);
 				},
 			}

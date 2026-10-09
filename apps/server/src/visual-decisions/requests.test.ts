@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
+import * as Chat from "../chat/service";
 import * as Service from "../plan/service";
 import { CommitRejected } from "../storage/errors";
 import { openPlan } from "../testing/plan";
@@ -115,6 +116,56 @@ test("a queued request refuses a member turn that ended before the document lock
 	await held;
 	await expect(pending).rejects.toThrow("no longer driving");
 	expect(context.plan.visualRequests.size).toBe(0);
+});
+
+test("an aborted foreground turn cannot commit a request queued behind the document lock", async () => {
+	let entryId = crypto.randomUUID();
+	let text = "Explore the billing card spacing.";
+	let context = await openPlan("# Billing", { transcript: [message(entryId, text)] });
+	plans.push(context.plan);
+	let chat = context.plan.chat;
+	chat.busy = true;
+	chat.turn = { id: "turn", handle: "ana", started: 1, entryOffset: 0, responded: false };
+	chat.turnController = new AbortController();
+	chat.activeRequest = {
+		...source(entryId, text),
+		claimantSessionId: "session",
+		turnId: "turn",
+		lifecycle: chat.lifecycle,
+	};
+	let provider: NonNullable<Chat.Room["visualPreview"]> = {
+		request: async (active, stillCurrent) => {
+			let request = await Requests.create(context.plan, active, stillCurrent);
+			return { requestId: request.id, state: request.state };
+		},
+		publish: async () => {},
+		resolve: async () => undefined,
+	};
+	let room = {
+		chat,
+		plan: context.plan,
+		server: context.server,
+		room: context.channel.id,
+		persist: () => Service.persist(context.plan),
+		visualPreview: provider,
+	} as Chat.Room;
+	let release = Promise.withResolvers<void>();
+	let started = Promise.withResolvers<void>();
+	let held = Service.exclusive(context.plan, async () => {
+		started.resolve();
+		await release.promise;
+	});
+	await started.promise;
+	let pending = Chat.documentRoom(room).createVisualRequest!();
+	let outcome = pending.then(() => "accepted", () => "refused");
+	await Chat.abort(room, { data: { handle: "ana" } } as never);
+	expect(chat.turnController.signal.aborted).toBe(true);
+	release.resolve();
+	await held;
+	expect(await outcome).toBe("refused");
+	expect(context.plan.visualRequests.size).toBe(0);
+	let saved = await context.storage.collaboration.load(context.channel.id, context.now);
+	expect((saved?.sidecar as { visualRequests?: unknown[] } | null)?.visualRequests).toBeUndefined();
 });
 
 test("malformed durable request fails restoration rather than disappearing", async () => {
