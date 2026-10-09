@@ -189,3 +189,43 @@ test("diagram controls sit centred below the drawing and step to either end", as
 	await expect(controls.getByRole("button", { name: "Replay diagram" })).toHaveCount(0);
 	await expect(controls.getByRole("button", { name: "Reset diagram" })).toHaveCount(0);
 });
+
+test("a wireframe fence is drawn chromeless, and an invalid one stays code", async ({ page }) => {
+	let blocks = page.locator("[data-wireframe-document] .planCode");
+	let drawn = blocks.first();
+	let invalid = blocks.last();
+	let region = drawn.getByRole("region", { name: "Implementation wireframe", exact: true });
+	await expect(region).toBeVisible();
+	await expect(region.getByText("Approve and build this plan", { exact: true })).toBeVisible();
+	await expect(drawn.locator("[data-plan-source]")).toBeHidden();
+	await expect(drawn.getByRole("button")).toHaveCount(0);
+
+	await expect(invalid.getByRole("region")).toHaveCount(0);
+	await expect(invalid.locator("[data-plan-source]")).toBeVisible();
+	let error = invalid.locator("[data-plan-error]");
+	await expect(error).toContainText("This wireframe could not be drawn");
+	await expect(error).toContainText('Line 3: Unknown kind "buton".');
+});
+
+test("a narrow wireframe stacks its rows and puts notes below", async ({ page }) => {
+	let narrow = page.locator('[data-wireframe-sample="narrow"]');
+	let tasks = narrow.getByRole("region", { name: "Tasks wireframe", exact: true });
+	await expect(tasks).toBeVisible();
+	let done = await tasks.getByText("Parse fences", { exact: true }).boundingBox();
+	let blocked = await tasks.getByText("Planner prompt", { exact: true }).boundingBox();
+	let note = await tasks.getByText("Waits on server validation", { exact: true }).boundingBox();
+	expect(blocked!.y).toBeGreaterThan(done!.y + done!.height);
+	expect(Math.abs(blocked!.x - done!.x)).toBeLessThan(2);
+	expect(note!.y).toBeGreaterThan(blocked!.y);
+});
+
+test("a wide wireframe keeps its flow across and its notes beside", async ({ page }) => {
+	test.skip((page.viewportSize()?.width ?? 0) < 800, "Wide layout only");
+	let tasks = page.locator('[data-wireframe-sample="tasks"]').getByRole("region");
+	let done = await tasks.getByText("Parse fences", { exact: true }).boundingBox();
+	let blocked = await tasks.getByText("Planner prompt", { exact: true }).boundingBox();
+	let note = await tasks.getByText("Waits on server validation", { exact: true }).boundingBox();
+	expect(Math.abs(blocked!.y - done!.y)).toBeLessThan(2);
+	expect(blocked!.x).toBeGreaterThan(done!.x + done!.width);
+	expect(note!.x).toBeGreaterThan(blocked!.x);
+});

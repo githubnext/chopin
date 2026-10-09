@@ -1,3 +1,11 @@
+export {
+	describeWireframePart,
+	describeWireframeProblem,
+	wireframeCallouts,
+	wireframeLabel,
+	wireframeName,
+} from "./outline";
+export type { WireframeCallout } from "./outline";
 export { parseWireframe, resolveWireframeTarget } from "./parse";
 export { printWireframe } from "./print";
 export {

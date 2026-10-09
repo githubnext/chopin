@@ -2177,7 +2177,7 @@
 	margin-block: 1em;
 }
 
-.plan-content .planCode:not([data-plan-presentation="diagram"]) {
+.plan-content .planCode:not([data-plan-presentation]) {
 	overflow: hidden;
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
@@ -2262,7 +2262,7 @@
  * own above the content instead of sitting on its first line.
  */
 @media not ((hover: hover) and (pointer: fine)) {
-	.plan-content .planCode:not([data-plan-presentation="diagram"]) {
+	.plan-content .planCode:not([data-plan-presentation], [data-plan-language="wireframe"]) {
 		padding-block-start: calc(var(--spacing) * 9);
 	}
 
@@ -2446,6 +2446,87 @@
 	/* With nothing in the corner, touch needs no band to hold it. */
 	@media not ((hover: hover) and (pointer: fine)) {
 		padding-block-start: 0;
+	}
+}
+
+.plan-content
+	.planCode[data-plan-language="wireframe"]
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "Wireframe, e.g. panel \"Settings\"";
+}
+
+/*
+ * A wireframe has no chrome: a quiet stage, and its source folds open below it
+ * only while the caret is inside. Hover deepens the stage's hairline and
+ * nothing more; writing in the source rings the drawing it changes.
+ *
+ * The preview slot steps out of the layout so an error can follow the source,
+ * where the author is looking, even while the last drawing stays above it.
+ */
+.plan-content .planCode[data-plan-language="wireframe"] [data-plan-preview] {
+	display: contents;
+}
+
+.plan-content .planCode[data-plan-language="wireframe"] [data-plan-preview] > [data-plan-error] {
+	order: 1;
+}
+
+.plan-content
+	.planCode[data-plan-presentation="wireframe"]
+	[data-plan-preview]
+	> [data-plan-error] {
+	padding-inline: calc(var(--spacing) * 1);
+}
+
+/* One that does not parse is plain code, with what is wrong under it. */
+.plan-content
+	.planCode[data-plan-language="wireframe"]:not([data-plan-presentation])
+	[data-plan-preview]:not(:empty)
+	~ [data-plan-source] {
+	border-block-start: 0;
+	background: var(--color-page);
+	opacity: 1;
+}
+
+.plan-content
+	.planCode[data-plan-language="wireframe"]:not([data-plan-presentation])
+	[data-plan-preview]
+	> [data-plan-error] {
+	border-block-start: var(--edge-width) solid var(--color-edge);
+}
+
+.plan-content .plan-wireframe .wf-stage {
+	transition:
+		border-color var(--duration-fast) var(--ease-out),
+		opacity var(--duration-base) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.plan-content .planCode[data-plan-presentation="wireframe"]:hover .plan-wireframe .wf-stage {
+		border-color: var(--color-control-edge);
+	}
+}
+
+/* The last drawing that parsed, kept while its source is mid-edit. */
+.plan-content .plan-wireframe[data-stale] .wf-stage {
+	opacity: 0.4;
+}
+
+.plan-content
+	.planCode[data-plan-presentation="wireframe"]
+	[data-plan-preview]:not(:empty)
+	~ [data-plan-source] {
+	margin-block-start: calc(var(--spacing) * 2);
+	padding: calc(var(--spacing) * 3);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.plan-content .planCode[data-plan-presentation="wireframe"] [data-plan-source] {
+		animation: plan-source-in var(--duration-fast) var(--ease-out);
 	}
 }
 

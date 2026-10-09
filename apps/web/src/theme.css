@@ -1524,6 +1524,24 @@ button.question-add:disabled {
 }
 
 /*
+ * A wireframe has no box of its own, so its stage takes the ring: on keyboard
+ * focus, and while the caret is in the source folded open below it.
+ */
+.plan-content .plan-wireframe > .wf:focus-visible {
+	outline: none;
+}
+
+.plan-content .planCode[data-plan-editing] .plan-wireframe .wf-stage,
+:root:not([data-focus-input="pointer"])
+	.plan-content
+	.plan-wireframe
+	> .wf:focus-visible
+	.wf-stage {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: 0;
+}
+
+/*
  * The ring answers "where am I?" for keyboard users, so it hides after a pointer
  * press. Text fields keep theirs: a caret alone is easy to lose.
  */

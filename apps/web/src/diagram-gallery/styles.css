@@ -258,3 +258,15 @@
 		--plan-gutter: 1rem;
 	}
 }
+
+.diagram-gallery-wireframes {
+	display: grid;
+	gap: 1rem;
+	margin-block-start: 1rem;
+}
+
+.diagram-gallery-wireframe-narrow {
+	display: grid;
+	gap: 1rem;
+	inline-size: min(100%, 23.4375rem);
+}
