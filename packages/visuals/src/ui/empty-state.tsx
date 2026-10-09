@@ -29,7 +29,7 @@ export function EmptyState({
 			data-measure={measure}
 		>
 			<span aria-hidden="true" className="cv-empty-state-icon-frame">
-				<Icon className="cv-empty-state-icon" />
+				<Icon size={24} className="cv-empty-state-icon" />
 			</span>
 			<div className="cv-empty-state-copy">
 				{title && <h3 className="cv-empty-state-title">{title}</h3>}

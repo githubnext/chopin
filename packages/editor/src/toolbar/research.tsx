@@ -297,11 +297,23 @@ export function ResearchComposerSurface(
 			element.className = "plan-research-draft-host";
 			element.contentEditable = "false";
 			setDOMUnmanaged(element, { captureSelection: true });
+			// React handles portal events on this host; keep native keys out of Lexical.
+			element.addEventListener("keydown", event => event.stopPropagation());
+			element.addEventListener("focusout", () => {
+				let selection = element.ownerDocument.getSelection();
+				if (selection?.anchorNode && element.contains(selection.anchorNode)) {
+					selection.removeAllRanges();
+				}
+			});
 			slot.current = element;
 			setHost(element);
 		}
 		place();
 	}, [detach, place, shown]);
+	useLayoutEffect(() => {
+		// Restore the caret after the closing draft becomes inert.
+		if (shown && !draft) editor.focus();
+	}, [draft, editor, shown]);
 	useEffect(() => () => {
 		detach();
 		slot.current?.remove();
@@ -338,10 +350,7 @@ export function ResearchComposerSurface(
 
 	if (!shown || !host) return null;
 	let current = draft ?? shown;
-	let dismiss = () => {
-		drafts.dismiss();
-		editor.focus();
-	};
+	let dismiss = () => drafts.dismiss();
 	let submit = () => {
 		if (!draft || draft.submitting || draft.cancelling || !draft.question.trim()) return;
 		if (!binding || disabled) return;
