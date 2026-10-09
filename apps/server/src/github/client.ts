@@ -1,3 +1,10 @@
+import type {
+	GitHubIssueSummary,
+	GitHubPullRequestSummary,
+	GitHubReferenceAuthor,
+	GitHubReferenceLabel,
+} from "@chopin/protocol/github-reference";
+
 export type GitHubUser = {
 	id: string;
 	login: string;
@@ -45,6 +52,7 @@ export type GitHubInstallation = {
 		pullRequests: boolean;
 		checks: boolean;
 		statuses: boolean;
+		issues: boolean;
 	};
 };
 
@@ -60,6 +68,35 @@ export type GitHubCondition = {
 export type GitHubConditional<T extends object> =
 	| (T & { etag?: string })
 	| { notModified: true; etag?: string };
+
+export type InstalledRepository = {
+	repository: Repository;
+	installation: GitHubInstallation;
+};
+
+/** The narrow surface the GitHub reference summary route needs. */
+export interface GitHubReferenceSource {
+	/** Like `repositoryAccess`, but also names the installation that grants it. */
+	installedRepository(
+		token: string,
+		owner: string,
+		name: string,
+	): Promise<InstalledRepository | undefined>;
+	pullRequest(
+		token: string,
+		owner: string,
+		name: string,
+		number: number,
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<GitHubPullRequestSummary>>;
+	issue(
+		token: string,
+		owner: string,
+		name: string,
+		number: number,
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<GitHubIssueSummary>>;
+}
 
 export type GitHubTokenGrant = {
 	accessToken: string;
@@ -273,7 +310,127 @@ function installation(value: unknown): GitHubInstallation {
 			pullRequests: allowed("pull_requests"),
 			checks: allowed("checks"),
 			statuses: allowed("statuses"),
+			issues: allowed("issues"),
 		},
+	};
+}
+
+const MAX_SUMMARY_TITLE = 500;
+const MAX_SUMMARY_LABELS = 20;
+
+function timestamp(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	let time = Date.parse(value);
+	return Number.isNaN(time) ? undefined : new Date(time).toISOString();
+}
+
+function optionalTimestamp(value: unknown): string | null | undefined {
+	return value === null || value === undefined ? null : timestamp(value);
+}
+
+function author(value: unknown): GitHubReferenceAuthor | null | undefined {
+	if (value === null) return null;
+	let item = record(value);
+	if (!item || typeof item.login !== "string" || typeof item.avatar_url !== "string") {
+		return undefined;
+	}
+	return { login: item.login, avatarUrl: item.avatar_url };
+}
+
+function labels(value: unknown): GitHubReferenceLabel[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	let result: GitHubReferenceLabel[] = [];
+	for (let entry of value) {
+		let item = record(entry);
+		if (
+			!item
+			|| typeof item.name !== "string"
+			|| typeof item.color !== "string"
+			|| !/^[0-9a-fA-F]{6}$/.test(item.color)
+		) continue;
+		result.push({ name: item.name, color: item.color.toLowerCase() });
+		if (result.length >= MAX_SUMMARY_LABELS) break;
+	}
+	return result;
+}
+
+function summaryBase(item: Record<string, unknown>, owner: string, name: string, path: string) {
+	let createdAt = timestamp(item.created_at);
+	let updatedAt = timestamp(item.updated_at);
+	let closedAt = optionalTimestamp(item.closed_at);
+	let user = author(item.user);
+	let labelList = labels(item.labels);
+	if (
+		!Number.isSafeInteger(item.number)
+		|| (item.number as number) <= 0
+		|| typeof item.title !== "string"
+		|| !Number.isSafeInteger(item.comments)
+		|| (item.comments as number) < 0
+		|| !createdAt
+		|| !updatedAt
+		|| closedAt === undefined
+		|| user === undefined
+		|| !labelList
+	) return undefined;
+	return {
+		owner,
+		repository: name,
+		number: item.number as number,
+		url: `https://github.com/${owner}/${name}/${path}/${item.number}`,
+		title: item.title.slice(0, MAX_SUMMARY_TITLE),
+		author: user,
+		labels: labelList,
+		comments: item.comments as number,
+		createdAt,
+		updatedAt,
+		closedAt,
+	};
+}
+
+function pullRequestSummary(value: unknown, owner: string, name: string): GitHubPullRequestSummary {
+	let item = record(value);
+	let base = item && summaryBase(item, owner, name, "pull");
+	let head = record(item?.head);
+	let target = record(item?.base);
+	let mergedAt = optionalTimestamp(item?.merged_at);
+	if (
+		!item
+		|| !base
+		|| (item.state !== "open" && item.state !== "closed")
+		|| typeof item.draft !== "boolean"
+		|| mergedAt === undefined
+		|| typeof head?.ref !== "string"
+		|| typeof target?.ref !== "string"
+	) throw new GitHubError("GitHub returned an invalid pull request");
+	return {
+		...base,
+		kind: "pull",
+		state: mergedAt ? "merged" : item.state,
+		draft: item.draft,
+		mergedAt,
+		headBranch: head.ref,
+		baseBranch: target.ref,
+	};
+}
+
+function issueSummary(value: unknown, owner: string, name: string): GitHubIssueSummary {
+	let item = record(value);
+	let base = item && summaryBase(item, owner, name, "issues");
+	if (!item || !base || (item.state !== "open" && item.state !== "closed")) {
+		throw new GitHubError("GitHub returned an invalid issue");
+	}
+	// The issues endpoint also serves pull requests; those belong to the pull summary.
+	if (item.pull_request !== undefined) throw new GitHubError("issue not found", 404);
+	let reason = item.state_reason;
+	return {
+		...base,
+		kind: "issue",
+		state: item.state,
+		stateReason: item.state === "open"
+			? null
+			: reason === "not_planned" || reason === "duplicate"
+			? "not_planned"
+			: "completed",
 	};
 }
 
@@ -320,7 +477,7 @@ function nextPage(link: string | null, api: string, path: string): number | unde
 }
 
 /** Narrow GitHub OAuth and repository API client with validated responses. */
-export class GitHubClient implements GitHub {
+export class GitHubClient implements GitHub, GitHubReferenceSource {
 	readonly #fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 	readonly #endpoints: Endpoints;
 	readonly #clock: () => number;
@@ -521,6 +678,14 @@ export class GitHubClient implements GitHub {
 		owner: string,
 		name: string,
 	): Promise<Repository | undefined> {
+		return (await this.installedRepository(token, owner, name))?.repository;
+	}
+
+	async installedRepository(
+		token: string,
+		owner: string,
+		name: string,
+	): Promise<InstalledRepository | undefined> {
 		let fullName = `${owner}/${name}`.toLowerCase();
 		let now = this.#clock();
 		for (let [key, entry] of this.#access) {
@@ -555,13 +720,59 @@ export class GitHubClient implements GitHub {
 					cached.repositories.set(installed.id, listing);
 				}
 				let found = await this.#findRepository(token, installed.id, fullName, listing);
-				if (found) return found;
+				if (found) return { repository: found, installation: installed };
 			}
 			return undefined;
 		} catch (err) {
 			if (this.#access.get(key) === cached) this.#access.delete(key);
 			throw err;
 		}
+	}
+
+	pullRequest(
+		token: string,
+		owner: string,
+		name: string,
+		number: number,
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<GitHubPullRequestSummary>> {
+		return this.#summary(token, owner, name, "pulls", number, condition, pullRequestSummary);
+	}
+
+	issue(
+		token: string,
+		owner: string,
+		name: string,
+		number: number,
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<GitHubIssueSummary>> {
+		return this.#summary(token, owner, name, "issues", number, condition, issueSummary);
+	}
+
+	async #summary<T extends object>(
+		token: string,
+		owner: string,
+		name: string,
+		collection: "pulls" | "issues",
+		number: number,
+		condition: GitHubCondition | undefined,
+		parse: (value: unknown, owner: string, name: string) => T,
+	): Promise<GitHubConditional<T>> {
+		if (!Number.isSafeInteger(number) || number <= 0) {
+			throw new GitHubError(`${collection} not found`, 404);
+		}
+		let url = new URL(
+			`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/${collection}/${number}`,
+			this.#endpoints.api,
+		);
+		let response = await this.#request(url, token, condition?.ifNoneMatch);
+		let etag = response.headers.get("etag") ?? undefined;
+		if (response.status === 304) {
+			etag ??= condition?.ifNoneMatch;
+			return { notModified: true, ...(etag ? { etag } : {}) };
+		}
+		let result = parse(await body(response), owner, name);
+		return etag ? { ...result, etag } : result;
 	}
 
 	invalidate(token: string): void {

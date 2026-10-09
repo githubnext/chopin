@@ -31,7 +31,8 @@ import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
 import { describe, load } from "./config";
-import { GitHubError } from "./github/client";
+import { GitHubClient, GitHubError } from "./github/client";
+import { GitHubReferences } from "./github/references";
 import { Router } from "./http/router";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
@@ -1620,6 +1621,9 @@ registerChannelRoutes(router, hostedAuth, {
 	onChannelDeleted: deleteChannel,
 	onChannelRenamed: announceChannel,
 	onChannelRestored: restoreChannel,
+	references: hostedAuth.github instanceof GitHubClient
+		? new GitHubReferences(hostedAuth.github)
+		: undefined,
 });
 registerResearchWorkspaceRoutes(router, hostedAuth, {
 	service: researchService,
