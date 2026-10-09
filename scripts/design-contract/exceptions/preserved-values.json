@@ -34,7 +34,7 @@
 	},
 	{
 		"file": "apps/web/src/theme.css",
-		"reason": "Approved chat divider opacity is 9%, distinct from passive 7% edge and 20% control edge; retained as a checked contextual design-record value.",
+		"reason": "Approved chat divider opacity is 9%, distinct from passive 7% edge and 15% control edge; retained as a checked contextual design-record value.",
 		"cases": [
 			[
 				"color",
