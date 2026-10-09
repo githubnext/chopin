@@ -1258,11 +1258,6 @@
 	margin-left: calc(var(--spacing) * 1.5);
 }
 
-/* Inset is lighter than the header's ground, so the label sits on selected. */
-.document-archived-status .cv-badge {
-	--cv-semantic-surface: var(--color-selected);
-}
-
 :root[data-plan-coarse-pointer]
 	.project-sidebar
 	:where(.project-sidebar-action, .project-sidebar-document-action) {
