@@ -85,7 +85,8 @@ window.openCardProbe = {
   this.unmountCard(); activeId = id;
   let realm = new Realm();
   realm.pub(widgets$, { questions: openSnapshot.questions, cardMeta: openSnapshot.cardMeta,
-   connected: true, canEdit, wire: openWire, onCardSource: source ? openSnapshot.showCardSource : undefined });
+   connected: true, canEdit, wire: openWire, onCardSource: source ? openSnapshot.showCardSource : undefined,
+   hasCardSource: () => source });
   openRoot = createRoot(document.querySelector("#open-card"));
   openRoot.render(<RealmContext.Provider value={realm}><main className="plan"><section className="plan-document" data-open-card-host>
    <LexicalComposer initialConfig={{ namespace: "native-open-card", nodes: registry().nodes, editable: canEdit,

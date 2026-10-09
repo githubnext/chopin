@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import { backfillDocumentSlugs } from "./migrations/002_document_slugs";
+import { backfillUnansweredDecisions } from "./migrations/017_unanswered_decisions";
 
 import type { SQL, TransactionSQL } from "bun";
 
@@ -60,6 +61,15 @@ const MIGRATIONS = [{
 }, {
 	id: "015_planner_inline_reference",
 	path: join(import.meta.dir, "migrations/015_planner_inline_reference.sql"),
+}, {
+	id: "016_persistent_sessions",
+	path: join(import.meta.dir, "migrations/016_persistent_sessions.sql"),
+}, {
+	id: "017_unanswered_decisions",
+	path: join(import.meta.dir, "migrations/017_unanswered_decisions.sql"),
+	applyPath: join(import.meta.dir, "migrations/017_unanswered_decisions.ts"),
+	checksumTag: "apply:backfillUnansweredDecisions:v1",
+	apply: backfillUnansweredDecisions,
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */

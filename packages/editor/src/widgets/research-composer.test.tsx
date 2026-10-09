@@ -180,7 +180,9 @@ describe("research composer", () => {
 		expect(markup).toContain("Research could not be started.");
 		expect(markup).toContain("Start research");
 		expect(markup).toContain("Discard research question");
-		expect(markup).toMatch(/<textarea[^>]*class="field"/);
+		// The composer is the single field surface; the textarea carries no border of its own.
+		expect(markup).not.toMatch(/<textarea[^>]*class=/);
+		expect(markup).toMatch(/<p[^>]*data-tone="error"[^>]*role="alert"/);
 		expect(markup).not.toContain(">Cancel<");
 		expect((markup.match(/textarea/g) ?? []).length).toBe(2);
 	});
@@ -251,5 +253,19 @@ describe("research composer", () => {
 			{ ...actions(calls, false), onDismiss: () => calls.push("escape") },
 		);
 		expect(calls).toEqual(["prevent", "stop"]);
+	});
+
+	it("shows a quiet notice without disabling submission", () => {
+		let markup = renderToStaticMarkup(createElement(ResearchComposer, {
+			question: QUESTION,
+			notice: "This research draft cannot yet be placed at its saved position.",
+			onCancel() {},
+			onChange() {},
+			onSubmit() {},
+		}));
+
+		expect(markup).toContain("cannot yet be placed");
+		expect(markup).toMatch(/<p[^>]*role="status"/);
+		expect(markup).not.toMatch(/<button[^>]*aria-label="Start research"[^>]*disabled=""/);
 	});
 });

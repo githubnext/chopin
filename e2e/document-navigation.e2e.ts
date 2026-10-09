@@ -186,6 +186,8 @@ test("account menu closes on Escape and outside click, and returns focus", async
 	await account.click();
 	await expect(menu).toBeVisible();
 	await page.keyboard.press("ArrowDown");
+	await expect(menu.getByRole("menuitem", { name: "Keyboard shortcuts" })).toBeFocused();
+	await page.keyboard.press("ArrowDown");
 	await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(menu).toHaveCount(0);
@@ -212,7 +214,7 @@ test("document action menu motion settles keyboard opening immediately", async (
 test("a pointer-collapsed Project stays inert through exit and restores in place", async ({ join }) => {
 	let page = await join("ana");
 	let projects = sidebar(page);
-	let trigger = projects.getByRole("button", { name: "score", exact: true });
+	let trigger = projects.getByRole("button", { name: /^score(?:, \d+ unanswered decisions?)?$/ });
 	let body = projects.locator('[data-motion-disclosure="projects"]');
 	let bodyId = await body.getAttribute("id");
 
@@ -274,6 +276,42 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
 	await expect(content(page)).toBeFocused();
 	await expect(projects.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
+test("the header names the project and its prefix reveals it in the sidebar", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	let header = page.getByRole("banner");
+	let prefix = header.getByRole("button", { name: "Show score in the sidebar" });
+	let project = sidebar(page).locator('[data-project-id="R_score"]');
+	let disclosure = project.getByRole("button", {
+		name: /^score(?:, \d+ unanswered decisions?)?$/,
+	});
+
+	await expect(prefix).toHaveText("score");
+	await disclosure.click();
+	await expect(disclosure).toHaveAttribute(
+		"aria-expanded",
+		"false",
+	);
+
+	await prefix.click();
+	await expect(disclosure).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
+	await expect(disclosure).toBeFocused();
+
+	await sidebar(page).getByRole("button", { name: "Hide sidebar" }).click();
+	await expect(sidebar(page)).toHaveCount(0);
+	await prefix.click();
+	await expect(sidebar(page)).toBeVisible();
+	await expect(disclosure).toBeFocused();
+});
+
+test("the project prefix gives way on phones", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	await expect(headerDocument(page)).toBeVisible();
+	await expect(page.getByRole("banner").getByRole("button", { name: /^Show score/ })).toBeHidden();
 });
 
 test("the header title renames in place with click, F2, Escape, and blur", async ({ join, room }) => {
@@ -940,6 +978,40 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 
 	await input.press("Enter");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
+});
+
+test("archiving offers Undo and archived mode names itself", async ({ join, room }) => {
+	let ana = await join("ana");
+	let title = `Test ${room.slice(0, 8)}`;
+	let projects = sidebar(ana);
+
+	await headerAction(ana, "Archive");
+	let notice = ana.getByRole("status").filter({ hasText: `Archived ${title}` });
+	await expect(notice).toBeVisible();
+	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);
+	await notice.getByRole("button", { name: "Undo", exact: true }).click();
+	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toHaveCount(0);
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeFocused();
+
+	await headerAction(ana, "Archive");
+	await expect(notice).toBeVisible();
+	await ana.keyboard.press("Shift+Tab");
+	await expect(
+		ana.getByRole("banner").getByRole("button", {
+			name: "Show score in the sidebar",
+		}),
+	).toBeFocused();
+	await ana.keyboard.press("Shift+Tab");
+	let undo = notice.getByRole("button", { name: "Undo", exact: true });
+	await expect(undo).toBeFocused();
+	await ana.waitForTimeout(6000);
+	await expect(notice).toBeVisible();
+	await ana.keyboard.press("Enter");
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeFocused();
+
+	await projects.getByRole("button", { name: "Archived", exact: true }).click();
+	await expect(projects.getByRole("navigation", { name: "Archived documents" })).toBeVisible();
+	await expect(projects.getByText("Projects", { exact: true })).toHaveCount(0);
 });
 
 test("writers can archive, restore, and permanently delete a document", async ({ join, room }) => {

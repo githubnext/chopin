@@ -102,7 +102,7 @@
 				1
 			]
 		],
-		"sourceHash": "0bdcf918d08f5913786cbe786e8f670ed9fdec9dceb86bb6f811b040b35aa4f3"
+		"sourceHash": "e2bcd44481a8df91f73ffcbb0bef8ccc93a7dd64addd9ea4b874755c19afd09f"
 	},
 	{
 		"file": "packages/editor/src/toolbar/bubble.tsx",
@@ -120,21 +120,35 @@
 				"class",
 				"CELL",
 				"class > SelectionBubble > <button>",
-				5
+				3
 			],
 			[
 				"dynamic",
 				"class",
 				"CELL_ON",
 				"class > SelectionBubble > <button>",
-				2
+				3
 			],
 			[
 				"dynamic",
 				"class",
 				"CELL_OFF",
 				"class > SelectionBubble > <button>",
-				5
+				6
+			],
+			[
+				"dynamic",
+				"class",
+				"ROW",
+				"class > SelectionBubble > <button>",
+				2
+			],
+			[
+				"dynamic",
+				"class",
+				"DIVIDER",
+				"class > SelectionBubble > <span>",
+				1
 			],
 			[
 				"dynamic",
@@ -144,7 +158,7 @@
 				3
 			]
 		],
-		"sourceHash": "01db79e7bf938cd5b01b3f3a446415cb88ca6e42100908d890b087b0b593d192"
+		"sourceHash": "0c55d7382e99b0fc885a47a127dd8f59bf9f50a49261ce7f14fcb0bdf78aff5d"
 	},
 	{
 		"file": "packages/editor/src/toolbar/research.tsx",
@@ -158,7 +172,7 @@
 				1
 			]
 		],
-		"sourceHash": "adbf5fed0ed7f56653ce5b496714a92b640bcd2a3fce4a681f12ea1167887590"
+		"sourceHash": "9efb66508a77c1cce3bf057c61f62f50db047ab318b9928238aefc922a5afa4c"
 	},
 	{
 		"file": "packages/editor/src/widgets/research-motion.tsx",
@@ -200,7 +214,7 @@
 				1
 			]
 		],
-		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
+		"sourceHash": "42d324e8f0d6553de93211b3e56e98026bb90f33e4a6f4b0b735bc9af4dbbbfb"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -228,11 +242,11 @@
 				1
 			]
 		],
-		"sourceHash": "7eba346023c4c7efabdd7977a98dce810e46c6429a444ccdb83270763341c55d"
+		"sourceHash": "42d324e8f0d6553de93211b3e56e98026bb90f33e4a6f4b0b735bc9af4dbbbfb"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
-		"reason": "Table rail style is computed viewport geometry (position, size, transform); token policy deliberately does not ban measured dimensions.",
+		"reason": "Table rails and seam lines use measured viewport position and size, clipped to the document scroller; no semantic paint or typography values enter these styles.",
 		"cases": [
 			[
 				"dynamic",
@@ -275,9 +289,16 @@
 				"seamBox(axis, lines[at] ?? 0, origin, GRIP, 2, gripLane)",
 				"unresolved style > Rail > <div>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"seamLine(aim.axis, line, metrics)",
+				"unresolved style > TableRails > <div>",
+				1
 			]
 		],
-		"sourceHash": "7f56a600045b818225aa9752cdb32f174792dfe3269637cf6e6cea0e956f0bfc"
+		"sourceHash": "fadeb29730d5f0d73a55912d6f82d1e91cedab3675ec341f9320849e4702b184"
 	},
 	{
 		"file": "packages/editor/src/disclosure-motion.tsx",
@@ -340,7 +361,7 @@
 				2
 			]
 		],
-		"sourceHash": "85e5f52822e9f2c5445e6827f4af8b6e36bca14eadcad82eea617b2db2b0f58a"
+		"sourceHash": "6423c77075026d3f140493be51a65e38c07a313c1a05360780317441e8cc34ce"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -361,7 +382,7 @@
 				1
 			]
 		],
-		"sourceHash": "d210230ab09b8560bb9e17286af0df2648beff3891e183eb8c87a46f390185f2"
+		"sourceHash": "22c33a6f68fa66902159bda6643bc6d81acfa36107e722e428580d970f60e142"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
@@ -382,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "cda7747035e17442e6c9585491a1724bfe67529e723b4074b914adf65cabb400"
+		"sourceHash": "49ccb021fb60c45cdbe234241549e468ba556277d74d824145ca8707ff2bc908"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -396,7 +417,7 @@
 				1
 			]
 		],
-		"sourceHash": "c336f006257672b5930becbe3c246a862dbf0311483cde1992c329a6f723e5d1"
+		"sourceHash": "01110b02afe3ac02bea7998cac3ade4c0cdf4b0948204190d4b773aafeeaa4f5"
 	},
 	{
 		"file": "packages/editor/src/changes.ts",
@@ -410,7 +431,7 @@
 				1
 			]
 		],
-		"sourceHash": "e14622f16d62dca66486a913fec462b1d5380c732c6f04b63e713c877302ded9"
+		"sourceHash": "a31a505282b9cbd25a0b3ebae1862d61b971aea30b40ec20462b9c3c84aef466"
 	},
 	{
 		"file": "packages/editor/src/widgets/language-menu.tsx",
@@ -431,7 +452,7 @@
 				1
 			]
 		],
-		"sourceHash": "482a607c538b870d82602302e1ece86e6b35d60367a2616658ab1eea1e6c95d9"
+		"sourceHash": "b66eda9493a332f0c5d39b5fc2c07df09de7d45457d7ac45c2a839d1651e1f86"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
@@ -445,7 +466,7 @@
 				1
 			]
 		],
-		"sourceHash": "cda7747035e17442e6c9585491a1724bfe67529e723b4074b914adf65cabb400"
+		"sourceHash": "49ccb021fb60c45cdbe234241549e468ba556277d74d824145ca8707ff2bc908"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -466,7 +487,7 @@
 				1
 			]
 		],
-		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
+		"sourceHash": "74045d002ca932fa97d57774c0d4c4e36b19bb30daa92703a322595de22e37f5"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -480,6 +501,6 @@
 				1
 			]
 		],
-		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
+		"sourceHash": "74045d002ca932fa97d57774c0d4c4e36b19bb30daa92703a322595de22e37f5"
 	}
 ]

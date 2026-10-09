@@ -57,6 +57,7 @@ import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
+import type { ShortcutActions } from "./global-shortcuts";
 import type { NavigationMode, NavigationRoute } from "./navigation-model";
 
 export type Navigate = (
@@ -89,9 +90,23 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 }
 
 let NavigationNotice = lazy(() => import("./navigation-notice-view"));
+
+class SidebarDecisionBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+	override state = { failed: false };
+
+	static getDerivedStateFromError() {
+		return { failed: true };
+	}
+
+	override render() {
+		return this.state.failed ? null : <Suspense fallback={null}>{this.props.children}</Suspense>;
+	}
+}
+
 let ProjectSidebar = lazy(() =>
 	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
 );
+let SidebarDecisionCounts = lazy(() => import("./sidebar-decision-counts"));
 let EmptyWorkspace = lazy(() =>
 	import("./empty-workspace").then(module => ({ default: module.EmptyWorkspace }))
 );
@@ -107,6 +122,11 @@ let DocumentSearchDialog = lazy(() =>
 let DeleteDocumentDialog = lazy(() =>
 	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
 );
+let KeyboardShortcutsDialog = lazy(() =>
+	import("./keyboard-shortcuts-dialog").then(module => ({
+		default: module.KeyboardShortcutsDialog,
+	}))
+);
 
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
 
@@ -120,6 +140,7 @@ let NavigationDocument = createContext<{
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onDocumentRouteSettled: (routeKey: DocumentRouteIdentity) => void;
+	onProjectReveal: (repositoryId: string) => void;
 	onRepositoryAccessChanged: () => void;
 	onResearchChildOpen: (
 		parentId: string,
@@ -133,6 +154,7 @@ let NavigationDocument = createContext<{
 	onDocumentDeleted() {},
 	async onDocumentLoaded() {},
 	onDocumentRouteSettled() {},
+	onProjectReveal() {},
 	onRepositoryAccessChanged() {},
 	onResearchChildOpen() {},
 	onResearchChildPublished() {},
@@ -264,6 +286,13 @@ export function NavigationShell(
 	},
 ) {
 	let [navigation, setNavigation] = useState<Api.Navigation>();
+	let [countsReady, setCountsReady] = useState(false);
+	useEffect(() => {
+		let frame = requestAnimationFrame(() => {
+			frame = requestAnimationFrame(() => setCountsReady(true));
+		});
+		return () => cancelAnimationFrame(frame);
+	}, []);
 	let navigationRef = useRef<Api.Navigation | undefined>(undefined);
 	let navigationRequest = useRef<Promise<void> | undefined>(undefined);
 	let navigationRefreshQueued = useRef(false);
@@ -289,12 +318,14 @@ export function NavigationShell(
 		| "add"
 		| "new"
 		| "search"
+		| "shortcuts"
 		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [notice, showNotice] = useState<NoticeOptions>();
+	let [reveal, setReveal] = useState<{ id: string; nonce: number }>();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
@@ -339,14 +370,22 @@ export function NavigationShell(
 	let dialogMotion = dialogPresence.phase === "closed" ? undefined : dialogPresence;
 	let presentedDialog = dialogMotion?.value;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
+	let resyncDecisions = useRef<(repositoryId: string) => void>(() => {});
 	let {
+		beginTotalRequest,
 		loadMore,
 		projects,
 		refreshProject,
 		removeDocument,
+		updateDecisionCounts,
+		updateDecisionSnapshot,
 		updateDocument,
 		upsertDocument,
-	} = useProjectDocuments(navigation, catalogueMode === "archived");
+	} = useProjectDocuments(
+		navigation,
+		catalogueMode === "archived",
+		repositoryId => resyncDecisions.current(repositoryId),
+	);
 	let routeKey = isDocumentWorkspaceRoute(route)
 		? documentRouteIdentity(route)
 		: route.page === "repository"
@@ -675,16 +714,41 @@ export function NavigationShell(
 			return;
 		}
 		setError(undefined);
+		let acceptTotal = beginTotalRequest(channel.repositoryId);
 		let mutation = action === "archive"
 			? Api.archiveChannel(channel.id)
 			: Api.restoreChannel(channel.id);
 		void mutation.then(detail => {
 			acceptChannel(detail.channel);
+			if (action === "archive") acceptTotal(detail.unansweredDecisions);
 			if (action === "restore") setCatalogueMode("active");
+			else {
+				showNotice({
+					message: `Archived ${detail.channel.title}`,
+					action: {
+						label: "Undo",
+						onAction: () => {
+							void Api.restoreChannel(detail.channel.id).then(restored => {
+								acceptChannel(restored.channel);
+								requestAnimationFrame(() =>
+									(document.querySelector<HTMLElement>(
+										`[data-project-sidebar] [data-document-id="${restored.channel.id}"] .project-sidebar-document-link`,
+									)
+										?? document.querySelector<HTMLElement>(
+											"header button[aria-label^='Actions for ']",
+										))
+										?.focus({ preventScroll: true })
+								);
+							}, reason => setError({ reason }));
+						},
+					},
+					duration: 8000,
+				});
+			}
 		}, reason => {
 			setError({ reason });
 		});
-	}, [acceptChannel, navigate, showDialog, showNotice]);
+	}, [acceptChannel, beginTotalRequest, navigate, showDialog, showNotice]);
 	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
@@ -714,6 +778,11 @@ export function NavigationShell(
 	let repositoryAccessChanged = useCallback(() => {
 		void refresh();
 	}, [refresh]);
+	let projectReveal = useCallback((id: string) => {
+		setCollapsed(false);
+		if (mode === "drawer") setDrawerOpen(true);
+		setReveal(current => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
+	}, [mode]);
 	let navigationDocument = useMemo(() => ({
 		channel: currentChannel,
 		onDocumentAction: workspaceDocumentAction,
@@ -721,6 +790,7 @@ export function NavigationShell(
 		onDocumentDeleted: documentDeleted,
 		onDocumentLoaded: documentLoaded,
 		onDocumentRouteSettled: documentRouteSettled,
+		onProjectReveal: projectReveal,
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchChildOpen: researchChildOpen,
 		onResearchChildPublished: researchChildPublished,
@@ -730,6 +800,7 @@ export function NavigationShell(
 		documentDeleted,
 		documentLoaded,
 		documentRouteSettled,
+		projectReveal,
 		repositoryAccessChanged,
 		researchChildOpen,
 		researchChildPublished,
@@ -757,6 +828,34 @@ export function NavigationShell(
 		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
 	};
 	let dismissDialog = () => setDialog(undefined);
+	let [sidebarShortcut, setSidebarShortcut] = useState<string>();
+	let shortcutActions = useRef<ShortcutActions>({});
+	shortcutActions.current = {
+		search: () => showDialog("search"),
+		"new-document": newDocument,
+		shortcuts: () => showDialog("shortcuts"),
+		"toggle-sidebar": () => {
+			if (mode === "drawer") return setDrawerOpen(true);
+			if (collapsed) return setCollapsed(false);
+			let inside = document.activeElement?.closest(".project-sidebar-frame");
+			setCollapsed(true);
+			if (inside) requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
+		},
+	};
+	// The listener and its registry load after first paint; the shell only names its actions.
+	useEffect(() => {
+		let stop: (() => void) | undefined;
+		let live = true;
+		void import("./global-shortcuts").then(module => {
+			if (!live) return;
+			stop = module.listenForShortcuts(() => shortcutActions.current);
+			setSidebarShortcut(module.shortcutHint("toggle-sidebar"));
+		});
+		return () => {
+			live = false;
+			stop?.();
+		};
+	}, []);
 	let collapseSidebar = () => {
 		setCollapsed(true);
 		dismissDrawer();
@@ -791,6 +890,7 @@ export function NavigationShell(
 					className: accountPresence.className,
 					closing: accountPresence.phase === "closing",
 					onDismiss: () => closeAccount(false),
+					onShortcuts: () => showDialog("shortcuts"),
 					onSignOut: () => void signOut(),
 				}}
 				accountMenuId={accountMenuId}
@@ -809,6 +909,8 @@ export function NavigationShell(
 				focusProjectId={focusProjectId}
 				onAddProject={() => showDialog("add")}
 				onFocusedProject={() => setFocusProjectId(undefined)}
+				onRevealed={() => setReveal(undefined)}
+				reveal={reveal}
 				onCollapse={collapseSidebar}
 				onCreateDocument={project => void createDocument(project)}
 				onDocumentAction={documentAction}
@@ -907,6 +1009,19 @@ export function NavigationShell(
 
 	return (
 		<NavigationDocument.Provider value={navigationDocument}>
+			{countsReady && (
+				<SidebarDecisionBoundary>
+					<SidebarDecisionCounts
+						archived={catalogueMode === "archived"}
+						onCounts={updateDecisionCounts}
+						onSnapshot={updateDecisionSnapshot}
+						priorityRepositoryId={active?.repositoryId}
+						projects={projects}
+						refreshProject={refreshProject}
+						resync={resyncDecisions}
+					/>
+				</SidebarDecisionBoundary>
+			)}
 			<div
 				className="navigation-shell"
 				data-navigation-mode={mode}
@@ -927,6 +1042,7 @@ export function NavigationShell(
 					<ProjectSidebarExpandButton
 						buttonRef={drawerOpener}
 						onExpand={() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false)}
+						shortcut={sidebarShortcut}
 					/>
 				)}
 				{drawerPresence.phase !== "closed" && (
@@ -1000,6 +1116,11 @@ export function NavigationShell(
 							source={projects}
 							userId={user.id}
 						/>
+					</LazyDialogBoundary>
+				)}
+				{dialogMotion && presentedDialog === "shortcuts" && (
+					<LazyDialogBoundary>
+						<KeyboardShortcutsDialog motion={dialogMotion} onDismiss={dismissDialog} />
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && typeof presentedDialog === "object"

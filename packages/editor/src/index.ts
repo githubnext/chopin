@@ -30,6 +30,7 @@ export type { MotionDisclosureContract } from "./disclosure-motion";
 export { displayName } from "./display-name";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
+export type { Refusal } from "./history";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
 export { usePointerCapabilities } from "./pointer";

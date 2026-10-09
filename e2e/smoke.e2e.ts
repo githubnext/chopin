@@ -247,7 +247,9 @@ async function scriptPlanner(page: Page) {
 test("a GitHub session joins its authorized channel", async ({ join, room }) => {
 	let page = await join("ana");
 	let projects = page.getByRole("complementary", { name: "Projects" });
-	let repository = projects.getByRole("button", { name: "score", exact: true });
+	let repository = projects.getByRole("button", {
+		name: /^score(?:, \d+ unanswered decisions?)?$/,
+	});
 
 	await expect(page).toHaveURL(roomPath(room));
 	await expect(repository).toHaveAttribute("aria-expanded", "true");
@@ -891,7 +893,9 @@ test(
 		await expect(chat.getByText("Edit plan", { exact: true })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
-		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "Ask Chopin" });
+		let mine = chat.locator("[data-chat-entry]").filter({
+			has: page.getByText("Ana", { exact: true }),
+		});
 		let theirs = chat.locator("[data-chat-entry]").filter({
 			hasText: "Check the rollback path too.",
 		});

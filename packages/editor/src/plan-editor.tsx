@@ -11,6 +11,7 @@ import { markdownShortcutPlugin, MDXEditor } from "@mdxeditor/editor";
 
 // Structural editor CSS, then our retheme over the top.
 import "@mdxeditor/editor/style.css";
+import "@chopin/diagrams/styles.css";
 import "./styles.css";
 import "./feedback.css";
 import { plugins as dialectPlugins } from "@chopin/dialect";
@@ -26,6 +27,7 @@ import { widgetsPlugin } from "./widgets-plugin";
 
 import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
+import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
@@ -34,6 +36,7 @@ import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
 import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
+import type { Refusal } from "./history";
 import type { ResearchLauncher } from "./research-launcher";
 
 /**
@@ -64,6 +67,7 @@ export type PlanEditorProps = {
 	commentPresentation?: CommentPresentation;
 	/** App-owned input policy for interactions that should settle without motion. */
 	motionImmediately?: () => boolean;
+	disclosureMotion?: MotionDisclosureContract;
 	/** Host presentation for moving between bounded questionnaire steps. */
 	questionMotion?: QuestionStepMotion;
 	/** Identity for this client's remote cursor. */
@@ -82,6 +86,10 @@ export type PlanEditorProps = {
 	cardMeta?: CardMetaStore;
 	/** Open the chat message that started a conversation decision. */
 	onCardSource?: (questionnaireId: string) => void;
+	/** Whether a card has a Chat message to go back to; without one it offers no jump. */
+	hasCardSource?: (questionnaireId: string) => boolean;
+	/** False when no Planner will review where decisions live. */
+	planner?: boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
@@ -112,7 +120,15 @@ export type PlanState = {
 	lost?: number;
 	/** Why it could not be opened at all, if it could not. */
 	failed?: string;
+	/**
+	 * An undo or redo this person just asked for that could not be applied
+	 * safely, for the host to mention briefly. A new object for each refusal.
+	 */
+	refused?: { reason: Refusal };
 };
+
+/** How long a refused undo stays in the state, long enough to read and no longer. */
+const UNDO_NOTICE = 3000;
 
 export function PlanEditor(
 	{
@@ -120,6 +136,7 @@ export function PlanEditor(
 		className,
 		commentPresentation = "popover",
 		connection,
+		disclosureMotion,
 		motionImmediately,
 		onScrollTop,
 		onState,
@@ -128,7 +145,9 @@ export function PlanEditor(
 		questions,
 		cardMeta,
 		onCardSource,
+		hasCardSource,
 		evidence,
+		planner,
 		readOnly,
 		research,
 		researchLauncher,
@@ -192,8 +211,24 @@ export function PlanEditor(
 		[questions, threads],
 	);
 
+	let onUndoRefused = useCallback((reason: Refusal) => {
+		setState(prev => ({ ...prev, refused: { reason } }));
+	}, []);
+	useEffect(() => {
+		let refused = state.refused;
+		if (!refused) return;
+		let timer = setTimeout(() => {
+			setState(prev => prev.refused === refused ? { ...prev, refused: undefined } : prev);
+		}, UNDO_NOTICE);
+		return () => clearTimeout(timer);
+	}, [state.refused]);
+
 	let onChanges = useCallback((found: Plan.Change[]) => {
 		changes.mark(found);
+	}, [changes]);
+
+	let onRemoteUpdate = useCallback((agent: boolean) => {
+		changes.authored(agent);
 	}, [changes]);
 
 	// The scroll container is what "in view" is measured against, and it only
@@ -210,10 +245,14 @@ export function PlanEditor(
 		return () => element.removeEventListener("scroll", onScroll);
 	}, [changes, generation, onScrollTop, wire]);
 
+	// Restore only when the scroller is (re)created. Echoing every reported
+	// position back cancels smooth scrolls and rewinds to a stale offset.
+	let restoreTop = useRef(scrollTop);
+	restoreTop.current = scrollTop;
 	useEffect(() => {
 		let element = scroller.current;
-		if (element && scrollTop !== undefined) element.scrollTop = scrollTop;
-	}, [generation, scrollTop]);
+		if (element && restoreTop.current !== undefined) element.scrollTop = restoreTop.current;
+	}, [generation]);
 
 	// A preface that changes height moves the document without resizing or scrolling it; overlays
 	// that track the prose (comment markers, rails) re-measure on scroll, so announce one.
@@ -321,16 +360,21 @@ export function PlanEditor(
 						onBinding,
 						onAnchors,
 						onChanges,
+						onUndoRefused,
+						onRemoteUpdate,
 					}),
 					widgetsPlugin({
 						binding,
 						commentPresentation,
+						disclosureMotion,
 						motionImmediately,
 						questionMotion,
 						questions,
 						cardMeta,
 						onCardSource,
+						hasCardSource,
 						evidence,
+						planner,
 						research,
 						researchDrafts,
 						researchLauncher,
@@ -339,6 +383,7 @@ export function PlanEditor(
 						wire,
 						connected: !offline,
 						canEdit: !readOnly,
+						self: user.name,
 						synced: state.synced,
 					}),
 				]
@@ -351,15 +396,20 @@ export function PlanEditor(
 			onBinding,
 			onAnchors,
 			onChanges,
+			onUndoRefused,
+			onRemoteUpdate,
 			binding,
 			questions,
 			cardMeta,
 			onCardSource,
+			hasCardSource,
 			evidence,
+			planner,
 			research,
 			researchDrafts,
 			researchLauncher,
 			commentPresentation,
+			disclosureMotion,
 			motionImmediately,
 			questionMotion,
 			threads,

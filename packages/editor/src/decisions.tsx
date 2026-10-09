@@ -25,6 +25,10 @@ export type DecisionsProps = {
 	store: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
 	canEdit?: boolean;
+	/** The viewer's own handle, who is never shown as present on a card. */
+	self?: string;
+	/** False when no Planner will review where decisions live. */
+	planner?: boolean;
 	motion: MotionDisclosureContract;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
@@ -83,8 +87,10 @@ export function Decisions(
 		motion,
 		motionImmediately,
 		onShowPlan,
+		planner,
 		questionMotion,
 		reveal,
+		self,
 		store,
 		wire,
 	}: DecisionsProps,
@@ -155,6 +161,8 @@ export function Decisions(
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
 			meta={metadata.get(entry.id)}
+			planner={planner}
+			relations={store.relations(entry.id)}
 			canEdit={canEdit}
 			connected={connected}
 			key={entry.id}
@@ -167,6 +175,7 @@ export function Decisions(
 			}}
 			places={store.counts(entry.id)}
 			presentation="list"
+			self={self}
 			value={entry.value}
 			wire={wire}
 		/>

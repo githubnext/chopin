@@ -13,8 +13,11 @@ description provenance and optional parent channel, repository-scoped document
 slug aliases, collaboration recovery state, domain sidecars, token-free ownership
 references, parent-scoped research request staging, durable background jobs,
 ordinary child channels, and the writer lease.
-GitHub tokens, browser-cookie verifiers, open rooms, Awareness presence, and
-Copilot SDK sessions never cross the storage boundary.
+Hosted sessions store browser-secret hashes and authenticated ciphertext for
+GitHub credentials. The encryption key stays outside PostgreSQL. Plaintext
+GitHub tokens, raw browser-cookie secrets, open rooms, Awareness presence, and
+Copilot SDK sessions never cross the storage boundary. See
+[Session boundary](authentication.md#session-boundary) for encryption and restoration.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
 It includes document sequence and plan revision counters, question and comment
@@ -49,8 +52,9 @@ Every adapter must provide:
 - idempotent archive and restore transitions and archived-only atomic deletion;
 - repository-scoped canonical and historical slug resolution without rebinding
   aliases;
-- expiring, token-free process-session registry rows;
-- startup removal of every registry row and Planner owner reference;
+- expiring session rows with optional opaque encrypted credentials;
+- revision-checked credential rotation that cannot recreate a deleted session;
+- startup removal of expired and metadata-only sessions and every Planner owner reference;
 - renewable leases whose fencing token protects commits, epoch replacements,
   checkpoints, jobs, and research request mutations;
 - idempotent, independently revisioned publication of generated channel
@@ -104,10 +108,10 @@ applied migration. The application schema contains:
 | Table                      | Purpose                                                                                                                                                    |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `users`                    | GitHub identity and attribution records.                                                                                                                   |
-| `web_sessions`             | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                                                                 |
+| `web_sessions`             | Session metadata and optional browser-secret hashes, encrypted hosted credentials, and credential revisions. Planner ownership references session IDs.     |
 | `channels`                 | Repository identity, optional parent channel, title, creator, archive and generated-description metadata, storage revision, next sequence, and timestamps. |
 | `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                                                           |
-| `channel_state`            | Current sidecar JSON for a channel.                                                                                                                        |
+| `channel_state`            | Current sidecar JSON for a channel and its `unanswered_decisions` count, written with each sidecar from its question records.                              |
 | `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                                                           |
 | `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                                                                |
 | `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                                                                |
@@ -121,6 +125,12 @@ applied migration. The application schema contains:
 | `research_workspaces`      | Internal request staging: parent channel, exact brief fields, optional published child, attribution, revision, idempotency, and compatibility counters.    |
 | `research_turns`           | Internal initial attempt and compatibility turns with evidence and answer job links.                                                                       |
 | `research_messages`        | Compatibility transcript rows retained for historical workspace references; not a current product thread.                                                  |
+
+`channel_state.unanswered_decisions` is maintained in JavaScript rather than a
+generated column. Sidecar text may contain an escaped NUL or an unpaired UTF-16
+surrogate, which JSONB rejects, so SQL cannot re-parse every stored sidecar.
+Migration 017 backfills existing rows with the same rule, and every adapter write
+that replaces a sidecar writes its count in the same statement.
 
 The `channels.parent_channel_id` foreign key records navigational containment.
 Storage rejects a parent from another repository and rejects a grandchild.

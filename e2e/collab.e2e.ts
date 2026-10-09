@@ -114,3 +114,52 @@ test("nobody sees their own caret twice", async ({ join }) => {
 	await expect(ana.getByRole("region", { name: "Document" }).getByText("ana", { exact: true }))
 		.toHaveCount(0);
 });
+
+for (let reducedMotion of ["no-preference", "reduce"] as const) {
+	test(`a peer's name flashes intermittently and returns on hover (${reducedMotion})`, async ({ join }) => {
+		let ana = await join("ana");
+		let bo = await join("bo");
+		await bo.emulateMedia({ reducedMotion });
+
+		await content(ana).click();
+		await ana.keyboard.type("Somewhere to type for a while.");
+		await expect(content(bo)).toContainText("Somewhere to type for a while.");
+
+		let name = bo.getByRole("region", { name: "Document" }).getByText("ana", { exact: true });
+		await ana.keyboard.type(" Start");
+		await expect(name).toHaveCSS("opacity", "1");
+		let typing = ana.keyboard.type("word ".repeat(16), { delay: 50 });
+
+		// Continued typing, including line wrapping, must not renew the name.
+		await bo.waitForTimeout(2500);
+		await expect(name).toHaveCSS("opacity", "0");
+		await typing;
+		await expect(name).toHaveCSS("opacity", "0");
+
+		// A new inline text node is still the same block.
+		await ana.keyboard.press("ControlOrMeta+b");
+		await ana.keyboard.type("bold");
+		await expect(name).toHaveCSS("opacity", "0");
+		await ana.keyboard.press("ControlOrMeta+b");
+
+		// Enter changes the block without an idle pause.
+		await ana.keyboard.press("Enter");
+		await ana.keyboard.type("Another block.");
+		await expect(name).toHaveCSS("opacity", "1");
+
+		await expect(name).toHaveCSS("opacity", "0", { timeout: 5000 });
+		await bo.waitForTimeout(1700);
+		await ana.keyboard.type(" Resumed.");
+		await expect(name).toHaveCSS("opacity", "1");
+		await expect(name).toHaveCSS("opacity", "0", { timeout: 5000 });
+
+		let caret = await bo.evaluate(() => {
+			let box = document.querySelector(".plan-cursor")!.getBoundingClientRect();
+			return { x: box.left, y: box.top + box.height / 2 };
+		});
+		await bo.mouse.move(caret.x + 2, caret.y);
+		await expect(name).toHaveCSS("opacity", "1");
+		await bo.mouse.move(0, 0);
+		await expect(name).toHaveCSS("opacity", "0");
+	});
+}

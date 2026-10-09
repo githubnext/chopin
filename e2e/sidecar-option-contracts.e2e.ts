@@ -206,7 +206,8 @@ test("a duplicate option is refused inline", async ({ join, seed }) => {
 	await card.getByRole("textbox", { name: "New option" }).fill("in sqlite");
 	await page.keyboard.press("Enter");
 
-	await expect(card.getByRole("alert")).toContainText("That option already exists");
+	await expect(card.getByText("Already an option: In SQLite")).toBeVisible();
+	await expect(card.getByRole("alert")).toHaveCount(0);
 	await expect(card.getByRole("textbox", { name: "New option" })).toHaveValue("in sqlite");
 });
 

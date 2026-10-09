@@ -18,7 +18,7 @@ import * as Y from "yjs";
 
 import { importPlan, registry } from "@chopin/dialect";
 
-import { counts, relate, resolve } from "./anchors";
+import { counts, relate, relations, resolve } from "./anchors";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
@@ -212,5 +212,34 @@ describe("how much prose a card says it points at", () => {
 		];
 
 		expect(counts(found, "w1")).toEqual({ q1: 1 });
+	});
+});
+
+describe("which relationship state a card shows", () => {
+	it("keeps linked, pending, deliberately empty and orphaned apart", () => {
+		let { binding, editor } = room();
+		let gone: Plan.Anchor = { epoch: "e1", position: "", digest: "sha256:x", orphaned: true };
+		let found = relate(binding, [widget({
+			linked: { anchors: [anchor(editor, binding, 1)], pending: false },
+			pending: { anchors: [], pending: true, reason: "missing" },
+			empty: { anchors: [], pending: false },
+			orphaned: { anchors: [gone], pending: true, reason: "orphaned" },
+		})]);
+
+		expect(relations(found, "w1")).toEqual({
+			linked: "linked",
+			pending: "pending",
+			empty: "empty",
+			orphaned: "orphaned",
+		});
+	});
+
+	it("treats trusted anchors this editor cannot resolve yet as pending, not empty", () => {
+		let { binding } = room();
+		let found = relate(binding, [widget({
+			q1: { anchors: [{ epoch: "e0", position: "!!!", digest: "sha256:x" }], pending: false },
+		})]);
+
+		expect(relations(found, "w1")).toEqual({ q1: "pending" });
 	});
 });

@@ -74,8 +74,10 @@ SESSION_ENCRYPTION_KEY=<64 hex characters>
 ```
 
 The client ID is distinct from the numeric App ID. Generate the encryption key
-with `openssl rand -hex 32`; it protects the short-lived OAuth attempt cookie,
-including state, the PKCE verifier, and an optional browser return path.
+with `openssl rand -hex 32`; it protects the short-lived OAuth attempt cookie
+and, through a separate derived key, hosted session credentials in PostgreSQL.
+Keep it stable across releases and store it in deployment secrets, outside the
+database and source control. Replacing it invalidates existing hosted logins.
 
 `APP_ORIGIN` must be exactly one HTTP(S) origin: no credentials, path, query,
 fragment, or trailing slash. HTTPS is required except for loopback development,
@@ -228,14 +230,14 @@ repository role directly.
 Admission results are cached by a hash of the access token for 30 seconds.
 Browser requests, open-socket authorization, MCP requests, and Planner
 permission callbacks recheck the policy. A definitive removal revokes the
-process-local browser session and Planner ownership at the next browser or
+browser session, its persisted credentials, and Planner ownership at the next browser or
 socket recheck; a Planner permission callback refuses the operation immediately. GitHub outages,
 rate limits, malformed responses, blocked Apps, and missing permission fail
 closed for new requests but do not revoke an established browser session; they
 are reported as a temporary `503` and retried later.
 
 Configuration is read at process startup. Restart after changing either list;
-startup already clears every process-local login session. GitHub usernames and
+restored sessions must pass the new policy. GitHub usernames and
 organization names can be renamed, so update the lists when that happens.
 
 ## Authorization and installation
@@ -298,33 +300,58 @@ Environment-specific callback and proxy configuration is documented in
 ## Session boundary
 
 The browser receives an HttpOnly, SameSite=Lax cookie containing a random
-session ID and a 256-bit secret. The serving process keeps the secret hash,
-GitHub access and refresh tokens, expirations, user, and credential revision in
-memory. PostgreSQL receives only the session ID, user ID, expiry, and creation
-time so durable Planner ownership can reference an active process session. A
-database row or session ID cannot authenticate a request without the in-memory
-secret hash.
+session ID and a 256-bit secret. Hosted sessions persist the secret's SHA-256
+hash and encrypted GitHub access/refresh tokens and token expirations, alongside
+the session ID, user ID, absolute expiry, creation time, and credential revision.
+The raw cookie secret is never stored. Plaintext tokens live in process memory
+only while the session is loaded.
+
+Credentials use AES-256-GCM with a fresh random nonce on every write and a
+purpose-specific key derived from `SESSION_ENCRYPTION_KEY` using HKDF-SHA-256.
+Authenticated data binds the ciphertext to the application origin, GitHub App
+client ID, session/user IDs, creation and expiry times, verifier hash, and
+credential revision. Altering those fields or copying ciphertext to another
+session fails authentication. A database dump alone contains no directly usable
+browser secret or GitHub token; access to the deployment key as well permits
+token decryption. Backups retain encrypted credentials according to their own
+retention policy and need the same key protection as the live database.
+
+After a restart, a valid browser cookie lazily restores its session and checks
+GitHub identity and current instance admission before authenticating a request.
+Knowing a session ID or user ID cannot restore it for internal Planner or MCP
+use. Repository authorization continues to check App installation and role.
+Local device mode uses its separate credential store and metadata-only session
+rows instead of database credential encryption.
 
 GitHub App user access tokens expire after eight hours. Chopin refreshes five
-minutes early, rotates the one-use refresh token, and atomically replaces the
-process-local credential object. Concurrent requests share one refresh. Logout
-removes the memory entry before any asynchronous cleanup, so a racing refresh
-cannot resurrect a session.
+minutes early and rotates the one-use refresh token. Hosted refresh commits the
+encrypted replacement with a credential-revision check before publishing it in
+memory. Concurrent restores and refreshes share work. Logout blocks the memory
+entry immediately and deletes the durable row before reporting success; a racing
+refresh can update an existing revision only and cannot recreate a deleted row.
+A failed logout write reports an error and remains blocked locally for retry.
+If a process crashes after GitHub rotates a token but before the database commits
+its replacement, that session may require sign-in again. A failed replacement
+write revokes the session rather than retaining a consumed refresh token.
 
-A rejected refresh token or a second API `401` deletes the matching local
-session. Network failures, rate limits, malformed responses, and GitHub `5xx`
+A rejected refresh token or a second API `401` deletes the matching session
+and its persisted credentials. Network failures, rate limits, malformed responses, and GitHub `5xx`
 responses do not delete it. A transient proactive refresh may continue using
 the still-valid access token; after access expiry it reports a temporary error
 and retains the session for retry.
 
-Sessions expire absolutely after 30 days or whenever the server process stops.
+Hosted sessions expire absolutely after 30 days; restoration never extends that
+deadline. Deployments preserve them when the database, encryption key, origin,
+and GitHub App client ID are stable. The first release adding persistence still
+requires one sign-in because previous processes never stored credentials.
 In local mode, the session created after a restart is a new session bound to
 the restored device-flow credential, not the same session ID; see
 [Local device-flow sign-in](#local-device-flow-sign-in) for the restore path.
-After acquiring the database writer lease, every new process clears session
-registry rows and Planner ownership before accepting traffic. Documents,
+After acquiring the database writer lease, every new process deletes expired
+and metadata-only session rows and clears all Planner ownership before accepting
+traffic. Valid encrypted hosted sessions survive. Documents,
 transcripts, reserved Planner context fields, and repository installations
-remain durable. Logout deletes the process-local session and registry row but
+remain durable. Logout deletes the process-local session and durable row but
 does not revoke the GitHub App authorization.
 
 OAuth state, the PKCE verifier, and the validated browser return path are held in
@@ -334,7 +361,8 @@ The bearer-authenticated MCP route accepts a missing Origin, as non-browser
 clients normally omit it, but rejects a present mismatched Origin. Open sockets
 periodically recheck the process-local session, instance admission, and
 installation repository permission. On restart, a returning local browser
-restores a new session on `/api/session`; hosted browsers return to sign-in.
+restores a new session on `/api/session`; a hosted browser restores its existing
+session on its first authenticated request.
 
 When a credential rotates, any Planner SDK session holding the previous token
 is aborted and discarded before refresh. A later turn recreates it from the
@@ -378,7 +406,10 @@ UUID routes remain internal API and collaboration entry points.
 API and authentication paths are owned by the server in development and
 production.
 
-Live collaboration is multiplexed over `/ws`. External coding agents use the
+Live collaboration is multiplexed over `/ws`. The Projects sidebar's
+`/ws/sidebar` socket admits any authenticated browser session with the exact
+Origin, then checks GitHub read access for each repository before it delivers
+that repository's decision counts; see [Repository channels](channels.md). External coding agents use the
 separate Streamable HTTP endpoint at `/mcp`; unlike the browser API, its
 caller-supplied bearer is independent of the GitHub App installation and can
 perform write-authorized document and implementation lifecycle operations.

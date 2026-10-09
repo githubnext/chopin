@@ -77,9 +77,9 @@ and tool vocabulary remain optimized for planning.
   and, under the default `copilot-sdk` harness, the Copilot entitlement. With
   `HARNESS=pi` or `HARNESS=atomic`, model access comes from the operator's
   `HARNESS_AUTH` instead.
-  A server restart clears every session and releases that ownership. A
-  returning browser in local device mode can restore a new session, but does
-  not reclaim Planner ownership.
+  A server restart releases that ownership. Hosted browser logins survive
+  releases using encrypted session credentials; local device mode restores a
+  new session. Returning browsers can claim Planner ownership on a later action.
 - Document and Chat context, along with repository material selected by
   the Planner, is sent to the harness's model provider during a turn (GitHub
   Copilot by default; under `HARNESS=pi` or `HARNESS=atomic`, the provider
@@ -87,11 +87,12 @@ and tool vocabulary remain optimized for planning.
   material, including context loaded during execution, to isolated workers on
   the same harness. The public research worker receives
   only the exact submitted brief, but may derive or refine the queries it sends
-  to web search. By default GitHub credentials remain process-local; the
+  to web search. Hosted GitHub credentials are encrypted in PostgreSQL with a
+  deployment key kept outside the database; the
   [local device mode](docs/authentication.md#local-device-flow-sign-in) persists
   credentials in an OS vault or an explicitly consented local file. Documents,
   transcripts, decisions, research request staging, background-job inputs and
-  artifacts, and token-free session records are stored in PostgreSQL.
+  artifacts, and session records are stored in PostgreSQL.
 - Optional conversation-derived cards default to off. With `CONVERSATION_PLAN=on`,
   current and recent Chat messages and selected decision context are sent to
   TypeSafe's Jev service for interpretation. This uses the server's `JEV_API_KEY`,

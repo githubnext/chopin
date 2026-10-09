@@ -35,7 +35,7 @@ comes from the operator's `HARNESS_AUTH` mode. The user must pass instance
 admission and have repository push or administration access. Ownership is
 assigned atomically in storage and guarded by a generation token.
 
-That process-local login owns the channel's model usage until it expires, logs
+That login owns the channel's model usage in this process until it expires, logs
 out, the server restarts, or the authenticated reset API releases it. The
 current web application does not expose a reset control. Under `copilot-sdk`, a
 user without Copilot entitlement sees the provider failure on the first
@@ -48,11 +48,12 @@ message; the turn runs under the channel's current owner, whoever that is. A
 channel without one is claimed for the caller's live browser login, hosted or
 local, and without such a login the call is refused and nothing is posted.
 
-PostgreSQL stores the owner session ID only so durable ownership can refer to an
-active process session. The cookie verifier and GitHub credential remain in
-memory. Startup clears every browser-session registry row and owner reference,
-while preserving the document, transcript, reserved context fields, and
-ownership generation.
+Planner ownership stores only the owner session ID, referring to a login loaded
+in this process. Hosted logins separately persist encrypted credentials in
+PostgreSQL. Startup clears every owner reference while preserving valid hosted
+sessions, the document, transcript, reserved context fields, and ownership
+generation. A returning browser must present its cookie and pass authorization
+before that session is available for a new Planner claim.
 
 ## Runtime isolation
 
@@ -73,7 +74,7 @@ That isolated Planner has no:
 - shared embeddings or cross-session store; or
 - ability to change GitHub.
 
-Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.128 so Pi does not
+Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.148 so Pi does not
 load `AGENTS.md` or `CLAUDE.md` context files from the host filesystem. See
 [Self-hosting](self-hosting.md#choose-and-trust-a-harness).
 
@@ -262,7 +263,13 @@ every turn.
   descriptions and legacy summaries under durable `document-summary@1` are
   separate and are not bootstrap context.
 - The Planner reads the current document through the plan-named `read_plan` tool
-  instead of receiving a stale embedded copy.
+  instead of receiving a stale embedded copy. That result, and every structured
+  `edit_plan` result (success, or a locked, stale, or invalid refusal), carry
+  `document: { id, url }`: the room's own document id and the canonical URL MCP
+  `read_document` returns for it, nested under the parent for a child document.
+  Argument and storage errors return plain error text without it. Code running
+  inside the session, such as an Atomic extension, can use either to address
+  that document over MCP.
 
 Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.

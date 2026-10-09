@@ -15,6 +15,7 @@ import type {
 	ChannelAgent,
 	ChannelArchiveInput,
 	ChannelArchiveResult,
+	ChannelDecisionCount,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -56,17 +57,18 @@ import type {
 	ResetInitialResearchAttemptResult,
 	ResumeBackgroundJob,
 	SaveCheckpoint,
+	SessionCredentials,
 	SettleBackgroundJob,
 	StartResearchWorkspace,
 	StartResearchWorkspaceResult,
 	StoredChannel,
+	StoredWebSession,
 	SupersedeBackgroundJob,
 	UpdateAgentContext,
 	UserNavigation,
 	UserNavigationSnapshot,
 	UserProject,
 	UserRecord,
-	WebSession,
 } from "./model";
 
 export interface UserStore {
@@ -76,10 +78,12 @@ export interface UserStore {
 
 export interface SessionStore {
 	create(session: CreateWebSession): Promise<void>;
-	get(id: string, now: Date): Promise<WebSession | undefined>;
+	get(id: string, now: Date): Promise<StoredWebSession | undefined>;
+	rotate(id: string, expectedRevision: number, credentials: SessionCredentials): Promise<boolean>;
 	delete(id: string): Promise<boolean>;
 	deleteExpired(now: Date): Promise<number>;
-	deleteAll(
+	/** Release all Planner owners; retain only unexpired sessions with encrypted credentials. */
+	reset(
 		now: Date,
 		lease: Lease,
 		leaseTtlMs: number,
@@ -132,6 +136,13 @@ export interface ChannelStore {
 		after?: ChannelScanCursor,
 		includeArchived?: boolean,
 	): Promise<ChannelScanPage>;
+	/** Totals the repository's active catalogue: what `list` returns without archived rows. */
+	unansweredDecisions(repositoryId: string): Promise<number>;
+	/** Current counts for the requested channels that belong to the repository, archived or not. */
+	unansweredDecisionCounts(
+		repositoryId: string,
+		channelIds: string[],
+	): Promise<ChannelDecisionCount[]>;
 	claimAgentOwner(channelId: string, sessionId: string, now: Date): Promise<AgentState>;
 	clearAgentOwner(
 		channelId: string,

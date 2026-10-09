@@ -59,18 +59,18 @@ image build. A documentation-only change should still pass `bun run ci`.
 
 ## Repository map
 
-| Area                | Responsibility                                         | Internal workspace dependencies                      |
-| ------------------- | ------------------------------------------------------ | ---------------------------------------------------- |
-| `packages/dialect`  | Restricted MDX, MDAST, and Lexical schema              | none                                                 |
-| `packages/protocol` | WebSocket declarations and addressing helper           | none                                                 |
-| `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                           |
-| `packages/draft`    | Bounded collaborative plain-text drafts                | none                                                 |
-| `packages/viewport` | Browser geometry and subscriptions                     | none                                                 |
-| `packages/diagrams` | Bounded diagram rendering and scoped React viewing     | none (React peer)                                    |
-| `packages/editor`   | Collaborative editor, decisions, comments, and widgets | `dialect`, `question`, `protocol`, `viewport`        |
-| `apps/server`       | Auth, channels, rooms, storage, Planner, MCP, tasks    | `dialect`, `draft`, `question`, `protocol`           |
-| `apps/web`          | Repository picker, navigation, conversation, workspace | `dialect`, `draft`, `editor`, `protocol`, `viewport` |
-| `e2e`               | Browser and system integration harness                 | may import server internals as fixtures              |
+| Area                | Responsibility                                         | Internal workspace dependencies                           |
+| ------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| `packages/dialect`  | Restricted MDX, MDAST, and Lexical schema              | none                                                      |
+| `packages/protocol` | WebSocket declarations and addressing helper           | none                                                      |
+| `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                                |
+| `packages/draft`    | Bounded collaborative plain-text drafts                | none                                                      |
+| `packages/viewport` | Browser geometry and subscriptions                     | none                                                      |
+| `packages/diagrams` | Bounded diagram rendering and scoped React viewing     | none (React peer)                                         |
+| `packages/editor`   | Collaborative editor, decisions, comments, and widgets | `diagrams`, `dialect`, `question`, `protocol`, `viewport` |
+| `apps/server`       | Auth, channels, rooms, storage, Planner, MCP, tasks    | `diagrams`, `dialect`, `draft`, `question`, `protocol`    |
+| `apps/web`          | Repository picker, navigation, conversation, workspace | `dialect`, `draft`, `editor`, `protocol`, `viewport`      |
+| `e2e`               | Browser and system integration harness                 | may import server internals as fixtures                   |
 
 Runtime workspace packages do not depend on an application. E2E and skill
 contract tests may deliberately import server internals; do not treat those test
@@ -80,7 +80,8 @@ harnesses as runtime package boundaries.
 
 The browser edits Lexical bound to Yjs. One WebSocket multiplexes session,
 document (`plan:*` on the wire), conversation, questions, comments, and
-implementation lifecycle messages. The server keeps each open channel as an
+implementation lifecycle messages; the Projects sidebar's own `/ws/sidebar`
+socket carries only decision counts. The server keeps each open channel as an
 authoritative Y.Doc with a headless Lexical mirror so it can validate and
 serialize the document without trusting a browser.
 
@@ -96,9 +97,10 @@ MDAST object identity preserves existing Lexical nodes, selections, and undo
 history.
 
 PostgreSQL is the only runtime storage adapter. One renewable `chopin:writer`
-lease permits one application process per database. Process-local browser
-sessions and GitHub credentials are cleared on startup; collaborative state and
-external implementation runs are durable.
+lease permits one application process per database. Hosted browser sessions use
+encrypted credentials in PostgreSQL and restore on presentation of the browser
+cookie. Startup clears Planner ownership and metadata-only local sessions;
+collaborative state and external implementation runs are durable.
 
 ## Authority and security
 
@@ -389,7 +391,7 @@ ordering. Extract pure state machines for unit coverage and use `*.e2e.ts` for
 the browser adapter.
 
 The E2E fake GitHub replaces GitHub's network responses only. OAuth state,
-process-local sessions, admission, repository checks, channel routes,
+session persistence, admission, repository checks, channel routes,
 WebSockets, storage, and the web application are production implementations.
 
 Prefer role and accessible-name selectors. Avoid classes, generated Lexical

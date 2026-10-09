@@ -14,7 +14,9 @@
  *
  * Only one table has rails at a time — whichever the pointer is over, or the
  * caret is in. Rails on every table at once would be a page of grey furniture
- * around prose that is mostly not tables.
+ * around prose that is mostly not tables. Within that table only the row and
+ * column being pointed at, or holding the caret, draw a grip; an insert button
+ * shows only while its seam is aimed at.
  *
  * There is no test for this file, on purpose: it is rectangles and pointers all
  * the way down and the test runtime has no DOM. What can be decided without one
@@ -24,8 +26,8 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $findTableNode } from "@lexical/table";
-import { $getSelection, $isRangeSelection } from "lexical";
+import { $findTableNode, $isTableCellNode } from "@lexical/table";
+import { $findMatchingParent, $getSelection, $isRangeSelection } from "lexical";
 
 import { alignmentLabel, nextAlign } from "./alignment";
 import { destination, dropSeam, gripBox, seamAt, seamBox, seams } from "./geometry";
@@ -54,16 +56,16 @@ import type { Table } from "./ops";
  * going down. Nothing in the two lanes overlaps now, so neither can take the
  * other's pointer.
  */
-const GRIP = 14;
-const TOOL = 14;
+const GRIP = 12;
+const TOOL = 24;
 const DEPTH = GRIP + TOOL;
 
 /** How much of a seam can be aimed at. */
-const SEAM = 16;
+const SEAM = 24;
 
 /** One button in the tool lane, and how far each of a pair sits from centre. */
-const BUTTON = 15;
-const PAIR = 8;
+const BUTTON = 24;
+const PAIR = 13;
 
 export type RailMode = "full" | "grips";
 
@@ -84,10 +86,54 @@ type Metrics = {
 	height: number;
 	columns: Track[];
 	rows: Track[];
+	/** The visible rect of the scroller the table is in, which rails never draw past. */
+	clip: { top: number; bottom: number };
 };
+
+/** The nearest ancestor that scrolls vertically, or the viewport. */
+function visibleRect(element: HTMLElement): Metrics["clip"] {
+	for (let node = element.parentElement; node; node = node.parentElement) {
+		if (!/auto|scroll/.test(getComputedStyle(node).overflowY)) continue;
+		let { top, bottom } = node.getBoundingClientRect();
+		return { top, bottom };
+	}
+	return { top: 0, bottom: innerHeight };
+}
+
+/** A fixed overlay's `clip-path`, cutting off whatever falls outside `clip`. */
+function clipTo(
+	clip: Metrics["clip"],
+	box: { left: number; top: number; width: number; height: number },
+) {
+	// Vertical only: a row rail lives in the gutter, which can be outside the
+	// scroller's own box, and the chrome a rail must not cover is above and below.
+	let inset = [clip.top - box.top, 0, box.top + box.height - clip.bottom, 0]
+		.map(edge => `${Math.max(edge, 0)}px`);
+	return `inset(${inset.join(" ")})`;
+}
 
 /** A drag in progress. */
 type Drag = { axis: Axis; from: number; seam: number };
+
+/** A cell of the active table, by row and column. */
+type Cell = { table: NodeKey; row: number; column: number };
+
+/** The seam an insert button is aimed at, drawn across the table. */
+type Aim = { axis: Axis; seam: number };
+
+function same(a: Cell | undefined, b: Cell | undefined): boolean {
+	return a?.table === b?.table && a?.row === b?.row && a?.column === b?.column;
+}
+
+function cellAt(tables: Table[], key: NodeKey): Cell | undefined {
+	for (let table of tables) {
+		for (let [row, keys] of table.cells.entries()) {
+			let column = keys.indexOf(key);
+			if (column >= 0) return { table: table.key, row, column };
+		}
+	}
+	return undefined;
+}
 
 /**
  * Measure one table.
@@ -133,6 +179,7 @@ function measure(editor: LexicalEditor, table: Table): Metrics | undefined {
 		height: frame.height,
 		columns,
 		rows,
+		clip: visibleRect(element),
 	};
 }
 
@@ -148,6 +195,9 @@ export function TableRails(
 	let [active, setActive] = useState<NodeKey>();
 	let [metrics, setMetrics] = useState<Metrics>();
 	let [drag, setDrag] = useState<Drag>();
+	let [pointed, setPointed] = useState<Cell>();
+	let [caretCell, setCaretCell] = useState<Cell>();
+	let [aim, setAim] = useState<Aim>();
 
 	let table = tables.find(item => item.key === active);
 
@@ -214,6 +264,7 @@ export function TableRails(
 	let dragging = useRef(false);
 	dragging.current = drag !== undefined;
 	let leaving = useRef(0);
+	let caret = useRef<NodeKey | undefined>(undefined);
 
 	let hover = useCallback((key: NodeKey | undefined) => {
 		cancelAnimationFrame(leaving.current);
@@ -227,7 +278,11 @@ export function TableRails(
 		 * would take the rails out from under a pointer on its way to them.
 		 * The rail's own handler cancels this before it runs.
 		 */
-		leaving.current = requestAnimationFrame(() => setActive(undefined));
+		leaving.current = requestAnimationFrame(() => {
+			// Back to the table holding the caret, if any, rather than none.
+			setActive(caret.current);
+			setAim(undefined);
+		});
 	}, []);
 
 	useEffect(() => {
@@ -237,9 +292,20 @@ export function TableRails(
 		let over = (event: PointerEvent) => {
 			let target = event.target;
 			if (!(target instanceof Node)) return;
-			hover(tables.find(item => editor.getElementByKey(item.key)?.contains(target))?.key);
+			let found = tables.find(item => editor.getElementByKey(item.key)?.contains(target));
+			hover(found?.key);
+			let element = target instanceof Element ? target : target.parentElement;
+			let cell = element?.closest("td, th");
+			let key = found && cell
+				? found.cells.flat().find(item => editor.getElementByKey(item) === cell)
+				: undefined;
+			let at = key ? cellAt([found!], key) : undefined;
+			setPointed(last => same(last, at) ? last : at);
 		};
-		let out = () => hover(undefined);
+		let out = () => {
+			hover(undefined);
+			setPointed(undefined);
+		};
 
 		root.addEventListener("pointerover", over);
 		root.addEventListener("pointerleave", out);
@@ -257,14 +323,17 @@ export function TableRails(
 	 * re-asserting it against a pointer resting somewhere else, and the rails
 	 * would flick between the two as long as somebody kept writing.
 	 */
-	let caret = useRef<NodeKey | undefined>(undefined);
+	let tablesRef = useRef(tables);
+	tablesRef.current = tables;
 	useEffect(() => {
 		let sync = () => {
 			editor.getEditorState().read(() => {
 				let selection = $getSelection();
-				let found = $isRangeSelection(selection)
-					? $findTableNode(selection.anchor.getNode())?.getKey()
-					: undefined;
+				let node = $isRangeSelection(selection) ? selection.anchor.getNode() : undefined;
+				let found = node ? $findTableNode(node)?.getKey() : undefined;
+				let cell = node ? $findMatchingParent(node, $isTableCellNode)?.getKey() : undefined;
+				let at = cell ? cellAt(tablesRef.current, cell) : undefined;
+				setCaretCell(last => same(last, at) ? last : at);
 				if (found === caret.current) return;
 				caret.current = found;
 				if (found) setActive(found);
@@ -280,14 +349,36 @@ export function TableRails(
 	// table's rectangles would put the rails somewhere they do not belong.
 	if (disabled || !table || !metrics || metrics.key !== table.key) return null;
 	let tools = mode === "full";
+	let aimed = pointed?.table === table.key ? pointed : undefined;
+	let hot = aimed ?? (caretCell?.table === table.key ? caretCell : undefined);
+	let holding = caretCell?.table === table.key;
+
+	let line = aim
+		? seams(aim.axis === "column" ? metrics.columns : metrics.rows)[aim.seam]
+		: undefined;
 
 	return (
 		<>
+			{aim && line !== undefined
+				? (
+					<div
+						aria-hidden="true"
+						className="plan-seam-line"
+						data-plan-seam-line={aim.axis}
+						style={seamLine(aim.axis, line, metrics)}
+					/>
+				)
+				: null}
 			<Rail
 				axis="column"
+				aim={aim}
+				aimed={aimed?.column}
+				caret={holding}
 				drag={drag}
+				hot={hot?.column}
 				metrics={metrics}
 				onAct={act}
+				onAim={setAim}
 				onDrag={setDrag}
 				onHover={hover}
 				table={table}
@@ -296,9 +387,14 @@ export function TableRails(
 			/>
 			<Rail
 				axis="row"
+				aim={aim}
+				aimed={aimed?.row}
+				caret={holding}
 				drag={drag}
+				hot={hot?.row}
 				metrics={metrics}
 				onAct={act}
+				onAim={setAim}
 				onDrag={setDrag}
 				onHover={hover}
 				table={table}
@@ -309,11 +405,27 @@ export function TableRails(
 	);
 }
 
+function seamLine(axis: Axis, line: number, metrics: Metrics) {
+	let box = axis === "column"
+		? { left: line - 1, top: metrics.top, width: 2, height: metrics.height }
+		: { left: metrics.left, top: line - 1, width: metrics.width, height: 2 };
+	return { ...box, clipPath: clipTo(metrics.clip, box) };
+}
+
 type RailProps = {
+	/** The seam an insert is aimed at, on either rail. */
+	aim: Aim | undefined;
+	/** The track the pointer is on in the table; the caret alone does not count. */
+	aimed: number | undefined;
 	axis: Axis;
+	/** Whether the caret is in this table, which keeps every grip faintly drawn. */
+	caret: boolean;
 	drag: Drag | undefined;
+	/** The track being pointed at in the table, or holding the caret. */
+	hot: number | undefined;
 	metrics: Metrics;
 	onAct: (op: () => void) => void;
+	onAim: (aim: Aim | undefined) => void;
 	onDrag: (drag: Drag | undefined) => void;
 	onHover: (key: NodeKey | undefined) => void;
 	table: Table;
@@ -321,7 +433,24 @@ type RailProps = {
 	tools: boolean;
 };
 
-function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tools }: RailProps) {
+function Rail(
+	{
+		aim,
+		aimed,
+		axis,
+		caret,
+		drag,
+		hot,
+		metrics,
+		onAct,
+		onAim,
+		onDrag,
+		onHover,
+		table,
+		tracks,
+		tools,
+	}: RailProps,
+) {
 	let column = axis === "column";
 	let key = table.key;
 	let count = tracks.length;
@@ -389,14 +518,27 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 		column ? canRemoveColumn(table.shape, index) : canRemoveRow(table.shape, index);
 	// Every column may be taken hold of; the header row may not.
 	let holdable = (index: number) => table.shape.simple && (column || index > HEADER);
+	// A row rail is beside the table, so its tooltips go further out to the left;
+	// a column rail's already open above it.
+	let side = column ? undefined : "left";
+	/*
+	 * Only the seams either side of the track being pointed at take the pointer.
+	 * The rest of the button lane lets clicks through to whatever it overlaps —
+	 * on a column rail, the last line of the paragraph above the table.
+	 */
+	let near = under ?? aimed;
+	let live = (seam: number) => near !== undefined && (seam === near || seam === near + 1);
 
 	return (
 		<div
 			className="plan-rail"
 			data-focus-boundary=""
+			data-plan-caret={caret || undefined}
 			data-plan-rail={axis}
+			// Tooltips sit beyond the rail, so none covers a control in it.
+			data-tooltip-edge=""
 			// Placement is measured, so it is a style rather than a class.
-			style={frame}
+			style={{ ...frame, clipPath: clipTo(metrics.clip, frame) }}
 			onPointerOver={() => onHover(key)}
 			onPointerLeave={() => {
 				onHover(undefined);
@@ -406,19 +548,24 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 			{tracks.map((track, index) => {
 				let box = gripBox(axis, track, origin, GRIP, gripLane);
 				if (!holdable(index)) {
-					// The header still gets a bar, so the rail does not have a
-					// gap in it where the row everybody can see plainly is.
+					// Undrawn, but still the rail's: a hole here would be a
+					// pointerleave on the way from the header to the first grip.
 					return <div key={index} className="plan-grip is-fixed" style={box} />;
 				}
 				return (
 					<button
 						key={index}
 						type="button"
+						aria-keyshortcuts={column
+							? "Meta+ArrowLeft Meta+ArrowRight Control+ArrowLeft Control+ArrowRight"
+							: "Meta+ArrowUp Meta+ArrowDown Control+ArrowUp Control+ArrowDown"}
 						aria-label={`Move ${noun} ${index + 1}`}
 						className={`plan-grip ${mine?.from === index ? "is-held" : ""}`}
 						data-press="small"
 						data-tooltip={`Move ${column ? "column" : "row"}`}
+						data-tooltip-side={side}
 						data-plan-held={mine?.from === index || undefined}
+						data-plan-hot={(under ?? hot) === index || undefined}
 						style={box}
 						title={`Drag to move this ${noun}`}
 						onPointerEnter={() => setUnder(index)}
@@ -488,7 +635,9 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 				// track's middle rather than both on it; a row has only the one.
 				let place = (offset: number) =>
 					seamBox(axis, middle + (column ? offset : 0), origin, TOOL, BUTTON);
-				let shown = under === index ? "" : undefined;
+				// Never under an aimed insert: a click meant for adding must not
+				// land on removing.
+				let shown = under === index && aim?.axis !== axis ? "" : undefined;
 
 				return (
 					<Fragment key={`tools-${index}`}>
@@ -503,6 +652,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 									data-press="small"
 									data-plan-align={table.align[index] ?? "default"}
 									data-tooltip="Align column"
+									data-tooltip-side={side}
 									data-plan-shown={shown}
 									style={place(-PAIR)}
 									title="Change this column's alignment"
@@ -522,6 +672,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 									data-press="small"
 									data-plan-shown={shown}
 									data-tooltip={`Remove ${column ? "column" : "row"}`}
+									data-tooltip-side={side}
 									style={place(PAIR)}
 									title={`Remove this ${noun}`}
 									onFocus={() => setUnder(index)}
@@ -546,11 +697,17 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 								? `Insert ${noun} before the first`
 								: `Insert ${noun} after ${noun} ${seam}`}
 							className="plan-insert"
+							data-plan-live={live(seam) || undefined}
 							data-press="small"
 							data-tooltip={`Insert ${column ? "column" : "row"}`}
+							data-tooltip-side={side}
 							style={seamBox(axis, line, origin, TOOL, SEAM)}
 							title={`Insert a ${noun} here`}
+							onBlur={() => onAim(undefined)}
 							onClick={() => insert(seam)}
+							onFocus={() => onAim({ axis, seam })}
+							onPointerEnter={() => onAim({ axis, seam })}
+							onPointerLeave={() => onAim(undefined)}
 						/>
 					);
 				})}

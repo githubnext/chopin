@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 
-import { intersectViewport, placeSurface } from "./placement";
+import {
+	draftOverflow,
+	intersectViewport,
+	placeDraft,
+	placeSurface,
+	revealTarget,
+	visibleAnchor,
+} from "./placement";
 
 test("intersects the visual viewport with the editor host", () => {
 	expect(
@@ -49,4 +56,126 @@ test("bounds an over-tall surface to the room below its anchor", () => {
 			{ left: 0, top: 0, width: 390, height: 844 },
 		),
 	).toEqual({ left: 80, top: 428, maxHeight: 408 });
+});
+
+test("prefers above a selection and flips below only without room", () => {
+	let viewport = { left: 0, top: 0, width: 800, height: 600 };
+	let surface = { width: 200, height: 36 };
+	let near = { left: 100, right: 300, top: 300, bottom: 320, width: 200, height: 20 };
+	// Auto would pick below here; the bubble stays over the selection.
+	let roomy = { ...near, top: 100, bottom: 120 };
+	expect(placeSurface(roomy, surface, viewport, 8, "above").top).toBe(56);
+	expect(placeSurface({ ...roomy, top: 400, bottom: 420 }, surface, viewport, 8, "above").top).toBe(
+		356,
+	);
+	let cramped = { ...near, top: 30, bottom: 50 };
+	expect(placeSurface(cramped, surface, viewport, 8, "above").top).toBe(58);
+});
+
+test("clamps a preferred-above surface horizontally", () => {
+	let placed = placeSurface(
+		{ left: 700, right: 790, top: 300, bottom: 320, width: 90, height: 20 },
+		{ width: 200, height: 36 },
+		{ left: 0, top: 0, width: 800, height: 600 },
+		8,
+		"above",
+	);
+	expect(placed).toEqual({ left: 592, top: 256, maxHeight: 36 });
+});
+
+test("hides an anchor that has mostly scrolled out and clips a tall one", () => {
+	let viewport = { left: 0, top: 100, width: 800, height: 400 };
+	let anchor = (top: number, bottom: number) => ({
+		left: 0,
+		right: 100,
+		top,
+		bottom,
+		width: 100,
+		height: bottom - top,
+	});
+	expect(visibleAnchor(anchor(200, 220), viewport)).toEqual(anchor(200, 220));
+	expect(visibleAnchor(anchor(60, 105), viewport)).toBeUndefined();
+	expect(visibleAnchor(anchor(520, 540), viewport)).toBeUndefined();
+	expect(visibleAnchor(anchor(0, 1000), viewport)).toEqual(anchor(100, 500));
+});
+
+const BOUNDS = { left: 760, top: 96, width: 660, height: 790 };
+const DRAFT = { width: 450, height: 150 };
+
+function block(top: number, height = 26, left = 827) {
+	return { left, right: left + 540, top, bottom: top + height, width: 540, height };
+}
+
+test("places a draft directly under its anchor block when it fits", () => {
+	expect(placeDraft(block(300), DRAFT, BOUNDS)).toEqual({
+		left: 827,
+		top: 326,
+		side: "below",
+		reveal: 0,
+	});
+});
+
+test("asks to reveal a draft whose anchor sits above the visible scroller", () => {
+	let placement = placeDraft(block(-85), DRAFT, BOUNDS);
+	expect(placement.side).toBe("away");
+	expect(placement.reveal).toBe(-85 + 2 - 104);
+	// After that scroll, the last anchor line sits at the top edge and the draft below it.
+	expect(placeDraft(block(-85 - placement.reveal), DRAFT, BOUNDS).side).toBe("below");
+});
+
+test("asks to reveal a draft that would run past the bottom edge", () => {
+	let placement = placeDraft(block(760), DRAFT, BOUNDS);
+	expect(placement.reveal).toBe(786 + 150 - 878);
+	expect(placeDraft(block(760 - placement.reveal), DRAFT, BOUNDS)).toMatchObject({
+		side: "below",
+		reveal: 0,
+	});
+});
+
+test("tolerates the sub-pixel remainder a whole-pixel scroll leaves", () => {
+	expect(placeDraft(block(702.5), DRAFT, BOUNDS).side).toBe("below");
+});
+
+test("flips above the anchor when the bottom edge leaves no room", () => {
+	expect(placeDraft(block(760), DRAFT, BOUNDS)).toMatchObject({ side: "above", top: 610 });
+});
+
+test("pins inside a short visual viewport where neither side fits", () => {
+	let keyboard = { left: 0, top: 0, width: 390, height: 160 };
+	let placement = placeDraft(block(120, 26, 20), { width: 350, height: 150 }, keyboard);
+	expect(placement).toMatchObject({ side: "pinned", top: 8, left: 20 });
+	expect(placement.reveal).toBe(122 - 8);
+});
+
+test("reveals only enough to fit a draft above the keyboard", () => {
+	let keyboard = { left: 0, top: 0, width: 390, height: 260 };
+	let placement = placeDraft(block(120, 26, 20), { width: 350, height: 150 }, keyboard);
+	expect(placement.reveal).toBe(146 + 150 - 252);
+});
+
+test("keeps a draft inside narrow bounds horizontally", () => {
+	expect(placeDraft(block(300, 26, 1100), DRAFT, BOUNDS).left).toBe(1420 - 8 - 450);
+});
+
+test("measures how far a draft overflows the visible scroller", () => {
+	expect(draftOverflow(28, 120, BOUNDS)).toEqual({ top: 68, bottom: 0 });
+	expect(draftOverflow(300, 120, BOUNDS)).toEqual({ top: 0, bottom: 0 });
+	expect(draftOverflow(820, 120, BOUNDS)).toEqual({ top: 0, bottom: 54 });
+});
+
+test("reveals by returning to the reader's position when the draft fits there", () => {
+	// The editor jumped 2000px after opening; at the original offset the draft sat at 300.
+	let anchorNow = block(300 - 2000);
+	let placeAt = (shift: number) => placeDraft(block(anchorNow.top + shift), DRAFT, BOUNDS);
+	let now = placeDraft(anchorNow, DRAFT, BOUNDS);
+	expect(revealTarget(3000, 1000, placeAt, now.reveal)).toBe(1000);
+});
+
+test("reveals minimally when the draft did not fit at the opening offset", () => {
+	let anchorNow = block(-85);
+	let placeAt = (shift: number) => placeDraft(block(anchorNow.top + shift), DRAFT, BOUNDS);
+	let now = placeDraft(anchorNow, DRAFT, BOUNDS);
+	// At the opening offset (20px further down the document) the anchor is still above the edge.
+	expect(revealTarget(1000, 980, placeAt, now.reveal)).toBe(1000 + now.reveal);
+	expect(revealTarget(1000, undefined, placeAt, now.reveal)).toBe(1000 + now.reveal);
 });

@@ -10,7 +10,9 @@
  *
  * Once seen the clock runs whether or not the mark is still in view. Two
  * states and one timer: a mark can never go dark and light up again on a later
- * scroll, which would read as a second edit that never happened.
+ * scroll, which would read as a second edit that never happened. Only more
+ * work from the agent restarts a clock that is running, so the marks from one
+ * turn fade together rather than section by section.
  *
  * Nothing here knows what a mark looks like, where it is, or that there is a
  * document. It is the part worth testing and the part that does not need a
@@ -37,6 +39,8 @@ export type Trail = {
 	add: (ids: string[]) => void;
 	/** Report what is in the viewport. Anything newly seen starts its clock. */
 	saw: (ids: Iterable<string>) => void;
+	/** Restart the clock on everything showing, because the agent is still at it. */
+	renew: () => void;
 	/** Give up on marks that no longer name anywhere. */
 	drop: (ids: Iterable<string>) => void;
 	phase: (id: string) => Phase | undefined;
@@ -71,6 +75,16 @@ export function trail(changed: () => void, linger = LINGER): Trail {
 		phases.delete(id);
 	};
 
+	let start = (id: string) => {
+		timers.set(
+			id,
+			setTimeout(() => {
+				forget(id);
+				changed();
+			}, linger),
+		);
+	};
+
 	let of = (phase: Phase) => [...phases].flatMap(([id, held]) => held === phase ? [id] : []);
 
 	return {
@@ -93,13 +107,18 @@ export function trail(changed: () => void, linger = LINGER): Trail {
 				// mark could be kept alive indefinitely by being looked at.
 				if (phases.get(id) !== "pending") continue;
 				phases.set(id, "showing");
-				timers.set(
-					id,
-					setTimeout(() => {
-						forget(id);
-						changed();
-					}, linger),
-				);
+				start(id);
+			}
+		},
+
+		renew() {
+			// A turn arrives as several batches seconds apart. Without this the
+			// first section of a draft has faded by the time the third lands, and
+			// one piece of work reads as one changed section among old ones.
+			for (let [id, phase] of phases) {
+				if (phase !== "showing") continue;
+				stop(id);
+				start(id);
 			}
 		},
 

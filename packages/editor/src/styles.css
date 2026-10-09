@@ -35,11 +35,31 @@
 
 .plan-research-draft {
 	width: min(28.125rem, var(--plan-content-width, 48rem), calc(100vw - 2rem));
-	padding: 0.875rem;
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-lg);
-	background: var(--color-page);
-	box-shadow: var(--shadow-resting);
+}
+
+.motion-research-draft {
+	opacity: 0;
+	transform: scale(var(--dropdown-pre-scale));
+	transform-origin: top left;
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+}
+
+.motion-research-draft[data-side="above"] {
+	transform-origin: bottom left;
+}
+
+.motion-research-draft[data-motion="is-open"] {
+	opacity: 1;
+	transform: none;
+}
+
+.motion-research-draft[data-motion="is-closing"] {
+	pointer-events: none;
+	opacity: 0;
+	transform: scale(var(--dropdown-closing-scale));
+	transition-duration: var(--dropdown-close-dur);
 }
 
 [data-research-ready] {
@@ -69,23 +89,39 @@
 	max-width: 28.125rem;
 }
 
+/* One surface: the composer is the field, so focus rings the whole card. */
 .plan-research-composer {
-	display: grid;
-	gap: 0.625rem;
-}
-
-.plan-research-field {
 	position: relative;
+	display: grid;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
 }
 
-.plan-research-field textarea {
+.plan-research-draft:is([data-side="above"], [data-side="pinned"]) .plan-research-composer {
+	box-shadow: var(--shadow-raised);
+}
+
+.plan-research-composer textarea {
 	display: block;
 	width: 100%;
-	min-height: 5.5rem;
+	min-height: 4rem;
 	resize: none;
-	padding: 0.625rem 2.5rem 3rem 0.75rem;
+	padding: 0.625rem 2.5rem 0.25rem 0.75rem;
+	border: 0;
+	background: transparent;
 	font: inherit;
 	font-size: var(--text-sm);
+	color: var(--color-text-primary);
+}
+
+.plan-research-composer textarea::placeholder {
+	color: var(--color-text-quaternary);
+}
+
+.plan-research-composer textarea:disabled {
+	color: var(--color-text-tertiary);
 }
 
 .plan-research-dismiss {
@@ -93,16 +129,24 @@
 	inset: 0.3125rem 0.3125rem auto auto;
 }
 
-.plan-research-send {
-	position: absolute;
-	inset: auto 0.625rem 0.625rem auto;
+.plan-research-composer-footer {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.25rem 0.5rem 0.5rem 0.75rem;
 }
 
-.plan-research-actions {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: flex-end;
-	gap: 0.5rem;
+.plan-research-message {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.plan-research-message[data-tone="error"] {
+	color: var(--color-destructive);
 }
 
 .plan-research-tracked {
@@ -352,13 +396,15 @@
 	display: grid;
 	grid-template-rows: 0fr;
 	opacity: 0;
-	transition: grid-template-rows 420ms var(--ease-out), opacity 300ms var(--ease-out);
+	transition:
+		grid-template-rows var(--acc-collapse) var(--motion-move),
+		opacity var(--acc-collapse) var(--motion-move);
 }
 
 .plan-research-fold[data-open] {
 	grid-template-rows: 1fr;
 	opacity: 1;
-	transition-delay: var(--duration-fast);
+	transition-duration: var(--acc-expand);
 }
 
 .plan-research-fold > div {
@@ -387,6 +433,7 @@
 	.plan-research-track span::after {
 		animation: none;
 	}
+	.motion-research-draft,
 	.plan-research-fold,
 	.plan-research-track span,
 	.plan-research-track span::after {
@@ -638,6 +685,18 @@
 	overflow: hidden;
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 1;
+}
+
+.plan-content [data-plan-comment-card] :is(p, ul, li, blockquote) {
+	margin-block: 0;
+}
+
+.plan-content [data-plan-comment-card] ul {
+	padding-inline-start: calc(1em + 3px);
+}
+
+:root[data-plan-coarse-pointer] .plan-comment-row {
+	min-height: 44px;
 }
 
 .plan-comment-context {
@@ -1195,6 +1254,12 @@
 	min-width: 44px;
 }
 
+/* The bubble's block trigger carries a label, and its seams cost width a phone lacks. */
+:root[data-plan-coarse-pointer] .plan-bubble-trigger {
+	width: auto;
+	padding-inline: 0.5rem 0.25rem;
+}
+
 /*
  * Document typography.
  *
@@ -1386,54 +1451,42 @@
 /* Visual top-level blocks can use the document beyond the prose measure. */
 .plan-content
 	> :is(p:has(> [data-plan-src]:first-child
-		+ br[data-lexical-managed-linebreak]:last-child), [data-plan-language="mermaid"]) {
+		+ br[data-lexical-managed-linebreak]:last-child), [data-plan-language="mermaid"], [data-plan-language="seecode"]) {
 	inline-size: var(--plan-wide-inline-size);
 	max-inline-size: var(--plan-wide-inline-size);
 	margin-inline: var(--plan-wide-inline-offset);
 }
 
 /*
- * A table spans the prose measure like the paragraphs around it; a wide one
- * scrolls inside it. The row and column rails are fixed overlays and sit in the
- * gutter outside it.
- *
- * The rows live in an anonymous table box that shrink-wraps its columns, so a
- * few short columns would stop halfway across. Each column of a table with up
- * to six asks for an equal share of the measure (the container) instead; six
- * columns at their minimum already fill it. Longer content still widens its own
- * column and the table scrolls.
+ * A compact table shrink-wraps around its columns from the prose's start edge,
+ * like every other block; a wide one scrolls inside the prose measure. The row
+ * and column rails are fixed overlays and sit in the gutter outside it.
  */
-.plan-content table {
-	container-type: inline-size;
+.plan-content > table {
+	inline-size: max-content;
+	max-inline-size: 100%;
 }
 
-.plan-content table tr > :is(th, td) {
-	/* Less one hairline, which the collapsed outer borders add to the sum. */
-	min-inline-size: max(7rem, (100cqi - 1px) / var(--plan-table-columns, 7));
+/* Name an empty header for what it holds. Counted per header cell, out of flow. */
+.plan-content table tr:first-of-type {
+	counter-reset: plan-column;
 }
 
-.plan-content table tr:has(> :last-child:nth-child(1)) {
-	--plan-table-columns: 1;
+.plan-content table tr:first-of-type > th {
+	counter-increment: plan-column;
 }
 
-.plan-content table tr:has(> :last-child:nth-child(2)) {
-	--plan-table-columns: 2;
+.plan-content[contenteditable="true"] th > p:only-child:has(> br:only-child) {
+	position: relative;
 }
 
-.plan-content table tr:has(> :last-child:nth-child(3)) {
-	--plan-table-columns: 3;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(4)) {
-	--plan-table-columns: 4;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(5)) {
-	--plan-table-columns: 5;
-}
-
-.plan-content table tr:has(> :last-child:nth-child(6)) {
-	--plan-table-columns: 6;
+.plan-content[contenteditable="true"] th > p:only-child:has(> br:only-child)::before {
+	content: "Column " counter(plan-column);
+	position: absolute;
+	inset-inline-start: 0;
+	color: var(--color-text-quaternary);
+	font-weight: 500;
+	pointer-events: none;
 }
 
 /* The paragraph owns the wide row; the image keeps its intrinsic size inside it. */
@@ -1557,19 +1610,26 @@
  * than replacing it.
  */
 /*
- * The rail takes pointer events across the whole of itself, holes included.
+ * The rail itself lets the pointer through; only its controls take it.
  *
- * It is tempting to pass the gaps through so the prose behind stays clickable,
- * and that is what this did first. But `pointerleave` fires the instant the
- * pointer crosses anything untargetable, so every hole was somewhere the rails
- * blinked out from under a hand on its way across them. A rail exists only
- * while its table is being pointed at, and it is 28 pixels of a 32-pixel
- * gutter; the prose it covers for that moment is not worth the flicker.
+ * Its button lane reaches past the gap above a table into the block above,
+ * which is usually the paragraph somebody wants to click next. The grip lane
+ * is unbroken and lies against the table, and the buttons a pointer heads for
+ * sit beside the grip it came from, so crossing from table to control never
+ * passes through a hole that would end the hover.
  */
 .plan-rail {
 	position: fixed;
 	z-index: 40;
 	overflow: hidden;
+	pointer-events: none;
+	animation: plan-rail-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes plan-rail-in {
+	from {
+		opacity: 0;
+	}
 }
 
 .plan-rail > * {
@@ -1579,15 +1639,57 @@
 	background: transparent;
 }
 
+/*
+ * Only the grip of the track being pointed at, or holding the caret, is drawn.
+ * The rest wait at nothing, or faintly while the caret is in the table, so a
+ * keyboard user can still see where every row and column can be taken from.
+ */
 .plan-grip {
+	pointer-events: auto;
+	opacity: 0;
 	border-radius: var(--radius-sm);
-	background: var(--color-selected);
-	transition: background-color var(--duration-fast) var(--ease-out);
+	background: var(--color-hover);
+	color: var(--color-text-quaternary);
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.plan-rail[data-plan-caret] .plan-grip {
+	opacity: 0.35;
+}
+
+.plan-rail .plan-grip[data-plan-hot],
+.plan-rail .plan-grip:focus-visible,
+.plan-rail .plan-grip.is-held {
+	opacity: 1;
 }
 
 .plan-grip:hover,
 .plan-grip:focus-visible {
-	background: color-mix(in oklch, var(--color-brand) 45%, transparent);
+	background: var(--color-selected);
+	color: var(--color-text-secondary);
+}
+
+/* Six dots, the mark for "this can be dragged". Drawn rather than an icon so the
+   dots stay on whole pixels at any track length. */
+.plan-grip::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 3);
+	translate: -50% -50%;
+	/* Stops are fractions of the tile's half-diagonal: a dot of about a pixel. */
+	background-image: radial-gradient(circle, currentcolor 35%, transparent 45%);
+	background-size: var(--spacing) var(--spacing);
+}
+
+[data-plan-rail="column"] .plan-grip::before {
+	width: calc(var(--spacing) * 3);
+	height: calc(var(--spacing) * 2);
 }
 
 [data-plan-rail="column"] .plan-grip {
@@ -1601,12 +1703,13 @@
 .plan-grip.is-held {
 	cursor: grabbing;
 	background: var(--color-brand);
+	color: var(--color-page);
 }
 
-/* The header row's bar. Drawn so the rail has no gap where the row plainly is,
-   but not a control: the header cannot move and cannot be removed. */
-.plan-grip.is-fixed {
-	background: color-mix(in oklch, var(--color-edge) 60%, transparent);
+/* The header row's place in the rail. Not a control: the header cannot move
+   and cannot be removed, so nothing is drawn there. */
+.plan-rail .plan-grip.is-fixed {
+	opacity: 0;
 	cursor: default;
 }
 
@@ -1618,24 +1721,38 @@
  * in the tab order while it is out of sight — and `pointer-events` with it, so
  * an invisible cross cannot be clicked by accident.
  */
+/*
+ * Each button's box is its whole target; the ghost drawn inside it is smaller,
+ * by its padding, so a 24-pixel target reads as a 20-pixel control.
+ */
 .plan-grip-remove,
 .plan-insert,
 .plan-align {
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity var(--duration-fast) var(--ease-out);
+	padding: calc(var(--spacing) / 2);
 	border-radius: var(--radius-sm);
-	background: var(--color-page);
-	outline: var(--edge-width) solid var(--color-control-edge);
-	outline-offset: calc(-1 * var(--edge-width));
-	color: var(--color-text-quaternary);
+	background-clip: content-box;
+	color: var(--color-text-tertiary);
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+/* An insert shows only while its own seam is aimed at, so beside the track
+   being pointed at it takes the pointer while still invisible. It is later in
+   the rail than a remove button, so where the two meet on a short row the
+   insert wins, and the remove hides while an insert is aimed. */
+.plan-insert[data-plan-live] {
+	pointer-events: auto;
 }
 
 .plan-grip-remove[data-plan-shown],
 .plan-align[data-plan-shown],
 .plan-grip-remove:focus-visible,
 .plan-align:focus-visible,
-.plan-rail:hover .plan-insert,
+.plan-insert:hover,
 .plan-insert:focus-visible {
 	opacity: 1;
 	pointer-events: auto;
@@ -1643,9 +1760,10 @@
 
 .plan-grip-remove:hover,
 .plan-insert:hover,
+.plan-insert:focus-visible,
 .plan-align:hover {
+	background-color: var(--color-hover);
 	color: var(--color-text-primary);
-	outline-color: var(--color-brand);
 }
 
 /* Drawn rather than lettered: at fifteen pixels a glyph is a smudge, and these
@@ -1656,7 +1774,7 @@
 .plan-insert::after {
 	content: "";
 	position: absolute;
-	inset: 50% 25%;
+	inset: 50% 30%;
 	border-top: 1.5px solid currentcolor;
 	translate: 0 -50%;
 }
@@ -1684,17 +1802,17 @@
 .plan-align::after {
 	content: "";
 	position: absolute;
-	left: 3px;
-	right: 3px;
+	left: 7px;
+	right: 7px;
 	border-top: 1.5px solid currentcolor;
 }
 
 .plan-align::before {
-	top: 5px;
+	top: 9px;
 }
 
 .plan-align::after {
-	top: 9px;
+	top: 13px;
 }
 
 .plan-align[data-plan-align="default"] {
@@ -1708,16 +1826,16 @@
 
 .plan-align[data-plan-align="default"]::after,
 .plan-align[data-plan-align="left"]::after {
-	right: 7px;
+	right: 11px;
 }
 
 .plan-align[data-plan-align="center"]::after {
-	left: 5px;
-	right: 5px;
+	left: 9px;
+	right: 9px;
 }
 
 .plan-align[data-plan-align="right"]::after {
-	left: 7px;
+	left: 11px;
 }
 
 /* Where the drag will land. A hairline, because it is a position rather than a
@@ -1726,6 +1844,15 @@
 	background: var(--color-brand);
 	border-radius: 1px;
 	pointer-events: none;
+}
+
+/* Where an aimed-at insert will put the new row or column, across the table. */
+.plan-seam-line {
+	position: fixed;
+	z-index: 40;
+	background: var(--color-brand);
+	pointer-events: none;
+	animation: plan-rail-in var(--duration-fast) var(--ease-out);
 }
 
 .plan-table-action-toolbar {
@@ -1779,9 +1906,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.plan-rail,
+	.plan-seam-line {
+		animation: none;
+	}
+
 	.plan-grip,
 	.plan-grip-remove,
-	.plan-insert {
+	.plan-insert,
+	.plan-align {
 		transition: none;
 	}
 }
@@ -1812,12 +1945,11 @@
 	position: absolute;
 	inset-block-end: 100%;
 	inset-inline-start: -1px;
-	margin-block-end: 2px;
 	padding: 0 0.25rem;
 	border-radius: var(--radius-sm);
 	background: var(--lexical-cursor-color, currentColor);
 	color: var(--color-page);
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	line-height: 1rem;
 	font-weight: 500;
 	white-space: nowrap;
@@ -1829,9 +1961,30 @@
 	transition: opacity var(--duration-base) var(--ease-out);
 }
 
-/* Raised while its peer is moving, then left to fade. */
-.plan .plan-cursor[data-plan-active] .plan-cursor-name {
+/*
+ * The agent's caret is left at the end of the block it last wrote, so the line
+ * above it is prose the reader has just been shown. Beside the caret, on its
+ * own line, the label covers nothing.
+ */
+.plan .plan-cursor[data-plan-agent] .plan-cursor-name {
+	inset-block-end: auto;
+	inset-block-start: 50%;
+	inset-inline-start: calc(100% + 0.25rem);
+	translate: 0 -50%;
+}
+
+/* Raised while its peer is moving or typing, or while it is pointed at, then
+   left to fade. */
+.plan .plan-cursor[data-plan-active] .plan-cursor-name,
+.plan .plan-cursor[data-plan-hover] .plan-cursor-name {
 	opacity: 1;
+}
+
+/* Beside the local caret, the label drops under its own line instead of
+   covering the line the local user is writing on. */
+.plan .plan-cursor[data-plan-below] .plan-cursor-name {
+	inset-block-end: auto;
+	inset-block-start: 100%;
 }
 
 /*
@@ -1846,14 +1999,6 @@
 	.plan * {
 		transition: none !important;
 		animation: none !important;
-	}
-
-	/*
-	 * Without the fade, a label would blink in and out on every keystroke a
-	 * peer makes. Leaving it up is the quieter of the two.
-	 */
-	.plan .plan-cursor-name {
-		opacity: 1;
 	}
 }
 
@@ -1891,6 +2036,8 @@
 
 	max-inline-size: 100%;
 	overflow-x: auto;
+	/* The renderer raises its header; keep that inside, under the block's controls. */
+	isolation: isolate;
 }
 
 /* The renderer's shadow root owns syntax painting; this host supplies the
@@ -1970,18 +2117,6 @@
 	z-index: 1;
 }
 
-/* Revealed on hover or focus where a pointer can hover; always shown on touch. */
-@media (hover: hover) and (pointer: fine) {
-	.plan-content .planMath[data-plan-inline="false"] .plan-code-toggle[aria-expanded="false"] {
-		opacity: 0;
-		transition: opacity var(--duration-fast) var(--ease-out);
-	}
-
-	.plan-content .planMath[data-plan-inline="false"]:is(:hover, :focus-within) .plan-code-toggle {
-		opacity: 1;
-	}
-}
-
 /*
  * Say what belongs in an empty one. Lexical fills an empty block with a managed
  * line break, so `:empty` never matches and the placeholder keys off that
@@ -2014,11 +2149,25 @@
 	height: auto;
 }
 
+/* A SeeCode diagram keeps its rendered width and scrolls inside its own stage. */
+.plan-content [data-plan-preview] .plan-seecode .sc-svg {
+	max-width: none;
+	max-inline-size: none;
+}
+
+/*
+ * A diagram a little wider than the measure shrinks to fit; one that would
+ * have to shrink past legibility keeps its drawn size and scrolls, with the
+ * hidden side faded so the cut reads as "more this way" rather than a crop.
+ */
 .plan-content .plan-diagram {
+	--ace-diagram-fade: calc(var(--spacing) * 8);
+
 	max-inline-size: 100%;
 	overflow-x: auto;
 	overflow-y: hidden;
 	overscroll-behavior-inline: contain;
+	transition: opacity var(--duration-base) var(--ease-out);
 }
 
 .plan-content .plan-diagram svg {
@@ -2027,11 +2176,39 @@
 	margin-inline: auto;
 }
 
+.plan-content .plan-diagram[data-fit] svg {
+	max-width: 100%;
+}
+
+.plan-content .plan-diagram[data-more="end"] {
+	mask-image: linear-gradient(to right, black calc(100% - var(--ace-diagram-fade)), transparent);
+}
+
+.plan-content .plan-diagram[data-more="start"] {
+	mask-image: linear-gradient(to right, transparent, black var(--ace-diagram-fade));
+}
+
+.plan-content .plan-diagram[data-more="both"] {
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		black var(--ace-diagram-fade),
+		black calc(100% - var(--ace-diagram-fade)),
+		transparent
+	);
+}
+
+/* The last drawing that worked, kept while its source is mid-edit. */
+.plan-content .plan-diagram[data-stale] {
+	opacity: 0.4;
+}
+
 /*
  * A code block is one box: header, rendered code, source. A border rather than
  * an outline, because the renderer paints over an inset outline.
  */
 .plan-content .planCode {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	margin-block: 1em;
@@ -2041,11 +2218,150 @@
 	background: var(--color-page);
 }
 
+/*
+ * A block's controls float in its top-end corner rather than on a bar of their
+ * own, the same place a formula's toggle sits. At rest a code block shows only
+ * its language, as quiet text; the menu and the source toggle arrive on hover
+ * or focus. The fill fades in from the start so a long first line runs under
+ * the label instead of colliding with it.
+ */
 .plan-content .planCode [data-plan-chrome="block"] {
-	order: -1;
-	padding: 0.25rem;
-	border-block-end: var(--edge-width) solid var(--color-edge);
-	background: var(--color-inset);
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	z-index: 1;
+	max-inline-size: 100%;
+}
+
+/* A long title is the one thing that gives way, from its end. */
+.plan-content .planCode .plan-code-chrome {
+	max-inline-size: 100%;
+
+	& > * {
+		flex-shrink: 0;
+	}
+
+	& > .plan-code-title {
+		flex-shrink: 1;
+	}
+}
+
+/* Room for the controls, so they never sit on a drawing or a diff's counts. */
+.plan-content .planCode .plan-diagram {
+	padding-block-start: calc(var(--spacing) * 8);
+}
+
+.plan-content .plan-diff-chrome-room {
+	display: block;
+	inline-size: calc(var(--spacing) * 26);
+}
+
+.plan-content .planCode .plan-code-chrome {
+	position: relative;
+	padding: calc(var(--spacing) * 1.5);
+	background-color: var(--color-page);
+}
+
+.plan-content .planCode .plan-code-chrome::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-end: 100%;
+	inline-size: calc(var(--spacing) * 6);
+	background: linear-gradient(to right, transparent, var(--color-page));
+	pointer-events: none;
+}
+
+.plan-content .plan-code-chrome :is(.plan-code-language, .plan-code-language-label) {
+	font-size: var(--text-xs);
+}
+
+.plan-content .plan-code-chrome,
+.plan-content .plan-code-chrome .plan-code-toggle,
+.plan-content .plan-code-chrome .plan-code-language [data-nucleo-icon] {
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-content .plan-code-chrome,
+	.plan-content .plan-code-chrome .plan-code-toggle,
+	.plan-content .plan-code-chrome .plan-code-language [data-nucleo-icon],
+	.plan-content .plan-diagram {
+		transition: none;
+	}
+}
+
+/*
+ * Without hover the controls never leave, so on touch they get a band of their
+ * own above the content instead of sitting on its first line.
+ */
+@media not ((hover: hover) and (pointer: fine)) {
+	.plan-content .planCode {
+		padding-block-start: calc(var(--spacing) * 9);
+	}
+
+	.plan-content .planCode .plan-diagram {
+		padding-block-start: 0;
+	}
+
+	.plan-content .planCode .plan-code-chrome {
+		background: none;
+	}
+
+	.plan-content .plan-diff-chrome-room {
+		display: none;
+	}
+}
+
+/* Revealed on hover or focus where a pointer can hover; always shown on touch. */
+@media (hover: hover) and (pointer: fine) {
+	:is(.plan-content .planCode, .plan-content
+		.planMath[data-plan-inline="false"]):not(:hover, :focus-within, :has(.plan-code-chrome
+		[aria-expanded="true"]), :has(.plan-code-chrome[data-editing])) {
+		/* Only a named language says something the rendering does not. */
+		& .plan-code-chrome:not([data-kind="code"]),
+		& .plan-code-toggle,
+		& .plan-code-language [data-nucleo-icon] {
+			opacity: 0;
+		}
+
+		/*
+		 * The hidden toggle keeps its place, so at rest only the label carries
+		 * a fill, reaching to the block's edge; code runs on under the empty
+		 * slot beside it.
+		 */
+		& .plan-code-chrome {
+			background: none;
+		}
+
+		& .plan-code-chrome::before {
+			content: none;
+		}
+
+		& .plan-code-chrome :is(.plan-code-language, .plan-code-language-label) {
+			position: relative;
+			background-color: var(--color-page);
+
+			&::before {
+				content: "";
+				position: absolute;
+				inset-block: 0;
+				inset-inline-end: 100%;
+				inline-size: calc(var(--spacing) * 6);
+				background: linear-gradient(to right, transparent, var(--color-page));
+				pointer-events: none;
+			}
+
+			&::after {
+				content: "";
+				position: absolute;
+				inset-block: 0;
+				inset-inline-start: 100%;
+				inline-size: calc(var(--spacing) * 1.5);
+				background-color: var(--color-page);
+			}
+		}
+	}
 }
 
 .plan-content .plan-code-toggle[aria-expanded="true"] {
@@ -2060,7 +2376,7 @@
 
 .plan-content .plan-code-language-label {
 	padding-inline: 0.5rem;
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	color: var(--color-text-tertiary);
 }
 
@@ -2105,34 +2421,100 @@
 	background: var(--color-page);
 }
 
+/* Like a formula's: say what belongs in an empty fence. See that rule for the line break. */
+.plan-content .planCode [data-plan-source] {
+	position: relative;
+}
+
+.plan-content
+	.planCode
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "Code";
+	position: absolute;
+	inset-block-start: 0.75rem;
+	inset-inline-start: 0.75rem;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
+}
+
+.plan-content
+	.planCode[data-plan-language="diff"]
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "Paste a unified diff";
+}
+
+.plan-content
+	.planCode[data-plan-language="mermaid"]
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "Mermaid, e.g. flowchart TD; A-->B";
+}
+
 .plan-content .planCode [data-plan-preview]:not(:empty) ~ [data-plan-source] {
 	border-block-start: var(--edge-width) solid var(--color-edge);
 	background: var(--color-inset);
 }
 
-.plan-content .planCode [data-plan-preview] :is(.plan-diagram, [data-plan-error]) {
+/*
+ * Editing code or a diff swaps the coloured copy for its source in the same
+ * box, so a line is never on screen twice. The source is the text now, not a
+ * footnote to it.
+ */
+.plan-content .planCode[data-plan-swapped] [data-plan-preview] {
+	display: none;
+}
+
+.plan-content .planCode[data-plan-swapped] [data-plan-preview]:not(:empty) ~ [data-plan-source] {
+	opacity: 1;
+	border-block-start: 0;
+	background: var(--color-page);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.plan-content .planCode[data-plan-swapped] [data-plan-source] {
+		animation: plan-source-in var(--duration-fast) var(--ease-out);
+	}
+}
+
+@keyframes plan-source-in {
+	from {
+		opacity: 0;
+	}
+}
+
+.plan-content .planCode [data-plan-preview] :is(.plan-diagram, .plan-seecode, [data-plan-error]) {
 	padding-inline: 0.75rem;
 }
 
-/* Diagram error callout. */
+/*
+ * While its source is open, a drawn diagram keeps the error line's room, so a
+ * mistake arriving after a pause does not push the source down under the caret.
+ */
+.plan-content
+	.planCode[data-plan-language="mermaid"]:not([data-plan-collapsed])
+	[data-plan-preview]:has(> .plan-diagram):not(:has(> [data-plan-error])) {
+	padding-block-end: calc(var(--spacing) * 20);
+}
+
+.plan-content .planCode[data-plan-language="mermaid"] [data-plan-preview] > [data-plan-error] {
+	min-block-size: calc(var(--spacing) * 20);
+}
+
+/*
+ * Diagram error: a quiet note under the last drawing that worked, not a panel.
+ * It only arrives once the author pauses, so it reads as a hint, not an alarm.
+ */
 .plan-content .planCode [data-plan-preview] [data-plan-error]:has(.plan-error-badge) {
 	display: flex;
 	align-items: flex-start;
-	gap: 0.625rem;
-	margin: 0.75rem;
-	padding: 0.625rem 0.75rem;
-	border-radius: var(--radius-md);
-	background: var(--color-ruby-2);
+	gap: calc(var(--spacing) * 2);
+	padding-block: calc(var(--spacing) * 2.5);
 }
 
 .plan-content .plan-error-badge {
 	display: grid;
 	flex-shrink: 0;
 	place-items: center;
-	width: 1.5rem;
-	height: 1.5rem;
-	border-radius: 50%;
-	background: var(--color-danger-surface);
+	height: var(--text-sm--line-height);
 	color: var(--color-destructive);
 }
 
@@ -2145,50 +2527,49 @@
 }
 
 .plan-content .plan-error-title {
-	display: block;
 	font-size: var(--text-sm);
-	font-weight: 600;
+	font-weight: 500;
 	color: var(--color-destructive-ink);
 }
 
 .plan-content .plan-error-message {
-	margin: 0.125rem 0 0;
+	display: inline;
+	margin: 0;
 	font-size: var(--text-sm);
-	color: var(--color-destructive-ink);
+	color: var(--color-text-tertiary);
 	overflow-wrap: anywhere;
 	line-height: var(--text-sm--line-height);
 }
 
+.plan-content .plan-error-message::before {
+	content: "·";
+	margin-inline: 0.375rem;
+	color: var(--color-text-quaternary);
+}
+
 .plan-content .plan-error-detail {
-	margin: 0.5rem 0 0;
+	margin: calc(var(--spacing) * 1) 0 0;
 	padding: 0;
 	overflow-x: auto;
 	background: transparent;
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
-	color: var(--color-destructive-ink);
-}
-
-.plan-content .plan-error-expected {
-	margin: 0.375rem 0 0;
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
-	color: var(--color-destructive-ink);
-	overflow-wrap: anywhere;
+	color: var(--color-text-tertiary);
 }
 
 .plan-content .plan-code-title {
 	min-width: 0;
+	max-inline-size: 16rem;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	color: var(--color-text-secondary);
 }
 
-.plan-content .plan-code-title::before {
+.plan-content .plan-code-title::after {
 	content: "·";
-	margin-inline: 0.125rem 0.375rem;
+	margin-inline: 0.375rem 0.125rem;
 	color: var(--color-text-quaternary);
 }
 
@@ -2198,8 +2579,168 @@
 	margin-block-end: 0.5rem;
 }
 
+.plan-content .plan-tab-strip {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1);
+	padding-block-end: calc(var(--spacing) * 1);
+	border-block-end: var(--edge-width) solid var(--color-edge);
+}
+
+.plan-content .plan-tab {
+	--plan-tab-surface: var(--color-page);
+	position: relative;
+	display: flex;
+	flex-shrink: 0;
+	/* Never wider than the strip, so a selected tab can always be shown whole. */
+	max-inline-size: 100%;
+	border-radius: var(--radius-md);
+	background: var(--plan-tab-surface);
+	color: var(--color-text-quaternary);
+	transition:
+		color var(--duration-fast) var(--ease-out),
+		background-color var(--duration-fast) var(--ease-out);
+}
+
+.plan-content .plan-tab:hover {
+	--plan-tab-surface: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.plan-content .plan-tab[data-selected] {
+	--plan-tab-surface: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+/*
+ * A removable tab always keeps a slot at its end for remove, so showing the
+ * button never covers the label or moves the tabs beside it.
+ */
+.plan-content .plan-tab[data-removable] > [role="tab"] {
+	padding-inline-end: calc(var(--spacing) * 6);
+}
+
+.plan-content .plan-tab-remove {
+	position: absolute;
+	inset-block-start: calc(50% - var(--spacing) * 2);
+	inset-inline-end: calc(var(--spacing) * 1);
+	display: grid;
+	place-items: center;
+	inline-size: calc(var(--spacing) * 4);
+	block-size: calc(var(--spacing) * 4);
+	border-radius: var(--radius-sm);
+	color: var(--color-text-tertiary);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+	.plan-content .plan-tab:hover .plan-tab-remove {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+/* A long press reveals the remove control for a tab that is not selected. */
+.plan-content .plan-tab[data-revealed] .plan-tab-remove {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.plan-content .plan-tab-remove:hover {
+	color: var(--color-text-primary);
+}
+
+/* Touch shows removal on the selected tab; others stay compact until revealed. */
+@media (hover: none) {
+	.plan-content .plan-tab[data-selected] .plan-tab-remove {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.plan-content .plan-tab[data-removable]:not([data-selected]):not([data-revealed]) > [role="tab"] {
+		padding-inline-end: calc(var(--spacing) * 2.5);
+	}
+}
+
+/* Coarse pointers: a 44px target around the small remove button. */
+:root[data-plan-coarse-pointer] .plan-content .plan-tab-remove::after {
+	content: "";
+	position: absolute;
+	inset: calc(50% - 22px);
+}
+
+.plan-content .plan-tab-add {
+	flex-shrink: 0;
+	opacity: 0;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.plan-content .planTabs:hover .plan-tab-add,
+.plan-content .plan-tab-strip:focus-within .plan-tab-add {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.plan-content .plan-tab-add {
+		opacity: 1;
+	}
+}
+
+/* The field sizes to its text: the hidden copy sets the width the input fills. */
+.plan-content .plan-tab-rename {
+	display: inline-grid;
+	flex-shrink: 0;
+	max-inline-size: 16rem;
+}
+
+.plan-content .plan-tab-rename > * {
+	grid-area: 1 / 1;
+	min-inline-size: 4rem;
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2.5);
+}
+
+.plan-content .plan-tab-rename > span {
+	visibility: hidden;
+	overflow: hidden;
+	white-space: pre;
+}
+
+.plan-content .plan-tab-rename > input {
+	inline-size: 100%;
+	font: inherit;
+}
+
+/* A rule closes the panel so the block after it reads as outside the tabs. */
+.plan-content [data-plan-panels] {
+	padding-block-end: calc(var(--spacing) * 2);
+	border-block-end: var(--edge-width) solid var(--color-edge);
+}
+
 .plan-content [data-plan-panels] > [hidden] {
 	display: none;
+}
+
+/* Like the formula placeholder: out of flow, so the caret stays where it is. */
+.plan-content[contenteditable="true"] .planTab > p:only-child:has(> br:only-child) {
+	position: relative;
+}
+
+/* A tab with no blocks at all, as the Planner or MDX can write one. */
+.plan-content[contenteditable="true"] .planTab:not(:has(> :not(br)))::before {
+	content: "Write in this tab…";
+	display: block;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
+}
+
+.plan-content[contenteditable="true"] .planTab > p:only-child:has(> br:only-child)::before {
+	content: "Write in this tab…";
+	position: absolute;
+	inset-inline-start: 0;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
 }
 
 /* Status ----------------------------------------------------------------- */
@@ -2300,13 +2841,29 @@
  * its cursor, which comes and goes with the turn rather than waiting to be
  * read.
  */
-.plan .plan-content [data-plan-change] {
-	transition: background var(--duration-linger) var(--ease-out);
+/*
+ * Registered so the colours can be animated: every part of a mark is drawn
+ * from these two, so fading them fades the whole mark at once, at its full
+ * shape, with nothing left to snap off at the end.
+ */
+@property --plan-wash {
+	syntax: "<color>";
+	inherits: false;
+	initial-value: transparent;
 }
 
-/* Written just now. */
-.plan .plan-content [data-plan-change="added"] {
-	background: var(--color-brand-wash);
+@property --plan-hole {
+	syntax: "<color>";
+	inherits: false;
+	initial-value: transparent;
+}
+
+.plan .plan-content [data-plan-change] {
+	/* What the wash fades from and back to. */
+	--plan-wash-rest: transparent;
+	--plan-wash: color-mix(in oklch, var(--color-brand-wash) 65%, transparent);
+	background-color: var(--plan-wash);
+	animation: plan-change-in var(--duration-linger) var(--ease-out);
 }
 
 /*
@@ -2315,7 +2872,49 @@
  * saying "new, but less so" about them would not be true.
  */
 .plan .plan-content [data-plan-change="moved"] {
-	background: color-mix(in oklch, var(--color-text-quaternary) 9%, transparent);
+	--plan-wash: color-mix(in oklch, var(--color-text-quaternary) 9%, transparent);
+}
+
+/*
+ * Prose is washed past its edges by an outline, so the wash neither moves the
+ * text nor stops hard against it. Blocks that draw their own frame — code,
+ * tables, cards — are only tinted, or the two edges would read as a double
+ * border. Opaque over the page, so where the pieces below overlap they do not
+ * darken.
+ */
+.plan .plan-content :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote)[data-plan-change] {
+	--plan-wash-rest: var(--color-page);
+	--plan-wash: color-mix(in oklab, var(--color-brand-wash) 65%, var(--color-page));
+	border-radius: var(--radius-sm);
+	outline: 0.375rem solid var(--plan-wash);
+}
+
+.plan .plan-content :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote)[data-plan-change="moved"] {
+	--plan-wash: color-mix(in oklab, var(--color-text-quaternary) 9%, var(--color-page));
+}
+
+/*
+ * Two changed blocks in a row are one region. The later one fills the margin
+ * between them upward — an outset paints outside the box without taking any
+ * space — by enough to cover the largest margin a prose block has, 1.5em above
+ * a heading. Any excess lands on the block above, which is already washed the
+ * same colour. Not on a quote, whose bar is a border this would replace.
+ */
+.plan
+	.plan-content
+	:is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="added"]
+	+ :is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="added"],
+.plan
+	.plan-content
+	:is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="moved"]
+	+ :is(p, h1, h2, h3, h4, h5, h6, ul, ol)[data-plan-change="moved"] {
+	border-image: linear-gradient(var(--plan-wash), var(--plan-wash)) fill 0 / 0 / 1.5em 0.375rem 0;
+}
+
+@keyframes plan-change-in {
+	from {
+		--plan-wash: var(--plan-wash-rest);
+	}
 }
 
 /*
@@ -2329,18 +2928,28 @@
  */
 .plan .plan-content [data-plan-gap-before],
 .plan .plan-content [data-plan-gap-after] {
+	--plan-hole: var(--color-text-quaternary);
 	box-shadow:
 		var(--plan-gap-above, 0 0 transparent),
 		var(--plan-gap-below, 0 0 transparent);
-	transition: box-shadow var(--duration-linger) var(--ease-out);
+}
+
+.plan .plan-content :is([data-plan-gap-before], [data-plan-gap-after]):not([data-plan-change]) {
+	animation: plan-gap-in var(--duration-linger) var(--ease-out);
+}
+
+@keyframes plan-gap-in {
+	from {
+		--plan-hole: transparent;
+	}
 }
 
 .plan .plan-content [data-plan-gap-before="removed"] {
-	--plan-gap-above: 0 -0.375rem 0 -0.3125rem var(--color-text-quaternary);
+	--plan-gap-above: 0 -0.375rem 0 -0.3125rem var(--plan-hole);
 }
 
 .plan .plan-content [data-plan-gap-after="removed"] {
-	--plan-gap-below: 0 0.375rem 0 -0.3125rem var(--color-text-quaternary);
+	--plan-gap-below: 0 0.375rem 0 -0.3125rem var(--plan-hole);
 }
 
 /*
@@ -2350,17 +2959,30 @@
 .plan .plan-content [data-plan-gap-before="vacated"] {
 	--plan-gap-above: 0 -0.375rem 0 -0.34375rem color-mix(
 		in oklch,
-		var(--color-text-quaternary) 55%,
+		var(--plan-hole) 55%,
 		transparent
 	);
 }
 
 .plan .plan-content [data-plan-gap-after="vacated"] {
-	--plan-gap-below: 0 0.375rem 0 -0.34375rem color-mix(
-		in oklch,
-		var(--color-text-quaternary) 55%,
-		transparent
-	);
+	--plan-gap-below: 0 0.375rem 0 -0.34375rem color-mix(in oklch, var(--plan-hole) 55%, transparent);
+}
+
+/*
+ * Expired. The store keeps every attribute on until this has run, so the mark
+ * fades at its full shape and is only then taken off.
+ */
+.plan
+	.plan-content
+	:is([data-plan-change], [data-plan-gap-before], [data-plan-gap-after])[data-plan-fade] {
+	animation: plan-change-out var(--duration-linger) var(--ease-out) forwards;
+}
+
+@keyframes plan-change-out {
+	to {
+		--plan-wash: var(--plan-wash-rest);
+		--plan-hole: transparent;
+	}
 }
 
 /*
@@ -2382,19 +3004,18 @@
 /* Reaching the ones off screen ------------------------------------------- */
 
 /*
- * One chip per edge, over the prose rather than in it, and only while
- * something in that direction is still unread. Opposite the status chip at the
- * bottom, which is why the lower one sits inline-start of it.
+ * One chip per edge, in the leading margin rather than over the prose, and only
+ * while something in that direction is still unread. The status chip has the
+ * trailing corner at the bottom.
  */
 .plan-changes {
 	position: absolute;
 	z-index: 3;
-	inset-inline-start: 50%;
-	translate: -50% 0;
+	inset-inline-start: 0.5rem;
 	display: flex;
 	flex-direction: column;
+	align-items: flex-start;
 	gap: 0.375rem;
-	max-width: min(24rem, calc(100% - 1.5rem));
 }
 
 .plan-changes[data-side="above"] {
@@ -2406,52 +3027,67 @@
 	flex-direction: column-reverse;
 }
 
+/*
+ * A narrow pane has no margin to sit in, and a chip pinned there covers the
+ * first word of a line. Centred, it reads as floating over the document.
+ */
+@container (max-width: 44rem) {
+	.plan-changes {
+		inset-inline-start: 50%;
+		translate: -50% 0;
+		align-items: center;
+	}
+}
+
 .plan-changes-bar {
 	display: flex;
-	align-self: center;
 	align-items: stretch;
 	border-radius: var(--radius-full);
 	background: var(--color-page);
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
-	box-shadow: var(--shadow-resting);
+	box-shadow: var(--shadow-raised);
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
-	max-inline-size: 100%;
+	color: var(--color-text-secondary);
 }
 
 .plan-changes-go,
 .plan-changes-more {
-	min-inline-size: 0;
 	display: flex;
 	align-items: center;
-	gap: 0.375rem;
-	padding: 0.25rem 0.625rem;
-	color: var(--color-text-primary);
+	justify-content: center;
+	min-block-size: 1.5rem;
+	min-inline-size: 1.5rem;
 	cursor: pointer;
+}
+
+.plan-changes-go {
+	gap: 0.1875rem;
+	padding-inline: 0.375rem 0.3125rem;
+	border-start-start-radius: var(--radius-full);
+	border-end-start-radius: var(--radius-full);
+	font-weight: 500;
 }
 
 .plan-changes-more {
 	border-start-end-radius: var(--radius-full);
 	border-end-end-radius: var(--radius-full);
-	padding-inline: 0.375rem;
-	border-inline-start: var(--edge-width) solid var(--color-edge);
-}
-
-.plan-changes-go {
-	border-start-start-radius: var(--radius-full);
-	border-end-start-radius: var(--radius-full);
+	padding-inline-end: 0.125rem;
 }
 
 .plan-changes-go:hover,
-.plan-changes-more:hover {
-	background: var(--color-brand-wash);
+.plan-changes-more:hover,
+.plan-changes-more[aria-expanded="true"] {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
 }
 
 .plan-changes-list,
 .plan-changes-empty {
+	max-inline-size: min(24rem, calc(100cqi - 1rem));
 	margin: 0;
-	padding: 0.375rem;
+	padding: 0.25rem;
 	max-height: 12rem;
 	overflow-y: auto;
 	list-style: none;
@@ -2469,31 +3105,32 @@
 	color: var(--color-text-quaternary);
 }
 
+/* The dot's slot is kept on every row, so read and unread text line up. */
 .plan-changes-item {
 	display: flex;
+	align-items: baseline;
 	gap: 0.5rem;
 	padding: 0.25rem 0.5rem;
 	border-radius: var(--radius-sm);
 }
 
+.plan-changes-item::before {
+	content: "";
+	flex: none;
+	align-self: center;
+	width: 0.375rem;
+	height: 0.375rem;
+	border-radius: var(--radius-full);
+}
+
 .plan-changes-kind {
 	flex: none;
-	font-weight: 600;
+	font-weight: 500;
 	color: var(--color-text-tertiary);
 }
 
 /* Still waiting to be reached, as opposed to already shown and counted down. */
-.plan-changes-item[data-unread] {
-	background: var(--color-brand-wash);
-}
-
 .plan-changes-item[data-unread]::before {
-	content: "";
-	flex: none;
-	width: 0.375rem;
-	height: 0.375rem;
-	margin-block-start: 0.4375rem;
-	border-radius: var(--radius-full);
 	background: var(--color-brand);
 }
 
@@ -2522,6 +3159,19 @@
 	flex: none;
 	align-items: center;
 	block-size: 1.5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.presence-face {
+		animation: presence-face-in var(--badge-pop-dur) var(--motion-smooth-out) both;
+	}
+}
+
+@keyframes presence-face-in {
+	from {
+		opacity: 0;
+		scale: 0.85;
+	}
 }
 
 .presence-face + .presence-face {
@@ -2723,10 +3373,6 @@
 	flex: none;
 }
 
-.plan-decision-meta > p > svg {
-	margin-block: calc((1lh - 0.875rem) / 2);
-}
-
 .plan-decision-meta > p > :is(img, [role="img"]) {
 	margin-block: calc((1lh - 1.125rem) / 2);
 }
@@ -2745,7 +3391,7 @@
 .plan-decision-fold {
 	display: grid;
 	grid-template-rows: 0fr;
-	transition: grid-template-rows var(--duration-base) var(--ease-out);
+	transition: grid-template-rows var(--acc-collapse) var(--motion-move);
 }
 
 .plan-decision-fold > div {
@@ -2754,6 +3400,7 @@
 
 .plan-decision-pop[data-pinned] .plan-decision-fold {
 	grid-template-rows: 1fr;
+	transition-duration: var(--acc-expand);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2831,5 +3478,27 @@
 
 	.plan-content :is([class*="_listItemUnchecked"], [class*="_listItemChecked"]):before {
 		transition: none;
+	}
+}
+
+@keyframes plan-bubble-enter {
+	from {
+		opacity: 0;
+		transform: translateY(4px) scale(var(--dropdown-pre-scale));
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.plan-formatting-toolbar {
+	animation: plan-bubble-enter var(--duration-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-formatting-toolbar {
+		animation: none;
 	}
 }

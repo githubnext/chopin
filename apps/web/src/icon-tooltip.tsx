@@ -129,6 +129,7 @@ export function IconTooltip() {
 					?? originalTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
 				tooltip.textContent = tooltipText(label, button.hasAttribute("data-tooltip-verbatim"));
+				tooltip.setAttribute("data-shortcut", button.dataset.tooltipShortcut ?? "");
 				let rect = button.getBoundingClientRect();
 				// A row's description card sits beside its rail (data-tooltip-edge) when there is room.
 				if (button.dataset.tooltipSide === "right") {
@@ -145,6 +146,17 @@ export function IconTooltip() {
 							)
 						}px`;
 						tooltip.style.left = `${right + GAP}px`;
+						tooltip.setAttribute("data-visible", "");
+						return;
+					}
+				}
+				// A table's row rail keeps its tooltips beyond its outer edge, clear of its controls.
+				if (button.dataset.tooltipSide === "left") {
+					tooltip.dataset.side = "left";
+					let left = (button.closest("[data-tooltip-edge]") ?? button).getBoundingClientRect().left;
+					if (left - GAP - tooltip.offsetWidth >= 8) {
+						tooltip.style.top = `${rect.top + rect.height / 2}px`;
+						tooltip.style.left = `${left - GAP - tooltip.offsetWidth}px`;
 						tooltip.setAttribute("data-visible", "");
 						return;
 					}

@@ -5,7 +5,8 @@
  * front. This reaches the built editor through the realm and binds it, which is
  * why the editor is mounted with `editorState={null}` and
  * `suppressSharedHistory` — otherwise it would seed initial content that then
- * fights the CRDT, and its history would compete with the Yjs undo manager.
+ * fights the CRDT, and its history would compete with the Yjs undo manager
+ * registered here (see `history.ts`).
  */
 
 import { useEffect, useState } from "react";
@@ -29,6 +30,7 @@ import { $getNodeByKey, BLUR_COMMAND, COMMAND_PRIORITY_EDITOR, FOCUS_COMMAND } f
 import * as Y from "yjs";
 
 import { collapsed, enclosing } from "./collapse";
+import { registerPlanHistory } from "./history";
 import { labels } from "./labels";
 import { PlanProvider } from "./provider";
 
@@ -40,6 +42,7 @@ import type {
 	UserState,
 } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
+import type { Refusal } from "./history";
 import type { PlanProviderOptions } from "./provider";
 
 export type CollaborationOptions = Omit<PlanProviderOptions, "doc"> & {
@@ -47,6 +50,8 @@ export type CollaborationOptions = Omit<PlanProviderOptions, "doc"> & {
 	user: { name: string; color: string };
 	onProvider?: (provider: PlanProvider | undefined) => void;
 	onBinding?: (binding: Binding | undefined) => void;
+	/** An undo or redo this person asked for could not be applied safely. */
+	onUndoRefused?: (reason: Refusal) => void;
 };
 
 const DOC = "plan";
@@ -133,9 +138,14 @@ function Collaboration(options: CollaborationOptions) {
 			},
 		);
 
+		let history = registerPlanHistory(editor, binding, {
+			onRefused: reason => options.onUndoRefused?.(reason),
+		});
 		let observer = (events: unknown[], transaction: { origin: unknown }) => {
 			if (transaction.origin !== binding) {
-				syncYjsChangesToLexical(binding, provider, events as never, false, cursors);
+				let undone = transaction.origin instanceof Y.UndoManager;
+				syncYjsChangesToLexical(binding, provider, events as never, undone, cursors);
+				history.react();
 			}
 		};
 		binding.root.getSharedType().observeDeep(observer);
@@ -194,6 +204,7 @@ function Collaboration(options: CollaborationOptions) {
 			focus();
 			blur();
 			stopLocal();
+			history.dispose();
 			binding.root.getSharedType().unobserveDeep(observer);
 			// Announce the departure while the transport is still up.
 			leave();
@@ -226,6 +237,15 @@ function Collaboration(options: CollaborationOptions) {
 		let flash = labels(binding, provider);
 		let paint = () => {
 			cursors(binding, provider);
+			// The agent's caret sits at the end of what it just wrote, so its
+			// label goes beside the caret rather than over the line above.
+			let states = provider.awareness.getStates();
+			for (let [client, cursor] of binding.cursors) {
+				let caret = cursor.selection?.caret;
+				if (!caret) continue;
+				if (states.get(client)?.agent === true) caret.dataset.planAgent = "";
+				else caret.removeAttribute("data-plan-agent");
+			}
 			flash.sync();
 		};
 

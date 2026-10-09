@@ -55,7 +55,7 @@
 .ch-diagram .sc-svg {
 	display: block;
 	width: 100%;
-	min-width: 32.5rem;
+	min-width: var(--sc-native-width, 32.5rem);
 	height: auto;
 	max-height: 82vh;
 	margin: 0 auto;

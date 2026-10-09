@@ -135,13 +135,12 @@ test("a wide table scrolls without losing its measured column rail", async ({ jo
 	await expectNoHorizontalOverflow(page);
 });
 
-test("the header row is drawn a bar, not a grip", async ({ join, seed }) => {
+test("the header row has no grip", async ({ join, seed }) => {
 	await seed(TABLE);
 	let page = await join("ana");
 	let rail = await rails(page);
 
-	// A bar and not a gap: a rail with a hole where a row plainly is reads as
-	// a bug, so the header is drawn and simply cannot be taken hold of.
+	// The header cannot be taken hold of.
 	await expect(rail.getByRole("button", { name: "Move row 1" })).toHaveCount(0);
 	await expect(rail.getByRole("button", { name: "Remove row 1" })).toHaveCount(0);
 
@@ -152,6 +151,69 @@ test("the header row is drawn a bar, not a grip", async ({ join, seed }) => {
 
 	// Every body row can be moved.
 	await expect(rail.getByRole("button", { name: /^Move row / })).toHaveCount(3);
+});
+
+test("rails disclose only the pointed track, with roomy targets outside it", async ({ join, seed }) => {
+	await seed(TABLE);
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	await content(page).getByRole("cell", { name: "two" }).hover();
+	let rail = page.locator('[data-plan-rail="row"]');
+	await expect(rail).toBeVisible();
+
+	// The pointed row's grip is drawn; the others wait undrawn.
+	await expect(grip(rail, "row", 3)).toHaveCSS("opacity", "1");
+	await expect(grip(rail, "row", 2)).toHaveCSS("opacity", "0");
+
+	// An insert shows only on its own seam, with a line across the table there.
+	let insert = rail.getByRole("button", { name: "Insert row after row 2" });
+	await expect(insert).toHaveCSS("opacity", "0");
+	await insert.hover();
+	await expect(insert).toHaveCSS("opacity", "1");
+	let line = page.locator('[data-plan-seam-line="row"]');
+	await expect(line).toBeVisible();
+	let table = (await content(page).locator("table").boundingBox())!;
+	let lineBox = (await line.boundingBox())!;
+	expect(Math.abs(lineBox.width - table.width)).toBeLessThan(2);
+
+	await grip(rail, "row", 3).hover();
+	let remove = rail.getByRole("button", { name: "Remove row 3" });
+	await expect(remove).toHaveCSS("opacity", "1");
+	for (let button of [insert, remove]) {
+		let box = (await button.boundingBox())!;
+		expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(24);
+	}
+	// The grip's tooltip opens beyond the rail rather than over its buttons.
+	let tooltip = page.locator("[data-icon-tooltip][data-visible]");
+	await expect(tooltip).toBeVisible();
+	let railBox = (await rail.boundingBox())!;
+	let tipBox = (await tooltip.boundingBox())!;
+	expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(railBox.x);
+});
+
+test("the paragraph above a table stays clickable while its rails show", async ({ join, seed }) => {
+	await seed(`A paragraph that ends just above the table.\n\n${TABLE}`);
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	await content(page).getByRole("cell", { name: "one" }).click();
+	let rail = page.locator('[data-plan-rail="column"]');
+	await expect(rail).toBeVisible();
+
+	let paragraph = content(page).getByText("A paragraph that ends just above the table.");
+	let line = (await paragraph.boundingBox())!;
+	let cell = (await content(page).getByRole("cell", { name: "one" }).boundingBox())!;
+	// The rail's button lane reaches up over this line; it must let the click through.
+	let x = cell.x + cell.width / 2;
+	let y = line.y + line.height - 4;
+	let railBox = (await rail.boundingBox())!;
+	expect(y).toBeGreaterThan(railBox.y);
+	await page.mouse.click(x, y);
+
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let node = getSelection()?.anchorNode;
+			let element = node instanceof Element ? node : node?.parentElement;
+			return element?.closest("p")?.textContent ?? null;
+		})
+	).toBe("A paragraph that ends just above the table.");
 });
 
 test("a grip moves its row from the keyboard", async ({ join, seed }) => {

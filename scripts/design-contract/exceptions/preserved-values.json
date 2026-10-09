@@ -448,19 +448,6 @@
 		]
 	},
 	{
-		"file": "packages/editor/src/styles.css",
-		"reason": "Fold's grid-row and opacity durations are tuned together for a non-jumping height reveal; no shared duration matches this bespoke choreography.",
-		"cases": [
-			[
-				"motion",
-				"transition",
-				"grid-template-rows 420ms var(--ease-out), opacity 300ms var(--ease-out)",
-				"CSS > .plan-research-fold",
-				1
-			]
-		]
-	},
-	{
 		"file": "apps/web/src/chat/composer.css",
 		"reason": "User-approved Chopin mode halo uses 10px spread at 0.4 opacity on a separate outer layer. This addressing indicator keeps the input white and does not change shared elevation tiers.",
 		"cases": [

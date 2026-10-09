@@ -294,11 +294,18 @@ function DocumentRouteSwap(
 	let published = useRef<DocumentRouteResolution | undefined>(undefined);
 	useEffect(() => {
 		let resolution = state.current.resolution;
-		if (!resolution || published.current === resolution) return;
+		// An outgoing route that resolves after a newer request must not canonicalize over it.
+		if (!resolution || state.pending || published.current === resolution) return;
 		published.current = resolution;
 		onCanonicalPath(resolution.canonicalPath);
 		void onDocumentLoaded(resolution.channel, resolution.routeKey);
-	}, [onCanonicalPath, onDocumentLoaded, state.current.key, state.current.resolution]);
+	}, [
+		onCanonicalPath,
+		onDocumentLoaded,
+		state.current.key,
+		state.current.resolution,
+		state.pending,
+	]);
 
 	return (
 		<div className="document-route-swap content-swap-stack h-full">

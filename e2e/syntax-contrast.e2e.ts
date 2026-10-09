@@ -60,7 +60,9 @@ test("a narrow code preview can be scrolled with the keyboard", async ({ join, s
 	expect(await preview.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 	await expect(preview).toHaveAttribute("tabindex", "0");
 	await preview.focus();
-	await expectFocusIndicator(preview);
+	// The block clips its corners and the renderer paints over the preview's
+	// own box, so the whole block carries the ring.
+	await expectFocusIndicator(preview, content(page).locator(".planCode"));
 	await page.keyboard.press("ArrowRight");
 	await expect.poll(() => preview.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
 });

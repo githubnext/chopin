@@ -167,7 +167,10 @@ export declare namespace Plan {
 	};
 
 	export type ChangeAttribution = {
+		/** The MCP client's self-reported name, or `unknown` when it gave none. */
 		client: { name: string; version: string };
+		/** The verified GitHub login of the MCP caller. */
+		user: string;
 		fromRevision: number;
 		revision: number;
 	};
@@ -277,6 +280,11 @@ export declare namespace Plan {
 		/** base64 Yjs update */
 		update: string;
 		seq: number;
+		/**
+		 * The Planner or an MCP client wrote this, not a person. Descriptive
+		 * only, for how the change is shown; it grants and proves nothing.
+		 */
+		agent?: true;
 	};
 
 	/** Ephemeral presence: cursors, selections, focus. Never persisted. */

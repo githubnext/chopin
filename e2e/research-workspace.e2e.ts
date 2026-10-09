@@ -1,6 +1,8 @@
 import { readSource, seedPendingLegacyResearchWorkspace } from "./database";
 import { content, expect, test } from "./room";
 
+import type { Page } from "@playwright/test";
+
 const WORKSPACE_SOURCE = `# Inline research
 
 ${Array.from({ length: 36 }, (_, index) => `Workspace passage ${index + 1}.`).join("\n\n")}
@@ -129,11 +131,15 @@ test("a private research draft keeps its authored geometry until explicit dismis
 	expect(scrollTop).toBeGreaterThan(120);
 	await scroller.evaluate(element => element.scrollTop -= 120);
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(scrollTop - 120);
+	// It stays attached to its anchor: directly below, or flipped above near the bottom edge.
 	await expect.poll(() =>
 		composer.evaluate(element => {
-			let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
-			return Math.abs(
-				element.getBoundingClientRect().top - anchor.getBoundingClientRect().bottom,
+			let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!
+				.getBoundingClientRect();
+			let draft = element.getBoundingClientRect();
+			return Math.min(
+				Math.abs(draft.top - anchor.bottom),
+				Math.abs(draft.bottom - anchor.top),
 			);
 		})
 	).toBeLessThan(2);
@@ -164,4 +170,85 @@ test("a private research draft keeps its authored geometry until explicit dismis
 		.toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Ask from research", exact: true }))
 		.toHaveCount(0);
+});
+
+async function draftGeometry(page: Page) {
+	return await page.evaluate(() => {
+		let draft = document.querySelector<HTMLElement>(".plan-research-draft")!;
+		let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
+		let scroller = document.querySelector<HTMLElement>("[data-plan-scroll]")!;
+		let box = draft.getBoundingClientRect();
+		let bounds = scroller.getBoundingClientRect();
+		return {
+			anchor: anchor.getBoundingClientRect().toJSON() as DOMRect,
+			bottom: box.bottom,
+			inside: box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1,
+			side: draft.dataset.side,
+			top: box.top,
+		};
+	});
+}
+
+test("the research draft stays fully visible as its anchor nears an edge", async ({ join, seed }) => {
+	await seed(WORKSPACE_SOURCE);
+	let page = await join("ana");
+	let editor = content(page);
+	// Place the caret by clicking the end of the line; End scrolls the document on macOS.
+	let passage = page.getByText("Workspace passage 12.", { exact: true });
+	let box = (await passage.boundingBox())!;
+	await passage.click({ position: { x: box.width - 1, y: box.height / 2 } });
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/research");
+	await page.keyboard.press("Enter");
+	let question = page.getByRole("textbox", { name: "Research question", exact: true });
+	await expect(question).toBeFocused();
+	// The reveal may still be scrolling; wait for it to settle below the anchor.
+	await expect.poll(async () => {
+		let geometry = await draftGeometry(page);
+		return geometry.inside && geometry.side === "below";
+	}).toBe(true);
+
+	// Scrolled partly past the top, the draft is clipped to the pane rather than drawn over its tabs.
+	let scroller = page.locator("[data-plan-scroll]");
+	// Wheel input, like a reader's, also ends the opening reveal.
+	let pane = (await scroller.boundingBox())!;
+	// Use the pane gutter so the draft's textarea does not consume the wheel gesture.
+	await page.mouse.move(pane.x + 8, pane.y + pane.height / 2);
+	await page.mouse.wheel(
+		0,
+		await scroller.evaluate(element => {
+			let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
+			return anchor.getBoundingClientRect().bottom - element.getBoundingClientRect().top + 40;
+		}),
+	);
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let draft = document.querySelector<HTMLElement>(".plan-research-draft")!;
+			let scroller = document.querySelector<HTMLElement>("[data-plan-scroll]")!;
+			let hidden = Number(/inset\((-?[\d.]+)px/.exec(draft.style.clipPath)?.[1] ?? 0);
+			return draft.getBoundingClientRect().top + Math.max(0, hidden)
+					>= scroller.getBoundingClientRect().top - 1 && hidden > 0;
+		})
+	).toBe(true);
+
+	// Scroll the anchor to just above the bottom edge: the draft flips above it.
+	await scroller.evaluate(element => {
+		let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
+		element.scrollTop -= element.getBoundingClientRect().bottom - 48
+			- anchor.getBoundingClientRect().bottom;
+	});
+	await expect.poll(async () => (await draftGeometry(page)).side).toBe("above");
+	let flipped = await draftGeometry(page);
+	expect(flipped.inside).toBe(true);
+	expect(Math.abs(flipped.bottom - flipped.anchor.top)).toBeLessThan(2);
+
+	// A shorter viewport, as when an on-screen keyboard opens, scrolls the draft back into view.
+	let size = page.viewportSize()!;
+	await page.setViewportSize({ width: size.width, height: Math.round(size.height * 0.6) });
+	await expect.poll(async () => {
+		let geometry = await draftGeometry(page);
+		return geometry.inside && geometry.side === "below";
+	}).toBe(true);
+	await expect(question).toBeFocused();
+	await expect(editor).toBeVisible();
 });

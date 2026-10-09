@@ -1,6 +1,19 @@
 import { expect, test } from "bun:test";
 
-import { PROMPT } from "./planner";
+import { renderDiagram } from "@chopin/diagrams";
+
+import { DIAGRAM_AUTHORING, PROMPT } from "./planner";
+
+test("offers grounded optional diagrams with three valid authoring examples", () => {
+	expect(PROMPT).toContain(DIAGRAM_AUTHORING);
+	expect(DIAGRAM_AUTHORING).toContain("when a diagram adds no clarity");
+	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)];
+	expect(examples).toHaveLength(3);
+	for (let [index, example] of examples.entries()) {
+		let rendered = renderDiagram(JSON.parse(example[1]!) as unknown);
+		expect(rendered.ok, `example ${index + 1}`).toBe(true);
+	}
+});
 
 test("settles blocking opening choices before writing a first plan", () => {
 	expect(PROMPT).toContain(

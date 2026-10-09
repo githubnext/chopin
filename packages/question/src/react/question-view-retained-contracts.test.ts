@@ -103,7 +103,9 @@ test("a linked decision keeps its heading outside the related-prose button", () 
 	expect(markup).toMatch(/<h4[^>]*><button[^>]*data-ace-question-id="q"/);
 	expect(button).toBeDefined();
 	expect(button).not.toMatch(/<h[1-6]\b/);
-	expect(button).toContain('aria-label="What auth system should we use? — show in plan, 2 places"');
+	expect(button).toContain(
+		'aria-label="What auth system should we use? — show in document, 2 places"',
+	);
 });
 
 test("Save is disabled until something is chosen", () => {

@@ -87,7 +87,7 @@
 				1
 			]
 		],
-		"sourceHash": "9261461af068e89ab69e28e8a5bc49dc0e4edf78d1a3d070bd5f2028246e2064"
+		"sourceHash": "976bf62ec394e98b0ef030de872305b9e1ab02811d3b0c31453771bf354c78f0"
 	},
 	{
 		"file": "apps/web/src/project-sidebar.tsx",
@@ -101,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "71da0b32af267f6bf549cb2a4825b7d8ea13a3cb476674cc5dca4ee6fc5cabb9"
+		"sourceHash": "7ebd3a797b4423e5b511a2c1b03195f377a591a06ee89c874ad685b6e3560904"
 	},
 	{
 		"file": "apps/web/src/project-sidebar.tsx",
@@ -115,7 +115,7 @@
 				1
 			]
 		],
-		"sourceHash": "71da0b32af267f6bf549cb2a4825b7d8ea13a3cb476674cc5dca4ee6fc5cabb9"
+		"sourceHash": "7ebd3a797b4423e5b511a2c1b03195f377a591a06ee89c874ad685b6e3560904"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -234,7 +234,7 @@
 				1
 			]
 		],
-		"sourceHash": "460a146f66832be548bac2c90f22faed448cf7114db4b9bace02fefe7c626709"
+		"sourceHash": "32351868c1423465eac33e7db7df58ef0c5c321c3ac304776dc9e00e7b14326f"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
@@ -248,7 +248,7 @@
 				1
 			]
 		],
-		"sourceHash": "7c8d8e38b981d970cdb940da6e183da9bbdb6ff3e1268c2ee533d29ba1aa8888"
+		"sourceHash": "7a500f7e32a5c4f8db23dfd0a11f66cb164a0ce0676f5ce1b0ff4df2607a410d"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -262,7 +262,7 @@
 				1
 			]
 		],
-		"sourceHash": "d96045d78571bb6cf5d7ec8c41cdfd3386224510cab6c7462dae8baa3184f580"
+		"sourceHash": "c67c1e2ab9c4cf2886619429a10451766d50f964f5839a87deb35526e7f124e9"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -290,7 +290,7 @@
 				1
 			]
 		],
-		"sourceHash": "d96045d78571bb6cf5d7ec8c41cdfd3386224510cab6c7462dae8baa3184f580"
+		"sourceHash": "c67c1e2ab9c4cf2886619429a10451766d50f964f5839a87deb35526e7f124e9"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",

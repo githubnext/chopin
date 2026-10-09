@@ -36,7 +36,13 @@ import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
-import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import { DecisionViewControl, useDecisionAttention } from "./decision-view-control";
+import {
+	advanceDocumentActivity,
+	ANSWER_FOLLOW_MS,
+	documentActivity,
+	QUIET_DOCUMENT,
+} from "./document-activity";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
@@ -50,11 +56,12 @@ import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
-import type { ConversationPlan, Research, Session } from "@chopin/protocol";
+import type { ConversationPlan, Plan, Question, Research, Session } from "@chopin/protocol";
 import type {
 	DecisionView,
 	DecisionViewState,
 	PlanState,
+	Refusal,
 	ResearchLaunchResult,
 } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
@@ -99,6 +106,7 @@ export function Header(
 		onEditingChange,
 		onRenamed,
 		presentation,
+		project,
 		room,
 	}: {
 		archivedAt?: string;
@@ -110,9 +118,11 @@ export function Header(
 		onEditingChange: (editing?: TitleEdit) => void;
 		onRenamed: (channel: DocumentMetadata) => void;
 		presentation: WorkspacePresentation;
+		project?: { id: string; name: string };
 		room: string;
 	},
 ) {
+	let { onProjectReveal } = useNavigationDocument();
 	let people = peopleHere(members);
 	let header = useRef<HTMLElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
@@ -142,6 +152,19 @@ export function Header(
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
 				<DocumentIcon className="shrink-0" />
+				{project && presentation.type !== "parent-with-child" && (
+					<>
+						<button
+							aria-label={`Show ${project.name} in the sidebar`}
+							className="document-project-prefix"
+							onClick={() => onProjectReveal(project.id)}
+							type="button"
+						>
+							<span className="truncate">{project.name}</span>
+						</button>
+						<span aria-hidden="true" className="document-project-separator">/</span>
+					</>
+				)}
 				{presentation.type === "parent-with-child"
 					? (
 						<>
@@ -250,6 +273,11 @@ export function Header(
 
 const LOST_EDITS =
 	"Your last edits couldn't be saved because the document changed while you were offline.";
+
+const UNDO_REFUSALS: Record<Refusal, string> = {
+	others: "Others have edited this since.",
+	change: "This change can't be reversed here.",
+};
 
 /** Reconnect attempts a person can make in one outage before Reload is offered. */
 const RECONNECTS_BEFORE_RELOAD = 3;
@@ -401,10 +429,9 @@ export function RoomWorkspace(
 		};
 	});
 	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
-	let previousUnanswered = useRef(unanswered);
+	let attention = useDecisionAttention(unanswered);
 	let latestCanEdit = useRef(canEdit);
 	let latestCanManage = useRef(canManage);
-	let [attention, setAttention] = useState(false);
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
 	let chatActive = workspacePresentation.chatVisible;
 	let [chatActivity, setChatActivity] = useState({ unread: 0, busy: false });
@@ -419,6 +446,12 @@ export function RoomWorkspace(
 		},
 		[chatActive],
 	);
+	let planVisible = workspacePresentation.documentVisible && view === "plan";
+	let latestPlanVisible = useRef(planVisible);
+	latestPlanVisible.current = planVisible;
+	let latestBusy = useRef(chatActivity.busy);
+	latestBusy.current = chatActivity.busy;
+	let [documentWatch, setDocumentWatch] = useState(QUIET_DOCUMENT);
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
 		let previous = metadataRef.current;
 		let metadata = newestDocumentMetadata(previous, next);
@@ -458,13 +491,46 @@ export function RoomWorkspace(
 	}, [chatActive]);
 
 	useEffect(() => {
-		let previous = previousUnanswered.current;
-		previousUnanswered.current = unanswered;
-		if (!decisionAttention(previous, unanswered)) return;
-		setAttention(true);
-		let timer = window.setTimeout(() => setAttention(false), 200);
+		if (planVisible) setDocumentWatch(state => advanceDocumentActivity(state, { type: "seen" }));
+	}, [planVisible]);
+
+	useEffect(() => {
+		setDocumentWatch(state =>
+			advanceDocumentActivity(state, { type: chatActivity.busy ? "started" : "idle" })
+		);
+	}, [chatActivity.busy]);
+
+	useEffect(() => {
+		if (documentWatch.following !== "awaiting") return;
+		let timer = window.setTimeout(
+			() => setDocumentWatch(state => advanceDocumentActivity(state, { type: "expired" })),
+			ANSWER_FOLLOW_MS,
+		);
 		return () => window.clearTimeout(timer);
-	}, [unanswered]);
+	}, [documentWatch.following]);
+
+	useEffect(() => {
+		if (!wire) return;
+		let offChanges = wire.on<Plan.Changes>("plan:changes", () => {
+			if (latestPlanVisible.current) return;
+			setDocumentWatch(state =>
+				advanceDocumentActivity(state, { type: "changes", busy: latestBusy.current })
+			);
+		});
+		// Only this viewer's own answer resumes a turn worth following; a discard
+		// or someone else's answer may start nothing.
+		let offResolved = wire.on<Question.Resolved>("question:resolved", event => {
+			if (event.status !== "answered" || event.resolver !== handle) return;
+			if (latestPlanVisible.current) return;
+			setDocumentWatch(state =>
+				advanceDocumentActivity(state, { type: "answered", busy: latestBusy.current })
+			);
+		});
+		return () => {
+			offChanges();
+			offResolved();
+		};
+	}, [wire, handle]);
 
 	let selectView = (next: DecisionView, revealFirst = true) => {
 		setDecisionView(state => selectDecisionView(state, next));
@@ -531,6 +597,10 @@ export function RoomWorkspace(
 		if (mode === "split") setDesktopChatOpen(true);
 		else dispatch({ type: "set-chat", open: true });
 	}, [dispatch, mode, setDesktopChatOpen]);
+	let hasCardSource = useCallback((questionnaireId: string) => {
+		let thread = conversation.state && threadForCard(conversation.state, questionnaireId);
+		return !!thread?.questionSources[0];
+	}, [conversation.state]);
 	let showCardSource = useCallback((questionnaireId: string) => {
 		let thread = conversation.state && threadForCard(conversation.state, questionnaireId);
 		let source = thread?.questionSources[0];
@@ -899,6 +969,7 @@ export function RoomWorkspace(
 					/>
 				}
 				chatActivity={chatActivity}
+				documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 				header={
 					<Header
 						archivedAt={workspaceArchivedAt}
@@ -910,12 +981,14 @@ export function RoomWorkspace(
 						onEditingChange={setTitleEdit}
 						onRenamed={updateMetadata}
 						presentation={presentation}
+						project={{ id: repository.id, name: repository.name }}
 						room={room}
 					/>
 				}
 				controls={
 					<DecisionViewControl
 						attention={attention}
+						documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 						onView={selectDestination}
 						unanswered={unanswered}
 						view={view}
@@ -947,6 +1020,27 @@ export function RoomWorkspace(
 								</button>
 							</div>
 						)}
+						{/* Apart from PlanStatus, which would announce its end as "Reconnected". */}
+						{planState.refused && (
+							<div className="plan-status" data-level="notice">
+								<span aria-hidden="true" className="plan-status-dot" />
+								<span aria-hidden="true" className="plan-status-text">
+									<span
+										className="plan-status-label"
+										data-tooltip={UNDO_REFUSALS[planState.refused.reason]}
+										data-tooltip-verbatim=""
+									>
+										Can't undo
+									</span>
+									<span className="plan-status-detail">
+										{UNDO_REFUSALS[planState.refused.reason]}
+									</span>
+								</span>
+							</div>
+						)}
+						<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
+							{planState.refused && `Can't undo. ${UNDO_REFUSALS[planState.refused.reason]}`}
+						</span>
 						<PlanStatus
 							connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
 							failed={planState.failed}
@@ -975,8 +1069,10 @@ export function RoomWorkspace(
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}
 						onShowPlan={showPlan}
+						planner={agent}
 						questionMotion={QUESTION_MOTION}
 						reveal={reveal}
+						self={handle}
 						store={questions}
 						wire={wire}
 					/>
@@ -986,9 +1082,12 @@ export function RoomWorkspace(
 						cardMeta={cardMeta}
 						evidence={showEvidence}
 						onCardSource={showCardSource}
+						hasCardSource={hasCardSource}
+						planner={agent}
 						commentPresentation={mode === "split" ? "popover" : "sheet"}
 						connection={status === "deleted" ? "closed" : status}
 						key={workspaceArchivedAt ? "archived" : "active"}
+						disclosureMotion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}
 						onScrollTop={setPlanScrollTop}
 						onState={setPlanState}

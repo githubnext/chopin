@@ -24,8 +24,12 @@ import "./workspace-sizing.css";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { sidebarMoving, usePaneMotion, usePaneSettledWidth } from "./pane-motion";
+import { listenForShortcuts } from "./global-shortcuts";
+import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
+import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
 
 import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
+import type { DocumentActivity } from "./document-activity";
 import type {
 	WorkspaceDestination,
 	WorkspaceEvent,
@@ -128,6 +132,7 @@ export type WorkspaceProps = {
 	onDestination: (destination: "plan" | "decisions") => void;
 	unanswered: number;
 	chatActivity: { unread: number; busy: boolean };
+	documentActivity?: DocumentActivity;
 	identity?: string;
 	presentation: WorkspacePresentation;
 };
@@ -165,6 +170,7 @@ export function ChatToggle(
 			aria-label={open ? "Hide chat" : `Show chat${status ? `, ${status}` : ""}`}
 			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
 			data-tooltip={open ? "Hide chat" : "Show chat"}
+			data-tooltip-shortcut={shortcutLabel("toggle-chat", currentShortcutPlatform())}
 			data-tooltip-verbatim={open ? "" : undefined}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
@@ -215,7 +221,9 @@ function destinationLabel(
 	destination: WorkspaceDestination,
 	unanswered: number,
 	activity: WorkspaceProps["chatActivity"],
+	document: DocumentActivity,
 ): string {
+	if (destination === "plan") return documentActivityLabel(document);
 	if (destination === "decisions" && unanswered > 0) {
 		return `Decisions, ${unanswered} unanswered`;
 	}
@@ -240,6 +248,7 @@ export function Workspace(
 		ids,
 		chatActivity,
 		decisions,
+		documentActivity,
 		header,
 		identity,
 		mode,
@@ -354,6 +363,24 @@ export function Workspace(
 		});
 	};
 
+	let toggleChat = useRef(() => {});
+	toggleChat.current = () => {
+		if (!presentation.chatVisible) {
+			if (mode === "split") showDesktopChat();
+			else navigate("chat");
+			return;
+		}
+		let pane = root.current?.querySelector(`#${CSS.escape(ids.pane.chat)}`);
+		// Keep focus where it was unless closing the pane would strand it.
+		if (mode !== "split" || pane?.contains(document.activeElement)) dismissChat();
+		else onDesktopChatOpen(false);
+	};
+	let chatShortcutEnabled = !!chat && !paperObscured;
+	useEffect(() => {
+		if (!chatShortcutEnabled) return;
+		return listenForShortcuts(() => ({ "toggle-chat": () => toggleChat.current() }));
+	}, [chatShortcutEnabled]);
+
 	return (
 		<div
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
@@ -378,6 +405,7 @@ export function Workspace(
 							destination,
 							unanswered,
 							chatActivity,
+							active ? undefined : documentActivity,
 						);
 						return (
 							<button
@@ -394,6 +422,9 @@ export function Workspace(
 									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
+								{destination === "plan" && !active && (
+									<DocumentActivityDot activity={documentActivity} />
+								)}
 								{destination === "decisions" && unanswered > 0 && (
 									<span aria-hidden="true" className="ml-1" data-plan-decision-count>
 										<Count motion>{unanswered}</Count>

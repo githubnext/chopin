@@ -160,7 +160,7 @@ test("Save requires a choice while an existing custom draft remains readable", a
 test("Related preserves separate heading and counted name and forwards parent-section events", async ({ page }) => {
 	let errors = await load(page, "linked");
 	let related = page.getByRole("button", {
-		name: "What auth system should we use? — show in plan, 2 places",
+		name: "What auth system should we use? — show in document, 2 places",
 		exact: true,
 	});
 	await expect(related).toBeVisible();
@@ -193,7 +193,7 @@ test("Related preserves separate heading and counted name and forwards parent-se
 
 test("an unlinked prompt remains inert prose with no advertised Related destination", async ({ page }) => {
 	let errors = await load(page, "unlinked");
-	await expect(page.getByRole("button", { name: /show in plan/ })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: /show in document/ })).toHaveCount(0);
 	let prompt = page.getByRole("heading", { name: "What auth system should we use?", exact: true });
 	expect(
 		await prompt.evaluate(element => ({

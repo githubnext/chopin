@@ -38,12 +38,20 @@ async function emulatedVisualViewportPage(
 		}));
 }
 
+/** The bubble enters with a scale and rise; geometry is only meaningful once that ends. */
+async function settled(surface: Locator): Promise<void> {
+	await surface.evaluate(element =>
+		Promise.all(element.getAnimations().map(item => item.finished))
+	);
+}
+
 async function expectSurfaceToFollowEditorScroll(
 	page: Page,
 	surface: Locator,
 ): Promise<void> {
 	// The surface's passive effect owns the scroll listeners; wait one frame so
 	// this exercise is about their geometry rather than React effect scheduling.
+	await settled(surface);
 	await page.waitForTimeout(32);
 	let scroller = page.locator("[data-plan-scroll]");
 	let beforeScroll = await scroller.evaluate(element => element.scrollTop);
@@ -270,9 +278,28 @@ test("a formatting glyph shows its label on hover", async ({ join }) => {
 	await bold.hover();
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await expect(tooltip).toBeVisible();
-	await expect(tooltip).toHaveText("Bold");
+	await expect(tooltip).toHaveText(/^Bold (⌘|Ctrl\+)B$/);
 	await page.mouse.move(0, 0);
 	await expect(tooltip).toBeHidden();
+});
+
+test("the selection toolbar sits above the selection and never covers it", async ({ join }) => {
+	let page = await join("ana");
+	await content(page).click();
+	await page.keyboard.type("First line to leave room above.");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("Selected line.");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("Next line beneath.");
+	await content(page).getByText("Selected line.").selectText();
+
+	let bubble = page.getByRole("toolbar", BUBBLE);
+	await expect(bubble).toBeVisible();
+	await settled(bubble);
+	let toolbar = (await bubble.boundingBox())!;
+	let selected = (await content(page).getByText("Selected line.").boundingBox())!;
+	expect(toolbar.y + toolbar.height).toBeLessThanOrEqual(selected.y);
+	await expectInsideViewport(bubble);
 });
 
 test("a mark from the toolbar reaches the file", async ({ join, room }) => {
@@ -567,6 +594,7 @@ test("touch editor menus use reachable targets and stay inside the viewport", as
 	await page.keyboard.press("Shift+Home");
 	let bubble = page.getByRole("toolbar", BUBBLE);
 	await expect(bubble).toBeVisible();
+	await settled(bubble);
 	let targets = await bubble.getByRole("button").evaluateAll(buttons =>
 		buttons.map(button => {
 			let box = button.getBoundingClientRect();

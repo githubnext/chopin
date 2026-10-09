@@ -574,6 +574,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			) pending.moved = true;
 			// Keep native prose selection outside the controls.
 			if (root.current?.contains(event.target as Node)) return;
+			// A pointer over the selection toolbar is not over the prose beneath it.
+			if ((event.target as Element).closest?.("[role=toolbar]")) {
+				if (hoverOwner.current) unhover(hoverOwner.current);
+				return;
+			}
 			let next = over(event)?.view.thread.id;
 			if (next) hover(next);
 			else if (hoverOwner.current) unhover(hoverOwner.current);
@@ -697,13 +702,19 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			let dialog = pinned ? document.getElementById(dialogId(pinned)) : undefined;
 			if (dialog?.contains(event.target as Node)) return;
 			if (pinned) dismiss();
-			else setPreview(undefined);
+			else {
+				hoverOwner.current = undefined;
+				setPreview(undefined);
+			}
 		};
 		let escape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
 			event.preventDefault();
 			if (pinned) dismiss();
-			else setPreview(undefined);
+			else {
+				hoverOwner.current = undefined;
+				setPreview(undefined);
+			}
 		};
 		document.addEventListener("pointerdown", outside);
 		document.addEventListener("keydown", escape);
