@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { $isTableNode, TableCellNode, TableRowNode } from "@lexical/table";
-import { $createParagraphNode, $getRoot, $isElementNode } from "lexical";
+import { $createLinkNode } from "@lexical/link";
+import { $createParagraphNode, $createTextNode, $getRoot, $isElementNode } from "lexical";
 
 import { $createPlanNodes, exportPlan, importPlan } from "./convert";
 import { $isCodeBlockNode } from "./nodes/content";
@@ -60,8 +61,24 @@ describe("conversion", () => {
 			"> quoted\n",
 			"---\n",
 			"[docs](https://example.com)\n",
+			"[https://example.com](https://example.com)\n",
 		];
 		for (let source of cases) expect(through(source)).toBe(source);
+	});
+
+	/** What the link toolbar or an autolinked paste leaves behind. */
+	it("exports a Lexical link whose text is its URL as parseable MDX", () => {
+		let instance = editor();
+		instance.update(() => {
+			let paragraph = $createParagraphNode();
+			paragraph.append(
+				$createLinkNode("https://example.com").append($createTextNode("https://example.com")),
+			);
+			$getRoot().append(paragraph);
+		}, { discrete: true });
+		let source = exportPlan(instance, { registry: REGISTRY });
+		expect(source).toBe("[https://example.com](https://example.com)\n");
+		expect(() => parse(source)).not.toThrow();
 	});
 
 	/**
