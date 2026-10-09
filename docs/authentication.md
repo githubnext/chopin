@@ -33,11 +33,16 @@ Contents:        Read-only
 Pull requests:   Read-only
 Checks:          Read-only
 Commit statuses: Read-only
+Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
-Contents backs file, tree, code-search, and commit-history tools. The other
-read-only permissions back the hosted GitHub MCP pull-request toolset. Chopin
+Contents backs file, tree, code-search, and commit-history tools. Pull requests
+and Issues also back the summaries behind pull request and issue links in a
+document; without Issues, issue links stay plain links. The other read-only
+permissions back the hosted GitHub MCP pull-request toolset. Existing
+installations must approve the added Issues permission before issue summaries
+appear. Chopin
 does not request repository, organization, or account write permission. An
 `AGENT=off` deployment only needs Contents and automatic Metadata access unless
 organization admission is enabled.
@@ -385,6 +390,7 @@ GET  /api/repositories/:owner/:repository/documents/:slug
 GET  /api/channels/:channelId
 PATCH /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
+GET  /api/channels/:channelId/github-references?ref=owner/repository/pull/12
 POST /auth/logout
 ```
 
