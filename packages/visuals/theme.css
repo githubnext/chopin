@@ -118,8 +118,9 @@
 	);
 	--color-destructive-ink: oklch(0.4941 0.19046 25.161); /* #b51421 */
 
-	/* Passive structure and controls are the only two edge weights. */
+	/* Outline buttons use a quieter edge than filled controls. */
 	--color-edge: oklch(0 0 0 / 7%);
+	--color-button-outline-edge: oklch(0 0 0 / 12%);
 	--color-control-edge: oklch(0 0 0 / 15%);
 	--color-control-boundary: var(--color-gray-500);
 	--edge-width: 1px;

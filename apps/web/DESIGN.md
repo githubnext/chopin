@@ -162,7 +162,7 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 
 ## Components
 
-- **Buttons:** Primary, secondary, outline, ghost, and destructive tiers (outline is a white button with the control edge, for a quiet single action inside a card) share one shape and compact text treatment. Resting outlines use at most 15% opacity, including primary and danger treatments; secondary buttons keep the lighter 7% passive edge. Medium buttons are 2rem high; small buttons are 1.5rem. Hover and pressed states change the relevant color role. Keyboard focus shows the brand focus ring; a pointer press hides it on buttons and menus, while text fields keep theirs.
+- **Buttons:** Primary, secondary, outline, ghost, and destructive tiers (outline is a white button with a quiet 12% edge, for a single action inside a card) share one shape and compact text treatment. Resting outlines use at most 15% opacity, including primary and danger treatments; secondary buttons keep the lighter 7% passive edge. Medium buttons are 2rem high; small buttons are 1.5rem. Hover and pressed states change the relevant color role. Keyboard focus shows the brand focus ring; a pointer press hides it on buttons and menus, while text fields keep theirs.
 - **Recovery actions:** Use `btn-outline-danger` on danger surfaces and `icon-danger` for error indicators. Hover and pressed states stay within the danger palette.
 - **Fields and selections:** White fields use the medium radius, control edge, and subtle resting shadow. Invalid fields use the destructive role. Disabled controls use neutral fill and muted text.
 - **Navigation:** The current location uses a white surface and primary ink. Other items stay quieter and reveal their affordance on hover or focus.
