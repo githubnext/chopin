@@ -71,6 +71,8 @@ export function DecisionViewControl(
 				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
 				className={`btn btn-sm gap-1 transition-[background-color,box-shadow,color] ${
+					unanswered > 0 ? "pr-1" : ""
+				} ${
 					view === "decisions"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"

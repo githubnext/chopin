@@ -11,6 +11,7 @@ import { useVisualViewport } from "./viewport";
 
 import "@fontsource-variable/inter/opsz.css";
 import "@fontsource-variable/inter/opsz-italic.css";
+import "@fontsource/lora/latin-400.css";
 
 import "./theme.css";
 import "@chopin/visuals/styles.css";
@@ -36,11 +37,20 @@ let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
 	? import("./diagram-gallery/page").then(({ DiagramGalleryPage }) => <DiagramGalleryPage />)
 	: Promise.resolve(<Root />);
 
-void Promise.all([content, import("./icon-tooltip")]).then(([value, { IconTooltip }]) => {
-	createRoot(root).render(
-		<StrictMode>
-			{value}
-			<IconTooltip />
-		</StrictMode>,
-	);
-});
+let agentation = import.meta.env.DEV
+	? import("agentation").then(({ Agentation }) => (
+		<Agentation appName="Chopin" endpoint="http://127.0.0.1:4747" />
+	))
+	: Promise.resolve(null);
+
+void Promise.all([content, import("./icon-tooltip"), agentation]).then(
+	([value, { IconTooltip }, feedback]) => {
+		createRoot(root).render(
+			<StrictMode>
+				{value}
+				<IconTooltip />
+				{feedback}
+			</StrictMode>,
+		);
+	},
+);

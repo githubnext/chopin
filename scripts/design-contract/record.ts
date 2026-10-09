@@ -188,7 +188,10 @@ export function designRecordProblems(
 				["fontFamily", "fontSize", "fontWeight", "lineHeight"],
 				`DESIGN.md.typography.${name}`,
 			);
-			compare(`DESIGN.md.typography.${name}.fontFamily`, role.fontFamily, "var(--font-sans)", true);
+			let font = ["document-title", "section-heading", "subheading"].includes(name)
+				? "--font-document-heading"
+				: "--font-sans";
+			compare(`DESIGN.md.typography.${name}.fontFamily`, role.fontFamily, `var(${font})`, true);
 			compare(`DESIGN.md.typography.${name}.fontSize`, role.fontSize, `var(--text-${token})`);
 			compare(
 				`DESIGN.md.typography.${name}.lineHeight`,

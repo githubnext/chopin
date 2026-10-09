@@ -43,7 +43,7 @@ test("the interface uses only the shared Nucleo icon family", () => {
 	expect(icons).toContain('x1="9" x2="9" y1="3.25" y2="14.75"');
 });
 
-test("interface icons default to fourteen pixels", () => {
+test("interface icons default to fourteen pixels with compact sidebar controls at twelve", () => {
 	let icon = readFileSync(join(repository, "packages/icons/src/icon.tsx"), "utf8");
 	let system = readFileSync(join(repository, "packages/icons/src/system.tsx"), "utf8");
 	expect(icon).toContain("size = 14");
@@ -89,9 +89,11 @@ test("interface icons default to fourteen pixels", () => {
 				&& match[1] === "CircleClose" && size === 16;
 			let relationStatus = file.endsWith("question/src/react/relation-note.tsx")
 				&& ["Document", "Warning"].includes(match[1]!) && size === 12;
+			let compactSidebarControl = file === join(root, "project-sidebar.tsx")
+				&& ["Chevron", "Search", "Plus"].includes(match[1]!) && size === 12;
 			if (
 				size !== 14 && !emptyStateException && !stepperCaret && !composerNotice && !referenceStatus
-				&& !referenceFailure && !relationStatus
+				&& !referenceFailure && !relationStatus && !compactSidebarControl
 			) {
 				offenders.push(`${file}: ${match[0]}`);
 			}

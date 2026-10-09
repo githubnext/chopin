@@ -8,7 +8,7 @@
 	background: var(--color-gray-800);
 	box-shadow: var(--shadow-overlay);
 	color: var(--color-white);
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	font-weight: 500;
 	line-height: 1.35;
 	text-align: center;

@@ -93,6 +93,30 @@ describe("structured design record", () => {
 		).toContain("design.json.extensions.typographyMeta.small-metadata: missing mapped field");
 	});
 
+	test("validates document heading fonts separately from prose and interface fonts", () => {
+		let result = check({
+			theme: theme.replace(
+				'--font-document-heading: "Lora", Georgia, serif',
+				'--font-document-heading: "Lora", "Times New Roman", serif',
+			),
+		});
+		expect(result.map(value => value.split(":")[0])).toEqual([
+			"DESIGN.md.typography.document-title.fontFamily",
+			"DESIGN.md.typography.section-heading.fontFamily",
+			"DESIGN.md.typography.subheading.fontFamily",
+		]);
+		expect(
+			check({
+				markdown: markdown.replace(
+					/document-body:\n    fontFamily: [^\n]+/,
+					'document-body:\n    fontFamily: "var(--font-document-heading)"',
+				),
+			}).map(value => value.split(":")[0]),
+		).toEqual([
+			"DESIGN.md.typography.document-body.fontFamily",
+		]);
+	});
+
 	test("checks sidecar shadows and motion against canonical tokens", () => {
 		expect(
 			check({
