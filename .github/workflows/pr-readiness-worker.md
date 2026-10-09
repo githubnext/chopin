@@ -255,11 +255,15 @@ job owns publication; a proposal is not proof of publication or passing CI.
    `oldReplayBoundary: null`, `checks` (nonempty array of `{command, result}`),
    and `hashReviews` (array, empty when none). Identities come from the attempt
    JSON; record actual verification results rather than claimed success.
-8. For a merge, obtain the synthetic tree SHA (the first NUL-delimited field)
+8. For a merge or rebase, obtain the synthetic tree SHA (the first NUL-delimited field)
    from `git --no-replace-objects -c merge.conflictStyle=merge merge-tree
    --write-tree -z --name-only --no-messages HEAD_SHA BASE_SHA`. This is the
-   review base: the trusted application verifies that all cleanly merged paths
-   match this tree. For a fix or rebase, use `HEAD_SHA` as the review base.
+   review base. For a rebase, add `--merge-base=BOUNDARY_SHA`, using the unique
+   `git merge-base HEAD_SHA BASE_SHA` as the captured replay boundary. A clean
+   rebase produces an empty review: inherited base changes are already trusted.
+   Conflict resolutions and additional edits remain in the review. The trusted
+   application separately validates replayed commit identities, protected paths,
+   and the exact review bytes. For a fix, use `HEAD_SHA` as the review base.
    Obtain the exact `git --no-replace-objects diff --binary --no-ext-diff
    --no-textconv REVIEW_BASE PROPOSAL_SHA`. If larger than 10,240 bytes, report
    a human blocker for reviewing the larger change. Otherwise call

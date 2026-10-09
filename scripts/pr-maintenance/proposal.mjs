@@ -133,7 +133,7 @@ export function validateProposal({
 	let merged = null;
 	let reviewBase = expectedHead;
 	let conflicts = new Set();
-	if (operation === "merge") {
+	if (operation === "merge" || operation === "rebase") {
 		let output;
 		try {
 			output = git(
@@ -144,6 +144,7 @@ export function validateProposal({
 				"-z",
 				"--name-only",
 				"--no-messages",
+				...(operation === "rebase" ? [`--merge-base=${boundary}`] : []),
 				expectedHead,
 				expectedBase,
 			);
@@ -155,7 +156,8 @@ export function validateProposal({
 		let sha = parts.shift();
 		if (
 			!sha || !/^[a-f0-9]{40}$/.test(sha) || parts.pop() !== ""
-			|| parts.length === 0 || new Set(parts).size !== parts.length
+			|| (operation === "merge" && parts.length === 0)
+			|| new Set(parts).size !== parts.length
 		) throw new Error("Captured heads have no unambiguous text conflict");
 		conflicts = new Set(parts);
 		merged = tree(sha);

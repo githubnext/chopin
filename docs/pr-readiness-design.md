@@ -82,6 +82,12 @@ avoid Docker. This does not grant agent sudo, host-service access, or broader
 network permissions. A missing browser revision or Docker image-build
 prerequisite remains an infrastructure blocker.
 
+Merge and rebase reviews compare the proposed tree with Git's deterministic
+combination of the captured head and base. Inherited base changes do not consume
+the 10 KB review limit; a clean replay has an empty review. Conflict resolutions
+and additional agent edits remain subject to that limit and exact-byte review.
+Replay identity checks and protected-path validation run independently.
+
 ## Stacked PRs
 
 Repair parents before descendants. Record parent tips before rewriting them so
