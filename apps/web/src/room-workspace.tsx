@@ -55,6 +55,7 @@ import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
+import { VisualPreview } from "./visual-preview/host";
 
 import type { ConversationPlan, Plan, Question, Research, Session } from "@chopin/protocol";
 import type {
@@ -63,6 +64,7 @@ import type {
 	PlanState,
 	Refusal,
 	ResearchLaunchResult,
+	VisualPreviewComponent,
 } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
@@ -307,6 +309,18 @@ export function RoomWorkspace(
 	}: HostedWorkspaceProps,
 ) {
 	let [wire, setWire] = useState<Wire>();
+	let visualPreview = useMemo<VisualPreviewComponent>(
+		() => ({ decisionId, definition, values, onStatus }) => (
+			<VisualPreview
+				channelId={room}
+				decisionId={decisionId}
+				definition={definition}
+				values={values}
+				onStatus={onStatus}
+			/>
+		),
+		[room],
+	);
 	let [sourceDestination, setSourceDestination] = useState<ChatDestination | undefined>(undefined);
 	let sourceToken = useRef(0);
 	let conversationStore = useMemo(() => new ConversationPlanStore(room), [room]);
@@ -1069,13 +1083,14 @@ export function RoomWorkspace(
 					<Decisions
 						cardMeta={cardMeta}
 						canEdit={workspaceCanEdit}
-						connected={treatAsConnected && workspaceCanEdit}
+						connected={treatAsConnected}
 						headingId={workspaceIds.heading.decisions}
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}
 						onShowPlan={showPlan}
 						planner={agent}
 						questionMotion={QUESTION_MOTION}
+						visualPreview={visualPreview}
 						reveal={reveal}
 						self={handle}
 						store={questions}
@@ -1100,6 +1115,7 @@ export function RoomWorkspace(
 							? <ChildProvenance channelId={room} parent={presentation.parent} />
 							: undefined}
 						questionMotion={QUESTION_MOTION}
+						visualPreview={visualPreview}
 						questions={questions}
 						readOnly={!workspaceCanEdit}
 						research={profile.research ? research : undefined}

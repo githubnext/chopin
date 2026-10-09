@@ -14,6 +14,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { previewFramePolicy } from "./visual-preview/descriptor";
 
 /** Hop-by-hop headers, which describe one connection and must not be forwarded. */
 const HOP_BY_HOP = new Set([
@@ -47,19 +48,25 @@ function forwardable(headers: Headers): Headers {
  * refused connection is answered with something that says as much rather than
  * a stack trace.
  */
-export async function proxy(req: Request, url: URL, origin: string): Promise<Response> {
+export async function proxy(
+	req: Request,
+	url: URL,
+	origin: string,
+	appOrigin?: string,
+): Promise<Response> {
 	let target = new URL(url.pathname + url.search, origin);
 	let headers = forwardable(req.headers);
 	// Vite is an internal upstream and must validate its own host, not the tunnel's.
 	headers.set("host", target.host);
 
 	try {
-		return await fetch(target, {
+		let response = await fetch(target, {
 			method: req.method,
 			headers,
 			body: req.body,
 			redirect: "manual",
 		});
+		return appOrigin ? framePolicy(response, appOrigin) : response;
 	} catch {
 		return new Response(`chopin: no dev client at ${origin}. Is Vite running?`, {
 			status: 502,
@@ -74,7 +81,7 @@ export async function proxy(req: Request, url: URL, origin: string): Promise<Res
  * Anything that is not a real file is the single-page app, so a room URL
  * survives a reload and a deep link opens the room it names.
  */
-export async function serve(url: URL, dir: string): Promise<Response> {
+export async function serve(url: URL, dir: string, appOrigin?: string): Promise<Response> {
 	if (!existsSync(dir)) {
 		return new Response(
 			"chopin: no built client. Run `bun run dev` for development, or `bun run build` first.",
@@ -83,6 +90,16 @@ export async function serve(url: URL, dir: string): Promise<Response> {
 	}
 
 	let file = Bun.file(join(dir, url.pathname));
-	if (await file.exists()) return new Response(file);
-	return new Response(Bun.file(join(dir, "index.html")));
+	let response = new Response(await file.exists() ? file : Bun.file(join(dir, "index.html")));
+	return appOrigin ? framePolicy(response, appOrigin) : response;
+}
+
+function framePolicy(response: Response, appOrigin: string) {
+	let headers = new Headers(response.headers);
+	headers.append("content-security-policy", previewFramePolicy(appOrigin));
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	});
 }

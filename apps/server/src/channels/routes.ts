@@ -213,6 +213,7 @@ export function registerChannelRoutes(
 		onChannelDeleted?: (channelId: string) => Promise<boolean>;
 		onChannelRenamed?: (channel: ChannelRecord) => void;
 		onChannelRestored?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
+		onVisualPreview?: (channelId: string, decisionId: string) => Promise<Response>;
 		random?: () => number;
 		references?: GitHubReferences;
 	} = {},
@@ -383,6 +384,33 @@ export function registerChannelRoutes(
 			);
 			let opened = openedDocument(repo, channel);
 			return opened ? json(opened) : json({ error: "channel not found" }, 404);
+		} catch (err) {
+			return failure(err, request, auth);
+		}
+	});
+
+	router.on("GET", "/api/channels/:channelId/visual-preview/:decisionId", async (
+		request,
+		_url,
+		params,
+	) => {
+		try {
+			let session = await auth.sessions.authenticate(request);
+			if (!session) return json({ error: "authentication required" }, 401);
+			let id = params.channelId!;
+			if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
+			let channel = await auth.storage.channels.get(id);
+			if (!channel) return json({ error: "channel not found" }, 404);
+			let repo = await authorizedRepository(
+				auth,
+				session,
+				channel.repositoryOwner,
+				channel.repositoryName,
+			);
+			if (!openedDocument(repo, channel)) return json({ error: "channel not found" }, 404);
+			return options.onVisualPreview
+				? await options.onVisualPreview(id, params.decisionId!)
+				: json({ error: "preview unavailable" }, 503);
 		} catch (err) {
 			return failure(err, request, auth);
 		}

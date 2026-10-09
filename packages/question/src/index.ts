@@ -41,3 +41,4 @@ export type { Relation } from "./relation";
  * shipping its bytes over a socket would be a fiction.
  */
 export { crdt } from "./draft";
+export * as Visual from "./visual";

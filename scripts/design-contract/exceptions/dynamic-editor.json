@@ -347,7 +347,7 @@
 				2
 			]
 		],
-		"sourceHash": "6423c77075026d3f140493be51a65e38c07a313c1a05360780317441e8cc34ce"
+		"sourceHash": "9fbf12e071f428c636a8df12e2245b6baa766d95ee10b7fb6e45449499671ea1"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -389,7 +389,21 @@
 				1
 			]
 		],
-		"sourceHash": "49ccb021fb60c45cdbe234241549e468ba556277d74d824145ca8707ff2bc908"
+		"sourceHash": "c879d4538bd4cd411fda5d2f57a2f8399af9903c4d8f8bd816476c90c44d6422"
+	},
+	{
+		"file": "packages/editor/src/widgets/questionnaire.tsx",
+		"reason": "The wrapper forwards its typed questionnaire props to the unchanged card implementation for ordinary decisions; the visual branch selects a separate component, and no arbitrary style or class prop enters this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > QuestionnaireCard > <QuestionnaireCardContent>",
+				1
+			]
+		],
+		"sourceHash": "c879d4538bd4cd411fda5d2f57a2f8399af9903c4d8f8bd816476c90c44d6422"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -448,11 +462,11 @@
 				"dynamic",
 				"class",
 				"presence.className",
-				"class > QuestionnaireCard > <div>",
+				"class > QuestionnaireCardContent > <div>",
 				1
 			]
 		],
-		"sourceHash": "49ccb021fb60c45cdbe234241549e468ba556277d74d824145ca8707ff2bc908"
+		"sourceHash": "c879d4538bd4cd411fda5d2f57a2f8399af9903c4d8f8bd816476c90c44d6422"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",

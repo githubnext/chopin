@@ -38,6 +38,7 @@ import type { Connection, Transport } from "./transport";
 import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
 import type { Refusal } from "./history";
 import type { ResearchLauncher } from "./research-launcher";
+import type { VisualPreviewComponent } from "./widgets/visual-decision";
 
 /**
  * Lexical paints remote cursors with inline styles unless the theme names a
@@ -70,6 +71,7 @@ export type PlanEditorProps = {
 	disclosureMotion?: MotionDisclosureContract;
 	/** Host presentation for moving between bounded questionnaire steps. */
 	questionMotion?: QuestionStepMotion;
+	visualPreview?: VisualPreviewComponent;
 	/** Identity for this client's remote cursor. */
 	user: { name: string; color: string };
 	/** Read-only while an agent turn may be rewriting the plan. */
@@ -142,6 +144,7 @@ export function PlanEditor(
 		onState,
 		preface,
 		questionMotion,
+		visualPreview,
 		questions,
 		cardMeta,
 		onCardSource,
@@ -369,6 +372,7 @@ export function PlanEditor(
 						disclosureMotion,
 						motionImmediately,
 						questionMotion,
+						visualPreview,
 						questions,
 						cardMeta,
 						onCardSource,
@@ -412,6 +416,7 @@ export function PlanEditor(
 			disclosureMotion,
 			motionImmediately,
 			questionMotion,
+			visualPreview,
 			threads,
 			changes,
 			offline,

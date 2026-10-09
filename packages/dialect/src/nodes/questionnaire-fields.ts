@@ -30,6 +30,7 @@ export type Question = {
 export type Questionnaire = {
 	id: string;
 	questions: Question[];
+	visual?: "visual-decision@1";
 	/** Conversation thread that raised this card. Absent for Planner questions. */
 	thread?: string;
 	/** Absent on older documents; derive their status from answers. */
@@ -70,6 +71,9 @@ export function cardStatus(value: Questionnaire): CardStatus {
 export function parse(value: unknown): Questionnaire {
 	if (!value || typeof value !== "object") return EMPTY;
 	let raw = value as Partial<Questionnaire>;
+	if (Object.hasOwn(raw, "visual") && raw.visual !== "visual-decision@1") {
+		throw new Error("invalid visual questionnaire marker");
+	}
 	if (
 		Object.hasOwn(raw, "thread")
 		&& (typeof raw.thread !== "string" || !raw.thread.trim() || raw.thread.length > limits.MAX_ID)
@@ -107,6 +111,7 @@ export function parse(value: unknown): Questionnaire {
 	return {
 		id: typeof raw.id === "string" ? raw.id : "",
 		questions,
+		...(raw.visual === undefined ? {} : { visual: raw.visual }),
 		...(raw.thread === undefined ? {} : { thread: raw.thread }),
 		...(raw.status === undefined ? {} : { status: raw.status }),
 		...(typeof raw.by === "string" ? { by: raw.by } : {}),

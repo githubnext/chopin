@@ -70,10 +70,12 @@ export function fromElement(node: Jsx): Questionnaire {
 	let at = attribute(node, "at");
 	let thread = attribute(node, "thread");
 	let status = attribute(node, "status") as CardStatus | undefined;
+	let visual = attribute(node, "visual");
 
 	return parse({
 		id: attribute(node, "id") ?? "",
 		questions,
+		...(visual === undefined ? {} : { visual }),
 		...(thread === undefined ? {} : { thread }),
 		...(status === undefined ? {} : { status }),
 		...(by ? { by } : {}),
@@ -87,6 +89,7 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 		type: "mdxJsxFlowElement",
 		name: "Questionnaire",
 		attributes: identity(value.id, {
+			visual: value.visual,
 			thread: value.thread,
 			status: value.status,
 			by: value.by,

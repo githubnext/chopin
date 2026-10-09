@@ -11,6 +11,14 @@ export class StorageError extends Error {
 	}
 }
 
+/** PostgreSQL aborted the entire transaction, so this commit can be retried. */
+export class CommitRejected extends StorageError {
+	constructor(cause?: unknown) {
+		super("unavailable", "The save transaction was rejected; try again", { cause });
+		this.name = "CommitRejected";
+	}
+}
+
 export function conflict(message: string): StorageError {
 	return new StorageError("conflict", message);
 }

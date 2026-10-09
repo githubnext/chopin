@@ -102,6 +102,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		content: { type: "components", names: ["Question"] },
 		forbids: ["Questionnaire", "Tabs", "Callout"],
 		attributes: {
+			visual: { type: "enum", required: false, values: ["visual-decision@1"] },
 			thread: { type: "text", required: false, max: limits.MAX_ID },
 			status: {
 				type: "enum",

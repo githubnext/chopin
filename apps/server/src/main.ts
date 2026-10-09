@@ -29,6 +29,9 @@ import { handleResearchCommand } from "./conversation-plan/research-commands";
 import { startAcceptedResearch } from "./conversation-plan/accepted-research";
 import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
+import * as VisualDecisions from "./visual-decisions/service";
+import * as VisualInject from "./visual-decisions/inject";
+import { previewResponse } from "./visual-preview/descriptor";
 import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
@@ -242,6 +245,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			if (config.conversationPlan && !channel?.archivedAt) {
 				await backfillPlannerAskThreads(opened);
 			}
+			if (!channel?.archivedAt) await VisualInject.seed(opened);
 		});
 		await conversationRuntime.attach(
 			room,
@@ -363,6 +367,24 @@ function evict(room: Rooms.Room): void {
 			console.error("chopin: room close failed -", err);
 		});
 	}, EVICT_MS);
+}
+
+function visualLifecycle(
+	room: Rooms.Room,
+	ws: Socket,
+	opened: Service.Plan,
+): VisualDecisions.Lifecycle {
+	return action =>
+		withDocumentLock(room.id, async () => {
+			if (
+				Rooms.get(room.id) !== room || room.plan !== opened || room.closing
+				|| archivingChannels.has(room.id) || deletingChannels.has(room.id)
+				|| ws.data.closed || ws.data.room !== room.id || room.members.get(ws.data.client) !== ws
+			) throw new Error("Document is unavailable");
+			let access = await refreshAccess(ws);
+			if (access !== "allowed") throw new Error("Repository authorization is unavailable");
+			await action();
+		});
 }
 
 async function receive(ws: Socket, raw: string): Promise<void> {
@@ -522,6 +544,24 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			});
 			return;
 
+		case "visual-decision:open":
+			if (room.plan) {
+				await VisualDecisions.open(room.plan, ws, frame, visualLifecycle(room, ws, room.plan));
+			}
+			return;
+
+		case "visual-decision:edit":
+			if (room.plan) {
+				await VisualDecisions.edit(room.plan, ws, frame, visualLifecycle(room, ws, room.plan));
+			}
+			return;
+
+		case "visual-decision:save":
+			if (room.plan) {
+				await VisualDecisions.save(room.plan, ws, frame, visualLifecycle(room, ws, room.plan));
+			}
+			return;
+
 		case "question:open":
 			if (room.plan) Questions.open(room.plan, ws, frame);
 			return;
@@ -626,6 +666,7 @@ const VIEWER_ALLOWED = new Set([
 	"session:ping",
 	"plan:open",
 	"plan:close",
+	"visual-decision:open",
 	"job:list",
 	"job:get",
 	"conversation-plan:research-link",
@@ -980,7 +1021,9 @@ function listen(): Server<SocketData> {
 			let routed = await router.handle(req, url);
 			if (routed) return routed;
 
-			return config.devClient ? proxy(req, url, config.devClient) : serve(url, CLIENT);
+			return config.devClient
+				? proxy(req, url, config.devClient, hostedAuth.config.origin)
+				: serve(url, CLIENT, hostedAuth.config.origin);
 		},
 
 		websocket: {
@@ -1621,6 +1664,15 @@ registerChannelRoutes(router, hostedAuth, {
 	onChannelDeleted: deleteChannel,
 	onChannelRenamed: announceChannel,
 	onChannelRestored: restoreChannel,
+	onVisualPreview: async (channelId, decisionId) => {
+		let definition = Rooms.get(channelId)?.plan?.visualDecisions.get(decisionId)?.definition;
+		if (!definition) return Response.json({ error: "Preview unavailable" }, { status: 404 });
+		let resolve = process.env.E2E_VISUAL_DECISIONS === "1"
+				&& process.env.NODE_ENV !== "production"
+			? (await import("../../../e2e/visual-decision-fixtures/fixtures")).fixtureResolver
+			: undefined;
+		return previewResponse(definition, hostedAuth.config.origin, resolve);
+	},
 	references: hostedAuth.github instanceof GitHubClient
 		? new GitHubReferences(hostedAuth.github)
 		: undefined,

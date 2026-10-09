@@ -27,6 +27,7 @@ import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
+import { VisualDecisionCard } from "./visual-decision";
 import { WriteupStatus } from "./writeup-status";
 
 import type { Question } from "@chopin/protocol";
@@ -35,6 +36,7 @@ import type { Transport } from "@chopin/question/react";
 import type { Answer, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
 import type { QuestionStepMotion } from "../widget-options";
+import type { VisualPreviewComponent } from "./visual-decision";
 
 /** The plan stores the chosen text; the shared view wants answer records. */
 function answers(value: Questionnaire): Answer[] | undefined {
@@ -94,6 +96,7 @@ export type QuestionnaireCardProps = {
 	/** Take the reader to that prose. Without it the shared view's jump is inert. */
 	onQuestionSelect?: (question: string) => void;
 	motion?: QuestionStepMotion;
+	visualPreview?: VisualPreviewComponent;
 };
 
 export type CardPresentation = "hidden" | "settled-line" | "resolved" | "open";
@@ -112,7 +115,22 @@ export function cardPresentation(
 	return "settled-line";
 }
 
-export function QuestionnaireCard(
+export function QuestionnaireCard(props: QuestionnaireCardProps) {
+	if (props.value.visual === "visual-decision@1") {
+		return (
+			<VisualDecisionCard
+				canEdit={props.canEdit}
+				connected={props.connected}
+				id={props.value.id}
+				preview={props.visualPreview}
+				wire={props.wire}
+			/>
+		);
+	}
+	return <QuestionnaireCardContent {...props} />;
+}
+
+function QuestionnaireCardContent(
 	{
 		canEdit = true,
 		connected = false,
@@ -609,6 +627,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			connected={options.connected}
 			evidence={evidence}
 			motion={options.questionMotion}
+			visualPreview={options.visualPreview}
 			motionImmediately={options.motionImmediately}
 			onCardSource={source}
 			self={options.self}

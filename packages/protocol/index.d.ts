@@ -208,6 +208,7 @@ export type { Job } from "./job";
 export type { Plan } from "./plan";
 export type { Question } from "./question";
 export type { Research } from "./research";
+export type { VisualDecision } from "./visual-decision";
 
 /** Everything a client may send on a room socket; the sidebar socket accepts `Sidebar.Incoming`. */
 export type Incoming =
@@ -217,7 +218,8 @@ export type Incoming =
 	| import("./conversation-plan").ConversationPlan.Incoming
 	| import("./job").Job.Incoming
 	| import("./plan").Plan.Incoming
-	| import("./question").Question.Incoming;
+	| import("./question").Question.Incoming
+	| import("./visual-decision").VisualDecision.Incoming;
 
 /** Everything a client may receive, on a room socket or the sidebar socket. */
 export type Outgoing =
@@ -229,4 +231,5 @@ export type Outgoing =
 	| import("./job").Job.Outgoing
 	| import("./plan").Plan.Outgoing
 	| import("./question").Question.Outgoing
-	| import("./research").Research.Outgoing;
+	| import("./research").Research.Outgoing
+	| import("./visual-decision").VisualDecision.Outgoing;
