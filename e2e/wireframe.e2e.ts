@@ -74,7 +74,7 @@ test("an invalid wireframe is code with its problem, until it is fixed", async (
 	await expect(block.getByRole("region")).toHaveCount(0);
 	let error = block.locator("[data-plan-error]");
 	await expect(error.getByText("This wireframe could not be drawn")).toBeVisible();
-	await expect(error).toContainText('Line 4: Unknown kind "x".');
+	await expect(error).toContainText('Line 3: Unknown kind "x".');
 	await expect(block.getByRole("button")).toHaveCount(0);
 
 	// The end of the last line, then the stray word goes.
