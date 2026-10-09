@@ -3276,7 +3276,7 @@
 }
 
 .plan-decision-marker:hover:not([aria-expanded="true"]) .plan-decision-disc {
-	outline-color: color-mix(in oklch, var(--color-success) 85%, transparent);
+	outline-color: color-mix(in oklch, var(--color-success) 30%, transparent);
 }
 
 .plan-decision-marker:focus-visible .plan-decision-disc {
