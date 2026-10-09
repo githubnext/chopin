@@ -1,0 +1,23 @@
+.implementation-panel {
+	margin: calc(var(--spacing) * 4) auto;
+	padding: calc(var(--spacing) * 4);
+	max-width: 43.75rem;
+	background: var(--color-inset);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+}
+
+.implementation-tasks {
+	list-style: none;
+	margin: calc(var(--spacing) * 3) 0 0;
+	padding: 0;
+	display: grid;
+	gap: calc(var(--spacing) * 3);
+}
+
+.implementation-tasks > li {
+	padding: calc(var(--spacing) * 3);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+}

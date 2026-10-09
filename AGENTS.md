@@ -224,10 +224,10 @@ standalone report, thread, navigation child, or confirmation flow.
 The hosted Planner's graph tools remain technically available in any channel
 after plan readiness checks pass. That does not make child implementation a
 supported product workflow: the child surface exposes no tasks or implementation
-destination. The supported MCP read path exposes a graph only for an MCP-created
-document. The Planner cannot approve, lock, or start a graph. Approval exists in
-the domain but has no current production UI or route; the workflow is
-experimental.
+destination. The ordinary MCP read path exposes graphs for MCP-created documents. A browser
+plan can approve and dispatch a graph through the owner-paired ACP connector;
+its run-scoped bridge exposes the document and lifecycle reporting tools. The
+Planner cannot approve, lock, or start a graph. See docs/local-launcher.md.
 
 An approved graph binds one plan revision, graph version, and graph revision.
 `start_implementation` atomically claims those values and locks the graph. Task,

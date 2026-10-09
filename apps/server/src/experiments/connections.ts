@@ -21,7 +21,10 @@ type Pending = {
 	connection?: Connection;
 	token?: string;
 };
-export type Grant = { connectionId: string; run?: { id: string; generation: number } };
+export type Grant = {
+	connectionId: string;
+	run?: { id: string; generation: number; kind?: "implementation" };
+};
 
 export class Connections {
 	#pending = new Map<string, Pending>();
@@ -105,13 +108,16 @@ export class Connections {
 			value.documentId === documentId && value.expiresAt > this.now()
 		);
 	}
-	runToken(connectionId: string, id: string, generation: number) {
-		let key = `${connectionId}:${id}:${generation}`;
+	runToken(connectionId: string, id: string, generation: number, kind?: "implementation") {
+		let key = `${connectionId}:${id}:${generation}:${kind ?? "experiment"}`;
 		let existing = this.#runTokens.get(key);
 		if (existing) return existing;
 		let token = randomBytes(32).toString("base64url");
 		this.#runTokens.set(key, token);
-		this.#tokens.set(fingerprint(token), { connectionId, run: { id, generation } });
+		this.#tokens.set(fingerprint(token), {
+			connectionId,
+			run: { id, generation, ...(kind ? { kind } : {}) },
+		});
 		return token;
 	}
 	revoke(id: string) {

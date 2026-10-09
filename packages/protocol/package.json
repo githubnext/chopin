@@ -10,6 +10,7 @@
 		".": {
 			"types": "./index.d.ts"
 		},
+		"./implementation": { "types": "./implementation.d.ts" },
 		"./address": {
 			"types": "./address.ts",
 			"default": "./address.ts"

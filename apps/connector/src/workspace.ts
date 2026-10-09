@@ -55,7 +55,11 @@ export async function lockWorkspace(root: string, directory: string) {
 	};
 }
 
-export async function prepareWorkspace(root: string, directory: string, input: RunInput) {
+export async function prepareWorkspace(
+	root: string,
+	directory: string,
+	input: Pick<RunInput, "id" | "source">,
+) {
 	let current = await workspace(root);
 	if (current.repository.toLowerCase() !== input.source.repository.toLowerCase()) {
 		throw new Error("Repository differs from the authorized run.");

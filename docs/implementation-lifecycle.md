@@ -4,24 +4,26 @@ One current planning-specific workflow hands a document used as a settled plan
 to an external coding agent. It persists a versioned dependency graph, lets a
 coding agent claim an approved version, records task and pull-request progress,
 and requires graph-wide verification before releasing a successful run. The
-supported read-before-claim path requires a document originally created through
-`create_document`.
+ordinary MCP read-before-claim path accepts MCP-created documents. Browser plans
+use the owner-paired ACP connector and its run-scoped bridge; see the
+[local implementation tracer](local-launcher.md).
 
-> [!IMPORTANT]
-> This is not yet a complete user workflow. The hosted Planner can draft a graph
-> and the MCP server can execute an approved graph, but the web application does
-> not currently expose a way for a person to review and approve the draft. No
-> normal product path can bridge those two stages yet. Browser-created channels
-> also lack the creation provenance required by `read_implementation`.
+The web application can prepare tasks through the Planner, review and approve
+the graph, queue a local ACP session, and display task progress, dependencies,
+blockers and PR links. This is a thin live tracer: decision resolution during
+implementation, automatic restart and an installer remain future work.
 
 ## Actors
 
 - The **hosted Planner** reads the current plan and drafts or revises tasks with
   `read_implementation_graph` and `edit_implementation_graph`.
 - A **person** is the only actor allowed by the domain model to approve a draft.
-  That approval operation is implemented internally but has no production route
-  or interface.
-- A **coding agent** connects through `/mcp`, reads an approved graph, and starts
+  The browser's “Approve and build this plan” action approves the exact reviewed
+  graph and queues its assigned paired workspace in one durable commit.
+- The **local connector** creates an exact-commit worktree and ACP session, then
+  claims a browser-approved graph before prompting the orchestrator. Its scoped
+  bridge fixes document and run identity for lifecycle reports.
+- A **coding agent** may also connect through `/mcp`, read an approved graph, and start
   one logical implementation run. The run is not authorization-bound to that
   caller after it starts.
 
@@ -84,9 +86,8 @@ graph counter.
 
 The Planner may then draft a replacement graph, but a revision request does not
 itself supersede the old version and does not prevent that version from being
-claimed again. Approval lacks a user-facing entry point, and browser-created
-channels lack the required creation metadata, which is why the workflow remains
-experimental.
+claimed again through MCP. The connector deliberately does not replay a picked-up
+request, including after failure; a replacement graph needs a new build.
 
 ## MCP lifecycle tools
 
@@ -117,13 +118,15 @@ checks.
 
 ## Lock behavior
 
-An active implementation locks the graph and prevents plan changes that would
+A queued or launching build freezes plan and decision edits before the MCP
+claim. An active implementation locks the graph and prevents plan changes that would
 invalidate the claimed work. Planner edits, new questions, and decision changes
 that mutate the plan are refused until the implementation finishes or requests
 revision. Progress and archived runs remain durable sidecar state.
 
 The protocol defines a `plan:lifecycle` projection for active progress and run
-history. The current web client does not yet render that projection.
+history. The web implementation panel polls an authenticated snapshot of that
+same state every two seconds, including after refresh.
 
 Archiving does not release an active graph lock or terminate its run. A coding
 agent can continue reporting task, pull-request, blocker, revision, and

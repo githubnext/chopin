@@ -1,3 +1,5 @@
+import { restoreBuilds } from "../tasks/builds";
+import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
  * The plan, as a room offers it.
  *
@@ -166,6 +168,7 @@ type Captured = {
 };
 
 export type Plan = {
+	builds: BuildRequest[];
 	id: string;
 	/** Context retained for plans created through MCP. */
 	creation?: CreationMetadata;
@@ -248,6 +251,7 @@ function recent(stamps: number[], window: number): number[] {
 }
 
 type Sidecar = {
+	builds?: BuildRequest[];
 	version: 1;
 	revision: number;
 	documentSeq: number;
@@ -278,6 +282,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		documentSeq: plan.document.seq,
 		...(plan.creation ? { creation: plan.creation } : {}),
 		...(plan.graph ? { graph: plan.graph } : {}),
+		...(plan.builds.length ? { builds: plan.builds } : {}),
 		...(plan.execution ? { execution: plan.execution } : {}),
 		...(plan.lifecycle.events?.length || plan.lifecycle.history.length > 0
 			? { lifecycle: plan.lifecycle }
@@ -470,6 +475,8 @@ function restoredState(
 		"version",
 	];
 	if (created) expected.push(...(legacy ? ["brief", "origin"] : ["creation"]));
+	if (Object.hasOwn(item, "builds")) expected.push("builds");
+	let builds = restoreBuilds(item.builds, scope?.repositoryId);
 	if (Object.hasOwn(item, "graph")) expected.push("graph");
 	if (Object.hasOwn(item, "execution")) expected.push("execution");
 	if (Object.hasOwn(item, "lifecycle")) expected.push("lifecycle");
@@ -644,6 +651,7 @@ function restoredState(
 		documentSeq: item.documentSeq,
 		...(created ? { creation: created } : {}),
 		...(graph ? { graph } : {}),
+		...(builds.length ? { builds } : {}),
 		...(execution ? { execution } : {}),
 		...(lifecycle ? { lifecycle } : {}),
 		...(mcpUpdates.length > 0 ? { mcpUpdates } : {}),
@@ -1137,7 +1145,10 @@ export async function drain(plan: Plan): Promise<void> {
 
 /** One gate for every path that can mutate a plan during implementation. */
 export function implementationActive(plan: Plan): boolean {
-	return plan.claiming || !!plan.execution;
+	return plan.claiming || !!plan.execution
+		|| plan.builds.some(build =>
+			build.state === "queued" || build.state === "starting" || build.state === "running"
+		);
 }
 
 /** Sidecar-only commit for a caller already holding `exclusive`. */
@@ -1289,6 +1300,7 @@ export async function readStored(
 ): Promise<{
 	source: string;
 	revision: number;
+	builds?: BuildRequest[];
 	creation?: CreationMetadata;
 	graph?: Graph;
 	execution?: Run;
@@ -1302,6 +1314,7 @@ export async function readStored(
 			revision: restored.sidecar.revision,
 			...(restored.sidecar.creation ? { creation: restored.sidecar.creation } : {}),
 			...(restored.sidecar.graph ? { graph: restored.sidecar.graph } : {}),
+			...(restored.sidecar.builds ? { builds: restored.sidecar.builds } : {}),
 			...(restored.sidecar.execution ? { execution: restored.sidecar.execution } : {}),
 			...(restored.sidecar.lifecycle ? { lifecycle: restored.sidecar.lifecycle } : {}),
 		};
@@ -1323,6 +1336,7 @@ export async function open(
 
 	let plan: Plan = {
 		id,
+		builds: sidecar.builds ?? [],
 		...(sidecar.creation ? { creation: sidecar.creation } : {}),
 		mcpUpdates: sidecar.mcpUpdates ?? [],
 		server,

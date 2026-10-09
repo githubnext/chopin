@@ -8,7 +8,9 @@ export function connectorSchemas(
 	if (runScoped) {
 		return {
 			read_experiment: z.object({}).strict(),
+			read_investigation: z.object({}).strict(),
 			submit_experiment_result: z.object({ result: resultSchema }).strict(),
+			submit_investigation_result: z.object({ result: resultSchema }).strict(),
 		};
 	}
 	return {
