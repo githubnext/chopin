@@ -414,8 +414,11 @@ must not contain source text, search queries, URLs, or credentials.
 Public research reports setup, session opening, model waiting, and search-call
 boundaries. Search-call counts distinguish a model that has not invoked search
 from an outstanding search or a model that has received results. Each web-search
-tool invocation has a 60-second limit, including authorization, and passes its
-abort signal to the MCP client. A timed-out search ends the research attempt with
+tool invocation has a three-minute limit, including authorization, and passes its
+abort signal to the MCP client. The upstream tool runs an AI research agent rather
+than a raw search, so valid cited responses can take more than a minute. Its local
+tool description and query schema ask for one focused natural-language question
+per call. A timed-out search ends the research attempt with
 `web-search-timeout`; a stalled authorization check produces
 `web-search-authorization-timeout`. Search calls are counted after authorization.
 The overall evidence-stage limit remains five minutes. Use the host wrapper's
