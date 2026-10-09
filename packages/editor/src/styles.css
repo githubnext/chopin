@@ -2160,6 +2160,12 @@
 	opacity: 0.4;
 }
 
+/* A drawing and its controls end a passage; the next paragraph starts a new one. */
+.plan-content
+	.planCode:is([data-plan-presentation="diagram"], [data-plan-language="mermaid"][data-plan-collapsed]) {
+	margin-block-end: calc(var(--spacing) * 10);
+}
+
 /*
  * A code block is one box: header, rendered code, source. A border rather than
  * an outline, because the renderer paints over an inset outline.

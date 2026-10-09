@@ -20,11 +20,11 @@ test("document views use separate SVG resources and survive source changes", asy
 		.toHaveCount(2);
 	let first = page.locator('[data-specimen-diagram="first"]');
 	let second = page.locator('[data-specimen-diagram="second"]');
-	await expect(first.locator(".ch-diagram svg")).toBeVisible();
-	await expect(second.locator(".ch-diagram svg")).toBeVisible();
+	await expect(first.locator(".ch-diagram svg.sc-svg")).toBeVisible();
+	await expect(second.locator(".ch-diagram svg.sc-svg")).toBeVisible();
 	let resources = await page.evaluate(() => {
-		let first = document.querySelector('[data-specimen-diagram="first"] svg');
-		let second = document.querySelector('[data-specimen-diagram="second"] svg');
+		let first = document.querySelector('[data-specimen-diagram="first"] svg.sc-svg');
+		let second = document.querySelector('[data-specimen-diagram="second"] svg.sc-svg');
 		return {
 			first: first ? [...first.querySelectorAll("[id]")].map(element => element.id) : [],
 			second: second ? [...second.querySelectorAll("[id]")].map(element => element.id) : [],
@@ -40,8 +40,12 @@ test("document views use separate SVG resources and survive source changes", asy
 	await firstNode.press("Enter");
 	await expect(first.getByRole("complementary", { name: "Diagram details" })).toBeVisible();
 	await expect(second.getByRole("complementary", { name: "Diagram details" })).toHaveCount(0);
-	await first.getByRole("button", { name: "Next step" }).click();
+	let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
+	await controls.getByRole("button", { name: "Next step", exact: true }).click();
 	await expect(first.locator(".ch-diagram__status")).toContainText("Step 1 of");
+	await expect(controls.getByText(/^1 \/ \d+$/)).toBeVisible();
+	await expect(controls.getByRole("button", { name: "Previous step", exact: true }))
+		.toBeDisabled();
 	let future = await first.evaluate(element => {
 		let items = [...element.querySelectorAll<SVGElement>("[data-sc-node], [data-sc-edge]")];
 		return items.filter(item => item.closest('[data-sc-step][aria-hidden="true"]'))
@@ -58,7 +62,7 @@ test("document views use separate SVG resources and survive source changes", asy
 	await expect(second).toHaveCount(0);
 	await expect(page.getByText("Second diagram unmounted.", { exact: true })).toBeVisible();
 	await page.getByRole("button", { name: "Mount second diagram" }).click();
-	await expect(second.locator(".ch-diagram svg")).toBeVisible();
+	await expect(second.locator(".ch-diagram svg.sc-svg")).toBeVisible();
 });
 
 test("gallery has no page-level horizontal overflow", async ({ page }) => {
@@ -85,7 +89,45 @@ test("a narrow diagram exposes keyboard horizontal scrolling", async ({ page }, 
 
 test("reduced motion leaves diagram content readable", async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: "reduce" });
-	await expect(page.locator('[data-specimen-diagram="first"] .ch-diagram svg')).toBeVisible();
-	await expect(page.locator('[data-specimen-diagram="first"]'))
-		.not.toContainText("Replay");
+	let first = page.locator('[data-specimen-diagram="first"]');
+	await expect(first.locator(".ch-diagram svg.sc-svg")).toBeVisible();
+	let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
+	await controls.getByRole("button", { name: "Next step", exact: true }).click();
+	await expect(first.locator(".ch-diagram__status")).toContainText("Step 1 of");
+	await controls.getByRole("button", { name: "Restart diagram", exact: true }).click();
+	await expect(first.locator(".ch-diagram__status")).toHaveCount(0);
+	await expect(first.locator("svg.sc-svg")).not.toHaveClass(/sc-stepping/);
+});
+
+test("diagram controls sit centred below the drawing and step to either end", async ({ page }) => {
+	let first = page.locator('[data-specimen-diagram="first"]');
+	let stage = first.locator(".ch-diagram__stage");
+	let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
+	await expect(controls).toBeVisible();
+	let [stageBox, controlsBox] = [await stage.boundingBox(), await controls.boundingBox()];
+	expect(controlsBox!.y).toBeGreaterThanOrEqual(stageBox!.y + stageBox!.height);
+	expect(
+		Math.abs(
+			controlsBox!.x + controlsBox!.width / 2 - (stageBox!.x + stageBox!.width / 2),
+		),
+	).toBeLessThanOrEqual(1);
+
+	let previous = controls.getByRole("button", { name: "Previous step", exact: true });
+	let next = controls.getByRole("button", { name: "Next step", exact: true });
+	let total = Number(await first.locator("svg.sc-svg").getAttribute("data-sc-steps"));
+	expect(total).toBeGreaterThan(1);
+	await expect(controls.getByText(`– / ${total}`, { exact: true })).toBeVisible();
+	await next.focus();
+	for (let index = 1; index <= total; index++) {
+		await page.keyboard.press("Enter");
+		await expect(controls.getByText(`${index} / ${total}`, { exact: true })).toBeVisible();
+	}
+	await expect(next).toBeDisabled();
+	await previous.click();
+	await expect(controls.getByText(`${total - 1} / ${total}`, { exact: true })).toBeVisible();
+	await expect(next).toBeEnabled();
+	await controls.getByRole("button", { name: "Restart diagram", exact: true }).click();
+	await expect(controls.getByText(`– / ${total}`, { exact: true })).toBeVisible();
+	await expect(controls.getByRole("button", { name: "Replay diagram" })).toHaveCount(0);
+	await expect(controls.getByRole("button", { name: "Reset diagram" })).toHaveCount(0);
 });

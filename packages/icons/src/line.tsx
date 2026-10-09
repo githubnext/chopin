@@ -292,3 +292,63 @@ export function PencilIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function ArrowLeftIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<line x1="15.25" x2="2.75" y1="9" y2="9" />
+			<polyline points="7 4.75 2.75 9 7 13.25" />
+		</LineIcon>
+	);
+}
+
+export function ArrowRightIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<line x1="2.75" x2="15.25" y1="9" y2="9" />
+			<polyline points="11 4.75 15.25 9 11 13.25" />
+		</LineIcon>
+	);
+}
+
+/** Start again: a counter-clockwise turn back to the beginning. */
+export function RestartIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M2.75 9a6.25 6.25 0 1 0 1.83-4.42L2.75 6.4" />
+			<polyline points="2.75 2.75 2.75 6.4 6.4 6.4" />
+		</LineIcon>
+	);
+}
+
+export function MinusIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<line x1="3.25" x2="14.75" y1="9" y2="9" />
+		</LineIcon>
+	);
+}
+
+/** Fit to width: a span stretched between two edges. */
+export function FitWidthIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<line x1="2" x2="2" y1="4" y2="14" />
+			<line x1="16" x2="16" y1="4" y2="14" />
+			<line x1="5" x2="13" y1="9" y2="9" />
+			<polyline points="7.5 6.5 5 9 7.5 11.5" />
+			<polyline points="10.5 6.5 13 9 10.5 11.5" />
+		</LineIcon>
+	);
+}
+
+/** Actual size: a 1:1 ratio. */
+export function ActualSizeIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M3 6.25 5.25 4.5v9" />
+			<path d="M12.75 6.25 15 4.5v9" />
+			<path d="M9 7h.01M9 11h.01" />
+		</LineIcon>
+	);
+}
