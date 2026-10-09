@@ -26,6 +26,7 @@ import { DIAGRAM_VIEWPORT, fitDiagram } from "./viewport";
 import {
 	advance,
 	currentStep,
+	finish,
 	initialPlayback,
 	pause,
 	play,
@@ -49,6 +50,8 @@ type Item = { kind: "node" | "edge"; id: string };
 let diagramInstanceSequence = 0;
 /** Reduced motion's discrete playback interval: the drawn stagger (`--sc-stagger`). */
 const STILL_STEP_INTERVAL = 420;
+/** Long enough for the last step's entrance, edge draw and arrowheads to finish. */
+const LAST_STEP_SETTLE = 1000;
 
 function prefersReducedMotion(): boolean {
 	return typeof window !== "undefined" && typeof window.matchMedia === "function"
@@ -105,11 +108,11 @@ function DiagramView({
 	let nodes = graph?.nodes ?? [];
 	let edges = graph?.edges ?? [];
 	let interactive = nodes.length > 0;
-	let isRunning = running(mode, maxStep);
+	let isRunning = running(mode);
 	let current = currentStep(mode, maxStep);
 	// Animation plays the steps in; otherwise the stepped view shows them.
 	let animated = mode.kind === "playing" && !reduced;
-	let step = animated ? null : current;
+	let step = animated || maxStep === 0 ? null : current;
 	let body = useMemo(() => namespaceSvgIds(result.body, prefix), [result.body, prefix]);
 	let active = preview ?? selected;
 
@@ -137,6 +140,16 @@ function DiagramView({
 		}
 		return () => timers.forEach(clearTimeout);
 	}, [playingFrom, playback, maxStep, reduced]);
+
+	let reachedEnd = maxStep > 0 && mode.kind === "playing" && mode.at >= maxStep;
+	useEffect(() => {
+		if (!reachedEnd) return;
+		let timer = setTimeout(
+			() => setMode((current) => finish(current, maxStep)),
+			reduced ? STILL_STEP_INTERVAL : LAST_STEP_SETTLE,
+		);
+		return () => clearTimeout(timer);
+	}, [reachedEnd, playback, maxStep, reduced]);
 
 	useEffect(() => {
 		let stage = stageRef.current;
