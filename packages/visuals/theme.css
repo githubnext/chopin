@@ -98,7 +98,7 @@
 	--color-danger-surface: var(--color-ruby-3);
 	--color-danger-surface-hover: var(--color-ruby-4);
 	--color-danger-surface-active: var(--color-ruby-5);
-	--color-danger-edge: color-mix(in srgb, var(--color-ruby-7) 45%, transparent);
+	--color-danger-edge: color-mix(in srgb, var(--color-ruby-7) 15%, transparent);
 	--color-danger-graphic: var(--color-ruby-9);
 	--color-danger-icon: var(--color-ruby-11);
 	--color-danger-text: var(--color-ruby-12);
