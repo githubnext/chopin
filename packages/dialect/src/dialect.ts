@@ -227,6 +227,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		content: { type: "blocks" },
 		parent: ["Columns"],
 		forbids: [
+			"Experiment",
 			"Questionnaire",
 			"Question",
 			"Option",

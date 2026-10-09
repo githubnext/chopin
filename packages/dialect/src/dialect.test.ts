@@ -438,6 +438,12 @@ describe("columns", () => {
 		expect(codes(withCallout)).toContain("bad-nesting");
 	});
 
+	it("allows an Experiment at document root but refuses it inside a column", () => {
+		let experiment = `<Experiment id="${ID}" experiment="investigation-one" view="table" />`;
+		accepts(experiment);
+		expect(codes(COLUMNS.replace("First.", experiment))).toContain("bad-nesting");
+	});
+
 	it("rejects unsupported attributes and record-owned children", () => {
 		expect(codes(COLUMNS.replace("<Columns id=", '<Columns variant="gallery" id=')))
 			.toContain("unknown-attribute");

@@ -3,6 +3,9 @@ import { describe, expect, it } from "bun:test";
 import { contentEditableClassName$, corePlugin, readOnly$ } from "@mdxeditor/editor";
 import { Realm } from "@mdxeditor/gurx";
 import { createHeadlessEditor } from "@lexical/headless";
+import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
+import { $getRoot } from "lexical";
+import * as Y from "yjs";
 import { toMarkdown } from "mdast-util-to-markdown";
 
 import { exportPlan, importPlan } from "./convert";
@@ -13,6 +16,7 @@ import { extensions } from "./serialize";
 import { validate } from "./validate";
 
 import type { Nodes } from "mdast";
+import type { Provider } from "@lexical/yjs";
 
 /**
  * Stand in for `<MDXEditor>`, which installs a core plugin built from its own
@@ -133,6 +137,8 @@ Right side.
 
 <Research id="8f4d193b-2018-4977-b404-0092bb911676" />
 
+<Experiment id="01K0N4W3B7P27CBAEC7A8C8WEH" experiment="investigation-one" view="table" />
+
 <Questionnaire id="01K0N4W3B7P27CBAEC7A8C8WEE">
 <Question id="01K0N4W3B7P27CBAEC7A8C8WEF" header="Choice" prompt="Choose one" multiple="false">
 <Option id="01K0N4W3B7P27CBAEC7A8C8WEG" label="Yes" />
@@ -176,6 +182,99 @@ describe("markdown extensions", () => {
 		expect(output).toContain("<Questionnaire");
 		expect(validate(parse(output))).toEqual({ ok: true });
 		expect(errors).toEqual([]);
+	});
+
+	it("synchronizes every registered node and restores a Yjs checkpoint", async () => {
+		let reg = registry();
+		let errors: Error[] = [];
+		let provider = {
+			awareness: {
+				getLocalState: () => null,
+				getStates: () => new Map(),
+				off() {},
+				on() {},
+				setLocalState() {},
+				setLocalStateField() {},
+			},
+			connect() {},
+			disconnect() {},
+			off() {},
+			on() {},
+		} as unknown as Provider;
+		let peer = () => {
+			let editor = createHeadlessEditor({ nodes: reg.nodes, onError: error => errors.push(error) });
+			let doc = new Y.Doc();
+			let binding = createYjsBinding({ editor, id: "plan", doc, docMap: new Map([["plan", doc]]) });
+			let stop = editor.registerUpdateListener(
+				({ dirtyElements, dirtyLeaves, editorState, normalizedNodes, prevEditorState, tags }) => {
+					syncLexicalUpdateToYjs(
+						binding,
+						provider,
+						prevEditorState,
+						editorState,
+						dirtyElements,
+						dirtyLeaves,
+						normalizedNodes,
+						tags,
+					);
+				},
+			);
+			let shared = binding.root.getSharedType();
+			let receive: Parameters<typeof shared.observeDeep>[0] = (events, transaction) => {
+				if (transaction.origin !== binding) {
+					syncYjsChangesToLexical(binding, provider, events, false, () => {});
+				}
+			};
+			shared.observeDeep(receive);
+			return {
+				editor,
+				doc,
+				close() {
+					stop();
+					shared.unobserveDeep(receive);
+					doc.destroy();
+				},
+			};
+		};
+		let source = peer();
+		let target = peer();
+		let restored = peer();
+		let flush = (client: ReturnType<typeof peer>) =>
+			new Promise<void>(resolve => client.editor.update(() => {}, { onUpdate: resolve }));
+		try {
+			importPlan(source.editor, SAMPLE, { registry: reg });
+			let original = exportPlan(source.editor, { registry: reg });
+			Y.applyUpdate(target.doc, Y.encodeStateAsUpdate(source.doc));
+			await flush(target);
+			expect(errors).toEqual([]);
+			expect(exportPlan(target.editor, { registry: reg })).toBe(original);
+
+			let before = Y.encodeStateVector(target.doc);
+			source.editor.update(() => {
+				let text = $getRoot().getAllTextNodes().find(node =>
+					node.getTextContent() === "Left side."
+				);
+				expect(text).toBeDefined();
+				text!.setTextContent("Edited left side.");
+			}, { discrete: true });
+			Y.applyUpdate(target.doc, Y.encodeStateAsUpdate(source.doc, before));
+			await flush(target);
+			expect(errors).toEqual([]);
+			let edited = exportPlan(source.editor, { registry: reg });
+			expect(edited).toContain("Edited left side.");
+			expect(exportPlan(target.editor, { registry: reg })).toBe(edited);
+
+			Y.applyUpdate(restored.doc, Y.encodeStateAsUpdate(target.doc));
+			await flush(restored);
+			let checkpoint = exportPlan(restored.editor, { registry: reg });
+			expect(checkpoint).toBe(edited);
+			expect(validate(parse(checkpoint))).toEqual({ ok: true });
+			expect(errors).toEqual([]);
+		} finally {
+			source.close();
+			target.close();
+			restored.close();
+		}
 	});
 
 	it("write every node type the dialect accepts", () => {
