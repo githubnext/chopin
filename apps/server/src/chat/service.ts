@@ -25,6 +25,7 @@ import type { PlannerSession } from "../harness/session";
 import { verifiedCheckout } from "../harness/atomic/checkout";
 import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
+import { askJev } from "../conversation-plan/jev";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import * as Service from "../plan/service";
@@ -1191,7 +1192,8 @@ function retain(
 function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 	let active = chat.activeRequest;
 	if (
-		!active || chat.closed || !chat.busy || chat.lifecycle !== active.lifecycle
+		!active || chat.closed || !chat.busy || !chat.turnController
+		|| chat.turnController.signal.aborted || chat.lifecycle !== active.lifecycle
 		|| chat.turn?.id !== active.turnId || !active.userId
 	) return undefined;
 	let entry = chat.entries.find(value => value.id === active.entryId);
@@ -1200,6 +1202,15 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 		|| entry.text !== active.text
 	) return undefined;
 	return active;
+}
+
+function visualRouting(context: Room): boolean {
+	if (
+		!context.config?.plannerVisuals || context.chat.job
+		|| !["copilot-sdk", "pi"].includes(context.config.harness)
+	) return false;
+	let request = currentMemberRequest(context.chat);
+	return !!request && request.text.length <= 1_000;
 }
 
 export function documentRoom(context: Room): DocumentRoom {
@@ -1216,6 +1227,16 @@ export function documentRoom(context: Room): DocumentRoom {
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
 		currentMemberRequest: () => currentMemberRequest(chat),
+		...(visualRouting(context) && {
+			visual: {
+				ask: (request: Parameters<typeof askJev>[0]) =>
+					askJev(request, {
+						model: context.config.conversationPlanModel,
+						timeoutMs: context.config.conversationPlanTimeoutMs,
+						signal: chat.turnController?.signal,
+					}),
+			},
+		}),
 		readReference: async (id, repositoryId) => {
 			let reference = chat.referenceCache.get(id);
 			if (!reference) throw new Error("reference is not available in this Planner session");
@@ -1404,6 +1425,7 @@ async function repositorySession(
 					`${repository.owner}/${repository.name}`,
 					bootstrap,
 					workspace,
+					visualRouting(context),
 				),
 			model: context.config.model,
 			harness: context.config.harness,

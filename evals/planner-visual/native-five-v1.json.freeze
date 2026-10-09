@@ -1,0 +1,13 @@
+{
+  "version": "native-five-development-v1",
+  "parentCohortSha256": "bb7b2135ef838f12a28fb095b9f2a85423f40461c4281423d4c43cda69a85e0b",
+  "rubric": "native-mdx-v3",
+  "axes": ["presentation fit", "source fidelity", "semantic usefulness", "persistence and rendering"],
+  "cases": [
+    {"id":"R1","sourceSha256":"aa4e453c4d60425857c004774a20fe3c80f62e0c21175e25a34877dc91c04639","promptSha256":"22c7118606fcb9b2513ca000f74502d9723653b83e245293cca0fa204bb04f41"},
+    {"id":"A1","sourceSha256":"4b61d16672597b006ccdd39a76793b4f1e7e072e93dbe73982b897c267060a58","promptSha256":"7b4d6375c2518af0cf9e769d4e83ee12268f6585a9743216da2f546b6a7456cb"},
+    {"id":"E1","sourceSha256":"4db4f2f5fc81b6ebf2f6014ef06abaaf98bd66c7ef374d649066484a1d4e04ed","promptSha256":"f2986fc23163a8fc9963d75fee0eb7beb8fb22d6ba2d5f9deefb3278a2318dac"},
+    {"id":"D1","sourceSha256":"464740c5213b68ae94c09b83e2fbda3eb93359af10b300d89e5c61c5d0f90def","promptSha256":"d7b39b8f5813a0f938e0b2e870eb013da087002622d44a35b03217f2a1a4960d"},
+    {"id":"S1","sourceSha256":"8a41eec1039a036b07ded91588ac1bf9af12f1e236e1ebc3e1de274a88af3997","promptSha256":"a831ab68ebdc643ffe8331b4bdca55b82a84c02f2f9ec0f458d08ff706b83ccf"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "version": "jev-three-development-v1",
+  "parentCohortSha256": "bb7b2135ef838f12a28fb095b9f2a85423f40461c4281423d4c43cda69a85e0b",
+  "rubric": "native-mdx-v3",
+  "axes": ["presentation fit", "source fidelity", "semantic usefulness", "persistence and rendering"],
+  "cases": [
+    {"id":"R1","sourceSha256":"aa4e453c4d60425857c004774a20fe3c80f62e0c21175e25a34877dc91c04639","promptSha256":"22c7118606fcb9b2513ca000f74502d9723653b83e245293cca0fa204bb04f41"},
+    {"id":"E1","sourceSha256":"4db4f2f5fc81b6ebf2f6014ef06abaaf98bd66c7ef374d649066484a1d4e04ed","promptSha256":"f2986fc23163a8fc9963d75fee0eb7beb8fb22d6ba2d5f9deefb3278a2318dac"},
+    {"id":"D1","sourceSha256":"464740c5213b68ae94c09b83e2fbda3eb93359af10b300d89e5c61c5d0f90def","promptSha256":"d7b39b8f5813a0f938e0b2e870eb013da087002622d44a35b03217f2a1a4960d"}
+  ]
+}

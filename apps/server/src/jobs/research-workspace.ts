@@ -1,15 +1,10 @@
 import { createHash } from "node:crypto";
 import * as limits from "@chopin/dialect/limits";
 
-import {
-	researchAgent,
-	researchAnswerAgent,
-	researchPrivateAgent,
-	researchReportAgent,
-} from "../harness/agents";
 import { WebSearchTimeoutError, webSearchTool } from "../harness/web-search";
 import { JobExecutionError } from "./registry";
 import { openWorkerSession, type WorkerSession } from "./worker-session";
+import type { researchAgent } from "../harness/agents";
 import type { Config } from "../config";
 import type { JsonValue } from "../storage/model";
 import type { JobDefinition, JobExecution, JobExecutionDiagnostic } from "./registry";
@@ -848,17 +843,20 @@ async function stage(
 			throw new Error("research authorization is no longer active");
 		}
 	};
-	let agent = kind === "public"
-		? researchAgent
-		: kind === "private"
-		? researchPrivateAgent
-		: kind === "report"
-		? researchReportAgent
-		: researchAnswerAgent;
 	let web: Awaited<ReturnType<typeof webSearchTool>> | undefined;
 	let worker: WorkerSession<Awaited<ReturnType<typeof researchAgent.createSession>>> | undefined;
 	try {
 		await authorize();
+		// Reference parsing reaches this module during plan startup; agents load only for a job.
+		let { researchAgent, researchPrivateAgent, researchReportAgent, researchAnswerAgent } =
+			await import("../harness/agents");
+		let agent = kind === "public"
+			? researchAgent
+			: kind === "private"
+			? researchPrivateAgent
+			: kind === "report"
+			? researchReportAgent
+			: researchAnswerAgent;
 		if (publicWeb) {
 			diagnose("connecting-web");
 			await execution.progress("web-setup", "started");

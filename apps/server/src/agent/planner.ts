@@ -24,6 +24,9 @@ import {
 
 import type { Component } from "@chopin/dialect/dialect";
 import type { PlannerWorkspace } from "../harness/atomic/workspace";
+import { DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING } from "./visual-authoring";
+
+export { DIAGRAM_AUTHORING };
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -62,28 +65,12 @@ function reference(): string {
 	}).filter(Boolean).join("\n");
 }
 
-/** Semantic choices and small, valid examples; the renderer owns visual details. */
-export const DIAGRAM_AUTHORING =
-	`Use a \`${SEECODE_LANGUAGE}\` fence for a compact, explanatory diagram
-when spatial relationships, message order, or state transitions make the plan
-easier to understand. Its body is one JSON object, at most 64 KiB. Ground every
-label and relationship in the document or repository evidence; explain the
-takeaway in nearby prose. Use plain prose or a list when a diagram adds no clarity.
-
-Architecture (nodes have positions; edges refer to their ids):
-\`\`\`${SEECODE_LANGUAGE}
-{"type":"architecture","nodes":[{"id":"web","label":"Browser","row":0,"col":0},{"id":"api","label":"API","row":0,"col":1}],"edges":[["web","api"]]}
-\`\`\`
-
-Sequence (messages refer to participant ids, in order):
-\`\`\`${SEECODE_LANGUAGE}
-{"type":"sequence","participants":[{"id":"reader","label":"Reader"},{"id":"api","label":"API"}],"messages":[["reader","api","Open document"]]}
-\`\`\`
-
-State (edges connect named states and may label transitions):
-\`\`\`${SEECODE_LANGUAGE}
-{"type":"state","nodes":[{"id":"draft","label":"Draft","row":0,"col":0},{"id":"saved","label":"Saved","row":0,"col":1}],"edges":[["draft","saved","publish"]]}
-\`\`\``;
+const DIAGRAM_INTRO = `Diagrams and formulas can clarify a plan. Use a \`${SEECODE_LANGUAGE}\` fence
+for architecture, sequences, or state transitions when a compact structured
+view helps; \`${MERMAID_LANGUAGE}\` remains available for other simple flows.
+Set a formula wherever the plan turns`;
+const ROUTED_DIAGRAM_INTRO = `A Jev-selected diagram uses a \`${SEECODE_LANGUAGE}\` fence.
+Set a formula wherever the plan turns`;
 
 /** One compact grammar summary and example; the parser owns the full rules. */
 export const WIREFRAME_AUTHORING =
@@ -258,10 +245,7 @@ code fences, footnotes, links (\`https:\` and \`mailto:\` only, plus
 repository-relative paths), and images. Images are referenced by absolute
 \`https:\` URL.
 
-Diagrams and formulas can clarify a plan. Use a \`${SEECODE_LANGUAGE}\` fence
-for architecture, sequences, or state transitions when a compact structured
-view helps; \`${MERMAID_LANGUAGE}\` remains available for other simple flows.
-Set a formula wherever the plan turns
+${DIAGRAM_INTRO}
 quantitative — a cost model, a bound, a threshold — rather than spelling the
 arithmetic out in prose: \`$…$\` inline, and \`$$\` on its own lines around a
 displayed one.
@@ -300,11 +284,32 @@ Questionnaires are created by \`ask\`, never by hand, and their answers are owne
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;
 
+const ROUTED_PROMPT = PROMPT.replace(DIAGRAM_INTRO, ROUTED_DIAGRAM_INTRO)
+	.replace(DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING);
+
 export function plannerInstructions(
 	repository: string,
 	bootstrap?: string,
 	workspace?: PlannerWorkspace,
+	visualRouting = false,
 ): string {
+	let visual = visualRouting
+		? `Visual explanations are a normal part of this document. For each new explanatory
+paragraph, write the factual passage first, then call assess_visual with that one
+paragraph, its intended operation and the revision from read_plan. Jev separately
+decides whether it can be visualized, whether that would improve comprehension,
+and which supported type fits. Follow the returned route exactly; do not make
+those yes/no or type choices yourself. Keep the passage beside any selected
+visual. Use the returned example only as syntax; replace every label and value
+with supported facts. Pass visual_route to edit_plan for that same paragraph and
+placement. Write headings in separate edits. This bounded handoff does not yet
+support lists or nested MDX paragraphs; report that limit instead of bypassing
+the route. If the document changes, read it and assess again. If assessment is
+unavailable, do not write that explanatory passage; state the limitation. A valid
+earlier route still applies only to its original passage and placement. Do not
+add a table or diagram without its route.`
+		: undefined;
+	let prompt = visualRouting ? ROUTED_PROMPT : PROMPT;
 	let reading = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and \`list_pull_requests\` and
@@ -312,7 +317,7 @@ export function plannerInstructions(
 	if (!workspace) {
 		let isolated = `You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-		return [PROMPT, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
+		return [prompt, visual, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
 	}
 	let place = workspace.checkout
 		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
@@ -338,7 +343,9 @@ now, rather than prepare its task graph, your \`intercom\` tool can reach other 
 machine: one working in a checkout of ${repository}, such as a session that handed you this
 document, can take the request along with what it needs to find this document. Tell the member
 where the work continues, or that no session could take it.`;
-	return [PROMPT, reading, place, questions, surface, implementing, bootstrap].filter(Boolean).join(
+	return [prompt, visual, reading, place, questions, surface, implementing, bootstrap].filter(
+		Boolean,
+	).join(
 		"\n\n",
 	);
 }

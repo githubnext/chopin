@@ -24,6 +24,11 @@ export const PLANNER_TOOL_NAMES = [
 	"revise_open_decision",
 ];
 
+export const VISUAL_PLANNER_TOOL_NAMES = Object.freeze([
+	...PLANNER_TOOL_NAMES,
+	"assess_visual",
+]);
+
 function jobNames(own: string): readonly string[] {
 	return Object.freeze([
 		...PLANNER_TOOL_NAMES.filter(name => !WRITE_TOOLS.has(name) && !INVESTIGATION_READS.has(name)),

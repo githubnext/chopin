@@ -37,16 +37,24 @@ function textResult(text: string): { content: { type: "text"; text: string }[] }
 	return { content: [{ type: "text", text }] };
 }
 
-export function startFakeGithubMcpServer(): { url: string; stop: () => void } {
+export function startFakeGithubMcpServer(options: {
+	port?: number;
+	rejectToolCalls?: boolean;
+	blockedRequests?: string[];
+	acceptAnyBearer?: boolean;
+} = {}): { url: string; stop: () => void } {
 	let calls: RecordedCall[] = [];
 
 	let server = Bun.serve({
-		port: FAKE_MCP_PORT,
+		port: options.port ?? FAKE_MCP_PORT,
 		hostname: "127.0.0.1",
 		async fetch(request) {
 			let url = new URL(request.url);
 			if (request.method === "GET" && url.pathname === "/__calls__") {
 				return Response.json(calls);
+			}
+			if (request.method === "GET" && url.pathname === "/__blocked__") {
+				return Response.json(options.blockedRequests ?? []);
 			}
 			if (request.method !== "POST") return new Response("Not found", { status: 404 });
 
@@ -60,7 +68,9 @@ export function startFakeGithubMcpServer(): { url: string; stop: () => void } {
 				method: body.method,
 				toolName: typeof body.params?.name === "string" ? body.params.name : undefined,
 				arguments: body.params?.arguments,
-				hasBearer: authorization.startsWith("Bearer ghu_e2e_"),
+				hasBearer: options.acceptAnyBearer
+					? /^Bearer \S+$/.test(authorization)
+					: authorization.startsWith("Bearer ghu_e2e_"),
 				readonly: request.headers.get("x-mcp-readonly"),
 				toolsets: request.headers.get("x-mcp-toolsets"),
 			});
@@ -98,6 +108,9 @@ export function startFakeGithubMcpServer(): { url: string; stop: () => void } {
 						],
 					});
 				case "tools/call": {
+					if (options.rejectToolCalls) {
+						return error(body.id, -32000, "Repository source expansion is disabled in this run");
+					}
 					let name = body.params?.name;
 					if (name === "list_pull_requests") {
 						return result(body.id, textResult(JSON.stringify(PULL_REQUESTS)));

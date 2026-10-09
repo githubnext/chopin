@@ -97,6 +97,16 @@ REST tools construct owner and repository coordinates on the server, bound
 response sizes and line ranges, reject path escape, and post-filter code search
 by GitHub repository node ID.
 
+With `PLANNER_VISUALS=on` and a configured Jev key, foreground `copilot-sdk` and
+`pi` sessions for an explicit member request of at most 1,000 characters also
+receive `assess_visual`. It routes one explanatory paragraph through
+possibility, comprehension, and type choices before `edit_plan` can publish it.
+The route is bound to the member turn, document revision, passage, and placement.
+Accepted-comment turns, longer requests, background jobs, and `atomic` sessions
+keep their existing authoring prompt, tool set, and edit path. Atomic sessions
+may retain workflow ownership across turns and are outside this disposable-session
+prototype. This path is opt-in while the bounded authoring workflow is evaluated.
+
 The isolated Planner does not see a user's local checkout, current branch, working tree,
 or uncommitted changes. A coding agent must compare the repository context
 returned by Chopin with its checkout before claiming work. The server validates

@@ -4,6 +4,7 @@ import { ulid } from "@chopin/dialect";
 import {
 	consumeBootstrapBackscroll,
 	create,
+	documentRoom,
 	finished,
 	progressed,
 	retainReferences,
@@ -38,6 +39,50 @@ function call(toolName: string, toolCallId = "t1", input: unknown = {}) {
 }
 
 describe("AI SDK stream projection", () => {
+	it("does not add Jev without an active member request", () => {
+		let chat = create();
+		let context = room(chat).context;
+		context.config.plannerVisuals = true;
+		context.config.harness = "copilot-sdk";
+		expect(documentRoom(context).visual).toBeUndefined();
+		chat.job = { kind: "heading" } as never;
+		expect(documentRoom(context).visual).toBeUndefined();
+	});
+
+	it("stops exposing the member request as soon as the turn is aborted", () => {
+		let chat = create();
+		let entryId = ulid();
+		chat.entries.push({
+			id: entryId,
+			author: { kind: "member", handle: "ana" },
+			text: "Explain the process.",
+			ts: 1,
+		});
+		chat.busy = true;
+		chat.turn = {
+			id: "turn-1",
+			handle: "ana",
+			started: 1,
+			startedAt: 1,
+			entryOffset: 0,
+			responded: false,
+		};
+		chat.activeRequest = {
+			entryId,
+			userId: "user-1",
+			handle: "ana",
+			text: "Explain the process.",
+			claimantSessionId: undefined,
+			turnId: chat.turn.id,
+			lifecycle: chat.lifecycle,
+		};
+		let controller = chat.turnController = new AbortController();
+		let current = documentRoom(room(chat).context).currentMemberRequest!;
+		expect(current()?.entryId).toBe(entryId);
+		controller.abort();
+		expect(current()).toBeUndefined();
+	});
+
 	it("counts only non-empty Planner prose as a response and streams one entry", () => {
 		let chat = create();
 		chat.turn = {

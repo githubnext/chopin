@@ -18,6 +18,8 @@ import { documentIdentity, implementationActive } from "../plan/service";
 import { experimentTools } from "./experiment-tools";
 import type { InvestigationTools } from "./experiment-tools";
 
+import type { VisualSession } from "./visual-handoff";
+
 import type { Server } from "bun";
 import { jsonSchema, tool } from "ai";
 import { z } from "zod";
@@ -35,6 +37,14 @@ async function answer(name: string, produce: () => unknown): Promise<string> {
 		console.error(`[agent/${name}]`, err);
 		return `Error: ${message}`;
 	}
+}
+
+function sameMemberRequest(
+	current: ActiveMemberRequest | undefined,
+	expected: Pick<ActiveMemberRequest, "entryId" | "turnId" | "lifecycle">,
+): boolean {
+	return !!current && current.entryId === expected.entryId
+		&& current.turnId === expected.turnId && current.lifecycle === expected.lifecycle;
 }
 
 function researchQuestion(raw: unknown): string {
@@ -93,6 +103,8 @@ export type DocumentRoom = {
 	createResearch?: (question: string) => Promise<ResearchWorkspaceRequest>;
 	/** Reads one reference retained by this room's active Planner session. */
 	readReference?: (id: string, repositoryId: string) => Promise<unknown>;
+	/** Experimental foreground visual handoff; absent from production sessions. */
+	visual?: VisualSession;
 };
 const roomContext = z.object({
 	room: z.custom<DocumentRoom>(value =>
@@ -225,6 +237,91 @@ export const documentTools = {
 			}),
 	}),
 
+	assess_visual: tool({
+		contextSchema: roomContext,
+		description: "Assess one proposed explanatory paragraph before editing it. Jev decides "
+			+ "whether a visual is possible and helpful, then selects its supported type. "
+			+ "Use the returned visual_route id with edit_plan for this exact paragraph and position.",
+		inputSchema: jsonSchema({
+			type: "object",
+			properties: {
+				revision: { type: "integer", minimum: 0 },
+				operation: {
+					type: "object",
+					properties: {
+						op: { type: "string", enum: ["insert", "insert_root", "replace", "replace_root"] },
+						index: { type: "integer", minimum: 0 },
+						source: { type: "string", maxLength: 100_000 },
+					},
+					required: ["op", "source"],
+					additionalProperties: false,
+				},
+			},
+			required: ["revision", "operation"],
+			additionalProperties: false,
+		}),
+		metadata: { skipPermission: true },
+		execute: (raw, { context: { room: context } }) =>
+			answer("assess_visual", async () => {
+				let [{ visualCandidate }, { assessVisual }, { bindVisualRoute }, catalog] = await Promise
+					.all([
+						import("./visual-handoff"),
+						import("./visual-routing"),
+						import("./visual-receipt"),
+						import("./visual-catalog"),
+					]);
+				let visual = context.visual;
+				if (!visual || context.plan.chat?.job) {
+					throw new Error("visual assessment is unavailable in this session");
+				}
+				let member = context.currentMemberRequest?.();
+				if (!member) throw new Error("visual assessment needs a current member request");
+				let { revision, operation } = Arguments.assessVisual(raw);
+				if (revision !== context.plan.revision) {
+					return { ok: false, reason: "stale-route", revision: context.plan.revision };
+				}
+				let { passage, target } = visualCandidate(operation);
+				let assessment = await assessVisual(
+					{ passages: [{ index: 0, source: passage }], readerQuestion: member.text },
+					request => {
+						if (
+							context.plan.revision !== revision
+							|| !sameMemberRequest(context.currentMemberRequest?.(), member)
+						) throw new Error("visual assessment turn changed");
+						return visual.ask(request);
+					},
+				);
+				if (
+					context.plan.revision !== revision
+					|| !sameMemberRequest(context.currentMemberRequest?.(), member)
+				) return { ok: false, reason: "stale-route", revision: context.plan.revision };
+				if (assessment.failure) {
+					return { ok: false, reason: "assessment-unavailable", failure: assessment.failure };
+				}
+				let route = assessment.routes[0]!;
+				let id = crypto.randomUUID();
+				visual.pending = {
+					id,
+					member: {
+						entryId: member.entryId,
+						turnId: member.turnId,
+						lifecycle: member.lifecycle,
+					},
+					passage,
+					receipt: bindVisualRoute({ revision, passage, target, route }),
+				};
+				return {
+					ok: true,
+					visual_route: id,
+					route,
+					...(route.kind === "diagram" && route.type && {
+						requires: catalog.VISUAL_DESCRIPTIONS[route.type]?.requires,
+						example: catalog.visualExample(route.type),
+					}),
+				};
+			}),
+	}),
+
 	edit_plan: tool({
 		contextSchema: roomContext,
 		description: "Edit the plan as an atomic batch against the revision you last read. Indices "
@@ -280,18 +377,53 @@ export const documentTools = {
 						additionalProperties: false,
 					},
 				},
+				visual_route: {
+					type: "string",
+					minLength: 1,
+					maxLength: 100,
+					description: "The id returned by assess_visual for this exact explanatory edit.",
+				},
 			},
 			required: ["revision", "operations"],
 			additionalProperties: false,
 		}),
 		execute: (raw, { context: { room: context } }) =>
 			answer("edit_plan", async () => {
+				let visual = context.visual
+					? await Promise.all([import("./visual-handoff"), import("./visual-receipt")])
+					: undefined;
 				let document = await documentIdentity(context.plan);
 				let result = await context.exclusive(async () => {
 					if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 					let args = Arguments.editPlan(raw);
+					if (context.visual) {
+						let written = visual![0].visualWrite(args.operations);
+						if (written) {
+							let pending = context.visual.pending;
+							let member = context.currentMemberRequest?.();
+							if (
+								!pending || args.visualRoute !== pending.id
+								|| !sameMemberRequest(member, pending.member)
+							) return { ok: false, reason: "missing-route" };
+							if (args.revision !== context.plan.revision) {
+								return { ok: false, reason: "stale-route", revision: context.plan.revision };
+							}
+							let check = visual![1].checkVisualRoute({
+								required: true,
+								receipt: pending.receipt,
+								revision: args.revision,
+								passage: pending.passage,
+								target: written.target,
+								authored: written.authored,
+							});
+							if (!check.ok) return check;
+						} else if (args.visualRoute) return { ok: false, reason: "wrong-placement" };
+					} else if (args.visualRoute) {
+						return { ok: false, reason: "visual-routing-unavailable" };
+					}
 					let outcome = edit.apply(context.plan, args.revision, args.operations);
 					if (!outcome.ok) return outcome;
+					if (context.visual) context.visual.pending = undefined;
 
 					for (let id of outcome.detached) {
 						let record = context.plan.records.get(id);

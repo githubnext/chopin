@@ -146,15 +146,35 @@ function operation(raw: unknown, position: number): Operation {
 }
 
 /** Validate `edit_plan`'s tool input into the shape `edit.apply` expects. */
-export function editPlan(raw: unknown): { revision: number; operations: Operation[] } {
+export function editPlan(raw: unknown): {
+	revision: number;
+	operations: Operation[];
+	visualRoute?: string;
+} {
 	let args = record(raw, "edit_plan arguments");
-	fields(args, ["revision", "operations"], ["revision", "operations"], "edit_plan arguments");
+	fields(
+		args,
+		["revision", "operations", "visual_route"],
+		["revision", "operations"],
+		"edit_plan arguments",
+	);
 
 	let revision = integer(args.revision, "revision");
 	let operations = array(args.operations, "operations", "operation", 1, MAX_OPERATIONS)
 		.map((item, index) => operation(item, index));
+	let visualRoute = "visual_route" in args
+		? text(args.visual_route, "visual_route", 100)
+		: undefined;
+	if (visualRoute === "") fail("`visual_route` must be non-empty text.");
 
-	return { revision, operations };
+	return { revision, operations, ...(visualRoute && { visualRoute }) };
+}
+
+export function assessVisual(raw: unknown): { revision: number; operation: Operation } {
+	let args = record(raw, "assess_visual arguments");
+	fields(args, ["revision", "operation"], ["revision", "operation"], "assess_visual arguments");
+	let parsed = editPlan({ revision: args.revision, operations: [args.operation] });
+	return { revision: parsed.revision, operation: parsed.operations[0]! };
 }
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
