@@ -10,7 +10,10 @@
 - Exact sandbox revision: `f7aab2fc09f592e231658f91ae4b1c88128563ce`
 - Test document: https://419-chopin.githubnext.com/documents/KC-Test-OSS/TestRepo/pr-419-readme-compression-evidence
 - Failed investigation: `dd54f77b-c57d-4657-972e-0aaf01c20411`
-- Real coding agent: GitHub Copilot CLI `1.0.80`, via ACP
+- Real coding agent: GitHub Copilot CLI `1.0.8`, via ACP. The launcher reported
+  `1.0.80` for `copilot --version`, but the test's `--no-auto-update` flag selected
+  its bundled `1.0.8` executable. Follow-up tests also reproduced the stdio
+  limitation on actual `1.0.80`.
 
 ## Passed
 
@@ -50,19 +53,32 @@ The live command used the documented connector entrypoint, `copilot --acp
 
 Narrow follow-up probes:
 
-- A real Copilot ACP session with a minimal injected stdio `probe_echo` MCP tool
-  also reported the tool unavailable. A startup marker confirmed that the supplied
-  MCP server process was never launched.
-- A separate OpenCode `2.0.24` ACP probe also reported the injected tool unavailable.
-  This was a local diagnostic, not a second deployed investigation.
+- Real Copilot ACP sessions on both `1.0.8` and `1.0.80` with a minimal injected
+  stdio `probe_echo` MCP tool reported the tool unavailable. A dependency-free
+  server and startup marker confirmed that the supplied server was never launched.
+- Copilot `1.0.80` logged the exact cause:
+  `Rejecting non-http/sse MCP server "acpprobe" from client`.
+- The same `probe_echo` tool supplied over HTTP worked on Copilot `1.0.80`:
+  `initialize`, `notifications/initialized`, `tools/list`, and `tools/call` all
+  reached the bridge, and the model returned `ACP_MCP_PROBE_OK`.
+- The earlier inline OpenCode probe was inconclusive. A subsequent
+  dependency-free stdio control started and received `tools/list`; it should not
+  be treated as evidence of the Copilot-specific rejection.
 - A protocol spy confirmed that the shared client actually sends protocol version
   1, followed by `session/new` with `cwd` and the stdio `mcpServers` configuration.
 
-This establishes a reproducible integration blocker in the tested environment,
-not yet its precise cause. Investigate the real agents' handling of `session/new`
-MCP configuration and add a real-tool handshake check before relying on the
-current ACP smoke test. The existing opt-in smoke test asks for a text response
-without tools, so it does not exercise this boundary.
+The cause is confirmed and tracked upstream in
+[github/copilot-cli#3889](https://github.com/github/copilot-cli/issues/3889):
+Copilot rejects client-supplied stdio MCP servers in ACP `session/new` even though
+it returns a successful session response. Upgrading from the stale executable
+alone does not resolve this limitation.
+
+The generic connector fix is capability-based transport selection: provide a
+run-scoped HTTP bridge when the agent advertises `mcpCapabilities.http`, and use
+stdio for other agents. This needs no Copilot-specific adapter. Add a real-tool
+handshake check: the existing opt-in smoke test asks for a text response without
+tools, so it does not exercise this boundary. The full deployed investigation
+has not yet been rerun with an HTTP bridge.
 
 Relevant code: `apps/connector/src/acp.ts` (session setup/prompt),
 `apps/connector/src/main.ts` (bridge injection/completion), and
