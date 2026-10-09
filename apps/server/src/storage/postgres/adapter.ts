@@ -2,6 +2,7 @@ import { SQL } from "bun";
 
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { availableChannelTitle } from "../../channels/title";
+import { sidecarUnansweredDecisions } from "../../questions/unanswered";
 import { CommitRejected, conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
@@ -16,6 +17,7 @@ import type {
 	ChannelArchiveInput,
 	ChannelArchiveResult,
 	ChannelCursor,
+	ChannelDecisionCount,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -35,9 +37,9 @@ import type {
 	SaveCheckpoint,
 	StoredChannel,
 	StoredEvent,
+	StoredWebSession,
 	UpdateAgentContext,
 	UserRecord,
-	WebSession,
 } from "../model";
 import type {
 	BackgroundJobStore,
@@ -67,6 +69,9 @@ type SessionRow = {
 	userId: string;
 	expiresAt: Timestamp;
 	createdAt: Timestamp;
+	secretHash: Uint8Array | null;
+	ciphertext: Uint8Array | null;
+	credentialRevision: Integer | null;
 };
 
 type ChannelRow = {
@@ -90,6 +95,7 @@ type ChannelRow = {
 	descriptionGeneratorVersion: Integer | null;
 	descriptionJobId: string | null;
 	descriptionUpdatedAt: Timestamp | null;
+	unansweredDecisions: Integer;
 };
 
 type SnapshotRow = {
@@ -200,11 +206,21 @@ function user(row: UserRow): UserRecord {
 	};
 }
 
-function session(row: SessionRow): WebSession {
+function session(row: SessionRow): StoredWebSession {
 	return {
-		...row,
+		id: row.id,
+		userId: row.userId,
 		expiresAt: date(row.expiresAt, "session expiry"),
 		createdAt: date(row.createdAt, "session creation time"),
+		...(row.ciphertext && row.secretHash && row.credentialRevision !== null
+			? {
+				credentials: {
+					secretHash: new Uint8Array(row.secretHash),
+					ciphertext: new Uint8Array(row.ciphertext),
+					revision: integer(row.credentialRevision, "session credential revision"),
+				},
+			}
+			: {}),
 	};
 }
 
@@ -220,6 +236,7 @@ function channel(row: ChannelRow): ChannelRecord {
 		descriptionGeneratorVersion,
 		descriptionJobId,
 		descriptionUpdatedAt,
+		unansweredDecisions,
 		...record
 	} = row;
 	let projectionRevision = integer(descriptionRevision, "channel description revision");
@@ -263,6 +280,7 @@ function channel(row: ChannelRow): ChannelRecord {
 		updatedAt: date(row.updatedAt, "channel update time"),
 		...(archivedAt === null ? {} : { archivedAt: date(archivedAt, "channel archive time") }),
 		...(projected ? { description: projected } : {}),
+		unansweredDecisions: integer(unansweredDecisions, "channel unanswered decisions"),
 	};
 }
 
@@ -340,7 +358,10 @@ const SESSION_COLUMNS = `
 	id,
 	user_id AS "userId",
 	expires_at AS "expiresAt",
-	created_at AS "createdAt"
+	created_at AS "createdAt",
+	secret_hash AS "secretHash",
+	credential_ciphertext AS "ciphertext",
+	credential_revision AS "credentialRevision"
 `;
 
 const CHANNEL_COLUMNS = `
@@ -366,7 +387,12 @@ const CHANNEL_COLUMNS = `
 	channels.generated_description_source_hash AS "descriptionSourceHash",
 	channels.generated_description_generator_version AS "descriptionGeneratorVersion",
 	channels.generated_description_job_id AS "descriptionJobId",
-	channels.generated_description_updated_at AS "descriptionUpdatedAt"
+	channels.generated_description_updated_at AS "descriptionUpdatedAt",
+	coalesce((
+		SELECT channel_state.unanswered_decisions
+		FROM channel_state
+		WHERE channel_state.channel_id = channels.id
+	), 0) AS "unansweredDecisions"
 `;
 
 const CHANNEL_RETURNING = `
@@ -387,7 +413,12 @@ const CHANNEL_RETURNING = `
 	generated_description_source_hash AS "descriptionSourceHash",
 	generated_description_generator_version AS "descriptionGeneratorVersion",
 	generated_description_job_id AS "descriptionJobId",
-	generated_description_updated_at AS "descriptionUpdatedAt"
+	generated_description_updated_at AS "descriptionUpdatedAt",
+	coalesce((
+		SELECT channel_state.unanswered_decisions
+		FROM channel_state
+		WHERE channel_state.channel_id = channels.id
+	), 0) AS "unansweredDecisions"
 `;
 
 const SNAPSHOT_COLUMNS = `
@@ -501,9 +532,11 @@ export class PostgresStorage implements StorageAdapter {
 			this.#run("create login session", async () => {
 				await this.#sql`
 				INSERT INTO web_sessions (
-					id, user_id, expires_at, created_at
+					id, user_id, expires_at, created_at, secret_hash, credential_ciphertext, credential_revision
 				) VALUES (
-					${input.id}, ${input.userId}, ${input.expiresAt}, ${input.createdAt}
+					${input.id}, ${input.userId}, ${input.expiresAt}, ${input.createdAt},
+					${input.credentials?.secretHash ?? null}, ${input.credentials?.ciphertext ?? null},
+					${input.credentials?.revision ?? null}
 				)
 			`;
 			}),
@@ -515,6 +548,21 @@ export class PostgresStorage implements StorageAdapter {
 				WHERE id = ${id} AND expires_at > ${now}
 			`;
 				return found ? session(found) : undefined;
+			}),
+		rotate: (id, expectedRevision, credentials) =>
+			this.#run("rotate session credentials", async () => {
+				if (credentials.revision !== expectedRevision + 1) {
+					throw conflict("invalid credential revision");
+				}
+				let updated = await this.#sql<{ id: string }[]>`
+					UPDATE web_sessions
+					SET secret_hash = ${credentials.secretHash},
+						credential_ciphertext = ${credentials.ciphertext},
+						credential_revision = ${credentials.revision}
+					WHERE id = ${id} AND credential_revision = ${expectedRevision}
+					RETURNING id
+				`;
+				return updated.length > 0;
 			}),
 		delete: id =>
 			this.#run("delete login session", () =>
@@ -544,8 +592,8 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 					return deleted.length;
 				})),
-		deleteAll: (now, held, ttlMs) =>
-			this.#run("delete all login sessions", () =>
+		reset: (now, held, ttlMs) =>
+			this.#run("reset login sessions and owners", () =>
 				this.#sql.begin(async transaction => {
 					await this.#assertLease(transaction, held);
 					await transaction`
@@ -554,7 +602,9 @@ export class PostgresStorage implements StorageAdapter {
 					WHERE owner_session_id IS NOT NULL
 				`;
 					let deleted = await transaction<{ id: string }[]>`
-					DELETE FROM web_sessions RETURNING id
+					DELETE FROM web_sessions
+					WHERE credential_ciphertext IS NULL OR expires_at <= ${now}
+					RETURNING id
 					`;
 					let [renewed] = await transaction<LeaseRow[]>`
 					UPDATE storage_leases
@@ -604,6 +654,9 @@ export class PostgresStorage implements StorageAdapter {
 			this.#listChannels(repositoryId, limit, after, query, includeArchived),
 		scan: (repositoryId, limit, after, includeArchived) =>
 			this.#scanChannels(repositoryId, limit, after, includeArchived),
+		unansweredDecisions: repositoryId => this.#unansweredDecisions(repositoryId),
+		unansweredDecisionCounts: (repositoryId, channelIds) =>
+			this.#unansweredDecisionCounts(repositoryId, channelIds),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -712,10 +765,11 @@ export class PostgresStorage implements StorageAdapter {
 			input.now,
 		);
 		await transaction`
-			INSERT INTO channel_state (channel_id, sidecar)
+			INSERT INTO channel_state (channel_id, sidecar, unanswered_decisions)
 			VALUES (
 				${input.id},
-				${input.initial ? JSON.stringify(input.initial.sidecar) : "null"}::jsonb
+				${input.initial ? JSON.stringify(input.initial.sidecar) : "null"}::jsonb,
+				${sidecarUnansweredDecisions(input.initial?.sidecar)}
 			)
 		`;
 		if (input.initial) {
@@ -1027,6 +1081,54 @@ export class PostgresStorage implements StorageAdapter {
 				channels: page,
 				next: more && last ? { updatedAt: last.updatedAt, id: last.id } : undefined,
 			};
+		});
+	}
+
+	#unansweredDecisions(repositoryId: string): Promise<number> {
+		return this.#run("count unanswered decisions", async () => {
+			let [row] = await this.#sql<{ total: Integer }[]>`
+				SELECT coalesce(sum(channel_state.unanswered_decisions), 0)::bigint AS total
+				FROM channels
+				JOIN channel_state ON channel_state.channel_id = channels.id
+				LEFT JOIN channels AS parent_channels
+					ON parent_channels.id = channels.parent_channel_id
+				WHERE channels.repository_id = ${repositoryId}
+					AND (
+						(channels.parent_channel_id IS NULL AND channels.archived_at IS NULL)
+						OR (
+							parent_channels.repository_id = channels.repository_id
+							AND parent_channels.parent_channel_id IS NULL
+							AND parent_channels.archived_at IS NULL
+						)
+					)
+			`;
+			return integer(row?.total ?? 0, "unanswered decision total");
+		});
+	}
+
+	#unansweredDecisionCounts(
+		repositoryId: string,
+		channelIds: string[],
+	): Promise<ChannelDecisionCount[]> {
+		if (channelIds.length === 0) return Promise.resolve([]);
+		return this.#run("read unanswered decision counts", async () => {
+			let rows = await this.#sql<
+				{ channelId: string; revision: Integer; unansweredDecisions: Integer }[]
+			>`
+				SELECT
+					channels.id AS "channelId",
+					channels.revision,
+					coalesce(channel_state.unanswered_decisions, 0) AS "unansweredDecisions"
+				FROM channels
+				LEFT JOIN channel_state ON channel_state.channel_id = channels.id
+				WHERE channels.repository_id = ${repositoryId}
+					AND channels.id IN ${this.#sql(channelIds)}
+			`;
+			return rows.map(row => ({
+				channelId: row.channelId,
+				revision: integer(row.revision, "channel revision"),
+				unansweredDecisions: integer(row.unansweredDecisions, "channel unanswered decisions"),
+			}));
 		});
 	}
 
@@ -1373,7 +1475,9 @@ export class PostgresStorage implements StorageAdapter {
 				if (input.sidecar !== undefined) {
 					await transaction`
 					UPDATE channel_state
-					SET sidecar = ${JSON.stringify(input.sidecar)}::jsonb
+					SET
+						sidecar = ${JSON.stringify(input.sidecar)}::jsonb,
+						unanswered_decisions = ${sidecarUnansweredDecisions(input.sidecar)}
 					WHERE channel_id = ${input.channelId}
 				`;
 				}
@@ -1493,7 +1597,9 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 				await transaction`
 					UPDATE channel_state
-					SET sidecar = ${JSON.stringify(input.sidecar)}::jsonb
+					SET
+						sidecar = ${JSON.stringify(input.sidecar)}::jsonb,
+						unanswered_decisions = ${sidecarUnansweredDecisions(input.sidecar)}
 					WHERE channel_id = ${input.channelId}
 				`;
 				await transaction`

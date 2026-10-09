@@ -22,6 +22,50 @@ import { createStateStore } from "./state-store.mjs";
 import { validateState } from "./state.mjs";
 
 let workflow = "pr-readiness-worker.lock.yml";
+export function eventTarget(eventName, event, repository, payload) {
+	if (
+		eventName === "schedule"
+		|| (eventName === "push" && event.ref === "refs/heads/main")
+		|| (eventName === "workflow_dispatch" && !event.inputs?.pr)
+	) return null;
+	if (eventName === "workflow_dispatch") {
+		let number = Number(event.inputs?.pr);
+		return Number.isSafeInteger(number) && number > 0
+			? { kind: "prs", numbers: [number] }
+			: { kind: "none" };
+	}
+	if (eventName === "pull_request_target") {
+		let pr = event.pull_request;
+		return event.repository?.full_name === repository
+				&& pr?.head?.repo?.full_name === repository
+				&& Number.isSafeInteger(pr.number) && pr.number > 0
+			? { kind: "prs", numbers: [pr.number] }
+			: { kind: "none" };
+	}
+	if (eventName !== "workflow_run") return { kind: "none" };
+	let run = event.workflow_run;
+	if (
+		run?.status !== "completed" || run.repository?.full_name !== repository
+		|| run.head_repository?.full_name !== repository
+	) return { kind: "none" };
+	if (run.path === ".github/workflows/ci.yml") {
+		return ["pull_request", "workflow_dispatch"].includes(run.event)
+				&& typeof run.head_branch === "string" && run.head_branch
+			? { kind: "branch", branch: run.head_branch }
+			: { kind: "none" };
+	}
+	if (
+		run.path === `.github/workflows/${workflow}` && run.event === "workflow_dispatch"
+	) {
+		// Display titles are mutable. Observe the small set of attempts in signed state.
+		let numbers = Object.values(payload.prs).filter(state => state.active).map(state =>
+			state.number
+		);
+		return numbers.length ? { kind: "prs", numbers } : { kind: "none" };
+	}
+	return { kind: "none" };
+}
+
 async function downloadResult(repository, runId) {
 	let directory = mkdtempSync(join(tmpdir(), "chopin-result-"));
 	try {
@@ -71,35 +115,24 @@ export async function runCoordinator(config = {}) {
 		);
 	}
 	let request = config.request ?? createRequest(process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN);
-	let rows = await (config.inspect
-		?? (() => inventory(repository, createInventoryRead(repository), selected)))();
-	rows = rows.filter(row => selected(row.number));
-	let confirm = config.confirm ?? inspectReadiness;
-	rows = await Promise.all(rows.map(row => confirm(repository, row, request)));
-	// Reapply parent ordering using confirmed checks, not the advisory inventory.
-	for (let row of rows) {
-		if (
-			row.parent && rows.find(parent => parent.number === row.parent)?.action !== "ready"
-			&& row.action !== "opted-out"
-		) row.action = "waiting-parent";
-	}
 	let store = config.store ?? createStateStore(repository, key, request);
 	let previous = await store.load();
-	let now = config.now ?? Date.now();
-	if (!Number.isFinite(now) || now < 0) throw new Error("Invalid coordinator timestamp");
 	for (let [number, state] of Object.entries(previous.payload.prs)) {
 		validateState(state);
 		if (String(state.number) !== number) throw new Error("PR state identity mismatch");
 	}
-	let root = `/repos/${repository}`;
 	let event = config.event
 		?? (process.env.GITHUB_EVENT_PATH
 			? JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"))
 			: {});
+	let eventName = config.eventName ?? process.env.GITHUB_EVENT_NAME ?? "schedule";
+	let target = config.target ?? eventTarget(eventName, event, repository, previous.payload);
+	if (target?.kind === "none") {
+		return { rows: [], payload: previous.payload, dispatches: [], errors: [] };
+	}
+	let root = `/repos/${repository}`;
 	let retryPR = null;
-	if (
-		(config.eventName ?? process.env.GITHUB_EVENT_NAME) === "workflow_dispatch" && event.inputs?.pr
-	) {
+	if (eventName === "workflow_dispatch" && event.inputs?.pr) {
 		let actor = event.sender?.login;
 		if (typeof actor !== "string" || !actor) {
 			throw new Error("Manual retry actor is not authorized");
@@ -116,6 +149,21 @@ export async function runCoordinator(config = {}) {
 			throw new Error("Manual retry PR is outside canary selection");
 		}
 	}
+	let rows = await (config.inspect
+		?? (() => inventory(repository, createInventoryRead(repository), selected, target)))();
+	rows = rows.filter(row => selected(row.number));
+	let confirm = config.confirm ?? inspectReadiness;
+	rows = (await Promise.all(rows.map(row => confirm(repository, row, request))))
+		.filter(row => row !== null);
+	// Reapply parent ordering using confirmed checks, not the advisory inventory.
+	for (let row of rows) {
+		if (
+			row.parent && rows.find(parent => parent.number === row.parent)?.action !== "ready"
+			&& row.action !== "opted-out"
+		) row.action = "waiting-parent";
+	}
+	let now = config.now ?? Date.now();
+	if (!Number.isFinite(now) || now < 0) throw new Error("Invalid coordinator timestamp");
 	let humanChanges = [];
 	for (let row of rows) {
 		let state = previous.payload.prs[row.number];
@@ -254,7 +302,7 @@ export async function runCoordinator(config = {}) {
 		if (!selected(row.number)) continue;
 		try {
 			let pr = await request("GET", `${root}/pulls/${row.number}`);
-			if (pr.state !== "open") continue;
+			if (pr.state !== "open" || pr.draft !== false) continue;
 			let optedOut = pr.labels?.some(label =>
 				(typeof label === "string" ? label : label.name) === "no-babysit"
 			);

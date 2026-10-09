@@ -325,6 +325,33 @@
 	align-self: stretch;
 }
 
+.project-sidebar-project-row {
+	position: relative;
+}
+
+/* Reveal from the document header: a wash that fades out; opacity is the only motion. */
+.project-sidebar-project[data-revealed] > .project-sidebar-project-row::after {
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: var(--project-sidebar-selected);
+	content: "";
+	pointer-events: none;
+	animation: project-reveal var(--duration-linger) var(--ease-out) var(--duration-linger) forwards;
+}
+
+@keyframes project-reveal {
+	to {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.project-sidebar-project[data-revealed] > .project-sidebar-project-row::after {
+		animation: none;
+	}
+}
+
 .project-sidebar-document {
 	min-height: var(--project-sidebar-row);
 	gap: var(--spacing);
@@ -403,12 +430,19 @@
 	visibility: hidden;
 }
 
-.group\/document:hover .project-sidebar-document-actions,
-.group\/document:focus-within .project-sidebar-document-actions,
+.project-sidebar-document:is(:hover, :focus-within) > .project-sidebar-document-actions,
+.project-sidebar-child:is(:hover, :focus-within) > .project-sidebar-document-actions,
+:root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
+	visibility: visible;
+}
+
+.project-sidebar-document:is(:hover, :has(:focus-visible, [aria-expanded="true"]))
+	> .project-sidebar-document-actions,
+.project-sidebar-child:is(:hover, :has(:focus-visible, [aria-expanded="true"]))
+	> .project-sidebar-document-actions,
 :root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
 	width: auto;
 	overflow: visible;
-	visibility: visible;
 }
 
 .project-sidebar-action,
@@ -443,8 +477,62 @@
 .project-sidebar-document:hover .project-sidebar-document-action,
 .project-sidebar-document:focus-within .project-sidebar-document-action,
 .project-sidebar-child:hover .project-sidebar-document-action,
-.project-sidebar-child:focus-within .project-sidebar-document-action {
+.project-sidebar-child:focus-within .project-sidebar-document-action,
+.project-sidebar-document-action[aria-expanded="true"] {
 	opacity: 1;
+}
+
+.project-sidebar-project-row > .project-sidebar-action {
+	width: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+.project-sidebar-project-row:is(:hover, :has(:focus-visible)) > .project-sidebar-action,
+.project-sidebar-project-row > .project-sidebar-action-pending,
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-project-row
+	> .project-sidebar-action {
+	width: calc(var(--spacing) * 6);
+	padding: calc(var(--spacing) * 1.25);
+	overflow: visible;
+}
+
+.project-sidebar-count {
+	display: flex;
+	min-width: calc(var(--spacing) * 6);
+	flex: 0 0 auto;
+	justify-content: flex-end;
+}
+
+:root:not([data-plan-coarse-pointer])
+	:is(.project-sidebar-project-row:has(> .project-sidebar-action):is(:hover, :has(:focus-visible)), .project-sidebar-project-row:has(> .project-sidebar-action-pending), .project-sidebar-document:has(> .project-sidebar-document-actions):is(:hover, :has(:focus-visible, [aria-expanded="true"])), .project-sidebar-child:has(> .project-sidebar-document-actions):is(:hover, :has(:focus-visible, [aria-expanded="true"])))
+	> .project-sidebar-count {
+	display: none;
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	:is(.project-sidebar-document-actions, .project-sidebar-project-row > .project-sidebar-action) {
+	order: 1;
+}
+
+/* Rows use different gaps, so pad touch counts to the project row's gap and share its edge. */
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-document
+	> .project-sidebar-document-actions
+	~ .project-sidebar-count {
+	margin-right: calc(var(--project-sidebar-gap) - var(--spacing));
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-child
+	> .project-sidebar-document-actions
+	~ .project-sidebar-count {
+	margin-right: var(--project-sidebar-gap);
 }
 
 .project-sidebar-status,
@@ -1234,6 +1322,36 @@
 	font-size: var(--text-sm);
 	font-weight: 500;
 	color: var(--color-text-secondary);
+}
+
+.document-project-prefix {
+	min-width: 0;
+	max-width: 10rem;
+	flex: 0 1 auto;
+	border-radius: var(--radius-sm);
+	padding: 4px;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.document-project-prefix:hover,
+.document-project-prefix:focus-visible {
+	background: var(--color-selected);
+	color: var(--color-text-secondary);
+}
+
+.document-project-separator {
+	flex: none;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+	opacity: 0.45;
+}
+
+@media (max-width: 639px) {
+	.document-project-prefix,
+	.document-project-separator {
+		display: none;
+	}
 }
 
 .document-breadcrumb-separator {

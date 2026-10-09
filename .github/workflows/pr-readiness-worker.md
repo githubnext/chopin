@@ -66,6 +66,15 @@ steps:
       PR_MAINTENANCE_STATE_KEY: ${{ secrets.PR_MAINTENANCE_STATE_KEY }}
       PR_NUMBER: ${{ inputs.pr }}
       ATTEMPT: ${{ inputs.attempt }}
+  - name: Prepare browser and PostgreSQL binaries from trusted main
+    run: |
+      # Runner setup only: the agent keeps its strict, unprivileged sandbox.
+      sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+      sudo apt-get install -y --no-install-recommends postgresql-17
+      bun install --frozen-lockfile
+      PLAYWRIGHT_BROWSERS_PATH=/tmp/gh-aw/browsers bun run e2e:browsers
+      echo "PLAYWRIGHT_BROWSERS_PATH=/tmp/gh-aw/browsers" >> "$GITHUB_ENV"
+      install -m 644 scripts/pr-maintenance/test-databases.sh /tmp/gh-aw/data/test-databases.sh
 post-steps:
   - name: Upload the proposed Git graph
     uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -206,13 +215,29 @@ job owns publication; a proposal is not proof of publication or passing CI.
    for TypeScript edits. Browser, PostgreSQL, and container failures require real
    prerequisites. Report unavailable infrastructure instead of a speculative fix.
    A mergeable PR may receive this fix while its branch is behind the base.
+
+   For browser or PostgreSQL checks, source the trusted helper inside the sandbox:
+   `source /tmp/gh-aw/data/test-databases.sh`. It starts PostgreSQL 17 on sandbox
+   loopback and exports four separate `E2E_DATABASE_URL_0` through
+   `E2E_DATABASE_URL_3` databases plus `TEST_DATABASE_URL`. Run the checks in that
+   same shell so these variables reach their child processes. `bun run e2e`
+   uses the supplied databases and does not need Docker. Chromium is already
+   cached at `PLAYWRIGHT_BROWSERS_PATH`; report a missing browser revision as
+   infrastructure instead of changing dependencies. For PostgreSQL contracts,
+   use `bun test apps/server/src/storage/postgres` with `TEST_DATABASE_URL` from
+   the helper; `bun run test:postgres` overrides that URL. Docker image builds
+   remain unavailable inside the sandbox and require an infrastructure report.
+
 5. Do not weaken tests, assertions, design rules, or checks. Do not change workflow
    files, manifests, lockfiles, agent instructions, maintenance scripts, or other
    protected paths. Existing design-contract exception `sourceHash` fields may
    be renewed only after checking the new source preserves that exact documented
-   exception. Preserve all other JSON fields and entries. Record each renewal as
-   `{file, sourceHash, rationale}` in `hashReviews`; hash actual source bytes with
-   SHA-256. Changed expectations or a broader exception need a human decision.
+   exception. Preserve all other JSON fields and entries. Changed expectations
+   or a broader exception need a human decision. For each renewed exception
+   record, add `{file, sourceHash, rationale}` to `hashReviews`: set `file` to that record's
+   `file` source path (for example `apps/web/src/workspace.tsx`), not the exception
+   JSON path; set `sourceHash` to the SHA-256 of that source blob in the proposed
+   tree; explain the renewed exception in `rationale`.
    The merge exception above permits only those reviewed hash renewals in a
    protected conflict.
 6. When intent is ambiguous or protected edits are needed, call `finish_attempt`

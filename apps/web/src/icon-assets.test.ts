@@ -87,9 +87,11 @@ test("interface icons default to fourteen pixels", () => {
 				&& match[1] === "Info" && size === 16;
 			let referenceFailure = file.endsWith("chat/reference-status-icon.tsx")
 				&& match[1] === "CircleClose" && size === 16;
+			let relationStatus = file.endsWith("question/src/react/relation-note.tsx")
+				&& ["Document", "Warning"].includes(match[1]!) && size === 12;
 			if (
 				size !== 14 && !emptyStateException && !stepperCaret && !composerNotice && !referenceStatus
-				&& !referenceFailure
+				&& !referenceFailure && !relationStatus
 			) {
 				offenders.push(`${file}: ${match[0]}`);
 			}
@@ -178,4 +180,11 @@ test("directional controls reuse one chevron and one panel icon", () => {
 	expect(existsSync(join(root, "assets/icons/tool-chevron-down.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/icons/tool-chevron-right.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/figma/navigation/sidebar-right-3-hide.svg"))).toBe(false);
+});
+
+test("icons never shrink beside wrapping text", () => {
+	let css = readFileSync(join(root, "theme.css"), "utf8");
+	expect(css).toMatch(
+		/@layer base \{\s*:is\(\[data-nucleo-icon\], \[data-filled-icon\]\) \{\s*flex-shrink: 0;/,
+	);
 });

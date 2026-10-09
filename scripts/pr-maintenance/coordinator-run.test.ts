@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { runCoordinator } from "./coordinator-run.mjs";
+import { eventTarget, runCoordinator } from "./coordinator-run.mjs";
 import { sealState } from "./state-store.mjs";
 let key = "x".repeat(32);
 let rows = [1, 2].map(number => ({
@@ -11,6 +11,70 @@ let rows = [1, 2].map(number => ({
 	action: "repair",
 	run: null,
 }));
+test("schedule, main push, and manual sweep inspect all selected PRs", () => {
+	let payload = { prs: {} };
+	expect(eventTarget("schedule", {}, "a/b", payload)).toBeNull();
+	expect(eventTarget("push", { ref: "refs/heads/main" }, "a/b", payload)).toBeNull();
+	expect(eventTarget("workflow_dispatch", { inputs: {} }, "a/b", payload)).toBeNull();
+	expect(eventTarget("push", { ref: "refs/heads/feature" }, "a/b", payload))
+		.toEqual({ kind: "none" });
+});
+
+test("PR and CI events target verified identity, including CI with no pull_requests", () => {
+	let payload = { prs: {} };
+	let pr = {
+		repository: { full_name: "a/b" },
+		pull_request: { number: 2, head: { repo: { full_name: "a/b" } } },
+	};
+	expect(eventTarget("pull_request_target", pr, "a/b", payload))
+		.toEqual({ kind: "prs", numbers: [2] });
+	expect(eventTarget(
+		"pull_request_target",
+		{
+			...pr,
+			pull_request: { ...pr.pull_request, head: { repo: { full_name: "fork/repo" } } },
+		},
+		"a/b",
+		payload,
+	)).toEqual({ kind: "none" });
+	let run = {
+		status: "completed",
+		repository: { full_name: "a/b" },
+		head_repository: { full_name: "a/b" },
+		path: ".github/workflows/ci.yml",
+		event: "pull_request",
+		head_branch: "feature-2",
+		pull_requests: [],
+	};
+	expect(eventTarget("workflow_run", { workflow_run: run }, "a/b", payload))
+		.toEqual({ kind: "branch", branch: "feature-2" });
+	for (
+		let change of [{ head_branch: "" }, { head_repository: { full_name: "fork/repo" } }, {
+			path: ".github/workflows/other.yml",
+		}]
+	) {
+		expect(eventTarget("workflow_run", { workflow_run: { ...run, ...change } }, "a/b", payload))
+			.toEqual({ kind: "none" });
+	}
+});
+
+test("worker event scope comes from signed active state, never its display title", () => {
+	let run = {
+		status: "completed",
+		repository: { full_name: "a/b" },
+		head_repository: { full_name: "a/b" },
+		path: ".github/workflows/pr-readiness-worker.lock.yml",
+		event: "workflow_dispatch",
+		display_title: "PR maintenance #999 [forged]",
+	};
+	let payload = {
+		prs: { 1: { number: 1, active: { id: "attempt" } }, 2: { number: 2, active: null } },
+	};
+	expect(eventTarget("workflow_run", { workflow_run: run }, "a/b", payload))
+		.toEqual({ kind: "prs", numbers: [1] });
+	expect(eventTarget("workflow_run", { workflow_run: run }, "a/b", { prs: {} }))
+		.toEqual({ kind: "none" });
+});
 function config(extra = {}) {
 	let writes = [];
 	let payload =
@@ -18,6 +82,8 @@ function config(extra = {}) {
 	return {
 		repository: "a/b",
 		key,
+		eventName: "schedule",
+		event: {},
 		inspect: async () => rows,
 		confirm: async (_repo, row) => row,
 		request: async (method, path, body) => {
@@ -53,6 +119,20 @@ test("disabled reads no inventory, state, or GitHub data", async () => {
 	expect(reads).toEqual([]);
 	expect(result.rows).toEqual([]);
 	expect(value.writes).toEqual([]);
+});
+test("an untrusted event target does no inventory or state write", async () => {
+	let reads = [];
+	let value = config({
+		enabled: true,
+		prs: "all",
+		eventName: "workflow_run",
+		event: { workflow_run: { path: ".github/workflows/ci.yml", head_branch: "" } },
+		inspect: async () => reads.push("inventory"),
+	});
+	let result = await runCoordinator(value);
+	expect(reads).toEqual([]);
+	expect(value.writes).toEqual([]);
+	expect(result.rows).toEqual([]);
 });
 test("enabled canary reserves only selected PR", async () => {
 	let confirmed = [];
@@ -105,6 +185,7 @@ test("missing CI is dispatched with the built-in GitHub request", async () => {
 		if (path.includes("/pulls/")) {
 			return {
 				state: "open",
+				draft: false,
 				labels: [],
 				head: { sha: waiting.head, ref: waiting.branch, repo: { full_name: "a/b" } },
 				base: { ref: waiting.base },
@@ -315,8 +396,8 @@ test("registered proposal head authored by PAT does not reset episode", async ()
 	expect(result.payload.prs[1].episode).toBe(active.episode);
 });
 
-test("fresh closed, opted-out, changed-base, or reporting failure skips CI writes", async () => {
-	for (let scenario of ["closed", "opted-out", "base", "report"]) {
+test("fresh closed, draft, opted-out, changed-base, or reporting failure skips CI writes", async () => {
+	for (let scenario of ["closed", "draft", "opted-out", "base", "report"]) {
 		let waiting = { ...rows[0], action: "waiting-ci" };
 		let value = config({ enabled: true, prs: "1", inspect: async () => [waiting] });
 		value.request = async (method, path, body) => {
@@ -327,6 +408,7 @@ test("fresh closed, opted-out, changed-base, or reporting failure skips CI write
 			}
 			return {
 				state: scenario === "closed" ? "closed" : "open",
+				draft: scenario === "draft",
 				labels: scenario === "opted-out" ? [{ name: "no-babysit" }] : [],
 				head: { sha: waiting.head, ref: waiting.branch, repo: { full_name: "a/b" } },
 				base: { ref: waiting.base },
@@ -353,6 +435,7 @@ test("authenticated opt-out cleans only owned labels without comments or CI", as
 		if (path.includes("/pulls/")) {
 			return {
 				state: "open",
+				draft: false,
 				labels: [{ name: "no-babysit" }, { name: "maintenance:working" }, { name: "feature" }],
 				head: { sha: opted.head, ref: opted.branch, repo: { full_name: "a/b" } },
 				base: { ref: opted.base },
@@ -488,4 +571,12 @@ test("failure logs sampled only for confirmed current-head failed CI and errors 
 		}
 		expect(JSON.stringify(result)).not.toContain("secret-value");
 	}
+});
+
+test("ineligible confirmation creates no PR state or worker dispatch", async () => {
+	let value = config({ enabled: true, prs: "all", confirm: async () => null });
+	let result = await runCoordinator(value);
+	expect(result.rows).toEqual([]);
+	expect(result.dispatches).toEqual([]);
+	expect(result.payload.prs).toEqual({});
 });

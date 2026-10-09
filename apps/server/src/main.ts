@@ -14,7 +14,7 @@ import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
-import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
+import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
 import { researchBriefDefinition } from "./jobs/research-brief";
@@ -55,17 +55,33 @@ import { registerResearchWorkspaceRoutes } from "./research/routes";
 import { ResearchWorkspaceError, ResearchWorkspaceService } from "./research/service";
 import { placeResearchReference as placeResearch } from "./research/placement";
 import * as Rooms from "./rooms";
-import { admit } from "./socket/admission";
+import { admit, admitSidebar } from "./socket/admission";
 import { refreshAuthorization } from "./socket/authorization";
+import {
+	recheckDecisionWatch,
+	releaseDecisionWatch,
+	repositoryReader,
+	unwatchDecisions,
+	unwatchRequest,
+	watchDecisions,
+	watchRequest,
+} from "./socket/decision-watch";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
-import { broadcast, fail, relay, reply, tell, topic } from "./wire";
+import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
 
-import type { Server } from "bun";
+import type { Server, ServerWebSocket } from "bun";
+import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
 import type { ChannelRecord, Lease } from "./storage/model";
-import type { AuthorizationResult, Socket, SocketData } from "./wire";
+import type {
+	AuthorizationResult,
+	SidebarSocket,
+	SidebarSocketData,
+	Socket,
+	SocketData,
+} from "./wire";
 
 const config = load();
 harnessFor(config);
@@ -655,6 +671,128 @@ const VIEWER_ALLOWED = new Set([
 	"conversation-plan:research-link",
 ]);
 
+type AnySocket = ServerWebSocket<SocketData | SidebarSocketData>;
+
+function isSidebarSocket(ws: AnySocket): ws is SidebarSocket {
+	return ws.data.sidebar === true;
+}
+
+function decisionTopics(ws: SidebarSocket): WatchTopics {
+	return {
+		subscribe: repositoryId => ws.subscribe(repositoryTopic(repositoryId)),
+		unsubscribe: repositoryId => ws.unsubscribe(repositoryTopic(repositoryId)),
+	};
+}
+
+function watchingRepository(ws: SidebarSocket, repositoryId: string): boolean {
+	return !ws.data.closed && ws.data.decisionWatch.repositories.has(repositoryId);
+}
+
+async function sidebarRepositoryReader(
+	ws: SidebarSocket,
+): Promise<RepositoryAuthorizer | undefined> {
+	let data = ws.data;
+	if (data.closed || data.authorizedUntil <= Date.now()) return undefined;
+	let request = new Request(hostedAuth.config.origin, { headers: { cookie: data.credential } });
+	let session = await hostedAuth.sessions.authenticate(request);
+	if (!session || session.user.id !== data.principalId) return undefined;
+	data.authorizedUntil = session.session.expiresAt.getTime();
+	return repositoryReader(async (owner, name) => {
+		let access = await hostedAuth.sessions.use(
+			session,
+			token => hostedAuth.github.repositoryAccess(token, owner, name),
+		);
+		return access.value;
+	});
+}
+
+function expireSidebar(ws: SidebarSocket): void {
+	if (!ws.data.closed) ws.close(4403, "authorization expired");
+}
+
+async function receiveSidebar(ws: SidebarSocket, raw: string): Promise<void> {
+	let frame = sidebarFrame(raw);
+	if (!frame) return;
+	switch (frame.kind) {
+		case "session:ping":
+			return tell(ws, { kind: "session:ping", ts: 0, rid: frame.rid });
+
+		case "sidebar:watch":
+			return watchSidebarDecisions(ws, frame.rid, frame.repositories);
+
+		case "sidebar:unwatch": {
+			let repositoryIds = unwatchRequest(frame.repositoryIds);
+			if (!repositoryIds) return fail(ws, frame.rid, "invalid decision unwatch");
+			unwatchDecisions(ws.data.decisionWatch, repositoryIds, decisionTopics(ws));
+			return;
+		}
+
+		default:
+			return fail(ws, (frame as { rid: string }).rid, "unsupported sidebar request");
+	}
+}
+
+async function watchSidebarDecisions(
+	ws: SidebarSocket,
+	rid: string,
+	value: unknown,
+): Promise<void> {
+	let requested = watchRequest(value);
+	if (!requested) return fail(ws, rid, "invalid decision watch");
+	let authorize: RepositoryAuthorizer | undefined;
+	try {
+		authorize = await sidebarRepositoryReader(ws);
+	} catch {
+		return fail(ws, rid, "authorization is temporarily unavailable");
+	}
+	if (!authorize) {
+		fail(ws, rid, "authorization expired");
+		return expireSidebar(ws);
+	}
+	let outcome = await watchDecisions(
+		ws.data.decisionWatch,
+		requested,
+		authorize,
+		decisionTopics(ws),
+	);
+	if (ws.data.closed) return;
+	reply(ws, rid, {
+		kind: "sidebar:watched",
+		ts: 0,
+		watched: outcome.watched.map(repository => repository.repositoryId),
+		refused: outcome.refused,
+		unavailable: outcome.unavailable,
+	});
+	for (let { repositoryId, channelIds } of outcome.watched) {
+		void Service.tellRepositoryUnanswered(
+			storage,
+			ws,
+			repositoryId,
+			channelIds,
+			() => watchingRepository(ws, repositoryId),
+		).catch(err => {
+			if (!ws.data.closed) console.warn("chopin: could not send decision snapshot -", err);
+		});
+	}
+}
+
+async function recheckSidebar(ws: SidebarSocket): Promise<void> {
+	if (ws.data.closed) return;
+	let authorize = await sidebarRepositoryReader(ws);
+	if (ws.data.closed) return;
+	if (!authorize) return expireSidebar(ws);
+	await recheckDecisionWatch(ws.data.decisionWatch, authorize, decisionTopics(ws));
+}
+
+function scheduleSidebarRecheck(ws: SidebarSocket): void {
+	if (ws.data.closed) return;
+	ws.data.recheckTimer = setTimeout(() => {
+		void recheckSidebar(ws).catch(err => {
+			if (!ws.data.closed) console.warn("chopin: could not recheck sidebar repositories -", err);
+		}).finally(() => scheduleSidebarRecheck(ws));
+	}, ACCESS_RECHECK_MS);
+}
+
 async function refreshAccess(ws: Socket, forceGitHub = false): Promise<AuthorizationResult> {
 	return refreshAuthorization(ws.data, forceGitHub, forced => checkAccess(ws, forced));
 }
@@ -760,8 +898,11 @@ function scheduleAuthorization(ws: Socket): void {
 	ws.data.authorizationTimer = setTimeout(() => {
 		void refreshAccess(ws, true).then(result => {
 			if (ws.data.closed) return;
-			if (result === "denied") ws.close(4403, "authorization expired");
-			else scheduleAuthorization(ws);
+			if (result === "denied") {
+				ws.close(4403, "authorization expired");
+				return;
+			}
+			scheduleAuthorization(ws);
 		});
 	}, ACCESS_RECHECK_MS);
 }
@@ -781,8 +922,78 @@ async function validateOpenedSocket(ws: Socket): Promise<void> {
 	applyChannelAccess(ws, channel, ws.data.canManage);
 }
 
+function openRoomSocket(ws: Socket): void {
+	// Every mutation revalidates document state; the admission snapshot keeps startup stable.
+	ws.data.canEdit = ws.data.canEdit
+		&& !archivingChannels.has(ws.data.room)
+		&& !deletingChannels.has(ws.data.room);
+	ws.subscribe(topic(ws.data.room));
+	let room = Rooms.join(ws);
+	tell(ws, {
+		kind: "session:hello",
+		ts: 0,
+		channelId: room.id,
+		title: ws.data.channelTitle,
+		slug: ws.data.channelSlug,
+		updatedAt: ws.data.channelUpdatedAt,
+		descriptionRevision: ws.data.channelDescriptionRevision,
+		...(ws.data.channelDescription
+			? { description: ws.data.channelDescription }
+			: {}),
+		you: { handle: ws.data.handle, client: ws.data.client },
+		members: Rooms.members(room),
+		canEdit: ws.data.canEdit,
+		canManage: ws.data.canManage,
+		...(ws.data.channelArchivedAt ? { archivedAt: ws.data.channelArchivedAt } : {}),
+		backgroundJobs: config.backgroundJobs,
+		webResearch: config.webResearch,
+		...CHAT_CAPABILITIES,
+	});
+	relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
+	scheduleAuthorization(ws);
+	void validateOpenedSocket(ws).catch(err => {
+		console.error("chopin: WebSocket open failed -", err);
+		ws.close(1011, "cannot open document");
+	});
+}
+
+function closeRoomSocket(ws: Socket): void {
+	ws.data.closed = true;
+	if (ws.data.authorizationTimer) clearTimeout(ws.data.authorizationTimer);
+	let room = Rooms.leave(ws);
+	ws.unsubscribe(topic(ws.data.room));
+	if (!room) return;
+	if (room.plan) {
+		Service.departed(room.plan, ws);
+		Questions.away(room.plan, ws);
+		conversationRuntime.processor(room.plan)?.leaveResearch(ws.data.client);
+		Comments.away(room.plan, ws);
+	}
+	if (room.members.size > 0) presence(server, room);
+	else evict(room);
+}
+
+function closeSidebarSocket(ws: SidebarSocket): void {
+	ws.data.closed = true;
+	if (ws.data.recheckTimer) clearTimeout(ws.data.recheckTimer);
+	releaseDecisionWatch(ws.data.decisionWatch, decisionTopics(ws));
+}
+
+function upgraded(
+	req: Request,
+	self: Server<SocketData | SidebarSocketData>,
+	data: SocketData | SidebarSocketData,
+): Response | undefined {
+	if (
+		req.headers.get("x-chopin-socket-probe") === "1"
+		&& req.headers.get("upgrade")?.toLowerCase() !== "websocket"
+	) return new Response(null, { status: 204 });
+	if (self.upgrade(req, { data })) return undefined;
+	return new Response("upgrade failed", { status: 400 });
+}
+
 function listen(): Server<SocketData> {
-	return Bun.serve<SocketData>({
+	return Bun.serve<SocketData | SidebarSocketData>({
 		hostname: config.host,
 		port: config.port,
 
@@ -797,12 +1008,14 @@ function listen(): Server<SocketData> {
 				if ("status" in outcome) {
 					return new Response(outcome.reason, { status: outcome.status });
 				}
-				if (
-					req.headers.get("x-chopin-socket-probe") === "1"
-					&& req.headers.get("upgrade")?.toLowerCase() !== "websocket"
-				) return new Response(null, { status: 204 });
-				if (self.upgrade(req, { data: outcome.data })) return undefined;
-				return new Response("upgrade failed", { status: 400 });
+				return upgraded(req, self, outcome.data);
+			}
+			if (url.pathname === "/ws/sidebar") {
+				let outcome = await admitSidebar(req, hostedAuth);
+				if ("status" in outcome) {
+					return new Response(outcome.reason, { status: outcome.status });
+				}
+				return upgraded(req, self, outcome.data);
 			}
 			let routed = await router.handle(req, url);
 			if (routed) return routed;
@@ -813,65 +1026,25 @@ function listen(): Server<SocketData> {
 		},
 
 		websocket: {
-			open(ws: Socket) {
-				// Every mutation revalidates document state; the admission snapshot keeps startup stable.
-				ws.data.canEdit = ws.data.canEdit
-					&& !archivingChannels.has(ws.data.room)
-					&& !deletingChannels.has(ws.data.room);
-				ws.subscribe(topic(ws.data.room));
-				let room = Rooms.join(ws);
-				tell(ws, {
-					kind: "session:hello",
-					ts: 0,
-					channelId: room.id,
-					title: ws.data.channelTitle,
-					slug: ws.data.channelSlug,
-					updatedAt: ws.data.channelUpdatedAt,
-					descriptionRevision: ws.data.channelDescriptionRevision,
-					...(ws.data.channelDescription
-						? { description: ws.data.channelDescription }
-						: {}),
-					you: { handle: ws.data.handle, client: ws.data.client },
-					members: Rooms.members(room),
-					canEdit: ws.data.canEdit,
-					canManage: ws.data.canManage,
-					...(ws.data.channelArchivedAt ? { archivedAt: ws.data.channelArchivedAt } : {}),
-					backgroundJobs: config.backgroundJobs,
-					webResearch: config.webResearch,
-					...CHAT_CAPABILITIES,
-				});
-				relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
-				scheduleAuthorization(ws);
-				void validateOpenedSocket(ws).catch(err => {
-					console.error("chopin: WebSocket open failed -", err);
-					ws.close(1011, "cannot open document");
-				});
+			open(ws: AnySocket) {
+				if (isSidebarSocket(ws)) scheduleSidebarRecheck(ws);
+				else openRoomSocket(ws as Socket);
 			},
 
-			message(ws: Socket, raw) {
+			message(ws: AnySocket, raw) {
 				if (typeof raw !== "string") return;
-				void receive(ws, raw).catch(err => {
+				let received = isSidebarSocket(ws) ? receiveSidebar(ws, raw) : receive(ws as Socket, raw);
+				void received.catch(err => {
 					console.error("chopin: WebSocket receive failed -", err);
 				});
 			},
 
-			close(ws: Socket) {
-				ws.data.closed = true;
-				if (ws.data.authorizationTimer) clearTimeout(ws.data.authorizationTimer);
-				let room = Rooms.leave(ws);
-				ws.unsubscribe(topic(ws.data.room));
-				if (!room) return;
-				if (room.plan) {
-					Service.departed(room.plan, ws);
-					Questions.away(room.plan, ws);
-					conversationRuntime.processor(room.plan)?.leaveResearch(ws.data.client);
-					Comments.away(room.plan, ws);
-				}
-				if (room.members.size > 0) presence(server, room);
-				else evict(room);
+			close(ws: AnySocket) {
+				if (isSidebarSocket(ws)) closeSidebarSocket(ws);
+				else closeRoomSocket(ws as Socket);
 			},
 		},
-	});
+	}) as Server<SocketData>;
 }
 
 /** Nothing in memory is worth losing to a Ctrl-C. */
@@ -1044,6 +1217,7 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 			return storage.channels.archive({ id: channelId, now });
 		});
 		announceChannel(result.channel);
+		void Service.announceCatalogueUnanswered(server, storage, result.channel);
 		return result;
 	} catch (err) {
 		summaryCoordinator?.resume(channelId);
@@ -1093,6 +1267,7 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 		await conversationRuntime.attach(current, current.plan, false, !result.channel.parentChannelId);
 	}
 	announceChannel(result.channel);
+	void Service.announceCatalogueUnanswered(server, storage, result.channel);
 	if (summaryCoordinator) void summaryCoordinator.ensure(channelId).catch(() => {});
 	return result;
 }
@@ -1132,6 +1307,7 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 			ws.close(4404, "document deleted");
 		}
 		if (room) Rooms.forget(room);
+		void Service.announceDeletedUnanswered(server, storage, channel);
 		summaryCoordinator?.resume(channelId);
 		return true;
 	} catch (err) {
@@ -1532,7 +1708,7 @@ try {
 		LEASE_TTL_MS,
 	);
 	if (!heldLease) throw new Error("another Chopin instance owns the database");
-	let reset = await storage.sessions.deleteAll(new Date(), heldLease, LEASE_TTL_MS);
+	let reset = await storage.sessions.reset(new Date(), heldLease, LEASE_TTL_MS);
 	heldLease = reset.lease;
 } catch (err) {
 	await shutdownHarnesses();

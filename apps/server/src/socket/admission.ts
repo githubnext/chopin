@@ -2,11 +2,46 @@ import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { uid } from "../ids";
 import { StorageError } from "../storage/errors";
+import { decisionWatch } from "./decision-watch";
 
 import type { HostedAuth } from "../auth/routes";
-import type { SocketData } from "../wire";
+import type { SidebarSocketData, SocketData } from "../wire";
 
 export type Admission = { data: SocketData } | { status: number; reason: string };
+
+export type SidebarAdmission = { data: SidebarSocketData } | { status: number; reason: string };
+
+function probing(request: Request): boolean {
+	return request.headers.get("x-chopin-socket-probe") === "1"
+		&& request.headers.get("upgrade")?.toLowerCase() !== "websocket";
+}
+
+export async function admitSidebar(request: Request, auth: HostedAuth): Promise<SidebarAdmission> {
+	try {
+		if (!probing(request) && request.headers.get("origin") !== auth.config.origin) {
+			return { status: 403, reason: "origin is not allowed" };
+		}
+		let session = await auth.sessions.authenticate(request);
+		let credential = auth.sessions.credential(request);
+		if (!session || !credential) return { status: 401, reason: "authentication required" };
+		return {
+			data: {
+				sidebar: true,
+				handle: session.user.login,
+				principalId: session.user.id,
+				sessionId: session.session.id,
+				authorizedUntil: session.session.expiresAt.getTime(),
+				credential,
+				decisionWatch: decisionWatch(),
+			},
+		};
+	} catch (err) {
+		if (err instanceof StorageError && err.failure === "unavailable") {
+			return { status: 503, reason: "session storage is temporarily unavailable" };
+		}
+		return { status: 500, reason: "admission failed" };
+	}
+}
 
 export async function admit(
 	request: Request,
@@ -18,9 +53,7 @@ export async function admit(
 	} = {},
 ): Promise<Admission> {
 	try {
-		let probe = request.headers.get("x-chopin-socket-probe") === "1"
-			&& request.headers.get("upgrade")?.toLowerCase() !== "websocket";
-		if (!probe && request.headers.get("origin") !== auth.config.origin) {
+		if (!probing(request) && request.headers.get("origin") !== auth.config.origin) {
 			return { status: 403, reason: "origin is not allowed" };
 		}
 		let session = await auth.sessions.authenticate(request);

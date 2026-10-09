@@ -50,42 +50,40 @@ test("source metadata preserves current Markdown rendering instead of flattening
 	expect(result).toContain("<strong>A\u{1F9EA} pilot</strong>");
 });
 
-test("a message sent to the Planner is labelled; room messages are not", () => {
-	let render = (to?: "planner") =>
-		renderToStaticMarkup(createElement(Transcript, {
-			active: true,
-			entries: [{
-				id: "m",
-				author: { kind: "member", handle: "ana" },
-				text: "tighten it",
-				ts: 1,
-				...(to ? { to } : {}),
-			}],
-			handle: "ana",
-			onWithdraw: () => {},
-			queued: [],
-		}));
-	expect(render("planner")).toContain("To Chopin");
-	expect(render()).not.toContain("To Chopin");
+function planner(entries: { id: string; text: string; to?: "planner" }[], queued = []) {
+	return renderToStaticMarkup(createElement(Transcript, {
+		active: true,
+		entries: entries.map(entry => ({
+			author: { kind: "member" as const, handle: "ana" },
+			ts: 1,
+			...entry,
+		})),
+		handle: "ana",
+		onWithdraw: () => {},
+		queued,
+	}));
+}
+
+test("a message sent to the Planner starts with an @chopin mention; room messages do not", () => {
+	let result = planner([{ id: "m", text: "tighten it", to: "planner" }]);
+	expect(result).toContain('<span class="chat-mention">@chopin</span>');
+	expect(result).toContain('data-chat-raw="tighten it"');
+	expect(result).not.toContain("To Chopin");
+	expect(planner([{ id: "m", text: "tighten it" }])).not.toContain("@chopin");
 });
 
-test("To Chopin appears once per run and never in persistent Chopin mode", () => {
-	let entry = (id: string) => ({
-		id,
-		author: { kind: "member" as const, handle: "ana" },
-		text: id,
-		ts: 1,
-		to: "planner" as const,
-	});
-	let render = (talkingToChopin?: boolean) =>
-		renderToStaticMarkup(createElement(Transcript, {
-			active: true,
-			entries: [entry("a"), entry("b")],
-			handle: "ana",
-			onWithdraw: () => {},
-			queued: [{ id: "q", handle: "ana", text: "queued" }],
-			talkingToChopin,
-		})).split("To Chopin").length - 1;
-	expect(render()).toBe(2); // the sent run, then the queued message
-	expect(render(true)).toBe(0);
+test("every message in a run and every queued item carries the mention, once", () => {
+	let entry = (id: string) => ({ id, text: id, to: "planner" as const });
+	let result = planner(
+		[entry("a"), entry("b")],
+		[{ id: "q", handle: "ana", text: "queued" }] as never,
+	);
+	expect(result.split('chat-mention">@chopin').length - 1).toBe(3);
+});
+
+test("a typed leading @chopin is not doubled", () => {
+	let result = planner([{ id: "m", text: "@chopin yo", to: "planner" }]);
+	expect(result.split("@chopin").length - 1).toBe(2); // mention span + raw attribute
+	expect(result).toContain('data-chat-raw="@chopin yo"');
+	expect(result).toContain("yo");
 });

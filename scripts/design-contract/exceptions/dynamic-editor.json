@@ -102,7 +102,7 @@
 				1
 			]
 		],
-		"sourceHash": "0bdcf918d08f5913786cbe786e8f670ed9fdec9dceb86bb6f811b040b35aa4f3"
+		"sourceHash": "e2bcd44481a8df91f73ffcbb0bef8ccc93a7dd64addd9ea4b874755c19afd09f"
 	},
 	{
 		"file": "packages/editor/src/toolbar/bubble.tsx",
@@ -361,7 +361,7 @@
 				2
 			]
 		],
-		"sourceHash": "0fd1f99ad0f1d8bb5daa98c117aacbf5fc0a2cd0948b3191d8dcacce8b3d54e1"
+		"sourceHash": "9fbf12e071f428c636a8df12e2245b6baa766d95ee10b7fb6e45449499671ea1"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "5eff0265a48bb5def602b05fe634b4ed03f1154b8cc2546788c361357798019d"
+		"sourceHash": "c879d4538bd4cd411fda5d2f57a2f8399af9903c4d8f8bd816476c90c44d6422"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
@@ -417,7 +417,7 @@
 				1
 			]
 		],
-		"sourceHash": "5eff0265a48bb5def602b05fe634b4ed03f1154b8cc2546788c361357798019d"
+		"sourceHash": "c879d4538bd4cd411fda5d2f57a2f8399af9903c4d8f8bd816476c90c44d6422"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -431,7 +431,7 @@
 				1
 			]
 		],
-		"sourceHash": "c336f006257672b5930becbe3c246a862dbf0311483cde1992c329a6f723e5d1"
+		"sourceHash": "01110b02afe3ac02bea7998cac3ade4c0cdf4b0948204190d4b773aafeeaa4f5"
 	},
 	{
 		"file": "packages/editor/src/changes.ts",
@@ -466,7 +466,7 @@
 				1
 			]
 		],
-		"sourceHash": "482a607c538b870d82602302e1ece86e6b35d60367a2616658ab1eea1e6c95d9"
+		"sourceHash": "b66eda9493a332f0c5d39b5fc2c07df09de7d45457d7ac45c2a839d1651e1f86"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
@@ -480,7 +480,7 @@
 				1
 			]
 		],
-		"sourceHash": "5eff0265a48bb5def602b05fe634b4ed03f1154b8cc2546788c361357798019d"
+		"sourceHash": "c879d4538bd4cd411fda5d2f57a2f8399af9903c4d8f8bd816476c90c44d6422"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -501,7 +501,7 @@
 				1
 			]
 		],
-		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
+		"sourceHash": "74045d002ca932fa97d57774c0d4c4e36b19bb30daa92703a322595de22e37f5"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -515,6 +515,6 @@
 				1
 			]
 		],
-		"sourceHash": "0b9632edfc6282892be8296588da0a4a953c69de4e5815c2d05a4d7738977c59"
+		"sourceHash": "74045d002ca932fa97d57774c0d4c4e36b19bb30daa92703a322595de22e37f5"
 	}
 ]

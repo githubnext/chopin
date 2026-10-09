@@ -173,14 +173,21 @@
 	right: calc(-1 * var(--edge-width));
 }
 .chat-composer [data-chat-reference-picker] [role="option"] {
-	min-height: 2rem;
+	height: 2rem;
 	padding-block: 0.25rem;
 	gap: 0.5rem;
 }
-.chat-composer [data-chat-reference-picker] [role="option"] > :last-child {
-	max-width: 38%;
+.chat-composer [data-chat-reference-picker] [role="option"] [data-reference-meta] {
+	flex: 0 1 auto;
+	max-width: 35%;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+@media (max-width: 40rem) {
+	.chat-composer [data-chat-reference-picker] [data-reference-meta="slug"] {
+		display: none;
+	}
 }
 .chat-composer [data-chat-mention-picker] [role="option"] {
 	padding-left: 0.25rem;

@@ -352,9 +352,11 @@ through to organization admission. Check the latest startup summary. `0 users`
 means the preview value did not reach the process; verify the Coolify Preview
 runtime value and the direct Compose reference on the production branch.
 
-**The preview returns to sign-in after a redeploy.** This is expected. Chopin
-sessions are process-local; start OAuth again. The GitHub profile remains
-signed in.
+**The preview returns to sign-in after a redeploy.** Hosted sessions survive
+releases when the preview database, `SESSION_ENCRYPTION_KEY`, origin, and App
+client ID stay stable. Check those values without printing secrets. Existing
+sessions from before encrypted persistence require one new sign-in; expiry or
+revoked GitHub access also requires OAuth again.
 
 **More than one repository is visible.** Stop. Reduce the test account and App
 installation to the single sandbox before continuing.

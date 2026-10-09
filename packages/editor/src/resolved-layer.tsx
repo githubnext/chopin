@@ -181,7 +181,7 @@ function Popover(
 				</span>
 			</div>
 			<p className="plan-decision-answer">
-				<CheckIcon aria-hidden="true" />
+				<CheckIcon aria-hidden="true" className="icon-first-line" />
 				<span>{decision.answer}</span>
 			</p>
 			{others.length > 0 && (
@@ -189,7 +189,7 @@ function Popover(
 					<div>
 						{others.map(label => (
 							<p className="plan-decision-answer" data-rejected="" key={label}>
-								<CloseIcon aria-hidden="true" />
+								<CloseIcon aria-hidden="true" className="icon-first-line" />
 								<span>{label}</span>
 							</p>
 						))}
@@ -209,7 +209,7 @@ function Popover(
 					)}
 					{decision.at && when(decision.at) && (
 						<p>
-							<ClockIcon aria-hidden="true" />
+							<ClockIcon aria-hidden="true" className="icon-first-line" />
 							<span>{when(decision.at)}</span>
 						</p>
 					)}
@@ -601,6 +601,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 						<Popover
 							close={dismiss}
 							onSource={decision.meta?.thread && options.onCardSource
+									&& options.hasCardSource?.(decision.widget)
 								? () => options.onCardSource?.(decision.widget)
 								: undefined}
 							value={current}

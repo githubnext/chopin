@@ -19,6 +19,7 @@ export type SeedState = {
 	openQuestions?: unknown[];
 	threads?: unknown[];
 	transcript?: unknown[];
+	parent?: string;
 };
 
 export function storedQuestion(definition: Definition): number[] {
@@ -69,14 +70,22 @@ export async function openPlan(source = "", state: SeedState = {}) {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_test", login: "test", avatarUrl: "", now });
-	let channel = await storage.channels.create({
-		id: crypto.randomUUID(),
+	let fields = {
 		repositoryId: "R_test",
 		repositoryOwner: "owner",
 		repositoryName: "repository",
-		title: "Test plan",
 		createdBy: "U_test",
 		now,
+	};
+	let parentChannelId = state.parent === undefined
+		? undefined
+		: (await storage.channels.create({ ...fields, id: crypto.randomUUID(), title: state.parent }))
+			.id;
+	let channel = await storage.channels.create({
+		...fields,
+		id: crypto.randomUUID(),
+		title: "Test plan",
+		...(parentChannelId ? { parentChannelId } : {}),
 	});
 	let lease = await storage.leases.acquire("writer", crypto.randomUUID(), 60_000);
 	if (!lease) throw new Error("could not acquire test lease");

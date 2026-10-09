@@ -10,7 +10,13 @@
 import { useEffect, useRef, useState } from "react";
 import { cardStatus } from "@chopin/dialect";
 import { DecisionIcon, MessageForwardIcon } from "@chopin/icons";
-import { QuestionView, useQuestionnaire } from "@chopin/question/react";
+import {
+	cardRelation,
+	NOT_LINKED,
+	QuestionView,
+	RelationNote,
+	useQuestionnaire,
+} from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { Provenance, SidecarCard } from "../card";
@@ -22,11 +28,12 @@ import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
 import { VisualDecisionCard } from "./visual-decision";
+import { WriteupStatus } from "./writeup-status";
 
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { Transport } from "@chopin/question/react";
-import type { Answer } from "@chopin/question";
+import type { Answer, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
 import type { QuestionStepMotion } from "../widget-options";
 import type { VisualPreviewComponent } from "./visual-decision";
@@ -80,6 +87,10 @@ export type QuestionnaireCardProps = {
 	canEdit?: boolean;
 	/** How much prose each decision lives in. */
 	places?: { [question: string]: number };
+	/** Linked, pending, deliberately empty or orphaned, by question. */
+	relations?: { [question: string]: Relation };
+	/** False when no Planner will review where decisions live. */
+	planner?: boolean;
 	onQuestionEnter?: (question: string) => void;
 	onQuestionLeave?: (question: string) => void;
 	/** Take the reader to that prose. Without it the shared view's jump is inert. */
@@ -134,6 +145,8 @@ function QuestionnaireCardContent(
 		motion,
 		meta,
 		places,
+		planner = true,
+		relations,
 		value,
 		wire,
 	}: QuestionnaireCardProps,
@@ -141,7 +154,21 @@ function QuestionnaireCardContent(
 	if (value.status === "expired") return <Expired value={value} />;
 	let resolved = answers(value);
 	let current = meta?.status ?? cardStatus(value);
-	let pointing = { places, onQuestionEnter, onQuestionLeave, onQuestionSelect };
+	// A conversation decision's write-up has its own durable job status below.
+	// "Linking…" is anchor review, which needs a Planner.
+	let pendingRelation = meta?.origin === "conversation" && !meta.hasProse
+		? NOT_LINKED
+		: planner
+		? "Linking…"
+		: NOT_LINKED;
+	let pointing = {
+		places,
+		relations,
+		pendingRelation,
+		onQuestionEnter,
+		onQuestionLeave,
+		onQuestionSelect,
+	};
 
 	let shown = cardPresentation(value, meta, presentation);
 	let immediate = motionImmediately?.() ?? false;
@@ -155,6 +182,7 @@ function QuestionnaireCardContent(
 				meta={meta}
 				value={value}
 				wire={wire}
+				{...pointing}
 			/>
 		)
 		: shown === "resolved"
@@ -223,6 +251,8 @@ function QuestionnaireCardContent(
 
 type Pointing = {
 	places?: { [question: string]: number };
+	relations?: { [question: string]: Relation };
+	pendingRelation?: string;
 	onQuestionEnter?: (question: string) => void;
 	onQuestionLeave?: (question: string) => void;
 	onQuestionSelect?: (question: string) => void;
@@ -392,16 +422,25 @@ function labels(value: Questionnaire): string[] {
 }
 
 function SettledLine(
-	{ canEdit, connected, meta, value, wire }: {
+	{ canEdit, connected, meta, value, wire, ...pointing }: {
 		canEdit: boolean;
 		connected: boolean;
 		meta?: Question.CardMeta;
 		value: Questionnaire;
 		wire?: Transport;
-	},
+	} & Pointing,
 ) {
 	let owner = meta?.owner ?? value.by;
 	let chosen = labels(value);
+	let first = value.questions[0]?.id;
+	let related = meta?.proseOrphaned && first
+		? { relation: "orphaned" as const, question: first }
+		: cardRelation(pointing.relations, value.questions.map(question => question.id))
+			?? (meta?.origin === "conversation" && first
+				? { relation: "pending" as const, question: first }
+				: undefined);
+	let writeup = related?.relation === "pending" && meta?.origin === "conversation"
+		&& (meta.writeup?.status === "writing" || meta.writeup?.status === "failed");
 	let state = useQuestionnaire({
 		id: value.id,
 		bridge: wire,
@@ -419,21 +458,29 @@ function SettledLine(
 	};
 	return (
 		<p
-			className="m-0 flex items-center gap-2 text-sm text-text-secondary"
+			className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-secondary"
 			data-card-settled=""
 			data-plan-sidecar-questionnaire={value.id}
 		>
-			<DecisionIcon aria-hidden="true" size={14} />
+			<DecisionIcon aria-hidden="true" className="icon-first-line" size={14} />
 			<span>
 				Decided: {chosen.length ? chosen.join(", ") : "Saved decision"}
 				{owner ? ` · @${owner}` : ""}
 			</span>
-			{meta?.origin === "conversation" && (
-				<span className="text-text-tertiary">
-					{meta.proseOrphaned ? " · prose removed" : "writing up…"}
-				</span>
-			)}
-			{meta?.proseOrphaned && (
+			{writeup && meta
+				? <WriteupStatus canEdit={canEdit} connected={connected} meta={meta} wire={wire} />
+				: related && (
+					<RelationNote
+						count={pointing.places?.[related.question]}
+						onEnter={pointing.onQuestionEnter}
+						onLeave={pointing.onQuestionLeave}
+						onSelect={pointing.onQuestionSelect}
+						pending={pointing.pendingRelation}
+						question={related.question}
+						relation={related.relation}
+					/>
+				)}
+			{related?.relation === "orphaned" && (
 				<button
 					className="btn btn-sm btn-secondary ml-auto"
 					disabled={!canEdit || !connected || reopening}
@@ -560,6 +607,7 @@ function Expired({ value }: { value: Questionnaire }) {
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
 	let meta = useCardMeta(options.cardMeta, value.id);
+	let source = options.hasCardSource?.(value.id) ? options.onCardSource : undefined;
 	let evidence = value.thread && (meta?.status === "open" || meta?.status === "reopened")
 		? options.evidence?.(value.id)
 		: null;
@@ -581,13 +629,15 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			motion={options.questionMotion}
 			visualPreview={options.visualPreview}
 			motionImmediately={options.motionImmediately}
-			onCardSource={options.onCardSource}
+			onCardSource={source}
 			self={options.self}
 			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}
 			places={places}
+			planner={options.planner}
+			relations={options.questions?.relations(value.id)}
 			value={value}
 			wire={options.wire}
 		/>

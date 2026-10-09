@@ -11,6 +11,7 @@ import { markdownShortcutPlugin, MDXEditor } from "@mdxeditor/editor";
 
 // Structural editor CSS, then our retheme over the top.
 import "@mdxeditor/editor/style.css";
+import "@chopin/diagrams/styles.css";
 import "./styles.css";
 import "./feedback.css";
 import { plugins as dialectPlugins } from "@chopin/dialect";
@@ -87,6 +88,10 @@ export type PlanEditorProps = {
 	cardMeta?: CardMetaStore;
 	/** Open the chat message that started a conversation decision. */
 	onCardSource?: (questionnaireId: string) => void;
+	/** Whether a card has a Chat message to go back to; without one it offers no jump. */
+	hasCardSource?: (questionnaireId: string) => boolean;
+	/** False when no Planner will review where decisions live. */
+	planner?: boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
@@ -143,7 +148,9 @@ export function PlanEditor(
 		questions,
 		cardMeta,
 		onCardSource,
+		hasCardSource,
 		evidence,
+		planner,
 		readOnly,
 		research,
 		researchLauncher,
@@ -369,7 +376,9 @@ export function PlanEditor(
 						questions,
 						cardMeta,
 						onCardSource,
+						hasCardSource,
 						evidence,
+						planner,
 						research,
 						researchDrafts,
 						researchLauncher,
@@ -397,7 +406,9 @@ export function PlanEditor(
 			questions,
 			cardMeta,
 			onCardSource,
+			hasCardSource,
 			evidence,
+			planner,
 			research,
 			researchDrafts,
 			researchLauncher,
