@@ -242,8 +242,9 @@ expressions, and no raw HTML. Anything outside this list is rejected.
 
 Markdown: headings, paragraphs, lists, tables, blockquotes, thematic breaks,
 code fences, footnotes, links (\`https:\` and \`mailto:\` only, plus
-repository-relative paths), and images. Images are referenced by absolute
-\`https:\` URL.
+repository-relative paths), and images. Images use an absolute \`https:\` URL
+or a \`/images/<sha256>.<ext>\` path that Chopin returned when the image was
+uploaded to this document. Never invent or guess such a path.
 
 ${DIAGRAM_INTRO}
 quantitative — a cost model, a bound, a threshold — rather than spelling the
