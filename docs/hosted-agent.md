@@ -74,7 +74,7 @@ That isolated Planner has no:
 - shared embeddings or cross-session store; or
 - ability to change GitHub.
 
-Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.128 so Pi does not
+Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.148 so Pi does not
 load `AGENTS.md` or `CLAUDE.md` context files from the host filesystem. See
 [Self-hosting](self-hosting.md#choose-and-trust-a-harness).
 
@@ -263,7 +263,13 @@ every turn.
   descriptions and legacy summaries under durable `document-summary@1` are
   separate and are not bootstrap context.
 - The Planner reads the current document through the plan-named `read_plan` tool
-  instead of receiving a stale embedded copy.
+  instead of receiving a stale embedded copy. That result, and every structured
+  `edit_plan` result (success, or a locked, stale, or invalid refusal), carry
+  `document: { id, url }`: the room's own document id and the canonical URL MCP
+  `read_document` returns for it, nested under the parent for a child document.
+  Argument and storage errors return plain error text without it. Code running
+  inside the session, such as an Atomic extension, can use either to address
+  that document over MCP.
 
 Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.

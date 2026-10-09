@@ -15,6 +15,7 @@ import type {
 	ChannelAgent,
 	ChannelArchiveInput,
 	ChannelArchiveResult,
+	ChannelDecisionCount,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -135,6 +136,13 @@ export interface ChannelStore {
 		after?: ChannelScanCursor,
 		includeArchived?: boolean,
 	): Promise<ChannelScanPage>;
+	/** Totals the repository's active catalogue: what `list` returns without archived rows. */
+	unansweredDecisions(repositoryId: string): Promise<number>;
+	/** Current counts for the requested channels that belong to the repository, archived or not. */
+	unansweredDecisionCounts(
+		repositoryId: string,
+		channelIds: string[],
+	): Promise<ChannelDecisionCount[]>;
 	claimAgentOwner(channelId: string, sessionId: string, now: Date): Promise<AgentState>;
 	clearAgentOwner(
 		channelId: string,

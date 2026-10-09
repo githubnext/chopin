@@ -94,18 +94,18 @@ tools, never through Pi.
 Under `pi`, `MODEL` is required and must be an ID from Pi's model catalog,
 preferably provider-qualified (for example `github-copilot/gpt-5.6-luna`).
 Chopin's default, `gpt-6-luna`, is a Copilot ID that Pi does not recognize.
-Unpatched Pi silently falls back to another model for an unknown ID; Chopin's
-patch to `@ai-sdk/harness-pi` 1.0.128 fails the turn instead, so the startup
-banner always names the model Pi runs.
+`@ai-sdk/harness-pi` 1.0.148 fails the turn for an unknown ID ("Harness 'pi'
+has no model ... in its catalog") instead of falling back to another model, so
+the startup banner always names the model Pi runs.
 
-The same patch stops Pi's resource loader from reading `AGENTS.md` or
-`CLAUDE.md` context files from the session's working directory, its parent
-directories, or Pi's agent directory on the host. Both changes live in
-`patches/@ai-sdk%2Fharness-pi@1.0.128.patch`; reapply or drop them when bumping
-`@ai-sdk/harness-pi`, and run the Pi contract suite
-(`apps/server/src/harness/pi.contract.test.ts`), which covers both.
+Chopin patches `@ai-sdk/harness-pi` 1.0.148 so Pi's resource loader never reads
+`AGENTS.md` or `CLAUDE.md` context files from the session's working directory,
+its parent directories, or Pi's agent directory on the host. The change lives
+in `patches/@ai-sdk%2Fharness-pi@1.0.148.patch`; reapply or drop it when
+bumping `@ai-sdk/harness-pi`, and run the Pi contract suite
+(`apps/server/src/harness/pi.contract.test.ts`), which covers both behaviors.
 
-`@ai-sdk/harness-pi` 1.0.128 cannot return structured output itself, so
+`@ai-sdk/harness-pi` 1.0.148 cannot return structured output itself, so
 Chopin registers a result tool as an inline Pi extension. The tool runs inside
 Pi and ends the turn (`terminate: true`), so the summary and research workers
 get their structured result without a follow-up model request. The adapter
@@ -115,7 +115,7 @@ it. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
 covers this against the real Pi agent loop; run it before bumping
 `@ai-sdk/harness-pi` or `@earendil-works/pi-coding-agent`.
 
-`HARNESS=atomic` runs Atomic 0.9.27 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.29 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI, use
 RPC mode, or substitute Atomic for Pi's runtime.
 

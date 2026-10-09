@@ -1451,7 +1451,7 @@
 /* Visual top-level blocks can use the document beyond the prose measure. */
 .plan-content
 	> :is(p:has(> [data-plan-src]:first-child
-		+ br[data-lexical-managed-linebreak]:last-child), [data-plan-language="mermaid"]) {
+		+ br[data-lexical-managed-linebreak]:last-child), [data-plan-language="mermaid"], [data-plan-language="seecode"]) {
 	inline-size: var(--plan-wide-inline-size);
 	max-inline-size: var(--plan-wide-inline-size);
 	margin-inline: var(--plan-wide-inline-offset);
@@ -2149,6 +2149,12 @@
 	height: auto;
 }
 
+/* A SeeCode diagram keeps its rendered width and scrolls inside its own stage. */
+.plan-content [data-plan-preview] .plan-seecode .sc-svg {
+	max-width: none;
+	max-inline-size: none;
+}
+
 /*
  * A diagram a little wider than the measure shrinks to fit; one that would
  * have to shrink past legibility keeps its drawn size and scrolls, with the
@@ -2475,7 +2481,7 @@
 	}
 }
 
-.plan-content .planCode [data-plan-preview] :is(.plan-diagram, [data-plan-error]) {
+.plan-content .planCode [data-plan-preview] :is(.plan-diagram, .plan-seecode, [data-plan-error]) {
 	padding-inline: 0.75rem;
 }
 
@@ -3365,10 +3371,6 @@
 
 .plan-decision-meta > p > :first-child {
 	flex: none;
-}
-
-.plan-decision-meta > p > svg {
-	margin-block: calc((1lh - 0.875rem) / 2);
 }
 
 .plan-decision-meta > p > :is(img, [role="img"]) {

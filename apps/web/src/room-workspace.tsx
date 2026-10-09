@@ -36,7 +36,7 @@ import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
-import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import { DecisionViewControl, useDecisionAttention } from "./decision-view-control";
 import {
 	advanceDocumentActivity,
 	ANSWER_FOLLOW_MS,
@@ -429,10 +429,9 @@ export function RoomWorkspace(
 		};
 	});
 	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
-	let previousUnanswered = useRef(unanswered);
+	let attention = useDecisionAttention(unanswered);
 	let latestCanEdit = useRef(canEdit);
 	let latestCanManage = useRef(canManage);
-	let [attention, setAttention] = useState(false);
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
 	let chatActive = workspacePresentation.chatVisible;
 	let [chatActivity, setChatActivity] = useState({ unread: 0, busy: false });
@@ -532,15 +531,6 @@ export function RoomWorkspace(
 			offResolved();
 		};
 	}, [wire, handle]);
-
-	useEffect(() => {
-		let previous = previousUnanswered.current;
-		previousUnanswered.current = unanswered;
-		if (!decisionAttention(previous, unanswered)) return;
-		setAttention(true);
-		let timer = window.setTimeout(() => setAttention(false), 200);
-		return () => window.clearTimeout(timer);
-	}, [unanswered]);
 
 	let selectView = (next: DecisionView, revealFirst = true) => {
 		setDecisionView(state => selectDecisionView(state, next));

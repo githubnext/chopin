@@ -228,8 +228,33 @@ describe("reference picker accessibility", () => {
 		expect(markup).toContain(
 			'aria-describedby="reference-list-option-0-description reference-list-option-0-slug"',
 		);
-		expect(markup).toContain("Coordinates launch readiness.");
+		expect(markup).toContain('title="Coordinates launch readiness."');
+		expect(markup).toContain('<span class="sr-only" id="reference-list-option-0-description">');
 		expect(markup).toContain(">release-plan</span>");
+	});
+
+	test("keeps every row one line for long titles, slugs, and descriptions", () => {
+		let title = "Comparing tldraw and Excalidraw licensing, store control, and headless rendering";
+		let markup = renderToStaticMarkup(createElement(ReferencePicker, {
+			active: 0,
+			id: "reference-list",
+			onActive: () => {},
+			onSelect: () => {},
+			state: {
+				status: "ready",
+				options: [{
+					kind: "document",
+					channelId: "long",
+					title,
+					slug: "tldraw-vs-excalidraw-licence-store-control-and-headless-rendering",
+					description: "A long description that would once have added a second line to the row.",
+				}],
+			},
+		}));
+
+		expect(markup).toContain(`flex-1 truncate text-sm font-medium">${title}</span>`);
+		expect(markup).toContain('data-reference-meta="slug"');
+		expect(markup).not.toContain("block truncate text-text-tertiary");
 	});
 
 	test("omits the slug when it matches the title", () => {

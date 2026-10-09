@@ -651,7 +651,6 @@ export function Chat(
 			live={transcriptReady}
 			onWithdraw={id => wire?.send("chat:unqueue", { id })}
 			queued={queue}
-			talkingToChopin={mode}
 			working={workingTurn}
 		/>
 	);
@@ -699,8 +698,8 @@ export function Chat(
 						id={cueId}
 					>
 						{sendError
-							? <WarningIcon className="icon-danger" size={14} />
-							: <InfoIcon size={14} />}
+							? <WarningIcon className="icon-danger icon-first-line" size={14} />
+							: <InfoIcon className="icon-first-line" size={14} />}
 						<span>
 							{sendError ?? (researchBlock
 								? researchCopy[researchBlock]

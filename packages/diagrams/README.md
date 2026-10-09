@@ -25,7 +25,20 @@ server-rendered hydration needs a separately verified ID strategy.
 
 Run the development gallery with `CHOPIN_DEV_WEB_PORT=5173 bun run --cwd apps/web dev` and open
 `http://127.0.0.1:5173/diagram-gallery`. Its document specimen uses a local slot in the static
-document viewer; diagrams are not persisted document nodes.
+document viewer. Real saved documents use a `seecode` code fence containing one JSON spec:
+
+````md
+The browser sends a request to the API.
+
+```seecode
+{"type":"architecture","nodes":[{"id":"web","label":"Browser","row":0,"col":0},{"id":"api","label":"API","row":0,"col":1}],"edges":[["web","api"]]}
+```
+````
+
+The fence is collaborative source text. The editor shows a derived viewer beside it and keeps
+inspection and playback state local to each reader. Source is capped at 64 KiB before parsing;
+`renderDiagram` validates the spec. An incomplete human edit shows an error without hiding its
+source. Planner edits that introduce invalid specs fail before changing the document.
 
 The development gallery uses `@chopin/diagrams/fixtures` for the 42 upstream examples.
 The upstream `loop-terminal` alias is accepted as a loop variant; its `skin: "terminal"` hint

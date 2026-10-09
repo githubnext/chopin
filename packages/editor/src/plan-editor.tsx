@@ -11,6 +11,7 @@ import { markdownShortcutPlugin, MDXEditor } from "@mdxeditor/editor";
 
 // Structural editor CSS, then our retheme over the top.
 import "@mdxeditor/editor/style.css";
+import "@chopin/diagrams/styles.css";
 import "./styles.css";
 import "./feedback.css";
 import { plugins as dialectPlugins } from "@chopin/dialect";

@@ -45,7 +45,10 @@ test("discarding an open card commits its hidden node before releasing the Plann
 		`thread="${plan.records.get(id)?.threadId}" status="discarded"`,
 	);
 	expect(Store.snapshot(plan.questions, id).open).toBe(false);
-	expect(context.broadcasts.slice(before).map(frame => frame.kind)).toEqual([
+	expect(
+		context.broadcasts.slice(before).map(frame => frame.kind)
+			.filter(kind => kind !== "sidebar:decisions"),
+	).toEqual([
 		"plan:update",
 		"question:resolved",
 		"question:meta",

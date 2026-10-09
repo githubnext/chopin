@@ -163,7 +163,7 @@ describe("pi host isolation and model resolution", () => {
 	it("fails the turn when Pi does not recognize the requested model", async () => {
 		stub.requests.length = 0;
 		await expect(turn({ model: "gpt-6-luna" })).rejects.toThrow(
-			"Pi does not recognize model gpt-6-luna",
+			"Harness 'pi' has no model 'gpt-6-luna' in its catalog.",
 		);
 		expect(stub.requests).toHaveLength(0);
 	});

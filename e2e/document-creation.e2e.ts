@@ -80,6 +80,7 @@ for (let action of ["global", "pencil", "empty"] as const) {
 			await page.keyboard.press("Escape");
 			await expect(page.getByRole("dialog", { name: "Projects", exact: true })).toBeHidden();
 		}
+		if (action === "pencil") await pencil.locator("..").hover();
 		await trigger.click();
 		await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 		await expect(page.getByRole("textbox", { name: "editable markdown" })).toHaveAttribute(
@@ -275,8 +276,10 @@ test("overlapping creations keep separate guards and open the latest requested p
 		name: "New document in archive-1",
 		exact: true,
 	});
+	await first.locator("..").hover();
 	await first.click();
 	let firstDocument = await firstPosted.promise;
+	await second.locator("..").hover();
 	await second.click();
 	let secondDocument = await secondPosted.promise;
 	await expect(first).toBeDisabled();
@@ -443,7 +446,9 @@ test("canonicalizing the current document does not cancel a pending creation", a
 
 	await page.goto(`/channels/${id}`);
 	await reading.promise;
-	await page.getByRole("button", { name: "New document in score", exact: true }).click();
+	let pencil = page.getByRole("button", { name: "New document in score", exact: true });
+	await pencil.locator("..").hover();
+	await pencil.click();
 	let created = await posted.promise;
 	releaseRead.resolve();
 	await expect(page).toHaveURL(testChannelPath(id));

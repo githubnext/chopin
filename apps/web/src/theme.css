@@ -11,6 +11,7 @@
  * `.ts` is included because shared class lists can live outside components.
  */
 @source "../../../packages/editor/src/**/*.{ts,tsx}";
+@source "../../../packages/icons/src/**/*.{ts,tsx}";
 @source "../../../packages/question/src/**/*.{ts,tsx}";
 
 @utility ring-hairline {
@@ -20,6 +21,22 @@
 
 :where([data-nucleo-icon]) {
 	color: var(--color-icon);
+}
+
+/*
+ * Every icon keeps its declared size: as a flex item it would otherwise shrink
+ * when the text beside it wraps. In the base layer so a utility can still opt out.
+ */
+@layer base {
+	:is([data-nucleo-icon], [data-filled-icon]) {
+		flex-shrink: 0;
+	}
+}
+
+/* Beside text that may wrap: centre on the first line instead of the whole block. */
+@utility icon-first-line {
+	align-self: flex-start;
+	translate: 0 calc(0.5lh - 50%);
 }
 
 @utility icon-danger {
@@ -761,10 +778,6 @@ body {
 /* Jump-to-source: a tint behind the message that fades; the message itself never moves. */
 .chat-message-body[data-chat-source] {
 	isolation: isolate;
-}
-
-.chat-message-body:not(:first-child) > .chat-message-to {
-	margin-top: 4px;
 }
 
 .chat-source-tint {

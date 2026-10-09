@@ -302,26 +302,23 @@ export function ReferencePicker(
 							onMouseEnter={() => onActive(index)}
 							role="option"
 							tabIndex={-1}
+							title={option.description}
 							type="button"
 						>
 							<span aria-hidden="true" className="shrink-0 text-text-quaternary">#</span>
-							<span className="min-w-0 flex-1 text-sm">
-								<span className="block truncate font-medium">{option.title}</span>
-								{option.description && (
-									<span
-										className="block truncate text-text-tertiary"
-										id={generatedDescription}
-									>
-										{option.description}
-									</span>
-								)}
-							</span>
+							<span className="min-w-0 flex-1 truncate text-sm font-medium">{option.title}</span>
+							{option.description && (
+								<span className="sr-only" id={generatedDescription}>{option.description}</span>
+							)}
 							{option.child && option.parentTitle && (
-								<span className="shrink-0 text-text-tertiary">in {option.parentTitle}</span>
+								<span className="text-text-tertiary" data-reference-meta="">
+									in {option.parentTitle}
+								</span>
 							)}
 							{showSlug && (
 								<span
-									className="shrink-0 font-mono text-sm text-text-quaternary"
+									className="font-mono text-sm text-text-quaternary"
+									data-reference-meta="slug"
 									id={slugDescription}
 								>
 									{option.slug}

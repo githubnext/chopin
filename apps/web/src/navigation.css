@@ -430,12 +430,19 @@
 	visibility: hidden;
 }
 
-.group\/document:hover .project-sidebar-document-actions,
-.group\/document:focus-within .project-sidebar-document-actions,
+.project-sidebar-document:is(:hover, :focus-within) > .project-sidebar-document-actions,
+.project-sidebar-child:is(:hover, :focus-within) > .project-sidebar-document-actions,
+:root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
+	visibility: visible;
+}
+
+.project-sidebar-document:is(:hover, :has(:focus-visible, [aria-expanded="true"]))
+	> .project-sidebar-document-actions,
+.project-sidebar-child:is(:hover, :has(:focus-visible, [aria-expanded="true"]))
+	> .project-sidebar-document-actions,
 :root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
 	width: auto;
 	overflow: visible;
-	visibility: visible;
 }
 
 .project-sidebar-action,
@@ -470,8 +477,62 @@
 .project-sidebar-document:hover .project-sidebar-document-action,
 .project-sidebar-document:focus-within .project-sidebar-document-action,
 .project-sidebar-child:hover .project-sidebar-document-action,
-.project-sidebar-child:focus-within .project-sidebar-document-action {
+.project-sidebar-child:focus-within .project-sidebar-document-action,
+.project-sidebar-document-action[aria-expanded="true"] {
 	opacity: 1;
+}
+
+.project-sidebar-project-row > .project-sidebar-action {
+	width: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+.project-sidebar-project-row:is(:hover, :has(:focus-visible)) > .project-sidebar-action,
+.project-sidebar-project-row > .project-sidebar-action-pending,
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-project-row
+	> .project-sidebar-action {
+	width: calc(var(--spacing) * 6);
+	padding: calc(var(--spacing) * 1.25);
+	overflow: visible;
+}
+
+.project-sidebar-count {
+	display: flex;
+	min-width: calc(var(--spacing) * 6);
+	flex: 0 0 auto;
+	justify-content: flex-end;
+}
+
+:root:not([data-plan-coarse-pointer])
+	:is(.project-sidebar-project-row:has(> .project-sidebar-action):is(:hover, :has(:focus-visible)), .project-sidebar-project-row:has(> .project-sidebar-action-pending), .project-sidebar-document:has(> .project-sidebar-document-actions):is(:hover, :has(:focus-visible, [aria-expanded="true"])), .project-sidebar-child:has(> .project-sidebar-document-actions):is(:hover, :has(:focus-visible, [aria-expanded="true"])))
+	> .project-sidebar-count {
+	display: none;
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	:is(.project-sidebar-document-actions, .project-sidebar-project-row > .project-sidebar-action) {
+	order: 1;
+}
+
+/* Rows use different gaps, so pad touch counts to the project row's gap and share its edge. */
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-document
+	> .project-sidebar-document-actions
+	~ .project-sidebar-count {
+	margin-right: calc(var(--project-sidebar-gap) - var(--spacing));
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	.project-sidebar-child
+	> .project-sidebar-document-actions
+	~ .project-sidebar-count {
+	margin-right: var(--project-sidebar-gap);
 }
 
 .project-sidebar-status,

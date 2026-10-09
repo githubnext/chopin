@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
+import { DIFF_LANGUAGE, MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect";
 
 import {
 	describeDiagramError,
@@ -24,6 +24,7 @@ import {
 describe("what a fence is", () => {
 	it("tells rendered languages apart from ordinary code", () => {
 		expect(kindOf(MERMAID_LANGUAGE)).toBe("mermaid");
+		expect(kindOf(SEECODE_LANGUAGE)).toBe("seecode");
 		expect(kindOf(DIFF_LANGUAGE)).toBe("diff");
 		expect(kindOf("openui-options")).toBe("openui-options");
 		expect(kindOf("typescript")).toBe("code");
@@ -99,6 +100,7 @@ describe("the languages on offer", () => {
 	it("offers both of the fences that render as something else", () => {
 		let ids = LANGUAGES.map(([id]) => id);
 		expect(ids).toContain(MERMAID_LANGUAGE);
+		expect(ids).toContain(SEECODE_LANGUAGE);
 		expect(ids).toContain(DIFF_LANGUAGE);
 	});
 

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import "./isolated-git.test-fixtures";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -10,7 +10,7 @@
  * never have to load.
  */
 
-import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
+import { DIFF_LANGUAGE, MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect";
 
 /**
  * How a block is drawn, which is not the same as what its fence says.
@@ -19,11 +19,12 @@ import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
  * preview of uncoloured text beside the same uncoloured text is two of the
  * same thing and an invitation to edit the wrong one.
  */
-export type Kind = "plain" | "code" | "diff" | "mermaid" | "openui-options";
+export type Kind = "plain" | "code" | "diff" | "mermaid" | "seecode" | "openui-options";
 
 export function kindOf(language: string): Kind {
 	if (!language) return "plain";
 	if (language === MERMAID_LANGUAGE) return "mermaid";
+	if (language === SEECODE_LANGUAGE) return "seecode";
 	if (language === DIFF_LANGUAGE) return "diff";
 	if (language === "openui-options") return "openui-options";
 	return "code";
@@ -69,6 +70,7 @@ export const LANGUAGES: readonly LanguageOption[] = Object.freeze(
 		["python", "Python"],
 		["ruby", "Ruby"],
 		["rust", "Rust"],
+		[SEECODE_LANGUAGE, "SeeCode"],
 		["sql", "SQL"],
 		["swift", "Swift"],
 		["toml", "TOML"],

@@ -3,13 +3,14 @@ import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
+import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
-import { Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import { Count, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
 
@@ -61,6 +62,22 @@ export function documentGroups(
 		children.set(channel.parentChannelId, nested);
 	}
 	return parents.map(parent => ({ parent, children: children.get(parent.id) ?? [] }));
+}
+
+function UnansweredCount({ unanswered }: { unanswered: number }) {
+	let attention = useDecisionAttention(unanswered);
+	if (unanswered <= 0) return null;
+	return (
+		<span aria-hidden="true" className="project-sidebar-count" data-sidebar-decision-count="">
+			<Count
+				appearance="quiet"
+				key={attention ? `attention-${unanswered}` : "settled"}
+				motion={attention}
+			>
+				{unanswered}
+			</Count>
+		</span>
+	);
 }
 
 function archiveFocusTarget(list: HTMLElement | null, documentId: string): HTMLElement | undefined {
@@ -198,6 +215,11 @@ function Project(
 	});
 	let label = project.repository?.name ?? project.repositoryName;
 	let canManage = canManageProject(project);
+	let documentUnanswered = (channel: Api.Channel) =>
+		archiveMode ? 0 : channel.unansweredDecisions ?? 0;
+	let projectUnanswered = archiveMode || documents.status === "unavailable"
+		? 0
+		: documents.unansweredDecisions ?? 0;
 	let phase = pendingCreations.get(project.repositoryId);
 	let contentId = useId();
 	let collapseMotion = motionContract("collapse");
@@ -255,6 +277,9 @@ function Project(
 									<a
 										aria-current={parentCurrent ? "page" : undefined}
 										aria-description={channel.description || undefined}
+										aria-label={documentUnanswered(channel) > 0
+											? unansweredDecisionsLabel(channel.title, documentUnanswered(channel))
+											: undefined}
 										className="project-sidebar-document-link"
 										data-tooltip={channel.description || undefined}
 										data-tooltip-side="right"
@@ -275,6 +300,7 @@ function Project(
 											/>
 										</div>
 									)}
+									<UnansweredCount unanswered={documentUnanswered(channel)} />
 								</div>
 								{children.length > 0 && (
 									<ul className="project-sidebar-children">
@@ -289,6 +315,9 @@ function Project(
 												>
 													<a
 														aria-current={current ? "page" : undefined}
+														aria-label={documentUnanswered(child) > 0
+															? unansweredDecisionsLabel(child.title, documentUnanswered(child))
+															: undefined}
 														className="project-sidebar-child-link"
 														href={childDocumentPath(
 															channel.repositoryOwner,
@@ -314,6 +343,7 @@ function Project(
 															/>
 														</div>
 													)}
+													<UnansweredCount unanswered={documentUnanswered(child)} />
 												</li>
 											);
 										})}
@@ -351,6 +381,9 @@ function Project(
 				<button
 					aria-controls={expanded ? contentId : undefined}
 					aria-expanded={expanded}
+					aria-label={projectUnanswered > 0
+						? unansweredDecisionsLabel(label, projectUnanswered)
+						: undefined}
 					className="project-sidebar-project-disclosure flex min-w-0 flex-1 items-center gap-2 text-left"
 					onClick={onToggle}
 					ref={disclosure}
@@ -380,6 +413,7 @@ function Project(
 						<NavigationIcon src={newDocumentIcon} />
 					</button>
 				)}
+				<UnansweredCount unanswered={projectUnanswered} />
 			</div>
 			<div className={phase ? "project-sidebar-status" : undefined} role="status">
 				{phase === "creating" ? "Creating document…" : phase ? "Opening document…" : ""}

@@ -59,18 +59,18 @@ image build. A documentation-only change should still pass `bun run ci`.
 
 ## Repository map
 
-| Area                | Responsibility                                         | Internal workspace dependencies                      |
-| ------------------- | ------------------------------------------------------ | ---------------------------------------------------- |
-| `packages/dialect`  | Restricted MDX, MDAST, and Lexical schema              | none                                                 |
-| `packages/protocol` | WebSocket declarations and addressing helper           | none                                                 |
-| `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                           |
-| `packages/draft`    | Bounded collaborative plain-text drafts                | none                                                 |
-| `packages/viewport` | Browser geometry and subscriptions                     | none                                                 |
-| `packages/diagrams` | Bounded diagram rendering and scoped React viewing     | none (React peer)                                    |
-| `packages/editor`   | Collaborative editor, decisions, comments, and widgets | `dialect`, `question`, `protocol`, `viewport`        |
-| `apps/server`       | Auth, channels, rooms, storage, Planner, MCP, tasks    | `dialect`, `draft`, `question`, `protocol`           |
-| `apps/web`          | Repository picker, navigation, conversation, workspace | `dialect`, `draft`, `editor`, `protocol`, `viewport` |
-| `e2e`               | Browser and system integration harness                 | may import server internals as fixtures              |
+| Area                | Responsibility                                         | Internal workspace dependencies                           |
+| ------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| `packages/dialect`  | Restricted MDX, MDAST, and Lexical schema              | none                                                      |
+| `packages/protocol` | WebSocket declarations and addressing helper           | none                                                      |
+| `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                                |
+| `packages/draft`    | Bounded collaborative plain-text drafts                | none                                                      |
+| `packages/viewport` | Browser geometry and subscriptions                     | none                                                      |
+| `packages/diagrams` | Bounded diagram rendering and scoped React viewing     | none (React peer)                                         |
+| `packages/editor`   | Collaborative editor, decisions, comments, and widgets | `diagrams`, `dialect`, `question`, `protocol`, `viewport` |
+| `apps/server`       | Auth, channels, rooms, storage, Planner, MCP, tasks    | `diagrams`, `dialect`, `draft`, `question`, `protocol`    |
+| `apps/web`          | Repository picker, navigation, conversation, workspace | `dialect`, `draft`, `editor`, `protocol`, `viewport`      |
+| `e2e`               | Browser and system integration harness                 | may import server internals as fixtures                   |
 
 Runtime workspace packages do not depend on an application. E2E and skill
 contract tests may deliberately import server internals; do not treat those test
@@ -80,7 +80,8 @@ harnesses as runtime package boundaries.
 
 The browser edits Lexical bound to Yjs. One WebSocket multiplexes session,
 document (`plan:*` on the wire), conversation, questions, comments, and
-implementation lifecycle messages. The server keeps each open channel as an
+implementation lifecycle messages; the Projects sidebar's own `/ws/sidebar`
+socket carries only decision counts. The server keeps each open channel as an
 authoritative Y.Doc with a headless Lexical mirror so it can validate and
 serialize the document without trusting a browser.
 
