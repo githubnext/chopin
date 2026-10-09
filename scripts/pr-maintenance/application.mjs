@@ -57,7 +57,7 @@ export async function applyProposal({
 	let observe = async () => {
 		let pr = await call(`${prefix}/pulls/${number}`);
 		if (
-			pr.state !== "open" || pr.head?.repo?.full_name !== repository
+			pr.state !== "open" || pr.draft !== false || pr.head?.repo?.full_name !== repository
 			|| pr.base?.repo?.full_name !== repository
 			|| !Array.isArray(pr.labels)
 			|| pr.labels.some((label) =>

@@ -30,6 +30,7 @@ export async function inspectReadiness(repository, row, request) {
 	}
 	try {
 		let pr = await get(`/pulls/${row.number}`);
+		if (pr.state !== "open" || pr.draft !== false) return null;
 		if (
 			pr.state === "open" && pr.head.repo?.full_name === repository
 			&& pr.labels?.some(label => (typeof label === "string" ? label : label.name) === "no-babysit")
@@ -72,6 +73,7 @@ export async function inspectReadiness(repository, row, request) {
 		) replay = "rebase";
 		if (replay) {
 			let fresh = await get(`/pulls/${row.number}`);
+			if (fresh.state !== "open" || fresh.draft !== false) return null;
 			let currentBase = await get(`/commits/${encodeURIComponent(row.base)}`);
 			if (
 				fresh.labels?.some(label =>
@@ -159,6 +161,7 @@ export async function inspectReadiness(repository, row, request) {
 				: "waiting-ci";
 		}
 		let fresh = await get(`/pulls/${row.number}`);
+		if (fresh.state !== "open" || fresh.draft !== false) return null;
 		let currentBase = await get(`/commits/${encodeURIComponent(row.base)}`);
 		if (
 			fresh.state === "open"

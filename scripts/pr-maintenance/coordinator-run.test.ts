@@ -185,6 +185,7 @@ test("missing CI is dispatched with the built-in GitHub request", async () => {
 		if (path.includes("/pulls/")) {
 			return {
 				state: "open",
+				draft: false,
 				labels: [],
 				head: { sha: waiting.head, ref: waiting.branch, repo: { full_name: "a/b" } },
 				base: { ref: waiting.base },
@@ -395,8 +396,8 @@ test("registered proposal head authored by PAT does not reset episode", async ()
 	expect(result.payload.prs[1].episode).toBe(active.episode);
 });
 
-test("fresh closed, opted-out, changed-base, or reporting failure skips CI writes", async () => {
-	for (let scenario of ["closed", "opted-out", "base", "report"]) {
+test("fresh closed, draft, opted-out, changed-base, or reporting failure skips CI writes", async () => {
+	for (let scenario of ["closed", "draft", "opted-out", "base", "report"]) {
 		let waiting = { ...rows[0], action: "waiting-ci" };
 		let value = config({ enabled: true, prs: "1", inspect: async () => [waiting] });
 		value.request = async (method, path, body) => {
@@ -407,6 +408,7 @@ test("fresh closed, opted-out, changed-base, or reporting failure skips CI write
 			}
 			return {
 				state: scenario === "closed" ? "closed" : "open",
+				draft: scenario === "draft",
 				labels: scenario === "opted-out" ? [{ name: "no-babysit" }] : [],
 				head: { sha: waiting.head, ref: waiting.branch, repo: { full_name: "a/b" } },
 				base: { ref: waiting.base },
@@ -433,6 +435,7 @@ test("authenticated opt-out cleans only owned labels without comments or CI", as
 		if (path.includes("/pulls/")) {
 			return {
 				state: "open",
+				draft: false,
 				labels: [{ name: "no-babysit" }, { name: "maintenance:working" }, { name: "feature" }],
 				head: { sha: opted.head, ref: opted.branch, repo: { full_name: "a/b" } },
 				base: { ref: opted.base },
@@ -568,4 +571,12 @@ test("failure logs sampled only for confirmed current-head failed CI and errors 
 		}
 		expect(JSON.stringify(result)).not.toContain("secret-value");
 	}
+});
+
+test("ineligible confirmation creates no PR state or worker dispatch", async () => {
+	let value = config({ enabled: true, prs: "all", confirm: async () => null });
+	let result = await runCoordinator(value);
+	expect(result.rows).toEqual([]);
+	expect(result.dispatches).toEqual([]);
+	expect(result.payload.prs).toEqual({});
 });

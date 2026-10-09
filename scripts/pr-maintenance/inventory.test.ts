@@ -16,7 +16,7 @@ function pull(number = 1, base = "main") {
 	return {
 		number,
 		state: "open",
-		draft: true,
+		draft: false,
 		labels: [] as { name: string }[],
 		mergeable: true,
 		rebaseable: true,
@@ -157,7 +157,7 @@ test("stale, absent, pending, cancelled, skipped, and foreign CI never imply rea
 	}
 });
 
-test("inventories every paginated same-repository draft without a batch cap", () => {
+test("inventories every paginated open non-draft PR without a batch cap", () => {
 	let prs = Array.from({ length: 30 }, (_, index) => pull(index + 1));
 	let { gh } = fixture([prs.slice(0, 10), prs.slice(10)]);
 	let rows = inventory(repository, gh);
@@ -348,4 +348,21 @@ test("cyclic and ambiguous stacks defer rather than guessing a parent", () => {
 	let duplicate = { ...pull(2), head: { ...pull(2).head, ref: "branch-1" } };
 	let ambiguous = fixture([[pull(3, "branch-1"), pull(1), duplicate]]);
 	expect(inventory(repository, ambiguous.gh)[0]?.action).toBe("verify");
+});
+
+test("drafts are excluded at listing, initial detail, and final refresh", () => {
+	for (let draftAt of ["listing", "detail", "refresh"]) {
+		let pr = pull();
+		let { gh } = fixture([[{ ...pr, draft: draftAt === "listing" }]]);
+		let pulls = 0;
+		let read = (args: string[]) => {
+			let response = gh(args);
+			if (args[1] === `repos/${repository}/pulls/1`) {
+				pulls++;
+				return { ...response, draft: pulls === (draftAt === "detail" ? 1 : 2) };
+			}
+			return response;
+		};
+		expect(inventory(repository, read)).toEqual([]);
+	}
 });
