@@ -1,0 +1,74 @@
+{
+	"version": 2,
+	"id": "D08",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Hal",
+		"Vic",
+		"Lou"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Hal",
+			"text": "how do we roll out the new parser without breaking every document?",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Vic",
+			"text": "we could ship it behind a flag to 5% of rooms, or swap everyone at once after the migration.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Lou",
+			"text": "flag plus dual-read sounds safer. canary rooms first.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Hal",
+			"text": "dual-read is another implementation detail; the choice is staged vs all at once.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Vic",
+			"text": "I'd do the 5% canary. we can stop it if the mismatch metric moves.",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Lou",
+			"text": "yes, staged. but let's set the rollback threshold before flipping it.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

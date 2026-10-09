@@ -1,0 +1,80 @@
+{
+	"version": 2,
+	"id": "D06",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Ruth",
+		"Sol",
+		"Kit"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Ruth",
+			"text": "reviewers won't have a company account. how should they sign in?",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Sol",
+			"text": "magic link, passkey, and GitHub OAuth are the plausible routes.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Kit",
+			"text": "passkeys are lovely but account recovery worries me.",
+			"to": "room"
+		},
+		{
+			"id": "c3",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Ruth",
+			"text": "I'm leaning magic links for v1. people only open a review once a month.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Sol",
+			"text": "same. GitHub OAuth would exclude the nontechnical folks.",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Kit",
+			"text": "hang on, do we have rate limiting on the email endpoint?",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

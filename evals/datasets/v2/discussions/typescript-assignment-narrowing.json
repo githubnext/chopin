@@ -1,0 +1,232 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "typescript-assignment-narrowing",
+	"title": "TypeScript assignment narrowing",
+	"source": {
+		"url": "https://github.com/microsoft/TypeScript/issues/61789",
+		"retrievedAt": "2026-09-29T20:10:24.805379+00:00",
+		"repository": "microsoft/TypeScript",
+		"number": 61789
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2025-05-31T23:59:59Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-06-03T23:59:59Z"
+		},
+		{
+			"id": "c3",
+			"at": "2025-06-05T23:59:59Z"
+		},
+		{
+			"id": "c4",
+			"at": "2025-06-16T23:59:59Z"
+		}
+	],
+	"events": [
+		{
+			"id": "2925360295",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-05-31T15:53:13Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2925360295",
+			"summary": "The proposer acknowledges that making initialization differ from later assignment is confusing, but argues current assignment narrowing also causes recurring confusion.",
+			"actorId": 35091,
+			"actorType": "human"
+		},
+		{
+			"id": "2925395937",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-05-31T16:16:01Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2925395937",
+			"summary": "The proposer points readers to several prior TypeScript issues covering the same tradeoff.",
+			"actorId": 35091,
+			"actorType": "human"
+		},
+		{
+			"id": "2925534216",
+			"kind": "comment",
+			"actor": "jcalz",
+			"createdAt": "2025-05-31T18:19:46Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2925534216",
+			"summary": "A participant says the proposal would break existing TypeScript code when enabled, regardless of whether it is behind a flag.",
+			"editedAt": "2025-05-31T18:22:35Z",
+			"actorId": 150626,
+			"actorType": "human",
+			"visibleAt": "2025-05-31T18:22:35Z"
+		},
+		{
+			"id": "2925585442",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-05-31T18:56:44Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2925585442",
+			"summary": "The proposer argues that an opt-in flag avoids unintentional breakage, while accepting that another compiler configuration is costly.",
+			"editedAt": "2025-05-31T18:59:12Z",
+			"actorId": 35091,
+			"actorType": "human",
+			"visibleAt": "2025-05-31T18:59:12Z"
+		},
+		{
+			"id": "2925684146",
+			"kind": "comment",
+			"actor": "jcalz",
+			"createdAt": "2025-05-31T20:10:58Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2925684146",
+			"summary": "The participant asks why a flagged compiler should reject common assignments that current narrowing accepts.",
+			"actorId": 150626,
+			"actorType": "human"
+		},
+		{
+			"id": "2925721546",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-05-31T20:58:05Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2925721546",
+			"summary": "The proposer says a widened declared type could avoid surprising runtime behavior, at the cost of more explicit narrowing in some programs.",
+			"editedAt": "2025-06-01T13:15:57Z",
+			"actorId": 35091,
+			"actorType": "human",
+			"visibleAt": "2025-06-01T13:15:57Z"
+		},
+		{
+			"id": "2927364584",
+			"kind": "comment",
+			"actor": "jcalz",
+			"createdAt": "2025-06-01T14:57:14Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2927364584",
+			"summary": "The participant doubts the team will adopt this direction and suggests clearer displayed types or an individual variable opt-out instead.",
+			"editedAt": "2025-06-01T14:59:15Z",
+			"actorId": 150626,
+			"actorType": "human",
+			"visibleAt": "2025-06-01T14:59:15Z"
+		},
+		{
+			"id": "2928042450",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-06-01T22:42:26Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2928042450",
+			"summary": "The proposer agrees that displaying both read and write types or offering a targeted opt-out may better address the confusion.",
+			"actorId": 35091,
+			"actorType": "human"
+		},
+		{
+			"id": "2936843089",
+			"kind": "comment",
+			"actor": "RyanCavanaugh",
+			"createdAt": "2025-06-03T19:23:50Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2936843089",
+			"summary": "A TypeScript maintainer argues that doing less control-flow analysis would reject valid code, encourage assertions, and leave mutation limits unsolved.",
+			"actorId": 6685088,
+			"actorType": "human"
+		},
+		{
+			"id": "2940916252",
+			"kind": "comment",
+			"actor": "jcalz",
+			"createdAt": "2025-06-04T18:02:33Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2940916252",
+			"summary": "A participant explores whether a per-variable volatility marker would help, but notes that reliably disabling narrowing could itself be awkward.",
+			"actorId": 150626,
+			"actorType": "human"
+		},
+		{
+			"id": "2941843696",
+			"kind": "comment",
+			"actor": "RyanCavanaugh",
+			"createdAt": "2025-06-04T22:52:41Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2941843696",
+			"summary": "A maintainer jokes about a rejected spelling for an explicit widening operation.",
+			"actorId": 6685088,
+			"actorType": "human"
+		},
+		{
+			"id": "2941849977",
+			"kind": "comment",
+			"actor": "jcalz",
+			"createdAt": "2025-06-04T22:56:38Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2941849977",
+			"summary": "A participant responds with another playful operator name.",
+			"actorId": 150626,
+			"actorType": "human"
+		},
+		{
+			"id": "2945361039",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-06-05T17:21:15Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2945361039",
+			"summary": "The proposer suggests documenting how annotated variables narrow on assignment more prominently.",
+			"actorId": 35091,
+			"actorType": "human"
+		},
+		{
+			"id": "2945337667",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-06-05T17:14:56Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2945337667",
+			"summary": "The proposer responds to the maintainer's examples, questions how often the alternative would hurt, and concedes that a compiler flag may make the idea impractical.",
+			"editedAt": "2025-06-05T18:46:12Z",
+			"actorId": 35091,
+			"actorType": "human",
+			"visibleAt": "2025-06-05T18:46:12Z"
+		},
+		{
+			"id": "2945971908",
+			"kind": "comment",
+			"actor": "RyanCavanaugh",
+			"createdAt": "2025-06-05T20:00:24Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2945971908",
+			"summary": "The maintainer reports widespread failures in a large package sample, including cases where splitting an initialization into two statements would avoid a false error.",
+			"actorId": 6685088,
+			"actorType": "human"
+		},
+		{
+			"id": "2961509294",
+			"kind": "comment",
+			"actor": "MartinJohns",
+			"createdAt": "2025-06-11T07:12:53Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2961509294",
+			"summary": "A participant continues the playful operator-name aside without changing the technical direction.",
+			"actorId": 5269069,
+			"actorType": "human"
+		},
+		{
+			"id": "2970004342",
+			"kind": "comment",
+			"actor": "mkantor",
+			"createdAt": "2025-06-13T11:11:02Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2970004342",
+			"summary": "The proposer says the maintainer's examples and experiment have changed their mind; they plan to close the proposal and may seek documentation improvements.",
+			"actorId": 35091,
+			"actorType": "human"
+		},
+		{
+			"id": "2974865189",
+			"kind": "comment",
+			"actor": "typescript-bot",
+			"createdAt": "2025-06-16T01:34:59Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789#issuecomment-2974865189",
+			"summary": "An automated housekeeping comment says the declined issue has been closed.",
+			"actorId": 23042052,
+			"actorType": "human"
+		},
+		{
+			"id": "18160375647",
+			"kind": "process_event",
+			"actor": "typescript-bot",
+			"createdAt": "2025-06-16T01:35:00Z",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789",
+			"summary": "An automated process event records closure of the issue.",
+			"actorId": 23042052,
+			"actorType": "human"
+		}
+	]
+}

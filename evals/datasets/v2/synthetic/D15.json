@@ -1,0 +1,80 @@
+{
+	"version": 2,
+	"id": "D15",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Oona",
+		"Pax",
+		"Lee"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Oona",
+			"text": "where do experiment flags live? I don't want another emergency deploy for a toggle.",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Pax",
+			"text": "we've kept them in environment variables so far, which is why a toggle needs a deploy.",
+			"to": "room"
+		},
+		{
+			"id": "c2",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Lee",
+			"text": "LaunchDarkly seems overkill at this size. maybe our database config table, if it has an audit trail?",
+			"to": "room"
+		},
+		{
+			"id": "c3",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Oona",
+			"text": "can we use the table, with a recorded actor and timestamp?",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Pax",
+			"text": "yes, table for mutable flags. env vars can keep boot-time settings.",
+			"to": "room"
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Lee",
+			"text": "I'd do that too; no runtime flag should require a restart.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

@@ -1,82 +1,63 @@
-# Frozen development inputs
+# Development inputs
 
-This package registers evaluation **inputs**, not scores or approved gold. The
-baseline [registry](registry.json) is byte-identical to eval-hub commit
-`0c560ea126181bd3c6911a318f9804a029f0c85a` (SHA-256
-`5cdc086840041f9b5c2140d90f9baa8355c7604b8b6fa46d991f09c9f3b889cb`).
-Its real source files came from corpus commit
-`dda78480888859ae3eec90846c1263cd28552d05`; synthetic fixtures came from
-`446a9779a937fa5be7cd3eb52fd7f3023d691ed2`. Do not change this registry
-when adding source interpretations or supplemental cases.
+Use [v2/manifest.json](v2/manifest.json) and [v2.ts](v2.ts) for the committed,
+offline development set. These are inputs for evaluation, not approved gold
+answers or model-quality results. The historical [registry](registry.json) is
+still byte-identical to eval-hub commit `0c560ea126181bd3c6911a318f9804a029f0c85a`
+(SHA-256 `5cdc086840041f9b5c2140d90f9baa8355c7604b8b6fa46d991f09c9f3b889cb`).
+Do not edit it to reinterpret or replace an older experiment.
 
-| Input class                  | Cases |       Checkpoints | Status                                                  |
-| ---------------------------- | ----: | ----------------: | ------------------------------------------------------- |
-| Real asynchronous discussion |     7 |                27 | Original source wording; candidate interpretations only |
-| Real authored RFC            |     2 | 2 pinned versions | Separate development supplement                         |
-| Source-grounded adaptation   |     0 |                 0 | None included                                           |
-| Synthetic chat               |    19 |                68 | Separate generated fixtures                             |
+| v2 input                   | Cases | Checkpoints | Material                                            |
+| -------------------------- | ----: | ----------: | --------------------------------------------------- |
+| Synthetic chat             |    19 |          68 | Input-only copies of generated development fixtures |
+| Adapted discussion         |     7 |          27 | Attributed, source-grounded event summaries         |
+| Original authored proposal |     1 |           1 | Pinned Rust async/await RFC text                    |
 
-The original corpus screened 44 public threads across 12 repositories and
-proposed 15 episodes / 58 checkpoints. Only its seven development episodes are
-loadable here. The five validation and three proposed final episodes remain out
-of this package. Twelve synthetic held-out cases remain archived and unopened.
-Partition assignments keep whole source clusters together. The focused Vite
-reply chain represents only part of its source discussion.
+The 19 synthetic files remove `expectations` and other reviewer annotations from
+the original fixtures. Their manifest entries retain the original file SHA-256
+alongside the committed input SHA-256. The discussion files preserve the seven
+original source clusters, event IDs, actors, timestamps and 27 cutoff times.
+Each is explicitly marked `adapted`: its `summary` is a paraphrase, not the
+contributor's wording. The manifest records source URLs, retrieval times, and
+the SHA-256 of each historical checkpoint file. A loader returns only events
+visible by the selected cutoff. Links in an input are inert.
 
-The seven discussion URLs and retrieval times are in [sources.json](sources.json).
-The [proposal supplement](proposals.json) pins the first RFC text committed to
-[Rust async/await](https://github.com/rust-lang/rfcs/pull/2394) and
-[ESLint per-rule autofix](https://github.com/eslint/rfcs/pull/134). Their pinned
-commits and byte hashes are recorded separately so the baseline cannot change
-silently. ESLint's supplement shares a source cluster with its development
-discussion; never append that proposal to an earlier discussion checkpoint.
+The RFC is the original file from Rust RFC commit
+`f63ddca7ce5cd8725ec137459ba2a930474a34e7` and matches the original
+[proposal manifest](proposals.json) checksum. The Rust RFC repository says
+contributions intentionally submitted for inclusion are available under MIT or
+Apache 2.0; this copy uses its MIT option and carries the
+[license notice](v2/proposals/LICENSE-MIT). The author is credited in the v2
+manifest. The ESLint RFC supplement remains registered as historical evidence
+in [proposals.json](proposals.json), but is not copied into v2 because the
+pinned source repository did not provide a clear license notice for that text.
+Likewise, GitHub's [site terms](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)
+do not by themselves clearly permit republication of complete third-party
+issue and discussion comments outside GitHub, so v2 uses attributed summaries.
 
-## Local use
+## Offline use
 
-The full inputs and 22 selected source-evidence files are in the ignored
-`data/visual-doc-corpus/` directory on this host. No raw or sealed archive is
-tracked. To restore the 48 baseline files from a checkout containing the
-source commits, run:
+```ts
+import { listCases, loadCase } from "./evals/datasets/v2";
 
-```bash
-python3 evals/datasets/import-development.py --source-git /path/to/source-checkout
+let cases = listCases();
+let input = await loadCase("deno-run-task", "c2");
+// input.events contains only the adapted discussion visible by c2.
+let proposal = await loadCase("proposal-rust-async-await");
 ```
 
-The proposal text is separate. Download its two pinned versions, then verify
-them against [proposals.json](proposals.json):
+Run `bun test evals/datasets/input.test.ts evals/datasets/v2.test.ts`. This reads
+only tracked files and makes no network requests. `loadCase` verifies file size
+and SHA-256 before parsing. Unknown, validation and reserved IDs fail before
+file reads. The original [input.ts](input.ts) and
+[offline importer](import-development.py) remain for historical reproduction
+from an archived source checkout; they are not required for v2 or its tests.
 
-```bash
-mkdir -p data/visual-doc-corpus/development/proposals
-curl -fsSL -o data/visual-doc-corpus/development/proposals/proposal-rust-async-await.md https://raw.githubusercontent.com/rust-lang/rfcs/f63ddca7ce5cd8725ec137459ba2a930474a34e7/text/0000-async_await.md
-curl -fsSL -o data/visual-doc-corpus/development/proposals/proposal-eslint-per-rule-autofix.md https://raw.githubusercontent.com/eslint/rfcs/41598f3a0d81f56ae6c75f59273269a54db50085/designs/2024-per-rule-autofix-configuration/README.md
-python3 evals/datasets/import-development.py --with-proposals
-bun test evals/datasets/input.test.ts
-```
-
-The importer itself makes no network request, nor does it fetch linked pages
-inside an input. Use `listDevelopment()` and `loadInput(id, checkpointId)` from
-[input.ts](input.ts) for the baseline; use `listProposals()` and
-`loadProposal(id)` for the supplement. Both loaders verify bytes before
-returning text. Unknown, validation, and reserved IDs fail before file reads.
-The discussion loader returns only the selected cutoff file and omits
-annotations, future events, and later outcomes. All links in returned inputs
-are inert: a runner must not follow them. In a clean checkout, four
-manifest and access-boundary tests run; six local-fidelity tests skip until
-the ignored snapshot is restored.
-
-## Source and reuse limits
-
-The source comments are public research evidence, but their republication was
-not cleared. The code repository license does not grant rights to third-party
-comment wording. This repository therefore carries URLs, timestamps, hashes,
-methods, and access code, without publishing the full comment bodies. The
-local inputs preserve speaker identity, wording, reply links where recorded,
-process events, and chronological cutoffs for evaluation. REST issue comments
-have no recoverable nested reply parents; edited or deleted historical wording
-and off-platform discussion may be missing. A close, merge, or participant's
-shipping report is evidence, not an automatic Chopin Save or verified outcome.
-
-Candidate annotations stay outside model input. Human review is still needed
-for episode boundaries, decision authority, missing context, and any public
-release of source text. The source set is not a statistically representative
-benchmark and has no approved gold labels or model-quality result.
+The original corpus screened 44 public threads across 12 repositories. Its
+five validation and three proposed final episodes remain outside this package,
+as do twelve unopened synthetic holdouts. The original 7 discussion candidates
+and the older RFC supplement are not unqualified gold. REST issue comments lack
+reliable nested reply parents, and missing edits or off-platform context may
+limit interpretation. A close or merge event is evidence, not an automatic
+Chopin Save or verified outcome. Do not follow linked pages when evaluating a
+cutoff or add later proposal text to an earlier discussion input.

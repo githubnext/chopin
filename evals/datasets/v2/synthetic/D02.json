@@ -1,0 +1,87 @@
+{
+	"version": 2,
+	"id": "D02",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Ada",
+		"Bram",
+		"Cy"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Ada",
+			"text": "hosting for the beta: managed app service or our own server?",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Bram",
+			"text": "a small VPS is enough for this traffic. we'll have to patch it ourselves.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Ada",
+			"text": "managed would be less ops work, though pricier.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Cy",
+			"text": "if we're doing the VPS, please put backups in the first milestone.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Bram",
+			"text": "we've decided to host it on our own VPS.",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Ada",
+			"text": "yes, and keep managed hosting as the escape hatch if on-call gets silly.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m7",
+			"kind": "say",
+			"actor": "Bram",
+			"text": "I take back my VPS preference for now. Let’s verify backups before choosing hosting.",
+			"to": "room"
+		},
+		{
+			"id": "c7",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

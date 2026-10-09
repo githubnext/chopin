@@ -1,0 +1,54 @@
+{
+	"version": 2,
+	"id": "D19",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Leah",
+		"Omar",
+		"Priya"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Leah",
+			"text": "Before the repository pilot, we need to choose how people sign in and how the hosted agent gets repository credentials.",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Omar",
+			"text": "For human sign-in, the options are GitHub OAuth or email magic links. Separately, for the hosted agent's repository credentials, we could pass each user's GitHub token or use a GitHub App installation token. Those are two different calls.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Priya",
+			"text": "Right. A person's sign-in session doesn't answer which credential the agent uses for GitHub API calls.",
+			"to": "room"
+		},
+		{
+			"id": "c3",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Leah",
+			"text": "Let's choose GitHub OAuth for human sign-in. Keep the agent credential choice open; we still need to decide between user GitHub tokens and the GitHub App installation token.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}
