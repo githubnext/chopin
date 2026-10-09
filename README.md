@@ -191,7 +191,10 @@ a Chat reference.
 
 Chopin exposes a bearer-authenticated Streamable HTTP MCP endpoint. See
 [Connect a local coding agent](docs/local-agent-mcp.md) for Claude Code, Codex
-CLI, and GitHub Copilot CLI configuration.
+CLI, and GitHub Copilot CLI configuration. Its document tools include
+[`upload_image`](docs/local-agent-mcp.md#upload-an-image), which hosts a PNG,
+JPEG, WebP, or GIF of at most 1 MiB for a document; only people who can read
+that document can load it.
 
 Planning is one way to use a Chopin document today. The optional
 [creating-chopin-plans skill](skills/creating-chopin-plans/SKILL.md) turns a

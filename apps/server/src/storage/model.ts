@@ -21,6 +21,19 @@ export type PutUser = Omit<UserRecord, "createdAt" | "updatedAt"> & {
 	now: Date;
 };
 
+/** Image bytes uploaded to one document, addressed by their SHA-256. */
+export type StoredImage = {
+	channelId: string;
+	sha256: string;
+	mimeType: string;
+	bytes: Uint8Array;
+	size: number;
+	uploadedBy: string;
+	createdAt: Date;
+};
+
+export type PutImage = Omit<StoredImage, "size" | "createdAt"> & { now: Date };
+
 export type UserProject = {
 	userId: string;
 	repositoryId: string;

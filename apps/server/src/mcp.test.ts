@@ -478,7 +478,7 @@ describe("the MCP read protocol", () => {
 				method: "POST",
 				headers: {
 					authorization: "Bearer allowed",
-					"content-length": "786433",
+					"content-length": "1463641",
 					"content-type": "application/json",
 				},
 				body: "{}",
@@ -493,7 +493,7 @@ describe("the MCP read protocol", () => {
 				},
 				body: new ReadableStream({
 					start(controller) {
-						for (let index = 0; index < 7; index++) {
+						for (let index = 0; index < 12; index++) {
 							controller.enqueue(new Uint8Array(131_072));
 						}
 						controller.close();

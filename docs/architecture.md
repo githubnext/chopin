@@ -113,8 +113,8 @@ push or administration access permits mutation.
 `/mcp` authenticates a GitHub bearer supplied by the coding agent. It applies
 instance admission and checks that token's current repository role without
 requiring the GitHub App for Chopin installation. Pull access permits reads;
-push or administration access permits document creation, document updates, and
-implementation lifecycle mutations.
+push or administration access permits document creation, document updates, image
+uploads, and implementation lifecycle mutations.
 
 ### Hosted agent
 

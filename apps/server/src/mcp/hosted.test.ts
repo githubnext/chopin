@@ -662,6 +662,93 @@ describe("the hosted MCP adapter", () => {
 		});
 	});
 
+	it("stores an uploaded image once under its hash for a document writer", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		await context.storage.users.put({
+			id: "U_owner",
+			login: "owner",
+			avatarUrl: "",
+			now: context.now,
+		});
+		let channel = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_owner",
+			now: context.now,
+		});
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.upload) throw new Error("hosted image upload is unavailable");
+		let bytes = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0]);
+		let hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+		let locator = "/documents/octo-org/score/release-plan";
+		let input = { id: locator, mimeType: "image/gif", bytes } as const;
+
+		let uploaded = await adapter.upload.upload(caller, input);
+		expect(uploaded).toEqual({ kind: "uploaded", path: `/images/${hash}.gif` });
+		expect(await adapter.upload.upload(caller, { ...input, id: channel.id })).toEqual(uploaded);
+		expect(await context.storage.images.channels(hash)).toEqual([channel.id]);
+		expect(await context.storage.images.get(channel.id, hash)).toMatchObject({
+			mimeType: "image/gif",
+			bytes,
+			size: bytes.byteLength,
+			uploadedBy: "U_allowed",
+		});
+	});
+
+	it("refuses image uploads to readers, archived, deleting and missing documents", async () => {
+		let context = setup();
+		await context.storage.users.put({
+			id: "U_owner",
+			login: "owner",
+			avatarUrl: "",
+			now: context.now,
+		});
+		let channel = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_owner",
+			now: context.now,
+		});
+		let deleting = new Set<string>();
+		let adapter = hosted(context.auth, undefined, {
+			isChannelDeleting: id => deleting.has(id),
+		});
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.upload) throw new Error("hosted image upload is unavailable");
+		let bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xdb]);
+		let input = { id: channel.id, mimeType: "image/jpeg", bytes } as const;
+
+		expect(await adapter.upload.upload(caller, input)).toEqual({ kind: "forbidden" });
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: false, admin: true },
+		};
+		expect(await adapter.upload.upload(caller, { ...input, id: crypto.randomUUID() })).toEqual({
+			kind: "unavailable",
+		});
+		deleting.add(channel.id);
+		expect(await adapter.upload.upload(caller, input)).toEqual({ kind: "unavailable" });
+		deleting.clear();
+		await context.storage.channels.archive({ id: channel.id, now: context.now });
+		expect(await adapter.upload.upload(caller, input)).toEqual({ kind: "archived" });
+		context.github.accessible = false;
+		expect(await adapter.upload.upload(caller, input)).toEqual({ kind: "unavailable" });
+
+		let hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+		expect(await context.storage.images.channels(hash)).toEqual([]);
+	});
+
 	it("requires repository write access before creating a channel", async () => {
 		let context = setup();
 		let adapter = hosted(context.auth);

@@ -4,6 +4,7 @@ import { availableChannelTitle } from "../../channels/title";
 import { sidecarUnansweredDecisions } from "../../questions/unanswered";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
+import { MemoryImageStore } from "./images";
 import { MemoryResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -45,6 +46,7 @@ import type {
 	BackgroundJobStore,
 	ChannelStore,
 	CollaborationStore,
+	ImageStore,
 	LeaseStore,
 	NavigationStore,
 	ResearchWorkspaceStore,
@@ -145,6 +147,11 @@ export class MemoryStorage implements StorageAdapter {
 	#operations = new Map<string, Map<string, Operation>>();
 	#agents = new Map<string, AgentState>();
 	#leases = new Map<string, Lease>();
+	readonly #images = new MemoryImageStore({
+		channelExists: id => this.#channels.has(id),
+		userExists: id => this.#users.has(id),
+	});
+	readonly images: ImageStore = this.#images;
 
 	readonly users: UserStore = {
 		put: input => {
@@ -533,6 +540,7 @@ export class MemoryStorage implements StorageAdapter {
 		this.#channels.delete(id);
 		await this.#research.deleteChannel(id);
 		this.#jobs.deleteChannel(id);
+		this.#images.deleteChannel(id);
 		this.#snapshots.delete(id);
 		this.#sequences.delete(id);
 		this.#updates.delete(id);

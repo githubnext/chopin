@@ -454,14 +454,21 @@ class Validator {
 
 	#image(url: string, path: string, node: Nodes): void {
 		this.#images++;
+		// Chopin's own uploads are the one relative form: the server that renders
+		// the document also serves them, so they resolve against its origin.
+		if (dialect.HOSTED_IMAGE_PATH.test(url)) return;
 
 		let protocol: string;
 		try {
 			protocol = new URL(url).protocol;
 		} catch {
-			// Unlike a link, an image has no relative form worth accepting: there
-			// is nothing to resolve it against.
-			this.add("bad-image", "Image must be an absolute URL", path, node);
+			// Any other relative image has nothing to resolve against.
+			this.add(
+				"bad-image",
+				"Image must be an absolute URL or a Chopin-hosted /images/ path",
+				path,
+				node,
+			);
 			return;
 		}
 

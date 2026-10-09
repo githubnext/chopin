@@ -125,6 +125,7 @@ applied migration. The application schema contains:
 | `research_workspaces`      | Internal request staging: parent channel, exact brief fields, optional published child, attribution, revision, idempotency, and compatibility counters.    |
 | `research_turns`           | Internal initial attempt and compatibility turns with evidence and answer job links.                                                                       |
 | `research_messages`        | Compatibility transcript rows retained for historical workspace references; not a current product thread.                                                  |
+| `plan_images`              | Images uploaded to a document through MCP `upload_image`: SHA-256, type, bytes, size, uploader, and time, keyed by channel and hash.                       |
 
 `channel_state.unanswered_decisions` is maintained in JavaScript rather than a
 generated column. Sidecar text may contain an escaped NUL or an unpaired UTF-16
