@@ -34,6 +34,28 @@ function preparedGraph(): Graph {
 	};
 }
 
+test("Build remains reachable on a compact document without an implementation preface", async ({ seed, join: enter }) => {
+	await seed("# Build review\n\nThe document stays readable on a phone.\n");
+	let page = await enter("ana", {
+		viewport: { width: 390, height: 844 },
+		hasTouch: true,
+		isMobile: true,
+	});
+	let panel = page.getByRole("region", { name: "Implementation", exact: true });
+	await expect(panel).toHaveCount(0);
+	let build = page.getByRole("button", { name: "Build", exact: true });
+	await expect(build).toBeInViewport({ ratio: 1 });
+	await expect(build).toBeEnabled();
+	await build.tap();
+	await expect.poll(() =>
+		panel.evaluate(element => element.checkVisibility({ checkOpacity: true }))
+	)
+		.toBe(true);
+	await page.getByRole("button", { name: "Close implementation", exact: true }).click();
+	await expect(panel).toHaveCount(0);
+	await expect(content(page).locator(":scope > p").first()).toBeInViewport({ ratio: 1 });
+});
+
 async function connector(baseURL: string, command: string[]) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-implementation-checkout-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-implementation-state-"));

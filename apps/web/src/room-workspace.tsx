@@ -75,6 +75,7 @@ import type { DocumentAction } from "./document-actions-menu";
 import type { TitleEdit } from "./title-edit";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
+import type { ReactNode } from "react";
 import type { ChatDestination } from "./conversation-plan/source";
 import type { SourceDestination } from "./conversation-plan/card-parts";
 import type { WorkspacePresentation } from "./workspace-model";
@@ -103,6 +104,7 @@ const QUESTION_MOTION = {
 
 export function Header(
 	{
+		actions,
 		archivedAt,
 		canManage,
 		editing,
@@ -115,6 +117,7 @@ export function Header(
 		project,
 		room,
 	}: {
+		actions?: ReactNode;
 		archivedAt?: string;
 		canManage: boolean;
 		editing?: TitleEdit;
@@ -254,6 +257,7 @@ export function Header(
 					</span>
 				)}
 			</div>
+			{actions && <div className="ml-2 flex shrink-0 items-center">{actions}</div>}
 			<div
 				aria-label={`People here: ${people.join(", ")}`}
 				className="room-members ml-auto flex shrink-0 items-center"
@@ -939,6 +943,15 @@ export function RoomWorkspace(
 			</div>
 		);
 	}
+	let buildAction = profile.implementation && (
+		<button
+			className="btn btn-sm btn-ghost"
+			disabled={!hasPlanContent}
+			onClick={() => setShowImplementation(true)}
+		>
+			Build
+		</button>
+	);
 
 	return (
 		<>
@@ -1032,6 +1045,7 @@ export function RoomWorkspace(
 				documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 				header={
 					<Header
+						actions={mode !== "split" ? buildAction : undefined}
 						archivedAt={workspaceArchivedAt}
 						canManage={effectiveCanManage}
 						editing={titleEdit}
@@ -1047,15 +1061,7 @@ export function RoomWorkspace(
 				}
 				controls={
 					<>
-						{profile.implementation && (
-							<button
-								className="btn btn-sm btn-ghost"
-								disabled={!hasPlanContent}
-								onClick={() => setShowImplementation(true)}
-							>
-								Build
-							</button>
-						)}
+						{buildAction}
 						<button className="btn btn-sm btn-ghost" onClick={() => setShowExperiments(true)}>
 							Investigations
 						</button>
