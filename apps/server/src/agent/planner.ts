@@ -19,6 +19,7 @@ import {
 	DIFF_LANGUAGE,
 	MERMAID_LANGUAGE,
 	SEECODE_LANGUAGE,
+	WIREFRAME_LANGUAGE,
 } from "@chopin/dialect/dialect";
 
 import type { Component } from "@chopin/dialect/dialect";
@@ -82,6 +83,33 @@ Sequence (messages refer to participant ids, in order):
 State (edges connect named states and may label transitions):
 \`\`\`${SEECODE_LANGUAGE}
 {"type":"state","nodes":[{"id":"draft","label":"Draft","row":0,"col":0},{"id":"saved","label":"Saved","row":0,"col":1}],"edges":[["draft","saved","publish"]]}
+\`\`\``;
+
+/** One compact grammar summary and example; the parser owns the full rules. */
+export const WIREFRAME_AUTHORING =
+	`Use a \`${WIREFRAME_LANGUAGE}\` fence to sketch an interface layout or mockup.
+Never draw one with box-drawing characters or ASCII art in a text fence.
+
+Each line is one part: a kind, then an optional "quoted label", bare flags,
+\`key=value\` properties, and an optional \`#id\`. Indent each child exactly two
+spaces under its parent. Kinds and their flags: panel, header, row (wrap, flow),
+stack, card (selected, muted), title, text (muted, strong), button (primary,
+danger, disabled), badge (\`tone=success\` and similar), disclosure (open),
+list (ordered), tabs and nav (\`active=2\`), input (\`placeholder="…"\`), image,
+divider. list, tabs and nav hold \`- item\` lines. \`note "…" -> #id\` annotates
+another part. A refused edit names the line to fix, counted inside the fence.
+
+\`\`\`${WIREFRAME_LANGUAGE}
+panel "Implementation"
+  header
+    button "Approve and build this plan" primary
+  text "Build on Laptop · 4f2a9c01" muted
+  disclosure "0 of 2 tasks complete" open
+    card
+      badge "queued"
+      title "Parse wireframe fences"
+      list
+        - Unknown kinds report a line number
 \`\`\``;
 
 export const PROMPT = `You are the planner. You produce and maintain the plan — the shared document
@@ -243,6 +271,8 @@ eaten on the way out — so \`\\(r = n/t\\)\` is saved as \`(r = n/t)\` and read
 like prose somebody meant to write.
 
 ${DIAGRAM_AUTHORING}
+
+${WIREFRAME_AUTHORING}
 
 Always name a fence's language — \`ts\`, \`python\`, \`sh\` — because the
 language is what colours it, and an unnamed fence is rendered as the grey text
