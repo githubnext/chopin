@@ -148,7 +148,7 @@ text only when people need it to act or recover.
 
 ## Layout
 
-The workspace places the document beside conversation when space permits. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 40.625rem (650px), with 3.75rem (60px) of top padding and at least 3rem (48px) of padding on each side. At browser widths of 600px or less, the horizontal padding becomes 1.5rem (24px). Images and diagrams can extend beyond the prose measure within those gutters; tables can grow toward the trailing gutter and retain their own scroll lane.
+The workspace places the document on the left and Chat on the right when space permits. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 40.625rem (650px), with 3.75rem (60px) of top padding and at least 3rem (48px) of padding on each side. At browser widths of 600px or less, the horizontal padding becomes 1.5rem (24px). Images and diagrams can extend beyond the prose measure within those gutters; tables can grow toward the trailing gutter and retain their own scroll lane.
 
 Spacing starts from a 4px unit and uses the measured steps shown in the frontmatter. App chrome is dense; prose has larger margins and trailing space so the caret remains comfortable near the end of a document. Layout responds to both viewport and document container width. Safe-area insets and larger coarse-pointer targets are accounted for in the web styles.
 

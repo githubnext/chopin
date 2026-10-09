@@ -204,7 +204,7 @@ export function ChatToggle(
 						src={open ? chatCloseIcon : chatIcon}
 					/>
 				)}
-			{status && !open && (
+			{status && (
 				<span
 					aria-hidden="true"
 					className={`absolute right-1 top-1 size-1.5 rounded-full bg-brand ${
@@ -455,87 +455,10 @@ export function Workspace(
 				data-paper-obscured={paperObscured || undefined}
 				inert={paperObscured}
 			>
-				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
-				{chat && (
-					<aside
-						aria-hidden={chatInactive || undefined}
-						aria-labelledby={ids.heading.chat}
-						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
-							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
-						}`}
-						data-pane-moving={chatTrack.moving || undefined}
-						hidden={chatPresence.phase === "closed"}
-						id={ids.pane.chat}
-						inert={chatInactive}
-						onKeyDown={event => {
-							if (event.key === "Escape" && mode !== "split") {
-								event.preventDefault();
-								event.stopPropagation();
-								dismissChat();
-							}
-						}}
-						onTransitionEnd={chatTrack.onTransitionEnd}
-						style={mode === "split"
-							? { "--chat-width": `${chatWidth}px` } as CSSProperties
-							: { width: "100%" }}
-					>
-						{mode === "split"
-							? (
-								<div
-									className="chat-header flex h-[46px] shrink-0 items-center gap-2 px-3.5 hairline-b"
-									data-chat-header
-								>
-									{presentation.separatorVisible && (
-										<ResizeHandle
-											label="Resize chat"
-											max={maximum}
-											min={CHAT_PANE.min}
-											onResize={resizeChat}
-											side="right"
-											width={chatWidth}
-										/>
-									)}
-									<span
-										aria-hidden="true"
-										className="relative grid size-[14px] shrink-0"
-										data-chat-identity
-									>
-										<img alt="" className="size-[14px]" src={chatIcon} />
-										{(chatActivity.busy || chatActivity.unread > 0) && (
-											<span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-brand" />
-										)}
-									</span>
-									<h2
-										className="text-sm font-medium text-text-tertiary"
-										id={ids.heading.chat}
-										tabIndex={-1}
-									>
-										Chat
-									</h2>
-									<ChatToggle
-										activity={chatActivity}
-										className="chat-header-control -mr-[5px] ml-auto"
-										controls={ids.pane.chat}
-										onToggle={dismissChat}
-										open
-									/>
-								</div>
-							)
-							: (
-								<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
-									Chat
-								</h2>
-							)}
-						<div className="min-h-0 flex-1">
-							{chat}
-						</div>
-					</aside>
-				)}
-
 				<main
 					aria-hidden={!presentation.documentVisible || undefined}
-					className={`workspace-document-panel order-1 relative min-w-0 w-full flex-1 ${
-						mode === "split" ? "hairline-l hairline-b" : ""
+					className={`workspace-document-panel relative min-w-0 w-full flex-1 ${
+						mode === "split" ? "hairline-b" : ""
 					}`}
 					hidden={documentPresence.phase === "closed"}
 					inert={!presentation.documentVisible}
@@ -556,35 +479,34 @@ export function Workspace(
 									}
 								}}
 							>
-								{chat && !presentation.chatVisible && (
-									<ChatToggle
-										activity={chatActivity}
-										buttonRef={edgeTab}
-										className="mr-1 shrink-0"
-										controls={ids.pane.chat}
-										onToggle={showDesktopChat}
-										open={false}
-										swapOnHover
-									/>
-								)}
 								{controls}
 								<div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
 									{status}
+									{chat && !presentation.chatVisible && (
+										<ChatToggle
+											activity={chatActivity}
+											buttonRef={edgeTab}
+											className="shrink-0"
+											controls={ids.pane.chat}
+											onToggle={showDesktopChat}
+											open={false}
+										/>
+									)}
+									{childPresentation && (
+										<div className="flex shrink-0 items-center">
+											<button
+												aria-label={`Close ${childPresentation.label}`}
+												className="btn btn-icon btn-ghost -mr-1 shrink-0"
+												data-child-document-close
+												data-tooltip="Close document"
+												onClick={childPresentation.onClose}
+												type="button"
+											>
+												<CloseIcon aria-hidden="true" size={14} />
+											</button>
+										</div>
+									)}
 								</div>
-								{childPresentation && (
-									<div className="ml-auto flex shrink-0 items-center">
-										<button
-											aria-label={`Close ${childPresentation.label}`}
-											className="btn btn-icon btn-ghost -mr-1 shrink-0"
-											data-child-document-close
-											data-tooltip="Close document"
-											onClick={childPresentation.onClose}
-											type="button"
-										>
-											<CloseIcon aria-hidden="true" size={14} />
-										</button>
-									</div>
-								)}
 							</div>
 						)}
 						{mode !== "split" && status && <div className="workspace-status-row">{status}</div>}
@@ -625,6 +547,73 @@ export function Workspace(
 						</div>
 					</div>
 				</main>
+				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
+				{chat && (
+					<aside
+						aria-hidden={chatInactive || undefined}
+						aria-labelledby={ids.heading.chat}
+						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
+							mode === "split" ? "hairline-l hairline-b" : ""
+						}`}
+						data-pane-moving={chatTrack.moving || undefined}
+						hidden={chatPresence.phase === "closed"}
+						id={ids.pane.chat}
+						inert={chatInactive}
+						onKeyDown={event => {
+							if (event.key === "Escape" && mode !== "split") {
+								event.preventDefault();
+								event.stopPropagation();
+								dismissChat();
+							}
+						}}
+						onTransitionEnd={chatTrack.onTransitionEnd}
+						style={mode === "split"
+							? { "--chat-width": `${chatWidth}px` } as CSSProperties
+							: { width: "100%" }}
+					>
+						{mode === "split"
+							? (
+								<div
+									className="chat-header flex h-[46px] shrink-0 items-center gap-0.5 px-3.5 hairline-b"
+									data-chat-header
+								>
+									{presentation.separatorVisible && (
+										<ResizeHandle
+											label="Resize chat"
+											max={maximum}
+											min={CHAT_PANE.min}
+											onResize={resizeChat}
+											side="left"
+											width={chatWidth}
+										/>
+									)}
+									<ChatToggle
+										activity={chatActivity}
+										className="chat-header-control -ml-[5px]"
+										controls={ids.pane.chat}
+										onToggle={dismissChat}
+										open
+										swapOnHover
+									/>
+									<h2
+										className="text-sm font-medium text-text-tertiary"
+										id={ids.heading.chat}
+										tabIndex={-1}
+									>
+										Chat
+									</h2>
+								</div>
+							)
+							: (
+								<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
+									Chat
+								</h2>
+							)}
+						<div className="min-h-0 flex-1">
+							{chat}
+						</div>
+					</aside>
+				)}
 			</div>
 		</div>
 	);

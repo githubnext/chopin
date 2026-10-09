@@ -340,9 +340,11 @@ describe("anchored child lifecycle", () => {
 		expect(markup).toContain('aria-label="Close Source review"');
 		expect(toolbar).toContain('aria-label="Show chat, Planner working"');
 		expect(toolbar).toContain('aria-label="Close Source review"');
+		expect(toolbar.indexOf("Document controls")).toBeLessThan(toolbar.indexOf("Show chat"));
 		expect(toolbar.indexOf("Show chat")).toBeLessThan(
 			toolbar.indexOf("Close Source review"),
 		);
+		expect(markup.indexOf("<main")).toBeLessThan(markup.indexOf("<aside"));
 	});
 
 	it("gives a compact child all three workspace destinations", () => {

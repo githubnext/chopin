@@ -499,29 +499,14 @@ body {
 	opacity: 0;
 }
 
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-default {
+.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-default,
+.chat-header:is(:hover, :focus-within) .chat-header-control .chat-toggle-icon-default {
 	opacity: 0;
 }
 
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-sidebar {
+.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-sidebar,
+.chat-header:is(:hover, :focus-within) .chat-header-control .chat-toggle-icon-sidebar {
 	opacity: 1;
-}
-
-@media (hover: hover) and (pointer: fine) {
-	.chat-header-control {
-		opacity: 0;
-		transition: opacity var(--duration-fast) var(--ease-out);
-	}
-
-	.chat-header:is(:hover, :focus-within) .chat-header-control {
-		opacity: 1;
-	}
-}
-
-@media (any-pointer: coarse) {
-	.chat-header-control {
-		opacity: 1;
-	}
 }
 
 :root[data-motion-input="pointer"] .chat-toggle-icon {
@@ -642,10 +627,6 @@ body {
 	border-color: rgb(0 0 0 / 9%);
 }
 
-.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
-	--panel-direction: -1;
-}
-
 .workspace-root[data-workspace-mode="split"] .workspace-frame > main {
 	min-width: 9rem;
 }
@@ -674,7 +655,7 @@ body {
 /* Split Chat is a track: its width moves the document, and Chat slides under its clip. */
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
 	width: 0;
-	align-items: flex-end;
+	align-items: flex-start;
 	opacity: 1;
 	transform: none;
 }
@@ -1635,10 +1616,6 @@ button.question-add:disabled {
 	}
 
 	[data-chat-enter] {
-		transition: none;
-	}
-
-	.chat-header-control {
 		transition: none;
 	}
 
