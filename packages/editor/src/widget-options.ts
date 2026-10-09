@@ -10,6 +10,7 @@ import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { Research } from "@chopin/protocol";
+import type { GitHubReference, GitHubReferenceResult } from "@chopin/protocol/github-reference";
 import type { ResearchDraftStore } from "./research-draft";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
@@ -36,6 +37,23 @@ export type ResearchStore = {
 	retry(id: string): Promise<Research.RequestView>;
 	opener(id: string, current?: HTMLElement | null): ResearchOpener;
 	open(child: Research.ReadyChild, opener: ResearchOpener): void;
+};
+
+/** A GitHub reference's summary as the host last saw it, or that one is on its way. */
+export type GitHubReferenceEntry = { status: "loading" } | GitHubReferenceResult;
+
+/**
+ * App-owned summaries for GitHub pull request and issue links.
+ *
+ * Reading is cheap and may happen on every editor update: `get` answers from
+ * memory and asks the host to fetch (batched) when it has nothing or what it
+ * has is stale, notifying subscribers when the answer changes.
+ */
+export type GitHubReferenceStore = {
+	subscribe(listener: () => void): () => void;
+	get(reference: GitHubReference): GitHubReferenceEntry;
+	/** Settles with a fresh answer, for a paste that wants a title. */
+	load(reference: GitHubReference): Promise<GitHubReferenceResult>;
 };
 
 export type WidgetOptions = {

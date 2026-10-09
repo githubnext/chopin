@@ -58,14 +58,14 @@ before comparison. Missing or unknown mapped fields, duplicate named entries,
 unknown aliases, alias cycles, malformed sources, and genuine value conflicts
 fail the check. Tailwind namespace resets are applied in source order.
 
-| Record subset                                                     | Implementation owner                                                                    |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Fourteen named colours, including sidecar `colorMeta.*.canonical` | Explicit semantic colour mapping in the theme; Chat divider uses `--color-divider`      |
-| Five `rounded` entries                                            | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`             |
-| Seven typography roles: size, complete font stack, line height    | `--text-*`, `--font-sans`, paired leading; document prose uses `--document-line-height` |
-| Eight spacing steps                                               | Multiples of `--spacing`                                                                |
-| Four sidecar shadow entries                                       | `--shadow-resting`, `--shadow-resting-strong`, `--shadow-raised`, `--shadow-overlay`    |
-| Seven sidecar motion entries                                      | Fast/base/linger duration, smooth-out/move curves, sidebar open/close duration          |
+| Record subset                                                    | Implementation owner                                                                    |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Fifteen named colours, including sidecar `colorMeta.*.canonical` | Explicit semantic colour mapping in the theme; Chat divider uses `--color-divider`      |
+| Five `rounded` entries                                           | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`             |
+| Seven typography roles: size, complete font stack, line height   | `--text-*`, `--font-sans`, paired leading; document prose uses `--document-line-height` |
+| Eight spacing steps                                              | Multiples of `--spacing`                                                                |
+| Four sidecar shadow entries                                      | `--shadow-resting`, `--shadow-resting-strong`, `--shadow-raised`, `--shadow-overlay`    |
+| Seven sidecar motion entries                                     | Fast/base/linger duration, smooth-out/move curves, sidebar open/close duration          |
 
 The checker also verifies two component bindings. The divider is the `border-color`
 in `.workspace-frame .workspace-chat-panel` in the

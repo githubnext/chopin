@@ -28,6 +28,11 @@ import {
 	SELECTION_CHANGE_COMMAND,
 } from "lexical";
 
+import { parseGitHubReference } from "@chopin/protocol/github-reference";
+
+import { GitHubCard } from "../github-card";
+import { useGitHubEntry } from "../github-hover";
+import { useGitHubReferences } from "../github-references";
 import { registerLinkGuard } from "./link-guard";
 import { placeSurface } from "./placement";
 import { $relativePosition, $resolveRange } from "./position";
@@ -35,6 +40,8 @@ import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 import { checkUrl } from "./url";
 
 import type { LinkNode } from "@lexical/link";
+import type { GitHubReference } from "@chopin/protocol/github-reference";
+import type { GitHubReferenceStore } from "../widget-options";
 import type { Binding } from "@lexical/yjs";
 import type {
 	BaseSelection,
@@ -522,6 +529,8 @@ function LinkPreview(
 		return element ? startOf(element.getClientRects(), element.getBoundingClientRect()) : undefined;
 	}, [editor, preview.key]);
 	let position = usePlacement(editor, ref, locate);
+	let store = useGitHubReferences();
+	let reference = store ? parseGitHubReference(preview.url) : undefined;
 
 	// Without a caret to move away, a read-only preview needs its own ways out.
 	useEffect(() => {
@@ -549,7 +558,7 @@ function LinkPreview(
 			ref={ref}
 			role="dialog"
 			aria-label="Link"
-			className={`${SURFACE} flex max-w-[min(24rem,calc(100vw-1rem))] items-center gap-1 p-1`}
+			className={`${SURFACE} flex max-w-[min(24rem,calc(100vw-1rem))] flex-col`}
 			contentEditable={false}
 			data-focus-boundary=""
 			// The caret is what keeps this open; the buttons must not take it.
@@ -558,27 +567,48 @@ function LinkPreview(
 				? { top: position.top, left: position.left }
 				: { top: 0, left: 0, visibility: "hidden" }}
 		>
-			<span className="min-w-0 truncate px-2 text-sm text-text-secondary" title={preview.url}>
-				{preview.url}
-			</span>
-			<button
-				className="btn btn-sm btn-ghost shrink-0"
-				onClick={() => follow(editor, preview.key, preview.url)}
-				title={readOnly ? "Open in a new tab" : "Open in a new tab (⌘↵)"}
-				type="button"
-			>
-				Open
-			</button>
-			{!readOnly && (
+			{store && reference && (
+				<PreviewGitHubCard reference={reference} store={store} url={preview.url} />
+			)}
+			<div className="flex items-center gap-1 p-1">
+				<span className="min-w-0 truncate px-2 text-sm text-text-secondary" title={preview.url}>
+					{preview.url}
+				</span>
 				<button
 					className="btn btn-sm btn-ghost shrink-0"
-					onClick={onEdit}
-					title="Edit link (⌘K)"
+					onClick={() => follow(editor, preview.key, preview.url)}
+					title={readOnly ? "Open in a new tab" : "Open in a new tab (⌘↵)"}
 					type="button"
 				>
-					Edit
+					Open
 				</button>
-			)}
+				{!readOnly && (
+					<button
+						className="btn btn-sm btn-ghost shrink-0"
+						onClick={onEdit}
+						title="Edit link (⌘K)"
+						type="button"
+					>
+						Edit
+					</button>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/** A GitHub reference's card above the link's own actions, so a pill opens one surface. */
+function PreviewGitHubCard(
+	{ reference, store, url }: {
+		reference: GitHubReference;
+		store: GitHubReferenceStore;
+		url: string;
+	},
+) {
+	let entry = useGitHubEntry(store, reference);
+	return (
+		<div className="gh-card-preview">
+			<GitHubCard entry={entry} reference={reference} url={url} />
 		</div>
 	);
 }

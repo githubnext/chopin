@@ -15,6 +15,7 @@ let colors: Record<string, string> = {
 	destructive: "destructive",
 	success: "success",
 	warning: "warning",
+	merged: "merged-icon",
 	"chat-divider": "chat-divider",
 };
 let typography: Record<string, string> = {

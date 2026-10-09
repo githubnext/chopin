@@ -1,5 +1,16 @@
 export { GitHubIcon } from "./brand";
 export { ChopinIcon } from "./filled";
+export {
+	IssueCompletedIcon,
+	IssueNotPlannedIcon,
+	IssueOpenIcon,
+	PendingIcon,
+	PrivateIcon,
+	PullRequestClosedIcon,
+	PullRequestDraftIcon,
+	PullRequestMergedIcon,
+	PullRequestOpenIcon,
+} from "./github";
 export type { IconProps, IconSize } from "./icon";
 export { iconSizes } from "./icon";
 export {
