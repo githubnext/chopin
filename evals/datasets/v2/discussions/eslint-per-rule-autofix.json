@@ -1,0 +1,258 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "eslint-per-rule-autofix",
+	"title": "ESLint per-rule autofix configuration",
+	"source": {
+		"url": "https://github.com/eslint/rfcs/pull/134",
+		"retrievedAt": "2026-09-29T20:10:24.805379+00:00",
+		"repository": "eslint/rfcs",
+		"number": 134
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2025-06-17T23:59:59Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-06-26T23:59:59Z"
+		},
+		{
+			"id": "c3",
+			"at": "2025-07-02T23:59:59Z"
+		},
+		{
+			"id": "c4",
+			"at": "2025-08-22T23:59:59Z"
+		}
+	],
+	"events": [
+		{
+			"id": "3081073479",
+			"kind": "opening",
+			"actor": "MorevM",
+			"createdAt": "2025-05-21T18:22:25Z",
+			"url": "https://github.com/eslint/rfcs/pull/134",
+			"summary": "The PR author proposes shareable per-rule autofix control, continuing an earlier RFC and inviting feedback on an incomplete draft and implementation plan.",
+			"actorId": 49679666,
+			"actorType": "human"
+		},
+		{
+			"id": "2898850775",
+			"kind": "comment",
+			"actor": "linux-foundation-easycla[bot]",
+			"createdAt": "2025-05-21T18:22:32Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-2898850775",
+			"summary": "An automated CLA check records signed agreement status for the listed contributors.",
+			"editedAt": "2025-06-06T22:23:37Z",
+			"actorId": 43480880,
+			"actorType": "bot",
+			"visibleAt": "2025-06-06T22:23:37Z"
+		},
+		{
+			"id": "2960728262",
+			"kind": "comment",
+			"actor": "MorevM",
+			"createdAt": "2025-06-10T22:32:56Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-2960728262",
+			"summary": "The author challenges a claimed performance cost of object-shaped rule entries and offers a small benchmark, while acknowledging its limited realism.",
+			"editedAt": "2025-06-11T11:54:49Z",
+			"actorId": 49679666,
+			"actorType": "human",
+			"visibleAt": "2025-06-11T11:54:49Z"
+		},
+		{
+			"id": "2963101004",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2025-06-11T14:38:26Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-2963101004",
+			"summary": "A maintainer says the concern is retaining both array and object forms in memory and prefers a nonbreaking helper syntax backed by a separate autofix map.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "2963362746",
+			"kind": "comment",
+			"actor": "MorevM",
+			"createdAt": "2025-06-11T15:55:08Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-2963362746",
+			"summary": "The author revisits memory measurements and argues the overhead may be acceptable, while questioning how a top-level setting would interact with rule entries.",
+			"actorId": 49679666,
+			"actorType": "human"
+		},
+		{
+			"id": "2970605137",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2025-06-13T14:35:39Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-2970605137",
+			"summary": "The maintainer reiterates that simultaneous internal representations, rather than either representation alone, are the concern; defineConfig could translate user syntax.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "2970769803",
+			"kind": "comment",
+			"actor": "MorevM",
+			"createdAt": "2025-06-13T15:35:29Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-2970769803",
+			"summary": "The author accepts the helper translation idea but asks which setting should win if both per-rule and top-level autofix declarations are allowed.",
+			"actorId": 49679666,
+			"actorType": "human"
+		},
+		{
+			"id": "2980705905",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2025-06-17T14:54:01Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-2980705905",
+			"summary": "The maintainer suggests withholding top-level autofix from defineConfig initially, leaving lower-level configuration available to direct users.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "3006206582",
+			"kind": "comment",
+			"actor": "MorevM",
+			"createdAt": "2025-06-25T21:32:04Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3006206582",
+			"summary": "The author asks whether helper-only syntax would remove proposed CLI and inline forms and how the design would cover linter option diagnostics.",
+			"actorId": 49679666,
+			"actorType": "human"
+		},
+		{
+			"id": "3008075961",
+			"kind": "comment",
+			"actor": "mdjermanovic",
+			"createdAt": "2025-06-26T10:58:20Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3008075961",
+			"summary": "A maintainer agrees that CLI and inline rule syntax would not gain the new setting under a helper-only approach.",
+			"actorId": 44349756,
+			"actorType": "human"
+		},
+		{
+			"id": "3008167154",
+			"kind": "comment",
+			"actor": "mdjermanovic",
+			"createdAt": "2025-06-26T11:33:09Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3008167154",
+			"summary": "Another maintainer favors a breaking object normalization because it would support future per-rule settings consistently across config, CLI, and inline directives.",
+			"actorId": 44349756,
+			"actorType": "human"
+		},
+		{
+			"id": "3008215860",
+			"kind": "comment",
+			"actor": "MorevM",
+			"createdAt": "2025-06-26T11:51:45Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3008215860",
+			"summary": "The author supports object normalization and says waiting for a major release is preferable to a confusing compatibility workaround.",
+			"actorId": 49679666,
+			"actorType": "human"
+		},
+		{
+			"id": "3023749067",
+			"kind": "comment",
+			"actor": "mdjermanovic",
+			"createdAt": "2025-07-01T12:14:29Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3023749067",
+			"summary": "A maintainer asks the opposing maintainer whether the breaking design remains unacceptable.",
+			"actorId": 44349756,
+			"actorType": "human"
+		},
+		{
+			"id": "3028259282",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2025-07-02T15:15:16Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3028259282",
+			"summary": "The opposing maintainer says the narrow autofix use case does not justify changing the public rule configuration format.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "3028334819",
+			"kind": "comment",
+			"actor": "mdjermanovic",
+			"createdAt": "2025-07-02T15:37:39Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3028334819",
+			"summary": "A maintainer notes there is no consensus for the breaking design and says the RFC should use the compatible direction.",
+			"actorId": 44349756,
+			"actorType": "human"
+		},
+		{
+			"id": "3188233717",
+			"kind": "comment",
+			"actor": "fasttime",
+			"createdAt": "2025-08-14T12:11:45Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3188233717",
+			"summary": "A maintainer checks whether the author intends to revise the RFC and offers help.",
+			"actorId": 6367844,
+			"actorType": "human"
+		},
+		{
+			"id": "3188359417",
+			"kind": "comment",
+			"actor": "MorevM",
+			"createdAt": "2025-08-14T12:56:22Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3188359417",
+			"summary": "The author declines to implement the compatible design, but offers to investigate the original design further or wait for a future major release.",
+			"actorId": 49679666,
+			"actorType": "human"
+		},
+		{
+			"id": "3206778289",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2025-08-20T14:59:04Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3206778289",
+			"summary": "A maintainer says the project will proceed only with a compatible approach and offers to close the RFC so another author can take it up.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "3208199394",
+			"kind": "comment",
+			"actor": "MorevM",
+			"createdAt": "2025-08-20T21:56:53Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3208199394",
+			"summary": "The author steps back from the current RFC while remaining open to future work on object normalization.",
+			"actorId": 49679666,
+			"actorType": "human"
+		},
+		{
+			"id": "19287677270",
+			"kind": "process_event",
+			"actor": "nzakas",
+			"createdAt": "2025-08-22T13:34:41Z",
+			"url": "https://github.com/eslint/rfcs/pull/134",
+			"summary": "A maintainer closes the pull request.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "3214406055",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2025-08-22T13:34:41Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3214406055",
+			"summary": "The maintainer confirms in a comment that the RFC is closing for now.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "3215300283",
+			"kind": "comment",
+			"actor": "SamuelT-Beslogic",
+			"createdAt": "2025-08-22T18:50:58Z",
+			"url": "https://github.com/eslint/rfcs/pull/134#issuecomment-3215300283",
+			"summary": "The original feature requester thanks the author and says waiting for a future major release is acceptable while existing workarounds remain.",
+			"editedAt": "2025-08-22T18:55:31Z",
+			"actorId": 84519004,
+			"actorType": "human",
+			"visibleAt": "2025-08-22T18:55:31Z"
+		}
+	]
+}

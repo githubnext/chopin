@@ -1,0 +1,81 @@
+{
+	"version": 2,
+	"id": "D10",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Ivo",
+		"Sam",
+		"Uma"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Ivo",
+			"text": "comments drift when text is inserted above a selection.",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Sam",
+			"text": "for a durable anchor, we could save DOM paths and offsets, use Yjs relative positions, or keep a text quote with nearby context.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Ivo",
+			"text": "DOM offsets alone feel brittle across render changes.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Uma",
+			"text": "the browser Selection API only tells us where the user started. we'd still need a durable locator.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Sam",
+			"text": "so use quote + context for recovery, with Selection/Range just to capture it?",
+			"to": "room"
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Uma",
+			"text": "yes, that's my preference. and if two quotes match, don't guess.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m7",
+			"kind": "say",
+			"actor": "Ivo",
+			"text": "sounds right. let's test moved paragraphs before saving it.",
+			"to": "room"
+		},
+		{
+			"id": "c7",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}
