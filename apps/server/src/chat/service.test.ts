@@ -4,6 +4,7 @@ import { ulid } from "@chopin/dialect";
 import {
 	consumeBootstrapBackscroll,
 	create,
+	documentRoom,
 	finished,
 	progressed,
 	retainReferences,
@@ -36,6 +37,23 @@ function part(value: Record<string, unknown>): TextStreamPart<ToolSet> {
 function call(toolName: string, toolCallId = "t1", input: unknown = {}) {
 	return part({ type: "tool-call", toolCallId, toolName, input });
 }
+
+it("omits the visual request callback without a preview provider", () => {
+	let { context } = room(create());
+	expect(documentRoom(context).createVisualRequest).toBeUndefined();
+});
+
+it("offers the visual request callback only for a complete provider", () => {
+	let { context } = room(create());
+	context.visualPreview = {
+		request: async () => ({ requestId: "test", state: "pending" }),
+		publish: async () => {},
+		resolve: async () => undefined,
+	};
+	expect(documentRoom(context).createVisualRequest).toBeFunction();
+	context.visualPreview = { resolve: async () => undefined } as never;
+	expect(documentRoom(context).createVisualRequest).toBeUndefined();
+});
 
 describe("AI SDK stream projection", () => {
 	it("counts only non-empty Planner prose as a response and streams one entry", () => {

@@ -41,6 +41,10 @@ import type { JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
 import { broadcast, fail, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES, REQUEST_ID } from "./limits";
+import {
+	availableVisualPreview,
+	type VisualPreviewCapability,
+} from "../visual-decisions/capability";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -477,10 +481,7 @@ export type Room = {
 		text: string;
 		question: string;
 	}) => Promise<ResearchWorkspaceRequest>;
-	createVisualRequest?: (
-		request: Pick<ActiveMemberRequest, "entryId" | "userId" | "handle" | "text">,
-		stillCurrent: () => boolean,
-	) => Promise<{ requestId: string; state: "pending" }>;
+	visualPreview?: VisualPreviewCapability;
 	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
 	hold?: () => () => void;
 };
@@ -1206,6 +1207,7 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 
 export function documentRoom(context: Room): DocumentRoom {
 	let { chat, plan, room, server } = context;
+	let preview = availableVisualPreview(context.visualPreview) ? context.visualPreview : undefined;
 	return {
 		id: room,
 		plan,
@@ -1244,17 +1246,22 @@ export function documentRoom(context: Room): DocumentRoom {
 				question: active.text,
 			});
 		},
-		createVisualRequest: async () => {
-			let active = currentMemberRequest(chat);
-			if (!active || chat.job) {
-				throw new Error(
-					"a current foreground member request is required for a visual preview",
-				);
+		...(preview
+			? {
+				createVisualRequest: async () => {
+					let active = currentMemberRequest(chat);
+					if (!active || chat.job) {
+						throw new Error(
+							"a current foreground member request is required for a visual preview",
+						);
+					}
+					return preview.request(
+						active,
+						() => !chat.job && currentMemberRequest(chat) === active,
+					);
+				},
 			}
-			let createVisualRequest = context.createVisualRequest;
-			if (!createVisualRequest) throw new Error("visual preview requests are unavailable");
-			return createVisualRequest(active, () => !chat.job && currentMemberRequest(chat) === active);
-		},
+			: {}),
 	};
 }
 
@@ -1411,11 +1418,13 @@ async function repositorySession(
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
+			visualPreview: context.visualPreview,
 			instructions: workspace =>
 				plannerInstructions(
 					`${repository.owner}/${repository.name}`,
 					bootstrap,
 					workspace,
+					context.visualPreview,
 				),
 			model: context.config.model,
 			harness: context.config.harness,

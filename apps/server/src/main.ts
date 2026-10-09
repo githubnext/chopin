@@ -30,7 +30,6 @@ import { startAcceptedResearch } from "./conversation-plan/accepted-research";
 import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import * as VisualDecisions from "./visual-decisions/service";
-import * as VisualRequests from "./visual-decisions/requests";
 import * as VisualInject from "./visual-decisions/inject";
 import { previewResponse } from "./visual-preview/descriptor";
 import { proxy, serve } from "./client";
@@ -332,12 +331,6 @@ function conversation(
 					state: created.request.state,
 					stage: created.request.stage,
 				};
-			}
-			: undefined,
-		createVisualRequest: config.agent
-			? async (request, stillCurrent) => {
-				let created = await VisualRequests.create(opened, request, stillCurrent);
-				return { requestId: created.id, state: created.state };
 			}
 			: undefined,
 	});

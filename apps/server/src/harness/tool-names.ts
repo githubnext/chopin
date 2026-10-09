@@ -1,5 +1,9 @@
 import type { ConversationPlan } from "@chopin/protocol";
 import { WRITE_TOOLS } from "../agent/job-scope";
+import {
+	availableVisualPreview,
+	type VisualPreviewCapability,
+} from "../visual-decisions/capability";
 
 export const PLANNER_TOOL_NAMES = [
 	"read_plan",
@@ -7,7 +11,6 @@ export const PLANNER_TOOL_NAMES = [
 	"list_background_jobs",
 	"read_background_job",
 	"create_research_workspace",
-	"request_visual_preview",
 	"edit_plan",
 	"ask",
 	"read_implementation_graph",
@@ -21,6 +24,16 @@ export const PLANNER_TOOL_NAMES = [
 	"pull_request_read",
 	"revise_open_decision",
 ];
+
+export function plannerToolNames(preview?: VisualPreviewCapability): readonly string[] {
+	return availableVisualPreview(preview)
+		? Object.freeze(
+			PLANNER_TOOL_NAMES.flatMap(name =>
+				name === "create_research_workspace" ? [name, "request_visual_preview"] : [name]
+			),
+		)
+		: PLANNER_TOOL_NAMES;
+}
 
 function jobNames(own: string): readonly string[] {
 	return Object.freeze([...PLANNER_TOOL_NAMES.filter(name => !WRITE_TOOLS.has(name)), own]);

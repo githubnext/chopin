@@ -13,8 +13,10 @@ import { openPlannerSession } from "./session";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
+import type { VisualPreviewCapability } from "../visual-decisions/capability";
+import type { PlannerSessionDependencies } from "./session";
 
-it("opens a host-only Planner turn with bound toolsContext, then destroys its sandbox", async () => {
+it("offers visual requests only with a complete provider", async () => {
 	let toolsSeen: string[] = [];
 	let resultSeen: unknown;
 	let destroyed = { session: 0, sandbox: 0 };
@@ -96,11 +98,12 @@ it("opens a host-only Planner turn with bound toolsContext, then destroys its sa
 		revalidate: async () => true,
 		release() {},
 	} satisfies ActiveOwnerBinding;
-	let opened = await openPlannerSession(owner, {
+	let channel = {
 		room: { id: "channel", plan: {}, server: {} } as never,
 		repository: owner.repository,
 		instructions: "Only Chopin tools",
-	}, {
+	};
+	let dependencies: PlannerSessionDependencies = {
 		agent: createPlannerAgent(fake) as never,
 		githubTools: async () => ({
 			ok: true,
@@ -124,7 +127,8 @@ it("opens a host-only Planner turn with bound toolsContext, then destroys its sa
 				},
 			}) as never,
 		registerCredential: () => () => {},
-	});
+	};
+	let opened = await openPlannerSession(owner, channel, dependencies);
 	expect(opened.ok).toBe(true);
 	if (!opened.ok) return;
 	try {
@@ -136,10 +140,35 @@ it("opens a host-only Planner turn with bound toolsContext, then destroys its sa
 			.toBe(true);
 		expect(resultSeen).toMatchObject({ output: "R_channel" });
 		expect(toolsSeen).toEqual(PLANNER_TOOL_NAMES);
+		expect(opened.value.activeTools).toEqual(PLANNER_TOOL_NAMES);
 	} finally {
 		await opened.value.destroy();
 	}
-	expect(destroyed).toEqual({ session: 1, sandbox: 1 });
+	let preview: VisualPreviewCapability = {
+		request: async () => ({ requestId: "test", state: "pending" }),
+		publish: async () => {},
+		resolve: async () => undefined,
+	};
+	let configured = await openPlannerSession(owner, { ...channel, visualPreview: preview }, {
+		...dependencies,
+		agent: undefined,
+		visualPreviewAgent: createPlannerAgent(fake, undefined, preview) as never,
+	});
+	expect(configured.ok).toBe(true);
+	if (!configured.ok) return;
+	try {
+		let result = await configured.value.stream("read the repository", owner.signal);
+		for await (let _part of result.fullStream) {}
+		expect(toolsSeen).toEqual([
+			...PLANNER_TOOL_NAMES.slice(0, 5),
+			"request_visual_preview",
+			...PLANNER_TOOL_NAMES.slice(5),
+		]);
+		expect(configured.value.activeTools).toEqual(toolsSeen);
+	} finally {
+		await configured.value.destroy();
+	}
+	expect(destroyed).toEqual({ session: 2, sandbox: 2 });
 });
 
 it("returns parsed worker output with no built-ins and a per-turn model", async () => {
