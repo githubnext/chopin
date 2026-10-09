@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        image: mirror.gcr.io/library/postgres:17-alpine
         env:
           POSTGRES_DB: chopin
           POSTGRES_USER: chopin
@@ -123,6 +123,11 @@ jobs:
       - name: Verify design audit stays out of production
         run: bun scripts/check-design-production.ts
 
+      - name: Cache PostgreSQL from the Docker Hub mirror
+        run: |
+          docker pull mirror.gcr.io/library/postgres:17-alpine
+          docker tag mirror.gcr.io/library/postgres:17-alpine postgres:17-alpine
+
       - run: E2E_SKIP_BUILD=1 bun run e2e
 
       # Only on failure, and only the parts worth reading. `test-results`
@@ -143,6 +148,10 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
 
       - uses: docker/build-push-action@v6
         with:
