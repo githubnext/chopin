@@ -3,15 +3,15 @@
 // entity (ER / db-schema table), class (UML compartments).
 import { el, text } from "../../svg.mjs";
 import { ceil4, textWidth, wrap } from "../../text.mjs";
-import { TYPE } from "../../tokens.mjs";
+import { DIAGRAM_TYPE, LABEL_BOX } from "../../tokens.mjs";
 
-const LABEL = { size: TYPE.label, weight: 600 };
-const SUB = { size: TYPE.sub, mono: true };
-const TAG = { size: TYPE.tag, mono: true, tracking: 0.12, upper: true };
-const FIELD = { size: 10 };
-const FTYPE = { size: 9, mono: true };
-const ROW_H = 18;
-const HEAD_H = 30;
+const LABEL = DIAGRAM_TYPE.label;
+const SUB = DIAGRAM_TYPE.sub;
+const TAG = DIAGRAM_TYPE.tag;
+const FIELD = { ...SUB, mono: false, fontFamily: LABEL.fontFamily };
+const FTYPE = SUB;
+const ROW_H = SUB.lineHeight + LABEL_BOX.tableRowPaddingBlock * 2;
+const HEAD_H = LABEL.lineHeight + LABEL_BOX.tablePaddingBlock * 2;
 
 export const MIN_W = 112;
 export const MAX_W = 220;
@@ -57,7 +57,9 @@ export function sizeNode(n, { minW = MIN_W, maxW = MAX_W } = {}) {
 	if (shape === "entity" || shape === "class") {
 		const { sections } = tableRows(n);
 		n.sections = sections;
-		let inner = textWidth(n.label, LABEL) + (n.tag ? textWidth(n.tag, TAG) + 24 : 0);
+		let inner = shape === "class"
+			? Math.max(textWidth(n.label, LABEL), n.tag ? textWidth(n.tag, TAG) : 0)
+			: textWidth(n.label, LABEL) + (n.tag ? textWidth(n.tag, TAG) + 24 : 0);
 		for (const s of sections) {
 			for (const r of s) {
 				const w = r.text !== undefined
@@ -67,14 +69,8 @@ export function sizeNode(n, { minW = MIN_W, maxW = MAX_W } = {}) {
 				inner = Math.max(inner, w);
 			}
 		}
-		n.headH = shape === "class" && n.tag ? 42 : HEAD_H;
-		if (shape === "class") {
-			inner = Math.max(
-				textWidth(n.label, LABEL),
-				n.tag ? textWidth(n.tag, TAG) : 0,
-				inner - (n.tag ? textWidth(n.tag, TAG) + 24 : 0),
-			);
-		}
+		n.headH = shape === "class" && n.tag ? HEAD_H + TAG.lineHeight : HEAD_H;
+
 		n.w = ceil4(Math.max(minW + 16, inner + 28));
 		const rows = sections.reduce(
 			(s, sec) => s + Math.max(sec.length, shape === "class" ? 1 : 0),
@@ -87,22 +83,23 @@ export function sizeNode(n, { minW = MIN_W, maxW = MAX_W } = {}) {
 	const lw = textWidth(n.label, LABEL);
 	let lines = [n.label];
 	let inner = lw;
-	if (lw > maxW - 32) {
-		lines = wrap(n.label, maxW - 32, LABEL).slice(0, 2);
+	if (lw > maxW - LABEL_BOX.paddingInline * 2) {
+		lines = wrap(n.label, maxW - LABEL_BOX.paddingInline * 2, LABEL).slice(0, 2);
 		inner = Math.max(...lines.map((l) => textWidth(l, LABEL)));
 	}
 	const sw = n.sub ? textWidth(n.sub, SUB) : 0;
-	const tw = n.tag ? textWidth(n.tag, TAG) + 10 : 0;
-	inner = Math.max(inner, sw, tw ? tw * 2 + 8 : 0);
-	let w = ceil4(Math.max(minW, inner + 32));
-	const extra = (lines.length - 1) * 15;
-	let h = (n.tag ? 64 : n.sub ? 52 : 40) + extra;
+	const tw = n.tag ? textWidth(n.tag, TAG) + LABEL_BOX.badgePaddingInline * 2 : 0;
+	inner = Math.max(inner, sw, tw ? tw + LABEL_BOX.tagInset * 2 - LABEL_BOX.paddingInline * 2 : 0);
+	let w = ceil4(Math.max(minW, inner + LABEL_BOX.paddingInline * 2));
+	const contentHeight = lines.length * LABEL.lineHeight
+		+ (n.sub ? LABEL_BOX.detailGap + SUB.lineHeight : 0);
+	const tagHeight = n.tag ? TAG.lineHeight + LABEL_BOX.badgePaddingBlock * 2 + LABEL_BOX.tagGap : 0;
+	let h = contentHeight + tagHeight + LABEL_BOX.paddingBlock * 2;
 	if (shape === "decision") {
 		w = ceil4(Math.max(128, inner * 1.5 + 40));
-		h = ceil4(Math.max(72, w * 0.5)) + extra;
+		h = ceil4(Math.max(72, w * 0.5, h));
 	} else if (shape === "terminal") {
 		w = ceil4(Math.max(96, inner + 40));
-		h = n.sub ? 48 : 36;
 	} else if (shape === "io") {
 		w = ceil4(Math.max(minW, inner + 48));
 	} else if (shape === "state") {
@@ -168,19 +165,42 @@ function drawTable(n, parts) {
 				text({
 					class: "n-tag",
 					x: x + w / 2,
-					y: y + 15,
+					y: y + LABEL_BOX.tablePaddingBlock + TAG.lineHeight / 2,
+					"dominant-baseline": "central",
 					"text-anchor": "middle",
 					style: "text-transform:none",
 				}, n.tag),
 			);
 		}
 		parts.push(
-			text({ class: "n-label", x: x + w / 2, y: y + H - 10.5, "text-anchor": "middle" }, n.label),
+			text({
+				class: "n-label",
+				x: x + w / 2,
+				y: y + H - LABEL_BOX.tablePaddingBlock - LABEL.lineHeight / 2,
+				"text-anchor": "middle",
+				"dominant-baseline": "central",
+			}, n.label),
 		);
 	} else {
-		if (n.tag) parts.push(text({ class: "n-tag", x: x + 10, y: y + 18 }, n.tag));
-		const tagW = n.tag ? textWidth(n.tag, TAG) + 16 : 0;
-		parts.push(text({ class: "n-label", x: x + 10 + tagW, y: y + 19.5 }, n.label));
+		if (n.tag) {
+			parts.push(
+				text({
+					class: "n-tag",
+					x: x + LABEL_BOX.tablePaddingInline,
+					y: y + H / 2,
+					"dominant-baseline": "central",
+				}, n.tag),
+			);
+		}
+		const tagW = n.tag ? textWidth(n.tag, TAG) + LABEL_BOX.tagGap : 0;
+		parts.push(
+			text({
+				class: "n-label",
+				x: x + LABEL_BOX.tablePaddingInline + tagW,
+				y: y + H / 2,
+				"dominant-baseline": "central",
+			}, n.label),
+		);
 	}
 	let ry = y + H + 4;
 	n.sections.forEach((sec, si) => {
@@ -190,20 +210,42 @@ function drawTable(n, parts) {
 		}
 		if (!sec.length && n.shape === "class") ry += ROW_H;
 		for (const r of sec) {
-			const base = ry + 12.5;
+			const base = ry + ROW_H / 2;
 			if (r.text !== undefined) {
-				parts.push(text({ class: "n-field-t", x: x + 10, y: base }, r.text));
+				parts.push(
+					text({
+						class: "n-field-t",
+						x: x + LABEL_BOX.tablePaddingInline,
+						y: base,
+						"dominant-baseline": "central",
+					}, r.text),
+				);
 			} else {
-				let fx = x + 10;
+				let fx = x + LABEL_BOX.tablePaddingInline;
 				if (r.key) {
 					const k = r.key.split(" ")[0];
-					parts.push(text({ class: `n-key n-key-${k.toLowerCase()}`, x: fx, y: base }, k));
+					parts.push(
+						text({
+							class: `n-key n-key-${k.toLowerCase()}`,
+							x: fx,
+							y: base,
+							"dominant-baseline": "central",
+						}, k),
+					);
 					fx += 24;
 				}
-				parts.push(text({ class: "n-field", x: fx, y: base }, r.name));
+				parts.push(
+					text({ class: "n-field", x: fx, y: base, "dominant-baseline": "central" }, r.name),
+				);
 				if (r.type) {
 					parts.push(
-						text({ class: "n-field-t", x: x + w - 10, y: base, "text-anchor": "end" }, r.type),
+						text({
+							class: "n-field-t",
+							x: x + w - LABEL_BOX.tablePaddingInline,
+							y: base,
+							"text-anchor": "end",
+							"dominant-baseline": "central",
+						}, r.type),
 					);
 				}
 			}
@@ -224,26 +266,49 @@ export function drawNode(n, { step, extraClass = "", attrs = {} } = {}) {
 	} else if (n.shape === "entity" || n.shape === "class") {
 		drawTable(n, parts);
 	} else {
-		let top = n.y;
+		let top = n.y + LABEL_BOX.paddingBlock;
 		if (n.tag) {
-			const tw = textWidth(n.tag, TAG) + 10;
-			parts.push(
-				el("rect", { class: "n-tag-box", x: n.x + 8, y: n.y + 8, width: tw, height: 12, rx: 2 }),
-			);
-			parts.push(
-				text({ class: "n-tag", x: n.x + 8 + tw / 2, y: n.y + 17, "text-anchor": "middle" }, n.tag),
-			);
-			top += 16;
+			const tw = textWidth(n.tag, TAG) + LABEL_BOX.badgePaddingInline * 2;
+			const tagHeight = TAG.lineHeight + LABEL_BOX.badgePaddingBlock * 2;
+			parts.push(el("rect", {
+				class: "n-tag-box",
+				x: n.x + LABEL_BOX.tagInset,
+				y: n.y + LABEL_BOX.tagInset,
+				width: tw,
+				height: tagHeight,
+				rx: 2,
+			}));
+			parts.push(text({
+				class: "n-tag",
+				x: n.x + LABEL_BOX.tagInset + tw / 2,
+				y: n.y + LABEL_BOX.tagInset + tagHeight / 2,
+				"text-anchor": "middle",
+				"dominant-baseline": "central",
+			}, n.tag));
+			top += tagHeight + LABEL_BOX.tagGap;
 		}
 		const lines = n.lines || [n.label];
-		const block = lines.length * 15 + (n.sub ? 14 : 0) - 3;
-		let y = top + (n.y + n.h - top) / 2 - block / 2 + 11;
+		const block = lines.length * LABEL.lineHeight
+			+ (n.sub ? LABEL_BOX.detailGap + SUB.lineHeight : 0);
+		let y = top + (n.y + n.h - LABEL_BOX.paddingBlock - top - block) / 2;
 		for (const line of lines) {
-			parts.push(text({ class: "n-label", x: cx, y, "text-anchor": "middle" }, line));
-			y += 15;
+			parts.push(text({
+				class: "n-label",
+				x: cx,
+				y: y + LABEL.lineHeight / 2,
+				"text-anchor": "middle",
+				"dominant-baseline": "central",
+			}, line));
+			y += LABEL.lineHeight;
 		}
 		if (n.sub) {
-			parts.push(text({ class: "n-sub", x: cx, y: y + 0.5, "text-anchor": "middle" }, n.sub));
+			parts.push(text({
+				class: "n-sub",
+				x: cx,
+				y: y + LABEL_BOX.detailGap + SUB.lineHeight / 2,
+				"text-anchor": "middle",
+				"dominant-baseline": "central",
+			}, n.sub));
 		}
 	}
 	if (n.status) {

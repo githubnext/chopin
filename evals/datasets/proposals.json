@@ -1,0 +1,38 @@
+{
+	"version": 1,
+	"partition": "development-supplement",
+	"cases": [
+		{
+			"id": "proposal-rust-async-await",
+			"kind": "authored-proposal",
+			"origin": "original-source",
+			"title": "Async & Await",
+			"author": "withoutboats",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/2394",
+			"pinnedUrl": "https://github.com/rust-lang/rfcs/blob/f63ddca7ce5cd8725ec137459ba2a930474a34e7/text/0000-async_await.md",
+			"snapshot": "f63ddca7ce5cd8725ec137459ba2a930474a34e7",
+			"cutoff": "2018-04-05T12:34:04Z",
+			"file": {
+				"path": "proposals/proposal-rust-async-await.md",
+				"sourcePath": "text/0000-async_await.md",
+				"sha256": "5a5cb895be9d00fa3c1b180bf2ceb06349744405fb494cb281ed04f4faa7f767"
+			}
+		},
+		{
+			"id": "proposal-eslint-per-rule-autofix",
+			"kind": "authored-proposal",
+			"origin": "original-source",
+			"title": "Per-rule autofix configuration",
+			"author": "Samuel Therrien",
+			"sourceUrl": "https://github.com/eslint/rfcs/pull/134",
+			"pinnedUrl": "https://github.com/eslint/rfcs/blob/41598f3a0d81f56ae6c75f59273269a54db50085/designs/2024-per-rule-autofix-configuration/README.md",
+			"snapshot": "41598f3a0d81f56ae6c75f59273269a54db50085",
+			"cutoff": "2024-10-22T17:50:04Z",
+			"file": {
+				"path": "proposals/proposal-eslint-per-rule-autofix.md",
+				"sourcePath": "designs/2024-per-rule-autofix-configuration/README.md",
+				"sha256": "8efe54d811137f2b524623b4808d4f245e84047a0832b385014a80c876a9ffc5"
+			}
+		}
+	]
+}

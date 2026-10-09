@@ -33,7 +33,7 @@
 	line-height: var(--text-xs--line-height);
 }
 
-.cv-badge[data-size="sm"] .cv-icon-label {
+.cv-badge:is([data-size="sm"], [data-text-size]) .cv-icon-label {
 	font-size: inherit;
 	line-height: inherit;
 }
@@ -46,4 +46,14 @@
 .cv-badge[data-size="sm"] .cv-icon-label-icon {
 	width: calc(var(--spacing) * 3);
 	height: calc(var(--spacing) * 3);
+}
+
+.cv-badge[data-text-size="xs"] {
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.cv-badge[data-text-size="2xs"] {
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
 }

@@ -1,0 +1,55 @@
+{
+	"version": 1,
+	"registrySha256": "5cdc086840041f9b5c2140d90f9baa8355c7604b8b6fa46d991f09c9f3b889cb",
+	"sources": [
+		{
+			"id": "astro-production-deps",
+			"partition": "development",
+			"origin": "original-source",
+			"url": "https://github.com/withastro/roadmap/discussions/655",
+			"retrievedAt": "2026-09-29T20:14:55.806360+00:00"
+		},
+		{
+			"id": "vite-bundled-dev-hmr",
+			"partition": "development",
+			"origin": "original-source",
+			"url": "https://github.com/vitejs/vite/discussions/22747",
+			"retrievedAt": "2026-09-29T20:14:56.764761+00:00"
+		},
+		{
+			"id": "deno-run-task",
+			"partition": "development",
+			"origin": "original-source",
+			"url": "https://github.com/denoland/deno/issues/25575",
+			"retrievedAt": "2026-09-29T20:09:58.360206+00:00"
+		},
+		{
+			"id": "pandas-excel-style",
+			"partition": "development",
+			"origin": "original-source",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154",
+			"retrievedAt": "2026-09-29T20:10:25.569780+00:00"
+		},
+		{
+			"id": "biome-fix-all",
+			"partition": "development",
+			"origin": "original-source",
+			"url": "https://github.com/biomejs/biome/issues/3339",
+			"retrievedAt": "2026-09-29T20:10:22.692375+00:00"
+		},
+		{
+			"id": "typescript-assignment-narrowing",
+			"partition": "development",
+			"origin": "original-source",
+			"url": "https://github.com/microsoft/TypeScript/issues/61789",
+			"retrievedAt": "2026-09-29T20:10:24.805379+00:00"
+		},
+		{
+			"id": "eslint-per-rule-autofix",
+			"partition": "development",
+			"origin": "original-source",
+			"url": "https://github.com/eslint/rfcs/pull/134",
+			"retrievedAt": "2026-09-29T20:10:24.805379+00:00"
+		}
+	]
+}

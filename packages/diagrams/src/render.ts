@@ -1,3 +1,5 @@
+import { compactGraphSpecs, DIAGRAM_VIEWPORT } from "./viewport";
+
 import { resolvePreset } from "./core/motion.mjs";
 import { validate } from "./core/schema.mjs";
 import { SCHEMAS } from "./core/schemas";
@@ -147,7 +149,10 @@ const FIX_HINTS: Record<string, string> = {
 	"unknown field": "remove the field",
 };
 
-export function renderDiagram(input: unknown): DiagramResult {
+export function renderDiagram(
+	input: unknown,
+	options: { availableWidth?: number } = {},
+): DiagramResult {
 	let copied = boundedCopy(input);
 	if (copied.problem) return { ok: false, problems: [copied.problem] };
 	if (!copied.value || typeof copied.value !== "object" || Array.isArray(copied.value)) {
@@ -242,7 +247,7 @@ export function renderDiagram(input: unknown): DiagramResult {
 				problems: [{ code: "E_RENDER", at: "(root)", msg: "renderer produced invalid geometry" }],
 			};
 		}
-		return {
+		let ready: Extract<DiagramResult, { ok: true }> = {
 			ok: true,
 			body: result.body,
 			viewBox: viewBox as [number, number, number, number],
@@ -254,6 +259,20 @@ export function renderDiagram(input: unknown): DiagramResult {
 			...(result.graph ? { graph: result.graph as DiagramGraph } : {}),
 			diagnostics,
 		};
+		let available = options.availableWidth;
+		if (info.family !== "graph" || !Number.isFinite(available) || !available || available <= 0) {
+			return ready;
+		}
+		let target = Math.min(DIAGRAM_VIEWPORT.preferredWidth, available);
+		if (ready.viewBox[2] <= target) return ready;
+		for (let candidate of compactGraphSpecs(spec)) {
+			let compact = renderDiagram(candidate);
+			if (!compact.ok || compact.viewBox[2] >= ready.viewBox[2]) continue;
+			// Compare complete renders: routing, groups and playback remain owned by the renderer.
+			ready = compact;
+			if (ready.viewBox[2] <= target) break;
+		}
+		return ready;
 	} catch {
 		return {
 			ok: false,

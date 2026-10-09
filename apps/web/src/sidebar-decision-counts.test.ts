@@ -151,7 +151,7 @@ describe("sidebar decision counts", () => {
 		for (let [, attributes, count] of slots) {
 			expect(attributes).toContain('aria-hidden="true"');
 			expect(attributes).toContain('class="project-sidebar-count"');
-			expect(count).toContain("bg-inset");
+			expect(count).toContain("bg-count-quiet");
 			expect(count).toContain("text-text-tertiary");
 			expect(count).not.toContain("bg-brand");
 		}

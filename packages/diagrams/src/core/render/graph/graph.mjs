@@ -9,6 +9,7 @@ import { drawEdge, labelBox, placeLabel } from "../shared/edges.mjs";
 import { legend } from "../shared/legend.mjs";
 import { routeEdges } from "./route.mjs";
 import { compressSteps } from "../../motion.mjs";
+import { DIAGRAM_TYPE, LABEL_BOX } from "../../tokens.mjs";
 
 export const family = "graph";
 
@@ -379,8 +380,9 @@ export function render(input) {
 			}
 		}
 		const label = (g.label || g.id).toUpperCase();
-		const lw = ceil4(textWidth(label, { size: 7, mono: true, tracking: 0.16 }) + 12);
-		groups.push({ ...g, box, label, labelBox: { x: box.x + 12, y: box.y - 6, w: lw, h: 12 } });
+		const lw = ceil4(textWidth(label, DIAGRAM_TYPE.tag) + LABEL_BOX.badgePaddingInline * 2);
+		const lh = DIAGRAM_TYPE.tag.lineHeight + LABEL_BOX.badgePaddingBlock * 2;
+		groups.push({ ...g, box, label, labelBox: { x: box.x + 12, y: box.y - lh / 2, w: lw, h: lh } });
 	}
 
 	// Labels.
@@ -456,7 +458,7 @@ export function render(input) {
 		return { id, label, y0: rowY[r0] - above, y1: rowY[r1] + rowH[r1] + below, i };
 	}).filter(Boolean);
 	const laneGutter = lanes.length
-		? Math.max(...lanes.map((l) => textWidth(l.label, { size: 8, mono: true, tracking: 0.16 })))
+		? Math.max(...lanes.map((l) => textWidth(l.label, DIAGRAM_TYPE.tag)))
 			+ 48
 		: 0;
 
@@ -464,7 +466,13 @@ export function render(input) {
 	const pts = [];
 	lanes.forEach((l) => pts.push([-laneGutter - 8, l.y0], [lastX + 24, l.y1]));
 	nodes.forEach((n) => pts.push([n.x, n.y], [n.x + n.w, n.y + n.h]));
-	groups.forEach((g) => pts.push([g.box.x, g.labelBox.y], [g.box.x + g.box.w, g.box.y + g.box.h]));
+	groups.forEach((g) =>
+		pts.push(
+			[g.box.x, g.labelBox.y],
+			[g.box.x + g.box.w, g.box.y + g.box.h],
+			[g.labelBox.x + g.labelBox.w, g.labelBox.y + g.labelBox.h],
+		)
+	);
 	edges.forEach((e) => (e.route || []).forEach((p) => pts.push([p.x, p.y])));
 	placed.forEach((b) => pts.push([b.x, b.y], [b.x + b.w, b.y + b.h]));
 	const minX = Math.min(...pts.map((p) => p[0])) - 24;
@@ -540,7 +548,12 @@ export function render(input) {
 					l.i === 0
 						? el("line", { class: "lane-rule", x1: minX + 16, y1: l.y0, x2: maxX - 16, y2: l.y0 })
 						: "",
-					text({ class: "lane-label", x: minX + 28, y: (l.y0 + l.y1) / 2 + 3 }, l.label),
+					text({
+						class: "lane-label",
+						x: minX + 28,
+						y: (l.y0 + l.y1) / 2,
+						"dominant-baseline": "central",
+					}, l.label),
 				])
 			),
 		)
@@ -570,9 +583,14 @@ export function render(input) {
 						x: g.labelBox.x,
 						y: g.labelBox.y,
 						width: g.labelBox.w,
-						height: 12,
+						height: g.labelBox.h,
 					}),
-					text({ class: "g-label", x: g.labelBox.x + 6, y: g.labelBox.y + 9 }, g.label),
+					text({
+						class: "g-label",
+						x: g.labelBox.x + LABEL_BOX.badgePaddingInline,
+						y: g.labelBox.y + g.labelBox.h / 2,
+						"dominant-baseline": "central",
+					}, g.label),
 				])
 			),
 		),

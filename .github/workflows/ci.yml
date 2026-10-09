@@ -117,17 +117,16 @@ jobs:
       - name: Diagram gallery (rendering and keyboard behaviour)
         run: bun run diagrams:test
 
-      # Builds the client, then runs it. The build is deliberately here rather
-      # than inside the Playwright config: web servers start before any global
-      # setup, so a build racing them would leave the suite on the previous
-      # bundle — green, about code nobody changed.
-      - run: bun run e2e
+      # Build once, and reject development previews before the long browser suite.
+      - run: bun run build
 
       - name: Generic visual decisions (isolated preview fixtures)
         run: E2E_SKIP_BUILD=1 bun scripts/e2e.ts --config e2e/visual-decision.playwright.config.ts
 
       - name: Verify design audit stays out of production
         run: bun scripts/check-design-production.ts
+
+      - run: E2E_SKIP_BUILD=1 bun run e2e
 
       # Only on failure, and only the parts worth reading. `test-results`
       # carries the traces; the report is the thing that indexes them.

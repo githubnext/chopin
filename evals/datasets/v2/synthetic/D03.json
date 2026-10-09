@@ -1,0 +1,100 @@
+{
+	"version": 2,
+	"id": "D03",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Liv",
+		"Dan",
+		"Isha"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Liv",
+			"text": "what sends transactional notifications? our SMTP relay, Postmark, or SES?",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Dan",
+			"text": "relay is cheap but delivery reports are rough.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Isha",
+			"text": "Postmark has the webhooks we need for bounced invites.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Liv",
+			"text": "SES is fine too if cost wins. what's our monthly volume? I don't know current provider prices.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "a1",
+			"kind": "research-action",
+			"actor": "Liv",
+			"researchKey": "provider-pricing",
+			"action": "dismiss"
+		},
+		{
+			"id": "ca1",
+			"kind": "checkpoint",
+			"waitFor": "analysis",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Dan",
+			"text": "under 20k. lets do postmark for notifications.",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Isha",
+			"text": "works for me. we can revisit if volume changes.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m7",
+			"kind": "say",
+			"actor": "Liv",
+			"text": "I still do not know the current Postmark and SES prices. We can compare them later.",
+			"to": "room"
+		},
+		{
+			"id": "c7",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

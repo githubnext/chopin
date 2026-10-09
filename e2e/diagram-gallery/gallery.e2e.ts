@@ -77,9 +77,6 @@ test("a narrow diagram exposes keyboard horizontal scrolling", async ({ page }, 
 	let stage = page.locator('[data-specimen-diagram="first"] .ch-diagram__stage');
 	await expect(stage).toHaveAttribute("tabindex", "0");
 	await expect(stage).toHaveAttribute("aria-label", /scroll horizontally/i);
-	await expect(page.locator('[data-specimen-diagram="first"]')).toContainText(
-		/left and right arrow keys/i,
-	);
 	await stage.focus();
 	await expect(stage).toBeFocused();
 	await stage.press("ArrowRight");

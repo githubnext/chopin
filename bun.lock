@@ -65,6 +65,7 @@
         "@chopin/viewport": "workspace:*",
         "@chopin/visuals": "workspace:*",
         "@fontsource-variable/inter": "^5.3.0",
+        "@fontsource/lora": "^5.3.0",
         "react": "catalog:react",
         "react-dom": "catalog:react",
         "react-markdown": "^10.1.0",
@@ -75,6 +76,7 @@
         "@types/react": "catalog:react",
         "@types/react-dom": "catalog:react",
         "@vitejs/plugin-react": "catalog:react",
+        "agentation": "^3.1.2",
         "tailwindcss": "catalog:ui",
         "vite": "catalog:ui",
         "vite-tsconfig-paths": "catalog:ui",
@@ -154,6 +156,7 @@
         "@chopin/protocol": "workspace:*",
         "@chopin/question": "workspace:*",
         "@chopin/viewport": "workspace:*",
+        "@chopin/visuals": "workspace:*",
         "@lexical/link": "catalog:mdx",
         "@lexical/list": "catalog:mdx",
         "@lexical/react": "catalog:mdx",
@@ -646,6 +649,8 @@
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
     "@fontsource-variable/inter": ["@fontsource-variable/inter@5.3.0", "", {}, "sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA=="],
+
+    "@fontsource/lora": ["@fontsource/lora@5.3.0", "", {}, "sha512-OK1g1z01rHVPqO5aw/FOIoDqc46KKYZdgL3NOLkxLWDk6QhDHhdr/h2BV1cke6gTvR1tzpDfdKyUkGsC+sQLeQ=="],
 
     "@github/copilot": ["@github/copilot@1.0.80", "", { "dependencies": { "detect-libc": "^2.1.2" }, "optionalDependencies": { "@github/copilot-darwin-arm64": "1.0.80", "@github/copilot-darwin-x64": "1.0.80", "@github/copilot-linux-arm64": "1.0.80", "@github/copilot-linux-x64": "1.0.80", "@github/copilot-linuxmusl-arm64": "1.0.80", "@github/copilot-linuxmusl-x64": "1.0.80", "@github/copilot-win32-arm64": "1.0.80", "@github/copilot-win32-x64": "1.0.80" }, "bin": { "copilot": "npm-loader.js" } }, "sha512-6tf93ZF56KOiTTAjK/UhLZkl1W543IzaTQly288kockJZFswpRTnQEI00Yvacpb39DTvTYu3/ha9SeKpo/pgZQ=="],
 
@@ -1294,6 +1299,8 @@
     "acorn-jsx": ["acorn-jsx@5.3.2", "", { "peerDependencies": { "acorn": "^6.0.0 || ^7.0.0 || ^8.0.0" } }, "sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ=="],
 
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
+
+    "agentation": ["agentation@3.1.2", "", { "peerDependencies": { "react": ">=18.0.0", "react-dom": ">=18.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-ZZr6PRgX3ussGbvC9NVh5vFfKKFkQyHL6KuxOfBAAM/mJS3bM2XyhZ7wLPakDwU3pqkzq7u6vEfLikFsCOu5+Q=="],
 
     "ai": ["ai@7.0.135", "", { "dependencies": { "@ai-sdk/gateway": "4.0.109", "@ai-sdk/provider": "4.0.26", "@ai-sdk/provider-utils": "5.0.58" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-/fR5b8VX2U0U0oMmD0hSrNNWXtT1vVi+BK0He6g3tjOi2m+rerW501WLMw5auDBFbsgg2xdaMqthVMioVhDbDQ=="],
 

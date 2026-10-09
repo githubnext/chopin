@@ -1,0 +1,88 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "deno-run-task",
+	"title": "Deno run and configured tasks",
+	"source": {
+		"url": "https://github.com/denoland/deno/issues/25575",
+		"retrievedAt": "2026-09-29T20:09:58.360206+00:00",
+		"repository": "denoland/deno",
+		"number": 25575
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2024-09-11T10:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2024-09-18T18:38:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2024-09-18T18:52:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2024-09-18T19:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "deno-25575:issue:25575",
+			"kind": "opening",
+			"actor": "dsherret",
+			"createdAt": "2024-09-11T09:52:57Z",
+			"url": "https://github.com/denoland/deno/issues/25575",
+			"summary": "The opener argues that deno run should execute scripts while deno task should execute configured tasks; task fallback can interfere with import-map paths.",
+			"editedAt": "2024-09-11T09:54:25Z",
+			"actorId": 1609021,
+			"actorType": "human"
+		},
+		{
+			"id": "deno-25575:comment:2359159481",
+			"kind": "comment",
+			"actor": "bartlomieju",
+			"createdAt": "2024-09-18T18:37:10Z",
+			"url": "https://github.com/denoland/deno/issues/25575#issuecomment-2359159481",
+			"summary": "A maintainer says the team decided to keep the behavior, while changing errors so missing scripts no longer prompt with available tasks.",
+			"actorId": 13602871,
+			"actorType": "human",
+			"parentId": "deno-25575:issue:25575"
+		},
+		{
+			"id": "deno-25575:process:closed:2024-09-18T18:37:10Z",
+			"kind": "process",
+			"actor": "bartlomieju",
+			"createdAt": "2024-09-18T18:37:10Z",
+			"url": "https://github.com/denoland/deno/issues/25575",
+			"summary": "A maintainer closes the issue.",
+			"actorId": 13602871,
+			"actorType": "human",
+			"parentId": "deno-25575:issue:25575"
+		},
+		{
+			"id": "deno-25575:comment:2359180223",
+			"kind": "comment",
+			"actor": "birkskyum",
+			"createdAt": "2024-09-18T18:49:04Z",
+			"url": "https://github.com/denoland/deno/issues/25575#issuecomment-2359180223",
+			"summary": "A participant asks for an explicit account of the final relationship between deno run and deno task.",
+			"editedAt": "2024-09-18T18:51:58Z",
+			"actorId": 74932975,
+			"actorType": "human",
+			"parentId": "deno-25575:issue:25575"
+		},
+		{
+			"id": "deno-25575:comment:2359196596",
+			"kind": "comment",
+			"actor": "bartlomieju",
+			"createdAt": "2024-09-18T18:58:41Z",
+			"url": "https://github.com/denoland/deno/issues/25575#issuecomment-2359196596",
+			"summary": "The maintainer confirms that deno run can execute a matching task after a file lookup fails; absent both, the error names the missing file.",
+			"actorId": 13602871,
+			"actorType": "human",
+			"parentId": "deno-25575:issue:25575"
+		}
+	]
+}

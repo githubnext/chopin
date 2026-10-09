@@ -3,6 +3,7 @@
 // curve draws, then the points pop.
 import { el, text } from "../../svg.mjs";
 import { textWidth, wrap } from "../../text.mjs";
+import { DIAGRAM_TYPE } from "../../tokens.mjs";
 
 export const family = "lanes";
 
@@ -43,7 +44,14 @@ export function render(spec) {
 			Math.max(...steps.map((s) => textWidth(s.label, { size: 10.5, weight: 500 }) * 0.6)) + 40,
 		),
 	);
-	const curveTop = 70, curveH = 150;
+	const stageSubLines = spec.stages.map((st) =>
+		st.sub ? wrap(st.sub, Math.max(1, (st.steps || []).length) * COL - 24, DIAGRAM_TYPE.sub) : []
+	);
+	const curveTop = Math.max(
+			70,
+			...stageSubLines.map((lines) => 38 + lines.length * DIAGRAM_TYPE.sub.lineHeight),
+		),
+		curveH = 150;
 	const y = (score) => curveTop + ((2 - Math.max(-2, Math.min(2, score ?? 0))) / 4) * curveH;
 	const out = [];
 	let col = 0;
@@ -59,7 +67,9 @@ export function render(spec) {
 				height: curveTop + curveH + 114,
 			}),
 			text({ class: "jr-stage", x: x + 12, y: 22 }, st.label.toUpperCase()),
-			st.sub ? text({ class: "n-sub", x: x + 12, y: 38 }, st.sub) : "",
+			...stageSubLines[si].map((line, index) =>
+				text({ class: "n-sub", x: x + 12, y: 38 + index * DIAGRAM_TYPE.sub.lineHeight }, line)
+			),
 		]));
 		col += n;
 	});

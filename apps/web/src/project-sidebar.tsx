@@ -1,10 +1,10 @@
-import addProjectIcon from "./assets/figma/navigation/add-project.svg";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
-import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { IconButton } from "./icon-button";
+import { MenuItem, MenuSeparator } from "./menu-item";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -19,7 +19,9 @@ import {
 	ArchiveIcon,
 	ChevronIcon,
 	DocumentIcon,
+	KeyboardIcon,
 	LockIcon,
+	PlusIcon,
 	SearchIcon,
 	SignInIcon,
 } from "@chopin/icons";
@@ -71,6 +73,7 @@ function UnansweredCount({ unanswered }: { unanswered: number }) {
 		<span aria-hidden="true" className="project-sidebar-count" data-sidebar-decision-count="">
 			<Count
 				appearance="quiet"
+				typography="metadata"
 				key={attention ? `attention-${unanswered}` : "settled"}
 				motion={attention}
 			>
@@ -292,10 +295,10 @@ function Project(
 										<div className="project-sidebar-document-actions">
 											<DocumentActionsMenu
 												channel={channel}
-												className="project-sidebar-document-action"
+												iconButton
 												onAction={action => documentAction(channel, action)}
 												trigger={
-													<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
+													<NavigationIcon className="h-auto w-3" src={documentActionsIcon} />
 												}
 											/>
 										</div>
@@ -332,11 +335,11 @@ function Project(
 														<div className="project-sidebar-document-actions">
 															<DocumentActionsMenu
 																channel={child}
-																className="project-sidebar-document-action"
+																iconButton
 																onAction={action => onDocumentAction(child, action)}
 																trigger={
 																	<NavigationIcon
-																		className="h-auto w-3.5"
+																		className="h-auto w-3"
 																		src={documentActionsIcon}
 																	/>
 																}
@@ -389,29 +392,35 @@ function Project(
 					ref={disclosure}
 					type="button"
 				>
-					<MotionDisclosureIcon
-						className="motion-feedback shrink-0"
-						closed={<ChevronIcon size={14} />}
-						open={expanded}
-						opened={<ChevronIcon className="rotate-90" size={14} />}
-					/>
-					<DocumentIcon />
-					<span className="truncate text-sm font-bold">{label}</span>
+					<span aria-hidden="true" className="project-sidebar-project-icon">
+						<DocumentIcon className="project-sidebar-project-repository-icon" />
+						<span className="project-sidebar-project-chevron">
+							<MotionDisclosureIcon
+								className="motion-feedback shrink-0"
+								closed={<ChevronIcon size={12} />}
+								open={expanded}
+								opened={<ChevronIcon className="rotate-90" size={12} />}
+							/>
+						</span>
+					</span>
+					<span className="truncate text-xs font-bold">{label}</span>
 				</button>
 				{!archiveMode && project.available && canManage && (
-					<button
+					<IconButton
 						aria-busy={!!phase}
 						aria-label={`New document in ${label}`}
-						className={`project-sidebar-action ${phase ? "project-sidebar-action-pending" : ""}`}
-						data-press="small"
+						glyph="compact"
+						pending={!!phase}
+						placement="sidebar"
+						size="compact"
+						tone="nested"
 						data-tooltip="New document"
 						disabled={!!phase}
 						onClick={() => onCreateDocument(project)}
 						title={`New document in ${label}`}
-						type="button"
 					>
-						<NavigationIcon src={newDocumentIcon} />
-					</button>
+						<PlusIcon size={12} />
+					</IconButton>
 				)}
 				<UnansweredCount unanswered={projectUnanswered} />
 			</div>
@@ -559,7 +568,7 @@ export function ProjectSidebar(
 	}, [catalogueMode]);
 	let searchButton = (
 		<button className="project-sidebar-primary-action" onClick={onSearch} type="button">
-			<SearchIcon />
+			<SearchIcon size={12} />
 			<span>Search</span>
 			<kbd aria-hidden="true" className="project-sidebar-hint">
 				{shortcutLabel("search", platform)}
@@ -599,7 +608,7 @@ export function ProjectSidebar(
 							onClick={onNewDocument}
 							type="button"
 						>
-							<NavigationIcon src={newDocumentIcon} />
+							<PlusIcon />
 							<span>
 								{newDocumentPhase === "creating"
 									? "Creating document…"
@@ -620,7 +629,7 @@ export function ProjectSidebar(
 							onClick={onSearch}
 							type="button"
 						>
-							<SearchIcon />
+							<SearchIcon size={12} />
 							<span>Search</span>
 							<kbd aria-hidden="true" className="project-sidebar-hint">
 								{shortcutLabel("search", platform)}
@@ -659,19 +668,18 @@ export function ProjectSidebar(
 				<header className="project-sidebar-header group/sidebar-header">
 					<div className="flex items-center gap-2">
 						<img alt="" height={14} src={chopinIcon} width={14} />
-						<span className="text-sm font-semibold text-brand">Chopin</span>
+						<span className="text-xs font-semibold text-brand">Chopin</span>
 					</div>
-					<button
+					<IconButton
 						aria-label="Hide sidebar"
-						className="project-sidebar-action"
-						data-press="small"
+						placement="sidebar"
+						size="compact"
 						data-tooltip="Hide sidebar"
 						data-tooltip-shortcut={shortcutLabel("toggle-sidebar", platform)}
 						onClick={onCollapse}
-						type="button"
 					>
 						<NavigationIcon src={collapseIcon} />
-					</button>
+					</IconButton>
 				</header>
 
 				{primaryActions}
@@ -684,16 +692,16 @@ export function ProjectSidebar(
 					<div className="project-sidebar-projects-heading group/projects-heading">
 						<span>{archiveMode ? "Archived" : "Projects"}</span>
 						{!archiveMode && (
-							<button
+							<IconButton
 								aria-label="Add project"
 								data-tooltip="Add project"
-								className="project-sidebar-action"
-								data-press="small"
+								glyph="compact"
+								placement="sidebar"
+								size="compact"
 								onClick={onAddProject}
-								type="button"
 							>
-								<NavigationIcon className="size-3.5" src={addProjectIcon} />
-							</button>
+								<PlusIcon size={12} />
+							</IconButton>
 						)}
 					</div>
 					{newDocumentPhase === "loading" && projects.length === 0 && <ProjectSidebarSkeleton />}
@@ -758,23 +766,21 @@ export function ProjectSidebar(
 						}}
 						role="menu"
 					>
-						<a href="/auth/github/install" rel="noopener" role="menuitem" target="_blank">
+						<MenuItem density="compact" href="/auth/github/install" rel="noopener" target="_blank">
 							<LockIcon aria-hidden="true" size={14} />
 							Manage repository access
-						</a>
-						<button
-							className="navigation-account-menu-item"
+						</MenuItem>
+						<MenuItem
+							density="compact"
 							onClick={accountMenu.onShortcuts}
-							role="menuitem"
-							type="button"
 						>
-							Keyboard shortcuts<kbd aria-hidden="true">?</kbd>
-						</button>
-						<div role="separator" />
-						<button onClick={accountMenu.onSignOut} role="menuitem" type="button">
+							<KeyboardIcon aria-hidden="true" size={14} />Keyboard shortcuts
+						</MenuItem>
+						<MenuSeparator />
+						<MenuItem density="compact" onClick={accountMenu.onSignOut}>
 							<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
 							Sign out
-						</button>
+						</MenuItem>
 					</div>
 				)}
 			</div>

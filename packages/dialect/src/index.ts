@@ -19,6 +19,7 @@ export {
 	lookup,
 	MERMAID_LANGUAGE,
 	SEECODE_LANGUAGE,
+	WIREFRAME_LANGUAGE,
 } from "./dialect";
 export type { Attribute, Component, Content, Kind } from "./dialect";
 

@@ -30,12 +30,10 @@
 	outline-offset: calc(-1 * var(--edge-width));
 }
 
-.plan-content [data-research-draft-anchor] {
-	margin-block-end: var(--research-draft-space, 0);
-}
-
+.plan-research-draft-host,
 .plan-research-draft {
-	width: min(28.125rem, var(--plan-content-width, 48rem), calc(100vw - 2rem));
+	width: 100%;
+	max-width: var(--document-prose-measure);
 }
 
 .motion-research-draft {
@@ -45,10 +43,6 @@
 	transition:
 		opacity var(--dropdown-open-dur) var(--dropdown-ease),
 		transform var(--dropdown-open-dur) var(--dropdown-ease);
-}
-
-.motion-research-draft[data-side="above"] {
-	transform-origin: bottom left;
 }
 
 .motion-research-draft[data-motion="is-open"] {
@@ -83,11 +77,11 @@
 	background: transparent;
 }
 
-/* Research widgets never exceed 450px and shrink with their container. */
+/* Composer, progress and result share the document's prose column. */
 .plan-research-composer,
 .plan-research-tracked {
 	width: 100%;
-	max-width: 28.125rem;
+	max-width: var(--document-prose-measure);
 }
 
 /* One surface: the composer is the field, so focus rings the whole card. */
@@ -98,10 +92,6 @@
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 	box-shadow: var(--shadow-resting);
-}
-
-.plan-research-draft:is([data-side="above"], [data-side="pinned"]) .plan-research-composer {
-	box-shadow: var(--shadow-raised);
 }
 
 .plan-research-composer textarea {
@@ -444,14 +434,13 @@
 
 .plan,
 .plan-decisions {
-	--plan-gutter: 4rem;
+	--plan-gutter: var(--document-gutter);
 	/*
 	 * A comfortable measure. The panel is resizable and a plan is read far more
 	 * often than it is written, so the text stops widening well before the pane
-	 * does. At the body size below this is roughly 85 characters a line, near
-	 * the top of the range a reader can track back from without losing the row.
+	 * does.
 	 */
-	--plan-measure: 43.75rem;
+	--plan-measure: var(--document-prose-measure);
 	/*
 	 * Document body text, one step down from the old 17px so prose sits
 	 * closer to chrome and chat sizes. Resolved out here because MDXEditor
@@ -486,17 +475,20 @@
 	box-shadow: var(--shadow-raised);
 }
 
-/* A narrow document needs breathing room, but never a 32px tax on each side. */
-@container (max-width: 40rem) {
-	.plan-content,
-	.plan-preface,
-	.plan-decisions-content {
-		--plan-gutter: 1rem;
+@media (max-width: 600px) {
+	.plan,
+	.plan-decisions {
+		--plan-gutter: var(--document-gutter-compact);
 	}
+}
 
+@container (max-width: 40rem) {
 	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
 	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface) {
-		--plan-leading-gutter: 2rem;
+		--plan-leading-gutter: max(
+			calc(var(--decision-marker-size) + var(--spacing) * 2),
+			var(--plan-gutter)
+		);
 	}
 
 	/* Wide authored surfaces keep their own visible, keyboard-operable lane. */
@@ -604,7 +596,7 @@
 	box-shadow: var(--shadow-overlay);
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 	color: var(--color-text-primary);
 }
 
@@ -954,7 +946,7 @@
 
 .plan-decisions-content {
 	width: 100%;
-	padding: 1.5rem var(--plan-gutter) 60vh;
+	padding: var(--document-decisions-top-inset) var(--plan-gutter) var(--document-trailing-space);
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
 }
@@ -965,47 +957,7 @@
 	max-width: none;
 	align-items: safe center;
 	justify-content: center;
-	padding: 3rem var(--plan-gutter);
-}
-
-.plan-decisions-empty {
-	display: flex;
-	width: min(100%, 42rem);
-	min-height: 19rem;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	padding: 2.5rem 1.5rem;
-	border: var(--edge-width) dashed var(--color-control-edge);
-	border-radius: var(--radius-lg);
-	text-align: center;
-}
-
-.plan-decisions-empty-icon {
-	display: grid;
-	width: 3.5rem;
-	height: 3.5rem;
-	place-items: center;
-	margin-block-end: 1.5rem;
-	border-radius: var(--radius-lg);
-	background: var(--color-inset);
-	color: var(--color-text-primary);
-}
-
-.plan-decisions-empty h3 {
-	margin: 0;
-	font-size: var(--text-xl);
-	font-weight: 600;
-	line-height: 1.25;
-	color: var(--color-text-primary);
-}
-
-.plan-decisions-empty p {
-	max-width: 27rem;
-	margin: 0.5rem 0 0;
-	font-size: var(--text-base);
-	line-height: 1.5;
-	color: var(--color-text-tertiary);
+	padding: var(--document-decisions-top-inset) var(--plan-gutter);
 }
 
 /* Decorator hosts are block-level plan content, not zero-size anchors. */
@@ -1211,27 +1163,23 @@
 	 * The trailing space is deliberate and large: the caret should never sit
 	 * against the bottom of the pane, and a plan is usually appended to.
 	 */
-	padding: 2rem var(--plan-gutter) 60vh;
+	padding: var(--document-top-inset) var(--plan-gutter) var(--document-trailing-space);
 	padding-inline-start: var(--plan-leading-gutter);
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
 	font-size: var(--plan-body);
 	/* Prose wants looser leading than the UI rhythm the token pairs with. */
-	line-height: 1.6;
+	line-height: var(--document-line-height);
 	color: var(--color-text-primary);
 }
 
 /* Host context above the document shares the prose column and pulls the title up under it. */
 .plan .plan-preface {
 	--plan-leading-gutter: var(--plan-gutter);
-	padding: 2rem var(--plan-gutter) 0;
+	padding: var(--document-top-inset) var(--plan-gutter) 0;
 	padding-inline-start: var(--plan-leading-gutter);
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
-}
-
-.plan [data-plan-scroll]:has(> .plan-preface) .plan-content {
-	padding-block-start: 1rem;
 }
 
 /*
@@ -1269,12 +1217,20 @@
  * A plan is prose, so the document elements are given their meaning back here.
  */
 .plan-content :is(h1, h2, h3, h4, h5, h6) {
-	font-weight: 600;
 	line-height: 1.3;
 	margin-block: 1.5em 0.5em;
 	color: var(--color-text-primary);
 	/* Short enough to weigh every break at once, and an 8/1 split reads as a mistake. */
 	text-wrap: balance;
+}
+
+.plan-content :is(h1, h2, h3, h4) {
+	font-family: var(--font-document-heading);
+	font-weight: var(--font-weight-document-heading);
+}
+
+.plan-content :is(h5, h6) {
+	font-weight: var(--font-weight-semibold);
 }
 
 .plan-content :is(h1, h2, h3, h4, h5, h6):first-child {
@@ -1403,8 +1359,8 @@
  * Tables scroll independently so a wide one never widens the document.
  *
  * `display: block` turns the table itself into the scrollport. Its inline size
- * is the readable width, while the cells' minimum widths preserve usable
- * columns and create overflow inside that scrollport when necessary.
+ * is bounded by the document gutter, while the cells' minimum widths preserve
+ * usable columns and create overflow inside that scrollport when necessary.
  */
 .plan-content table {
 	display: block;
@@ -1460,12 +1416,13 @@
 
 /*
  * A compact table shrink-wraps around its columns from the prose's start edge,
- * like every other block; a wide one scrolls inside the prose measure. The row
- * and column rails are fixed overlays and sit in the gutter outside it.
+ * like every other block; a wide one grows to the trailing document gutter
+ * before scrolling. The row and column rails are fixed overlays and sit in
+ * the gutter outside it.
  */
 .plan-content > table {
 	inline-size: max-content;
-	max-inline-size: 100%;
+	max-inline-size: calc((100% + var(--plan-wide-inline-size)) / 2);
 }
 
 /* Name an empty header for what it holds. Counted per header cell, out of flow. */
@@ -2213,6 +2170,9 @@
 	display: flex;
 	flex-direction: column;
 	margin-block: 1em;
+}
+
+.plan-content .planCode:not([data-plan-presentation="diagram"]) {
 	overflow: hidden;
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
@@ -2297,7 +2257,7 @@
  * own above the content instead of sitting on its first line.
  */
 @media not ((hover: hover) and (pointer: fine)) {
-	.plan-content .planCode {
+	.plan-content .planCode:not([data-plan-presentation="diagram"]) {
 		padding-block-start: calc(var(--spacing) * 9);
 	}
 
@@ -2482,7 +2442,7 @@
 	}
 }
 
-.plan-content .planCode [data-plan-preview] :is(.plan-diagram, .plan-seecode, [data-plan-error]) {
+.plan-content .planCode [data-plan-preview] :is(.plan-diagram, [data-plan-error]) {
 	padding-inline: 0.75rem;
 }
 
@@ -3209,13 +3169,17 @@
 	z-index: 2;
 }
 
+.plan-document [data-plan-scroll] {
+	position: relative;
+}
+
 .plan-decision-marker {
 	pointer-events: auto;
 	position: absolute;
 	display: grid;
 	place-items: center;
-	inline-size: 1.25rem;
-	block-size: 1.25rem;
+	inline-size: var(--decision-marker-size);
+	block-size: var(--decision-marker-size);
 	padding: 0;
 	border-radius: var(--radius-full);
 }
@@ -3237,11 +3201,19 @@
 	--color-icon: var(--color-success);
 	display: grid;
 	place-items: center;
-	inline-size: 1.25rem;
-	block-size: 1.25rem;
+	inline-size: var(--decision-marker-size);
+	block-size: var(--decision-marker-size);
 	border-radius: var(--radius-full);
 	background: var(--color-success-wash);
 	color: var(--color-success);
+}
+
+.plan-decision-size-probe {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	visibility: hidden;
+	pointer-events: none;
 }
 
 /* Too narrow a gutter for a disc: a slim bar the height of the first line. */
@@ -3267,6 +3239,10 @@
 	outline: var(--edge-width) solid var(--color-success);
 }
 
+.plan-decision-marker:hover:not([aria-expanded="true"]) .plan-decision-disc {
+	outline-color: var(--color-success-outline-subtle);
+}
+
 .plan-decision-marker:focus-visible .plan-decision-disc {
 	--color-icon: var(--color-success-ink);
 }
@@ -3281,6 +3257,20 @@
 
 .plan-decision-pop[data-pinned] {
 	pointer-events: auto;
+}
+
+.plan-decision-pop[role="tooltip"] {
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.plan-decision-pop[role="tooltip"] .plan-decision-answer {
+	font-size: var(--text-xs);
+}
+
+.plan-decision-pop[role="tooltip"] .plan-decision-meta {
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
 }
 
 .plan-decision-pop p {
@@ -3415,6 +3405,8 @@
 /* Keep the caret off the bottom edge while typing: browsers honour this when
    they scroll a selection into view. */
 .plan [data-plan-scroll] {
+	/* Wide blocks measure the usable scrollport, excluding a consuming scrollbar. */
+	container-type: inline-size;
 	scroll-padding-block: 4rem 30%;
 }
 

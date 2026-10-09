@@ -188,7 +188,7 @@ function PreviewContent({ view }: { view: ThreadView }) {
 			{opening && (
 				<>
 					<p className="plan-comment-preview-author">
-						<Author handle={opening.handle} />
+						<Author handle={opening.handle} textSize="xs" />
 					</p>
 					<p className="plan-comment-preview-note">{opening.text}</p>
 				</>

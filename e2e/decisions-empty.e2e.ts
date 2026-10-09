@@ -29,17 +29,17 @@ test("empty decisions remain reachable in a short viewport", async ({ join }) =>
 	await expect(page.locator(".workspace-document-layer.is-open").filter({ has: view }))
 		.toHaveCSS("opacity", "1");
 	let scroller = view.locator("[data-plan-decisions-scroll]");
-	let panel = scroller.locator(".plan-decisions-empty");
+	let panel = scroller.locator('[data-slot="empty-state"]');
 	await expect(panel).toBeVisible();
 	let top = await scroller.evaluate(element => ({
 		viewport: element.getBoundingClientRect().top,
-		panel: element.querySelector(".plan-decisions-empty")!.getBoundingClientRect().top,
+		panel: element.querySelector('[data-slot="empty-state"]')!.getBoundingClientRect().top,
 	}));
 	expect(top.panel).toBeGreaterThanOrEqual(top.viewport);
 	await scroller.evaluate(element => element.scrollTop = element.scrollHeight);
 	let bottom = await scroller.evaluate(element => ({
 		viewport: element.getBoundingClientRect().bottom,
-		panel: element.querySelector(".plan-decisions-empty")!.getBoundingClientRect().bottom,
+		panel: element.querySelector('[data-slot="empty-state"]')!.getBoundingClientRect().bottom,
 	}));
 	expect(bottom.panel).toBeLessThanOrEqual(bottom.viewport);
 });

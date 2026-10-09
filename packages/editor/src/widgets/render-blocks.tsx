@@ -357,6 +357,8 @@ function Preview(
 		else delete element.dataset.planCollapsed;
 		if (swap) element.dataset.planSwapped = "";
 		else delete element.dataset.planSwapped;
+		if (hide && block.kind === "seecode") element.dataset.planPresentation = "diagram";
+		else delete element.dataset.planPresentation;
 	});
 
 	let element = editor.getElementByKey(block.key);
@@ -385,7 +387,7 @@ function Preview(
 					host,
 					`${block.key}:preview`,
 				)}
-			{chrome && (hidable || named) && createPortal(
+			{chrome && (hidable || named) && !(block.kind === "seecode" && hidable) && createPortal(
 				<div
 					// Chrome, not content: keep it out of the editable tree.
 					contentEditable={false}
@@ -995,8 +997,8 @@ export function PreviewPlugin() {
 			if (!(event.target instanceof Element) || event.target.closest("[data-plan-chrome]")) return;
 			let block = blockAt(event.target.closest("[data-plan-preview]")?.parentElement);
 			if (!block || !latest.current.hidable.has(block.key)) return;
-			// SeeCode has its own interactive diagram controls; the source toggle
-			// is the explicit way to edit the diagram's specification.
+			// SeeCode owns clicks for diagram interaction; focusing its preview
+			// and pressing Enter opens the canonical source.
 			if (block.kind === "seecode") return;
 			let offset = pressed?.offset ?? block.source.length;
 			editor.update(() => $open(block.key, offset));

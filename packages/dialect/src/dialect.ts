@@ -361,6 +361,9 @@ export const MERMAID_LANGUAGE = "mermaid";
 /** Fenced JSON source for a bounded SeeCode explanatory diagram. */
 export const SEECODE_LANGUAGE = "seecode";
 
+/** Fenced indented outline for a bounded interface wireframe. */
+export const WIREFRAME_LANGUAGE = "wireframe";
+
 /**
  * Fenced code language that renders as a diff.
  *

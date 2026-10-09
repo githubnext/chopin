@@ -164,7 +164,7 @@ export function PlanStatus({ onReload = reloadPage, onReconnect, ...props }: Pla
 			{reload && (
 				<button
 					aria-describedby={detailId}
-					className="btn btn-sm btn-ghost"
+					className="btn btn-compact btn-ghost"
 					data-tooltip={detail}
 					data-tooltip-detail=""
 					data-tooltip-verbatim=""

@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
 import { Admission } from "../auth/admission";
+import { GitHubError } from "../github/client";
+import { GitHubReferences } from "../github/references";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerChannelRoutes } from "./routes";
@@ -9,12 +11,19 @@ import { registerChannelRoutes } from "./routes";
 import type { HostedAuth } from "../auth/routes";
 import type {
 	GitHub,
+	GitHubConditional,
+	GitHubInstallation,
+	GitHubReferenceSource,
 	GitHubTokenGrant,
 	GitHubUser,
 	InstallationPage,
 	Repository,
 	RepositoryPage,
 } from "../github/client";
+import type {
+	GitHubIssueSummary,
+	GitHubPullRequestSummary,
+} from "@chopin/protocol/github-reference";
 import type { JsonValue } from "../storage/model";
 
 class FakeGitHub implements GitHub {
@@ -74,6 +83,83 @@ class FakeGitHub implements GitHub {
 	invalidate(): void {}
 }
 
+class FakeReferenceSource implements GitHubReferenceSource {
+	/** Repository names each user token reaches through its App installation. */
+	access = new Map<string, Set<string>>([["ghu_user", new Set(["score", "tools"])]]);
+	fetched: Array<{ token: string; path: string }> = [];
+	rateLimited = false;
+
+	async installedRepository(token: string, owner: string, name: string) {
+		if (this.rateLimited) throw new GitHubError("slow down", 429);
+		if (owner !== "octo-org" || !this.access.get(token)?.has(name)) return undefined;
+		let installation: GitHubInstallation = {
+			id: "101",
+			account: { login: "octo-org", avatarUrl: "", type: "organization" },
+			repositorySelection: "selected",
+			configureUrl: "",
+			suspended: false,
+			permissions: {
+				contents: true,
+				pullRequests: true,
+				checks: true,
+				statuses: true,
+				issues: true,
+			},
+		};
+		return {
+			repository: {
+				id: `R_${name}`,
+				owner,
+				name,
+				fullName: `${owner}/${name}`,
+				private: true,
+				url: "",
+				defaultBranch: "main",
+				permissions: { pull: true, push: false, admin: false },
+			},
+			installation,
+		};
+	}
+
+	async pullRequest(
+		token: string,
+		owner: string,
+		name: string,
+		number: number,
+	): Promise<GitHubConditional<GitHubPullRequestSummary>> {
+		this.fetched.push({ token, path: `${owner}/${name}/pull/${number}` });
+		return {
+			kind: "pull",
+			owner,
+			repository: name,
+			number,
+			url: `https://github.com/${owner}/${name}/pull/${number}`,
+			title: "Ship pills",
+			author: null,
+			labels: [],
+			comments: 0,
+			createdAt: "2026-10-01T00:00:00.000Z",
+			updatedAt: "2026-10-01T00:00:00.000Z",
+			closedAt: null,
+			state: "open",
+			draft: false,
+			mergedAt: null,
+			headBranch: "topic",
+			baseBranch: "main",
+		};
+	}
+
+	async issue(
+		token: string,
+		owner: string,
+		name: string,
+		number: number,
+	): Promise<GitHubConditional<GitHubIssueSummary>> {
+		this.fetched.push({ token, path: `${owner}/${name}/issues/${number}` });
+		throw new GitHubError("not found", 404);
+	}
+}
+
 function grant(accessToken: string): GitHubTokenGrant {
 	return {
 		accessToken,
@@ -96,7 +182,10 @@ async function setup(
 	await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
 	let sessions = new Sessions(storage, true, () => now);
 	let issued = await sessions.issue("U_octocat", grant("ghu_user"));
+	await storage.users.put({ id: "U_hubot", login: "hubot", avatarUrl: "avatar", now });
+	let other = await sessions.issue("U_hubot", grant("ghu_hubot"));
 	let github = new FakeGitHub();
+	let referenceSource = new FakeReferenceSource();
 	let config = {
 		origin: "https://chopin.test",
 		appSlug: "chopin-test",
@@ -141,12 +230,15 @@ async function setup(
 		},
 		onVisualPreview,
 		random,
+		references: new GitHubReferences(referenceSource),
 	});
 	return {
 		router,
 		storage,
 		github,
+		referenceSource,
 		cookie: pair(issued.cookie),
+		otherCookie: pair(other.cookie),
 		sessionId: issued.id,
 		reset,
 		renamed,
@@ -1026,5 +1118,116 @@ describe("channel routes", () => {
 		expect(reset).toEqual([channel.id]);
 		expect((await storage.collaboration.load(channel.id, now))!.agent!.ownerSessionId)
 			.toBeUndefined();
+	});
+
+	describe("GitHub references", () => {
+		function references(channelId: string, refs: string[]) {
+			let query = refs.map(ref => `ref=${encodeURIComponent(ref)}`).join("&");
+			return `/api/channels/${channelId}/github-references?${query}`;
+		}
+
+		it("requires a session and read access to the document's repository", async () => {
+			let { router, storage, github, referenceSource, cookie, now } = await setup();
+			let channel = await createChannel(storage, now, "Pills");
+			let path = references(channel.id, ["octo-org/score/pull/1"]);
+			expect((await router.handle(request(path)))!.status).toBe(401);
+
+			github.repo = { ...github.repo, permissions: { pull: false, push: false, admin: false } };
+			expect((await router.handle(request(path, cookie)))!.status).toBe(404);
+			github.repo = { ...github.repo, permissions: { pull: true, push: false, admin: false } };
+			github.affiliated = false;
+			expect((await router.handle(request(path, cookie)))!.status).toBe(404);
+			expect(
+				(await router.handle(request(references(crypto.randomUUID(), ["a/b/pull/1"]), cookie)))!
+					.status,
+			).toBe(404);
+			expect(referenceSource.fetched).toEqual([]);
+		});
+
+		it("summarizes installed references and hides everything else", async () => {
+			let { router, storage, referenceSource, cookie, now } = await setup();
+			let channel = await createChannel(storage, now, "Pills");
+			let response = await router.handle(request(
+				references(channel.id, [
+					"octo-org/score/pull/1",
+					"octo-org/tools/pull/2",
+					"octo-org/score/issues/3",
+					"octo-org/secret/pull/4",
+					"elsewhere/score/pull/5",
+					"octo-org/score/pull/1",
+				]),
+				cookie,
+			));
+			expect(response!.status).toBe(200);
+			expect(response!.headers.get("cache-control")).toBe("no-store");
+			let body = await response!.json();
+			expect(Object.keys(body.references)).toHaveLength(5);
+			expect(body.references["octo-org/score/pull/1"]).toMatchObject({
+				status: "ok",
+				summary: { kind: "pull", number: 1, state: "open" },
+			});
+			expect(body.references["octo-org/tools/pull/2"].status).toBe("ok");
+			expect(body.references["octo-org/score/issues/3"]).toEqual({ status: "unavailable" });
+			expect(body.references["octo-org/secret/pull/4"]).toEqual({ status: "unavailable" });
+			expect(body.references["elsewhere/score/pull/5"]).toEqual({ status: "unavailable" });
+			expect(referenceSource.fetched.map(call => call.path).sort()).toEqual([
+				"octo-org/score/issues/3",
+				"octo-org/score/pull/1",
+				"octo-org/tools/pull/2",
+			]);
+
+			referenceSource.rateLimited = true;
+			let limited = await router.handle(request(
+				references(channel.id, ["octo-org/score/pull/9"]),
+				cookie,
+			));
+			expect((await limited!.json()).references["octo-org/score/pull/9"]).toEqual({
+				status: "rate-limited",
+			});
+		});
+
+		it("rejects empty, oversized and malformed batches", async () => {
+			let { router, storage, referenceSource, cookie, now } = await setup();
+			let channel = await createChannel(storage, now, "Pills");
+			let twenty = Array.from({ length: 20 }, (_, index) => `octo-org/score/pull/${index + 1}`);
+			for (
+				let refs of [
+					[],
+					[...twenty, "octo-org/score/pull/21"],
+					["https://github.com/octo-org/score/pull/1"],
+					["octo-org/score/pulls/1"],
+					["octo-org/score/pull/1", "octo-org/score/commit/abc"],
+				]
+			) {
+				let response = await router.handle(request(references(channel.id, refs), cookie));
+				expect(response!.status).toBe(400);
+			}
+			expect(referenceSource.fetched).toEqual([]);
+			let full = await router.handle(request(references(channel.id, twenty), cookie));
+			expect(full!.status).toBe(200);
+		});
+
+		it("serves a cached summary to another user only after their own access check", async () => {
+			let { router, storage, referenceSource, cookie, otherCookie, now } = await setup();
+			let channel = await createChannel(storage, now, "Pills");
+			let path = references(channel.id, ["octo-org/tools/pull/2"]);
+			let first = await router.handle(request(path, cookie));
+			expect((await first!.json()).references["octo-org/tools/pull/2"].status).toBe("ok");
+
+			referenceSource.access.set("ghu_hubot", new Set(["score"]));
+			let denied = await router.handle(request(path, otherCookie));
+			expect(denied!.status).toBe(200);
+			expect((await denied!.json()).references["octo-org/tools/pull/2"]).toEqual({
+				status: "unavailable",
+			});
+
+			referenceSource.access.set("ghu_hubot", new Set(["score", "tools"]));
+			let allowed = await router.handle(request(path, otherCookie));
+			expect((await allowed!.json()).references["octo-org/tools/pull/2"].status).toBe("ok");
+			expect(referenceSource.fetched).toEqual([{
+				token: "ghu_user",
+				path: "octo-org/tools/pull/2",
+			}]);
+		});
 	});
 });
