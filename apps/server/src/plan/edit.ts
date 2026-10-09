@@ -421,10 +421,14 @@ const FENCE_VALIDATORS: Readonly<Record<string, (source: string) => string | und
 /** Existing human-edited fences remain editable around even if their source is malformed. */
 function introducedFenceError(base: RootContent[], next: RootContent[]): string | undefined {
 	let previous = new Map<string, number>();
-	let collect = (nodes: RootContent[], visit: (lang: string, source: string) => void): void => {
+	let collect = (
+		nodes: RootContent[],
+		visit: (key: string, lang: string, source: string) => void,
+	): void => {
 		let walk = (node: RootContent): void => {
 			if (node.type === "code" && node.lang && Object.hasOwn(FENCE_VALIDATORS, node.lang)) {
-				visit(node.lang, node.value);
+				// A retained fence excuses only the same language and body.
+				visit(`${node.lang}\n${node.value}`, node.lang, node.value);
 			}
 			if ("children" in node && Array.isArray(node.children)) {
 				for (let child of node.children) walk(child as RootContent);
@@ -432,17 +436,13 @@ function introducedFenceError(base: RootContent[], next: RootContent[]): string 
 		};
 		for (let node of nodes) walk(node);
 	};
-	// The language is part of the key: a retained fence excuses only the same language and body.
-	let key = (lang: string, source: string) => `${lang}\n${source}`;
-	collect(base, (lang, source) => {
-		previous.set(key(lang, source), (previous.get(key(lang, source)) ?? 0) + 1);
-	});
+	collect(base, key => previous.set(key, (previous.get(key) ?? 0) + 1));
 	let failure: string | undefined;
-	collect(next, (lang, source) => {
+	collect(next, (key, lang, source) => {
 		if (failure) return;
-		let retained = previous.get(key(lang, source)) ?? 0;
+		let retained = previous.get(key) ?? 0;
 		if (retained > 0) {
-			previous.set(key(lang, source), retained - 1);
+			previous.set(key, retained - 1);
 			return;
 		}
 		failure = FENCE_VALIDATORS[lang]!(source);
