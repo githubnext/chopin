@@ -90,13 +90,14 @@ export const WIREFRAME_AUTHORING =
 	`Use a \`${WIREFRAME_LANGUAGE}\` fence to sketch an interface layout or mockup.
 Never draw one with box-drawing characters or ASCII art in a text fence.
 
-Each line is one part: a kind, then an optional "quoted label", bare flags,
-\`key=value\` properties, and an optional \`#id\`. Indent each child exactly two
-spaces under its parent. Kinds and their flags: panel, header, row (wrap, flow),
-stack, card (selected, muted), title, text (muted, strong), button (primary,
-danger, disabled), badge (\`tone=success\` and similar), disclosure (open),
-list (ordered), tabs and nav (\`active=2\`), input (\`placeholder="…"\`), image,
-divider. list, tabs and nav hold \`- item\` lines. \`note "…" -> #id\` annotates
+Each line is one part: a kind, then a "quoted label", bare flags, \`key=value\`
+properties, and an optional \`#id\`. Indent each child exactly two spaces under
+its parent. Kinds, with some flags and properties: panel, header, row (wrap,
+flow), stack, card (selected, muted), title, text (muted, strong), button
+(primary, danger, disabled), badge (\`tone=success\`), disclosure (open), list
+(ordered), tabs and nav (\`active=2\`), input (\`placeholder="…"\`), image,
+divider. title, text, button, badge, disclosure and note need a label; row,
+stack, tabs, nav and divider take none. list, tabs and nav hold \`- item\` lines. \`note "…" -> #id\` annotates
 another part. A refused edit names the line to fix, counted inside the fence.
 
 \`\`\`${WIREFRAME_LANGUAGE}
