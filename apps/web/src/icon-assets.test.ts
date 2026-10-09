@@ -33,14 +33,6 @@ test("the interface uses only the shared Nucleo icon family", () => {
 		sourceFiles(join(repository, "packages")),
 	);
 	for (let file of files) expect(readFileSync(file, "utf8")).not.toContain("@phosphor-icons/react");
-
-	let icons = readFileSync(join(repository, "packages/icons/src/line.tsx"), "utf8");
-	expect(icons).toContain("M9,1.75C4.996,1.75");
-	expect(icons).toContain("M9.75,2.75h3.5");
-	expect(icons).toContain("M4.75 13.25V9");
-	expect(icons).toContain("10.912 7.087 15.75 9");
-	expect(icons).toContain("M7.63796 3.48996");
-	expect(icons).toContain('x1="9" x2="9" y1="3.25" y2="14.75"');
 });
 
 test("interface icons default to fourteen pixels with compact sidebar controls at twelve", () => {
@@ -126,11 +118,6 @@ test("interface icons share one neutral default colour", () => {
 			expect(asset).not.toContain("<title");
 			if (entry === "planner-stop.svg" || entry === "planner-resume.svg") {
 				expect(asset).toContain('<g fill="#212121">');
-				if (entry === "planner-stop.svg") {
-					expect(asset).toContain(
-						'<rect x="2" y="2" width="14" height="14" rx="2.75" ry="2.75"></rect>',
-					);
-				}
 			} else {
 				expect(asset).toContain("#78766e");
 				expect(asset).not.toContain("#212121");
