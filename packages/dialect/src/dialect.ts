@@ -368,8 +368,8 @@ export function leavesRepository(url: string): boolean {
  *
  * Browsers trim surrounding whitespace and drop tabs and newlines anywhere,
  * so ` javascript:` or `java\tscript:` reach a scheme the plain check below
- * never saw. Only images are absolute by rule, so only links can be
- * scheme-less paths that wander off to another host.
+ * never saw. Images are absolute or one exact same-origin path by rule, so
+ * only links can be scheme-less paths that wander off to another host.
  */
 export function disguisedUrl(url: string, kind: "link" | "image" = "link"): string | undefined {
 	let noun = kind === "image" ? "Image URL" : "Link";
@@ -386,13 +386,21 @@ export function disguisedUrl(url: string, kind: "link" | "image" = "link"): stri
 }
 
 /**
- * URL protocols permitted in images.
+ * URL protocols permitted in absolute image URLs.
  *
  * Narrower than links, and absolute where a link need not be: there is no
  * server here to resolve a repository-relative path against, so a relative
- * image would render as a break in every client that opened the plan.
+ * image would render as a break in every client that opened the plan. The one
+ * exception is {@link HOSTED_IMAGE_PATH}.
  */
 export const IMAGE_PROTOCOLS: readonly string[] = Object.freeze(["https:"]);
+
+/**
+ * The only relative image form: an image Chopin stores itself, named by the
+ * SHA-256 of its bytes and served from the document's own origin. Every other
+ * relative path still has nothing to resolve against.
+ */
+export const HOSTED_IMAGE_PATH = /^\/images\/[0-9a-f]{64}\.(?:png|jpg|jpeg|webp|gif)$/;
 
 /** Fenced code language that renders as a diagram. */
 export const MERMAID_LANGUAGE = "mermaid";

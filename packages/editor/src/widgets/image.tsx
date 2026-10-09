@@ -1,10 +1,12 @@
 /**
  * Images.
  *
- * A plan references an image by absolute URL, so rendering one is an `<img>`
- * and nothing more. Referrers are suppressed because plan content is written
- * by an agent as well as by people: loading it should not tell a third party
- * where the request came from.
+ * A plan references an image by absolute URL or by the same-origin path of an
+ * image Chopin hosts, so rendering one is an `<img>` and nothing more; the
+ * browser sends the session cookie that authorizes a hosted image itself.
+ * Referrers are suppressed because plan content is written by an agent as well
+ * as by people: loading it should not tell a third party where the request
+ * came from.
  */
 
 import { useEffect, useRef, useState } from "react";

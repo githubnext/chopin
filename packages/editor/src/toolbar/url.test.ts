@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import { IMAGE_PROTOCOLS, LINK_PROTOCOLS } from "@chopin/dialect";
+import { HOSTED_IMAGE_PATH, IMAGE_PROTOCOLS, LINK_PROTOCOLS } from "@chopin/dialect";
 
 import { checkUrl } from "./url";
 
 const LINKS = { protocols: LINK_PROTOCOLS, relative: true };
-const IMAGES = { protocols: IMAGE_PROTOCOLS, relative: false };
+const IMAGES = { protocols: IMAGE_PROTOCOLS, relative: HOSTED_IMAGE_PATH };
 
 const hidden = (code: number) => String.fromCharCode(code);
 
@@ -81,9 +81,13 @@ describe("checking a link before it becomes a node", () => {
 		expect(checkUrl("my notes.md", LINKS)).toEqual({ problem: "A URL cannot contain spaces." });
 	});
 
-	it("never makes an image relative", () => {
+	it("never makes an image relative unless Chopin hosts it", () => {
 		expect(checkUrl("images/a.png", IMAGES)).toEqual({ problem: "Use an https:// address." });
 		expect(checkUrl("example.com/a.png", IMAGES)).toEqual({ url: "https://example.com/a.png" });
 		expect(checkUrl("ana@example.com", IMAGES).problem).toBeDefined();
+		let hosted = `/images/${"0123456789abcdef".repeat(4)}.png`;
+		expect(checkUrl(` ${hosted} `, IMAGES)).toEqual({ url: hosted });
+		expect(checkUrl(`/images/${"0".repeat(64)}.svg`, IMAGES).problem).toBeDefined();
+		expect(checkUrl("/docs/a.png", IMAGES).problem).toBeDefined();
 	});
 });

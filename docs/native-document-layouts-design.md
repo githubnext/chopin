@@ -48,7 +48,9 @@ Images and captions remain editable inside the document.
 ```
 
 This example uses the accepted canonical MDX spacing. Image URLs must be
-absolute HTTPS URLs. Each `id` is unique within the document.
+absolute HTTPS URLs or Chopin-hosted `/images/` paths returned by
+[`upload_image`](local-agent-mcp.md#upload-an-image). Each `id` is unique within
+the document.
 
 The paragraph immediately after an image paragraph receives compact caption
 styling, but remains an ordinary paragraph rather than a formal caption node.

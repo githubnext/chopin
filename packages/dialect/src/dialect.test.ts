@@ -203,12 +203,41 @@ describe("security boundary", () => {
 		accepts("[x](src/index.ts)");
 	});
 
-	it("requires images to be absolute https URLs", () => {
+	it("requires images to be absolute https URLs or Chopin-hosted paths", () => {
 		expect(codes("![a](http://example.com/x.png)")).toContain("bad-image-protocol");
 		expect(codes("![a](data:image/png;base64,iVBORw0KGgo=)")).toContain("bad-image-protocol");
-		// Unlike a link, a relative image has nothing to resolve against.
+		// A repository-relative image has nothing to resolve against.
 		expect(codes("![a](docs/diagram.png)")).toContain("bad-image");
 		accepts("![a](https://example.com/x.png)");
+	});
+
+	it("accepts only Chopin's own content-addressed image paths as relative images", () => {
+		let hash = "0123456789abcdef".repeat(4);
+		for (let extension of ["png", "jpg", "jpeg", "webp", "gif"]) {
+			accepts(`![a](/images/${hash}.${extension})`);
+		}
+		for (
+			let url of [
+				`/images/${hash.toUpperCase()}.png`,
+				`/images/${hash.slice(1)}.png`,
+				`/images/${hash}.svg`,
+				`/images/${hash}.PNG`,
+				`/images/${hash}.png?x=1`,
+				`images/${hash}.png`,
+				`/other/${hash}.png`,
+				`//images/${hash}.png`,
+			]
+		) {
+			expect(codes(`![a](${url})`)).toContain("bad-image");
+		}
+	});
+
+	it("counts hosted images toward the image limit", () => {
+		let image = `![a](/images/${"0123456789abcdef".repeat(4)}.png)`;
+		accepts(Array(limits.MAX_IMAGES).fill(image).join("\n\n"));
+		expect(codes(Array(limits.MAX_IMAGES + 1).fill(image).join("\n\n"))).toContain(
+			"too-many-images",
+		);
 	});
 
 	it("rejects frontmatter", () => {
