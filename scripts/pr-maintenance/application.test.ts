@@ -145,6 +145,7 @@ function fixture(
 	};
 	let pr = {
 		state: "open",
+		draft: false,
 		labels: [],
 		head: { sha: head, ref: "feature", repo: { full_name: "owner/repo" } },
 		base: { ref: baseRef, repo: { full_name: "owner/repo" } },
@@ -510,3 +511,26 @@ test("malformed verification records block before registration or publication", 
 	expect(f.calls).not.toContain("save");
 	expect(f.calls).not.toContain("push");
 });
+
+test(
+	"closed or draft PRs supersede proposals before validation and immediately before push",
+	async () => {
+		for (let change of [{ state: "closed" }, { draft: true }]) {
+			for (let changedAt of [1, 2]) {
+				let f = fixture();
+				let request = f.options.request;
+				let pulls = 0;
+				f.options.request = async (method, path) => {
+					if (path.endsWith("/pulls/1") && ++pulls === changedAt) {
+						Object.assign(f.pr, change);
+					}
+					return request(method, path);
+				};
+				expect(await applyProposal(f.options)).toEqual({ kind: "superseded" });
+				expect(f.calls).not.toContain("push");
+				if (changedAt === 1) expect(f.calls).not.toContain("save");
+			}
+		}
+	},
+	15_000,
+);

@@ -61,7 +61,8 @@ export function nextAction(snapshot) {
 }
 
 function included(pr, repository) {
-	return pr.state === "open" && pr.head.repo?.full_name === repository;
+	return pr.state === "open" && pr.draft === false
+		&& pr.head.repo?.full_name === repository;
 }
 
 function optedOut(pr) {
