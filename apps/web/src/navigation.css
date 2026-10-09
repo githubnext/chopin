@@ -1175,8 +1175,8 @@
 	border-radius: var(--radius-sm);
 	padding: var(--spacing) calc(var(--spacing) * 2);
 	min-height: calc(var(--spacing) * 7);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 	text-align: left;
 	color: var(--color-text-secondary);
 }
