@@ -153,7 +153,8 @@ export async function runCoordinator(config = {}) {
 		?? (() => inventory(repository, createInventoryRead(repository), selected, target)))();
 	rows = rows.filter(row => selected(row.number));
 	let confirm = config.confirm ?? inspectReadiness;
-	rows = await Promise.all(rows.map(row => confirm(repository, row, request)));
+	rows = (await Promise.all(rows.map(row => confirm(repository, row, request))))
+		.filter(row => row !== null);
 	// Reapply parent ordering using confirmed checks, not the advisory inventory.
 	for (let row of rows) {
 		if (
@@ -301,7 +302,7 @@ export async function runCoordinator(config = {}) {
 		if (!selected(row.number)) continue;
 		try {
 			let pr = await request("GET", `${root}/pulls/${row.number}`);
-			if (pr.state !== "open") continue;
+			if (pr.state !== "open" || pr.draft !== false) continue;
 			let optedOut = pr.labels?.some(label =>
 				(typeof label === "string" ? label : label.name) === "no-babysit"
 			);

@@ -13,6 +13,7 @@ function transport(options = {}) {
 		if (path.includes("/pulls/")) {
 			return {
 				state: "open",
+				draft: false,
 				head: { sha: "abc", ref: "feature", repo: { full_name: "a/b" } },
 				base: { ref: "main" },
 				mergeable: true,
@@ -261,6 +262,7 @@ test("fresh opt-out preserves null base identity and skips CI inspection", async
 		calls.push(path);
 		return {
 			state: "open",
+			draft: false,
 			labels: [{ name: "no-babysit" }],
 			head: { sha: "abc", ref: "feature", repo: { full_name: "a/b" } },
 			base: { ref: "main" },
@@ -304,5 +306,21 @@ test("contents-readable branch metadata preserves rules requirements without adm
 				? { commit: { sha: "base" }, protection }
 				: base(method, path);
 		expect((await inspectReadiness("a/b", row, inspect)).action).toBe("verify");
+	}
+});
+
+test("closed or draft PRs cannot survive either readiness observation", async () => {
+	for (let change of [{ state: "closed" }, { draft: true }]) {
+		for (let changedAt of [1, 2]) {
+			let base = transport();
+			let pulls = 0;
+			let request = async (method, path) => {
+				let response = await base(method, path);
+				return path.includes("/pulls/") && ++pulls === changedAt
+					? { ...response, ...change }
+					: response;
+			};
+			expect(await inspectReadiness("a/b", row, request)).toBeNull();
+		}
 	}
 });

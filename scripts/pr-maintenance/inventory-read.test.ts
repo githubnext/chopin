@@ -9,6 +9,7 @@ function unavailable(status) {
 let pr = number => ({
 	number,
 	state: "open",
+	draft: false,
 	labels: [],
 	head: { sha: `head${number}`, ref: `feature${number}`, repo: { full_name: "a/b" } },
 	base: { ref: "main" },

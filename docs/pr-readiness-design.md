@@ -28,7 +28,9 @@ completion events wake only selected PRs because GitHub can omit PR numbers from
 those events. Set `PR_READINESS_PRS=all` after the full rollout; the head-ref
 gate then no longer applies.
 
-Eligibility includes same-repository open PRs, including drafts.
+Eligibility includes same-repository open, non-draft PRs, whether or not auto-merge is enabled.
+Discovery, readiness confirmation, worker preparation, and publication recheck draft status.
+A PR converted to draft during an attempt receives no branch update.
 `no-babysit` remains the opt-out. Forks are outside the first release. A pilot
 uses main-based PRs; stacks need a recorded replay boundary before expansion.
 Preserve the current base, draft status, reviews, and authored PR description.
@@ -71,6 +73,14 @@ lost dispatch response cannot permanently lose work.
 
 An agent's successful exit or accepted proposal alone never means ready. The
 trusted job must confirm the actual branch update and current GitHub checks.
+
+Trusted runner setup installs PostgreSQL 17 and caches main's Chromium revision.
+The worker sources the captured test-database helper inside its strict sandbox
+to start one local PostgreSQL process with four isolated E2E databases and a
+separate contract database. Supplied database URLs let the existing E2E runner
+avoid Docker. This does not grant agent sudo, host-service access, or broader
+network permissions. A missing browser revision or Docker image-build
+prerequisite remains an infrastructure blocker.
 
 ## Stacked PRs
 

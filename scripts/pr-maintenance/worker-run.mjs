@@ -52,7 +52,7 @@ export async function runWorker(mode, config) {
 			let pr = await request("GET", `${prefix}/pulls/${number}`);
 			let base = await request("GET", `${prefix}/branches/${encodeURIComponent(pr.base.ref)}`);
 			if (
-				pr.state !== "open" || pr.head.repo?.full_name !== repository
+				pr.state !== "open" || pr.draft !== false || pr.head.repo?.full_name !== repository
 				|| pr.base.repo?.full_name !== repository || pr.head.sha !== active.head
 				|| typeof pr.head.ref !== "string" || !pr.head.ref
 				|| base.commit?.sha !== active.baseHead || !Array.isArray(pr.labels)
