@@ -767,7 +767,7 @@
 				1
 			]
 		],
-		"sourceHash": "7f24fc5d35ece52b798c1a183cdc3f9bca856db0f20ad1494527ee67686f1bef"
+		"sourceHash": "fca5e0a9cacc82ad7ccb14f1c3a84625455a002a4cd7e2fa779488e6d20ee070"
 	},
 	{
 		"file": "packages/dialect/src/nodes/containers.ts",
