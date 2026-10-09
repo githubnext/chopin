@@ -53,7 +53,7 @@ import { $isTableCellNode, $isTableRowNode } from "@lexical/table";
 import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
-import { describeDiagramError, kindOf, languageOptions, titleOf } from "./code";
+import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } from "./code";
 import { CodeView } from "./code-view";
 import { LanguageMenu } from "./language-menu";
 import { registerPreviewSelection } from "./preview-selection";
@@ -347,6 +347,7 @@ function Preview(
 	 * showing both would put every line on screen twice. A drawing is a
 	 * different reading of its source, and stays above it while it is edited.
 	 */
+	let text = plainText(block.language);
 	let hide = collapsed && renders(block, html, spec);
 	let swap = !collapsed && renders(block, html, spec)
 		&& (block.kind === "code" || block.kind === "diff");
@@ -359,6 +360,8 @@ function Preview(
 		else delete element.dataset.planSwapped;
 		if (hide && block.kind === "seecode") element.dataset.planPresentation = "diagram";
 		else delete element.dataset.planPresentation;
+		if (text) element.dataset.planText = "";
+		else delete element.dataset.planText;
 	});
 
 	let element = editor.getElementByKey(block.key);

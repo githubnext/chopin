@@ -16,6 +16,7 @@ import {
 	kindOf,
 	languageOptions,
 	LANGUAGES,
+	plainText,
 	repaired,
 	titled,
 	titleOf,
@@ -36,6 +37,21 @@ describe("what a fence is", () => {
 	 */
 	it("has nothing to draw for a fence with no language", () => {
 		expect(kindOf("")).toBe("plain");
+	});
+
+	/**
+	 * A fence named as text is drawn as text: no coloured copy, no source
+	 * toggle, and no language menu at rest. An unnamed fence keeps its menu,
+	 * because it is usually one just inserted and still waiting for a name.
+	 */
+	it("draws a fence named as plain text the way it draws an unnamed one", () => {
+		for (let name of ["text", "txt", "plaintext", "plain", "Text"]) {
+			expect(kindOf(name)).toBe("plain");
+			expect(plainText(name)).toBe(true);
+		}
+		expect(plainText("")).toBe(false);
+		expect(plainText("typescript")).toBe(false);
+		expect(plainText("markdown")).toBe(false);
 	});
 
 	/** One spelling, so the agent cannot copy a second one back at us. */
