@@ -7,7 +7,12 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { DIFF_LANGUAGE, MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect";
+import {
+	DIFF_LANGUAGE,
+	MERMAID_LANGUAGE,
+	SEECODE_LANGUAGE,
+	WIREFRAME_LANGUAGE,
+} from "@chopin/dialect";
 
 import {
 	describeDiagramError,
@@ -23,9 +28,10 @@ import {
 } from "./code";
 
 describe("what a fence is", () => {
-	it("tells the two rendered languages apart from ordinary code", () => {
+	it("tells the rendered languages apart from ordinary code", () => {
 		expect(kindOf(MERMAID_LANGUAGE)).toBe("mermaid");
 		expect(kindOf(SEECODE_LANGUAGE)).toBe("seecode");
+		expect(kindOf(WIREFRAME_LANGUAGE)).toBe("wireframe");
 		expect(kindOf(DIFF_LANGUAGE)).toBe("diff");
 		expect(kindOf("typescript")).toBe("code");
 	});

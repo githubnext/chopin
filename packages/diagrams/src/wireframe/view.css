@@ -1,0 +1,662 @@
+/*
+ * Wireframes: a hairline blueprint.
+ *
+ * Greyscale outlines on a dotted inset ground, so a drawing reads as a sketch
+ * of a proposal rather than as interface embedded in the document. The one
+ * filled shape is the primary button. Status is carried by shape — filled,
+ * half, ring, dotted ring, struck ring — so it survives without colour.
+ *
+ * The drawing lays itself out against its own width, not the viewport's: rows
+ * stack and flows turn downward in a narrow column, and notes move from a side
+ * rail to below the drawing.
+ */
+
+.wf {
+	--wf-line: var(--color-control-edge);
+	--wf-gap: calc(var(--spacing) * 2.5);
+
+	position: relative;
+	container-type: inline-size;
+	min-width: 0;
+	font-family: var(--font-sans);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-secondary);
+	-webkit-font-smoothing: antialiased;
+}
+
+.wf-stage {
+	display: grid;
+	gap: calc(var(--spacing) * 4);
+	padding: calc(var(--spacing) * 4);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+	background-color: var(--color-inset);
+	background-image: radial-gradient(
+		circle,
+		color-mix(in oklch, var(--color-text-quaternary) 40%, transparent) 1px,
+		transparent 1px
+	);
+	background-size: calc(var(--spacing) * 4) calc(var(--spacing) * 4);
+	cursor: default;
+	user-select: none;
+}
+
+@container (min-width: 40rem) {
+	.wf-stage:has(> .wf-notes) {
+		grid-template-columns: minmax(0, 1fr) calc(var(--spacing) * 44);
+		align-items: start;
+	}
+}
+
+.wf-canvas {
+	display: grid;
+	gap: var(--wf-gap);
+	min-width: 0;
+}
+
+.wf [data-wf] {
+	position: relative;
+	min-width: 0;
+	margin: 0;
+	white-space: pre-line;
+}
+
+/* Containers ------------------------------------------------------------- */
+
+.wf :is([data-wf="panel"], [data-wf="card"]) {
+	border: var(--edge-width) solid var(--wf-line);
+	background-color: var(--color-page);
+}
+
+.wf [data-wf="panel"] {
+	display: grid;
+	gap: calc(var(--spacing) * 3);
+	align-content: start;
+	padding: calc(var(--spacing) * 3);
+	border-radius: var(--radius-md);
+}
+
+.wf .wf-panel-title {
+	font-weight: var(--font-weight-semibold);
+	color: var(--color-text-primary);
+}
+
+.wf [data-wf="stack"] {
+	display: grid;
+	gap: var(--wf-gap);
+	align-content: start;
+}
+
+.wf [data-wf="header"] {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 2);
+}
+
+.wf [data-wf="header"]:not(:has(> .wf-header-title, > [data-wf="title"], > [data-wf="text"])) {
+	justify-content: flex-end;
+}
+
+.wf .wf-header-title {
+	margin-inline-end: auto;
+	font-weight: var(--font-weight-semibold);
+	color: var(--color-text-primary);
+}
+
+.wf [data-wf="row"] {
+	display: flex;
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 3);
+
+	& > [data-wf] {
+		flex: 1 1 0;
+	}
+
+	& > :is([data-wf="button"], [data-wf="badge"]) {
+		flex: 0 0 auto;
+	}
+
+	& > [data-wf="nav"][data-vertical] {
+		flex: 0 0 calc(var(--spacing) * 32);
+	}
+
+	& > [data-wf="image"] {
+		flex: 0 0 calc(var(--spacing) * 36);
+	}
+}
+
+.wf
+	[data-wf="row"]:is([data-wrap], :has(> [data-wf="button"]):not(:has(> :not([data-wf="button"])))) {
+	flex-wrap: wrap;
+	gap: calc(var(--spacing) * 1.5);
+}
+
+/* Alignment along the main axis: a stack's runs down, everything else's across. */
+.wf [data-wf="stack"][data-align="start"] {
+	justify-items: start;
+}
+
+.wf [data-wf="stack"][data-align="center"] {
+	justify-items: center;
+}
+
+.wf [data-wf="stack"][data-align="end"] {
+	justify-items: end;
+}
+
+.wf :is([data-wf="row"], [data-wf="header"])[data-align="start"] {
+	justify-content: flex-start;
+}
+
+.wf :is([data-wf="row"], [data-wf="header"])[data-align="center"] {
+	justify-content: center;
+}
+
+.wf :is([data-wf="row"], [data-wf="header"])[data-align="end"] {
+	justify-content: flex-end;
+}
+
+.wf :is([data-wf="row"], [data-wf="header"])[data-align="between"] {
+	justify-content: space-between;
+}
+
+.wf [data-wf="row"][data-align] > [data-wf] {
+	flex: 0 1 auto;
+}
+
+/* A flow joins its parts with arrows; a stack inside one is a parallel column. */
+.wf [data-wf="row"][data-flow] {
+	align-items: center;
+	gap: 0;
+}
+
+.wf .wf-arrow {
+	position: relative;
+	flex: 0 0 calc(var(--spacing) * 6);
+	align-self: center;
+	block-size: 0;
+	border-block-start: var(--edge-width) solid var(--color-text-quaternary);
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset-inline-end: 0;
+		inset-block-start: 50%;
+		inline-size: calc(var(--spacing) * 1.5);
+		block-size: calc(var(--spacing) * 1.5);
+		border-block-start: var(--edge-width) solid var(--color-text-quaternary);
+		border-inline-end: var(--edge-width) solid var(--color-text-quaternary);
+		transform: translateY(-50%) rotate(45deg);
+	}
+}
+
+.wf [data-wf="card"] {
+	display: grid;
+	gap: calc(var(--spacing) * 1.5);
+	justify-items: start;
+	align-content: start;
+	padding: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-sm);
+
+	& > :not([data-wf="badge"], [data-wf="button"], .wf-mark) {
+		justify-self: stretch;
+	}
+}
+
+.wf [data-wf="panel"] [data-wf="card"] {
+	background-color: transparent;
+}
+
+.wf [data-wf="card"][data-selected] {
+	border-color: var(--color-text-secondary);
+	outline: var(--edge-width) solid var(--color-text-secondary);
+}
+
+.wf [data-wf="card"][data-muted] {
+	background-color: transparent;
+	color: var(--color-text-tertiary);
+
+	& :is([data-wf="title"], .wf-card-label) {
+		color: var(--color-text-tertiary);
+	}
+}
+
+.wf .wf-card-label {
+	font-weight: var(--font-weight-medium);
+	color: var(--color-text-primary);
+}
+
+/* Words ------------------------------------------------------------------ */
+
+.wf [data-wf="title"] {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	font-weight: var(--font-weight-semibold);
+	color: var(--color-text-primary);
+	text-wrap: balance;
+}
+
+.wf [data-wf="text"] {
+	text-wrap: pretty;
+
+	&[data-muted] {
+		color: var(--color-text-tertiary);
+	}
+
+	&[data-strong] {
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
+	}
+}
+
+/* Controls, drawn ---------------------------------------------------------- */
+
+.wf [data-wf="button"] {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	block-size: calc(var(--spacing) * 6);
+	padding-inline: calc(var(--spacing) * 2.5);
+	border: var(--edge-width) solid var(--wf-line);
+	border-radius: var(--radius-sm);
+	background-color: var(--color-page);
+	font-weight: var(--font-weight-medium);
+	white-space: nowrap;
+}
+
+.wf [data-wf="button"][data-primary] {
+	border-color: var(--color-text-primary);
+	background: var(--color-text-primary);
+	color: var(--color-page);
+}
+
+.wf [data-wf="button"][data-disabled] {
+	border-color: var(--color-edge);
+	background-color: transparent;
+	color: var(--color-text-quaternary);
+}
+
+.wf [data-wf="badge"] {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.25);
+	max-inline-size: 100%;
+	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.75);
+	border: var(--edge-width) solid var(--wf-line);
+	border-radius: var(--radius-full);
+	background-color: var(--color-page);
+	font-family: var(--font-mono);
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.wf .wf-badge-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.wf .wf-glyph {
+	flex: 0 0 auto;
+	inline-size: calc(var(--spacing) * 2);
+	block-size: calc(var(--spacing) * 2);
+	border: var(--edge-width) solid currentColor;
+	border-radius: var(--radius-full);
+	color: var(--color-text-tertiary);
+}
+
+.wf [data-tone="success"] .wf-glyph {
+	background: currentColor;
+}
+
+.wf [data-tone="warning"] .wf-glyph {
+	background: conic-gradient(currentColor 0 50%, transparent 0);
+}
+
+.wf [data-tone="info"] .wf-glyph {
+	border-style: dotted;
+}
+
+.wf :is([data-tone="danger"], [data-danger]) .wf-glyph {
+	background: linear-gradient(45deg, transparent 40%, currentColor 40% 60%, transparent 60%);
+}
+
+.wf [data-wf="disclosure"] {
+	display: grid;
+}
+
+.wf .wf-disclosure-summary {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	font-weight: var(--font-weight-medium);
+}
+
+.wf .wf-chevron {
+	inline-size: calc(var(--spacing) * 1.25);
+	block-size: calc(var(--spacing) * 1.25);
+	margin-inline: calc(var(--spacing) * 0.5);
+	border-block-end: var(--edge-width) solid var(--color-text-tertiary);
+	border-inline-end: var(--edge-width) solid var(--color-text-tertiary);
+	transform: rotate(-45deg);
+}
+
+.wf [data-open] > .wf-disclosure-summary .wf-chevron {
+	transform: translateY(calc(var(--spacing) * -0.25)) rotate(45deg);
+}
+
+.wf .wf-disclosure-body {
+	display: grid;
+	gap: var(--wf-gap);
+	margin-block-start: calc(var(--spacing) * 2);
+	padding-inline-start: calc(var(--spacing) * 4);
+}
+
+.wf [data-wf="list"] {
+	display: grid;
+	gap: calc(var(--spacing) * 1);
+}
+
+.wf .wf-list-label {
+	font-weight: var(--font-weight-medium);
+	color: var(--color-text-primary);
+}
+
+.wf .wf-items {
+	display: grid;
+	gap: calc(var(--spacing) * 0.5);
+	margin: 0;
+	padding-inline-start: calc(var(--spacing) * 3.5);
+	list-style: disc;
+
+	& > li {
+		margin: 0;
+		padding: 0;
+	}
+
+	& > li::marker {
+		color: var(--color-text-quaternary);
+	}
+}
+
+.wf ol.wf-items {
+	list-style: decimal;
+}
+
+.wf [data-wf="input"] {
+	display: grid;
+	gap: calc(var(--spacing) * 1);
+}
+
+.wf .wf-input-label {
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.wf .wf-input-field {
+	display: flex;
+	align-items: center;
+	min-block-size: calc(var(--spacing) * 7);
+	padding-inline: calc(var(--spacing) * 2);
+	border: var(--edge-width) solid var(--wf-line);
+	border-radius: var(--radius-sm);
+	background-color: var(--color-page);
+	color: var(--color-text-quaternary);
+
+	&[data-value] {
+		color: var(--color-text-primary);
+	}
+}
+
+.wf [data-wf="input"][data-disabled] .wf-input-field {
+	border-color: var(--color-edge);
+	background-color: var(--color-inset);
+	color: var(--color-text-quaternary);
+}
+
+.wf [data-wf="tabs"] {
+	display: flex;
+	flex-wrap: wrap;
+	column-gap: calc(var(--spacing) * 4);
+	border-block-end: var(--edge-width) solid var(--wf-line);
+
+	& > span {
+		padding-block: calc(var(--spacing) * 1.5);
+		color: var(--color-text-tertiary);
+		white-space: nowrap;
+	}
+
+	& > [data-selected] {
+		margin-block-end: calc(var(--edge-width) * -1);
+		border-block-end: var(--edge-width) solid currentColor;
+		border-block-end-width: calc(var(--edge-width) * 2);
+		color: var(--color-text-primary);
+		font-weight: var(--font-weight-medium);
+	}
+}
+
+.wf [data-wf="nav"] {
+	display: flex;
+	flex-wrap: wrap;
+	gap: calc(var(--spacing) * 1);
+
+	& > span {
+		padding: calc(var(--spacing) * 1.25) calc(var(--spacing) * 2);
+		border: var(--edge-width) solid transparent;
+		border-radius: var(--radius-sm);
+		color: var(--color-text-tertiary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	& > [data-selected] {
+		border-color: var(--wf-line);
+		background: var(--color-page);
+		color: var(--color-text-primary);
+		font-weight: var(--font-weight-medium);
+	}
+}
+
+.wf [data-wf="nav"][data-vertical] {
+	display: grid;
+	gap: calc(var(--spacing) * 0.5);
+	align-content: start;
+	padding-inline-end: calc(var(--spacing) * 3);
+	border-inline-end: var(--edge-width) solid var(--wf-line);
+}
+
+/*
+ * A crossed box: the universal sign for "a picture goes here". Each ratio is
+ * fixed, so each diagonal's length (as a share of the width) and angle are too.
+ */
+.wf [data-wf="image"] {
+	--wf-diagonal: 117.925%;
+	--wf-angle: 32.005deg;
+
+	display: grid;
+	place-items: center;
+	aspect-ratio: 16 / 10;
+	border: var(--edge-width) solid var(--wf-line);
+	border-radius: var(--radius-sm);
+	background-color: var(--color-page);
+
+	&[data-ratio="square"] {
+		--wf-diagonal: 141.421%;
+		--wf-angle: 45deg;
+
+		aspect-ratio: 1;
+	}
+
+	&[data-ratio="tall"] {
+		--wf-diagonal: 166.667%;
+		--wf-angle: 53.13deg;
+
+		aspect-ratio: 3 / 4;
+	}
+
+	&::before,
+	&::after {
+		content: "";
+		position: absolute;
+		inset-block-start: 50%;
+		inset-inline-start: 50%;
+		inline-size: var(--wf-diagonal);
+		border-block-start: var(--edge-width) solid var(--wf-line);
+		transform: translate(-50%, -50%) rotate(var(--wf-angle));
+	}
+
+	&::after {
+		transform: translate(-50%, -50%) rotate(calc(var(--wf-angle) * -1));
+	}
+}
+
+.wf .wf-image-label {
+	position: relative;
+	z-index: 1;
+	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
+	background: var(--color-page);
+	font-family: var(--font-mono);
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--color-text-quaternary);
+}
+
+.wf [data-wf="divider"] {
+	inline-size: 100%;
+	border-block-start: var(--edge-width) solid var(--wf-line);
+}
+
+/* Callouts --------------------------------------------------------------- */
+
+/* A numbered chip on the target's corner; the words live in the notes. */
+.wf .wf-mark {
+	position: absolute;
+	inset-block-start: calc(var(--spacing) * -2);
+	inset-inline-end: calc(var(--spacing) * -2);
+	z-index: 1;
+	display: flex;
+	gap: calc(var(--spacing) * 0.5);
+}
+
+.wf .wf-mark-chip {
+	display: inline-grid;
+	flex: 0 0 auto;
+	place-items: center;
+	min-inline-size: calc(var(--spacing) * 4);
+	block-size: calc(var(--spacing) * 4);
+	padding-inline: calc(var(--spacing) * 1);
+	border-radius: var(--radius-full);
+	background: var(--color-text-secondary);
+	color: var(--color-page);
+	font-size: var(--text-2xs);
+	font-weight: var(--font-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.wf-notes {
+	display: grid;
+	gap: calc(var(--spacing) * 2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+
+	& > li {
+		display: flex;
+		align-items: flex-start;
+		gap: calc(var(--spacing) * 2);
+		margin: 0;
+		padding: 0;
+		text-wrap: pretty;
+	}
+
+	& .wf-mark-chip {
+		margin-block-start: calc(var(--spacing) * 0.25);
+	}
+}
+
+.wf .wf-note-text {
+	white-space: pre-line;
+}
+
+/* Read by assistive technology in place of the inert drawing. */
+.wf .wf-alt {
+	position: absolute;
+	inline-size: var(--edge-width);
+	block-size: var(--edge-width);
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* Narrow: reflow ------------------------------------------------------------ */
+
+@container (max-width: 26rem) {
+	.wf [data-wf="row"] {
+		flex-direction: column;
+		align-items: stretch;
+
+		& > [data-wf] {
+			flex: 0 0 auto;
+		}
+
+		& > :is([data-wf="button"], [data-wf="badge"]) {
+			align-self: flex-start;
+		}
+
+		& > [data-wf="nav"][data-vertical] {
+			flex: 0 0 auto;
+			display: flex;
+			flex-wrap: wrap;
+			gap: calc(var(--spacing) * 1);
+			padding-inline-end: 0;
+			padding-block-end: calc(var(--spacing) * 2);
+			border-inline-end: 0;
+			border-block-end: var(--edge-width) solid var(--wf-line);
+		}
+
+		& > [data-wf="image"] {
+			flex: 0 0 auto;
+			inline-size: 100%;
+		}
+	}
+
+	/* A row of buttons is still a row of buttons; it wraps instead. */
+	.wf [data-wf="row"]:has(> [data-wf="button"]):not(:has(> :not([data-wf="button"]))) {
+		flex-direction: row;
+		align-items: flex-start;
+	}
+
+	.wf [data-wf="row"][data-flow] {
+		align-items: stretch;
+	}
+
+	.wf .wf-arrow {
+		flex-basis: calc(var(--spacing) * 4);
+		align-self: flex-start;
+		inline-size: 0;
+		block-size: calc(var(--spacing) * 4);
+		margin-inline-start: calc(var(--spacing) * 5);
+		border-block-start: 0;
+		border-inline-start: var(--edge-width) solid var(--color-text-quaternary);
+
+		&::after {
+			inset-inline-end: auto;
+			inset-inline-start: 50%;
+			inset-block-start: auto;
+			inset-block-end: 0;
+			transform: translateX(-50%) rotate(135deg);
+		}
+	}
+}

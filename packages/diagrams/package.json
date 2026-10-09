@@ -23,6 +23,10 @@
 			"types": "./src/wireframe/index.ts",
 			"default": "./src/wireframe/index.ts"
 		},
+		"./wireframe/view": {
+			"types": "./src/wireframe/view.tsx",
+			"default": "./src/wireframe/view.tsx"
+		},
 		"./fixtures": {
 			"types": "./src/fixtures/index.ts",
 			"default": "./src/fixtures/index.ts"

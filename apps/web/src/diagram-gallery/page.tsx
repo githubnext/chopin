@@ -7,6 +7,7 @@ import { StaticPlanEditor } from "@chopin/editor/static";
 import "@chopin/diagrams/styles.css";
 import "@chopin/editor/styles.css";
 import "./styles.css";
+import { WireframeSpecimen } from "./wireframes";
 
 type Fixture = (typeof DIAGRAM_FIXTURES)[number];
 
@@ -155,6 +156,8 @@ export function DiagramGalleryPage() {
 			</section>
 
 			<DocumentSpecimen />
+
+			<WireframeSpecimen />
 
 			<section
 				aria-labelledby="diagram-catalogue-heading"
