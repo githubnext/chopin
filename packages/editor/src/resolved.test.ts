@@ -124,8 +124,8 @@ describe("marker and popover placement", () => {
 
 	it("sits in the gutter, centred on the first line", () => {
 		expect(markerPoint(box(100, 50, 600, 80), 32, host)).toEqual({
-			top: 56,
-			left: 72,
+			top: 54,
+			left: 68,
 			compact: false,
 		});
 	});
@@ -137,7 +137,7 @@ describe("marker and popover placement", () => {
 	});
 
 	it("never leaves the host", () => {
-		expect(markerPoint(box(1000, 50, 100, 20), 20, host).left).toBeLessThanOrEqual(780);
+		expect(markerPoint(box(1000, 50, 100, 20), 20, host).left).toBeLessThanOrEqual(776);
 		expect(markerPoint(box(2, 50, 100, 20), 20, host).left).toBeGreaterThanOrEqual(0);
 	});
 

@@ -3213,13 +3213,17 @@
 	z-index: 2;
 }
 
+.plan-document [data-plan-scroll] {
+	position: relative;
+}
+
 .plan-decision-marker {
 	pointer-events: auto;
 	position: absolute;
 	display: grid;
 	place-items: center;
-	inline-size: 1.25rem;
-	block-size: 1.25rem;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
 	padding: 0;
 	border-radius: var(--radius-full);
 }
@@ -3241,8 +3245,8 @@
 	--color-icon: var(--color-success);
 	display: grid;
 	place-items: center;
-	inline-size: 1.25rem;
-	block-size: 1.25rem;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
 	border-radius: var(--radius-full);
 	background: var(--color-success-wash);
 	color: var(--color-success);
