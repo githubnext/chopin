@@ -101,6 +101,11 @@ and tool vocabulary remain optimized for planning.
   Independent research analysis can propose [research offers](docs/conversation-research.md)
   with shared editable briefs. Brief synthesis uses an isolated harness worker;
   a writer starts the research explicitly.
+- Experimental Planner visual routing is opt-in with `PLANNER_VISUALS=on` and
+  `JEV_API_KEY`. Jev makes small possibility, comprehension, and type decisions
+  for one explanatory paragraph at a time; Planner authors the selected visual.
+  Routing applies to explicit member requests of at most 1,000 characters under
+  `copilot-sdk` or `pi`. Other turns keep their ordinary authoring behavior.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
 

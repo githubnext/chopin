@@ -1,12 +1,18 @@
 import { expect, test } from "bun:test";
 
 import { parseWireframe, renderDiagram, WIREFRAME_KINDS } from "@chopin/diagrams";
+import { parse } from "@chopin/dialect/parse";
+import { ulid } from "@chopin/dialect/ulid";
+import { validate } from "@chopin/dialect/validate";
 
-import { DIAGRAM_AUTHORING, PROMPT, WIREFRAME_AUTHORING } from "./planner";
+import { DIAGRAM_AUTHORING, plannerInstructions, PROMPT, WIREFRAME_AUTHORING } from "./planner";
 
 test("offers grounded optional diagrams with three valid authoring examples", () => {
 	expect(PROMPT).toContain(DIAGRAM_AUTHORING);
-	expect(DIAGRAM_AUTHORING).toContain("when a diagram adds no clarity");
+	expect(plannerInstructions("octo-org/score")).toContain(DIAGRAM_AUTHORING);
+	expect(DIAGRAM_AUTHORING).toContain("Start from the reader's question");
+	expect(DIAGRAM_AUTHORING).toContain("ordinary multiple-choice");
+	expect(DIAGRAM_AUTHORING).toContain("field-specific validation message");
 	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)];
 	expect(examples).toHaveLength(3);
 	for (let [index, example] of examples.entries()) {
@@ -17,6 +23,8 @@ test("offers grounded optional diagrams with three valid authoring examples", ()
 
 test("teaches wireframe fences with a valid example and every kind", () => {
 	expect(PROMPT).toContain(WIREFRAME_AUTHORING);
+	expect(plannerInstructions("octo-org/score", undefined, undefined, true))
+		.toContain(WIREFRAME_AUTHORING);
 	expect(WIREFRAME_AUTHORING).toContain(
 		"Never draw one with box-drawing characters or ASCII art in a text fence.",
 	);
@@ -27,6 +35,47 @@ test("teaches wireframe fences with a valid example and every kind", () => {
 	for (let kind of Object.keys(WIREFRAME_KINDS)) {
 		expect(WIREFRAME_AUTHORING, kind).toMatch(new RegExp(`\\b${kind}\\b`));
 	}
+});
+
+test("makes Jev the only visual decision maker in routed Planner sessions", () => {
+	let routed = plannerInstructions("octo-org/score", undefined, undefined, true);
+	expect(routed).toContain("call assess_visual");
+	expect(routed).toContain("Jev separately");
+	expect(routed).toContain("do not make");
+	expect(routed).toContain("Pass visual_route to edit_plan");
+	expect(routed).toContain("Chopin Jev visual authoring guide");
+	expect(routed).toContain("repair the named field using the same visual_route");
+	expect(routed).toContain("unavailable, do not write that explanatory passage");
+	expect(routed).not.toContain("use the prose route and state the limitation");
+	expect(routed).not.toContain(DIAGRAM_AUTHORING);
+	expect(plannerInstructions("octo-org/score")).toContain(DIAGRAM_AUTHORING);
+	expect(plannerInstructions("octo-org/score")).not.toContain("call assess_visual");
+});
+
+test("offers native composition recipes with valid table and Callout examples", () => {
+	expect(DIAGRAM_AUTHORING).toContain("Native document composition");
+	expect(DIAGRAM_AUTHORING).toContain("If evidence is uneven, use prose or bullets");
+	expect(DIAGRAM_AUTHORING).toContain("A team selection belongs in `ask`");
+	let table = DIAGRAM_AUTHORING.match(
+		/Illustrative comparison \(replace each cell with supported facts\):\n([\s\S]*?)\n\nIllustrative caveat:/,
+	)?.[1];
+	let callout = DIAGRAM_AUTHORING.match(
+		/Illustrative caveat:\n([\s\S]*?)\n\nNever add/,
+	)?.[1];
+	expect(table).toBeDefined();
+	expect(callout).toBeDefined();
+	// edit_plan assigns the Callout id that the Planner must omit.
+	let document = parse(
+		`# Example\n\n${table}\n\n${
+			callout?.replace("<Callout type", `<Callout id="${ulid()}" type`)
+		}\n`,
+	);
+	expect(validate(document)).toEqual({ ok: true });
+	expect(document.children.map(node => node.type)).toEqual([
+		"heading",
+		"table",
+		"mdxJsxFlowElement",
+	]);
 });
 
 test("settles blocking opening choices before writing a first plan", () => {

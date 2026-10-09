@@ -317,12 +317,28 @@ the image.
 | `WEB_RESEARCH`                 | on                    | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `COPILOT_CLI_PATH`             | automatic             | Advanced override for the Copilot CLI executable. Applies only to the `copilot-sdk` adapter.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `CONVERSATION_PLAN`            | off                   | Set exactly `on` to enable experimental conversation-derived cards. Interpretation runs independently of `AGENT`; Planner jobs still obey the agent and job settings.                                                                                                                                                                                                                                                                                                                                                                              |
+| `PLANNER_VISUALS`              | off                   | Set exactly `on` to enable the bounded Jev visual handoff for foreground Planner turns. Requires `AGENT=on` and `JEV_API_KEY`.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `JEV_MODEL`                    | `jev-latest`          | Model alias for conversation interpretation. Independent of the hosted Planner's `MODEL`.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `JEV_TIMEOUT_MS`               | `30000`               | Per-request interpretation timeout in milliseconds, an integer between 100 and 60000.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `JEV_API_KEY`                  | required when enabled | Server-side Jev API key. Required at startup when `CONVERSATION_PLAN=on`; never send it to the browser.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `JEV_API_KEY`                  | required when enabled | Server-side Jev API key. Required at startup when `CONVERSATION_PLAN=on` or `PLANNER_VISUALS=on`; never send it to the browser.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
+
+`PLANNER_VISUALS` defaults to off. Set it exactly to `on` alongside `AGENT=on`
+and `JEV_API_KEY` to enable the bounded foreground visual handoff. Jev makes
+three decisions for each assessed paragraph: whether visualization is possible,
+whether it improves comprehension, and which SeeCode type or table fits. The
+Planner writes and validates the selected visual. This experimental path
+currently accepts one explanatory paragraph per edit, optionally followed by
+its selected visual; headings can be separate edits. Lists and nested MDX
+paragraphs are not yet supported in a routed edit. `JEV_MODEL` and
+`JEV_TIMEOUT_MS` apply to this path too.
+
+Routing is limited to explicit member requests of at most 1,000 characters under
+`copilot-sdk` or `pi`. Accepted-comment turns, longer member requests, background
+jobs, and `atomic` sessions retain their ordinary authoring behavior. Atomic's
+retained workflow sessions are outside this disposable-session prototype.
 
 Conversation-derived cards default to off. When enabled, interpretation sends
 current and recent Chat messages and selected decision context to TypeSafe's Jev
@@ -337,7 +353,7 @@ unavailable. Actual research starts only after a writer accepts the current shar
 brief and the execution capability is enabled. See
 [Research offers from Chat](conversation-research.md).
 
-The supplied Compose file forwards `CONVERSATION_PLAN`, `JEV_MODEL` and
+The supplied Compose file forwards `CONVERSATION_PLAN`, `PLANNER_VISUALS`, `JEV_MODEL` and
 `JEV_API_KEY` from the deployment environment. It uses the server's default
 30-second interpretation timeout. To override `JEV_TIMEOUT_MS`, configure it
 explicitly in the service environment; the Compose file does not forward an

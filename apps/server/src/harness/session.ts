@@ -1,6 +1,12 @@
-import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES } from "./tool-names";
+import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
-import { headingPlannerAgent, plannerAgent, prosePlannerAgent, refinePlannerAgent } from "./agents";
+import {
+	headingPlannerAgent,
+	plannerAgent,
+	prosePlannerAgent,
+	refinePlannerAgent,
+	visualPlannerAgent,
+} from "./agents";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
 import {
@@ -67,6 +73,7 @@ export type PlannerSessionDependencies = {
 	headingAgent?: PlannerAgent;
 	refineAgent?: PlannerAgent;
 	proseAgent?: PlannerAgent;
+	visualAgent?: PlannerAgent;
 	githubTools?: typeof githubTools;
 	createSandbox?: () => Promise<Sandbox>;
 	registerCredential?: typeof registerCredential;
@@ -153,6 +160,8 @@ export async function openPlannerSession(
 			? deps.refineAgent ?? refinePlannerAgent
 			: job?.kind === "prose"
 			? deps.proseAgent ?? prosePlannerAgent
+			: channel.room.visual
+			? deps.visualAgent ?? visualPlannerAgent
 			: plannerAgent);
 		let opening = agent.createSession({ sessionId, sandboxSession: sandbox });
 		let deadline = new Promise<never>((_, reject) => {
@@ -191,7 +200,11 @@ export async function openPlannerSession(
 			}
 			: {};
 		let fixedTools = Object.freeze([
-			...(job ? BACKGROUND_TOOL_NAMES[job.kind] : PLANNER_TOOL_NAMES),
+			...(job
+				? BACKGROUND_TOOL_NAMES[job.kind]
+				: channel.room.visual
+				? VISUAL_PLANNER_TOOL_NAMES
+				: PLANNER_TOOL_NAMES),
 		]);
 		return {
 			ok: true,

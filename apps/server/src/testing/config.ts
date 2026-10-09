@@ -25,6 +25,7 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		BACKGROUND_JOBS: undefined,
 		WEB_RESEARCH: undefined,
 		CONVERSATION_PLAN: undefined,
+		PLANNER_VISUALS: undefined,
 		JEV_API_KEY: undefined,
 		JEV_MODEL: undefined,
 		JEV_TIMEOUT_MS: undefined,

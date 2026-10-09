@@ -22,6 +22,19 @@ describe("configuration", () => {
 		expect(configured({ STORAGE_DRIVER: undefined }).storage.driver).toBe("postgres");
 	});
 
+	it("keeps foreground Jev visuals opt-in and requires a Jev key", () => {
+		expect(configured().plannerVisuals).toBe(false);
+		expect(configured({ JEV_API_KEY: "test-key" }).plannerVisuals).toBe(false);
+		expect(configured({ PLANNER_VISUALS: "on", JEV_API_KEY: "test-key" }).plannerVisuals)
+			.toBe(true);
+		expect(() => configured({ PLANNER_VISUALS: "on" }))
+			.toThrow("JEV_API_KEY is required when PLANNER_VISUALS=on");
+		expect(
+			configured({ AGENT: "off", PLANNER_VISUALS: "on", JEV_API_KEY: "test-key" })
+				.plannerVisuals,
+		).toBe(false);
+	});
+
 	it("gates background execution and web research behind the hosted agent", () => {
 		expect(configured()).toMatchObject({ agent: true, backgroundJobs: true, webResearch: true });
 		expect(configured({ WEB_RESEARCH: "off" })).toMatchObject({

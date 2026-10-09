@@ -84,6 +84,7 @@ test("the direct writer receives the same live verified member request", () => {
 	let h = harness();
 	h.chat.busy = true;
 	h.chat.turn = { id: "turn", handle: "ana", started: 1, entryOffset: 0, responded: false };
+	h.chat.turnController = new AbortController();
 	let active: Chat.ActiveMemberRequest = {
 		entryId: "entry",
 		userId: "U_ana",

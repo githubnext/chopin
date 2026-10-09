@@ -6,6 +6,7 @@ import { openPlannerSession } from "./session";
 import { fullPlanner } from "./atomic/full";
 import { forgetWorkspaces, rememberCheckout, stateDirectory } from "./atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
+import { VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
 
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { PlannerSessionDependencies } from "./session";
@@ -57,6 +58,34 @@ function fixture() {
 }
 
 describe("openPlannerSession", () => {
+	it("uses the visual Planner profile only when the room has Jev routing", async () => {
+		let { owner, channel, deps } = fixture();
+		let visualOpened = false;
+		deps.agent = undefined;
+		channel.room = {
+			id: "channel",
+			plan: {},
+			server: {},
+			visual: {
+				ask: async () => {
+					throw new Error("unused");
+				},
+			},
+		} as never;
+		deps.visualAgent = {
+			createSession: async () => {
+				visualOpened = true;
+				return { destroy: async () => {} };
+			},
+		} as never;
+		let opened = await openPlannerSession(owner, channel, deps);
+		expect(opened.ok).toBe(true);
+		if (!opened.ok) return;
+		expect(visualOpened).toBe(true);
+		expect(opened.value.activeTools).toEqual(VISUAL_PLANNER_TOOL_NAMES);
+		await opened.value.destroy();
+	});
+
 	it("keeps the credential host-side and destroys the session and sandbox once", async () => {
 		let { owner, channel, deps, destroyed } = fixture();
 		let opened = await openPlannerSession(owner, channel, deps);

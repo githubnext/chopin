@@ -41,6 +41,8 @@ export type Config = {
 	conversationPlan?: boolean;
 	conversationPlanModel?: string;
 	conversationPlanTimeoutMs?: number;
+	/** Explicitly enables Jev-routed foreground visual authoring. */
+	plannerVisuals?: boolean;
 	/**
 	 * Origin of a running Vite, when developing.
 	 *
@@ -113,6 +115,7 @@ export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
 	let conversationPlan = process.env.CONVERSATION_PLAN === "on";
+	let plannerVisuals = process.env.PLANNER_VISUALS === "on" && agent;
 	let conversationPlanModel = process.env.JEV_MODEL || "jev-latest";
 	let timeoutRaw = process.env.JEV_TIMEOUT_MS;
 	let conversationPlanTimeoutMs = timeoutRaw === undefined ? 30_000 : Number(timeoutRaw);
@@ -126,7 +129,12 @@ export function load(): Config {
 	if (conversationPlan && !process.env.JEV_API_KEY) {
 		throw new Error("JEV_API_KEY is required when CONVERSATION_PLAN=on");
 	}
-	if (conversationPlan && !/^[A-Za-z0-9._-]{1,100}$/.test(conversationPlanModel)) {
+	if (plannerVisuals && !process.env.JEV_API_KEY) {
+		throw new Error("JEV_API_KEY is required when PLANNER_VISUALS=on");
+	}
+	if (
+		(conversationPlan || plannerVisuals) && !/^[A-Za-z0-9._-]{1,100}$/.test(conversationPlanModel)
+	) {
 		throw new Error("JEV_MODEL must be a valid model alias");
 	}
 	let selection = harnessSelection();
@@ -141,6 +149,7 @@ export function load(): Config {
 		conversationPlan,
 		conversationPlanModel,
 		conversationPlanTimeoutMs,
+		plannerVisuals,
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
 		auth: loadAuth(serverPort, selection.host),
@@ -179,6 +188,9 @@ export function describe(config: Config): string {
 		config.conversationPlan
 			? `conversation plan: ${config.conversationPlanModel}`
 			: "conversation plan: off",
+		config.plannerVisuals
+			? `Planner visuals: ${config.conversationPlanModel}`
+			: "Planner visuals: off",
 		admission,
 		`storage: ${config.storage.driver}`,
 	];

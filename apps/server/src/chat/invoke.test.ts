@@ -140,6 +140,8 @@ type Seen = {
 	full: ReturnType<typeof fullPlanner>;
 	instructions: string;
 	prompt: string;
+	visual: boolean;
+	tools: readonly string[];
 };
 
 /** The real session opener, over a harness stub that records what each turn runs with. */
@@ -165,6 +167,8 @@ function observe(context: Chat.Room): Seen[] {
 						full: fullPlanner(call.session.sessionId),
 						instructions: call.options.instructions,
 						prompt: call.prompt,
+						visual: !!channel.room.visual,
+						tools: context.chat.agent?.activeTools ?? [],
 					});
 					return { fullStream: (async function*() {})() };
 				},
@@ -196,6 +200,30 @@ async function browserTurn(context: Chat.Room, text: string) {
 	} as never);
 	await context.chat.running;
 }
+
+test("visual routing only attaches to bounded member turns on disposable harnesses", async () => {
+	for (let harness of ["copilot-sdk", "pi", "atomic"]) {
+		let { context } = await setup(configured({
+			HARNESS: harness,
+			HARNESS_AUTH: "ai-gateway",
+			MODEL: "stub/model",
+			PLANNER_VISUALS: "on",
+			JEV_API_KEY: "test-key",
+		}));
+		let seen = observe(context);
+		await browserTurn(context, "Explain the process.");
+		await browserTurn(context, "A".repeat(1_001));
+		await Chat.instruct(context, "ana", "Apply the accepted comment.", "Comment accepted.");
+		await context.chat.running;
+		expect(seen).toHaveLength(3);
+		for (let [index, turn] of seen.entries()) {
+			let routed = harness !== "atomic" && index === 0;
+			expect(turn.visual).toBe(routed);
+			expect(turn.tools.includes("assess_visual")).toBe(routed);
+			expect(turn.instructions.includes("call assess_visual")).toBe(routed);
+		}
+	}
+});
 
 test("an invoked instruction persists verbatim as a member message before publication and returns before the turn", async () => {
 	let { context, events, user } = await setup();
