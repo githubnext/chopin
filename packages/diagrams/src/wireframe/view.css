@@ -565,7 +565,7 @@
 	white-space: nowrap;
 }
 
-.wf-notes {
+.wf .wf-notes {
 	display: grid;
 	gap: calc(var(--spacing) * 2);
 	margin: 0;

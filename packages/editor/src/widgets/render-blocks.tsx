@@ -279,6 +279,8 @@ function Preview(
 	let [error, setError] = useState<string>();
 	let [spec, setSpec] = useState<unknown>();
 	let [drawing, setDrawing] = useState<Drawing>();
+	/** The wireframe source that last failed to parse. */
+	let [failed, setFailed] = useState<string>();
 
 	let drawn = block.kind === "math" || block.kind === "mermaid" || block.kind === "seecode"
 		|| block.kind === "wireframe";
@@ -293,6 +295,7 @@ function Preview(
 			setError(undefined);
 			setSpec(undefined);
 			setDrawing(undefined);
+			setFailed(undefined);
 			return;
 		}
 		let cancelled = false;
@@ -304,6 +307,7 @@ function Preview(
 				setHtml(undefined);
 				setError(undefined);
 				setDrawing(undefined);
+				setFailed(undefined);
 				return;
 			}
 			try {
@@ -318,6 +322,7 @@ function Preview(
 					if (cancelled) return;
 					if (!parsed.ok) throw new Error(describeWireframeProblem(parsed.problems));
 					setDrawing({ source: block.source, wireframe: parsed.wireframe });
+					setFailed(undefined);
 					setError(undefined);
 					return;
 				}
@@ -352,6 +357,7 @@ function Preview(
 				let message = err instanceof Error ? err.message : "could not be rendered";
 				if (block.kind === "seecode") setSpec(undefined);
 				else if (block.kind === "math") setHtml(undefined);
+				else if (block.kind === "wireframe") setFailed(block.source);
 				timer = setTimeout(() => setError(message), ERROR_DELAY);
 			}
 		};
@@ -381,17 +387,21 @@ function Preview(
 	 */
 	let text = plainText(block.language);
 	let current = renders(block, html, spec, drawing);
-	let hide = collapsed && current;
-	let swap = !collapsed && current && (block.kind === "code" || block.kind === "diff");
 	/*
-	 * A wireframe somebody is writing keeps its last drawing, faded, while the
-	 * source is mid-edit; one nobody is in that does not parse is plain code.
+	 * A wireframe keeps its last drawing while a changed source is still being
+	 * read, so nobody's edit flickers it to code and back. One somebody is
+	 * writing keeps it, faded, while the source does not parse; one nobody is
+	 * in that does not parse is plain code.
 	 */
-	let stale = block.kind === "wireframe" && !current && !collapsed && drawing !== undefined;
-	let wireframe = block.kind === "wireframe" && (current || stale);
+	let broken = block.kind === "wireframe" && failed === block.source;
+	let pending = block.kind === "wireframe" && !current && !broken && drawing !== undefined;
+	let stale = broken && !collapsed && drawing !== undefined;
+	let wireframe = block.kind === "wireframe" && (current || pending || stale);
+	let hide = collapsed && (current || pending);
+	let swap = !collapsed && current && (block.kind === "code" || block.kind === "diff");
 	useEffect(() => {
-		if (block.kind === "wireframe" && collapsed && drawing && !current) setDrawing(undefined);
-	}, [block.kind, collapsed, current, drawing]);
+		if (broken && collapsed && drawing) setDrawing(undefined);
+	}, [broken, collapsed, drawing]);
 	useLayoutEffect(() => {
 		let element = editor.getElementByKey(block.key);
 		if (!element) return;
@@ -418,7 +428,7 @@ function Preview(
 	// A block with nothing rendered has nothing to fall back to, so there is
 	// nothing to offer: hiding a plain fence would leave an empty box. A
 	// formula has no language either, so its row can be empty of both.
-	let hidable = current;
+	let hidable = current || pending;
 	let named = block.kind !== "math";
 
 	useEffect(() => {
@@ -439,6 +449,7 @@ function Preview(
 						error={error}
 						spec={spec}
 						drawing={wireframe ? drawing : undefined}
+						stale={stale}
 					/>,
 					host,
 					`${block.key}:preview`,
@@ -582,13 +593,15 @@ function WireframeError({ message }: { message: string }) {
 }
 
 function Rendered(
-	{ block, html, error, spec, drawing }: {
+	{ block, html, error, spec, drawing, stale }: {
 		block: Block;
 		html: string | undefined;
 		error: string | undefined;
 		spec: unknown;
 		/** Only while it is shown: current, or the last one while its source is mid-edit. */
 		drawing?: Drawing;
+		/** The drawing is of an earlier source than the one that does not parse now. */
+		stale?: boolean;
 	},
 ) {
 	if (block.kind === "wireframe") {
@@ -598,7 +611,7 @@ function Rendered(
 					<div
 						className="plan-wireframe"
 						contentEditable={false}
-						data-stale={drawing.source === block.source ? undefined : ""}
+						data-stale={stale ? "" : undefined}
 					>
 						<Suspense fallback={null}>
 							<WireframeView wireframe={drawing.wireframe} focusable />
@@ -1214,6 +1227,20 @@ export function PreviewPlugin() {
 			editor.registerUpdateListener(refresh),
 			editor.registerCommand(FOCUS_COMMAND, () => {
 				refresh();
+				// Back in the editor with the caret still in a wireframe that blur
+				// folded: open it again, since that is where typing will go.
+				let key = editor.getEditorState().read(() => {
+					let selection = $getSelection();
+					return $isRangeSelection(selection) ? enclosing(selection.anchor.getNode()) : undefined;
+				});
+				let block = key && latest.current.blocks.find(candidate => candidate.key === key);
+				// The DOM's selection says whether a click is already taking the
+				// caret somewhere else, which Lexical has not heard about yet.
+				let anchor = editor.getRootElement()?.ownerDocument.getSelection()?.anchorNode;
+				let inside = key && anchor && editor.getElementByKey(key)?.contains(anchor);
+				if (key && inside && block && block.kind === "wireframe") {
+					setShown(prev => (prev[key] ? prev : { ...prev, [key]: "editing" }));
+				}
 				return false;
 			}, COMMAND_PRIORITY_LOW),
 			editor.registerCommand(BLUR_COMMAND, () => {
