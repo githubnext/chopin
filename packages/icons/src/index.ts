@@ -15,6 +15,7 @@ export {
 	FormulaIcon,
 	ImageIcon,
 	InfoIcon,
+	KeyboardIcon,
 	LightbulbIcon,
 	LinkIcon,
 	LinkPlusIcon,

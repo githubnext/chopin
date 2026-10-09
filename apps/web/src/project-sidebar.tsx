@@ -17,6 +17,7 @@ import {
 	ArchiveIcon,
 	ChevronIcon,
 	DocumentIcon,
+	KeyboardIcon,
 	LockIcon,
 	PlusIcon,
 	SearchIcon,
@@ -773,7 +774,7 @@ export function ProjectSidebar(
 							role="menuitem"
 							type="button"
 						>
-							<kbd aria-hidden="true">?</kbd>Keyboard shortcuts
+							<KeyboardIcon aria-hidden="true" size={14} />Keyboard shortcuts
 						</button>
 						<div role="separator" />
 						<button onClick={accountMenu.onSignOut} role="menuitem" type="button">
