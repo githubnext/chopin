@@ -93,10 +93,15 @@ test("a held script waits for release and aborts promptly when its job service s
 	await writeFile(join(path, "heading.hold"), "hold");
 	let controller = new AbortController();
 	let run = scriptedRunner(path, () => [], plan.chat, () => plan.revision, controller.signal);
-	let pending = run(heading(), "prompt");
-	await Bun.sleep(50);
-	expect(plan.chat.job?.id).toBe(heading().id);
-	controller.abort();
+	let job = heading();
+	let pending = run(job, "prompt");
+	try {
+		let deadline = Date.now() + 2000;
+		while (plan.chat.job !== job && Date.now() < deadline) await Bun.sleep(5);
+		expect(plan.chat.job).toBe(job);
+	} finally {
+		controller.abort();
+	}
 	expect(await pending).toMatchObject({ status: "skipped" });
 	expect(plan.chat.job).toBeUndefined();
 	expect(plan.chat.turn).toBeUndefined();
