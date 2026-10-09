@@ -43,6 +43,7 @@ POST /api/channels/:channelId/archive
 POST /api/channels/:channelId/restore
 DELETE /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
+GET  /api/channels/:channelId/github-references?ref=owner/repository/pull/12
 POST /api/channels/:channelId/research-workspaces
 GET  /api/channels/:channelId/research-workspaces/:workspaceId
 POST /api/channels/:channelId/research-workspaces/:workspaceId/cancel
@@ -63,6 +64,17 @@ not use them as product routes. The repository-scoped `documents/:slug` route
 resolves both the current document slug and its historical aliases. Browser
 creation returns the readable canonical document route in `Location`, not a
 UUID route.
+
+The `github-references` route summarizes up to 20 pull requests or issues
+linked from a document, each named as `owner/repository/pull/N` or
+`owner/repository/issues/N`. It is not a general GitHub proxy. The caller needs
+read access to the document's repository, and each target repository must be
+reachable through the caller's own App installation with Pull requests or
+Issues read permission. Each reference resolves independently to `ok` with a
+summary, `unavailable`, or `rate-limited`; a missing, private, or unauthorized
+target is indistinguishable from one that does not exist. Summaries are cached
+in process for 60 seconds by repository node ID, but a cached summary is served
+only after the current caller's own access check.
 
 The listing route accepts a case-insensitive `query`, an opaque `cursor`, a
 `limit` from 1 through 100, and `includeArchived=true`. The query matches title

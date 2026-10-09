@@ -278,6 +278,7 @@ Contents:        Read-only
 Pull requests:   Read-only
 Checks:          Read-only
 Commit statuses: Read-only
+Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
