@@ -1130,11 +1130,12 @@ button.chat-tool-call-toggle {
 	min-width: 0;
 }
 
-.question-title {
+.question-card .question-title {
 	/* Centre the first line on the 1.5rem mark, then lift 2px optically. */
 	margin: calc((1.5rem - 1lh) / 2 - 0.125rem) 0 0;
-	font-size: var(--text-base);
-	line-height: var(--text-lg--line-height);
+	font-family: var(--font-sans);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 	font-weight: 600;
 	color: var(--color-text-primary);
 	overflow-wrap: break-word;
@@ -1165,7 +1166,7 @@ button.chat-tool-call-toggle {
 	position: relative;
 	display: flex;
 	align-items: flex-start;
-	gap: 0.625rem;
+	gap: 1.5rem;
 	padding: 0.375rem 0.75rem 0.375rem 0.5rem;
 	border-radius: var(--radius-md);
 	font-size: var(--text-sm);
@@ -1212,7 +1213,7 @@ label.question-option:has(.question-input:not(:disabled)) {
 	block-size: 1lh;
 }
 
-/* Same 1.5rem as the header mark, so option text shares the title's left edge. */
+/* The letter tile uses the same 1.5rem size as the header mark. */
 .question-key > span {
 	display: grid;
 	place-items: center;
