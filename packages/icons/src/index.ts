@@ -3,6 +3,9 @@ export { ChopinIcon } from "./filled";
 export type { IconProps, IconSize } from "./icon";
 export { iconSizes } from "./icon";
 export {
+	ActualSizeIcon,
+	ArrowLeftIcon,
+	ArrowRightIcon,
 	ArrowUpIcon,
 	CheckIcon,
 	ChevronIcon,
@@ -13,6 +16,7 @@ export {
 	DecisionIcon,
 	DiagramIcon,
 	DiffIcon,
+	FitWidthIcon,
 	FormulaIcon,
 	ImageIcon,
 	InfoIcon,
@@ -25,8 +29,10 @@ export {
 	MessageForwardIcon,
 	MessageIcon,
 	MessagePlusIcon,
+	MinusIcon,
 	PencilIcon,
 	PlusIcon,
+	RestartIcon,
 	SignInIcon,
 	SirenIcon,
 	SparkleIcon,

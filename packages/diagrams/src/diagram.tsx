@@ -1,6 +1,16 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 
+import {
+	ActualSizeIcon,
+	ArrowLeftIcon,
+	ArrowRightIcon,
+	FitWidthIcon,
+	MinusIcon,
+	PlusIcon,
+	RestartIcon,
+} from "@chopin/icons";
+
 import { diagramTypographyVariables } from "./core/tokens.mjs";
 import { type DiagramGraph, type DiagramResult, renderDiagram } from "./render";
 import { DIAGRAM_VIEWPORT, fitDiagram } from "./viewport";
@@ -16,7 +26,7 @@ export type DiagramProps = {
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
 type Item = { kind: "node" | "edge"; id: string };
-type Playback = { kind: "playing" | "still" } | { kind: "step"; index: number };
+type Playback = { kind: "playing" } | { kind: "step"; index: number };
 let diagramInstanceSequence = 0;
 
 const DiagramBody = memo(function DiagramBody({ body }: { body: string }) {
@@ -59,7 +69,6 @@ function DiagramView({
 	let [selected, setSelected] = useState<Item | null>(null);
 	let [mode, setMode] = useState<Playback>({ kind: "playing" });
 	let [playback, setPlayback] = useState(0);
-	let [reduced, setReduced] = useState(false);
 	let [overflowing, setOverflowing] = useState(false);
 	let [available, setAvailable] = useState(0);
 	let [zoom, setZoom] = useState(1);
@@ -72,15 +81,6 @@ function DiagramView({
 	let step = mode.kind === "step" ? mode.index : null;
 	let body = useMemo(() => namespaceSvgIds(result.body, prefix), [result.body, prefix]);
 	let active = preview ?? selected;
-
-	useEffect(() => {
-		if (typeof window.matchMedia !== "function") return;
-		let query = window.matchMedia("(prefers-reduced-motion: reduce)");
-		let update = () => setReduced(query.matches);
-		update();
-		query.addEventListener("change", update);
-		return () => query.removeEventListener("change", update);
-	}, []);
 
 	useEffect(() => {
 		let stage = stageRef.current;
@@ -212,15 +212,12 @@ function DiagramView({
 	let showStep = (next: number) => {
 		setPreview(null);
 		setSelected(null);
-		setMode({ kind: "step", index: Math.max(0, Math.min(maxStep, next)) });
+		setMode({ kind: "step", index: Math.max(1, Math.min(maxStep, next)) });
 	};
-	let reset = () => {
+	// One control returns to a fresh view: no selection, every step shown, entrance replayed.
+	let restart = () => {
 		setPreview(null);
 		setSelected(null);
-		setMode({ kind: "still" });
-	};
-	let replay = () => {
-		setPreview(null);
 		setMode({ kind: "playing" });
 		setPlayback((current) => current + 1);
 	};
@@ -233,6 +230,8 @@ function DiagramView({
 	let related = selectedNode
 		? edges.filter((edge) => edge.from === selectedNode.id || edge.to === selectedNode.id)
 		: [];
+	let stepping = maxStep > 0;
+	let zoomable = result.viewBox[2] > available || zoom !== 1;
 	let labelFor = (nodeId: string) => nodes.find((node) => node.id === nodeId)?.label ?? nodeId;
 	let status = step !== null
 		? `Step ${step} of ${maxStep}`
@@ -274,6 +273,93 @@ function DiagramView({
 					<DiagramBody key={playback} body={body} />
 				</svg>
 			</div>
+			{(stepping || zoomable) && (
+				<div className="ch-diagram__controls" role="group" aria-label="Diagram controls">
+					{stepping && (
+						<div className="ch-diagram__control-group">
+							<button
+								className="ch-diagram__control"
+								type="button"
+								onClick={() => showStep((step ?? maxStep) - 1)}
+								disabled={step !== null && step <= 1}
+								aria-label="Previous step"
+							>
+								<ArrowLeftIcon />
+							</button>
+							<span className="ch-diagram__step" aria-hidden="true">
+								{step ?? "–"} / {maxStep}
+							</span>
+							<button
+								className="ch-diagram__control"
+								type="button"
+								onClick={() =>
+									showStep((step ?? 0) + 1)}
+								disabled={step === maxStep}
+								aria-label="Next step"
+							>
+								<ArrowRightIcon />
+							</button>
+							<button
+								className="ch-diagram__control"
+								type="button"
+								onClick={restart}
+								aria-label="Restart diagram"
+							>
+								<RestartIcon />
+							</button>
+						</div>
+					)}
+					{zoomable && (
+						<div className="ch-diagram__control-group">
+							<button
+								className="ch-diagram__control"
+								type="button"
+								aria-label="Zoom out diagram"
+								disabled={zoom <= DIAGRAM_VIEWPORT.minimumZoom}
+								onClick={() =>
+									setZoom(current =>
+										Math.max(DIAGRAM_VIEWPORT.minimumZoom, current - DIAGRAM_VIEWPORT.zoomStep)
+									)}
+							>
+								<MinusIcon />
+							</button>
+							<output className="ch-diagram__zoom" aria-label="Diagram zoom">
+								{Math.round(zoom * 100)}%
+							</output>
+							<button
+								className="ch-diagram__control"
+								type="button"
+								aria-label="Zoom in diagram"
+								disabled={zoom >= DIAGRAM_VIEWPORT.maximumZoom}
+								onClick={() =>
+									setZoom(current =>
+										Math.min(DIAGRAM_VIEWPORT.maximumZoom, current + DIAGRAM_VIEWPORT.zoomStep)
+									)}
+							>
+								<PlusIcon />
+							</button>
+							<button
+								className="ch-diagram__control"
+								type="button"
+								aria-label="Fit to width"
+								onClick={() => setZoom(fitDiagram(result.viewBox[2], available))}
+							>
+								<FitWidthIcon />
+							</button>
+							<button
+								className="ch-diagram__control"
+								type="button"
+								aria-label="Actual size"
+								aria-pressed={zoom === 1}
+								onClick={() =>
+									setZoom(1)}
+							>
+								<ActualSizeIcon />
+							</button>
+						</div>
+					)}
+				</div>
+			)}
 			{selected && (
 				<aside className="ch-diagram__inspector" aria-label="Diagram details">
 					<div className="ch-diagram__inspector-head">
@@ -310,100 +396,14 @@ function DiagramView({
 					)}
 				</aside>
 			)}
-			{status && <figcaption className="ch-diagram__status" role="status">{status}</figcaption>}
-			{(maxStep > 0 || selected || result.viewBox[2] > available || zoom !== 1) && (
-				<div className="ch-diagram__controls" role="group" aria-label="Diagram controls">
-					{maxStep > 0 && (
-						<>
-							<button
-								className="btn btn-compact btn-outline"
-								type="button"
-								onClick={() => showStep((step ?? maxStep) - 1)}
-								disabled={step === 0}
-								aria-label="Previous step"
-							>
-								Previous
-							</button>
-							<button
-								className="btn btn-compact btn-outline"
-								type="button"
-								onClick={() =>
-									showStep((step ?? 0) + 1)}
-								disabled={step === maxStep}
-								aria-label="Next step"
-							>
-								Next
-							</button>
-							{!reduced && (
-								<button
-									className="btn btn-compact btn-outline"
-									type="button"
-									onClick={replay}
-									aria-label="Replay diagram"
-								>
-									Replay
-								</button>
-							)}
-						</>
-					)}
-					{(maxStep > 0 || selected) && (
-						<button
-							className="btn btn-compact btn-outline"
-							type="button"
-							onClick={reset}
-							aria-label="Reset diagram"
-						>
-							Reset
-						</button>
-					)}
-					{(result.viewBox[2] > available || zoom !== 1) && (
-						<>
-							<button
-								className="btn btn-compact btn-outline"
-								type="button"
-								onClick={() => setZoom(fitDiagram(result.viewBox[2], available))}
-							>
-								Fit
-							</button>
-							<button
-								className="btn btn-compact btn-outline"
-								type="button"
-								onClick={() =>
-									setZoom(1)}
-								aria-pressed={zoom === 1}
-							>
-								Actual size
-							</button>
-							<button
-								className="btn btn-compact btn-outline"
-								type="button"
-								aria-label="Zoom out diagram"
-								disabled={zoom <= DIAGRAM_VIEWPORT.minimumZoom}
-								onClick={() =>
-									setZoom(current =>
-										Math.max(DIAGRAM_VIEWPORT.minimumZoom, current - DIAGRAM_VIEWPORT.zoomStep)
-									)}
-							>
-								−
-							</button>
-							<output className="ch-diagram__zoom" aria-label="Diagram zoom">
-								{Math.round(zoom * 100)}%
-							</output>
-							<button
-								className="btn btn-compact btn-outline"
-								type="button"
-								aria-label="Zoom in diagram"
-								disabled={zoom >= DIAGRAM_VIEWPORT.maximumZoom}
-								onClick={() =>
-									setZoom(current =>
-										Math.min(DIAGRAM_VIEWPORT.maximumZoom, current + DIAGRAM_VIEWPORT.zoomStep)
-									)}
-							>
-								+
-							</button>
-						</>
-					)}
-				</div>
+			{status && (
+				<figcaption
+					className="ch-diagram__status"
+					data-visually-hidden={step !== null ? "" : undefined}
+					role="status"
+				>
+					{status}
+				</figcaption>
 			)}
 		</figure>
 	);

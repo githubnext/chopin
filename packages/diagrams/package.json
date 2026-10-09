@@ -29,6 +29,9 @@
 		},
 		"./styles.css": "./src/viewer/diagram.css"
 	},
+	"dependencies": {
+		"@chopin/icons": "workspace:*"
+	},
 	"peerDependencies": {
 		"react": "catalog:react"
 	},

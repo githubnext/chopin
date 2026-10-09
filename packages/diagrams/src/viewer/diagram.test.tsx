@@ -45,3 +45,18 @@ test("renderer errors appear as escaped text and chart remains a semantic graphi
 	expect(valid).toContain("<title");
 	expect(valid).toContain("<desc");
 });
+
+test("a stepped diagram offers one restart control beside a labelled icon stepper", () => {
+	let stepped = DIAGRAM_FIXTURES.map((fixture) =>
+		renderToStaticMarkup(<Diagram spec={fixture.spec} />)
+	)
+		.find((markup) => markup.includes('aria-label="Next step"'));
+	expect(stepped).toBeDefined();
+	expect(stepped).toContain('aria-label="Previous step"');
+	expect(stepped).toContain('aria-label="Restart diagram"');
+	expect(stepped).not.toContain("Replay");
+	expect(stepped).not.toContain("Reset");
+	let buttons = [...stepped!.matchAll(/<button class="ch-diagram__control"[^>]*>(.*?)<\/button>/g)];
+	expect(buttons.length).toBeGreaterThanOrEqual(3);
+	for (let [, inner] of buttons) expect(inner).toMatch(/^<svg aria-hidden="true"/);
+});

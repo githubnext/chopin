@@ -99,6 +99,9 @@
     "packages/diagrams": {
       "name": "@chopin/diagrams",
       "version": "0.0.0",
+      "dependencies": {
+        "@chopin/icons": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "catalog:bun",
         "@types/react": "catalog:react",

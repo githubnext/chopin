@@ -119,7 +119,7 @@ test(
 		await expect(preview.getByRole("complementary", { name: "Diagram details" }))
 			.toBeVisible();
 		let nativeWidth = await svg.evaluate(element => element.getBoundingClientRect().width);
-		await preview.getByRole("button", { name: "Fit", exact: true }).click();
+		await preview.getByRole("button", { name: "Fit to width", exact: true }).click();
 		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("85%");
 		await expect.poll(() => svg.evaluate(element => element.getBoundingClientRect().width))
 			.toBeCloseTo(nativeWidth * 0.85, 0);
@@ -141,7 +141,7 @@ test(
 		)
 			.toBeCloseTo(1, 2);
 		await page.reload();
-		await expect(preview.locator("svg")).toBeVisible();
+		await expect(preview.locator("svg.sc-svg")).toBeVisible();
 		await written(page, room, /production install may include CLI deps/);
 	},
 );
@@ -161,8 +161,11 @@ test("a saved SeeCode block renders for two readers and revises through shared s
 		});
 
 	for (let page of [ana, bo]) {
-		await expect(preview(page).locator("svg")).toBeVisible();
-		await expect(preview(page).locator("svg")).toHaveAttribute("data-sc-type", "architecture");
+		await expect(preview(page).locator("svg.sc-svg")).toBeVisible();
+		await expect(preview(page).locator("svg.sc-svg")).toHaveAttribute(
+			"data-sc-type",
+			"architecture",
+		);
 		await expect(preview(page).getByRole("button", { name: "API", exact: true }))
 			.toBeVisible();
 		await expect(content(page).locator("[data-plan-source]")).toBeHidden();
@@ -192,7 +195,7 @@ test("a saved SeeCode block renders for two readers and revises through shared s
 	if (process.env.SEECODE_INTERACTION_EVIDENCE_PATH) {
 		await ana.screenshot({ path: process.env.SEECODE_INTERACTION_EVIDENCE_PATH });
 	}
-	await preview(ana).getByRole("button", { name: "Reset diagram" }).click();
+	await preview(ana).getByRole("button", { name: "Close diagram details", exact: true }).click();
 	await expect(preview(ana).getByRole("complementary", { name: "Diagram details" }))
 		.toHaveCount(0);
 	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
@@ -224,7 +227,7 @@ test("malformed source shows a bounded error while prose remains usable", async 
 	);
 	let page = await join("ana");
 	let preview = content(page).getByRole("region", { name: "Diagram preview", exact: true });
-	await expect(preview.locator("svg")).toBeVisible();
+	await expect(preview.locator("svg.sc-svg")).toBeVisible();
 	await preview.focus();
 	await preview.press("Enter");
 	await content(page).locator("[data-plan-source]").selectText();
@@ -238,6 +241,6 @@ test("malformed source shows a bounded error while prose remains usable", async 
 	await content(page).locator("[data-plan-source]").selectText();
 	await page.keyboard.insertText(JSON.stringify(first));
 	await written(page, room, /```seecode\n\{"type":"architecture"/);
-	await expect(content(page).getByRole("region", { name: "Diagram preview" }).locator("svg"))
+	await expect(content(page).getByRole("region", { name: "Diagram preview" }).locator("svg.sc-svg"))
 		.toBeVisible();
 });
