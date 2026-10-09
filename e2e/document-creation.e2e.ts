@@ -91,6 +91,49 @@ for (let action of ["global", "pencil", "empty"] as const) {
 	});
 }
 
+test("Alt+N ignores shortcut repeats and holds ordinary typing for the new title", async ({ join }) => {
+	let page = await join("ana");
+	let posted = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let posts = creationRequests(page);
+	await page.route("**/api/repositories/octo-org/score/channels", async route => {
+		if (route.request().method() !== "POST") return route.fallback();
+		let response = await route.fetch();
+		posted.resolve();
+		await release.promise;
+		await route.fulfill({ response });
+	});
+	await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+	await page.keyboard.press("Alt+KeyN");
+	await posted.promise;
+	await page.evaluate(() => {
+		document.body.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "n",
+				code: "KeyN",
+				altKey: true,
+				repeat: true,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		document.body.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "n",
+				code: "KeyN",
+				isComposing: true,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+	});
+	await page.keyboard.type("Chosen title");
+	release.resolve();
+	await expect(page.getByRole("textbox", { name: "Document title", exact: true }))
+		.toHaveValue("Chosen title");
+	expect(posts).toHaveLength(1);
+});
+
 test("first-document creation stays guarded through both POST and opening", async ({ baseURL, page }) => {
 	await start(page, baseURL!);
 	await expect(sidebar(page).getByText("No documents", { exact: true })).toBeVisible();

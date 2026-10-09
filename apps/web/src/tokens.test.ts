@@ -116,8 +116,15 @@ function utility(name: string): string {
 function sizes(name: string): { height: number; width?: number } {
 	let result: { height: number; width?: number } = { height: 0 };
 	for (let property of ["height", "width"] as const) {
-		let found = new RegExp(`\\n\\s*${property}:\\s*([\\d.]+)rem;`).exec(utility(name));
-		if (found) result[property] = Number(found[1]) * 16;
+		let found = new RegExp(`\\n\\s*${property}:\\s*([^;]+);`).exec(utility(name));
+		if (!found) continue;
+		let value = found[1]!.replace(/var\((--[\w-]+)\)/g, (_, token) => resolved(token));
+		let length = /^([\d.]+)rem$/.exec(value);
+		let scaled = /^calc\(var\(--spacing\) \* ([\d.]+)\)$/.exec(value);
+		if (length) result[property] = Number(length[1]) * 16;
+		else if (scaled) {
+			result[property] = Number.parseFloat(resolved("--spacing")) * 16 * Number(scaled[1]);
+		} else throw new Error(`unsupported ${name} ${property}: ${value}`);
 	}
 	return result;
 }
@@ -162,8 +169,9 @@ describe("palette", () => {
 
 	it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
 		expect(THEME).toMatch(
-			/\.workspace-frame \.workspace-chat-panel\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
+			/\.workspace-frame \.workspace-chat-panel\s*\{\s*border-color:\s*var\(--color-divider\);/,
 		);
+		expect(declared("--color-divider")).toBe("rgb(0 0 0 / 9%)");
 	});
 
 	it("gives every text level at least AA contrast on the page", () => {
@@ -254,9 +262,15 @@ describe("type", () => {
 describe("edges and depth", () => {
 	it("keeps neutral edges and the approved danger edge distinct", () => {
 		let edges = [...THEME.matchAll(/\n\s*(--color-[\w-]*edge):/g)].map(match => match[1]);
-		expect(edges.sort()).toEqual(["--color-control-edge", "--color-danger-edge", "--color-edge"]);
+		expect(edges.sort()).toEqual([
+			"--color-button-outline-edge",
+			"--color-control-edge",
+			"--color-danger-edge",
+			"--color-edge",
+		]);
 		expect(declared("--color-edge")).toBe("oklch(0 0 0 / 7%)");
-		expect(declared("--color-control-edge")).toBe("oklch(0 0 0 / 20%)");
+		expect(declared("--color-control-edge")).toBe("oklch(0 0 0 / 15%)");
+		expect(declared("--color-button-outline-edge")).toBe("oklch(0 0 0 / 12%)");
 	});
 
 	it("keeps the control boundary visible on every surface", () => {
@@ -290,10 +304,15 @@ describe("controls", () => {
 	it("exposes the settled button sizes and destructive states", () => {
 		expect(sizes("btn-md")).toEqual({ height: 32 });
 		expect(sizes("btn-sm")).toEqual({ height: 24 });
+		expect(sizes("btn-compact")).toEqual({ height: 24 });
 		expect(sizes("btn-icon")).toEqual({ height: 28, width: 28 });
 		expect(inlinePadding("btn-md")).toBe("calc(var(--spacing) * 3)");
-		expect(inlinePadding("btn-sm")).toBe("calc(var(--spacing) * 2)");
-		expect(utility("btn-icon")).toMatch(/\n\s*padding:\s*0\.4375rem;/);
+		expect(inlinePadding("btn-sm")).toBe("var(--control-padding-inline)");
+		expect(resolved("--control-padding-inline")).toBe("calc(var(--spacing) * 2)");
+		expect(utility("btn-icon")).toContain("padding: var(--icon-button-padding);");
+		expect(declared("--icon-button-padding")).toBe(
+			"calc((var(--icon-button-size) - var(--icon-size-default)) / 2)",
+		);
 		expect(hex("--color-destructive-hover")).toBe("#c44746");
 		expect(hex("--color-destructive-active")).toBe("#b34140");
 	});
@@ -366,12 +385,26 @@ describe("controls", () => {
 			let lines = readFileSync(file, "utf8").split("\n");
 			for (let [index, line] of lines.entries()) {
 				if (!line.includes("className=") || !/(?<![\w-])btn(?![\w-])/.test(line)) continue;
-				if (/\bbtn-(?:md|sm|icon)\b/.test(line)) continue;
+				if (/\bbtn-(?:md|sm|compact|icon)\b/.test(line)) continue;
+				if (
+					relative(ROOT, file) === "apps/web/src/icon-button.tsx"
+					&& line.includes("app-icon-button btn")
+				) continue;
 				offenders.push(`${relative(ROOT, file)}:${index + 1}`);
 			}
 		}
 
 		expect(offenders).toEqual([]);
+		let iconButton = readFileSync(join(ROOT, "apps/web/src/icon-button.tsx"), "utf8");
+		let navigation = readFileSync(join(ROOT, "apps/web/src/navigation.css"), "utf8");
+		expect(iconButton).toContain('size?: "compact" | "normal";');
+		expect(iconButton).toContain('data-size={props.size ?? "normal"}');
+		expect(navigation).toMatch(
+			/\.app-icon-button\s*\{[\s\S]*?height:\s*var\(--icon-button-current-size\)/,
+		);
+		expect(navigation).toMatch(
+			/\.app-icon-button\[data-size="compact"\]\s*\{\s*--icon-button-current-size:\s*var\(--icon-button-size-compact\)/,
+		);
 	});
 
 	it("keeps button labels on one line", () => {

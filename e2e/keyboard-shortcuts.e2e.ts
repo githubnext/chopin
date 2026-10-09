@@ -1,6 +1,7 @@
 /** Global keyboard shortcuts, their hints, and the shortcuts sheet. */
 
 import { content, expect, test } from "./room";
+import { shortcutPlatform } from "../apps/web/src/shortcuts";
 
 import type { Page } from "@playwright/test";
 
@@ -10,6 +11,15 @@ function chatPane(page: Page) {
 
 async function blur(page: Page) {
 	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+}
+
+async function pressShortcut(page: Page, code: string) {
+	let browser = await page.evaluate(() => ({
+		userAgent: navigator.userAgent,
+		platform: navigator.platform,
+	}));
+	let platform = shortcutPlatform(browser.userAgent, browser.platform);
+	await page.keyboard.press(`${platform === "mac" ? "Meta" : "Control"}+${code}`);
 }
 
 test("? opens the keyboard shortcuts sheet outside text fields", async ({ join }) => {
@@ -40,13 +50,13 @@ test("the search chord opens search, even from the editor", async ({ join }) => 
 	let page = await join("ana");
 	let search = page.getByRole("textbox", { name: "Search documents" });
 	await blur(page);
-	await page.keyboard.press("ControlOrMeta+KeyK");
+	await pressShortcut(page, "KeyK");
 	await expect(search).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(search).toHaveCount(0);
 
 	await content(page).click();
-	await page.keyboard.press("ControlOrMeta+KeyK");
+	await pressShortcut(page, "KeyK");
 	await expect(search).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(search).toHaveCount(0);
@@ -63,10 +73,10 @@ test("the search chord opens search, even from the editor", async ({ join }) => 
 test("the sidebar chord hides and shows Projects", async ({ join }) => {
 	let page = await join("ana");
 	await content(page).click();
-	await page.keyboard.press("ControlOrMeta+Backslash");
+	await pressShortcut(page, "Backslash");
 	await expect(page.getByRole("button", { name: "Show sidebar" })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Hide sidebar" })).toHaveCount(0);
-	await page.keyboard.press("ControlOrMeta+Backslash");
+	await pressShortcut(page, "Backslash");
 	await expect(page.getByRole("button", { name: "Hide sidebar" })).toBeVisible();
 });
 
@@ -74,14 +84,14 @@ test("the chat chord toggles Chat without leaving the editor", async ({ join }) 
 	let page = await join("ana");
 	await expect(chatPane(page)).toBeVisible();
 	await content(page).click();
-	await page.keyboard.press("ControlOrMeta+Period");
+	await pressShortcut(page, "Period");
 	await expect(chatPane(page)).toBeHidden();
 	await expect(content(page)).toBeFocused();
-	await page.keyboard.press("ControlOrMeta+Period");
+	await pressShortcut(page, "Period");
 	await expect(chatPane(page)).toBeVisible();
 });
 
-test("C starts a new document only when nobody is typing", async ({ join }) => {
+test("Alt+N starts a new document only when nobody is typing", async ({ join }) => {
 	let page = await join("ana");
 	let created = 0;
 	// Count creation without adding documents to repositories other tests share.
@@ -93,12 +103,13 @@ test("C starts a new document only when nobody is typing", async ({ join }) => {
 	let dialog = page.getByRole("dialog", { name: "New document", exact: true });
 	await content(page).click();
 	await page.keyboard.type("c");
+	await page.keyboard.press("Alt+KeyN");
 	await expect(content(page)).toContainText("c");
 	expect(created).toBe(0);
 	await expect(dialog).toHaveCount(0);
 
 	await blur(page);
-	await page.keyboard.press("c");
+	await page.keyboard.press("Alt+KeyN");
 	await expect.poll(async () => created > 0 || await dialog.isVisible()).toBe(true);
 });
 

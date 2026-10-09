@@ -10,6 +10,10 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import {
+	DIAGRAM_TYPOGRAPHY_SOURCE,
+	diagramTypographyFoundation,
+} from "./design-contract/diagram-typography";
 
 const ROOT = dirname(import.meta.dir);
 const ROOTS = ["apps", "packages"];
@@ -39,6 +43,13 @@ function source(file: string): string {
 }
 
 let defined = new Set<string>();
+let diagramTypography = diagramTypographyFoundation(
+	readFileSync(join(ROOT, DIAGRAM_TYPOGRAPHY_SOURCE), "utf8"),
+);
+if (diagramTypography.errors.length) {
+	throw new Error(diagramTypography.errors.join("\n"));
+}
+for (let name of Object.keys(diagramTypography.variables)) defined.add(name);
 for (let file of files) {
 	for (let [, name] of source(file).matchAll(/(--[\w-]+)\s*:/g)) {
 		defined.add(name!);

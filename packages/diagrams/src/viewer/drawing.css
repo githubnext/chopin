@@ -81,20 +81,23 @@
 }
 .ch-diagram .n-label {
 	fill: var(--sc-ink);
-	font-size: 12px;
-	font-weight: 600;
+	font-size: var(--diagram-label-font-size);
+	font-weight: var(--diagram-label-font-weight);
+	font-family: var(--diagram-label-font-family);
 }
 .ch-diagram .n-sub {
 	fill: var(--sc-muted);
-	font-family: var(--font-mono);
-	font-size: 9px;
+	font-family: var(--diagram-sub-font-family);
+	font-size: var(--diagram-sub-font-size);
+	font-weight: var(--diagram-sub-font-weight);
 }
 .ch-diagram .n-tag {
 	fill: var(--sc-soft);
-	font-family: var(--font-mono);
-	font-size: 7px;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
+	font-family: var(--diagram-tag-font-family);
+	font-size: var(--diagram-tag-font-size);
+	letter-spacing: var(--diagram-tag-tracking);
+	text-transform: var(--diagram-tag-text-transform);
+	font-weight: var(--diagram-tag-font-weight);
 }
 .ch-diagram .n-tag-box {
 	fill: none;
@@ -130,10 +133,11 @@
 }
 .ch-diagram .e-label {
 	fill: var(--sc-muted);
-	font-family: var(--font-mono);
-	font-size: 8px;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	font-family: var(--diagram-edge-font-family);
+	font-size: var(--diagram-edge-font-size);
+	letter-spacing: var(--diagram-edge-tracking);
+	text-transform: var(--diagram-edge-text-transform);
+	font-weight: var(--diagram-edge-font-weight);
 }
 .ch-diagram .ek-primary .e-label {
 	fill: var(--sc-accent);
@@ -169,10 +173,11 @@
 }
 .ch-diagram .g-label {
 	fill: var(--sc-soft);
-	font-family: var(--font-mono);
-	font-size: 7px;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
+	font-family: var(--diagram-tag-font-family);
+	font-size: var(--diagram-tag-font-size);
+	letter-spacing: var(--diagram-tag-tracking);
+	text-transform: var(--diagram-tag-text-transform);
+	font-weight: var(--diagram-tag-font-weight);
 }
 .ch-diagram .g-label-bg {
 	fill: var(--sc-paper);
@@ -333,17 +338,17 @@
 }
 .ch-diagram .n-field {
 	fill: var(--sc-ink);
-	font-size: 10px;
+	font-size: var(--diagram-sub-font-size);
 }
 .ch-diagram .n-field-t {
 	fill: var(--sc-muted);
 	font-family: var(--font-mono);
-	font-size: 9px;
+	font-size: var(--diagram-sub-font-size);
 }
 .ch-diagram .n-key {
 	font-family: var(--font-mono);
-	font-size: 7.5px;
-	letter-spacing: 0.06em;
+	font-size: var(--diagram-tag-font-size);
+	letter-spacing: var(--diagram-tag-tracking);
 	fill: var(--sc-soft);
 }
 .ch-diagram .n-key-pk {
@@ -383,8 +388,8 @@
 .ch-diagram .n-change {
 	fill: var(--sc-accent);
 	font-family: var(--font-mono);
-	font-size: 7.5px;
-	letter-spacing: 0.12em;
+	font-size: var(--diagram-tag-font-size);
+	letter-spacing: var(--diagram-tag-tracking);
 }
 .ch-diagram .ch-added .n-box {
 	stroke: var(--sc-accent);
@@ -448,10 +453,11 @@
 }
 .ch-diagram .lane-label {
 	fill: var(--sc-muted);
-	font-family: var(--font-mono);
-	font-size: 8px;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
+	font-family: var(--diagram-tag-font-family);
+	font-size: var(--diagram-tag-font-size);
+	letter-spacing: var(--diagram-tag-tracking);
+	text-transform: var(--diagram-tag-text-transform);
+	font-weight: var(--diagram-tag-font-weight);
 }
 .ch-diagram .loop-center {
 	fill: var(--sc-ink);

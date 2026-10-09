@@ -94,10 +94,8 @@ test("unanswered decisions expose an accessible count with quiet styling", () =>
 	let classes = badgeClass?.split(/\s+/) ?? [];
 	for (
 		let className of [
-			"h-5",
-			"min-w-5",
+			"editor-count-control",
 			"rounded-sm",
-			"bg-inset",
 			"text-xs",
 			"text-text-tertiary",
 			"tabular-nums",

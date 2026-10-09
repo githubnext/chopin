@@ -24,6 +24,7 @@ export type Shortcut = {
 	key: string;
 	/** ⌘ on a Mac, Ctrl elsewhere. */
 	mod?: boolean;
+	alt?: boolean;
 	shift?: boolean;
 	/** Physical fallback when the layout cannot report a printable ASCII character. */
 	code?: string;
@@ -40,7 +41,14 @@ export const SHORTCUTS: readonly Shortcut[] = [
 		code: "KeyK",
 		mod: true,
 	},
-	{ id: "new-document", label: "New document", group: "General", key: "c" },
+	{
+		id: "new-document",
+		label: "New document",
+		group: "General",
+		key: "n",
+		code: "KeyN",
+		alt: true,
+	},
 	{
 		id: "toggle-sidebar",
 		label: "Show or hide sidebar",
@@ -65,12 +73,15 @@ export const SHORTCUTS: readonly Shortcut[] = [
 	{ id: "redo", label: "Redo", group: "Editing", key: "z", mod: true, shift: true, display: true },
 ];
 
-export function shortcutPlatform(userAgent: string): ShortcutPlatform {
-	return /Mac|iPhone|iPad|iPod/.test(userAgent) ? "mac" : "other";
+export function shortcutPlatform(userAgent: string, platform?: string): ShortcutPlatform {
+	// Native editing commands follow the OS platform even when the browser spoofs its user agent.
+	return /Mac|iPhone|iPad|iPod/.test(platform || userAgent) ? "mac" : "other";
 }
 
 export function currentShortcutPlatform(): ShortcutPlatform {
-	return typeof navigator === "undefined" ? "other" : shortcutPlatform(navigator.userAgent);
+	return typeof navigator === "undefined"
+		? "other"
+		: shortcutPlatform(navigator.userAgent, navigator.platform);
 }
 
 function shortcut(id: ShortcutId): Shortcut {
@@ -86,6 +97,7 @@ export function shortcutKeys(id: ShortcutId, platform: ShortcutPlatform): string
 	let entry = shortcut(id);
 	let keys: string[] = [];
 	if (entry.mod) keys.push(platform === "mac" ? "⌘" : "Ctrl");
+	if (entry.alt) keys.push(platform === "mac" ? "⌥" : "Alt");
 	if (entry.shift) keys.push(platform === "mac" ? "⇧" : "Shift");
 	keys.push(keyName(entry.key));
 	return keys;
@@ -114,16 +126,15 @@ export type ShortcutContext = {
 };
 
 /**
- * Single keys never fire while typing. Chords fire anywhere because the editor and
- * fields leave them alone. A chord the editor claims is prevented before it reaches
- * the window, and the caller skips prevented events.
+ * Single keys and Alt chords never fire while typing. Command/Control chords may
+ * fire in fields unless the editor claims and prevents the event first.
  */
 export function matchShortcut(
 	event: ShortcutKey,
 	platform: ShortcutPlatform,
 	context: ShortcutContext,
 ): ShortcutId | undefined {
-	if (event.isComposing || event.altKey || context.modal) return;
+	if (event.isComposing || context.modal) return;
 	let mod = platform === "mac" ? event.metaKey : event.ctrlKey;
 	let other = platform === "mac" ? event.ctrlKey : event.metaKey;
 	if (other) return;
@@ -132,7 +143,7 @@ export function matchShortcut(
 	// a fallback for dead keys, unidentified keys, and non-ASCII layouts.
 	let physicalFallback = !/^[\x20-\x7e]$/.test(event.key) && !event.shiftKey;
 	for (let entry of SHORTCUTS) {
-		if (entry.display || !!entry.mod !== mod) continue;
+		if (entry.display || !!entry.mod !== mod || !!entry.alt !== event.altKey) continue;
 		if (!entry.mod && context.typing) continue;
 		// Punctuation needs Shift on some layouts (`.` on AZERTY, `?` nearly everywhere), so
 		// Shift only distinguishes letter chords.

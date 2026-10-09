@@ -1,9 +1,10 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, normalize, relative } from "node:path";
 
 import postcss from "postcss";
 
 import { classProblems } from "./classes";
+import { DIAGRAM_TYPOGRAPHY_SOURCE, diagramTypographyFoundation } from "./diagram-typography";
 import { declarationProblem, type TokenPolicy } from "./policy";
 import { type Extraction, extractSource } from "./source";
 
@@ -88,15 +89,34 @@ export function scan(
 	read = (path: string) => readFileSync(path, "utf8"),
 ): { findings: Finding[]; files: number; policy: TokenPolicy } {
 	let files = sourceFiles(root);
-	let sources = files.map(path => {
-		let content = read(path);
+	let contents = files.map(path => ({ file: relative(root, path), content: read(path) }));
+	let foundationPath = join(root, DIAGRAM_TYPOGRAPHY_SOURCE);
+	if (
+		existsSync(foundationPath)
+		&& !contents.some(source => source.file === DIAGRAM_TYPOGRAPHY_SOURCE)
+	) {
+		contents.push({ file: DIAGRAM_TYPOGRAPHY_SOURCE, content: read(foundationPath) });
+	}
+	let catalog = contents.find(source => source.file === DIAGRAM_TYPOGRAPHY_SOURCE);
+	let foundation = catalog && diagramTypographyFoundation(catalog.content);
+	let sources = contents.map(({ file, content }) => {
 		return {
-			file: relative(root, path),
+			file,
 			content,
-			extracted: extractSource(relative(root, path), content),
+			extracted: extractSource(
+				file,
+				content,
+				(specifier, name) =>
+					name === "diagramTypographyVariables"
+						&& normalize(join(dirname(file), specifier)) === DIAGRAM_TYPOGRAPHY_SOURCE
+						&& !foundation?.errors.length
+						? foundation?.variables
+						: undefined,
+			),
 		};
 	});
 	let canonical = new Map<string, string>();
+	for (let [name, value] of Object.entries(foundation?.variables ?? {})) canonical.set(name, value);
 	let aliases = new Map<string, string[]>();
 	for (let { file, extracted } of sources) {
 		for (let { property, value, context } of extracted.declarations) {
@@ -113,7 +133,7 @@ export function scan(
 			utilities.add(rule.params);
 		});
 	}
-	let policy = { canonical, aliases, utilities };
+	let policy = { canonical, aliases, utilities, typographyProperties: foundation?.properties };
 	let findings = sources.flatMap(({ file, extracted }) => {
 		if (file !== "packages/visuals/theme.css") return inspect(file, extracted, policy);
 		// Only direct token definitions own literals; component rules in the theme still count.
@@ -124,6 +144,17 @@ export function scan(
 		});
 		return inspect(file, { ...extracted, declarations }, policy);
 	});
+	for (let reason of foundation?.errors ?? []) {
+		findings.push({
+			file: DIAGRAM_TYPOGRAPHY_SOURCE,
+			line: 1,
+			family: "parse",
+			property: "",
+			value: "",
+			context: "typography foundation",
+			reason,
+		});
+	}
 	return { findings, files: files.length, policy };
 }
 

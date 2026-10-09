@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SearchIcon } from "@chopin/icons";
+import { iconSizes, SearchIcon } from "@chopin/icons";
 
 let root = import.meta.dir;
 let repository = join(root, "../../..");
@@ -79,22 +79,7 @@ test("interface icons default to fourteen pixels with compact sidebar controls a
 	) {
 		for (let match of readFileSync(file, "utf8").matchAll(explicit)) {
 			let size = Number(match[2]);
-			let emptyStateException = file.endsWith("design-audit/surfaces.tsx") && size === 24;
-			let stepperCaret = file.endsWith("question/src/react/question-view.tsx") && size === 16;
-			let composerNotice = file.endsWith("chat/chat.tsx")
-				&& ["Archive", "Lock"].includes(match[1]!) && size === 18;
-			let referenceStatus = file.endsWith("chat/reference-picker.tsx")
-				&& match[1] === "Info" && size === 16;
-			let referenceFailure = file.endsWith("chat/reference-status-icon.tsx")
-				&& match[1] === "CircleClose" && size === 16;
-			let relationStatus = file.endsWith("question/src/react/relation-note.tsx")
-				&& ["Document", "Warning"].includes(match[1]!) && size === 12;
-			let compactSidebarControl = file === join(root, "project-sidebar.tsx")
-				&& ["Chevron", "Search", "Plus"].includes(match[1]!) && size === 12;
-			if (
-				size !== 14 && !emptyStateException && !stepperCaret && !composerNotice && !referenceStatus
-				&& !referenceFailure && !relationStatus && !compactSidebarControl
-			) {
+			if (!(iconSizes as readonly number[]).includes(size)) {
 				offenders.push(`${file}: ${match[0]}`);
 			}
 		}

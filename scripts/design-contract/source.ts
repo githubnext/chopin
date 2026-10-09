@@ -11,6 +11,7 @@ export type Declaration = {
 	line: number;
 	context: string;
 	dynamic?: boolean;
+	foundation?: boolean;
 };
 
 export type Extraction = {
@@ -44,7 +45,11 @@ function cssAncestors(current: postcss.AnyNode): string[] {
 	return ancestors;
 }
 
-export function extractSource(file: string, content: string): Extraction {
+export function extractSource(
+	file: string,
+	content: string,
+	staticImport?: (specifier: string, name: string) => Record<string, string> | undefined,
+): Extraction {
 	let result: Extraction = {
 		declarations: [],
 		classes: [],
@@ -77,7 +82,7 @@ export function extractSource(file: string, content: string): Extraction {
 	};
 
 	let addJavaScript = (source: string, baseLine = 1) =>
-		extractJavaScript(file, source, baseLine, result, addCss);
+		extractJavaScript(file, source, baseLine, result, addCss, staticImport);
 
 	if (/\.css$/i.test(file)) addCss(content);
 	else if (/\.(?:html|svg)$/i.test(file)) {

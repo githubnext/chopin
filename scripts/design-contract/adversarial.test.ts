@@ -22,6 +22,33 @@ function fixture(files: Record<string, string>, check: (root: string) => void) {
 }
 
 describe("adversarial contract coverage", () => {
+	test("local style producers expose aesthetic properties beside measured geometry", () => {
+		let measured = `function markerStyle(marker) {
+			let reach = marker.left + marker.width;
+			return { top: marker.top, left: reach };
+		}
+		<button style={markerStyle(measured)} />;`;
+		expect(inspect("sample.tsx", extractSource("sample.tsx", measured), policy)).toEqual([]);
+		let styled = measured.replace("left: reach", 'left: reach, color: "#123456"');
+		let findings = inspect("sample.tsx", extractSource("sample.tsx", styled), policy);
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.property).toBe("color");
+	});
+
+	test("local style producers cannot hide unknown spreads or imperative mutation", () => {
+		for (
+			let body of [
+				"return { top: marker.top, ...unreviewed };",
+				"let style = { top: marker.top }; mutate(style); return style;",
+				"let style = { top: marker.top }; let changed = mutate(style); return { ...style };",
+			]
+		) {
+			let source = `function placement(marker) { ${body} } <div style={placement(bounds)} />;`;
+			let findings = inspect("sample.tsx", extractSource("sample.tsx", source), policy);
+			expect(findings.some(finding => finding.family === "dynamic")).toBe(true);
+		}
+	});
+
 	test("escaped CSS spelling still exposes a literal", () => {
 		let source = String.raw`.item { c\6flor: r\65 d; transition: opacity 1\73  ease; }`;
 		expect(inspect("sample.css", extractSource("sample.css", source), policy)).toHaveLength(2);

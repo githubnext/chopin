@@ -136,10 +136,13 @@ describe("structured design record", () => {
 			.toContain("motion.fast:");
 	});
 
-	test("checks contextual declarations without turning them into global tokens", () => {
+	test("checks component wiring to shared divider and document leading roles", () => {
 		expect(
 			check({
-				context: { ...context, web: context.web.replace("rgb(0 0 0 / 9%)", "rgb(0 0 0 / 8%)") },
+				context: {
+					...context,
+					web: context.web.replace("var(--color-divider)", "rgb(0 0 0 / 8%)"),
+				},
 			})[0],
 		)
 			.toContain("colors.chat-divider:");
@@ -147,7 +150,7 @@ describe("structured design record", () => {
 			check({
 				context: {
 					...context,
-					editor: context.editor.replace("line-height: 1.6;", "line-height: 1.7;"),
+					editor: context.editor.replace("var(--document-line-height)", "1.7"),
 				},
 			})[0],
 		)
@@ -155,6 +158,17 @@ describe("structured design record", () => {
 		expect(check({ context: { ...context, web: "" } })[0]).toContain(
 			"expected exactly one contextual declaration",
 		);
+	});
+
+	test("document heading weight drift is checked against its shared role", () => {
+		let problems = check({
+			theme: theme.replace(
+				"--font-weight-document-heading: 400",
+				"--font-weight-document-heading: 500",
+			),
+		});
+		expect(problems).toHaveLength(3);
+		expect(problems.every(problem => problem.includes(".fontWeight:"))).toBe(true);
 	});
 
 	test("unknown, missing, and duplicate mapped entries fail", () => {
