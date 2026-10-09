@@ -27,7 +27,7 @@ test("Chat grows to available space and preserves a preferred width across narro
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(476, 0);
 	await expect.poll(() => page.evaluate(() => localStorage.getItem("chopin:pane:chat")))
 		.toBe(String(preferred));
-	await handle.press("ArrowLeft");
+	await handle.press("ArrowRight");
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(460, 0);
 
 	await page.setViewportSize({ width: 1600, height: 900 });
@@ -50,20 +50,24 @@ test("desktop Chat retains its width and stays beside the document as the window
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await join("ana");
 	let chat = chatPane(page);
-	let document = page.locator("main");
 	let initialWidth = (await box(chat)).width;
 	expect(initialWidth).toBeCloseTo(500, 0);
 
 	for (let width of [1280, 1440]) {
 		await page.setViewportSize({ width, height: 800 });
-		await expect.poll(async () => (await box(chat)).width).toBeCloseTo(initialWidth, 0);
-		let [chatBox, documentBox, frameBox] = await Promise.all([
-			box(chat),
-			box(document),
-			box(page.locator(".workspace-frame")),
-		]);
-		expect(chatBox.x).toBeCloseTo(frameBox.x, 0);
-		expect(chatBox.x + chatBox.width).toBeLessThanOrEqual(documentBox.x + 1);
+		await expect.poll(() =>
+			page.locator(".workspace-frame").evaluate(frame => {
+				let frameBox = frame.getBoundingClientRect();
+				let documentBox = frame.querySelector("main")!.getBoundingClientRect();
+				let chatBox = frame.querySelector("aside")!.getBoundingClientRect();
+				return {
+					chatWidth: Math.round(chatBox.width),
+					documentStart: Math.round(documentBox.x - frameBox.x),
+					gap: Math.round(chatBox.x - documentBox.right),
+					chatEnd: Math.round(frameBox.right - chatBox.right),
+				};
+			})
+		).toEqual({ chatWidth: Math.round(initialWidth), documentStart: 0, gap: 0, chatEnd: 0 });
 	}
 
 	await expect(chat).toBeVisible();
@@ -72,7 +76,7 @@ test("desktop Chat retains its width and stays beside the document as the window
 	await expectNoHorizontalOverflow(page);
 });
 
-test("the Chat edge grows right, keeps its left-side reopen control, and remembers its width", async ({ join, page }) => {
+test("the left Chat edge grows left, keeps its right-side reopen control, and remembers its width", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
 	let chat = chatPane(page);
@@ -84,15 +88,16 @@ test("the Chat edge grows right, keeps its left-side reopen control, and remembe
 
 	await page.mouse.move(dragX, dragY);
 	await page.mouse.down();
-	await page.mouse.move(dragX + 20, dragY, {
+	await page.mouse.move(dragX - 20, dragY, {
 		steps: 4,
 	});
 	await page.mouse.up();
 	await expect.poll(async () => (await box(chat)).width).toBeGreaterThan(initial.width + 10);
-	expect((await box(chat)).x).toBeCloseTo(initial.x, 0);
+	let widened = await box(chat);
+	expect(widened.x + widened.width).toBeCloseTo(initial.x + initial.width, 0);
 	let pointerWidth = (await box(chat)).width;
 
-	await handle.press("ArrowRight");
+	await handle.press("ArrowLeft");
 	await expect.poll(async () => (await box(chat)).width).toBeGreaterThan(pointerWidth);
 	let rememberedWidth = (await box(chat)).width;
 	expect(rememberedWidth).toBeGreaterThanOrEqual(250);
@@ -104,9 +109,9 @@ test("the Chat edge grows right, keeps its left-side reopen control, and remembe
 	let opener = page.getByRole("button", { name: "Show chat" });
 	let openerBox = await box(opener);
 	expect(openerBox.x + openerBox.width).toBeLessThanOrEqual(frame.x + frame.width);
-	expect(openerBox.x - frame.x).toBeLessThan(32);
+	expect(frame.x + frame.width - openerBox.x - openerBox.width).toBeLessThan(32);
 	let controlsBox = await box(page.getByRole("group", { name: "Document view" }));
-	expect(openerBox.x + openerBox.width).toBeLessThanOrEqual(controlsBox.x);
+	expect(controlsBox.x + controlsBox.width).toBeLessThanOrEqual(openerBox.x);
 	await opener.click();
 	await expect(chat).toBeVisible();
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(rememberedWidth, 0);
