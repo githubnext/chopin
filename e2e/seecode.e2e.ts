@@ -244,3 +244,75 @@ test("malformed source shows a bounded error while prose remains usable", async 
 	await expect(content(page).getByRole("region", { name: "Diagram preview" }).locator("svg.sc-svg"))
 		.toBeVisible();
 });
+
+test("diagram controls never move the document, and Restart replays from the first step", async ({ join, seed }) => {
+	let prose = Array.from(
+		{ length: 12 },
+		(_, index) => `Paragraph ${index + 1} keeps the document taller than the window.`,
+	).join("\n\n");
+	await seed(
+		`# Diagram controls\n\n${prose}\n\n\`\`\`seecode\n${
+			JSON.stringify(astro)
+		}\n\`\`\`\n\nAfter the diagram.\n\n${prose}\n`,
+	);
+	let page = await join("ana");
+	let preview = content(page).getByRole("region", { name: "Diagram preview", exact: true });
+	let controls = preview.getByRole("group", { name: "Diagram controls", exact: true });
+	let button = (name: string) => controls.getByRole("button", { name, exact: true });
+	let svg = preview.locator("svg.sc-svg");
+	await expect(svg).toBeVisible();
+	let total = Number(await svg.getAttribute("data-sc-steps"));
+	expect(total).toBeGreaterThan(2);
+	let counter = (step: number) => controls.getByText(`${step} / ${total}`, { exact: true });
+
+	// An author reading the diagram has left the caret in nearby prose.
+	await content(page).getByText("After the diagram.", { exact: true }).click();
+	// The document keeps its lower 30% clear for the caret (scroll-padding), so a
+	// control there is exactly where any scroll-into-view would move the page.
+	let scroller = page.locator("[data-plan-scroll]");
+	let bar = (await controls.boundingBox())!;
+	let frame = (await scroller.boundingBox())!;
+	await scroller.evaluate(
+		(element, delta) => element.scrollTop += delta,
+		bar.y - (frame.y + frame.height * 0.8),
+	);
+	let position = () =>
+		scroller.evaluate(element => ({ document: element.scrollTop, window: window.scrollY }));
+	let start = await position();
+	expect(start.document).toBeGreaterThan(0);
+	let unmoved = async () => expect(await position()).toEqual(start);
+	// A pointer click at the control, as a reader makes it. Locator clicks first
+	// scroll their target into view, which would hide the very movement under test.
+	let press = async (name: string) => {
+		let box = (await button(name).boundingBox())!;
+		await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+	};
+
+	await expect(button("Play diagram")).toBeVisible({ timeout: 10_000 });
+	await expect(counter(total)).toBeVisible();
+	await press("Previous step");
+	await expect(counter(total - 1)).toBeVisible();
+	await unmoved();
+	await press("Next step");
+	await expect(counter(total)).toBeVisible();
+	await expect(button("Next step")).toBeDisabled();
+	await expect(button("Next step")).toBeFocused();
+	await unmoved();
+
+	await press("Restart diagram");
+	await expect(counter(1)).toBeVisible();
+	await expect(button("Pause diagram")).toBeVisible();
+	// The last step waits for its turn again, so the entrance really replays.
+	let last = svg.locator(
+		`[data-sc-node][data-sc-step="${total}"], [data-sc-edge][data-sc-step="${total}"]`,
+	).first();
+	expect(await last.evaluate(element => getComputedStyle(element).opacity)).toBe("0");
+	await unmoved();
+	await press("Pause diagram");
+	await expect(button("Play diagram")).toBeVisible();
+	await unmoved();
+	await press("Play diagram");
+	await expect(counter(total)).toBeVisible({ timeout: 10_000 });
+	await unmoved();
+	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
+});

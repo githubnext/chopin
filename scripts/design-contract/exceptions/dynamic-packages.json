@@ -352,6 +352,20 @@
 				"props",
 				"unresolved JSX props > ActualSizeIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PlayIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PauseIcon > <LineIcon>",
+				1
 			]
 		],
 		"sourceHash": "12c922c2cbd7a1a52c5306d9ac7996f3b31c93327c5f9330b2c43c4b02d5cbf2"

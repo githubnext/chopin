@@ -54,9 +54,14 @@ test("a stepped diagram offers one restart control beside a labelled icon steppe
 	expect(stepped).toBeDefined();
 	expect(stepped).toContain('aria-label="Previous step"');
 	expect(stepped).toContain('aria-label="Restart diagram"');
+	// Playback starts at once, counting from the first step.
+	expect(stepped).toContain('aria-label="Pause diagram"');
+	expect(stepped).toMatch(/>1 \/ \d+</);
 	expect(stepped).not.toContain("Replay");
 	expect(stepped).not.toContain("Reset");
 	let buttons = [...stepped!.matchAll(/<button class="ch-diagram__control"[^>]*>(.*?)<\/button>/g)];
 	expect(buttons.length).toBeGreaterThanOrEqual(3);
-	for (let [, inner] of buttons) expect(inner).toMatch(/^<svg aria-hidden="true"/);
+	for (let [, inner] of buttons) {
+		expect(inner).toMatch(/^<[^>]*aria-hidden="true"[^>]*data-nucleo-icon=""/);
+	}
 });
