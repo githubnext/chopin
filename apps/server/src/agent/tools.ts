@@ -432,7 +432,9 @@ export const documentTools = {
 		contextSchema: roomContext,
 		description: "Read the current plan revision and implementation graph before drafting or "
 			+ "revising tasks. The returned plan_revision and graph_revision are required by "
-			+ "edit_implementation_graph; a newer plan or graph refuses the whole edit.",
+			+ "edit_implementation_graph; a newer plan or graph refuses the whole edit. "
+			+ "When needs_revision is true, the graph is stale even if approved. Revise it "
+			+ "against plan_revision before calling it ready; replace an unchanged task if its content remains valid.",
 		inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
 		metadata: { skipPermission: true },
 		execute: (_raw, { context: { room: context } }) =>
@@ -442,6 +444,8 @@ export const documentTools = {
 					plan_revision: context.plan.revision,
 					source: edit.source(context.plan),
 					graph_revision: version?.revision ?? 0,
+					graph_plan_revision: version?.planRevision,
+					needs_revision: !!version && version.planRevision !== context.plan.revision,
 					graph: context.plan.graph,
 				};
 			}),

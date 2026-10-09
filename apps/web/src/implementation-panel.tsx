@@ -75,8 +75,9 @@ export function ImplementationPanel({ id, canEdit, planner, wire, onClose }: {
 				await wire.ask<Chat.Sent>("chat:send", {
 					requestId: crypto.randomUUID(),
 					to: "planner",
-					text:
-						"Prepare or revise the implementation graph for this settled plan. Read the current document and graph, then use edit_implementation_graph to create small reviewable tasks, acceptance criteria and explicit dependencies. Do not approve or start implementation.",
+					text: snapshot.graph
+						? `Revise the implementation graph for review. The displayed graph version ${snapshot.graph.number} is bound to document revision ${snapshot.graph.planRevision}; the displayed document revision is ${snapshot.planRevision}. Read the latest document and graph, then use edit_implementation_graph to save a draft against the latest document revision. Preserve valid task goals, acceptance criteria and dependencies. If the tasks are still correct, replace an existing task unchanged to refresh the graph's document binding. Do not stop at summarizing an already-approved graph: approval does not make an older document revision current. Do not approve or start implementation.`
+						: "Prepare an implementation graph for this settled plan. Read the current document and graph, then use edit_implementation_graph to create small reviewable tasks, acceptance criteria and explicit dependencies. Do not approve or start implementation.",
 				});
 			} else if (kind === "revise") {
 				await response(
