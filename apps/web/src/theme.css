@@ -96,6 +96,30 @@
 	padding-inline: calc(var(--spacing) * 2);
 }
 
+[data-document-view-control] > button:has([data-plan-decision-count]) {
+	height: auto;
+	min-height: 1.5rem;
+	padding-block: var(--spacing);
+	padding-inline-end: var(--spacing);
+	line-height: 1;
+}
+
+[data-plan-decision-count] {
+	display: flex;
+}
+
+[data-plan-decision-count] > span {
+	inline-size: max-content;
+	min-inline-size: 1rem;
+	block-size: auto;
+	aspect-ratio: 1;
+	padding-inline: 0;
+}
+
+[data-document-view-control] > button[aria-pressed="true"] [data-plan-decision-count] > span {
+	background-color: var(--color-page);
+}
+
 @utility btn-icon {
 	width: 1.75rem;
 	height: 1.75rem;
