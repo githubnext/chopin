@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+import type { Page } from "@playwright/test";
+
+async function reload(page: Page) {
+	await page.reload();
+	await expect(page.locator("[data-diagram-gallery]")).toBeVisible();
+}
+
 test.beforeEach(async ({ page }) => {
 	await page.goto("/diagram-gallery");
 	await expect(page.locator("[data-diagram-gallery]")).toBeVisible();
@@ -16,6 +23,9 @@ test("decorative chart strokes do not open connection details", async ({ page })
 });
 
 test("document views use separate SVG resources and survive source changes", async ({ page }) => {
+	// Opening on the whole diagram keeps the stepping below independent of playback timing.
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await reload(page);
 	await expect(page.locator('[role="document"] .plan-document [data-specimen-diagram]'))
 		.toHaveCount(2);
 	let first = page.locator('[data-specimen-diagram="first"]');
@@ -41,11 +51,12 @@ test("document views use separate SVG resources and survive source changes", asy
 	await expect(first.getByRole("complementary", { name: "Diagram details" })).toBeVisible();
 	await expect(second.getByRole("complementary", { name: "Diagram details" })).toHaveCount(0);
 	let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
-	await controls.getByRole("button", { name: "Next step", exact: true }).click();
-	await expect(first.locator(".ch-diagram__status")).toContainText("Step 1 of");
-	await expect(controls.getByText(/^1 \/ \d+$/)).toBeVisible();
-	await expect(controls.getByRole("button", { name: "Previous step", exact: true }))
-		.toBeDisabled();
+	let total = Number(await first.locator("svg.sc-svg").getAttribute("data-sc-steps"));
+	await controls.getByRole("button", { name: "Previous step", exact: true }).click();
+	await expect(first.locator(".ch-diagram__status")).toContainText(
+		`Step ${total - 1} of ${total}`,
+	);
+	await expect(first.getByRole("complementary", { name: "Diagram details" })).toHaveCount(0);
 	let future = await first.evaluate(element => {
 		let items = [...element.querySelectorAll<SVGElement>("[data-sc-node], [data-sc-edge]")];
 		return items.filter(item => item.closest('[data-sc-step][aria-hidden="true"]'))
@@ -56,7 +67,8 @@ test("document views use separate SVG resources and survive source changes", asy
 
 	await page.getByRole("button", { name: "Replace first source" }).click();
 	await expect(first).toContainText("State · first instance");
-	await expect(first.locator(".ch-diagram__status")).toBeEmpty();
+	// A new source opens fresh, on its whole diagram.
+	await expect(first.locator(".ch-diagram__status")).toHaveText(/^Step (\d+) of \1$/);
 	await expect(second).toContainText("Sequence · second instance");
 	await page.getByRole("button", { name: "Unmount second diagram" }).click();
 	await expect(second).toHaveCount(0);
@@ -87,16 +99,32 @@ test("a narrow diagram exposes keyboard horizontal scrolling", async ({ page }, 
 	await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
 });
 
-test("reduced motion leaves diagram content readable", async ({ page }) => {
+test("reduced motion opens on the whole diagram and plays only when asked", async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: "reduce" });
+	await reload(page);
 	let first = page.locator('[data-specimen-diagram="first"]');
-	await expect(first.locator(".ch-diagram svg.sc-svg")).toBeVisible();
+	let svg = first.locator("svg.sc-svg");
+	await expect(svg).toBeVisible();
+	let total = Number(await svg.getAttribute("data-sc-steps"));
 	let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
-	await controls.getByRole("button", { name: "Next step", exact: true }).click();
-	await expect(first.locator(".ch-diagram__status")).toContainText("Step 1 of");
+	let counter = (step: number) => controls.getByText(`${step} / ${total}`, { exact: true });
+	await expect(counter(total)).toBeVisible();
+	await page.waitForTimeout(1000);
+	await expect(counter(total)).toBeVisible();
+	await expect(controls.getByRole("button", { name: "Next step", exact: true })).toBeDisabled();
+
+	await controls.getByRole("button", { name: "Play diagram", exact: true }).click();
+	await expect(counter(1)).toBeVisible();
+	await expect(svg).toHaveClass(/sc-stepping/);
+	await expect(controls.getByRole("button", { name: "Pause diagram", exact: true })).toBeVisible();
+	let shown = controls.locator(".ch-diagram__step");
+	// Each step shows for one stagger; poll faster than expect's backoff.
+	await expect.poll(async () => Number((await shown.textContent())!.split(" / ")[0]), {
+		intervals: [50],
+	}).toBeGreaterThan(1);
 	await controls.getByRole("button", { name: "Restart diagram", exact: true }).click();
+	await expect(counter(1)).toBeVisible();
 	await expect(first.locator(".ch-diagram__status")).toBeEmpty();
-	await expect(first.locator("svg.sc-svg")).not.toHaveClass(/sc-stepping/);
 });
 
 test("diagram controls sit centred below the drawing and step to either end", async ({ page }) => {
@@ -112,23 +140,52 @@ test("diagram controls sit centred below the drawing and step to either end", as
 		),
 	).toBeLessThanOrEqual(1);
 
+	let toggle = (name: "Play diagram" | "Pause diagram") =>
+		controls.getByRole("button", { name, exact: true });
 	let previous = controls.getByRole("button", { name: "Previous step", exact: true });
 	let next = controls.getByRole("button", { name: "Next step", exact: true });
+	let restart = controls.getByRole("button", { name: "Restart diagram", exact: true });
+	let shown = controls.locator(".ch-diagram__step");
 	let total = Number(await first.locator("svg.sc-svg").getAttribute("data-sc-steps"));
-	expect(total).toBeGreaterThan(1);
-	await expect(controls.getByText(`– / ${total}`, { exact: true })).toBeVisible();
-	await next.focus();
-	for (let index = 1; index <= total; index++) {
-		await page.keyboard.press("Enter");
-		await expect(controls.getByText(`${index} / ${total}`, { exact: true })).toBeVisible();
-	}
+	expect(total).toBeGreaterThan(3);
+	let counter = (step: number) => controls.getByText(`${step} / ${total}`, { exact: true });
+	let at = async () => Number((await shown.textContent())!.split(" / ")[0]);
+
+	// Playing counts the step being played, and the arrows wait for a pause.
+	await restart.click();
+	await expect(counter(1)).toBeVisible();
+	await expect(previous).toBeDisabled();
 	await expect(next).toBeDisabled();
+	await expect.poll(at, { intervals: [50] }).toBeGreaterThan(1);
+	await toggle("Pause diagram").click();
+	await expect(toggle("Play diagram")).toBeFocused();
+	let paused = await at();
+	expect(paused).toBeLessThan(total);
+	await page.waitForTimeout(1000);
+	await expect(counter(paused)).toBeVisible();
+
+	await next.click();
+	await expect(counter(paused + 1)).toBeVisible();
+	for (let step = paused; step >= 1; step--) {
+		await previous.click();
+		await expect(counter(step)).toBeVisible();
+	}
+	// A disabled arrow keeps focus, so the keyboard never drops out of the bar.
+	await expect(previous).toBeDisabled();
 	await expect(previous).toBeFocused();
-	await previous.click();
-	await expect(controls.getByText(`${total - 1} / ${total}`, { exact: true })).toBeVisible();
-	await expect(next).toBeEnabled();
-	await controls.getByRole("button", { name: "Restart diagram", exact: true }).click();
-	await expect(controls.getByText(`– / ${total}`, { exact: true })).toBeVisible();
+
+	// Play resumes from the step on screen and stops at the last one.
+	await toggle("Play diagram").click();
+	await expect(toggle("Pause diagram")).toBeVisible();
+	await expect.poll(at, { intervals: [50] }).toBeGreaterThan(1);
+	await expect(counter(total)).toBeVisible({ timeout: 10_000 });
+	await expect(toggle("Play diagram")).toBeVisible();
+	await expect(next).toBeDisabled();
+	await expect(previous).toBeEnabled();
+
+	await restart.click();
+	await expect(counter(1)).toBeVisible();
+	await expect(toggle("Pause diagram")).toBeVisible();
 	await expect(controls.getByRole("button", { name: "Replay diagram" })).toHaveCount(0);
 	await expect(controls.getByRole("button", { name: "Reset diagram" })).toHaveCount(0);
 });

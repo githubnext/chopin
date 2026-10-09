@@ -94,8 +94,14 @@
 	display: none;
 }
 @media (prefers-reduced-motion: no-preference) {
+	/* Resuming from step N (--sc-from) starts the next step one stagger later. */
 	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) [data-sc-step] {
-		--d: calc(var(--step, 0) * var(--sc-stagger));
+		--d: calc((var(--step, 0) - var(--sc-from, 0)) * var(--sc-stagger));
+	}
+	/* Steps already on screen when playback resumes stay drawn. */
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .is-done,
+	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .is-done * {
+		animation: none !important;
 	}
 	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-node[data-sc-step],
 	.ch-diagram .sc-svg[data-sc-motion]:not(.sc-still) .sc-enter[data-sc-step] {

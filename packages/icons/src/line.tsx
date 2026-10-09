@@ -352,3 +352,20 @@ export function ActualSizeIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function PlayIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M5.5 3.9v10.2c0 .58.63.94 1.13.65l8.5-5.1c.49-.29.49-1 0-1.3l-8.5-5.1c-.5-.3-1.13.07-1.13.65Z" />
+		</LineIcon>
+	);
+}
+
+export function PauseIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="11.5" rx="1" width="3" x="4.25" y="3.25" />
+			<rect height="11.5" rx="1" width="3" x="10.75" y="3.25" />
+		</LineIcon>
+	);
+}

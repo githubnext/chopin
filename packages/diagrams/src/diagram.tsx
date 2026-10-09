@@ -1,5 +1,12 @@
-import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type {
+	AnimationEvent,
+	CSSProperties,
+	FocusEvent,
+	KeyboardEvent,
+	MouseEvent,
+	PointerEvent,
+} from "react";
 
 import {
 	ActualSizeIcon,
@@ -7,6 +14,8 @@ import {
 	ArrowRightIcon,
 	FitWidthIcon,
 	MinusIcon,
+	PauseIcon,
+	PlayIcon,
 	PlusIcon,
 	RestartIcon,
 } from "@chopin/icons";
@@ -14,6 +23,17 @@ import {
 import { diagramTypographyVariables } from "./core/tokens.mjs";
 import { type DiagramGraph, type DiagramResult, renderDiagram } from "./render";
 import { DIAGRAM_VIEWPORT, fitDiagram } from "./viewport";
+import {
+	advance,
+	currentStep,
+	initialPlayback,
+	pause,
+	play,
+	type Playback,
+	restart as restartPlayback,
+	running,
+	step as stepPlayback,
+} from "./playback";
 import { namespaceSvgIds } from "./viewer/namespace";
 
 export type DiagramProps = {
@@ -26,8 +46,14 @@ export type DiagramProps = {
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
 type Item = { kind: "node" | "edge"; id: string };
-type Playback = { kind: "playing" } | { kind: "step"; index: number };
 let diagramInstanceSequence = 0;
+/** Reduced motion's discrete playback interval: the drawn stagger (`--sc-stagger`). */
+const STILL_STEP_INTERVAL = 420;
+
+function prefersReducedMotion(): boolean {
+	return typeof window !== "undefined" && typeof window.matchMedia === "function"
+		&& window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 const DiagramBody = memo(function DiagramBody({ body }: { body: string }) {
 	return <g dangerouslySetInnerHTML={{ __html: body }} />;
@@ -65,11 +91,12 @@ function DiagramView({
 	let descriptionId = `${prefix}-description`;
 	let stageRef = useRef<HTMLDivElement>(null);
 	let svgRef = useRef<SVGSVGElement>(null);
-	let controlsRef = useRef<HTMLDivElement>(null);
-	let focusedControl = useRef<HTMLButtonElement | null>(null);
 	let [preview, setPreview] = useState<Item | null>(null);
 	let [selected, setSelected] = useState<Item | null>(null);
-	let [mode, setMode] = useState<Playback>({ kind: "playing" });
+	let [reduced, setReduced] = useState(prefersReducedMotion);
+	let motion = result.motion && result.motion !== "none" ? result.motion : null;
+	let maxStep = motion ? Math.max(0, result.steps ?? 0) : 0;
+	let [mode, setMode] = useState<Playback>(() => initialPlayback(maxStep, reduced));
 	let [playback, setPlayback] = useState(0);
 	let [overflowing, setOverflowing] = useState(false);
 	let [available, setAvailable] = useState(0);
@@ -78,11 +105,38 @@ function DiagramView({
 	let nodes = graph?.nodes ?? [];
 	let edges = graph?.edges ?? [];
 	let interactive = nodes.length > 0;
-	let motion = result.motion && result.motion !== "none" ? result.motion : null;
-	let maxStep = motion ? Math.max(0, result.steps ?? 0) : 0;
-	let step = mode.kind === "step" ? mode.index : null;
+	let isRunning = running(mode, maxStep);
+	let current = currentStep(mode, maxStep);
+	// Animation plays the steps in; otherwise the stepped view shows them.
+	let animated = mode.kind === "playing" && !reduced;
+	let step = animated ? null : current;
 	let body = useMemo(() => namespaceSvgIds(result.body, prefix), [result.body, prefix]);
 	let active = preview ?? selected;
+
+	useEffect(() => {
+		if (typeof window.matchMedia !== "function") return;
+		let query = window.matchMedia("(prefers-reduced-motion: reduce)");
+		let update = () => setReduced(query.matches);
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
+	}, []);
+
+	// Animated playback counts each step as its animation starts (onAnimationStart).
+	// Reduced motion has no animation to follow, so it shows one step per interval.
+	let playingFrom = mode.kind === "playing" ? mode.from : null;
+	useEffect(() => {
+		if (playingFrom === null || !reduced) return;
+		let timers: ReturnType<typeof setTimeout>[] = [];
+		for (let to = playingFrom + 1; to <= maxStep; to++) {
+			timers.push(
+				setTimeout(
+					() => setMode((current) => advance(current, maxStep, to)),
+					(to - Math.max(1, playingFrom)) * STILL_STEP_INTERVAL,
+				),
+			);
+		}
+		return () => timers.forEach(clearTimeout);
+	}, [playingFrom, playback, maxStep, reduced]);
 
 	useEffect(() => {
 		let stage = stageRef.current;
@@ -166,36 +220,22 @@ function DiagramView({
 					: active?.kind === "edge" && active.id === edgeId,
 			);
 		}
-	}, [active, playback, edges]);
+	}, [active, body, playback, edges]);
 
-	useEffect(() => {
+	// Before paint, so a resumed playback never flashes steps that were already on screen.
+	useLayoutEffect(() => {
 		let svg = svgRef.current;
 		if (!svg) return;
+		let done = animated ? playingFrom ?? 0 : 0;
 		for (let element of svg.querySelectorAll<SVGElement>("[data-sc-step]")) {
 			let elementStep = Number(element.getAttribute("data-sc-step"));
 			let hidden = step !== null && elementStep > step;
 			element.classList.toggle("is-shown", step !== null && !hidden);
+			element.classList.toggle("is-done", elementStep <= done);
 			if (hidden) element.setAttribute("aria-hidden", "true");
 			else element.removeAttribute("aria-hidden");
 		}
-	}, [step, playback]);
-
-	// An arrow or zoom button disables itself at its limit; keep keyboard focus in the bar.
-	useEffect(() => {
-		let control = focusedControl.current;
-		let controls = controlsRef.current;
-		if (!control || !controls || !control.disabled) return;
-		let active = document.activeElement;
-		if (active !== control && active !== document.body && active !== null) return;
-		let buttons = [...controls.querySelectorAll("button")];
-		let index = buttons.indexOf(control);
-		let nearest = buttons
-			.filter((button) => !button.disabled)
-			.sort((a, b) =>
-				Math.abs(buttons.indexOf(a) - index) - Math.abs(buttons.indexOf(b) - index)
-			)[0];
-		nearest?.focus();
-	}, [step, zoom]);
+	}, [body, step, playback, animated, playingFrom]);
 
 	let select = (item: Item | null) => {
 		setSelected((current) => sameItem(current, item) ? null : item);
@@ -221,6 +261,11 @@ function DiagramView({
 		let item = itemAt(svgRef.current, event.target, graph);
 		if (item) select(item);
 	};
+	let onAnimationStart = (event: AnimationEvent<SVGSVGElement>) => {
+		if (!(event.target instanceof Element)) return;
+		let value = event.target.closest("[data-sc-step]")?.getAttribute("data-sc-step");
+		if (value) setMode((current) => advance(current, maxStep, Number(value)));
+	};
 	let onKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
 		if (event.key !== "Enter" && event.key !== " ") return;
 		let item = itemAt(svgRef.current, event.target, graph);
@@ -228,17 +273,22 @@ function DiagramView({
 		event.preventDefault();
 		select(item);
 	};
-	let showStep = (next: number) => {
+	let showStep = (delta: number) => {
+		if (isRunning || (delta < 0 ? current <= 1 : current >= maxStep)) return;
 		setPreview(null);
 		setSelected(null);
-		setMode({ kind: "step", index: Math.max(1, Math.min(maxStep, next)) });
+		setMode(stepPlayback(mode, maxStep, delta));
 	};
-	// One control returns to a fresh view: no selection, every step shown, entrance replayed.
-	let restart = () => {
+	// Entering playback remounts the drawing so its entrance animation starts again.
+	let startPlayback = (next: Playback) => {
 		setPreview(null);
 		setSelected(null);
-		setMode({ kind: "playing" });
-		setPlayback((current) => current + 1);
+		setMode(next);
+		setPlayback((count) => count + 1);
+	};
+	let togglePlayback = () => {
+		if (isRunning) setMode(pause(mode, maxStep));
+		else startPlayback(play(mode, maxStep));
 	};
 	let selectedNode = selected?.kind === "node"
 		? nodes.find((node) => node.id === selected.id)
@@ -252,8 +302,8 @@ function DiagramView({
 	let stepping = maxStep > 0;
 	let zoomable = result.viewBox[2] > available || zoom !== 1;
 	let labelFor = (nodeId: string) => nodes.find((node) => node.id === nodeId)?.label ?? nodeId;
-	let status = step !== null
-		? `Step ${step} of ${maxStep}`
+	let status = maxStep > 0 && !isRunning && (mode.kind === "paused" || reduced)
+		? `Step ${current} of ${maxStep}`
 		: selectedNode
 		? `${selectedNode.label}: ${related.length} connection${related.length === 1 ? "" : "s"}`
 		: selectedEdge
@@ -270,10 +320,11 @@ function DiagramView({
 			>
 				<svg
 					ref={svgRef}
-					style={{ "--sc-display-width": `${result.viewBox[2] * zoom}px` } as CSSProperties}
-					className={`sc-svg${mode.kind === "playing" ? "" : " sc-still"}${
-						mode.kind === "step" ? " sc-stepping" : ""
-					}`}
+					style={{
+						"--sc-display-width": `${result.viewBox[2] * zoom}px`,
+						"--sc-from": animated ? playingFrom ?? 0 : 0,
+					} as CSSProperties}
+					className={`sc-svg${animated ? "" : " sc-still"}${step !== null ? " sc-stepping" : ""}`}
 					viewBox={result.viewBox.join(" ")}
 					role={interactive ? "group" : "img"}
 					aria-labelledby={`${titleId} ${descriptionId}`}
@@ -286,6 +337,7 @@ function DiagramView({
 					onBlurCapture={onBlur}
 					onClick={onClick}
 					onKeyDown={onKeyDown}
+					onAnimationStart={onAnimationStart}
 				>
 					<title id={titleId}>{title ?? result.title}</title>
 					<desc id={descriptionId}>{description ?? result.description}</desc>
@@ -293,34 +345,35 @@ function DiagramView({
 				</svg>
 			</div>
 			{(stepping || zoomable) && (
-				<div
-					ref={controlsRef}
-					className="ch-diagram__controls"
-					role="group"
-					aria-label="Diagram controls"
-					onFocus={(event) => {
-						if (event.target instanceof HTMLButtonElement) focusedControl.current = event.target;
-					}}
-				>
+				<div className="ch-diagram__controls" role="group" aria-label="Diagram controls">
 					{stepping && (
 						<div className="ch-diagram__control-group">
 							<button
 								className="ch-diagram__control"
 								type="button"
-								onClick={() => showStep((step ?? maxStep) - 1)}
-								disabled={step !== null && step <= 1}
+								onClick={togglePlayback}
+								aria-label={isRunning ? "Pause diagram" : "Play diagram"}
+							>
+								{isRunning ? <PauseIcon /> : <PlayIcon />}
+							</button>
+							<button
+								className="ch-diagram__control"
+								type="button"
+								onClick={() => showStep(-1)}
+								aria-disabled={isRunning || current <= 1}
 								aria-label="Previous step"
 							>
 								<ArrowLeftIcon />
 							</button>
 							<span className="ch-diagram__step" aria-hidden="true">
-								{step ?? "–"} / {maxStep}
+								{current} / {maxStep}
 							</span>
 							<button
 								className="ch-diagram__control"
 								type="button"
-								onClick={() => showStep((step ?? 0) + 1)}
-								disabled={step === maxStep}
+								onClick={() =>
+									showStep(1)}
+								aria-disabled={isRunning || current >= maxStep}
 								aria-label="Next step"
 							>
 								<ArrowRightIcon />
@@ -328,7 +381,8 @@ function DiagramView({
 							<button
 								className="ch-diagram__control"
 								type="button"
-								onClick={restart}
+								onClick={() =>
+									startPlayback(restartPlayback())}
 								aria-label="Restart diagram"
 							>
 								<RestartIcon />
@@ -341,7 +395,7 @@ function DiagramView({
 								className="ch-diagram__control"
 								type="button"
 								aria-label="Zoom out diagram"
-								disabled={zoom <= DIAGRAM_VIEWPORT.minimumZoom}
+								aria-disabled={zoom <= DIAGRAM_VIEWPORT.minimumZoom}
 								onClick={() =>
 									setZoom(current =>
 										Math.max(DIAGRAM_VIEWPORT.minimumZoom, current - DIAGRAM_VIEWPORT.zoomStep)
@@ -356,7 +410,7 @@ function DiagramView({
 								className="ch-diagram__control"
 								type="button"
 								aria-label="Zoom in diagram"
-								disabled={zoom >= DIAGRAM_VIEWPORT.maximumZoom}
+								aria-disabled={zoom >= DIAGRAM_VIEWPORT.maximumZoom}
 								onClick={() =>
 									setZoom(current =>
 										Math.min(DIAGRAM_VIEWPORT.maximumZoom, current + DIAGRAM_VIEWPORT.zoomStep)
@@ -377,7 +431,8 @@ function DiagramView({
 								type="button"
 								aria-label="Actual size"
 								aria-pressed={zoom === 1}
-								onClick={() => setZoom(1)}
+								onClick={() =>
+									setZoom(1)}
 							>
 								<ActualSizeIcon />
 							</button>
