@@ -93,7 +93,9 @@ test("a fake Jev routed tool edit renders after browser save and reopen", async 
 	await seed(source!);
 	let page = await join("ana");
 	let preview = content(page).getByRole("region", { name: "Diagram preview", exact: true });
-	await expect(preview.locator("svg")).toHaveAttribute("data-sc-type", "flowchart");
+	let rendered = (title: string) =>
+		preview.getByRole("group", { name: `${title} Flowchart diagram`, exact: true });
+	await expect(rendered("Token check")).toHaveAttribute("data-sc-type", "flowchart");
 	await expect(preview.getByRole("button", { name: "Valid token?", exact: true })).toBeVisible();
 	await expect(content(page)).toContainText(passage);
 
@@ -106,6 +108,6 @@ test("a fake Jev routed tool edit renders after browser save and reopen", async 
 	await page.keyboard.insertText(JSON.stringify({ ...diagram, title: "Revised token check" }));
 	await written(page, room, /Revised token check/);
 	await page.reload();
-	await expect(preview.locator("title")).toHaveText("Revised token check");
+	await expect(rendered("Revised token check").locator("title")).toHaveText("Revised token check");
 	await expect(content(page)).toContainText(passage);
 });
