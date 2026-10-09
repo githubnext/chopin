@@ -250,6 +250,10 @@
 	color: var(--color-destructive-ink);
 }
 
+:where(.design-audit-menu-destructive) :is([data-nucleo-icon], [data-filled-icon]) {
+	color: inherit;
+}
+
 .design-audit-dropdown-row {
 	display: flex;
 	flex-wrap: wrap;
