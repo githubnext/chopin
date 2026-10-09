@@ -43,7 +43,7 @@
 	--color-icon: var(--color-danger-icon);
 }
 
-:where(.btn-primary, .btn-destructive, .btn-outline-danger, .document-actions-menu-destructive, .design-audit-menu-destructive)
+:where(.btn-primary, .btn-destructive, .btn-outline-danger, .document-actions-menu-destructive)
 	:is([data-nucleo-icon], [data-filled-icon]) {
 	color: inherit;
 }
