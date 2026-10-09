@@ -31,7 +31,10 @@ const OPTIONS = {
 	fence: "`",
 	fences: true,
 	incrementListMarker: true,
-	resourceLink: false,
+	// MDX has no autolinks: `<https://…>` parses as a JSX tag and fails, so a
+	// link whose text is its URL must stay `[url](url)`. No stored plan can
+	// hold the autolink form, so this changes no persisted bytes.
+	resourceLink: true,
 	tightDefinitions: true,
 } as const;
 

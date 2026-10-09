@@ -16,6 +16,7 @@ import {
 } from "lexical";
 import * as Y from "yjs";
 
+import * as dialect from "@chopin/dialect";
 import { $importPlan, limits } from "@chopin/dialect";
 
 import { peer, REGISTRY } from "../testing/peer";
@@ -264,6 +265,65 @@ describe("recovery", () => {
 		expect(outcome.ok).toBe(false);
 		if (outcome.ok) return;
 		expect(outcome.issues.length).toBeGreaterThan(0);
+	});
+
+	/** The link toolbar or an autolinked paste leaves a link whose text is its URL. */
+	it("accepts a link whose text is its URL", async () => {
+		let document = await room.create("# Title\n");
+		room.mark(document);
+		let client = peer();
+		Y.applyUpdate(client.doc, room.sync(document), "remote");
+		await room.settle();
+
+		let before = Y.encodeStateVector(client.doc);
+		let source = "# Title\n\n[https://example.com](https://example.com)\n";
+		client.editor.update(() => {
+			$importPlan(source, { registry: REGISTRY, validate: false });
+		}, { discrete: true });
+
+		let outcome = await room.apply(document, [Y.encodeStateAsUpdate(client.doc, before)]);
+		expect(outcome.ok).toBe(true);
+		expect(room.project(document)).toBe(source);
+	});
+
+	/**
+	 * `apply` runs on the plan queue from a timer. Anything it throws becomes an
+	 * unhandled rejection, which exits the server, and leaves the room holding
+	 * the bad update. A projection that will not re-parse must refuse the batch
+	 * so the room rebuilds instead.
+	 */
+	it("refuses, rather than throws, a batch whose projection will not re-parse", async () => {
+		let document = await room.create("# Title\n");
+		room.mark(document);
+		let client = peer();
+		Y.applyUpdate(client.doc, room.sync(document), "remote");
+		await room.settle();
+
+		let before = Y.encodeStateVector(client.doc);
+		client.editor.update(() => {
+			$importPlan("# Title\n\nUnparseable.\n", { registry: REGISTRY, validate: false });
+		}, { discrete: true });
+
+		let real = dialect.parse;
+		let parse = spyOn(dialect, "parse").mockImplementation((source, options) => {
+			if (source.includes("Unparseable.")) throw new dialect.PlanParseError("unparseable");
+			return real(source, options);
+		});
+		try {
+			let outcome = await room.apply(document, [Y.encodeStateAsUpdate(client.doc, before)]);
+			expect(outcome).toEqual({ ok: false, issues: ["unparseable"] });
+		} finally {
+			parse.mockRestore();
+		}
+		expect(room.project(await room.rebuild(document))).toBe("# Title\n");
+	});
+
+	it("refuses, rather than throws, update bytes Yjs cannot decode", async () => {
+		let document = await room.create("# Title\n");
+		room.mark(document);
+		let outcome = await room.apply(document, [new Uint8Array([255])]);
+		expect(outcome).toEqual({ ok: false, issues: ["malformed-update"] });
+		expect(room.project(await room.rebuild(document))).toBe("# Title\n");
 	});
 
 	/**

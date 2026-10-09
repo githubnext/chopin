@@ -279,6 +279,23 @@ describe("serialization safety", () => {
 		let source = "[site](https://example.com) and [^1]\n\n[^1]: Note.\n";
 		expect(serialize(parse(source))).toBe(source);
 	});
+
+	// MDX has no autolinks: `<https://…>` reads as a JSX tag and fails to parse.
+	it("writes a link whose text is its URL as a resource link, never an autolink", () => {
+		for (let url of ["https://example.com", "https://example.com/a_b?q=1", "mailto:a@b.co"]) {
+			let source = serialize({
+				type: "root",
+				children: [{
+					type: "paragraph",
+					children: [{ type: "link", url, children: [{ type: "text", value: url }] }],
+				}],
+			});
+			expect(source).not.toContain("<");
+			let link = parse(source).children[0];
+			expect(link?.type === "paragraph" && link.children[0]).toMatchObject({ type: "link", url });
+			expect(serialize(parse(source))).toBe(source);
+		}
+	});
 });
 
 describe("components", () => {
