@@ -64,6 +64,9 @@ function Comparison({ view, options }: { view: ViewModel; options: OptionModel[]
 	return (
 		<section className="openui-options-part" aria-label={view.title}>
 			<h4>{view.title}</h4>
+			<p className="openui-options-scroll-hint">
+				Scroll to see more columns <span aria-hidden="true">→</span>
+			</p>
 			<div
 				className="openui-options-table-scroll"
 				tabIndex={0}
@@ -121,7 +124,22 @@ function Section({ section }: { section: OptionsSectionModel }) {
 				</div>
 				<label>
 					<span>Show options</span>
-					<select value={filter} onChange={event => setFilter(event.currentTarget.value)}>
+					<select
+						value={filter}
+						onChange={event => setFilter(event.currentTarget.value)}
+						onKeyDown={event => {
+							let options = event.currentTarget.options;
+							let index = event.currentTarget.selectedIndex;
+							let next: number | undefined;
+							if (event.key === "Home") next = 0;
+							else if (event.key === "End") next = options.length - 1;
+							else if (event.key === "ArrowDown") next = Math.min(index + 1, options.length - 1);
+							else if (event.key === "ArrowUp") next = Math.max(index - 1, 0);
+							if (next === undefined) return;
+							event.preventDefault();
+							setFilter(options[next]?.value ?? "");
+						}}
+					>
 						<option value="">All options</option>
 						{categories.map(category => <option value={category} key={category}>{category}
 						</option>)}

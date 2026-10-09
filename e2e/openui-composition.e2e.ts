@@ -84,6 +84,17 @@ test("the saved pandas document shows grounded media, a table and keyboard detai
 		"Source reasoning",
 	]);
 	await expect(view.getByRole("article")).toHaveCount(2);
+	let firstCard = view.getByRole("article").first();
+	let cardColumns = await firstCard.evaluate(card => {
+		let media = card.querySelector("figure")!.getBoundingClientRect();
+		let body = card.querySelector(".openui-options-card-body")!.getBoundingClientRect();
+		return {
+			beside: body.left >= media.right,
+			aligned: Math.abs(body.top - media.top) < 2,
+			roomy: body.width > media.width,
+		};
+	});
+	expect(cardColumns).toEqual({ beside: true, aligned: true, roomy: true });
 	await expect(view.getByRole("img", { name: /Spreadsheet with styled row and column headers/ }))
 		.toBeVisible();
 	await expect(view.locator("img")).toHaveAttribute("referrerpolicy", "no-referrer");
@@ -127,7 +138,12 @@ test("the saved pandas document shows grounded media, a table and keyboard detai
 		name: "Comparison table",
 	});
 	await expect(table).toBeVisible();
+	await expect(section(page, "Excel header styling").getByText("Scroll to see more columns"))
+		.toBeVisible();
 	expect(await table.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	await table.focus();
+	await table.press("ArrowRight");
+	await expect.poll(() => table.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
 	await expectNoHorizontalOverflow(page);
 	expect(forbiddenRequests).toEqual([]);
 });
@@ -167,8 +183,10 @@ test("a saved comparison-first document has a rail and private filters for a rea
 		await expect(content(reader)).toHaveAttribute("contenteditable", "false");
 		let readerView = section(reader, "Pagination choices");
 		await expect(readerView.getByRole("article")).toHaveCount(3);
-		await readerView.getByRole("combobox", { name: "Show options" })
-			.selectOption({ label: "Stable" });
+		let readerFilter = readerView.getByRole("combobox", { name: "Show options" });
+		await readerFilter.focus();
+		await readerFilter.press("End");
+		await expect(readerFilter).toHaveValue("Stable");
 		await expect(readerView.getByRole("article")).toHaveCount(2);
 		await expect(view.getByRole("article")).toHaveCount(3);
 		await view.getByRole("combobox", { name: "Show options" })
@@ -184,6 +202,18 @@ test("a saved comparison-first document has a rail and private filters for a rea
 	} finally {
 		await context.close();
 	}
+});
+
+test("comparison and diagram previews survive a shared document reload", async ({ join, page, seed }) => {
+	await seed(`${pandas}\n\n\`\`\`mermaid\ngraph LR;\nA-->B;\n\`\`\`\n`);
+	await join("ana");
+	await expect(section(page, "Excel header styling").getByRole("article")).toHaveCount(2);
+	await expect(content(page).getByRole("region", { name: "Diagram preview" }).locator("svg"))
+		.toBeVisible();
+	await page.reload();
+	await expect(section(page, "Excel header styling").getByRole("article")).toHaveCount(2);
+	await expect(content(page).getByRole("region", { name: "Diagram preview" }).locator("svg"))
+		.toBeVisible();
 });
 
 test("malformed source keeps adjacent prose and recovers after an authored repair", async ({ join, room, seed }) => {

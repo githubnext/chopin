@@ -6,6 +6,14 @@ options; it does not create a decision or save a choice. The source, view order,
 and option data persist. The filter and expanded details belong to each reader
 and reset on reload.
 
+The layout adapts to the document width. A grid gallery presents each option
+as a compact media-and-copy row when space allows, then stacks its media above
+the copy in a narrow document. An authored rail remains a horizontal gallery.
+The comparison keeps table semantics and a keyboard-scrollable lane; on narrow
+documents it pins option names and shows a cue for the remaining columns.
+Details use native disclosures. These are presentation choices, so the
+authoring syntax and persisted data are unchanged.
+
 ## Authoring syntax
 
 Use one declaration per line, with no blank lines, comments, expressions, state,
