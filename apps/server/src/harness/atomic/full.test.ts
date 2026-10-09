@@ -359,6 +359,7 @@ const PLANNER_TOOLS = [
 	"workflow",
 	"intercom",
 	"web_search",
+	"codemode",
 	"host_tool",
 ];
 const WITHHELD_TOOLS = ["bash", "edit", "write", "todo", "subagent", "operator_tool"];
