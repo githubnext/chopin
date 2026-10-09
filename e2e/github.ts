@@ -43,6 +43,11 @@ const repositories = [
 
 const CREATOR_WRITABLE = new Set(["archive-1", "archive-8", "archive-9"]);
 
+// People GitHub reports with less than the default access to the private
+// octo-org/score: a reader may pull but not push, and an outsider cannot see it.
+const SCORE_READER = "score-reader-";
+const SCORE_OUTSIDER = "score-outsider-";
+
 const installations = [
 	{
 		id: 101,
@@ -196,11 +201,15 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		let authorized = /^Bearer ghu_e2e_(.+)_\d+$/.exec(authorization);
 		if (!authorized) return json({ message: "Bad credentials" }, { status: 401 });
 		let handle = authorized[1]!;
-		let accessibleRepositories = repositories.map(repository =>
-			handle.startsWith("document-creator-") && CREATOR_WRITABLE.has(repository.name)
-				? { ...repository, permissions: { ...repository.permissions, push: true } }
-				: repository
-		);
+		let accessibleRepositories = repositories.flatMap(repository => {
+			if (handle.startsWith(SCORE_OUTSIDER) && repository.name === "score") return [];
+			if (handle.startsWith(SCORE_READER) && repository.name === "score") {
+				return [{ ...repository, permissions: { ...repository.permissions, push: false } }];
+			}
+			return handle.startsWith("document-creator-") && CREATOR_WRITABLE.has(repository.name)
+				? [{ ...repository, permissions: { ...repository.permissions, push: true } }]
+				: [repository];
+		});
 		let tagged = (value: unknown, etag: string, responseInit: ResponseInit = {}) => {
 			let headers = new Headers(responseInit.headers);
 			headers.set("etag", etag);
