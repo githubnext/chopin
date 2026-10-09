@@ -268,7 +268,7 @@ export function $isMathNode(node: LexicalNode | null | undefined): node is MathN
 
 type SerializedImage = Spread<{ planSrc: string; planAlt: string }, SerializedLexicalNode>;
 
-/** A remote image, referenced by absolute URL. */
+/** An image, referenced by absolute `https:` URL or by a Chopin-hosted `/images/<sha256>.<ext>` path. */
 export class ImageNode extends DecoratorNode<unknown> {
 	static override getType(): string {
 		return "plan-image";
