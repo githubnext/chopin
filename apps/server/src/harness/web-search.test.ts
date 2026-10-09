@@ -1,4 +1,4 @@
-import { expect, it } from "bun:test";
+import { expect, it, spyOn } from "bun:test";
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -123,6 +123,58 @@ it("does not count a resolved MCP error as a successful search", async () => {
 		expect(results[1]).toMatchObject({ error: expect.any(Error) });
 	} finally {
 		await loaded.value.close();
+	}
+});
+
+it("accepts a cited search response that takes longer than one minute", async () => {
+	let timers: Array<{ duration: number; controller: AbortController }> = [];
+	let timeout = spyOn(AbortSignal, "timeout").mockImplementation(duration => {
+		let controller = new AbortController();
+		timers.push({ duration, controller });
+		return controller.signal;
+	});
+	let owner = { ...credential(), expiresAt: new Date(Date.now() + 300_000) };
+	let response = {
+		content: [{
+			type: "text",
+			text: JSON.stringify({
+				text: {
+					value: "Evidence",
+					annotations: [{
+						url_citation: { url: "https://www.notion.com/help/updates-and-notifications" },
+					}],
+				},
+			}),
+		}],
+	};
+	let loaded: Awaited<ReturnType<typeof webSearchTool>> | undefined;
+	try {
+		loaded = await webSearchTool(owner, {
+			createClient: async () => ({
+				tools: async () => ({
+					web_search: tool({
+						inputSchema: z.object({ query: z.string() }),
+						execute: async (_input, options) => {
+							for (let { duration, controller } of timers) {
+								if (duration <= 90_000) controller.abort();
+							}
+							options.abortSignal?.throwIfAborted();
+							return response;
+						},
+					}),
+				}),
+				close: async () => {},
+			}),
+		});
+		if (!loaded.ok) throw new Error("fixture failed");
+		expect(
+			await loaded.value.tool.execute!({ query: "notification design" }, {
+				context: { credential: owner },
+			} as never),
+		).toEqual(response);
+	} finally {
+		timeout.mockRestore();
+		if (loaded?.ok) await loaded.value.close();
 	}
 });
 

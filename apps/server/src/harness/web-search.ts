@@ -11,7 +11,13 @@ import type { GitHubToolsError, Result } from "./github-tools";
 
 const MCP_URL = "https://api.githubcopilot.com/mcp/";
 const WEB_SEARCH_SCHEMA = {
-	web_search: { inputSchema: z.object({ query: z.string() }) },
+	web_search: {
+		inputSchema: z.object({
+			query: z.string().describe(
+				"A concise, standalone natural-language question focused on one public topic.",
+			),
+		}),
+	},
 } as const;
 
 type Client = {
@@ -42,7 +48,8 @@ export async function webSearchTool(
 		timeoutMs?: number;
 	} = {},
 ): Promise<Result<{ tool: ToolSet["web_search"]; close: () => Promise<void> }, GitHubToolsError>> {
-	let timeoutMs = deps.timeoutMs ?? 60_000;
+	// The upstream tool runs an AI research agent, so a valid response can take over a minute.
+	let timeoutMs = deps.timeoutMs ?? 180_000;
 	if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) {
 		throw new Error("Invalid web search timeout");
 	}
@@ -76,7 +83,9 @@ export async function webSearchTool(
 			ok: true,
 			value: {
 				tool: tool({
-					description: "Search the public web for evidence about the disclosed research query.",
+					description: "Research the public web for evidence about the disclosed research query. "
+						+ "An AI research agent answers with citations; each call may take several minutes. "
+						+ "Ask one focused natural-language question per call. Split comparisons into separate questions.",
 					inputSchema: WEB_SEARCH_SCHEMA.web_search.inputSchema,
 					contextSchema: WebContext,
 					toModelOutput: source.toModelOutput,
