@@ -44,6 +44,14 @@ export { plugins, registry, tablePlugin } from "./registry";
 export type { Registry } from "./registry";
 
 export {
+	$createColumnNode,
+	$createColumnsNode,
+	$isColumnNode,
+	$isColumnsNode,
+	ColumnNode,
+	ColumnsNode,
+} from "./nodes/columns";
+export {
 	$createCalloutNode,
 	$createTabNode,
 	$createTabsNode,

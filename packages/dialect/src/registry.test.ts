@@ -2,12 +2,15 @@ import { describe, expect, it } from "bun:test";
 
 import { contentEditableClassName$, corePlugin, readOnly$ } from "@mdxeditor/editor";
 import { Realm } from "@mdxeditor/gurx";
+import { createHeadlessEditor } from "@lexical/headless";
 import { toMarkdown } from "mdast-util-to-markdown";
 
+import { exportPlan, importPlan } from "./convert";
 import { NODES } from "./dialect";
 import { parse } from "./parse";
-import { plugins } from "./registry";
+import { plugins, registry } from "./registry";
 import { extensions } from "./serialize";
+import { validate } from "./validate";
 
 import type { Nodes } from "mdast";
 
@@ -97,7 +100,7 @@ $$
 | - | - |
 | 1 | 2 |
 
-A reference[^01K0N4V4E7Y6P4MJ5WD8XZF3B2] and <Var name="x" /> inline.
+A reference[^01K0N4V4E7Y6P4MJ5WD8XZF3B2] and <Underline>x</Underline> inline.
 
 [^01K0N4V4E7Y6P4MJ5WD8XZF3B2]: The note.
 
@@ -106,6 +109,36 @@ A reference[^01K0N4V4E7Y6P4MJ5WD8XZF3B2] and <Var name="x" /> inline.
 Inside.
 
 </Callout>
+
+<Tabs id="01K0N4TR8K7JGM4R1J7PW4R8YJ">
+<Tab id="01K0N4V4E7Y6P4MJ5WD8XZF3B2" label="One">
+
+Tab body.
+
+</Tab>
+</Tabs>
+
+<Columns id="01K0N4W3B7P27CBAEC7A8C8WEB">
+<Column id="01K0N4W3B7P27CBAEC7A8C8WEC">
+
+Left side.
+
+</Column>
+<Column id="01K0N4W3B7P27CBAEC7A8C8WED">
+
+Right side.
+
+</Column>
+</Columns>
+
+<Research id="8f4d193b-2018-4977-b404-0092bb911676" />
+
+<Questionnaire id="01K0N4W3B7P27CBAEC7A8C8WEE">
+<Question id="01K0N4W3B7P27CBAEC7A8C8WEF" header="Choice" prompt="Choose one" multiple="false">
+<Option id="01K0N4W3B7P27CBAEC7A8C8WEG" label="Yes" />
+<Answer value="Yes" />
+</Question>
+</Questionnaire>
 
 <Decision id="01K0N4X2M5R8T3VQ7YB6ZC4DEF" quote="Cached for 60 seconds." by="ana" at="2026-07-28T10:14:00Z">
   <Note by="ana" text="Too long; the data changes every 10s." />
@@ -133,6 +166,18 @@ function types(node: Nodes, seen = new Set<string>()): Set<string> {
  * happens to meet.
  */
 describe("markdown extensions", () => {
+	it("imports and exports all registered nodes in the headless editor", () => {
+		let reg = registry();
+		let errors: Error[] = [];
+		let editor = createHeadlessEditor({ nodes: reg.nodes, onError: error => errors.push(error) });
+		importPlan(editor, SAMPLE, { registry: reg });
+		let output = exportPlan(editor, { registry: reg });
+		expect(output).toContain("<Columns");
+		expect(output).toContain("<Questionnaire");
+		expect(validate(parse(output))).toEqual({ ok: true });
+		expect(errors).toEqual([]);
+	});
+
 	it("write every node type the dialect accepts", () => {
 		expect(() => toMarkdown(parse(SAMPLE), { extensions: extensions() })).not.toThrow();
 	});

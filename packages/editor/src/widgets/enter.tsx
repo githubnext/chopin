@@ -32,7 +32,13 @@ import {
 	COMMAND_PRIORITY_LOW,
 	INSERT_PARAGRAPH_COMMAND,
 } from "lexical";
-import { $isCalloutNode, $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
+import {
+	$isCalloutNode,
+	$isCodeBlockNode,
+	$isColumnNode,
+	$isColumnsNode,
+	$isMathNode,
+} from "@chopin/dialect";
 
 import type { ElementNode, LexicalNode } from "lexical";
 
@@ -58,7 +64,7 @@ function containerPosition(node: LexicalNode | null) {
 	let child = node;
 	while (child) {
 		let parent = child.getParent();
-		if ($isCalloutNode(parent)) {
+		if ($isCalloutNode(parent) || $isColumnNode(parent)) {
 			return { container: parent, child };
 		}
 		child = parent;
@@ -129,8 +135,17 @@ export function handleEnter(): boolean {
 			return true;
 		}
 
+		let columnParent = $isColumnNode(position?.container)
+			? position.container.getParent()
+			: null;
+		let exitContainer = $isCalloutNode(position?.container)
+			? position.container
+			: $isColumnsNode(columnParent) && position?.container.getNextSibling() === null
+			? columnParent
+			: null;
 		if (
-			position
+			exitContainer
+			&& position
 			&& $isParagraphNode(position.child)
 			&& position.child.getChildrenSize() === 0
 			&& position.child.getPreviousSibling() !== null
@@ -138,7 +153,7 @@ export function handleEnter(): boolean {
 		) {
 			position.child.remove();
 			let paragraph = $createParagraphNode();
-			position.container.insertAfter(paragraph);
+			exitContainer.insertAfter(paragraph);
 			paragraph.select();
 			return true;
 		}

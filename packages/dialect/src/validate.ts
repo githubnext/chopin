@@ -161,6 +161,9 @@ class Validator {
 			this.add("unknown-component", `\`${node.name}\` is not a plan component`, path, node);
 			return;
 		}
+		if (spec.name === "Columns" && depth !== 1) {
+			this.add("bad-layout-placement", "`Columns` must be a top-level block", path, node);
+		}
 
 		let expected = node.type === "mdxJsxFlowElement" ? "flow" : "text";
 		if (spec.kind !== expected) {
@@ -398,6 +401,9 @@ class Validator {
 						continue;
 					}
 					found++;
+				}
+				if (spec.name === "Columns" && found !== 2) {
+					this.add("bad-column-count", "`Columns` requires exactly two columns", path, node);
 				}
 				let pendingQuestion = spec.name === "Question" && parent?.name === "Questionnaire"
 					&& !!stringAttribute(parent, "thread")

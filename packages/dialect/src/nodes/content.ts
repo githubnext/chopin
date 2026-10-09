@@ -314,7 +314,8 @@ export class ImageNode extends DecoratorNode<unknown> {
 		return dom;
 	}
 
-	override updateDOM(): boolean {
+	override updateDOM(_prev: ImageNode, dom: HTMLElement): boolean {
+		dom.dataset.planSrc = this.getSrc();
 		return false;
 	}
 
