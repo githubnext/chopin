@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import "./isolated-git.test-fixtures";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,6 +13,7 @@ function fixture(
 	contents = "repair",
 	operation = "fix",
 	baseExtraBytes = 0,
+	baseRef = "main",
 ) {
 	let source = mkdtempSync(join(tmpdir(), "application-source-"));
 	let directory = mkdtempSync(join(tmpdir(), "application-trusted-"));
@@ -36,6 +38,18 @@ function fixture(
 	let root = git("rev-parse", "HEAD");
 	let head = root;
 	let expectedBase = root;
+	if (baseRef === "parent") {
+		git("checkout", "-qb", "parent");
+		writeFileSync(join(source, "apps/a.ts"), "parent");
+		git("add", ".");
+		git("commit", "-qm", "parent");
+		expectedBase = git("rev-parse", "HEAD");
+		git("checkout", "-qb", "feature");
+		writeFileSync(join(source, "apps/a.ts"), "child");
+		git("add", ".");
+		git("commit", "-qm", "child");
+		head = git("rev-parse", "HEAD");
+	}
 	if (operation === "merge") {
 		git("checkout", "-qb", "feature");
 		writeFileSync(join(source, "apps/a.ts"), "feature");
@@ -117,7 +131,11 @@ function fixture(
 						number: 1,
 						head,
 						baseHead: expectedBase,
-						action: operation === "merge" ? "conflict" : "repair",
+						action: operation === "merge"
+							? "conflict"
+							: operation === "rebase"
+							? "rebase"
+							: "repair",
 					}, 1),
 					"attempt",
 					2,
@@ -127,9 +145,10 @@ function fixture(
 	};
 	let pr = {
 		state: "open",
+		draft: false,
 		labels: [],
 		head: { sha: head, ref: "feature", repo: { full_name: "owner/repo" } },
-		base: { ref: "main", repo: { full_name: "owner/repo" } },
+		base: { ref: baseRef, repo: { full_name: "owner/repo" } },
 	};
 	let calls: string[] = [];
 	let baseHead = expectedBase;
@@ -344,16 +363,69 @@ test("unexpected published head supersedes; crash after push recovers without re
 	expect(f.calls.filter((call) => call === "push")).toHaveLength(1);
 });
 
-test("main-only rollout blocks stacks, and post-registration opt-out supersedes", async () => {
-	let f = fixture();
-	f.pr.base.ref = "parent";
+test("stacked one-commit fix publishes after validating the recorded parent head", async () => {
+	let f = fixture(false, "repair", "fix", 0, "parent");
 	expect(await applyProposal(f.options)).toEqual({
-		kind: "blocked",
-		reason: "Stacked PR needs a recorded trusted replay boundary",
+		kind: "applied",
+		head: f.proposalHead,
+		verification: {
+			head: f.proposalHead,
+			operation: "fix",
+			paths: ["apps/a.ts"],
+			checks: [{ command: "bun test", result: "passed" }],
+			hashReviews: [],
+		},
 	});
-	expect(f.calls).not.toContain("save");
-	expect(f.calls).not.toContain("push");
-	f = fixture();
+	expect(f.calls.indexOf("save")).toBeLessThan(f.calls.indexOf("push"));
+}, 15_000);
+
+test(
+	"stacked fixes reject stale parent heads and protected changes before publication",
+	async () => {
+		let stale = fixture(false, "repair", "fix", 0, "parent");
+		stale.setBase("c".repeat(40));
+		expect(await applyProposal(stale.options)).toEqual({ kind: "superseded" });
+		expect(stale.calls).not.toContain("save");
+		expect(stale.calls).not.toContain("push");
+		let raced = fixture(false, "repair", "fix", 0, "parent");
+		let save = raced.options.store.save;
+		raced.options.store.save = async (previous, next) => {
+			let saved = await save(previous, next);
+			raced.setBase("c".repeat(40));
+			return saved;
+		};
+		expect(await applyProposal(raced.options)).toEqual({ kind: "superseded" });
+		expect(raced.calls).not.toContain("push");
+		let protectedChange = fixture(true, "changed", "fix", 0, "parent");
+		expect((await applyProposal(protectedChange.options)).kind).toBe("blocked");
+		expect(protectedChange.calls).not.toContain("save");
+		expect(protectedChange.calls).not.toContain("push");
+		let unreviewed = fixture(false, "repair", "fix", 0, "parent");
+		unreviewed.options.review = "unreviewed";
+		expect((await applyProposal(unreviewed.options)).kind).toBe("blocked");
+		expect(unreviewed.calls).not.toContain("save");
+		expect(unreviewed.calls).not.toContain("push");
+	},
+	15_000,
+);
+
+test("stacked merge and rebase remain blocked without a trusted replay boundary", async () => {
+	for (let operation of ["merge", "rebase"]) {
+		let f = operation === "merge"
+			? fixture(false, "combined", operation)
+			: fixture(false, "repair", operation, 0, "parent");
+		f.pr.base.ref = "parent";
+		expect(await applyProposal(f.options)).toEqual({
+			kind: "blocked",
+			reason: "Stacked PR needs a recorded trusted replay boundary",
+		});
+		expect(f.calls).not.toContain("save");
+		expect(f.calls).not.toContain("push");
+	}
+}, 15_000);
+
+test("post-registration opt-out supersedes", async () => {
+	let f = fixture();
 	let save = f.options.store.save;
 	f.options.store.save = async (previous, next) => {
 		let saved = await save(previous, next);
@@ -439,3 +511,26 @@ test("malformed verification records block before registration or publication", 
 	expect(f.calls).not.toContain("save");
 	expect(f.calls).not.toContain("push");
 });
+
+test(
+	"closed or draft PRs supersede proposals before validation and immediately before push",
+	async () => {
+		for (let change of [{ state: "closed" }, { draft: true }]) {
+			for (let changedAt of [1, 2]) {
+				let f = fixture();
+				let request = f.options.request;
+				let pulls = 0;
+				f.options.request = async (method, path) => {
+					if (path.endsWith("/pulls/1") && ++pulls === changedAt) {
+						Object.assign(f.pr, change);
+					}
+					return request(method, path);
+				};
+				expect(await applyProposal(f.options)).toEqual({ kind: "superseded" });
+				expect(f.calls).not.toContain("push");
+				if (changedAt === 1) expect(f.calls).not.toContain("save");
+			}
+		}
+	},
+	15_000,
+);

@@ -358,6 +358,9 @@ export const IMAGE_PROTOCOLS: readonly string[] = Object.freeze(["https:"]);
 /** Fenced code language that renders as a diagram. */
 export const MERMAID_LANGUAGE = "mermaid";
 
+/** Fenced JSON source for a bounded SeeCode explanatory diagram. */
+export const SEECODE_LANGUAGE = "seecode";
+
 /**
  * Fenced code language that renders as a diff.
  *

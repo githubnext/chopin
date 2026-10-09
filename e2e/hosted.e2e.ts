@@ -73,8 +73,11 @@ test("an authenticated user adds a Project and creates its first document", asyn
 	await expect(search).toBeFocused();
 	await repositoryOption(page, "score").click();
 	let projects = page.getByRole("complementary", { name: "Projects" });
-	await expect(projects.getByRole("button", { name: "score", exact: true })).toBeVisible();
-	await projects.getByRole("button", { name: "New document in score" }).click();
+	await expect(projects.getByRole("button", { name: /^score(?:, \d+ unanswered decisions?)?$/ }))
+		.toBeVisible();
+	let pencil = projects.getByRole("button", { name: "New document in score" });
+	await pencil.locator("..").hover();
+	await pencil.click();
 
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 	let activeRoute = page.locator("[data-content-swap-state]:not([inert])").filter({

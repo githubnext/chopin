@@ -37,12 +37,14 @@ import * as Questions from "../questions/service";
 import * as VisualDecisions from "../visual-decisions/state";
 import * as VisualRequests from "../visual-decisions/requests";
 import { CommitRejected } from "../storage/errors";
+import { sidecarUnansweredDecisions } from "../questions/unanswered";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
 import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
-import { broadcast, fail, relay, reply, tell } from "../wire";
+import { broadcast, broadcastRepository, fail, relay, reply, tell } from "../wire";
+import { documentUrl } from "../channels/document-url";
 
 import type { Server } from "bun";
-import type { ConversationPlan, Plan as Wire, Request } from "@chopin/protocol";
+import type { ConversationPlan, Plan as Wire, Request, Sidebar } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
 import type { Document } from "./room";
@@ -50,6 +52,7 @@ import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../storage/model";
 import type {
+	ChannelRecord,
 	InitialChannel,
 	JsonValue,
 	Lease,
@@ -142,6 +145,8 @@ export type McpUpdateRecord = {
 
 type Persistence = Backend & {
 	channelId: string;
+	repositoryId: string;
+	committedUnanswered: number;
 	revision: number;
 	sequence: number;
 	lastSidecar: string;
@@ -919,6 +924,7 @@ async function commitHosted(
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		announceUnanswered(plan);
 		if (plan.document.epoch === captured.epoch) {
 			plan.document.checkpoint = new Uint8Array(captured.document);
 		}
@@ -942,6 +948,121 @@ async function commitHosted(
 		) durable.fatal(err);
 		throw err;
 	}
+}
+
+type UnansweredCounts = {
+	channelId: string;
+	repositoryId: string;
+	unanswered: number;
+	revision: number;
+};
+
+let repositoryAnnouncements = new Map<string, Promise<void>>();
+
+/**
+ * Each frame carries a repository total read when its turn comes, so frames for one
+ * repository must be read and sent one at a time to never let an older total arrive last.
+ */
+function inRepositoryOrder(repositoryId: string, send: () => Promise<void>): Promise<void> {
+	let sent = (repositoryAnnouncements.get(repositoryId) ?? Promise.resolve()).then(send);
+	let settled = sent.catch(() => {});
+	repositoryAnnouncements.set(repositoryId, settled);
+	void settled.then(() => {
+		if (repositoryAnnouncements.get(repositoryId) === settled) {
+			repositoryAnnouncements.delete(repositoryId);
+		}
+	});
+	return sent;
+}
+
+async function unansweredFrame(
+	storage: StorageAdapter,
+	counts: UnansweredCounts,
+): Promise<Sidebar.Decisions> {
+	let repositoryUnanswered = await storage.channels.unansweredDecisions(counts.repositoryId);
+	return { kind: "sidebar:decisions", ts: 0, ...counts, repositoryUnanswered };
+}
+
+function announceCounts(
+	server: Server<SocketData>,
+	storage: StorageAdapter,
+	counts: UnansweredCounts,
+): Promise<void> {
+	return inRepositoryOrder(counts.repositoryId, async () => {
+		broadcastRepository(server, counts.repositoryId, await unansweredFrame(storage, counts));
+	}).catch(err => {
+		console.warn(`[plan] could not announce decision counts for ${counts.channelId}:`, err);
+	});
+}
+
+function announceUnanswered(plan: Plan): void {
+	let durable = plan.persistence;
+	let unanswered = sidecarUnansweredDecisions(durable.committedSidecar);
+	if (unanswered === durable.committedUnanswered) return;
+	durable.committedUnanswered = unanswered;
+	void announceCounts(plan.server, durable.storage, {
+		channelId: durable.channelId,
+		repositoryId: durable.repositoryId,
+		unanswered,
+		revision: durable.revision,
+	});
+}
+
+/** Refresh every sidebar in the repository after a document leaves or rejoins its active catalogue. */
+export function announceCatalogueUnanswered(
+	server: Server<SocketData>,
+	storage: StorageAdapter,
+	channel: ChannelRecord,
+): Promise<void> {
+	return announceCounts(server, storage, {
+		channelId: channel.id,
+		repositoryId: channel.repositoryId,
+		unanswered: channel.unansweredDecisions,
+		revision: channel.revision,
+	});
+}
+
+/** Refresh every sidebar watching the repository after a document leaves its catalogue for good. */
+export function announceDeletedUnanswered(
+	server: Server<SocketData>,
+	storage: StorageAdapter,
+	channel: ChannelRecord,
+): Promise<void> {
+	return announceCounts(server, storage, {
+		channelId: channel.id,
+		repositoryId: channel.repositoryId,
+		unanswered: 0,
+		revision: channel.revision,
+	});
+}
+
+/** Reconcile a watching socket with counts it missed, ordered with the repository's frames. */
+export function tellRepositoryUnanswered(
+	storage: StorageAdapter,
+	ws: Pick<Socket, "send">,
+	repositoryId: string,
+	channelIds: string[],
+	watching: () => boolean,
+): Promise<void> {
+	return inRepositoryOrder(repositoryId, async () => {
+		if (!watching()) return;
+		let [documents, repositoryUnanswered] = await Promise.all([
+			storage.channels.unansweredDecisionCounts(repositoryId, channelIds),
+			storage.channels.unansweredDecisions(repositoryId),
+		]);
+		if (!watching()) return;
+		tell(ws, {
+			kind: "sidebar:snapshot",
+			ts: 0,
+			repositoryId,
+			repositoryUnanswered,
+			documents: documents.map(document => ({
+				channelId: document.channelId,
+				unanswered: document.unansweredDecisions,
+				revision: document.revision,
+			})),
+		});
+	});
 }
 
 async function checkpointHosted(plan: Plan): Promise<void> {
@@ -993,6 +1114,7 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		announceUnanswered(plan);
 		plan.document.checkpoint = new Uint8Array(captured.document);
 		if (durable.checkpointTimer) clearTimeout(durable.checkpointTimer);
 		durable.checkpointTimer = undefined;
@@ -1284,6 +1406,8 @@ export async function open(
 	plan.persistence = {
 		...backend,
 		channelId: id,
+		repositoryId: loaded.channel.repositoryId,
+		committedUnanswered: sidecarUnansweredDecisions(committed.sidecar),
 		revision: loaded.channel.revision,
 		sequence: loaded.latestSequence,
 		lastSidecar: committed.sidecarText,
@@ -2015,6 +2139,12 @@ export async function close(plan: Plan): Promise<void> {
 /** Current canonical source. */
 export function source(plan: Plan): string {
 	return room.project(plan.document);
+}
+
+export async function documentIdentity(plan: Plan): Promise<{ id: string; url: string }> {
+	let channel = await plan.persistence.storage.channels.get(plan.id);
+	if (!channel) throw new Error("document is unavailable");
+	return { id: channel.id, url: await documentUrl(channel, plan.persistence.storage.channels) };
 }
 
 /** Size of the Yjs history, for the idle compaction check. */

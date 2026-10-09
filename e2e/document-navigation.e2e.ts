@@ -214,7 +214,7 @@ test("document action menu motion settles keyboard opening immediately", async (
 test("a pointer-collapsed Project stays inert through exit and restores in place", async ({ join }) => {
 	let page = await join("ana");
 	let projects = sidebar(page);
-	let trigger = projects.getByRole("button", { name: "score", exact: true });
+	let trigger = projects.getByRole("button", { name: /^score(?:, \d+ unanswered decisions?)?$/ });
 	let body = projects.locator('[data-motion-disclosure="projects"]');
 	let bodyId = await body.getAttribute("id");
 
@@ -276,6 +276,42 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
 	await expect(content(page)).toBeFocused();
 	await expect(projects.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
+test("the header names the project and its prefix reveals it in the sidebar", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	let header = page.getByRole("banner");
+	let prefix = header.getByRole("button", { name: "Show score in the sidebar" });
+	let project = sidebar(page).locator('[data-project-id="R_score"]');
+	let disclosure = project.getByRole("button", {
+		name: /^score(?:, \d+ unanswered decisions?)?$/,
+	});
+
+	await expect(prefix).toHaveText("score");
+	await disclosure.click();
+	await expect(disclosure).toHaveAttribute(
+		"aria-expanded",
+		"false",
+	);
+
+	await prefix.click();
+	await expect(disclosure).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
+	await expect(disclosure).toBeFocused();
+
+	await sidebar(page).getByRole("button", { name: "Hide sidebar" }).click();
+	await expect(sidebar(page)).toHaveCount(0);
+	await prefix.click();
+	await expect(sidebar(page)).toBeVisible();
+	await expect(disclosure).toBeFocused();
+});
+
+test("the project prefix gives way on phones", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	await expect(headerDocument(page)).toBeVisible();
+	await expect(page.getByRole("banner").getByRole("button", { name: /^Show score/ })).toBeHidden();
 });
 
 test("the header title renames in place with click, F2, Escape, and blur", async ({ join, room }) => {
@@ -959,6 +995,12 @@ test("archiving offers Undo and archived mode names itself", async ({ join, room
 
 	await headerAction(ana, "Archive");
 	await expect(notice).toBeVisible();
+	await ana.keyboard.press("Shift+Tab");
+	await expect(
+		ana.getByRole("banner").getByRole("button", {
+			name: "Show score in the sidebar",
+		}),
+	).toBeFocused();
 	await ana.keyboard.press("Shift+Tab");
 	let undo = notice.getByRole("button", { name: "Undo", exact: true });
 	await expect(undo).toBeFocused();

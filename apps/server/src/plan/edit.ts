@@ -15,7 +15,8 @@
 
 import { createHash } from "node:crypto";
 
-import { lookup } from "@chopin/dialect/dialect";
+import { parseDiagramSource, renderDiagram } from "@chopin/diagrams";
+import { lookup, SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
 import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 import { ulid } from "@chopin/dialect/ulid";
@@ -192,6 +193,8 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 				+ "so insert new content rather than duplicating a block you read.",
 		};
 	}
+	let diagramError = introducedDiagramError(root.children, children);
+	if (diagramError) return { ok: false, reason: "invalid", message: diagramError };
 
 	let next: string;
 	try {
@@ -275,6 +278,8 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 				+ "so insert new content rather than duplicating a block you read.",
 		};
 	}
+	let diagramError = introducedDiagramError(root.children, children);
+	if (diagramError) return { ok: false, reason: "invalid", message: diagramError };
 
 	try {
 		let next = serialize({ ...root, children });
@@ -388,6 +393,43 @@ function align(base: RootContent[], next: RootContent[]): RootContent[] {
 		if (!bucket || bucket.nodes.length !== counts.get(digest)) return node;
 		return bucket.nodes[bucket.used++]!;
 	});
+}
+
+/** Existing human-edited fences remain editable around even if their spec is malformed. */
+function introducedDiagramError(base: RootContent[], next: RootContent[]): string | undefined {
+	let previous = new Map<string, number>();
+	let collect = (nodes: RootContent[], visit: (source: string) => void): void => {
+		let walk = (node: RootContent): void => {
+			if (node.type === "code" && node.lang === SEECODE_LANGUAGE) visit(node.value);
+			if ("children" in node && Array.isArray(node.children)) {
+				for (let child of node.children) walk(child as RootContent);
+			}
+		};
+		for (let node of nodes) walk(node);
+	};
+	collect(base, source => previous.set(source, (previous.get(source) ?? 0) + 1));
+	let failure: string | undefined;
+	collect(next, source => {
+		if (failure) return;
+		let retained = previous.get(source) ?? 0;
+		if (retained > 0) {
+			previous.set(source, retained - 1);
+			return;
+		}
+		let parsed = parseDiagramSource(source);
+		if (!parsed.ok) {
+			failure = `Invalid seecode diagram: ${parsed.message}`;
+			return;
+		}
+		let rendered = renderDiagram(parsed.spec);
+		if (!rendered.ok) {
+			let problem = rendered.problems[0];
+			failure = problem
+				? `Invalid seecode diagram at ${problem.at.slice(0, 80)}: ${problem.msg.slice(0, 160)}`
+				: "Invalid seecode diagram: the spec could not be rendered.";
+		}
+	});
+	return failure;
 }
 
 function describeReplacement(base: RootContent[], after: RootContent[]): Change[] {

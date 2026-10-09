@@ -11,6 +11,7 @@
  * `.ts` is included because shared class lists can live outside components.
  */
 @source "../../../packages/editor/src/**/*.{ts,tsx}";
+@source "../../../packages/icons/src/**/*.{ts,tsx}";
 @source "../../../packages/question/src/**/*.{ts,tsx}";
 
 @utility ring-hairline {
@@ -20,6 +21,22 @@
 
 :where([data-nucleo-icon]) {
 	color: var(--color-icon);
+}
+
+/*
+ * Every icon keeps its declared size: as a flex item it would otherwise shrink
+ * when the text beside it wraps. In the base layer so a utility can still opt out.
+ */
+@layer base {
+	:is([data-nucleo-icon], [data-filled-icon]) {
+		flex-shrink: 0;
+	}
+}
+
+/* Beside text that may wrap: centre on the first line instead of the whole block. */
+@utility icon-first-line {
+	align-self: flex-start;
+	translate: 0 calc(0.5lh - 50%);
 }
 
 @utility icon-danger {
@@ -492,6 +509,54 @@ body {
 		scale var(--duration-fast) var(--ease-out);
 }
 
+/*
+ * The shared menu recipe. Items mark the keyboard or pointer row with
+ * `data-active`; `aria-selected` stays free for a chosen value.
+ */
+.menu-surface {
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-overlay);
+	font-size: var(--text-sm);
+}
+
+.menu-item {
+	display: flex;
+	min-height: var(--menu-item-height);
+	width: 100%;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	border-radius: var(--radius-sm);
+	padding: 0 calc(var(--spacing) * 2);
+	text-align: left;
+	font-size: var(--text-sm);
+	color: var(--color-text-primary);
+}
+
+.menu-item:hover {
+	background: var(--color-hover);
+}
+
+.menu-item[data-active] {
+	background: var(--color-selected);
+}
+
+/* Surfaces that mount already open (no presence class) ease in the same way. */
+.menu-surface[data-menu-enter] {
+	transform-origin: bottom left;
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+
+	@starting-style {
+		opacity: 0;
+		transform: scale(var(--dropdown-pre-scale));
+	}
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -713,10 +778,6 @@ body {
 /* Jump-to-source: a tint behind the message that fades; the message itself never moves. */
 .chat-message-body[data-chat-source] {
 	isolation: isolate;
-}
-
-.chat-message-body:not(:first-child) > .chat-message-to {
-	margin-top: 4px;
 }
 
 .chat-source-tint {
@@ -1358,6 +1419,22 @@ button.question-add:disabled {
 	}
 }
 
+/* Resolved cards have no padded body, so their footer needs its own floor. */
+.question-actions[data-resolved-actions] {
+	padding-block-end: calc(var(--spacing) * 2.5);
+}
+
+/* A decision whose prose has not been reviewed yet: a calm pulse, not a spinner. */
+.question-relation-dot {
+	background: var(--color-text-tertiary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.question-relation-dot:not([data-idle]) {
+		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
+	}
+}
+
 /* Discard confirm: the footer swaps in place and fades in. */
 .question-confirm {
 	margin-inline-end: auto;
@@ -1434,6 +1511,18 @@ button.question-add:disabled {
 	outline: none;
 }
 
+/* A rendered block clips its preview's ring, so show the same ring on the outer block. */
+.plan-content .planCode :is(.plan-code-view, .plan-diagram):focus-visible {
+	outline: none;
+}
+
+:root:not([data-focus-input="pointer"])
+	.plan-content
+	.planCode:has(> [data-plan-preview] :is(.plan-code-view, .plan-diagram):focus-visible) {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: 0;
+}
+
 /*
  * The ring answers "where am I?" for keyboard users, so it hides after a pointer
  * press. Text fields keep theirs: a caret alone is easy to lose.
@@ -1474,6 +1563,12 @@ button.question-add:disabled {
 	border-right-color: transparent;
 	border-radius: var(--radius-full);
 }
+
+@media (prefers-reduced-motion: no-preference) {
+	.document-activity-dot[data-document-activity="writing"] {
+		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
+	}
+}
 @media (prefers-reduced-motion: reduce) {
 	.chat-work-lattice > span,
 	.chat-work-headline-motion,
@@ -1485,6 +1580,7 @@ button.question-add:disabled {
 		animation: none;
 	}
 
+	.menu-surface[data-menu-enter],
 	.motion-dropdown,
 	.motion-popover,
 	.motion-panel,

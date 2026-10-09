@@ -27,6 +27,9 @@ const BASE_ENV = {
 let processes: ReturnType<typeof spawn>[] = [];
 let directories: string[] = [];
 
+// Both modes use the same disposable database and application port.
+test.describe.configure({ mode: "default" });
+
 async function stop(child: ReturnType<typeof spawn>) {
 	if (child.exitCode !== null || child.pid === undefined) {
 		processes = processes.filter(value => value !== child);
@@ -38,7 +41,7 @@ async function stop(child: ReturnType<typeof spawn>) {
 	processes = processes.filter(value => value !== child);
 }
 
-async function server(directory: string, unavailable = false) {
+async function server(directory: string, unavailable = false, extra: Record<string, string> = {}) {
 	let child = spawn(process.execPath, [
 		"--preload",
 		"./e2e/secrets.ts",
@@ -54,6 +57,7 @@ async function server(directory: string, unavailable = false) {
 			E2E_FAKE_VAULT_DIR: join(directory, "fake-vault"),
 			E2E_DEVICE_APPROVAL_FILE: join(directory, "approval"),
 			E2E_FAKE_VAULT_UNAVAILABLE: unavailable ? "1" : "0",
+			...extra,
 		},
 		stdio: ["ignore", "ignore", "pipe"],
 	});
@@ -66,7 +70,7 @@ async function server(directory: string, unavailable = false) {
 		if (child.exitCode !== null) {
 			let safe = errors.replace(/(?:ghu_|ghr_)[A-Za-z0-9_-]+/g, "<redacted>")
 				.replace(/postgres(?:ql)?:\/\/[^\s]+/g, "<database-url>");
-			throw new Error(`local server exited with ${child.exitCode}: ${safe.slice(-800)}`);
+			throw new Error(`auth test server exited with ${child.exitCode}: ${safe.slice(-800)}`);
 		}
 		try {
 			let response = await fetch(`${ORIGIN}/api/session`);
@@ -74,7 +78,7 @@ async function server(directory: string, unavailable = false) {
 		} catch { /* Server has not bound yet. */ }
 		await new Promise(resolve => setTimeout(resolve, 100));
 	}
-	throw new Error("local server did not become ready");
+	throw new Error("auth test server did not become ready");
 }
 
 test.afterEach(async () => {
@@ -82,6 +86,56 @@ test.afterEach(async () => {
 	for (let directory of directories) await rm(directory, { recursive: true, force: true });
 	processes = [];
 	directories = [];
+});
+
+test("hosted sign-in survives process replacement and logout survives another restart", async ({ page, browser }) => {
+	test.setTimeout(60_000);
+	let directory = await mkdtemp(join(tmpdir(), "chopin-hosted-e2e-"));
+	directories.push(directory);
+	let hosted = { AUTH_MODE: "hosted", GITHUB_APP_CLIENT_SECRET: "e2e" };
+	let child = await server(directory, false, hosted);
+	await page.goto(ORIGIN);
+	let login = page.getByRole("link", { name: "Continue with GitHub" });
+	await expect(login).toBeVisible();
+	let started = await page.request.get(new URL((await login.getAttribute("href"))!, ORIGIN).href, {
+		maxRedirects: 0,
+	});
+	expect(started.status()).toBe(302);
+	let state = new URL(started.headers().location!).searchParams.get("state")!;
+	await page.goto(
+		`${ORIGIN}/auth/github/callback?code=e2e-restarting&state=${encodeURIComponent(state)}`,
+	);
+	await expect(page.getByRole("button", { name: "restarting", exact: true })).toBeVisible();
+	let original = await (await page.request.get(`${ORIGIN}/api/session`)).json();
+	let cookie = (await page.context().cookies()).find(value => value.name === "chopin_session")!;
+	expect(cookie.httpOnly).toBe(true);
+	await stop(child);
+	child = await server(directory, false, hosted);
+	await page.reload();
+	await expect(page.getByRole("button", { name: "restarting", exact: true })).toBeVisible();
+	expect(await (await page.request.get(`${ORIGIN}/api/session`)).json()).toEqual(original);
+	expect((await page.context().cookies()).find(value => value.name === cookie.name)?.value).toBe(
+		cookie.value,
+	);
+	let outsider = await browser.newContext();
+	try {
+		expect(await (await outsider.request.get(`${ORIGIN}/api/session`)).json()).toMatchObject({
+			user: null,
+		});
+	} finally {
+		await outsider.close();
+	}
+	await expect(page.getByRole("textbox", { name: "Search repositories" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("button", { name: "Close Add project" })).toHaveCount(0);
+	await page.getByRole("button", { name: "restarting", exact: true }).click();
+	await page.getByRole("menuitem", { name: "Sign out" }).click();
+	await expect(page.getByText("Open your workspace")).toBeVisible();
+	await stop(child);
+	await server(directory, false, hosted);
+	await page.context().addCookies([cookie]);
+	await page.reload();
+	await expect(page.getByText("Open your workspace")).toBeVisible();
 });
 
 test("local device approval, backend fallback, restart and logout", async ({ page, browser, request }) => {
@@ -174,10 +228,9 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
 	await expect(page.getByText("Enter one-time code:")).toHaveCount(0);
-	if (await page.getByRole("button", { name: "Close Add project" }).isVisible()) {
-		await page.keyboard.press("Escape");
-		await expect(page.getByRole("button", { name: "Close Add project" })).toHaveCount(0);
-	}
+	await expect(page.getByRole("textbox", { name: "Search repositories" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("button", { name: "Close Add project" })).toHaveCount(0);
 	await page.getByRole("button", { name: "octocat", exact: true }).click();
 	await page.getByRole("menuitem", { name: "Sign out" }).click();
 	await expect(page.getByText("Open your workspace")).toBeVisible();

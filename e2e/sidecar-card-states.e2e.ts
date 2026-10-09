@@ -311,7 +311,7 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 	await expect(card.getByRole("radio", { name: "Anchors" })).not.toBeChecked();
 });
 
-test("an answered heading remains a keyboard link to its prose", async ({ join, seed }) => {
+test("a linked decision keeps a keyboard jump to its prose", async ({ join, seed }) => {
 	await seed(`Anchored paragraph.\n\n${DECIDED_CARD}`, {
 		questions: [{
 			...DECIDED_RECORD,
@@ -322,7 +322,7 @@ test("an answered heading remains a keyboard link to its prose", async ({ join, 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "1 resolved" }).click();
 	let card = cardByPrompt(page, "How should we deploy?");
-	let link = card.getByRole("button", { name: "How should we deploy? — show in plan" });
+	let link = card.getByRole("button", { name: "Show in document" });
 	await expect(link).toHaveCount(1);
 	await link.focus();
 	await link.press("Enter");
@@ -387,12 +387,12 @@ test("an orphaned prose anchor retains its authoritative state and resolved card
 		.toContainText("Canary");
 });
 
-test("conversation decisions settle inline while their prose is being written up", async ({ join, seed }) => {
+test("conversation decisions settle inline without claiming a write-up no job is doing", async ({ join, seed }) => {
 	await seed(`${PROSE}\n${DECIDED_CARD}`, {
 		questions: [{ ...DECIDED_RECORD, origin: "conversation" }],
 	});
 	let page = await join("ana");
 	let settled = content(page).locator("[data-card-settled]");
 	await expect(settled).toContainText("Decided: Canary · @ana");
-	await expect(settled).toContainText("writing up…");
+	await expect(settled).not.toContainText("Writing up…");
 });

@@ -7,11 +7,12 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
+import { DIFF_LANGUAGE, MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect";
 
 import {
 	describeDiagramError,
 	fileNameOf,
+	jumpTo,
 	kindOf,
 	languageOptions,
 	LANGUAGES,
@@ -23,6 +24,7 @@ import {
 describe("what a fence is", () => {
 	it("tells the two rendered languages apart from ordinary code", () => {
 		expect(kindOf(MERMAID_LANGUAGE)).toBe("mermaid");
+		expect(kindOf(SEECODE_LANGUAGE)).toBe("seecode");
 		expect(kindOf(DIFF_LANGUAGE)).toBe("diff");
 		expect(kindOf("typescript")).toBe("code");
 	});
@@ -97,6 +99,7 @@ describe("the languages on offer", () => {
 	it("offers both of the fences that render as something else", () => {
 		let ids = LANGUAGES.map(([id]) => id);
 		expect(ids).toContain(MERMAID_LANGUAGE);
+		expect(ids).toContain(SEECODE_LANGUAGE);
 		expect(ids).toContain(DIFF_LANGUAGE);
 	});
 
@@ -223,6 +226,26 @@ describe("languageOptions", () => {
 		let options = languageOptions("brainfuck");
 		expect(options[1]).toEqual(["brainfuck", "brainfuck"]);
 		expect(options).toHaveLength(LANGUAGES.length + 2);
+	});
+});
+
+describe("jumpTo", () => {
+	let options = languageOptions("typescript");
+	let at = (id: string) => options.findIndex(([option]) => option === id);
+
+	it("reaches a diagram by its label or by Mermaid", () => {
+		expect(jumpTo(options, 0, "d")).toBe(at(MERMAID_LANGUAGE));
+		expect(jumpTo(options, 0, "M")).toBe(at(MERMAID_LANGUAGE));
+	});
+
+	it("moves on to the next match, and wraps round", () => {
+		let diagram = at(MERMAID_LANGUAGE);
+		expect(jumpTo(options, diagram, "m")).toBe(at("markdown"));
+		expect(jumpTo(options, at("markdown"), "m")).toBe(diagram);
+	});
+
+	it("finds nothing for a letter no row starts with", () => {
+		expect(jumpTo(options, 0, "q")).toBe(-1);
 	});
 });
 

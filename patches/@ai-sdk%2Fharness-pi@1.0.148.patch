@@ -1,0 +1,13 @@
+diff --git a/dist/index.js b/dist/index.js
+index 678fa75f2547719be5526942698d854777403528..e455994fabbcf88057bd24f7720e1c152c9a73bb 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2181,6 +2181,8 @@ async function createPiSession(input) {
+ 		noExtensions: true,
+ 		noThemes: true,
+ 		noPromptTemplates: true,
++		// Chopin patch: never read AGENTS.md or CLAUDE.md from the host filesystem.
++		noContextFiles: true,
+ 		skillsOverride: (base) => ({
+ 			...base,
+ 			skills: [...base.skills.filter((skill) => isWithinWorkspace(skill.filePath, sessionWorkDir, hostWorkDir)), ...harnessSkills]

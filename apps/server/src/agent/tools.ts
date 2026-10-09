@@ -14,7 +14,7 @@ import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
 import { ULID } from "@chopin/dialect";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
-import { implementationActive } from "../plan/service";
+import { documentIdentity, implementationActive } from "../plan/service";
 
 import type { Server } from "bun";
 import { jsonSchema, tool } from "ai";
@@ -113,7 +113,8 @@ export const documentTools = {
 		// anybody needs to approve.
 		metadata: { skipPermission: true },
 		execute: (_raw, { context: { room: context } }) =>
-			answer("read_plan", () => ({
+			answer("read_plan", async () => ({
+				document: await documentIdentity(context.plan),
 				revision: context.plan.revision,
 				source: edit.source(context.plan),
 				blocks: edit.outline(context.plan),
@@ -303,8 +304,9 @@ export const documentTools = {
 			additionalProperties: false,
 		}),
 		execute: (raw, { context: { room: context } }) =>
-			answer("edit_plan", () =>
-				context.exclusive(async () => {
+			answer("edit_plan", async () => {
+				let document = await documentIdentity(context.plan);
+				let result = await context.exclusive(async () => {
 					if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 					let args = Arguments.editPlan(raw);
 					let outcome = edit.apply(context.plan, args.revision, args.operations);
@@ -349,7 +351,9 @@ export const documentTools = {
 							...Comments.outstanding(context.plan),
 						],
 					};
-				})),
+				});
+				return { ...result, document };
+			}),
 	}),
 
 	ask: tool({

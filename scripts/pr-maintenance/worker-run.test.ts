@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import "./isolated-git.test-fixtures";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -177,6 +178,7 @@ test("prepare copies trusted main guidance and writes no credentials or state mu
 			path.includes("/pulls/")
 				? {
 					state: "open",
+					draft: false,
 					head: { sha: head, ref: "feature", repo: { full_name: "o/r" } },
 					base: { ref: "main", repo: { full_name: "o/r" } },
 					labels: [],
@@ -186,6 +188,18 @@ test("prepare copies trusted main guidance and writes no credentials or state mu
 	let result = await runWorker("prepare", full);
 	expect(result.head).toBe(head);
 	expect(result.operation).toBe("fix");
+	for (let change of [{ state: "closed" }, { draft: true }]) {
+		let request = full.request;
+		let rejected = await runWorker("prepare", {
+			...full,
+			request: async (method, path) => {
+				let response = await request(method, path);
+				return path.includes("/pulls/") ? { ...response, ...change } : response;
+			},
+		});
+		expect(rejected.kind).toBe("transient");
+	}
+
 	state.action = state.active.action = "conflict";
 	state.active.operation = "merge";
 	expect((await runWorker("prepare", full)).operation).toBe("merge");

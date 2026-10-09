@@ -26,8 +26,10 @@ import { motionImmediately } from "./motion-input";
 import { sidebarMoving, usePaneMotion, usePaneSettledWidth } from "./pane-motion";
 import { listenForShortcuts } from "./global-shortcuts";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
+import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
 
 import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
+import type { DocumentActivity } from "./document-activity";
 import type {
 	WorkspaceDestination,
 	WorkspaceEvent,
@@ -130,6 +132,7 @@ export type WorkspaceProps = {
 	onDestination: (destination: "plan" | "decisions") => void;
 	unanswered: number;
 	chatActivity: { unread: number; busy: boolean };
+	documentActivity?: DocumentActivity;
 	identity?: string;
 	presentation: WorkspacePresentation;
 };
@@ -218,7 +221,9 @@ function destinationLabel(
 	destination: WorkspaceDestination,
 	unanswered: number,
 	activity: WorkspaceProps["chatActivity"],
+	document: DocumentActivity,
 ): string {
+	if (destination === "plan") return documentActivityLabel(document);
 	if (destination === "decisions" && unanswered > 0) {
 		return `Decisions, ${unanswered} unanswered`;
 	}
@@ -243,6 +248,7 @@ export function Workspace(
 		ids,
 		chatActivity,
 		decisions,
+		documentActivity,
 		header,
 		identity,
 		mode,
@@ -399,6 +405,7 @@ export function Workspace(
 							destination,
 							unanswered,
 							chatActivity,
+							active ? undefined : documentActivity,
 						);
 						return (
 							<button
@@ -415,6 +422,9 @@ export function Workspace(
 									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
+								{destination === "plan" && !active && (
+									<DocumentActivityDot activity={documentActivity} />
+								)}
 								{destination === "decisions" && unanswered > 0 && (
 									<span aria-hidden="true" className="ml-1" data-plan-decision-count>
 										<Count motion>{unanswered}</Count>

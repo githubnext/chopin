@@ -44,6 +44,7 @@ function serialized(channel: ChannelRecord) {
 		descriptionRevision: channel.description?.revision ?? 0,
 		...(channel.description ? { description: channel.description.value } : {}),
 		...(channel.archivedAt ? { archivedAt: channel.archivedAt.toISOString() } : {}),
+		unansweredDecisions: channel.unansweredDecisions,
 	};
 }
 
@@ -246,13 +247,17 @@ export function registerChannelRoutes(
 				) {
 					return json({ error: "invalid channel pagination" }, 400);
 				}
-				let page = await auth.storage.channels.list(
-					repo.id,
-					requestedLimit,
-					cursor?.cursor,
-					requestedQuery || undefined,
-					includeArchived,
-				);
+				let activeCatalogue = !requestedQuery && !includeArchived;
+				let [page, unansweredDecisions] = await Promise.all([
+					auth.storage.channels.list(
+						repo.id,
+						requestedLimit,
+						cursor?.cursor,
+						requestedQuery || undefined,
+						includeArchived,
+					),
+					activeCatalogue ? auth.storage.channels.unansweredDecisions(repo.id) : undefined,
+				]);
 				let canManage = repo.permissions.push || repo.permissions.admin;
 				return json({
 					repository: repository(repo),
@@ -261,6 +266,7 @@ export function registerChannelRoutes(
 					nextCursor: page.next
 						? encoded(page.next, requestedQuery, includeArchived)
 						: undefined,
+					...(unansweredDecisions === undefined ? {} : { unansweredDecisions }),
 				});
 			} catch (err) {
 				return failure(err, request, auth);
@@ -489,7 +495,9 @@ export function registerChannelRoutes(
 						? options.onChannelRestored(id, now)
 						: auth.storage.channels.restore({ id, now }));
 				let opened = openedDocument(repo, result.channel);
-				return opened ? json(opened) : json({ error: "channel not found" }, 404);
+				if (!opened) return json({ error: "channel not found" }, 404);
+				let unansweredDecisions = await auth.storage.channels.unansweredDecisions(repo.id);
+				return json({ ...opened, unansweredDecisions });
 			} catch (err) {
 				return failure(err, request, auth);
 			}

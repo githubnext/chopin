@@ -15,6 +15,16 @@ import { BACKGROUND_JOB_PROGRESS_LIMIT } from "./model";
 import type { StorageFactory as Factory } from "./contract-support";
 import type { JsonValue } from "./model";
 
+function decisionRecord(id: string, status: string, ...questions: string[]): JsonValue {
+	return {
+		id,
+		status,
+		definition: {
+			questions: questions.map(question => ({ id: question, header: question, options: [] })),
+		},
+	};
+}
+
 function attempt<T>(action: () => Promise<T>): Promise<T> {
 	return Promise.resolve().then(action);
 }
@@ -22,7 +32,7 @@ function attempt<T>(action: () => Promise<T>): Promise<T> {
 /** The behavioral gate every built-in storage adapter must pass. */
 export function storageContract(name: string, factory: Factory): void {
 	describe(`${name} storage`, () => {
-		it("keeps only process-lifetime registry metadata for a login session", async () => {
+		it("supports expiring metadata-only sessions for local authentication", async () => {
 			let storage = await opened(factory);
 			try {
 				let now = new Date("2026-01-02T03:04:05.000Z");
@@ -57,7 +67,7 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
-		it("deletes all session registries while preserving durable agent context", async () => {
+		it("deletes process-only sessions while preserving durable agent context", async () => {
 			let storage = await opened(factory);
 			try {
 				let { sessionId, channelId, lease } = await userAndChannel(storage);
@@ -72,7 +82,7 @@ export function storageContract(name: string, factory: Factory): void {
 					status: "ready",
 					now,
 				});
-				let reset = await storage.sessions.deleteAll(now, lease, 60_000);
+				let reset = await storage.sessions.reset(now, lease, 60_000);
 				expect(reset.deleted).toBeGreaterThan(0);
 				expect(reset.lease.fencing).toBe(lease.fencing);
 				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
@@ -84,6 +94,79 @@ export function storageContract(name: string, factory: Factory): void {
 					status: "unavailable",
 				});
 				expect(saved!.agent!.ownerSessionId).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("preserves encrypted sessions across a fenced reset and clears their Planner ownership", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, sessionId, channelId, lease } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let persistentId = id("persistent-session");
+				let credentials = {
+					secretHash: new Uint8Array(32).fill(1),
+					ciphertext: new Uint8Array(64).fill(2),
+					revision: 1,
+				};
+				let persistent = {
+					id: persistentId,
+					userId,
+					createdAt: now,
+					expiresAt: new Date(now.getTime() + 60_000),
+					credentials,
+				};
+				await storage.sessions.create(persistent);
+				let expiredId = id("expired-persistent-session");
+				await storage.sessions.create({ ...persistent, id: expiredId, expiresAt: now });
+				await storage.channels.claimAgentOwner(channelId, persistentId, now);
+				await expect(storage.sessions.reset(now, { ...lease, fencing: lease.fencing + 1 }, 60_000))
+					.rejects.toBeInstanceOf(StorageError);
+				expect((await storage.channels.readAgent(channelId, now))?.agent?.ownerSessionId).toBe(
+					persistentId,
+				);
+				await storage.sessions.reset(now, lease, 60_000);
+				expect(await storage.sessions.get(persistentId, now)).toEqual(persistent);
+				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
+				expect(await storage.sessions.get(expiredId, new Date(now.getTime() - 1))).toBeUndefined();
+				expect((await storage.channels.readAgent(channelId, now))?.agent?.ownerSessionId)
+					.toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("rotates encrypted credentials by revision without recreating deleted sessions", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let sessionId = id("persistent-session");
+				let credentials = {
+					secretHash: new Uint8Array(32).fill(1),
+					ciphertext: new Uint8Array(64).fill(2),
+					revision: 1,
+				};
+				await storage.sessions.create({
+					id: sessionId,
+					userId,
+					createdAt: now,
+					expiresAt: new Date(now.getTime() + 60_000),
+					credentials,
+				});
+				let next = { ...credentials, ciphertext: new Uint8Array(64).fill(3), revision: 2 };
+				expect(await storage.sessions.rotate(sessionId, 1, next)).toBe(true);
+				expect(
+					await storage.sessions.rotate(sessionId, 1, {
+						...next,
+						ciphertext: new Uint8Array(64).fill(4),
+					}),
+				).toBe(false);
+				expect((await storage.sessions.get(sessionId, now))?.credentials).toEqual(next);
+				await storage.sessions.delete(sessionId);
+				expect(await storage.sessions.rotate(sessionId, 2, { ...next, revision: 3 })).toBe(false);
+				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
 			} finally {
 				await storage.close();
 			}
@@ -420,6 +503,124 @@ export function storageContract(name: string, factory: Factory): void {
 						activeChild.id,
 					]),
 				);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("counts unanswered decisions from committed question records", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let commit = async (target: string, sidecar: JsonValue, expectedRevision = 0) =>
+					storage.collaboration.commit({
+						channelId: target,
+						lease,
+						expectedRevision,
+						operationId: id("decisions"),
+						epoch: "epoch-decisions",
+						sidecar,
+						events: [],
+						now: new Date("2026-01-06T03:04:05.000Z"),
+					});
+				let channel = async (input: {
+					title: string;
+					parentChannelId?: string;
+					repository?: string;
+				}) =>
+					storage.channels.create({
+						id: id("decision-channel"),
+						repositoryId: input.repository ?? repositoryId,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						title: input.title,
+						createdBy: userId,
+						...(input.parentChannelId ? { parentChannelId: input.parentChannelId } : {}),
+						now: new Date("2026-01-03T03:04:05.000Z"),
+					});
+
+				expect((await storage.channels.get(channelId))?.unansweredDecisions).toBe(0);
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(0);
+
+				await commit(channelId, {
+					questions: [
+						decisionRecord("open", "open", "a", "b"),
+						decisionRecord("answered", "answered", "c"),
+						decisionRecord("discarded", "discarded", "d"),
+					],
+				});
+				let child = await channel({ title: "Child decisions", parentChannelId: channelId });
+				await commit(child.id, { questions: [decisionRecord("reopened", "reopened", "e")] });
+				let archivedChild = await channel({
+					title: "Archived child decisions",
+					parentChannelId: channelId,
+				});
+				await commit(archivedChild.id, { questions: [decisionRecord("open", "open", "f")] });
+				await storage.channels.archive({
+					id: archivedChild.id,
+					now: new Date("2026-01-07T03:04:05.000Z"),
+				});
+				let archived = await channel({ title: "Archived decisions" });
+				await commit(archived.id, { questions: [decisionRecord("open", "open", "g", "h", "i")] });
+				await storage.channels.archive({
+					id: archived.id,
+					now: new Date("2026-01-07T03:04:05.000Z"),
+				});
+				let elsewhere = await channel({ title: "Elsewhere", repository: id("repository") });
+				await commit(elsewhere.id, { questions: [decisionRecord("open", "open", "j")] });
+
+				expect((await storage.channels.get(channelId))?.unansweredDecisions).toBe(2);
+				expect((await storage.channels.get(child.id))?.unansweredDecisions).toBe(1);
+				expect((await storage.channels.get(archived.id))?.unansweredDecisions).toBe(3);
+				let listed = await storage.channels.list(repositoryId, 1);
+				let pages = [...listed.channels];
+				while (listed.next) {
+					listed = await storage.channels.list(repositoryId, 1, listed.next);
+					pages.push(...listed.channels);
+				}
+				expect(Object.fromEntries(pages.map(item => [item.id, item.unansweredDecisions])))
+					.toEqual({ [channelId]: 2, [child.id]: 1, [archivedChild.id]: 1 });
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(4);
+				let requested = await storage.channels.unansweredDecisionCounts(repositoryId, [
+					channelId,
+					child.id,
+					archived.id,
+					elsewhere.id,
+					id("missing-channel"),
+				]);
+				expect(requested.toSorted((a, b) => a.channelId.localeCompare(b.channelId))).toEqual(
+					[
+						{ channelId, revision: 1, unansweredDecisions: 2 },
+						{ channelId: child.id, revision: 1, unansweredDecisions: 1 },
+						{ channelId: archived.id, revision: 1, unansweredDecisions: 3 },
+					].toSorted((a, b) => a.channelId.localeCompare(b.channelId)),
+				);
+				expect(await storage.channels.unansweredDecisionCounts(repositoryId, [])).toEqual([]);
+
+				await storage.collaboration.replace({
+					channelId: child.id,
+					lease,
+					expectedRevision: 1,
+					operationId: id("decisions-replace"),
+					generation: id("generation"),
+					epoch: "epoch-replaced",
+					source: "# Replaced\n",
+					sourceHash: "sha256:replaced",
+					document: new Uint8Array([1]),
+					sidecar: { questions: [decisionRecord("reopened", "answered", "e")] },
+					now: new Date("2026-01-08T03:04:05.000Z"),
+				});
+				await commit(channelId, { questions: [decisionRecord("open", "open", "a")] }, 1);
+				await commit(channelId, { version: 1 }, 2);
+
+				expect((await storage.channels.get(child.id))?.unansweredDecisions).toBe(0);
+				expect((await storage.channels.get(channelId))?.unansweredDecisions).toBe(0);
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(1);
+				await storage.channels.archive({
+					id: channelId,
+					now: new Date("2026-01-09T03:04:05.000Z"),
+				});
+				expect(await storage.channels.unansweredDecisions(repositoryId)).toBe(0);
 			} finally {
 				await storage.close();
 			}

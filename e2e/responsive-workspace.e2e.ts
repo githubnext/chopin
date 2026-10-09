@@ -537,6 +537,22 @@ test("a representative desktop retains the split Chat layout", async ({ join, se
 	await expect(content(page)).toBeEditable();
 });
 
+test("a pinch zoom magnifies the desktop layout instead of reflowing it", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
+	let cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+	await expect.poll(() => page.evaluate(() => window.visualViewport!.scale)).toBeGreaterThan(1.5);
+	let root = await page.evaluate(() => {
+		let box = document.getElementById("root")!.getBoundingClientRect();
+		return { height: box.height, left: box.left, top: box.top, width: box.width };
+	});
+	expect(root).toEqual({ height: 900, left: 0, top: 0, width: 1440 });
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
+});
+
 test("200% zoom at 640 CSS pixels uses compact controls without clipping", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", {

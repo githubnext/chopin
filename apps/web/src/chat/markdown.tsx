@@ -47,10 +47,13 @@ let COMPONENTS: Components = {
 export function MessageMarkdown(
 	{
 		className,
+		mention,
 		references,
 		source,
 	}: {
 		className?: string;
+		/** Inline lead drawn before the first paragraph, styled as a mention. */
+		mention?: string;
 		references?: Chat.Reference[];
 		source: string;
 	},
@@ -90,7 +93,17 @@ export function MessageMarkdown(
 		},
 	};
 	return (
-		<div className={`chat-markdown ${className ?? ""}`} data-chat-markdown>
+		<div
+			className={`chat-markdown ${className ?? ""}`}
+			data-chat-markdown
+			data-chat-mention-lead={mention ? "" : undefined}
+		>
+			{mention && (
+				<>
+					<span className="chat-mention">{mention}</span>
+					{" "}
+				</>
+			)}
 			<ReactMarkdown
 				allowedElements={ELEMENTS}
 				components={components}

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import "./isolated-git.test-fixtures";
 import { createRequest, openResult, sealResult } from "./actions.mjs";
 
 let key = "01234567890123456789012345678901";

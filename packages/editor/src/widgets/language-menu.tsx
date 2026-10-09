@@ -12,11 +12,11 @@ import { createPortal } from "react-dom";
 import { CheckIcon, ChevronIcon } from "@chopin/icons";
 
 import { usePopoverDismissal } from "../popover-dismissal";
+import { jumpTo } from "./code";
 import { useTransitionPresence } from "../transition-presence";
 
 import type { CSSProperties, KeyboardEvent } from "react";
-
-export type LanguageOption = readonly [id: string, label: string];
+import type { LanguageOption } from "./code";
 
 const GAP = 4;
 const MARGIN = 8;
@@ -138,13 +138,8 @@ export function LanguageMenu(
 			action();
 			return;
 		}
-		// Type to jump, as a native select does.
 		if (event.key.length === 1) {
-			let letter = event.key.toLowerCase();
-			let found = options.findIndex(([, name], index) =>
-				index > active && name.toLowerCase().startsWith(letter)
-			);
-			if (found < 0) found = options.findIndex(([, name]) => name.toLowerCase().startsWith(letter));
+			let found = jumpTo(options, active, event.key);
 			if (found >= 0) setActive(found);
 		}
 	};
@@ -177,7 +172,7 @@ export function LanguageMenu(
 				<div
 					aria-activedescendant={`${listId}-${active}`}
 					aria-label="Code language"
-					className={`plan-language-menu motion-dropdown ${presence.className} fixed z-50 min-w-40 overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-overlay`}
+					className={`plan-language-menu motion-dropdown ${presence.className} fixed z-50 min-w-40 overflow-y-auto menu-surface`}
 					id={listId}
 					onKeyDown={onKey}
 					ref={panel}
@@ -188,9 +183,8 @@ export function LanguageMenu(
 					{options.map(([id, name], index) => (
 						<div
 							aria-selected={index === selected}
-							className={`motion-picker-option flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm ${
-								index === active ? "bg-selected" : ""
-							}`}
+							className="motion-picker-option menu-item cursor-pointer"
+							data-active={index === active || undefined}
 							data-index={index}
 							id={`${listId}-${index}`}
 							key={id || "plain"}

@@ -61,14 +61,15 @@ export function nextAction(snapshot) {
 }
 
 function included(pr, repository) {
-	return pr.state === "open" && pr.head.repo?.full_name === repository;
+	return pr.state === "open" && pr.draft === false
+		&& pr.head.repo?.full_name === repository;
 }
 
 function optedOut(pr) {
 	return pr.labels.some((label) => label.name === "no-babysit");
 }
 
-export function inventory(repository, gh = github, selected = () => true) {
+export function inventory(repository, gh = github, selected = () => true, target = null) {
 	if (typeof selected !== "function") throw new TypeError("Invalid PR selection");
 	let listed = gh([
 		"api",
@@ -76,11 +77,40 @@ export function inventory(repository, gh = github, selected = () => true) {
 		"--paginate",
 		"--slurp",
 	]).flat();
+	let focused = null;
+	if (target !== null) {
+		let candidates = listed.filter(pr => included(pr, repository));
+		let seeds = target.kind === "prs"
+			? candidates.filter(pr => target.numbers.includes(pr.number))
+			: target.kind === "branch"
+			? candidates.filter(pr => pr.head.ref === target.branch)
+			: [];
+		// A branch name must identify exactly one open PR. Ambiguity is retried by the sweep.
+		if (target.kind === "branch" && seeds.length !== 1) return [];
+		focused = new Set(seeds.map(pr => pr.number));
+		let branches = new Set(seeds.map(pr => pr.head.ref));
+		let bases = new Set(seeds.map(pr => pr.base.ref));
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (let pr of candidates) {
+				if (focused.has(pr.number)) continue;
+				if (!branches.has(pr.base.ref) && !bases.has(pr.head.ref)) continue;
+				focused.add(pr.number);
+				branches.add(pr.head.ref);
+				bases.add(pr.base.ref);
+				changed = true;
+			}
+		}
+	}
 	let snapshots = new Map();
 	let mergePolicies = new Map();
 	let settings;
 	for (let candidate of listed) {
-		if (!included(candidate, repository) || !selected(candidate.number)) continue;
+		if (
+			!included(candidate, repository) || !selected(candidate.number)
+			|| (focused !== null && !focused.has(candidate.number))
+		) continue;
 		let pr = optedOut(candidate)
 			? candidate
 			: gh(["api", `repos/${repository}/pulls/${candidate.number}`]);

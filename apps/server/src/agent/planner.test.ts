@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { PREVIEW_REQUEST_AUTHORING, PROMPT } from "./planner";
+import { renderDiagram } from "@chopin/diagrams";
+
+import { DIAGRAM_AUTHORING, PREVIEW_REQUEST_AUTHORING, PROMPT } from "./planner";
 
 test("routes continuous preview requests and discrete team choices", () => {
 	expect(PROMPT).toContain(PREVIEW_REQUEST_AUTHORING);
@@ -9,6 +11,17 @@ test("routes continuous preview requests and discrete team choices", () => {
 	expect(PREVIEW_REQUEST_AUTHORING).toContain("with `{}`");
 	expect(PREVIEW_REQUEST_AUTHORING).toContain("ordinary `ask`");
 	expect(PREVIEW_REQUEST_AUTHORING).toContain("request is pending");
+});
+
+test("offers grounded optional diagrams with three valid authoring examples", () => {
+	expect(PROMPT).toContain(DIAGRAM_AUTHORING);
+	expect(DIAGRAM_AUTHORING).toContain("when a diagram adds no clarity");
+	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)];
+	expect(examples).toHaveLength(3);
+	for (let [index, example] of examples.entries()) {
+		let rendered = renderDiagram(JSON.parse(example[1]!) as unknown);
+		expect(rendered.ok, `example ${index + 1}`).toBe(true);
+	}
 });
 
 test("settles blocking opening choices before writing a first plan", () => {

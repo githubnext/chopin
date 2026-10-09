@@ -16,7 +16,7 @@ function pull(number = 1, base = "main") {
 	return {
 		number,
 		state: "open",
-		draft: true,
+		draft: false,
 		labels: [] as { name: string }[],
 		mergeable: true,
 		rebaseable: true,
@@ -157,7 +157,7 @@ test("stale, absent, pending, cancelled, skipped, and foreign CI never imply rea
 	}
 });
 
-test("inventories every paginated same-repository draft without a batch cap", () => {
+test("inventories every paginated open non-draft PR without a batch cap", () => {
 	let prs = Array.from({ length: 30 }, (_, index) => pull(index + 1));
 	let { gh } = fixture([prs.slice(0, 10), prs.slice(10)]);
 	let rows = inventory(repository, gh);
@@ -246,6 +246,33 @@ test("selected inventory avoids unselected per-PR reads and waits for an unselec
 	expect(calls.some(args => args[1]?.includes("head-3"))).toBe(false);
 });
 
+test("a targeted PR expands its connected stack before expensive reads", () => {
+	let parent = pull(1);
+	let child = pull(2, parent.head.ref);
+	let grandchild = pull(3, child.head.ref);
+	let { gh, calls } = fixture([[pull(4), grandchild, child, parent]]);
+	let result = inventory(repository, gh, () => true, { kind: "prs", numbers: [2] });
+	expect(result.map(row => [row.number, row.parent])).toEqual([[1, null], [2, 1], [3, 2]]);
+	expect(calls.some(args => args[1] === `repos/${repository}/pulls/4`)).toBe(false);
+	let pilot = fixture([[pull(4), grandchild, child, parent]]);
+	expect(
+		inventory(repository, pilot.gh, number => number === 2, {
+			kind: "prs",
+			numbers: [1],
+		}).map(row => [row.number, row.action]),
+	).toEqual([[2, "waiting-parent"]]);
+	expect(pilot.calls.some(args => args[1] === `repos/${repository}/pulls/1`)).toBe(false);
+});
+
+test("a CI branch without one open same-repository PR defers after the listing", () => {
+	let duplicate = { ...pull(2), head: { ...pull(2).head, ref: pull(1).head.ref } };
+	for (let branch of ["missing", pull(1).head.ref]) {
+		let { gh, calls } = fixture([[pull(1), duplicate]]);
+		expect(inventory(repository, gh, () => true, { kind: "branch", branch })).toEqual([]);
+		expect(calls).toHaveLength(1);
+	}
+});
+
 test("only the latest CI run for the refreshed head affects advice", () => {
 	let { gh } = fixture(undefined, {
 		"runs/head-1": { workflow_runs: [{ ...run, status: "in_progress" }, run] },
@@ -321,4 +348,21 @@ test("cyclic and ambiguous stacks defer rather than guessing a parent", () => {
 	let duplicate = { ...pull(2), head: { ...pull(2).head, ref: "branch-1" } };
 	let ambiguous = fixture([[pull(3, "branch-1"), pull(1), duplicate]]);
 	expect(inventory(repository, ambiguous.gh)[0]?.action).toBe("verify");
+});
+
+test("drafts are excluded at listing, initial detail, and final refresh", () => {
+	for (let draftAt of ["listing", "detail", "refresh"]) {
+		let pr = pull();
+		let { gh } = fixture([[{ ...pr, draft: draftAt === "listing" }]]);
+		let pulls = 0;
+		let read = (args: string[]) => {
+			let response = gh(args);
+			if (args[1] === `repos/${repository}/pulls/1`) {
+				pulls++;
+				return { ...response, draft: pulls === (draftAt === "detail" ? 1 : 2) };
+			}
+			return response;
+		};
+		expect(inventory(repository, read)).toEqual([]);
+	}
 });

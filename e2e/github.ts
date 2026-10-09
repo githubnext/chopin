@@ -1,5 +1,5 @@
 /**
- * Fake only GitHub's network boundary. OAuth state, PKCE, process-local sessions,
+ * Fake only GitHub's network boundary. OAuth state, PKCE, persistent sessions,
  * channel authorization and WebSocket admission still run in the real server.
  */
 import { readFile } from "node:fs/promises";
@@ -40,6 +40,8 @@ const repositories = [
 		permissions: { pull: true, push: false, admin: false },
 	})),
 ];
+
+const CREATOR_WRITABLE = new Set(["archive-1", "archive-8", "archive-9"]);
 
 const installations = [
 	{
@@ -129,7 +131,7 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		if (!authorized) return json({ message: "Bad credentials" }, { status: 401 });
 		let handle = authorized[1]!;
 		let accessibleRepositories = repositories.map(repository =>
-			handle.startsWith("document-creator-") && repository.name === "archive-1"
+			handle.startsWith("document-creator-") && CREATOR_WRITABLE.has(repository.name)
 				? { ...repository, permissions: { ...repository.permissions, push: true } }
 				: repository
 		);

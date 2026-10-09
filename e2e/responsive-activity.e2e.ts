@@ -115,13 +115,13 @@ test("a closed desktop Chat tab keeps unread activity visible", async ({ join, p
 		document.addEventListener("transitionstart", event => {
 			if (
 				event.target instanceof Element
-				&& event.target.matches('[data-motion-feedback="count"]')
+				&& event.target.matches('.chat-toggle [data-motion-feedback="count"]')
 			) record.starts++;
 		}, true);
 		document.addEventListener("transitionend", event => {
 			if (
 				event.target instanceof Element
-				&& event.target.matches('[data-motion-feedback="count"]')
+				&& event.target.matches('.chat-toggle [data-motion-feedback="count"]')
 			) record.ends++;
 		}, true);
 	});
