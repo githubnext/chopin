@@ -600,6 +600,15 @@ body {
 	padding-top: calc(0.5rem + env(safe-area-inset-top));
 }
 
+.room-header
+	:is(.document-title-trigger, .document-title-label, .document-title-input, .document-title-error, .document-parent-breadcrumb, .document-child-breadcrumb, .document-project-prefix, .document-project-separator, .room-member-overflow, .btn) {
+	font-size: var(--text-xs);
+}
+
+.room-header :is(.room-member-face [role="img"], .cv-badge[data-size="sm"]) {
+	font-size: var(--text-2xs);
+}
+
 .hosted-header {
 	height: calc(3.5rem + env(safe-area-inset-top));
 	padding-right: calc(0.75rem + env(safe-area-inset-right));

@@ -230,7 +230,7 @@ export function Header(
 				)}
 				{archivedAt && (
 					<span className="document-archived-status">
-						<Badge icon={ArchiveIcon} label="Archived" size="sm" />
+						<Badge icon={ArchiveIcon} label="Archived" size="sm" tone="warning" />
 						{canManage && (
 							<button
 								className="btn btn-sm btn-outline"
