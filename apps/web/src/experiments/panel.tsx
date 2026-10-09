@@ -38,7 +38,7 @@ export function ExperimentsPanel({ store, userId, canEdit, onClose }: {
 	return (
 		<NavigationDialog
 			title="Investigations"
-			motion={{ phase: "open", className: "" }}
+			motion={{ phase: "open", className: "is-open" }}
 			onDismiss={onClose}
 		>
 			<div className="flex max-h-[75vh] min-w-0 flex-col gap-4 overflow-auto">
