@@ -48,6 +48,7 @@ export function extractJavaScript(
 	baseLine: number,
 	result: Extraction,
 	addCss: (css: string, line?: number, context?: string) => void,
+	staticImport?: (specifier: string, name: string) => Record<string, string> | undefined,
 ): void {
 	let tree: Ast;
 	try {
@@ -78,12 +79,33 @@ export function extractJavaScript(
 		if (current.type === "VariableDeclarator") {
 			bindPattern(node(current.id), scope, node(current.init));
 		}
+		if (current.type === "FunctionDeclaration") {
+			bindPattern(node(current.id), parent, current);
+		}
 		if (Array.isArray(current.params)) {
 			for (let param of current.params) bindPattern(node(param), scope);
 		}
 		if (current.type === "CatchClause") bindPattern(node(current.param), scope);
 		if (current.type.startsWith("Import") && current.local) {
-			bindPattern(node(current.local), scope);
+			let imported = node(current.imported);
+			let specifier = node(parents.get(current)?.source);
+			let value = imported && specifier
+				&& staticImport?.(String(specifier.value), String(imported.name));
+			bindPattern(
+				node(current.local),
+				scope,
+				value
+					? {
+						type: "ObjectExpression",
+						properties: Object.entries(value).map(([key, value]) => ({
+							type: "ObjectProperty",
+							foundation: true,
+							key: { type: "StringLiteral", value: key },
+							value: { type: "StringLiteral", value },
+						})),
+					}
+					: undefined,
+			);
 		}
 		for (let child of children(current)) {
 			parents.set(child, current);
@@ -121,6 +143,19 @@ export function extractJavaScript(
 			let value = bindingScope(current)?.bindings.get(String(current.name));
 			return value ? resolve(value, seen) : current;
 		}
+		if (current.type === "ConditionalExpression") {
+			let test = resolve(node(current.test), new Set(seen));
+			if (test?.type === "BooleanLiteral") {
+				return resolve(node(test.value ? current.consequent : current.alternate), seen);
+			}
+		}
+		if (
+			current.type === "CallExpression"
+			&& node(current.callee)?.type === "MemberExpression"
+			&& node(node(current.callee)?.object)?.name === "Object"
+			&& node(node(current.callee)?.property)?.name === "freeze"
+			&& !bindingScope(node(node(current.callee)?.object)!)
+		) return resolve(node((current.arguments as unknown[])[0]), seen);
 		if (["MemberExpression", "OptionalMemberExpression"].includes(current.type)) {
 			let object = resolve(node(current.object), seen);
 			if (object?.type === "ObjectExpression" && !mutated.has(object)) {
@@ -213,6 +248,7 @@ export function extractJavaScript(
 			line: line(origin),
 			context: [context, contextOf(origin)].filter(Boolean).join(" > "),
 			...(property === "*" || literal === undefined ? { dynamic: true } : {}),
+			...(origin.foundation ? { foundation: true } : {}),
 		});
 	};
 	let mutated = new Set<Ast>();
@@ -252,6 +288,38 @@ export function extractJavaScript(
 		} else if (current.type === "LogicalExpression") {
 			if (current.operator !== "&&") style(node(current.left), origin, new Set(seen));
 			style(node(current.right), origin, new Set(seen));
+		} else if (current.type === "CallExpression") {
+			let producer = resolve(node(current.callee));
+			let body = producer && node(producer.body);
+			let statements = body?.type === "BlockStatement"
+				? (body.body as unknown[]).map(node)
+				: undefined;
+			let returned = statements?.at(-1);
+			let containsObject = (argument: Ast | undefined, visited = new Set<Ast>()): boolean => {
+				let value = resolve(argument);
+				if (!value || visited.has(value)) return false;
+				visited.add(value);
+				if (value?.type === "ObjectExpression") return true;
+				return value?.type === "ConditionalExpression"
+					&& (containsObject(node(value.consequent), new Set(visited))
+						|| containsObject(node(value.alternate), new Set(visited)));
+			};
+			let passesObjectToCall = (statement: Ast): boolean => {
+				if (
+					statement.type === "CallExpression"
+					&& (statement.arguments as unknown[]).some(argument => containsObject(node(argument)))
+				) return true;
+				return children(statement).some(passesObjectToCall);
+			};
+			if (
+				producer && ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]
+					.includes(producer.type)
+				&& statements?.slice(0, -1).every(statement => statement?.type === "VariableDeclaration")
+				&& returned?.type === "ReturnStatement"
+				&& !statements.some(statement => statement && passesObjectToCall(statement))
+			) {
+				style(node(returned.argument), origin, new Set(seen));
+			} else add("*", value, origin, "unresolved style");
 		} else {
 			add("*", value, origin, "unresolved style");
 		}

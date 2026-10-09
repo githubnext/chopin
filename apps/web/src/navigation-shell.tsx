@@ -24,7 +24,6 @@ import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
 import type { NoticeOptions } from "./navigation-notice";
 import { motionContract } from "./motion-contract";
-import { NavigationFocusScope } from "./navigation-focus";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 import {
@@ -46,14 +45,13 @@ import {
 	SIDEBAR_STORAGE_KEY,
 } from "./project-sidebar-chrome";
 import { clearRepositoryCache } from "./repository-cache";
-import { TerminalAlert } from "./terminal-alert";
+import { NavigationError } from "./navigation-error";
 import { useProjectDocuments } from "./use-project-documents";
 import { useDocumentCreation } from "./use-document-creation";
 import { requestTitleEdit } from "./title-edit";
 
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
-import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
@@ -65,33 +63,32 @@ export type Navigate = (
 	options?: { opener?: ResearchOpener; replace?: boolean },
 ) => void;
 
-class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class LazyDialogBoundary extends Component<
+	{ children: ReactNode; onFailure: () => void },
+	{ failed: boolean }
+> {
 	override state = { failed: false };
 
 	static getDerivedStateFromError() {
 		return { failed: true };
 	}
 
+	override componentDidCatch() {
+		this.props.onFailure();
+	}
+
 	override render() {
 		if (!this.state.failed) return <Suspense fallback={null}>{this.props.children}</Suspense>;
-		return (
-			<TerminalAlert className="navigation-error">
-				Could not load this dialog.
-				<button
-					className="btn btn-sm btn-secondary ml-2"
-					onClick={() => location.reload()}
-					type="button"
-				>
-					Reload
-				</button>
-			</TerminalAlert>
-		);
+		return null;
 	}
 }
 
 let NavigationNotice = lazy(() => import("./navigation-notice-view"));
+let NavigationDrawer = lazy(() =>
+	import("./navigation-drawer").then(module => ({ default: module.NavigationDrawer }))
+);
 
-class SidebarDecisionBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class SidebarFeatureBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 	override state = { failed: false };
 
 	static getDerivedStateFromError() {
@@ -107,6 +104,9 @@ let ProjectSidebar = lazy(() =>
 	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
 );
 let SidebarDecisionCounts = lazy(() => import("./sidebar-decision-counts"));
+let SidebarResizeHandle = lazy(() =>
+	import("./sidebar-resize-handle").then(module => ({ default: module.SidebarResizeHandle }))
+);
 let EmptyWorkspace = lazy(() =>
 	import("./empty-workspace").then(module => ({ default: module.EmptyWorkspace }))
 );
@@ -192,84 +192,6 @@ function useSidebarWidth() {
 	return [width, (delta: number) => setWidth(current => clamp(current + delta))] as const;
 }
 
-function SidebarResizeHandle(
-	{ onResize, width }: { onResize: (delta: number) => void; width: number },
-) {
-	let origin = useRef(0);
-	return (
-		<div
-			aria-label="Resize Projects sidebar"
-			aria-orientation="vertical"
-			aria-valuemax={SIDEBAR_MAX}
-			aria-valuemin={SIDEBAR_MIN}
-			aria-valuenow={width}
-			className="project-sidebar-resize"
-			onKeyDown={event => {
-				let step = event.shiftKey ? 64 : 16;
-				if (event.key === "ArrowRight") onResize(step);
-				else if (event.key === "ArrowLeft") onResize(-step);
-				else if (event.key === "Home") onResize(SIDEBAR_MIN - width);
-				else if (event.key === "End") onResize(SIDEBAR_MAX - width);
-				else return;
-				event.preventDefault();
-			}}
-			onPointerDown={event => {
-				origin.current = event.clientX;
-				event.currentTarget.setPointerCapture(event.pointerId);
-			}}
-			onPointerMove={event => {
-				if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-				let delta = event.clientX - origin.current;
-				origin.current = event.clientX;
-				onResize(delta);
-			}}
-			role="separator"
-			tabIndex={0}
-		/>
-	);
-}
-
-function NavigationDrawer(
-	{
-		children,
-		motion,
-		onDismiss,
-	}: {
-		children: ReactNode;
-		motion: Exclude<TransitionPresence<boolean>, { phase: "closed" }>;
-		onDismiss: () => void;
-	},
-) {
-	let active = motion.phase !== "closing";
-	return (
-		<div
-			aria-hidden={active ? undefined : "true"}
-			className={`navigation-drawer motion-drawer ${motion.className}`}
-			inert={!active}
-			role="presentation"
-		>
-			<button
-				aria-label="Close Projects sidebar"
-				className="navigation-drawer-backdrop"
-				data-press="none"
-				onClick={onDismiss}
-				type="button"
-			/>
-			<NavigationFocusScope active={active} onDismiss={onDismiss}>
-				<div
-					aria-label="Projects"
-					aria-modal="true"
-					className="project-sidebar-frame"
-					role="dialog"
-					tabIndex={-1}
-				>
-					{children}
-				</div>
-			</NavigationFocusScope>
-		</div>
-	);
-}
-
 export function NavigationShell(
 	{
 		children,
@@ -322,6 +244,7 @@ export function NavigationShell(
 		| { channel: Api.Channel; type: "delete" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
+	let [dialogLoadFailed, setDialogLoadFailed] = useState(false);
 	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [notice, showNotice] = useState<NoticeOptions>();
@@ -661,6 +584,7 @@ export function NavigationShell(
 	};
 
 	let showDialog = useCallback((next: NonNullable<typeof dialog>) => {
+		setDialogLoadFailed(false);
 		setDrawerOpen(false);
 		setAccountOpen(false);
 		setDialog(next);
@@ -933,6 +857,13 @@ export function NavigationShell(
 		: undefined;
 	let content = (
 		<>
+			{dialogLoadFailed && (
+				<NavigationError
+					message="Could not load this dialog."
+					onRetry={() => location.reload()}
+					retryLabel="Reload"
+				/>
+			)}
 			{notice && (
 				<Suspense>
 					<NavigationNotice notice={notice} show={showNotice} />
@@ -949,68 +880,54 @@ export function NavigationShell(
 				</div>
 			)}
 			{creation.error && presentedDialog !== "new" && (
-				<TerminalAlert className="navigation-error">
-					{creation.error.message}
-					{retryProject && (
-						<button
-							className="btn btn-sm btn-secondary ml-2"
-							onClick={() => createDocument(retryProject)}
-							type="button"
-						>
-							Try again
-						</button>
-					)}
-				</TerminalAlert>
+				<NavigationError
+					message={creation.error.message}
+					onRetry={retryProject ? () => void createDocument(retryProject) : undefined}
+				/>
 			)}
 			{error !== undefined && (
-				<TerminalAlert className="navigation-error">
-					{error.reason instanceof Error
+				<NavigationError
+					message={error.reason instanceof Error
 						? error.reason.message
 						: "Could not update navigation."}
-					{error.retry && (
-						<button
-							className="btn btn-sm btn-secondary ml-2"
-							onClick={retryError}
-							type="button"
-						>
-							Try again
-						</button>
-					)}
-				</TerminalAlert>
+					onRetry={error.retry ? retryError : undefined}
+				/>
 			)}
-			{children ?? (unknownRepository
-				? (
-					<WorkspaceNotice
-						actions={
-							<button
-								className="btn btn-md btn-primary"
-								onClick={() => showDialog("add")}
-								type="button"
-							>
-								Add project
-							</button>
-						}
-						body="Add it to open its documents."
-						title={`${unknownRepository} isn't one of your projects`}
-					/>
-				)
-				: (
-					<Suspense fallback={null}>
-						<EmptyWorkspace
-							disabled={creationTarget.type === "loading" || creation.pending.size > 0}
-							hasProjects={navigation?.projects.length !== 0}
-							onAddProject={() => showDialog("add")}
-							onNewDocument={newDocument}
+			<div className="navigation-body">
+				{children ?? (unknownRepository
+					? (
+						<WorkspaceNotice
+							actions={
+								<button
+									className="btn btn-md btn-primary"
+									onClick={() => showDialog("add")}
+									type="button"
+								>
+									Add project
+								</button>
+							}
+							body="Add it to open its documents."
+							title={`${unknownRepository} isn't one of your projects`}
 						/>
-					</Suspense>
-				))}
+					)
+					: (
+						<Suspense fallback={null}>
+							<EmptyWorkspace
+								disabled={creationTarget.type === "loading" || creation.pending.size > 0}
+								hasProjects={navigation?.projects.length !== 0}
+								onAddProject={() => showDialog("add")}
+								onNewDocument={newDocument}
+							/>
+						</Suspense>
+					))}
+			</div>
 		</>
 	);
 
 	return (
 		<NavigationDocument.Provider value={navigationDocument}>
 			{countsReady && (
-				<SidebarDecisionBoundary>
+				<SidebarFeatureBoundary>
 					<SidebarDecisionCounts
 						archived={catalogueMode === "archived"}
 						onCounts={updateDecisionCounts}
@@ -1020,7 +937,7 @@ export function NavigationShell(
 						refreshProject={refreshProject}
 						resync={resyncDecisions}
 					/>
-				</SidebarDecisionBoundary>
+				</SidebarFeatureBoundary>
 			)}
 			<div
 				className="navigation-shell"
@@ -1035,7 +952,9 @@ export function NavigationShell(
 						style={{ "--project-sidebar-width": `${width}px` } as CSSProperties}
 					>
 						<div className="project-sidebar-motion-content">{sidebar}</div>
-						<SidebarResizeHandle onResize={resize} width={width} />
+						<SidebarFeatureBoundary>
+							<SidebarResizeHandle onResize={resize} width={width} />
+						</SidebarFeatureBoundary>
 					</div>
 				)}
 				{triggerVisible && (
@@ -1046,9 +965,16 @@ export function NavigationShell(
 					/>
 				)}
 				{drawerPresence.phase !== "closed" && (
-					<NavigationDrawer motion={drawerPresence} onDismiss={dismissDrawer}>
-						{sidebar}
-					</NavigationDrawer>
+					<LazyDialogBoundary
+						onFailure={() => {
+							dismissDrawer();
+							setDialogLoadFailed(true);
+						}}
+					>
+						<NavigationDrawer motion={drawerPresence} onDismiss={dismissDrawer}>
+							{sidebar}
+						</NavigationDrawer>
+					</LazyDialogBoundary>
 				)}
 				{children === undefined
 					? (
@@ -1068,7 +994,7 @@ export function NavigationShell(
 						</div>
 					)}
 				{dialogMotion && presentedDialog === "add" && (
-					<LazyDialogBoundary>
+					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
 						<AddProjectDialog
 							added={navigation?.projects ?? []}
 							motion={dialogMotion}
@@ -1076,7 +1002,9 @@ export function NavigationShell(
 								catalogueRefreshes.current.set(project.repositoryId, Date.now());
 								setFocusProjectId(project.repositoryId);
 								setCollapsed(false);
-								if (mode === "drawer") setDrawerOpen(true);
+								if (mode === "drawer") {
+									setDrawerOpen(true);
+								}
 								void refresh();
 							}}
 							onDismiss={dismissDialog}
@@ -1085,12 +1013,13 @@ export function NavigationShell(
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && presentedDialog === "new" && (
-					<LazyDialogBoundary>
+					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
 						<Suspense fallback={null}>
 							<NewDocumentDialog
 								error={creation.error?.message}
 								motion={dialogMotion}
-								onAddProject={() => showDialog("add")}
+								onAddProject={() =>
+									showDialog("add")}
 								onCreate={createDocument}
 								onDismiss={() => {
 									setDialog(undefined);
@@ -1106,7 +1035,7 @@ export function NavigationShell(
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && presentedDialog === "search" && (
-					<LazyDialogBoundary>
+					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
 						<DocumentSearchDialog
 							includeArchived={catalogueMode === "archived"}
 							motion={dialogMotion}
@@ -1119,17 +1048,18 @@ export function NavigationShell(
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && presentedDialog === "shortcuts" && (
-					<LazyDialogBoundary>
+					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
 						<KeyboardShortcutsDialog motion={dialogMotion} onDismiss={dismissDialog} />
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && typeof presentedDialog === "object"
 					&& presentedDialog.type === "delete" && (
-					<LazyDialogBoundary>
+					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
 						<DeleteDocumentDialog
 							channel={presentedDialog.channel}
 							motion={dialogMotion}
-							onDeleted={() => documentDeleted(presentedDialog.channel.id)}
+							onDeleted={() =>
+								documentDeleted(presentedDialog.channel.id)}
 							onDismiss={dismissDialog}
 						/>
 					</LazyDialogBoundary>

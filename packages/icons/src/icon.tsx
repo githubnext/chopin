@@ -1,7 +1,10 @@
 import type { SVGProps } from "react";
 
+export let iconSizes = [10, 12, 14, 16, 18, 24] as const;
+export type IconSize = typeof iconSizes[number];
+
 export type IconProps = Omit<SVGProps<SVGSVGElement>, "height" | "width"> & {
-	size?: number;
+	size?: IconSize;
 };
 
 export function LineIcon(

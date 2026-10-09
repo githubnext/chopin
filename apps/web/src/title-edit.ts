@@ -18,7 +18,7 @@ export let heldTyping: { text: string; enter?: boolean } | undefined;
 // Keys pressed while a new document opens would land on the page or its body instead.
 function hold(event: KeyboardEvent) {
 	if (
-		!heldTyping || event.metaKey || event.ctrlKey
+		!heldTyping || event.metaKey || event.ctrlKey || event.altKey || event.isComposing
 		|| (event.target as Element).matches("input,textarea")
 	) return;
 	if (event.key == "Enter") heldTyping.enter = true;

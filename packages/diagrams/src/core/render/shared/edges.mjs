@@ -2,12 +2,16 @@
 import { el, esc, roundedPath, text } from "../../svg.mjs";
 import { ceil4, textWidth } from "../../text.mjs";
 import { rectsOverlap } from "../../svg.mjs";
+import { DIAGRAM_TYPE, LABEL_BOX } from "../../tokens.mjs";
 
-export const EDGE_LABEL = { size: 8, mono: true, tracking: 0.06, upper: true };
+export const EDGE_LABEL = DIAGRAM_TYPE.edge;
 const HEAD = 8;
 
 export function labelBox(label) {
-	return { w: ceil4(textWidth(label, EDGE_LABEL) + 10), h: 12 };
+	return {
+		w: ceil4(textWidth(label, EDGE_LABEL) + LABEL_BOX.badgePaddingInline * 2),
+		h: EDGE_LABEL.lineHeight + LABEL_BOX.badgePaddingBlock * 2,
+	};
 }
 
 function unit(a, b) {
@@ -185,7 +189,13 @@ export function drawEdge(e, { step, labelBoxAt } = {}) {
 		const b = labelBoxAt;
 		parts.push(el("g", { class: "e-label-g" }, [
 			el("rect", { class: "e-label-bg", x: b.x, y: b.y, width: b.w, height: b.h, rx: 2 }),
-			text({ class: "e-label", x: b.x + b.w / 2, y: b.y + 8.6, "text-anchor": "middle" }, e.label),
+			text({
+				class: "e-label",
+				x: b.x + b.w / 2,
+				y: b.y + b.h / 2,
+				"text-anchor": "middle",
+				"dominant-baseline": "central",
+			}, e.label),
 		]));
 	}
 	return el("g", {

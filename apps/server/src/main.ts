@@ -34,7 +34,8 @@ import * as VisualInject from "./visual-decisions/inject";
 import { previewResponse } from "./visual-preview/descriptor";
 import { proxy, serve } from "./client";
 import { describe, load } from "./config";
-import { GitHubError } from "./github/client";
+import { GitHubClient, GitHubError } from "./github/client";
+import { GitHubReferences } from "./github/references";
 import { Router } from "./http/router";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
@@ -1672,6 +1673,9 @@ registerChannelRoutes(router, hostedAuth, {
 			: undefined;
 		return previewResponse(definition, hostedAuth.config.origin, resolve);
 	},
+	references: hostedAuth.github instanceof GitHubClient
+		? new GitHubReferences(hostedAuth.github)
+		: undefined,
 });
 registerResearchWorkspaceRoutes(router, hostedAuth, {
 	service: researchService,

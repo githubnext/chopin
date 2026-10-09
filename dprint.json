@@ -24,6 +24,8 @@
 		"**/*-lock.json",
 		"**/*.lock",
 		"data/**",
+		"evals/datasets/registry.json",
+		"evals/datasets/v2/proposals/rust-async-await.md",
 		"e2e/.scratch/**",
 		"e2e/test-results/**",
 		"e2e/playwright-report/**"

@@ -71,6 +71,8 @@ export function DecisionViewControl(
 				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
 				className={`btn btn-sm gap-1 transition-[background-color,box-shadow,color] ${
+					unanswered > 0 ? "btn-with-count" : ""
+				} ${
 					view === "decisions"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"
@@ -83,12 +85,14 @@ export function DecisionViewControl(
 				{unanswered > 0 && (
 					<span
 						aria-hidden="true"
+						className="flex"
 						data-plan-decision-count
 					>
 						<Count
-							appearance="quiet"
+							appearance="control"
 							key={attention ? `attention-${unanswered}` : "settled"}
 							motion={attention}
+							selected={view === "decisions"}
 						>
 							{unanswered}
 						</Count>

@@ -190,7 +190,13 @@ describe("the GitHub client", () => {
 			account: { login: "octo-org", type: "organization" },
 			repositorySelection: "selected",
 			suspended: false,
-			permissions: { contents: true, pullRequests: true, checks: true, statuses: true },
+			permissions: {
+				contents: true,
+				pullRequests: true,
+				checks: true,
+				statuses: true,
+				issues: false,
+			},
 		});
 		expect(installations.nextPage).toBe(2);
 		let page = await client.installationRepositories("ghu_user", "123", 1);
@@ -455,5 +461,202 @@ describe("the GitHub client", () => {
 			expect(err).toBeInstanceOf(GitHubError);
 			expect((err as GitHubError).status).toBe(401);
 		}
+	});
+
+	describe("reference summaries", () => {
+		function pull(overrides: Record<string, unknown> = {}) {
+			return {
+				number: 12,
+				title: "Ship pills",
+				state: "closed",
+				draft: false,
+				user: { login: "octocat", avatar_url: "https://avatars.test/octocat" },
+				labels: [
+					{ name: "ui", color: "A2EEEF" },
+					{ name: "bad", color: "url(javascript:1)" },
+					"not-an-object",
+				],
+				comments: 3,
+				created_at: "2026-10-01T10:00:00Z",
+				updated_at: "2026-10-02T10:00:00Z",
+				closed_at: "2026-10-02T10:00:00Z",
+				merged_at: "2026-10-02T10:00:00Z",
+				head: { ref: "github-pills" },
+				base: { ref: "main" },
+				html_url: "https://evil.test/redirect",
+				...overrides,
+			};
+		}
+
+		function issue(overrides: Record<string, unknown> = {}) {
+			return {
+				number: 5,
+				title: "Pills are missing",
+				state: "closed",
+				state_reason: "not_planned",
+				user: null,
+				labels: [],
+				comments: 0,
+				created_at: "2026-10-01T10:00:00Z",
+				updated_at: "2026-10-02T10:00:00Z",
+				closed_at: "2026-10-02T10:00:00Z",
+				...overrides,
+			};
+		}
+
+		function client(respond: (url: URL, headers: Headers) => Response) {
+			let requests: Array<{ path: string; headers: Headers }> = [];
+			let github = new GitHubClient({
+				fetch: async (input, init) => {
+					let url = new URL(String(input));
+					let headers = new Headers(init?.headers);
+					requests.push({ path: url.pathname, headers });
+					return respond(url, headers);
+				},
+				endpoints: { api: "https://api.test" },
+			});
+			return { github, requests };
+		}
+
+		it("maps a merged pull request and builds its URL from the repository", async () => {
+			let { github, requests } = client(() => Response.json(pull()));
+			let summary = await github.pullRequest("ghu_user", "octo-org", "score", 12);
+			expect(requests[0]!.path).toBe("/repos/octo-org/score/pulls/12");
+			expect(requests[0]!.headers.get("authorization")).toBe("Bearer ghu_user");
+			expect(summary).toEqual({
+				kind: "pull",
+				owner: "octo-org",
+				repository: "score",
+				number: 12,
+				url: "https://github.com/octo-org/score/pull/12",
+				title: "Ship pills",
+				author: { login: "octocat", avatarUrl: "https://avatars.test/octocat" },
+				labels: [{ name: "ui", color: "a2eeef" }],
+				comments: 3,
+				createdAt: "2026-10-01T10:00:00.000Z",
+				updatedAt: "2026-10-02T10:00:00.000Z",
+				closedAt: "2026-10-02T10:00:00.000Z",
+				state: "merged",
+				draft: false,
+				mergedAt: "2026-10-02T10:00:00.000Z",
+				headBranch: "github-pills",
+				baseBranch: "main",
+			});
+		});
+
+		it("keeps open, draft and unmerged closed pull request states distinct", async () => {
+			let next = pull();
+			let { github } = client(() => Response.json(next));
+			next = pull({ state: "open", merged_at: null, closed_at: null, draft: true });
+			expect(await github.pullRequest("t", "octo-org", "score", 12)).toMatchObject({
+				state: "open",
+				draft: true,
+				closedAt: null,
+				mergedAt: null,
+			});
+			next = pull({ merged_at: null });
+			expect((await github.pullRequest("t", "octo-org", "score", 12) as { state: string }).state)
+				.toBe("closed");
+		});
+
+		it("maps issue state reasons", async () => {
+			let next: Record<string, unknown> = issue();
+			let { github, requests } = client(() => Response.json(next));
+			let summary = await github.issue("t", "octo-org", "score", 5);
+			expect(requests[0]!.path).toBe("/repos/octo-org/score/issues/5");
+			expect(summary).toMatchObject({
+				kind: "issue",
+				state: "closed",
+				stateReason: "not_planned",
+				author: null,
+				url: "https://github.com/octo-org/score/issues/5",
+			});
+			expect(summary).not.toHaveProperty("headBranch");
+			for (
+				let [reason, expected] of [
+					["completed", "completed"],
+					["duplicate", "not_planned"],
+					[null, "completed"],
+				] as const
+			) {
+				next = issue({ state_reason: reason });
+				expect(await github.issue("t", "octo-org", "score", 5)).toMatchObject({
+					stateReason: expected,
+				});
+			}
+			next = issue({ state: "open", state_reason: "reopened", closed_at: null });
+			expect(await github.issue("t", "octo-org", "score", 5)).toMatchObject({
+				state: "open",
+				stateReason: null,
+			});
+		});
+
+		it("does not summarize a pull request through the issues endpoint", async () => {
+			let { github } = client(() => Response.json(issue({ pull_request: { url: "x" } })));
+			await expect(github.issue("t", "octo-org", "score", 5)).rejects.toMatchObject({
+				status: 404,
+			});
+		});
+
+		it("revalidates with an ETag", async () => {
+			let { github, requests } = client((_url, headers) =>
+				headers.get("if-none-match") === '"v1"'
+					? new Response(null, { status: 304, headers: { etag: '"v1"' } })
+					: Response.json(pull(), { headers: { etag: '"v1"' } })
+			);
+			let first = await github.pullRequest("t", "octo-org", "score", 12, {});
+			expect(first).toMatchObject({ etag: '"v1"', state: "merged" });
+			expect(await github.pullRequest("t", "octo-org", "score", 12, { ifNoneMatch: '"v1"' }))
+				.toEqual({ notModified: true, etag: '"v1"' });
+			expect(requests[1]!.headers.get("if-none-match")).toBe('"v1"');
+		});
+
+		it("classifies missing, forbidden, rate-limited and malformed responses", async () => {
+			let cases: Array<[Response, number]> = [
+				[Response.json({ message: "Not Found" }, { status: 404 }), 404],
+				[Response.json({ message: "Forbidden" }, { status: 403 }), 403],
+				[Response.json({ message: "slow down" }, { status: 429 }), 429],
+				[
+					Response.json({ message: "API rate limit exceeded" }, {
+						status: 403,
+						headers: { "x-ratelimit-remaining": "0" },
+					}),
+					429,
+				],
+				[Response.json({ number: 12 }), 502],
+			];
+			for (let [response, status] of cases) {
+				let { github } = client(() => response);
+				await expect(github.pullRequest("t", "octo-org", "score", 12)).rejects.toMatchObject({
+					status,
+				});
+			}
+			let { github, requests } = client(() => Response.json(pull()));
+			await expect(github.issue("t", "octo-org", "score", 0)).rejects.toMatchObject({
+				status: 404,
+			});
+			expect(requests).toHaveLength(0);
+		});
+
+		it("names the installation and its issue permission with repository access", async () => {
+			let { github } = client(url =>
+				url.pathname === "/user/installations"
+					? Response.json({
+						installations: [{
+							...installation(),
+							permissions: { ...installation().permissions, issues: "read" },
+						}],
+					})
+					: Response.json({ repositories: [repository("R_score")] })
+			);
+			let found = await github.installedRepository("t", "octo-org", "score");
+			expect(found?.repository.id).toBe("R_score");
+			expect(found?.installation).toMatchObject({
+				id: "123",
+				permissions: { pullRequests: true, issues: true },
+			});
+			expect(await github.installedRepository("t", "octo-org", "elsewhere")).toBeUndefined();
+			expect(await github.installedRepository("t", "someone-else", "score")).toBeUndefined();
+		});
 	});
 });

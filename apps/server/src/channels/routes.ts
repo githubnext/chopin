@@ -1,4 +1,5 @@
 import { documentPath } from "@chopin/protocol/document-url";
+import { MAX_GITHUB_REFERENCES, parseGitHubReferenceKey } from "@chopin/protocol/github-reference";
 
 import { GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
@@ -10,7 +11,9 @@ import { normalizedTitle } from "./title";
 
 import type { HostedAuth } from "../auth/routes";
 import type { AuthenticatedSession } from "../auth/session";
+import type { GitHubReference, GitHubReferencesResponse } from "@chopin/protocol/github-reference";
 import type { Repository } from "../github/client";
+import type { GitHubReferences } from "../github/references";
 import type { Router } from "../http/router";
 import type { ChannelArchiveResult, ChannelCursor, ChannelRecord } from "../storage/model";
 
@@ -212,6 +215,7 @@ export function registerChannelRoutes(
 		onChannelRestored?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 		onVisualPreview?: (channelId: string, decisionId: string) => Promise<Response>;
 		random?: () => number;
+		references?: GitHubReferences;
 	} = {},
 ): void {
 	router.on(
@@ -411,6 +415,51 @@ export function registerChannelRoutes(
 			return failure(err, request, auth);
 		}
 	});
+
+	let references = options.references;
+	if (references) {
+		router.on(
+			"GET",
+			"/api/channels/:channelId/github-references",
+			async (request, url, params) => {
+				try {
+					let session = await auth.sessions.authenticate(request);
+					if (!session) return json({ error: "authentication required" }, 401);
+					let keys = [...new Set(url.searchParams.getAll("ref"))];
+					let parsed = keys.map(parseGitHubReferenceKey);
+					if (
+						keys.length === 0 || keys.length > MAX_GITHUB_REFERENCES
+						|| parsed.includes(undefined)
+					) {
+						return json({ error: "invalid GitHub references" }, 400);
+					}
+					let id = params.channelId!;
+					if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
+					let channel = await auth.storage.channels.get(id);
+					if (!channel) return json({ error: "channel not found" }, 404);
+					let repo = await authorizedRepository(
+						auth,
+						session,
+						channel.repositoryOwner,
+						channel.repositoryName,
+					);
+					if (repo.id !== channel.repositoryId || !repo.permissions.pull) {
+						return json({ error: "channel not found" }, 404);
+					}
+					let { value } = await auth.sessions.use(
+						session,
+						token => references.resolve(token, parsed as GitHubReference[]),
+					);
+					let body: GitHubReferencesResponse = {
+						references: Object.fromEntries(keys.map((key, index) => [key, value[index]!])),
+					};
+					return json(body);
+				} catch (err) {
+					return failure(err, request, auth);
+				}
+			},
+		);
+	}
 
 	router.on("PATCH", "/api/channels/:channelId", async (request, _url, params) => {
 		if (request.headers.get("origin") !== auth.config.origin) {

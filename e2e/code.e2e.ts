@@ -594,14 +594,16 @@ test("the language menu is a keyboard-operable listbox", async ({ join, room, se
 	await written(page, room, /^```(?!typescript$)\S+$/m);
 });
 
-test("the language menu takes focus before the next animation frame", async ({ join, seed }) => {
+test("the language menu takes focus before the next animation frame", async ({ join, page, seed }) => {
 	await seed("```typescript\nlet total = 1;\n```\n");
-	let page = await join("ana");
+	let time = new Date("2026-01-01T00:00:00Z");
+	await page.clock.install({ time });
+	await join("ana");
 	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
 	let list = page.getByRole("listbox", { name: "Code language" });
 
-	await page.clock.install();
-	await page.clock.pauseAt(new Date());
+	// Pause ahead of the fixed epoch rather than racing two system clocks.
+	await page.clock.pauseAt(new Date(time.getTime() + 60_000));
 	await trigger.focus();
 	await page.keyboard.press("ArrowDown");
 	await expect(list).toBeFocused();

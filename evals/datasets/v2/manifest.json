@@ -1,0 +1,654 @@
+{
+	"version": 2,
+	"partition": "development",
+	"historicalRegistrySha256": "5cdc086840041f9b5c2140d90f9baa8355c7604b8b6fa46d991f09c9f3b889cb",
+	"cases": [
+		{
+			"id": "D01",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "editor-foundation",
+			"checkpoints": [
+				"c2",
+				"c5",
+				"c6",
+				"c7"
+			],
+			"file": {
+				"path": "synthetic/D01.json",
+				"sha256": "af9d29ea3644ca3c3cc2796b7eec058fc48c0541a5a0cbe1c3634f6e5067598c",
+				"bytes": 1706
+			},
+			"historicalSourceSha256": "642b455dcd148c88c960da3da83e456cfaceff439454bd822917df935897d032"
+		},
+		{
+			"id": "D02",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "hosting-beta",
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6",
+				"c7"
+			],
+			"file": {
+				"path": "synthetic/D02.json",
+				"sha256": "31c7852322e9b3f718297d914cdc84f8cd81e08b323f353c79d30c76c982732c",
+				"bytes": 1643
+			},
+			"historicalSourceSha256": "da0abdb23cb0f3e24a1a2560b23de5bfffe78a0d7c6e35bda999d387b1eea561"
+		},
+		{
+			"id": "D03",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "notification-mail",
+			"checkpoints": [
+				"c4",
+				"ca1",
+				"c5",
+				"c6",
+				"c7"
+			],
+			"file": {
+				"path": "synthetic/D03.json",
+				"sha256": "981aa6d6986677216aeea423b32bfe6cbcb74cc3139f856bdcb7caa841565698",
+				"bytes": 1876
+			},
+			"historicalSourceSha256": "b196d28344fb98493fd115fcd6bed326583d433b9ed457ec905cbeee7bf538ab"
+		},
+		{
+			"id": "D04",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "upload-originals",
+			"checkpoints": [
+				"c5",
+				"ca1",
+				"cr1",
+				"c6",
+				"c7"
+			],
+			"file": {
+				"path": "synthetic/D04.json",
+				"sha256": "825c22973a0dbdae1e6ab4d09880a70778a4732ff4651bff593490c1f317fcc9",
+				"bytes": 1889
+			},
+			"historicalSourceSha256": "54a33521b058925a49c6758b81230d76fa07d175ab8f3518407e4cfcef17cf6a"
+		},
+		{
+			"id": "D05",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "two-topic-storage-search",
+			"checkpoints": [
+				"c2",
+				"c5",
+				"c7",
+				"c8"
+			],
+			"file": {
+				"path": "synthetic/D05.json",
+				"sha256": "e05179c4ab568beede91ed831f144bdd96855f84d1adc738532296355089aa37",
+				"bytes": 1823
+			},
+			"historicalSourceSha256": "e8f46c65db393c080d075780e430e23ef06f92fba51de166ee1858b71dd27c32"
+		},
+		{
+			"id": "D06",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "authentication",
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D06.json",
+				"sha256": "778a5be44e3dd7cd15119c64b0f5a206671d3aaddef01ca12bd21a68bdf0c6ff",
+				"bytes": 1470
+			},
+			"historicalSourceSha256": "377d95a1ae41ddc838d2e436cf42a42627ff894f07ee5bdcccaa3a99c9ebe44b"
+		},
+		{
+			"id": "D07",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "job-queue",
+			"checkpoints": [
+				"c2",
+				"c4",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D07.json",
+				"sha256": "1cd92aa5a1dddbb38188b148d7248cace54051c77438fb1cc0321dcda87cd91c",
+				"bytes": 1503
+			},
+			"historicalSourceSha256": "c76aca7d2e6eede5c93b41be8bc589e52a691e9774a9144ac46e134a09398ac0"
+		},
+		{
+			"id": "D08",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "rollout",
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D08.json",
+				"sha256": "1dd5630f3d01e68b5ea9e6dacfcfab86970d654dc6d5f78e811ad0cdf02dc065",
+				"bytes": 1434
+			},
+			"historicalSourceSha256": "64b0296260c33b3b6709f3ff88d691b331b88f3383e5ab0c500490591444f297"
+		},
+		{
+			"id": "D09",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "observability",
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D09.json",
+				"sha256": "9b1888cbc30f37ff2c8d4f49849c8589fe16b04c303854cb9577de73bc81ba8c",
+				"bytes": 1464
+			},
+			"historicalSourceSha256": "2ccdd7ed9733b4b14066f959121e57ca65dad3c2fc2c7a6a5ad812fdf4f03890"
+		},
+		{
+			"id": "D10",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "anchoring",
+			"checkpoints": [
+				"c4",
+				"c6",
+				"c7"
+			],
+			"file": {
+				"path": "synthetic/D10.json",
+				"sha256": "6fbcf96a56cf8f1aba832ea7afa070edf2d6432a426523dd8a376d4a376dac38",
+				"bytes": 1634
+			},
+			"historicalSourceSha256": "36e5520e0ec9b6d49b8bede81f0e06723868ec53ec38faf9b2e6f261a74f46e7"
+		},
+		{
+			"id": "D11",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "migration",
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D11.json",
+				"sha256": "5b21fb867ea9dafe8d746bae5ebb87964137662614f0fbb4dcf8b1e8c45171e2",
+				"bytes": 1421
+			},
+			"historicalSourceSha256": "55d7c8f9e80bb868db9a7f6c95bc84e3cca1c9e0dcc4eab46681d2f1ffec3966"
+		},
+		{
+			"id": "D12",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "pagination",
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D12.json",
+				"sha256": "535ef5a8286f0216fa5a86797cc4ba883d77a1a0652bfc9d115f2a2613a553b0",
+				"bytes": 1450
+			},
+			"historicalSourceSha256": "d90a18a1184149988a2e94b9e1289df3f1ee0fade8094d4ded62f739cfea7a8b"
+		},
+		{
+			"id": "D13",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "caching",
+			"checkpoints": [
+				"c3",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D13.json",
+				"sha256": "8e5659ea64852ef701a997dfbc38001dfe5ff363512da70bc2136c69629f4e57",
+				"bytes": 1396
+			},
+			"historicalSourceSha256": "740b5e159d343cb1a56285389befb886d702ecf7159b6208c0c376d0475369ea"
+		},
+		{
+			"id": "D14",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "notifications",
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D14.json",
+				"sha256": "5b692006aae322b352e90212a1ab5a9e3ddc4b34cbc25faee4af5f4702c4db44",
+				"bytes": 1428
+			},
+			"historicalSourceSha256": "a49fb8a45be115475956df5525d71076b346e7a55048e3a91b431eb64fb54844"
+		},
+		{
+			"id": "D15",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "feature-flags",
+			"checkpoints": [
+				"c2",
+				"c3",
+				"c4",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D15.json",
+				"sha256": "7722a068aa0992079f7342e755305d75498b19ab6bcbd3579fc9bad11243195e",
+				"bytes": 1560
+			},
+			"historicalSourceSha256": "1be673499713ce1a9f57d91433fc11529e26d3342487a3a5cf354fca43084d24"
+		},
+		{
+			"id": "D16",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "retry-policy",
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D16.json",
+				"sha256": "a0bb0868bd4b0fe7881d4a7c1bead955a9248ec1f487c4b6ef2537f7b2bdca4e",
+				"bytes": 1598
+			},
+			"historicalSourceSha256": "f01b409adfb78ca3f9c53573a3deda9ecb1516509730089a4bf09c325c5220e2"
+		},
+		{
+			"id": "D17",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "concurrency",
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D17.json",
+				"sha256": "5e30aa3788f651ed7f4db45bd7bcec700673d050fd93ac810cc569237c88a01f",
+				"bytes": 1505
+			},
+			"historicalSourceSha256": "500ca3fd88c51c7b1b17cdc680bd41f8594c0c1815bc1bf644d27cb313a0f36a"
+		},
+		{
+			"id": "D18",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "audit-history",
+			"checkpoints": [
+				"c2",
+				"c3",
+				"c5",
+				"c6"
+			],
+			"file": {
+				"path": "synthetic/D18.json",
+				"sha256": "9f04ce32e4350582ab702f39184da8e2ffa33bf57c9987e8f7a49b00a30abfb9",
+				"bytes": 1470
+			},
+			"historicalSourceSha256": "585decf4c8271fcaeb92a0f0a988b05ac32040744be41ed3ddf4489cc64e6494"
+		},
+		{
+			"id": "D19",
+			"kind": "synthetic-chat",
+			"origin": "synthetic",
+			"sourceCluster": "authentication-boundaries",
+			"checkpoints": [
+				"c3",
+				"c4"
+			],
+			"file": {
+				"path": "synthetic/D19.json",
+				"sha256": "33ff454f4257e76ec1d1336f61c84f545f90addd69a900a09d360b3b74e538e7",
+				"bytes": 1368
+			},
+			"historicalSourceSha256": "5598a875bc2d7493ac4975e610794d40838c5ca083c2c9daedcdb8a22e8a720d"
+		},
+		{
+			"id": "astro-production-deps",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "web-frameworks",
+			"sourceUrl": "https://github.com/withastro/roadmap/discussions/655",
+			"retrievedAt": "2026-09-29T20:14:55.806360+00:00",
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"file": {
+				"path": "discussions/astro-production-deps.json",
+				"sha256": "d29d1f4898e05bdb07e44aac75e3bc44a538bf715960b3562fb5277707379e41",
+				"bytes": 7044
+			},
+			"historicalFiles": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2023-07-27T11:00:00Z",
+					"sha256": "4c614cbb6620139c9fa1978dae43734a37a724c48fccfa4b9bf411f4c11a79b8"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2023-08-15T21:36:04Z",
+					"sha256": "bd91c2d4ab2b80990506712984b8959bd6b0e6f6e10c668063eb17b732581f10"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2023-08-18T10:36:27Z",
+					"sha256": "1ffbc643d0244abb8954523413d2c51fdef08ad4c86b0fa4dd9e251e265b1bb9"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2024-05-15T10:07:35Z",
+					"sha256": "fde0e0605bbbd93c86fd2a9e7d88a70fe2e07cd33fa62e8c33a4a7ef975c4418"
+				}
+			],
+			"historicalSourceRevision": "dda78480888859ae3eec90846c1263cd28552d05",
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vite-bundled-dev-hmr",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "web-frameworks",
+			"sourceUrl": "https://github.com/vitejs/vite/discussions/22747",
+			"retrievedAt": "2026-09-29T20:14:56.764761+00:00",
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"file": {
+				"path": "discussions/vite-bundled-dev-hmr.json",
+				"sha256": "eecd0065f52c556111321ad6b64ac8277564a51ff35312c45abfa838fe9b0eed",
+				"bytes": 2466
+			},
+			"historicalFiles": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2026-07-30T07:24:41Z",
+					"sha256": "ef42fc7d12e053051b984333027a36deb2850005f70cfdecf347d9d523df177d"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2026-07-30T10:06:03Z",
+					"sha256": "ca3c10c656ae92c4987d13da2399dc9b9b4ad2cc12b31c37b83ae2238fdee593"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2026-07-30T10:21:40Z",
+					"sha256": "35147fef8f440b097ee8c7302008696bd33adb01e8ef86e854edbb450171dc59"
+				}
+			],
+			"historicalSourceRevision": "dda78480888859ae3eec90846c1263cd28552d05",
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "deno-run-task",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "other-projects",
+			"sourceUrl": "https://github.com/denoland/deno/issues/25575",
+			"retrievedAt": "2026-09-29T20:09:58.360206+00:00",
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"file": {
+				"path": "discussions/deno-run-task.json",
+				"sha256": "d84d3fd8b6174cb767c128bd62f42b74b3f72dc69fb8f689e1bcfb9ee79ff776",
+				"bytes": 2751
+			},
+			"historicalFiles": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2024-09-11T10:00:00Z",
+					"sha256": "244c18cd3986d62bf7690e9359d2a71df9f517c72f16223b7530cc6083471614"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2024-09-18T18:38:00Z",
+					"sha256": "da8dd3e34e3892c01b80a325ac0fb5d8c0747fb787a2e384cfe0da3a1077b041"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2024-09-18T18:52:00Z",
+					"sha256": "edf8412a6f7ba3cfb711ac080dfb37fe37c763a0428e6f2cbcc0462b85e18343"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2024-09-18T19:00:00Z",
+					"sha256": "7db5e4522ac40fbbea0a53ebbf456d86cfb47c28b6baca2f80c68ee614ed00aa"
+				}
+			],
+			"historicalSourceRevision": "dda78480888859ae3eec90846c1263cd28552d05",
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "pandas-excel-style",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "other-projects",
+			"sourceUrl": "https://github.com/pandas-dev/pandas/issues/54154",
+			"retrievedAt": "2026-09-29T20:10:25.569780+00:00",
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"file": {
+				"path": "discussions/pandas-excel-style.json",
+				"sha256": "7cb242a6905959e170c76f4f0077695f9981c1173fa7cb217027e8e7d648fddf",
+				"bytes": 4751
+			},
+			"historicalFiles": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2023-07-16T12:35:00Z",
+					"sha256": "9b38fbe59a60db9a106ef6cfbaaebf679fae0aae3bf151131fa5ebd0bee2ca39"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2023-07-16T19:30:00Z",
+					"sha256": "c274e3aac69a09233797a880335ad9cb93b2ac324226362df7880065a82e79e8"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2023-07-16T20:10:00Z",
+					"sha256": "dbd13c15e359f6152a15402390915326bf7e98ba655b2217d251b6bd05ed42d1"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2023-07-25T16:00:00Z",
+					"sha256": "bbf13917915cd0e66b93632ccd885b1d5d7268021bebc6d4e57bd32117d3db51"
+				}
+			],
+			"historicalSourceRevision": "dda78480888859ae3eec90846c1263cd28552d05",
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "biome-fix-all",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "other-projects",
+			"sourceUrl": "https://github.com/biomejs/biome/issues/3339",
+			"retrievedAt": "2026-09-29T20:10:22.692375+00:00",
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"file": {
+				"path": "discussions/biome-fix-all.json",
+				"sha256": "2bde73cb9dfa2536b4a62ea1a142cb945d152af47c2660caad475aaa3586fcda",
+				"bytes": 7141
+			},
+			"historicalFiles": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2024-07-02T20:38:00Z",
+					"sha256": "0ee7bd045718fefb837f75c7ae6b6af1c124d9c1b93c5cbe7d67ca8ef7b2021d"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2024-07-23T15:00:00Z",
+					"sha256": "b2a9a7051cb4f552628eac7208843af8b5f23bd9cf1d316a1466eb3ac838f915"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2024-08-05T09:00:00Z",
+					"sha256": "16897b41adc47849ccfccd929c135a0c2254ba9397431e62a98d88521b1bd3ba"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2024-08-29T13:00:00Z",
+					"sha256": "ef088eb95d99a4d54ad54f0ccefc4211ce033ade179ebb2d40d82d690e662b94"
+				}
+			],
+			"historicalSourceRevision": "dda78480888859ae3eec90846c1263cd28552d05",
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "typescript-assignment-narrowing",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "systems-languages",
+			"sourceUrl": "https://github.com/microsoft/TypeScript/issues/61789",
+			"retrievedAt": "2026-09-29T20:10:24.805379+00:00",
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"file": {
+				"path": "discussions/typescript-assignment-narrowing.json",
+				"sha256": "4bbd0e7e99454dbfa5c019c464003a69638c902bd98cccc5ab9cb0b637d772a3",
+				"bytes": 8404
+			},
+			"historicalFiles": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2025-05-31T23:59:59Z",
+					"sha256": "34d26a6a6e29c11b8d5aec0a1c3be3493ce4e60364f6a2692d0bca62a0dea025"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2025-06-03T23:59:59Z",
+					"sha256": "c0b3bc3dfb919d60df2ba1c4665b282dd58ec002eebfcc374653dfebde52c37a"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2025-06-05T23:59:59Z",
+					"sha256": "bc44edc2337bf9309062a87eaad9696c2d49f5d5ec400c81cbe68500608766f7"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2025-06-16T23:59:59Z",
+					"sha256": "2c381b55825ddb6adcb3b60f528790dc6bdbb88ee944ca953d6f4d2560ee42f8"
+				}
+			],
+			"historicalSourceRevision": "dda78480888859ae3eec90846c1263cd28552d05",
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "eslint-per-rule-autofix",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "systems-languages",
+			"sourceUrl": "https://github.com/eslint/rfcs/pull/134",
+			"retrievedAt": "2026-09-29T20:10:24.805379+00:00",
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"file": {
+				"path": "discussions/eslint-per-rule-autofix.json",
+				"sha256": "2cc8c4c273a5ca3cd637cea39c061f5b7b4134c446c4d12675accbdb2c6703ce",
+				"bytes": 9232
+			},
+			"historicalFiles": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2025-06-17T23:59:59Z",
+					"sha256": "17f22e63a89e7181162dcc136e840dd1d9055df4891ccc7d6706c8f281b52979"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2025-06-26T23:59:59Z",
+					"sha256": "b7e970b715d973eba145ac49160509c8f59a53bad6ddb33caae92f88739749c7"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2025-07-02T23:59:59Z",
+					"sha256": "78f5790c73c9f420c5e76dcfa2785c2fe4353d65f9a63e114dbbe3e4251d719e"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2025-08-22T23:59:59Z",
+					"sha256": "22c0904375c8efd5a499e3fe9eea9e5e45abeaaad9dea2b7dbc7d2218624fff0"
+				}
+			],
+			"historicalSourceRevision": "dda78480888859ae3eec90846c1263cd28552d05",
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "proposal-rust-async-await",
+			"kind": "authored-proposal",
+			"origin": "original-source",
+			"sourceCluster": "rust-rfcs",
+			"cutoff": "2018-04-05T12:34:04Z",
+			"author": "withoutboats",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/2394",
+			"pinnedUrl": "https://github.com/rust-lang/rfcs/blob/f63ddca7ce5cd8725ec137459ba2a930474a34e7/text/0000-async_await.md",
+			"sourceRevision": "f63ddca7ce5cd8725ec137459ba2a930474a34e7",
+			"file": {
+				"path": "proposals/rust-async-await.md",
+				"sha256": "5a5cb895be9d00fa3c1b180bf2ceb06349744405fb494cb281ed04f4faa7f767",
+				"bytes": 23806
+			},
+			"historicalSourceSha256": "5a5cb895be9d00fa3c1b180bf2ceb06349744405fb494cb281ed04f4faa7f767",
+			"reuse": "MIT OR Apache-2.0; see proposals/LICENSE-MIT"
+		}
+	]
+}

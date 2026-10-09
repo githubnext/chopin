@@ -1,0 +1,72 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "vite-bundled-dev-hmr",
+	"title": "Vite bundled development HMR",
+	"source": {
+		"url": "https://github.com/vitejs/vite/discussions/22747",
+		"retrievedAt": "2026-09-29T20:14:56.764761+00:00",
+		"nodeId": "D_kwDOD1jqbs4AnUJn",
+		"number": 22747
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2026-07-30T07:24:41Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-07-30T10:06:03Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-07-30T10:21:40Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOD1jqbs4AnUJn",
+			"kind": "opening",
+			"actor": "sapphi-red",
+			"createdAt": "2026-06-23T11:08:30Z",
+			"url": "https://github.com/vitejs/vite/discussions/22747",
+			"summary": "A maintainer opens a feedback thread for the first bundled development phase, warning that third-party plugins and less common features may not work yet.",
+			"editedAt": "2026-06-24T08:43:43Z",
+			"actorId": "MDQ6VXNlcjQ5MDU2ODY5",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOD1jqbs4BECuJ",
+			"kind": "comment",
+			"actor": "raphamorim",
+			"createdAt": "2026-07-30T07:24:41Z",
+			"url": "https://github.com/vitejs/vite/discussions/22747#discussioncomment-17836937",
+			"summary": "A tester reports strong startup gains but observes full reloads for every edit in a minimal setup, and asks whether released Vite lacks granular HMR.",
+			"actorId": "MDQ6VXNlcjM2MzAzNDY=",
+			"actorType": "human",
+			"parentId": "D_kwDOD1jqbs4AnUJn"
+		},
+		{
+			"id": "DC_kwDOD1jqbs4BEDLZ",
+			"kind": "reply",
+			"actor": "shulaoda",
+			"createdAt": "2026-07-30T10:06:03Z",
+			"url": "https://github.com/vitejs/vite/discussions/22747#discussioncomment-17838809",
+			"summary": "A respondent reproduces granular CSS changes on the same versions, explains that bundled CSS updates travel as JS patches, and distinguishes self-accepting from reload cases.",
+			"actorId": "U_kgDOCd9Dzg",
+			"actorType": "human",
+			"parentId": "DC_kwDOD1jqbs4BECuJ"
+		},
+		{
+			"id": "DC_kwDOD1jqbs4BEDN9",
+			"kind": "reply",
+			"actor": "raphamorim",
+			"createdAt": "2026-07-30T10:21:40Z",
+			"url": "https://github.com/vitejs/vite/discussions/22747#discussioncomment-17838973",
+			"summary": "The tester identifies their measurement error: no browser client had registered HMR boundaries; a real browser receives a granular update, leaving plugin hooks as the remaining concern.",
+			"actorId": "MDQ6VXNlcjM2MzAzNDY=",
+			"actorType": "human",
+			"parentId": "DC_kwDOD1jqbs4BECuJ"
+		}
+	]
+}

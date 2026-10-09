@@ -54,7 +54,13 @@ const installations = [
 		repository_selection: "selected",
 		html_url: "https://github.com/settings/installations/101",
 		suspended_at: null,
-		permissions: { contents: "read", pull_requests: "read", checks: "read", statuses: "read" },
+		permissions: {
+			contents: "read",
+			pull_requests: "read",
+			checks: "read",
+			statuses: "read",
+			issues: "read",
+		},
 	},
 	{
 		id: 102,
@@ -66,9 +72,69 @@ const installations = [
 		repository_selection: "selected",
 		html_url: "https://github.com/settings/installations/102",
 		suspended_at: null,
-		permissions: { contents: "read", pull_requests: "read", checks: "read", statuses: "read" },
+		permissions: {
+			contents: "read",
+			pull_requests: "read",
+			checks: "read",
+			statuses: "read",
+			issues: "read",
+		},
 	},
 ];
+
+const referenceAuthor = {
+	login: "octocat",
+	avatar_url: "https://example.invalid/octocat.png",
+};
+
+function referenceFixture(number: number, title: string, closed: boolean) {
+	return {
+		number,
+		title,
+		user: referenceAuthor,
+		labels: [{ name: "documents", color: "0e8a16" }],
+		comments: number,
+		created_at: "2026-09-01T12:00:00Z",
+		updated_at: "2026-09-02T12:00:00Z",
+		closed_at: closed ? "2026-09-02T12:00:00Z" : null,
+	};
+}
+
+function pullFixture(
+	number: number,
+	title: string,
+	state: "open" | "closed",
+	options: { merged?: boolean; draft?: boolean } = {},
+) {
+	return {
+		...referenceFixture(number, title, state === "closed"),
+		state,
+		draft: options.draft ?? false,
+		merged_at: options.merged ? "2026-09-02T12:00:00Z" : null,
+		head: { ref: `topic-${number}` },
+		base: { ref: "main" },
+	};
+}
+
+function issueFixture(
+	number: number,
+	title: string,
+	state: "open" | "closed",
+	reason: "completed" | "not_planned" | null,
+) {
+	return { ...referenceFixture(number, title, state === "closed"), state, state_reason: reason };
+}
+
+// Pull requests and issues in octo-org/score for GitHub reference pills.
+const references = new Map<string, unknown>([
+	["pulls/1", pullFixture(1, "Add document outline", "open")],
+	["pulls/2", pullFixture(2, "Render decision cards", "closed", { merged: true })],
+	["pulls/3", pullFixture(3, "Try a sidebar rewrite", "closed")],
+	["pulls/4", pullFixture(4, "Draft link pills", "open", { draft: true })],
+	["issues/5", issueFixture(5, "Links lose their context", "open", null)],
+	["issues/6", issueFixture(6, "Outline jumps on load", "closed", "completed")],
+	["issues/7", issueFixture(7, "Support GitLab links", "closed", "not_planned")],
+]);
 
 // One synthetic principal models an App permission being revoked after socket
 // admission. The test invalidates the same access cache a real setup callback
@@ -204,6 +270,9 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 				`"repositories-${handle}-102-${url.searchParams.get("page") ?? "1"}"`,
 			);
 		}
+		let reference = /^\/repos\/octo-org\/score\/((?:pulls|issues)\/\d+)$/.exec(url.pathname);
+		let summary = reference && references.get(reference[1]!);
+		if (summary) return tagged(summary, `"reference-${reference![1]}"`);
 		let repository = accessibleRepositories.find(value =>
 			url.pathname === `/repos/${value.full_name}`
 		);

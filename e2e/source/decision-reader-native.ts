@@ -36,12 +36,19 @@ export async function prepareReader() {
 	let assets = fileURLToPath(new URL("../../apps/web/dist/assets/", import.meta.url));
 	let files = await readdir(assets);
 	let names = files.filter(name => /^index-.*\.css$/.test(name));
-	let editorStyles = files.filter(name => /^plan-editor-.*\.css$/.test(name));
 	expect(names).toHaveLength(1);
+	let styles = await Promise.all(
+		files.filter(name => name.endsWith(".css")).map(async name => ({
+			name,
+			content: await readFile(assets + name, "utf8"),
+		})),
+	);
+	let editorStyles = styles.filter(style => style.content.includes(".plan-decision-marker"));
 	expect(editorStyles).toHaveLength(1);
-	stylesheet =
-		(await Promise.all([names[0]!, editorStyles[0]!].map(name => readFile(assets + name, "utf8"))))
-			.join("\n");
+	stylesheet = [
+		styles.find(style => style.name === names[0])!.content,
+		editorStyles[0]!.content,
+	].join("\n");
 	expect(stylesheet).toContain(".plan-decision-marker");
 }
 export let reader = (page: Page, index = 0) => page.locator(`[data-reader="${index}"]`);

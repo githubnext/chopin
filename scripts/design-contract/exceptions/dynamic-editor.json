@@ -161,20 +161,6 @@
 		"sourceHash": "0c55d7382e99b0fc885a47a127dd8f59bf9f50a49261ce7f14fcb0bdf78aff5d"
 	},
 	{
-		"file": "packages/editor/src/toolbar/research.tsx",
-		"reason": "Research draft portal receives measured placement from its anchor; the style boundary is geometry owned by the browser.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"style",
-				"unresolved style > ResearchDraftShell > <div>",
-				1
-			]
-		],
-		"sourceHash": "9efb66508a77c1cce3bf057c61f62f50db047ab318b9928238aefc922a5afa4c"
-	},
-	{
 		"file": "packages/editor/src/widgets/research-motion.tsx",
 		"reason": "Swap composes a static base class with an optional caller-forwarded className, the same forwarding boundary already reviewed for ButtonRow; static call-site classes are scanned, so only this exact merge needs review.",
 		"cases": [
@@ -214,7 +200,7 @@
 				1
 			]
 		],
-		"sourceHash": "42d324e8f0d6553de93211b3e56e98026bb90f33e4a6f4b0b735bc9af4dbbbfb"
+		"sourceHash": "31ddd891e9559b23c4f255584ec7bf818560994587ac3671a2171915162c63bc"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -242,7 +228,7 @@
 				1
 			]
 		],
-		"sourceHash": "42d324e8f0d6553de93211b3e56e98026bb90f33e4a6f4b0b735bc9af4dbbbfb"
+		"sourceHash": "31ddd891e9559b23c4f255584ec7bf818560994587ac3671a2171915162c63bc"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
@@ -492,16 +478,9 @@
 				"current.style",
 				"unresolved style > Surface > <div>",
 				1
-			],
-			[
-				"dynamic",
-				"*",
-				"markerStyle(marker, lineHeight, prose, vertical[index]!)",
-				"unresolved style > ResolvedLayer > <button>",
-				1
 			]
 		],
-		"sourceHash": "74045d002ca932fa97d57774c0d4c4e36b19bb30daa92703a322595de22e37f5"
+		"sourceHash": "6ea77828a0957740f400b8a2905dfbedfad9dab112883948b5bb6cddbdf60999"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -515,6 +494,6 @@
 				1
 			]
 		],
-		"sourceHash": "74045d002ca932fa97d57774c0d4c4e36b19bb30daa92703a322595de22e37f5"
+		"sourceHash": "6ea77828a0957740f400b8a2905dfbedfad9dab112883948b5bb6cddbdf60999"
 	}
 ]

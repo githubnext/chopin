@@ -1,0 +1,74 @@
+{
+	"version": 2,
+	"id": "D14",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Mica",
+		"Ro",
+		"Ali"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Mica",
+			"text": "notifications are too noisy when someone leaves ten comments in a row.",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Ro",
+			"text": "for each kind of notification we could email right away, batch hourly, or send one daily digest.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Mica",
+			"text": "I'd keep immediate for direct mentions; not sure on other comments.",
+			"to": "room"
+		},
+		{
+			"id": "c3",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Ali",
+			"text": "daily feels too slow for review cycles. hourly digest for ordinary comments.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Ro",
+			"text": "hourly for non-mentions works. direct mentions stay immediate.",
+			"to": "room"
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Mica",
+			"text": "yes. that's two delivery rules, not one setting.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

@@ -34,7 +34,7 @@ let astro = {
 };
 
 test(
-	"a saved wide diagram keeps native label scale inside its own scroller",
+	"a wide diagram derives a readable narrower view with bounded zoom and unchanged source",
 	async ({ join, room, seed }, testInfo) => {
 		let source =
 			`# Astro runtime\n\nThe build and release stages have different dependencies.\n\n\`\`\`seecode\n${
@@ -51,6 +51,13 @@ test(
 			await page.setViewportSize(viewport);
 			await expect(svg).toBeVisible();
 			await expect(svg.locator("[data-sc-node]")).toHaveCount(7);
+			await expect(content(page).getByRole("button", { name: "Show source" })).toHaveCount(0);
+			await expect(preview.getByText(/Scroll sideways/)).toHaveCount(0);
+			await expect(stage).toHaveCSS("border-width", "0px");
+			await expect(content(page).locator('[data-plan-presentation="diagram"]')).toHaveCSS(
+				"border-width",
+				"0px",
+			);
 			await expect(svg.getByRole("button", { name: "Astro project", exact: true }))
 				.toBeVisible();
 			let geometry = await stage.evaluate(element => {
@@ -75,17 +82,29 @@ test(
 					documentRight: documentBounds?.right ?? 0,
 				};
 			});
-			expect(geometry.viewBoxWidth).toBe(1204);
+			expect(geometry.viewBoxWidth).toBeLessThanOrEqual(1100);
 			expect(geometry.scale).toBeGreaterThanOrEqual(1);
-			expect(geometry.scrollWidth).toBeGreaterThan(geometry.stageWidth);
+			if (geometry.viewBoxWidth <= geometry.stageWidth) {
+				expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.stageWidth + 1);
+			} else {
+				expect(geometry.scrollWidth).toBeGreaterThan(geometry.stageWidth);
+			}
 			expect(geometry.pageScrollWidth).toBeLessThanOrEqual(geometry.pageWidth + 1);
 			expect(geometry.documentScrollWidth).toBeLessThanOrEqual(geometry.documentWidth + 1);
 			expect(geometry.stageLeft).toBeGreaterThanOrEqual(geometry.documentLeft - 1);
 			expect(geometry.stageRight).toBeLessThanOrEqual(geometry.documentRight + 1);
+			if (geometry.scrollWidth <= geometry.stageWidth + 1) continue;
 			await expect(stage).toHaveAttribute("tabindex", "0");
 			await stage.focus();
+			await stage.evaluate(element => {
+				element.setAttribute("data-keyboard-scroll-complete", "false");
+				element.addEventListener("scrollend", () => {
+					element.setAttribute("data-keyboard-scroll-complete", "true");
+				}, { once: true });
+			});
 			await stage.press("ArrowRight");
 			await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+			await expect(stage).toHaveAttribute("data-keyboard-scroll-complete", "true");
 			let end = await stage.evaluate(element => {
 				element.scrollLeft = element.scrollWidth;
 				return { actual: element.scrollLeft, maximum: element.scrollWidth - element.clientWidth };
@@ -96,6 +115,31 @@ test(
 			await page.screenshot({ path: testInfo.outputPath(`astro-${viewport.width}.png`) });
 		}
 
+		await svg.getByRole("button", { name: "Astro project", exact: true }).click();
+		await expect(preview.getByRole("complementary", { name: "Diagram details" }))
+			.toBeVisible();
+		let nativeWidth = await svg.evaluate(element => element.getBoundingClientRect().width);
+		await preview.getByRole("button", { name: "Fit", exact: true }).click();
+		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("85%");
+		await expect.poll(() => svg.evaluate(element => element.getBoundingClientRect().width))
+			.toBeCloseTo(nativeWidth * 0.85, 0);
+		await preview.getByRole("button", { name: "Zoom in diagram", exact: true }).click();
+		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("100%");
+		await preview.getByRole("button", { name: "Zoom in diagram", exact: true }).click();
+		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("115%");
+		await page.setViewportSize({ width: 1452, height: 895 });
+		await expect(
+			preview.getByRole("complementary", { name: "Diagram details" })
+				.getByRole("heading", { name: "Astro project", exact: true }),
+		).toBeVisible();
+		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("115%");
+		await preview.getByRole("button", { name: "Actual size", exact: true }).click();
+		await expect.poll(() =>
+			svg.evaluate(element =>
+				element.getBoundingClientRect().width / (element as SVGSVGElement).viewBox.baseVal.width
+			)
+		)
+			.toBeCloseTo(1, 2);
 		await page.reload();
 		await expect(preview.locator("svg")).toBeVisible();
 		await written(page, room, /production install may include CLI deps/);
@@ -144,7 +188,7 @@ test("a saved SeeCode block renders for two readers and revises through shared s
 	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
 	await expect(preview(bo).getByRole("complementary", { name: "Diagram details" }))
 		.toHaveCount(0);
-	await expect(content(ana).getByRole("button", { name: "Show source" })).toBeVisible();
+	await expect(content(ana).getByRole("button", { name: "Show source" })).toHaveCount(0);
 	if (process.env.SEECODE_INTERACTION_EVIDENCE_PATH) {
 		await ana.screenshot({ path: process.env.SEECODE_INTERACTION_EVIDENCE_PATH });
 	}
@@ -159,7 +203,8 @@ test("a saved SeeCode block renders for two readers and revises through shared s
 		.toBeVisible();
 	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
 
-	await content(ana).getByRole("button", { name: "Show source" }).click();
+	await preview(ana).focus();
+	await preview(ana).press("Enter");
 	let source = content(ana).locator("[data-plan-source]");
 	await source.selectText();
 	await ana.keyboard.insertText(JSON.stringify({ ...first, title: "Revised request path" }));
@@ -178,7 +223,10 @@ test("malformed source shows a bounded error while prose remains usable", async 
 		}\n\`\`\`\n`,
 	);
 	let page = await join("ana");
-	await content(page).getByRole("button", { name: "Show source" }).click();
+	let preview = content(page).getByRole("region", { name: "Diagram preview", exact: true });
+	await expect(preview.locator("svg")).toBeVisible();
+	await preview.focus();
+	await preview.press("Enter");
 	await content(page).locator("[data-plan-source]").selectText();
 	await page.keyboard.insertText("{broken");
 	await written(page, room, /```seecode\n\{broken\n```/);

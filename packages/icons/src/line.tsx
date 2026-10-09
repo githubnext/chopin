@@ -28,6 +28,15 @@ export function CodeIcon(props: IconProps) {
 	);
 }
 
+export function KeyboardIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect x="1.75" y="4.75" width="14.5" height="8.5" rx="1.5" />
+			<path d="M4.75 7.75h.5m3.5 0h.5m3.5 0h.5M5.75 10.25h6.5" />
+		</LineIcon>
+	);
+}
+
 export function MessageIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
@@ -146,20 +155,6 @@ export function SparkleIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
 			<polygon points="9 2.25 10.912 7.087 15.75 9 10.912 10.913 9 15.75 7.087 10.913 2.25 9 7.087 7.087 9 2.25" />
-		</LineIcon>
-	);
-}
-
-export function WarningIcon(props: IconProps) {
-	return (
-		<LineIcon {...props}>
-			<path d="M7.63796 3.48996L2.21295 12.89C1.60795 13.9399 2.36395 15.25 3.57495 15.25H14.425C15.636 15.25 16.392 13.9399 15.787 12.89L10.362 3.48996C9.75696 2.44996 8.24296 2.44996 7.63796 3.48996Z" />
-			<path d="M9 6.75V9.75" />
-			<path
-				d="M9 13.5C8.448 13.5 8 13.05 8 12.5C8 11.95 8.448 11.5 9 11.5C9.552 11.5 10 11.9501 10 12.5C10 13.0499 9.552 13.5 9 13.5Z"
-				fill="currentColor"
-				stroke="none"
-			/>
 		</LineIcon>
 	);
 }

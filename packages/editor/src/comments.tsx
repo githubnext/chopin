@@ -27,9 +27,17 @@ import type { Comment } from "@chopin/protocol";
 import type { ThreadView } from "./threads";
 
 /** Chat's author row: face, display name, quiet timestamp. The handle stays in the name. */
-export function Author({ handle, ts }: { handle: string; ts?: number }) {
+export function Author(
+	{ handle, textSize = "sm", ts }: {
+		handle: string;
+		textSize?: "xs" | "sm";
+		ts?: number;
+	},
+) {
 	return (
-		<span className="flex min-w-0 items-center gap-2 text-sm">
+		<span
+			className={`flex min-w-0 items-center gap-2 ${textSize === "xs" ? "text-xs" : "text-sm"}`}
+		>
 			<Face decorative handle={handle} size={20} titled={false} />
 			<span className="min-w-0 truncate font-semibold" title={`@${handle}`}>
 				{displayName(handle)}

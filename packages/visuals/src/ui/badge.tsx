@@ -10,17 +10,20 @@ export type BadgeProps = Omit<ComponentProps<"span">, "children"> & {
 	label: string;
 	/** `sm` is a compact, borderless status label for dense chrome such as headers. */
 	size?: "md" | "sm";
+	/** Dense chrome can reduce the label independently of its badge geometry. */
+	textSize?: "xs" | "2xs";
 	tone?: SemanticTone;
 };
 
 export function Badge(
-	{ className, icon, label, size = "md", tone = "neutral", ...props }: BadgeProps,
+	{ className, icon, label, size = "md", textSize, tone = "neutral", ...props }: BadgeProps,
 ) {
 	return (
 		<span
 			{...props}
 			className={semanticClasses("cv-badge", className)}
 			data-size={size}
+			data-text-size={textSize}
 			data-slot="badge"
 			data-tone={tone}
 		>

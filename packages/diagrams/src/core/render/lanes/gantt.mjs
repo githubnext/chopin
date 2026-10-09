@@ -3,6 +3,7 @@
 // optional "today" line. Motion: bars grow left→right in start order.
 import { el, text } from "../../svg.mjs";
 import { textWidth } from "../../text.mjs";
+import { DIAGRAM_TYPE } from "../../tokens.mjs";
 import { addDays, DAY, parseTime, timeTicks } from "./time.mjs";
 
 export const family = "lanes";
@@ -88,7 +89,12 @@ export function render(spec) {
 	const W = 640;
 	const x = (t) => ((t - t0) / (t1 - t0)) * W;
 	const ROW = 26;
-	const labelW = Math.max(...tasks.map((t) => textWidth(t.label, { size: 11 }))) + 28;
+	const labelW = Math.max(
+		...tasks.map((t) => textWidth(t.label, { size: 11 })),
+		...tasks.filter((t) => t.section).map((t) =>
+			textWidth(t.section.toUpperCase(), DIAGRAM_TYPE.tag)
+		),
+	) + 28;
 	const out = [];
 	// sections
 	const sections = [];

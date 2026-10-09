@@ -33,19 +33,6 @@
 		]
 	},
 	{
-		"file": "apps/web/src/theme.css",
-		"reason": "Approved chat divider opacity is 9%, distinct from passive 7% edge and 20% control edge; retained as a checked contextual design-record value.",
-		"cases": [
-			[
-				"color",
-				"border-color",
-				"rgb(0 0 0 / 9%)",
-				"CSS > .workspace-frame .workspace-chat-panel",
-				1
-			]
-		]
-	},
-	{
 		"file": "apps/web/src/local-login-view.tsx",
 		"reason": "Existing reduced-motion-gated Tailwind continuous loader uses its standard one-second linear spin; preserve its established behavior.",
 		"cases": [
@@ -110,33 +97,6 @@
 				"file": "apps/web/src/design-audit/foundations.tsx",
 				"sourceHash": "7736dc2ddcd49b36b90b85f387b3e497810b7a2b9efd78ca5d91ec282760b6b2"
 			}
-		]
-	},
-	{
-		"file": "apps/web/src/workspace.tsx",
-		"reason": "Existing workspace frame has an intentional 12px outer radius; preserve the approved layout/hierarchy rather than introducing a one-use scale token.",
-		"cases": [
-			[
-				"utility",
-				"class",
-				"rounded-[12px]",
-				"class > Workspace > <div>",
-				2
-			]
-		],
-		"sourceHash": "7bb4ae6a718f8e37cbdb2f3b5acec007e72a88849b1f9d5dc81447d7cf1b842c"
-	},
-	{
-		"file": "apps/web/src/empty-workspace.tsx",
-		"reason": "The empty workspace repeats the workspace frame's intentional 12px outer radius so the layout does not change when a document opens.",
-		"cases": [
-			[
-				"utility",
-				"class",
-				"rounded-[12px]",
-				"class > EmptyWorkspace > <div>",
-				2
-			]
 		]
 	},
 	{
@@ -344,7 +304,7 @@
 				1
 			]
 		],
-		"sourceHash": "830c3d5275279f75c3fa0da9d01f5d4802daff0deb0923f95df1072150b9d11e"
+		"sourceHash": "2ade3c7e75dbddc215461d425c92282eebf9b3448e8ebca46df68433663af588"
 	},
 	{
 		"file": "packages/editor/src/callout.css",

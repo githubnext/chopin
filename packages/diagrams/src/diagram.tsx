@@ -1,7 +1,9 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 
+import { diagramTypographyVariables } from "./core/tokens.mjs";
 import { type DiagramGraph, type DiagramResult, renderDiagram } from "./render";
+import { DIAGRAM_VIEWPORT, fitDiagram } from "./viewport";
 import { namespaceSvgIds } from "./viewer/namespace";
 
 export type DiagramProps = {
@@ -44,13 +46,13 @@ function DiagramView({
 	title,
 	description,
 	idPrefix,
-}: Omit<DiagramProps, "spec"> & { result: ReadyDiagram }) {
+	onWidth,
+}: Omit<DiagramProps, "spec"> & { result: ReadyDiagram; onWidth: (width: number) => void }) {
 	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 	let [instance] = useState(() => ++diagramInstanceSequence);
 	let prefix = `chd-${idPrefix?.replace(/[^a-zA-Z0-9_-]/g, "") || "view"}-${id}-${instance}`;
 	let titleId = `${prefix}-title`;
 	let descriptionId = `${prefix}-description`;
-	let scrollHintId = `${prefix}-scroll-hint`;
 	let stageRef = useRef<HTMLDivElement>(null);
 	let svgRef = useRef<SVGSVGElement>(null);
 	let [preview, setPreview] = useState<Item | null>(null);
@@ -59,6 +61,8 @@ function DiagramView({
 	let [playback, setPlayback] = useState(0);
 	let [reduced, setReduced] = useState(false);
 	let [overflowing, setOverflowing] = useState(false);
+	let [available, setAvailable] = useState(0);
+	let [zoom, setZoom] = useState(1);
 	let graph = result.graph;
 	let nodes = graph?.nodes ?? [];
 	let edges = graph?.edges ?? [];
@@ -82,13 +86,17 @@ function DiagramView({
 		let stage = stageRef.current;
 		let svg = svgRef.current;
 		if (!stage || !svg) return;
-		let measure = () => setOverflowing(stage.scrollWidth > stage.clientWidth + 1);
+		let measure = () => {
+			setOverflowing(stage.scrollWidth > stage.clientWidth + 1);
+			setAvailable(stage.clientWidth);
+			onWidth(stage.clientWidth);
+		};
 		measure();
 		let observer = new ResizeObserver(measure);
 		observer.observe(stage);
 		observer.observe(svg);
 		return () => observer.disconnect();
-	}, [body, playback]);
+	}, [body, playback, onWidth, zoom]);
 
 	useEffect(() => {
 		let svg = svgRef.current;
@@ -235,46 +243,16 @@ function DiagramView({
 		: "";
 
 	return (
-		<figure className="ch-diagram">
-			{(maxStep > 0 || selected) && (
-				<div className="ch-diagram__controls" role="group" aria-label="Diagram controls">
-					{maxStep > 0 && (
-						<>
-							<button
-								type="button"
-								onClick={() => showStep((step ?? maxStep) - 1)}
-								disabled={step === 0}
-								aria-label="Previous step"
-							>
-								Previous
-							</button>
-							<button
-								type="button"
-								onClick={() =>
-									showStep((step ?? 0) + 1)}
-								disabled={step === maxStep}
-								aria-label="Next step"
-							>
-								Next
-							</button>
-							{!reduced && (
-								<button type="button" onClick={replay} aria-label="Replay diagram">Replay</button>
-							)}
-						</>
-					)}
-					<button type="button" onClick={reset} aria-label="Reset diagram">Reset</button>
-				</div>
-			)}
+		<figure className="ch-diagram" style={diagramTypographyVariables as CSSProperties}>
 			<div
 				ref={stageRef}
 				className="ch-diagram__stage"
 				tabIndex={overflowing ? 0 : undefined}
 				aria-label={overflowing ? "Diagram, scroll horizontally" : undefined}
-				aria-describedby={overflowing ? scrollHintId : undefined}
 			>
 				<svg
 					ref={svgRef}
-					style={{ "--sc-native-width": `${result.viewBox[2]}px` } as CSSProperties}
+					style={{ "--sc-display-width": `${result.viewBox[2] * zoom}px` } as CSSProperties}
 					className={`sc-svg${mode.kind === "playing" ? "" : " sc-still"}${
 						mode.kind === "step" ? " sc-stepping" : ""
 					}`}
@@ -296,11 +274,6 @@ function DiagramView({
 					<DiagramBody key={playback} body={body} />
 				</svg>
 			</div>
-			{overflowing && (
-				<p className="ch-diagram__scroll-hint" id={scrollHintId}>
-					Scroll sideways to see the full diagram. Use the left and right arrow keys when focused.
-				</p>
-			)}
 			{selected && (
 				<aside className="ch-diagram__inspector" aria-label="Diagram details">
 					<div className="ch-diagram__inspector-head">
@@ -338,12 +311,107 @@ function DiagramView({
 				</aside>
 			)}
 			{status && <figcaption className="ch-diagram__status" role="status">{status}</figcaption>}
+			{(maxStep > 0 || selected || result.viewBox[2] > available || zoom !== 1) && (
+				<div className="ch-diagram__controls" role="group" aria-label="Diagram controls">
+					{maxStep > 0 && (
+						<>
+							<button
+								className="btn btn-compact btn-outline"
+								type="button"
+								onClick={() => showStep((step ?? maxStep) - 1)}
+								disabled={step === 0}
+								aria-label="Previous step"
+							>
+								Previous
+							</button>
+							<button
+								className="btn btn-compact btn-outline"
+								type="button"
+								onClick={() =>
+									showStep((step ?? 0) + 1)}
+								disabled={step === maxStep}
+								aria-label="Next step"
+							>
+								Next
+							</button>
+							{!reduced && (
+								<button
+									className="btn btn-compact btn-outline"
+									type="button"
+									onClick={replay}
+									aria-label="Replay diagram"
+								>
+									Replay
+								</button>
+							)}
+						</>
+					)}
+					{(maxStep > 0 || selected) && (
+						<button
+							className="btn btn-compact btn-outline"
+							type="button"
+							onClick={reset}
+							aria-label="Reset diagram"
+						>
+							Reset
+						</button>
+					)}
+					{(result.viewBox[2] > available || zoom !== 1) && (
+						<>
+							<button
+								className="btn btn-compact btn-outline"
+								type="button"
+								onClick={() => setZoom(fitDiagram(result.viewBox[2], available))}
+							>
+								Fit
+							</button>
+							<button
+								className="btn btn-compact btn-outline"
+								type="button"
+								onClick={() =>
+									setZoom(1)}
+								aria-pressed={zoom === 1}
+							>
+								Actual size
+							</button>
+							<button
+								className="btn btn-compact btn-outline"
+								type="button"
+								aria-label="Zoom out diagram"
+								disabled={zoom <= DIAGRAM_VIEWPORT.minimumZoom}
+								onClick={() =>
+									setZoom(current =>
+										Math.max(DIAGRAM_VIEWPORT.minimumZoom, current - DIAGRAM_VIEWPORT.zoomStep)
+									)}
+							>
+								−
+							</button>
+							<output className="ch-diagram__zoom" aria-label="Diagram zoom">
+								{Math.round(zoom * 100)}%
+							</output>
+							<button
+								className="btn btn-compact btn-outline"
+								type="button"
+								aria-label="Zoom in diagram"
+								disabled={zoom >= DIAGRAM_VIEWPORT.maximumZoom}
+								onClick={() =>
+									setZoom(current =>
+										Math.min(DIAGRAM_VIEWPORT.maximumZoom, current + DIAGRAM_VIEWPORT.zoomStep)
+									)}
+							>
+								+
+							</button>
+						</>
+					)}
+				</div>
+			)}
 		</figure>
 	);
 }
 
 export function Diagram({ spec, ...props }: DiagramProps) {
-	let result = useMemo(() => renderDiagram(spec), [spec]);
+	let [availableWidth, setAvailableWidth] = useState<number>();
+	let result = useMemo(() => renderDiagram(spec, { availableWidth }), [spec, availableWidth]);
 	if (!result.ok) {
 		return (
 			<div className="ch-diagram ch-diagram--error" role="alert">
@@ -361,6 +429,7 @@ export function Diagram({ spec, ...props }: DiagramProps) {
 		<DiagramView
 			key={fingerprint}
 			result={result}
+			onWidth={setAvailableWidth}
 			title={props.title}
 			description={props.description}
 			idPrefix={props.idPrefix}

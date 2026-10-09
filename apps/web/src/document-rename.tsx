@@ -123,7 +123,7 @@ export function DocumentRename(
 				<label className="sr-only" htmlFor={`document-title-${channel.id}`}>Document title</label>
 				<input
 					aria-invalid={error === undefined ? undefined : true}
-					className="document-title-input"
+					className="title-control-label document-title-input text-xs font-medium"
 					id={`document-title-${channel.id}`}
 					maxLength={120}
 					onBlur={() => {
@@ -145,7 +145,7 @@ export function DocumentRename(
 					value={title}
 				/>
 				{error !== undefined && (
-					<TerminalAlert className="document-title-error text-sm text-destructive-ink">
+					<TerminalAlert className="document-title-error text-xs text-destructive-ink">
 						{message(error)}
 					</TerminalAlert>
 				)}

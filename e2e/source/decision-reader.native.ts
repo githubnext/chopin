@@ -101,6 +101,58 @@ test("actual measured panel clamps inside a narrow document host", async ({ page
 	expect(panel!.y + panel!.height).toBeLessThanOrEqual(host!.y + host!.height);
 });
 
+test("marker moves with prose immediately during native scrolling in either direction", async ({ page }) => {
+	await loadReader(page);
+	let errors = await reader(page).evaluate(element => {
+		let scroll = element.querySelector<HTMLElement>("[data-plan-scroll]")!;
+		let marker = element.querySelector<HTMLElement>("[data-plan-decision-marker]")!;
+		let prose = [...element.querySelectorAll(".plan-content p")].find(paragraph =>
+			paragraph.textContent === "We use GitHub Apps for authentication."
+		)!;
+		let offset = marker.getBoundingClientRect().top - prose.getBoundingClientRect().top;
+		return [16, 40, 24, 8, 0].map(top => {
+			scroll.scrollTop = top;
+			return Math.abs(
+				marker.getBoundingClientRect().top - prose.getBoundingClientRect().top - offset,
+			);
+		});
+	});
+	for (let error of errors) expect(error).toBeLessThan(1);
+});
+
+test("horizontal scrolling preserves the marker's reach toward its prose", async ({ page }) => {
+	await loadReader(page);
+	await reader(page).locator(".plan-content").evaluate(async element => {
+		(element as HTMLElement).style.minWidth = "900px";
+		await new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
+	});
+	let before = await marker(page).evaluate(element => {
+		let prose = [...element.closest("[data-reader]")!.querySelectorAll(".plan-content p")]
+			.find(paragraph => paragraph.textContent === "We use GitHub Apps for authentication.")!;
+		return {
+			reach: getComputedStyle(element).getPropertyValue("--plan-decision-reach-end"),
+			gap: prose.getBoundingClientRect().left - element.getBoundingClientRect().right,
+		};
+	});
+	expect(Number.parseFloat(before.reach)).toBeGreaterThan(0);
+	await reader(page).locator("[data-plan-scroll]").evaluate(async element => {
+		element.scrollLeft = 16;
+		await new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
+	});
+	await expect.poll(() =>
+		marker(page).evaluate(element => {
+			let prose = [...element.closest("[data-reader]")!.querySelectorAll(".plan-content p")]
+				.find(paragraph => paragraph.textContent === "We use GitHub Apps for authentication.")!;
+			return prose.getBoundingClientRect().left - element.getBoundingClientRect().right;
+		})
+	).toBeCloseTo(before.gap, 1);
+	await expect(marker(page)).toHaveCSS("--plan-decision-reach-end", before.reach.trim());
+});
+
 test("pin survives pointer leave, follows native scroll and retires offscreen", async ({ page }) => {
 	await loadReader(page);
 	await marker(page).click();

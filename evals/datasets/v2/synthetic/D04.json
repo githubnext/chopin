@@ -1,0 +1,100 @@
+{
+	"version": 2,
+	"id": "D04",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Jules",
+		"Priya",
+		"Teo"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Jules",
+			"text": "image originals can't live in the app container after deploys.",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Priya",
+			"text": "options seem to be S3 or the existing shared disk.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Jules",
+			"text": "S3 gives us signed uploads. the disk means a lot less wiring this week.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Teo",
+			"text": "is R2 still worth comparing, or did we rule it out?",
+			"to": "room"
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Priya",
+			"text": "worth comparing. R2's egress could matter for thumbnails.",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "a1",
+			"kind": "research-action",
+			"actor": "Teo",
+			"researchKey": "object-storage-cost",
+			"action": "research"
+		},
+		{
+			"id": "ca1",
+			"kind": "checkpoint",
+			"waitFor": "analysis",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "cr1",
+			"kind": "checkpoint",
+			"waitFor": "research-terminal",
+			"deadlineMs": 180000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Teo",
+			"text": "I'd use S3 for originals and worry about thumbnail delivery separately.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m7",
+			"kind": "say",
+			"actor": "Jules",
+			"text": "same, S3 for the source file. don't make that a decision about CDN.",
+			"to": "room"
+		},
+		{
+			"id": "c7",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

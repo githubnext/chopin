@@ -1,0 +1,143 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "pandas-excel-style",
+	"title": "Default styling in pandas Excel exports",
+	"source": {
+		"url": "https://github.com/pandas-dev/pandas/issues/54154",
+		"retrievedAt": "2026-09-29T20:10:25.569780+00:00",
+		"repository": "pandas-dev/pandas",
+		"number": 54154
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2023-07-16T12:35:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2023-07-16T19:30:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-07-16T20:10:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2023-07-25T16:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "pandas-54154:issue:54154",
+			"kind": "opening",
+			"actor": "attack68",
+			"createdAt": "2023-07-16T07:28:16Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154",
+			"summary": "The opener proposes removing automatic bold and border formatting from DataFrame.to_excel and directing intentional styling through Styler.to_excel.",
+			"actorId": 24256554,
+			"actorType": "human"
+		},
+		{
+			"id": "pandas-54154:comment:1637072977",
+			"kind": "comment",
+			"actor": "rmhowe425",
+			"createdAt": "2023-07-16T12:33:29Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1637072977",
+			"summary": "A contributor volunteers to implement the change in an existing pull request.",
+			"editedAt": "2023-07-16T12:34:11Z",
+			"actorId": 45905457,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1637123171",
+			"kind": "comment",
+			"actor": "WillAyd",
+			"createdAt": "2023-07-16T15:42:48Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1637123171",
+			"summary": "A maintainer expresses support.",
+			"actorId": 609873,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1637165200",
+			"kind": "comment",
+			"actor": "rhshadrach",
+			"createdAt": "2023-07-16T19:07:32Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1637165200",
+			"summary": "A second maintainer expresses support.",
+			"actorId": 45562402,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1637171319",
+			"kind": "comment",
+			"actor": "mroeschke",
+			"createdAt": "2023-07-16T19:27:58Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1637171319",
+			"summary": "A maintainer supports the change but initially suggests deprecating the old formatting behavior.",
+			"actorId": 10647082,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1637173778",
+			"kind": "comment",
+			"actor": "rhshadrach",
+			"createdAt": "2023-07-16T19:41:23Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1637173778",
+			"summary": "Another maintainer asks whether pandas 3.0 could make the change directly, since warning and opt-out machinery for styling alone seems excessive.",
+			"editedAt": "2023-07-16T19:41:44Z",
+			"actorId": 45562402,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1637179533",
+			"kind": "comment",
+			"actor": "mroeschke",
+			"createdAt": "2023-07-16T20:09:10Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1637179533",
+			"summary": "The previous maintainer accepts making the change in pandas 3.0 without a separate deprecation path.",
+			"actorId": 10647082,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1642841583",
+			"kind": "comment",
+			"actor": "alimcmaster1",
+			"createdAt": "2023-07-19T22:23:24Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1642841583",
+			"summary": "Another participant expresses support.",
+			"actorId": 16733618,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1649919469",
+			"kind": "comment",
+			"actor": "attack68",
+			"createdAt": "2023-07-25T14:09:24Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1649919469",
+			"summary": "The opener says the discussion has enough support to proceed with the pull request.",
+			"actorId": 24256554,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		},
+		{
+			"id": "pandas-54154:comment:1650012755",
+			"kind": "comment",
+			"actor": "rmhowe425",
+			"createdAt": "2023-07-25T15:02:21Z",
+			"url": "https://github.com/pandas-dev/pandas/issues/54154#issuecomment-1650012755",
+			"summary": "The contributor confirms they will begin the implementation.",
+			"actorId": 45905457,
+			"actorType": "human",
+			"parentId": "pandas-54154:issue:54154"
+		}
+	]
+}

@@ -1,0 +1,87 @@
+{
+	"version": 2,
+	"id": "D01",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Nia",
+		"Rob",
+		"Mei"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Nia",
+			"text": "need to pick an editor before comments get any deeper. what are we comparing?",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Rob",
+			"text": "Tiptap, bare ProseMirror, Lexical, or just native Selection and Range with our own document model.",
+			"to": "room"
+		},
+		{
+			"id": "c2",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Mei",
+			"text": "Tiptap gets us menus quickly, but I don't love how much it wraps.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Rob",
+			"text": "Lexical's node model looks like a better fit for collaborative blocks.",
+			"to": "room"
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Nia",
+			"text": "can we spike the selection behaviour before calling it?",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Mei",
+			"text": "agreed. I'd pick Lexical for the spike; still want to see how it handles pasted tables.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m7",
+			"kind": "say",
+			"actor": "Rob",
+			"text": "yep, Lexical for the spike. not a final library call yet.",
+			"to": "room"
+		},
+		{
+			"id": "c7",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}
