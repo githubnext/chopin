@@ -28,6 +28,15 @@ export function CodeIcon(props: IconProps) {
 	);
 }
 
+export function KeyboardIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect x="1.75" y="4.75" width="14.5" height="8.5" rx="1.5" />
+			<path d="M4.75 7.75h.5m3.5 0h.5m3.5 0h.5M5.75 10.25h6.5" />
+		</LineIcon>
+	);
+}
+
 export function MessageIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>

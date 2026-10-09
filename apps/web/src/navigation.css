@@ -986,17 +986,6 @@
 	gap: calc(var(--spacing) * 2);
 }
 
-.navigation-account-menu-item kbd {
-	display: grid;
-	width: calc(var(--spacing) * 3.5);
-	height: calc(var(--spacing) * 3.5);
-	flex: 0 0 auto;
-	place-items: center;
-	font-family: var(--font-sans);
-	font-size: var(--text-2xs);
-	color: var(--color-text-quaternary);
-}
-
 .navigation-dialog-list {
 	display: flex;
 	max-height: min(50vh, 20rem);
@@ -1223,7 +1212,7 @@
 .document-actions-menu button {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: calc(var(--spacing) * 1.5);
 	min-height: 34px;
 	border-radius: var(--radius-sm);
 	padding: 7px 10px;

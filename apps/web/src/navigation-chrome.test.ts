@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ChevronIcon, DocumentIcon, PlusIcon, SearchIcon } from "@chopin/icons";
+import { ChevronIcon, DocumentIcon, KeyboardIcon, PlusIcon, SearchIcon } from "@chopin/icons";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -156,7 +156,9 @@ describe("the Figma navigation chrome", () => {
 		expect(closed).toMatch(/class="project-sidebar-account" aria-expanded="false"/);
 		expect(open).toMatch(/class="project-sidebar-account" aria-expanded="true"/);
 		expect(open).toContain("Keyboard shortcuts");
-		expect(open).toContain('<kbd aria-hidden="true">?</kbd>Keyboard shortcuts');
+		expect(open).toContain(
+			renderToStaticMarkup(createElement(KeyboardIcon, { size: 14 })) + "Keyboard shortcuts",
+		);
 	});
 
 	test("offers explicit pagination when a Project has more documents", () => {
