@@ -30,6 +30,7 @@ export type { MotionDisclosureContract } from "./disclosure-motion";
 export { displayName } from "./display-name";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
+export { GitHubReferencesProvider } from "./github-references";
 export type { Refusal } from "./history";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
@@ -62,6 +63,8 @@ export type { PresenceAction, PresencePhase, TransitionPresence } from "./transi
 export type { Connection, Transport, Unsubscribe } from "./transport";
 export type {
 	CommentPresentation,
+	GitHubReferenceEntry,
+	GitHubReferenceStore,
 	QuestionStepMotion,
 	ResearchOpener,
 	ResearchStore,

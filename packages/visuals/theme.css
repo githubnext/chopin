@@ -42,6 +42,19 @@
 	--color-lime-10: oklch(0.603 0.132 126.75);
 	--color-lime-11: oklch(0.474 0.14 128.6);
 	--color-lime-12: oklch(0.35370 0.05728 120.98);
+	/* GitHub's merged and completed purple, on the same lightness curve as ruby and lime. */
+	--color-plum-1: oklch(0.99300 0.00350 305);
+	--color-plum-2: oklch(0.98100 0.00950 305);
+	--color-plum-3: oklch(0.95600 0.02300 305);
+	--color-plum-4: oklch(0.92700 0.04000 305);
+	--color-plum-5: oklch(0.89700 0.05600 305);
+	--color-plum-6: oklch(0.85800 0.07000 305);
+	--color-plum-7: oklch(0.80800 0.08800 305);
+	--color-plum-8: oklch(0.74500 0.11500 304);
+	--color-plum-9: oklch(0.58000 0.19000 301);
+	--color-plum-10: oklch(0.52500 0.19000 301);
+	--color-plum-11: oklch(0.47500 0.17500 301);
+	--color-plum-12: oklch(0.34000 0.09500 301);
 
 	/* Warm olive neutrals. The lightest steps are deliberately close, not aliases. */
 	--color-gray-50: oklch(0.99051 0.00263 95); /* #fcfcfa */
@@ -109,6 +122,11 @@
 	--color-danger-graphic: var(--color-ruby-9);
 	--color-danger-icon: var(--color-ruby-11);
 	--color-danger-text: var(--color-ruby-12);
+	/* A merged pull request or completed issue: finished work, neither success nor failure. */
+	--color-merged-surface: var(--color-plum-3);
+	--color-merged-graphic: var(--color-plum-8);
+	--color-merged-icon: var(--color-plum-11);
+	--color-merged-text: var(--color-plum-12);
 	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
 	--color-success-wash: oklch(0.93 0.026 145);
 	--color-success-ink: oklch(0.44098 0.11068 144.754); /* #236228 */

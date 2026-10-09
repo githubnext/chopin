@@ -11,6 +11,7 @@ import {
 	documentHasPlanningContent,
 	Face,
 	firstOpenDecision,
+	GitHubReferencesProvider,
 	PlanEditor,
 	PlanStatus,
 	QuestionnaireStore,
@@ -52,6 +53,7 @@ import { useNavigationDocument } from "./navigation-shell";
 import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
+import { GitHubReferenceCache } from "./github-references";
 import { Wire } from "./wire";
 import { ExperimentStore } from "./experiments/store";
 import { ExperimentsPanel } from "./experiments/panel";
@@ -396,6 +398,7 @@ export function RoomWorkspace(
 			}),
 		[onResearchChildOpen, onResearchChildPublished, room],
 	);
+	let githubReferences = useMemo(() => new GitHubReferenceCache({ channelId: room }), [room]);
 	let researchLinks = useResearchOfferLinks(
 		wire,
 		status === "connected",
@@ -1110,33 +1113,35 @@ export function RoomWorkspace(
 					/>
 				}
 				plan={
-					<PlanEditor
-						experiments={experiments}
-						cardMeta={cardMeta}
-						evidence={showEvidence}
-						onCardSource={showCardSource}
-						hasCardSource={hasCardSource}
-						planner={agent}
-						commentPresentation={mode === "split" ? "popover" : "sheet"}
-						connection={status === "deleted" ? "closed" : status}
-						key={workspaceArchivedAt ? "archived" : "active"}
-						disclosureMotion={motionContract("collapse")}
-						motionImmediately={settleMotionImmediately}
-						onScrollTop={setPlanScrollTop}
-						onState={setPlanState}
-						preface={presentation.type === "child" && presentation.parent
-							? <ChildProvenance channelId={room} parent={presentation.parent} />
-							: undefined}
-						questionMotion={QUESTION_MOTION}
-						questions={questions}
-						readOnly={!workspaceCanEdit}
-						research={profile.research ? research : undefined}
-						researchLauncher={researchLauncher}
-						scrollTop={planScrollTop}
-						threads={threads}
-						user={user}
-						wire={wire}
-					/>
+					<GitHubReferencesProvider value={githubReferences}>
+						<PlanEditor
+							experiments={experiments}
+							cardMeta={cardMeta}
+							evidence={showEvidence}
+							onCardSource={showCardSource}
+							hasCardSource={hasCardSource}
+							planner={agent}
+							commentPresentation={mode === "split" ? "popover" : "sheet"}
+							connection={status === "deleted" ? "closed" : status}
+							key={workspaceArchivedAt ? "archived" : "active"}
+							disclosureMotion={motionContract("collapse")}
+							motionImmediately={settleMotionImmediately}
+							onScrollTop={setPlanScrollTop}
+							onState={setPlanState}
+							preface={presentation.type === "child" && presentation.parent
+								? <ChildProvenance channelId={room} parent={presentation.parent} />
+								: undefined}
+							questionMotion={QUESTION_MOTION}
+							questions={questions}
+							readOnly={!workspaceCanEdit}
+							research={profile.research ? research : undefined}
+							researchLauncher={researchLauncher}
+							scrollTop={planScrollTop}
+							threads={threads}
+							user={user}
+							wire={wire}
+						/>
+					</GitHubReferencesProvider>
 				}
 				state={workspace}
 				presentation={presentation}

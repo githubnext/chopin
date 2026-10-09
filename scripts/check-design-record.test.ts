@@ -60,6 +60,16 @@ describe("structured design record", () => {
 		).toBe(true);
 	});
 
+	test("the merged colour follows the merged icon role through the plum scale", () => {
+		let result = check({
+			theme: theme.replace(
+				"--color-merged-icon: var(--color-plum-11);",
+				"--color-merged-icon: var(--color-plum-10);",
+			),
+		});
+		expect(result.some(value => value.startsWith("DESIGN.md.colors.merged:"))).toBe(true);
+	});
+
 	test("checks fluid roles, full font stacks, leading, radius, and spacing", () => {
 		for (
 			let [before, after, diagnostic] of [
