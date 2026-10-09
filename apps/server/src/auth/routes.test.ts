@@ -92,6 +92,7 @@ class FakeGitHub implements GitHub {
 					pullRequests: true,
 					checks: true,
 					statuses: true,
+					issues: true,
 				},
 			}],
 			nextPage: page + 1,

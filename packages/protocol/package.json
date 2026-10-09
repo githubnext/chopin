@@ -17,6 +17,10 @@
 		"./document-url": {
 			"types": "./document-url.ts",
 			"default": "./document-url.ts"
+		},
+		"./github-reference": {
+			"types": "./github-reference.ts",
+			"default": "./github-reference.ts"
 		}
 	}
 }
