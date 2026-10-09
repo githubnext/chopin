@@ -136,7 +136,7 @@
 @utility btn-outline {
 	background-color: var(--color-page);
 	color: var(--color-text-primary);
-	outline: var(--button-edge-width) solid var(--color-control-edge);
+	outline: var(--button-edge-width) solid var(--color-button-outline-edge);
 	outline-offset: calc(-1 * var(--button-edge-width));
 	box-shadow: var(--shadow-resting);
 
