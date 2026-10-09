@@ -66,16 +66,34 @@ function fixture(
 		expectedBase = git("rev-parse", "HEAD");
 		git("checkout", "-q", "feature");
 	}
+	if (operation === "rebase" && baseRef === "main") {
+		git("checkout", "-qb", "feature");
+		writeFileSync(join(source, "apps/a.ts"), "feature");
+		git("add", ".");
+		git("commit", "-qm", "feature");
+		head = git("rev-parse", "HEAD");
+		git("checkout", "-qb", "main", root);
+		mkdirSync(join(source, ".github/workflows"), { recursive: true });
+		writeFileSync(join(source, ".github/workflows/ci.yml"), "x".repeat(baseExtraBytes));
+		git("add", ".");
+		git("commit", "-qm", "base update");
+		expectedBase = git("rev-parse", "HEAD");
+		git("checkout", "-q", "feature");
+	}
 	execFileSync("git", ["clone", "-q", source, directory]);
 	if (operation === "merge") {
 		expect(() => git("merge", "--no-ff", "--no-commit", "main")).toThrow();
 	}
-	writeFileSync(join(source, protectedChange ? "package.json" : "apps/a.ts"), contents);
-	git("add", ".");
-	git("commit", "-qm", "proposal");
+	if (operation === "rebase" && baseRef === "main") {
+		git("rebase", "main");
+	} else {
+		writeFileSync(join(source, protectedChange ? "package.json" : "apps/a.ts"), contents);
+		git("add", ".");
+		git("commit", "-qm", "proposal");
+	}
 	let proposalHead = git("rev-parse", "HEAD");
 	let reviewBase = head;
-	if (operation === "merge") {
+	if (operation === "merge" || operation === "rebase") {
 		let output: string;
 		try {
 			output = execFileSync("git", [
@@ -278,6 +296,32 @@ test("merge detector reviews only resolution over the synthetic merge tree", asy
 	expect(mismatch.calls).not.toContain("save");
 	expect(mismatch.calls).not.toContain("push");
 }, 15_000);
+
+test(
+	"clean rebase publishes with an empty review despite large inherited protected changes",
+	async () => {
+		let f = fixture(false, "feature", "rebase", 20 * 1024);
+		expect(
+			execFileSync("git", ["diff", "--binary", f.head, f.proposalHead], {
+				cwd: f.source,
+			}).length,
+		).toBeGreaterThan(10 * 1024);
+		expect(f.options.review).toBe("");
+		expect((await applyProposal(f.options)).kind).toBe("applied");
+		expect(f.calls.indexOf("save")).toBeLessThan(f.calls.indexOf("push"));
+		let mismatch = fixture(false, "feature", "rebase", 100);
+		mismatch.options.review = execFileSync("git", [
+			"diff",
+			"--binary",
+			mismatch.head,
+			mismatch.proposalHead,
+		], { cwd: mismatch.source, encoding: "utf8" });
+		expect((await applyProposal(mismatch.options)).kind).toBe("blocked");
+		expect(mismatch.calls).not.toContain("save");
+		expect(mismatch.calls).not.toContain("push");
+	},
+	15_000,
+);
 
 test("head/base drift and opt-out supersede without publication", async () => {
 	for (let drift of ["head", "base", "opt-out"]) {

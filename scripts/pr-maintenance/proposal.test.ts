@@ -553,12 +553,12 @@ test("protected hash conflict rejects semantic head-only and partially head-only
 	}
 });
 
-function rebaseFixture() {
+function rebaseFixture(baseExtraBytes = 0) {
 	let f = fixture();
 	f.put("apps/a.ts", "feature");
 	let head = f.commit("feature message");
 	f.git("checkout", "--detach", f.base);
-	f.put(".github/workflows/ci.yml", "base update");
+	f.put(".github/workflows/ci.yml", "base update" + "x".repeat(baseExtraBytes));
 	let base = f.commit("base update");
 	f.git("cherry-pick", head);
 	let proposal = f.git("rev-parse", "HEAD");
@@ -573,6 +573,21 @@ function rebaseFixture() {
 		});
 	return { ...f, head, newBase: base, proposal, validate };
 }
+
+test("rebase review excludes inherited base changes and includes agent edits", () => {
+	let f = rebaseFixture(20 * 1024);
+	let baseline = f.validate().reviewBase;
+	expect(f.git("diff", "--binary", f.head, f.proposal).length).toBeGreaterThan(10 * 1024);
+	expect(f.git("diff", "--binary", baseline, f.proposal)).toBe("");
+	f.put("apps/a.ts", "agent edit");
+	f.git("add", ".");
+	f.git("commit", "--amend", "--no-edit");
+	let edited = f.git("rev-parse", "HEAD");
+	let guarded = f.validate(edited);
+	expect(guarded.reviewBase).toBe(baseline);
+	expect(guarded.paths).toEqual(["apps/a.ts"]);
+	expect(f.git("diff", "--binary", guarded.reviewBase, edited)).toContain("agent edit");
+});
 
 test("rebase inherits protected base changes and rejects agent changes", () => {
 	let f = rebaseFixture();
