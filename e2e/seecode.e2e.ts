@@ -96,8 +96,15 @@ test(
 			if (geometry.scrollWidth <= geometry.stageWidth + 1) continue;
 			await expect(stage).toHaveAttribute("tabindex", "0");
 			await stage.focus();
+			await stage.evaluate(element => {
+				element.setAttribute("data-keyboard-scroll-complete", "false");
+				element.addEventListener("scrollend", () => {
+					element.setAttribute("data-keyboard-scroll-complete", "true");
+				}, { once: true });
+			});
 			await stage.press("ArrowRight");
 			await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+			await expect(stage).toHaveAttribute("data-keyboard-scroll-complete", "true");
 			let end = await stage.evaluate(element => {
 				element.scrollLeft = element.scrollWidth;
 				return { actual: element.scrollLeft, maximum: element.scrollWidth - element.clientWidth };

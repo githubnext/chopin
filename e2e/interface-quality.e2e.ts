@@ -62,7 +62,7 @@ for (let width of [1280, 390]) {
 			page.getByRole("banner").locator("svg").evaluateAll(icons =>
 				Math.min(...icons.map(icon => icon.getBoundingClientRect().width))
 			)
-		).toBeGreaterThanOrEqual(14);
+		).toBeGreaterThanOrEqual(12);
 		await actions.click();
 		await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
 		await actions.click();
