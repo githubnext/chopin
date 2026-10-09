@@ -1005,11 +1005,6 @@ button.chat-tool-call-toggle {
 	outline: none;
 }
 
-.chat-header-control:hover:not(:disabled),
-.chat-header-control:active:not(:disabled) {
-	background-color: transparent;
-}
-
 .chat-composer .send-action:disabled {
 	background-color: var(--color-brand);
 	color: var(--color-page);
