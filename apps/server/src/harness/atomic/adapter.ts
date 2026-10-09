@@ -62,9 +62,11 @@ export const ATOMIC_DEFAULT_SYSTEM_PROMPT =
 
 /**
  * What a full Planner's own turns may call besides Chopin's tools: reading the
- * checkout and the web, asking Decisions, running workflows, and Intercom. It
- * cannot edit files or run commands, so implementing the plan goes to another
- * session.
+ * checkout and the web, asking Decisions, running workflows, Intercom, and
+ * codemode. Codemode scripts call only the tools this turn already offers, plus
+ * non-LLM models such as classifiers and image generators, so it adds no file
+ * edits or commands. The Planner cannot edit files or run commands, so
+ * implementing the plan goes to another session.
  */
 export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"read",
@@ -78,6 +80,7 @@ export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"ask_user_question",
 	"workflow",
 	"intercom",
+	"codemode",
 ]);
 
 const GATEWAY_PROVIDER = "vercel-ai-gateway";
