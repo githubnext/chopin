@@ -81,6 +81,7 @@ for (let transport of ["stdio", "http"] as const) {
 			});
 			await rm(root, { recursive: true, force: true });
 			await rm(state, { recursive: true, force: true });
+			expect(connector.exitCode, output).toBe(0);
 		}
 	});
 }

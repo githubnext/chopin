@@ -120,6 +120,8 @@ async function connect(args: string[]) {
 				signal: abort.signal,
 			});
 		}
+	} catch (error) {
+		if (!abort.signal.aborted) throw error;
 	} finally {
 		if (api) {
 			await api.call("disconnect_workspace").catch(() => {});
