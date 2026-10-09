@@ -10,6 +10,7 @@ import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Store from "../questions/store";
 import { openPlan } from "../testing/plan";
+import { approveGraph } from "../tasks/graphs";
 
 import type { HostedAuth } from "../auth/routes";
 import type { SeedState } from "../testing/plan";
@@ -750,6 +751,64 @@ test("planner graph edits draft a revision without changing plan prose", async (
 	});
 	expect(JSON.parse(stale as string)).toEqual({ ok: false, reason: "stale-graph" });
 	expect(room.project(plan.document)).toBe(before);
+});
+
+test("graph reads identify stale approval and an unchanged task can refresh its document binding", async () => {
+	let { plan, server } = await opened("Original review.\n");
+	let tools = fixtureTools({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		publish: mutation => Service.publish(plan, server, plan.id, mutation),
+		anchors() {},
+		changes() {},
+	});
+	let call = async (name: string, input: unknown) => {
+		let result = await tools.find(tool => tool.name === name)!.handler(input, { toolCallId: name });
+		return JSON.parse(result as string);
+	};
+	let task = {
+		id: "review",
+		title: "Review implementation",
+		context: "A settled plan",
+		goal: "Validate the implementation",
+		acceptance: ["Changes are checked", "Evidence is reported"],
+		dependsOn: [],
+	};
+	await call("edit_implementation_graph", {
+		plan_revision: 0,
+		graph_revision: 0,
+		operations: [{ op: "add", task }],
+	});
+	let approved = approveGraph({ graph: plan.graph, revision: plan.revision });
+	if (!approved.ok) throw new Error(approved.reason);
+	plan.graph = approved.value;
+	expect(await call("read_implementation_graph", {})).toMatchObject({
+		plan_revision: 0,
+		graph_plan_revision: 0,
+		needs_revision: false,
+	});
+	await call("edit_plan", {
+		revision: 0,
+		operations: [{ op: "replace", index: 0, source: "Updated review.\n" }],
+	});
+	expect(await call("read_implementation_graph", {})).toMatchObject({
+		plan_revision: 1,
+		graph_plan_revision: 0,
+		needs_revision: true,
+	});
+	await call("edit_implementation_graph", {
+		plan_revision: 1,
+		graph_revision: 1,
+		operations: [{ op: "replace", id: task.id, task }],
+	});
+	expect(await call("read_implementation_graph", {})).toMatchObject({
+		graph_plan_revision: 1,
+		needs_revision: false,
+	});
+	expect(plan.graph?.versions.at(-1)).toMatchObject({ number: 2, state: "draft", planRevision: 1 });
 });
 
 test("chat-started tools retain only the current member request provenance", async () => {
