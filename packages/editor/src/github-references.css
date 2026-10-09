@@ -7,9 +7,12 @@
  * while the authored title truncates.
  */
 
-.plan-content a[data-gh-state] {
+:is(.plan-content a, .gh-card-glyph)[data-gh-state] {
 	--gh-surface: var(--color-neutral-surface);
 	--gh-icon: var(--color-neutral-icon);
+}
+
+.plan-content a[data-gh-state] {
 	display: inline-flex;
 	align-items: center;
 	box-sizing: border-box;
@@ -111,17 +114,18 @@
 	}
 }
 
-.plan-content a:is([data-gh-state="pr-open"], [data-gh-state="issue-open"]) {
+:is(.plan-content a, .gh-card-glyph):is([data-gh-state="pr-open"], [data-gh-state="issue-open"]) {
 	--gh-surface: var(--color-success-surface);
 	--gh-icon: var(--color-success-icon);
 }
 
-.plan-content a:is([data-gh-state="pr-merged"], [data-gh-state="issue-completed"]) {
+:is(.plan-content
+	a, .gh-card-glyph):is([data-gh-state="pr-merged"], [data-gh-state="issue-completed"]) {
 	--gh-surface: var(--color-merged-surface);
 	--gh-icon: var(--color-merged-icon);
 }
 
-.plan-content a[data-gh-state="pr-closed"] {
+:is(.plan-content a, .gh-card-glyph)[data-gh-state="pr-closed"] {
 	--gh-surface: var(--color-danger-surface);
 	--gh-icon: var(--color-danger-icon);
 }
@@ -181,4 +185,307 @@
 
 .plan-content a[data-gh-state="unknown"][data-gh-kind="issue"] {
 	--gh-glyph: var(--gh-glyph-issue-open);
+}
+
+/* Hover card ------------------------------------------------------------- */
+
+.gh-card-positioner {
+	z-index: 50;
+}
+
+.gh-card-popup {
+	box-sizing: border-box;
+	width: 20rem;
+	max-width: calc(100vw - var(--spacing) * 4);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	color: var(--color-text-primary);
+	transform-origin: var(--transform-origin, top left);
+	transition-property: opacity, scale;
+	transition-duration: var(--dropdown-open-dur);
+	transition-timing-function: var(--dropdown-ease);
+}
+
+.gh-card-popup[data-starting-style],
+.gh-card-popup[data-ending-style] {
+	opacity: 0;
+	scale: var(--dropdown-pre-scale);
+}
+
+.gh-card-popup[data-ending-style] {
+	transition-duration: var(--dropdown-close-dur);
+}
+
+/* Inside the caret's link preview, the card sits above the link's own actions. */
+.gh-card-preview {
+	min-width: min(20rem, 100%);
+	border-block-end: var(--edge-width) solid var(--color-edge);
+}
+
+.gh-card {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: calc(var(--spacing) * 3);
+	align-items: start;
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 5) calc(var(--spacing) * 3)
+		calc(var(--spacing) * 3);
+	font-family: var(--font-sans);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-secondary);
+	-webkit-font-smoothing: antialiased;
+}
+
+.gh-card-glyph {
+	display: grid;
+	place-items: center;
+	width: calc(var(--spacing) * 7);
+	height: calc(var(--spacing) * 7);
+	border-radius: var(--radius-md);
+	background: var(--gh-surface);
+	color: var(--gh-icon);
+}
+
+.gh-card-glyph svg {
+	width: calc(var(--spacing) * 4);
+	height: calc(var(--spacing) * 4);
+}
+
+.gh-card-body {
+	display: grid;
+	justify-items: start;
+	gap: calc(var(--spacing) * 2);
+	min-width: 0;
+}
+
+.gh-card-title {
+	display: -webkit-box;
+	margin: 0 0 calc(var(--spacing) * -0.5);
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-medium);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-primary);
+	text-wrap: pretty;
+}
+
+.gh-card-number {
+	font-weight: var(--font-weight-normal);
+	color: var(--color-text-tertiary);
+	font-variant-numeric: tabular-nums;
+}
+
+.gh-card-time {
+	max-width: 100%;
+	margin-block-start: calc(var(--spacing) * -1.5);
+	overflow: hidden;
+	color: var(--color-text-quaternary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.gh-card-person {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	max-width: 100%;
+	min-width: 0;
+	color: var(--color-text-secondary);
+}
+
+.gh-card-login {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.gh-card-avatar {
+	display: inline-grid;
+	flex: none;
+	place-items: center;
+	position: relative;
+	overflow: hidden;
+	width: calc(var(--spacing) * 4.5);
+	height: calc(var(--spacing) * 4.5);
+	border-radius: var(--radius-full);
+	background: var(--color-neutral-surface);
+	font-size: var(--text-2xs);
+	font-weight: var(--font-weight-semibold);
+	line-height: 1;
+	color: var(--color-text-secondary);
+}
+
+.gh-card-avatar img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+/* The outline sits above the photo so it reads on any avatar colour. */
+.gh-card-avatar::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	box-sizing: border-box;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: inherit;
+}
+
+/* The last row (branch or labels) sits apart: the 8px gap plus 4px. */
+.gh-card-body > .gh-card-last {
+	margin-block-start: var(--spacing);
+}
+
+.gh-card-branch {
+	display: flex;
+	max-width: 100%;
+	min-width: 0;
+}
+
+.gh-card-branch code {
+	min-width: 0;
+	overflow: hidden;
+	padding: calc(var(--spacing) / 4) var(--spacing);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-sm);
+	background: var(--color-inset);
+	font-family: var(--font-mono);
+	font-size: var(--text-2xs);
+	color: var(--color-text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Issue labels: hairline capsules with a 10px dot in the nearest shared tone. */
+.gh-card-labels {
+	display: flex;
+	flex-wrap: wrap;
+	gap: calc(var(--spacing) * 1.5);
+}
+
+.gh-card-label {
+	--tone: var(--color-neutral-graphic);
+	display: inline-flex;
+	align-items: center;
+	box-sizing: border-box;
+	gap: calc(var(--spacing) * 1.5);
+	height: calc(var(--spacing) * 5.5);
+	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-full);
+	font-size: var(--text-xs);
+	color: var(--color-text-secondary);
+}
+
+.gh-card-label::before {
+	content: "";
+	flex: none;
+	width: calc(var(--spacing) * 2.5);
+	height: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-full);
+	background: var(--tone);
+}
+
+.gh-card-label[data-tone="success"] {
+	--tone: var(--color-success-graphic);
+}
+
+.gh-card-label[data-tone="warning"] {
+	--tone: var(--color-warning-graphic);
+}
+
+.gh-card-label[data-tone="danger"] {
+	--tone: var(--color-danger-graphic);
+}
+
+.gh-card-label[data-tone="brand"] {
+	--tone: var(--color-brand);
+}
+
+.gh-card-label[data-tone="merged"] {
+	--tone: var(--color-merged-graphic);
+}
+
+.gh-card-note {
+	margin: 0;
+	color: var(--color-text-secondary);
+	text-wrap: pretty;
+}
+
+.gh-card-action {
+	color: var(--color-brand-ink);
+	font-weight: var(--font-weight-medium);
+	text-decoration: none;
+}
+
+.gh-card-action:hover {
+	text-decoration: underline;
+}
+
+/* Loading: the same rows, as quiet bars. */
+.gh-card[data-loading] .gh-card-body {
+	justify-items: stretch;
+}
+
+.gh-card-skeleton {
+	display: block;
+	height: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-sm);
+	background: var(--color-neutral-surface);
+	animation: gh-card-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite alternate;
+}
+
+.gh-card-glyph.gh-card-skeleton {
+	height: calc(var(--spacing) * 7);
+	border-radius: var(--radius-md);
+}
+
+.gh-card-skeleton:is([data-line="title"], [data-line="title-end"]) {
+	height: calc(var(--spacing) * 3.5);
+}
+
+.gh-card-skeleton[data-line="title"] {
+	width: 92%;
+}
+
+.gh-card-skeleton[data-line="title-end"] {
+	width: 58%;
+}
+
+.gh-card-skeleton[data-line="time"] {
+	width: 34%;
+}
+
+.gh-card-skeleton[data-line="author"] {
+	width: 6rem;
+}
+
+.gh-card-skeleton[data-line="last"] {
+	width: 50%;
+}
+
+.gh-card-avatar.gh-card-skeleton {
+	height: calc(var(--spacing) * 4.5);
+	border-radius: var(--radius-full);
+}
+
+@keyframes gh-card-pulse {
+	to {
+		opacity: var(--opacity-quiet);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.gh-card-skeleton {
+		animation: none;
+	}
+
+	.gh-card-popup {
+		transition-property: opacity;
+	}
 }
