@@ -611,12 +611,15 @@ test("the language menu is a keyboard-operable listbox", async ({ join, room, se
 
 	await trigger.focus();
 	await page.keyboard.press("ArrowDown");
-	await page.keyboard.press("ArrowDown");
+	// Pick a named language: the next option may be a chromeless drawing.
+	await page.keyboard.press("x");
+	await expect(list.getByRole("option", { name: "XML", exact: true }))
+		.toHaveAttribute("data-active", "true");
 	await page.keyboard.press("Enter");
 	await expect(list).toBeHidden();
-	await expect(content(page).getByRole("button", { name: /^Code language: (?!TypeScript)/ }))
+	await expect(content(page).getByRole("button", { name: "Code language: XML", exact: true }))
 		.toBeVisible();
-	await written(page, room, /^```(?!typescript$)\S+$/m);
+	await written(page, room, /^```xml$/m);
 });
 
 test("the language menu takes focus before the next animation frame", async ({ join, page, seed }) => {
@@ -632,7 +635,7 @@ test("the language menu takes focus before the next animation frame", async ({ j
 	await trigger.focus();
 	await page.keyboard.press("ArrowDown");
 	await expect(list).toBeFocused();
-	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("x");
 	await page.keyboard.press("Enter");
 	await page.clock.resume();
 	await expect(content(page).getByRole("button", { name: "Code language: XML", exact: true }))

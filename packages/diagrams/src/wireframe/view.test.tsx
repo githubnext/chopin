@@ -77,3 +77,22 @@ test("joins a flow's parts with arrows between them, not around them", () => {
 	let html = markup(`row flow\n  card "A"\n  card "B"\n  card "C"`);
 	expect(html.match(/class="wf-arrow"/g)).toHaveLength(2);
 });
+
+test("the text alternative includes every tab as well as the selected tab", () => {
+	let html = markup(`tabs active=2\n  - Profile\n  - Access`);
+	expect(html).toContain(
+		'<div class="wf-alt"><ul><li>Tabs, “Access” selected<ul><li>Profile</li><li>Access</li></ul>',
+	);
+});
+
+test("flow connectors skip notes that live in the callout rail", () => {
+	let html = markup(
+		`row flow\n  note "Before" -> #a\n  card "A" #a\n  note "Between" -> #a\n  card "B"\n  note "After" -> #a`,
+	);
+	expect(html.match(/class="wf-arrow"/g)).toHaveLength(1);
+});
+
+test("a note marks a divider target as well as other parts", () => {
+	let html = markup(`panel\n  divider #split\nnote "Separates sections" -> #split`);
+	expect(html).toContain('<div data-wf="divider" data-marked=""><span class="wf-mark">');
+});

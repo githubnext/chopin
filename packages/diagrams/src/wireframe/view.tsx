@@ -74,7 +74,7 @@ function Outline({ nodes }: { nodes: WireframeNode[] }) {
 			{parts.map((node, index) => (
 				<li key={index}>
 					{describeWireframePart(node)}
-					{node.kind !== "tabs" && node.items.length > 0 && (
+					{node.items.length > 0 && (
 						<ul>{node.items.map((item, at) => <li key={at}>{item.text}</li>)}</ul>
 					)}
 					{(node.kind !== "disclosure" || node.flags.includes("open"))
@@ -143,7 +143,7 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 			return (
 				<div {...common} data-flow={has(node, "flow")} data-wrap={has(node, "wrap")}>
 					{mark}
-					{node.children.map((child, index) => (
+					{node.children.filter(child => child.kind !== "note").map((child, index) => (
 						<Fragment key={index}>
 							{flow && index > 0 && <span className="wf-arrow" />}
 							<Part node={child} marks={marks} />
@@ -249,6 +249,6 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 				</div>
 			);
 		case "divider":
-			return <div {...common} />;
+			return <div {...common}>{mark}</div>;
 	}
 }
