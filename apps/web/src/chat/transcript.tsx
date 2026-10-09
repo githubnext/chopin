@@ -5,6 +5,7 @@ import { CloseIcon, MessageIcon, SignInIcon, SparkleIcon, WarningIcon } from "@c
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { Face, useCardMeta } from "@chopin/editor";
+import { EmptyState } from "@chopin/visuals";
 
 import { ChopinMark } from "./agent-mark";
 import { MessageMarkdown } from "./markdown";
@@ -658,30 +659,36 @@ export function Transcript(
 				{emptyHint && (
 					<div
 						aria-hidden={groups.length > 0 || undefined}
-						className={`pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center transition-opacity motion-reduce:transition-none ${
+						className={`pointer-events-none absolute inset-0 flex items-center justify-center px-6 transition-opacity motion-reduce:transition-none ${
 							groups.length > 0 ? "opacity-0" : "opacity-100"
 						}`}
 						data-chat-empty=""
 					>
-						<MessageIcon aria-hidden="true" className="text-text-quaternary" />
-						<p className="max-w-[32ch] text-sm text-text-tertiary">
-							Talk it through with your collaborators.
-							{emptyHint.planner && (
+						<EmptyState
+							density="compact"
+							icon={MessageIcon}
+							measure="short"
+							description={
 								<>
-									{" "}Mention <strong className="font-medium text-text-secondary">@chopin</strong>
-									{" "}
-									to ask the Planner
-									{emptyHint.references ? ", or " : "."}
+									Talk it through with your collaborators.
+									{emptyHint.planner && (
+										<>
+											{" "}Mention{" "}
+											<strong className="font-medium text-text-secondary">@chopin</strong>{" "}
+											to ask the Planner
+											{emptyHint.references ? ", or " : "."}
+										</>
+									)}
+									{emptyHint.references && (
+										<>
+											{emptyHint.planner ? "" : " Use "}
+											<strong className="font-medium text-text-secondary">#</strong>{" "}
+											to point at a document.
+										</>
+									)}
 								</>
-							)}
-							{emptyHint.references && (
-								<>
-									{emptyHint.planner ? "" : " Use "}
-									<strong className="font-medium text-text-secondary">#</strong>{" "}
-									to point at a document.
-								</>
-							)}
-						</p>
+							}
+						/>
 					</div>
 				)}
 			</div>

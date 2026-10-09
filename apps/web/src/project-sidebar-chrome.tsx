@@ -1,4 +1,5 @@
 import panelIcon from "./assets/icons/panel-close.svg";
+import { IconButton } from "./icon-button";
 
 import type { RefObject } from "react";
 import type * as Api from "./api";
@@ -27,14 +28,15 @@ export function ProjectSidebarLoading(
 							<span className="size-3.5 shrink-0" />
 							<span className="text-xs font-semibold text-brand">Chopin</span>
 						</div>
-						<button
+						<IconButton
 							aria-label="Hide sidebar"
-							className="project-sidebar-action"
+							glyph="default"
 							onClick={onCollapse}
-							type="button"
+							placement="sidebar"
+							size="compact"
 						>
 							<img alt="" height="14" src={panelIcon} width="14" />
-						</button>
+						</IconButton>
 					</header>
 					<p className="sr-only" role="status">Loading projects…</p>
 					<div aria-hidden="true" className="pointer-events-none">

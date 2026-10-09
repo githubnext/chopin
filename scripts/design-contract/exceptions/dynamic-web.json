@@ -73,7 +73,7 @@
 				1
 			]
 		],
-		"sourceHash": "40ca22148b2b9580fa180823db072d1ba59234ba5f146c45bb98d94f9cc6a610"
+		"sourceHash": "834ae3a6082aff6f1456bacfb943f9f419c1ffd120de974ef2800a595f647be5"
 	},
 	{
 		"file": "apps/web/src/chat/markdown.tsx",
@@ -101,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "5e5f3ef1a83250c9f3971479457a1bef6f4ddf1e47513ca179f1c12391614f45"
+		"sourceHash": "cf9223a300a5e36ab22e6394d5c344a6eab34736178d197ae6c6d2d8b7bfd1dc"
 	},
 	{
 		"file": "apps/web/src/project-sidebar.tsx",
@@ -115,7 +115,7 @@
 				1
 			]
 		],
-		"sourceHash": "5e5f3ef1a83250c9f3971479457a1bef6f4ddf1e47513ca179f1c12391614f45"
+		"sourceHash": "cf9223a300a5e36ab22e6394d5c344a6eab34736178d197ae6c6d2d8b7bfd1dc"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -157,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "fb330a89359e98822a720be68add8398dcad5a434788c1a96947a15b0f06f770"
+		"sourceHash": "895d89913307fd6884c56a0f7ccf8e698988a4546ca525465105b69c365a5db7"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -171,7 +171,7 @@
 				1
 			]
 		],
-		"sourceHash": "fb330a89359e98822a720be68add8398dcad5a434788c1a96947a15b0f06f770"
+		"sourceHash": "895d89913307fd6884c56a0f7ccf8e698988a4546ca525465105b69c365a5db7"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -192,7 +192,7 @@
 				1
 			]
 		],
-		"sourceHash": "fb330a89359e98822a720be68add8398dcad5a434788c1a96947a15b0f06f770"
+		"sourceHash": "895d89913307fd6884c56a0f7ccf8e698988a4546ca525465105b69c365a5db7"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -215,13 +215,6 @@
 			[
 				"dynamic",
 				"class",
-				"motion.className",
-				"class > NavigationDrawer > <div>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
 				"sidebarMotion.className",
 				"class > NavigationShell > <div>",
 				1
@@ -234,7 +227,21 @@
 				1
 			]
 		],
-		"sourceHash": "32351868c1423465eac33e7db7df58ef0c5c321c3ac304776dc9e00e7b14326f"
+		"sourceHash": "36a4b50b7644c85420c097bd5a0d8031c9b7521d8af1570303f59cce3cf22a6f"
+	},
+	{
+		"file": "apps/web/src/navigation-drawer.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"motion.className",
+				"class > NavigationDrawer > <div>",
+				1
+			]
+		],
+		"sourceHash": "2b72ef13673383cad8334636e328ec9367fd263a46b0281b2fe7ce0e4efdd729"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
@@ -262,7 +269,7 @@
 				1
 			]
 		],
-		"sourceHash": "9dc8f3ebb687c4aef15bcdf1aeb38a8b1e315aae3df3cd75179466ceaea62077"
+		"sourceHash": "a738e4f3fee8e64eaddcf9a783bca5260e9fe3861ff0d367427dbe2896b368d7"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -290,7 +297,7 @@
 				1
 			]
 		],
-		"sourceHash": "9dc8f3ebb687c4aef15bcdf1aeb38a8b1e315aae3df3cd75179466ceaea62077"
+		"sourceHash": "a738e4f3fee8e64eaddcf9a783bca5260e9fe3861ff0d367427dbe2896b368d7"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",

@@ -112,7 +112,7 @@ Chopin feels calm, precise, and collaborative. The authored document is the visu
 - Petrol marks actions, links, focus, and presence; semantic colors identify outcomes.
 - Controls are quiet, legible, and purposeful. Depth gives layers subtle separation.
 
-The implementation is the authority for values: `../../packages/visuals/theme.css` owns shared tokens, while `src/theme.css`, `src/navigation.css`, and `../../packages/editor/src/styles.css` apply them. The frontmatter records the most reused values; it is not a replacement for those source files. `scripts/check-design-record.ts` compares the structured subset against the shared theme, including explicit aliases. Two contextual values are checked against their owning selectors: Chat's divider in `.workspace-frame .workspace-chat-panel`, and prose leading in `.plan .plan-content`. Prose leading is deliberately 1.6 while the paired base UI token remains 1.5. The sidecar's color values, shadows, and motion entries are checked too; generated dates and illustrative tonal ramps do not establish authority. See [the design contract guide](../../docs/design-contract.md) for the exact scope and change workflow.
+The implementation is the authority for values: `../../packages/visuals/theme.css` owns shared tokens, while `src/theme.css`, `src/navigation.css`, and `../../packages/editor/src/styles.css` apply them. The frontmatter records the most reused values; it is not a replacement for those source files. `scripts/check-design-record.ts` compares the structured subset against the shared theme, including explicit aliases. Two component bindings to shared tokens are checked against their owning selectors: Chat's divider in `.workspace-frame .workspace-chat-panel`, and prose leading in `.plan .plan-content`. Their shared owners are `--color-divider` and `--document-line-height`. Document leading is deliberately 1.6 while the paired base UI token remains 1.5. The sidecar's color values, shadows, and motion entries are checked too; generated dates and illustrative tonal ramps do not establish authority. See [the design contract guide](../../docs/design-contract.md) for the exact scope and change workflow.
 
 ## Colors
 
@@ -148,7 +148,7 @@ text only when people need it to act or recover.
 
 ## Layout
 
-The workspace places the document on the left and Chat on the right when space permits. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 40.625rem (650px), with 3.75rem (60px) of top padding and at least 3rem (48px) of padding on each side. At browser widths of 600px or less, the horizontal padding becomes 1.5rem (24px). Images and diagrams can extend beyond the prose measure within those gutters; tables can grow toward the trailing gutter and retain their own scroll lane.
+The workspace places the document on the left and Chat on the right when space permits. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 40.625rem (650px), with 3.75rem (60px) of top padding and at least 3.5rem (56px) of padding on each side. At browser widths of 600px or less, the horizontal padding becomes 1.5rem (24px). Images and diagrams can extend beyond the prose measure within those gutters; tables can grow toward the trailing gutter and retain their own scroll lane.
 
 Spacing starts from a 4px unit and uses the measured steps shown in the frontmatter. App chrome is dense; prose has larger margins and trailing space so the caret remains comfortable near the end of a document. Layout responds to both viewport and document container width. Safe-area insets and larger coarse-pointer targets are accounted for in the web styles.
 
@@ -183,3 +183,18 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 
 - **Don't** introduce a raw color, font size, or radius in a component when an established token serves that role.
 - **Don't** create a second local definition of a shared token or shadow treatment.
+
+## Shared component recipes
+
+Important visual dimensions and colors belong to the shared theme. Use finite component variants for density, size, typography and state; avoid selector overrides that reach into another component or anonymous child. Browser geometry remains measured at runtime.
+
+- `Count` owns quiet, actionable and control appearances. Quiet sidebar counts use `--color-count-quiet` (gray-50); selected control counts use the page surface. Control counts use an 18px minimum square and allow wider values without clipping. Counted buttons use the shared 4px control inset.
+- `IconButton` owns normal and compact sizes, default and compact glyphs, and ghost or nested hover surfaces. Compact sidebar buttons are 24px with a 12px glyph; the common icon catalog also includes micro, default and larger roles. Coarse pointer targets use `--control-target-coarse`.
+- `MenuItem` owns normal and compact density, with shared height, padding and gap tokens. Destructive text and icons inherit the same semantic ink. `MenuSeparator` owns the divider spacing.
+- `EmptyState` owns circular tinted icon frames, title and description type roles, copy measure, icon gap and optional framed presentation. Decisions and Chat use its compact density.
+- Document measure, gutters, top inset, leading and decision marker size are shared document roles. Marker positioning measures the rendered disc, so token changes cannot desynchronize the visual size and geometry.
+- Panel headers and the document title split control use shared heights and insets. Breadcrumb text uses medium weight; the split label and compact action produce an 8px text-to-chevron gap. Project names in document breadcrumbs are plain text; document title and menu controls share a single hover surface.
+
+SeeCode uses a fixed canvas typography catalog in `packages/diagrams/src/core/tokens.mjs`: node labels 14px, subtitles 12px, tags 10px and edge labels 12px. Measurement and SVG drawing variables derive from the same catalog, so changing type updates boxes and routing together. These are coordinate-system roles; interface controls retain the fluid UI scale. Architecture graphs may use a narrower derived layout, targeting the smaller of 1100px or the document lane, while preserving saved source, node identities, connections and playback. Fitting has a readability floor; dense diagrams keep native scrolling and zoom controls below the diagram.
+
+`InlineNotice` reserves space in the page flow for recoverable failures, using the shared semantic surface, icon and text roles. Navigation retry controls align within it; notices never cover document content. Connection labels and recovery buttons use the same compact text role.

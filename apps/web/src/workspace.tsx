@@ -180,17 +180,17 @@ export function ChatToggle(
 			{swapOnHover
 				? (
 					<span
-						className={`${feedback} grid size-[14px]`}
+						className={`${feedback} grid size-(--icon-size-default)`}
 						data-motion-feedback="icon"
 					>
 						<img
 							alt=""
-							className="chat-toggle-icon chat-toggle-icon-default col-start-1 row-start-1 size-[14px]"
+							className="chat-toggle-icon chat-toggle-icon-default col-start-1 row-start-1 size-(--icon-size-default)"
 							src={chatIcon}
 						/>
 						<img
 							alt=""
-							className="chat-toggle-icon chat-toggle-icon-sidebar col-start-1 row-start-1 size-[14px] rotate-180"
+							className="chat-toggle-icon chat-toggle-icon-sidebar col-start-1 row-start-1 size-(--icon-size-default) rotate-180"
 							src={chatCloseIcon}
 						/>
 					</span>
@@ -198,7 +198,7 @@ export function ChatToggle(
 				: (
 					<img
 						alt=""
-						className={`${feedback} size-[14px]`}
+						className={`${feedback} size-(--icon-size-default)`}
 						data-motion-feedback="icon"
 						key={open ? "open" : "closed"}
 						src={open ? chatCloseIcon : chatIcon}
@@ -449,8 +449,8 @@ export function Workspace(
 				ref={frame}
 				className={`workspace-frame relative flex min-h-0 flex-1 ${
 					mode === "split"
-						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-page shadow-raised ring-hairline"
-						: "m-2 overflow-hidden rounded-[12px] bg-page shadow-resting ring-hairline"
+						? "mx-3 mb-3 overflow-hidden rounded-panel bg-page shadow-raised ring-hairline"
+						: "m-2 overflow-hidden rounded-panel bg-page shadow-resting ring-hairline"
 				}`}
 				data-paper-obscured={paperObscured || undefined}
 				inert={paperObscured}
@@ -466,7 +466,7 @@ export function Workspace(
 					<div className="relative flex h-full flex-col overflow-hidden">
 						{mode === "split" && (
 							<div
-								className="flex h-[46px] shrink-0 items-center overflow-x-auto overflow-y-hidden px-2.5 hairline-b"
+								className="panel-header flex shrink-0 items-center overflow-x-auto overflow-y-hidden px-(--panel-toolbar-padding-inline) hairline-b"
 								data-document-toolbar
 								onFocusCapture={event => {
 									if (!(event.target instanceof HTMLElement)) return;
@@ -574,7 +574,7 @@ export function Workspace(
 						{mode === "split"
 							? (
 								<div
-									className="chat-header flex h-[46px] shrink-0 items-center gap-0.5 px-3.5 hairline-b"
+									className="chat-header panel-header flex shrink-0 items-center gap-(--panel-header-gap) px-(--panel-header-padding-inline) hairline-b"
 									data-chat-header
 								>
 									{presentation.separatorVisible && (
@@ -589,7 +589,7 @@ export function Workspace(
 									)}
 									<ChatToggle
 										activity={chatActivity}
-										className="chat-header-control -ml-[5px]"
+										className="chat-header-control panel-header-control"
 										controls={ids.pane.chat}
 										onToggle={dismissChat}
 										open

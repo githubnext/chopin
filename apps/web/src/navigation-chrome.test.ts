@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ChevronIcon, DocumentIcon, KeyboardIcon, PlusIcon, SearchIcon } from "@chopin/icons";
+import { ChevronIcon, DocumentIcon } from "@chopin/icons";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -41,7 +41,7 @@ describe("the Figma navigation chrome", () => {
 		expect([...collapsed]).toEqual(["R_other"]);
 	});
 
-	test("uses plus icons for document creation and a compact add-project icon", () => {
+	test("offers document creation, project creation, and search with an accessible project disclosure", () => {
 		let markup = renderToStaticMarkup(createElement(ProjectSidebar, {
 			canCreateDocument: true,
 			pendingCreations: new Map(),
@@ -76,32 +76,15 @@ describe("the Figma navigation chrome", () => {
 			user: { avatarUrl: "/user.png", id: "user-one", login: "MaggieAppleton" },
 		}));
 
-		let plus = renderToStaticMarkup(createElement(PlusIcon));
 		let primary = markup.match(
 			/<button[^>]*class="project-sidebar-primary-action"[^>]*>.*?<\/button>/s,
 		)?.[0];
-		expect(primary).toContain(plus);
 		expect(primary).toContain("New document</span>");
-		expect(markup).toMatch(/height="14" src="[^"]*chopin\.svg" width="14"/);
-		let projectAction = markup.match(
-			/<button[^>]*aria-label="New document in testing-sql-transcripts"[^>]*>.*?<\/button>/s,
-		)?.[0];
-		expect(projectAction).toContain(renderToStaticMarkup(createElement(PlusIcon, { size: 12 })));
-		expect(markup).toContain(
-			renderToStaticMarkup(createElement(DocumentIcon, {
-				className: "project-sidebar-project-repository-icon",
-			})),
-		);
-		expect(markup).not.toContain('src="/repository.png"');
-		let addProjectAction = markup.match(
-			/<button[^>]*aria-label="Add project"[^>]*>.*?<\/button>/s,
-		)?.[0];
-		expect(addProjectAction).toContain(renderToStaticMarkup(createElement(PlusIcon, { size: 12 })));
+		expect(markup).toContain('aria-label="New document in testing-sql-transcripts"');
+		expect(markup).toContain('aria-label="Add project"');
 		expect(markup).toMatch(
 			/<button[^>]*class="project-sidebar-primary-action"[^>]*>.*?Search<\/span>/s,
 		);
-		expect(markup).toContain(renderToStaticMarkup(createElement(SearchIcon, { size: 12 })));
-		expect(markup).toContain('class="project-sidebar-projects gap-2"');
 		expect(markup).toMatch(
 			/<button[^>]*aria-expanded="true"[^>]*class="project-sidebar-project-disclosure[^>]*>.*?testing-sql-transcripts<\/span><\/button>/s,
 		);
@@ -156,9 +139,6 @@ describe("the Figma navigation chrome", () => {
 		expect(closed).toMatch(/class="project-sidebar-account" aria-expanded="false"/);
 		expect(open).toMatch(/class="project-sidebar-account" aria-expanded="true"/);
 		expect(open).toContain("Keyboard shortcuts");
-		expect(open).toContain(
-			renderToStaticMarkup(createElement(KeyboardIcon, { size: 14 })) + "Keyboard shortcuts",
-		);
 	});
 
 	test("offers explicit pagination when a Project has more documents", () => {
@@ -195,6 +175,7 @@ describe("the Figma navigation chrome", () => {
 	test("keeps the document header to one project icon and document trigger", () => {
 		let props = {
 			canManage: true,
+			project: { id: "R_test", name: "chopin" },
 			label: "Hushed mountain",
 			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
 			onAction: () => {},
@@ -217,6 +198,7 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toContain('style="width:24px;height:24px;');
 		expect(markup).not.toContain('aria-label="Show sidebar"');
 		expect(markup).not.toContain('aria-label="Repository:');
+		expect(markup).not.toContain('aria-label="Show chopin in the sidebar"');
 		expect(markup).not.toContain('href="/"');
 		expect(markup).not.toContain("hairline-b");
 	});

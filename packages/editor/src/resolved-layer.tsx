@@ -34,7 +34,6 @@ import { Face } from "./face";
 import {
 	COMPACT_GUTTER,
 	keyOf,
-	MARKER_SIZE,
 	markerPoint,
 	markerReach,
 	ownedPoint,
@@ -75,6 +74,7 @@ type Placed = {
 	decision: Decision;
 	marker: MarkerPlace;
 	lineHeight: number;
+	markerSize: number;
 	anchor: Rect;
 	/** Where the prose starts, from the host's left edge. */
 	prose: number;
@@ -113,10 +113,11 @@ function lineHeightOf(element: HTMLElement): number {
 function markerStyle(
 	marker: MarkerPlace,
 	lineHeight: number,
+	markerSize: number,
 	prose: number,
 	vertical: { top: number; bottom: number },
 ): CSSProperties {
-	let width = marker.compact ? COMPACT_GUTTER : MARKER_SIZE;
+	let width = marker.compact ? COMPACT_GUTTER : markerSize;
 	let reach = markerReach(marker.left, width, prose);
 	return {
 		top: marker.top,
@@ -292,6 +293,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	let [height, setHeight] = useState(0);
 	let root = useRef<HTMLDivElement>(null);
 	let markers = useRef<HTMLDivElement>(null);
+	let markerProbe = useRef<HTMLSpanElement>(null);
 	let wasVisible = useRef(false);
 	let leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	let painted = useRef(false);
@@ -381,6 +383,13 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 			return;
 		}
 		wasVisible.current = true;
+		let probe = markerProbe.current;
+		if (!probe) return;
+		let markerSize = Number.parseFloat(getComputedStyle(probe).inlineSize);
+		if (!Number.isFinite(markerSize) || markerSize <= 0) {
+			setPlaced([]);
+			return;
+		}
 		let page = rect(host.getBoundingClientRect());
 		let markerHost = scroller ? rect(scroller.getBoundingClientRect()) : page;
 		let next: Placed[] = [];
@@ -401,7 +410,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 				let first = rects.reduce((top, value) => value.top < top.top ? value : top);
 				let element = elements[rects.indexOf(first)]!;
 				let lineHeight = lineHeightOf(element);
-				let marker = markerPoint(first, lineHeight, markerHost);
+				let marker = markerPoint(first, lineHeight, markerHost, markerSize);
 				let prose = first.left - markerHost.left;
 				// Content coordinates let the browser carry markers with native scrolling.
 				if (scroller) {
@@ -409,7 +418,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 					marker.left += scroller.scrollLeft - scroller.clientLeft;
 					prose += scroller.scrollLeft - scroller.clientLeft;
 				}
-				next.push({ decision, marker, lineHeight, anchor: first, prose });
+				next.push({ decision, marker, markerSize, lineHeight, anchor: first, prose });
 			} catch (error) {
 				// A bad anchor must not break Lexical's update listener.
 				console.error(`[plan] could not place decision ${decision.key}:`, error);
@@ -429,6 +438,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		host.addEventListener("scroll", measure, true);
 		let observer = new ResizeObserver(measure);
 		observer.observe(host);
+		if (markerProbe.current) observer.observe(markerProbe.current);
 		// React card collapses move prose without resizing the host or updating Lexical.
 		let offRoot = editor.registerRootListener((element, previous) => {
 			if (previous) observer.unobserve(previous);
@@ -548,9 +558,9 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		};
 	}
 	let vertical = verticalReach(
-		placed.map(({ lineHeight, marker }) => ({
+		placed.map(({ lineHeight, marker, markerSize }) => ({
 			top: marker.top,
-			height: marker.compact ? lineHeight : MARKER_SIZE,
+			height: marker.compact ? lineHeight : markerSize,
 		})),
 	);
 	let popoverId = "plan-decision-pop";
@@ -560,7 +570,12 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		<div className="plan-decision-layer" ref={root}>
 			{createPortal(
 				<div className="plan-decision-layer" ref={markers}>
-					{placed.map(({ decision, lineHeight, marker, prose }, index) => {
+					<span
+						aria-hidden="true"
+						className="plan-decision-disc plan-decision-size-probe"
+						ref={markerProbe}
+					/>
+					{placed.map(({ decision, lineHeight, marker, markerSize, prose }, index) => {
 						let isPinned = pointer.pinned === decision.key;
 						let previewing = view?.key === decision.key && !view.pinned;
 						return (
@@ -593,7 +608,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 								onPointerEnter={event => event.pointerType !== "touch" && enter(decision.key)}
 								onPointerLeave={() => leave(decision.key)}
 								data-compact={marker.compact || undefined}
-								style={markerStyle(marker, lineHeight, prose, vertical[index]!)}
+								style={markerStyle(marker, lineHeight, markerSize, prose, vertical[index]!)}
 								type="button"
 							>
 								<span className="plan-decision-disc">

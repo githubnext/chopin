@@ -8,8 +8,8 @@ expresses why it exists; matching a number is not enough to choose it.
 
 ## Change a value deliberately
 
-1. Look for a reusable role before adding a token. Geometry, chart coordinates,
-   authored content, and isolated layout measurements do not each need a token.
+1. Look for a reusable role before adding a token. Runtime geometry, chart coordinates and authored content remain data.
+   Important visual dimensions, typography, colors and control spacing use shared tokens.
 2. Put a justified shared value in the theme. Preserve the fluid type scale,
    document title role, accepted 3px quote edge, and sidebar transform behaviour.
 3. Update the corresponding structured values in DESIGN.md and its
@@ -25,8 +25,9 @@ Dynamic groups also pin the reviewed owner file with SHA-256, so changes behind 
 
 The policy checks expected occurrence counts; removed or broadened uses must be
 reviewed again. A local disable comment is not an exception: the detector runs with
-`--no-inline-ignores`. Never add a broad ignore or create a one-use token just to
-silence a finding.
+`--no-inline-ignores`. Never add a broad ignore or create a token just to silence a finding.
+New interface work must use shared semantic roles and finite component variants;
+do not add aesthetic exceptions or descendant overrides for individual contexts.
 
 ## Contrast and visual hierarchy
 
@@ -57,24 +58,25 @@ before comparison. Missing or unknown mapped fields, duplicate named entries,
 unknown aliases, alias cycles, malformed sources, and genuine value conflicts
 fail the check. Tailwind namespace resets are applied in source order.
 
-| Record subset                                                     | Implementation owner                                                                 |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Fourteen named colours, including sidecar `colorMeta.*.canonical` | Explicit semantic colour mapping in the theme; Chat divider is contextual below      |
-| Five `rounded` entries                                            | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`          |
-| Seven typography roles: size, complete font stack, line height    | `--text-*`, `--font-sans`, paired leading; document prose is contextual below        |
-| Eight spacing steps                                               | Multiples of `--spacing`                                                             |
-| Four sidecar shadow entries                                       | `--shadow-resting`, `--shadow-resting-strong`, `--shadow-raised`, `--shadow-overlay` |
-| Seven sidecar motion entries                                      | Fast/base/linger duration, smooth-out/move curves, sidebar open/close duration       |
+| Record subset                                                     | Implementation owner                                                                    |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Fourteen named colours, including sidecar `colorMeta.*.canonical` | Explicit semantic colour mapping in the theme; Chat divider uses `--color-divider`      |
+| Five `rounded` entries                                            | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`             |
+| Seven typography roles: size, complete font stack, line height    | `--text-*`, `--font-sans`, paired leading; document prose uses `--document-line-height` |
+| Eight spacing steps                                               | Multiples of `--spacing`                                                                |
+| Four sidecar shadow entries                                       | `--shadow-resting`, `--shadow-resting-strong`, `--shadow-raised`, `--shadow-overlay`    |
+| Seven sidecar motion entries                                      | Fast/base/linger duration, smooth-out/move curves, sidebar open/close duration          |
 
-Two values intentionally belong to components. The divider is the `border-color`
+The checker also verifies two component bindings. The divider is the `border-color`
 in `.workspace-frame .workspace-chat-panel` in the
 [web theme](../apps/web/src/theme.css). Prose leading is the `line-height` in
 `.plan .plan-content` in the [editor styles](../packages/editor/src/styles.css).
-The check requires each declaration exactly once. The document's 1.6 leading is
+Both declarations resolve shared tokens; the check requires each exactly once.
+The document's 1.6 leading is
 deliberately looser than the base UI token's 1.5.
 
-Font weights are validated as numeric CSS weights, but are not compared to a
-shared token: the current theme does not own weight roles. Component recipes,
+Document heading weights are compared to `--font-weight-document-heading`.
+Other recorded weights are validated as numeric CSS weights. Component recipes,
 illustrative tonal ramps, breakpoints, and narrative are outside this canonical
 value comparison. Component aliases are still resolved so a broken reference
 cannot hide there. Sidecar typography metadata must cover the same seven roles.
@@ -105,7 +107,10 @@ JSX style/presentation attributes, direct DOM style assignments, `setProperty`,
 `cssText`, `Object.assign`, recognised stylesheet strings, HTML/SVG, `@apply`,
 and Tailwind arbitrary/variant forms. Exported uppercase or class-named literal
 producers and Lexical themes are checked separately from their consumers.
-Imported function computation, arbitrary control flow, Web Animations API calls,
+Bounded local style functions with declarations and a final object return are
+checked property by property, including logical spreads. Mutations, unresolved
+spreads and unknown control flow remain findings. Imported function computation,
+Web Animations API calls,
 third-party CSS-in-JS protocols, and arbitrary runtime-generated HTML are not
 interpreted. Known unresolved style/class sinks produce findings, including JSX
 prop pass-throughs. The exact dynamic exceptions record these reviewed boundaries;
@@ -114,10 +119,9 @@ behavior when changing such a boundary, and add a parser fixture before adopting
 a new style API. Do not treat a JavaScript string elsewhere in the program as a
 supported stylesheet container.
 
-Typography weight and leading stay component-owned except for the documented
-role checks. The scanner focuses typography enforcement on size, shorthand and
-family. Numeric spacing and layout measurements remain permitted; audit their
-intent in the real component. Standalone artwork palettes, fine caret geometry,
+Typography weight and leading use shared roles where defined. The scanner focuses typography enforcement on size, shorthand and
+family. Runtime layout measurements remain permitted; approved visual spacing uses
+shared foundation or component tokens. Audit their intent in the real component. Standalone artwork palettes, fine caret geometry,
 legacy mono stacks and bespoke repeat animations have explained counted cases.
 Canonical token use alone does not establish contrast; verify foreground and
 background pairs, opacity and rendered states separately.

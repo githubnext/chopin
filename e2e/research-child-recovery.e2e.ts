@@ -233,12 +233,17 @@ async function startInlineResearch(page: Page, question: string) {
 	await page.keyboard.press("Enter");
 	let composer = page.getByRole("region", { name: "Research question", exact: true });
 	await composer.getByRole("textbox", { name: "Research question", exact: true }).fill(question);
+	await expect(composer).toHaveCSS("transform", "none");
 	let authoredOrder = await page.locator("[data-research-draft-anchor]").evaluate(anchor => {
 		let editor = anchor.closest('[role="textbox"][aria-label="editable markdown"]')!;
 		let block = anchor;
 		while (block.parentElement !== editor) block = block.parentElement!;
 		let next = block.nextElementSibling;
-		while (next && !next.textContent?.trim()) next = next.nextElementSibling;
+		while (
+			next && (next.classList.contains("plan-research-draft-host") || !next.textContent?.trim())
+		) {
+			next = next.nextElementSibling;
+		}
 		let previous: Element | null = block;
 		while (previous && !previous.textContent?.trim()) previous = previous.previousElementSibling!;
 		return {
@@ -247,7 +252,12 @@ async function startInlineResearch(page: Page, question: string) {
 		};
 	});
 	await page.keyboard.press("Enter");
-	await expect(composer).toHaveCount(0);
+	await expect(page.getByRole("region", {
+		name: "Research question",
+		exact: true,
+		includeHidden: true,
+	})).toHaveCount(0);
+	await expect(editor.locator(".plan-research-draft-host")).toHaveCount(0);
 	let card = page.getByRole("article", { name: "Research" }).filter({ hasText: question });
 	await expect(card).toHaveCount(1);
 	expect(
@@ -270,6 +280,87 @@ async function startInlineResearch(page: Page, question: string) {
 		.toHaveCount(0);
 	return card;
 }
+
+test(
+	"research drafts and lifecycle cards share the prose column and scroll in document flow",
+	async ({ baseURL, join, page, room, seed }, testInfo) => {
+		await seed(PARENT_SOURCE);
+		let research = await scriptResearch(page, room, port(baseURL!));
+		let opened = await join("ana");
+		await opened.setViewportSize({ width: 1500, height: 895 });
+		let hideChat = opened.getByRole("button", { name: "Hide chat", exact: true });
+		if (await hideChat.isVisible()) await hideChat.click();
+		let editor = content(opened);
+		await expect.poll(async () => (await editor.locator("p").first().boundingBox())!.width)
+			.toBeCloseTo(650, 0);
+		await editor.click();
+		await opened.keyboard.press("Enter");
+		await opened.keyboard.type("/research");
+		await opened.keyboard.press("Enter");
+		let composer = opened.getByRole("region", { name: "Research question", exact: true });
+		let question = "Compare evidence without moving the research block outside the document.";
+		await composer.getByRole("textbox", { name: "Research question", exact: true }).fill(question);
+		await expect(composer).toHaveCSS("transform", "none");
+		let layout = await composer.evaluate(element => {
+			let paragraph = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
+			let prose = paragraph.getBoundingClientRect();
+			let draft = element.getBoundingClientRect();
+			return {
+				position: getComputedStyle(element).position,
+				proseWidth: prose.width,
+				width: draft.width,
+				left: draft.left,
+				proseLeft: prose.left,
+				top: draft.top,
+				proseBottom: prose.bottom,
+			};
+		});
+		expect(layout.position).toBe("static");
+		expect(layout.proseWidth).toBeCloseTo(650, 0);
+		expect(layout.width).toBeCloseTo(layout.proseWidth, 0);
+		expect(layout.left).toBeCloseTo(layout.proseLeft, 0);
+		expect(layout.top).toBeGreaterThanOrEqual(layout.proseBottom);
+		await opened.screenshot({ path: testInfo.outputPath("research-draft-layout.png") });
+		let before = await composer.boundingBox();
+		let travelled = await editor.evaluate(element => {
+			let scroller = element.closest("[data-plan-scroll]")!;
+			let before = scroller.scrollTop;
+			scroller.scrollTop += 80;
+			return scroller.scrollTop - before;
+		});
+		expect(travelled).toBeCloseTo(80, 0);
+		await expect.poll(async () => (await composer.boundingBox())!.y - before!.y)
+			.toBeCloseTo(-travelled, 0);
+		await expect(composer.getByRole("textbox", { name: "Research question", exact: true }))
+			.toBeFocused();
+		await opened.keyboard.press("Enter");
+		await expect(opened.getByRole("region", {
+			name: "Research question",
+			exact: true,
+			includeHidden: true,
+		})).toHaveCount(0);
+		await expect(editor.locator(".plan-research-draft-host")).toHaveCount(0);
+		let card = opened.getByRole("article", { name: "Research" }).filter({ hasText: question });
+		await expect(card).toBeVisible();
+		for (let stage of ["queued", "searching", "writing"] as const) {
+			if (stage !== "queued") await research.advance(question, stage);
+			await expect(card).toHaveAttribute("data-stage", stage);
+			expect((await card.boundingBox())!.width).toBeCloseTo(layout.proseWidth, 0);
+		}
+		await research.publish(question, "Inline research report");
+		let ready = opened.getByRole("article", { name: "Research" }).filter({
+			has: opened.getByRole("button", { name: "Open Inline research report", exact: true }),
+		});
+		await expect(ready).toHaveAttribute("data-stage", "ready");
+		expect((await ready.boundingBox())!.width).toBeCloseTo(layout.proseWidth, 0);
+		await opened.screenshot({ path: testInfo.outputPath("research-ready-layout.png") });
+		await opened.setViewportSize({ width: 390, height: 844 });
+		await expect.poll(async () => {
+			let prose = (await editor.locator("p").first().boundingBox())!.width;
+			return Math.abs((await ready.boundingBox())!.width - prose);
+		}).toBeLessThan(1);
+	},
+);
 
 test("a submitted /research card stays in the document through reload", async ({ baseURL, join, page, room, seed }) => {
 	await seed(PARENT_SOURCE);

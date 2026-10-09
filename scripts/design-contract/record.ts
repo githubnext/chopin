@@ -201,6 +201,13 @@ export function designRecordProblems(
 			if (typeof role.fontWeight !== "number" || role.fontWeight < 1 || role.fontWeight > 1000) {
 				throw new Error(`DESIGN.md.typography.${name}.fontWeight: expected weight from 1 to 1000`);
 			}
+			if (font === "--font-document-heading") {
+				compare(
+					`DESIGN.md.typography.${name}.fontWeight`,
+					role.fontWeight,
+					"var(--font-weight-document-heading)",
+				);
+			}
 		}
 		let steps = object(record.spacing, "DESIGN.md.spacing");
 		keys(steps, Object.keys(spacing), "DESIGN.md.spacing");

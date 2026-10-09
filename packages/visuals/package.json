@@ -11,6 +11,10 @@
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
 		},
+		"./inline-notice": {
+			"types": "./src/ui/inline-notice.tsx",
+			"default": "./src/ui/inline-notice.tsx"
+		},
 		"./styles.css": "./src/styles.css",
 		"./theme.css": "./theme.css"
 	},

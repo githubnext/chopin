@@ -122,7 +122,6 @@ export function Header(
 		room: string;
 	},
 ) {
-	let { onProjectReveal } = useNavigationDocument();
 	let people = peopleHere(members);
 	let header = useRef<HTMLElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
@@ -154,15 +153,10 @@ export function Header(
 				<DocumentIcon className="shrink-0" />
 				{project && presentation.type !== "parent-with-child" && (
 					<>
-						<button
-							aria-label={`Show ${project.name} in the sidebar`}
-							className="document-project-prefix"
-							onClick={() => onProjectReveal(project.id)}
-							type="button"
-						>
-							<span className="truncate">{project.name}</span>
-						</button>
-						<span aria-hidden="true" className="document-project-separator">/</span>
+						<span className="document-project-prefix truncate text-xs font-medium">
+							{project.name}
+						</span>
+						<span aria-hidden="true" className="document-project-separator text-xs">/</span>
 					</>
 				)}
 				{presentation.type === "parent-with-child"
@@ -170,7 +164,7 @@ export function Header(
 						<>
 							<button
 								aria-label={`Return to ${label}`}
-								className="document-parent-breadcrumb btn btn-md btn-ghost min-w-0"
+								className="document-parent-breadcrumb btn btn-compact btn-ghost min-w-0"
 								onClick={presentation.onChildClose}
 								type="button"
 							>
@@ -182,58 +176,69 @@ export function Header(
 							/>
 							<span
 								aria-label={`Child document: ${presentation.childLabel}`}
-								className="document-child-breadcrumb truncate"
+								className="document-child-breadcrumb truncate text-xs"
 							>
 								{presentation.childLabel}
 							</span>
 						</>
 					)
-					: editing && canManage && !archivedAt
-					? (
-						<DocumentRename
-							channel={{ id: room, title: label }}
-							inline
-							onCancel={finishEdit}
-							replay={editing === "new"}
-							onRenamed={detail => {
-								onRenamed(detail.channel);
-								finishEdit();
-							}}
-						/>
-					)
-					: canManage && !archivedAt
-					? (
-						<button
-							aria-label={`Rename ${label}`}
-							className="document-title-trigger"
-							onClick={() => onEditingChange("rename")}
-							onKeyDown={event => {
-								if (event.key !== "F2") return;
-								event.preventDefault();
-								onEditingChange("rename");
-							}}
-							ref={title}
-							type="button"
-						>
-							<span className="truncate">{label}</span>
-						</button>
-					)
-					: <span className="document-title-label truncate">{label}</span>}
-				{canManage && presentation.type !== "parent-with-child" && (
-					<DocumentActionsMenu
-						align="start"
-						channel={{ archivedAt, title: label }}
-						className="document-title-menu"
-						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
-						trigger={<ChevronIcon aria-hidden="true" className="rotate-90" size={12} />}
-					/>
-				)}
+					: (
+						<div className="title-control min-w-0 text-xs font-medium">
+							{editing && canManage && !archivedAt
+								? (
+									<DocumentRename
+										channel={{ id: room, title: label }}
+										inline
+										onCancel={finishEdit}
+										replay={editing === "new"}
+										onRenamed={detail => {
+											onRenamed(detail.channel);
+											finishEdit();
+										}}
+									/>
+								)
+								: canManage && !archivedAt
+								? (
+									<button
+										aria-label={`Rename ${label}`}
+										className="title-control-label document-title-trigger"
+										onClick={() => onEditingChange("rename")}
+										onKeyDown={event => {
+											if (event.key !== "F2") return;
+											event.preventDefault();
+											onEditingChange("rename");
+										}}
+										ref={title}
+										type="button"
+									>
+										<span className="truncate">{label}</span>
+									</button>
+								)
+								: <span className="title-control-label truncate">{label}</span>}
+							{canManage && (
+								<DocumentActionsMenu
+									align="start"
+									channel={{ archivedAt, title: label }}
+									className="title-control-action"
+									onAction={action =>
+										action === "rename" ? onEditingChange("rename") : onAction(action)}
+									trigger={
+										<ChevronIcon
+											aria-hidden="true"
+											className="rotate-90"
+											size={12}
+										/>
+									}
+								/>
+							)}
+						</div>
+					)}
 				{archivedAt && (
 					<span className="document-archived-status">
-						<Badge icon={ArchiveIcon} label="Archived" size="sm" tone="warning" />
+						<Badge icon={ArchiveIcon} label="Archived" size="sm" textSize="2xs" tone="warning" />
 						{canManage && (
 							<button
-								className="btn btn-sm btn-outline"
+								className="btn btn-compact btn-outline"
 								onClick={() => onAction("restore")}
 								type="button"
 							>
@@ -255,13 +260,13 @@ export function Header(
 						data-tooltip-verbatim=""
 						key={handle.toLowerCase()}
 					>
-						<Face handle={handle} ring="ground" size={24} titled={false} />
+						<Face handle={handle} ring="ground" size={24} textSize="2xs" titled={false} />
 					</span>
 				))}
 				{people.length > 3 && (
 					<span
 						aria-hidden="true"
-						className="room-member-overflow ml-1 hidden text-sm text-text-tertiary"
+						className="room-member-overflow ml-1 hidden text-xs text-text-tertiary"
 					>
 						+{people.length - 3}
 					</span>

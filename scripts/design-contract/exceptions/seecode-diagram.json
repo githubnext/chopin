@@ -6,41 +6,6 @@
 			[
 				"typography",
 				"font-size",
-				"12px",
-				"CSS > .ch-diagram .n-label",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"9px",
-				"CSS > .ch-diagram .n-sub",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"7px",
-				"CSS > .ch-diagram .n-tag",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"8px",
-				"CSS > .ch-diagram .e-label",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"7px",
-				"CSS > .ch-diagram .g-label",
-				1
-			],
-			[
-				"typography",
-				"font-size",
 				"8px",
 				"CSS > .ch-diagram .lg-title",
 				1
@@ -113,41 +78,6 @@
 				"font-size",
 				"10px",
 				"CSS > .ch-diagram .q-note-text",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"10px",
-				"CSS > .ch-diagram .n-field",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"9px",
-				"CSS > .ch-diagram .n-field-t",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"7.5px",
-				"CSS > .ch-diagram .n-key",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"7.5px",
-				"CSS > .ch-diagram .n-change",
-				1
-			],
-			[
-				"typography",
-				"font-size",
-				"8px",
-				"CSS > .ch-diagram .lane-label",
 				1
 			],
 			[

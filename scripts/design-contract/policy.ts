@@ -7,6 +7,7 @@ export type TokenPolicy = {
 	canonical: Map<string, string>;
 	aliases: Map<string, string[]>;
 	utilities?: Set<string>;
+	typographyProperties?: Map<string, "font-size" | "font-family">;
 };
 
 let roles = new Set(["2xs", "xs", "sm", "base", "lg", "xl", "2xl"]);
@@ -51,7 +52,10 @@ function validToken(
 	policy: TokenPolicy,
 	seen: Set<string>,
 ): boolean {
-	if (policy.canonical.has(name)) return tokenFamily(name, family, property);
+	if (policy.canonical.has(name)) {
+		return family === "typography" && policy.typographyProperties?.get(name) === property
+			|| tokenFamily(name, family, property);
+	}
 	if (seen.has(name)) return false;
 	let values = policy.aliases.get(name);
 	if (!values?.length) return false;
@@ -158,21 +162,22 @@ export function declarationProblem(
 	policy: TokenPolicy,
 ): { family: Family; reason: string } | undefined {
 	let { property, value, dynamic } = declaration;
-	let override = policy.canonical.has(property) && !property.endsWith("-*")
-		? property.startsWith("--text-") && !property.endsWith("--line-height")
-			? "font-size"
-			: property.startsWith("--color-")
-			? "color"
-			: property.startsWith("--radius-")
-			? "border-radius"
-			: property.startsWith("--shadow-")
-			? "box-shadow"
-			: property.startsWith("--font-")
-			? "font-family"
-			: tokenFamily(property, "motion", "transition")
-			? "transition"
-			: undefined
-		: undefined;
+	let override =
+		!declaration.foundation && policy.canonical.has(property) && !property.endsWith("-*")
+			? property.startsWith("--text-") && !property.endsWith("--line-height")
+				? "font-size"
+				: property.startsWith("--color-")
+				? "color"
+				: property.startsWith("--radius-")
+				? "border-radius"
+				: property.startsWith("--shadow-")
+				? "box-shadow"
+				: property.startsWith("--font-")
+				? "font-family"
+				: tokenFamily(property, "motion", "transition")
+				? "transition"
+				: policy.typographyProperties?.get(property)
+			: undefined;
 	if (override) {
 		let errors = valueProblems(override, value, familyOf(override)!, policy);
 		if (errors.length) {

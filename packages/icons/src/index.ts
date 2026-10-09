@@ -1,6 +1,7 @@
 export { GitHubIcon } from "./brand";
 export { ChopinIcon } from "./filled";
-export type { IconProps } from "./icon";
+export type { IconProps, IconSize } from "./icon";
+export { iconSizes } from "./icon";
 export {
 	ArrowUpIcon,
 	CheckIcon,
@@ -31,7 +32,7 @@ export {
 	SparkleIcon,
 	TableIcon,
 	TabsIcon,
-	WarningIcon,
 	WrenchIcon,
 } from "./line";
 export { ArchiveIcon, DocumentIcon, LoaderIcon, SearchIcon } from "./system";
+export { WarningIcon } from "./warning";

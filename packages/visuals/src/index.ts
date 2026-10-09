@@ -1,7 +1,11 @@
 export { Badge } from "./ui/badge";
 export type { BadgeProps } from "./ui/badge";
+export { EmptyState } from "./ui/empty-state";
+export type { EmptyStateProps } from "./ui/empty-state";
 export { IconLabel } from "./ui/icon-label";
 export type { IconLabelProps } from "./ui/icon-label";
+export { InlineNotice } from "./ui/inline-notice";
+export type { InlineNoticeProps } from "./ui/inline-notice";
 export { MiniBars } from "./ui/mini-bars";
 export type { MiniBarsProps } from "./ui/mini-bars";
 export { ProgressBar } from "./ui/progress-bar";

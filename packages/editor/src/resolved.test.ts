@@ -123,22 +123,35 @@ describe("marker and popover placement", () => {
 	let host = box(0, 0, 800, 600);
 
 	it("sits in the gutter, centred on the first line", () => {
-		expect(markerPoint(box(100, 50, 600, 80), 32, host)).toEqual({
+		expect(markerPoint(box(100, 50, 600, 80), 32, host, 24)).toEqual({
 			top: 54,
 			left: 68,
 			compact: false,
 		});
 	});
 
+	it("uses the measured marker size for centering and compact placement", () => {
+		expect(markerPoint(box(100, 50, 600, 80), 40, host, 32)).toEqual({
+			top: 54,
+			left: 60,
+			compact: false,
+		});
+		expect(markerPoint(box(42, 50, 600, 80), 40, host, 40)).toEqual({
+			top: 50,
+			left: 30,
+			compact: true,
+		});
+	});
+
 	it("becomes a slim bar on the first line when the gutter is too narrow", () => {
-		let narrow = markerPoint(box(16, 50, 300, 80), 32, box(0, 0, 360, 600));
+		let narrow = markerPoint(box(16, 50, 300, 80), 32, box(0, 0, 360, 600), 24);
 		expect(narrow).toEqual({ top: 50, left: 4, compact: true });
-		expect(markerPoint(box(8, 50, 300, 80), 32, box(0, 0, 360, 600)).left).toBe(0);
+		expect(markerPoint(box(8, 50, 300, 80), 32, box(0, 0, 360, 600), 24).left).toBe(0);
 	});
 
 	it("never leaves the host", () => {
-		expect(markerPoint(box(1000, 50, 100, 20), 20, host).left).toBeLessThanOrEqual(776);
-		expect(markerPoint(box(2, 50, 100, 20), 20, host).left).toBeGreaterThanOrEqual(0);
+		expect(markerPoint(box(1000, 50, 100, 20), 20, host, 24).left).toBeLessThanOrEqual(776);
+		expect(markerPoint(box(2, 50, 100, 20), 20, host, 24).left).toBeGreaterThanOrEqual(0);
 	});
 
 	it("reaches 12px past the marker but stops at the page edge and the prose", () => {

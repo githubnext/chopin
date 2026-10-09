@@ -27,6 +27,7 @@ import { $isCalloutNode, CALLOUT_TYPES, limits } from "@chopin/dialect";
 import { registerCalloutNormalization } from "./callout-shape";
 
 import type { CalloutType } from "@chopin/dialect";
+import type { IconSize } from "@chopin/icons";
 import type { ElementNode, LexicalEditor } from "lexical";
 
 type Callout = { key: string; type: CalloutType; title: string };
@@ -39,7 +40,7 @@ const LABELS: Record<CalloutType, string> = {
 	danger: "Danger",
 };
 
-function TypeIcon({ type, size = 17 }: { type: CalloutType; size?: number }) {
+function TypeIcon({ type, size = 14 }: { type: CalloutType; size?: IconSize }) {
 	let props = { "aria-hidden": true, size } as const;
 	switch (type) {
 		case "note":

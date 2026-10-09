@@ -3,6 +3,7 @@
 // Optional periods draw as bands under the axis. Motion: axis draws, events in order.
 import { el, text } from "../../svg.mjs";
 import { textWidth } from "../../text.mjs";
+import { DIAGRAM_TYPE } from "../../tokens.mjs";
 import { fmtTime, parseTime, timeTicks } from "./time.mjs";
 
 export const family = "lanes";
@@ -66,7 +67,7 @@ export function render(spec) {
 		const w = Math.max(
 			textWidth(e.label, LBL),
 			textWidth(e.when || "", { size: 9, mono: true }),
-			e.sub ? textWidth(e.sub, { size: 9, mono: true }) : 0,
+			e.sub ? textWidth(e.sub, DIAGRAM_TYPE.sub) : 0,
 		) + 12;
 		const side = spec.layout === "above" ? "up" : k % 2 === 0 ? "up" : "down";
 		let level = 0;
