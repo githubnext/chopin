@@ -36,6 +36,7 @@ import type { exportLexicalTreeToMdast, importMdastTreeToLexical } from "@mdxedi
 
 import { CONTAINER_EXPORT_VISITORS, CONTAINER_IMPORT_VISITORS } from "./nodes/container-visitors";
 import { CONTAINER_NODES } from "./nodes/containers";
+import { COLUMN_NODES } from "./nodes/columns";
 import { CONTENT_EXPORT_VISITORS, CONTENT_IMPORT_VISITORS } from "./nodes/content-visitors";
 import { CONTENT_NODES } from "./nodes/content";
 import { DecisionNode, LexicalDecisionVisitor, MdastDecisionVisitor } from "./nodes/decision";
@@ -117,7 +118,7 @@ export const jsxPlugin = realmPlugin({
 export const containersPlugin = realmPlugin({
 	init(realm) {
 		realm.pubIn({
-			[addLexicalNode$]: CONTAINER_NODES,
+			[addLexicalNode$]: [...CONTAINER_NODES, ...COLUMN_NODES],
 			[addImportVisitor$]: CONTAINER_IMPORT_VISITORS,
 			[addExportVisitor$]: CONTAINER_EXPORT_VISITORS,
 		});

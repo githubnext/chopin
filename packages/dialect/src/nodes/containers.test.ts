@@ -9,6 +9,7 @@ import { parse } from "../parse";
 import { registry } from "../registry";
 import { validate } from "../validate";
 import * as Containers from "./containers";
+import { $isColumnNode, $isColumnsNode } from "./columns";
 import { $isResearchNode } from "./research";
 
 import type { Binding, Provider } from "@lexical/yjs";
@@ -69,6 +70,11 @@ const TABS = `<Tabs id="${ID}">\n`
 	+ `<Tab id="${ID3}" label="Web">\n\n- a\n- b\n\n</Tab>\n`
 	+ `</Tabs>\n`;
 
+const COLUMNS = `<Columns id="${ID}">\n`
+	+ `<Column id="${ID2}">\n\nFirst.\n\n</Column>\n`
+	+ `<Column id="${ID3}">\n\nSecond.\n\n</Column>\n`
+	+ `</Columns>\n`;
+
 describe("structural components", () => {
 	it("round-trips one externally owned research reference", () => {
 		let source = `<Research id="${RESEARCH_ID}" />\n`;
@@ -99,6 +105,25 @@ describe("structural components", () => {
 		expect(out).toContain('label="macOS"');
 		expect(out).toContain('label="Web"');
 		expect(out).toContain("- a");
+	});
+
+	it("round-trips columns with ordinary editable blocks", () => {
+		let out = canonical(COLUMNS);
+		expect(out).toContain("First.");
+		expect(out).toContain("Second.");
+
+		let instance = editor();
+		importPlan(instance, COLUMNS, { registry: REGISTRY });
+		instance.getEditorState().read(() => {
+			let columns = $getRoot().getFirstChild();
+			expect($isColumnsNode(columns)).toBe(true);
+			if (!$isElementNode(columns)) return;
+			let children = columns.getChildren();
+			expect(children).toHaveLength(2);
+			expect(children.every($isColumnNode)).toBe(true);
+			expect($isElementNode(children[0]) && children[0].getFirstChild()?.getType())
+				.toBe("paragraph");
+		});
 	});
 
 	it("keeps nesting stable several levels deep", () => {
@@ -235,8 +260,8 @@ async function settle(): Promise<void> {
 	for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
 }
 
-/** Edit the first text node inside the nth tab. */
-function writeTab(instance: LexicalEditor, index: number, value: string) {
+/** Edit the first text node inside the nth child region. */
+function writeChild(instance: LexicalEditor, index: number, value: string) {
 	instance.update(
 		() => {
 			let tabs = $getRoot().getFirstChild();
@@ -252,6 +277,35 @@ function writeTab(instance: LexicalEditor, index: number, value: string) {
 }
 
 describe("container collaboration", () => {
+	it("merges edits in different columns", async () => {
+		let a = peer();
+		let b = peer();
+		let held: Array<{ from: Y.Doc; update: Uint8Array }> = [];
+		let paused = false;
+		let deliver = (from: Y.Doc, update: Uint8Array) => {
+			Y.applyUpdate(from === a.doc ? b.doc : a.doc, update, "relay");
+		};
+		for (let doc of [a.doc, b.doc]) {
+			doc.on("update", (update: Uint8Array, origin: unknown) => {
+				if (origin === "relay") return;
+				if (paused) held.push({ from: doc, update });
+				else deliver(doc, update);
+			});
+		}
+		importPlan(a.editor, COLUMNS, { registry: REGISTRY });
+		await settle();
+		paused = true;
+		writeChild(a.editor, 0, "edited-by-A");
+		writeChild(b.editor, 1, "edited-by-B");
+		paused = false;
+		for (let { from, update } of held) deliver(from, update);
+		await settle();
+		let left = exportPlan(a.editor, { registry: REGISTRY });
+		expect(left).toBe(exportPlan(b.editor, { registry: REGISTRY }));
+		expect(left).toContain("edited-by-A");
+		expect(left).toContain("edited-by-B");
+	});
+
 	it("merges concurrent edits in different tabs", async () => {
 		let a = peer();
 		let b = peer();
@@ -282,8 +336,8 @@ describe("container collaboration", () => {
 
 		// Both peers edit different tabs before either sees the other's change.
 		paused = true;
-		writeTab(a.editor, 0, "edited-by-A");
-		writeTab(b.editor, 1, "edited-by-B");
+		writeChild(a.editor, 0, "edited-by-A");
+		writeChild(b.editor, 1, "edited-by-B");
 		paused = false;
 		for (let { from, update } of held) deliver(from, update);
 		await settle();

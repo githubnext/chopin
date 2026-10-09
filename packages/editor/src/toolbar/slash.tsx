@@ -20,6 +20,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $copyBlockFormatIndent, $setBlocksType } from "@lexical/selection";
 import {
 	$getSelection,
+	$isParagraphNode,
 	$isRangeSelection,
 	$isTextNode,
 	COLLABORATION_TAG,
@@ -30,6 +31,8 @@ import {
 import {
 	$createCalloutNode,
 	$createCodeBlockNode,
+	$createColumnNode,
+	$createColumnsNode,
 	$createImageNode,
 	$createMathNode,
 	$createTabNode,
@@ -47,6 +50,7 @@ import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 import {
 	CheckIcon,
 	CodeIcon,
+	ColumnsIcon,
 	DiagramIcon,
 	DiffIcon,
 	FormulaIcon,
@@ -181,6 +185,31 @@ const COMMANDS: SlashCommand[] = [
 				 * something on screen that the saved source does not say.
 				 */
 				$insertNodes([$createTableNodeWithDimensions(3, 3, { rows: true, columns: false })]);
+			}),
+	},
+	{
+		id: "columns",
+		label: "Columns",
+		hint: "Two editable regions side by side",
+		icon: ColumnsIcon,
+		group: "Blocks",
+		keywords: ["column", "layout", "side by side", "compare"],
+		kind: "insert",
+		run: editor =>
+			editor.update(() => {
+				let selection = $getSelection();
+				let topLevel = $isRangeSelection(selection)
+					? selection.anchor.getNode().getTopLevelElement()
+					: null;
+				let columns = $createColumnsNode(ulid());
+				let first = $createColumnNode(ulid());
+				let second = $createColumnNode(ulid());
+				first.append($createParagraphNode());
+				second.append($createParagraphNode());
+				columns.append(first, second);
+				if (topLevel && !$isParagraphNode(topLevel)) topLevel.insertAfter(columns);
+				else $insertNodes([columns]);
+				first.getFirstChild()?.selectStart();
 			}),
 	},
 	{

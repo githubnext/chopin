@@ -226,6 +226,15 @@ export function TableIcon(props: IconProps) {
 	);
 }
 
+export function ColumnsIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="12.5" rx="1.5" width="5.25" x="2.75" y="2.75" />
+			<rect height="12.5" rx="1.5" width="5.25" x="10" y="2.75" />
+		</LineIcon>
+	);
+}
+
 export function LinkIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>

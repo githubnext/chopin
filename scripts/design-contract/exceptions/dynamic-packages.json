@@ -266,6 +266,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > ColumnsIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > LinkIcon > <LineIcon>",
 				1
 			],
@@ -368,7 +375,7 @@
 				1
 			]
 		],
-		"sourceHash": "0d8001ef2cb9f09496fd1502e0bf42e531eea31f78f8298bdacbce0b3cafb9b4"
+		"sourceHash": "85232eadf3b54966a7a97eeb61187a7ca4575e66856f446cf40aa0f8264ebcc1"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",
@@ -760,7 +767,7 @@
 				1
 			]
 		],
-		"sourceHash": "972a9d9783af2b4506ab6cf1c02abe553f1aad059bfc1b50f6438886f8fe90a3"
+		"sourceHash": "7f24fc5d35ece52b798c1a183cdc3f9bca856db0f20ad1494527ee67686f1bef"
 	},
 	{
 		"file": "packages/dialect/src/nodes/containers.ts",

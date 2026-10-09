@@ -214,6 +214,35 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		},
 	}),
 
+	Columns: component({
+		name: "Columns",
+		kind: "flow",
+		content: { type: "components", names: ["Column"] },
+		forbids: ["Columns"],
+	}),
+
+	Column: component({
+		name: "Column",
+		kind: "flow",
+		content: { type: "blocks" },
+		parent: ["Columns"],
+		forbids: [
+			"Questionnaire",
+			"Question",
+			"Option",
+			"Answer",
+			"Previous",
+			"Decision",
+			"Note",
+			"Tabs",
+			"Tab",
+			"Callout",
+			"Research",
+			"Columns",
+			"Column",
+		],
+	}),
+
 	Tabs: component({
 		name: "Tabs",
 		kind: "flow",

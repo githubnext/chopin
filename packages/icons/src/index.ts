@@ -24,6 +24,7 @@ export {
 	ClockIcon,
 	CloseIcon,
 	CodeIcon,
+	ColumnsIcon,
 	DecisionIcon,
 	DiagramIcon,
 	DiffIcon,

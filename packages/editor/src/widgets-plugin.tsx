@@ -26,6 +26,7 @@ import { Toolbar } from "./toolbar";
 import {
 	CalloutPlugin,
 	CardGapPlugin,
+	ColumnsPlugin,
 	DecisionDeletionPlugin,
 	DecoratorSelectionPlugin,
 	DiscardedNavigationPlugin,
@@ -64,6 +65,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, GitHubReferencesPlugin);
 		realm.pub(addComposerChild$, GitHubHoverCards);
 		realm.pub(addComposerChild$, TabsPlugin);
+		realm.pub(addComposerChild$, ColumnsPlugin);
 		realm.pub(addComposerChild$, DiscardedNavigationPlugin);
 		realm.pub(addComposerChild$, CardGapPlugin);
 		realm.pub(addComposerChild$, PreviewPlugin);

@@ -21,7 +21,7 @@ import {
 
 import * as Y from "yjs";
 
-import { exportPlan, importPlan, registry } from "@chopin/dialect";
+import { exportPlan, importPlan, parse, registry, validate } from "@chopin/dialect";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
@@ -165,6 +165,35 @@ describe("slash menu trigger", () => {
 });
 
 describe("slash menu commands", () => {
+	it("places a new section after a nested block", async () => {
+		let editor = createHeadlessEditor({
+			nodes: registry().nodes,
+			onError: error => {
+				throw error;
+			},
+		});
+		importPlan(
+			editor,
+			`<Columns id="01K0N4W3B7P27CBAEC7A8C8WEA">\n`
+				+ `<Column id="01K0N4W3B7P27CBAEC7A8C8WEB">\n\nFirst.\n\n</Column>\n`
+				+ `<Column id="01K0N4W3B7P27CBAEC7A8C8WEC">\n\nSecond.\n\n</Column>\n`
+				+ `</Columns>\n`,
+		);
+		editor.update(() => {
+			let columns = $getRoot().getFirstChild();
+			let first = $isElementNode(columns) ? columns.getFirstChild() : null;
+			let paragraph = $isElementNode(first) ? first.getFirstChild() : null;
+			paragraph?.selectEnd();
+		}, { discrete: true });
+		let command = availableCommands("columns")[0];
+		if (command?.kind !== "insert") throw new Error("Columns must be insertable");
+		command.run(editor);
+		await settle();
+		let source = exportPlan(editor);
+		expect(source.match(/<Columns /g) ?? []).toHaveLength(2);
+		expect(validate(parse(source))).toEqual({ ok: true });
+	});
+
 	it("consumes a research trigger synchronously inside its Lexical command", async () => {
 		let target = peer();
 		importPlan(target.editor, "/research\n");

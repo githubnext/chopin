@@ -11,6 +11,11 @@ const ID = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const ID2 = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 const ID3 = "01K0N4W3B7P27CBAEC7A8C8WEA";
 
+const COLUMNS = `<Columns id="${ID}">\n`
+	+ `<Column id="${ID2}">\n\nFirst.\n\n</Column>\n`
+	+ `<Column id="${ID3}">\n\nSecond.\n\n</Column>\n`
+	+ `</Columns>`;
+
 function codes(source: string): string[] {
 	let result = validate(parse(source));
 	return result.ok ? [] : result.issues.map(issue => issue.code);
@@ -404,6 +409,44 @@ describe("components", () => {
 		let out = canonical(source);
 		expect(out).toContain(`<Callout id="${ID}"`);
 		expect(out).toContain('type="warning"');
+	});
+});
+
+describe("columns", () => {
+	it("accepts two top-level editable regions", () => {
+		accepts(COLUMNS);
+		expect(canonical(COLUMNS)).toContain("First.");
+		expect(canonical(COLUMNS)).toContain("Second.");
+	});
+
+	it("requires exactly two Column children", () => {
+		let one = `<Columns id="${ID}"><Column id="${ID2}">One.</Column></Columns>`;
+		let three = COLUMNS.replace(
+			"</Columns>",
+			`<Column id="${ID}">\n\nThird.\n\n</Column>\n</Columns>`,
+		);
+		expect(codes(one)).toContain("bad-column-count");
+		expect(codes(three)).toContain("bad-column-count");
+		expect(codes(`<Columns id="${ID}">\n\nLoose.\n\n</Columns>`))
+			.toContain("unexpected-child");
+	});
+
+	it("keeps the layout at document root and blocks nested components", () => {
+		expect(codes(`<Callout id="${ID}" type="note">\n${COLUMNS}\n</Callout>`))
+			.toContain("bad-layout-placement");
+		let withCallout = COLUMNS.replace("First.", `<Callout id="${ID}" type="note">x</Callout>`);
+		expect(codes(withCallout)).toContain("bad-nesting");
+	});
+
+	it("rejects unsupported attributes and record-owned children", () => {
+		expect(codes(COLUMNS.replace("<Columns id=", '<Columns variant="gallery" id=')))
+			.toContain("unknown-attribute");
+		let withDecision = COLUMNS.replace(
+			"First.",
+			`<Decision id="${ID}" quote="q" by="a" at="2026-10-09T10:00:00Z">`
+				+ `<Note by="a" text="n" /></Decision>`,
+		);
+		expect(codes(withDecision)).toContain("bad-nesting");
 	});
 });
 

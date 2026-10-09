@@ -15,12 +15,14 @@ import {
 	$isTabNode,
 	$isTabsNode,
 } from "./containers";
+import { $createColumnNode, $createColumnsNode, $isColumnNode, $isColumnsNode } from "./columns";
 import { attribute, identity, isFlow, PRIORITY } from "./shared";
 
 import type { LexicalExportVisitor, MdastImportVisitor } from "@mdxeditor/editor";
 import type { LexicalNode } from "lexical";
 import type { MdxJsxFlowElement } from "mdast-util-mdx-jsx";
 import type { CalloutNode, CalloutType, TabNode, TabsNode } from "./containers";
+import type { ColumnNode, ColumnsNode } from "./columns";
 
 type Importer = MdastImportVisitor<MdxJsxFlowElement>;
 type Exporter<T extends LexicalNode> = LexicalExportVisitor<T, MdxJsxFlowElement>;
@@ -68,6 +70,16 @@ export const MdastCalloutVisitor = importer("Callout", node =>
 		attribute(node, "title") ?? "",
 	));
 
+export const MdastColumnsVisitor = importer(
+	"Columns",
+	node => $createColumnsNode(attribute(node, "id") ?? ""),
+);
+
+export const MdastColumnVisitor = importer(
+	"Column",
+	node => $createColumnNode(attribute(node, "id") ?? ""),
+);
+
 export const LexicalTabsVisitor: Exporter<TabsNode> = exporter(
 	"Tabs",
 	$isTabsNode,
@@ -86,14 +98,30 @@ export const LexicalCalloutVisitor: Exporter<CalloutNode> = exporter(
 	node => identity(node.getId(), { type: node.getCalloutType(), title: node.getTitle() }),
 );
 
+export const LexicalColumnsVisitor: Exporter<ColumnsNode> = exporter(
+	"Columns",
+	$isColumnsNode,
+	node => identity(node.getId()),
+);
+
+export const LexicalColumnVisitor: Exporter<ColumnNode> = exporter(
+	"Column",
+	$isColumnNode,
+	node => identity(node.getId()),
+);
+
 export const CONTAINER_IMPORT_VISITORS = [
 	MdastTabsVisitor,
 	MdastTabVisitor,
 	MdastCalloutVisitor,
+	MdastColumnsVisitor,
+	MdastColumnVisitor,
 ];
 
 export const CONTAINER_EXPORT_VISITORS = [
 	LexicalTabsVisitor,
 	LexicalTabVisitor,
 	LexicalCalloutVisitor,
+	LexicalColumnsVisitor,
+	LexicalColumnVisitor,
 ];
