@@ -34,7 +34,6 @@ import { Face } from "./face";
 import {
 	COMPACT_GUTTER,
 	keyOf,
-	MARKER_SIZE,
 	markerPoint,
 	markerReach,
 	ownedPoint,
@@ -75,6 +74,7 @@ type Placed = {
 	decision: Decision;
 	marker: MarkerPlace;
 	lineHeight: number;
+	markerSize: number;
 	anchor: Rect;
 	/** Where the prose starts, from the host's left edge. */
 	prose: number;
@@ -113,10 +113,11 @@ function lineHeightOf(element: HTMLElement): number {
 function markerStyle(
 	marker: MarkerPlace,
 	lineHeight: number,
+	markerSize: number,
 	prose: number,
 	vertical: { top: number; bottom: number },
 ): CSSProperties {
-	let width = marker.compact ? COMPACT_GUTTER : MARKER_SIZE;
+	let width = marker.compact ? COMPACT_GUTTER : markerSize;
 	let reach = markerReach(marker.left, width, prose);
 	return {
 		top: marker.top,
@@ -181,7 +182,7 @@ function Popover(
 				</span>
 			</div>
 			<p className="plan-decision-answer">
-				<CheckIcon aria-hidden="true" />
+				<CheckIcon aria-hidden="true" className="icon-first-line" />
 				<span>{decision.answer}</span>
 			</p>
 			{others.length > 0 && (
@@ -189,7 +190,7 @@ function Popover(
 					<div>
 						{others.map(label => (
 							<p className="plan-decision-answer" data-rejected="" key={label}>
-								<CloseIcon aria-hidden="true" />
+								<CloseIcon aria-hidden="true" className="icon-first-line" />
 								<span>{label}</span>
 							</p>
 						))}
@@ -209,7 +210,7 @@ function Popover(
 					)}
 					{decision.at && when(decision.at) && (
 						<p>
-							<ClockIcon aria-hidden="true" />
+							<ClockIcon aria-hidden="true" className="icon-first-line" />
 							<span>{when(decision.at)}</span>
 						</p>
 					)}
@@ -268,6 +269,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	let entries = useQuestionnaires(store);
 	let relations = useRelations(store);
 	let [host, setHost] = useState<HTMLElement>();
+	let scroller = useMemo(() => host?.querySelector<HTMLElement>("[data-plan-scroll]"), [host]);
 	let [placed, setPlaced] = useState<Placed[]>([]);
 	let [pointer, dispatch] = useReducer(point, {});
 	let pointerRef = useRef(pointer);
@@ -290,6 +292,8 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	}, []);
 	let [height, setHeight] = useState(0);
 	let root = useRef<HTMLDivElement>(null);
+	let markers = useRef<HTMLDivElement>(null);
+	let markerProbe = useRef<HTMLSpanElement>(null);
 	let wasVisible = useRef(false);
 	let leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	let painted = useRef(false);
@@ -379,7 +383,15 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 			return;
 		}
 		wasVisible.current = true;
+		let probe = markerProbe.current;
+		if (!probe) return;
+		let markerSize = Number.parseFloat(getComputedStyle(probe).inlineSize);
+		if (!Number.isFinite(markerSize) || markerSize <= 0) {
+			setPlaced([]);
+			return;
+		}
 		let page = rect(host.getBoundingClientRect());
+		let markerHost = scroller ? rect(scroller.getBoundingClientRect()) : page;
 		let next: Placed[] = [];
 		for (let decision of decisionsRef.current) {
 			try {
@@ -398,8 +410,15 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 				let first = rects.reduce((top, value) => value.top < top.top ? value : top);
 				let element = elements[rects.indexOf(first)]!;
 				let lineHeight = lineHeightOf(element);
-				let marker = markerPoint(first, lineHeight, page);
-				next.push({ decision, marker, lineHeight, anchor: first, prose: first.left - page.left });
+				let marker = markerPoint(first, lineHeight, markerHost, markerSize);
+				let prose = first.left - markerHost.left;
+				// Content coordinates let the browser carry markers with native scrolling.
+				if (scroller) {
+					marker.top += scroller.scrollTop - scroller.clientTop;
+					marker.left += scroller.scrollLeft - scroller.clientLeft;
+					prose += scroller.scrollLeft - scroller.clientLeft;
+				}
+				next.push({ decision, marker, markerSize, lineHeight, anchor: first, prose });
 			} catch (error) {
 				// A bad anchor must not break Lexical's update listener.
 				console.error(`[plan] could not place decision ${decision.key}:`, error);
@@ -407,7 +426,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		}
 		setPlaced(next);
 		act({ type: "prune", live: new Set(next.map(item => item.decision.key)) });
-	}, [act, editor, host]);
+	}, [act, editor, host, scroller]);
 
 	useLayoutEffect(() => {
 		measure();
@@ -419,6 +438,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		host.addEventListener("scroll", measure, true);
 		let observer = new ResizeObserver(measure);
 		observer.observe(host);
+		if (markerProbe.current) observer.observe(markerProbe.current);
 		// React card collapses move prose without resizing the host or updating Lexical.
 		let offRoot = editor.registerRootListener((element, previous) => {
 			if (previous) observer.unobserve(previous);
@@ -502,6 +522,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		let outside = (event: PointerEvent) => {
 			if (!pointer.pinned) return;
 			if (root.current?.contains(event.target as Node)) return;
+			if (markers.current?.contains(event.target as Node)) return;
 			act({ type: "dismiss" });
 		};
 		let escape = (event: KeyboardEvent) => {
@@ -537,9 +558,9 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		};
 	}
 	let vertical = verticalReach(
-		placed.map(({ lineHeight, marker }) => ({
+		placed.map(({ lineHeight, marker, markerSize }) => ({
 			top: marker.top,
-			height: marker.compact ? lineHeight : MARKER_SIZE,
+			height: marker.compact ? lineHeight : markerSize,
 		})),
 	);
 	let popoverId = "plan-decision-pop";
@@ -547,48 +568,58 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 
 	return createPortal(
 		<div className="plan-decision-layer" ref={root}>
-			{placed.map(({ decision, lineHeight, marker, prose }, index) => {
-				let isPinned = pointer.pinned === decision.key;
-				let previewing = view?.key === decision.key && !view.pinned;
-				return (
-					<button
-						aria-controls={view?.key === decision.key && view.pinned ? popoverId : undefined}
-						aria-describedby={previewing ? popoverId : undefined}
-						aria-expanded={isPinned}
-						aria-label={`Decision: ${decision.answer}`}
-						className="plan-decision-marker"
-						data-plan-decision-marker={decision.key}
-						data-press="small"
-						key={decision.key}
-						onBlur={() => {
-							pressing.current = false;
-							leave(decision.key);
-						}}
-						onClick={event => {
-							pressing.current = false;
-							origin.current = event.currentTarget;
-							// Detail 0 is a key press: the popover is not next in tab order,
-							// so focus goes to it rather than leaving the reader to find it.
-							enterPopover.current = event.detail === 0 && !isPinned;
-							act({ type: "toggle", key: decision.key });
-						}}
-						onFocus={() => !restoring.current && !pressing.current && enter(decision.key)}
-						onPointerDown={() => {
-							// A press focuses too; a mouse already showed the preview and touch has none.
-							pressing.current = true;
-						}}
-						onPointerEnter={event => event.pointerType !== "touch" && enter(decision.key)}
-						onPointerLeave={() => leave(decision.key)}
-						data-compact={marker.compact || undefined}
-						style={markerStyle(marker, lineHeight, prose, vertical[index]!)}
-						type="button"
-					>
-						<span className="plan-decision-disc">
-							<DecisionIcon aria-hidden="true" />
-						</span>
-					</button>
-				);
-			})}
+			{createPortal(
+				<div className="plan-decision-layer" ref={markers}>
+					<span
+						aria-hidden="true"
+						className="plan-decision-disc plan-decision-size-probe"
+						ref={markerProbe}
+					/>
+					{placed.map(({ decision, lineHeight, marker, markerSize, prose }, index) => {
+						let isPinned = pointer.pinned === decision.key;
+						let previewing = view?.key === decision.key && !view.pinned;
+						return (
+							<button
+								aria-controls={view?.key === decision.key && view.pinned ? popoverId : undefined}
+								aria-describedby={previewing ? popoverId : undefined}
+								aria-expanded={isPinned}
+								aria-label={`Decision: ${decision.answer}`}
+								className="plan-decision-marker"
+								data-plan-decision-marker={decision.key}
+								data-press="small"
+								key={decision.key}
+								onBlur={() => {
+									pressing.current = false;
+									leave(decision.key);
+								}}
+								onClick={event => {
+									pressing.current = false;
+									origin.current = event.currentTarget;
+									// Detail 0 is a key press: the popover is not next in tab order,
+									// so focus goes to it rather than leaving the reader to find it.
+									enterPopover.current = event.detail === 0 && !isPinned;
+									act({ type: "toggle", key: decision.key });
+								}}
+								onFocus={() => !restoring.current && !pressing.current && enter(decision.key)}
+								onPointerDown={() => {
+									// A press focuses too; a mouse already showed the preview and touch has none.
+									pressing.current = true;
+								}}
+								onPointerEnter={event => event.pointerType !== "touch" && enter(decision.key)}
+								onPointerLeave={() => leave(decision.key)}
+								data-compact={marker.compact || undefined}
+								style={markerStyle(marker, lineHeight, markerSize, prose, vertical[index]!)}
+								type="button"
+							>
+								<span className="plan-decision-disc">
+									<DecisionIcon aria-hidden="true" />
+								</span>
+							</button>
+						);
+					})}
+				</div>,
+				scroller ?? host,
+			)}
 			<Surface
 				id={popoverId}
 				immediately={immediately}
@@ -596,11 +627,14 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 				render={current => {
 					let decision = current.decision;
 					let error = actions.error?.key === decision.key ? actions.error.message : undefined;
-					let pending = actions.pending?.key === decision.key ? actions.pending.kind : undefined;
+					let pending = actions.pending?.key === decision.key
+						? actions.pending.kind
+						: undefined;
 					return (
 						<Popover
 							close={dismiss}
 							onSource={decision.meta?.thread && options.onCardSource
+									&& options.hasCardSource?.(decision.widget)
 								? () => options.onCardSource?.(decision.widget)
 								: undefined}
 							value={current}

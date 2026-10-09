@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as Api from "./api";
 import {
+	acceptDecisionCounts,
+	applyDecisionCounts,
+	applyDecisionSnapshot,
 	beginDocumentLoad,
 	completeDocumentPage,
 	failDocumentLoad,
@@ -9,18 +12,38 @@ import {
 	projectDocuments,
 	removeLoadedDocument,
 	replaceLoadedDocument,
+	replaceProjectTotal,
+	settleHttpTotal,
+	snapshotDecisionCounts,
+	staleDecisionCounts,
 	updateDocumentMetadata,
 	updateLoadedDocument,
 } from "./document-actions";
 
-import type { DocumentMetadata, LoadedDocuments, ProjectDocuments } from "./document-actions";
+import type {
+	DecisionCounts,
+	DecisionSnapshot,
+	DocumentMetadata,
+	LiveTotal,
+	LoadedDocuments,
+	ProjectDocuments,
+} from "./document-actions";
 
 type CatalogueLoad = {
 	controller: AbortController;
 	queued?: Api.NavigationProject;
 };
 
-export function useProjectDocuments(navigation?: Api.Navigation, includeArchived = false) {
+/**
+ * Load and keep each project's documents and decision counts. `onTotalConflict` is
+ * called when a repository total can no longer be ordered against a live one, so the
+ * caller can ask the sidebar socket for a fresh snapshot.
+ */
+export function useProjectDocuments(
+	navigation?: Api.Navigation,
+	includeArchived = false,
+	onTotalConflict?: (repositoryId: string) => void,
+) {
 	let [catalogue, setCatalogue] = useState<{
 		includeArchived: boolean;
 		documents: LoadedDocuments;
@@ -30,6 +53,10 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	let documents = catalogue.includeArchived === includeArchived ? catalogue.documents : {};
 	let loads = useRef(new Map<string, CatalogueLoad>());
 	let latestDocuments = useRef(new Map<string, Api.Channel>());
+	let liveCounts = useRef(new Map<string, DecisionCounts>());
+	let liveTotals = useRef(new Map<string, LiveTotal>());
+	let totalConflict = useRef(onTotalConflict);
+	totalConflict.current = onTotalConflict;
 
 	let load = useCallback(async (
 		project: Api.NavigationProject,
@@ -48,6 +75,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		let knownDocuments = cursor === undefined
 			? new Set(latestDocuments.current.keys())
 			: undefined;
+		let liveUpdatesAtRequest = liveTotals.current.get(id)?.updates;
 		loads.current.set(key, currentLoad);
 		setCatalogue(current => {
 			let catalogueDocuments = current.includeArchived === includeArchived
@@ -68,9 +96,19 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				{ cursor, includeArchived, signal: controller.signal },
 			);
 			if (loads.current.get(key) !== currentLoad) return;
+			let settled = settleHttpTotal(
+				liveTotals.current.get(id),
+				liveUpdatesAtRequest,
+				page.unansweredDecisions,
+			);
+			let unansweredDecisions = settled.total;
+			if (settled.conflict) totalConflict.current?.(id);
 			let channels = page.channels.map(channel => {
 				let latest = latestDocuments.current.get(channel.id);
-				let accepted = latest ? newestDocument(latest, channel) : channel;
+				let accepted = acceptDecisionCounts(
+					latest ? newestDocument(latest, channel) : channel,
+					liveCounts.current.get(channel.id),
+				);
 				latestDocuments.current.set(channel.id, accepted);
 				return accepted;
 			}).filter(channel =>
@@ -95,6 +133,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 							page.nextCursor,
 							cursor === undefined,
 							preserveMissing,
+							unansweredDecisions,
 						),
 					},
 				};
@@ -190,7 +229,10 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, [load]);
 	let upsertDocument = useCallback((channel: Api.Channel) => {
 		let latest = latestDocuments.current.get(channel.id);
-		let accepted = latest ? newestDocument(latest, channel) : channel;
+		let accepted = acceptDecisionCounts(
+			latest ? newestDocument(latest, channel) : channel,
+			liveCounts.current.get(channel.id),
+		);
 		latestDocuments.current.set(channel.id, accepted);
 		setCatalogue(current => {
 			let visible = current.includeArchived === includeArchivedRef.current;
@@ -228,6 +270,58 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 			return documents === current.documents ? current : { ...current, documents };
 		});
 	}, []);
+	let acceptLiveCounts = useCallback((counts: DecisionCounts) => {
+		let known = liveCounts.current.get(counts.channelId);
+		let latest = latestDocuments.current.get(counts.channelId);
+		if (
+			(known && known.revision > counts.revision) || staleDecisionCounts(latest, counts)
+		) return false;
+		liveCounts.current.set(counts.channelId, counts);
+		if (latest) {
+			latestDocuments.current.set(counts.channelId, acceptDecisionCounts(latest, counts));
+		}
+		return true;
+	}, []);
+	let acceptLiveTotal = useCallback((repositoryId: string, total: number) => {
+		liveTotals.current.set(repositoryId, {
+			updates: (liveTotals.current.get(repositoryId)?.updates ?? 0) + 1,
+			total,
+		});
+	}, []);
+	let updateDecisionCounts = useCallback((counts: DecisionCounts) => {
+		if (!acceptLiveCounts(counts)) {
+			// Dropping the frame also drops its total, which cannot be ordered against ours.
+			totalConflict.current?.(counts.repositoryId);
+			return;
+		}
+		acceptLiveTotal(counts.repositoryId, counts.repositoryUnanswered);
+		setCatalogue(current => {
+			let documents = applyDecisionCounts(current.documents, counts);
+			return documents === current.documents ? current : { ...current, documents };
+		});
+	}, [acceptLiveCounts, acceptLiveTotal]);
+	let updateDecisionSnapshot = useCallback((snapshot: DecisionSnapshot) => {
+		for (let counts of snapshotDecisionCounts(snapshot)) acceptLiveCounts(counts);
+		acceptLiveTotal(snapshot.repositoryId, snapshot.repositoryUnanswered);
+		setCatalogue(current => {
+			let documents = applyDecisionSnapshot(current.documents, snapshot);
+			return documents === current.documents ? current : { ...current, documents };
+		});
+	}, [acceptLiveCounts, acceptLiveTotal]);
+	let beginTotalRequest = useCallback((repositoryId: string) => {
+		let updatesAtRequest = liveTotals.current.get(repositoryId)?.updates;
+		return (total: number) => {
+			let live = liveTotals.current.get(repositoryId);
+			let settled = settleHttpTotal(live, updatesAtRequest, total);
+			if (settled.conflict) totalConflict.current?.(repositoryId);
+			if (settled.superseded) return;
+			liveTotals.current.set(repositoryId, { updates: (live?.updates ?? 0) + 1, total });
+			setCatalogue(current => {
+				let documents = replaceProjectTotal(current.documents, repositoryId, total);
+				return documents === current.documents ? current : { ...current, documents };
+			});
+		};
+	}, []);
 	let removeDocument = useCallback((documentId: string) => {
 		latestDocuments.current.delete(documentId);
 		for (let active of loads.current.values()) {
@@ -239,10 +333,13 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, []);
 
 	return {
+		beginTotalRequest,
 		loadMore,
 		projects,
 		refreshProject,
 		removeDocument,
+		updateDecisionCounts,
+		updateDecisionSnapshot,
 		updateDocument,
 		upsertDocument,
 	};

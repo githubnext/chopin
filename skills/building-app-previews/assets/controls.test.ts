@@ -102,3 +102,21 @@ test("rejects half-step values when the step count is large", () => {
 	expect(validateSnapshot(result.value, { distance: 500000000.0000005 }).ok).toBe(false);
 	expect(validateSnapshot(result.value, { distance: 500000000 }).ok).toBe(true);
 });
+
+test("accepts fractional steps anchored at a nonzero minimum", () => {
+	let control = {
+		type: "number" as const,
+		id: "spacing",
+		label: "Spacing",
+		unit: "px",
+		min: 12,
+		max: 32,
+		step: 0.1,
+	};
+	let result = validateDefinition({ controls: [control], baseline: { spacing: 12.1 } });
+	expect(result.ok).toBe(true);
+	if (!result.ok) throw new Error(result.error.message);
+	for (let spacing of [12.1, 12.2, 12.3]) {
+		expect(validateSnapshot(result.value, { spacing }).ok).toBe(true);
+	}
+});

@@ -9,6 +9,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
 import { ChevronIcon, DecisionIcon } from "@chopin/icons";
+import { EmptyState } from "@chopin/visuals";
 
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { useQuestionnaires } from "./questionnaires";
@@ -27,6 +28,8 @@ export type DecisionsProps = {
 	canEdit?: boolean;
 	/** The viewer's own handle, who is never shown as present on a card. */
 	self?: string;
+	/** False when no Planner will review where decisions live. */
+	planner?: boolean;
 	motion: MotionDisclosureContract;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
@@ -85,6 +88,7 @@ export function Decisions(
 		motion,
 		motionImmediately,
 		onShowPlan,
+		planner,
 		questionMotion,
 		reveal,
 		self,
@@ -158,6 +162,8 @@ export function Decisions(
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
 			meta={metadata.get(entry.id)}
+			planner={planner}
+			relations={store.relations(entry.id)}
 			canEdit={canEdit}
 			connected={connected}
 			key={entry.id}
@@ -200,10 +206,7 @@ export function Decisions(
 			>
 				{empty
 					? (
-						<div className="plan-decisions-empty">
-							<span className="plan-decisions-empty-icon" aria-hidden="true">
-								<DecisionIcon size={24} />
-							</span>
+						<>
 							<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
 								{readiness === "ready"
 									? "No decisions yet"
@@ -211,31 +214,31 @@ export function Decisions(
 									? "Decisions unavailable"
 									: "Loading decisions"}
 							</span>
-							{readiness === "ready"
-								? (
-									<>
-										<h3>No decisions yet</h3>
-										<p>
-											Questions from Chopin will appear here, with your answers kept for reference.
-										</p>
-									</>
-								)
-								: readiness === "unavailable"
-								? (
-									<>
-										<h3>Decisions unavailable</h3>
-										<p>The document couldn’t be opened. Try again to load its decisions.</p>
-										<button
-											className="btn btn-sm btn-secondary mt-6"
-											onClick={() => store.retryOpen()}
-											type="button"
-										>
-											Try again
-										</button>
-									</>
-								)
-								: <p aria-hidden="true">Loading decisions…</p>}
-						</div>
+							<EmptyState
+								appearance="framed"
+								density="compact"
+								icon={DecisionIcon}
+								title={readiness === "ready"
+									? "No decisions yet"
+									: readiness === "unavailable"
+									? "Decisions unavailable"
+									: undefined}
+								description={readiness === "ready"
+									? "Questions from Chopin will appear here, with your answers kept for reference."
+									: readiness === "unavailable"
+									? "The document couldn’t be opened. Try again to load its decisions."
+									: <span aria-hidden="true">Loading decisions…</span>}
+								action={readiness === "unavailable" && (
+									<button
+										className="btn btn-sm btn-secondary"
+										onClick={() => store.retryOpen()}
+										type="button"
+									>
+										Try again
+									</button>
+								)}
+							/>
+						</>
 					)
 					: (
 						<div className="flex flex-col gap-3">

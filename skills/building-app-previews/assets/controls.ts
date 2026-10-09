@@ -87,6 +87,7 @@ export function validateSnapshot(definition: PreviewDefinition, input: unknown):
 	}
 	for (let control of definition.controls) {
 		let value = values[control.id];
+		// Include the minimum's magnitude for cancellation when subtracting nearby decimals.
 		// Cap tolerance in step units so large ranges cannot admit fractional steps.
 		let valid = control.type === "color"
 			? typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)
@@ -97,7 +98,11 @@ export function validateSnapshot(definition: PreviewDefinition, input: unknown):
 					)
 					<= Math.min(
 						1e-7,
-						Number.EPSILON * 8 * Math.max(1, Math.abs((value - control.min) / control.step)),
+						Number.EPSILON * 8 * Math.max(
+							1,
+							Math.abs((value - control.min) / control.step),
+							Math.abs(control.min / control.step),
+						),
 					);
 		if (!Object.hasOwn(values, control.id) || !valid) {
 			return {

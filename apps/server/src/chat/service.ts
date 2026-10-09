@@ -1207,7 +1207,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		id: room,
 		plan,
 		server,
-		publish: mutation => Service.publish(plan, server, room, mutation),
+		publish: mutation => Service.publish(plan, server, room, mutation, { agent: true }),
 		persist: context.persist,
 		exclusive: action => Service.exclusive(plan, action),
 		anchors: () => Service.anchors(plan, server, room),

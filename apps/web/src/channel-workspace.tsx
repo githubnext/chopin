@@ -7,8 +7,10 @@ import type * as Api from "./api";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { ChannelSource, HostedFailure, HostedLoading } from "./hosted";
 
-// A channel URL resolves to its document path before any workspace mounts, so the document
-// host mounts once under its own route identity instead of replacing a channel-keyed room.
+// Failure, Loading and retryable arrive as props rather than imports so this lazy chunk has
+// no runtime import of hosted.tsx, which lazily imports it. A channel URL resolves to its
+// document path before any workspace mounts, so the document host mounts once under its own
+// route identity instead of replacing a channel-keyed room.
 export default function ChannelWorkspace(
 	{ Failure, Loading, onReady, onResolved, retryable, source, user }: {
 		Failure: typeof HostedFailure;

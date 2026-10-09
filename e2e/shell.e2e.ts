@@ -77,7 +77,9 @@ test("a second icon tooltip opens without the delay once one has shown", async (
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await page.getByRole("button", { exact: true, name: "Add project" }).hover();
 	await expect(tooltip).toHaveText("Add project");
-	await page.getByRole("button", { name: /^New document in / }).first().hover();
+	let newDocument = page.getByRole("button", { name: /^New document in / }).first();
+	await newDocument.locator("..").hover();
+	await newDocument.hover();
 	await expect(tooltip).toHaveText("New document", { timeout: 200 });
 	await expect(tooltip).toHaveAttribute("data-instant", "");
 });
@@ -120,13 +122,13 @@ test("the chat rail has its own resize control", async ({ join, page }) => {
 	let beforeValue = Number(await handle.getAttribute("aria-valuenow"));
 
 	let before = (await box(rail)).width;
-	await handle.press("ArrowRight");
-	await handle.press("ArrowRight");
+	await handle.press("ArrowLeft");
+	await handle.press("ArrowLeft");
 	expect((await box(rail)).width).toBeGreaterThan(before);
 	expect(Number(await handle.getAttribute("aria-valuenow"))).toBeGreaterThan(beforeValue);
 
 	let widened = (await box(rail)).width;
-	await handle.press("ArrowLeft");
+	await handle.press("ArrowRight");
 	expect((await box(rail)).width).toBeLessThan(widened);
 
 	await handle.press("End");
@@ -149,11 +151,11 @@ test("the chat rail edge follows the pointer", async ({ join, page }) => {
 
 	await handle.hover();
 	await page.mouse.down();
-	await page.mouse.move(start.x + 40, y, { steps: 4 });
+	await page.mouse.move(start.x - 40, y, { steps: 4 });
 	let widened = (await box(rail)).width;
 	expect(widened).toBeGreaterThan(before);
 
-	await page.mouse.move(start.x - 20, y, { steps: 4 });
+	await page.mouse.move(start.x + 20, y, { steps: 4 });
 	await page.mouse.up();
 	expect((await box(rail)).width).toBeLessThan(widened);
 });
@@ -177,7 +179,11 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 	let heading = page.getByRole("heading", { name: "Chat" });
 	let close = page.getByRole("button", { name: "Hide chat" });
 	let chatHeader = pane.locator("[data-chat-header]");
-	let identity = chatHeader.locator("[data-chat-identity]");
+	let identity = close.locator(".chat-toggle-icon-default");
+	let closeIcon = close.locator(".chat-toggle-icon-sidebar");
+	let originalDraft = await draft.elementHandle();
+	let editor = page.getByRole("textbox", { name: "editable markdown" });
+	let originalEditor = await editor.elementHandle();
 
 	await draft.fill("unfinished thought");
 	await expect(header.getByRole("button", { name: /chat pane/ })).toHaveCount(0);
@@ -189,15 +195,22 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 		close.boundingBox(),
 	]);
 	expect(iconBox!.x + iconBox!.width).toBeLessThan(headingBox!.x);
-	expect(closeBox!.x).toBeGreaterThan(headingBox!.x + headingBox!.width);
+	expect(closeBox!.x + closeBox!.width).toBeLessThanOrEqual(headingBox!.x);
 	await page.mouse.move(0, 0);
-	await expect(close).toHaveCSS("opacity", "0");
+	await expect(close).toHaveCSS("opacity", "1");
+	await expect(identity).toHaveCSS("opacity", "1");
+	await expect(closeIcon).toHaveCSS("opacity", "0");
 	await close.focus();
-	await expect(close).toHaveCSS("opacity", "1");
+	await expect(identity).toHaveCSS("opacity", "0");
+	await expect(closeIcon).toHaveCSS("opacity", "1");
 	await draft.focus();
-	await expect(close).toHaveCSS("opacity", "0");
-	await heading.hover();
 	await expect(close).toHaveCSS("opacity", "1");
+	await expect(identity).toHaveCSS("opacity", "1");
+	await expect(closeIcon).toHaveCSS("opacity", "0");
+	let headerBox = await chatHeader.boundingBox();
+	await page.mouse.move(headerBox!.x + headerBox!.width - 12, headerBox!.y + headerBox!.height / 2);
+	await expect(identity).toHaveCSS("opacity", "0");
+	await expect(closeIcon).toHaveCSS("opacity", "1");
 	await close.hover();
 	await expect(page.locator("[data-icon-tooltip]")).toHaveText("Hide chat");
 	await expect(page.locator("[data-icon-tooltip]")).toBeVisible();
@@ -212,17 +225,25 @@ test("split Chat owns its controls and keeps its draft while hidden", async ({ j
 	await expect(opener).toHaveAttribute("aria-expanded", "false");
 	await expect(opener).toBeFocused();
 	let [openerBox, tabBox] = await Promise.all([opener.boundingBox(), documentTab.boundingBox()]);
-	expect(openerBox!.x + openerBox!.width).toBeLessThan(tabBox!.x);
+	expect(tabBox!.x + tabBox!.width).toBeLessThan(openerBox!.x);
 	await page.mouse.move(0, 0);
 	await opener.evaluate(button => (button as HTMLButtonElement).blur());
-	await expect(opener.locator(".chat-toggle-icon-default")).toHaveCSS("opacity", "1");
-	await expect(opener.locator(".chat-toggle-icon-sidebar")).toHaveCSS("opacity", "0");
+	let reopenIcon = opener.locator("img");
+	let restingIcon = await reopenIcon.getAttribute("src");
+	await expect(opener.locator(".chat-toggle-icon-sidebar")).toHaveCount(0);
 	await opener.hover();
-	await expect(opener.locator(".chat-toggle-icon-default")).toHaveCSS("opacity", "0");
-	await expect(opener.locator(".chat-toggle-icon-sidebar")).toHaveCSS("opacity", "1");
+	await expect(reopenIcon).toHaveAttribute("src", restingIcon!);
+	await opener.focus();
+	await expect(reopenIcon).toHaveAttribute("src", restingIcon!);
 	await opener.click();
 	await expect(heading).toBeFocused();
 	await expectChatValue(draft, "unfinished thought");
+	expect(await draft.evaluate((element, original) => element === original, originalDraft)).toBe(
+		true,
+	);
+	expect(await editor.evaluate((element, original) => element === original, originalEditor)).toBe(
+		true,
+	);
 });
 
 test("split Chat controls remain available to touch", async ({ join }) => {

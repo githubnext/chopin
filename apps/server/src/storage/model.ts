@@ -59,7 +59,7 @@ export type CompareNavigationResult = {
 	updated: boolean;
 };
 
-/** Process-lifetime registry row used only by durable agent ownership. */
+/** Public session metadata, also referenced by durable agent ownership. */
 export type WebSession = {
 	id: string;
 	userId: string;
@@ -67,7 +67,15 @@ export type WebSession = {
 	createdAt: Date;
 };
 
-export type CreateWebSession = WebSession;
+/** Opaque authenticated ciphertext; storage never receives plaintext GitHub credentials. */
+export type SessionCredentials = {
+	secretHash: Uint8Array;
+	ciphertext: Uint8Array;
+	revision: number;
+};
+
+export type StoredWebSession = WebSession & { credentials?: SessionCredentials };
+export type CreateWebSession = StoredWebSession;
 
 export type ChannelDescription = {
 	value: string;
@@ -93,6 +101,11 @@ export type ChannelRecord = {
 	updatedAt: Date;
 	archivedAt?: Date;
 	description?: ChannelDescription;
+	unansweredDecisions: number;
+};
+
+export type ChannelDecisionCount = Pick<ChannelRecord, "revision" | "unansweredDecisions"> & {
+	channelId: string;
 };
 
 export type InitialChannel = Omit<
@@ -103,7 +116,13 @@ export type InitialChannel = Omit<
 export type CreateChannel =
 	& Omit<
 		ChannelRecord,
-		"slug" | "revision" | "createdAt" | "updatedAt" | "archivedAt" | "description"
+		| "slug"
+		| "revision"
+		| "createdAt"
+		| "updatedAt"
+		| "archivedAt"
+		| "description"
+		| "unansweredDecisions"
 	>
 	& {
 		now: Date;

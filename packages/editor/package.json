@@ -40,10 +40,12 @@
 	"dependencies": {
 		"@base-ui/react": "1.7.0",
 		"@chopin/dialect": "workspace:*",
+		"@chopin/diagrams": "workspace:*",
 		"@chopin/icons": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",
 		"@chopin/viewport": "workspace:*",
+		"@chopin/visuals": "workspace:*",
 		"@lexical/link": "catalog:mdx",
 		"@lexical/list": "catalog:mdx",
 		"@lexical/react": "catalog:mdx",

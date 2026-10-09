@@ -1,0 +1,74 @@
+{
+	"version": 2,
+	"id": "D17",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"El",
+		"Max",
+		"Jo"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "El",
+			"text": "two workers can update the same draft revision. who wins?",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Max",
+			"text": "choices I see: last write wins; reject stale revisions with compare-and-swap and no per-draft lock; or serialise writers with an advisory lock plus a revision check.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "El",
+			"text": "last-write-wins would quietly lose a paragraph.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Jo",
+			"text": "advisory lock protects the transaction but we'd still need a version check after a crash, right?",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Max",
+			"text": "I'd use compare-and-swap on the revision, no per-draft lock, and return a conflict to the loser.",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Jo",
+			"text": "same. the client can rebase and try again.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}

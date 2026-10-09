@@ -14,6 +14,10 @@ test("Projects does not reclaim focus after it intentionally leaves the open dra
 		let drawer = page.getByRole("dialog", { name: "Projects", exact: true });
 		await expect(drawer.getByRole("status")).toContainText("Loading projects");
 		await expect(drawer.getByRole("button", { name: "Hide sidebar" })).toBeFocused();
+		let loadingControl = await drawer.getByRole("button", { name: "Hide sidebar" })
+			.boundingBox();
+		expect(loadingControl!.width).toBe(24);
+		expect(loadingControl!.height).toBe(24);
 
 		// Simulate a host moving focus outside the drawer, then returning it to body.
 		await page.getByRole("banner").getByRole("button", { name: /^Actions for / })
@@ -32,4 +36,17 @@ test("Projects does not reclaim focus after it intentionally leaves the open dra
 	} finally {
 		release.resolve();
 	}
+});
+
+test("a Projects drawer chunk failure restores focus and renders the eager recovery notice", async ({ join, page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.route(/\/assets\/navigation-drawer-[^/]+\.js$/, route => route.abort("failed"));
+	await join("ana");
+	let opener = page.getByRole("button", { name: "Show sidebar", exact: true });
+	await opener.click();
+	await expect(page.getByRole("alert")).toContainText("Could not load this dialog.");
+	await expect(page.getByRole("dialog", { name: "Projects", exact: true })).toHaveCount(0);
+	await expect(opener).toBeFocused();
+	await expect(page.getByRole("alert").getByRole("button", { name: "Reload", exact: true }))
+		.toBeVisible();
 });

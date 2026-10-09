@@ -11,6 +11,7 @@
  * `.ts` is included because shared class lists can live outside components.
  */
 @source "../../../packages/editor/src/**/*.{ts,tsx}";
+@source "../../../packages/icons/src/**/*.{ts,tsx}";
 @source "../../../packages/question/src/**/*.{ts,tsx}";
 
 @utility ring-hairline {
@@ -22,11 +23,28 @@
 	color: var(--color-icon);
 }
 
+/*
+ * Every icon keeps its declared size: as a flex item it would otherwise shrink
+ * when the text beside it wraps. In the base layer so a utility can still opt out.
+ */
+@layer base {
+	:is([data-nucleo-icon], [data-filled-icon]) {
+		flex-shrink: 0;
+	}
+}
+
+/* Beside text that may wrap: centre on the first line instead of the whole block. */
+@utility icon-first-line {
+	align-self: flex-start;
+	translate: 0 calc(0.5lh - 50%);
+}
+
 @utility icon-danger {
 	--color-icon: var(--color-danger-icon);
 }
 
-:where(.btn-primary, .btn-destructive) [data-nucleo-icon] {
+:where(.btn-primary, .btn-destructive, .btn-outline-danger, .document-actions-menu-destructive)
+	:is([data-nucleo-icon], [data-filled-icon]) {
 	color: inherit;
 }
 
@@ -75,14 +93,28 @@
 }
 
 @utility btn-sm {
-	height: 1.5rem;
-	padding-inline: calc(var(--spacing) * 2);
+	height: var(--control-height-compact);
+	padding-inline: var(--control-padding-inline);
+}
+
+@utility btn-compact {
+	height: var(--control-height-compact);
+	padding-inline: var(--control-padding-inline);
+	font-size: var(--text-xs);
+}
+
+@utility btn-with-count {
+	height: auto;
+	min-height: var(--control-height-compact);
+	padding-block: var(--control-inset);
+	padding-inline-end: var(--control-inset);
+	line-height: 1;
 }
 
 @utility btn-icon {
-	width: 1.75rem;
-	height: 1.75rem;
-	padding: 0.4375rem;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	padding: var(--icon-button-padding);
 }
 
 @utility btn-primary {
@@ -119,7 +151,7 @@
 @utility btn-outline {
 	background-color: var(--color-page);
 	color: var(--color-text-primary);
-	outline: var(--button-edge-width) solid var(--color-control-edge);
+	outline: var(--button-edge-width) solid var(--color-button-outline-edge);
 	outline-offset: calc(-1 * var(--button-edge-width));
 	box-shadow: var(--shadow-resting);
 
@@ -457,29 +489,22 @@ body {
 	opacity: 0;
 }
 
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-default {
+.panel-header {
+	block-size: var(--panel-header-height);
+}
+
+.panel-header-control {
+	margin-inline-start: calc(-1 * var(--panel-header-control-offset));
+}
+
+.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-default,
+.chat-header:is(:hover, :focus-within) .chat-header-control .chat-toggle-icon-default {
 	opacity: 0;
 }
 
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-sidebar {
+.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-sidebar,
+.chat-header:is(:hover, :focus-within) .chat-header-control .chat-toggle-icon-sidebar {
 	opacity: 1;
-}
-
-@media (hover: hover) and (pointer: fine) {
-	.chat-header-control {
-		opacity: 0;
-		transition: opacity var(--duration-fast) var(--ease-out);
-	}
-
-	.chat-header:is(:hover, :focus-within) .chat-header-control {
-		opacity: 1;
-	}
-}
-
-@media (any-pointer: coarse) {
-	.chat-header-control {
-		opacity: 1;
-	}
 }
 
 :root[data-motion-input="pointer"] .chat-toggle-icon {
@@ -490,6 +515,54 @@ body {
 	transition:
 		background-color var(--duration-fast) var(--ease-out),
 		scale var(--duration-fast) var(--ease-out);
+}
+
+/*
+ * The shared menu recipe. Items mark the keyboard or pointer row with
+ * `data-active`; `aria-selected` stays free for a chosen value.
+ */
+.menu-surface {
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-overlay);
+	font-size: var(--text-sm);
+}
+
+.menu-item {
+	display: flex;
+	min-height: var(--menu-item-height);
+	width: 100%;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	border-radius: var(--radius-sm);
+	padding: 0 calc(var(--spacing) * 2);
+	text-align: left;
+	font-size: var(--text-sm);
+	color: var(--color-text-primary);
+}
+
+.menu-item:hover {
+	background: var(--color-hover);
+}
+
+.menu-item[data-active] {
+	background: var(--color-selected);
+}
+
+/* Surfaces that mount already open (no presence class) ease in the same way. */
+.menu-surface[data-menu-enter] {
+	transform-origin: bottom left;
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+
+	@starting-style {
+		opacity: 0;
+		transform: scale(var(--dropdown-pre-scale));
+	}
 }
 
 body {
@@ -540,11 +613,7 @@ body {
 }
 
 .workspace-frame .workspace-chat-panel {
-	border-color: rgb(0 0 0 / 9%);
-}
-
-.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
-	--panel-direction: -1;
+	border-color: var(--color-divider);
 }
 
 .workspace-root[data-workspace-mode="split"] .workspace-frame > main {
@@ -575,7 +644,7 @@ body {
 /* Split Chat is a track: its width moves the document, and Chat slides under its clip. */
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
 	width: 0;
-	align-items: flex-end;
+	align-items: flex-start;
 	opacity: 1;
 	transform: none;
 }
@@ -713,10 +782,6 @@ body {
 /* Jump-to-source: a tint behind the message that fades; the message itself never moves. */
 .chat-message-body[data-chat-source] {
 	isolation: isolate;
-}
-
-.chat-message-body:not(:first-child) > .chat-message-to {
-	margin-top: 4px;
 }
 
 .chat-source-tint {
@@ -870,10 +935,6 @@ button.chat-tool-call-toggle {
 	margin: 0 0 7px 20px;
 }
 
-.chat-tool-call-details[hidden] {
-	display: none;
-}
-
 .chat-tool-data-label {
 	margin-bottom: 3px;
 	color: var(--color-text-quaternary);
@@ -933,11 +994,6 @@ button.chat-tool-call-toggle {
 	outline: none;
 }
 
-.chat-header-control:hover:not(:disabled),
-.chat-header-control:active:not(:disabled) {
-	background-color: transparent;
-}
-
 .chat-composer .send-action:disabled {
 	background-color: var(--color-brand);
 	color: var(--color-page);
@@ -992,8 +1048,8 @@ button.chat-tool-call-toggle {
 :root[data-plan-coarse-pointer] .question-choice-row,
 :root[data-plan-coarse-pointer] .question-actions button,
 :root[data-plan-coarse-pointer] :where(button, [role="button"])[data-press="wide"] {
-	min-width: 44px;
-	min-height: 44px;
+	min-width: var(--control-target-coarse);
+	min-height: var(--control-target-coarse);
 }
 
 :root[data-plan-coarse-pointer] .question-choice-row {
@@ -1024,8 +1080,8 @@ button.chat-tool-call-toggle {
 		position: absolute;
 		top: 50%;
 		left: 50%;
-		width: max(100%, 44px);
-		height: max(100%, 44px);
+		width: max(100%, var(--control-target-coarse));
+		height: max(100%, var(--control-target-coarse));
 		transform: translate(-50%, -50%);
 	}
 
@@ -1073,11 +1129,12 @@ button.chat-tool-call-toggle {
 	min-width: 0;
 }
 
-.question-title {
+.question-card .question-title {
 	/* Centre the first line on the 1.5rem mark, then lift 2px optically. */
 	margin: calc((1.5rem - 1lh) / 2 - 0.125rem) 0 0;
-	font-size: var(--text-base);
-	line-height: var(--text-lg--line-height);
+	font-family: var(--font-sans);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 	font-weight: 600;
 	color: var(--color-text-primary);
 	overflow-wrap: break-word;
@@ -1108,7 +1165,7 @@ button.chat-tool-call-toggle {
 	position: relative;
 	display: flex;
 	align-items: flex-start;
-	gap: 0.625rem;
+	gap: var(--choice-content-gap);
 	padding: 0.375rem 0.75rem 0.375rem 0.5rem;
 	border-radius: var(--radius-md);
 	font-size: var(--text-sm);
@@ -1155,7 +1212,7 @@ label.question-option:has(.question-input:not(:disabled)) {
 	block-size: 1lh;
 }
 
-/* Same 1.5rem as the header mark, so option text shares the title's left edge. */
+/* The letter tile uses the same 1.5rem size as the header mark. */
 .question-key > span {
 	display: grid;
 	place-items: center;
@@ -1362,6 +1419,22 @@ button.question-add:disabled {
 	}
 }
 
+/* Resolved cards have no padded body, so their footer needs its own floor. */
+.question-actions[data-resolved-actions] {
+	padding-block-end: calc(var(--spacing) * 2.5);
+}
+
+/* A decision whose prose has not been reviewed yet: a calm pulse, not a spinner. */
+.question-relation-dot {
+	background: var(--color-text-tertiary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.question-relation-dot:not([data-idle]) {
+		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
+	}
+}
+
 /* Discard confirm: the footer swaps in place and fades in. */
 .question-confirm {
 	margin-inline-end: auto;
@@ -1438,6 +1511,18 @@ button.question-add:disabled {
 	outline: none;
 }
 
+/* A rendered block clips its preview's ring, so show the same ring on the outer block. */
+.plan-content .planCode :is(.plan-code-view, .plan-diagram):focus-visible {
+	outline: none;
+}
+
+:root:not([data-focus-input="pointer"])
+	.plan-content
+	.planCode:has(> [data-plan-preview] :is(.plan-code-view, .plan-diagram):focus-visible) {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: 0;
+}
+
 /*
  * The ring answers "where am I?" for keyboard users, so it hides after a pointer
  * press. Text fields keep theirs: a caret alone is easy to lose.
@@ -1478,6 +1563,12 @@ button.question-add:disabled {
 	border-right-color: transparent;
 	border-radius: var(--radius-full);
 }
+
+@media (prefers-reduced-motion: no-preference) {
+	.document-activity-dot[data-document-activity="writing"] {
+		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
+	}
+}
 @media (prefers-reduced-motion: reduce) {
 	.chat-work-lattice > span,
 	.chat-work-headline-motion,
@@ -1489,6 +1580,7 @@ button.question-add:disabled {
 		animation: none;
 	}
 
+	.menu-surface[data-menu-enter],
 	.motion-dropdown,
 	.motion-popover,
 	.motion-panel,
@@ -1508,10 +1600,6 @@ button.question-add:disabled {
 	}
 
 	[data-chat-enter] {
-		transition: none;
-	}
-
-	.chat-header-control {
 		transition: none;
 	}
 

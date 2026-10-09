@@ -134,7 +134,6 @@ export function prune(state: PointerState, live: ReadonlySet<string>): PointerSt
 	return hover === state.hover && pinned === state.pinned ? state : { hover, pinned };
 }
 
-export const MARKER_SIZE = 20;
 /** How far past its drawn edge the marker still answers a pointer. */
 export const MARKER_REACH = 12;
 const GAP = 8;
@@ -158,7 +157,7 @@ export function markerPoint(
 	block: Rect,
 	lineHeight: number,
 	host: Rect,
-	size = MARKER_SIZE,
+	size: number,
 ): MarkerPlace {
 	let gutter = block.left - host.left;
 	let top = block.top - host.top;

@@ -6,6 +6,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
 import {
@@ -18,34 +19,24 @@ import {
 	$setSelection,
 	COMMAND_PRIORITY_LOW,
 	createCommand,
+	setDOMUnmanaged,
 } from "lexical";
 import { $createResearchNode, $isResearchNode } from "@chopin/dialect";
 import * as Y from "yjs";
 
-import { blockElement, planScroller } from "../scroll";
+import { blockElement } from "../scroll";
 import { useTransitionPresence } from "../transition-presence";
 import { ResearchComposer } from "../widgets/research";
-import { draftOverflow, placeDraft, revealTarget } from "./placement";
 import { $relativePosition } from "./position";
-import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
-import type { CSSProperties, ReactNode, Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import type { ResearchDraftStore } from "../research-draft";
 import type { ResearchStore } from "../widget-options";
-import type { DOMRectLike, DraftPlacement, ViewportBox } from "./placement";
+import type { DOMRectLike } from "./placement";
 
-type Attachment = { block: HTMLElement; rect: DOMRectLike };
-type Position = {
-	left: number;
-	top: number;
-	side: DraftPlacement["side"];
-	clip?: string;
-};
-
-// Long enough to outlast the editor's own scroll after the slash command's Enter.
-const REVEAL_WINDOW = 600;
+type Attachment = { block: HTMLElement };
 
 export type OpenResearch = {
 	anchor: DOMRectLike;
@@ -128,12 +119,12 @@ export function beginResearchDraft(
 	return next ? drafts.open(next.anchor, next.position) : false;
 }
 
-export function attachDraft(block: HTMLElement, height: number): () => void {
+/** The private surface participates in flow without becoming collaborative content. */
+export function attachDraft(block: HTMLElement, host: HTMLElement): () => void {
 	block.dataset.researchDraftAnchor = "";
-	block.style.setProperty("--research-draft-space", `${height}px`);
+	block.after(host);
 	return () => {
 		delete block.dataset.researchDraftAnchor;
-		block.style.removeProperty("--research-draft-space");
 	};
 }
 
@@ -155,13 +146,11 @@ export function attachmentBlock<Block>(
 export const UNRESOLVED_DRAFT = "This research draft cannot yet be placed at its saved position.";
 
 export function ResearchDraftShell(
-	{ children, inert, motion, side, surfaceRef, style }: {
+	{ children, inert, motion, surfaceRef }: {
 		children?: ReactNode;
 		inert?: boolean;
 		motion?: string;
-		side?: DraftPlacement["side"];
 		surfaceRef?: Ref<HTMLDivElement>;
-		style?: CSSProperties;
 	},
 ) {
 	return (
@@ -171,26 +160,14 @@ export function ResearchDraftShell(
 			aria-label="Research question"
 			role="region"
 			data-focus-boundary=""
-			data-side={side}
 			contentEditable={false}
-			className="fixed z-50 plan-research-draft motion-research-draft"
+			className="plan-research-draft motion-research-draft"
 			data-motion={motion || undefined}
 			inert={inert}
-			style={style}
 		>
 			{children}
 		</div>
 	);
-}
-
-/** The pixels a draft may occupy: the visible scroller inside the visual viewport. */
-function draftBounds(editor: LexicalEditor): ViewportBox {
-	let bounds = editorSurfaceViewport(editor);
-	let scroller = planScroller(editor.getRootElement())?.getBoundingClientRect();
-	if (!scroller) return bounds;
-	let top = Math.max(bounds.top, scroller.top);
-	let bottom = Math.min(bounds.top + bounds.height, scroller.bottom);
-	return { ...bounds, top, height: Math.max(0, bottom - top) };
 }
 
 function resolveAttachment(
@@ -218,14 +195,18 @@ function resolveAttachment(
 	}
 	if (!key) return undefined;
 	let resolved = blockElement(editor, key);
+	let previous = resolved?.previousElementSibling as HTMLElement | null;
+	if (previous?.classList.contains("plan-research-draft-host")) {
+		previous = previous.previousElementSibling as HTMLElement | null;
+	}
 	let block = resolved
 		? attachmentBlock(
 			resolved,
 			offset,
-			resolved.previousElementSibling as HTMLElement | null ?? undefined,
+			previous ?? undefined,
 		)
 		: undefined;
-	return block ? { block, rect: block.getBoundingClientRect() } : undefined;
+	return block ? { block } : undefined;
 }
 
 function currentPosition(
@@ -255,17 +236,10 @@ export function ResearchComposerSurface(
 	let read = useCallback(() => drafts.get(), [drafts]);
 	let draft = useSyncExternalStore(subscribe, read, read);
 	let surface = useRef<HTMLDivElement>(null);
-	let attached = useRef<
-		{
-			block: HTMLElement;
-			height: number;
-			detach: () => void;
-		} | undefined
-	>(undefined);
-	let [position, setPosition] = useState<Position>();
+	let attached = useRef<{ block: HTMLElement; detach: () => void } | undefined>(undefined);
+	let slot = useRef<HTMLDivElement | undefined>(undefined);
+	let [host, setHost] = useState<HTMLDivElement>();
 	let [unresolved, setUnresolved] = useState(false);
-	let revealUntil = useRef(0);
-	let openedAt = useRef<number>(undefined);
 	let presence = useTransitionPresence(draft, 150, false);
 	let shown = presence.value;
 	let visible = !!draft;
@@ -275,7 +249,6 @@ export function ResearchComposerSurface(
 			OPEN_RESEARCH_COMMAND,
 			({ anchor, consume }) => {
 				if (disabled) return false;
-				openedAt.current = planScroller(editor.getRootElement())?.scrollTop;
 				return beginResearchDraft(drafts, () => {
 					if (!consume()) return;
 					return {
@@ -291,92 +264,69 @@ export function ResearchComposerSurface(
 		attached.current?.detach();
 		attached.current = undefined;
 	}, []);
-	let reserve = useCallback((block: HTMLElement | undefined, height: number) => {
-		let current = attached.current;
-		if (current && current.block === block && current.height === height) return;
-		detach();
-		if (block) attached.current = { block, height, detach: attachDraft(block, height) };
-	}, [detach]);
-
 	let place = useCallback(() => {
-		let element = surface.current;
-		if (!element || !draft) return;
+		let root = editor.getRootElement();
+		let host = slot.current;
+		if (!root || !host || !draft) return;
 		let resolved = binding && draft.position
 			? resolveAttachment(editor, binding, draft.position)
 			: undefined;
 		let previous = attached.current?.block;
 		if (previous && !previous.isConnected) previous = undefined;
 		let block = retainDraftBlock(resolved?.block, previous);
-		let attachment = resolved ?? (block
-			? { block, rect: block.getBoundingClientRect() }
-			: undefined);
 		setUnresolved(!!binding && !!draft.position && !resolved);
-		let anchor = attachment?.rect ?? draft.anchor;
-		let bounds = draftBounds(editor);
-		let column = attachment ? anchor.width : Infinity;
-		element.style.maxWidth = `${Math.max(0, Math.min(bounds.width - 16, column))}px`;
-		let height = element.offsetHeight;
-		reserve(attachment?.block, height);
-		let surfaceSize = { width: element.offsetWidth, height };
-		let next = placeDraft(anchor, surfaceSize, bounds);
-		let scroller = planScroller(editor.getRootElement());
-		if (next.reveal !== 0 && scroller && performance.now() < revealUntil.current) {
-			let target = revealTarget(
-				scroller.scrollTop,
-				openedAt.current,
-				shift =>
-					placeDraft(
-						{ ...anchor, top: anchor.top + shift, bottom: anchor.bottom + shift },
-						surfaceSize,
-						bounds,
-					),
-				next.reveal,
-			);
-			// A long trip is a jump, not a glide past the whole document.
-			let far = Math.abs(target - scroller.scrollTop) > bounds.height;
-			let reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-			scroller.scrollTo({ top: target, behavior: far || reduced ? "auto" : "smooth" });
-		}
-		// The draft is fixed, so clip whatever has scrolled past the pane instead of drawing over its chrome.
-		let overflow = draftOverflow(next.top, height, bounds);
-		let clip = overflow.top || overflow.bottom
-			? `inset(${overflow.top || -8}px -8px ${overflow.bottom || -8}px)`
-			: undefined;
-		setPosition(current =>
-			current?.left === next.left && current.top === next.top && current.side === next.side
-				&& current.clip === clip
-				? current
-				: { left: next.left, top: next.top, side: next.side, clip }
-		);
-	}, [binding, draft, editor, reserve]);
-
-	useLayoutEffect(() => {
-		if (!visible) return;
-		setPosition(undefined);
-		revealUntil.current = performance.now() + REVEAL_WINDOW;
-	}, [visible]);
-	useLayoutEffect(() => {
-		if (!draft) {
-			detach();
-			setUnresolved(false);
+		if (!block) {
+			if (host.parentElement !== root) root.append(host);
 			return;
 		}
-		place();
-		let element = surface.current;
-		if (!element || typeof ResizeObserver === "undefined") return;
-		let observer = new ResizeObserver(place);
-		observer.observe(element);
-		return () => observer.disconnect();
-	}, [detach, draft, place]);
+		if (attached.current?.block === block && block.nextElementSibling === host) return;
+		detach();
+		attached.current = { block, detach: attachDraft(block, host) };
+	}, [binding, draft, editor, detach]);
 
-	useEffect(() => detach, [detach]);
+	useLayoutEffect(() => {
+		if (!shown) {
+			detach();
+			slot.current?.remove();
+			slot.current = undefined;
+			setHost(undefined);
+			return;
+		}
+		if (!slot.current) {
+			let element = document.createElement("div");
+			element.className = "plan-research-draft-host";
+			element.contentEditable = "false";
+			setDOMUnmanaged(element, { captureSelection: true });
+			// React handles portal events on this host; keep native keys out of Lexical.
+			element.addEventListener("keydown", event => event.stopPropagation());
+			element.addEventListener("focusout", () => {
+				let selection = element.ownerDocument.getSelection();
+				if (selection?.anchorNode && element.contains(selection.anchorNode)) {
+					selection.removeAllRanges();
+				}
+			});
+			slot.current = element;
+			setHost(element);
+		}
+		place();
+	}, [detach, place, shown]);
+	useLayoutEffect(() => {
+		// Restore the caret after the closing draft becomes inert.
+		if (shown && !draft) editor.focus();
+	}, [draft, editor, shown]);
+	useEffect(() => () => {
+		detach();
+		slot.current?.remove();
+	}, [detach]);
 	useEffect(() => {
-		if (!visible) return;
+		if (!visible || !host) return;
 		let frame = requestAnimationFrame(() => {
-			surface.current?.querySelector("textarea")?.focus({ preventScroll: true });
+			let element = surface.current;
+			element?.scrollIntoView({ block: "nearest" });
+			element?.querySelector("textarea")?.focus({ preventScroll: true });
 		});
 		return () => cancelAnimationFrame(frame);
-	}, [visible]);
+	}, [host, visible]);
 	let settled = !!draft && !draft.submitting && !draft.cancelling;
 	useEffect(() => {
 		// A disabled textarea drops focus while a request is in flight; return it for a retry.
@@ -386,33 +336,6 @@ export function ResearchComposerSurface(
 			textarea.focus({ preventScroll: true });
 		}
 	}, [settled]);
-	useEffect(() => {
-		if (!draft) return;
-		return listenToEditorGeometry(editor, place);
-	}, [draft, editor, place]);
-	useEffect(() => {
-		if (!visible) return;
-		// An on-screen keyboard shrinks the viewport after focus; bring the draft back.
-		let resized = () => {
-			if (!surface.current?.contains(document.activeElement)) return;
-			openedAt.current = undefined;
-			revealUntil.current = performance.now() + REVEAL_WINDOW;
-		};
-		// Any user input ends a reveal, so it never fights the reader's own scroll or click.
-		let interrupted = () => {
-			revealUntil.current = 0;
-		};
-		let inputs = ["keydown", "pointerdown", "touchstart", "wheel"];
-		let viewport = window.visualViewport;
-		window.addEventListener("resize", resized, true);
-		viewport?.addEventListener("resize", resized, true);
-		for (let input of inputs) window.addEventListener(input, interrupted, true);
-		return () => {
-			window.removeEventListener("resize", resized, true);
-			viewport?.removeEventListener("resize", resized, true);
-			for (let input of inputs) window.removeEventListener(input, interrupted, true);
-		};
-	}, [visible]);
 	useEffect(() => {
 		if (!draft) return;
 		return editor.registerUpdateListener(place);
@@ -425,12 +348,9 @@ export function ResearchComposerSurface(
 		);
 	}, [binding, disabled, drafts, editor]);
 
-	if (!shown) return null;
+	if (!shown || !host) return null;
 	let current = draft ?? shown;
-	let dismiss = () => {
-		drafts.dismiss();
-		editor.focus();
-	};
+	let dismiss = () => drafts.dismiss();
 	let submit = () => {
 		if (!draft || draft.submitting || draft.cancelling || !draft.question.trim()) return;
 		if (!binding || disabled) return;
@@ -454,19 +374,11 @@ export function ResearchComposerSurface(
 	};
 	let busy = !!current.submitting || !!current.cancelling;
 	let dismissible = !busy && !current.created;
-	return (
+	return createPortal(
 		<ResearchDraftShell
 			motion={presence.className}
 			inert={!draft}
-			side={position?.side}
 			surfaceRef={surface}
-			style={position
-				? { top: position.top, left: position.left, clipPath: position.clip }
-				: {
-					top: current.anchor.bottom,
-					left: current.anchor.left,
-					visibility: "hidden",
-				}}
 		>
 			<ResearchComposer
 				blocked={disabled
@@ -478,7 +390,7 @@ export function ResearchComposerSurface(
 				cancelLabel={current.created ? "Cancel research" : undefined}
 				dismissible={dismissible}
 				error={current.error}
-				notice={unresolved ? UNRESOLVED_DRAFT : undefined}
+				notice={draft && !busy && unresolved ? UNRESOLVED_DRAFT : undefined}
 				onCancel={cancel}
 				onChange={question => drafts.change(question)}
 				onEscape={dismiss}
@@ -488,6 +400,7 @@ export function ResearchComposerSurface(
 				submitLabel={current.created ? "Place research" : undefined}
 				submitting={busy}
 			/>
-		</ResearchDraftShell>
+		</ResearchDraftShell>,
+		host,
 	);
 }

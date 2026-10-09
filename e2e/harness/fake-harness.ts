@@ -9,7 +9,7 @@ import type {
 	HarnessV1PromptTurnOptions,
 	HarnessV1Session,
 	HarnessV1StartOptions,
-} from "../../apps/server/node_modules/@ai-sdk/harness";
+} from "../../apps/server/src/harness/harness-v1";
 
 type FakeHarnessSettings = {
 	credentials: (id: string) => string | undefined;
@@ -24,7 +24,7 @@ const STEP_MS = 2_500;
 function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
 	if (typeof prompt === "string") return prompt;
 	if (typeof prompt.content === "string") return prompt.content;
-	return prompt.content.map((part: { text?: string }) => part.text ?? "").join("");
+	return prompt.content.map(part => part.type === "text" ? part.text : "").join("");
 }
 
 function unsupported(capability: string): () => Promise<never> {

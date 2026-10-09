@@ -120,14 +120,13 @@ jobs:
       - name: App preview toolkit (static resources and browser behaviour)
         run: bun run preview-toolkit:test
 
-      # Builds the client, then runs it. The build is deliberately here rather
-      # than inside the Playwright config: web servers start before any global
-      # setup, so a build racing them would leave the suite on the previous
-      # bundle — green, about code nobody changed.
-      - run: bun run e2e
+      # Build once, and reject development previews before the long browser suite.
+      - run: bun run build
 
       - name: Verify design audit stays out of production
         run: bun scripts/check-design-production.ts
+
+      - run: E2E_SKIP_BUILD=1 bun run e2e
 
       # Only on failure, and only the parts worth reading. `test-results`
       # carries the traces; the report is the thing that indexes them.

@@ -39,6 +39,7 @@ export type Channel = {
 	descriptionRevision: number;
 	description?: string;
 	archivedAt?: string;
+	unansweredDecisions?: number;
 };
 
 export type RepositoryPage = {
@@ -78,6 +79,8 @@ export type ChannelPage = {
 	canEdit: boolean;
 	channels: Channel[];
 	nextCursor?: string;
+	/** Present only for the unfiltered active catalogue, including documents on later pages. */
+	unansweredDecisions?: number;
 };
 
 export type ChannelDetail = {
@@ -261,11 +264,14 @@ export function renameChannel(id: string, title: string): Promise<ChannelDetail>
 	});
 }
 
-export function archiveChannel(id: string): Promise<ChannelDetail> {
+/** The repository's active-catalogue decision total read after the document moved. */
+export type ArchiveTransition = ChannelDetail & { unansweredDecisions: number };
+
+export function archiveChannel(id: string): Promise<ArchiveTransition> {
 	return response(`/api/channels/${encodeURIComponent(id)}/archive`, { method: "POST" });
 }
 
-export function restoreChannel(id: string): Promise<ChannelDetail> {
+export function restoreChannel(id: string): Promise<ArchiveTransition> {
 	return response(`/api/channels/${encodeURIComponent(id)}/restore`, { method: "POST" });
 }
 

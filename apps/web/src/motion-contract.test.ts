@@ -17,7 +17,7 @@ describe("motion contracts", () => {
 		});
 		expect(motionContract("collapse")).toEqual({
 			className: "motion-collapse",
-			closeDuration: 250,
+			closeDuration: 200,
 			contentClassName: "motion-collapse-content",
 			states: MOTION_STATES,
 		});

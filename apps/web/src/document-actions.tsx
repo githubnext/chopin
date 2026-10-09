@@ -1,9 +1,27 @@
 import * as Api from "./api";
 
+import type { Sidebar } from "@chopin/protocol";
+
+type LoadedPages = {
+	channels: Api.Channel[];
+	nextCursor?: string;
+	unansweredDecisions?: number;
+};
+
 export type DocumentLoadState =
-	| { status: "loading"; channels: Api.Channel[]; nextCursor?: string }
-	| { status: "ready"; channels: Api.Channel[]; nextCursor?: string }
-	| { status: "error"; channels: Api.Channel[]; nextCursor?: string; message: string };
+	| LoadedPages & { status: "loading" }
+	| LoadedPages & { status: "ready" }
+	| LoadedPages & { status: "error"; message: string };
+
+export type DecisionCounts = Pick<
+	Sidebar.Decisions,
+	"channelId" | "repositoryId" | "unanswered" | "repositoryUnanswered" | "revision"
+>;
+
+export type DecisionSnapshot = Pick<
+	Sidebar.Snapshot,
+	"repositoryId" | "repositoryUnanswered" | "documents"
+>;
 
 export type LoadedDocuments = Record<string, DocumentLoadState>;
 
@@ -29,11 +47,18 @@ export function projectDocuments(
 	}));
 }
 
+function retainedTotal(current?: DocumentLoadState) {
+	return current?.unansweredDecisions === undefined
+		? {}
+		: { unansweredDecisions: current.unansweredDecisions };
+}
+
 export function beginDocumentLoad(current?: DocumentLoadState): DocumentLoadState {
 	return {
 		status: "loading",
 		channels: current?.channels ?? [],
 		...(current?.nextCursor ? { nextCursor: current.nextCursor } : {}),
+		...retainedTotal(current),
 	};
 }
 
@@ -43,6 +68,7 @@ export function completeDocumentPage(
 	nextCursor?: string,
 	replace = false,
 	preserveMissing?: ReadonlySet<string>,
+	unansweredDecisions = current.unansweredDecisions,
 ): DocumentLoadState {
 	let retained = replace
 		? current.channels.filter(channel => preserveMissing?.has(channel.id))
@@ -57,6 +83,7 @@ export function completeDocumentPage(
 		status: "ready",
 		channels: [...byId.values()],
 		...(nextCursor ? { nextCursor } : {}),
+		...(unansweredDecisions === undefined ? {} : { unansweredDecisions }),
 	};
 }
 
@@ -68,6 +95,7 @@ export function failDocumentLoad(
 		status: "error",
 		channels: current.channels,
 		...(current.nextCursor ? { nextCursor: current.nextCursor } : {}),
+		...retainedTotal(current),
 		message: error instanceof Error ? error.message : "Could not load documents",
 	};
 }
@@ -121,10 +149,29 @@ export function updateDocumentMetadata(
 	return next;
 }
 
+function withDecisions(
+	channel: Api.Channel,
+	revision: number,
+	unansweredDecisions: number | undefined,
+): Api.Channel {
+	if (channel.revision === revision && channel.unansweredDecisions === unansweredDecisions) {
+		return channel;
+	}
+	let next: Api.Channel = { ...channel, revision };
+	if (unansweredDecisions === undefined) delete next.unansweredDecisions;
+	else next.unansweredDecisions = unansweredDecisions;
+	return next;
+}
+
 export function newestDocument(current: Api.Channel, replacement: Api.Channel): Api.Channel {
 	if (current.id !== replacement.id) return replacement;
 	let core = current.updatedAt > replacement.updatedAt ? current : replacement;
-	return updateDocumentMetadata(core, newestDocumentMetadata(current, replacement));
+	let decisions = current.revision > replacement.revision ? current : replacement;
+	return withDecisions(
+		updateDocumentMetadata(core, newestDocumentMetadata(current, replacement)),
+		decisions.revision,
+		decisions.unansweredDecisions,
+	);
 }
 
 export function replaceLoadedDocument(
@@ -193,4 +240,118 @@ export function updateLoadedDocument(
 		};
 	}
 	return documents;
+}
+
+export function replaceProjectTotal(
+	documents: LoadedDocuments,
+	repositoryId: string,
+	unansweredDecisions: number,
+): LoadedDocuments {
+	let current = documents[repositoryId];
+	if (!current || current.unansweredDecisions === unansweredDecisions) return documents;
+	return { ...documents, [repositoryId]: { ...current, unansweredDecisions } };
+}
+
+export type LiveTotal = { updates: number; total: number };
+
+export type HttpTotal = {
+	/** The total to show: the HTTP one, unless a live total arrived during the read. */
+	total?: number;
+	superseded: boolean;
+	/**
+	 * Totals carry no ordering key, so a superseded read that disagrees cannot say
+	 * which is newer. Only a fresh snapshot, ordered after every live frame, can.
+	 */
+	conflict: boolean;
+};
+
+export function settleHttpTotal(
+	live: LiveTotal | undefined,
+	updatesAtRequest: number | undefined,
+	total: number | undefined,
+): HttpTotal {
+	if (!live || live.updates === updatesAtRequest) {
+		return { total, superseded: false, conflict: false };
+	}
+	return {
+		total: live.total,
+		superseded: true,
+		conflict: total !== undefined && total !== live.total,
+	};
+}
+
+export function staleDecisionCounts(
+	known: Pick<Api.Channel, "id" | "revision"> | undefined,
+	counts: DecisionCounts,
+): boolean {
+	return known?.id === counts.channelId && known.revision > counts.revision;
+}
+
+export function acceptDecisionCounts(
+	channel: Api.Channel,
+	counts: DecisionCounts | undefined,
+): Api.Channel {
+	if (!counts || counts.channelId !== channel.id || staleDecisionCounts(channel, counts)) {
+		return channel;
+	}
+	return withDecisions(channel, counts.revision, counts.unanswered);
+}
+
+export function applyDecisionCounts(
+	documents: LoadedDocuments,
+	counts: DecisionCounts,
+): LoadedDocuments {
+	let current = documents[counts.repositoryId];
+	if (!current || current.channels.some(channel => staleDecisionCounts(channel, counts))) {
+		return documents;
+	}
+	let changed = false;
+	let channels = current.channels.map(channel => {
+		let next = acceptDecisionCounts(channel, counts);
+		if (next !== channel) changed = true;
+		return next;
+	});
+	if (!changed && current.unansweredDecisions === counts.repositoryUnanswered) return documents;
+	return {
+		...documents,
+		[counts.repositoryId]: {
+			...current,
+			channels: changed ? channels : current.channels,
+			unansweredDecisions: counts.repositoryUnanswered,
+		},
+	};
+}
+
+export function snapshotDecisionCounts(snapshot: DecisionSnapshot): DecisionCounts[] {
+	return snapshot.documents.map(document => ({
+		...document,
+		repositoryId: snapshot.repositoryId,
+		repositoryUnanswered: snapshot.repositoryUnanswered,
+	}));
+}
+
+export function applyDecisionSnapshot(
+	documents: LoadedDocuments,
+	snapshot: DecisionSnapshot,
+): LoadedDocuments {
+	let current = documents[snapshot.repositoryId];
+	if (!current) return documents;
+	let counts = new Map(
+		snapshotDecisionCounts(snapshot).map(document => [document.channelId, document]),
+	);
+	let changed = false;
+	let channels = current.channels.map(channel => {
+		let next = acceptDecisionCounts(channel, counts.get(channel.id));
+		if (next !== channel) changed = true;
+		return next;
+	});
+	if (!changed && current.unansweredDecisions === snapshot.repositoryUnanswered) return documents;
+	return {
+		...documents,
+		[snapshot.repositoryId]: {
+			...current,
+			channels: changed ? channels : current.channels,
+			unansweredDecisions: snapshot.repositoryUnanswered,
+		},
+	};
 }

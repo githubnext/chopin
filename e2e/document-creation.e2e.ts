@@ -80,6 +80,7 @@ for (let action of ["global", "pencil", "empty"] as const) {
 			await page.keyboard.press("Escape");
 			await expect(page.getByRole("dialog", { name: "Projects", exact: true })).toBeHidden();
 		}
+		if (action === "pencil") await pencil.locator("..").hover();
 		await trigger.click();
 		await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 		await expect(page.getByRole("textbox", { name: "editable markdown" })).toHaveAttribute(
@@ -89,6 +90,49 @@ for (let action of ["global", "pencil", "empty"] as const) {
 		expect(posts).toEqual(["/api/repositories/octo-org/score/channels"]);
 	});
 }
+
+test("Alt+N ignores shortcut repeats and holds ordinary typing for the new title", async ({ join }) => {
+	let page = await join("ana");
+	let posted = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let posts = creationRequests(page);
+	await page.route("**/api/repositories/octo-org/score/channels", async route => {
+		if (route.request().method() !== "POST") return route.fallback();
+		let response = await route.fetch();
+		posted.resolve();
+		await release.promise;
+		await route.fulfill({ response });
+	});
+	await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+	await page.keyboard.press("Alt+KeyN");
+	await posted.promise;
+	await page.evaluate(() => {
+		document.body.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "n",
+				code: "KeyN",
+				altKey: true,
+				repeat: true,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		document.body.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "n",
+				code: "KeyN",
+				isComposing: true,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+	});
+	await page.keyboard.type("Chosen title");
+	release.resolve();
+	await expect(page.getByRole("textbox", { name: "Document title", exact: true }))
+		.toHaveValue("Chosen title");
+	expect(posts).toHaveLength(1);
+});
 
 test("first-document creation stays guarded through both POST and opening", async ({ baseURL, page }) => {
 	await start(page, baseURL!);
@@ -275,8 +319,10 @@ test("overlapping creations keep separate guards and open the latest requested p
 		name: "New document in archive-1",
 		exact: true,
 	});
+	await first.locator("..").hover();
 	await first.click();
 	let firstDocument = await firstPosted.promise;
+	await second.locator("..").hover();
 	await second.click();
 	let secondDocument = await secondPosted.promise;
 	await expect(first).toBeDisabled();
@@ -443,7 +489,9 @@ test("canonicalizing the current document does not cancel a pending creation", a
 
 	await page.goto(`/channels/${id}`);
 	await reading.promise;
-	await page.getByRole("button", { name: "New document in score", exact: true }).click();
+	let pencil = page.getByRole("button", { name: "New document in score", exact: true });
+	await pencil.locator("..").hover();
+	await pencil.click();
 	let created = await posted.promise;
 	releaseRead.resolve();
 	await expect(page).toHaveURL(testChannelPath(id));

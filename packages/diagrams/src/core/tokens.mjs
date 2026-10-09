@@ -1,2 +1,90 @@
-// Retained layout type ramp from SeeCode; presentation tokens live in Chopin CSS.
-export const TYPE = { label: 12, sub: 9, tag: 7, edge: 8, axis: 8, legend: 9, title: 13 };
+// Canvas labels use fixed, measured roles so viewport fitting cannot change their metrics.
+export const DIAGRAM_TYPE = Object.freeze({
+	label: Object.freeze({
+		size: 14,
+		lineHeight: 20,
+		weight: 600,
+		fontFamily: "var(--font-sans)",
+		mono: false,
+		tracking: 0,
+		upper: false,
+	}),
+	sub: Object.freeze({
+		size: 12,
+		lineHeight: 16,
+		weight: 400,
+		fontFamily: "var(--font-mono)",
+		mono: true,
+		tracking: 0,
+		upper: false,
+	}),
+	tag: Object.freeze({
+		size: 10,
+		lineHeight: 14,
+		weight: 400,
+		fontFamily: "var(--font-mono)",
+		mono: true,
+		tracking: 0.12,
+		upper: true,
+	}),
+	edge: Object.freeze({
+		size: 12,
+		lineHeight: 16,
+		weight: 400,
+		fontFamily: "var(--font-mono)",
+		mono: true,
+		tracking: 0.06,
+		upper: true,
+	}),
+});
+
+export const LABEL_BOX = Object.freeze({
+	paddingInline: 16,
+	paddingBlock: 10,
+	detailGap: 4,
+	tagGap: 8,
+	tagInset: 8,
+	badgePaddingInline: 5,
+	badgePaddingBlock: 2,
+	tablePaddingInline: 10,
+	tablePaddingBlock: 8,
+	tableRowPaddingBlock: 2,
+});
+
+export const diagramTypographyVariables = Object.freeze({
+	"--diagram-label-font-size": `${DIAGRAM_TYPE.label.size}px`,
+	"--diagram-label-line-height": `${DIAGRAM_TYPE.label.lineHeight}px`,
+	"--diagram-label-font-weight": `${DIAGRAM_TYPE.label.weight}`,
+	"--diagram-label-font-family": DIAGRAM_TYPE.label.fontFamily,
+	"--diagram-label-tracking": `${DIAGRAM_TYPE.label.tracking}em`,
+	"--diagram-label-text-transform": DIAGRAM_TYPE.label.upper ? "uppercase" : "none",
+	"--diagram-sub-font-size": `${DIAGRAM_TYPE.sub.size}px`,
+	"--diagram-sub-line-height": `${DIAGRAM_TYPE.sub.lineHeight}px`,
+	"--diagram-sub-font-weight": `${DIAGRAM_TYPE.sub.weight}`,
+	"--diagram-sub-font-family": DIAGRAM_TYPE.sub.fontFamily,
+	"--diagram-sub-tracking": `${DIAGRAM_TYPE.sub.tracking}em`,
+	"--diagram-sub-text-transform": DIAGRAM_TYPE.sub.upper ? "uppercase" : "none",
+	"--diagram-tag-font-size": `${DIAGRAM_TYPE.tag.size}px`,
+	"--diagram-tag-line-height": `${DIAGRAM_TYPE.tag.lineHeight}px`,
+	"--diagram-tag-font-weight": `${DIAGRAM_TYPE.tag.weight}`,
+	"--diagram-tag-font-family": DIAGRAM_TYPE.tag.fontFamily,
+	"--diagram-tag-tracking": `${DIAGRAM_TYPE.tag.tracking}em`,
+	"--diagram-tag-text-transform": DIAGRAM_TYPE.tag.upper ? "uppercase" : "none",
+	"--diagram-edge-font-size": `${DIAGRAM_TYPE.edge.size}px`,
+	"--diagram-edge-line-height": `${DIAGRAM_TYPE.edge.lineHeight}px`,
+	"--diagram-edge-font-weight": `${DIAGRAM_TYPE.edge.weight}`,
+	"--diagram-edge-font-family": DIAGRAM_TYPE.edge.fontFamily,
+	"--diagram-edge-tracking": `${DIAGRAM_TYPE.edge.tracking}em`,
+	"--diagram-edge-text-transform": DIAGRAM_TYPE.edge.upper ? "uppercase" : "none",
+});
+
+// Chart layout roles retain their established dimensions in this graph-label pass.
+export const TYPE = {
+	label: DIAGRAM_TYPE.label.size,
+	sub: DIAGRAM_TYPE.sub.size,
+	tag: DIAGRAM_TYPE.tag.size,
+	edge: DIAGRAM_TYPE.edge.size,
+	axis: 8,
+	legend: 9,
+	title: 13,
+};

@@ -1,0 +1,202 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "biome-fix-all",
+	"title": "Biome fix-all code action registration",
+	"source": {
+		"url": "https://github.com/biomejs/biome/issues/3339",
+		"retrievedAt": "2026-09-29T20:10:22.692375+00:00",
+		"repository": "biomejs/biome",
+		"number": 3339
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2024-07-02T20:38:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2024-07-23T15:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2024-08-05T09:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2024-08-29T13:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "biome-3339:issue:3339",
+			"kind": "opening",
+			"actor": "predragnikolic",
+			"createdAt": "2024-07-02T20:12:04Z",
+			"url": "https://github.com/biomejs/biome/issues/3339",
+			"summary": "The opener proposes exposing Biome's save action as source.fixAll.biome, citing the LSP convention instead of the existing quickfix.biome name.",
+			"editedAt": "2024-07-02T20:37:26Z",
+			"actorId": 22029477,
+			"actorType": "human"
+		},
+		{
+			"id": "biome-3339:comment:2204361901",
+			"kind": "comment",
+			"actor": "ematipico",
+			"createdAt": "2024-07-02T20:32:58Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2204361901",
+			"summary": "A maintainer likes the idea but proposes adding the new action first and removing the old one in a major release to protect existing settings.",
+			"actorId": 602478,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2204367515",
+			"kind": "comment",
+			"actor": "predragnikolic",
+			"createdAt": "2024-07-02T20:37:04Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2204367515",
+			"summary": "The opener agrees that existing editor workflows should continue to work.",
+			"actorId": 22029477,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2245008825",
+			"kind": "comment",
+			"actor": "xin2017338",
+			"createdAt": "2024-07-23T11:42:35Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2245008825",
+			"summary": "A participant finds a fix-all category already present in Biome's code and asks whether it addresses the request.",
+			"editedAt": "2024-07-23T11:43:41Z",
+			"actorId": 28481035,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2245054863",
+			"kind": "comment",
+			"actor": "ematipico",
+			"createdAt": "2024-07-23T12:03:42Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2245054863",
+			"summary": "A maintainer initially says that category is not exposed through the LSP handler.",
+			"editedAt": "2024-07-23T12:03:52Z",
+			"actorId": 602478,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2245138904",
+			"kind": "comment",
+			"actor": "xin2017338",
+			"createdAt": "2024-07-23T12:37:01Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2245138904",
+			"summary": "The participant points to the handler and reports that source.fixAll.biome works in their VS Code configuration.",
+			"actorId": 28481035,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2245387528",
+			"kind": "comment",
+			"actor": "ematipico",
+			"createdAt": "2024-07-23T14:18:51Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2245387528",
+			"summary": "The maintainer revises the diagnosis: the documentation appears to be out of date.",
+			"actorId": 602478,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2268494350",
+			"kind": "comment",
+			"actor": "rchl",
+			"createdAt": "2024-08-05T08:38:27Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2268494350",
+			"summary": "Another participant says the server should also advertise the action kind in its LSP capabilities for editor interoperability.",
+			"editedAt": "2024-08-05T08:38:34Z",
+			"actorId": 153197,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2314066371",
+			"kind": "comment",
+			"actor": "xin2017338",
+			"createdAt": "2024-08-28T02:53:10Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2314066371",
+			"summary": "A participant checks the current capability response and asks whether a boolean value is sufficient.",
+			"actorId": 28481035,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2314451902",
+			"kind": "comment",
+			"actor": "rchl",
+			"createdAt": "2024-08-28T06:47:00Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2314451902",
+			"summary": "The participant clarifies that the relevant capability is the explicit codeActionKinds array.",
+			"actorId": 153197,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2314655822",
+			"kind": "comment",
+			"actor": "xin2017338",
+			"createdAt": "2024-08-28T08:23:05Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2314655822",
+			"summary": "The first participant asks whether Biome should replace the boolean capability with an array naming source.fixAll.biome.",
+			"editedAt": "2024-08-28T08:24:45Z",
+			"actorId": 28481035,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2314661765",
+			"kind": "comment",
+			"actor": "predragnikolic",
+			"createdAt": "2024-08-28T08:25:41Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2314661765",
+			"summary": "The opener links to the LSP discussion explaining the expected registration behavior.",
+			"actorId": 22029477,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2314671807",
+			"kind": "comment",
+			"actor": "rchl",
+			"createdAt": "2024-08-28T08:29:51Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2314671807",
+			"summary": "The participant explains that clients should rely on registered action kinds for save actions, even though VS Code currently accepts less explicit registration.",
+			"editedAt": "2024-08-28T08:30:23Z",
+			"actorId": 153197,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:comment:2314801105",
+			"kind": "comment",
+			"actor": "xin2017338",
+			"createdAt": "2024-08-28T09:25:37Z",
+			"url": "https://github.com/biomejs/biome/issues/3339#issuecomment-2314801105",
+			"summary": "A participant acknowledges the distinction and asks for review of a related pull request.",
+			"actorId": 28481035,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		},
+		{
+			"id": "biome-3339:process:closed:2024-08-29T12:37:10Z",
+			"kind": "process",
+			"actor": "ematipico",
+			"createdAt": "2024-08-29T12:37:10Z",
+			"url": "https://github.com/biomejs/biome/issues/3339",
+			"summary": "A maintainer closes the issue.",
+			"actorId": 602478,
+			"actorType": "human",
+			"parentId": "biome-3339:issue:3339"
+		}
+	]
+}

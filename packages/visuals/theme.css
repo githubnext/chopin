@@ -63,7 +63,14 @@
 	--color-ground: var(--color-gray-150);
 	--color-hover: var(--color-gray-100);
 	--color-inset: var(--color-gray-100);
+	--color-count-quiet: var(--color-gray-50);
 	--color-selected: var(--color-gray-200);
+	--color-selected-strong: color-mix(in oklch, var(--color-selected) 75%, var(--color-gray-300));
+	--color-hover-nested: color-mix(
+		in oklch,
+		var(--color-selected-strong) 50%,
+		var(--color-gray-300)
+	);
 
 	--color-text-primary: var(--color-gray-900);
 	--color-text-secondary: var(--color-gray-700);
@@ -98,13 +105,14 @@
 	--color-danger-surface: var(--color-ruby-3);
 	--color-danger-surface-hover: var(--color-ruby-4);
 	--color-danger-surface-active: var(--color-ruby-5);
-	--color-danger-edge: color-mix(in srgb, var(--color-ruby-7) 45%, transparent);
+	--color-danger-edge: color-mix(in srgb, var(--color-ruby-7) 15%, transparent);
 	--color-danger-graphic: var(--color-ruby-9);
 	--color-danger-icon: var(--color-ruby-11);
 	--color-danger-text: var(--color-ruby-12);
 	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
 	--color-success-wash: oklch(0.93 0.026 145);
 	--color-success-ink: oklch(0.44098 0.11068 144.754); /* #236228 */
+	--color-success-outline-subtle: color-mix(in oklch, var(--color-success) 30%, transparent);
 	--color-warning: oklch(0.59898 0.12586 74.986); /* #ab7302 */
 	--color-warning-wash: oklch(0.95 0.032 75);
 	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
@@ -118,9 +126,11 @@
 	);
 	--color-destructive-ink: oklch(0.4941 0.19046 25.161); /* #b51421 */
 
-	/* Passive structure and controls are the only two edge weights. */
+	/* Outline buttons use a quieter edge than filled controls. */
 	--color-edge: oklch(0 0 0 / 7%);
-	--color-control-edge: oklch(0 0 0 / 20%);
+	--color-button-outline-edge: oklch(0 0 0 / 12%);
+	--color-control-edge: oklch(0 0 0 / 15%);
+	--color-divider: rgb(0 0 0 / 9%);
 	--color-control-boundary: var(--color-gray-500);
 	--edge-width: 1px;
 	--button-edge-width: 1px;
@@ -149,11 +159,69 @@
 	/* Tailwind's multiplier keeps 4px steps and admits 2, 6, 10 and 22px. */
 	--spacing: 0.25rem;
 
+	/* Compact controls, panel chrome, and their shared icon slots. */
+	--control-height-compact: calc(var(--spacing) * 6);
+	--control-target-coarse: calc(var(--spacing) * 11);
+	--control-padding-inline: calc(var(--spacing) * 2);
+	--control-inset: var(--spacing);
+	--split-control-label-padding-start: var(--control-inset);
+	--split-control-label-padding-end: calc(var(--spacing) / 2);
+	--label-measure-compact: 10rem;
+	--opacity-quiet: 0.45;
+	--icon-size-micro: calc(var(--spacing) * 2.5);
+	--icon-size-compact: calc(var(--spacing) * 3);
+	--icon-size-default: calc(var(--spacing) * 3.5);
+	--icon-button-size: calc(var(--spacing) * 7);
+	--icon-button-size-compact: var(--control-height-compact);
+	--icon-button-padding: calc((var(--icon-button-size) - var(--icon-size-default)) / 2);
+	--icon-button-padding-compact: calc(
+		(var(--icon-button-size-compact) - var(--icon-size-compact)) / 2
+	);
+	--count-control-size: calc(var(--spacing) * 4.5);
+	--count-control-padding: calc(var(--spacing) / 4);
+	--menu-item-height-normal: calc(var(--spacing) * 8.5);
+	--menu-item-height-compact: calc(var(--spacing) * 7);
+	--menu-item-padding-block-normal: calc(var(--spacing) * 1.75);
+	--menu-item-padding-block-compact: var(--spacing);
+	--menu-item-padding-inline-normal: calc(var(--spacing) * 2.5);
+	--menu-item-padding-inline-compact: var(--control-padding-inline);
+	--menu-item-gap-normal: calc(var(--spacing) * 1.5);
+	--menu-item-gap-compact: calc(var(--spacing) * 2);
+	--menu-separator-margin: calc(var(--spacing) / 2);
+	--panel-header-height: calc(var(--spacing) * 11.5);
+	--panel-header-padding-inline: calc(var(--spacing) * 3.5);
+	--panel-toolbar-padding-inline: calc(var(--spacing) * 2.5);
+	--panel-header-gap: calc(var(--spacing) / 2);
+	--panel-header-control-offset: calc(var(--icon-button-padding) - var(--panel-header-gap));
+
+	/* Authored documents keep prose measure separate from wide content. */
+	--document-prose-measure: 40.625rem;
+	--document-top-inset: calc(var(--spacing) * 15);
+	--document-decisions-top-inset: calc(var(--spacing) * 12);
+	--document-gutter: calc(var(--spacing) * 14);
+	--document-gutter-compact: calc(var(--spacing) * 6);
+	--document-trailing-space: 60vh;
+	--document-line-height: 1.6;
+	--decision-marker-size: calc(var(--spacing) * 6);
+	--choice-content-gap: calc(var(--spacing) * 3);
+
+	/* Empty states share one illustration and copy rhythm. */
+	--empty-state-icon-frame-size: calc(var(--spacing) * 14);
+	--empty-state-icon-size: calc(var(--spacing) * 6);
+	--empty-state-icon-gap: calc(var(--spacing) * 6);
+	--empty-state-frame-width: 42rem;
+	--empty-state-frame-height: 19rem;
+	--empty-state-frame-padding-block: calc(var(--spacing) * 10);
+	--empty-state-frame-padding-inline: calc(var(--spacing) * 6);
+	--empty-state-copy-width: 27rem;
+	--empty-state-copy-width-short: 32ch;
+
 	/*
 	 * Tailwind's own values, declared here so the scale has one owner: a change
 	 * lands in one place, and a misspelt rung is caught rather than waved through.
 	 */
 	--radius-*: initial;
+	--radius-panel: calc(var(--spacing) * 3);
 	--radius-sm: 0.25rem; /* 4px — buttons, grips, toolbar cells */
 	--radius-md: 0.375rem; /* 6px — cards, inputs, callouts, code blocks */
 	--radius-lg: 0.5rem; /* 8px — popovers and panels */
@@ -219,6 +287,9 @@
 	--modal-scale: 0.96;
 	--modal-scale-close: 0.96;
 	--modal-ease: var(--motion-smooth-out);
+	/* One recipe for every menu and listbox: `.menu-surface` holds `.menu-item` rows. */
+	--menu-padding: 0.25rem;
+	--menu-item-height: 2rem;
 	--sidebar-open-dur: 250ms;
 	--sidebar-close-dur: 180ms;
 	--drawer-open-dur: 250ms;
@@ -238,7 +309,7 @@
 	--badge-pop-dur: 180ms;
 	--badge-close-dur: 180ms;
 	--acc-expand: 250ms;
-	--acc-collapse: 250ms;
+	--acc-collapse: 200ms;
 	--toast-open: 280ms;
 	--toast-close: 200ms;
 
@@ -248,5 +319,10 @@
 
 	/* Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack. */
 	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-document-heading: "Lora", Georgia, serif;
+	--font-weight-normal: 400;
+	--font-weight-medium: 500;
+	--font-weight-semibold: 600;
+	--font-weight-document-heading: 400;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }

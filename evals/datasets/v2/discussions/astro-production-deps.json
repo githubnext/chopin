@@ -1,0 +1,188 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "astro-production-deps",
+	"title": "Astro production dependencies for SSR deployment",
+	"source": {
+		"url": "https://github.com/withastro/roadmap/discussions/655",
+		"retrievedAt": "2026-09-29T20:14:55.806360+00:00",
+		"nodeId": "D_kwDOGa48bc4AVE2J",
+		"number": 655
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2023-07-27T11:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2023-08-15T21:36:04Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-08-18T10:36:27Z"
+		},
+		{
+			"id": "c4",
+			"at": "2024-05-15T10:07:35Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOGa48bc4AVE2J",
+			"kind": "opening",
+			"actor": "robak86",
+			"createdAt": "2023-07-27T09:59:43Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655",
+			"summary": "The opener reports that an Astro SSR production install carries build tools, making a minimal Node deployment much larger than expected; they ask for build-only packages to be excluded.",
+			"actorId": "MDQ6VXNlcjUxOTIzOQ==",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZsL7",
+			"kind": "comment",
+			"actor": "Princesseuh",
+			"createdAt": "2023-07-27T10:19:52Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6734587",
+			"summary": "A respondent explains that Astro's package needs those tools for CLI commands, even if a built app does not need them at runtime.",
+			"editedAt": "2023-07-27T10:23:13Z",
+			"actorId": "MDQ6VXNlcjMwMTk3MzE=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZsL8",
+			"kind": "comment",
+			"actor": "robak86",
+			"createdAt": "2023-07-27T10:43:52Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6734588",
+			"summary": "The opener clarifies a two-stage Docker workflow: build with all tools, then install only runtime packages alongside the server output.",
+			"editedAt": "2023-07-27T10:47:11Z",
+			"actorId": "MDQ6VXNlcjUxOTIzOQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZsL9",
+			"kind": "comment",
+			"actor": "Princesseuh",
+			"createdAt": "2023-07-27T10:46:55Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6734589",
+			"summary": "The respondent points out that moving a library's own runtime dependencies to devDependencies would leave those packages unavailable to its users.",
+			"actorId": "MDQ6VXNlcjMwMTk3MzE=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZsL-",
+			"kind": "comment",
+			"actor": "robak86",
+			"createdAt": "2023-07-27T11:00:00Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6734590",
+			"summary": "The opener accepts the packaging constraint and suggests a larger separation, such as a distinct CLI package.",
+			"actorId": "MDQ6VXNlcjUxOTIzOQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZsL_",
+			"kind": "comment",
+			"actor": "Princesseuh",
+			"createdAt": "2023-07-27T11:02:16Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6734591",
+			"summary": "The respondent keeps the problem open and suggests extracting a small runtime package that an SSR build could depend on alone.",
+			"actorId": "MDQ6VXNlcjMwMTk3MzE=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZsMA",
+			"kind": "comment",
+			"actor": "natemoo-re",
+			"createdAt": "2023-08-15T21:36:04Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6734592",
+			"summary": "A maintainer moves the topic to the roadmap, supports the goal, and says the packaging design still needs discussion.",
+			"actorId": "MDQ6VXNlcjcxMTgxNzc=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZxOe",
+			"kind": "comment",
+			"actor": "natemoo-re",
+			"createdAt": "2023-08-17T20:14:14Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6755230",
+			"summary": "A maintainer cites Remix's split between development tooling and server runtime as a possible model.",
+			"actorId": "MDQ6VXNlcjcxMTgxNzc=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZxRQ",
+			"kind": "reply",
+			"actor": "Princesseuh",
+			"createdAt": "2023-08-17T20:44:04Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6755408",
+			"summary": "A respondent asks what effort would be involved in separating Astro's development code into another package.",
+			"actorId": "MDQ6VXNlcjMwMTk3MzE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AZxOe"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AZyc6",
+			"kind": "reply",
+			"actor": "ematipico",
+			"createdAt": "2023-08-18T10:36:08Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-6760250",
+			"summary": "A maintainer says the split is feasible, pointing to existing runtime code organization while noting additional moves would be required.",
+			"editedAt": "2023-08-18T10:36:27Z",
+			"actorId": "MDQ6VXNlcjYwMjQ3OA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AZxOe"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AdKz3",
+			"kind": "comment",
+			"actor": "firxworx",
+			"createdAt": "2023-11-22T21:30:28Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-7646455",
+			"summary": "A user reports large Astro SSR container images and asks for a deployment dependency graph or generated runtime package manifest.",
+			"actorId": "MDQ6VXNlcjI0NTE4MjM0",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AjLPe",
+			"kind": "comment",
+			"actor": "linguofeng",
+			"createdAt": "2024-04-25T06:22:08Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-9221086",
+			"summary": "A participant leaves a watch reaction without adding a technical position.",
+			"actorId": "MDQ6VXNlcjQ2MDMyOA==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVE2J"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AkBoj",
+			"kind": "reply",
+			"actor": "rburgst",
+			"createdAt": "2024-05-15T10:02:06Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-9443875",
+			"summary": "A participant suggests changing the project generator so new projects place TypeScript in development dependencies.",
+			"actorId": "MDQ6VXNlcjIyOTcx",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AZsL9"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AkBpb",
+			"kind": "reply",
+			"actor": "Princesseuh",
+			"createdAt": "2024-05-15T10:07:35Z",
+			"url": "https://github.com/withastro/roadmap/discussions/655#discussioncomment-9443931",
+			"summary": "A respondent says Astro has since removed TypeScript from its own direct dependencies.",
+			"actorId": "MDQ6VXNlcjMwMTk3MzE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AZsL9"
+		}
+	]
+}

@@ -31,6 +31,8 @@ export type FaceProps = {
 	/** Unverified, so the photograph may not exist. */
 	handle: string;
 	size?: number;
+	/** Compact chrome can choose the smaller fallback initial without changing the face size. */
+	textSize?: "xs" | "2xs";
 	/** The surface behind overlapping faces, so their cover ring does not show. */
 	ring?: "ground" | "page";
 	/** Set false where a design-system tooltip already names the face. */
@@ -55,7 +57,7 @@ export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
 }
 
 /** Keyed by handle so a reused mount never carries one person's load state to another. */
-export function Face({ decorative, handle, ring, size, titled }: FaceProps) {
+export function Face({ decorative, handle, ring, size, textSize, titled }: FaceProps) {
 	return (
 		<Portrait
 			decorative={decorative}
@@ -63,12 +65,15 @@ export function Face({ decorative, handle, ring, size, titled }: FaceProps) {
 			handle={handle}
 			ring={ring}
 			size={size}
+			textSize={textSize}
 			titled={titled}
 		/>
 	);
 }
 
-function Portrait({ decorative, handle, ring, size = 20, titled = true }: FaceProps) {
+function Portrait(
+	{ decorative, handle, ring, size = 20, textSize = "xs", titled = true }: FaceProps,
+) {
 	let [failed, setFailed] = useState(false);
 	let [loaded, setLoaded] = useState(false);
 	let tone = color(handle);
@@ -79,7 +84,9 @@ function Portrait({ decorative, handle, ring, size = 20, titled = true }: FacePr
 			aria-hidden={decorative || undefined}
 			aria-label={decorative ? undefined : handle}
 			role={decorative ? undefined : "img"}
-			className={`relative grid shrink-0 place-items-center overflow-hidden text-xs font-semibold uppercase ${edge}`}
+			className={`relative grid shrink-0 place-items-center overflow-hidden ${
+				textSize === "2xs" ? "text-2xs" : "text-xs"
+			} font-semibold uppercase ${edge}`}
 			style={{
 				width: size,
 				height: size,

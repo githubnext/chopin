@@ -9,11 +9,12 @@
 .ch-diagram__controls {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.375rem;
-	margin-bottom: 0.75rem;
+	gap: var(--control-inset);
+	margin-top: calc(var(--spacing) * 3);
+	justify-content: flex-start;
+	align-items: center;
 }
 
-.ch-diagram__controls button,
 .ch-diagram__inspector button {
 	font-family: var(--font-sans);
 	font-size: var(--text-xs);
@@ -26,38 +27,21 @@
 	cursor: pointer;
 }
 
-.ch-diagram__controls button:hover:not(:disabled),
 .ch-diagram__inspector button:hover {
 	color: var(--color-brand-ink);
 	border-color: var(--color-brand);
 }
 
-.ch-diagram__controls button:disabled {
-	opacity: 0.45;
-	cursor: default;
-}
-
 .ch-diagram__stage {
 	width: 100%;
 	overflow-x: auto;
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-lg);
-	background: var(--color-page);
-}
-
-.ch-diagram__scroll-hint {
-	margin: 0.375rem 0 0;
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-	color: var(--color-text-tertiary);
 }
 
 .ch-diagram .sc-svg {
 	display: block;
-	width: 100%;
-	min-width: 32.5rem;
+	width: var(--sc-display-width, 100%);
+	min-width: var(--sc-display-width, 0);
 	height: auto;
-	max-height: 82vh;
 	margin: 0 auto;
 	user-select: none;
 }
@@ -174,7 +158,7 @@
 }
 
 @media print {
-	.ch-diagram__controls, .ch-diagram__inspector, .ch-diagram__scroll-hint {
+	.ch-diagram__controls, .ch-diagram__inspector {
 		display: none;
 	}
 	.ch-diagram .sc-svg {
@@ -186,4 +170,10 @@
 	.ch-diagram .sc-svg.sc-stepping [data-sc-step] {
 		filter: none;
 	}
+}
+
+.ch-diagram__zoom {
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+	color: var(--color-text-secondary);
 }

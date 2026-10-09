@@ -80,6 +80,20 @@ function value(placement: Placement): string {
 	return placement.kind;
 }
 
+function reduced(): boolean {
+	return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function duration(style: CSSStyleDeclaration, token: string): number {
+	let value = style.getPropertyValue(token).trim();
+	let number = Number.parseFloat(value);
+	if (!Number.isFinite(number)) return 0;
+	return value.endsWith("ms") ? number : number * 1000;
+}
+
+/** Longer than the fade, so a mark is taken off even if its animation never ends. */
+const FADED = 2_000;
+
 export class ChangeStore {
 	#listeners = new Set<() => void>();
 	#snapshot: Snapshot = EMPTY;
@@ -101,6 +115,11 @@ export class ChangeStore {
 	#observed = new Map<Element, Set<string>>();
 	/** Attributes this store put on the document, so it can take them off. */
 	#painted = new Map<HTMLElement, Set<string>>();
+
+	/** Marks on their way out, and which attributes go once they have faded. */
+	#fading = new Map<HTMLElement, { names: Set<string>; timer: ReturnType<typeof setTimeout> }>();
+	/** Whether the remote update being applied right now was the agent's. */
+	#agent = false;
 
 	#scrolled = 0;
 	#frame = 0;
@@ -148,6 +167,7 @@ export class ChangeStore {
 	 * work out for themselves that they were the same block.
 	 */
 	mark(changes: Plan.Change[]): void {
+		this.#marks.renew();
 		for (let change of changes) {
 			let id = `c${this.#counter++}`;
 			this.#changes.set(id, change);
@@ -365,25 +385,123 @@ export class ChangeStore {
 			let element = elements.get(id);
 			if (!placement || !element) continue;
 
+			// Marked again on its way out: back to an ordinary mark.
+			if (this.#fading.has(element)) this.#faded(element);
+
 			let names = next.get(element) ?? new Set();
 			names.add(attribute(placement));
 			next.set(element, names);
 			element.setAttribute(attribute(placement), value(placement));
 		}
 
+		let still = !reduced();
 		for (let [element, names] of this.#painted) {
-			for (let name of names) {
-				if (!next.get(element)?.has(name)) element.removeAttribute(name);
+			let staying = next.get(element);
+			let leaving = [...names].filter(name => !staying?.has(name));
+			if (leaving.length === 0) continue;
+
+			// The stylesheet fades the mark while every attribute is still on,
+			// so the wash keeps its shape to the end. Only a block losing all of
+			// its marks fades: fading one of two would take the other with it.
+			if (still && !staying && element.isConnected) {
+				this.#fading.set(element, {
+					names: new Set(leaving),
+					timer: setTimeout(() => this.#faded(element), FADED),
+				});
+				element.addEventListener("animationend", this.#ended);
+				element.setAttribute("data-plan-fade", "");
+				continue;
 			}
+			for (let name of leaving) element.removeAttribute(name);
 		}
 		this.#painted = next;
 	}
 
+	#ended = (event: AnimationEvent): void => {
+		if (event.animationName !== "plan-change-out") return;
+		if (event.target instanceof HTMLElement) this.#faded(event.target);
+	};
+
+	#faded(element: HTMLElement): void {
+		let fading = this.#fading.get(element);
+		if (!fading) return;
+		clearTimeout(fading.timer);
+		this.#fading.delete(element);
+		element.removeEventListener("animationend", this.#ended);
+		element.removeAttribute("data-plan-fade");
+		for (let name of fading.names) element.removeAttribute(name);
+	}
+
 	#unpaint(): void {
+		for (let element of this.#fading.keys()) this.#faded(element);
 		for (let [element, names] of this.#painted) {
 			for (let name of names) element.removeAttribute(name);
 		}
 		this.#painted.clear();
+	}
+
+	/**
+	 * Say who wrote the remote update about to be applied.
+	 *
+	 * Lexical applies it in a microtask, which is before this timer runs, so
+	 * the flag covers exactly that update and no later one.
+	 */
+	authored(agent: boolean): void {
+		this.#agent = agent;
+		if (agent) setTimeout(() => (this.#agent = false));
+	}
+
+	/** Whether the update Lexical is applying now came from the agent. */
+	get agentWriting(): boolean {
+		return this.#agent;
+	}
+
+	/**
+	 * Open up blocks the agent just inserted in front of the reader.
+	 *
+	 * A block that appears at full height shoves everything under it down in
+	 * one frame, which reads as the page lurching. Only blocks on screen are
+	 * worth it: one inserted out of view moves nothing anybody is looking at.
+	 * The caller decides which blocks are safe to open; this only animates.
+	 */
+	arrived(elements: HTMLElement[]): void {
+		let root = this.#scroller;
+		if (!root || elements.length === 0 || reduced()) return;
+
+		// Every read before any write, so opening several costs one layout.
+		let bounds = root.getBoundingClientRect();
+		let opening = elements.flatMap(element => {
+			let rect = element.getBoundingClientRect();
+			if (rect.top >= bounds.bottom || rect.bottom <= bounds.top) return [];
+			return [{ element, height: rect.height, style: getComputedStyle(element) }];
+		});
+
+		for (let { element, height, style } of opening) {
+			// Clipped through the keyframes rather than an inline style, so it
+			// cannot outlive the animation or overwrite one Lexical writes.
+			element.animate(
+				[
+					{
+						height: "0px",
+						marginBlock: "0px",
+						paddingBlock: "0px",
+						opacity: 0,
+						overflow: "clip",
+					},
+					{
+						height: `${height}px`,
+						marginBlock: `${style.marginBlockStart} ${style.marginBlockEnd}`,
+						paddingBlock: `${style.paddingBlockStart} ${style.paddingBlockEnd}`,
+						opacity: 1,
+						overflow: "clip",
+					},
+				],
+				{
+					duration: duration(style, "--acc-expand"),
+					easing: style.getPropertyValue("--motion-move").trim() || "ease-out",
+				},
+			);
+		}
 	}
 
 	// -- what the chips say --------------------------------------------------

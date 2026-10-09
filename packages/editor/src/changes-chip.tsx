@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowUpIcon, ChevronIcon } from "@chopin/icons";
 
 import { MotionDisclosureIcon } from "./disclosure-motion";
 import { usePopoverDismissal } from "./popover-dismissal";
@@ -41,6 +42,27 @@ function label(entry: Entry): string {
 	}
 }
 
+/**
+ * Who wrote it: the verified caller first, then the client they used. The
+ * client names itself and could claim to be anyone, so it never stands alone;
+ * one that gave no name is reported by the server as `unknown`.
+ */
+export function author(entry: Entry): string | undefined {
+	let attribution = entry.attribution;
+	if (!attribution) return undefined;
+	let user = `@${attribution.user}`;
+	return attribution.client.name === "unknown" ? user : `${user} via ${attribution.client.name}`;
+}
+
+function provenance(entry: Entry): string | undefined {
+	let attribution = entry.attribution;
+	if (!attribution) return undefined;
+	let client = attribution.client.name === "unknown"
+		? "An unnamed MCP client"
+		: `${attribution.client.name} ${attribution.client.version}`;
+	return `${client}, revisions ${attribution.fromRevision} to ${attribution.revision}`;
+}
+
 function describe(entry: Entry): string {
 	let first = entry.blocks[0];
 	if (!first) return "";
@@ -66,14 +88,9 @@ function List({ entries }: { entries: Entry[] }) {
 					// between this list and a plain history of the turn.
 					data-unread={entry.seen ? undefined : ""}
 				>
-					<span
-						className="plan-changes-kind"
-						title={entry.attribution
-							? `${entry.attribution.client.name} ${entry.attribution.client.version}, revisions ${entry.attribution.fromRevision} to ${entry.attribution.revision}`
-							: undefined}
-					>
+					<span className="plan-changes-kind" title={provenance(entry)}>
 						{label(entry)}
-						{entry.attribution ? ` by ${entry.attribution.client.name}` : ""}
+						{author(entry) ? ` by ${author(entry)}` : ""}
 					</span>
 					<span className="plan-changes-text">{describe(entry)}</span>
 				</li>
@@ -119,6 +136,8 @@ function Chip(
 
 	if (waiting === 0) return null;
 
+	let summary = `${count(waiting)} ${waiting === 1 ? "change" : "changes"} ${side}`;
+
 	return (
 		<div ref={box} className="plan-changes" data-side={side}>
 			{open && <List entries={entries} />}
@@ -130,10 +149,14 @@ function Chip(
 					type="button"
 					className="plan-changes-go"
 					onClick={onGo}
-					title={`Go to the nearest change ${side}`}
+					aria-label={summary}
+					data-tooltip={summary}
 				>
-					<span aria-hidden="true">{side === "above" ? "↑" : "↓"}</span>
-					{`${count(waiting)} ${waiting === 1 ? "change" : "changes"} ${side}`}
+					<ArrowUpIcon
+						className={side === "below" ? "rotate-180" : undefined}
+						size={14}
+					/>
+					<span className="tabular-nums" aria-hidden="true">{count(waiting)}</span>
 				</button>
 				<button
 					type="button"
@@ -147,14 +170,15 @@ function Chip(
 						);
 						setOpen(value => !value);
 					}}
-					title="What the agent changed"
 				>
 					<MotionDisclosureIcon
 						className="editor-motion-feedback"
-						closed="▸"
+						closed={<ChevronIcon size={14} />}
 						motionOwner={iconMotionOwner}
 						open={open}
-						opened="▾"
+						opened={
+							<ChevronIcon className={side === "below" ? "-rotate-90" : "rotate-90"} size={14} />
+						}
 					/>
 					<span className="sr-only">What the agent changed</span>
 				</button>

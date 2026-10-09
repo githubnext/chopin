@@ -17,8 +17,10 @@ import { answered } from "../draft";
 import { InlineCode } from "./inline-code";
 import { plainInlineList, plainInlineText } from "./inline-segments";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
+import { cardRelation, RelationNote } from "./relation-note";
 import { ResolvedActions } from "./resolved-actions";
 import type { VisibleSuggestion } from "./project-suggestion";
+import type { Relation } from "../relation";
 
 import type { ReactNode } from "react";
 import type { Question } from "@chopin/protocol";
@@ -79,6 +81,10 @@ export type QuestionViewProps = {
 	 * rather than advertising a jump that would do nothing.
 	 */
 	places?: Record<string, number>;
+	/** Whether each answered decision is linked, pending, deliberately empty or orphaned. */
+	relations?: Record<string, Relation>;
+	/** What a pending relationship is waiting on, when the host knows better than "Linking…". */
+	pendingRelation?: string;
 	collaborators?: Collaborator[];
 	/**
 	 * Replaces the `@handle` pills for people on the current question. The view
@@ -470,8 +476,8 @@ function Related(
 			data-ace-question-id={id}
 			data-press="wide"
 			aria-label={count > 1
-				? `${label} — show in plan, ${count} places`
-				: `${label} — show in plan`}
+				? `${label} — show in document, ${count} places`
+				: `${label} — show in document`}
 			onClick={() => onSelect?.(id)}
 			onMouseEnter={() => onEnter?.(id)}
 			onMouseLeave={event => event.currentTarget !== document.activeElement && onLeave?.(id)}
@@ -699,6 +705,8 @@ export function QuestionView(props: QuestionViewProps) {
 		aside,
 		headerActions,
 		places,
+		relations,
+		pendingRelation,
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionFocus,
@@ -791,6 +799,20 @@ export function QuestionView(props: QuestionViewProps) {
 	}
 
 	if (status !== "open") {
+		let related = answers
+			? cardRelation(relations, definition.questions.map(question => question.id))
+			: undefined;
+		let relationNote = related && (
+			<RelationNote
+				count={places?.[related.question]}
+				onEnter={onQuestionEnter}
+				onLeave={onQuestionLeave}
+				onSelect={onQuestionSelect}
+				pending={pendingRelation}
+				question={related.question}
+				relation={related.relation}
+			/>
+		);
 		return (
 			<div className="question-card">
 				{answers
@@ -800,7 +822,8 @@ export function QuestionView(props: QuestionViewProps) {
 							aside={aside}
 							definition={definition}
 							resolver={resolver}
-							places={places}
+							// One control per destination: a linked note takes over the jump.
+							places={related?.relation === "linked" ? undefined : places}
 							onQuestionEnter={onQuestionEnter}
 							onQuestionLeave={onQuestionLeave}
 							onQuestionSelect={onQuestionSelect}
@@ -819,6 +842,7 @@ export function QuestionView(props: QuestionViewProps) {
 					onDiscard={onDiscard}
 					onReopen={onReopen}
 					submitting={submitting}
+					note={relationNote}
 				/>
 			</div>
 		);

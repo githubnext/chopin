@@ -1,0 +1,576 @@
+{
+	"version": 1,
+	"development": [
+		{
+			"id": "D01",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D01.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D01.json",
+				"sha256": "642b455dcd148c88c960da3da83e456cfaceff439454bd822917df935897d032"
+			},
+			"checkpoints": [
+				"c2",
+				"c5",
+				"c6",
+				"c7"
+			]
+		},
+		{
+			"id": "D02",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D02.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D02.json",
+				"sha256": "da0abdb23cb0f3e24a1a2560b23de5bfffe78a0d7c6e35bda999d387b1eea561"
+			},
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6",
+				"c7"
+			]
+		},
+		{
+			"id": "D03",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D03.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D03.json",
+				"sha256": "b196d28344fb98493fd115fcd6bed326583d433b9ed457ec905cbeee7bf538ab"
+			},
+			"checkpoints": [
+				"c4",
+				"ca1",
+				"c5",
+				"c6",
+				"c7"
+			]
+		},
+		{
+			"id": "D04",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D04.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D04.json",
+				"sha256": "54a33521b058925a49c6758b81230d76fa07d175ab8f3518407e4cfcef17cf6a"
+			},
+			"checkpoints": [
+				"c5",
+				"ca1",
+				"cr1",
+				"c6",
+				"c7"
+			]
+		},
+		{
+			"id": "D05",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D05.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D05.json",
+				"sha256": "e8f46c65db393c080d075780e430e23ef06f92fba51de166ee1858b71dd27c32"
+			},
+			"checkpoints": [
+				"c2",
+				"c5",
+				"c7",
+				"c8"
+			]
+		},
+		{
+			"id": "D06",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D06.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D06.json",
+				"sha256": "377d95a1ae41ddc838d2e436cf42a42627ff894f07ee5bdcccaa3a99c9ebe44b"
+			},
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D07",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D07.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D07.json",
+				"sha256": "c76aca7d2e6eede5c93b41be8bc589e52a691e9774a9144ac46e134a09398ac0"
+			},
+			"checkpoints": [
+				"c2",
+				"c4",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D08",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D08.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D08.json",
+				"sha256": "64b0296260c33b3b6709f3ff88d691b331b88f3383e5ab0c500490591444f297"
+			},
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D09",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D09.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D09.json",
+				"sha256": "2ccdd7ed9733b4b14066f959121e57ca65dad3c2fc2c7a6a5ad812fdf4f03890"
+			},
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D10",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D10.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D10.json",
+				"sha256": "36e5520e0ec9b6d49b8bede81f0e06723868ec53ec38faf9b2e6f261a74f46e7"
+			},
+			"checkpoints": [
+				"c4",
+				"c6",
+				"c7"
+			]
+		},
+		{
+			"id": "D11",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D11.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D11.json",
+				"sha256": "55d7c8f9e80bb868db9a7f6c95bc84e3cca1c9e0dcc4eab46681d2f1ffec3966"
+			},
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D12",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D12.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D12.json",
+				"sha256": "d90a18a1184149988a2e94b9e1289df3f1ee0fade8094d4ded62f739cfea7a8b"
+			},
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c6"
+			]
+		},
+		{
+			"id": "D13",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D13.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D13.json",
+				"sha256": "740b5e159d343cb1a56285389befb886d702ecf7159b6208c0c376d0475369ea"
+			},
+			"checkpoints": [
+				"c3",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D14",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D14.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D14.json",
+				"sha256": "a49fb8a45be115475956df5525d71076b346e7a55048e3a91b431eb64fb54844"
+			},
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c6"
+			]
+		},
+		{
+			"id": "D15",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D15.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D15.json",
+				"sha256": "1be673499713ce1a9f57d91433fc11529e26d3342487a3a5cf354fca43084d24"
+			},
+			"checkpoints": [
+				"c2",
+				"c3",
+				"c4",
+				"c6"
+			]
+		},
+		{
+			"id": "D16",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D16.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D16.json",
+				"sha256": "f01b409adfb78ca3f9c53573a3deda9ecb1516509730089a4bf09c325c5220e2"
+			},
+			"checkpoints": [
+				"c3",
+				"c4",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D17",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D17.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D17.json",
+				"sha256": "500ca3fd88c51c7b1b17cdc680bd41f8594c0c1815bc1bf644d27cb313a0f36a"
+			},
+			"checkpoints": [
+				"c4",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D18",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D18.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D18.json",
+				"sha256": "585decf4c8271fcaeb92a0f0a988b05ac32040744be41ed3ddf4489cc64e6494"
+			},
+			"checkpoints": [
+				"c2",
+				"c3",
+				"c5",
+				"c6"
+			]
+		},
+		{
+			"id": "D19",
+			"kind": "synthetic-chat",
+			"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+			"file": {
+				"path": "synthetic/D19.json",
+				"sourcePath": "evals/conversation-shape/fixtures/development/D19.json",
+				"sha256": "5598a875bc2d7493ac4975e610794d40838c5ca083c2c9daedcdb8a22e8a720d"
+			},
+			"checkpoints": [
+				"c3",
+				"c4"
+			]
+		},
+		{
+			"id": "astro-production-deps",
+			"kind": "async-discussion",
+			"labels": "candidate-not-gold",
+			"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+			"schemaGroup": "web-frameworks",
+			"files": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2023-07-27T11:00:00Z",
+					"path": "real-source/astro-production-deps/c1.json",
+					"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/astro-production-deps/c1.json",
+					"sha256": "4c614cbb6620139c9fa1978dae43734a37a724c48fccfa4b9bf411f4c11a79b8"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2023-08-15T21:36:04Z",
+					"path": "real-source/astro-production-deps/c2.json",
+					"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/astro-production-deps/c2.json",
+					"sha256": "bd91c2d4ab2b80990506712984b8959bd6b0e6f6e10c668063eb17b732581f10"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2023-08-18T10:36:27Z",
+					"path": "real-source/astro-production-deps/c3.json",
+					"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/astro-production-deps/c3.json",
+					"sha256": "1ffbc643d0244abb8954523413d2c51fdef08ad4c86b0fa4dd9e251e265b1bb9"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2024-05-15T10:07:35Z",
+					"path": "real-source/astro-production-deps/c4.json",
+					"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/astro-production-deps/c4.json",
+					"sha256": "fde0e0605bbbd93c86fd2a9e7d88a70fe2e07cd33fa62e8c33a4a7ef975c4418"
+				}
+			],
+			"provenance": {
+				"path": "real-source/astro-production-deps/provenance.json",
+				"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/astro-production-deps.manifest.json",
+				"sha256": "1c0f914c9fdbbfe5b38ee09b218a511d12180aa4a7be04d4f38557759a3f108b"
+			}
+		},
+		{
+			"id": "vite-bundled-dev-hmr",
+			"kind": "async-discussion",
+			"labels": "candidate-not-gold",
+			"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+			"schemaGroup": "web-frameworks",
+			"files": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2026-07-30T07:24:41Z",
+					"path": "real-source/vite-bundled-dev-hmr/c1.json",
+					"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/vite-bundled-dev-hmr/c1.json",
+					"sha256": "ef42fc7d12e053051b984333027a36deb2850005f70cfdecf347d9d523df177d"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2026-07-30T10:06:03Z",
+					"path": "real-source/vite-bundled-dev-hmr/c2.json",
+					"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/vite-bundled-dev-hmr/c2.json",
+					"sha256": "ca3c10c656ae92c4987d13da2399dc9b9b4ad2cc12b31c37b83ae2238fdee593"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2026-07-30T10:21:40Z",
+					"path": "real-source/vite-bundled-dev-hmr/c3.json",
+					"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/vite-bundled-dev-hmr/c3.json",
+					"sha256": "35147fef8f440b097ee8c7302008696bd33adb01e8ef86e854edbb450171dc59"
+				}
+			],
+			"provenance": {
+				"path": "real-source/vite-bundled-dev-hmr/provenance.json",
+				"sourcePath": "evals/conversation-corpus/batches/web-frameworks/replay/vite-bundled-dev-hmr.manifest.json",
+				"sha256": "d26b5e741d55a7051674fcbe121328d30447c9fdc59753f7dfcdb9d63bf89c6d"
+			}
+		},
+		{
+			"id": "deno-run-task",
+			"kind": "async-discussion",
+			"labels": "candidate-not-gold",
+			"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+			"schemaGroup": "other-projects",
+			"files": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2024-09-11T10:00:00Z",
+					"path": "real-source/deno-run-task/c1.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/deno-run-task/c1.json",
+					"sha256": "244c18cd3986d62bf7690e9359d2a71df9f517c72f16223b7530cc6083471614"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2024-09-18T18:38:00Z",
+					"path": "real-source/deno-run-task/c2.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/deno-run-task/c2.json",
+					"sha256": "da8dd3e34e3892c01b80a325ac0fb5d8c0747fb787a2e384cfe0da3a1077b041"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2024-09-18T18:52:00Z",
+					"path": "real-source/deno-run-task/c3.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/deno-run-task/c3.json",
+					"sha256": "edf8412a6f7ba3cfb711ac080dfb37fe37c763a0428e6f2cbcc0462b85e18343"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2024-09-18T19:00:00Z",
+					"path": "real-source/deno-run-task/c4.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/deno-run-task/c4.json",
+					"sha256": "7db5e4522ac40fbbea0a53ebbf456d86cfb47c28b6baca2f80c68ee614ed00aa"
+				}
+			]
+		},
+		{
+			"id": "pandas-excel-style",
+			"kind": "async-discussion",
+			"labels": "candidate-not-gold",
+			"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+			"schemaGroup": "other-projects",
+			"files": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2023-07-16T12:35:00Z",
+					"path": "real-source/pandas-excel-style/c1.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/pandas-excel-style/c1.json",
+					"sha256": "9b38fbe59a60db9a106ef6cfbaaebf679fae0aae3bf151131fa5ebd0bee2ca39"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2023-07-16T19:30:00Z",
+					"path": "real-source/pandas-excel-style/c2.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/pandas-excel-style/c2.json",
+					"sha256": "c274e3aac69a09233797a880335ad9cb93b2ac324226362df7880065a82e79e8"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2023-07-16T20:10:00Z",
+					"path": "real-source/pandas-excel-style/c3.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/pandas-excel-style/c3.json",
+					"sha256": "dbd13c15e359f6152a15402390915326bf7e98ba655b2217d251b6bd05ed42d1"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2023-07-25T16:00:00Z",
+					"path": "real-source/pandas-excel-style/c4.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/pandas-excel-style/c4.json",
+					"sha256": "bbf13917915cd0e66b93632ccd885b1d5d7268021bebc6d4e57bd32117d3db51"
+				}
+			]
+		},
+		{
+			"id": "biome-fix-all",
+			"kind": "async-discussion",
+			"labels": "candidate-not-gold",
+			"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+			"schemaGroup": "other-projects",
+			"files": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2024-07-02T20:38:00Z",
+					"path": "real-source/biome-fix-all/c1.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/biome-fix-all/c1.json",
+					"sha256": "0ee7bd045718fefb837f75c7ae6b6af1c124d9c1b93c5cbe7d67ca8ef7b2021d"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2024-07-23T15:00:00Z",
+					"path": "real-source/biome-fix-all/c2.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/biome-fix-all/c2.json",
+					"sha256": "b2a9a7051cb4f552628eac7208843af8b5f23bd9cf1d316a1466eb3ac838f915"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2024-08-05T09:00:00Z",
+					"path": "real-source/biome-fix-all/c3.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/biome-fix-all/c3.json",
+					"sha256": "16897b41adc47849ccfccd929c135a0c2254ba9397431e62a98d88521b1bd3ba"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2024-08-29T13:00:00Z",
+					"path": "real-source/biome-fix-all/c4.json",
+					"sourcePath": "evals/conversation-corpus/batches/other-projects/replay/biome-fix-all/c4.json",
+					"sha256": "ef088eb95d99a4d54ad54f0ccefc4211ce033ade179ebb2d40d82d690e662b94"
+				}
+			]
+		},
+		{
+			"id": "typescript-assignment-narrowing",
+			"kind": "async-discussion",
+			"labels": "candidate-not-gold",
+			"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+			"schemaGroup": "systems-languages",
+			"files": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2025-05-31T23:59:59Z",
+					"path": "real-source/typescript-assignment-narrowing/checkpoint-1.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/typescript-assignment-narrowing/checkpoint-1.json",
+					"sha256": "34d26a6a6e29c11b8d5aec0a1c3be3493ce4e60364f6a2692d0bca62a0dea025"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2025-06-03T23:59:59Z",
+					"path": "real-source/typescript-assignment-narrowing/checkpoint-2.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/typescript-assignment-narrowing/checkpoint-2.json",
+					"sha256": "c0b3bc3dfb919d60df2ba1c4665b282dd58ec002eebfcc374653dfebde52c37a"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2025-06-05T23:59:59Z",
+					"path": "real-source/typescript-assignment-narrowing/checkpoint-3.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/typescript-assignment-narrowing/checkpoint-3.json",
+					"sha256": "bc44edc2337bf9309062a87eaad9696c2d49f5d5ec400c81cbe68500608766f7"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2025-06-16T23:59:59Z",
+					"path": "real-source/typescript-assignment-narrowing/checkpoint-4.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/typescript-assignment-narrowing/checkpoint-4.json",
+					"sha256": "2c381b55825ddb6adcb3b60f528790dc6bdbb88ee944ca953d6f4d2560ee42f8"
+				}
+			]
+		},
+		{
+			"id": "eslint-per-rule-autofix",
+			"kind": "async-discussion",
+			"labels": "candidate-not-gold",
+			"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+			"schemaGroup": "systems-languages",
+			"files": [
+				{
+					"checkpoint": "c1",
+					"cutoff": "2025-06-17T23:59:59Z",
+					"path": "real-source/eslint-per-rule-autofix/checkpoint-1.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/eslint-per-rule-autofix/checkpoint-1.json",
+					"sha256": "17f22e63a89e7181162dcc136e840dd1d9055df4891ccc7d6706c8f281b52979"
+				},
+				{
+					"checkpoint": "c2",
+					"cutoff": "2025-06-26T23:59:59Z",
+					"path": "real-source/eslint-per-rule-autofix/checkpoint-2.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/eslint-per-rule-autofix/checkpoint-2.json",
+					"sha256": "b7e970b715d973eba145ac49160509c8f59a53bad6ddb33caae92f88739749c7"
+				},
+				{
+					"checkpoint": "c3",
+					"cutoff": "2025-07-02T23:59:59Z",
+					"path": "real-source/eslint-per-rule-autofix/checkpoint-3.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/eslint-per-rule-autofix/checkpoint-3.json",
+					"sha256": "78f5790c73c9f420c5e76dcfa2785c2fe4353d65f9a63e114dbbe3e4251d719e"
+				},
+				{
+					"checkpoint": "c4",
+					"cutoff": "2025-08-22T23:59:59Z",
+					"path": "real-source/eslint-per-rule-autofix/checkpoint-4.json",
+					"sourcePath": "evals/conversation-corpus/batches/systems-languages/replay/eslint-per-rule-autofix/checkpoint-4.json",
+					"sha256": "22c0904375c8efd5a499e3fe9eea9e5e45abeaaad9dea2b7dbc7d2218624fff0"
+				}
+			]
+		}
+	],
+	"reserved": {
+		"count": 12,
+		"snapshot": "446a9779a937fa5be7cd3eb52fd7f3023d691ed2",
+		"sourcePath": "evals/conversation-shape/fixtures/held-out/",
+		"access": "archive-only"
+	},
+	"realSourcePartitions": {
+		"development": 7,
+		"validation": 5,
+		"reserved": 3,
+		"snapshot": "dda78480888859ae3eec90846c1263cd28552d05",
+		"access": "development-only"
+	}
+}

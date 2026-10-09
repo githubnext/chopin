@@ -113,7 +113,9 @@ export async function draftHeading(
 			}
 			if (!result.mutation) throw new Error("heading did not change the document");
 			if (!active()) throw new Error("background Planner job changed before its tool completed");
-			await Service.publishStaged(plan, context.server, context.room, candidate, result.mutation);
+			await Service.publishStaged(plan, context.server, context.room, candidate, result.mutation, {
+				agent: true,
+			});
 			context.changes(result.changes);
 			context.anchors();
 			return { output: { title, goal }, revision: plan.revision };

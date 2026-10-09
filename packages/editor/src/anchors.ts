@@ -15,6 +15,7 @@ import * as Y from "yjs";
 
 import type { Binding } from "@lexical/yjs";
 import type { Plan } from "@chopin/protocol";
+import type { Relation } from "@chopin/question";
 
 /** Where one decision lives, resolved to the nodes it names in this editor. */
 export type Related = {
@@ -23,6 +24,10 @@ export type Related = {
 	keys: string[];
 	/** True when the agent has yet to review this since the plan changed. */
 	pending: boolean;
+	/** How many blocks the server named, resolved here or not. */
+	anchored: number;
+	/** A block it named can no longer be identified safely. */
+	orphaned: boolean;
 };
 
 function decode(value: string): Uint8Array {
@@ -61,7 +66,14 @@ export function relate(binding: Binding, widgets: Plan.WidgetAnchors[]): Related
 				.map(anchor => resolve(binding, anchor))
 				.filter((key): key is string => !!key);
 
-			out.push({ widget: widget.widget, question, keys, pending: set.pending });
+			out.push({
+				widget: widget.widget,
+				question,
+				keys,
+				pending: set.pending,
+				anchored: set.anchors.length,
+				orphaned: set.reason === "orphaned" || set.anchors.some(anchor => anchor.orphaned),
+			});
 		}
 	}
 
@@ -77,6 +89,33 @@ export function counts(related: Related[], widget: string): { [question: string]
 		// A pending relationship resolves to nothing on purpose: it is what
 		// makes the text inert rather than offering a jump that may be stale.
 		out[item.question] = item.pending ? 0 : item.keys.length;
+	}
+
+	return out;
+}
+
+/**
+ * Which of the four relationship states each decision is in.
+ *
+ * Orphaned outranks pending: a lost block also owes a review, but a reader
+ * should be told the text went away rather than that it is still being found.
+ * Anchors that are trusted yet do not resolve here are pending, not empty:
+ * this editor has not caught up with a document the server already holds.
+ */
+export function relations(related: Related[], widget: string): { [question: string]: Relation } {
+	let out: { [question: string]: Relation } = {};
+
+	for (let item of related) {
+		if (item.widget !== widget) continue;
+		out[item.question] = item.orphaned
+			? "orphaned"
+			: item.pending
+			? "pending"
+			: item.keys.length > 0
+			? "linked"
+			: item.anchored === 0
+			? "empty"
+			: "pending";
 	}
 
 	return out;

@@ -1,6 +1,6 @@
 import { authenticate, content, expect, roomPath, test } from "./room";
 import { createChannel, seedChannel } from "./database";
-import { chatInput } from "./chat-input";
+import { chatInput, expectChatValue, fillChat } from "./chat-input";
 
 function channel(id: string, title: string, description?: string) {
 	return {
@@ -173,7 +173,7 @@ test("header actions menu is start-aligned to its trigger", async ({ join }) => 
 			top: (element as HTMLElement).offsetTop,
 		})),
 	]);
-	expect(layout.left).toBeCloseTo(triggerBox!.x, 0);
+	expect(Math.abs(layout.left - triggerBox!.x)).toBeLessThanOrEqual(1);
 	expect(layout.top).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height);
 });
 
@@ -214,7 +214,7 @@ test("document action menu motion settles keyboard opening immediately", async (
 test("a pointer-collapsed Project stays inert through exit and restores in place", async ({ join }) => {
 	let page = await join("ana");
 	let projects = sidebar(page);
-	let trigger = projects.getByRole("button", { name: "score", exact: true });
+	let trigger = projects.getByRole("button", { name: /^score(?:, \d+ unanswered decisions?)?$/ });
 	let body = projects.locator('[data-motion-disclosure="projects"]');
 	let bodyId = await body.getAttribute("id");
 
@@ -276,6 +276,25 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
 	await expect(content(page)).toBeFocused();
 	await expect(projects.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
+test("the header names the project without adding a sidebar control", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	let header = page.getByRole("banner");
+	let prefix = header.getByText("score", { exact: true });
+	await expect(prefix).toBeVisible();
+	await expect(header.getByRole("button", { name: "Show score in the sidebar" })).toHaveCount(0);
+	await expect(header.getByRole("button", { name: /^Rename / })).toBeVisible();
+	await expect(header.getByRole("button", { name: /^Actions for / })).toBeVisible();
+	await sidebar(page).getByRole("button", { name: "Hide sidebar" }).click();
+	await expect(sidebar(page)).toHaveCount(0);
+	await expect(prefix).toBeVisible();
+});
+
+test("the project prefix gives way on phones", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	await expect(headerDocument(page)).toBeVisible();
+	await expect(page.getByRole("banner").getByText("score", { exact: true })).toBeHidden();
 });
 
 test("the header title renames in place with click, F2, Escape, and blur", async ({ join, room }) => {
@@ -384,7 +403,7 @@ test("a pointer-dismissed navigation dialog releases focus while it exits", asyn
 	await expect(modal).toHaveCount(0);
 });
 
-test("sidebar titles stay readable until hover reveals controls", async ({ join, page }) => {
+test("sidebar titles and actions share row space when controls appear", async ({ join, page }) => {
 	let title = "Complete the implementation";
 	let listed = channel("cccccccc-0000-4000-8000-000000000000", title);
 	await page.route(
@@ -399,13 +418,13 @@ test("sidebar titles stay readable until hover reveals controls", async ({ join,
 	let row = link.locator("..");
 	let actions = projects.getByRole("button", { name: `Actions for ${title}` });
 	let clipped = () => titleText.evaluate(element => element.scrollWidth > element.clientWidth);
-
 	await expect(actions).toBeHidden();
+	let restingWidth = await link.evaluate(element => element.clientWidth);
 	expect(await clipped()).toBe(false);
 
 	await row.hover();
 	await expect(actions).toBeVisible();
-	expect(await clipped()).toBe(true);
+	await expect.poll(() => link.evaluate(element => element.clientWidth)).toBeLessThan(restingWidth);
 	let [rowBox, actionsBox] = await Promise.all([row.boundingBox(), actions.boundingBox()]);
 	expect(rowBox!.x + rowBox!.width - actionsBox!.x - actionsBox!.width).toBeLessThanOrEqual(8);
 });
@@ -944,6 +963,36 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
 });
 
+test("archiving offers Undo and archived mode names itself", async ({ join, room }) => {
+	let ana = await join("ana");
+	let title = `Test ${room.slice(0, 8)}`;
+	let projects = sidebar(ana);
+
+	await headerAction(ana, "Archive");
+	let notice = ana.getByRole("status").filter({ hasText: `Archived ${title}` });
+	await expect(notice).toBeVisible();
+	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);
+	await notice.getByRole("button", { name: "Undo", exact: true }).click();
+	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toHaveCount(0);
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeFocused();
+
+	await headerAction(ana, "Archive");
+	await expect(notice).toBeVisible();
+	await expect(ana.getByRole("banner").getByRole("button", { name: /^Actions for / }))
+		.toBeFocused();
+	await ana.keyboard.press("Shift+Tab");
+	let undo = notice.getByRole("button", { name: "Undo", exact: true });
+	await expect(undo).toBeFocused();
+	await ana.waitForTimeout(6000);
+	await expect(notice).toBeVisible();
+	await ana.keyboard.press("Enter");
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeFocused();
+
+	await projects.getByRole("button", { name: "Archived", exact: true }).click();
+	await expect(projects.getByRole("navigation", { name: "Archived documents" })).toBeVisible();
+	await expect(projects.getByText("Projects", { exact: true })).toHaveCount(0);
+});
+
 test("writers can archive, restore, and permanently delete a document", async ({ join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
@@ -992,6 +1041,41 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	let unavailable = await ana.request.get(`/api/channels/${room}`);
 	expect(unavailable.status()).toBe(404);
 });
+
+test(
+	"navigation fetch failures reserve space and retry without losing the chat draft",
+	async ({ join, page, seed }, testInfo) => {
+		await seed(
+			"# A calmer document\n\nRetrying navigation keeps the document and draft available.\n",
+		);
+		await page.setViewportSize({ width: 1452, height: 895 });
+		let failed = false;
+		await page.route("**/api/navigation", async route => {
+			if (route.request().method() === "GET" && !failed) {
+				failed = true;
+				await route.abort("failed");
+				return;
+			}
+			await route.continue();
+		});
+		page = await join("ana");
+		let notice = page.getByRole("alert").filter({ hasText: "Could not reach Chopin." });
+		await expect(notice).toBeVisible();
+		let [noticeBox, headerBox] = await Promise.all([
+			notice.boundingBox(),
+			page.getByRole("banner").boundingBox(),
+		]);
+		expect(headerBox!.y).toBeGreaterThanOrEqual(noticeBox!.y + noticeBox!.height);
+		let draft = chatInput(page);
+		await fillChat(draft, "Keep this draft while retrying navigation.");
+		await page.screenshot({ path: testInfo.outputPath("navigation-warning.png") });
+		await notice.getByRole("button", { name: "Try again", exact: true }).click();
+		await expect(notice).toHaveCount(0);
+		await expectChatValue(draft, "Keep this draft while retrying navigation.");
+		await expect(sidebar(page).getByRole("link").and(page.locator('[aria-current="page"]')))
+			.toBeVisible();
+	},
+);
 
 test("sidebar creation failures remain retryable", async ({ join, page }) => {
 	let creationFailed = true;

@@ -1,5 +1,10 @@
-import { documentPath, parseDocumentPath } from "@chopin/protocol/document-url";
+import {
+	documentPath,
+	parseChildDocumentPath,
+	parseDocumentPath,
+} from "@chopin/protocol/document-url";
 
+import { documentUrl } from "../channels/document-url";
 import { deterministicChannelId, isChannelId } from "../channels/id";
 import { documentSlug } from "../channels/slug";
 import { GitHubError } from "../github/client";
@@ -171,9 +176,23 @@ export function hosted(
 		} catch {
 			path = undefined;
 		}
-		let parsed = path?.origin === auth.config.origin
-			? parseDocumentPath(path.pathname)
-			: undefined;
+		let local = path?.origin === auth.config.origin ? path.pathname : undefined;
+		let child = local === undefined ? undefined : parseChildDocumentPath(local);
+		if (child) {
+			let repository = await directRepository(caller, child.owner, child.repository);
+			if (!repository?.permissions.pull) return "forbidden" as const;
+			let channel = await auth.storage.channels.resolve(
+				repository.id,
+				documentSlug(child.childSlug),
+			);
+			let parent = channel?.parentChannelId
+				? await auth.storage.channels.resolve(repository.id, documentSlug(child.parentSlug))
+				: undefined;
+			return channel && parent?.id === channel.parentChannelId
+				? { channel, repository }
+				: undefined;
+		}
+		let parsed = local === undefined ? undefined : parseDocumentPath(local);
 		if (parsed?.slug) {
 			let repository = await directRepository(caller, parsed.owner, parsed.repository);
 			if (!repository?.permissions.pull) return "forbidden" as const;
@@ -302,10 +321,8 @@ export function hosted(
 						kind: "invoked",
 						document: {
 							...summary(channel),
-							url: new URL(
-								documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug),
-								auth.config.origin,
-							).href,
+							url:
+								new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href,
 						},
 					};
 				},
@@ -347,7 +364,7 @@ export function hosted(
 				let located = await locatedChannel(caller, id);
 				if (!located || located === "forbidden") return undefined;
 				let { channel } = located;
-				let url = documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug);
+				let url = await documentUrl(channel, auth.storage.channels);
 
 				let live = Rooms.get(channel.id)?.plan;
 				if (live) {
@@ -635,6 +652,7 @@ export function hosted(
 								cursor: false,
 								attribution: {
 									client,
+									user: caller.user.login,
 									fromRevision: input.revision,
 									revision: plan.revision,
 								},

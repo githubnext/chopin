@@ -303,6 +303,171 @@ test("hiding the source leaves what was drawn from it", async ({ join, seed }) =
 });
 
 /*
+ * Getting into a rendered block.
+ *
+ * The preview is derived and cannot take a caret, so every way of arriving at
+ * one has to end with the caret in the source, or with focus on the preview
+ * and a key that leads into the source from there. Typing is how each test
+ * proves where the caret went: the file is the only witness that cannot be
+ * fooled by a caret drawn somewhere it is not.
+ */
+
+test("clicking drawn code opens its source at the clicked line", async ({ join, room, seed }) => {
+	await seed("```ts\nlet a = 1;\nlet b = 2;\n```\n");
+	let page = await join("ana");
+	let block = content(page).locator(".planCode");
+
+	await block.locator("[data-line='2']").click();
+
+	// One copy: the source replaces the coloured lines rather than joining them.
+	await expect(block.locator("[data-plan-source]")).toBeVisible();
+	await expect(block.locator("[data-file]")).toBeHidden();
+	await expect(content(page)).toBeFocused();
+	await page.keyboard.type("X");
+	await written(page, room, /^let a = 1;\n[^\n]*X[^\n]*\n```/m);
+
+	await page.keyboard.press("Escape");
+	await expect(block.locator("[data-plan-source]")).toBeHidden();
+	await expect(block.getByRole("group", { name: "Code preview" })).toBeFocused();
+});
+
+test("clicking a drawn diff line opens the patch at that line", async ({ join, room, seed }) => {
+	await seed(PATCH);
+	let page = await join("ana");
+
+	await content(page).locator("[data-line][data-line-type='change-addition']").first().click();
+	await page.keyboard.type("X");
+
+	await written(page, room, /^\+(?=[^\n]*rotate)[^\n]*X[^\n]*$/m);
+});
+
+test("a focused preview opens on Enter, Space or typing, and never scrolls", async ({ join, room, seed }) => {
+	await seed("```ts\nlet a = 1;\n```\n");
+	let page = await join("ana");
+	let block = content(page).locator(".planCode");
+	let preview = block.getByRole("group", { name: "Code preview" });
+	let scroller = page.locator("[data-plan-scroll]");
+
+	await preview.focus();
+	let before = await scroller.evaluate(node => node.scrollTop);
+	await page.keyboard.press("Space");
+	await expect(block.locator("[data-plan-source]")).toBeVisible();
+	expect(await scroller.evaluate(node => node.scrollTop)).toBe(before);
+
+	await page.keyboard.press("Escape");
+	await expect(preview).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(content(page)).toBeFocused();
+
+	await page.keyboard.press("Escape");
+	await expect(preview).toBeFocused();
+	await page.keyboard.type("Z");
+	await written(page, room, /^let a = 1;Z$/m);
+});
+
+test("arrows step into code, onto a diagram, and out again", async ({ join, room, seed }) => {
+	await seed("Before\n\n```ts\nlet a = 1;\n```\n\n```mermaid\ngraph TD;\nA-->B;\n```\n\nAfter\n");
+	let page = await join("ana");
+	let [code, diagram] = [
+		content(page).locator(".planCode").nth(0),
+		content(page).locator(".planCode").nth(1),
+	];
+	let region = diagram.getByRole("region", { name: "Diagram preview" });
+	await expect(region).toBeVisible();
+	await expect(code.locator("[data-file]")).toBeVisible();
+
+	// A hidden source has no layout, so the browser alone would skip both.
+	await content(page).getByText("Before").click();
+	await page.keyboard.press("ArrowDown");
+	await expect(code.locator("[data-plan-source]")).toBeVisible();
+	await page.keyboard.type("Q");
+	await written(page, room, /^Qlet a = 1;$/m);
+
+	// A drawing is held as a block, not opened: arrowing past it is reading.
+	await page.keyboard.press("ArrowDown");
+	await expect(region).toBeFocused();
+	await expect(code.locator("[data-plan-source]")).toBeHidden();
+	await expect(diagram.locator("[data-plan-source]")).toBeHidden();
+
+	// Enter edits it, with the drawing kept above; Escape comes back.
+	await page.keyboard.press("Enter");
+	await expect(diagram.locator("[data-plan-source]")).toBeVisible();
+	await expect(region).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(region).toBeFocused();
+	await expect(diagram.locator("[data-plan-source]")).toBeHidden();
+
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.type("!");
+	await written(page, room, /^!After$/m);
+
+	await page.keyboard.press("ArrowUp");
+	await expect(region).toBeFocused();
+	await page.keyboard.press("ArrowUp");
+	await page.keyboard.type("R");
+	await written(page, room, /^RQlet a = 1;$/m);
+});
+
+test("dragging across drawn code selects it to copy, without opening", async ({ join, seed }) => {
+	await seed("```ts\nlet a = 1;\nexport function open(room: string) {}\n```\n");
+	let page = await join("ana");
+	let block = content(page).locator(".planCode");
+	let line = block.locator("[data-line='2']");
+	await expect(line).toBeVisible();
+	await page.evaluate(() =>
+		window.addEventListener("copy", event => {
+			(window as unknown as { copied: unknown }).copied = {
+				prevented: event.defaultPrevented,
+				text: document.getSelection()?.toString(),
+			};
+		})
+	);
+
+	let box = (await line.boundingBox())!;
+	await page.mouse.move(box.x + 16, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + 120, box.y + box.height / 2, { steps: 8 });
+	await page.mouse.up();
+	let dragged = await page.evaluate(() => document.getSelection()?.toString() ?? "");
+
+	// Shift extends it from where the drag began, as it would in text.
+	await page.keyboard.down("Shift");
+	await page.mouse.click(box.x + 200, box.y + box.height / 2);
+	await page.keyboard.up("Shift");
+
+	await expect(block.locator("[data-plan-source]")).toBeHidden();
+	await expect(block.locator("[data-file]")).toBeVisible();
+	let selected = await page.evaluate(() => document.getSelection()?.toString() ?? "");
+	expect(selected.length).toBeGreaterThan(dragged.length);
+	expect(selected.startsWith(dragged)).toBe(true);
+	expect("export function open(room: string) {}").toContain(selected);
+
+	// The browser copies what is selected; Lexical must not swap in its own.
+	await page.keyboard.press("ControlOrMeta+c");
+	await expect
+		.poll(() => page.evaluate(() => (window as unknown as { copied: unknown }).copied))
+		.toEqual({ prevented: false, text: selected });
+});
+
+test("arrows reach code inside a callout and a list item", async ({ join, room, seed }) => {
+	await seed(
+		'<Callout id="01K0N4Y9VG9DHBFZB6HC89E2AC" type="note" title="Nested">\n\nInside.\n\n```ts\nlet a = 1;\n```\n\n</Callout>\n\n- Item\n\n  ```ts\n  let b = 2;\n  ```\n\n- Next\n',
+	);
+	let page = await join("ana");
+	await expect(content(page).locator("[data-file]")).toHaveCount(2);
+
+	await content(page).getByText("Inside.").click();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.type("Q");
+	await written(page, room, /^\s*Qlet a = 1;$/m);
+
+	await content(page).getByText("Next").click();
+	await page.keyboard.press("ArrowUp");
+	await page.keyboard.type("R");
+	await written(page, room, /^\s*Rlet b = 2;$/m);
+});
+
+/*
  * Two people in one fence.
  *
  * What is drawn is a projection of the shared source, so the thing worth
@@ -411,10 +576,11 @@ test("the language menu is a keyboard-operable listbox", async ({ join, room, se
 	await expect(list).toBeHidden();
 
 	// Tab from the open menu continues from the trigger, not from the end of the page.
+	// The source toggle sits just before the trigger, so Shift+Tab lands on it.
 	await trigger.focus();
 	await page.keyboard.press("ArrowDown");
 	await expect(list).toBeVisible();
-	await page.keyboard.press("Tab");
+	await page.keyboard.press("Shift+Tab");
 	await expect(list).toBeHidden();
 	await expect(content(page).getByRole("button", { name: "Show source" })).toBeFocused();
 
@@ -428,14 +594,16 @@ test("the language menu is a keyboard-operable listbox", async ({ join, room, se
 	await written(page, room, /^```(?!typescript$)\S+$/m);
 });
 
-test("the language menu takes focus before the next animation frame", async ({ join, seed }) => {
+test("the language menu takes focus before the next animation frame", async ({ join, page, seed }) => {
 	await seed("```typescript\nlet total = 1;\n```\n");
-	let page = await join("ana");
+	let time = new Date("2026-01-01T00:00:00Z");
+	await page.clock.install({ time });
+	await join("ana");
 	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
 	let list = page.getByRole("listbox", { name: "Code language" });
 
-	await page.clock.install();
-	await page.clock.pauseAt(new Date());
+	// Pause ahead of the fixed epoch rather than racing two system clocks.
+	await page.clock.pauseAt(new Date(time.getTime() + 60_000));
 	await trigger.focus();
 	await page.keyboard.press("ArrowDown");
 	await expect(list).toBeFocused();

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { buildPreview, output } from "./build";
+import { resourcePath } from "./resource-path";
 
 let buildError = "";
 async function rebuild() {
@@ -31,11 +32,11 @@ for (let port of [8810, 8811]) {
 					headers: { "content-type": "text/plain" },
 				});
 			}
-			let path = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
-			if (path.split("/").includes("..")) return new Response("Not found", { status: 404 });
-			let file = Bun.file(join(output, path));
+			let path = resourcePath(output, url.pathname);
+			if (!path) return new Response("Not found", { status: 404 });
+			let file = Bun.file(path);
 			if (!await file.exists()) {
-				if (port === 8810 && path === "/index.html" && buildError) {
+				if (port === 8810 && path === join(output, "index.html") && buildError) {
 					return new Response(
 						`<!doctype html><html lang="en"><meta charset="utf-8"><title>Preview build failed</title><main><h1>Preview could not build</h1><p role="alert">Fix the local source, then retry.</p><button>Retry build</button></main><script>document.querySelector("button").onclick=async()=>{let button=document.querySelector("button");button.disabled=true;try{let response=await fetch("/retry-build",{method:"POST"});if((await response.json()).ok)location.reload();}finally{button.disabled=false;}}</script></html>`,
 						{ headers: { "content-type": "text/html" } },

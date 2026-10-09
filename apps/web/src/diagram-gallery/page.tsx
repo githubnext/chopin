@@ -93,20 +93,6 @@ function DocumentSpecimen() {
 							<Diagram spec={first.spec} />
 							<figcaption>{label(first.type)} · first instance</figcaption>
 						</figure>
-						<div className="diagram-gallery-prose-probe">
-							<span>Editable prose keyboard probe · local only</span>
-							<p
-								aria-label="Editable prose keyboard probe"
-								aria-multiline="true"
-								contentEditable
-								role="textbox"
-								suppressContentEditableWarning
-								tabIndex={0}
-							>
-								The second view is independent. Exploring a step in one diagram leaves the other at
-								its own step.
-							</p>
-						</div>
 						{secondMounted
 							? (
 								<figure data-specimen-diagram="second">

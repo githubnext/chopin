@@ -1,0 +1,12 @@
+.editor-count-control {
+	inline-size: max-content;
+	min-inline-size: var(--count-control-size);
+	block-size: auto;
+	aspect-ratio: 1;
+	padding-inline: var(--count-control-padding);
+	background-color: var(--color-inset);
+}
+
+.editor-count-control[data-selected] {
+	background-color: var(--color-page);
+}

@@ -1,0 +1,28 @@
+.cv-inline-notice {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	border-radius: var(--radius-md);
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+	background: var(--cv-semantic-surface);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+.cv-inline-notice-icon {
+	--color-icon: var(--cv-semantic-icon);
+	width: var(--icon-size-default);
+	height: var(--icon-size-default);
+	flex-shrink: 0;
+}
+
+.cv-inline-notice-message {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.cv-inline-notice-actions {
+	flex-shrink: 0;
+	margin-inline-start: auto;
+}

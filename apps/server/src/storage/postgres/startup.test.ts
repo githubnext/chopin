@@ -78,7 +78,7 @@ async function ready(port: number): Promise<void> {
 
 if (database) {
 	describe("postgres server lifecycle", () => {
-		it("resets sessions only after owning the writer lease", async () => {
+		it("preserves hosted sessions and resets owners under the writer lease", async () => {
 			let setup = new PostgresStorage(database);
 			await setup.migrate();
 			await setup.close();
@@ -100,6 +100,18 @@ if (database) {
 				expiresAt: new Date(now.getTime() + 60_000),
 				createdAt: now,
 			});
+			let persistentId = crypto.randomUUID();
+			await storage.sessions.create({
+				id: persistentId,
+				userId,
+				createdAt: now,
+				expiresAt: new Date(now.getTime() + 60_000),
+				credentials: {
+					secretHash: new Uint8Array(32).fill(1),
+					ciphertext: new Uint8Array(64).fill(2),
+					revision: 1,
+				},
+			});
 			await storage.channels.create({
 				id: channelId,
 				repositoryId: `repository-${crypto.randomUUID()}`,
@@ -109,10 +121,10 @@ if (database) {
 				createdBy: userId,
 				now,
 			});
-			let owner = await storage.channels.claimAgentOwner(channelId, sessionId, now);
+			let owner = await storage.channels.claimAgentOwner(channelId, persistentId, now);
 			await storage.channels.updateAgentContext({
 				channelId,
-				ownerSessionId: sessionId,
+				ownerSessionId: persistentId,
 				generation: owner.generation,
 				summary: "keep this",
 				transcriptCursor: 4,
@@ -125,8 +137,9 @@ if (database) {
 			let reason = await new Response(refused.stderr as ReadableStream).text();
 			expect(reason).toContain("another Chopin instance owns the database");
 			expect(await storage.sessions.get(sessionId, now)).toBeDefined();
+			expect(await storage.sessions.get(persistentId, now)).toBeDefined();
 			expect((await storage.collaboration.load(channelId, now))!.agent!.ownerSessionId)
-				.toBe(sessionId);
+				.toBe(persistentId);
 
 			first.kill("SIGTERM");
 			expect(await first.exited).toBe(0);
@@ -134,6 +147,7 @@ if (database) {
 			await started(replacement);
 			await ready(9072);
 			expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
+			expect(await storage.sessions.get(persistentId, now)).toBeDefined();
 			expect((await storage.collaboration.load(channelId, now))!.agent).toMatchObject({
 				ownerSessionId: undefined,
 				generation: owner.generation,

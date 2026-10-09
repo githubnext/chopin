@@ -4,9 +4,13 @@ import { visibleOutlineColor } from "./focus-color";
 
 import type { Locator } from "@playwright/test";
 
-export async function expectFocusIndicator(target: Locator): Promise<void> {
+/**
+ * `ring` is the element that draws the indicator, when that is not the focused
+ * element itself: a preview whose block clips it, say.
+ */
+export async function expectFocusIndicator(target: Locator, ring = target): Promise<void> {
 	await expect(target).toBeFocused();
-	let result = await target.evaluate(element => {
+	let result = await ring.evaluate(element => {
 		let style = getComputedStyle(element);
 		let width = parseFloat(style.outlineWidth);
 		let offset = parseFloat(style.outlineOffset);

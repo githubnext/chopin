@@ -6,6 +6,8 @@ import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chop
 import { motionContract } from "./motion-contract";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
+import { MenuItem } from "./menu-item";
+import { IconButton } from "./icon-button";
 
 import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
@@ -49,12 +51,14 @@ export function DocumentActionsMenu(
 		channel,
 		align = "end",
 		className = "",
+		iconButton = false,
 		onAction,
 		trigger,
 	}: {
 		align?: "start" | "end";
 		channel: Pick<Api.Channel, "title" | "archivedAt">;
 		className?: string;
+		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
 		trigger: ReactNode;
 	},
@@ -177,27 +181,49 @@ export function DocumentActionsMenu(
 			: (current - 1 + controls.length) % controls.length;
 		controls[next]?.focus();
 	};
+	let toggleMenu = () => open ? closeMenu() : openAt(0);
+	let triggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+		if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+		event.preventDefault();
+		openAt(event.key === "ArrowUp" ? items.length - 1 : 0);
+	};
 
 	return (
 		<>
-			<button
-				aria-controls={open ? id : undefined}
-				aria-expanded={open}
-				aria-haspopup="menu"
-				aria-label={`Actions for ${channel.title}`}
-				className={className}
-				data-tooltip="Document actions"
-				onClick={() => open ? closeMenu() : openAt(0)}
-				onKeyDown={event => {
-					if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-					event.preventDefault();
-					openAt(event.key === "ArrowUp" ? items.length - 1 : 0);
-				}}
-				ref={button}
-				type="button"
-			>
-				{trigger}
-			</button>
+			{iconButton
+				? (
+					<IconButton
+						aria-controls={open ? id : undefined}
+						aria-expanded={open}
+						aria-haspopup="menu"
+						aria-label={`Actions for ${channel.title}`}
+						data-tooltip="Document actions"
+						glyph="compact"
+						onClick={toggleMenu}
+						onKeyDown={triggerKeyDown}
+						placement="sidebar-document"
+						ref={button}
+						size="compact"
+					>
+						{trigger}
+					</IconButton>
+				)
+				: (
+					<button
+						aria-controls={open ? id : undefined}
+						aria-expanded={open}
+						aria-haspopup="menu"
+						aria-label={`Actions for ${channel.title}`}
+						className={className}
+						data-tooltip="Document actions"
+						onClick={toggleMenu}
+						onKeyDown={triggerKeyDown}
+						ref={button}
+						type="button"
+					>
+						{trigger}
+					</button>
+				)}
 			{mounted && createPortal(
 				<div
 					aria-hidden={active ? undefined : "true"}
@@ -212,19 +238,17 @@ export function DocumentActionsMenu(
 					style={presence.value ?? { visibility: "hidden" }}
 				>
 					{items.map(item => (
-						<button
-							className={item.destructive ? "document-actions-menu-destructive" : undefined}
+						<MenuItem
 							key={item.action}
 							onClick={() => {
 								closeMenu(true);
 								onAction(item.action);
 							}}
-							role="menuitem"
-							type="button"
+							tone={item.destructive ? "destructive" : "normal"}
 						>
 							<item.icon aria-hidden="true" size={14} />
 							{item.label}
-						</button>
+						</MenuItem>
 					))}
 				</div>,
 				document.body,

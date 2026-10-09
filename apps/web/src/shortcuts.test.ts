@@ -32,7 +32,7 @@ describe("shortcut registry", () => {
 
 	test("no two live shortcuts share a chord", () => {
 		let chords = SHORTCUTS.filter(entry => !entry.display).map(entry =>
-			`${entry.mod}:${entry.shift}:${entry.key}`
+			`${entry.mod}:${entry.alt}:${entry.shift}:${entry.key}`
 		);
 		expect(new Set(chords).size).toBe(chords.length);
 	});
@@ -56,11 +56,19 @@ describe("platform", () => {
 		expect(shortcutPlatform("Mozilla/5.0 (X11; Linux x86_64)")).toBe("other");
 	});
 
+	test("native keyboard platform takes precedence over a spoofed user agent", () => {
+		expect(shortcutPlatform("Windows NT 10.0", "MacIntel")).toBe("mac");
+		expect(shortcutPlatform("Macintosh", "Win32")).toBe("other");
+		expect(shortcutPlatform("Macintosh", "Linux x86_64")).toBe("other");
+		expect(shortcutPlatform("iPad; CPU OS 17_0 like Mac OS X", "")).toBe("mac");
+	});
+
 	test("labels print keycaps for each platform", () => {
 		expect(shortcutLabel("search", "mac")).toBe("⌘K");
 		expect(shortcutLabel("search", "other")).toBe("Ctrl+K");
 		expect(shortcutLabel("toggle-sidebar", "mac")).toBe("⌘\\");
-		expect(shortcutLabel("new-document", "other")).toBe("C");
+		expect(shortcutLabel("new-document", "mac")).toBe("⌥N");
+		expect(shortcutLabel("new-document", "other")).toBe("Alt+N");
 		expect(shortcutKeys("redo", "mac")).toEqual(["⌘", "⇧", "Z"]);
 		expect(shortcutKeys("redo", "other")).toEqual(["Ctrl", "Shift", "Z"]);
 	});
@@ -76,17 +84,38 @@ describe("matchShortcut", () => {
 			.toBeUndefined();
 	});
 
-	test("chords fire while typing; single keys do not", () => {
+	test("Command/Control chords fire while typing; single keys and Alt chords do not", () => {
 		expect(matchShortcut(key("k", { metaKey: true }), "mac", typing)).toBe("search");
 		expect(matchShortcut(key(".", { metaKey: true }), "mac", typing)).toBe("toggle-chat");
 		expect(matchShortcut(key("c"), "mac", typing)).toBeUndefined();
+		expect(matchShortcut(key("n", { altKey: true }), "mac", typing)).toBeUndefined();
+		expect(matchShortcut(key("Dead", { altKey: true, code: "KeyN" }), "mac", typing))
+			.toBeUndefined();
 		expect(matchShortcut(key("?", { shiftKey: true }), "mac", typing)).toBeUndefined();
 	});
 
 	test("single keys fire outside fields", () => {
-		expect(matchShortcut(key("c"), "mac", idle)).toBe("new-document");
+		expect(matchShortcut(key("c"), "mac", idle)).toBeUndefined();
+		expect(matchShortcut(key("n"), "mac", idle)).toBeUndefined();
 		expect(matchShortcut(key("C", { shiftKey: true }), "mac", idle)).toBeUndefined();
 		expect(matchShortcut(key("?", { shiftKey: true }), "mac", idle)).toBe("shortcuts");
+	});
+
+	test("new document requires exactly Alt+N, including the Mac dead key", () => {
+		for (let platform of ["mac", "other"] as const) {
+			expect(matchShortcut(key("n", { altKey: true }), platform, idle)).toBe("new-document");
+			expect(matchShortcut(key("Dead", { altKey: true, code: "KeyN" }), platform, idle))
+				.toBe("new-document");
+			for (let modifiers of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }]) {
+				expect(matchShortcut(key("n", { altKey: true, ...modifiers }), platform, idle))
+					.toBeUndefined();
+			}
+			expect(matchShortcut(key("c", { altKey: true }), platform, idle)).toBeUndefined();
+			expect(matchShortcut(key("?", { altKey: true, shiftKey: true }), platform, idle))
+				.toBeUndefined();
+			expect(matchShortcut(key("Dead", { altKey: true, code: "KeyM" }), platform, idle))
+				.toBeUndefined();
+		}
 	});
 
 	test("matches the physical key when the layout cannot report an ASCII character", () => {
@@ -127,12 +156,17 @@ describe("matchShortcut", () => {
 			.toBe("toggle-chat");
 	});
 
-	test("an open modal, Alt, or composition suppresses every shortcut", () => {
+	test("an open modal or composition suppresses every shortcut", () => {
 		expect(matchShortcut(key("k", { metaKey: true }), "mac", { typing: false, modal: true }))
 			.toBeUndefined();
 		expect(matchShortcut(key("k", { metaKey: true, altKey: true }), "mac", idle))
 			.toBeUndefined();
 		expect(matchShortcut(key("c", { isComposing: true }), "mac", idle)).toBeUndefined();
+		expect(matchShortcut(key("n", { altKey: true }), "mac", { typing: false, modal: true }))
+			.toBeUndefined();
+		expect(
+			matchShortcut(key("Dead", { code: "KeyN", altKey: true, isComposing: true }), "mac", idle),
+		).toBeUndefined();
 	});
 
 	test("editor chords are listed but never handled", () => {

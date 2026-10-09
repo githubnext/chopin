@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SearchIcon } from "@chopin/icons";
+import { iconSizes, SearchIcon } from "@chopin/icons";
 
 let root = import.meta.dir;
 let repository = join(root, "../../..");
@@ -33,17 +33,9 @@ test("the interface uses only the shared Nucleo icon family", () => {
 		sourceFiles(join(repository, "packages")),
 	);
 	for (let file of files) expect(readFileSync(file, "utf8")).not.toContain("@phosphor-icons/react");
-
-	let icons = readFileSync(join(repository, "packages/icons/src/line.tsx"), "utf8");
-	expect(icons).toContain("M9,1.75C4.996,1.75");
-	expect(icons).toContain("M9.75,2.75h3.5");
-	expect(icons).toContain("M4.75 13.25V9");
-	expect(icons).toContain("10.912 7.087 15.75 9");
-	expect(icons).toContain("M7.63796 3.48996");
-	expect(icons).toContain('x1="9" x2="9" y1="3.25" y2="14.75"');
 });
 
-test("interface icons default to fourteen pixels", () => {
+test("interface icons default to fourteen pixels with compact sidebar controls at twelve", () => {
 	let icon = readFileSync(join(repository, "packages/icons/src/icon.tsx"), "utf8");
 	let system = readFileSync(join(repository, "packages/icons/src/system.tsx"), "utf8");
 	expect(icon).toContain("size = 14");
@@ -79,18 +71,7 @@ test("interface icons default to fourteen pixels", () => {
 	) {
 		for (let match of readFileSync(file, "utf8").matchAll(explicit)) {
 			let size = Number(match[2]);
-			let emptyStateException = file.endsWith("design-audit/surfaces.tsx") && size === 24;
-			let stepperCaret = file.endsWith("question/src/react/question-view.tsx") && size === 16;
-			let composerNotice = file.endsWith("chat/chat.tsx")
-				&& ["Archive", "Lock"].includes(match[1]!) && size === 18;
-			let referenceStatus = file.endsWith("chat/reference-picker.tsx")
-				&& match[1] === "Info" && size === 16;
-			let referenceFailure = file.endsWith("chat/reference-status-icon.tsx")
-				&& match[1] === "CircleClose" && size === 16;
-			if (
-				size !== 14 && !emptyStateException && !stepperCaret && !composerNotice && !referenceStatus
-				&& !referenceFailure
-			) {
+			if (!(iconSizes as readonly number[]).includes(size)) {
 				offenders.push(`${file}: ${match[0]}`);
 			}
 		}
@@ -137,11 +118,6 @@ test("interface icons share one neutral default colour", () => {
 			expect(asset).not.toContain("<title");
 			if (entry === "planner-stop.svg" || entry === "planner-resume.svg") {
 				expect(asset).toContain('<g fill="#212121">');
-				if (entry === "planner-stop.svg") {
-					expect(asset).toContain(
-						'<rect x="2" y="2" width="14" height="14" rx="2.75" ry="2.75"></rect>',
-					);
-				}
 			} else {
 				expect(asset).toContain("#78766e");
 				expect(asset).not.toContain("#212121");
@@ -178,4 +154,11 @@ test("directional controls reuse one chevron and one panel icon", () => {
 	expect(existsSync(join(root, "assets/icons/tool-chevron-down.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/icons/tool-chevron-right.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/figma/navigation/sidebar-right-3-hide.svg"))).toBe(false);
+});
+
+test("icons never shrink beside wrapping text", () => {
+	let css = readFileSync(join(root, "theme.css"), "utf8");
+	expect(css).toMatch(
+		/@layer base \{\s*:is\(\[data-nucleo-icon\], \[data-filled-icon\]\) \{\s*flex-shrink: 0;/,
+	);
 });

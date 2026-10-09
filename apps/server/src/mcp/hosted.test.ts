@@ -775,6 +775,57 @@ describe("the hosted MCP adapter", () => {
 		await Service.close(opened.plan);
 	});
 
+	it("reads a child document by its nested canonical URL and refuses a mismatched parent", async () => {
+		let context = setup();
+		let opened = await plan(context);
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Rollback research",
+			createdBy: "U_allowed",
+			parentChannelId: opened.channel.id,
+			now: context.now,
+		});
+		let other = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Unrelated plan",
+			createdBy: "U_allowed",
+			now: context.now,
+		});
+		let childPlan = await Service.open(child.id, {
+			storage: context.storage,
+			lease: () => opened.lease,
+			fatal: err => {
+				throw err;
+			},
+		}, opened.server);
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		let url = "/documents/octo-org/score/release-readiness/children/rollback-research";
+
+		try {
+			expect(await adapter.documents.read(caller, child.id)).toMatchObject({ id: child.id, url });
+			expect(await adapter.documents.read(caller, url)).toMatchObject({ id: child.id, url });
+			expect(await adapter.documents.read(caller, `https://chopin.test${url}`))
+				.toMatchObject({ id: child.id, url });
+			expect(
+				await adapter.documents.read(
+					caller,
+					`/documents/octo-org/score/${other.slug}/children/rollback-research`,
+				),
+			).toBeUndefined();
+		} finally {
+			await Service.close(childPlan);
+			await Service.close(opened.plan);
+		}
+	});
+
 	it("reads an open plan from its authoritative live document", async () => {
 		let context = setup();
 		let opened = await plan(context);
@@ -1620,6 +1671,14 @@ describe("the hosted MCP adapter", () => {
 				"plan:anchors",
 			]);
 			expect(frames.some(frame => frame.kind === "plan:awareness")).toBe(false);
+			expect(frames.find(frame => frame.kind === "plan:update")).toMatchObject({ agent: true });
+			let marked = frames.find(frame => frame.kind === "plan:changes") as
+				| { changes: Array<{ attribution?: unknown }> }
+				| undefined;
+			expect(marked?.changes[0]?.attribution).toMatchObject({
+				client: { name: "Codex", version: "1.2.3" },
+				user: caller.user.login,
+			});
 			expect(Service.source(opened.plan)).toBe("# Live rewrite\n");
 		} finally {
 			Rooms.forget(live);

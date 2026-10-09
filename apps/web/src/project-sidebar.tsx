@@ -1,15 +1,16 @@
-import addProjectIcon from "./assets/figma/navigation/add-project.svg";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
-import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
+import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { IconButton } from "./icon-button";
+import { MenuItem, MenuSeparator } from "./menu-item";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
-import { Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import { Count, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
 
@@ -18,7 +19,9 @@ import {
 	ArchiveIcon,
 	ChevronIcon,
 	DocumentIcon,
+	KeyboardIcon,
 	LockIcon,
+	PlusIcon,
 	SearchIcon,
 	SignInIcon,
 } from "@chopin/icons";
@@ -61,6 +64,23 @@ export function documentGroups(
 		children.set(channel.parentChannelId, nested);
 	}
 	return parents.map(parent => ({ parent, children: children.get(parent.id) ?? [] }));
+}
+
+function UnansweredCount({ unanswered }: { unanswered: number }) {
+	let attention = useDecisionAttention(unanswered);
+	if (unanswered <= 0) return null;
+	return (
+		<span aria-hidden="true" className="project-sidebar-count" data-sidebar-decision-count="">
+			<Count
+				appearance="quiet"
+				typography="metadata"
+				key={attention ? `attention-${unanswered}` : "settled"}
+				motion={attention}
+			>
+				{unanswered}
+			</Count>
+		</span>
+	);
 }
 
 function archiveFocusTarget(list: HTMLElement | null, documentId: string): HTMLElement | undefined {
@@ -158,6 +178,7 @@ function Project(
 		onFocused,
 		onLoadMore,
 		onToggle,
+		revealed,
 	}: {
 		archiveMode: boolean;
 		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
@@ -170,6 +191,7 @@ function Project(
 		onFocused: () => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onToggle: () => void;
+		revealed: boolean;
 	},
 ) {
 	let item = useRef<HTMLLIElement>(null);
@@ -196,6 +218,11 @@ function Project(
 	});
 	let label = project.repository?.name ?? project.repositoryName;
 	let canManage = canManageProject(project);
+	let documentUnanswered = (channel: Api.Channel) =>
+		archiveMode ? 0 : channel.unansweredDecisions ?? 0;
+	let projectUnanswered = archiveMode || documents.status === "unavailable"
+		? 0
+		: documents.unansweredDecisions ?? 0;
 	let phase = pendingCreations.get(project.repositoryId);
 	let contentId = useId();
 	let collapseMotion = motionContract("collapse");
@@ -253,6 +280,9 @@ function Project(
 									<a
 										aria-current={parentCurrent ? "page" : undefined}
 										aria-description={channel.description || undefined}
+										aria-label={documentUnanswered(channel) > 0
+											? unansweredDecisionsLabel(channel.title, documentUnanswered(channel))
+											: undefined}
 										className="project-sidebar-document-link"
 										data-tooltip={channel.description || undefined}
 										data-tooltip-side="right"
@@ -265,14 +295,15 @@ function Project(
 										<div className="project-sidebar-document-actions">
 											<DocumentActionsMenu
 												channel={channel}
-												className="project-sidebar-document-action"
+												iconButton
 												onAction={action => documentAction(channel, action)}
 												trigger={
-													<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
+													<NavigationIcon className="h-auto w-3" src={documentActionsIcon} />
 												}
 											/>
 										</div>
 									)}
+									<UnansweredCount unanswered={documentUnanswered(channel)} />
 								</div>
 								{children.length > 0 && (
 									<ul className="project-sidebar-children">
@@ -287,6 +318,9 @@ function Project(
 												>
 													<a
 														aria-current={current ? "page" : undefined}
+														aria-label={documentUnanswered(child) > 0
+															? unansweredDecisionsLabel(child.title, documentUnanswered(child))
+															: undefined}
 														className="project-sidebar-child-link"
 														href={childDocumentPath(
 															channel.repositoryOwner,
@@ -301,17 +335,18 @@ function Project(
 														<div className="project-sidebar-document-actions">
 															<DocumentActionsMenu
 																channel={child}
-																className="project-sidebar-document-action"
+																iconButton
 																onAction={action => onDocumentAction(child, action)}
 																trigger={
 																	<NavigationIcon
-																		className="h-auto w-3.5"
+																		className="h-auto w-3"
 																		src={documentActionsIcon}
 																	/>
 																}
 															/>
 														</div>
 													)}
+													<UnansweredCount unanswered={documentUnanswered(child)} />
 												</li>
 											);
 										})}
@@ -342,41 +377,52 @@ function Project(
 			className="project-sidebar-project group/project"
 			data-project-id={project.repositoryId}
 			ref={item}
+			data-revealed={revealed || undefined}
 			tabIndex={-1}
 		>
 			<div className="project-sidebar-project-row" data-flash={flash || undefined}>
 				<button
 					aria-controls={expanded ? contentId : undefined}
 					aria-expanded={expanded}
+					aria-label={projectUnanswered > 0
+						? unansweredDecisionsLabel(label, projectUnanswered)
+						: undefined}
 					className="project-sidebar-project-disclosure flex min-w-0 flex-1 items-center gap-2 text-left"
 					onClick={onToggle}
 					ref={disclosure}
 					type="button"
 				>
-					<MotionDisclosureIcon
-						className="motion-feedback shrink-0"
-						closed={<ChevronIcon size={14} />}
-						open={expanded}
-						opened={<ChevronIcon className="rotate-90" size={14} />}
-					/>
-					<DocumentIcon />
-					<span className="truncate text-sm font-bold">{label}</span>
+					<span aria-hidden="true" className="project-sidebar-project-icon">
+						<DocumentIcon className="project-sidebar-project-repository-icon" />
+						<span className="project-sidebar-project-chevron">
+							<MotionDisclosureIcon
+								className="motion-feedback shrink-0"
+								closed={<ChevronIcon size={12} />}
+								open={expanded}
+								opened={<ChevronIcon className="rotate-90" size={12} />}
+							/>
+						</span>
+					</span>
+					<span className="truncate text-xs font-bold">{label}</span>
 				</button>
 				{!archiveMode && project.available && canManage && (
-					<button
+					<IconButton
 						aria-busy={!!phase}
 						aria-label={`New document in ${label}`}
-						className={`project-sidebar-action ${phase ? "project-sidebar-action-pending" : ""}`}
-						data-press="small"
+						glyph="compact"
+						pending={!!phase}
+						placement="sidebar"
+						size="compact"
+						tone="nested"
 						data-tooltip="New document"
 						disabled={!!phase}
 						onClick={() => onCreateDocument(project)}
 						title={`New document in ${label}`}
-						type="button"
 					>
-						<NavigationIcon src={newDocumentIcon} />
-					</button>
+						<PlusIcon size={12} />
+					</IconButton>
 				)}
+				<UnansweredCount unanswered={projectUnanswered} />
 			</div>
 			<div className={phase ? "project-sidebar-status" : undefined} role="status">
 				{phase === "creating" ? "Creating document…" : phase ? "Opening document…" : ""}
@@ -414,10 +460,12 @@ export function ProjectSidebar(
 		onDocumentAction,
 		onLoadMore,
 		onNewDocument,
+		onRevealed,
 		onSearch,
 		onCatalogueModeChange,
 		projects,
 		catalogueMode,
+		reveal,
 		user,
 	}: {
 		accountMenu?: false | {
@@ -445,9 +493,11 @@ export function ProjectSidebar(
 		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onNewDocument: () => void;
+		onRevealed?: () => void;
 		onSearch: () => void;
 		onCatalogueModeChange: (mode: "active" | "archived") => void;
 		projects: ProjectDocuments[];
+		reveal?: { id: string; nonce: number };
 		user: Api.User;
 	},
 ) {
@@ -467,26 +517,86 @@ export function ProjectSidebar(
 		}, 1500);
 		return () => window.clearTimeout(timer);
 	}, [catalogueMode, projects, user.id]);
+	let [revealedId, setRevealedId] = useState<string>();
+	useEffect(() => {
+		if (!reveal) return;
+		setCollapsedProjectIds(current => {
+			if (!current.has(reveal.id)) return current;
+			let next = new Set(current);
+			next.delete(reveal.id);
+			return next;
+		});
+		setRevealedId(reveal.id);
+		let frame = requestAnimationFrame(() => {
+			let row = document.querySelector<HTMLElement>(
+				`[data-project-id="${CSS.escape(reveal.id)}"] .project-sidebar-project-disclosure`,
+			);
+			row?.scrollIntoView({ block: "nearest" });
+			row?.focus({ preventScroll: true });
+		});
+		let timer = setTimeout(() => {
+			setRevealedId(undefined);
+			onRevealed?.();
+		}, 1400);
+		return () => {
+			cancelAnimationFrame(frame);
+			clearTimeout(timer);
+		};
+	}, [reveal]);
 	let archivedButton = useRef<HTMLButtonElement>(null);
 	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
 	let platform = currentShortcutPlatform();
+	let actionsRef = useRef<HTMLDivElement>(null);
+	let listRef = useRef<HTMLElement>(null);
+	let shownMode = useRef(catalogueMode);
+	useEffect(() => {
+		if (shownMode.current === catalogueMode) return;
+		shownMode.current = catalogueMode;
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		let style = getComputedStyle(actionsRef.current ?? document.documentElement);
+		let offset = catalogueMode === "archived" ? "8px" : "-8px";
+		for (let element of [actionsRef.current, listRef.current]) {
+			element?.animate(
+				[{ opacity: 0, transform: `translateX(${offset})` }, { opacity: 1, transform: "none" }],
+				{
+					duration: parseFloat(style.getPropertyValue("--duration-base")) || 200,
+					easing: style.getPropertyValue("--motion-smooth-out").trim() || "ease-out",
+				},
+			);
+		}
+	}, [catalogueMode]);
+	let searchButton = (
+		<button className="project-sidebar-primary-action" onClick={onSearch} type="button">
+			<SearchIcon size={12} />
+			<span>Search</span>
+			<kbd aria-hidden="true" className="project-sidebar-hint">
+				{shortcutLabel("search", platform)}
+			</kbd>
+		</button>
+	);
 	let primaryActions = (
-		<div className="project-sidebar-primary-actions">
+		<div
+			className="project-sidebar-primary-actions"
+			ref={actionsRef}
+		>
 			{archiveMode
 				? (
-					<button
-						className="project-sidebar-primary-action"
-						onClick={() => {
-							onCatalogueModeChange("active");
-							requestAnimationFrame(() => archivedButton.current?.focus({ preventScroll: true }));
-						}}
-						ref={allDocumentsButton}
-						type="button"
-					>
-						<span aria-hidden="true">←</span>
-						<span>All documents</span>
-					</button>
+					<>
+						<button
+							className="project-sidebar-primary-action"
+							onClick={() => {
+								onCatalogueModeChange("active");
+								requestAnimationFrame(() => archivedButton.current?.focus({ preventScroll: true }));
+							}}
+							ref={allDocumentsButton}
+							type="button"
+						>
+							<ChevronIcon aria-hidden="true" className="rotate-180" size={14} />
+							<span>All documents</span>
+						</button>
+						{searchButton}
+					</>
 				)
 				: (
 					<>
@@ -498,7 +608,7 @@ export function ProjectSidebar(
 							onClick={onNewDocument}
 							type="button"
 						>
-							<NavigationIcon src={newDocumentIcon} />
+							<PlusIcon />
 							<span>
 								{newDocumentPhase === "creating"
 									? "Creating document…"
@@ -519,7 +629,7 @@ export function ProjectSidebar(
 							onClick={onSearch}
 							type="button"
 						>
-							<SearchIcon />
+							<SearchIcon size={12} />
 							<span>Search</span>
 							<kbd aria-hidden="true" className="project-sidebar-hint">
 								{shortcutLabel("search", platform)}
@@ -558,37 +668,40 @@ export function ProjectSidebar(
 				<header className="project-sidebar-header group/sidebar-header">
 					<div className="flex items-center gap-2">
 						<img alt="" height={14} src={chopinIcon} width={14} />
-						<span className="text-sm font-semibold text-brand">Chopin</span>
+						<span className="text-xs font-semibold text-brand">Chopin</span>
 					</div>
-					<button
+					<IconButton
 						aria-label="Hide sidebar"
-						className="project-sidebar-action"
-						data-press="small"
+						placement="sidebar"
+						size="compact"
 						data-tooltip="Hide sidebar"
 						data-tooltip-shortcut={shortcutLabel("toggle-sidebar", platform)}
 						onClick={onCollapse}
-						type="button"
 					>
 						<NavigationIcon src={collapseIcon} />
-					</button>
+					</IconButton>
 				</header>
 
 				{primaryActions}
 
-				<nav className="px-2 py-2" aria-label="Projects">
+				<nav
+					className="px-2 py-2"
+					aria-label={archiveMode ? "Archived documents" : "Projects"}
+					ref={listRef}
+				>
 					<div className="project-sidebar-projects-heading group/projects-heading">
-						<span>Projects</span>
+						<span>{archiveMode ? "Archived" : "Projects"}</span>
 						{!archiveMode && (
-							<button
+							<IconButton
 								aria-label="Add project"
 								data-tooltip="Add project"
-								className="project-sidebar-action"
-								data-press="small"
+								glyph="compact"
+								placement="sidebar"
+								size="compact"
 								onClick={onAddProject}
-								type="button"
 							>
-								<NavigationIcon className="size-3.5" src={addProjectIcon} />
-							</button>
+								<PlusIcon size={12} />
+							</IconButton>
 						)}
 					</div>
 					{newDocumentPhase === "loading" && projects.length === 0 && <ProjectSidebarSkeleton />}
@@ -607,6 +720,7 @@ export function ProjectSidebar(
 									onDocumentAction={onDocumentAction}
 									onFocused={onFocusedProject ?? noop}
 									onLoadMore={onLoadMore}
+									revealed={revealedId === entry.project.repositoryId}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
 											toggleCollapsedProjectIds(current, entry.project.repositoryId)
@@ -652,23 +766,21 @@ export function ProjectSidebar(
 						}}
 						role="menu"
 					>
-						<a href="/auth/github/install" rel="noopener" role="menuitem" target="_blank">
+						<MenuItem density="compact" href="/auth/github/install" rel="noopener" target="_blank">
 							<LockIcon aria-hidden="true" size={14} />
 							Manage repository access
-						</a>
-						<button
-							className="navigation-account-menu-item"
+						</MenuItem>
+						<MenuItem
+							density="compact"
 							onClick={accountMenu.onShortcuts}
-							role="menuitem"
-							type="button"
 						>
-							Keyboard shortcuts<kbd aria-hidden="true">?</kbd>
-						</button>
-						<div role="separator" />
-						<button onClick={accountMenu.onSignOut} role="menuitem" type="button">
+							<KeyboardIcon aria-hidden="true" size={14} />Keyboard shortcuts
+						</MenuItem>
+						<MenuSeparator />
+						<MenuItem density="compact" onClick={accountMenu.onSignOut}>
 							<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
 							Sign out
-						</button>
+						</MenuItem>
 					</div>
 				)}
 			</div>

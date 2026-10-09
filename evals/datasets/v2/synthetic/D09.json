@@ -1,0 +1,74 @@
+{
+	"version": 2,
+	"id": "D09",
+	"kind": "synthetic-chat",
+	"origin": "synthetic",
+	"actors": [
+		"Finn",
+		"Aro",
+		"Eve"
+	],
+	"initialDocument": "",
+	"steps": [
+		{
+			"id": "m1",
+			"kind": "say",
+			"actor": "Finn",
+			"text": "we missed that invite failure for two days. where should app errors go?",
+			"to": "room"
+		},
+		{
+			"id": "m2",
+			"kind": "say",
+			"actor": "Aro",
+			"text": "Sentry for exceptions; Grafana Loki for logs; or keep structured logs in our current platform.",
+			"to": "room"
+		},
+		{
+			"id": "m3",
+			"kind": "say",
+			"actor": "Eve",
+			"text": "that's two questions, right? exceptions and general logs.",
+			"to": "room"
+		},
+		{
+			"id": "m4",
+			"kind": "say",
+			"actor": "Aro",
+			"text": "yes. Sentry vs platform error alerts for exceptions; Loki vs platform logs for searchable logs.",
+			"to": "room"
+		},
+		{
+			"id": "c4",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m5",
+			"kind": "say",
+			"actor": "Finn",
+			"text": "I'd choose Sentry for exceptions. leave logs as they are until we know what's missing.",
+			"to": "room"
+		},
+		{
+			"id": "c5",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		},
+		{
+			"id": "m6",
+			"kind": "say",
+			"actor": "Eve",
+			"text": "agreed on Sentry. the logging question stays open.",
+			"to": "room"
+		},
+		{
+			"id": "c6",
+			"kind": "checkpoint",
+			"waitFor": "settled",
+			"deadlineMs": 30000
+		}
+	]
+}
