@@ -120,7 +120,7 @@
 
 	/* Passive structure and controls are the only two edge weights. */
 	--color-edge: oklch(0 0 0 / 7%);
-	--color-control-edge: oklch(0 0 0 / 20%);
+	--color-control-edge: oklch(0 0 0 / 15%);
 	--color-control-boundary: var(--color-gray-500);
 	--edge-width: 1px;
 	--button-edge-width: 1px;
