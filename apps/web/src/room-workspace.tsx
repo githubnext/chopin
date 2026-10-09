@@ -380,7 +380,33 @@ export function RoomWorkspace(
 	let { available, frame, mode } = useWorkspaceLayout();
 	let workspaceIds = useWorkspaceIds();
 	let profile = workspaceProfile(presentation);
-	let [implementationLocked, setImplementationLocked] = useState(false);
+	let [implementation, setImplementation] = useState<Plan.ImplementationStatus>({
+		revision: -1,
+		locked: false,
+	});
+	let [showImplementation, setShowImplementation] = useState(false);
+	useEffect(() => {
+		setImplementation({ revision: -1, locked: false });
+		let update = (value: Plan.ImplementationStatus) => {
+			setImplementation(current => value.revision >= current.revision ? value : current);
+		};
+		let offOpen = wire?.on<Plan.Open.Reply>("plan:open", message => {
+			if (message.implementation) update(message.implementation);
+		});
+		let offChanged = wire?.on<Plan.ImplementationChanged>("plan:implementation", update);
+		return () => {
+			offOpen?.();
+			offChanged?.();
+		};
+	}, [room, wire]);
+	useEffect(() => {
+		let followTask = () => {
+			if (profile.implementation && location.hash.startsWith("#task-")) setShowImplementation(true);
+		};
+		followTask();
+		addEventListener("hashchange", followTask);
+		return () => removeEventListener("hashchange", followTask);
+	}, [profile.implementation]);
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
@@ -916,6 +942,15 @@ export function RoomWorkspace(
 
 	return (
 		<>
+			{showImplementation && profile.implementation && (
+				<ImplementationPanel
+					id={room}
+					canEdit={!!workspaceCanEdit && status === "connected"}
+					planner={agent && !chatActivity.busy}
+					wire={wire}
+					onClose={() => setShowImplementation(false)}
+				/>
+			)}
 			{showExperiments && (
 				<ExperimentsPanel
 					store={experiments}
@@ -1012,6 +1047,15 @@ export function RoomWorkspace(
 				}
 				controls={
 					<>
+						{profile.implementation && (
+							<button
+								className="btn btn-sm btn-ghost"
+								disabled={!hasPlanContent}
+								onClick={() => setShowImplementation(true)}
+							>
+								Build
+							</button>
+						)}
 						<button className="btn btn-sm btn-ghost" onClick={() => setShowExperiments(true)}>
 							Investigations
 						</button>
@@ -1132,20 +1176,10 @@ export function RoomWorkspace(
 							onState={setPlanState}
 							preface={presentation.type === "child" && presentation.parent
 								? <ChildProvenance channelId={room} parent={presentation.parent} />
-								: profile.implementation && hasPlanContent
-								? (
-									<ImplementationPanel
-										id={room}
-										canEdit={workspaceCanEdit}
-										planner={agent}
-										wire={wire}
-										onLocked={setImplementationLocked}
-									/>
-								)
 								: undefined}
 							questionMotion={QUESTION_MOTION}
 							questions={questions}
-							readOnly={!workspaceCanEdit || implementationLocked}
+							readOnly={!workspaceCanEdit || implementation.locked}
 							research={profile.research ? research : undefined}
 							researchLauncher={researchLauncher}
 							scrollTop={planScrollTop}

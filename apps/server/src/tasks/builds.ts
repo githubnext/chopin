@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { approveGraph } from "./graphs";
 import { implementationReadiness } from "./plan-graphs";
+import { claimEligibility } from "./lifecycle";
+import { announceImplementation } from "./notifications";
 import { drain, exclusive, persistExclusive } from "../plan/service";
 import type { Plan } from "../plan/service";
 import type { BuildRequest, CheckoutContext } from "@chopin/protocol/implementation";
@@ -12,6 +14,7 @@ export let checkoutSchema = z.object({
 }).strict();
 let buildSchema = z.object({
 	id: z.string().uuid(),
+	retryOf: z.string().uuid().optional(),
 	user: z.string().min(1).max(128),
 	connectionId: z.string().min(1).max(128),
 	repositoryId: z.string().min(1).max(128),
@@ -39,6 +42,7 @@ export function restoreBuilds(value: unknown, repositoryId?: string): BuildReque
 }
 
 type BuildInput = {
+	retryOf?: string;
 	planRevision: number;
 	graphVersion: number;
 	graphRevision: number;
@@ -66,18 +70,37 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 				&& existing.graphRevision === input.graphRevision
 				&& existing.planRevision === input.planRevision
 			) {
-				return structuredClone(existing);
+				let sameOwnerAndCheckout = existing.user === input.user
+					&& existing.connectionId === input.connectionId
+					&& existing.repositoryId === input.repositoryId
+					&& existing.checkout.repository === input.checkout.repository
+					&& existing.checkout.commit === input.checkout.commit
+					&& existing.checkout.branch === input.checkout.branch;
+				if (sameOwnerAndCheckout && existing.retryOf === input.retryOf) {
+					return structuredClone(existing);
+				}
+				if (input.retryOf !== existing.id || !["failed", "stopped"].includes(existing.state)) {
+					throw new Error("review the existing build before retrying");
+				}
+			} else if (input.retryOf) {
+				throw new Error("reviewed build has changed");
 			}
-			if (plan.execution) throw new Error("implementation is already active");
+			if (
+				plan.execution
+				|| plan.builds.some(build => ["queued", "starting", "running"].includes(build.state))
+			) throw new Error("implementation is already active");
 			let ready = implementationReadiness(plan, input.planRevision);
 			if (!ready.ok) throw new Error(ready.blockers.join(", "));
+			let id = crypto.randomUUID();
+			let eligibility = claimEligibility(plan.lifecycle, version, id);
+			if (!eligibility.ok) throw new Error(eligibility.reason);
 			let result = version.state === "approved"
 				? { ok: true as const, value: structuredClone(plan.graph!) }
 				: approveGraph({ graph: plan.graph, revision: plan.revision });
 			if (!result.ok) throw new Error(result.reason);
 			let build: BuildRequest = buildSchema.parse({
 				...input,
-				id: crypto.randomUUID(),
+				id,
 				createdAt: new Date().toISOString(),
 				expiresAt: Date.now() + 90_000,
 				state: "queued",
@@ -92,6 +115,7 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 				Object.assign(plan, previous);
 				throw error;
 			}
+			announceImplementation(plan);
 			return structuredClone(build);
 		});
 	} finally {
@@ -122,6 +146,7 @@ export function pickBuild(
 			plan.builds = previous;
 			throw error;
 		}
+		announceImplementation(plan);
 		return structuredClone(next);
 	});
 }
@@ -162,5 +187,9 @@ export function reportBuild(
 			plan.builds = previous;
 			throw error;
 		}
+		if (
+			current.state !== next.state || current.session !== next.session
+			|| current.error !== next.error
+		) announceImplementation(plan);
 	});
 }

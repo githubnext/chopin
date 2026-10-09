@@ -1,4 +1,5 @@
 import { restoreBuilds } from "../tasks/builds";
+import { implementationStatus } from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
  * The plan, as a room offers it.
@@ -1449,6 +1450,7 @@ export function greet(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void
 		threads: Comments.anchors(plan),
 		prose: Questions.prose(plan),
 		limits: room.LIMITS,
+		implementation: implementationStatus(plan),
 		...(hello ? { awareness: encode(hello) } : {}),
 	});
 }

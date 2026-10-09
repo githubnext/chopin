@@ -3,6 +3,7 @@ import type { Plan } from "./plan";
 export type CheckoutContext = { repository: string; branch?: string; commit: string };
 export type BuildRequest = {
 	id: string;
+	retryOf?: string;
 	user: string;
 	connectionId: string;
 	repositoryId: string;
@@ -17,6 +18,7 @@ export type BuildRequest = {
 	error?: string;
 };
 export type ImplementationSnapshot = {
+	revision: number;
 	planRevision: number;
 	graph?: {
 		number: number;

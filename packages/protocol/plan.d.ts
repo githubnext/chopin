@@ -24,6 +24,7 @@ export declare namespace Plan {
 		| Anchors
 		| Changes
 		| Reset
+		| ImplementationChanged
 		| Lifecycle;
 
 	/**
@@ -246,6 +247,7 @@ export declare namespace Plan {
 			threads: ThreadAnchors[];
 			prose?: ProseAnchors[];
 			limits: Limits;
+			implementation?: ImplementationStatus;
 		};
 	}
 
@@ -317,6 +319,9 @@ export declare namespace Plan {
 	};
 
 	/** Durable implementation activity, published only after persistence. */
+	export type ImplementationStatus = { revision: number; locked: boolean };
+	export type ImplementationChanged = KIND<"plan:implementation"> & ImplementationStatus;
+
 	export type Lifecycle = KIND<"plan:lifecycle"> & {
 		execution: { state: "idle" | "active" };
 		activity?: ImplementationProgress;

@@ -348,3 +348,83 @@ test("Build waits for an investigation-busy workspace before approving the graph
 	expect(context.plan.graph?.versions[0].state).toBe("draft");
 	await Plan.close(context.plan);
 });
+
+test("a committed build wakes the waiting connector and a failed pickup can be retried", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	let abort = new AbortController();
+	try {
+		let woken = false;
+		let waiting = context.experiments.connections.wait(context.plan.id, abort.signal)
+			.then(() => woken = true);
+		let review = {
+			connectionId: connection.connection.id,
+			checkout,
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		};
+		let built = await (await context.call(context.path, review)).json();
+		expect(woken).toBe(true);
+		await waiting;
+		await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "failed",
+			error: "Startup failed",
+		});
+		let retry = { ...review, retryOf: built.id };
+		let next = await (await context.call(context.path, retry)).json();
+		expect(next.id).not.toBe(built.id);
+		expect(next.state).toBe("queued");
+		expect((await (await context.call(context.path, retry)).json()).id).toBe(next.id);
+	} finally {
+		abort.abort();
+		await Plan.close(context.plan);
+	}
+});
+
+test("returning a stopped implementation for changes durably unlocks it once", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	try {
+		let built = await (await context.call(context.path, {
+			connectionId: connection.connection.id,
+			checkout,
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "running",
+			session: "session",
+		});
+		let input = { buildId: built.id, reason: "Resolve the missing design decision" };
+		expect((await context.call(`${context.path}/revise`, input)).status).toBe(409);
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "stopped",
+		});
+		expect(
+			(await context.call(`${context.path}/revise`, input, undefined, "https://other.test")).status,
+		)
+			.toBe(403);
+		let commit = context.storage.collaboration.commit;
+		context.storage.collaboration.commit = async () => {
+			throw new Error("offline");
+		};
+		expect((await context.call(`${context.path}/revise`, input)).status).toBe(409);
+		expect(Plan.implementationActive(context.plan)).toBe(true);
+		context.storage.collaboration.commit = commit;
+		expect((await context.call(`${context.path}/revise`, input)).status).toBe(200);
+		expect((await context.call(`${context.path}/revise`, input)).status).toBe(200);
+		expect(Plan.implementationActive(context.plan)).toBe(false);
+		expect(context.plan.execution).toBeUndefined();
+		expect(context.plan.lifecycle.history).toHaveLength(1);
+		expect(context.plan.lifecycle.history[0].events.at(-1)?.kind).toBe("request_revision");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});

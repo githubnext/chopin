@@ -97,7 +97,7 @@ async function connector(baseURL: string, command: string[]) {
 	};
 }
 
-for (let mode of ["block", "complete", "live"] as const) {
+for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 	test(`the paired ACP connector implements a browser plan (${mode})`, async ({ seed, join: enter, room, baseURL }) => {
 		test.skip(
 			mode === "live" && !process.env.CHOPIN_TEST_ACP_COMMAND,
@@ -120,6 +120,7 @@ for (let mode of ["block", "complete", "live"] as const) {
 					"bun",
 					join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
 					...(mode === "complete" ? ["--complete", "--http"] : []),
+					...(mode === "startup-failure" ? ["--fail-start"] : []),
 				],
 		);
 		try {
@@ -129,6 +130,12 @@ for (let mode of ["block", "complete", "live"] as const) {
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
 			await page.getByRole("link", { name: "Open document", exact: true }).click();
 			let panel = page.getByRole("region", { name: "Implementation", exact: true });
+			await expect(panel).toHaveCount(0);
+			await page.getByRole("button", { name: "Build", exact: true }).click();
+			await expect.poll(() =>
+				panel.evaluate(element => element.checkVisibility({ checkOpacity: true }))
+			)
+				.toBe(true);
 			let build = panel.getByRole("button", { name: "Approve and build this plan", exact: true });
 			await expect(build).toBeEnabled();
 			await build.click();
@@ -138,6 +145,22 @@ for (let mode of ["block", "complete", "live"] as const) {
 				return snapshot.build?.state;
 			}, { timeout: mode === "live" ? 150_000 : 30_000 }).toMatch(/^(failed|stopped)$/);
 			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+			if (mode === "startup-failure") {
+				expect(snapshot.build.state).toBe("failed");
+				expect(snapshot.lifecycle.execution.state).toBe("idle");
+				let first = snapshot.build.id;
+				await panel.getByRole("button", { name: "Retry build on my workspace", exact: true })
+					.click();
+				await expect.poll(async () => {
+					let next = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+					return next.build.id !== first && next.build.retryOf === first
+						&& next.build.state === "failed";
+				}).toBe(true);
+				await page.reload();
+				await expect(panel).toHaveCount(0);
+				await expect(content(page)).toHaveAttribute("contenteditable", "true");
+				return;
+			}
 			expect(snapshot.build.state, local.output()).toBe("stopped");
 			expect(snapshot.build.session).toBeTruthy();
 			if (mode === "complete") {
@@ -153,6 +176,12 @@ for (let mode of ["block", "complete", "live"] as const) {
 			await expect(panel).toContainText("After Connect the local agent");
 			expect(await local.localEdit()).toBe("uncommitted local edit");
 			await page.reload();
+			await expect(panel).toHaveCount(0);
+			await expect(content(page)).toHaveAttribute(
+				"contenteditable",
+				mode === "complete" ? "true" : "false",
+			);
+			await page.getByRole("button", { name: "Build", exact: true }).click();
 			await expect(panel).toContainText(
 				mode === "complete" ? "Implementation complete" : "Blocked: Choose the next tracer",
 			);
@@ -161,6 +190,16 @@ for (let mode of ["block", "complete", "live"] as const) {
 				&& mode === (process.env.CHOPIN_TEST_ACP_COMMAND ? "live" : "block")
 			) {
 				await panel.screenshot({ path: process.env.CHOPIN_LAUNCHER_SCREENSHOT });
+			}
+			if (mode === "block") {
+				await panel.getByRole("textbox", { name: "Reason for changes" }).fill(
+					"Choose the next tracer before continuing.",
+				);
+				await panel.getByRole("button", { name: "Return plan for changes", exact: true }).click();
+				await expect(panel.getByRole("button", { name: "Revise tasks", exact: true }))
+					.toBeVisible();
+				await page.getByRole("button", { name: "Close implementation", exact: true }).click();
+				await expect(content(page)).toHaveAttribute("contenteditable", "true");
 			}
 		} finally {
 			await local.close();

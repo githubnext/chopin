@@ -87,7 +87,9 @@ graph counter.
 The Planner may then draft a replacement graph, but a revision request does not
 itself supersede the old version and does not prevent that version from being
 claimed again through MCP. The connector deliberately does not replay a picked-up
-request, including after failure; a replacement graph needs a new build.
+request. A failed pre-claim attempt can be explicitly retried from Build. A stopped
+claimed attempt can be returned for changes through a durable revision request;
+the next reviewed build is a new attempt, not an automatic session replay.
 
 ## MCP lifecycle tools
 
@@ -125,8 +127,11 @@ that mutate the plan are refused until the implementation finishes or requests
 revision. Progress and archived runs remain durable sidecar state.
 
 The protocol defines a `plan:lifecycle` projection for active progress and run
-history. The web implementation panel polls an authenticated snapshot of that
-same state every two seconds, including after refresh.
+history. `plan:implementation` invalidates the Build dialog's authenticated
+snapshot after committed graph, build and lifecycle changes. It includes the
+storage revision and current editing lock; `plan:open` supplies that lock on
+reconnect even when the Build dialog is closed. The dialog refreshes when opened
+or notified rather than polling every document in the background.
 
 Archiving does not release an active graph lock or terminate its run. A coding
 agent can continue reporting task, pull-request, blocker, revision, and
