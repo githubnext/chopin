@@ -119,4 +119,5 @@ test("accepts fractional steps anchored at a nonzero minimum", () => {
 	for (let spacing of [12.1, 12.2, 12.3]) {
 		expect(validateSnapshot(result.value, { spacing }).ok).toBe(true);
 	}
+	expect(validateSnapshot(result.value, { spacing: 12.15 }).ok).toBe(false);
 });
