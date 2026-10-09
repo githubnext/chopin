@@ -81,12 +81,17 @@ test("the caret can edit inside a pill", async ({ join, room, seed }) => {
 	let page = await join("ana");
 	let pill = content(page).getByRole("link", { name: /Add document outline #1/ });
 	await expect(pill).toHaveAttribute("data-gh-state", "pr-open");
-	await pill.getByText("Add document outline").click();
+	// The middle of the title is the middle of "document".
+	await pill.getByText("Add document outline").dblclick();
 	await expect(pill).toHaveAttribute("data-gh-editing", "");
+	await page.keyboard.type("draft");
+	await written(page, room, `Shipped [Add draft outline](${BASE}/pull/1).`);
+	let edited = content(page).getByRole("link", { name: /Add draft outline #1/ });
+	await expect(edited).toHaveAttribute("data-gh-state", "pr-open");
+
+	// Home leaves the pill for the start of the line, as it would in prose.
 	await page.keyboard.press("Home");
-	for (let step = 0; step < "Shipped Add".length; step++) await page.keyboard.press("ArrowRight");
-	await page.keyboard.type("ed");
-	await written(page, room, `Shipped [Added document outline](${BASE}/pull/1).`);
-	await expect(content(page).getByRole("link", { name: /Added document outline #1/ }))
-		.toHaveAttribute("data-gh-state", "pr-open");
+	await expect(edited).not.toHaveAttribute("data-gh-editing");
+	await page.keyboard.type("Now ");
+	await written(page, room, `Now Shipped [Add draft outline](${BASE}/pull/1).`);
 });

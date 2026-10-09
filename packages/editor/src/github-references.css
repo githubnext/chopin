@@ -67,8 +67,24 @@
 }
 
 /* With the caret inside, every character has to be reachable. */
+/*
+ * With the caret inside, the pill becomes inline text in the same capsule.
+ * A flex box is its own line for Home, End and the arrow keys, and clips what
+ * it truncates; inline, every character is reachable and lines move as prose.
+ */
 .plan-content a[data-gh-editing] {
-	max-width: 100%;
+	display: inline;
+	max-width: none;
+	padding-block: calc(var(--spacing) * 1.25);
+	vertical-align: baseline;
+	white-space: normal;
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+}
+
+.plan-content a[data-gh-editing]::before {
+	display: inline-block;
+	vertical-align: -0.15em;
 }
 
 .plan-content a[data-gh-editing] > * {
