@@ -65,6 +65,8 @@ function DiagramView({
 	let descriptionId = `${prefix}-description`;
 	let stageRef = useRef<HTMLDivElement>(null);
 	let svgRef = useRef<SVGSVGElement>(null);
+	let controlsRef = useRef<HTMLDivElement>(null);
+	let focusedControl = useRef<HTMLButtonElement | null>(null);
 	let [preview, setPreview] = useState<Item | null>(null);
 	let [selected, setSelected] = useState<Item | null>(null);
 	let [mode, setMode] = useState<Playback>({ kind: "playing" });
@@ -178,6 +180,23 @@ function DiagramView({
 		}
 	}, [step, playback]);
 
+	// An arrow or zoom button disables itself at its limit; keep keyboard focus in the bar.
+	useEffect(() => {
+		let control = focusedControl.current;
+		let controls = controlsRef.current;
+		if (!control || !controls || !control.disabled) return;
+		let active = document.activeElement;
+		if (active !== control && active !== document.body && active !== null) return;
+		let buttons = [...controls.querySelectorAll("button")];
+		let index = buttons.indexOf(control);
+		let nearest = buttons
+			.filter((button) => !button.disabled)
+			.sort((a, b) =>
+				Math.abs(buttons.indexOf(a) - index) - Math.abs(buttons.indexOf(b) - index)
+			)[0];
+		nearest?.focus();
+	}, [step, zoom]);
+
 	let select = (item: Item | null) => {
 		setSelected((current) => sameItem(current, item) ? null : item);
 		setPreview(null);
@@ -274,7 +293,15 @@ function DiagramView({
 				</svg>
 			</div>
 			{(stepping || zoomable) && (
-				<div className="ch-diagram__controls" role="group" aria-label="Diagram controls">
+				<div
+					ref={controlsRef}
+					className="ch-diagram__controls"
+					role="group"
+					aria-label="Diagram controls"
+					onFocus={(event) => {
+						if (event.target instanceof HTMLButtonElement) focusedControl.current = event.target;
+					}}
+				>
 					{stepping && (
 						<div className="ch-diagram__control-group">
 							<button
@@ -292,8 +319,7 @@ function DiagramView({
 							<button
 								className="ch-diagram__control"
 								type="button"
-								onClick={() =>
-									showStep((step ?? 0) + 1)}
+								onClick={() => showStep((step ?? 0) + 1)}
 								disabled={step === maxStep}
 								aria-label="Next step"
 							>
@@ -351,8 +377,7 @@ function DiagramView({
 								type="button"
 								aria-label="Actual size"
 								aria-pressed={zoom === 1}
-								onClick={() =>
-									setZoom(1)}
+								onClick={() => setZoom(1)}
 							>
 								<ActualSizeIcon />
 							</button>
@@ -396,15 +421,14 @@ function DiagramView({
 					)}
 				</aside>
 			)}
-			{status && (
-				<figcaption
-					className="ch-diagram__status"
-					data-visually-hidden={step !== null ? "" : undefined}
-					role="status"
-				>
-					{status}
-				</figcaption>
-			)}
+			{/* Mounted before it has text, so the first change is announced. */}
+			<figcaption
+				className="ch-diagram__status"
+				data-visually-hidden={step !== null || !status ? "" : undefined}
+				role="status"
+			>
+				{status}
+			</figcaption>
 		</figure>
 	);
 }
