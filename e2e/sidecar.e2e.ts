@@ -1403,12 +1403,17 @@ test("resolving hides the thread at once, and Undo brings it back for everyone",
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	await expect(commentButton(page)).toHaveCount(0);
 	await expect(commentButton(other)).toHaveCount(0);
-	let toast = page.getByRole("status").filter({ hasText: "Comment resolved" });
-	await expect(toast).toBeVisible();
+	await expect(page.getByRole("status").filter({ hasText: "Comment resolved" })).toBeAttached();
+	let undo = page.getByRole("button", { name: "Undo", exact: true });
+	await expect(undo).toBeVisible();
 	expect(await content(page).textContent()).toBe(source);
 
-	await toast.getByRole("button", { name: "Undo" }).click();
-	await expect(toast).toHaveCount(0);
+	// Pointing at the toast holds it past its usual window.
+	await undo.hover();
+	await page.waitForTimeout(6_500);
+	await expect(undo).toBeVisible();
+	await undo.click();
+	await expect(undo).toHaveCount(0);
 	let reopened = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(reopened).toContainText("@dev");
 	await expect(commentButton(other)).toHaveCount(1);
@@ -1420,6 +1425,21 @@ test("resolving hides the thread at once, and Undo brings it back for everyone",
 	await expect(reopened).toContainText("Back again.");
 	await commentButton(other).click();
 	await expect(other.getByRole("dialog", { name: "Comment thread" })).toContainText("Back again.");
+});
+
+test("Mod+Z outside the editor undoes a resolve while its toast shows", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	let card = await thread(page);
+	await card.hover();
+	await card.getByRole("button", { name: "Resolve", exact: true }).click();
+	await expect(commentButton(page)).toHaveCount(0);
+
+	// Inside the editor Mod+Z is the document's own undo, so focus something else first.
+	await page.getByRole("button", { name: "Document", exact: true }).focus();
+	await page.keyboard.press("ControlOrMeta+z");
+	await expect(page.getByRole("dialog", { name: "Comment thread" })).toContainText("@dev");
+	await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveCount(0);
 });
 
 test("a resolved thread stays hidden after a reload", async ({ join, seed }) => {

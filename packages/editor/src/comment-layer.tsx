@@ -62,8 +62,14 @@ type MeasuredBlock = {
 /** A pinned list of one block's threads, as opposed to a pinned thread id. */
 const LIST = "list:";
 
-/** How long a resolve can be undone from its toast. */
+/** How long a resolve can be undone from its toast, while nobody is pointing at it. */
 const UNDO_WINDOW = 6_000;
+
+/** What the toast says: a resolve that can still be undone, or why an undo failed. */
+type Notice = { id: string; text: string; undo: boolean };
+
+/** Fields and the editor keep their own Mod+Z. */
+const OWNS_UNDO = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 
 /** The fragment Copy link writes and a page load follows. */
 const LINK = "#comment-";
@@ -344,7 +350,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [previewMeasurement, setPreviewMeasurement] = useState<PreviewMeasurement>();
 	let [pinned, setPinned] = useState<string>();
 	let [returnTo, setReturnTo] = useState<string>();
-	let [undo, setUndo] = useState<string>();
+	let [notice, setNotice] = useState<Notice>();
+	let [noticeHeld, setNoticeHeld] = useState(false);
 	let [linked, setLinked] = useState<string | undefined>(() =>
 		location.hash.startsWith(LINK) ? location.hash.slice(LINK.length) : undefined
 	);
@@ -654,23 +661,56 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		restoreOrigin();
 	}, [restoreOrigin, store]);
 	let resolve = useCallback((id: string) => {
-		store.resolve(id);
-		setUndo(id);
+		setNotice({ id, text: "Comment resolved", undo: true });
+		void store.resolve(id).then(resolved => {
+			// The card came back, so there is nothing to undo.
+			if (!resolved) setNotice(current => current?.id === id ? undefined : current);
+		});
 	}, [store]);
 	let reopen = useCallback((id: string) => {
-		setUndo(undefined);
-		void store.reopen(id).then(ok => {
-			if (!ok) return;
+		setNotice(undefined);
+		setNoticeHeld(false);
+		void store.reopen(id).then(outcome => {
+			if (!outcome.ok) {
+				setNotice({
+					id,
+					text: outcome.reason === "full"
+						? "Couldn’t reopen: this document has too many open comments"
+						: "Couldn’t reopen the comment",
+					undo: false,
+				});
+				return;
+			}
 			setReturnTo(undefined);
 			setPinned(id);
 		});
 	}, [store]);
 
+	// The window runs down only while nobody is pointing at or focused in the toast.
 	useEffect(() => {
-		if (!undo) return;
-		let timer = setTimeout(() => setUndo(undefined), UNDO_WINDOW);
+		if (!notice || noticeHeld) return;
+		let timer = setTimeout(() => setNotice(undefined), UNDO_WINDOW);
 		return () => clearTimeout(timer);
-	}, [undo]);
+	}, [notice, noticeHeld]);
+
+	// Mod+Z undoes the resolve while it can, unless a field or the editor has focus and
+	// would undo its own typing.
+	useEffect(() => {
+		if (!notice?.undo) return;
+		let id = notice.id;
+		let key = (event: KeyboardEvent) => {
+			if (
+				!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey
+				|| event.key.toLowerCase() !== "z" || event.defaultPrevented
+			) return;
+			let target = event.target instanceof Element ? event.target : undefined;
+			if (target?.closest(OWNS_UNDO)) return;
+			event.preventDefault();
+			reopen(id);
+		};
+		document.addEventListener("keydown", key);
+		return () => document.removeEventListener("keydown", key);
+	}, [notice, reopen]);
 
 	useEffect(() => {
 		let follow = () => {
@@ -938,6 +978,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			data-plan-comment-presentation={compact ? "sheet" : "popover"}
 			ref={root}
 		>
+			<p className="sr-only" role="status">{notice?.text ?? ""}</p>
 			{placed.flatMap(({ hits, view }) =>
 				hits.map((hit, index) => (
 					<div
@@ -1084,14 +1125,31 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	);
 
 	// Only the reader who resolved sees the toast, beneath the document they resolved it in.
-	let toast = undo && createPortal(
+	// It is mounted only while it shows: the live region that announces it stays in the layer.
+	let toast = notice && createPortal(
 		<div className="plan-comment-toast-region" style={{ left: page.left + page.width / 2 }}>
-			<div className="plan-comment-toast" key={undo} role="status">
-				<CheckIcon aria-hidden="true" size={14} />
-				<span>Comment resolved</span>
-				<button className="plan-comment-toast-undo" onClick={() => reopen(undo)} type="button">
-					Undo
-				</button>
+			<div
+				className="plan-comment-toast"
+				key={notice.id}
+				onBlur={event => {
+					if (!event.currentTarget.contains(event.relatedTarget)) setNoticeHeld(false);
+				}}
+				onFocus={() => setNoticeHeld(true)}
+				onMouseEnter={() => setNoticeHeld(true)}
+				onMouseLeave={() => setNoticeHeld(false)}
+			>
+				{notice.undo && <CheckIcon aria-hidden="true" size={14} />}
+				<span>{notice.text}</span>
+				{notice.undo && (
+					<button
+						aria-keyshortcuts="Control+Z Meta+Z"
+						className="plan-comment-toast-undo"
+						onClick={() => reopen(notice.id)}
+						type="button"
+					>
+						Undo
+					</button>
+				)}
 			</div>
 		</div>,
 		document.body,
