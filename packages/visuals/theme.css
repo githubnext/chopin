@@ -134,6 +134,23 @@
 	--color-warning: oklch(0.59898 0.12586 74.986); /* #ab7302 */
 	--color-warning-wash: oklch(0.95 0.032 75);
 	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
+	/*
+	 * Commented prose: a warm wash from the orange scale. A mark on passages,
+	 * never an action or focus, so it does not compete with petrol. The marker
+	 * roles give a resolved comment its amber disc; green stays for decisions.
+	 */
+	--color-comment-wash: var(--color-orange-2);
+	--color-comment-wash-strong: var(--color-orange-3);
+	--color-comment-underline: var(--color-orange-8);
+	--color-comment-marker: var(--color-orange-3);
+	--color-comment-marker-icon: var(--color-orange-11);
+	--color-comment-marker-ink: var(--color-orange-12);
+	--color-comment-marker-outline: var(--color-orange-8);
+	--color-comment-marker-outline-subtle: color-mix(
+		in oklch,
+		var(--color-orange-8) 35%,
+		transparent
+	);
 	--color-destructive: oklch(0.60513 0.17178 24.175); /* #d54d4c */
 	--color-destructive-hover: oklch(0.56972 0.16045 24.136); /* #c44746 */
 	--color-destructive-active: oklch(0.53376 0.1489 24.091); /* #b34140 */
