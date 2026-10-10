@@ -150,7 +150,10 @@ Planner destination without a mention.
 
 `instruction()` strips the mention before model input. Recent room messages that
 did not address the Planner still enter a bounded backscroll for the next turn.
-An accepted comment also starts an explicit Planner turn after it commits. An MCP
+An accepted comment also starts an explicit Planner turn after it commits. So does
+`implementation:draft` from Build: the server writes the instruction from the
+plan, rechecks write access as for `chat:send`, records only a system notice of
+who asked, and keeps one live draft per document. An MCP
 `invoke_planner` call posts its instruction as the caller's member message and
 runs under the channel's existing Planner owner; only a caller with a live
 browser login can claim an unowned channel.

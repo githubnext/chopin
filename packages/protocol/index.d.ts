@@ -216,6 +216,7 @@ export type Incoming =
 	| import("./chat").Chat.Incoming
 	| import("./comment").Comment.Incoming
 	| import("./conversation-plan").ConversationPlan.Incoming
+	| import("./implementation").Implementation.Incoming
 	| import("./job").Job.Incoming
 	| import("./plan").Plan.Incoming
 	| import("./question").Question.Incoming;
@@ -228,6 +229,7 @@ export type Outgoing =
 	| import("./chat").Chat.Outgoing
 	| import("./comment").Comment.Outgoing
 	| import("./conversation-plan").ConversationPlan.Outgoing
+	| import("./implementation").Implementation.Outgoing
 	| import("./job").Job.Outgoing
 	| import("./plan").Plan.Outgoing
 	| import("./question").Question.Outgoing

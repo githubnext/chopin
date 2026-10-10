@@ -31,6 +31,34 @@ The [implementing-chopin-plans skill](../skills/implementing-chopin-plans/SKILL.
 adds provider-neutral local work practices. The MCP initialization instructions
 and current tool descriptions remain authoritative.
 
+## Drafting tasks from Build
+
+Opening Build sends `implementation:draft` when the document has no tasks, its
+tasks were drafted for an earlier revision, or its last build was returned for
+changes. The browser asks at most once per visit, only for the need its first
+read saw, and never while the Planner is already in a turn; a later document
+change shows **Update tasks** instead.
+
+The server rechecks write access and the room exactly as for a Chat message to
+the Planner, refuses a child document, unresolved decisions or accepted
+comments, and an active implementation, then writes the instruction itself from
+the plan. No member message is posted: Chat records a system line saying who
+asked, as it does for an accepted comment, and the turn runs under the asker's
+login for Planner ownership like any member turn. The notice is persisted
+before the turn starts or queues. A queued draft is not shown in the Chat
+queue.
+
+At most one draft per document is live, whatever revision it was asked for,
+because its instruction reads the latest document. A request while a draft is
+queued or running returns that draft (`existing: true`), so collaborators
+opening Build together start one turn. Requests share Chat's send and queue
+limits, even while the Planner is idle. A reply says `ended` when the turn
+finished before the request was answered. `implementation:drafting`
+broadcasts `queued`, `running` and `ended`; `ended` follows the turn's own
+persistence, so a snapshot read then shows any tasks it saved. Whether tasks
+arrived is the snapshot's answer, not the broadcast's. Draft records are
+in-memory, like the turn they ride.
+
 ## Graph states and counters
 
 Each graph version contains ordered tasks, dependency edges, acceptance
@@ -167,6 +195,8 @@ See [Local agent MCP](local-agent-mcp.md) and
 - Task and verification lifecycle: `apps/server/src/tasks/lifecycle.ts`
 - Plan integration and durable publication: `apps/server/src/tasks/plan-graphs.ts`
 - Hosted Planner graph tools: `apps/server/src/agent/tools.ts`
+- Task draft requests: `apps/server/src/tasks/draft.ts` and `draftTasks` in
+  `apps/server/src/chat/service.ts`
 - Public MCP contract: `apps/server/src/mcp.ts` and
   `apps/server/src/mcp/lifecycle.ts`
 - Wire projection: `packages/protocol/plan.d.ts`

@@ -181,6 +181,7 @@ test("a paired workspace claims a browser build once and reports through run-sco
 	let built = await (await context.call(context.path, review)).json();
 	expect(built.state).toBe("queued");
 	expect((await (await context.call(context.path, review)).json()).id).toBe(built.id);
+	expect((await (await context.call(context.path)).json()).startedBy).toBe("test");
 	expect(await tool(context, connection.token, "wait_for_work")).toEqual({
 		id: built.id,
 		kind: "implementation",

@@ -105,7 +105,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			let { session } = await browser(request, id);
 			connector.track(id);
 			let busy = await options.busy?.(id) ?? [];
-			return options.withPlan(id, plan =>
+			let current = await options.withPlan(id, plan =>
 				exclusive(plan, async () => {
 					let ready = implementationReadiness(plan, plan.revision);
 					let snapshot: ImplementationSnapshot = {
@@ -139,8 +139,11 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							})
 							: { execution: { state: "idle" }, history: [] },
 					};
-					return json(snapshot);
+					return snapshot;
 				}));
+			// Read outside the plan lock; a missing user only loses the attribution.
+			let login = current.build && (await auth.storage.users.get(current.build.user))?.login;
+			return json(login ? { ...current, startedBy: login } : current);
 		}),
 	);
 	router.on(

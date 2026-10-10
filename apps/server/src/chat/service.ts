@@ -97,6 +97,17 @@ export type Waiting = Wire.Waiting & {
 	posted?: boolean;
 	/** MCP caller whose instruction this is; it never claims ownership without their login. */
 	invokedBy?: string;
+	/** The task draft this queued turn carries; it has no message to show in the queue. */
+	draft?: string;
+};
+
+/** A request for implementation tasks, live while its turn is queued or running. */
+export type TaskDraft = {
+	id: string;
+	planRevision: number;
+	state: "queued" | "running";
+	/** The running turn, once it has begun. */
+	turn?: string;
 };
 
 export type ActiveMemberRequest = {
@@ -187,6 +198,8 @@ export type Chat = {
 	 * than losing it.
 	 */
 	backscroll: Said[];
+	/** The document's live task draft; never persisted, like the turn it rides. */
+	draft?: TaskDraft;
 };
 
 export function create(): Chat {
@@ -409,7 +422,7 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
  * None of it belongs in the wire projection.
  */
 function visible(chat: Chat): Wire.Waiting[] {
-	return chat.waiting.map(({ handle, id, text, references }) => ({
+	return chat.waiting.filter(item => !item.draft).map(({ handle, id, text, references }) => ({
 		handle,
 		id,
 		text,
@@ -482,6 +495,8 @@ export type Room = {
 	}) => Promise<ResearchWorkspaceRequest>;
 	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
 	hold?: () => () => void;
+	/** The task draft the turn being started carries. */
+	draft?: string;
 };
 
 type Retained = {
@@ -833,6 +848,136 @@ export function instruct(
 	};
 	let announced = instructionNotice(context, said);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
+}
+
+function drafting(
+	server: Server<SocketData>,
+	room: string,
+	draft: TaskDraft,
+	state: "queued" | "running" | "ended",
+): void {
+	broadcast(server, room, {
+		kind: "implementation:drafting",
+		ts: 0,
+		id: draft.id,
+		planRevision: draft.planRevision,
+		state,
+	});
+}
+
+/**
+ * The draft that is still queued or running, if one is.
+ *
+ * A record whose queue entry or turn has gone without reaching the end of a
+ * turn (a closed room, a queue cleared after a failed save) is dropped here
+ * rather than tracked down every path that can discard it.
+ */
+function liveDraft(chat: Chat): TaskDraft | undefined {
+	let draft = chat.draft;
+	if (!draft) return;
+	let alive = draft.state === "queued"
+		? chat.waiting.some(item => item.draft === draft.id)
+		: chat.busy && (!draft.turn || chat.turn?.id === draft.turn);
+	if (alive) return draft;
+	chat.draft = undefined;
+}
+
+export type TaskDraftResult =
+	| {
+		ok: true;
+		draft: TaskDraft;
+		/** As of the reply: a turn can finish before its request is answered. */
+		state: "queued" | "running" | "ended";
+		existing: boolean;
+	}
+	| { ok: false; reason: string };
+
+/**
+ * Ask the Planner for implementation tasks without a member message.
+ *
+ * Like an accepted comment, this is an instruction rather than something said:
+ * the transcript gets a system line saying who asked, and the instruction goes
+ * to the model alone. One draft per document is live, whatever revision it was
+ * asked for, since its instruction reads the latest document; asking again
+ * returns it, so collaborators opening Build together start one turn. It takes
+ * the same place in line, and the same limits, as a Chat message.
+ */
+export function draftTasks(
+	context: Room,
+	handle: string,
+	planRevision: number,
+	text: string,
+	said: string,
+): Promise<TaskDraftResult> {
+	let { chat } = context;
+	if (chat.pendingSends >= MAX_PENDING_SENDS) {
+		return Promise.resolve({ ok: false, reason: "the Planner queue is full" });
+	}
+	chat.pendingSends++;
+	let post = () => postDraft(context, handle, planRevision, text, said);
+	let accepted = chat.sending.then(post, post);
+	let completed = accepted.finally(() => chat.pendingSends--);
+	chat.sending = completed.then(() => {}, () => {});
+	return completed;
+}
+
+async function postDraft(
+	context: Room,
+	handle: string,
+	planRevision: number,
+	text: string,
+	said: string,
+): Promise<TaskDraftResult> {
+	let { chat, config, room, server } = context;
+	if (!config.agent) return { ok: false, reason: "the Planner is not running" };
+	if (chat.closed) return { ok: false, reason: "chat is closed" };
+	let existing = liveDraft(chat);
+	if (existing) return { ok: true, draft: existing, state: existing.state, existing: true };
+	// The draft waits in the queue even when the Planner is idle, so it counts against it.
+	if (chat.waiting.length >= MAX_QUEUE) return { ok: false, reason: "the Planner queue is full" };
+	let draft: TaskDraft = { id: ulid(), planRevision, state: "queued" };
+	chat.draft = draft;
+	let waiting: Waiting = {
+		id: draft.id,
+		handle,
+		text,
+		draft: draft.id,
+		sessionId: context.claimantSessionId,
+	};
+	// Held in the queue while the notice saves, so the draft stays live throughout.
+	chat.waiting.push(waiting);
+	let abandon = (reason: string): TaskDraftResult => {
+		chat.waiting = chat.waiting.filter(item => item !== waiting);
+		if (chat.draft === draft) chat.draft = undefined;
+		return { ok: false, reason };
+	};
+	try {
+		await instructionNotice(context, said);
+	} catch {
+		return abandon("could not save the request");
+	}
+	if (chat.closed) return abandon("chat is closed");
+	let answer = (): TaskDraftResult => ({
+		ok: true,
+		draft,
+		state: liveDraft(chat) === draft ? draft.state : "ended",
+		existing: false,
+	});
+	// A turn that ended while the notice saved may already have started, or finished, this one.
+	if (!chat.waiting.includes(waiting)) return answer();
+	if (chat.busy) {
+		drafting(server, room, draft, "queued");
+		return answer();
+	}
+	chat.waiting = chat.waiting.filter(item => item !== waiting);
+	startRun(
+		{ ...context, draft: draft.id },
+		handle,
+		text,
+		undefined,
+		context.claimantSessionId,
+	);
+	return answer();
 }
 
 let jobState = safeProjection(state);
@@ -1570,6 +1715,13 @@ async function run(
 		chat.acting = thread;
 		(jobTurn ? jobState : state)(chat, server, room);
 	} else chat.acting = thread;
+	// Read directly: the drain has already taken this draft's queue entry.
+	let draft = context.draft && chat.draft?.id === context.draft ? chat.draft : undefined;
+	if (draft) {
+		draft.state = "running";
+		draft.turn = chat.turn?.id;
+		drafting(server, room, draft, "running");
+	}
 
 	chat.activeRequest = member && chat.turn
 		? {
@@ -1759,6 +1911,11 @@ async function run(
 				Service.release(plan, server, room);
 			}, LINGER_MS);
 		}
+		// After the turn's own persistence, so a read prompted by `ended` sees its tasks.
+		if (draft) {
+			if (chat.draft === draft) chat.draft = undefined;
+			drafting(server, room, draft, "ended");
+		}
 	}
 
 	if (persistenceError) {
@@ -1795,7 +1952,7 @@ async function run(
 		let entry = next.message ? chat.entries.find(item => item.id === nextId) : undefined;
 		if (entry && !next.posted) announce(server, room, entry);
 		await run(
-			{ ...context, invokedBy: next.invokedBy },
+			{ ...context, invokedBy: next.invokedBy, draft: next.draft },
 			next.handle,
 			next.text,
 			next.thread,
