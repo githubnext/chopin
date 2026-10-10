@@ -107,6 +107,7 @@ export function presentWorkspace(
 	return {
 		documentView,
 		documentVisible,
+		documentExpanded: mode === "split" && !chatVisible,
 		chatVisible,
 		separatorVisible: mode === "split" && chatVisible,
 	};
