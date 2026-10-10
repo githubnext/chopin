@@ -26,4 +26,15 @@ test("a comment sent to Chopin with no Planner running is saved and says Chopin 
 	await expect(box).toBeChecked();
 	await reply.press("Backspace");
 	await expect(box).not.toBeChecked();
+
+	// A mention that ends the text still addresses Chopin when Enter sends it.
+	await reply.fill("");
+	await reply.pressSequentially("shorter please @chopin");
+	await expect(box).not.toBeChecked();
+	await reply.press("Enter");
+	await expect(thread.locator(".plan-comment-mention")).toHaveCount(2);
+	await expect(thread.getByText("shorter please", { exact: true })).toHaveCount(0);
+	await expect(thread.locator(".plan-comment-note-body").last()).toHaveText(
+		"@Chopin shorter please",
+	);
 });
