@@ -18,12 +18,14 @@ function sourceFiles(directory: string, found: string[] = []): string[] {
 	return found;
 }
 
-test("the sidebar and Chat share one panel-close asset", () => {
+test("the sidebar owns the panel-close asset and the workspace uses line icons", () => {
 	let sidebar = readFileSync(join(root, "project-sidebar.tsx"), "utf8");
 	let workspace = readFileSync(join(root, "workspace.tsx"), "utf8");
 
 	expect(sidebar).toContain("assets/icons/panel-close.svg");
-	expect(workspace).toContain("assets/icons/panel-close.svg");
+	expect(workspace).not.toContain("assets/icons/panel-close.svg");
+	expect(workspace).toContain("ExpandIcon");
+	expect(workspace).toContain("CollapseIcon");
 	expect(existsSync(join(root, "assets/figma/navigation/collapse.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/icons/chat-close.svg"))).toBe(false);
 });

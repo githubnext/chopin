@@ -2,67 +2,38 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ChatToggle } from "./workspace";
+import { SurfaceToggle } from "./workspace";
 
-test("chat state swaps use purposeful icon feedback", () => {
-	let markup = renderToStaticMarkup(
-		createElement(ChatToggle, {
-			activity: { busy: false, unread: 0 },
-			controls: "chat",
-			onToggle: () => {},
-			open: false,
-		}),
-	);
+let render = (expanded: boolean, activity = { busy: false, unread: 0 }) =>
+	renderToStaticMarkup(createElement(SurfaceToggle, {
+		activity,
+		controls: "chat",
+		expanded,
+		onToggle: () => {},
+	}));
 
+test("the expand control is an icon button that names the document", () => {
+	let markup = render(false);
+
+	expect(markup).toContain('aria-label="Expand document"');
+	expect(markup).toContain('data-tooltip="Expand document"');
+	expect(markup).toContain('aria-controls="chat"');
+	expect(markup).not.toContain("aria-expanded");
+	expect(markup).toContain("btn-icon");
 	expect(markup).toContain('data-motion-feedback="icon"');
-	expect(markup).toContain("motion-feedback");
+	expect(markup).not.toContain("panel-close.svg");
+	expect(markup).not.toContain(">Chat<");
 });
 
-test("the open chat header swaps its glyph without display changes", () => {
-	let markup = renderToStaticMarkup(
-		createElement(ChatToggle, {
-			activity: { busy: false, unread: 0 },
-			controls: "chat",
-			onToggle: () => {},
-			open: true,
-			swapOnHover: true,
-		}),
-	);
+test("the restore control shows a Chat label and reports Planner activity", () => {
+	let busy = render(true, { busy: true, unread: 0 });
+	let unread = render(true, { busy: false, unread: 2 });
 
-	expect(markup.match(/class="chat-toggle-icon/g)).toHaveLength(2);
-	expect(markup).toContain('aria-label="Hide chat"');
-	expect(markup).toContain("chat-toggle-icon-sidebar");
-	expect(markup).toContain("rotate-180");
-	expect(markup).not.toContain("group-hover:hidden");
-	expect(markup).not.toContain("group-hover:block");
-});
-
-test("the open chat control has a distinct close action", () => {
-	let markup = renderToStaticMarkup(
-		createElement(ChatToggle, {
-			activity: { busy: false, unread: 0 },
-			controls: "chat",
-			onToggle: () => {},
-			open: true,
-		}),
-	);
-
-	expect(markup).toContain('aria-label="Hide chat"');
-	expect(markup).toContain('data-tooltip="Hide chat"');
-	expect(markup).toContain('data-tooltip-verbatim=""');
-	expect(markup).toContain("panel-close.svg");
-});
-
-test("live busy feedback stays immediate", () => {
-	let markup = renderToStaticMarkup(
-		createElement(ChatToggle, {
-			activity: { busy: true, unread: 0 },
-			controls: "chat",
-			onToggle: () => {},
-			open: false,
-		}),
-	);
-
-	expect(markup).toContain('aria-label="Show chat, Planner working"');
-	expect(markup).not.toContain('data-motion-feedback="count"');
+	expect(busy).toContain('aria-label="Show chat, Planner working"');
+	expect(busy).toContain('aria-expanded="false"');
+	expect(busy).toContain(">Chat</span>");
+	expect(busy).not.toContain('data-motion-feedback="count"');
+	expect(unread).toContain('aria-label="Show chat, 2 unread"');
+	expect(unread).toContain('data-motion-feedback="count"');
+	expect(unread.match(/<span aria-hidden="true"/g)).toHaveLength(1);
 });

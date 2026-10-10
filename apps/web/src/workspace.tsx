@@ -4,7 +4,7 @@ import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from 
 import { Count } from "@chopin/editor/count";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CloseIcon } from "@chopin/icons";
+import { CloseIcon, CollapseIcon, ExpandIcon } from "@chopin/icons";
 
 import {
 	CHAT_CHOICE_STORAGE_KEY,
@@ -16,8 +16,6 @@ import {
 	workspaceHeadingId,
 	workspaceProfile,
 } from "./workspace-model";
-import chatCloseIcon from "./assets/icons/panel-close.svg";
-import chatIcon from "./assets/icons/chat.svg";
 import { clampPane, ResizeHandle, usePaneWidth } from "./resizable-pane";
 import { workspaceSizing } from "./workspace-sizing";
 import "./workspace-sizing.css";
@@ -128,6 +126,8 @@ export type WorkspaceProps = {
 	controls: ReactNode;
 	/** Connection and document status, right-aligned in the document header. */
 	status?: ReactNode;
+	/** People present in the room, shown after the status in the document tab row. */
+	presence?: ReactNode;
 	ids: WorkspaceIds;
 	mode: WorkspaceMode;
 	state: WorkspaceState;
@@ -142,23 +142,14 @@ export type WorkspaceProps = {
 	presentation: WorkspacePresentation;
 };
 
-export function ChatToggle(
-	{
-		activity,
-		buttonRef,
-		className,
-		controls,
-		onToggle,
-		open,
-		swapOnHover = false,
-	}: {
+/** One button that trades the Chat column for a full-width document and back. */
+export function SurfaceToggle(
+	{ activity, buttonRef, controls, expanded, onToggle }: {
 		activity: WorkspaceProps["chatActivity"];
 		buttonRef?: RefObject<HTMLButtonElement | null>;
-		className?: string;
 		controls: string;
+		expanded: boolean;
 		onToggle: () => void;
-		open: boolean;
-		swapOnHover?: boolean;
 	},
 ) {
 	let status = activity.busy
@@ -167,55 +158,37 @@ export function ChatToggle(
 		? `${activity.unread} unread`
 		: undefined;
 	let feedback = motionContract("feedback").className;
+	let unread = !activity.busy && activity.unread > 0;
 	return (
 		<button
 			aria-controls={controls}
-			aria-description={open ? status : undefined}
-			aria-expanded={open}
-			aria-label={open ? "Hide chat" : `Show chat${status ? `, ${status}` : ""}`}
-			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
-			data-tooltip={open ? "Hide chat" : "Show chat"}
+			aria-expanded={expanded ? false : undefined}
+			aria-label={expanded ? `Show chat${status ? `, ${status}` : ""}` : "Expand document"}
+			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${
+				expanded ? "surface-toggle-restore" : ""
+			}`}
+			data-activity={activity.busy ? "busy" : unread ? "unread" : undefined}
+			data-tooltip={expanded ? "Show chat" : "Expand document"}
 			data-tooltip-shortcut={shortcutLabel("toggle-chat", currentShortcutPlatform())}
-			data-tooltip-verbatim={open ? "" : undefined}
-			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
 			ref={buttonRef}
 			type="button"
 		>
-			{swapOnHover
-				? (
-					<span
-						className={`${feedback} grid size-(--icon-size-default)`}
-						data-motion-feedback="icon"
-					>
-						<img
-							alt=""
-							className="chat-toggle-icon chat-toggle-icon-default col-start-1 row-start-1 size-(--icon-size-default)"
-							src={chatIcon}
-						/>
-						<img
-							alt=""
-							className="chat-toggle-icon chat-toggle-icon-sidebar col-start-1 row-start-1 size-(--icon-size-default) rotate-180"
-							src={chatCloseIcon}
-						/>
-					</span>
-				)
-				: (
-					<img
-						alt=""
-						className={`${feedback} size-(--icon-size-default)`}
-						data-motion-feedback="icon"
-						key={open ? "open" : "closed"}
-						src={open ? chatCloseIcon : chatIcon}
-					/>
-				)}
-			{status && !open && (
+			<span
+				className={`${feedback} grid size-(--icon-size-default)`}
+				data-motion-feedback="icon"
+				key={expanded ? "restore" : "expand"}
+			>
+				{expanded ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}
+			</span>
+			{expanded && <span>Chat</span>}
+			{expanded && status && (
 				<span
 					aria-hidden="true"
 					className={`absolute right-1 top-1 size-1.5 rounded-full bg-brand ${
-						!activity.busy && activity.unread > 0 ? feedback : ""
+						unread ? feedback : ""
 					}`}
-					data-motion-feedback={!activity.busy && activity.unread > 0 ? "count" : undefined}
+					data-motion-feedback={unread ? "count" : undefined}
 				/>
 			)}
 		</button>
@@ -264,6 +237,7 @@ export function Workspace(
 		onDesktopChatOpen,
 		onDestination,
 		plan,
+		presence,
 		presentation: workspacePresentation,
 		state,
 		status,
@@ -393,13 +367,21 @@ export function Workspace(
 	return (
 		<div
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
+			data-document-expanded={presentation.documentExpanded || undefined}
 			data-workspace-mode={mode}
 			data-workspace-room={identity}
 			data-workspace-surface={profile.surface}
 			data-workspace-travel={travel.back ? "back" : undefined}
 			ref={root}
+			style={mode === "split" ? { "--chat-width": `${chatWidth}px` } as CSSProperties : undefined}
 		>
-			{header}
+			<div
+				aria-hidden={presentation.documentExpanded || undefined}
+				className="workspace-header-slot shrink-0"
+				inert={presentation.documentExpanded}
+			>
+				{header}
+			</div>
 
 			{mode !== "split" && (
 				<nav
@@ -472,7 +454,7 @@ export function Workspace(
 				ref={frame}
 				className={`workspace-frame relative flex min-h-0 flex-1 ${
 					mode === "split"
-						? "mx-3 mb-3 overflow-hidden rounded-panel bg-page shadow-raised ring-hairline"
+						? "mx-3 mb-3"
 						: "m-2 overflow-hidden rounded-panel bg-page shadow-resting ring-hairline"
 				}`}
 				data-paper-obscured={paperObscured || undefined}
@@ -480,9 +462,7 @@ export function Workspace(
 			>
 				<main
 					aria-hidden={!presentation.documentVisible || undefined}
-					className={`workspace-document-panel relative min-w-0 w-full flex-1 ${
-						mode === "split" ? "hairline-l hairline-b" : ""
-					}`}
+					className="workspace-document-panel relative min-w-0 w-full flex-1"
 					hidden={documentPresence.phase === "closed"}
 					inert={!presentation.documentVisible}
 				>
@@ -502,20 +482,21 @@ export function Workspace(
 									}
 								}}
 							>
-								{chat && !presentation.chatVisible && (
-									<ChatToggle
-										activity={chatActivity}
-										buttonRef={edgeTab}
-										className="mr-1 shrink-0"
-										controls={ids.pane.chat}
-										onToggle={showDesktopChat}
-										open={false}
-										swapOnHover
-									/>
+								{chat && (
+									<span className="workspace-surface-toggle-slot flex shrink-0 items-center">
+										<SurfaceToggle
+											activity={chatActivity}
+											buttonRef={edgeTab}
+											controls={ids.pane.chat}
+											expanded={presentation.documentExpanded}
+											onToggle={presentation.documentExpanded ? showDesktopChat : dismissChat}
+										/>
+									</span>
 								)}
 								{controls}
 								<div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
 									{status}
+									{presence}
 									{childPresentation && (
 										<div className="flex shrink-0 items-center">
 											<button
@@ -593,8 +574,8 @@ export function Workspace(
 					<aside
 						aria-hidden={chatInactive || undefined}
 						aria-labelledby={ids.heading.chat}
-						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
-							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
+						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden ${
+							mode === "split" ? "" : "bg-chat-pane"
 						}`}
 						data-pane-moving={chatTrack.moving || undefined}
 						hidden={chatPresence.phase === "closed"}
@@ -608,58 +589,22 @@ export function Workspace(
 							}
 						}}
 						onTransitionEnd={chatTrack.onTransitionEnd}
-						style={mode === "split"
-							? { "--chat-width": `${chatWidth}px` } as CSSProperties
-							: { width: "100%" }}
+						style={mode === "split" ? undefined : { width: "100%" }}
 					>
-						{mode === "split"
-							? (
-								<div
-									className="chat-header panel-header flex shrink-0 items-center gap-2 px-(--panel-header-padding-inline) hairline-b"
-									data-chat-header
-								>
-									{presentation.separatorVisible && (
-										<ResizeHandle
-											label="Resize chat"
-											max={maximum}
-											min={CHAT_PANE.min}
-											onResize={resizeChat}
-											side="right"
-											width={chatWidth}
-										/>
-									)}
-									<span
-										aria-hidden="true"
-										className="relative grid size-(--icon-size-default) shrink-0"
-										data-chat-identity
-									>
-										<img alt="" className="size-(--icon-size-default)" src={chatIcon} />
-										{(chatActivity.busy || chatActivity.unread > 0) && (
-											<span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-brand" />
-										)}
-									</span>
-									<h2
-										className="text-sm font-medium text-text-tertiary"
-										id={ids.heading.chat}
-										tabIndex={-1}
-									>
-										Chat
-									</h2>
-									<ChatToggle
-										activity={chatActivity}
-										className="chat-header-control -mr-(--panel-header-control-offset) ml-auto"
-										controls={ids.pane.chat}
-										onToggle={dismissChat}
-										open
-									/>
-								</div>
-							)
-							: (
-								<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
-									Chat
-								</h2>
+						<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
+							Chat
+						</h2>
+						<div className="workspace-chat-body relative min-h-0 flex-1">
+							{presentation.separatorVisible && (
+								<ResizeHandle
+									label="Resize chat"
+									max={maximum}
+									min={CHAT_PANE.min}
+									onResize={resizeChat}
+									side="right"
+									width={chatWidth}
+								/>
 							)}
-						<div className="min-h-0 flex-1">
 							{chat}
 						</div>
 					</aside>
