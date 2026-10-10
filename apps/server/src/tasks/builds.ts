@@ -6,6 +6,7 @@ import {
 	historyFor,
 	implementationLifecycle,
 	progressFor,
+	resumeLiveRun,
 	transition,
 } from "./lifecycle";
 import { announceImplementation } from "./notifications";
@@ -13,8 +14,8 @@ import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import { broadcast } from "../wire";
 import type { Plan } from "../plan/service";
 import type { Connection } from "../experiments/connections";
-import type { ProgressEvent } from "./lifecycle";
-import type { Run } from "./graphs";
+import type { Lifecycle, ProgressEvent } from "./lifecycle";
+import type { Graph, Run } from "./graphs";
 import type { BuildRequest, CheckoutContext, LiveSnapshot } from "@chopin/protocol/implementation";
 
 export let checkoutSchema = z.object({
@@ -73,7 +74,8 @@ let liveSchema = z.object({
 	checkout: checkoutSchema,
 	baseRevision: z.number().int().nonnegative(),
 	baseSource: z.string(),
-	pullRequests: z.array(z.string().url()).min(1).max(100),
+	/** Empty only when a first build stopped on a blocker before opening any pull request. */
+	pullRequests: z.array(z.string().url()).max(100),
 	/** Commits rebuilds landed on the live pull requests, newest last. */
 	commits: z.array(
 		z.object({
@@ -86,7 +88,10 @@ let liveSchema = z.object({
 	).max(200).optional(),
 	/** Tasks a first build stopped short of; the next rebuild finishes them. */
 	outstanding: z.array(z.string().min(1).max(128)).min(1).max(100).optional(),
-	/** Rebuilds that landed without a commit or task, newest last, so they still leave a trace. */
+	/**
+	 * Syncs that needed no code, newest last, so they still leave a trace: a rebuild that landed
+	 * without a commit or task, or a declined gate check under a fresh id.
+	 */
 	noChange: z.array(
 		z.object({
 			buildId: z.string().uuid(),
@@ -306,6 +311,47 @@ export async function queueRebuild(
 	});
 }
 
+/**
+ * Record that an edit needed no code: the live base advances to the checked source with a
+ * no-change entry, so the document reads as in sync without a rebuild.
+ */
+export async function settleLive(
+	plan: Plan,
+	checked: { baseSource: string; revision: number; source: string; summary: string },
+): Promise<boolean> {
+	await drain(plan);
+	return exclusive(plan, async () => {
+		let live = plan.live;
+		if (
+			!live || live.baseSource !== checked.baseSource || live.outstanding?.length
+			|| buildActive(plan) || checked.revision > plan.revision
+		) return false;
+		let previous = live;
+		plan.live = {
+			...live,
+			baseRevision: checked.revision,
+			baseSource: checked.source,
+			noChange: [
+				...(live.noChange ?? []),
+				{
+					buildId: crypto.randomUUID(),
+					revision: checked.revision,
+					summary: checked.summary,
+					at: new Date().toISOString(),
+				},
+			].slice(-50),
+		};
+		try {
+			await persistExclusive(plan, true);
+		} catch (error) {
+			plan.live = previous;
+			throw error;
+		}
+		announceImplementation(plan);
+		return true;
+	});
+}
+
 /** Persist pickup before the companion receives permission to spawn a process. */
 export function pickBuild(
 	plan: Plan,
@@ -409,7 +455,11 @@ function liveFromStopped(plan: Plan, build: BuildRequest): void {
 		),
 	];
 	let outstanding = progress.tasks.flatMap(task => task.state === "completed" ? [] : [task.id]);
-	if (pullRequests.length === 0 || outstanding.length === 0) return;
+	// With no pull request yet, only a blocker makes it live, so an edit that answers it retries.
+	if (
+		outstanding.length === 0
+		|| pullRequests.length === 0 && !progress.tasks.some(task => task.state === "blocked")
+	) return;
 	let result = transition({
 		graph: plan.graph,
 		execution: run,
@@ -437,6 +487,73 @@ function liveFromStopped(plan: Plan, build: BuildRequest): void {
 		pullRequests,
 		outstanding,
 	};
+}
+
+/**
+ * Apply a rebuild's outcomes for the first build's outstanding tasks to that archived run, in graph
+ * order. A done task is started, given its pull request and completed; a blocked one records its
+ * blocker. Done and dropped tasks leave the outstanding list; an outcome the lifecycle refuses, such
+ * as a done task whose dependency is still unfinished, leaves its task outstanding.
+ */
+function resumeOutstanding(
+	graph: Graph,
+	start: Lifecycle,
+	live: LiveBuild,
+	buildId: string,
+	report: RebuildReport,
+): { lifecycle: Lifecycle; outstanding: string[] } | undefined {
+	let outcomes = report.outstanding ?? [];
+	let index = start.history.findIndex(item => item.run.id === live.buildId);
+	let archived = start.history[index];
+	let version = archived && graph.versions.find(item => item.number === archived.run.graphVersion);
+	if (!live.outstanding || !outcomes.length || !version) return;
+	let lifecycle = start;
+	let remaining = new Set(live.outstanding);
+	for (let task of version.definition.tasks) {
+		let outcome = outcomes.find(item => item.taskId === task.id);
+		if (!outcome || !remaining.has(task.id)) continue;
+		if (outcome.outcome === "dropped") {
+			remaining.delete(task.id);
+			continue;
+		}
+		let item = historyFor(graph, lifecycle)[index]?.progress.tasks.find(item =>
+			item.id === task.id
+		);
+		if (!item || item.state === "completed") continue;
+		let key = `${buildId}:${task.id}`;
+		let events: ProgressEvent[] = item.state === "blocked"
+			? [{ kind: "start", taskId: task.id, idempotencyKey: `${key}:start` }]
+			: [];
+		if (outcome.outcome === "blocked") {
+			events.push({
+				kind: "block",
+				taskId: task.id,
+				reason: outcome.blocker,
+				idempotencyKey: `${key}:block`,
+			});
+		} else {
+			let url = outcome.pullRequest
+				?? (item.state !== "queued" ? item.pullRequest?.url : undefined);
+			if (!url) continue;
+			if (item.state === "queued") {
+				events.push({ kind: "start", taskId: task.id, idempotencyKey: `${key}:start` });
+			}
+			events.push(
+				{ kind: "report_pr", taskId: task.id, url, state: "open", idempotencyKey: `${key}:pr` },
+				{
+					kind: "complete",
+					taskId: task.id,
+					summary: report.summary,
+					idempotencyKey: `${key}:done`,
+				},
+			);
+		}
+		let next = resumeLiveRun(graph, lifecycle, live.buildId, events);
+		if (!next) continue;
+		lifecycle = next;
+		if (outcome.outcome === "done") remaining.delete(task.id);
+	}
+	return { lifecycle, outstanding: [...remaining] };
 }
 
 /** The tasks a first build left unfinished, with their blockers and any pull request. */
@@ -482,6 +599,23 @@ export let rebuildReportSchema = z.object({
 			pullRequest: z.string().url(),
 		}).strict(),
 	).max(20),
+	/** What became of each outstanding task; a task left out stays outstanding. */
+	outstanding: z.array(
+		z.discriminatedUnion("outcome", [
+			z.object({
+				taskId: z.string().min(1).max(128),
+				outcome: z.literal("done"),
+				/** Required when the task had no pull request. */
+				pullRequest: z.string().url().optional(),
+			}).strict(),
+			z.object({
+				taskId: z.string().min(1).max(128),
+				outcome: z.literal("blocked"),
+				blocker: z.string().trim().min(1).max(2000),
+			}).strict(),
+			z.object({ taskId: z.string().min(1).max(128), outcome: z.literal("dropped") }).strict(),
+		]),
+	).max(100).optional(),
 }).strict();
 export type RebuildReport = z.infer<typeof rebuildReportSchema>;
 
@@ -552,8 +686,10 @@ export function reportRebuild(
 		let openings = outstandingTasks(plan).filter(task => !task.pullRequest).length;
 		let opened = [
 			...new Set(
-				[...report.commits, ...report.tasks].map(item => item.pullRequest).filter(url =>
-					!live.pullRequests.includes(url)
+				[...report.commits, ...report.tasks, ...report.outstanding ?? []].flatMap(item =>
+					"pullRequest" in item && item.pullRequest && !live.pullRequests.includes(item.pullRequest)
+						? [item.pullRequest]
+						: []
 				),
 			),
 		];
@@ -564,7 +700,8 @@ export function reportRebuild(
 		) return { kind: "refused", reason: "pull-request" };
 		let at = new Date().toISOString();
 		let graph = plan.graph && structuredClone(plan.graph);
-		let lifecycle = structuredClone(plan.lifecycle);
+		let resumed = graph && resumeOutstanding(graph, plan.lifecycle, live, build.id, report);
+		let lifecycle = resumed?.lifecycle ?? structuredClone(plan.lifecycle);
 		let latest = graph?.versions.at(-1);
 		// A draft the Planner started since the build keeps its place; only the commits are recorded.
 		if (graph && latest && report.tasks.length > 0 && latest.state === "approved") {
@@ -629,6 +766,7 @@ export function reportRebuild(
 			lifecycle.history.push({ run, events, live: true });
 		}
 		let { target: _target, outstanding: _outstanding, ...base } = live;
+		let outstanding = resumed?.outstanding ?? live.outstanding ?? [];
 		let previous = {
 			graph: plan.graph,
 			lifecycle: plan.lifecycle,
@@ -642,11 +780,13 @@ export function reportRebuild(
 			baseRevision: target.revision,
 			baseSource: target.source,
 			pullRequests: [...live.pullRequests, ...opened],
+			...(outstanding.length ? { outstanding } : {}),
 			commits: [
 				...(live.commits ?? []),
 				...report.commits.map(commit => ({ ...commit, revision: target.revision, at })),
 			].slice(-200),
 			...(report.commits.length === 0 && report.tasks.length === 0
+					&& !report.outstanding?.some(item => item.outcome !== "dropped")
 				? {
 					noChange: [
 						...(live.noChange ?? []),

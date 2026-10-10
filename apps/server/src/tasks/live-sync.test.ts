@@ -1,7 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
 
 import { LiveSyncCoordinator } from "./live-sync";
-import { reportBuild, reportRebuild } from "./builds";
+import { liveSnapshot, reportBuild, reportRebuild } from "./builds";
 import { implementationStatus } from "./notifications";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { close, implementationActive, open, rewrite, source } from "../plan/service";
@@ -201,13 +201,27 @@ describe("living-document sync", () => {
 		await close(plan);
 	});
 
-	it("queues nothing when the classifier declines the delta", async () => {
+	it("settles in sync without a rebuild when the classifier declines the delta", async () => {
 		let { plan, queued, deltas, edit, advance } = await harness({ classify: () => false });
 		edit();
 		await advance(45_000);
 		expect(deltas).toHaveLength(1);
 		expect(queued).toEqual([]);
 		expect(plan.builds).toHaveLength(1);
+		expect(plan.live?.baseSource).toBe(source(plan));
+		expect(plan.live?.baseRevision).toBe(plan.revision);
+		expect(plan.live?.noChange).toEqual([expect.objectContaining({ revision: plan.revision })]);
+		expect(liveSnapshot(plan, [])?.outOfSync).toBe(false);
+		await close(plan);
+	});
+
+	it("rebuilds outstanding tasks without asking the classifier", async () => {
+		let { plan, queued, deltas, edit, advance } = await harness({ classify: () => false });
+		plan.live = { ...plan.live!, outstanding: ["model"] };
+		edit();
+		await advance(45_000);
+		expect(deltas).toEqual([]);
+		expect(queued).toHaveLength(1);
 		await close(plan);
 	});
 

@@ -59,6 +59,7 @@ export let rebuildPrompt = [
 	"Never open any other pull request. Never merge.",
 	"Code that fits no existing pull request goes on the most closely related one.",
 	"If the change needs no code and nothing is outstanding, make no commits.",
-	"Finally call report_rebuild with a summary, every commit you pushed, and one task per change",
-	"or finished outstanding task.",
+	"Finally call report_rebuild with a summary, every commit you pushed, and one task per new change.",
+	"Give report_rebuild an outstanding entry for every outstanding task: outcome done with its pull",
+	"request, blocked with the blocker that still stops it, or dropped if the document no longer needs it.",
 ].join("\n");

@@ -822,6 +822,37 @@ export function progressFor(
 }
 
 /** Project archived event logs against the graph versions they implemented. */
+/**
+ * Add task events to a live run that stopped short and was archived by request_revision. They go
+ * before its revision, which is dropped once every task completes so the run reads as implemented.
+ * Returns undefined when any event is refused or reuses an idempotency key.
+ */
+export function resumeLiveRun(
+	graph: Graph,
+	lifecycle: Lifecycle,
+	runId: string,
+	added: ProgressEvent[],
+): Lifecycle | undefined {
+	let index = lifecycle.history.findIndex(item => item.run.id === runId);
+	let archived = lifecycle.history[index];
+	let revision = archived?.events.at(-1);
+	let version = archived && versionFor(graph, archived.run);
+	if (!archived?.live || !version || revision?.kind !== "request_revision") return;
+	let keys = new Set(
+		[...(lifecycle.events ?? []), ...lifecycle.history.flatMap(item => item.events)].map(event =>
+			event.idempotencyKey
+		),
+	);
+	if (added.some(event => keys.has(event.idempotencyKey))) return;
+	let events = [...archived.events.slice(0, -1), ...copy(added)];
+	let folded = foldRun(version.definition.tasks, archived.run, events, true);
+	if (folded.kind === "refused" || folded.state.phase === "revision_requested") return;
+	if (folded.state.phase === "active") events.push(revision);
+	let next = copy(lifecycle);
+	next.history[index] = { ...copy(archived), events };
+	return next;
+}
+
 export function historyFor(graph: Graph, lifecycle: Lifecycle): HistoricalRun[] {
 	return copy(projectHistory(graph, lifecycle.history) ?? []);
 }

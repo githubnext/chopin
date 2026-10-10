@@ -7,6 +7,7 @@ import {
 	reportImplementationLifecycle,
 } from "./plan-graphs";
 import { liveSnapshot, readRebuild, reportBuild, reportRebuild } from "./builds";
+import { historyFor } from "./lifecycle";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { claimStored, close, implementationActive, open, source } from "../plan/service";
 
@@ -895,11 +896,21 @@ describe("living-document builds", () => {
 					sha: "c".repeat(40),
 					message: "Store graphs in PostgreSQL",
 				}],
-				tasks: [{ ...task, pullRequest: "https://github.com/octo-org/score/pull/49" }],
+				tasks: [],
+				outstanding: [{ taskId: "model", outcome: "done" }],
 			}),
 		).toEqual({ kind: "accepted" });
 		expect(restored.live?.outstanding).toBeUndefined();
 		expect(liveSnapshot(restored, [])?.outstandingTasks).toBeUndefined();
+		// The first build's own task is done, so the Build view shows it completed.
+		expect(liveSnapshot(restored, [])?.noChange).toBeUndefined();
+		let first = historyFor(restored.graph!, restored.lifecycle)[0]!;
+		expect(first.outcome.kind).toBe("implemented");
+		expect(first.progress.tasks[0]).toMatchObject({
+			id: "model",
+			state: "completed",
+			pullRequest: { url: "https://github.com/octo-org/score/pull/49" },
+		});
 		await close(restored);
 	});
 
@@ -947,11 +958,51 @@ describe("living-document builds", () => {
 		await close(plan);
 	});
 
-	it("stays unbuilt when a stopped first build opened no pull request", async () => {
+	it("goes live with no pull request when a first build stops on a blocker", async () => {
 		let { plan } = await builtPlan(true, "unreported");
 		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
-		expect(plan.live).toBeUndefined();
-		expect(plan.execution?.id).toBe(buildId);
+		expect(plan.execution).toBeUndefined();
+		expect(plan.live).toMatchObject({ pullRequests: [], outstanding: ["model"] });
+		expect(liveSnapshot(plan, [])?.outstandingTasks).toEqual([{
+			id: "model",
+			title: "Model graphs",
+			state: "blocked",
+			blocker: "Which storage engine should the graph use?",
+		}]);
+		await close(plan);
+	});
+
+	it("keeps a still-blocked outstanding task outstanding with its new blocker", async () => {
+		let { plan } = await builtPlan(true, "block");
+		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
+		let rebuildId = crypto.randomUUID();
+		plan.builds = [...plan.builds, {
+			...plan.builds[0]!,
+			id: rebuildId,
+			kind: "rebuild",
+			baseRevision: plan.revision,
+			targetRevision: plan.revision,
+			state: "running",
+		}];
+		plan.live = {
+			...plan.live!,
+			target: { buildId: rebuildId, revision: plan.revision, source: source(plan) },
+		};
+		expect(
+			await reportRebuild(plan, rebuildId, {
+				summary: "Still waiting on storage.",
+				commits: [],
+				tasks: [],
+				outstanding: [{ taskId: "model", outcome: "blocked", blocker: "Pick Postgres or SQLite." }],
+			}),
+		).toEqual({ kind: "accepted" });
+		expect(plan.live?.outstanding).toEqual(["model"]);
+		expect(liveSnapshot(plan, [])?.outstandingTasks).toEqual([{
+			id: "model",
+			title: "Model graphs",
+			state: "blocked",
+			blocker: "Pick Postgres or SQLite.",
+		}]);
 		await close(plan);
 	});
 
