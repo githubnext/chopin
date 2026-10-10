@@ -40,6 +40,7 @@ import type {
 	PublishChannelDescriptionResult,
 	PublishInitialResearchReport,
 	PublishInitialResearchReportResult,
+	PutImage,
 	PutUser,
 	RecordNavigationVisit,
 	RenameChannel,
@@ -62,6 +63,7 @@ import type {
 	StartResearchWorkspace,
 	StartResearchWorkspaceResult,
 	StoredChannel,
+	StoredImage,
 	StoredWebSession,
 	SupersedeBackgroundJob,
 	UpdateAgentContext,
@@ -89,6 +91,14 @@ export interface SessionStore {
 		lease: Lease,
 		leaseTtlMs: number,
 	): Promise<{ deleted: number; lease: Lease }>;
+}
+
+export interface ImageStore {
+	/** Idempotent: repeating an upload of the same bytes to a document keeps the first. */
+	put(image: PutImage): Promise<void>;
+	get(channelId: string, sha256: string): Promise<StoredImage | undefined>;
+	/** Every document these bytes were uploaded to, oldest upload first. */
+	channels(sha256: string): Promise<string[]>;
 }
 
 export interface NavigationStore {
@@ -254,6 +264,7 @@ export interface StorageAdapter {
 	readonly leases: LeaseStore;
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
+	readonly images: ImageStore;
 
 	migrate(): Promise<void>;
 	health(): Promise<void>;

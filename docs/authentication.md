@@ -266,6 +266,14 @@ lookup. An MCP-created document for a repository outside the App installation is
 not available through browser routes, WebSockets, or the hosted agent until
 the installation includes that repository. See [Local agent MCP](local-agent-mcp.md).
 
+`upload_image` follows the MCP rule for writing: the bearer needs push or
+administration access to the document's repository. Serving the uploaded image
+at `/images/<sha256>.<ext>` follows the browser rule instead: it needs a browser
+session whose installation-gated repository role includes pull access to a
+document the image was uploaded to. Every other request receives the same `404`
+as an unknown image, so an image URL reveals nothing to someone who cannot read
+the document.
+
 `invoke_planner` is the one MCP tool that starts a hosted agent turn. It never
 lends the caller's bearer to the Planner: the turn runs under the channel's
 existing Planner owner, and a channel without one is claimed only for the

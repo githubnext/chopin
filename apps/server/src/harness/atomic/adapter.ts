@@ -62,9 +62,11 @@ export const ATOMIC_DEFAULT_SYSTEM_PROMPT =
 
 /**
  * What a full Planner's own turns may call besides Chopin's tools: reading the
- * checkout and the web, asking Decisions, running workflows, and Intercom. It
- * cannot edit files or run commands, so implementing the plan goes to another
- * session.
+ * checkout and the web, asking Decisions, running workflows, Intercom, and
+ * codemode. Codemode scripts call only the tools this turn already offers, plus
+ * non-LLM models such as classifiers and image generators, so it adds no file
+ * edits or commands. The Planner cannot edit files or run commands, so
+ * implementing the plan goes to another session.
  */
 export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"read",
@@ -78,6 +80,7 @@ export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"ask_user_question",
 	"workflow",
 	"intercom",
+	"codemode",
 ]);
 
 const GATEWAY_PROVIDER = "vercel-ai-gateway";
@@ -192,7 +195,17 @@ export function atomicTurnExtension(policy: TurnPolicy): ExtensionFactory {
 				};
 			},
 		});
+		let stage = false;
+		atomic.on("session_start", (_event, ctx) => {
+			stage = ctx.subagentPolicy !== undefined;
+		});
 		atomic.on("before_agent_start", event => {
+			if (stage) {
+				atomic.setActiveTools(
+					atomic.getActiveTools().filter(name => name !== ATOMIC_RESULT_TOOL_NAME),
+				);
+				return;
+			}
 			if (!policy.full) atomic.setActiveTools(activeNames(policy));
 			return {
 				systemPrompt: policy.full
@@ -201,6 +214,10 @@ export function atomicTurnExtension(policy: TurnPolicy): ExtensionFactory {
 			};
 		});
 		atomic.on("tool_call", event => {
+			if (stage) {
+				if (event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
+				return { block: true, reason: `${event.toolName} is not available in a workflow stage.` };
+			}
 			if (policy.full && event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
 			if (activeNames(policy).includes(event.toolName)) return;
 			return { block: true, reason: `${event.toolName} is not available in this turn.` };
@@ -512,7 +529,12 @@ export function createAtomicAdapter(
 
 			function observe(session: AgentSession, event: AgentSessionEvent): void {
 				let run = current;
-				if (!run) return;
+				if (!run) {
+					if (event.type === "agent_start" || event.type === "turn_start") {
+						void session.agent.abort();
+					}
+					return;
+				}
 				if (event.type === "turn_start") {
 					let offered = session.agent.state.tools.map(tool => tool.name);
 					if (!full && !sameNames(offered, activeNames(policy))) {
@@ -742,6 +764,7 @@ export function createAtomicAdapter(
 						try {
 							if (!run.stopped) {
 								run.emit({ type: "stream-start", modelId: agent.model?.id });
+								await agent.agent.waitForIdle();
 								await agent.prompt(text, { expandPromptTemplates: !!full });
 							}
 							if (run.failure) throw run.failure;

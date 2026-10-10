@@ -15,6 +15,7 @@ import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
+import { registerImageRoutes } from "./images/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
@@ -1789,6 +1790,7 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 	},
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
+registerImageRoutes(router, hostedAuth);
 
 try {
 	await storage.health();

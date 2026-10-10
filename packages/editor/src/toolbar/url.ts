@@ -15,17 +15,22 @@ export type UrlRules = {
 	/**
 	 * Whether a value with no protocol is acceptable.
 	 *
-	 * True for links, where a repository-relative path is meaningful. False for
-	 * images, which have nothing to resolve against.
+	 * True for links, where a repository-relative path is meaningful. For
+	 * images, which have nothing in the repository to resolve against, the one
+	 * relative form the dialect allows: a path to an image Chopin hosts.
 	 */
-	relative: boolean;
+	relative: boolean | RegExp;
 };
 
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 export function acceptable(value: string, rules: UrlRules): boolean {
 	if (HIDDEN_URL_CHARACTERS.test(value)) return false;
-	if (!SCHEME.test(value)) return rules.relative && !leavesRepository(value);
+	if (!SCHEME.test(value)) {
+		return rules.relative instanceof RegExp
+			? rules.relative.test(value)
+			: rules.relative && !leavesRepository(value);
+	}
 	try {
 		return rules.protocols.includes(new URL(value).protocol);
 	} catch {
@@ -87,7 +92,7 @@ export function checkUrl(entered: string, rules: UrlRules): Checked {
 	let allowed = rules.protocols.map(protocol => protocol === "mailto:" ? protocol : `${protocol}//`)
 		.join(" or ");
 	return {
-		problem: rules.relative
+		problem: rules.relative === true
 			? `Use an ${allowed} link, or a path in this repository.`
 			: `Use an ${allowed} address.`,
 	};

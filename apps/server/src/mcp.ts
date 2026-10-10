@@ -17,16 +17,20 @@ import {
 	REPOSITORY_PATH_PATTERN,
 } from "./mcp/create";
 import { prepareUpdate } from "./mcp/update";
+import { MAX_IMAGE_DATA_LENGTH, MAX_IMAGE_REQUEST_BYTES, prepareImage } from "./mcp/image";
+import { IMAGE_TYPES } from "./images/format";
 import { isLifecycleTool, LIFECYCLE_TOOLS, lifecycleCall } from "./mcp/lifecycle";
 import { normalizedTitle } from "./channels/title";
 
 import type { Brief, CreateDocumentInput } from "./mcp/create";
 import type { UpdateDocument } from "./mcp/update";
+import type { UploadImageInput } from "./mcp/image";
 import type { Run, Version } from "./tasks/graphs";
 import type { LifecycleArguments } from "./mcp/lifecycle";
 import type { ImplementationLifecycle } from "./tasks/lifecycle";
 
 export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
+export type { UploadImageInput } from "./mcp/image";
 export type { UpdateClient, UpdateDocument, UpdateDocumentInput } from "./mcp/update";
 
 export type DocumentSummary = {
@@ -163,6 +167,16 @@ export type InvokePlanner<Caller> = {
 	>;
 };
 
+export type UploadImage<Caller> = {
+	upload(
+		caller: Caller,
+		input: UploadImageInput,
+	): Promise<
+		| { kind: "uploaded"; path: string }
+		| { kind: "archived" | "forbidden" | "unavailable" }
+	>;
+};
+
 export type McpOptions<Caller> = {
 	/** The host owns authentication; MCP only receives its result. */
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
@@ -173,6 +187,7 @@ export type McpOptions<Caller> = {
 	archive?: ArchiveDocument<Caller>;
 	restore?: RestoreDocument<Caller>;
 	invoke?: InvokePlanner<Caller>;
+	upload?: UploadImage<Caller>;
 	implementations?: Implementations<Caller>;
 };
 
@@ -185,6 +200,8 @@ type Tool = {
 
 const MAX_DOCUMENT_ID_LENGTH = 128;
 const MAX_DOCUMENT_LOCATOR_LENGTH = 2_048;
+/** Plans and briefs, or one base64 image, whichever is larger. */
+const MAX_BODY_BYTES = Math.max(MAX_REQUEST_BYTES, MAX_IMAGE_REQUEST_BYTES);
 
 const DOCUMENT_IDENTITY = {
 	id: { type: "string" },
@@ -550,6 +567,55 @@ export const TOOLS: Tool[] = [
 		},
 	},
 	{
+		name: "upload_image",
+		description: "Upload a PNG, JPEG, WebP or GIF image of at most 1 MiB to a Chopin document "
+			+ "and return its path and Markdown. Place the Markdown in the document with "
+			+ "update_document. Only people who can read the document can load the image; "
+			+ "uploading the same bytes again returns the same path.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_LOCATOR_LENGTH,
+					pattern: "\\S",
+				},
+				data: {
+					type: "string",
+					contentEncoding: "base64",
+					maxLength: MAX_IMAGE_DATA_LENGTH,
+					description: "Standard base64 image bytes, at most 1 MiB decoded.",
+				},
+				mimeType: { type: "string", enum: [...IMAGE_TYPES] },
+			},
+			required: ["id", "data", "mimeType"],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			type: "object",
+			oneOf: [
+				{
+					type: "object",
+					properties: {
+						path: { type: "string", pattern: "^/images/[0-9a-f]{64}\\.(?:png|jpg|webp|gif)$" },
+						markdown: { type: "string" },
+					},
+					required: ["path", "markdown"],
+					additionalProperties: false,
+				},
+				outcome([
+					"document-unavailable",
+					"repository-forbidden",
+					"document-archived",
+					"too-large",
+					"unsupported-type",
+					"signature-mismatch",
+				]),
+			],
+		},
+	},
+	{
 		name: "read_implementation",
 		description:
 			"Read the approved implementation graph, plan and repository context by document ID or canonical URL.",
@@ -751,6 +817,7 @@ function serviceInstructions(tools: Tool[]): string | undefined {
 		|| tool.name === "archive_document"
 		|| tool.name === "restore_document"
 		|| tool.name === "invoke_planner"
+		|| tool.name === "upload_image"
 	);
 	let implementation = tools
 		.filter(tool =>
@@ -772,7 +839,7 @@ function serviceInstructions(tools: Tool[]): string | undefined {
 
 async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge: boolean }> {
 	let declared = request.headers.get("content-length");
-	if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_REQUEST_BYTES) {
+	if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_BODY_BYTES) {
 		return { tooLarge: true };
 	}
 
@@ -786,7 +853,7 @@ async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge
 			if (done) break;
 			if (!value) continue;
 			length += value.byteLength;
-			if (length > MAX_REQUEST_BYTES) {
+			if (length > MAX_BODY_BYTES) {
 				await reader.cancel().catch(() => {});
 				return { tooLarge: true };
 			}
@@ -822,6 +889,7 @@ export function handler<Caller>(
 		&& (tool.name !== "archive_document" || archiving)
 		&& (tool.name !== "restore_document" || restoring)
 		&& (tool.name !== "invoke_planner" || options.invoke)
+		&& (tool.name !== "upload_image" || options.upload)
 		&& (!["read_implementation", "start_implementation"].includes(tool.name)
 			|| options.implementations)
 		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
@@ -1031,6 +1099,30 @@ export function handler<Caller>(
 					return result.kind === "invoked"
 						? respond(text(result.document))
 						: respond(text({ code: result.code }, true));
+				}
+				if (tool.name === "upload_image" && options.upload) {
+					let prepared = prepareImage(tool.arguments);
+					if (!prepared) {
+						return notification
+							? undefined
+							: error(
+								call.id,
+								-32602,
+								"upload_image requires an id or URL, base64 data, and an image mimeType",
+							);
+					}
+					if ("refusal" in prepared) return respond(text({ code: prepared.refusal }, true));
+					let outcome = await options.upload.upload(caller, prepared.input);
+					if (outcome.kind === "uploaded") {
+						return respond(text({ path: outcome.path, markdown: `![](${outcome.path})` }));
+					}
+					return respond(text({
+						code: outcome.kind === "archived"
+							? "document-archived"
+							: outcome.kind === "forbidden"
+							? "repository-forbidden"
+							: "document-unavailable",
+					}, true));
 				}
 				if (tool.name === "read_implementation") {
 					if (Object.keys(tool.arguments).length !== 1 || !isLocator(tool.arguments.id)) {

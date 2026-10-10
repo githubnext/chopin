@@ -14,7 +14,7 @@ import {
 	$isImageNode,
 	$isMathNode,
 } from "./content";
-import { IMAGE_PROTOCOLS } from "../dialect";
+import { HOSTED_IMAGE_PATH, IMAGE_PROTOCOLS } from "../dialect";
 import { PRIORITY } from "./shared";
 
 import { $createTextNode } from "lexical";
@@ -100,6 +100,7 @@ export const LexicalMathVisitor: LexicalExportVisitor<MathNode, Math | InlineMat
 // -- image -----------------------------------------------------------------
 
 function permitted(url: string): boolean {
+	if (HOSTED_IMAGE_PATH.test(url)) return true;
 	try {
 		return IMAGE_PROTOCOLS.includes(new URL(url).protocol);
 	} catch {

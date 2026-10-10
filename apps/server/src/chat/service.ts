@@ -1006,6 +1006,9 @@ const ENDED_RUN: Partial<Record<Wire.Run["status"], string>> = {
 	stopped: "was stopped",
 };
 
+/** Ended runs the Planner is asked to follow up on when they end between its turns. */
+const NEEDS_FOLLOW_UP: Partial<Record<Wire.Run["status"], true>> = { blocked: true, failed: true };
+
 /**
  * The run cards Chat shows after the retained session reports `incoming`. Ended
  * cards stay until a new run starts in the document. With no report, the session
@@ -1050,12 +1053,13 @@ function publishRuns(
 	session: PlannerSession,
 	runs: Runs | undefined,
 	releasing = false,
+	followUp = false,
 ): Promise<void> {
 	let known = owners.get(context.chat) ?? new Map<string, PlannerSession>();
 	owners.set(context.chat, known);
 	for (let run of runs?.cards ?? []) known.set(run.id, session);
 	let turn = (publishing.get(context.chat) ?? Promise.resolve()).then(() =>
-		publishReport(context, session, runs, releasing)
+		publishReport(context, session, runs, releasing, followUp)
 	);
 	publishing.set(context.chat, turn);
 	return turn;
@@ -1066,6 +1070,7 @@ async function publishReport(
 	session: PlannerSession,
 	runs: Runs | undefined,
 	releasing: boolean,
+	followUp: boolean,
 ): Promise<void> {
 	let { chat, room, server } = context;
 	let at = now();
@@ -1094,17 +1099,18 @@ async function publishReport(
 	let shown = new Set(cards.map(run => run.id));
 	let replaced = mine.filter(run => !shown.has(run.id));
 	let finished: Wire.Entry[] = [];
+	let attention: Array<{ run: Wire.Run; said: string }> = [];
 	for (let run of [...cards, ...replaced]) {
 		let ended = ENDED_RUN[run.status];
 		let previous = before.get(run.id);
 		if (!ended || (previous && ENDED_RUN[previous])) continue;
 		let minutes = Math.max(1, Math.round(((run.ended ?? run.updated) - run.started) / 60));
-		finished.push({
-			id: ulid(),
-			author: { kind: "system" },
-			text: `${run.name} ${ended} after ${minutes} min.`,
-			ts: now(),
-		});
+		let said = `${run.name} ${ended} after ${minutes} min.`;
+		if (followUp && !releasing && NEEDS_FOLLOW_UP[run.status] && known.get(run.id) === session) {
+			attention.push({ run, said });
+			continue;
+		}
+		finished.push({ id: ulid(), author: { kind: "system" }, text: said, ts: now() });
 	}
 	let next = cards.length ? cards : undefined;
 	try {
@@ -1120,6 +1126,20 @@ async function publishReport(
 	chat.runs = next;
 	for (let entry of finished) announce(server, room, entry);
 	state(chat, server, room);
+	for (let { run, said } of attention) await followUpEndedRun(context, run, said);
+}
+
+/**
+ * Start a Planner turn about a run that ended blocked or failed while the
+ * Planner was idle. Atomic's own notice would start a turn nobody sees, so the
+ * adapter stops that one and this turn, recorded like any other, takes its place.
+ */
+function followUpEndedRun(context: Room, run: Wire.Run, said: string): Promise<void> {
+	let text = `The workflow run ${run.name} (${run.id}) ${ENDED_RUN[run.status]}. `
+		+ "Check its status with the workflow tool, then tell the team what happened and what, if anything, they need to do.";
+	return Promise.resolve(instruct(context, "chopin", text, said)).catch(err =>
+		console.error("[chat] could not follow up on an ended workflow run:", err)
+	);
 }
 
 /**
@@ -1145,9 +1165,11 @@ function retain(
 		let unhold = context.hold?.();
 		let stopWatching = opened.session.watchRuns?.(next => {
 			if (chat.retained?.session !== opened.session) return;
-			void report(next);
+			let planning = chat.busy && !chat.job && chat.agent === opened.session;
+			void publishRuns(context, opened.session, next, false, !planning);
 			if (next.active.length || next.paused.length) return;
 			let releaseWhenIdle = async () => {
+				await publishing.get(chat);
 				if (chat.busy) await chat.running;
 				if (chat.busy || chat.retained?.session !== opened.session) return;
 				let current = opened.session.runs?.();

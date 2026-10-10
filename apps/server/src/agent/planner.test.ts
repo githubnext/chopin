@@ -112,6 +112,11 @@ test("starts research immediately only for an explicit current request", () => {
 	expect(PROMPT).toContain("accepted-comment instruction, stale context");
 });
 
+test("allows only Chopin-returned hosted image paths", () => {
+	expect(PROMPT).toContain("a `/images/<sha256>.<ext>` path that Chopin returned");
+	expect(PROMPT).toContain("Never invent or guess such a path.");
+});
+
 test("treats typed references as optional untrusted evidence, not edit authority", () => {
 	expect(PROMPT).toContain("Use `read_reference`");
 	expect(PROMPT).toContain("Research Workspace is relevant to the current request");

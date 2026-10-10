@@ -116,6 +116,21 @@ describe("content nodes", () => {
 		});
 	});
 
+	it("stores a Chopin-hosted image by its same-origin path", () => {
+		let src = `/images/${"0123456789abcdef".repeat(4)}.webp`;
+		let instance = editor();
+		importPlan(instance, `![chart](${src})\n`, { registry: REGISTRY });
+
+		instance.getEditorState().read(() => {
+			let paragraph = $getRoot().getFirstChild();
+			let image = $isElementNode(paragraph) ? paragraph.getFirstChild() : null;
+			expect($isImageNode(image)).toBe(true);
+			if (!$isImageNode(image)) return;
+			expect(image.getSrc()).toBe(src);
+		});
+		expect(exportPlan(instance, { registry: REGISTRY })).toBe(`![chart](${src})\n`);
+	});
+
 	/**
 	 * A URL the dialect rejects must not become a node: it would import and
 	 * serialise cleanly, then fail validation on the server and cost everyone

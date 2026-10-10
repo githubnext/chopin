@@ -2,13 +2,13 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { $getNodeByKey } from "lexical";
 
-import { $isImageNode, IMAGE_PROTOCOLS } from "@chopin/dialect";
+import { $isImageNode, HOSTED_IMAGE_PATH, IMAGE_PROTOCOLS } from "@chopin/dialect";
 
 import { checkUrl } from "../toolbar/url";
 
 import type { LexicalEditor } from "lexical";
 
-const RULES = { protocols: IMAGE_PROTOCOLS, relative: false };
+const RULES = { protocols: IMAGE_PROTOCOLS, relative: HOSTED_IMAGE_PATH };
 
 export function ImageEditor(
 	{ editor, nodeKey, initialSrc, initialAlt, onClose }: {

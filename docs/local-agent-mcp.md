@@ -51,6 +51,8 @@ The current MCP contract can:
 - replace that canonical source later with `update_document`, naming the plan
   revision last read and an idempotency key;
 - rename, archive, and restore documents without deleting their durable state;
+- upload a PNG, JPEG, WebP, or GIF image to a document with `upload_image` and
+  reference its returned path from the document source;
 - read an approved implementation graph and its document source; and
 - claim a graph and report task, pull-request, blocker, revision, and
   verification lifecycle transitions; and
@@ -158,7 +160,7 @@ caller that has only the UUID can recover it:
 ```
 
 `read_document`, `read_implementation`, `archive_document`, `restore_document`,
-`update_document`, and `invoke_planner` accept either a document UUID
+`update_document`, `upload_image`, and `invoke_planner` accept either a document UUID
 or that canonical URL in their `id` input. The URL may be passed back exactly as returned; an absolute URL must
 use the configured Chopin origin. Both reads return the stable UUID as the
 document `id`.
@@ -207,6 +209,41 @@ recorded with the update. Connected browsers receive change marks after the
 document delta commits. Their change list identifies the MCP client without
 displaying a Planner cursor. Calls without initialization are attributed to
 `unknown`.
+
+## Upload an image
+
+Document images are either absolute `https:` URLs or images Chopin hosts itself.
+`upload_image` accepts a document `id` or canonical URL, the image bytes as
+standard base64 in `data`, and a `mimeType` of `image/png`, `image/jpeg`,
+`image/webp`, or `image/gif`. SVG is never accepted. The decoded image may be at
+most 1 MiB, and its file signature must match the declared type.
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==",
+	"mimeType": "image/png"
+}
+```
+
+The result contains a same-origin `path` such as `/images/<sha256>.png` and the
+matching `markdown`, for example `![](/images/<sha256>.png)`. Add alternative
+text to that Markdown and place it in the document with `update_document`;
+uploading alone does not change the document. Images are stored under the SHA-256
+of their bytes, so uploading the same bytes to the same document again returns
+the same path.
+
+Uploading needs the same access as `update_document`: pull plus push or admin
+access to the repository, and a document that is neither archived nor being
+deleted. Refusals return `document-unavailable`, `repository-forbidden`,
+`document-archived`, `too-large`, `unsupported-type`, or `signature-mismatch`.
+
+The browser loads `/images/` paths with the signed-in Chopin session. Chopin
+serves an image only to someone who can currently read a document it was
+uploaded to, which is the same pull access and GitHub App installation check as
+opening that document. Anyone else, including a signed-out browser and another
+MCP client fetching the path, receives `404`. Plans that leave Chopin therefore
+cannot display hosted images.
 
 `list_documents` excludes archived documents by default. Set
 `includeArchived: true` to include them; archived document summaries and direct
@@ -302,8 +339,8 @@ token's `read:org` or Members access, SSO authorization, and GitHub availability
 lacks the operation's repository permission; it does not mean the GitHub App for
 Chopin must be installed. Pull access is enough for `list_documents`,
 `read_document`, and `read_implementation`. Pull plus push or admin access is
-required for create, update, rename, archive, restore, invoke, start, and report
-lifecycle operations. `invoke_planner` additionally needs a Planner owner or the
+required for create, update, image upload, rename, archive, restore, invoke,
+start, and report lifecycle operations. `invoke_planner` additionally needs a Planner owner or the
 caller's live browser login, as described above. Use an account with the required access or ask a repository
 owner to grant it.
 
