@@ -195,7 +195,17 @@ export function atomicTurnExtension(policy: TurnPolicy): ExtensionFactory {
 				};
 			},
 		});
+		let stage = false;
+		atomic.on("session_start", (_event, ctx) => {
+			stage = ctx.subagentPolicy !== undefined;
+		});
 		atomic.on("before_agent_start", event => {
+			if (stage) {
+				atomic.setActiveTools(
+					atomic.getActiveTools().filter(name => name !== ATOMIC_RESULT_TOOL_NAME),
+				);
+				return;
+			}
 			if (!policy.full) atomic.setActiveTools(activeNames(policy));
 			return {
 				systemPrompt: policy.full
@@ -204,6 +214,10 @@ export function atomicTurnExtension(policy: TurnPolicy): ExtensionFactory {
 			};
 		});
 		atomic.on("tool_call", event => {
+			if (stage) {
+				if (event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
+				return { block: true, reason: `${event.toolName} is not available in a workflow stage.` };
+			}
 			if (policy.full && event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
 			if (activeNames(policy).includes(event.toolName)) return;
 			return { block: true, reason: `${event.toolName} is not available in this turn.` };

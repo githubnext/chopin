@@ -517,6 +517,8 @@ test(
 			)!;
 			expect(stage.toolNames).toContain("bash");
 			expect(stage.toolNames).toContain("write");
+			expect(stage.toolNames).not.toContain(ATOMIC_RESULT_TOOL_NAME);
+			expect(stage.system).not.toContain("CHOPIN-INSTRUCTIONS-MARKER");
 		} finally {
 			if (environment !== undefined) process.env.NODE_ENV = environment;
 			await room.close();

@@ -251,10 +251,10 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 		let names = new Map<string, string>();
 		let parents = new Map<string, string>();
 		let seen = new Set<string>();
-		planner.rootOf = runId => parents.get(runId) ?? runId;
+		let stage = true;
 		let ready = false;
 		let publish = () => {
-			if (!ready) return;
+			if (stage || !ready) return;
 			for (let [id, card] of cards) {
 				if (seen.has(id) && !roots.has(id) && card.ended === undefined) {
 					card.status = "finished";
@@ -270,6 +270,9 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 			for (let wake of planner.waiters ?? []) wake();
 		};
 		atomic.on("session_start", (_event, ctx) => {
+			stage = ctx.subagentPolicy !== undefined;
+			if (stage) return;
+			planner.rootOf = runId => parents.get(runId) ?? runId;
 			lease?.dispose();
 			lease = ctx.observeWorkflowActivity(frame => {
 				if (frame.kind === "snapshot") {
@@ -283,7 +286,7 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 			});
 		});
 		atomic.on("tool_result", event => {
-			if (event.toolName !== "workflow" || event.input.action !== "run") return;
+			if (stage || event.toolName !== "workflow" || event.input.action !== "run") return;
 			let runId = launchedRunId(event.content);
 			let name = typeof event.input.workflow === "string" ? event.input.workflow : undefined;
 			if (!runId || !name) return;
@@ -295,6 +298,7 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 			}
 		});
 		atomic.on("workflow_lifecycle", event => {
+			if (stage) return;
 			if (event.target.kind !== "prompt") parents.set(event.target.runId, event.rootRunId);
 			foldLifecycle(cards, event, names.get(event.rootRunId));
 			publish();
