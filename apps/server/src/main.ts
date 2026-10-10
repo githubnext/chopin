@@ -2111,6 +2111,7 @@ registerMcpRoutes(router, hostedAuth, {
 });
 implementations = registerImplementationRoutes(router, hostedAuth, {
 	buildable: (id, planRevision) => buildReadiness?.ready(id, planRevision) ?? false,
+	liveBuild: !!config.liveBuild,
 	connections: experiments.connections,
 	busy: async connectionId =>
 		(await experiments!.service.store.active()).some(item =>
