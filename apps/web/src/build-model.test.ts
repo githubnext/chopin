@@ -3,18 +3,26 @@ import { describe, expect, it } from "bun:test";
 import {
 	advanceDraft,
 	advanceFirstBuild,
+	ago,
 	buildPhase,
 	draftKey,
 	draftRefusalCopy,
 	elapsed,
 	firstBuildStep,
+	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
+	syncHint,
+	syncStatus,
 	taskStartsOpen,
 } from "./build-model";
 
-import type { BuildRequest, ImplementationSnapshot } from "@chopin/protocol/implementation";
+import type {
+	BuildRequest,
+	ImplementationSnapshot,
+	LiveSnapshot,
+} from "@chopin/protocol/implementation";
 
 type History = ImplementationSnapshot["lifecycle"]["history"][number];
 
@@ -343,5 +351,99 @@ describe("first build", () => {
 		let blocked = snapshot({ blockers: ["unanswered questionnaires"] });
 		expect(firstBuildStep(blocked, state)).toEqual({ view: "hidden", next: "reset" });
 		expect(advanceFirstBuild(state, { type: "reset" })).toEqual(idle);
+	});
+});
+
+const PR = "https://github.com/o/r/pull/7";
+
+function live(change: Partial<LiveSnapshot> = {}): ImplementationSnapshot {
+	return snapshot({
+		live: {
+			buildId: "b",
+			user: "u",
+			repositoryId: "r",
+			checkout: { repository: "o/r", commit: "0".repeat(40) },
+			baseRevision: 4,
+			pullRequests: [PR],
+			commits: [],
+			tasks: [],
+			outOfSync: false,
+			builderConnected: true,
+			...change,
+		},
+	});
+}
+
+function rebuild(state: BuildRequest["state"]): BuildRequest {
+	return { ...build(state), id: "r1", kind: "rebuild", baseRevision: 4, targetRevision: 6 };
+}
+
+describe("living document sync", () => {
+	it("is absent until the first build has delivered", () => {
+		expect(syncStatus(snapshot())).toBeUndefined();
+		expect(syncStatus(undefined)).toBeUndefined();
+	});
+
+	it("reads as in sync when the pull requests match the document", () => {
+		expect(syncStatus(live())).toEqual({ kind: "in-sync" });
+		expect(buildPhase(live())).toEqual({ kind: "live", sync: { kind: "in-sync" } });
+	});
+
+	it("reads as building while a rebuild or the first build runs", () => {
+		for (let state of ["queued", "starting", "running"] as const) {
+			expect(syncStatus(live({ outOfSync: true, rebuild: rebuild(state) })))
+				.toEqual({ kind: "building" });
+		}
+		expect(syncStatus({ ...live(), build: build("running") })).toEqual({ kind: "building" });
+	});
+
+	it("explains why it is out of sync", () => {
+		let pending = live({ outOfSync: true, rebuild: rebuild("stopped") });
+		expect(syncStatus(pending)).toEqual({ kind: "out-of-sync", reason: "pending" });
+		expect(syncHint(syncStatus(pending), pending, "me")).toBe("Changes will build shortly");
+		let waiting = { ...live({ outOfSync: true, builderConnected: false }), builtBy: "jev" };
+		expect(syncStatus(waiting)).toEqual({ kind: "out-of-sync", reason: "waiting" });
+		expect(syncHint(syncStatus(waiting), waiting, "me")).toBe("Waiting for @jev’s agent");
+		expect(syncHint(syncStatus(waiting), waiting, "u")).toBe("Waiting for your agent");
+		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
+		expect(syncStatus(failed)).toEqual({ kind: "out-of-sync", reason: "failed" });
+		expect(syncHint(syncStatus(failed), failed, "me")).toBe("The last rebuild failed");
+	});
+
+	it("does not call a failed rebuild out of sync once later edits match", () => {
+		expect(syncStatus(live({ rebuild: rebuild("failed") }))).toEqual({ kind: "in-sync" });
+		expect(syncHint({ kind: "in-sync" }, live(), "me")).toBeUndefined();
+	});
+});
+
+describe("living document commits", () => {
+	let commit = (sha: string, at: string, pullRequest = PR) => ({
+		pullRequest,
+		sha,
+		message: sha,
+		revision: 5,
+		at,
+	});
+
+	it("groups one pull request's commits, newest first", () => {
+		let value = live({
+			commits: [
+				commit("a", "2026-10-10T10:00:00.000Z"),
+				commit("b", "2026-10-10T11:00:00.000Z", "https://github.com/o/r/pull/8"),
+				commit("c", "2026-10-10T12:00:00.000Z"),
+				commit("d", "2026-10-10T12:00:00.000Z"),
+			],
+		});
+		expect(pullRequestCommits(value, PR).map(item => item.sha)).toEqual(["d", "c", "a"]);
+		expect(pullRequestCommits(snapshot(), PR)).toEqual([]);
+	});
+
+	it("says how long ago a commit landed", () => {
+		let now = Date.parse("2026-10-10T12:00:00.000Z");
+		expect(ago("2026-10-10T11:59:40.000Z", now)).toBe("just now");
+		expect(ago("2026-10-10T11:55:00.000Z", now)).toBe("5m ago");
+		expect(ago("2026-10-10T09:00:00.000Z", now)).toBe("3h ago");
+		expect(ago("2026-10-08T12:00:00.000Z", now)).toBe("2d ago");
+		expect(ago("nonsense", now)).toBeUndefined();
 	});
 });

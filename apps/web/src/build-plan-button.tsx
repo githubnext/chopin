@@ -1,7 +1,15 @@
-import { LoaderIcon } from "@chopin/icons";
+import { CheckIcon, LoaderIcon } from "@chopin/icons";
 import { useEffect, useReducer, useRef, useState } from "react";
 
-import { advanceFirstBuild, buildPhase, draftRefusalCopy, firstBuildStep } from "./build-model";
+import {
+	advanceFirstBuild,
+	buildPhase,
+	draftRefusalCopy,
+	firstBuildStep,
+	SYNC_LABEL,
+	syncHint,
+	syncStatus,
+} from "./build-model";
 import { implementationEndpoint, implementationResponse, startBuild } from "./build-start";
 
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
@@ -18,13 +26,16 @@ const RELOAD_ON = [
 /**
  * The document's first build in one press: ask the Planner for tasks, then
  * start them on the viewer's local agent. The Build view owns every later build.
+ * Once that build has delivered, the slot quietly reports whether the pull
+ * requests still match the living document.
  */
 export function BuildPlanButton(
-	{ onNeedsAgent, onShowBuild, room, wire }: {
+	{ onNeedsAgent, onShowBuild, room, userId, wire }: {
 		/** No local agent could take the build; the Build view explains how to start one. */
 		onNeedsAgent: () => void;
 		onShowBuild: () => void;
 		room: string;
+		userId?: string;
 		wire?: Wire;
 	},
 ) {
@@ -119,6 +130,34 @@ export function BuildPlanButton(
 		});
 	}, [step.next, snapshot?.revision]);
 
+	let sync = syncStatus(snapshot);
+	if (sync) {
+		let hint = syncHint(sync, snapshot, userId);
+		return (
+			<button
+				aria-busy={sync.kind === "building" || undefined}
+				aria-description={hint}
+				className="btn btn-compact btn-ghost shrink-0"
+				data-sync={sync.kind}
+				data-tooltip={hint}
+				data-tooltip-detail={hint ? "" : undefined}
+				data-tooltip-verbatim={hint ? "" : undefined}
+				onClick={onShowBuild}
+				type="button"
+			>
+				{sync.kind === "building" && <LoaderIcon aria-hidden="true" data-button-loader="" />}
+				{sync.kind === "in-sync" && <CheckIcon aria-hidden="true" className="text-text-tertiary" />}
+				{sync.kind === "out-of-sync" && (
+					<span
+						aria-hidden="true"
+						className="build-task-dot"
+						data-state={sync.reason === "failed" ? "blocked" : "queued"}
+					/>
+				)}
+				{SYNC_LABEL[sync.kind]}
+			</button>
+		);
+	}
 	if (step.view === "hidden") return null;
 	if (step.view === "working") {
 		return (

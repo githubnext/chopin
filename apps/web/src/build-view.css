@@ -300,6 +300,35 @@
 	color: var(--color-warning-ink);
 }
 
+/* A living document's commits on a task's pull request, newest first. */
+.build-task-commits {
+	display: grid;
+	gap: var(--spacing);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.build-task-commits > li {
+	display: flex;
+	align-items: baseline;
+	gap: calc(var(--spacing) * 2);
+	min-width: 0;
+}
+
+.build-task-sha {
+	flex: none;
+	color: var(--color-text-tertiary);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-decoration: none;
+}
+
+.build-task-sha:hover {
+	color: var(--color-brand);
+	text-decoration: underline;
+}
+
 .build-hint {
 	margin: calc(var(--spacing) * 3) 0 0;
 	color: var(--color-text-tertiary);
