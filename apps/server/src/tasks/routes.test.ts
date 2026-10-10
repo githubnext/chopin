@@ -31,7 +31,7 @@ async function prepare(plan: Plan.Plan) {
 	});
 }
 
-async function setup() {
+async function setup(options: { liveBuild?: boolean } = {}) {
 	let context = await openPlan("# Launcher plan\n");
 	let github = {
 		async user(token: string) {
@@ -96,6 +96,7 @@ async function setup() {
 		implementations: () => implementations,
 	});
 	implementations = registerImplementationRoutes(router, auth, {
+		liveBuild: options.liveBuild ?? false,
 		connections: experiments.connections,
 		busy: async connectionId =>
 			(await experiments.service.store.active()).some(item =>
@@ -405,8 +406,8 @@ test("a deleted document cannot block implementation recovery sweeps", async () 
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
 });
 
-test("Build queues behind a running prototype and starts once it finishes", async () => {
-	let context = await setup();
+test("Build queues behind a running prototype and starts once it finishes (LIVE_BUILD)", async () => {
+	let context = await setup({ liveBuild: true });
 	let connection = await paired(context);
 	let investigation = await (await context.call(`/api/documents/${context.plan.id}/experiments`, {
 		id: crypto.randomUUID(),
@@ -439,6 +440,46 @@ test("Build queues behind a running prototype and starts once it finishes", asyn
 		(await tool(context, connection.token, "claim_implementation_build", { id: build.id })).build,
 	).toMatchObject({ id: build.id, state: "starting" });
 	await Plan.close(context.plan);
+});
+
+test("without LIVE_BUILD a build is refused while an investigation holds the workspace", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	let investigation = await (await context.call(`/api/documents/${context.plan.id}/experiments`, {
+		id: crypto.randomUUID(),
+		brief: "Inspect a fixture",
+	})).json();
+	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
+	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
+	let response = await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	});
+	expect(response.status).toBe(409);
+	expect(await response.text()).toContain("workspace is offline or busy");
+	expect(context.plan.builds).toEqual([]);
+	expect((await (await context.call(context.path)).json()).waitingForPrototype).toBeUndefined();
+	await Plan.close(context.plan);
+});
+
+test("without LIVE_BUILD a second document is refused while the connection builds another", async () => {
+	let context = await setup();
+	let second = await openSiblingPlan(context, "# Second plan\n");
+	await prepare(second);
+	let secondPath = `/api/channels/${second.id}/implementation`;
+	let review = { planRevision: 0, graphVersion: 1, graphRevision: 1 };
+	await paired(context);
+	try {
+		expect((await context.call(context.path, review)).status).toBe(200);
+		let refused = await context.call(secondPath, review);
+		expect(refused.status).toBe(409);
+		expect(await refused.text()).toContain("workspace is offline or busy");
+		expect(second.builds).toEqual([]);
+	} finally {
+		await Plan.close(second);
+		await Plan.close(context.plan);
+	}
 });
 
 test("a committed build wakes the waiting connector and a failed pickup can be retried", async () => {
@@ -517,8 +558,8 @@ test("returning a stopped implementation for changes durably unlocks it once", a
 	}
 });
 
-test("a second document queues behind the first on one connection, which a finished or deleted build never strands", async () => {
-	let context = await setup();
+test("a second document queues behind the first on one connection, which a finished or deleted build never strands (LIVE_BUILD)", async () => {
+	let context = await setup({ liveBuild: true });
 	let second = await openSiblingPlan(context, "# Second plan\n");
 	await prepare(second);
 	context.plans.set(second.id, second);

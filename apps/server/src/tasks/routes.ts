@@ -20,6 +20,8 @@ type Options = {
 	busy?: (connectionId: string) => Promise<boolean>;
 	/** Whether the document reads as ready to build, apart from its blockers. */
 	buildable?: (id: string, planRevision: number) => boolean;
+	/** LIVE_BUILD: builds may queue behind a prototype or another document's build. */
+	liveBuild?: boolean;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
@@ -74,7 +76,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			).href;
 		},
 		async id => !!await auth.storage.channels.get(id),
-		options.busy,
+		options.liveBuild ? options.busy : undefined,
 	);
 	let safe = (handler: RouteHandler): RouteHandler => async (request, url, params) => {
 		try {
@@ -108,6 +110,19 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 	 * make its connection busy, so a repeated request can return that build.
 	 */
 	async function available(owner: string, repositoryId: string, id: string) {
+		if (!options.liveBuild) {
+			// Without LIVE_BUILD a busy connection is refused, never queued.
+			let idle: Connection[] = [];
+			for (let connection of options.connections.candidates(repositoryId, owner, id)) {
+				let here = options.connections.assigned(connection.id) === id;
+				if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
+					continue;
+				}
+				if (here) idle.unshift(connection);
+				else idle.push(connection);
+			}
+			return idle;
+		}
 		let free: Connection[] = [];
 		let prototyping: Connection[] = [];
 		let building: Connection[] = [];
@@ -133,7 +148,9 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			// Cheap on purpose: whether one is free is decided when Build is pressed.
 			let localAgent = options.connections.list(channel.repositoryId, session.user.id).length > 0;
 			// Read before the plan lock; the experiment store has its own.
-			let queued = await options.withPlan(id, async plan => plan.builds.at(-1));
+			let queued = options.liveBuild
+				? await options.withPlan(id, async plan => plan.builds.at(-1))
+				: undefined;
 			let ahead = queued?.state === "queued"
 					&& options.connections.queued(queued.connectionId).includes(id)
 				? options.connections.assigned(queued.connectionId)
@@ -197,7 +214,12 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				throw new GitHubError("no-workspace", 409);
 			}
 			let [connection] = await available(session.user.id, channel.repositoryId, id);
-			if (!connection) throw new GitHubError("no-workspace", 409);
+			if (!connection) {
+				throw new GitHubError(
+					options.liveBuild ? "no-workspace" : "workspace is offline or busy",
+					409,
+				);
+			}
 			let checkout = {
 				repository: connection.source.repository,
 				commit: connection.source.commit,
@@ -205,8 +227,16 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			};
 			connector.track(id);
 			return options.connections.locked(connection.id, async () => {
-				if (!options.connections.get(connection.id)) throw new GitHubError("no-workspace", 409);
-
+				if (
+					!options.connections.get(connection.id)
+					|| !options.liveBuild
+						&& !(await available(session.user.id, channel.repositoryId, id)).includes(connection)
+				) {
+					throw new GitHubError(
+						options.liveBuild ? "no-workspace" : "workspace is offline or busy",
+						409,
+					);
+				}
 				return options.withPlan(id, async plan => {
 					try {
 						let build = await queueBuild(plan, {
@@ -218,8 +248,9 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						});
 						let holder = options.connections.assigned(connection.id);
 						// Another document's build holds the connection: this one starts after it.
-						if (holder && holder !== id) options.connections.enqueue(connection.id, id);
-						else options.connections.assign(connection.id, id);
+						if (options.liveBuild && holder && holder !== id) {
+							options.connections.enqueue(connection.id, id);
+						} else options.connections.assign(connection.id, id);
 						options.connections.use(id, connection.id);
 						options.connections.wake(channel.repositoryId);
 						return json(build);
