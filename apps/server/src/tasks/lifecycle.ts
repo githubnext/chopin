@@ -312,13 +312,14 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent): Reduction {
 			};
 			break;
 		case "block":
-			if (item.state !== "in_progress") return refused("task-state");
+			// A blocker found before start_task implicitly starts the task, so it is never lost.
+			if (item.state !== "in_progress" && item.state !== "queued") return refused("task-state");
 			if (!text(stored.reason)) return refused("reason");
 			next = {
 				id: item.id,
 				state: "blocked",
 				blocker: stored.reason,
-				...(item.pullRequest ? { pullRequest: item.pullRequest } : {}),
+				...(item.state !== "queued" && item.pullRequest ? { pullRequest: item.pullRequest } : {}),
 			};
 			break;
 		case "report_pr": {

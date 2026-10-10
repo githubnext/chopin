@@ -128,7 +128,7 @@ the next reviewed build is a new attempt, not an automatic session replay.
 | `read_implementation`  | Read the approved graph, plan, and repository context by UUID or canonical URL.           |
 | `start_implementation` | Claim that exact graph while reporting the coding agent's repository, branch, and commit. |
 | `start_task`           | Move one dependency-ready task to in progress.                                            |
-| `block_task`           | Record a task blocker without releasing the graph lock.                                   |
+| `block_task`           | Record a task blocker without releasing the graph lock; a queued task starts implicitly.  |
 | `report_pr`            | Attach an open, merged, or closed pull request to a task.                                 |
 | `complete_task`        | Complete a task after its pull request and summary are recorded.                          |
 | `report_verification`  | Submit graph-wide review evidence and return failed tasks to work.                        |

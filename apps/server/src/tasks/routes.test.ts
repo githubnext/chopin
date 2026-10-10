@@ -237,6 +237,49 @@ test("a paired workspace claims a browser build once and reports through run-sco
 	await Plan.close(context.plan);
 });
 
+test("a run's parallel lifecycle batch lands in order and refusals say what to do next", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	let claim = await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	await tool(context, connection.token, "report_implementation_build", {
+		id: built.id,
+		state: "running",
+		session: "acp-session",
+	});
+	let pr = "https://github.com/owner/repository/pull/7";
+	// The agent sends the whole batch at once; complete_task arrives before report_pr.
+	let results = await Promise.all([
+		tool(context, claim.runToken, "complete_task", {
+			taskId: "first",
+			summary: "Done.",
+			idempotencyKey: "complete-first",
+		}),
+		tool(context, claim.runToken, "report_pr", {
+			taskId: "first",
+			url: pr,
+			state: "open",
+			idempotencyKey: "pr-first",
+		}),
+		tool(context, claim.runToken, "start_task", { taskId: "first", idempotencyKey: "start-first" }),
+	]);
+	expect(results.map(result => result.isError)).toEqual([undefined, undefined, undefined]);
+	let snapshot = await (await context.call(context.path)).json();
+	expect(snapshot.lifecycle.activity.tasks[0]).toMatchObject({ state: "completed" });
+	let refused = await tool(context, claim.runToken, "start_task", {
+		taskId: "first",
+		idempotencyKey: "start-again",
+	});
+	expect(refused.content[0].text).toContain(
+		"task-state: The task is already in progress or completed",
+	);
+	await Plan.close(context.plan);
+});
+
 test("a build runs only on the clicker's own connection and records who started it", async () => {
 	let context = await setup();
 	let foreign = await paired(context, context.otherCookie);
