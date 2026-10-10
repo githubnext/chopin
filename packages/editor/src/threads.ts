@@ -17,7 +17,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { useEffect } from "react";
 
 import { resolve } from "./anchors";
-import { clear as unpaint, holds, paint, pin, unpin } from "./marks";
+import { clear as unpaint, holds, paintComments, pin, unpin } from "./marks";
 import { $blockPoints, $recover, locate } from "./passage";
 import { blockElement, scrollToKey } from "./scroll";
 
@@ -75,8 +75,22 @@ export type ThreadView = {
 	planner?: "working" | "stopped" | "failed" | "off";
 };
 
+/**
+ * A resolved thread whose turn edited the document, beside the prose it wrote.
+ *
+ * Only these leave a trace once resolved: a thread resolved without edits has
+ * nothing in the document to stand beside.
+ */
+export type ResolvedView = {
+	thread: Comment.Thread;
+	/** The blocks its turn wrote, in document order of the result anchors. */
+	keys: string[];
+	places: Points[];
+};
+
 export type ThreadState = {
 	threads: ThreadView[];
+	resolved: ResolvedView[];
 	draft?: Draft;
 	/** Who is writing a reply, by thread. */
 	writing: { [thread: string]: string[] };
@@ -85,7 +99,7 @@ export type ThreadState = {
 	error?: string;
 };
 
-const EMPTY: ThreadState = { threads: [], writing: {} };
+const EMPTY: ThreadState = { threads: [], resolved: [], writing: {} };
 
 /** Whether a note was taken, and if not, why, in words the composer can show. */
 export type Sent = { ok: true } | { ok: false; message: string };
@@ -110,6 +124,10 @@ export class ThreadStore {
 	#planner = new Map<string, NonNullable<ThreadView["planner"]>>();
 	#draft: Draft | undefined;
 	#focused: string | undefined;
+	/** Threads pointed at together, through a margin chip that stands for several. */
+	#group: string[] = [];
+	/** Threads whose card, or whose block's list, is open. */
+	#opened: string[] = [];
 	#error: string | undefined;
 	/**
 	 * Which card the reader last asked to be taken to, and how far along it.
@@ -382,6 +400,20 @@ export class ThreadStore {
 		this.refresh();
 	}
 
+	/** Strengthen several passages at once, for a chip that stands for all of them. */
+	light(ids: string[]): void {
+		if (same(this.#group, ids)) return;
+		this.#group = ids;
+		this.refresh();
+	}
+
+	/** Underline the passages whose card is open. */
+	open(ids: string[]): void {
+		if (same(this.#opened, ids)) return;
+		this.#opened = ids;
+		this.refresh();
+	}
+
 	/**
 	 * Take the reader to the prose a thread points at.
 	 *
@@ -444,7 +476,18 @@ export class ThreadStore {
 		let binding = this.#binding;
 
 		let views: ThreadView[] = [];
-		let marks: Points[] = [];
+		let resolved: ResolvedView[] = [];
+		let tones: { rest: Points[]; hover: Points[]; open: Points[] } = {
+			rest: [],
+			hover: [],
+			open: [],
+		};
+		let toneOf = (id: string) =>
+			this.#opened.includes(id)
+				? "open"
+				: this.#focused === id || this.#group.includes(id)
+				? "hover"
+				: "rest";
 
 		// Resolved and dismissed threads are not shown at all, so they are
 		// dropped once here rather than in each branch below, where one copy of
@@ -454,6 +497,19 @@ export class ThreadStore {
 		);
 
 		let build = () => {
+			if (editor && binding) {
+				for (let thread of this.#threads.values()) {
+					if (thread.status !== "resolved") continue;
+					try {
+						let anchors = this.#anchors.get(thread.id);
+						let keys = anchors ? produced(binding, anchors) : [];
+						let places = keys.map($blockPoints).filter((points): points is Points => !!points);
+						if (places.length > 0) resolved.push({ thread, keys, places });
+					} catch (err) {
+						console.error(`[plan] could not place resolved comment ${thread.id}:`, err);
+					}
+				}
+			}
 			for (let thread of live) {
 				/*
 				 * One thread at a time, and the whole of it.
@@ -497,7 +553,7 @@ export class ThreadStore {
 					});
 
 					// Accepted threads render through their inline Decision instead.
-					if (thread.status === "open") marks.push(...places);
+					if (thread.status === "open") tones[toneOf(thread.id)].push(...places);
 				} catch (err) {
 					console.error(`[plan] could not place comment ${thread.id}:`, err);
 					// Unplaceable, but still worth reading.
@@ -515,10 +571,10 @@ export class ThreadStore {
 
 		if (editor && binding) editor.getEditorState().read(build);
 		else build();
-		if (this.#draft?.points) marks.push(this.#draft.points);
+		if (this.#draft?.points) tones.hover.push(this.#draft.points);
 
 		views.sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
-		if (editor) paint(editor, "comments", marks);
+		if (editor) paintComments(editor, tones);
 
 		let writing: { [thread: string]: string[] } = {};
 		for (let [id, entry] of this.#writing) {
@@ -527,6 +583,7 @@ export class ThreadStore {
 
 		let next: ThreadState = {
 			threads: views,
+			resolved,
 			writing,
 			...(this.#draft ? { draft: this.#draft } : {}),
 			...(this.#focused ? { focused: this.#focused } : {}),
@@ -560,24 +617,17 @@ export class ThreadStore {
 		anchors: Plan.ThreadAnchors,
 		open: boolean,
 	): { places: Points[]; targetKey?: string } {
-		let { result, subject } = anchors;
+		let { subject } = anchors;
 
-		// Pending means nobody has checked this since the plan moved, so it is
-		// not somewhere worth sending a reader.
-		let produced = () =>
-			result.anchors.length > 0 && !result.pending
-				? result.anchors
-					.map(anchor => resolve(binding, anchor))
-					.flatMap(key => (key ? [$blockPoints(key)] : []))
-					.filter((points): points is Points => !!points)
-				: [];
+		let written = () =>
+			produced(binding, anchors).map($blockPoints).filter((points): points is Points => !!points);
 
 		// An open thread is still about the phrase somebody marked, even after
 		// Chopin has written something for it; only once that phrase is gone
 		// does it follow what was written.
 		if (!open) {
-			let written = produced();
-			if (written.length > 0) return { places: written };
+			let places = written();
+			if (places.length > 0) return { places };
 		}
 
 		let targetKey = subject.blocks
@@ -585,8 +635,8 @@ export class ThreadStore {
 			.find((key): key is string => !!key);
 		let found = locate(binding, subject) ?? this.#recover(binding, subject);
 		if (!found && open) {
-			let written = produced();
-			if (written.length > 0) return { places: written };
+			let places = written();
+			if (places.length > 0) return { places };
 		}
 		return {
 			places: found ? [found] : [],
@@ -603,6 +653,27 @@ export class ThreadStore {
 
 		return $recover(subject, keys);
 	}
+}
+
+/**
+ * The blocks a thread's turn wrote, as they are now.
+ *
+ * Pending means nobody has checked this since the plan moved, so it is not
+ * somewhere worth sending a reader. Call inside a read.
+ */
+function produced(binding: Binding, anchors: Plan.ThreadAnchors): string[] {
+	let { result } = anchors;
+	if (result.anchors.length === 0 || result.pending) return [];
+	let keys: string[] = [];
+	for (let anchor of result.anchors) {
+		let key = resolve(binding, anchor);
+		if (key && !keys.includes(key)) keys.push(key);
+	}
+	return keys;
+}
+
+function same(a: string[], b: string[]): boolean {
+	return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 /**

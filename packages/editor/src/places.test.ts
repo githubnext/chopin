@@ -20,7 +20,7 @@ import * as Y from "yjs";
 
 import { importPlan, registry } from "@chopin/dialect";
 
-import { clear, union, unpin } from "./marks";
+import { clear, commented, union, unpin } from "./marks";
 import { ThreadStore } from "./threads";
 
 import type { Binding, Provider } from "@lexical/yjs";
@@ -396,11 +396,65 @@ describe("an open thread whose phrase has drifted", () => {
 		expect(view.orphaned).toBe(true);
 	});
 
-	it("keeps exact open comment passages marked", () => {
+	it("keeps exact open comment passages washed at rest", () => {
 		let { binding, editor } = room();
 		open(editor, binding);
 
-		expect(marked()).toBe(1);
+		expect(commented().rest).toHaveLength(1);
+		expect(marked()).toBe(0);
+	});
+
+	it("strengthens a pointed-at passage and underlines an open one, one tone each", () => {
+		let { binding, editor } = room();
+		let subject = open(editor, binding);
+		let id = subject.snapshot().threads[0]!.thread.id;
+		let tones = () => {
+			let { hover, open: opened, rest } = commented();
+			return [rest.length, hover.length, opened.length];
+		};
+
+		subject.focus(id);
+		expect(tones()).toEqual([0, 1, 0]);
+		subject.focus(undefined);
+		subject.light([id]);
+		expect(tones()).toEqual([0, 1, 0]);
+		subject.open([id]);
+		expect(tones()).toEqual([0, 0, 1]);
+		subject.open([]);
+		subject.light([]);
+		expect(tones()).toEqual([1, 0, 0]);
+	});
+
+	it("keeps a resolved thread beside what its turn wrote, and only that one", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let edited = thread({ id: "edited", status: "resolved" });
+		let quiet = thread({ id: "quiet", status: "resolved" });
+		let unchecked = thread({ id: "unchecked", status: "resolved" });
+		subject.sync([edited, quiet, unchecked]);
+		let passage = { ...rewritten(), blocks: [anchor(editor, binding, 1)], drifted: undefined };
+		subject.anchors([
+			{
+				thread: "edited",
+				subject: passage,
+				result: {
+					anchors: [anchor(editor, binding, 1), anchor(editor, binding, 2)],
+					pending: false,
+				},
+			},
+			{ thread: "quiet", subject: passage, result: { anchors: [], pending: false } },
+			{
+				thread: "unchecked",
+				subject: passage,
+				result: { anchors: [anchor(editor, binding, 2)], pending: true, reason: "orphaned" },
+			},
+		]);
+
+		let { resolved, threads } = subject.snapshot();
+		expect(resolved.map(view => view.thread.id)).toEqual(["edited"]);
+		expect(resolved[0]!.keys).toEqual([blocks(editor)[1]!.getKey(), blocks(editor)[2]!.getKey()]);
+		expect(threads).toHaveLength(0);
+		expect(commented().rest).toHaveLength(0);
 	});
 });
 

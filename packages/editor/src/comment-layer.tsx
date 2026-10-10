@@ -115,8 +115,14 @@ function union(rects: Rect[]): Rect | undefined {
 	return { top, right, bottom, left, width: right - left, height: bottom - top };
 }
 
+/** An icon and the count of threads on the block: "1" included, so every chip reads alike. */
 function chipWidth(count: number): number {
-	return count > 1 ? 30 + 7 * String(count).length : CHIP;
+	return 27 + 7 * String(count).length;
+}
+
+/** What a chip's tooltip says, and its label for a block with several threads. */
+export function commentCount(count: number): string {
+	return count === 1 ? "1 comment" : `${count} comments`;
 }
 
 type PassagePress = { id: string; left: number; pointer: number; top: number; moved: boolean };
@@ -558,6 +564,22 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}, [editor, host, state.threads, coarse]);
 
 	useEffect(() => () => clearTimeout(close.current), []);
+
+	// The passages behind an open card, or an open list, are underlined.
+	let openIds = pinned?.startsWith(LIST)
+		? markers.find(marker => `${LIST}${marker.key}` === pinned)?.views.map(view => view.thread.id)
+			?? []
+		: pinned && pinned !== "orphans"
+		? [pinned]
+		: [];
+	let openKey = openIds.join(" ");
+	useEffect(() => {
+		store.open(openKey ? openKey.split(" ") : []);
+	}, [openKey, store]);
+	useEffect(() => () => {
+		store.open([]);
+		store.light([]);
+	}, [store]);
 
 	useEffect(() => {
 		if (!canEdit && state.draft) store.draft(undefined);
@@ -1029,6 +1051,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					0,
 				);
 				let previewId = single ? `plan-comment-preview-${single.thread.id}` : undefined;
+				let ids = views.map(view => view.thread.id);
+				// Linked with its passage: pointing at the prose lights the chip too.
+				let lit = !dimmed && !shown
+					&& (state.focused !== undefined && ids.includes(state.focused));
 				let width = coarse ? Math.max(TOUCH_TARGET, button.width) : button.width;
 				// Never taller than the first line, so a tap at the end of the second line reaches the text.
 				let height = coarse ? Math.min(TOUCH_TARGET, Math.max(CHIP, marker.line)) : CHIP;
@@ -1051,15 +1077,20 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						aria-expanded={shown}
 						className="plan-comment-button"
 						data-dimmed={dimmed || undefined}
+						data-lit={lit || undefined}
 						data-plan-comment-button={marker.key}
 						data-plan-comment-count={single ? undefined : views.length}
 						data-press="small"
-						data-replies={replies > 0 || undefined}
 						data-slim={button.slim || undefined}
+						// One thread previews itself on hover; several say how many there are.
+						data-tooltip={single ? undefined : commentCount(views.length)}
+						data-tooltip-verbatim={single ? undefined : ""}
+						data-tooltip-detail={single ? undefined : ""}
 						inert={dimmed || undefined}
 						key={marker.key}
 						onBlur={() => {
 							if (single) unhover(single.thread.id);
+							else store.light([]);
 							// A focused marker whose passage scrolled away hides once focus leaves it.
 							measure();
 						}}
@@ -1071,9 +1102,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 								setPinned(single ? single.thread.id : `${LIST}${marker.key}`);
 							}
 						}}
-						onFocus={single ? () => hover(single.thread.id) : undefined}
-						onMouseEnter={single ? () => hover(single.thread.id) : undefined}
-						onMouseLeave={single ? () => unhover(single.thread.id) : undefined}
+						onFocus={single ? () => hover(single.thread.id) : () => store.light(ids)}
+						onMouseEnter={single ? () => hover(single.thread.id) : () => store.light(ids)}
+						onMouseLeave={single ? () => unhover(single.thread.id) : () => store.light([])}
 						style={{
 							top: button.top - (height - CHIP) / 2,
 							left,
@@ -1090,7 +1121,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							{(single || !button.slim) && (
 								<MessageIcon aria-hidden="true" size={button.slim ? 10 : 14} />
 							)}
-							{!single && <span className="plan-comment-count">{views.length}</span>}
+							{(!single || !button.slim) && (
+								<span className="plan-comment-count">{views.length}</span>
+							)}
 						</span>
 					</button>
 				);

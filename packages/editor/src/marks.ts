@@ -7,12 +7,12 @@
  * the dialect has no mark node, and adding one would put one reader's pointer
  * into everybody's document and make it undoable.
  *
- * One mark, and only while somebody is pointing at the card that owns it.
- * Standing marks were tried and taken out again: a plan accumulates decisions,
- * so anything painted permanently ends up painted over most of the prose, and
- * a document that is mostly highlighted says nothing at all. Which prose a
- * comment or a decision concerns is the sidecar's to answer, and it answers on
- * demand.
+ * Decisions mark prose only while somebody is pointing at the card that owns
+ * them. Standing decision marks were tried and taken out again: a plan
+ * accumulates decisions, so anything painted permanently ends up painted over
+ * most of the prose. Open comments are the exception, because resolving one
+ * takes its wash away: a faint amber at rest, stronger while pointed at, and
+ * underlined while its card is open (`paintComments`).
  *
  * One mechanism for both halves of the sidecar, too. Questions used to outline
  * a block through a DOM attribute while comments washed a range, so the same
@@ -57,6 +57,8 @@ import type { Points } from "./passage";
 export type Owner = "questions" | "comments" | "decisions";
 
 const NAME = "plan-related";
+/** Where a reader was sent to a comment's passage: the comment's own strong wash. */
+const COMMENT_PIN = "plan-comment-pin";
 const DECIDED = "plan-decided";
 
 /** CSS Highlights is document-wide, so each mounted editor owns only its ranges. */
@@ -75,6 +77,80 @@ export function paintDecided(editor: LexicalEditor, ranges: Range[]): void {
 	if (all.length === 0) CSS.highlights.delete(DECIDED);
 	else CSS.highlights.set(DECIDED, new Highlight(...all));
 }
+/**
+ * Named highlights painted by more than one editor.
+ *
+ * `CSS.highlights` is document-wide, so a parent and a child editor each own
+ * their ranges here and every write publishes the union for that name.
+ */
+const shared = new Map<string, Map<LexicalEditor, Range[]>>();
+
+/** Replace one editor's ranges under a shared name and publish the union. */
+export function paintShared(name: string, editor: LexicalEditor, ranges: Range[]): void {
+	let owners = shared.get(name) ?? new Map<LexicalEditor, Range[]>();
+	if (ranges.length === 0) owners.delete(editor);
+	else owners.set(editor, ranges);
+	if (owners.size === 0) shared.delete(name);
+	else shared.set(name, owners);
+	if (!available()) return;
+	let all = [...owners.values()].flat();
+	if (all.length === 0) CSS.highlights.delete(name);
+	else CSS.highlights.set(name, new Highlight(...all));
+}
+
+/**
+ * How strongly a commented passage is being pointed at.
+ *
+ * Every open thread's passage carries a faint wash at rest. Pointing at the
+ * passage or its margin chip strengthens it, and an open card adds an
+ * underline. Each passage is painted under exactly one name, so the tones
+ * never stack into a darker fourth.
+ */
+export type CommentTone = "rest" | "hover" | "open";
+
+export const COMMENT_HIGHLIGHT: { [tone in CommentTone]: string } = {
+	rest: "plan-comment",
+	hover: "plan-comment-hover",
+	open: "plan-comment-open",
+};
+
+/** What each editor asked to have washed, before any DOM range is built. */
+const commentTones = new Map<LexicalEditor, { [tone in CommentTone]?: Points[] }>();
+
+/** Every commented passage asked for, by tone. Pure, so it is testable headless. */
+export function commented(): { [tone in CommentTone]: Points[] } {
+	let out: { [tone in CommentTone]: Points[] } = { rest: [], hover: [], open: [] };
+	for (let tones of commentTones.values()) {
+		for (let tone of ["rest", "hover", "open"] as const) out[tone].push(...(tones[tone] ?? []));
+	}
+	return out;
+}
+
+/** Paint one editor's commented passages by tone. */
+export function paintComments(
+	editor: LexicalEditor,
+	tones: { [tone in CommentTone]?: Points[] },
+): void {
+	commentTones.set(editor, tones);
+	try {
+		let ranges: { [tone in CommentTone]: Range[] } = { rest: [], hover: [], open: [] };
+		editor.getEditorState().read(() => {
+			for (let tone of ["rest", "hover", "open"] as const) {
+				for (let points of tones[tone] ?? []) {
+					let range = $rangeOf(editor, points);
+					if (range) ranges[tone].push(range);
+				}
+			}
+		});
+		for (let tone of ["rest", "hover", "open"] as const) {
+			paintShared(COMMENT_HIGHLIGHT[tone], editor, ranges[tone]);
+		}
+	} catch (err) {
+		// Reached from a Lexical update listener; see `paint`.
+		console.error("[plan] could not mark commented prose:", err);
+	}
+}
+
 /** Prose a decision produced is washed in the decision's own (success) tone. */
 const DECISION_NAME = "plan-decision";
 
@@ -242,6 +318,8 @@ export function clear(editor?: LexicalEditor): void {
 		wanted.delete(editor);
 		if (pinned?.editor === editor) release();
 		paintDecided(editor, []);
+		for (let name of shared.keys()) paintShared(name, editor, []);
+		commentTones.delete(editor);
 		outline(editor, []);
 		try {
 			render(editor);
@@ -252,10 +330,15 @@ export function clear(editor?: LexicalEditor): void {
 		wanted.clear();
 		release();
 		decided.clear();
+		let names = [...shared.keys()];
+		shared.clear();
+		commentTones.clear();
 		if (available()) {
 			CSS.highlights.delete(NAME);
 			CSS.highlights.delete(DECISION_NAME);
 			CSS.highlights.delete(DECIDED);
+			CSS.highlights.delete(COMMENT_PIN);
+			for (let name of names) CSS.highlights.delete(name);
 		}
 	}
 }
@@ -270,12 +353,14 @@ function release(): void {
 function render(editor: LexicalEditor): void {
 	if (!available()) return fallback(editor);
 
-	let ranges: { [name: string]: Range[] } = { [NAME]: [], [DECISION_NAME]: [] };
+	let ranges: { [name: string]: Range[] } = { [NAME]: [], [DECISION_NAME]: [], [COMMENT_PIN]: [] };
+	let named = (owner: Owner) =>
+		owner === "questions" ? DECISION_NAME : owner === "comments" ? COMMENT_PIN : NAME;
 	for (let [source, owner, places] of layers()) {
 		source.getEditorState().read(() => {
 			for (let points of places) {
 				let range = $rangeOf(source, points);
-				if (range) ranges[owner === "questions" ? DECISION_NAME : NAME]!.push(range);
+				if (range) ranges[named(owner)]!.push(range);
 			}
 		});
 	}

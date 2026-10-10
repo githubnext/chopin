@@ -1340,7 +1340,10 @@ test("a remotely orphaned compact comment closes its sheet and restores editor f
 });
 
 function washed(page: import("@playwright/test").Page): Promise<number> {
-	return page.evaluate(() => CSS.highlights.get("plan-related")?.size ?? 0);
+	return page.evaluate(() =>
+		["plan-comment", "plan-comment-hover", "plan-comment-open"]
+			.reduce((total, name) => total + (CSS.highlights.get(name)?.size ?? 0), 0)
+	);
 }
 
 test("the reply field is one line until focused, then grows and reveals Send to Chopin and its send", async ({ join, seed }) => {
