@@ -105,8 +105,32 @@ function refused(value: Thread | Blocked): value is Blocked {
 	return "ok" in value && value.ok === false;
 }
 
-export function note(handle: string, text: string): Comment.Note {
-	return { id: ulid(), handle, text, ts: now() };
+/** A member's note, addressed to the Planner when `to` says so. */
+export function note(handle: string, text: string, to?: "planner"): Comment.Note {
+	return { id: ulid(), author: "member", handle, text, ts: now(), ...(to ? { to } : {}) };
+}
+
+/** The Planner's own note. */
+export function answer(text: string): Comment.Note {
+	return { id: ulid(), author: "planner", text, ts: now() };
+}
+
+/** Who said it, as a line of transcript names them. */
+export function speaker(note: Comment.Note): string {
+	return note.author === "planner" ? "chopin" : note.handle;
+}
+
+/**
+ * A note as it was stored before notes named their author.
+ *
+ * Every such note was a member's: nothing else could write one. Anything
+ * already carrying an author is returned unchanged.
+ */
+export function normalize(
+	note: Comment.Note | { id: string; handle: string; text: string; ts: number },
+): Comment.Note {
+	if ("author" in note) return note;
+	return { ...note, author: "member" };
 }
 
 /** Threads that have not been resolved. */
@@ -114,8 +138,22 @@ export function open(records: Records): Thread[] {
 	return [...records.values()].filter(record => record.status === "open");
 }
 
-/** Whether another thread may be started at all. */
-export function room(records: Records): { ok: false; reason: "full"; message: string } | undefined {
+/**
+ * Whether there is room for more: another note in `thread` when one is given,
+ * another thread at all otherwise.
+ */
+export function room(
+	records: Records,
+	thread?: Thread,
+): { ok: false; reason: "full"; message: string } | undefined {
+	if (thread) {
+		if (thread.notes.length < MAX_NOTES) return undefined;
+		return {
+			ok: false,
+			reason: "full",
+			message: `A thread holds at most ${MAX_NOTES} comments.`,
+		};
+	}
 	if (open(records).length < MAX_OPEN) return undefined;
 	return {
 		ok: false,
@@ -131,22 +169,27 @@ export function reply(
 	id: string,
 	handle: string,
 	text: string,
-): { ok: true; note: Comment.Note; thread: Thread } | Refusal {
+	to?: "planner",
+): { ok: true; note: Comment.Note; thread: Thread; previous: Thread } | Refusal {
+	return append(threads, records, id, note(handle, text, to));
+}
+
+/** Add a note to an open thread, whoever wrote it. */
+export function append(
+	threads: Threads,
+	records: Records,
+	id: string,
+	added: Comment.Note,
+): { ok: true; note: Comment.Note; thread: Thread; previous: Thread } | Refusal {
 	let record = live(threads, records, id);
 	if (refused(record)) return record;
 
-	if (record.notes.length >= MAX_NOTES) {
-		return {
-			ok: false,
-			reason: "full",
-			message: `A thread holds at most ${MAX_NOTES} comments.`,
-		};
-	}
+	let full = room(records, record);
+	if (full) return full;
 
-	let added = note(handle, text);
 	let next: Thread = { ...record, notes: [...record.notes, added] };
 	records.set(id, next);
-	return { ok: true, note: added, thread: next };
+	return { ok: true, note: added, thread: next, previous: record };
 }
 
 /**

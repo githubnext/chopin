@@ -19,7 +19,7 @@ export async function protectedFixture(kind: "decision" | "questionnaire") {
 			id,
 			status: "accepted",
 			passage,
-			notes: [{ id: ulid(), handle: "octocat", text: note.text, ts: 1 }],
+			notes: [{ id: ulid(), author: "member", handle: "octocat", text: note.text, ts: 1 }],
 			quote,
 			resolver: "octocat",
 			at: Math.floor(Date.now() / 1_000),

@@ -104,6 +104,12 @@ export declare namespace Chat {
 				sources: ConversationPlan.SourceRef[];
 			}
 			| { questionnaireId: string; kind: "activity"; label?: string; generation?: never };
+		/**
+		 * A system notice that a comment was sent to the Planner; text remains its fallback.
+		 *
+		 * `excerpt` is a short cut of the marked passage, `note` the comment as sent.
+		 */
+		comment?: { thread: string; excerpt: string; note: string };
 		/** True while the agent is still writing this one. */
 		streaming?: boolean;
 		tools?: Activity[];

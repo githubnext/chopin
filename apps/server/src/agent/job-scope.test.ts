@@ -40,6 +40,7 @@ describe("background Planner job scope", () => {
 				"edit_plan",
 				"ask",
 				"anchor_plan",
+				"reply_comment",
 				"edit_implementation_graph",
 				"create_research_workspace",
 				"revise_open_decision",

@@ -42,7 +42,7 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 		context: Room,
 		handle: string,
 		text: string,
-		thread: string | undefined,
+		about: undefined,
 		claimantSessionId: string,
 		reserved?: boolean,
 		member?: never,

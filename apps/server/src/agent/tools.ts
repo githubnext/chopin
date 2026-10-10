@@ -10,9 +10,10 @@ import type { ActiveMemberRequest } from "../chat/service";
 
 import * as Arguments from "./arguments";
 import * as Comments from "../comments/service";
+import * as Store from "../comments/store";
 import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
-import { ULID } from "@chopin/dialect";
+import { limits, ULID } from "@chopin/dialect";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
 import { documentIdentity, implementationActive } from "../plan/service";
 import { experimentTools } from "./experiment-tools";
@@ -148,7 +149,7 @@ export const documentTools = {
 						// False means this one still needs acting on and
 						// anchoring; it is the same list `anchors_pending` gives.
 						actioned: !!thread.result && !thread.result.pending,
-						comments: thread.notes.map(note => `@${note.handle}: ${note.text}`),
+						comments: thread.notes.map(note => `@${Store.speaker(note)}: ${note.text}`),
 					})),
 				questions: [...context.plan.records.values()].map(record => ({
 					id: record.id,
@@ -630,7 +631,7 @@ export const documentTools = {
 		contextSchema: roomContext,
 		description: "Say where in the plan each decision lives. Call it immediately after every "
 			+ "successful `edit_plan`, using that result's revision and block digests. For a "
-			+ "question, give `widget` and `question`; for an accepted comment, give `thread`. "
+			+ "question, give `widget` and `question`; for a comment thread, give `thread`. "
 			+ "Either way the blocks are the prose that decision produced. Link only blocks that "
 			+ "would have to change if the decision changed. A question's card moves after its "
 			+ "first related block. An empty list means reviewed and "
@@ -653,7 +654,7 @@ export const documentTools = {
 							question: { type: "string", description: "The question id." },
 							thread: {
 								type: "string",
-								description: "An accepted comment thread's id, instead of widget/question.",
+								description: "A comment thread's id, instead of widget/question.",
 							},
 							blocks: {
 								type: "array",
@@ -725,6 +726,39 @@ export const documentTools = {
 							...Comments.outstanding(context.plan),
 						],
 					};
+			}),
+	}),
+
+	reply_comment: tool({
+		contextSchema: roomContext,
+		description: "Reply in the comment thread this turn was sent. Use it once, after any edit "
+			+ "and `anchor_plan`, to answer the latest note sent to you — briefly, since it is "
+			+ "shown in a small card beside the passage. Only that thread can be answered, and "
+			+ "not once it has been resolved.",
+		inputSchema: jsonSchema({
+			type: "object",
+			properties: {
+				thread: { type: "string", description: "The comment thread's id, from the prompt." },
+				text: { type: "string", minLength: 1, maxLength: limits.MAX_NOTE },
+			},
+			required: ["thread", "text"],
+			additionalProperties: false,
+		}),
+		execute: (raw, { context: { room: context } }) =>
+			answer("reply_comment", async () => {
+				let args = raw as Record<string, unknown>;
+				if (
+					!args || typeof args !== "object" || typeof args.thread !== "string"
+					|| typeof args.text !== "string"
+					|| Object.keys(args).some(key => key !== "thread" && key !== "text")
+				) throw new Error("reply_comment takes only `thread` and `text`, both text");
+				return Comments.answer(
+					context.plan,
+					context.server,
+					context.id,
+					args.thread,
+					args.text,
+				);
 			}),
 	}),
 };

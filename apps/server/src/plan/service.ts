@@ -1356,7 +1356,7 @@ export async function open(
 		records: new Map(
 			sidecar.questions.map(record => [record.id, Questions.normalizeRecord(record)]),
 		),
-		threads: new Map(sidecar.threads.map(record => [record.id, record])),
+		threads: new Map(sidecar.threads.map(record => [record.id, Comments.normalize(record)])),
 		revision: sidecar.revision,
 		graph: sidecar.graph,
 		execution: sidecar.execution,

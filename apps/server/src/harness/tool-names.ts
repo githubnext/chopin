@@ -15,6 +15,7 @@ export const PLANNER_TOOL_NAMES = [
 	"read_implementation_graph",
 	"edit_implementation_graph",
 	"anchor_plan",
+	"reply_comment",
 	"read_repository_file",
 	"list_repository_tree",
 	"search_repository",

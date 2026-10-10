@@ -16,6 +16,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"edit_plan",
 	"ask",
 	"anchor_plan",
+	"reply_comment",
 	"edit_implementation_graph",
 	"create_research_workspace",
 	"propose_investigation",

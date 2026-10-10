@@ -5,6 +5,11 @@
  * hides it and reopening brings it back; neither touches the document, so each
  * is a record change that is persisted before anyone is told.
  *
+ * A note can be sent to the Planner. That starts, or joins, a turn about the
+ * thread; the Planner answers in the thread with `reply_comment`, and whatever
+ * it writes in the plan is recorded as the thread's result. The wire's `to`
+ * decides whether a note is addressed — never its text.
+ *
  * Threads accepted under the earlier lifecycle keep their `<Decision>` and their
  * result anchors, and the agent still owes them a review. Nothing new becomes
  * accepted or dismissed.
@@ -18,7 +23,9 @@
 import { limits, ulid } from "@chopin/dialect";
 
 import * as room from "../plan/room";
+import * as Chat from "../chat/service";
 import * as Store from "./store";
+import { address } from "./prompt";
 import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import * as Service from "../plan/service";
@@ -47,7 +54,10 @@ export type Record = {
 	 */
 	passage: Wired.Passage;
 	notes: Wire.Note[];
-	/** The prose the agent's revision produced. Absent until it anchors it. */
+	/**
+	 * The prose the agent's revision produced. Absent until it anchors it, or
+	 * until a turn sent this thread writes something.
+	 */
 	result?: Wired.AnchorSet;
 	/** The marked text as it read when this resolved. Frozen; the passage is not. */
 	quote?: string;
@@ -56,8 +66,13 @@ export type Record = {
 	at?: number;
 };
 
+/** A record as it was stored before notes named their author. */
+export function normalize(record: Record): Record {
+	return { ...record, notes: record.notes.map(Store.normalize) };
+}
+
 /** The thread as clients see it. The passage travels on `plan:anchors`. */
-function wire(record: Record): Wire.Thread {
+function wire(record: Record, plan?: Plan): Wire.Thread {
 	return {
 		id: record.id,
 		status: record.status,
@@ -65,7 +80,21 @@ function wire(record: Record): Wire.Thread {
 		...(record.quote !== undefined ? { quote: record.quote } : {}),
 		...(record.resolver ? { resolver: record.resolver } : {}),
 		...(record.at !== undefined ? { at: record.at } : {}),
+		...(plan && working(plan, record.id) ? { working: true } : {}),
 	};
+}
+
+/**
+ * Whether a Planner turn is running or waiting for this thread.
+ *
+ * Read from the turn and its queue rather than stored, so it cannot outlive
+ * them: a restart drops both, and a thread that said otherwise would spin
+ * for good.
+ */
+export function working(plan: Plan, id: string): boolean {
+	let record = plan.threads.get(id);
+	if (record?.status !== "open") return false;
+	return plan.chat.acting === id || !!Chat.queuedFor(plan.chat, id);
 }
 
 /**
@@ -89,11 +118,14 @@ function reading(plan: Plan, record: Record): { quote: string; record: Record } 
 /**
  * Whether a thread still points into the document.
  *
- * Resolved and dismissed threads are hidden, so nobody is shown where they
- * point and their positions are not kept current. A resolved thread recovers
- * its passage from its relative positions and quote when it is reopened.
+ * Dismissed threads, and resolved threads that changed nothing, are hidden, so
+ * nobody is shown where they point and their positions are not kept current.
+ * A resolved thread recovers its passage from its relative positions and quote
+ * when it is reopened. A resolved thread whose turn wrote something keeps
+ * pointing at what it wrote, so the margin can still say so.
  */
 function tracked(record: Record): boolean {
+	if (record.status === "resolved") return !!record.result && record.result.anchors.length > 0;
 	return record.status === "open" || record.status === "accepted";
 }
 
@@ -200,18 +232,26 @@ export function applied(plan: Plan, id: string): boolean {
  */
 export function attribute(plan: Plan, thread: string, blocks: number[]): void {
 	let record = plan.threads.get(thread);
-	if (!record || record.status !== "accepted") return;
-	if (record.result && !record.result.pending) return;
+	if (!record || (record.status !== "accepted" && record.status !== "open")) return;
+	if (record.status === "accepted" && record.result && !record.result.pending) return;
 	if (blocks.length === 0) return;
 
 	try {
 		let current = room.digests(plan.document);
-		let anchors: Wired.Anchor[] = [];
+		// An open thread can be sent to the Planner more than once, and each
+		// turn adds to what it produced rather than replacing it.
+		let kept = record.status === "open" && record.result
+			? record.result.anchors.filter(anchor => !anchor.orphaned)
+			: [];
+		let seen = new Set(kept.map(anchor => anchor.digest));
+		let anchors: Wired.Anchor[] = [...kept];
 		for (let index of blocks) {
 			let hash = current[index];
-			if (hash) anchors.push(room.anchorAt(plan.document, index, hash));
+			if (!hash || seen.has(hash)) continue;
+			seen.add(hash);
+			anchors.push(room.anchorAt(plan.document, index, hash));
 		}
-		if (anchors.length === 0) return;
+		if (anchors.length === kept.length) return;
 
 		plan.threads.set(thread, { ...record, result: { anchors, pending: false } });
 	} catch (err) {
@@ -221,7 +261,7 @@ export function attribute(plan: Plan, thread: string, blocks: number[]): void {
 	}
 }
 
-/** Record the prose an accepted thread's revision produced. */
+/** Record the prose a thread's revision produced. */
 export function relate(
 	plan: Plan,
 	thread: string,
@@ -229,7 +269,7 @@ export function relate(
 ): string | undefined {
 	let record = plan.threads.get(thread);
 	if (!record) return `no comment thread ${thread}`;
-	if (record.status !== "accepted") return `comment thread ${thread} was not accepted`;
+	if (record.status === "dismissed") return `comment thread ${thread} was dismissed`;
 
 	let current = room.digests(plan.document);
 	let found: Wired.Anchor[] = [];
@@ -256,7 +296,7 @@ export function greet(plan: Plan, ws: Socket): void {
 		ts: 0,
 		threads: [...plan.threads.values()]
 			.filter(tracked)
-			.map(wire),
+			.map(record => wire(record, plan)),
 	});
 }
 
@@ -266,6 +306,28 @@ function said(text: string): string | undefined {
 	return value.length > limits.MAX_NOTE ? undefined : value;
 }
 
+/** How the Planner is reached, for a note sent to it. Absent for an ordinary note. */
+export type Addressed = Chat.Room;
+
+type Admitted = { planner?: Wire.Planner } | { refused: string };
+
+/**
+ * Whether a note sent to the Planner can be acted on, asked before it is saved.
+ *
+ * A full queue refuses the note rather than saving one nobody will act on. A
+ * server without a Planner still takes it — it is a comment either way — and
+ * says so.
+ */
+function admit(msg: { to?: unknown }, context: Addressed | undefined, thread?: string): Admitted {
+	if (msg.to === undefined) return {};
+	if (msg.to !== "planner" || !context) return { refused: "A comment can only be sent to Chopin." };
+	let admitted = Chat.admission(context, thread);
+	if (admitted === "busy") {
+		return { refused: "Chopin has too much waiting already. Try again when it has caught up." };
+	}
+	return { planner: admitted };
+}
+
 /** Mark a phrase and say the first thing about it. */
 export function start(
 	plan: Plan,
@@ -273,8 +335,9 @@ export function start(
 	roomId: string,
 	ws: Socket,
 	msg: Request<Wire.Start.Ask>,
+	context?: Addressed,
 ): void | Promise<void> {
-	let refuse = (reason: "invalid" | "full", message: string) =>
+	let refuse = (reason: "invalid" | "full" | "busy", message: string) =>
 		reply(ws, msg.rid, { kind: "comment:start", ts: 0, ok: false, reason, message });
 
 	let full = Store.room(plan.threads);
@@ -283,6 +346,11 @@ export function start(
 	let text = said(msg.text);
 	if (!text) return refuse("invalid", "A comment needs something in it.");
 
+	let admitted = admit(msg, context);
+	if ("refused" in admitted) {
+		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused);
+	}
+
 	let passage: Wired.Passage;
 	try {
 		passage = room.passageAt(plan.document, msg.blocks, msg.quote, msg.offset, msg.length);
@@ -290,19 +358,22 @@ export function start(
 		return refuse("invalid", err instanceof Error ? err.message : "could not mark that passage");
 	}
 
-	let record: Record = {
-		id: ulid(),
-		status: "open",
-		passage,
-		notes: [Store.note(ws.data.handle, text)],
-	};
+	let first = Store.note(ws.data.handle, text, admitted.planner ? "planner" : undefined);
+	let record: Record = { id: ulid(), status: "open", passage, notes: [first] };
 	plan.threads.set(record.id, record);
-	let finish = () => {
-		reply(ws, msg.rid, { kind: "comment:start", ts: 0, ok: true, thread: wire(record) });
+	let finish = async () => {
+		reply(ws, msg.rid, {
+			kind: "comment:start",
+			ts: 0,
+			ok: true,
+			thread: wire(record),
+			...(admitted.planner ? { planner: admitted.planner } : {}),
+		});
 		relay(ws, { kind: "comment:opened", ts: 0, thread: wire(record) });
 		// The passage travels separately, and a card with nothing to highlight is
 		// what the room sees until it arrives — so it goes now, not on the next edit.
 		Service.anchors(plan, server, roomId);
+		if (context && admitted.planner) await send(context, record.id, first);
 	};
 	return Service.persist(plan).then(finish);
 }
@@ -312,30 +383,184 @@ export function respond(
 	plan: Plan,
 	ws: Socket,
 	msg: Request<Wire.Reply.Ask>,
+	context?: Addressed,
 ): void | Promise<void> {
+	let refuse = (reason: "invalid" | "busy", message: string) =>
+		reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ok: false, reason, message });
+
 	let text = said(msg.text);
-	if (!text) {
-		return reply(ws, msg.rid, {
-			kind: "comment:reply",
-			ts: 0,
-			id: msg.id,
-			ok: false,
-			reason: "invalid",
-			message: "A comment needs something in it.",
-		});
+	if (!text) return refuse("invalid", "A comment needs something in it.");
+
+	let admitted = admit(msg, context, msg.id);
+	if ("refused" in admitted) {
+		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused);
 	}
 
-	let outcome = Store.reply(plan.comments, plan.threads, msg.id, ws.data.handle, text);
+	let outcome = Store.reply(
+		plan.comments,
+		plan.threads,
+		msg.id,
+		ws.data.handle,
+		text,
+		admitted.planner ? "planner" : undefined,
+	);
 	if (!outcome.ok) {
 		return reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ...outcome });
 	}
 
 	Store.typing(plan.comments, msg.id, ws.data.client, ws.data.handle, false);
-	let finish = () => {
-		reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ok: true, note: outcome.note });
+	let finish = async () => {
+		reply(ws, msg.rid, {
+			kind: "comment:reply",
+			ts: 0,
+			id: msg.id,
+			ok: true,
+			note: outcome.note,
+			...(admitted.planner ? { planner: admitted.planner } : {}),
+		});
 		relay(ws, { kind: "comment:said", ts: 0, id: msg.id, note: outcome.note });
+		if (context && admitted.planner) await send(context, msg.id, outcome.note);
 	};
 	return Service.persist(plan).then(finish);
+}
+
+/** Tell everyone whether the Planner is on a thread, and why it stopped if it did not finish. */
+function announce(
+	context: Pick<Addressed, "server" | "room">,
+	id: string,
+	working: boolean,
+	reason?: Wire.Working["reason"],
+): void {
+	broadcast(context.server, context.room, {
+		kind: "comment:working",
+		ts: 0,
+		id,
+		working,
+		...(reason ? { reason } : {}),
+	});
+}
+
+/**
+ * Hand a saved note to the Planner.
+ *
+ * Only after the note is durable and the room has it, so the turn never reads
+ * a thread somebody else cannot see. A server without a Planner says so on the
+ * thread rather than in Chat: the note is the thing that was asked about.
+ */
+async function send(context: Addressed, id: string, note: Wire.Note): Promise<void> {
+	let { plan } = context;
+	if (!context.config.agent) return announce(context, id, false, "off");
+
+	let record = plan.threads.get(id);
+	if (!record || record.status !== "open") return;
+	let quote = reading(plan, record).quote;
+	let handle = Store.speaker(note);
+	try {
+		await Chat.instruct(
+			context,
+			handle,
+			address(plan.threads.get(id) ?? record, quote),
+			`Comment on “${excerpt(quote)}” sent to Chopin`,
+			{
+				thread: id,
+				// Resolved before its turn came round: nobody is waiting for it now.
+				spent: () => plan.threads.get(id)?.status !== "open",
+				ended: outcome => ended(context, id, outcome),
+				comment: { thread: id, excerpt: excerpt(quote), note: note.text },
+			},
+		);
+	} catch (err) {
+		console.error("[comments] could not send a comment to the Planner:", err);
+		return announce(context, id, working(plan, id), "failed");
+	}
+	announce(context, id, working(plan, id));
+}
+
+/**
+ * The turn a thread was sent to has finished.
+ *
+ * If the Planner said something but never replied in the thread, its last word
+ * in Chat is posted there for it: somebody asked in the thread, so the thread is
+ * where they will look. Only when the thread is still open and nothing from the
+ * Planner has followed the latest note sent to it.
+ */
+async function ended(context: Addressed, id: string, outcome: Chat.Ended): Promise<void> {
+	let { plan } = context;
+	let record = plan.threads.get(id);
+	let text = outcome.text?.trim().slice(0, limits.MAX_NOTE);
+	if (outcome.status === "done" && record?.status === "open" && text) {
+		let last = record.notes.findLastIndex(note => note.to === "planner");
+		let answered = record.notes.slice(last + 1).some(note => note.author === "planner");
+		if (!answered) {
+			await post(plan, context.server, context.room, id, text).catch(err => {
+				console.error("[comments] could not post the Planner's reply:", err);
+			});
+		}
+	}
+
+	let still = !!Chat.queuedFor(plan.chat, id);
+	let reason = outcome.status === "stopped"
+		? "stopped" as const
+		: outcome.status === "failed"
+		? "failed" as const
+		: undefined;
+	announce(context, id, still, still ? undefined : reason);
+}
+
+/** Add the Planner's note to an open thread, durably, then tell the room. */
+async function post(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+	text: string,
+): Promise<{ ok: true; note: Wire.Note } | Store.Refusal> {
+	let outcome = Store.append(plan.comments, plan.threads, id, Store.answer(text));
+	if (!outcome.ok) return outcome;
+	try {
+		await Service.persist(plan);
+	} catch (err) {
+		Store.restore(plan.comments, plan.threads, outcome.previous);
+		throw err;
+	}
+	broadcast(server, roomId, { kind: "comment:said", ts: 0, id, note: outcome.note });
+	return { ok: true, note: outcome.note };
+}
+
+/**
+ * The Planner answers in a thread.
+ *
+ * Only the thread its running turn was sent: a turn has no business speaking in
+ * a conversation nobody asked it into, and one about a thread resolved since is
+ * refused like any other late reply.
+ */
+export async function answer(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	thread: string,
+	text: string,
+): Promise<{ ok: true; note: string } | { ok: false; reason: string; message: string }> {
+	if (plan.chat.acting !== thread) {
+		return {
+			ok: false,
+			reason: "not-asked",
+			message: "You can only reply in the comment thread this turn was sent.",
+		};
+	}
+	let value = said(text);
+	if (!value) {
+		return {
+			ok: false,
+			reason: "invalid",
+			message: `A reply needs text, at most ${limits.MAX_NOTE} characters.`,
+		};
+	}
+	let outcome = await post(plan, server, roomId, thread, value);
+	if (outcome.ok) return { ok: true, note: outcome.note.id };
+	return outcome.reason === "resolved"
+		? { ok: false, reason: "resolved", message: "The thread was resolved; nobody is waiting." }
+		: { ok: false, reason: outcome.reason, message: outcome.message };
 }
 
 /** Somebody is, or has stopped, writing a reply. */

@@ -91,6 +91,17 @@ Chopin's tools available to the Planner under every harness are:
   `createMCPClient` against GitHub's remote MCP server, bound to the channel's
   repository.
 
+A comment note sent to Chopin (`to: "planner"` on `comment:start` or
+`comment:reply`; the server never looks for a mention in the text) starts or
+joins a turn about that one thread, under the sender's claimant session after
+the same write-authority recheck as Chat. That turn alone may call
+`reply_comment { thread, text }`: it refuses any thread other than the one the
+running turn was sent, and a resolved or full one, and persists the Planner's
+note before the room sees it. The turn's `edit_plan` writes are recorded as the
+thread's result. If the turn ends having said something in Chat but nothing in
+the thread, that last message is posted to the thread for it. Background jobs
+cannot call `reply_comment`.
+
 Issue and general search MCP tools are refused because linked objects and
 free-form qualifiers can cross the selected repository boundary. Repository
 REST tools construct owner and repository coordinates on the server, bound
@@ -102,7 +113,7 @@ With `PLANNER_VISUALS=on` and a configured Jev key, foreground `copilot-sdk` and
 receive `assess_visual`. It routes one explanatory paragraph through
 possibility, comprehension, and type choices before `edit_plan` can publish it.
 The route is bound to the member turn, document revision, passage, and placement.
-Accepted-comment turns, longer requests, background jobs, and `atomic` sessions
+Comment turns, longer requests, background jobs, and `atomic` sessions
 keep their existing authoring prompt, tool set, and edit path. Atomic sessions
 may retain workflow ownership across turns and are outside this disposable-session
 prototype. This path is opt-in while the bounded authoring workflow is evaluated.

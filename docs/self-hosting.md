@@ -336,7 +336,7 @@ paragraphs are not yet supported in a routed edit. `JEV_MODEL` and
 `JEV_TIMEOUT_MS` apply to this path too.
 
 Routing is limited to explicit member requests of at most 1,000 characters under
-`copilot-sdk` or `pi`. Accepted-comment turns, longer member requests, background
+`copilot-sdk` or `pi`. Comment turns, longer member requests, background
 jobs, and `atomic` sessions retain their ordinary authoring behavior. Atomic's
 retained workflow sessions are outside this disposable-session prototype.
 

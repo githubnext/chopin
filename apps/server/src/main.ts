@@ -715,12 +715,31 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Questions.addOption(room.plan, server, room.id, ws, frame);
 			return;
 
+		// A note sent to the Planner starts a turn on the sender's entitlement, so
+		// their authority to do that is rechecked first, exactly as for Chat; the
+		// sender's session is the turn's claimant.
 		case "comment:start":
-			if (room.plan) await Comments.start(room.plan, server, room.id, ws, frame);
+			if (!room.plan) return;
+			if (frame.to === "planner" && !await plannerWritable(room, ws, frame.rid)) return;
+			await Comments.start(
+				room.plan,
+				server,
+				room.id,
+				ws,
+				frame,
+				frame.to === "planner" ? chat(room, ws) : undefined,
+			);
 			return;
 
 		case "comment:reply":
-			if (room.plan) await Comments.respond(room.plan, ws, frame);
+			if (!room.plan) return;
+			if (frame.to === "planner" && !await plannerWritable(room, ws, frame.rid)) return;
+			await Comments.respond(
+				room.plan,
+				ws,
+				frame,
+				frame.to === "planner" ? chat(room, ws) : undefined,
+			);
 			return;
 
 		case "comment:typing":

@@ -88,6 +88,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"read_implementation_graph",
 		"edit_implementation_graph",
 		"anchor_plan",
+		"reply_comment",
 	]);
 	expect(documentTools.edit_plan.inputSchema).toBeDefined();
 });

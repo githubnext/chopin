@@ -371,7 +371,7 @@ structural block operations against that revision rather than a text patch.
 4. Existing MDAST objects identify untouched or moved blocks. Their live Lexical
    nodes are reused; genuinely new blocks receive new nodes.
 5. Lexical produces a Yjs delta. The server finalizes records, reviews
-   relationships, and attributes accepted-comment results.
+   relationships, and attributes the results of the comment thread a turn was sent.
 6. The delta and sidecar commit before broadcast.
 7. The server derives added, moved, and removed marks and places the Planner
    cursor at the end of the final changed block.
