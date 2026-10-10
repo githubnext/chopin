@@ -1,12 +1,15 @@
 import { z } from "zod";
-import { approveGraph } from "./graphs";
+import { approveGraph, validate } from "./graphs";
 import { implementationReadiness } from "./plan-graphs";
-import { claimEligibility } from "./lifecycle";
+import { claimEligibility, historyFor, implementationLifecycle } from "./lifecycle";
 import { announceImplementation } from "./notifications";
 import { drain, exclusive, persistExclusive, source } from "../plan/service";
+import { broadcast } from "../wire";
 import type { Plan } from "../plan/service";
 import type { Connection } from "../experiments/connections";
-import type { BuildRequest, CheckoutContext } from "@chopin/protocol/implementation";
+import type { ProgressEvent } from "./lifecycle";
+import type { Run } from "./graphs";
+import type { BuildRequest, CheckoutContext, LiveSnapshot } from "@chopin/protocol/implementation";
 
 export let checkoutSchema = z.object({
 	repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
@@ -65,6 +68,22 @@ let liveSchema = z.object({
 	baseRevision: z.number().int().nonnegative(),
 	baseSource: z.string(),
 	pullRequests: z.array(z.string().url()).min(1).max(100),
+	/** Commits rebuilds landed on the live pull requests, newest last. */
+	commits: z.array(
+		z.object({
+			pullRequest: z.string().url(),
+			sha: z.string().regex(/^[a-f0-9]{7,40}$/),
+			message: z.string().min(1).max(500),
+			revision: z.number().int().nonnegative(),
+			at: z.string().datetime(),
+		}).strict(),
+	).max(200).optional(),
+	/** The source a queued rebuild targets, sealed so later edits join the next delta. */
+	target: z.object({
+		buildId: z.string().uuid(),
+		revision: z.number().int().nonnegative(),
+		source: z.string(),
+	}).strict().optional(),
 }).strict();
 
 /** The built source a living document compares later edits against. */
@@ -87,6 +106,11 @@ export function restoreLive(
 		|| !history.some(item => item.run.id === live.buildId && item.live)
 		|| live.baseRevision > revision
 		|| new Set(live.pullRequests).size !== live.pullRequests.length
+		|| live.commits?.some(commit => !live.pullRequests.includes(commit.pullRequest))
+		|| live.target && (
+				live.target.revision > revision || live.target.revision < live.baseRevision
+				|| !builds.some(item => item.id === live.target!.buildId && item.kind === "rebuild")
+			)
 	) {
 		throw new Error("invalid live build");
 	}
@@ -235,12 +259,16 @@ export async function queueRebuild(
 			expiresAt: Date.now() + 90_000,
 			state: "queued",
 		});
-		let previous = plan.builds;
-		plan.builds = [...previous, build];
+		let previous = { builds: plan.builds, live };
+		plan.builds = [...previous.builds, build];
+		plan.live = {
+			...live,
+			target: { buildId: build.id, revision: plan.revision, source: source(plan) },
+		};
 		try {
 			await persistExclusive(plan, true);
 		} catch (error) {
-			plan.builds = previous;
+			Object.assign(plan, previous);
 			throw error;
 		}
 		announceImplementation(plan);
@@ -320,4 +348,210 @@ export function reportBuild(
 			plan.persistence.onBuildStopped?.(plan.id);
 		}
 	});
+}
+
+export let rebuildReportSchema = z.object({
+	summary: z.string().trim().min(1).max(2000),
+	commits: z.array(
+		z.object({
+			pullRequest: z.string().url(),
+			sha: z.string().regex(/^[a-f0-9]{7,40}$/),
+			message: z.string().trim().min(1).max(500),
+		}).strict(),
+	).max(50),
+	tasks: z.array(
+		z.object({
+			title: z.string().trim().min(1).max(200),
+			goal: z.string().trim().min(1).max(2000),
+			pullRequest: z.string().url(),
+		}).strict(),
+	).max(20),
+}).strict();
+export type RebuildReport = z.infer<typeof rebuildReportSchema>;
+
+/** Completed tasks of every live run, in delivery order. */
+function liveTasks(plan: Plan) {
+	if (!plan.graph) return [];
+	let graph = plan.graph;
+	let projected = historyFor(graph, plan.lifecycle);
+	return plan.lifecycle.history.flatMap((archived, index) => {
+		let version = graph.versions.find(item => item.number === archived.run.graphVersion);
+		let progress = projected[index]?.progress.tasks ?? [];
+		if (!archived.live || !version) return [];
+		return progress.flatMap(item => {
+			let task = version.definition.tasks.find(task => task.id === item.id);
+			return item.state === "completed" && task
+				? [{
+					title: task.title,
+					goal: task.goal,
+					pullRequest: item.pullRequest.url,
+					summary: item.summary,
+				}]
+				: [];
+		});
+	});
+}
+
+/** The sealed delta a running rebuild implements. */
+export function readRebuild(plan: Plan, buildId: string) {
+	return exclusive(plan, async () => {
+		let live = plan.live;
+		let build = plan.builds.at(-1);
+		if (!live?.target || live.target.buildId !== buildId || build?.id !== buildId) return;
+		let tasks = liveTasks(plan);
+		return {
+			before: live.baseSource,
+			after: live.target.source,
+			baseRevision: live.baseRevision,
+			targetRevision: live.target.revision,
+			pullRequests: live.pullRequests.map(url => ({
+				url,
+				title: tasks.find(task => task.pullRequest === url)?.title ?? "",
+			})),
+			tasks,
+		};
+	});
+}
+
+/**
+ * Land a rebuild: record its commits, append its tasks as a completed graph version, advance the
+ * live base to the sealed target, and stop the build so a deferred live check can run.
+ */
+export function reportRebuild(
+	plan: Plan,
+	buildId: string,
+	report: RebuildReport,
+): Promise<{ kind: "accepted" } | { kind: "refused"; reason: string }> {
+	return exclusive(plan, async () => {
+		let live = plan.live;
+		let build = plan.builds.at(-1);
+		let target = live?.target;
+		if (
+			!live || !target || !build || build.id !== buildId
+			|| build.kind !== "rebuild" || build.state !== "running" || target.buildId !== buildId
+		) return { kind: "refused", reason: "build-inactive" };
+		if (
+			[...report.commits, ...report.tasks].some(item =>
+				!live.pullRequests.includes(item.pullRequest)
+			)
+		) return { kind: "refused", reason: "pull-request" };
+		let at = new Date().toISOString();
+		let graph = plan.graph && structuredClone(plan.graph);
+		let lifecycle = structuredClone(plan.lifecycle);
+		let latest = graph?.versions.at(-1);
+		// A draft the Planner started since the build keeps its place; only the commits are recorded.
+		if (graph && latest && report.tasks.length > 0 && latest.state === "approved") {
+			let number = latest.number + 1;
+			let checked = validate({
+				tasks: report.tasks.map((task, index) => ({
+					id: `rebuild-${number}-${index + 1}`,
+					title: task.title,
+					context:
+						`Living-document rebuild of revisions ${live.baseRevision} to ${target.revision}.`,
+					goal: task.goal,
+					acceptance: [
+						`Committed on ${task.pullRequest}.`,
+						`Reflects the document change since revision ${live.baseRevision}.`,
+					],
+					dependsOn: [],
+				})),
+			});
+			if (!checked.ok) return { kind: "refused", reason: checked.reason };
+			latest.state = "superseded";
+			// LIVE_BUILD prototype: a rebuild's tasks are approved and completed by the coding agent's
+			// report alone. This deliberately bypasses the human-only graph approval.
+			graph.versions.push({
+				number,
+				revision: 1,
+				planRevision: plan.revision,
+				state: "approved",
+				definition: checked.value,
+			});
+			let run: Run = {
+				id: build.id,
+				user: build.user,
+				client: { name: "chopin-acp", version: "0.1.0" },
+				session: build.session ?? build.id,
+				planRevision: plan.revision,
+				graphVersion: number,
+				graphRevision: 1,
+				repository: live.checkout.repository,
+				branch: `chopin/rebuild-${build.id.slice(0, 8)}`,
+				commit: build.checkout.commit,
+				startedAt: build.createdAt,
+			};
+			let events: ProgressEvent[] = checked.value.tasks.flatMap((task, index) => {
+				let key = `${build.id}:${task.id}`;
+				return [
+					{ kind: "start" as const, taskId: task.id, idempotencyKey: `${key}:start` },
+					{
+						kind: "report_pr" as const,
+						taskId: task.id,
+						url: report.tasks[index]!.pullRequest,
+						state: "open" as const,
+						idempotencyKey: `${key}:pr`,
+					},
+					{
+						kind: "complete" as const,
+						taskId: task.id,
+						summary: report.summary,
+						idempotencyKey: `${key}:complete`,
+					},
+				];
+			});
+			lifecycle.history.push({ run, events, live: true });
+		}
+		let { target: _target, ...base } = live;
+		let previous = {
+			graph: plan.graph,
+			lifecycle: plan.lifecycle,
+			live: plan.live,
+			builds: plan.builds,
+		};
+		plan.graph = graph;
+		plan.lifecycle = lifecycle;
+		plan.live = {
+			...base,
+			baseRevision: target.revision,
+			baseSource: target.source,
+			commits: [
+				...(live.commits ?? []),
+				...report.commits.map(commit => ({ ...commit, revision: target.revision, at })),
+			].slice(-200),
+		};
+		plan.builds = [...plan.builds.slice(0, -1), buildSchema.parse({ ...build, state: "stopped" })];
+		try {
+			await persistExclusive(plan, true);
+		} catch {
+			Object.assign(plan, previous);
+			return { kind: "refused", reason: "durability" };
+		}
+		announceImplementation(plan);
+		if (graph) {
+			broadcast(plan.server, plan.id, {
+				kind: "plan:lifecycle",
+				ts: 0,
+				...implementationLifecycle({ graph, execution: plan.execution, lifecycle }),
+			});
+		}
+		plan.persistence.onBuildStopped?.(plan.id);
+		return { kind: "accepted" };
+	});
+}
+
+/** What the browser needs to show whether a living document matches its pull requests. */
+export function liveSnapshot(plan: Plan, connections: Connection[]): LiveSnapshot | undefined {
+	let live = plan.live;
+	if (!live) return;
+	let { baseSource, target: _target, commits, ...rest } = live;
+	let rebuild = plan.builds.findLast(build => build.kind === "rebuild");
+	return {
+		...structuredClone(rest),
+		commits: structuredClone(commits ?? []),
+		...(rebuild ? { rebuild: structuredClone(rebuild) } : {}),
+		outOfSync: source(plan) !== baseSource,
+		builderConnected: connections.some(connection =>
+			connection.owner === live.user && connection.source.repositoryId === live.repositoryId
+		),
+	};
 }

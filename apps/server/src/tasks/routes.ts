@@ -1,6 +1,6 @@
 import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
-import { queueBuild } from "./builds";
+import { liveSnapshot, queueBuild } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 import { implementationReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
@@ -126,6 +126,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			let current = await options.withPlan(id, plan =>
 				exclusive(plan, async () => {
 					let ready = implementationReadiness(plan, plan.revision);
+					let live = liveSnapshot(plan, options.connections.list(id));
 					let snapshot: ImplementationSnapshot = {
 						revision: plan.persistence.revision,
 						planRevision: plan.revision,
@@ -143,6 +144,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 								lifecycle: plan.lifecycle,
 							})
 							: { execution: { state: "idle" }, history: [] },
+						...(live ? { live } : {}),
 					};
 					return snapshot;
 				}));

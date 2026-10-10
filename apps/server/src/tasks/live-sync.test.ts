@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import { LiveSyncCoordinator } from "./live-sync";
-import { reportBuild } from "./builds";
+import { reportBuild, reportRebuild } from "./builds";
 import { implementationStatus } from "./notifications";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { close, implementationActive, open, source } from "../plan/service";
+import { close, implementationActive, open, rewrite, source } from "../plan/service";
 
 import type { Server } from "bun";
 import type { Connection } from "../experiments/connections";
@@ -220,6 +220,51 @@ describe("living-document sync", () => {
 		expect(plan.builds.filter(build => build.kind === "rebuild")).toHaveLength(2);
 		await stop("failed");
 		expect(queued).toHaveLength(2);
+		await close(plan);
+	});
+
+	it("lands a reported rebuild and rebuilds edits made while it ran", async () => {
+		let { plan, queued, deltas, edit, advance } = await harness();
+		edit();
+		await advance(45_000);
+		expect(queued).toHaveLength(1);
+		let target = source(plan);
+		plan.builds = [...plan.builds.slice(0, -1), { ...plan.builds.at(-1)!, state: "running" }];
+		let next = `${target.trimEnd()}\n\nWritten during the rebuild.\n`;
+		expect(
+			(await rewrite(plan, next, (text, revision) => ({
+				idempotencyKey: "mid-rebuild",
+				fingerprint: "mid-rebuild",
+				fromRevision: plan.revision,
+				client: { name: "test", version: "1" },
+				document: { source: text, revision, title: "Living document", url: "https://chopin.test" },
+			}))).ok,
+		).toBe(true);
+		edit();
+		await advance(45_000);
+		expect(queued).toHaveLength(1);
+		let commit = {
+			pullRequest: "https://github.com/octo-org/score/pull/49",
+			sha: "c".repeat(40),
+			message: "Render the paragraph",
+		};
+		expect(
+			await reportRebuild(plan, queued[0]!, { summary: "Done", commits: [commit], tasks: [] }),
+		).toEqual({ kind: "accepted" });
+		await settle(plan);
+		expect(plan.live).toMatchObject({ baseSource: target, commits: [commit] });
+		expect(queued).toHaveLength(2);
+		expect(source(plan)).toContain("Written during the rebuild.");
+		expect(deltas.at(-1)).toMatchObject({ baseSource: target, source: source(plan) });
+		expect(plan.live!.target).toMatchObject({ buildId: queued[1], source: source(plan) });
+		await close(plan);
+	});
+
+	it("catches up on a missed rebuild when a workspace reconnects", async () => {
+		let { plan, coordinator, queued, advance } = await harness();
+		coordinator.connected(plan.id);
+		await advance(0);
+		expect(queued).toHaveLength(1);
 		await close(plan);
 	});
 

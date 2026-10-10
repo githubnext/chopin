@@ -24,6 +24,29 @@ export type BuildRequest = {
 	baseRevision?: number;
 	targetRevision?: number;
 };
+/** A living document's last delivered build and its sync state, without the built source. */
+export type LiveSnapshot = {
+	buildId: string;
+	user: string;
+	repositoryId: string;
+	checkout: CheckoutContext;
+	baseRevision: number;
+	pullRequests: string[];
+	commits: Array<{
+		pullRequest: string;
+		sha: string;
+		message: string;
+		/** The document revision this commit brought its pull request up to. */
+		revision: number;
+		at: string;
+	}>;
+	/** The latest rebuild; its state distinguishes building from failed. */
+	rebuild?: BuildRequest;
+	/** The current document differs from the source last built onto the pull requests. */
+	outOfSync: boolean;
+	/** A workspace of the live build's user is connected for this document. */
+	builderConnected: boolean;
+};
 export type ImplementationSnapshot = {
 	revision: number;
 	planRevision: number;
@@ -50,6 +73,7 @@ export type ImplementationSnapshot = {
 	localAgent: boolean;
 	blockers: string[];
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
+	live?: LiveSnapshot;
 };
 
 /**

@@ -1639,6 +1639,7 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 	context: currentDocumentTarget,
+	connected: id => liveSync?.connected(id),
 	place: (id, experiment, view, decision, remove) =>
 		withDocumentTransition(id, async () => {
 			await Rooms.get(id)?.closing;

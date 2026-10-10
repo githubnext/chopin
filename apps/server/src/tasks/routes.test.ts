@@ -7,6 +7,8 @@ import * as Plan from "../plan/service";
 import { registerExperimentRoutes } from "../experiments/routes";
 import { implementationGraphs } from "./plan-graphs";
 import { registerImplementationRoutes } from "./routes";
+import { queueRebuild } from "./builds";
+import { implementationStatus } from "./notifications";
 import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
 
@@ -540,6 +542,197 @@ test("one connection builds two documents and a finished or deleted build never 
 		});
 	} finally {
 		await Plan.close(second);
+		await Plan.close(context.plan);
+	}
+});
+
+const pullRequest = "https://github.com/owner/repository/pull/7";
+
+function edit(plan: Plan.Plan, text: string) {
+	let next = `${Plan.source(plan).trimEnd()}\n\n${text}\n`;
+	return Plan.rewrite(plan, next, (source, revision) => ({
+		idempotencyKey: crypto.randomUUID(),
+		fingerprint: text,
+		fromRevision: plan.revision,
+		client: { name: "test", version: "1" },
+		document: { source, revision, title: "Launcher plan", url: "https://chopin.test" },
+	}));
+}
+
+/** Deliver a live build, edit the document, then queue and start a rebuild of that edit. */
+async function rebuilding() {
+	let context = await setup();
+	context.plan.persistence.liveBuild = true;
+	let stopped: string[] = [];
+	context.plan.persistence.onBuildStopped = id => stopped.push(id);
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		connectionId: connection.connection.id,
+		checkout,
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	let claim = await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	await tool(context, connection.token, "report_implementation_build", {
+		id: built.id,
+		state: "running",
+		session: "session",
+	});
+	for (
+		let [name, args] of [
+			["start_task", { taskId: "first", idempotencyKey: "start" }],
+			["report_pr", { taskId: "first", idempotencyKey: "pr", url: pullRequest, state: "open" }],
+			["complete_task", { taskId: "first", idempotencyKey: "done", summary: "Launched" }],
+		] as const
+	) expect((await tool(context, claim.runToken, name, args)).isError).toBeUndefined();
+	await tool(context, connection.token, "report_implementation_build", {
+		id: built.id,
+		state: "stopped",
+	});
+	let builtSource = context.plan.live!.baseSource;
+	expect((await edit(context.plan, "A rebuilt paragraph.")).ok).toBe(true);
+	let target = Plan.source(context.plan);
+	let queued = await queueRebuild(context.plan, context.experiments.connections);
+	if (queued.kind !== "queued") throw new Error(`rebuild was ${queued.kind}`);
+	expect(await tool(context, connection.token, "wait_for_work")).toEqual({
+		id: queued.build.id,
+		kind: "implementation",
+	});
+	let rebuild = await tool(context, connection.token, "claim_implementation_build", {
+		id: queued.build.id,
+	});
+	expect(rebuild.build.kind).toBe("rebuild");
+	await tool(context, connection.token, "report_implementation_build", {
+		id: queued.build.id,
+		state: "running",
+		session: "rebuild-session",
+	});
+	return { context, connection, built, rebuild, builtSource, target, stopped };
+}
+
+test("a running rebuild leaves editing open and reads its sealed delta", async () => {
+	let { context, rebuild, builtSource, target } = await rebuilding();
+	try {
+		expect(context.plan.execution).toBeUndefined();
+		expect(Plan.implementationActive(context.plan)).toBe(false);
+		expect(implementationStatus(context.plan).locked).toBe(false);
+		let listed = await (await context.call("/connector/mcp", {
+			jsonrpc: "2.0",
+			id: 1,
+			method: "tools/list",
+		}, rebuild.runToken)).json();
+		expect(listed.result.tools.map((item: { name: string }) => item.name)).toEqual([
+			"read_rebuild",
+			"report_rebuild",
+		]);
+		expect((await edit(context.plan, "An edit during the rebuild.")).ok).toBe(true);
+		let read = await tool(context, rebuild.runToken, "read_rebuild");
+		expect(read).toEqual({
+			before: builtSource,
+			after: target,
+			baseRevision: 0,
+			targetRevision: 1,
+			pullRequests: [{ url: pullRequest, title: "First" }],
+			tasks: [{ title: "First", goal: "Launch", pullRequest, summary: "Launched" }],
+		});
+		expect(read.after).not.toContain("An edit during the rebuild.");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("report_rebuild appends a completed version, records commits and advances the base", async () => {
+	let { context, connection, rebuild, target, stopped } = await rebuilding();
+	let closed = false;
+	try {
+		expect((await edit(context.plan, "An edit during the rebuild.")).ok).toBe(true);
+		let report = {
+			summary: "Rendered the rebuilt paragraph.",
+			commits: [{ pullRequest, sha: "c".repeat(40), message: "Add the rebuilt paragraph" }],
+			tasks: [{ title: "Rebuilt paragraph", goal: "Render it", pullRequest }],
+		};
+		expect(
+			(await tool(context, rebuild.runToken, "report_rebuild", {
+				...report,
+				commits: [{
+					...report.commits[0],
+					pullRequest: "https://github.com/owner/repository/pull/8",
+				}],
+			})).isError,
+		).toBe(true);
+		expect(await tool(context, rebuild.runToken, "report_rebuild", report)).toEqual({
+			state: "stopped",
+		});
+		let plan = context.plan;
+		expect(plan.graph!.versions.map(version => [version.number, version.state])).toEqual([
+			[1, "superseded"],
+			[2, "approved"],
+		]);
+		expect(plan.graph!.versions[1]).toMatchObject({ planRevision: plan.revision });
+		expect(plan.lifecycle.history.at(-1)).toMatchObject({ live: true, run: { graphVersion: 2 } });
+		expect(plan.live).toMatchObject({
+			baseRevision: 1,
+			baseSource: target,
+			commits: [{ ...report.commits[0], revision: 1 }],
+		});
+		expect(plan.live!.target).toBeUndefined();
+		expect(plan.builds.at(-1)!.state).toBe("stopped");
+		expect(stopped).toEqual([plan.id, plan.id]);
+		expect(
+			await tool(context, connection.token, "report_implementation_build", {
+				id: rebuild.build.id,
+				state: "stopped",
+			}),
+		).toEqual({ accepted: true });
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.live).toMatchObject({
+			pullRequests: [pullRequest],
+			commits: [{ pullRequest, sha: "c".repeat(40), revision: 1 }],
+			rebuild: { id: rebuild.build.id, state: "stopped" },
+			outOfSync: true,
+			builderConnected: true,
+		});
+		expect(snapshot.live.baseSource).toBeUndefined();
+		expect(snapshot.lifecycle.history.at(-1).outcome.kind).toBe("implemented");
+		let live = plan.live;
+		await Plan.close(plan);
+		closed = true;
+		let restored = await Plan.open(
+			plan.id,
+			{ ...context.backend, liveBuild: true },
+			context.server,
+		);
+		expect(restored.live).toEqual(live);
+		expect(restored.graph).toEqual(plan.graph);
+		await Plan.close(restored);
+	} finally {
+		if (!closed) await Plan.close(context.plan);
+	}
+});
+
+test("a rebuild that ends without a report fails and leaves the live base alone", async () => {
+	let { context, connection, rebuild } = await rebuilding();
+	try {
+		let live = structuredClone(context.plan.live);
+		let graph = structuredClone(context.plan.graph);
+		await tool(context, connection.token, "report_implementation_build", {
+			id: rebuild.build.id,
+			state: "stopped",
+		});
+		expect(context.plan.builds.at(-1)).toMatchObject({ state: "failed" });
+		expect(context.plan.live).toEqual(live!);
+		expect(context.plan.graph).toEqual(graph!);
+		expect(
+			(await tool(context, rebuild.runToken, "report_rebuild", {
+				summary: "Too late",
+				commits: [],
+				tasks: [],
+			})).isError,
+		).toBe(true);
+		let again = await queueRebuild(context.plan, context.experiments.connections);
+		expect(again.kind).toBe("queued");
+	} finally {
 		await Plan.close(context.plan);
 	}
 });
