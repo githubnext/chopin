@@ -139,11 +139,20 @@ export async function storedResolvedComment(
 				id,
 				status: "resolved",
 				passage,
-				notes: notes.map((text, index) =>
-					index % 2 === 0
-						? { id: ulid(), author: "member", handle: resolver, text, ts: at + index * 60 }
-						: { id: ulid(), author: "planner", text, ts: at + index * 60 }
-				),
+				// A leading "@chopin " addresses the Planner the way the wire does: through `to`.
+				notes: notes.map((text, index) => {
+					let ts = at + index * 60;
+					if (index % 2 === 1) return { id: ulid(), author: "planner", text, ts };
+					let addressed = text.startsWith("@chopin ");
+					return {
+						id: ulid(),
+						author: "member",
+						handle: resolver,
+						text: addressed ? text.slice("@chopin ".length) : text,
+						ts,
+						...(addressed ? { to: "planner" } : {}),
+					};
+				}),
 				quote,
 				resolver,
 				at: at + notes.length * 60,
