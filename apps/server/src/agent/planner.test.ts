@@ -20,7 +20,7 @@ test("offers grounded optional diagrams with valid diagram and chart authoring e
 	expect(DIAGRAM_AUTHORING).toContain("ordinary multiple-choice");
 	expect(DIAGRAM_AUTHORING).toContain("field-specific validation message");
 	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)];
-	expect(examples).toHaveLength(4);
+	expect(examples).toHaveLength(6);
 	for (let [index, example] of examples.entries()) {
 		let rendered = renderDiagram(JSON.parse(example[1]!) as unknown);
 		expect(rendered.ok, `example ${index + 1}`).toBe(true);
@@ -58,6 +58,18 @@ test("ordinary guidance supplies an executable numerical chart example", () => {
 	expect(bar).toBeDefined();
 	expect(renderDiagram(bar)).toMatchObject({ ok: true, type: "bar" });
 });
+
+test.each(["marimekko", "dumbbell"])(
+	"supplies a valid %s example with its variant data shape",
+	type => {
+		let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)]
+			.map(match => JSON.parse(match[1]!));
+		let example = examples.find(spec => spec.type === type);
+		expect(example).toBeDefined();
+		expect(renderDiagram(example)).toMatchObject({ ok: true, type: "bar" });
+		expect(DIAGRAM_AUTHORING).not.toContain("An alias uses its canonical type's data shape");
+	},
+);
 
 test("teaches wireframe fences with a valid example and every kind", () => {
 	expect(PROMPT).toContain(WIREFRAME_AUTHORING);
