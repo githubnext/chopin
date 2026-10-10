@@ -175,14 +175,15 @@ test("compact keeps its header presence and navigation, and split keeps expansio
 	await expect(header.getByRole("group", { name: /People here: ana/ })).toBeVisible();
 	expect(Math.round((await box(header)).width)).toBe(600);
 	await expectNoHorizontalOverflow(page);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await expect(toolbar(page).getByRole("button", { name: "Show chat" })).toBeVisible();
+	await expect(chatPane(page)).toBeHidden();
+
+	await page.setViewportSize({ width: 600, height: 844 });
 	await page.getByRole("navigation", { name: "Workspace view" }).getByRole("button", {
 		name: /Chat/,
 	}).first().click();
 	let compactField = chatPane(page).locator(".chat-composer .field");
 	await expect(compactField).toHaveCSS("box-shadow", "none");
 	await expect(compactField).toHaveCSS("background-color", await resolved(page, "--color-inset"));
-
-	await page.setViewportSize({ width: 1440, height: 900 });
-	await expect(toolbar(page).getByRole("button", { name: "Show chat" })).toBeVisible();
-	await expect(chatPane(page)).toBeHidden();
 });
