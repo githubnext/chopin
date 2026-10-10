@@ -34,7 +34,7 @@ function preparedGraph(): Graph {
 	};
 }
 
-test("Build remains reachable on a compact document without an implementation preface", async ({ seed, join: enter }) => {
+test("Build is a compact workspace panel after Decisions", async ({ seed, join: enter }) => {
 	await seed("# Build review\n\nThe document stays readable on a phone.\n");
 	let page = await enter("ana", {
 		viewport: { width: 390, height: 844 },
@@ -46,14 +46,52 @@ test("Build remains reachable on a compact document without an implementation pr
 	let build = page.getByRole("button", { name: "Build", exact: true });
 	await expect(build).toBeInViewport({ ratio: 1 });
 	await expect(build).toBeEnabled();
+	let navigation = page.getByRole("navigation", { name: "Workspace view", exact: true });
+	await expect(navigation.getByRole("button")).toHaveText([
+		"Chat",
+		"Document",
+		"Decisions",
+		"Build",
+	]);
 	await build.tap();
+	await expect(build).toHaveAttribute("aria-pressed", "true");
+	await expect(page.getByRole("dialog", { name: "Implementation", exact: true })).toHaveCount(0);
+	await expect(content(page)).not.toBeVisible();
 	await expect.poll(() =>
 		panel.evaluate(element => element.checkVisibility({ checkOpacity: true }))
 	)
 		.toBe(true);
-	await page.getByRole("button", { name: "Close implementation", exact: true }).click();
+	await page.getByRole("button", { name: "Document", exact: true }).click();
 	await expect(panel).toHaveCount(0);
 	await expect(content(page).locator(":scope > p").first()).toBeInViewport({ ratio: 1 });
+});
+
+test("Build shares the document pane and task links open it without a modal", async ({ seed, join: enter }) => {
+	await seed("# Build review\n\nReview these tasks before running them.\n", {
+		graph: preparedGraph(),
+	});
+	let page = await enter("ana");
+	let controls = page.getByRole("group", { name: "Document view", exact: true });
+	await expect(controls.getByRole("button")).toHaveText(["Document", "Decisions", "Build"]);
+	await controls.getByRole("button", { name: "Build", exact: true }).click();
+	let panel = page.getByRole("region", { name: "Implementation", exact: true });
+	await expect(panel).toContainText("Connect the local agent");
+	await expect(page.getByRole("dialog", { name: "Implementation", exact: true })).toHaveCount(0);
+	await expect(content(page)).not.toBeVisible();
+	await expect(page.getByRole("complementary", { name: "Chat", exact: true })).toBeVisible();
+	await controls.getByRole("button", { name: "Decisions", exact: true }).click();
+	await expect(panel).toHaveCount(0);
+	await controls.getByRole("button", { name: "Document", exact: true }).click();
+	await page.evaluate(() => {
+		location.hash = "task-review";
+	});
+	await expect(controls.getByRole("button", { name: "Build", exact: true })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	await expect(panel.getByText("Review the connection", { exact: true })).toBeInViewport();
+	await page.reload();
+	await expect(panel.getByText("Review the connection", { exact: true })).toBeInViewport();
 });
 
 async function connector(baseURL: string, command: string[]) {
@@ -193,7 +231,8 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			} else {
 				await expect(panel).toContainText("Blocked: Choose the next tracer");
 				await expect(panel).toContainText("Needs attention");
-				await expect(content(page)).toHaveAttribute("contenteditable", "false");
+				await expect(page.getByRole("textbox", { name: "editable markdown", includeHidden: true }))
+					.toHaveAttribute("contenteditable", "false");
 			}
 			await expect(panel).toContainText("After Connect the local agent");
 			expect(await local.localEdit()).toBe("uncommitted local edit");
@@ -220,7 +259,7 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				await panel.getByRole("button", { name: "Return plan for changes", exact: true }).click();
 				await expect(panel.getByRole("button", { name: "Revise tasks", exact: true }))
 					.toBeVisible();
-				await page.getByRole("button", { name: "Close implementation", exact: true }).click();
+				await page.getByRole("button", { name: "Document", exact: true }).click();
 				await expect(content(page)).toHaveAttribute("contenteditable", "true");
 			}
 		} finally {

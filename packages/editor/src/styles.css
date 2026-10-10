@@ -484,7 +484,7 @@
 
 @container (max-width: 40rem) {
 	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
-	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface) {
+	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface, .plan-afterword) {
 		--plan-leading-gutter: max(
 			calc(var(--decision-marker-size) + var(--spacing) * 2),
 			var(--plan-gutter)
@@ -3787,4 +3787,21 @@
 	.plan-formatting-toolbar {
 		animation: none;
 	}
+}
+
+.plan .plan-afterword {
+	--plan-leading-gutter: var(--plan-gutter);
+	padding: 0 var(--plan-gutter) var(--document-trailing-space);
+	padding-inline-start: var(--plan-leading-gutter);
+	margin-inline: auto;
+	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
+}
+
+.plan[data-plan-afterword]
+	> .plan-workspace
+	> .plan-document
+	> [data-plan-scroll]
+	> .mdxeditor
+	.plan-content {
+	padding-bottom: calc(var(--spacing) * 6);
 }

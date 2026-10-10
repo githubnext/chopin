@@ -29,9 +29,11 @@ sessions can survive releases. Reconnect after a server restart or logout.
 
 ## Run and inspect work
 
-Open **Investigations** in the document controls. Propose a brief, choose one of
-your connected workspaces, and select **Run on my workspace**. A Planner can also
-propose an investigation; that proposal still needs a workspace owner's action.
+At the end of the document, choose **Propose investigation** and enter a brief.
+The request appears as an inline card. Choose one of your connected workspaces
+and select **Run on my workspace**. A Planner can also propose an investigation;
+its card still needs a workspace owner's action. Progress and published results
+appear in that card automatically, without opening another tab or dialog.
 
 Several people can connect to the same document. Only a connection's owner can
 authorize its local work. Other document writers can inspect published results,

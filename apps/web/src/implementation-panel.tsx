@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Badge } from "@chopin/visuals";
 import { DocumentIcon } from "@chopin/icons";
 import { ApiError } from "./api";
-import { NavigationDialog } from "./navigation-dialog";
 import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { Chat } from "@chopin/protocol";
 import type { Wire } from "./wire";
@@ -13,12 +12,11 @@ async function response<T>(result: Response): Promise<T> {
 	return value;
 }
 
-export function ImplementationPanel({ id, canEdit, planner, wire, onClose }: {
+export function ImplementationPanel({ id, canEdit, planner, wire }: {
 	id: string;
 	canEdit: boolean;
 	planner: boolean;
 	wire?: Wire;
-	onClose: () => void;
 }) {
 	let [snapshot, setSnapshot] = useState<ImplementationSnapshot>();
 	let [error, setError] = useState<string>();
@@ -139,157 +137,149 @@ export function ImplementationPanel({ id, canEdit, planner, wire, onClose }: {
 			: "Ready to review";
 	let blockers = snapshot?.blockers ?? [];
 	return (
-		<NavigationDialog
-			title="Implementation"
-			motion={{ phase: "open", className: "is-open" }}
-			onDismiss={onClose}
-		>
-			<section aria-label="Implementation" className="implementation-panel">
-				<div className="flex flex-wrap items-center justify-between gap-2">
-					<div className="flex items-center gap-2">
-						<strong className="text-sm">Reviewed tasks</strong>
-						{snapshot?.build && <Badge size="sm" icon={DocumentIcon} label={buildLabel} />}
-					</div>
-					<div className="flex flex-wrap gap-2">
-						<button className="btn btn-sm btn-ghost" onClick={() => setRefresh(value => value + 1)}>
-							Refresh
-						</button>
-						{canEdit && !active && !pending && (
-							<button
-								className="btn btn-sm btn-outline"
-								onClick={() => void action("prepare")}
-								disabled={busy || !snapshot || !planner || blockers.length > 0}
-							>
-								{snapshot?.graph ? "Revise tasks" : "Prepare tasks"}
-							</button>
-						)}
-						{canEdit && snapshot?.graph && !active && !pending && !finished && (
-							<button
-								className="btn btn-sm btn-primary"
-								type="button"
-								onClick={() => void action("build")}
-								disabled={busy || blockers.length > 0 || !!stale || !selected}
-							>
-								{busy
-									? "Starting…"
-									: snapshot.build
-									? "Retry build on my workspace"
-									: "Approve and build this plan"}
-							</button>
-						)}
-					</div>
+		<section aria-label="Implementation" className="implementation-panel">
+			<div className="flex flex-wrap items-center justify-between gap-2">
+				<div className="flex items-center gap-2">
+					<strong className="text-sm">Reviewed tasks</strong>
+					{snapshot?.build && <Badge size="sm" icon={DocumentIcon} label={buildLabel} />}
 				</div>
-				{!snapshot && !error && <p role="status" className="text-sm">Loading implementation…</p>}
-				{error && <p role="alert" className="m-0 mt-2 text-sm text-destructive-ink">{error}</p>}
-				{stale && (
-					<p className="m-0 mt-2 text-sm">
-						The document changed. Revise the tasks before building.
-					</p>
-				)}
-				{canEdit && active && !pending && (
-					<form
-						className="mt-3 flex flex-col gap-2"
-						onSubmit={event => {
-							event.preventDefault();
-							void action("revise");
-						}}
-					>
-						<p className="m-0 text-sm">
-							Inspect the retained worktree before returning the plan for review.
-						</p>
-						<label className="text-sm">
-							Reason for changes
-							<textarea
-								className="field mt-1 w-full"
-								value={reason}
-								onChange={event => setReason(event.target.value)}
-								required
-								maxLength={2000}
-							/>
-						</label>
-						<button className="btn btn-md btn-outline" disabled={busy || !reason.trim()}>
-							Return plan for changes
+				<div className="flex flex-wrap gap-2">
+					<button className="btn btn-sm btn-ghost" onClick={() => setRefresh(value => value + 1)}>
+						Refresh
+					</button>
+					{canEdit && !active && !pending && (
+						<button
+							className="btn btn-sm btn-outline"
+							onClick={() => void action("prepare")}
+							disabled={busy || !snapshot || !planner || blockers.length > 0}
+						>
+							{snapshot?.graph ? "Revise tasks" : "Prepare tasks"}
 						</button>
-					</form>
-				)}
-				{snapshot?.build?.error && <p className="m-0 mt-2 text-sm">{snapshot.build.error}</p>}
-				{blockers.length > 0 && (
-					<p className="m-0 mt-2 text-sm text-text-secondary">
-						Resolve {blockers.join(" and ")} before building.
+					)}
+					{canEdit && snapshot?.graph && !active && !pending && !finished && (
+						<button
+							className="btn btn-sm btn-primary"
+							type="button"
+							onClick={() => void action("build")}
+							disabled={busy || blockers.length > 0 || !!stale || !selected}
+						>
+							{busy
+								? "Starting…"
+								: snapshot.build
+								? "Retry build on my workspace"
+								: "Approve and build this plan"}
+						</button>
+					)}
+				</div>
+			</div>
+			{!snapshot && !error && <p role="status" className="text-sm">Loading implementation…</p>}
+			{error && <p role="alert" className="m-0 mt-2 text-sm text-destructive-ink">{error}</p>}
+			{stale && (
+				<p className="m-0 mt-2 text-sm">
+					The document changed. Revise the tasks before building.
+				</p>
+			)}
+			{canEdit && active && !pending && (
+				<form
+					className="mt-3 flex flex-col gap-2"
+					onSubmit={event => {
+						event.preventDefault();
+						void action("revise");
+					}}
+				>
+					<p className="m-0 text-sm">
+						Inspect the retained worktree before returning the plan for review.
 					</p>
-				)}
-				{snapshot?.graph && !active && !pending && !finished && (
-					<p className="m-0 mt-2 text-sm text-text-secondary">
-						{selected
-							? `Build on ${selected.label} · ${selected.checkout.commit.slice(0, 8)}`
-							: "Connect a workspace with the local connector to build this plan."}
-					</p>
-				)}
-				{available.length > 1 && !active && !pending && !finished && (
-					<select
-						aria-label="Build on"
-						value={selected?.id ?? ""}
-						onChange={event => setWorkspace(event.target.value)}
-					>
-						{available.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-					</select>
-				)}
-				{snapshot?.graph && (
-					<details className="mt-3" open>
-						<summary className="text-sm cursor-pointer">
-							{activity?.tasks.filter(task => task.state === "completed").length ?? 0} of{" "}
-							{snapshot.graph.definition.tasks.length} tasks complete
-						</summary>
-						<ol className="implementation-tasks">
-							{snapshot.graph.definition.tasks.map(task => {
-								let progress = activity?.tasks.find(item => item.id === task.id);
-								return (
-									<li key={task.id} id={`task-${task.id}`}>
-										<div className="flex flex-wrap items-center justify-between gap-2">
-											<strong className="text-sm">{task.title}</strong>
-											<Badge
-												size="sm"
-												icon={DocumentIcon}
-												label={progress?.state.replaceAll("_", " ") ?? "queued"}
-											/>
-										</div>
-										<p className="m-0 mt-1 text-sm text-text-secondary">{task.goal}</p>
-										{task.dependsOn.length > 0 && (
-											<p className="m-0 mt-1 text-xs text-text-secondary">
-												After {task.dependsOn.map(id =>
-													snapshot.graph!.definition.tasks.find(item =>
-														item.id === id
-													)?.title ?? id
-												).join(", ")}
-											</p>
-										)}
-										<ul className="mt-1 mb-0 text-xs text-text-secondary">
-											{task.acceptance.map((item, index) => <li key={index}>{item}</li>)}
-										</ul>
-										{progress?.blocker && (
-											<p className="m-0 mt-2 text-sm">Blocked: {progress.blocker}</p>
-										)}
-										{progress?.pullRequest && (
-											<a
-												className="text-sm"
-												href={progress.pullRequest.url}
-												target="_blank"
-												rel="noreferrer"
-											>
-												Open pull request
-											</a>
-										)}
-									</li>
-								);
-							})}
-						</ol>
-					</details>
-				)}
-				{snapshot?.build?.session && (
-					<p className="m-0 mt-2 text-xs text-text-secondary">Session {snapshot.build.session}</p>
-				)}
-			</section>
-			<button className="btn btn-md btn-ghost mt-3" onClick={onClose}>Close implementation</button>
-		</NavigationDialog>
+					<label className="text-sm">
+						Reason for changes
+						<textarea
+							className="field mt-1 w-full"
+							value={reason}
+							onChange={event => setReason(event.target.value)}
+							required
+							maxLength={2000}
+						/>
+					</label>
+					<button className="btn btn-md btn-outline" disabled={busy || !reason.trim()}>
+						Return plan for changes
+					</button>
+				</form>
+			)}
+			{snapshot?.build?.error && <p className="m-0 mt-2 text-sm">{snapshot.build.error}</p>}
+			{blockers.length > 0 && (
+				<p className="m-0 mt-2 text-sm text-text-secondary">
+					Resolve {blockers.join(" and ")} before building.
+				</p>
+			)}
+			{snapshot?.graph && !active && !pending && !finished && (
+				<p className="m-0 mt-2 text-sm text-text-secondary">
+					{selected
+						? `Build on ${selected.label} · ${selected.checkout.commit.slice(0, 8)}`
+						: "Connect a workspace with the local connector to build this plan."}
+				</p>
+			)}
+			{available.length > 1 && !active && !pending && !finished && (
+				<select
+					aria-label="Build on"
+					value={selected?.id ?? ""}
+					onChange={event => setWorkspace(event.target.value)}
+				>
+					{available.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+				</select>
+			)}
+			{snapshot?.graph && (
+				<details className="mt-3" open>
+					<summary className="text-sm cursor-pointer">
+						{activity?.tasks.filter(task => task.state === "completed").length ?? 0} of{" "}
+						{snapshot.graph.definition.tasks.length} tasks complete
+					</summary>
+					<ol className="implementation-tasks">
+						{snapshot.graph.definition.tasks.map(task => {
+							let progress = activity?.tasks.find(item => item.id === task.id);
+							return (
+								<li key={task.id} id={`task-${task.id}`}>
+									<div className="flex flex-wrap items-center justify-between gap-2">
+										<strong className="text-sm">{task.title}</strong>
+										<Badge
+											size="sm"
+											icon={DocumentIcon}
+											label={progress?.state.replaceAll("_", " ") ?? "queued"}
+										/>
+									</div>
+									<p className="m-0 mt-1 text-sm text-text-secondary">{task.goal}</p>
+									{task.dependsOn.length > 0 && (
+										<p className="m-0 mt-1 text-xs text-text-secondary">
+											After{" "}
+											{task.dependsOn.map(id =>
+												snapshot.graph!.definition.tasks.find(item => item.id === id)?.title ?? id
+											).join(", ")}
+										</p>
+									)}
+									<ul className="mt-1 mb-0 text-xs text-text-secondary">
+										{task.acceptance.map((item, index) => <li key={index}>{item}</li>)}
+									</ul>
+									{progress?.blocker && (
+										<p className="m-0 mt-2 text-sm">Blocked: {progress.blocker}</p>
+									)}
+									{progress?.pullRequest && (
+										<a
+											className="text-sm"
+											href={progress.pullRequest.url}
+											target="_blank"
+											rel="noreferrer"
+										>
+											Open pull request
+										</a>
+									)}
+								</li>
+							);
+						})}
+					</ol>
+				</details>
+			)}
+			{snapshot?.build?.session && (
+				<p className="m-0 mt-2 text-xs text-text-secondary">Session {snapshot.build.session}</p>
+			)}
+		</section>
 	);
 }

@@ -21,6 +21,7 @@ import type { ChannelDetail } from "./api";
 
 const workspaceIds = {
 	heading: {
+		build: "workspace-build-heading",
 		chat: "workspace-chat-heading",
 		decisions: "workspace-decisions-heading",
 		plan: "workspace-plan-heading",
@@ -311,7 +312,7 @@ describe("anchored child lifecycle", () => {
 		expect(markup).toContain("Parent header");
 	});
 
-	it("renders a collapsed child Chat toggle beside Close", () => {
+	it("renders a collapsed child Chat toggle before the document controls", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
 			chat: createElement("div", null, "Child chat"),
 			controls: createElement("div", null, "Document controls"),
@@ -340,7 +341,7 @@ describe("anchored child lifecycle", () => {
 		expect(markup).toContain('aria-label="Close Source review"');
 		expect(toolbar).toContain('aria-label="Show chat, Planner working"');
 		expect(toolbar).toContain('aria-label="Close Source review"');
-		expect(toolbar.indexOf("Document controls")).toBeLessThan(toolbar.indexOf("Show chat"));
+		expect(toolbar.indexOf("Show chat")).toBeLessThan(toolbar.indexOf("Document controls"));
 		expect(toolbar.indexOf("Show chat")).toBeLessThan(
 			toolbar.indexOf("Close Source review"),
 		);

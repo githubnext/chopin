@@ -25,7 +25,9 @@ export type WorkspaceProfile = {
 	surface: WorkspaceSurface;
 };
 
-export type WorkspaceDestination = "plan" | "decisions" | "chat";
+export type WorkspaceDocumentView = DecisionView | "build";
+
+export type WorkspaceDestination = WorkspaceDocumentView | "chat";
 
 export type WorkspaceState = {
 	chatOpen: boolean;
@@ -74,8 +76,8 @@ export function workspaceProfile(
 	};
 }
 
-export function workspaceDestinations(): WorkspaceDestination[] {
-	return ["chat", "plan", "decisions"];
+export function workspaceDestinations(implementation = false): WorkspaceDestination[] {
+	return implementation ? ["chat", "plan", "decisions", "build"] : ["chat", "plan", "decisions"];
 }
 
 export function workspaceHeadingId(destination: WorkspaceDestination, scope?: string): string {
@@ -95,7 +97,7 @@ export function transitionWorkspace(state: WorkspaceState, event: WorkspaceEvent
 export function presentWorkspace(
 	state: WorkspaceState,
 	mode: WorkspaceMode,
-	documentView: DecisionView,
+	documentView: WorkspaceDocumentView,
 ) {
 	let chatVisible = mode === "split"
 		? (state.desktopChatOpen ?? true) || state.chatOpen

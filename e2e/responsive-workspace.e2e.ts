@@ -37,10 +37,11 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	await expect(header.getByRole("button", { name: /chat pane/ })).toHaveCount(0);
 	await expect(page.getByRole("group", { name: "Document view" })).toHaveCount(0);
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
-	await expect(destinations).toHaveCount(3);
+	await expect(destinations).toHaveCount(4);
 	await expect(destinations.nth(0)).toHaveAccessibleName(/^Chat/);
 	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
 	await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
+	await expect(destinations.nth(3)).toHaveAccessibleName("Build");
 
 	await expectInsideViewport(header);
 	await expectInsideViewport(projects);
@@ -105,6 +106,14 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(chatPane(page)).toBeHidden();
 	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
+	await nav.getByRole("button", { name: "Build", exact: true }).click();
+	await expect(page.getByRole("heading", { name: "Build", exact: true })).toBeFocused();
+	await expect(page.getByRole("region", { name: "Implementation", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeHidden();
+	await expect(chatPane(page)).toBeHidden();
+	await expect(page.getByRole("dialog", { name: "Implementation", exact: true })).toHaveCount(0);
+	await nav.getByRole("button", { name: "Document", exact: true }).click();
+	await expect(content(page)).toBeEditable();
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -310,15 +319,21 @@ test("enabling reduced motion settles an active drawer exit", async ({ join, see
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	await page.emulateMedia({ reducedMotion: "no-preference" });
+	let time = new Date("2026-01-01T00:00:00Z");
+	await page.clock.install({ time });
 	await page.getByRole("button", { name: "Show sidebar" }).click();
 	let drawer = page.getByRole("dialog", { includeHidden: true, name: "Projects" }).locator("../..");
+	await expect(drawer).toHaveClass(/\bis-open\b/);
+	// Hold the exit fallback timer: removal must come from the media change.
+	await page.clock.pauseAt(new Date(time.getTime() + 60_000));
 	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
 		position: { x: 382, y: 422 },
 	});
 	await expect(drawer).toHaveAttribute("aria-hidden", "true");
+	await expect(drawer).toHaveAttribute("inert", "");
 
 	await page.emulateMedia({ reducedMotion: "reduce" });
-	await expect(drawer).toHaveCount(0, { timeout: 100 });
+	await expect(drawer).toHaveCount(0);
 });
 
 test("a shifted visual viewport keeps workspace controls in the exposed rectangle", async ({ browser, baseURL, room, seed }) => {

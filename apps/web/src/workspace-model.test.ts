@@ -63,7 +63,7 @@ describe("adaptive workspace", () => {
 			research: false,
 			surface: "child",
 		});
-		expect(workspaceDestinations()).toEqual([
+		expect(workspaceDestinations(capabilities.implementation)).toEqual([
 			"chat",
 			"plan",
 			"decisions",
@@ -79,10 +79,11 @@ describe("adaptive workspace", () => {
 			research: true,
 			surface: "document",
 		});
-		expect(workspaceDestinations()).toEqual([
+		expect(workspaceDestinations(true)).toEqual([
 			"chat",
 			"plan",
 			"decisions",
+			"build",
 		]);
 	});
 

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
 
-import type { DecisionView } from "@chopin/editor";
+import type { WorkspaceDocumentView } from "./workspace-model";
 import type { DocumentActivity } from "./document-activity";
 
 export function decisionAttention(previous: number, current: number): boolean {
@@ -32,16 +32,18 @@ export function unansweredDecisionsLabel(label: string, unanswered: number): str
 export function DecisionViewControl(
 	{
 		attention,
+		buildEnabled,
 		documentActivity,
 		onView,
 		unanswered,
 		view,
 	}: {
 		attention?: boolean;
+		buildEnabled?: boolean;
 		documentActivity?: DocumentActivity;
-		onView: (view: DecisionView) => void;
+		onView: (view: WorkspaceDocumentView) => void;
 		unanswered: number;
-		view: DecisionView;
+		view: WorkspaceDocumentView;
 	},
 ) {
 	return (
@@ -99,6 +101,22 @@ export function DecisionViewControl(
 					</span>
 				)}
 			</button>
+			{buildEnabled !== undefined && (
+				<button
+					aria-current={view === "build" ? "page" : undefined}
+					aria-pressed={view === "build"}
+					className={`btn btn-sm transition-[background-color,box-shadow,color] ${
+						view === "build"
+							? "bg-ground font-medium text-gray-800"
+							: "text-text-tertiary hover:bg-hover"
+					}`}
+					disabled={!buildEnabled}
+					onClick={() => onView("build")}
+					type="button"
+				>
+					Build
+				</button>
+			)}
 		</div>
 	);
 }

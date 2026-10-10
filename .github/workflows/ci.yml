@@ -83,6 +83,8 @@ jobs:
   browser:
     name: e2e
     runs-on: ubuntu-latest
+    env:
+      CHOPIN_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
 
@@ -130,9 +132,24 @@ jobs:
 
       - run: E2E_SKIP_BUILD=1 bun run e2e
 
-      # Only on failure, and only the parts worth reading. `test-results`
-      # carries the traces; the report is the thing that indexes them.
-      - if: failure()
+      - name: Summarise browser results and retries
+        id: browser_summary
+        if: ${{ !cancelled() }}
+        run: bun scripts/browser-ci-summary.ts
+
+      - name: Save browser result counts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-test-summary
+          path: e2e/.scratch/ci-reports/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+      # Retry passes need their traces too. Keep each suite's output separate
+      # so integration setup does not erase earlier design/gallery evidence.
+      - if: ${{ !cancelled() && (failure() || steps.browser_summary.outputs.has_flaky == 'true') }}
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report

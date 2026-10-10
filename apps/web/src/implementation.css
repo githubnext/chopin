@@ -1,13 +1,3 @@
-.navigation-modal-content:has(> .implementation-panel) {
-	width: min(100%, 48rem);
-	max-height: calc(100dvh - var(--spacing) * 8);
-	overflow: auto;
-}
-
-.implementation-panel {
-	margin-top: calc(var(--spacing) * 3);
-}
-
 .implementation-tasks {
 	list-style: none;
 	margin: calc(var(--spacing) * 3) 0 0;

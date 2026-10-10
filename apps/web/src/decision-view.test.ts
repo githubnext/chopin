@@ -104,3 +104,15 @@ test("unanswered decisions expose an accessible count with quiet styling", () =>
 		expect(classes).toContain(className);
 	}
 });
+
+test("Build follows Decisions and marks the selected panel", () => {
+	let markup = renderToStaticMarkup(createElement(DecisionViewControl, {
+		buildEnabled: true,
+		onView() {},
+		unanswered: 0,
+		view: "build",
+	}));
+	expect(markup.indexOf(">Decisions<")).toBeLessThan(markup.indexOf(">Build<"));
+	expect(markup).toContain('aria-current="page" aria-pressed="true"');
+	expect(markup).not.toContain('aria-pressed="true" class="btn btn-sm gap-1');
+});
