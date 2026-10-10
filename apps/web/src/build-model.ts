@@ -79,29 +79,64 @@ export function syncHint(
 ): string | undefined {
 	if (status?.kind === "needs-attention") return attentionHint(snapshot);
 	if (status?.kind !== "out-of-sync") return;
-	let retry = status.outstanding
-		? ` · will also retry ${plural(status.outstanding, "blocked task", "blocked tasks")}`
-		: "";
-	if (status.reason === "pending") return `Your edits will sync shortly${retry}`;
+	let tasks = status.outstanding
+		? plural(status.outstanding, "blocked task", "blocked tasks")
+		: undefined;
+	if (status.reason === "pending") {
+		return tasks ? `Your edits and ${tasks} will sync shortly` : "Your edits will sync shortly";
+	}
 	// Every edit schedules another sync, so a failure is retried by the next one.
-	if (status.reason === "failed") return `The next edit will try again${retry}`;
-	if (snapshot?.live?.user === userId) return `Waiting for your agent${retry}`;
-	return snapshot?.builtBy
-		? `Waiting for @${snapshot.builtBy}’s agent${retry}`
-		: `Waiting for the builder’s agent${retry}`;
+	if (status.reason === "failed") {
+		return tasks
+			? `The next edit will retry the sync and ${tasks}`
+			: "The next edit will try again";
+	}
+	let agent = snapshot?.live?.user === userId
+		? "your agent"
+		: snapshot?.builtBy
+		? `@${snapshot.builtBy}’s agent`
+		: "the builder’s agent";
+	return tasks ? `Waiting for ${agent} to sync your edits and ${tasks}` : `Waiting for ${agent}`;
 }
 
-/** What an unfinished task is stuck on, and that an edit retries it. */
-export function attentionHint(snapshot: Snapshot | undefined): string | undefined {
+/** The longest blocker a tooltip quotes; the Build view's task row shows all of it. */
+const BLOCKER_CHARS = 120;
+
+/**
+ * What an unfinished task is stuck on, and that an edit retries it. `brief` leaves the
+ * blocker out, for the Build view, whose blocked row already shows it.
+ */
+export function attentionHint(
+	snapshot: Snapshot | undefined,
+	brief = false,
+): string | undefined {
 	let tasks = snapshot?.live?.outstandingTasks ?? [];
 	if (!tasks.length) return;
 	let first = tasks.find(task => task.blocker) ?? tasks[0]!;
-	let reason = first.blocker
-		? `“${first.title}” is blocked: ${first.blocker.trim().replace(/\.+$/, "")}`
-		: `“${first.title}” didn’t finish`;
+	let blocker = first.blocker?.trim().replace(/\s+/g, " ").replace(/\.+$/, "");
+	if (blocker && blocker.length > BLOCKER_CHARS) {
+		blocker = `${blocker.slice(0, BLOCKER_CHARS).replace(/\s+\S*$/, "")}…`;
+	}
+	let reason = !first.blocker
+		? `“${first.title}” didn’t finish`
+		: brief
+		? `“${first.title}” is blocked`
+		: `“${first.title}” is blocked: ${blocker}`;
 	let more = tasks.length > 1 ? ` (and ${plural(tasks.length - 1, "other", "others")})` : "";
 	let said = `${reason}${more}`;
 	return `${said}${/[?!…]$/.test(said) ? "" : "."} Edit the document to retry.`;
+}
+
+/**
+ * How a living document's task row reads: a task the first build left unfinished shows
+ * as needing attention, not as queued, until a sync picks it up again.
+ */
+export function liveTaskState(
+	state: TaskState,
+	outstanding: boolean,
+	syncing: boolean,
+): TaskState {
+	return outstanding && !syncing && state === "queued" ? "blocked" : state;
 }
 
 /** The header's tooltip: what the sync status means, or why it lags. */

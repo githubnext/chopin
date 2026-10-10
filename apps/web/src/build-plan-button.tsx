@@ -1,4 +1,4 @@
-import { CheckIcon, LoaderIcon } from "@chopin/icons";
+import { CheckIcon, ClockIcon, DecisionIcon, LoaderIcon } from "@chopin/icons";
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import {
@@ -21,6 +21,7 @@ import {
 
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { FirstBuild } from "./build-model";
+import type { WorkspaceDocumentView } from "./workspace-model";
 import type { Wire } from "./wire";
 
 const RELOAD_ON = [
@@ -35,14 +36,19 @@ const RELOAD_ON = [
  * start them on the viewer's local agent. The Build view owns every later build.
  * Once that build has delivered, the slot quietly reports whether the pull
  * requests still match the living document.
+ *
+ * Every state but Build plan points at a view, and hides while that view shows,
+ * because the view's own status line already says the same thing.
  */
 export function BuildPlanButton(
-	{ onNeedsAgent, onShowBuild, onShowDecisions, room, userId, wire }: {
+	{ onNeedsAgent, onShowBuild, onShowDecisions, room, showing, userId, wire }: {
 		/** No local agent could take the build; the Build view explains how to start one. */
 		onNeedsAgent: () => void;
 		onShowBuild: () => void;
 		onShowDecisions: () => void;
 		room: string;
+		/** The view the document pane shows now, if it is visible. */
+		showing?: WorkspaceDocumentView;
 		userId?: string;
 		wire?: Wire;
 	},
@@ -148,6 +154,7 @@ export function BuildPlanButton(
 
 	let sync = syncStatus(snapshot);
 	if (sync) {
+		if (showing === "build") return null;
 		let hint = syncTooltip(sync, snapshot, userId);
 		return (
 			<button
@@ -164,14 +171,12 @@ export function BuildPlanButton(
 			>
 				{sync.kind === "building" && <LoaderIcon aria-hidden="true" data-button-loader="" />}
 				{sync.kind === "in-sync" && <CheckIcon aria-hidden="true" className="text-text-tertiary" />}
-				{(sync.kind === "out-of-sync" || sync.kind === "needs-attention") && (
-					<span
-						aria-hidden="true"
-						className="build-task-dot"
-						data-state={sync.kind === "needs-attention" || sync.reason === "failed"
-							? "blocked"
-							: "queued"}
-					/>
+				{sync.kind === "out-of-sync" && sync.reason !== "failed" && (
+					<ClockIcon aria-hidden="true" className="text-text-tertiary" />
+				)}
+				{(sync.kind === "needs-attention"
+					|| sync.kind === "out-of-sync" && sync.reason === "failed") && (
+					<span aria-hidden="true" className="build-task-dot" data-state="blocked" />
 				)}
 				{syncLabel(sync)}
 			</button>
@@ -180,6 +185,7 @@ export function BuildPlanButton(
 	if (step.view === "hidden") return null;
 	if (step.view === "waiting") {
 		let { label, target } = waitingLabel(snapshot);
+		if (showing === target) return null;
 		let hint = target === "decisions"
 			? "The build starts once the open decisions are answered"
 			: "The build starts once the document is updated";
@@ -194,12 +200,15 @@ export function BuildPlanButton(
 				onClick={target === "decisions" ? onShowDecisions : onShowBuild}
 				type="button"
 			>
-				<span aria-hidden="true" className="build-task-dot" data-state="queued" />
+				{target === "decisions"
+					? <DecisionIcon aria-hidden="true" className="text-text-tertiary" />
+					: <ClockIcon aria-hidden="true" className="text-text-tertiary" />}
 				{label}
 			</button>
 		);
 	}
 	if (step.view === "working") {
+		if (showing === "build") return null;
 		let { hint, label, queued } = startingLabel(snapshot);
 		return (
 			<button
@@ -214,7 +223,7 @@ export function BuildPlanButton(
 				type="button"
 			>
 				{queued
-					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
+					? <ClockIcon aria-hidden="true" className="text-text-tertiary" />
 					: <LoaderIcon aria-hidden="true" data-button-loader="" />}
 				{label}
 			</button>

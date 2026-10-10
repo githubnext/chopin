@@ -1133,6 +1133,7 @@ export function RoomWorkspace(
 								onShowBuild={() => selectDestination("build")}
 								onShowDecisions={() => selectDestination("decisions")}
 								room={room}
+								showing={workspacePresentation.documentVisible ? view : undefined}
 								userId={userId}
 								wire={wire}
 							/>

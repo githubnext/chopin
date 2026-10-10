@@ -11,6 +11,7 @@ import {
 	elapsed,
 	firstBuildStep,
 	liveTaskGroups,
+	liveTaskState,
 	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
@@ -505,12 +506,51 @@ describe("living document sync", () => {
 		let edited = live({ outstandingTasks, outOfSync: true });
 		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
 		expect(syncHint(syncStatus(edited), edited, "me"))
-			.toBe("Your edits will sync shortly · will also retry 2 blocked tasks");
+			.toBe("Your edits and 2 blocked tasks will sync shortly");
+		let waiting = { ...live({ outstandingTasks, outOfSync: true, builderConnected: false }) };
+		expect(syncHint(syncStatus(waiting), waiting, "u"))
+			.toBe("Waiting for your agent to sync your edits and 2 blocked tasks");
+		let failed = live({ outstandingTasks, outOfSync: true, rebuild: rebuild("failed") });
+		expect(syncHint(syncStatus(failed), failed, "me"))
+			.toBe("The next edit will retry the sync and 2 blocked tasks");
 		expect(syncLabel(syncStatus(stuck)!)).toBe("Needs attention");
 		expect(syncTooltip(syncStatus(stuck)!, stuck, "me")).toContain("Edit the document to retry.");
 		// Syncing beats needing attention.
 		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
 			.toEqual({ kind: "building" });
+	});
+
+	it("leaves the blocker to the task row in the Build view's brief hint", () => {
+		let stuck = live({
+			outstandingTasks: [
+				{ id: "a", title: "Store graphs", state: "blocked", blocker: "Which database?" },
+				{ id: "b", title: "Render graphs", state: "queued" },
+			],
+		});
+		expect(attentionHint(stuck, true))
+			.toBe("“Store graphs” is blocked (and 1 other). Edit the document to retry.");
+		let unfinished = live({ outstandingTasks: [{ id: "a", title: "Ship", state: "queued" }] });
+		expect(attentionHint(unfinished, true)).toBe(
+			"“Ship” didn’t finish. Edit the document to retry.",
+		);
+	});
+
+	it("caps a long blocker in the tooltip at a word boundary", () => {
+		let blocker = `The repository has no app.${" Should I scaffold one?".repeat(10)}`;
+		let hint = attentionHint(live({
+			outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker }],
+		}))!;
+		expect(hint).toMatch(/^“Ship” is blocked: The repository has no app\. Should I .*…/);
+		expect(hint.endsWith("… Edit the document to retry.")).toBe(true);
+		expect(hint.length).toBeLessThan(180);
+	});
+
+	it("shows a task the first build left unfinished as needing attention until a sync runs", () => {
+		expect(liveTaskState("queued", true, false)).toBe("blocked");
+		expect(liveTaskState("queued", true, true)).toBe("queued");
+		expect(liveTaskState("queued", false, false)).toBe("queued");
+		expect(liveTaskState("in_progress", true, false)).toBe("in_progress");
+		expect(liveTaskState("completed", true, false)).toBe("completed");
 	});
 
 	it("ends a blocker's hint with one stop, whatever punctuation it brought", () => {

@@ -1,9 +1,10 @@
-import { CheckIcon } from "@chopin/icons";
+import { CheckIcon, ClockIcon } from "@chopin/icons";
 import { useEffect, useId, useRef, useState } from "react";
 
 import {
 	advanceDraft,
 	ago,
+	attentionHint,
 	buildPhase,
 	buildProgress,
 	draftInFlight,
@@ -11,6 +12,7 @@ import {
 	draftRefusalCopy,
 	elapsed,
 	liveTaskGroups,
+	liveTaskState,
 	plural,
 	pullRequestCommits,
 	pullRequestNumber,
@@ -413,13 +415,14 @@ export function BuildView(
 		status = plural(tasks.length, "task", "tasks");
 		if (canEdit) action = primary;
 	} else if (phase.kind === "building") {
-		since = snapshot?.build && elapsed(snapshot.build.createdAt, now);
 		let who = startedBy(snapshot, userId);
 		let { hint, queued } = startingLabel(snapshot);
+		// A queued build has not started, so it has no time to count.
+		since = !queued && snapshot?.build ? elapsed(snapshot.build.createdAt, now) : undefined;
 		status = (
 			<>
 				{queued
-					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
+					? <ClockIcon aria-hidden="true" className="build-status-icon" />
 					: <span aria-hidden="true" className="build-pulse" />}
 				<span className="min-w-0 flex-1">
 					{queued ? "Queued" : "Building"}
@@ -447,7 +450,10 @@ export function BuildView(
 		}
 	} else if (phase.kind === "live") {
 		let commits = snapshot?.live?.commits.length ?? 0;
-		let detail = syncHint(phase.sync, snapshot, userId)
+		// The blocked row below shows the blocker, so the status line only says what to do.
+		let detail = (phase.sync.kind === "needs-attention"
+			? attentionHint(snapshot, true)
+			: syncHint(phase.sync, snapshot, userId))
 			?? (phase.sync.kind === "in-sync" && commits > 0
 				? `${plural(commits, "commit", "commits")} since first build`
 				: undefined);
@@ -455,16 +461,14 @@ export function BuildView(
 			<>
 				{phase.sync.kind === "building" && <span aria-hidden="true" className="build-pulse" />}
 				{phase.sync.kind === "in-sync" && (
-					<CheckIcon aria-hidden="true" className="shrink-0 text-text-tertiary" />
+					<CheckIcon aria-hidden="true" className="build-status-icon" />
 				)}
-				{(phase.sync.kind === "out-of-sync" || phase.sync.kind === "needs-attention") && (
-					<span
-						aria-hidden="true"
-						className="build-task-dot"
-						data-state={phase.sync.kind === "needs-attention" || phase.sync.reason === "failed"
-							? "blocked"
-							: "queued"}
-					/>
+				{phase.sync.kind === "out-of-sync" && phase.sync.reason !== "failed" && (
+					<ClockIcon aria-hidden="true" className="build-status-icon" />
+				)}
+				{(phase.sync.kind === "needs-attention"
+					|| phase.sync.kind === "out-of-sync" && phase.sync.reason === "failed") && (
+					<span aria-hidden="true" className="build-task-dot" data-state="blocked" />
 				)}
 				<span className="min-w-0 flex-1">
 					{syncLabel(phase.sync)}
@@ -480,6 +484,8 @@ export function BuildView(
 	// A living document lists the tasks its later syncs added under their own heading.
 	let groups = phase.kind === "live" ? liveTaskGroups(tasks) : { first: tasks, since: [] };
 	let noChange = phase.kind === "live" ? [...(snapshot?.live?.noChange ?? [])].reverse() : [];
+	let outstanding = new Set(snapshot?.live?.outstandingTasks?.map(task => task.id));
+	let syncing = phase.kind === "live" && phase.sync.kind === "building";
 	let renderTask = (task: (typeof tasks)[number]) => {
 		let report = phase.kind === "live"
 			? snapshot?.live?.tasks.find(item => item.id === task.id)?.progress
@@ -487,7 +493,9 @@ export function BuildView(
 		let url = report?.pullRequest?.url;
 		let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
 		if (url) listed.add(url);
-		let state: TaskState = report?.state ?? "queued";
+		let state: TaskState = phase.kind === "live"
+			? liveTaskState(report?.state ?? "queued", outstanding.has(task.id), syncing)
+			: report?.state ?? "queued";
 		let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
 		let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
 		let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
@@ -600,6 +608,7 @@ export function BuildView(
 							{/* A sync that needed no code change still says what it checked. */}
 							{noChange.map(item => (
 								<li className="build-no-change" key={item.buildId}>
+									<CheckIcon aria-hidden="true" className="build-status-icon" size={12} />
 									<span className="min-w-0 flex-1">
 										No code change needed
 										<span className="build-status-detail">{` · ${item.summary}`}</span>

@@ -45,12 +45,24 @@
 	color: var(--color-text-primary);
 	font-size: var(--text-sm);
 	font-weight: var(--font-weight-medium);
+	/* Agent reasons can carry long URLs; they wrap rather than widen the page. */
+	overflow-wrap: anywhere;
 }
 
-/* A status dot stays on the first line when the reason wraps. */
-.build-status-line > .build-task-dot {
+/* A status glyph: tertiary, beside the label it describes. */
+.build-status-icon {
+	flex: none;
+	color: var(--color-text-tertiary);
+}
+
+/* A status dot or glyph stays on the first line when the reason wraps. */
+.build-status-line > :is(.build-task-dot, .build-status-icon) {
 	align-self: flex-start;
 	margin-block-start: calc((1lh - var(--spacing) * 3) / 2);
+}
+
+.build-status-line > .build-status-icon {
+	margin-block-start: calc((1lh - var(--spacing) * 3.5) / 2);
 }
 
 /* The reason or count after a status, quieter than the status itself. */
@@ -299,6 +311,7 @@
 	padding: 0 0 calc(var(--spacing) * 3) calc(var(--spacing) * 6);
 	color: var(--color-text-secondary);
 	font-size: var(--text-sm);
+	overflow-wrap: anywhere;
 }
 
 .build-task-acceptance {
@@ -330,16 +343,23 @@
 	margin-block-start: calc(var(--spacing) * 2);
 }
 
-/* A sync that needed no code change: quieter than a task, aligned with task titles. */
+/*
+ * A sync that needed no code change: quieter than a task, its check in the dot column and its
+ * time on the first line however long the summary runs.
+ */
 .build-no-change {
 	display: flex;
-	min-height: calc(var(--spacing) * 10);
-	align-items: center;
-	gap: calc(var(--spacing) * 2);
-	padding-inline-start: calc(var(--spacing) * 6);
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 3);
+	padding-block: calc((var(--spacing) * 10 - 1lh) / 2);
 	border-block-end: var(--edge-width) solid var(--color-edge);
 	color: var(--color-text-secondary);
 	font-size: var(--text-sm);
+	overflow-wrap: anywhere;
+}
+
+.build-no-change > .build-status-icon {
+	margin-block-start: calc((1lh - var(--spacing) * 3) / 2);
 }
 
 .build-task-blocker {
