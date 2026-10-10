@@ -49,7 +49,13 @@ export function App() {
 		setRepositoryCacheReady(true);
 	}, [session]);
 
-	if (error) return <HostedFailure error={error} />;
+	if (error) {
+		return (
+			<Suspense fallback={<HostedLoading />}>
+				<HostedFailure error={error} />
+			</Suspense>
+		);
+	}
 	if (!session || !repositoryCacheReady) return <HostedLoading />;
 	if (!session.user) {
 		return (
