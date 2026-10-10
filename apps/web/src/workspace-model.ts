@@ -25,7 +25,7 @@ export type WorkspaceProfile = {
 	surface: WorkspaceSurface;
 };
 
-export type WorkspaceDocumentView = DecisionView | "build";
+export type WorkspaceDocumentView = DecisionView | "build" | "graph";
 
 export type WorkspaceDestination = WorkspaceDocumentView | "chat";
 
@@ -76,8 +76,13 @@ export function workspaceProfile(
 	};
 }
 
-export function workspaceDestinations(implementation = false): WorkspaceDestination[] {
-	return implementation ? ["chat", "plan", "decisions", "build"] : ["chat", "plan", "decisions"];
+export function workspaceDestinations(
+	implementation = false,
+	hasGraph = false,
+): WorkspaceDestination[] {
+	return implementation
+		? ["chat", "plan", "decisions", ...(hasGraph ? ["graph" as const] : []), "build"]
+		: ["chat", "plan", "decisions"];
 }
 
 export function workspaceHeadingId(destination: WorkspaceDestination, scope?: string): string {

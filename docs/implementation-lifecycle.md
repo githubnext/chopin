@@ -13,6 +13,11 @@ the graph, queue a local ACP session, and display task progress, dependencies,
 blockers and PR links. This is a thin live tracer: decision resolution during
 implementation, automatic restart and an installer remain future work.
 
+The **Task graph** view appears as soon as a parent document has generated tasks,
+including a draft. It uses the document diagram renderer for dependency inspection
+and live status, with whole-graph hand-off through the existing paired connector.
+Selecting a node opens task details; it does not dispatch that task separately.
+
 ## Actors
 
 - The **hosted Planner** reads the current plan and drafts or revises tasks with
@@ -155,10 +160,10 @@ that mutate the plan are refused until the implementation finishes or requests
 revision. Progress and archived runs remain durable sidecar state.
 
 The protocol defines a `plan:lifecycle` projection for active progress and run
-history. `plan:implementation` invalidates the Build view's authenticated
+history. `plan:implementation` invalidates the implementation views' authenticated
 snapshot after committed graph, build and lifecycle changes. It includes the
-storage revision and current editing lock; `plan:open` supplies that lock on
-reconnect even when the Build view is closed. The view refreshes when opened
+storage revision, current editing lock and graph availability; `plan:open` supplies
+the same status on reconnect even when both implementation views are closed. Each view refreshes when opened
 or notified rather than polling every document in the background.
 
 Archiving does not release an active graph lock or terminate its run. A coding

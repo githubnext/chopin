@@ -59,6 +59,7 @@ export function useWorkspaceIds(): WorkspaceIds {
 	let instance = useId();
 	return {
 		heading: {
+			graph: workspaceHeadingId("graph", instance),
 			build: workspaceHeadingId("build", instance),
 			plan: workspaceHeadingId("plan", instance),
 			decisions: workspaceHeadingId("decisions", instance),
@@ -124,6 +125,8 @@ export type WorkspaceProps = {
 	plan: ReactNode;
 	decisions: ReactNode;
 	build?: ReactNode;
+	graph?: ReactNode;
+	hasGraph?: boolean;
 	buildEnabled?: boolean;
 	controls: ReactNode;
 	/** Connection and document status, right-aligned in the document header. */
@@ -229,6 +232,7 @@ function destinationLabel(
 	document: DocumentActivity,
 ): string {
 	if (destination === "build") return "Build";
+	if (destination === "graph") return "Task graph";
 	if (destination === "plan") return documentActivityLabel(document);
 	if (destination === "decisions" && unanswered > 0) {
 		return `Decisions, ${unanswered} unanswered`;
@@ -250,6 +254,8 @@ export function Workspace(
 		available = 950,
 		build,
 		buildEnabled = true,
+		graph,
+		hasGraph = false,
 		frame,
 		chat,
 		controls,
@@ -309,7 +315,7 @@ export function Workspace(
 		: view;
 	let [travel, setTravel] = useState({ destination, back: false });
 	if (travel.destination !== destination) {
-		let order = workspaceDestinations(profile.implementation);
+		let order = workspaceDestinations(profile.implementation, hasGraph);
 		setTravel({
 			back: order.indexOf(destination) < order.indexOf(travel.destination),
 			destination,
@@ -319,7 +325,7 @@ export function Workspace(
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousChatOpen = useRef(state.chatOpen);
 	let chatInactive = !presentation.chatVisible;
-	let destinations = workspaceDestinations(profile.implementation);
+	let destinations = workspaceDestinations(profile.implementation, hasGraph);
 	let buildReason = useId();
 	let focusDestination = (destination: WorkspaceDestination) => {
 		root.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.heading[destination])}`)
@@ -404,9 +410,7 @@ export function Workspace(
 			{mode !== "split" && (
 				<nav
 					aria-label="Workspace view"
-					className={`workspace-navigation hairline-b grid shrink-0 bg-ground p-1 ${
-						profile.implementation ? "grid-cols-4" : "grid-cols-3"
-					}`}
+					className="workspace-navigation hairline-b flex shrink-0 overflow-x-auto bg-ground p-1"
 				>
 					{destinations.map(destination => {
 						let active = destination === "chat"
@@ -426,7 +430,7 @@ export function Workspace(
 								aria-disabled={unavailable || undefined}
 								aria-label={label}
 								aria-pressed={active}
-								className={`btn btn-md btn-ghost min-h-11 min-w-0 ${
+								className={`btn btn-md btn-ghost min-h-11 shrink-0 flex-1 ${
 									unavailable ? "cursor-default opacity-40" : ""
 								}`}
 								key={destination}
@@ -439,6 +443,8 @@ export function Workspace(
 									? "Chat"
 									: destination === "build"
 									? "Build"
+									: destination === "graph"
+									? "Task graph"
 									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
@@ -568,6 +574,23 @@ export function Workspace(
 									{decisions}
 								</section>
 							</ContentSwapLayer>
+							{profile.implementation && hasGraph && (
+								<ContentSwapLayer
+									active={presentation.documentVisible && presentation.documentView === "graph"}
+									className="workspace-document-layer min-h-0"
+									immediately={immediately}
+									motion={contentSwapMotion}
+								>
+									<section
+										aria-labelledby={ids.heading.graph}
+										className="h-full min-h-0"
+										data-document-view="graph"
+									>
+										<h2 className="sr-only" id={ids.heading.graph} tabIndex={-1}>Task graph</h2>
+										{graph}
+									</section>
+								</ContentSwapLayer>
+							)}
 							{profile.implementation && (
 								<ContentSwapLayer
 									active={presentation.documentVisible && presentation.documentView === "build"}

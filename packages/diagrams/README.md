@@ -23,6 +23,12 @@ For a browser view, import `Diagram` from `@chopin/diagrams/react` and the scope
 inspection, focus, animation, and SVG resource IDs. The viewer is intended for client rendering;
 server-rendered hydration needs a separately verified ID strategy.
 
+Live application views can supply `stateKey` to preserve inspection and zoom
+across updates to one graph, `nodePresentation` for full accessible labels and
+semantic tones, and `renderNodeDetails` for application-owned inspector content.
+Change `stateKey` when the graph identity or definition changes. These props are
+reader-local presentation and do not extend the saved diagram specification.
+
 Run the development gallery with `CHOPIN_DEV_WEB_PORT=5173 bun run --cwd apps/web dev` and open
 `http://127.0.0.1:5173/diagram-gallery`. Its document specimen uses a local slot in the static
 document viewer. Real saved documents use a `seecode` code fence containing one JSON spec:

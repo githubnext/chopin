@@ -21,6 +21,7 @@ import type { ChannelDetail } from "./api";
 
 const workspaceIds = {
 	heading: {
+		graph: "workspace-graph-heading",
 		build: "workspace-build-heading",
 		chat: "workspace-chat-heading",
 		decisions: "workspace-decisions-heading",
@@ -372,7 +373,7 @@ describe("anchored child lifecycle", () => {
 			markup.indexOf("</nav>"),
 		);
 
-		expect(navigation).toContain("grid-cols-3");
+		expect(navigation.match(/<button /g)).toHaveLength(3);
 		expect(navigation).toContain(">Chat<");
 		expect(navigation).toContain(">Document<");
 		expect(navigation).toContain(">Decisions<");

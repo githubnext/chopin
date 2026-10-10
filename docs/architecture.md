@@ -149,10 +149,13 @@ evaluating uploaded code. See [Local investigations](local-experiments.md).
 
 Local implementation builds share that connector, owner pairing and workspace
 reservation. Approval durably binds the reviewed document/graph revisions and
-checkout before work is offered. Build is a third document view beside Document
-and Decisions, not a document preface. Lightweight implementation notifications
-keep editing locks current independently of that view; graph and task snapshots
-are fetched while it is open. See [Local implementation](local-launcher.md).
+checkout before work is offered. Build and the conditional Task graph are document
+views beside Document and Decisions. Task graph appears once generated tasks exist
+and uses the shared diagram renderer for dependency inspection and live status.
+Both implementation views share launch and recovery handling. Lightweight implementation
+notifications keep editing locks and graph availability current independently of
+the views; graph and task snapshots are fetched while a view is open.
+See [Local implementation](local-launcher.md).
 
 ### Durable PostgreSQL state
 
@@ -486,8 +489,8 @@ claimed for one logical run, after which task, pull-request, blocker, and
 verification transitions are persisted before publication. An active run locks
 plan changes that would invalidate the graph.
 
-The backend lifecycle is implemented, but there is currently no production UI
-or route for a person to approve the draft. See
+The browser's **Build on my laptop** action approves the reviewed draft and
+dispatches the whole graph through the paired ACP connector. See
 [Experimental implementation lifecycle](implementation-lifecycle.md).
 
 ## Known implementation gaps

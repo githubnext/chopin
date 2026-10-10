@@ -101,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "cf9223a300a5e36ab22e6394d5c344a6eab34736178d197ae6c6d2d8b7bfd1dc"
+		"sourceHash": "7292c219e75f5b3c7287c8987c772ec6a2a71dfc09a4cfdbafe2764ccf6415c0"
 	},
 	{
 		"file": "apps/web/src/project-sidebar.tsx",
@@ -115,7 +115,7 @@
 				1
 			]
 		],
-		"sourceHash": "cf9223a300a5e36ab22e6394d5c344a6eab34736178d197ae6c6d2d8b7bfd1dc"
+		"sourceHash": "7292c219e75f5b3c7287c8987c772ec6a2a71dfc09a4cfdbafe2764ccf6415c0"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -269,7 +269,7 @@
 				1
 			]
 		],
-		"sourceHash": "427d8b2f58632c71c1d404580dd3b23589a9dd2cc9793c28c5ecfb764d0521fe"
+		"sourceHash": "0c0f098a6d911aa7597728b55c38d90a1ce993e60bab2f6e9ce3967537c520f5"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -297,7 +297,7 @@
 				1
 			]
 		],
-		"sourceHash": "427d8b2f58632c71c1d404580dd3b23589a9dd2cc9793c28c5ecfb764d0521fe"
+		"sourceHash": "0c0f098a6d911aa7597728b55c38d90a1ce993e60bab2f6e9ce3967537c520f5"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",

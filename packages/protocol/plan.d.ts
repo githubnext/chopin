@@ -319,7 +319,7 @@ export declare namespace Plan {
 	};
 
 	/** Durable implementation activity, published only after persistence. */
-	export type ImplementationStatus = { revision: number; locked: boolean };
+	export type ImplementationStatus = { revision: number; locked: boolean; hasGraph: boolean };
 	export type ImplementationChanged = KIND<"plan:implementation"> & ImplementationStatus;
 
 	export type Lifecycle = KIND<"plan:lifecycle"> & {

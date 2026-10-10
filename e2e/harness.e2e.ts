@@ -332,3 +332,36 @@ test("a document edited while Build is open keeps its old tasks and waits to be 
 	await view.getByRole("button", { name: "Update tasks", exact: true }).click();
 	await expect.poll(() => drafts.length).toBe(1);
 });
+
+test("Task graph inspects stale tasks without drafting until the person opens Build", async ({ join, page, seed }) => {
+	await seed("# Graph review\n\nThe document changed after drafting.\n", {
+		revision: 1,
+		graph: {
+			versions: [{
+				number: 1,
+				revision: 1,
+				planRevision: 0,
+				state: "draft",
+				definition: {
+					tasks: [{
+						id: "review",
+						title: "Review the document",
+						context: "An earlier revision",
+						goal: "Implement the reviewed document",
+						acceptance: ["Works", "Verified"],
+						dependsOn: [],
+					}],
+				},
+			}],
+		},
+	});
+	let { drafts } = await recordDrafts(page);
+	let opened = await join("ana");
+	await opened.getByRole("group", { name: "Document view", exact: true })
+		.getByRole("button", { name: "Task graph", exact: true }).click();
+	let view = opened.getByRole("region", { name: "Task graph", exact: true });
+	await expect(view).toContainText("Out of date");
+	expect(drafts).toHaveLength(0);
+	await view.getByRole("button", { name: "Open Build", exact: true }).click();
+	await expect.poll(() => drafts.length).toBe(1);
+});
