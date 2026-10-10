@@ -108,7 +108,7 @@ test("a newly navigated parent document opens and submits its own comment compos
 	await active.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 
 	let draft = active.getByRole("dialog", { name: "New comment" });
-	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this parent passage.");
+	await draft.getByPlaceholder("Add a comment").fill("Keep this parent passage.");
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 	await expect(active.getByRole("button", { name: /Comment on “The destination parent/ }))
 		.toBeVisible();

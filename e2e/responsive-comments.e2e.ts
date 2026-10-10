@@ -28,7 +28,7 @@ test("320×568 uses the compact comment drawer", async ({ join, seed }) => {
 	let popover = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(popover).not.toHaveAttribute("aria-modal", "true");
 	await expect(page.getByRole("button", { name: "Resize comment sheet" })).toHaveCount(0);
-	await expect(popover.getByRole("button", { name: "Close comment" })).toBeFocused();
+	await expect(popover.getByRole("button", { name: "More actions" })).toBeFocused();
 });
 
 test("768×1024 keeps comments in a document popover", async ({ join, seed }) => {
@@ -96,7 +96,7 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 	await expect(draftClose).not.toHaveClass(/sr-only/);
 	await expect(draft.locator("[data-plan-comment-draft-header]")).toHaveCount(0);
 	// A soft keyboard has no Shift-Enter, so Enter is a newline and the button sends.
-	let draftField = draft.getByPlaceholder("Comment on this passage…");
+	let draftField = draft.getByPlaceholder("Add a comment");
 	await draftField.fill("Keep this paragraph close.");
 	await draftField.press("Enter");
 	await expect(draft).toBeVisible();
@@ -247,7 +247,7 @@ async function commentOn(page: import("@playwright/test").Page, index: number, t
 	await page.locator(".plan-content > p").nth(index).selectText();
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
-	await draft.getByPlaceholder("Comment on this passage…").fill(text);
+	await draft.getByPlaceholder("Add a comment").fill(text);
 	await draft.getByRole("button", { name: /^(Comment|Post comment)$/ }).click();
 	await expect(draft).toHaveCount(0);
 	await page.keyboard.press("Escape");
@@ -409,10 +409,10 @@ test("a desktop comment card opens beside its passage instead of over it", async
 	await target.selectText();
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
-	let field = draft.getByPlaceholder("Comment on this passage…");
+	let field = draft.getByPlaceholder("Add a comment");
 	await expect(field).toBeFocused();
 	await expect(draft.getByRole("button", { name: "Cancel" })).toHaveCount(0);
-	await expect(draft.getByRole("button", { name: "Close comment" })).toHaveCount(1);
+	await expect(draft.getByRole("button", { name: "Close comment" })).toHaveCount(0);
 	await expect.poll(async () =>
 		overlaps((await draft.boundingBox())!, (await target.boundingBox())!)
 	)

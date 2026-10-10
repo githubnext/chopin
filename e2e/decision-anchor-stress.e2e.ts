@@ -1,11 +1,12 @@
 /** Stress the durable prose link while nearby document text changes. */
 
 import { content, expect, test, written } from "./room";
-import { openJevWire, sendChat, wireFrames, wireRequest } from "./jev-wire";
+import { openJevWire, sendChat, wireFrames } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
 import * as Y from "../apps/server/node_modules/yjs";
 import * as PlanRoom from "../apps/server/src/plan/room";
 import { readSource } from "./database";
+import { storedAcceptedComment } from "../apps/server/src/testing/plan";
 
 import type { Plan } from "../packages/protocol/index";
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -124,7 +125,12 @@ test.afterEach(async () => {
 });
 
 test("a custom browser update cannot remove an accepted Decision projection", async ({ join, page, room, seed }) => {
-	await seed(`${MARKED_PROSE}\n`);
+	// Comments are no longer accepted, but stored decisions still project into the plan.
+	let stored = await storedAcceptedComment(`${MARKED_PROSE}\n`, MARKED_PROSE, {
+		by: "ana",
+		text: "Keep this choice recorded.",
+	});
+	await seed(stored.source, { threads: [stored.thread] });
 	let appFrames: Array<Record<string, unknown>> = [];
 	let browserSocket: WebSocketRoute | undefined;
 	let resolveOpen: ((frame: Plan.Open.Reply) => void) | undefined;
@@ -156,19 +162,6 @@ test("a custom browser update cannot remove an accepted Decision projection", as
 
 	let editor = await join("ana");
 	let other = await join("ben");
-	await openJevWire(editor, room);
-	let started = await wireRequest(editor, {
-		kind: "comment:start",
-		blocks: [0],
-		quote: MARKED_PROSE,
-		offset: 0,
-		length: MARKED_PROSE.length,
-		text: "Keep this choice recorded.",
-	});
-	expect(started.ok).toBe(true);
-	let threadId = (started.thread as { id: string }).id;
-	let accepted = await wireRequest(editor, { kind: "comment:accept", id: threadId });
-	expect(accepted.ok).toBe(true);
 	await expect(content(editor)).toContainText(MARKED_PROSE);
 	await expect(content(other)).toContainText(MARKED_PROSE);
 	await expect(commentDecision(editor)).toContainText(MARKED_PROSE);
@@ -192,7 +185,7 @@ test("a custom browser update cannot remove an accepted Decision projection", as
 	client.editor.getEditorState().read(() => {
 		let root = (client.editor.getEditorState() as unknown as EditorInternals)._nodeMap.get("root");
 		decision = root?.getChildren().find(node =>
-			node.getType() === "plan-decision" && node.getDecision?.().id === threadId
+			node.getType() === "plan-decision" && node.getDecision?.().id === stored.id
 		);
 		if (decision) decisionId = decision.getDecision!().id;
 	});
@@ -234,7 +227,7 @@ test("a custom browser update cannot remove an accepted Decision projection", as
 		threads?: Array<{ id: string; status: string; quote?: string }>;
 	} | undefined;
 	expect(synced?.threads).toContainEqual(expect.objectContaining({
-		id: threadId,
+		id: stored.id,
 		status: "accepted",
 		quote: MARKED_PROSE,
 	}));

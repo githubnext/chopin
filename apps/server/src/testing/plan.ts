@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { $isParagraphNode, $nodesOfType } from "lexical";
 import * as Y from "yjs";
-import { CalloutNode } from "@chopin/dialect";
+import { CalloutNode, ulid } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 
 import * as Room from "../plan/room";
@@ -61,6 +61,51 @@ export async function storedLegacyCallout(source: string) {
 			epoch: document.epoch,
 			source: Room.project(document),
 			update: Y.encodeStateAsUpdate(document.doc),
+		};
+	} finally {
+		document.doc.destroy();
+	}
+}
+
+/**
+ * A document with one comment accepted under the earlier lifecycle.
+ *
+ * Nothing creates accepted threads any more, but storage still holds them, so
+ * the `<Decision>` projection and its sidecar record are seeded together. The
+ * passage's positions belong to a document the seeded one is not, as after a
+ * restart, so the server recovers it from the quote.
+ */
+export async function storedAcceptedComment(
+	source: string,
+	quote: string,
+	note: { by: string; text: string },
+	block = 0,
+) {
+	let document = await Room.create(source);
+	try {
+		let passage = Room.passageAt(document, [block], quote, 0, quote.length);
+		let id = ulid();
+		let at = new Date("2026-08-13T12:00:00.000Z");
+		Room.insertDecision(document, {
+			id,
+			quote,
+			by: note.by,
+			at: at.toISOString(),
+			notes: [note],
+		});
+		await Room.settle();
+		return {
+			id,
+			source: Room.project(document),
+			thread: {
+				id,
+				status: "accepted",
+				passage,
+				notes: [{ id: ulid(), handle: note.by, text: note.text, ts: at.getTime() / 1_000 }],
+				quote,
+				resolver: note.by,
+				at: at.getTime() / 1_000,
+			},
 		};
 	} finally {
 		document.doc.destroy();

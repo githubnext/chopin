@@ -633,7 +633,7 @@ test("a touch comment sheet keeps its composer above the visual keyboard", async
 		await marker.tap();
 		let sheet = emulation.page.getByRole("dialog", { name: "Comment thread" });
 		await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
-		let composer = sheet.getByPlaceholder("Reply…");
+		let composer = sheet.getByPlaceholder("Reply", { exact: true });
 		await composer.focus();
 		await setVisualViewport(emulation.page, {
 			event: "resize",

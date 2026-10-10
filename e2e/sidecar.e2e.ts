@@ -192,7 +192,7 @@ async function secondThread(page: import("@playwright/test").Page) {
 	await content(page).locator("p").nth(1).selectText();
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
-	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this block as well.");
+	await draft.getByPlaceholder("Add a comment").fill("Keep this block as well.");
 	await draft.getByRole("button", { name: /^(Comment|Post comment)$/ }).click();
 	await expect.poll(() => commentButton(page).count()).toBe(2);
 	await page.keyboard.press("Escape");
@@ -1005,7 +1005,7 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 		await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 		let sheet = page.getByRole("dialog", { name: "New comment" });
 		await expect(sheet).toHaveAttribute("aria-modal", "true");
-		await expect(sheet.getByPlaceholder("Comment on this passage…")).toBeFocused();
+		await expect(sheet.getByPlaceholder("Add a comment")).toBeFocused();
 		return sheet;
 	};
 
@@ -1051,35 +1051,27 @@ test("submitting a compact new comment restores editor focus", async ({ join, se
 	await editor.locator("p").nth(1).selectText();
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let sheet = page.getByRole("dialog", { name: "New comment" });
-	await sheet.getByPlaceholder("Comment on this passage…").fill("Keep this block as well.");
+	await sheet.getByPlaceholder("Add a comment").fill("Keep this block as well.");
 	await sheet.getByRole("button", { name: "Post comment", exact: true }).click();
 
 	await expect(sheet).toHaveCount(0);
 	await expect(editor).toBeFocused();
 });
 
-for (
-	let resolution of [
-		{ action: "Apply feedback", confirmation: "Apply feedback", verb: "applying" },
-		{ action: "Dismiss", confirmation: "Dismiss", verb: "dismissing" },
-	] as const
-) {
-	test(`${resolution.verb} a compact comment restores editor focus`, async ({ join, seed }) => {
-		await seed(PROSE);
-		let page = await join("ana", {
-			hasTouch: true,
-			isMobile: true,
-			viewport: { width: 390, height: 844 },
-		});
-		let editor = content(page);
-		let sheet = await thread(page);
-		await sheet.getByRole("button", { name: resolution.action }).click();
-		await sheet.getByRole("button", { name: resolution.confirmation }).click();
-
-		await expect(sheet).toHaveCount(0);
-		await expect(editor).toBeFocused();
+test("resolving a compact comment restores editor focus", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
 	});
-}
+	let editor = content(page);
+	let sheet = await thread(page);
+	await sheet.getByRole("button", { name: "Resolve", exact: true }).click();
+
+	await expect(sheet).toHaveCount(0);
+	await expect(editor).toBeFocused();
+});
 
 test("an unavailable comment position keeps its compact sheet mounted until geometry recovers", async ({ join, seed }) => {
 	await seed(TALL_PASSAGE);
@@ -1105,7 +1097,7 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	});
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
-	await draft.getByPlaceholder("Comment on this passage…").fill("Keep the whole passage.");
+	await draft.getByPlaceholder("Add a comment").fill("Keep the whole passage.");
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 
 	// Both threads mark the one block, so they share its marker.
@@ -1263,7 +1255,7 @@ test("clicking a comment button pins its document card and preserves the related
 	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	let card = await thread(page);
 	await expect(card).toContainText("@dev");
-	await expect(card.getByPlaceholder("Reply…")).toBeVisible();
+	await expect(card.getByPlaceholder("Reply", { exact: true })).toBeVisible();
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	card = await thread(page);
@@ -1317,7 +1309,7 @@ test("a compact orphan sheet owns focus and restores its opener", async ({ join,
 	await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
 	await expect.poll(() => editorIsModalBackground(page)).toBe(true);
 	await page.keyboard.press("Shift+Tab");
-	await expect(sheet.getByRole("button", { name: "Apply feedback" })).toBeFocused();
+	await expect(sheet.getByRole("textbox", { name: "Reply", exact: true })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(sheet).toHaveCount(0);
 	await expect(opener).toBeFocused();
@@ -1351,54 +1343,37 @@ function washed(page: import("@playwright/test").Page): Promise<number> {
 	return page.evaluate(() => CSS.highlights.get("plan-related")?.size ?? 0);
 }
 
-test("the reply composer grows and keeps one inset send action", async ({ join, seed }) => {
+test("the reply field is one line until focused, then grows and reveals its send", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	let card = await thread(page);
-	let composer = card.getByPlaceholder("Reply…");
+	let composer = card.getByRole("textbox", { name: "Reply", exact: true });
+	let frame = composer.locator("xpath=..");
+	let send = card.getByRole("button", { name: "Send reply" });
 	let initial = await composer.evaluate(element => ({
 		height: element.clientHeight,
 		resize: getComputedStyle(element).resize,
 	}));
 
 	expect(initial.resize).toBe("none");
+	await expect(frame).not.toHaveAttribute("data-open");
+	await composer.focus();
+	await expect(frame).toHaveAttribute("data-open", "true");
+	await expect(send).toBeVisible();
+	await expect(send).toBeDisabled();
+
 	await composer.fill("First line\nSecond line\nThird line\nFourth line\nFifth line");
 	await expect.poll(() => composer.evaluate(element => element.clientHeight)).toBeGreaterThan(
 		initial.height,
 	);
-	let send = card.getByRole("button", { name: "Send reply" });
-	await expect(send).toBeVisible();
-	let geometry = await Promise.all([composer.boundingBox(), send.boundingBox()]).then(
-		([field, button]) =>
-			field && button
-				? {
-					bottom: field.y + field.height - button.y - button.height,
-					contained: button.x >= field.x
-						&& button.y >= field.y
-						&& button.x + button.width <= field.x + field.width
-						&& button.y + button.height <= field.y + field.height,
-					right: field.x + field.width - button.x - button.width,
-				}
-				: undefined,
+	await expect(send).toBeEnabled();
+	let contained = await Promise.all([frame.boundingBox(), send.boundingBox()]).then(
+		([outer, button]) =>
+			!!outer && !!button && button.x >= outer.x && button.y >= outer.y
+			&& button.x + button.width <= outer.x + outer.width
+			&& button.y + button.height <= outer.y + outer.height,
 	);
-	expect(geometry?.contained).toBe(true);
-	expect(Math.abs((geometry?.right ?? 0) - (geometry?.bottom ?? 0))).toBeLessThan(0.5);
-
-	let apply = card.getByRole("button", { name: "Apply feedback" });
-	let dismiss = card.getByRole("button", { name: "Dismiss" });
-	let actionStyles = await Promise.all([apply, dismiss].map(button =>
-		button.evaluate(element => {
-			let style = getComputedStyle(element);
-			return {
-				background: style.backgroundColor,
-				paddingLeft: style.paddingLeft,
-				paddingRight: style.paddingRight,
-			};
-		})
-	));
-	expect(actionStyles[0].background).not.toBe(actionStyles[1].background);
-	expect(actionStyles[0].paddingLeft).toBe("12px");
-	expect(actionStyles[0].paddingRight).toBe("12px");
+	expect(contained).toBe(true);
 });
 
 test("a reply joins the thread without a duplicate reply count", async ({ join, seed }) => {
@@ -1407,7 +1382,7 @@ test("a reply joins the thread without a duplicate reply count", async ({ join, 
 	let card = await thread(page);
 
 	await expect(card.getByText(/repl(y|ies)$/)).toHaveCount(0);
-	await card.getByPlaceholder("Reply…").fill("Still right, but say why.");
+	await card.getByPlaceholder("Reply", { exact: true }).fill("Still right, but say why.");
 	await card.getByRole("button", { name: "Send reply" }).click();
 	await expect(card).toContainText("Still right, but say why.");
 	await expect(card).toContainText("@ana");
@@ -1415,42 +1390,47 @@ test("a reply joins the thread without a duplicate reply count", async ({ join, 
 	await expect(commentButton(page)).toHaveAccessibleDescription("1 reply waiting.");
 });
 
-test("a comment confirmation remains until the reader chooses", async ({ join, seed }) => {
+test("resolving hides the thread at once, and Undo brings it back for everyone", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
+	let other = await join("bo");
+	await expect(commentButton(other)).toHaveCount(1);
 	let card = await thread(page);
+	let source = await content(page).textContent();
 
-	await card.getByRole("button", { name: "Dismiss" }).click();
-	await expect(card).toContainText("This closes the thread without changing the document.");
-	await page.waitForTimeout(4_100);
-	await expect(card.getByRole("button", { name: "Dismiss" })).toBeVisible();
-	await expect(card.getByRole("button", { name: "Cancel" })).toBeVisible();
-});
-
-test("accepting explains its consequence before changing the document", async ({ join, seed }) => {
-	await seed(PROSE);
-	let page = await join("ana");
-	let card = await thread(page);
-
-	await card.getByRole("button", { name: "Apply feedback" }).click();
-	await expect(card).toContainText("Planner will use this feedback to update the document.");
-	await card.getByRole("button", { name: "Apply feedback" }).click();
-	await expect(page.getByText(/accepted a comment on/)).toBeVisible();
-	await expect(
-		page.getByText("The agent is not running, so the plan has not been revised."),
-	).toBeVisible();
+	await card.hover();
+	await card.getByRole("button", { name: "Resolve", exact: true }).click();
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	await expect(commentButton(page)).toHaveCount(0);
-	await expect(content(page).locator("article").filter({ hasText: QUOTED })).toContainText(QUOTED);
+	await expect(commentButton(other)).toHaveCount(0);
+	let toast = page.getByRole("status").filter({ hasText: "Comment resolved" });
+	await expect(toast).toBeVisible();
+	expect(await content(page).textContent()).toBe(source);
+
+	await toast.getByRole("button", { name: "Undo" }).click();
+	await expect(toast).toHaveCount(0);
+	let reopened = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(reopened).toContainText("@dev");
+	await expect(commentButton(other)).toHaveCount(1);
+	await expect.poll(() => washed(other)).toBeGreaterThan(0);
+
+	// The reopened thread takes replies again.
+	await reopened.getByRole("textbox", { name: "Reply", exact: true }).fill("Back again.");
+	await reopened.getByRole("button", { name: "Send reply" }).click();
+	await expect(reopened).toContainText("Back again.");
+	await commentButton(other).click();
+	await expect(other.getByRole("dialog", { name: "Comment thread" })).toContainText("Back again.");
 });
 
-test("a dismissed thread removes its document button", async ({ join, seed }) => {
+test("a resolved thread stays hidden after a reload", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	let card = await thread(page);
+	await card.hover();
+	await card.getByRole("button", { name: "Resolve", exact: true }).click();
+	await expect(commentButton(page)).toHaveCount(0);
 
-	await card.getByRole("button", { name: "Dismiss" }).click();
-	await expect(card).toContainText("This closes the thread without changing the document.");
-	await card.getByRole("button", { name: "Dismiss" }).click();
+	await page.reload();
+	await expect(content(page)).toContainText(QUOTED);
 	await expect(commentButton(page)).toHaveCount(0);
 });
