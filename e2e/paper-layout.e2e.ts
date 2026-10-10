@@ -130,7 +130,7 @@ test("the Chat shortcut from the top bar moves focus to the Show chat button", a
 	await join("ana");
 	await page.locator(".room-header").getByRole("button").first().focus();
 	await expect(page.locator(".room-header :focus")).toHaveCount(1);
-	await page.keyboard.press("Meta+.");
+	await page.keyboard.press("ControlOrMeta+.");
 	await expect(chatPane(page)).toBeHidden();
 	await expect(toolbar(page).getByRole("button", { name: "Show chat" })).toBeFocused();
 });
