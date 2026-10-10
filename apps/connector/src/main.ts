@@ -77,7 +77,7 @@ async function connect(args: string[]) {
 	try {
 		let { root: _root, ...source } = info;
 		let pairing = await post("/api/connector/pairings", { ...source, label: basename(info.root) });
-		console.error(`Approve this workspace in Chopin: ${pairing.url}`);
+		console.error(`Connect this checkout of ${info.repository} in Chopin: ${pairing.url}`);
 		let token: string | undefined;
 		while (!abort.signal.aborted && !token) {
 			let claim = await post(`/api/connector/pairings/${pairing.id}/claim`, {
@@ -88,7 +88,9 @@ async function connect(args: string[]) {
 		}
 		if (!token) return;
 		api = await remote(url, token);
-		console.error("Connected. Waiting for owner-authorized local work. Ctrl-C disconnects.");
+		console.error(
+			`Connected. Work you start in any ${info.repository} document runs here. Ctrl-C disconnects.`,
+		);
 		while (!abort.signal.aborted) {
 			let offered = await api.call("wait_for_work", {}, abort.signal) as {
 				id?: string;

@@ -1,8 +1,4 @@
-import type {
-	InvestigationSummary,
-	PublishedInvestigation,
-	WorkspaceConnection,
-} from "@chopin/experiment/records";
+import type { InvestigationSummary, PublishedInvestigation } from "@chopin/experiment/records";
 import { experimentRequest } from "./api";
 import type { Wire } from "../wire";
 import type { SelectionPatch } from "@chopin/experiment";
@@ -14,7 +10,6 @@ export class ExperimentStore {
 	#request = 0;
 	#details = new Map<string, number>();
 	items: InvestigationSummary[] = [];
-	connections: WorkspaceConnection[] = [];
 	values = new Map<string, PublishedInvestigation>();
 	error = "";
 	constructor(readonly documentId: string) {}
@@ -36,12 +31,13 @@ export class ExperimentStore {
 		let request = ++this.#request;
 		let controller = this.#controller;
 		try {
-			let result = await experimentRequest<
-				{ experiments: InvestigationSummary[]; connections: WorkspaceConnection[] }
-			>(`/api/documents/${this.documentId}/experiments`, undefined, this.#controller.signal);
+			let result = await experimentRequest<{ experiments: InvestigationSummary[] }>(
+				`/api/documents/${this.documentId}/experiments`,
+				undefined,
+				this.#controller.signal,
+			);
 			if (request !== this.#request) return;
 			this.items = result.experiments;
-			this.connections = result.connections;
 			this.error = "";
 			this.changed();
 			for (let item of result.experiments) {
