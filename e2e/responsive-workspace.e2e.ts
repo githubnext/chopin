@@ -37,10 +37,11 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	await expect(header.getByRole("button", { name: /chat pane/ })).toHaveCount(0);
 	await expect(page.getByRole("group", { name: "Document view" })).toHaveCount(0);
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
-	await expect(destinations).toHaveCount(3);
+	await expect(destinations).toHaveCount(4);
 	await expect(destinations.nth(0)).toHaveAccessibleName(/^Chat/);
 	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
 	await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
+	await expect(destinations.nth(3)).toHaveAccessibleName("Build");
 
 	await expectInsideViewport(header);
 	await expectInsideViewport(projects);
@@ -105,6 +106,14 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(chatPane(page)).toBeHidden();
 	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
+	await nav.getByRole("button", { name: "Build", exact: true }).click();
+	await expect(page.getByRole("heading", { name: "Build", exact: true })).toBeFocused();
+	await expect(page.getByRole("region", { name: "Implementation", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeHidden();
+	await expect(chatPane(page)).toBeHidden();
+	await expect(page.getByRole("dialog", { name: "Implementation", exact: true })).toHaveCount(0);
+	await nav.getByRole("button", { name: "Document", exact: true }).click();
+	await expect(content(page)).toBeEditable();
 	await expectNoHorizontalOverflow(page);
 });
 
