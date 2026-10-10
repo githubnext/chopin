@@ -179,6 +179,9 @@ const MARKS: Mark[] = [
 /** Marks a phone keeps on the row; the rest move into the block menu. */
 const PHONE_ROW = new Set<TextFormatType>(["bold", "italic"]);
 
+/** Roughly how far the system's end handle hangs below a touch selection. */
+const SELECTION_HANDLE = 16;
+
 function usePrimaryCoarse(): boolean {
 	let [coarse, setCoarse] = useState(() => matchMedia(PRIMARY_COARSE_POINTER_QUERY).matches);
 	useEffect(() => {
@@ -361,10 +364,12 @@ export function SelectionBubble(
 		let height = element.offsetHeight;
 		element.style.maxHeight = capped;
 		let centre = visible.left + visible.width / 2;
+		// Below a touch selection the bubble also clears the system's end handle.
+		let handle = coarse ? SELECTION_HANDLE : 0;
 		let next = placeSurface(
 			{
-				bottom: visible.bottom,
-				height: visible.height,
+				bottom: visible.bottom + handle,
+				height: visible.height + handle,
 				left: centre - width / 2,
 				right: centre + width / 2,
 				top: visible.top,
