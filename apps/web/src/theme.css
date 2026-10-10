@@ -1529,6 +1529,11 @@ button.question-add:disabled {
 	outline: none;
 }
 
+/* A comment composer's frame shows focus with its border; its textarea hands that over. */
+.plan-comment-composer textarea:focus {
+	outline: none;
+}
+
 /* A rendered block clips its preview's ring, so show the same ring on the outer block. */
 .plan-content .planCode :is(.plan-code-view, .plan-diagram):focus-visible {
 	outline: none;

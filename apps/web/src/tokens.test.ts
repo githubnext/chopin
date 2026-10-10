@@ -631,9 +631,9 @@ describe("migration", () => {
 			},
 			{
 				file: "packages/editor/src/comments.tsx",
-				marker: "maxLength={limits.MAX_NOTE}",
+				marker: 'className="plan-comment-composer field"',
 				name: "comment composer",
-				tag: "textarea",
+				tag: "div",
 				utility: "field",
 			},
 		];
@@ -781,34 +781,16 @@ describe("migration", () => {
 				tiers: ["btn-primary"],
 			}],
 			["packages/editor/src/comments.tsx", {
-				action: "Ask again",
-				marker: "onClick={onRetry}",
-				size: "btn-sm",
+				action: "comment actions",
+				marker: 'aria-label="More actions"',
+				size: "btn-icon",
 				tiers: ["btn-ghost"],
 			}],
 			["packages/editor/src/comments.tsx", {
-				action: "comment confirmation",
-				marker: "confirmation.onConfirm();",
-				size: "btn-sm",
-				tiers: ["btn-secondary"],
-			}],
-			["packages/editor/src/comments.tsx", {
-				action: "cancel comment confirmation",
-				marker: "onClick={() => setConfirming(undefined)}",
-				size: "btn-sm",
+				action: "resolve comment",
+				marker: 'aria-label="Resolve"',
+				size: "btn-icon",
 				tiers: ["btn-ghost"],
-			}],
-			["packages/editor/src/comments.tsx", {
-				action: "Dismiss comment",
-				marker: 'setConfirming("dismiss")',
-				size: "btn-sm",
-				tiers: ["btn-ghost"],
-			}],
-			["packages/editor/src/comments.tsx", {
-				action: "Apply feedback",
-				marker: 'setConfirming("accept")',
-				size: "btn-md",
-				tiers: ["btn-primary"],
 			}],
 			["packages/editor/src/decisions.tsx", {
 				action: "resolved disclosure",
