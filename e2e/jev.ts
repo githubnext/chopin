@@ -429,6 +429,15 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 			usage: { input_tokens: 10, output_tokens: 5 },
 		});
 	}
+	if ("build_ready" in request.questions) {
+		let source = (request.state as { document?: string }).document ?? "";
+		let words = source.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;
+		return Response.json({
+			model: "jev-e2e-fixture",
+			answers: { build_ready: { type: "noul", noul: words >= 120 ? 0.9 : 0.1 } },
+			usage: { input_tokens: 10, output_tokens: 5 },
+		});
+	}
 	let scenario = current?.text && SCENARIOS[current.text];
 	if (!current?.id || !scenario) {
 		return Response.json({ error: "unknown Jev fixture scenario" }, { status: 501 });

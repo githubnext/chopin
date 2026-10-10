@@ -47,6 +47,7 @@ import {
 	visibleDecisionView,
 } from "@chopin/editor";
 
+import { BuildPlanButton } from "./build-plan-button";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
 import { ChildPhoneChromeContext, sameEditState } from "./child-phone-chrome";
@@ -513,6 +514,7 @@ export function RoomWorkspace(
 		locked: false,
 	});
 	let [showImplementation, setShowImplementation] = useState(false);
+	let [needsAgent, setNeedsAgent] = useState(0);
 	useEffect(() => {
 		setImplementation({ revision: -1, locked: false });
 		let update = (value: Plan.ImplementationStatus) => {
@@ -1306,6 +1308,17 @@ export function RoomWorkspace(
 					: undefined}
 				synced={planState.synced}
 			/>
+			{profile.implementation && workspaceCanEdit && status === "connected" && (
+				<BuildPlanButton
+					onNeedsAgent={() => {
+						setNeedsAgent(count => count + 1);
+						selectDestination("build");
+					}}
+					onShowBuild={() => selectDestination("build")}
+					room={room}
+					wire={wire}
+				/>
+			)}
 		</>
 	);
 	let plan = (
@@ -1588,6 +1601,7 @@ export function RoomWorkspace(
 							canEdit={!!workspaceCanEdit && status === "connected"}
 							chatLoaded={chatActivity.loaded}
 							comments={acceptedComments}
+						needsAgentSignal={needsAgent}
 							onShowDecisions={() => selectDestination("decisions")}
 							onShowDocument={() => selectDestination("plan")}
 							planner={agent}

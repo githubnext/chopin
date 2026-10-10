@@ -2,10 +2,12 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	advanceDraft,
+	advanceFirstBuild,
 	buildPhase,
 	draftKey,
 	draftRefusalCopy,
 	elapsed,
+	firstBuildStep,
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
@@ -38,6 +40,7 @@ function snapshot(change: Partial<ImplementationSnapshot> = {}): ImplementationS
 		},
 		localAgent: false,
 		blockers: [],
+		buildReady: true,
 		lifecycle: { execution: { state: "idle" }, history: [] },
 		...change,
 	};
@@ -274,5 +277,71 @@ describe("refusals", () => {
 			.toBe("Chopin is busy with other requests. Try again shortly.");
 		expect(draftRefusalCopy("not connected")).toBeUndefined();
 		expect(draftRefusalCopy("could not save the request")).toBeUndefined();
+	});
+});
+
+describe("first build", () => {
+	let idle = { stage: "idle" } as const;
+	let fresh = snapshot({ graph: undefined });
+
+	it("offers the button only for a ready document that was never built", () => {
+		expect(firstBuildStep(fresh, idle)).toEqual({ view: "ready" });
+		expect(firstBuildStep(snapshot(), idle)).toEqual({ view: "ready" });
+		expect(firstBuildStep(undefined, idle)).toEqual({ view: "hidden" });
+		expect(firstBuildStep(snapshot({ graph: undefined, buildReady: false }), idle).view)
+			.toBe("hidden");
+		expect(firstBuildStep(snapshot({ blockers: ["unanswered questionnaires"] }), idle).view)
+			.toBe("hidden");
+		expect(firstBuildStep(snapshot({ build: build("failed") }), idle).view).toBe("hidden");
+		expect(firstBuildStep(snapshot({ build: build("running") }), idle).view).toBe("working");
+	});
+
+	it("drafts, then starts the drafted tasks without a review step", () => {
+		let state = advanceFirstBuild(idle, { type: "press" });
+		expect(firstBuildStep(fresh, state)).toEqual({ view: "working", next: "draft" });
+		state = advanceFirstBuild(state, { type: "draft-sent" });
+		expect(firstBuildStep(fresh, state)).toEqual({ view: "working" });
+		// Tasks for an older revision are not the drafted ones.
+		let stale = snapshot({ planRevision: 5 });
+		expect(firstBuildStep(stale, state)).toEqual({ view: "working" });
+		expect(firstBuildStep(snapshot(), state)).toEqual({ view: "working", next: "start" });
+		state = advanceFirstBuild(state, { type: "start" });
+		expect(state).toEqual({ stage: "starting" });
+		expect(firstBuildStep(snapshot(), state)).toEqual({ view: "working" });
+		state = advanceFirstBuild(state, { type: "started" });
+		expect(firstBuildStep(snapshot(), state)).toEqual({ view: "working" });
+		expect(firstBuildStep(snapshot({ build: build("queued") }), state))
+			.toEqual({ view: "working", next: "reset" });
+	});
+
+	it("starts existing tasks for this revision at once", () => {
+		let state = advanceFirstBuild(idle, { type: "press" });
+		expect(firstBuildStep(snapshot(), state).next).toBe("start");
+	});
+
+	it("returns to the button when drafting or starting fails", () => {
+		let sent = advanceFirstBuild(advanceFirstBuild(idle, { type: "press" }), {
+			type: "draft-sent",
+		});
+		expect(advanceFirstBuild(sent, { type: "draft-ended", drafted: true })).toBe(sent);
+		let failed = advanceFirstBuild(sent, { type: "draft-ended", drafted: false });
+		expect(failed.stage).toBe("failed");
+		expect(firstBuildStep(fresh, failed)).toEqual({ view: "ready" });
+		expect(advanceFirstBuild(failed, { type: "press" })).toEqual({
+			stage: "drafting",
+			sent: false,
+		});
+
+		let starting = advanceFirstBuild(sent, { type: "start" });
+		let noAgent = advanceFirstBuild(starting, { type: "start-refused", agent: true });
+		expect(noAgent).toEqual({ stage: "failed", agent: true, message: undefined });
+		expect(firstBuildStep(snapshot(), noAgent)).toEqual({ view: "ready" });
+	});
+
+	it("hands a blocked attempt back to the Build view", () => {
+		let state = advanceFirstBuild(idle, { type: "press" });
+		let blocked = snapshot({ blockers: ["unanswered questionnaires"] });
+		expect(firstBuildStep(blocked, state)).toEqual({ view: "hidden", next: "reset" });
+		expect(advanceFirstBuild(state, { type: "reset" })).toEqual(idle);
 	});
 });
