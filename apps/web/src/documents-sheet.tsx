@@ -16,7 +16,7 @@ import {
 } from "@chopin/icons";
 
 import { ActionSheet } from "./action-sheet";
-import { unansweredDecisionsLabel } from "./decision-view-control";
+import { unansweredDecisionsLabel } from "./decision-attention";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import {
 	browserStorage,

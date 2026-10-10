@@ -36,10 +36,12 @@ project instructions and configured services.
    without posting a Chat message, once per visit; it waits if the Planner is
    already working. See
    [drafting tasks from Build](implementation-lifecycle.md#drafting-tasks-from-build).
-3. Review task goals, acceptance criteria and dependencies. To change them, ask
-   Chopin in Chat.
-4. Select **Build on my laptop**. It uses your first available connected
-   workspace; without one, Build shows the connector command to start, and you
+3. Once tasks exist, **Task graph** appears beside Decisions. Review the dependency
+   diagram and select nodes for context, goals, acceptance criteria and dependencies.
+   To change tasks, ask Chopin in Chat or open Build to update an out-of-date graph.
+4. Select **Build on my laptop** in Task graph or Build. Task graph lets you choose
+   your connected workspace and review its branch and commit; Build uses your first
+   available workspace. Without one, the view shows the connector command to start, and you
    select it again once connected. Approval persists the reviewed document and
    graph counters, checkout commit and connection owner, then freezes planning
    edits.
@@ -58,12 +60,23 @@ same workspace busy check. The connector uses HTTP MCP when advertised by the
 ACP agent, falling back to the stdio bridge otherwise. This also makes the
 investigation tools available to Copilot ACP versions that reject stdio MCP.
 
-The Build view loads a snapshot when opened and refreshes on document,
-workspace and implementation notifications. It does not poll in the background
-and occupies the same workspace pane as Document and Decisions. Leaving it does
+Build and Task graph load snapshots when opened and refresh on document,
+workspace and implementation notifications. They do not poll in the background
+and occupy the same workspace pane as Document and Decisions. Leaving either does
 not stop a run, and editing
 locks continue to update through the document socket. A `#task-<id>` link opens
 Build with that task expanded.
+
+Task graph follows the whole implementation: queued and starting dispatches,
+active work, interruptions, and verified outcomes. Nodes show reported task status;
+selection reveals blockers, completion summaries and PR links. Finishing all tasks
+is shown as awaiting verification while the run is active; **Verified** follows
+passing graph-wide verification. Progress survives refresh, while inspection and
+zoom stay local to the reader. Out-of-date graphs remain readable with a notice.
+Repository readers can inspect the graph and progress; starting a build requires
+write access and the person's own paired workspace.
+
+![Task graph with a selected blocked task, its dependency, and implementation details.](images/task-graph.png)
 
 Duplicate Build requests for the same owner, workspace and reviewed graph return
 the same durable intent. A picked-up build is never automatically replayed.

@@ -33,6 +33,69 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: calc(var(--spacing) * 3);
+	flex-wrap: wrap;
+}
+
+.build-view-graph .build-view-content {
+	max-width: none;
+}
+
+.task-graph {
+	min-width: 0;
+	font-size: var(--text-sm);
+}
+
+.task-graph-progress {
+	margin-block: calc(var(--spacing) * 3);
+	color: var(--color-text-tertiary);
+}
+
+.task-graph-detail {
+	display: grid;
+	gap: calc(var(--spacing) * 2);
+	margin-block: calc(var(--spacing) * 3);
+	overflow-wrap: anywhere;
+}
+
+.task-graph-detail p,
+.task-graph-detail h4 {
+	margin: 0;
+}
+
+.task-graph-detail ul,
+.task-graph-verification ul {
+	padding-inline-start: calc(var(--spacing) * 5);
+	list-style: disc;
+}
+
+.task-graph-state[data-tone="active"] {
+	color: var(--color-brand-ink);
+}
+
+.task-graph-state[data-tone="warning"] {
+	color: var(--color-warning-ink);
+}
+
+.task-graph-state[data-tone="success"] {
+	color: var(--color-success-ink);
+}
+
+.task-graph-fallback {
+	display: grid;
+	gap: calc(var(--spacing) * 4);
+	padding: 0;
+	list-style: none;
+}
+
+.task-graph-verification {
+	margin-block: calc(var(--spacing) * 4);
+	padding: calc(var(--spacing) * 3);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+}
+
+.task-graph-verification summary {
+	cursor: pointer;
 }
 
 .build-status-line {
