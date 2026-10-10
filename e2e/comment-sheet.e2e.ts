@@ -125,6 +125,23 @@ test("a phone thread sheet quotes its passage once and holds the thread on the s
 	await expect(address).toBeVisible();
 	expect((await size(address)).height).toBeGreaterThanOrEqual(44);
 	await expect(sheet.getByRole("checkbox", { name: "Send to Chopin" })).not.toBeChecked();
+
+	// Closed by touch, the chip takes focus back without a ring around its 44px hit area.
+	let marker = page.getByRole("button", { name: /^Comment on “review the pilot”/ });
+	await sheet.getByRole("button", { name: "Close comment" }).tap();
+	await expect(sheet).toHaveCount(0);
+	await expect(marker).toBeFocused();
+	expect(await marker.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("none");
+
+	// Closed from the keyboard, it keeps the ring that says where focus went.
+	await marker.tap();
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(sheet).toHaveCount(0);
+	await expect(marker).toBeFocused();
+	expect(await marker.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe(
+		"none",
+	);
 });
 
 test("a long phone thread scrolls its notes and keeps the composer pinned", async ({ join, seed }) => {
