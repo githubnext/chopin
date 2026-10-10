@@ -6,6 +6,7 @@
  * real peers, and the server accepting what an undo sends.
  */
 
+import { storedAcceptedComment } from "../apps/server/src/testing/plan";
 import { readSource } from "./database";
 import { content, expect, test, written } from "./room";
 
@@ -19,36 +20,6 @@ async function caretAfter(page: Page, text: string) {
 	let paragraph = content(page).locator("p").filter({ hasText: text });
 	await paragraph.click();
 	await page.keyboard.press("End");
-}
-
-/** Send one request on a second socket of this page's session and await its reply. */
-async function request(page: Page, room: string, frame: Record<string, unknown>) {
-	return page.evaluate(async ({ room, frame }) => {
-		let url = new URL("/ws", location.href);
-		url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-		url.searchParams.set("channel", room);
-		let socket = new WebSocket(url);
-		await new Promise((resolve, reject) => {
-			socket.addEventListener("open", resolve, { once: true });
-			socket.addEventListener("error", reject, { once: true });
-		});
-		let ask = (input: Record<string, unknown>) =>
-			new Promise<Record<string, unknown>>((resolve, reject) => {
-				let rid = crypto.randomUUID();
-				let timeout = setTimeout(() => reject(new Error(`no reply for ${input.kind}`)), 10_000);
-				socket.addEventListener("message", event => {
-					let reply = JSON.parse(event.data as string) as Record<string, unknown>;
-					if (reply.rid !== rid) return;
-					clearTimeout(timeout);
-					resolve(reply);
-				});
-				socket.send(JSON.stringify({ ...input, rid, ts: 0 }));
-			});
-		await ask({ kind: "plan:open" });
-		let reply = await ask(frame);
-		socket.close();
-		return reply;
-	}, { room, frame });
 }
 
 test("undo and redo reverse my own typing", async ({ join, room, seed }) => {
@@ -94,7 +65,12 @@ test("my undo leaves a peer's edit alone", async ({ join, room, seed }) => {
 
 test("undo past an accepted decision is accepted by the server", async ({ join, page, room, seed }) => {
 	let quote = "Keep the pilot reversible.";
-	await seed(`${quote}\n`);
+	// Comments are no longer accepted, but stored decisions still project into the plan.
+	let stored = await storedAcceptedComment(`${quote}\n`, quote, {
+		by: "ana",
+		text: "Record this.",
+	});
+	await seed(stored.source, { threads: [stored.thread] });
 	let resets = 0;
 	page.on("websocket", socket =>
 		socket.on("framereceived", ({ payload }) => {
@@ -106,22 +82,6 @@ test("undo past an accepted decision is accepted by the server", async ({ join, 
 	await ana.keyboard.press("Enter");
 	await ana.keyboard.type("Fresh prose.");
 	await written(ana, room, "Fresh prose.");
-
-	// Accepting a comment appends a Decision projection the server owns.
-	let started = await request(ana, room, {
-		kind: "comment:start",
-		blocks: [0],
-		quote,
-		offset: 0,
-		length: quote.length,
-		text: "Record this.",
-	});
-	expect(started.ok).toBe(true);
-	let accepted = await request(ana, room, {
-		kind: "comment:accept",
-		id: (started.thread as { id: string }).id,
-	});
-	expect(accepted.ok).toBe(true);
 	await written(ana, room, "<Decision");
 	let decision = ana.locator("[data-plan-comment-card]").filter({ hasText: "Record this." });
 	await expect(decision).toBeVisible();
