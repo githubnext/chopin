@@ -568,8 +568,6 @@ async function rebuilding() {
 	context.plan.persistence.onBuildStopped = id => stopped.push(id);
 	let connection = await paired(context);
 	let built = await (await context.call(context.path, {
-		connectionId: connection.connection.id,
-		checkout,
 		planRevision: 0,
 		graphVersion: 1,
 		graphRevision: 1,

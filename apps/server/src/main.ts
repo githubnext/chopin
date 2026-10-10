@@ -1640,7 +1640,7 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 	context: currentDocumentTarget,
-	connected: id => liveSync?.connected(id),
+	connected: (repositoryId, owner) => liveSync?.connected(repositoryId, owner),
 	place: (id, experiment, view, decision, remove) =>
 		withDocumentTransition(id, async () => {
 			await Rooms.get(id)?.closing;
@@ -1866,9 +1866,9 @@ if (config.liveBuild) {
 			model: config.conversationPlanModel ?? "jev-latest",
 			timeoutMs: config.conversationPlanTimeoutMs ?? 30_000,
 		}),
-		queued: id => {
+		queued: (id, build) => {
 			implementations?.track(id);
-			runtime.connections.wake(id);
+			runtime.connections.wake(build.repositoryId);
 		},
 		error: err => console.error("chopin: living-document rebuild failed -", err),
 	});

@@ -15,12 +15,11 @@ import type { SocketData } from "../wire";
 const now = new Date("2026-10-10T12:00:00.000Z");
 const buildId = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
 
-function connection(id: string, documentId: string): Connection {
+function connection(id: string, owner = "octocat"): Connection {
 	return {
 		id,
-		documentId,
-		owner: "octocat",
-		login: "octocat",
+		owner,
+		login: owner,
 		sessionId: "session",
 		label: "Laptop",
 		source: {
@@ -93,7 +92,8 @@ async function harness(
 	let clock = 0;
 	let queued: string[] = [];
 	let deltas: LiveDelta[] = [];
-	let available = [connection("laptop", channel.id)];
+	let available = [connection("laptop")];
+	let assignments = new Map<string, string>();
 	coordinator = new LiveSyncCoordinator({
 		withPlan: async (_id, action) => {
 			let result = await action(plan);
@@ -102,7 +102,12 @@ async function harness(
 		},
 		connections: {
 			get: id => available.find(item => item.id === id),
-			list: id => available.filter(item => item.documentId === id),
+			list: (repositoryId, owner) =>
+				available.filter(item =>
+					item.source.repositoryId === repositoryId && (owner === undefined || item.owner === owner)
+				),
+			assign: (connectionId, documentId) => assignments.set(connectionId, documentId),
+			assigned: connectionId => assignments.get(connectionId),
 		},
 		classifier: {
 			classify: async delta => {
@@ -126,6 +131,8 @@ async function harness(
 	return {
 		plan,
 		coordinator: live,
+		available,
+		assignments,
 		queued,
 		deltas,
 		edit: () => live.schedule({ channelId: plan.id }),
@@ -305,11 +312,34 @@ describe("living-document sync", () => {
 		await close(plan);
 	});
 
-	it("catches up on a missed rebuild when a workspace reconnects", async () => {
-		let { plan, coordinator, queued, advance } = await harness();
-		coordinator.connected(plan.id);
+	it("catches up on a missed rebuild when the builder's local agent reconnects", async () => {
+		let { plan, coordinator, available, assignments, queued, edit, advance } = await harness();
+		available.length = 0;
+		edit();
+		await advance(45_000);
+		expect(queued).toHaveLength(0);
+		available.push(connection("desktop", "someone-else"));
+		coordinator.connected("R_score", "someone-else");
+		await advance(0);
+		expect(queued).toHaveLength(0);
+		available.push(connection("laptop"));
+		coordinator.connected("R_other", "octocat");
+		await advance(0);
+		expect(queued).toHaveLength(0);
+		coordinator.connected("R_score", "octocat");
 		await advance(0);
 		expect(queued).toHaveLength(1);
+		expect(plan.builds.at(-1)).toMatchObject({ kind: "rebuild", connectionId: "laptop" });
+		expect(assignments.get("laptop")).toBe(plan.id);
+		await close(plan);
+	});
+
+	it("does not take a connection that holds another document's build", async () => {
+		let { plan, assignments, queued, edit, advance } = await harness();
+		assignments.set("laptop", crypto.randomUUID());
+		edit();
+		await advance(45_000);
+		expect(queued).toHaveLength(0);
 		await close(plan);
 	});
 

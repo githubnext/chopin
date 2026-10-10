@@ -201,7 +201,9 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 
 export type RebuildConnections = {
 	get: (id: string) => Connection | undefined;
-	list: (documentId: string) => Connection[];
+	list: (repositoryId: string, owner?: string) => Connection[];
+	assign: (connectionId: string, documentId: string) => void;
+	assigned: (connectionId: string) => string | undefined;
 };
 
 export type RebuildResult =
@@ -219,8 +221,9 @@ export function buildActive(plan: Plan): boolean {
 /**
  * Queue a rebuild of a live document's edits onto its pull requests.
  *
- * The live build's user keeps ownership; its original workspace is preferred, and another of the
- * same user's workspaces for this document stands in once that one has gone.
+ * The live build's user keeps ownership; its original connection is preferred, and another of the
+ * same user's connections for this repository stands in once that one has gone. A connection
+ * already holding another document's build is skipped so the rebuild cannot strand that build.
  */
 export async function queueRebuild(
 	plan: Plan,
@@ -233,11 +236,16 @@ export async function queueRebuild(
 		if (buildActive(plan)) return { kind: "busy" };
 		if (source(plan) === live.baseSource) return { kind: "unchanged" };
 		let original = plan.builds.find(build => build.id === live.buildId);
-		let usable = (connection: Connection | undefined) =>
-			!!connection && connection.owner === live.user && connection.documentId === plan.id
-			&& connection.source.repositoryId === live.repositoryId;
+		let usable = (connection: Connection | undefined) => {
+			let assigned = connection && connections.assigned(connection.id);
+			return !!connection && connection.owner === live.user
+				&& connection.source.repositoryId === live.repositoryId
+				&& (assigned === undefined || assigned === plan.id);
+		};
 		let connection = original && connections.get(original.connectionId);
-		if (!usable(connection)) connection = connections.list(plan.id).find(usable);
+		if (!usable(connection)) {
+			connection = connections.list(live.repositoryId, live.user).find(usable);
+		}
 		if (!original || !connection) return { kind: "unavailable" };
 		if (plan.builds.length >= 100) {
 			console.warn(`chopin: living document ${plan.id} cannot rebuild - build history is full`);
@@ -275,6 +283,7 @@ export async function queueRebuild(
 			Object.assign(plan, previous);
 			throw error;
 		}
+		connections.assign(connection.id, plan.id);
 		announceImplementation(plan);
 		return { kind: "queued", build: structuredClone(build) };
 	});
