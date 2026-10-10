@@ -31,6 +31,16 @@ let app = new AgentApp()
 			}
 			let branch = spawnSync("git", ["-C", cwd, "branch", "--show-current"], { encoding: "utf8" });
 			if (branch.stdout.trim()) throw new Error(`Rebuild started on a branch: ${branch.stdout}`);
+			// Outlive a heartbeat, as an agent finishing its turn after report_rebuild does.
+			if (process.argv.includes("--slow")) await new Promise(resolve => setTimeout(resolve, 200));
+			return { stopReason: "end_turn" as const };
+		}
+		if (process.argv.includes("--live")) {
+			let text = params.prompt.map(part => part.type === "text" ? part.text : "").join("\n");
+			if (
+				!text.includes("ends at the last complete_task") || text.includes("report_verification")
+				|| text.includes("request_revision")
+			) throw new Error("Live instruction missing");
 			return { stopReason: "end_turn" as const };
 		}
 		if (

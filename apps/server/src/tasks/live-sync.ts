@@ -117,11 +117,12 @@ export class LiveSyncCoordinator {
 		if (!delta || this.#closed) return;
 		let classifier = this.#options.classifier ?? sourcesDiffer;
 		if (!await classifier.classify(delta)) return;
-		let result = await this.#options.withPlan(
-			channelId,
-			plan => queueRebuild(plan, this.#options.connections),
-		);
-		if (result.kind === "busy") this.#waiting.add(channelId);
+		let result = await this.#options.withPlan(channelId, async plan => {
+			let queued = await queueRebuild(plan, this.#options.connections);
+			// Under the lock, so a build that stops right after still finds this check waiting.
+			if (queued.kind === "busy") this.#waiting.add(channelId);
+			return queued;
+		});
 		if (result.kind === "queued") this.#options.queued?.(channelId, result.build);
 	}
 
