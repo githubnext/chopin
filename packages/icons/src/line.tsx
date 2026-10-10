@@ -73,6 +73,16 @@ export function ClockIcon(props: IconProps) {
 	);
 }
 
+export function EllipsisIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="3.75" cy="9" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="9" cy="9" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="14.25" cy="9" fill="currentColor" r="1.25" stroke="none" />
+		</LineIcon>
+	);
+}
+
 export function InfoIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
