@@ -551,19 +551,28 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						if ("refusal" in prepared) fail(prepared.refusal);
 						let { bytes, mimeType } = prepared.input;
 						let sha256 = createHash("sha256").update(bytes).digest("hex");
-						let uploaded = uploads.get(id) ?? new Set<string>();
-						if (!uploaded.has(sha256) && uploaded.size >= MAX_SPIKE_IMAGES) {
+						// Parallel uploads share one set and reserve their slot before awaiting storage,
+						// so neither overwrites the other's record nor slips past the cap.
+						let uploaded = uploads.get(id);
+						if (!uploaded) uploads.set(id, uploaded = new Set<string>());
+						let reserved = !uploaded.has(sha256);
+						if (reserved && uploaded.size >= MAX_SPIKE_IMAGES) {
 							fail("image-limit", `A spike may upload at most ${MAX_SPIKE_IMAGES} images.`);
 						}
-						await auth.storage.images.put({
-							channelId: current.documentId,
-							sha256,
-							mimeType,
-							bytes,
-							uploadedBy: session.user.id,
-							now: new Date(),
-						});
-						uploads.set(id, uploaded.add(sha256));
+						uploaded.add(sha256);
+						try {
+							await auth.storage.images.put({
+								channelId: current.documentId,
+								sha256,
+								mimeType,
+								bytes,
+								uploadedBy: session.user.id,
+								now: new Date(),
+							});
+						} catch (err) {
+							if (reserved) uploaded.delete(sha256);
+							throw err;
+						}
 						value = { path: imagePath(sha256, mimeType) };
 					} else if (name === "submit_spike_result") {
 						if (!current.spike) fail("tool-forbidden");

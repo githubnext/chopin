@@ -506,10 +506,14 @@ test("a spike uploads at most three images and cites only its own", async () => 
 			data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, seed]).toString("base64"),
 			mimeType: "image/png",
 		});
-	let paths = [];
-	for (let seed of [1, 2, 3]) paths.push(text(await upload(seed)).path);
-	expect(text(await upload(1)).path).toBe(paths[0]);
-	expect(error(await upload(4))).toContain("image-limit");
+	// Parallel uploads in one run must all count, and the cap must hold across them.
+	let results = await Promise.all([1, 2, 3, 4].map(upload));
+	expect(results.filter(result => error(result).includes("image-limit"))).toHaveLength(1);
+	let seeds = [1, 2, 3, 4].filter((_seed, index) => !error(results[index]));
+	let paths: string[] = seeds.map(seed => text(results[seed - 1]).path);
+	expect(paths).toHaveLength(3);
+	expect(text(await upload(seeds[0])).path).toBe(paths[0]);
+	expect(error(await upload(5))).toContain("image-limit");
 	let foreign = "c".repeat(64);
 	await storage.images.put({
 		channelId: documentId,

@@ -6,11 +6,13 @@ import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import { cardWithProse } from "../questions/prose.test-fixtures";
 import * as Questions from "../questions/service";
+import { announceImplementation } from "../tasks/notifications";
 import { openPlan } from "../testing/plan";
 import { Connections } from "./connections";
 import { Experiments } from "./service";
 import { spikeHost } from "./spike-host";
 import { calloutDigest, callouts, placeSpikeCallout } from "./spike-placement";
+import { SpikeScout } from "./spike-scout";
 import { spikeCallout } from "./spikes";
 
 const PASSAGE = "We are unsure whether drag handles work on touch screens at all.";
@@ -146,5 +148,46 @@ test("placing a callout rebases copied decision and comment anchors first", asyn
 		comments.mockRestore();
 		errors.mockRestore();
 		await Service.close(context.plan);
+	}
+});
+
+test("a spike result deferred by a first build's lock lands once the lock releases", async () => {
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	let context = await hosted();
+	let scout = new SpikeScout({ host: context.host });
+	let { plan } = context;
+	// The wiring main.ts gives a released lock.
+	plan.persistence.liveBuild = true;
+	let released: Promise<void> | undefined;
+	plan.persistence.onEditingUnlocked = id => {
+		released = scout.refresh(id);
+	};
+	try {
+		await context.host.start(plan.id, {
+			owner: "U_test",
+			connection: { id: "gone", login: "maggie" },
+			block: { digest: room.digests(plan.document)[1], text: PASSAGE },
+		});
+		let [value] = await context.service.store.list(plan.id);
+		expect(value.state).toBe("failed");
+		expect(value.spike?.rendered).toBe("queued");
+
+		plan.builds = [{ id: crypto.randomUUID(), state: "running" } as never];
+		announceImplementation(plan);
+		await scout.refresh(plan.id);
+		expect(room.project(plan.document)).toContain('title="Queued"');
+		expect((await context.service.store.get(value.id))?.spike?.rendered).toBe("queued");
+
+		plan.builds = [{ ...plan.builds[0], state: "stopped" } as never];
+		announceImplementation(plan);
+		expect(released).toBeDefined();
+		await released;
+		expect(room.project(plan.document)).toContain('title="Prototype stopped"');
+		expect(room.project(plan.document)).not.toContain('title="Queued"');
+		expect((await context.service.store.get(value.id))?.spike?.rendered).toBe("stopped");
+	} finally {
+		scout.close();
+		errors.mockRestore();
+		await Service.close(plan);
 	}
 });

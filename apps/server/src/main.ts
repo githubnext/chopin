@@ -203,6 +203,8 @@ function documentBackend(): Service.Backend {
 			void relinkDecisions(id).catch(err =>
 				console.error("chopin: could not re-link decisions after a build -", err)
 			);
+			// Spike callouts the lock deferred land now.
+			void spikeScout?.refresh(id);
 		},
 	};
 }
@@ -326,6 +328,9 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled(opened)) Inject.ask(opened, server, room.id);
 			if (Marks.enabled(opened)) await Marks.mark(opened);
+			// A lock that released while the room was closed left spike callouts deferred.
+			// Retrying only when unlocked keeps the retry's own room open from looping.
+			if (spikeScout && !Service.implementationActive(opened)) void spikeScout.refresh(room.id);
 		}
 		return opened;
 	});
