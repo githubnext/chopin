@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { git, lockWorkspace, prepareWorkspace, workspace } from "./workspace";
@@ -37,6 +37,35 @@ test("isolates exact source without stashing dirty work and never executes an ac
 		git(root, "worktree", "remove", prepared.path);
 	} finally {
 		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
+test("replaces a lock left by a connector whose process is gone, and keeps a live one", async () => {
+	let state = await mkdtemp(join(tmpdir(), "chopin-state-"));
+	try {
+		let root = "/fixture/checkout";
+		let release = await lockWorkspace(root, state);
+		let [lock] = (await readdir(state)).filter(name => name.endsWith(".lock"));
+		let path = join(state, lock);
+		await release();
+
+		// A live process, even when it is not this one, still holds the workspace.
+		await writeFile(path, JSON.stringify({ pid: process.ppid, root }));
+		await expect(lockWorkspace(root, state)).rejects.toThrow("already locked");
+
+		// An exited process's lock is stale.
+		let child = Bun.spawn(["true"]);
+		await child.exited;
+		await writeFile(path, JSON.stringify({ pid: child.pid, root }));
+		let replaced = await lockWorkspace(root, state);
+		expect(JSON.parse(await readFile(path, "utf8")).pid).toBe(process.pid);
+		await replaced();
+
+		// A lock that does not name a process is left for a person to check.
+		await writeFile(path, "");
+		await expect(lockWorkspace(root, state)).rejects.toThrow("already locked");
+	} finally {
 		await rm(state, { recursive: true, force: true });
 	}
 });

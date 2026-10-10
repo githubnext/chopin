@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, realpath, rm } from "node:fs/promises";
+import { mkdir, open, readFile, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFile, spawnSync } from "node:child_process";
@@ -44,15 +44,42 @@ export async function lockWorkspace(root: string, directory: string) {
 	try {
 		file = await open(path, "wx", 0o600);
 	} catch {
-		throw new Error(
-			`Workspace already locked. After confirming no connector is running, remove ${path}`,
-		);
+		// A connector that crashed leaves its lock behind; replace it once its process is gone.
+		if (!await staleLock(path)) {
+			throw new Error(
+				`Workspace already locked. After confirming no connector is running, remove ${path}`,
+			);
+		}
+		await rm(path, { force: true });
+		try {
+			file = await open(path, "wx", 0o600);
+		} catch {
+			throw new Error(`Workspace already locked by a connector that just started. ${path}`);
+		}
 	}
 	await file.writeFile(JSON.stringify({ pid: process.pid, root }));
 	return async () => {
 		await file.close();
 		await rm(path, { force: true });
 	};
+}
+
+/** Only a lock naming a process that no longer exists is stale; unreadable locks are kept. */
+async function staleLock(path: string): Promise<boolean> {
+	let pid: unknown;
+	try {
+		pid = JSON.parse(await readFile(path, "utf8")).pid;
+	} catch {
+		return false;
+	}
+	if (!Number.isSafeInteger(pid) || (pid as number) <= 0) return false;
+	try {
+		process.kill(pid as number, 0);
+		return false;
+	} catch (err) {
+		// EPERM means the process exists but belongs to someone else.
+		return (err as NodeJS.ErrnoException).code === "ESRCH";
+	}
 }
 
 export async function prepareWorkspace(
