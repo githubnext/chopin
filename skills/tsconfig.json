@@ -1,0 +1,5 @@
+{
+	"extends": "../tsconfig.json",
+	"include": ["building-app-previews/assets/**/*.ts"],
+	"compilerOptions": { "types": ["bun"], "noUnusedLocals": true, "noUnusedParameters": true }
+}

@@ -353,6 +353,16 @@ applies only after an implementation graph has been approved through a future or
 operator-provided approval path. Current MCP initialization instructions and
 tool descriptions override copied prompts or remembered command sequences.
 
+## Prepare app previews locally
+
+The optional [app-preview toolkit](app-preview-toolkit.md) and
+[building-app-previews skill](../skills/building-app-previews/SKILL.md) prepare
+adjustable previews from real app components with built resources and browser
+evidence. Install the whole skill folder and verify discovery or explicitly read
+it. Installation does not establish an MCP connection or preview delivery.
+Use the current supplied descriptors when delivery is available; otherwise return
+local resources and report integration absent.
+
 ## References
 
 - [Claude Code MCP servers](https://docs.anthropic.com/en/docs/claude-code/mcp)

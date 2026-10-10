@@ -1,0 +1,121 @@
+@import "@fontsource-variable/inter";
+:root {
+	font-family: "Inter Variable", sans-serif;
+	color: #26352c;
+	background: #f1f3ee;
+}
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+	min-height: 100vh;
+	display: grid;
+	place-items: center;
+	padding: 24px;
+}
+button {
+	font: inherit;
+	cursor: pointer;
+}
+.billing-card {
+	--card-spacing: 24px;
+	--accent: #476b55;
+	width: min(100%, 380px);
+	display: flex;
+	flex-direction: column;
+	gap: var(--card-spacing);
+	padding: var(--card-spacing);
+	background: white;
+	border: 1px solid #dbe0d8;
+	border-radius: 18px;
+	box-shadow: 0 10px 35px #26352c08;
+}
+.billing-card header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-weight: 600;
+}
+.plan {
+	margin-left: auto;
+	font-size: 12px;
+	color: #657265;
+	border: 1px solid #dbe0d8;
+	border-radius: 20px;
+	padding: 4px 10px;
+}
+h1 {
+	font-size: 24px;
+	letter-spacing: -0.8px;
+	margin: 0 0 8px;
+	font-weight: 550;
+}
+p {
+	font-size: 14px;
+	line-height: 1.6;
+	color: #6d766e;
+	margin: 0;
+}
+.price {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+.price strong {
+	font-size: 40px;
+	font-weight: 550;
+	letter-spacing: -1.8px;
+}
+.price span {
+	font-size: 13px;
+	color: #6d766e;
+}
+ul {
+	padding: 0;
+	margin: 0;
+	list-style: none;
+	font-size: 14px;
+	line-height: 2;
+}
+li::before {
+	content: "✓";
+	margin-right: 10px;
+	color: var(--accent);
+}
+.action {
+	color: white;
+	background: var(--accent);
+	border: 0;
+	border-radius: 9px;
+	padding: 12px;
+}
+.action:hover {
+	filter: brightness(0.92);
+}
+.action:active {
+	transform: translateY(1px);
+}
+button:focus-visible {
+	outline: 2px solid #26352c;
+	outline-offset: 3px;
+}
+.billing-popup {
+	max-width: 280px;
+	background: white;
+	border: 1px solid #dbe0d8;
+	box-shadow: 0 8px 30px #26352c18;
+	border-radius: 12px;
+	padding: 18px;
+}
+.billing-popup h2 {
+	font-size: 16px;
+	margin: 0 0 8px;
+}
+.billing-popup button {
+	margin-top: 14px;
+	padding: 6px 12px;
+	background: #f1f3ee;
+	border: 0;
+	border-radius: 6px;
+}

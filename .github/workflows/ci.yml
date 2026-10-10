@@ -119,6 +119,9 @@ jobs:
       - name: Diagram gallery (rendering and keyboard behaviour)
         run: bun run diagrams:test
 
+      - name: App preview toolkit (static resources and browser behaviour)
+        run: bun run preview-toolkit:test
+
       # Build once, and reject development previews before the long browser suite.
       - run: bun run build
 

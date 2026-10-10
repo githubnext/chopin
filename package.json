@@ -18,14 +18,16 @@
 		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts && bun scripts/check-design-contract.ts && bun scripts/check-design-record.ts && bun run design:check",
 		"design:check": "node scripts/check-design.mjs",
 		"fix": "dprint fmt && oxlint --fix",
-		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
+		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e && tsgo --noEmit --skipLibCheck -p skills",
 		"e2e": "bun scripts/e2e.ts",
 		"e2e:ui": "bun scripts/e2e.ts --ui",
 		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium",
 		"design:test": "bun node_modules/@playwright/test/cli.js test --config e2e/design/playwright.config.ts",
 		"design:behavior": "bun node_modules/@playwright/test/cli.js test --config e2e/design/behavior.config.ts",
 		"diagrams:test": "bun node_modules/@playwright/test/cli.js test --config e2e/diagram-gallery/playwright.config.ts",
-		"design:browser": "bun scripts/design-browser.ts"
+		"design:browser": "bun scripts/design-browser.ts",
+		"preview-toolkit:dev": "bun e2e/app-preview-toolkit/server.ts",
+		"preview-toolkit:test": "bun node_modules/@playwright/test/cli.js test --config e2e/app-preview-toolkit/playwright.config.ts"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "4.13.0",
@@ -39,7 +41,14 @@
 		"parse5": "8.0.0",
 		"postcss": "8.5.23",
 		"postcss-value-parser": "4.2.0",
-		"yaml": "2.9.0"
+		"yaml": "2.9.0",
+		"@base-ui/react": "1.7.0",
+		"@fontsource-variable/inter": "5.3.0",
+		"react": "catalog:react",
+		"react-dom": "catalog:react",
+		"@types/react": "catalog:react",
+		"@types/react-dom": "catalog:react",
+		"vite": "catalog:ui"
 	},
 	"patchedDependencies": {
 		"@mdxeditor/editor@4.1.0": "patches/@mdxeditor%2Feditor@4.1.0.patch",
