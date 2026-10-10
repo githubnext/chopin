@@ -51,9 +51,9 @@ same workspace busy check. The connector uses HTTP MCP when advertised by the
 ACP agent, falling back to the stdio bridge otherwise. This also makes the
 investigation tools available to Copilot ACP versions that reject stdio MCP.
 
-The Build dialog loads a snapshot when opened and refreshes on document,
+The Build panel loads a snapshot when opened and refreshes on document,
 workspace and implementation notifications. It does not poll in the background
-or occupy space above the document. Closing it does not stop a run, and editing
+and occupies the same workspace pane as Document and Decisions. Switching views does not stop a run, and editing
 locks continue to update through the document socket.
 
 Duplicate Build requests for the same owner, workspace and reviewed graph return

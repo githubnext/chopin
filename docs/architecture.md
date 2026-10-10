@@ -149,10 +149,10 @@ evaluating uploaded code. See [Local investigations](local-experiments.md).
 
 Local implementation builds share that connector, owner pairing and workspace
 reservation. Approval durably binds the reviewed document/graph revisions and
-checkout before work is offered. The Build dialog is an explicit planning
+checkout before work is offered. The Build panel is an explicit planning
 workflow, not a document preface. Lightweight implementation notifications keep
-editing locks current independently of that dialog; graph and task snapshots
-are fetched when the dialog is open. See [Local implementation](local-launcher.md).
+editing locks current independently of that panel; graph and task snapshots
+are fetched when the panel is selected. See [Local implementation](local-launcher.md).
 
 ### Durable PostgreSQL state
 

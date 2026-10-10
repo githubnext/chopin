@@ -57,7 +57,7 @@ import { ResearchRequestStore } from "./research-requests";
 import { GitHubReferenceCache } from "./github-references";
 import { Wire } from "./wire";
 import { ExperimentStore } from "./experiments/store";
-import { ExperimentsPanel } from "./experiments/panel";
+import { InlineInvestigations } from "./experiments/inline";
 import { EvidenceDecisions } from "./experiments/evidence";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
@@ -78,7 +78,7 @@ import type { Status } from "./wire";
 import type { ReactNode } from "react";
 import type { ChatDestination } from "./conversation-plan/source";
 import type { SourceDestination } from "./conversation-plan/card-parts";
-import type { WorkspacePresentation } from "./workspace-model";
+import type { WorkspaceDocumentView, WorkspacePresentation } from "./workspace-model";
 
 type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
@@ -403,20 +403,21 @@ export function RoomWorkspace(
 			offChanged?.();
 		};
 	}, [room, wire]);
+	let researchEnabled = profile.research;
+	let [workspace, dispatch] = useWorkspaceState(profile);
 	useEffect(() => {
 		let followTask = () => {
-			if (profile.implementation && location.hash.startsWith("#task-")) setShowImplementation(true);
+			if (!profile.implementation || !location.hash.startsWith("#task-")) return;
+			setShowImplementation(true);
+			dispatch({ type: "set-chat", open: false });
 		};
 		followTask();
 		addEventListener("hashchange", followTask);
 		return () => removeEventListener("hashchange", followTask);
-	}, [profile.implementation]);
-	let researchEnabled = profile.research;
-	let [workspace, dispatch] = useWorkspaceState(profile);
+	}, [profile.implementation, dispatch]);
 	let [questions] = useState(() => new QuestionnaireStore());
 	let experiments = useMemo(() => new ExperimentStore(room), [room]);
 	useSyncExternalStore(experiments.subscribe, experiments.snapshot);
-	let [showExperiments, setShowExperiments] = useState(false);
 	useEffect(() => experiments.connect(wire), [experiments, wire]);
 	let [cardMeta] = useState(() => new CardMetaStore());
 	let [threads] = useState(() => new ThreadStore());
@@ -475,7 +476,9 @@ export function RoomWorkspace(
 			preferred: initialDocumentView(profile, stored),
 		};
 	});
-	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
+	let view: WorkspaceDocumentView = showImplementation && profile.implementation
+		? "build"
+		: visibleDecisionView(decisionView, hasPlanContent, unanswered);
 	let attention = useDecisionAttention(unanswered);
 	let latestCanEdit = useRef(canEdit);
 	let latestCanManage = useRef(canManage);
@@ -590,8 +593,9 @@ export function RoomWorkspace(
 		}
 	};
 
-	let selectDestination = (destination: "plan" | "decisions") => {
-		selectView(destination, mode === "split");
+	let selectDestination = (destination: WorkspaceDocumentView) => {
+		setShowImplementation(destination === "build");
+		if (destination !== "build") selectView(destination, mode === "split");
 		dispatch({ type: "set-chat", open: false });
 	};
 
@@ -943,40 +947,15 @@ export function RoomWorkspace(
 			</div>
 		);
 	}
-	let buildAction = profile.implementation && (
-		<button
-			className="btn btn-sm btn-ghost"
-			disabled={!hasPlanContent}
-			onClick={() => setShowImplementation(true)}
-		>
-			Build
-		</button>
-	);
 
 	return (
 		<>
-			{showImplementation && profile.implementation && (
-				<ImplementationPanel
-					id={room}
-					canEdit={!!workspaceCanEdit && status === "connected"}
-					planner={agent && !chatActivity.busy}
-					wire={wire}
-					onClose={() => setShowImplementation(false)}
-				/>
-			)}
-			{showExperiments && (
-				<ExperimentsPanel
-					store={experiments}
-					userId={userId}
-					canEdit={!!workspaceCanEdit && status === "connected"}
-					onClose={() => setShowExperiments(false)}
-				/>
-			)}
 			<p aria-live="polite" className="sr-only" role="status">
 				<span key={announcement.sequence}>{announcement.text}</span>
 			</p>
 			<Workspace
 				available={available}
+				buildEnabled={hasPlanContent}
 				frame={frame}
 				chat={
 					<Chat
@@ -1045,7 +1024,6 @@ export function RoomWorkspace(
 				documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 				header={
 					<Header
-						actions={mode !== "split" ? buildAction : undefined}
 						archivedAt={workspaceArchivedAt}
 						canManage={effectiveCanManage}
 						editing={titleEdit}
@@ -1061,12 +1039,9 @@ export function RoomWorkspace(
 				}
 				controls={
 					<>
-						{buildAction}
-						<button className="btn btn-sm btn-ghost" onClick={() => setShowExperiments(true)}>
-							Investigations
-						</button>
 						<DecisionViewControl
 							attention={attention}
+							buildEnabled={profile.implementation ? hasPlanContent : undefined}
 							documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 							onView={selectDestination}
 							unanswered={unanswered}
@@ -1140,6 +1115,14 @@ export function RoomWorkspace(
 				onDesktopChatOpen={setDesktopChatOpen}
 				onChatOpen={open => dispatch({ type: "set-chat", open })}
 				onDestination={selectDestination}
+				build={showImplementation && profile.implementation && (
+					<ImplementationPanel
+						id={room}
+						canEdit={!!workspaceCanEdit && status === "connected"}
+						planner={agent && !chatActivity.busy}
+						wire={wire}
+					/>
+				)}
 				decisions={
 					<Decisions
 						additional={
@@ -1168,6 +1151,14 @@ export function RoomWorkspace(
 					<GitHubReferencesProvider value={githubReferences}>
 						<PlanEditor
 							experiments={experiments}
+							afterword={
+								<InlineInvestigations
+									store={experiments}
+									userId={userId}
+									canEdit={!!workspaceCanEdit && status === "connected"}
+									locked={implementation.locked}
+								/>
+							}
 							cardMeta={cardMeta}
 							evidence={showEvidence}
 							onCardSource={showCardSource}
