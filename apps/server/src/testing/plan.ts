@@ -205,6 +205,25 @@ export async function checkpointSource(
 	document.doc.destroy();
 }
 
+/** Open another document in the same repository and storage as `context`. */
+export async function openSiblingPlan(
+	context: Awaited<ReturnType<typeof openPlan>>,
+	source = "",
+	state: SeedState = {},
+) {
+	let channel = await context.storage.channels.create({
+		repositoryId: "R_test",
+		repositoryOwner: "owner",
+		repositoryName: "repository",
+		createdBy: "U_test",
+		now: context.now,
+		id: crypto.randomUUID(),
+		title: `Sibling ${crypto.randomUUID()}`,
+	});
+	await checkpointSource(context.storage, context.lease, channel.id, source, state, context.now);
+	return Service.open(channel.id, context.backend, context.server);
+}
+
 export async function openPlan(source = "", state: SeedState = {}) {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();

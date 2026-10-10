@@ -20,13 +20,16 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		}),
 	})).json();
 	await page.goto(pairing.url);
-	await expect(page.getByRole("heading", { name: "Connect this checkout of octo-org/score" }))
+	await expect(page.getByRole("heading", { name: "Connect your local agent", exact: true }))
 		.toBeVisible();
+	await expect(page.getByText("Connect this checkout of octo-org/score so Chopin can run work"))
+		.toBeVisible();
+	await expect(page.getByText(pairing.code, { exact: true })).toBeVisible();
 	await expect(page.getByRole("combobox")).toHaveCount(0);
 	await page.getByRole("button", { name: "Connect", exact: true }).click();
-	await expect(page.getByRole("status")).toHaveText(
-		"Connected. Chopin can now run work for you in any octo-org/score document.",
-	);
+	await expect(page.getByRole("status")).toHaveText("Connected.");
+	await expect(page.getByRole("link", { name: "Open octo-org/score", exact: true }))
+		.toHaveAttribute("href", "/documents/octo-org/score");
 	await expect(page.getByText("a".repeat(8))).toHaveCount(0);
 	await page.goto(testChannelPath(room));
 	let paired = await (await fetch(`${baseURL}/api/connector/pairings/${pairing.id}/claim`, {

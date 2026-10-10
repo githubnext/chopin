@@ -22,7 +22,7 @@ export const experimentTools = {
 		contextSchema,
 		inputSchema: z.object({}).strict(),
 		description:
-			"List this document's local investigations and available workspace labels. This does not start work.",
+			"List this document's local investigations and their states. This does not start work.",
 		execute: (_input, { context: { room } }) =>
 			answer(async () => {
 				if (!room.investigations) throw new Error("Investigations unavailable");
@@ -51,7 +51,7 @@ export const experimentTools = {
 			key: z.string().min(1).max(128),
 		}).strict(),
 		description:
-			"Propose a local investigation from the current member request. Explain the objective and required evidence. A workspace owner must explicitly authorize it in Investigations; this tool never executes code. Reuse key for retries.",
+			"Propose a local investigation from the current member request. Explain the objective and required evidence. A person must select Run on its card, which runs it on their own local agent; this tool never executes code. Reuse key for retries.",
 		execute: (input, { context: { room } }) =>
 			answer(async () => {
 				let request = room.currentMemberRequest?.();

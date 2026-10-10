@@ -42,7 +42,7 @@ export type ImplementationSnapshot = {
 	build?: BuildRequest;
 	/** The GitHub login of whoever requested `build`, when it is still known. */
 	startedBy?: string;
-	/** Whether the viewer has a connected local agent for this repository that is free to build. */
+	/** Whether the viewer has a connected local agent for this repository; it may be busy. */
 	localAgent: boolean;
 	blockers: string[];
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;

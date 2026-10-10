@@ -97,8 +97,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			item.connectionId === connection.id && ["running", "publishing"].includes(item.state)
 		) || !!await options.implementations?.()?.busy(connection);
 	}
-	async function choose(owner: string, repositoryId: string) {
-		let live = connections.list(repositoryId, owner);
+	/**
+	 * The clicker's idle connection, preferring the one last used for this document. When every
+	 * connection is busy the work queues behind the first.
+	 */
+	async function choose(owner: string, repositoryId: string, documentId: string) {
+		let live = connections.candidates(repositoryId, owner, documentId);
 		if (!live.length) fail("no-workspace");
 		for (let connection of live) if (!await busy(connection)) return connection;
 		return live[0];
@@ -151,7 +155,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!session) fail("authentication-required");
 		let pending = connections.pending(params.id);
 		await repositoryWrite(session, pending.input.repository);
-		return json({ input: pending.input, owner: session.user.login });
+		return json({ input: pending.input, owner: session.user.login, code: pending.code });
 	});
 	route("POST", "/api/connector/pairings/:id/approve", async (request, params) => {
 		z.object({}).strict().parse(await body(request));
@@ -164,8 +168,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			repository.id,
 		);
 		connections.wake(repository.id);
-		let [owner, name] = pending.input.repository.split("/");
-		return json({ id: connection.id, url: documentsPath(owner, name) });
+		return json({ id: connection.id, url: documentsPath(repository.owner, repository.name) });
 	});
 	route("POST", "/api/connector/pairings/:id/claim", async (request, params) => {
 		let { secret } = z.object({ secret: z.string().min(32).max(100) }).strict().parse(
@@ -221,7 +224,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let context = await options.context(params.id);
 		if (!context) fail("not-found");
 		let previous = (await service.store.list(params.id)).toReversed().find(item => item.input);
-		let connection = await choose(session.user.id, channel.repositoryId);
+		let connection = await choose(session.user.id, channel.repositoryId, params.id);
 		let result = await service.authorize(value.id, connection.id, {
 			id: value.id,
 			documentId: params.id,
@@ -231,6 +234,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			source: previous?.input?.source ?? connection.source,
 			context: `Document revision ${context.revision}\n${context.source}`,
 		});
+		connections.use(params.id, connection.id);
 		return json(publicInvestigation(result));
 	});
 	route("POST", "/api/documents/:id/experiments/:experiment/cancel", async (request, params) => {
@@ -402,8 +406,17 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				}
 				value = { disconnected: true };
 			} else if (name === "wait_for_work") {
+				// A build in an archived document cannot be claimed; its expiry fails it in the sweep.
+				let build = async () => {
+					let offered = await implementation!.waiting(connection);
+					let documentId = connections.assigned(connection.id);
+					let channel = offered && documentId
+						? await auth.storage.channels.get(documentId)
+						: undefined;
+					return channel && !channel.archivedAt ? offered : undefined;
+				};
 				let queued = async () =>
-					await implementation!.waiting(connection)
+					await build()
 						?? (await implementation!.busy(connection)
 							? undefined
 							: (await work(connection, ["queued"])).map(item => ({

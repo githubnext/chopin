@@ -20,7 +20,8 @@ requires Bun 1.4.2 and Git. The agent must support local stdio ACP sessions and
 MCP tools through either advertised HTTP support or the default stdio transport. Authenticate the agent normally before connecting it.
 
 Open the printed pairing link, sign into Chopin with push access to the
-checkout's repository, and choose **Connect**. One connection serves every
+checkout's repository, check that the page shows the same confirmation code as
+your terminal, and choose **Connect**. One connection serves every
 document in that repository; there is no per-document pairing. Both the browser
 and connector contact the server over outbound requests. The browser does not
 access your filesystem.
@@ -33,18 +34,22 @@ sessions can survive releases. Reconnect after a server restart or logout.
 
 At the end of the document, choose **Propose investigation** and enter a brief.
 The request appears as an inline card marked **Ready to run**. Select **Run**:
-the work runs on your own local agent, never on another person's. Chopin uses
-your most recently active connection for the repository that is not already
-busy. Without one, the card shows the connector command to start, and you select
+the work runs on your own local agent, never on another person's. Chopin
+prefers the connection that last ran work for this document, then your most
+recently active one that is not busy. When all of yours are busy, the work
+queues behind one of them and starts when it is free. Without any, the card shows the connector command to start, and you select
 **Run** again once connected. A Planner can also propose an investigation; its
 card still needs someone to run it. Progress and published results appear in
 that card automatically, without opening another tab or dialog.
 
 Several people can connect checkouts of the same repository. Only a
 connection's owner can start or cancel work on it. The server rechecks the
-owner's repository push access on every connector call, and write access,
-archive state and the implementation lock on the target document when work is
-started and claimed. Other document writers can inspect published results,
+owner's repository push access on every connector call, and write access and
+archive state on the target document whenever work is claimed or reported. An
+investigation also requires that the document is not locked by an active build,
+both when it is started and when it is claimed; a document archived or locked
+in between interrupts the investigation instead of stalling the connector. A
+build is itself that lock, so builds do not check it. Other document writers can inspect published results,
 change shared selections, and record decisions.
 
 The first authorized investigation supplies the document's default experiment
