@@ -118,6 +118,8 @@ export type Backend = {
 	liveBuild?: boolean;
 	/** A build reached a terminal state after its stop was persisted. */
 	onBuildStopped?: (channelId: string) => void;
+	/** A living document's editing lock was released and announced; links it refused are owed. */
+	onEditingUnlocked?: (channelId: string) => void;
 };
 
 export type DocumentTarget = {

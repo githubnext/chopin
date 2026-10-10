@@ -51,6 +51,7 @@ import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { locksEditing } from "./tasks/builds";
+import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -190,7 +191,53 @@ function documentBackend(): Service.Backend {
 		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
+		onEditingUnlocked: id => {
+			void relinkDecisions(id).catch(err =>
+				console.error("chopin: could not re-link decisions after a build -", err)
+			);
+		},
 	};
+}
+
+/**
+ * Re-attempt decision links a first build's lock refused, under the existing Planner owner.
+ * Never claims ownership: without an owner the cards stay pending until the next Planner turn.
+ */
+async function relinkDecisions(channelId: string): Promise<void> {
+	if (!config.agent || deletingChannels.has(channelId)) return;
+	let opened = Rooms.get(channelId)?.plan;
+	if (!opened || pendingLinks(opened).length === 0) return;
+	let binding = await ownerBindings?.resolve(channelId);
+	if (!binding) return;
+	let repository = binding.repository;
+	binding.release();
+	await withDocumentTransition(channelId, async () => {
+		await Rooms.get(channelId)?.closing;
+		let held = Rooms.hold(channelId);
+		let release = () => {
+			held.release();
+			evict(held.room);
+		};
+		let running = false;
+		try {
+			let current = await plan(held.room, server);
+			let pending = pendingLinks(current);
+			if (pending.length === 0) return;
+			let context = conversation(held.room, undefined, repository);
+			await Chat.instruct(
+				context,
+				"Chopin",
+				relinkInstruction(pending),
+				"Linking decisions to the document after the build",
+			);
+			if (context.chat.running) {
+				running = true;
+				void context.chat.running.finally(release).catch(() => {});
+			}
+		} finally {
+			if (!running) release();
+		}
+	});
 }
 
 function placeResearchReference(
