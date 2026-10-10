@@ -28,6 +28,7 @@ export {
 	DecisionIcon,
 	DiagramIcon,
 	DiffIcon,
+	EllipsisIcon,
 	FitWidthIcon,
 	FormulaIcon,
 	ImageIcon,
