@@ -868,6 +868,18 @@ export function liveSnapshot(
 	let builder = viewer === live.user;
 	let latest = plan.builds.findLast(build => build.kind === "rebuild");
 	let rebuild = latest && (builder ? structuredClone(latest) : withoutConnection(latest));
+	// The first build's tasks, then each rebuild's appended version, with their last reported state.
+	let first = plan.builds.find(build => build.id === live.buildId)?.graphVersion;
+	let history = plan.graph ? historyFor(plan.graph, plan.lifecycle) : [];
+	let tasks = (plan.graph?.versions ?? []).filter(version =>
+		first !== undefined && version.number >= first
+	).flatMap(version => {
+		let progress = history.findLast(item => item.run.graphVersion === version.number)?.progress;
+		return version.definition.tasks.map(task => {
+			let report = progress?.tasks.find(item => item.id === task.id);
+			return { ...structuredClone(task), ...(report ? { progress: structuredClone(report) } : {}) };
+		});
+	});
 	let unfinished = outstandingTasks(plan).map(({ id, title, state, blocker }) => ({
 		id,
 		title,
@@ -877,6 +889,7 @@ export function liveSnapshot(
 	return {
 		...structuredClone(rest),
 		commits: structuredClone(commits ?? []),
+		tasks,
 		...(unfinished.length ? { outstandingTasks: unfinished } : {}),
 		...(rebuild ? { rebuild } : {}),
 		outOfSync: source(plan) !== baseSource,
