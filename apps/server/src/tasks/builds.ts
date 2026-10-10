@@ -3,8 +3,9 @@ import { approveGraph } from "./graphs";
 import { implementationReadiness } from "./plan-graphs";
 import { claimEligibility } from "./lifecycle";
 import { announceImplementation } from "./notifications";
-import { drain, exclusive, persistExclusive } from "../plan/service";
+import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import type { Plan } from "../plan/service";
+import type { Connection } from "../experiments/connections";
 import type { BuildRequest, CheckoutContext } from "@chopin/protocol/implementation";
 
 export let checkoutSchema = z.object({
@@ -27,7 +28,22 @@ let buildSchema = z.object({
 	state: z.enum(["queued", "starting", "running", "stopped", "failed"]),
 	session: z.string().min(1).max(128).optional(),
 	error: z.string().max(2000).optional(),
-}).strict();
+	kind: z.literal("rebuild").optional(),
+	baseRevision: z.number().int().nonnegative().optional(),
+	targetRevision: z.number().int().nonnegative().optional(),
+}).strict().refine(
+	build =>
+		build.kind === "rebuild"
+			? build.baseRevision !== undefined && build.targetRevision !== undefined
+				&& build.baseRevision <= build.targetRevision
+			: build.baseRevision === undefined && build.targetRevision === undefined,
+	"invalid rebuild revisions",
+);
+
+/** Whether a build closes document editing. A rebuild works from a sealed delta instead. */
+export function locksEditing(build: { state: string; kind?: string }): boolean {
+	return build.kind !== "rebuild" && ["queued", "starting", "running"].includes(build.state);
+}
 
 export function restoreBuilds(value: unknown, repositoryId?: string): BuildRequest[] {
 	if (value === undefined) return [];
@@ -159,6 +175,79 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 	}
 }
 
+export type RebuildConnections = {
+	get: (id: string) => Connection | undefined;
+	list: (documentId: string) => Connection[];
+};
+
+export type RebuildResult =
+	| { kind: "queued"; build: BuildRequest }
+	| { kind: "busy" }
+	| { kind: "unchanged" }
+	| { kind: "unavailable" };
+
+/** Whether any build or claim is in flight, including rebuilds that leave editing open. */
+export function buildActive(plan: Plan): boolean {
+	return plan.claiming || !!plan.execution
+		|| plan.builds.some(build => ["queued", "starting", "running"].includes(build.state));
+}
+
+/**
+ * Queue a rebuild of a live document's edits onto its pull requests.
+ *
+ * The live build's user keeps ownership; its original workspace is preferred, and another of the
+ * same user's workspaces for this document stands in once that one has gone.
+ */
+export async function queueRebuild(
+	plan: Plan,
+	connections: RebuildConnections,
+): Promise<RebuildResult> {
+	await drain(plan);
+	return exclusive(plan, async () => {
+		let live = plan.live;
+		if (!plan.persistence.liveBuild || !live) return { kind: "unavailable" };
+		if (buildActive(plan)) return { kind: "busy" };
+		if (source(plan) === live.baseSource) return { kind: "unchanged" };
+		let original = plan.builds.find(build => build.id === live.buildId);
+		let usable = (connection: Connection | undefined) =>
+			!!connection && connection.owner === live.user && connection.documentId === plan.id
+			&& connection.source.repositoryId === live.repositoryId;
+		let connection = original && connections.get(original.connectionId);
+		if (!usable(connection)) connection = connections.list(plan.id).find(usable);
+		if (!original || !connection || plan.builds.length >= 100) return { kind: "unavailable" };
+		let build: BuildRequest = buildSchema.parse({
+			id: crypto.randomUUID(),
+			kind: "rebuild",
+			user: live.user,
+			connectionId: connection.id,
+			repositoryId: live.repositoryId,
+			checkout: {
+				repository: connection.source.repository,
+				commit: connection.source.commit,
+				...(connection.source.branch ? { branch: connection.source.branch } : {}),
+			},
+			planRevision: plan.revision,
+			baseRevision: live.baseRevision,
+			targetRevision: plan.revision,
+			graphVersion: original.graphVersion,
+			graphRevision: original.graphRevision,
+			createdAt: new Date().toISOString(),
+			expiresAt: Date.now() + 90_000,
+			state: "queued",
+		});
+		let previous = plan.builds;
+		plan.builds = [...previous, build];
+		try {
+			await persistExclusive(plan, true);
+		} catch (error) {
+			plan.builds = previous;
+			throw error;
+		}
+		announceImplementation(plan);
+		return { kind: "queued", build: structuredClone(build) };
+	});
+}
+
 /** Persist pickup before the companion receives permission to spawn a process. */
 export function pickBuild(
 	plan: Plan,
@@ -227,5 +316,8 @@ export function reportBuild(
 			current.state !== next.state || current.session !== next.session
 			|| current.error !== next.error
 		) announceImplementation(plan);
+		if (current.state !== next.state && (next.state === "stopped" || next.state === "failed")) {
+			plan.persistence.onBuildStopped?.(plan.id);
+		}
 	});
 }

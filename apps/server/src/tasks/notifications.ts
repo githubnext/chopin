@@ -1,11 +1,11 @@
+import { locksEditing } from "./builds";
 import type { Plan } from "../plan/service";
 import { broadcast } from "../wire";
 
 export function implementationStatus(plan: Plan) {
 	return {
 		revision: plan.persistence.revision,
-		locked: !!plan.execution
-			|| plan.builds.some(build => ["queued", "starting", "running"].includes(build.state)),
+		locked: !!plan.execution || plan.builds.some(locksEditing),
 	};
 }
 
