@@ -237,6 +237,9 @@ function Composer({
 		setText("");
 		onTyping?.(false);
 		onSend(value);
+		// A clicked send disables itself and drops focus without a blur, which would leave
+		// the field believing it still had focus; the field takes it back instead.
+		ref.current?.focus({ preventScroll: true });
 	};
 
 	let key = (event: KeyboardEvent<HTMLTextAreaElement>) => {
