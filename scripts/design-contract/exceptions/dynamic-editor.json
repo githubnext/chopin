@@ -120,7 +120,14 @@
 				"class",
 				"CELL",
 				"class > SelectionBubble > <button>",
-				3
+				2
+			],
+			[
+				"dynamic",
+				"class",
+				"CELL",
+				"class > SelectionBubble > comment > <button>",
+				1
 			],
 			[
 				"dynamic",
@@ -134,7 +141,14 @@
 				"class",
 				"CELL_OFF",
 				"class > SelectionBubble > <button>",
-				6
+				5
+			],
+			[
+				"dynamic",
+				"class",
+				"CELL_OFF",
+				"class > SelectionBubble > comment > <button>",
+				1
 			],
 			[
 				"dynamic",
@@ -155,10 +169,10 @@
 				"class",
 				"SEAM",
 				"class > SelectionBubble > <span>",
-				3
+				4
 			]
 		],
-		"sourceHash": "0c55d7382e99b0fc885a47a127dd8f59bf9f50a49261ce7f14fcb0bdf78aff5d"
+		"sourceHash": "9c1a7dbd2365c15aae149bdb9203577adf59f5e1124aa6016cb227762bb8525b"
 	},
 	{
 		"file": "packages/editor/src/widgets/research-motion.tsx",
@@ -200,7 +214,7 @@
 				1
 			]
 		],
-		"sourceHash": "3516b82ff3d06451d3e18b5b4b705677122681437c964196bbc599b3da0f6746"
+		"sourceHash": "5be4ceafbbdafde5d60a131ed17ef51c22b499930d2c7b7d88d0cee3d9a2f60d"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -228,7 +242,7 @@
 				1
 			]
 		],
-		"sourceHash": "3516b82ff3d06451d3e18b5b4b705677122681437c964196bbc599b3da0f6746"
+		"sourceHash": "5be4ceafbbdafde5d60a131ed17ef51c22b499930d2c7b7d88d0cee3d9a2f60d"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
@@ -466,7 +480,7 @@
 				1
 			]
 		],
-		"sourceHash": "961fc6de610b1f692aae07f86c3128cb60f827e384b81fa44d768de69bf611e2"
+		"sourceHash": "e74d730f22374e8477603db259953c76df63ff8163d2633511114f3308cceb2d"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -480,6 +494,6 @@
 				1
 			]
 		],
-		"sourceHash": "961fc6de610b1f692aae07f86c3128cb60f827e384b81fa44d768de69bf611e2"
+		"sourceHash": "e74d730f22374e8477603db259953c76df63ff8163d2633511114f3308cceb2d"
 	}
 ]
