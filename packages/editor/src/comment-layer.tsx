@@ -10,7 +10,7 @@ import { $getNodeByKey } from "lexical";
 import { DraftCard, NoteAuthor, ThreadCard, ThreadList } from "./comments";
 import { blockMarkerPoints, commentCardPoint, markerRect, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
-import { CommentSheet, usesCommentSheet } from "./comment-sheet";
+import { CommentSheet, commentSheetHeading, usesCommentSheet } from "./comment-sheet";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
@@ -20,6 +20,7 @@ import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
 import type { CSSProperties, ReactNode } from "react";
+import type { CommentSheetHeading } from "./comment-sheet";
 import type { BlockMarkerPoint, CardSide, Point, Rect } from "./comment-geometry";
 import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
@@ -844,9 +845,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		let id = selected.current;
 		if (!id || id !== pinned) return;
 		selected.current = undefined;
-		document.querySelector<HTMLElement>(
-			`[data-plan-comment-thread="${id}"] [data-plan-comment-back]`,
-		)?.focus();
+		document.getElementById(dialogId(id))?.querySelector<HTMLElement>("[data-plan-comment-back]")
+			?.focus();
 	}, [pinned]);
 
 	let sheetId = compact && pinned !== "orphans" ? pinned : undefined;
@@ -909,27 +909,36 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		selected.current = id;
 		setPinned(id);
 	};
-	let card = (view: ThreadView) => {
+	let backTo = (view: ThreadView) => {
 		let group = markerOf(view.thread.id);
 		let back = group && group.views.length > 1 ? group : undefined;
+		return back
+			? {
+				count: back.views.length,
+				go: () => {
+					setReturnTo(view.thread.id);
+					setPinned(`${LIST}${back.key}`);
+				},
+			}
+			: undefined;
+	};
+	// A sheet says where it is, and leads back, in its own header row.
+	let card = (view: ThreadView, sheet = false) => {
+		let back = sheet ? undefined : backTo(view);
 		return (
 			<ThreadCard
-				backLabel={back ? `All ${back.views.length} comments` : undefined}
+				backLabel={back ? `All ${back.count} comments` : undefined}
 				canEdit={canEdit}
 				key={view.thread.id}
 				link={linkTo(view.thread.id)}
-				onBack={back
-					? () => {
-						setReturnTo(view.thread.id);
-						setPinned(`${LIST}${back.key}`);
-					}
-					: undefined}
+				onBack={back?.go}
 				onBlur={() => unhover(view.thread.id)}
 				onFocus={() => hover(view.thread.id)}
 				onReply={(text, to) => store.reply(view.thread.id, text, to)}
 				onResolve={() => resolve(view.thread.id)}
 				onTyping={writing => store.announce(view.thread.id, writing)}
 				quote={view.quote}
+				sheet={sheet}
 				view={view}
 				writing={state.writing[view.thread.id]}
 			/>
@@ -967,7 +976,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let compactKey: string | undefined;
 	let compactId: string | undefined;
 	let compactLabel: string | undefined;
-	let compactTitle: string | undefined;
+	let compactHeading: CommentSheetHeading | undefined;
+	let compactBack: (() => void) | undefined;
 	let compactClose: (() => void) | undefined;
 	let compactContent: ReactNode = undefined;
 	let previewView = preview && pinned !== preview
@@ -992,19 +1002,23 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactKey = "draft";
 		compactId = "plan-comment-draft";
 		compactLabel = "New comment";
-		compactTitle = "New comment";
+		compactHeading = commentSheetHeading({ kind: "draft", quote: draft.quote });
 		compactClose = cancelDraft;
 		compactContent = (
 			<DraftCard
 				onCancel={cancelDraft}
 				onSend={(text, to) => store.start(text, to)}
+				sheet
 			/>
 		);
 	} else if (compact && pinned === "orphans" && orphaned.length > 0) {
 		compactKey = "orphans";
 		compactId = "plan-comment-thread-orphans";
 		compactLabel = "Orphaned comments";
-		compactTitle = "Orphaned comments";
+		compactHeading = commentSheetHeading({
+			kind: "other",
+			title: `${orphaned.length} comments without prose`,
+		});
 		compactClose = dismiss;
 		compactContent = orphaned.map(view => card(view));
 	} else if (compact && pinned && (pinnedView || pinnedList)) {
@@ -1014,13 +1028,20 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			: `thread:${pinned}`;
 		compactId = dialogId(pinned);
 		compactLabel = pinnedView ? "Comment thread" : "Comments";
-		// A thread's own note count would read as a second, contradicting count beside a
-		// list's "All N comments", so one thread is only ever "Comment".
-		compactTitle = pinnedView ? "Comment" : "Comments";
+		let back = pinnedView ? backTo(pinnedView) : undefined;
+		compactHeading = pinnedView
+			? commentSheetHeading({
+				kind: "thread",
+				quote: pinnedView.quote,
+				siblings: back?.count ?? 1,
+			})
+			: commentSheetHeading({ kind: "list", count: pinnedList!.views.length });
+		compactBack = back?.go;
 		compactClose = dismiss;
-		compactContent = pinnedView ? card(pinnedView) : (
+		compactContent = pinnedView ? card(pinnedView, true) : (
 			<ThreadList
 				autoFocus={false}
+				heading={false}
 				onSelect={selectThread}
 				returnTo={returnTo}
 				views={pinnedList!.views}
@@ -1270,14 +1291,15 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		<>
 			{documentChrome}
 			{toast}
-			{compactKey && compactId && compactLabel && compactClose && (
+			{compactKey && compactId && compactLabel && compactClose && compactHeading && (
 				<CommentSheet
-					closeVisible={compactKey === "draft"}
+					focus={compactKey === "draft" ? "field" : "close"}
+					heading={compactHeading}
 					id={compactId}
 					key={compactKey}
 					label={compactLabel}
+					onBack={compactBack}
 					onClose={compactClose}
-					title={compactTitle}
 				>
 					{compactContent}
 				</CommentSheet>

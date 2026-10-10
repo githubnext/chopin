@@ -302,12 +302,15 @@ export function mention(
  */
 function Composer({
 	autoFocus,
+	expanded,
 	mode,
 	onCancel,
 	onSend,
 	onTyping,
 }: {
 	autoFocus?: boolean;
+	/** Keep Send to Chopin showing, as a sheet's pinned composer does. */
+	expanded?: boolean;
 	mode: "new" | "reply";
 	onCancel?: () => void;
 	onSend: (text: string, to?: "planner") => void | Promise<Sent>;
@@ -420,7 +423,7 @@ function Composer({
 		}
 	};
 
-	let open = mode === "new" || focused || text.length > 0 || to;
+	let open = expanded || mode === "new" || focused || text.length > 0 || to;
 	let label = mode === "new" ? "Post comment" : "Send reply";
 
 	return (
@@ -502,6 +505,8 @@ export type ThreadCardProps = {
 	/** Return to the list of a block's threads this one was opened from. */
 	onBack?: () => void;
 	backLabel?: string;
+	/** In a sheet the notes scroll and the composer stays pinned beneath them. */
+	sheet?: boolean;
 };
 
 export function ThreadCard({
@@ -515,6 +520,7 @@ export function ThreadCard({
 	onResolve,
 	onTyping,
 	quote,
+	sheet,
 	view,
 	writing,
 }: ThreadCardProps) {
@@ -550,59 +556,76 @@ export function ThreadCard({
 				</button>
 			)}
 
-			<ol className="plan-comment-notes">
-				{first && (
-					<Note
-						actions={canEdit || link
-							? <Actions link={link} onResolve={canEdit ? onResolve : undefined} />
-							: undefined}
-						note={first}
-					/>
-				)}
-				{folded && (
-					<li>
-						<button
-							className="plan-comment-more"
-							onClick={() => setUnfolded(true)}
-							type="button"
-						>
-							<span aria-hidden="true" className="plan-comment-more-rule" />
-							Show {hidden} {hidden === 1 ? "reply" : "replies"}
-							<span aria-hidden="true" className="plan-comment-more-rule" />
-						</button>
-					</li>
-				)}
-				{rest.map(note => <Note key={note.id} note={note} />)}
-			</ol>
-
-			{(view.orphaned || view.drifted) && (
-				<div className="plan-comment-context" data-plan-comment-context>
-					{view.orphaned && (
-						<blockquote className="plan-comment-context-copy m-0 text-sm text-text-secondary">
-							{quote}
-						</blockquote>
+			<Scroll sheet={sheet}>
+				<ol className="plan-comment-notes">
+					{first && (
+						<Note
+							actions={canEdit || link
+								? <Actions link={link} onResolve={canEdit ? onResolve : undefined} />
+								: undefined}
+							note={first}
+						/>
 					)}
-					<p className="m-0 text-sm text-warning-ink">
-						This passage has changed since the comment was added.
+					{folded && (
+						<li>
+							<button
+								className="plan-comment-more"
+								onClick={() => setUnfolded(true)}
+								type="button"
+							>
+								<span aria-hidden="true" className="plan-comment-more-rule" />
+								Show {hidden} {hidden === 1 ? "reply" : "replies"}
+								<span aria-hidden="true" className="plan-comment-more-rule" />
+							</button>
+						</li>
+					)}
+					{rest.map(note => <Note key={note.id} note={note} />)}
+				</ol>
+
+				{(view.orphaned || view.drifted) && (
+					<div className="plan-comment-context" data-plan-comment-context>
+						{view.orphaned && (
+							<blockquote className="plan-comment-context-copy m-0 text-sm text-text-secondary">
+								{quote}
+							</blockquote>
+						)}
+						<p className="m-0 text-sm text-warning-ink">
+							This passage has changed since the comment was added.
+						</p>
+					</div>
+				)}
+
+				{view.planner && <PlannerStatus state={view.planner} />}
+
+				{writing && writing.length > 0 && (
+					<p className="m-0 text-sm text-text-secondary">
+						{writing.join(", ")} {writing.length === 1 ? "is" : "are"} writing…
 					</p>
-				</div>
+				)}
+			</Scroll>
+
+			{canEdit && (
+				<Pinned sheet={sheet}>
+					<Composer expanded={sheet} mode="reply" onSend={onReply} onTyping={onTyping} />
+				</Pinned>
 			)}
-
-			{view.planner && <PlannerStatus state={view.planner} />}
-
-			{writing && writing.length > 0 && (
-				<p className="m-0 text-sm text-text-secondary">
-					{writing.join(", ")} {writing.length === 1 ? "is" : "are"} writing…
-				</p>
-			)}
-
-			{canEdit && <Composer mode="reply" onSend={onReply} onTyping={onTyping} />}
 		</article>
 	);
 }
 
+/** A sheet scrolls the notes on their own, beneath a fixed header and above a pinned composer. */
+function Scroll({ children, sheet }: { children: ReactNode; sheet?: boolean }) {
+	return sheet ? <div className="plan-comment-thread-scroll">{children}</div> : <>{children}</>;
+}
+
+function Pinned({ children, sheet }: { children: ReactNode; sheet?: boolean }) {
+	return sheet ? <div className="plan-comment-thread-compose">{children}</div> : <>{children}</>;
+}
+
 export type ThreadListProps = {
 	views: ThreadView[];
+	/** A sheet counts the threads in its own header row. */
+	heading?: boolean;
 	/** A compact sheet focuses its own grabber instead. */
 	autoFocus?: boolean;
 	/** The thread just left with Back; its item takes focus, even in a sheet. */
@@ -611,7 +634,9 @@ export type ThreadListProps = {
 };
 
 /** Several threads on one block, as one stop that opens into each of them. */
-export function ThreadList({ autoFocus = true, onSelect, returnTo, views }: ThreadListProps) {
+export function ThreadList(
+	{ autoFocus = true, heading = true, onSelect, returnTo, views }: ThreadListProps,
+) {
 	let list = useRef<HTMLUListElement>(null);
 
 	useEffect(() => {
@@ -654,7 +679,7 @@ export function ThreadList({ autoFocus = true, onSelect, returnTo, views }: Thre
 			data-plan-comment-card
 			data-plan-comment-group
 		>
-			<header className="plan-comment-list-head">{views.length} comments</header>
+			{heading && <header className="plan-comment-list-head">{views.length} comments</header>}
 			<ul className="plan-comment-list-items" onKeyDown={move} ref={list}>
 				{views.map(view => {
 					let opening = view.thread.notes[0];
@@ -688,10 +713,11 @@ export function ThreadList({ autoFocus = true, onSelect, returnTo, views }: Thre
 export type DraftCardProps = {
 	onSend: (text: string, to?: "planner") => void | Promise<Sent>;
 	onCancel: () => void;
+	sheet?: boolean;
 };
 
 /** A new comment: only the composer, with no header to say what the card already shows. */
-export function DraftCard({ onCancel, onSend }: DraftCardProps) {
+export function DraftCard({ onCancel, onSend, sheet }: DraftCardProps) {
 	return (
 		<article
 			aria-label="New comment"
@@ -700,7 +726,9 @@ export function DraftCard({ onCancel, onSend }: DraftCardProps) {
 			data-plan-comment-card
 			data-plan-comment-draft
 		>
-			<Composer autoFocus mode="new" onCancel={onCancel} onSend={onSend} />
+			<Pinned sheet={sheet}>
+				<Composer autoFocus mode="new" onCancel={onCancel} onSend={onSend} />
+			</Pinned>
 		</article>
 	);
 }
