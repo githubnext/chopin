@@ -175,15 +175,16 @@ test("a spike result deferred by a first build's lock lands once the lock releas
 		plan.builds = [{ id: crypto.randomUUID(), state: "running" } as never];
 		announceImplementation(plan);
 		await scout.refresh(plan.id);
-		expect(room.project(plan.document)).toContain('title="Queued"');
+		// Queued renders as a note and stopped as a warning; titles are copy and may change.
+		expect(room.project(plan.document)).toContain('type="note"');
 		expect((await context.service.store.get(value.id))?.spike?.rendered).toBe("queued");
 
 		plan.builds = [{ ...plan.builds[0], state: "stopped" } as never];
 		announceImplementation(plan);
 		expect(released).toBeDefined();
 		await released;
-		expect(room.project(plan.document)).toContain('title="Prototype stopped"');
-		expect(room.project(plan.document)).not.toContain('title="Queued"');
+		expect(room.project(plan.document)).toContain('type="warning"');
+		expect(room.project(plan.document)).not.toContain('type="note"');
 		expect((await context.service.store.get(value.id))?.spike?.rendered).toBe("stopped");
 	} finally {
 		scout.close();
