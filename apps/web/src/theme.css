@@ -621,7 +621,7 @@ body {
 	transition: opacity var(--panel-open-dur) var(--motion-smooth-out);
 }
 
-.workspace-root[data-workspace-mode="split"][data-document-expanded] > .workspace-header-slot {
+.workspace-root[data-workspace-mode="split"][data-header-hidden] > .workspace-header-slot {
 	opacity: 0;
 	visibility: hidden;
 	transition:
@@ -1746,7 +1746,7 @@ button.question-add:disabled {
 	}
 
 	.workspace-root[data-workspace-mode="split"] > .workspace-header-slot,
-	.workspace-root[data-workspace-mode="split"][data-document-expanded] > .workspace-header-slot {
+	.workspace-root[data-workspace-mode="split"][data-header-hidden] > .workspace-header-slot {
 		transition: none;
 	}
 

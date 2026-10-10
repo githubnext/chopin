@@ -114,6 +114,8 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 		childTitle,
 		CHILD_SOURCE,
 	);
+	// A child inherits the parent's Chat state; closed here so the parent is expanded.
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await join("ana");
 	await page.setViewportSize({ width: 1920, height: 1080 });
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
@@ -133,6 +135,7 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	await expect(parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }))
 		.toBeVisible();
 	await expect(parentHeader.getByText(childTitle, { exact: true })).toBeVisible();
+	await expect(parentHeader).toBeVisible();
 	await expect(
 		parent.locator("[data-document-toolbar]").getByRole("group", {
 			includeHidden: true,
@@ -165,11 +168,6 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	expect(childBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height + 12);
 	expect(await surface.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe("none");
 
-	// Expanding the child hides only its Chat, so the parent top bar stays in view.
-	await surface.locator("[data-document-toolbar]").getByRole("button", {
-		name: "Expand document",
-		exact: true,
-	}).click();
 	let childClose = surface.getByRole("button", { name: `Close ${childTitle}`, exact: true });
 	let childChatToggle = surface.getByRole("button", {
 		name: "Show chat",
