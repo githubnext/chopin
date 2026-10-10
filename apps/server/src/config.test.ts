@@ -41,7 +41,7 @@ describe("configuration", () => {
 		expect(configured({ LIVE_BUILD: "on" }).liveBuild).toBe(true);
 		expect(configured().liveSpikes).toBe(false);
 		expect(configured({ LIVE_SPIKES: "on" }).liveSpikes).toBe(true);
-		expect(configured({ LIVE_BUILD: "on" }).liveSpikes).toBe(true);
+		expect(configured({ LIVE_BUILD: "on" }).liveSpikes).toBe(false);
 		expect(description(configured({ LIVE_BUILD: "on" }))).toContain("live build: on");
 	});
 

@@ -5,7 +5,7 @@ import { ulid } from "@chopin/dialect/ulid";
 
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
-import { callouts, placeSpikeCallout } from "./spike-placement";
+import { calloutDigest, callouts, placeSpikeCallout } from "./spike-placement";
 import { eligible, renderKey, spikeBrief, spikeCallout, text } from "./spikes";
 
 import type { Connections } from "./connections";
@@ -50,25 +50,33 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 		async start(channelId, { owner, connection, block }) {
 			let id = crypto.randomUUID();
 			let callout = ulid();
-			let value = await service.create(channelId, owner, spikeBrief(block.text), id, undefined, {
+			let created = await service.create(channelId, owner, spikeBrief(block.text), id, undefined, {
 				digest: block.digest,
 				passage: block.text,
 				callout,
 				login: connection.login,
 				placed: false,
+				placing: true,
+			});
+			let node = spikeCallout(created);
+			// Persist what is about to be published, so recovery recognises it as untouched.
+			let value = await service.mutate(id, item => {
+				item.spike!.calloutDigest = calloutDigest(node);
 			});
 			let placed = await withPlan(
 				channelId,
-				plan =>
-					placeSpikeCallout(plan, { callout, node: spikeCallout(value), after: block.digest }),
+				plan => placeSpikeCallout(plan, { callout, node, after: block.digest }),
 			);
-			if (placed !== "placed") {
+			if (placed.status !== "placed") {
 				await dismiss(channelId, id);
 				return;
 			}
 			await service.mutate(id, item => {
 				item.spike!.placed = true;
+				delete item.spike!.placing;
 				item.spike!.rendered = "running";
+				item.spike!.callout = placed.callout;
+				item.spike!.calloutDigest = placed.digest;
 			});
 			let live = connections.get(connection.id);
 			try {
@@ -95,17 +103,30 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 		async refresh(channelId) {
 			for (let value of await spikes(channelId)) {
 				let spike = value.spike!;
-				if (!spike.placed || spike.dismissed) continue;
+				if (spike.dismissed) continue;
+				// A crash after publishing but before `placed` persisted: only ever look in place.
+				let recovering = !spike.placed && !!spike.placing;
+				if (!spike.placed && !recovering) continue;
 				let key = renderKey(value);
-				if (key === spike.rendered) continue;
+				if (!recovering && key === spike.rendered) continue;
 				let placed = await withPlan(
 					channelId,
-					plan => placeSpikeCallout(plan, { callout: spike.callout, node: spikeCallout(value) }),
+					plan =>
+						placeSpikeCallout(plan, {
+							callout: spike.callout,
+							node: spikeCallout(value),
+							rendered: spike.calloutDigest,
+						}),
 				);
-				if (placed === "missing") await dismiss(channelId, value.id);
-				else if (placed !== "deferred") {
+				if (placed.status === "missing") await dismiss(channelId, value.id);
+				else if (placed.status !== "deferred") {
+					let { callout, digest } = placed;
 					await service.mutate(value.id, item => {
+						item.spike!.placed = true;
+						delete item.spike!.placing;
 						item.spike!.rendered = key;
+						item.spike!.callout = callout;
+						item.spike!.calloutDigest = digest;
 					});
 				}
 			}
