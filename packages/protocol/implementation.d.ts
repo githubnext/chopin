@@ -54,6 +54,12 @@ export type LiveSnapshot = {
 		revision: number;
 		at: string;
 	}>;
+	/** The first build's tasks, then every rebuild's, each with its last reported progress. */
+	tasks: Array<
+		NonNullable<ImplementationSnapshot["graph"]>["definition"]["tasks"][number] & {
+			progress?: Plan.ImplementationProgress["tasks"][number];
+		}
+	>;
 	/** The latest rebuild; its state distinguishes building from failed. */
 	rebuild?: BuildRequest;
 	/** The current document differs from the source last built onto the pull requests. */
@@ -83,9 +89,28 @@ export type ImplementationSnapshot = {
 	build?: BuildRequest;
 	/** The GitHub login of whoever requested `build`, when it is still known. */
 	startedBy?: string;
+	/** The GitHub login of the living document's builder (`live.user`), when it is still known. */
+	builtBy?: string;
 	/** Whether the viewer has a connected local agent for this repository; it may be busy. */
 	localAgent: boolean;
 	blockers: string[];
+	/**
+	 * The document reads as complete enough to build and nothing blocks it.
+	 * Judged in memory once edits settle, so it may lag the latest revision.
+	 */
+	buildReady: boolean;
+	/** `build` is queued on a connection that starts it once its running prototype finishes. */
+	waitingForPrototype?: true;
+	/**
+	 * `build` is queued behind another document's build on the same agent; it starts when that
+	 * one finishes. `title` names the other document when it is known.
+	 */
+	waitingForDocument?: { title?: string };
+	/**
+	 * A one-click Build plan is waiting for its tasks: `by` (a user id) pressed it at `revision`.
+	 * It holds through open decisions and reloads until the build starts or is cancelled.
+	 */
+	buildRequested?: { by: string; revision: number };
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
 	live?: LiveSnapshot;
 };
@@ -100,7 +125,7 @@ export type ImplementationSnapshot = {
  */
 export declare namespace Implementation {
 	export type Incoming = Request<Draft>;
-	export type Outgoing = Drafted | Drafting;
+	export type Outgoing = Drafted | Drafting | Readiness;
 
 	/** Draft or revise the tasks for the document as it now stands. */
 	export type Draft = KIND<"implementation:draft"> & {
@@ -108,6 +133,8 @@ export declare namespace Implementation {
 		requestId: string;
 		/** The revision the asker saw; the server drafts against its current revision. */
 		planRevision: number;
+		/** Asked by the one-click Build plan, which starts the tasks once they are drafted. */
+		build?: true;
 	};
 
 	/** The document's live request, new or `existing`; `ended` if its turn finished first. */
@@ -123,5 +150,11 @@ export declare namespace Implementation {
 		id: string;
 		planRevision: number;
 		state: "queued" | "running" | "ended";
+	};
+
+	/** Broadcast when a document's build readiness judgement changes; read the snapshot again. */
+	export type Readiness = KIND<"implementation:readiness"> & {
+		planRevision: number;
+		ready: boolean;
 	};
 }

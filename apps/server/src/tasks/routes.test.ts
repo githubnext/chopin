@@ -7,7 +7,7 @@ import * as Plan from "../plan/service";
 import { registerExperimentRoutes } from "../experiments/routes";
 import { implementationGraphs } from "./plan-graphs";
 import { registerImplementationRoutes } from "./routes";
-import { queueRebuild } from "./builds";
+import { queueRebuild, requestBuild } from "./builds";
 import { implementationStatus } from "./notifications";
 import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
@@ -31,7 +31,7 @@ async function prepare(plan: Plan.Plan) {
 	});
 }
 
-async function setup() {
+async function setup(options: { liveBuild?: boolean } = {}) {
 	let context = await openPlan("# Launcher plan\n");
 	let github = {
 		async user(token: string) {
@@ -96,6 +96,7 @@ async function setup() {
 		implementations: () => implementations,
 	});
 	implementations = registerImplementationRoutes(router, auth, {
+		liveBuild: options.liveBuild ?? false,
 		connections: experiments.connections,
 		busy: async connectionId =>
 			(await experiments.service.store.active()).some(item =>
@@ -137,6 +138,7 @@ async function setup() {
 		router,
 		path,
 		call,
+		cookie: issued.cookie,
 		otherCookie: other.cookie,
 		implementations,
 		experiments,
@@ -311,6 +313,38 @@ test("a build runs only on the clicker's own connection and records who started 
 	await Plan.close(context.plan);
 });
 
+test("a one-click build request outlives a reload until its build starts or is cancelled", async () => {
+	let context = await setup();
+	let cancel = () =>
+		context.router.handle(
+			new Request(`${context.auth.config.origin}${context.path}/request`, {
+				method: "DELETE",
+				headers: { origin: context.auth.config.origin, cookie: context.cookie.split(";")[0] },
+			}),
+		);
+	try {
+		expect((await (await context.call(context.path)).json()).buildRequested).toBeUndefined();
+		requestBuild(context.plan, "U_test");
+		expect((await (await context.call(context.path)).json()).buildRequested).toEqual({
+			by: "U_test",
+			revision: context.plan.revision,
+		});
+		expect((await cancel())!.status).toBe(200);
+		expect(context.plan.buildRequested).toBeUndefined();
+		requestBuild(context.plan, "U_test");
+		await paired(context);
+		let built = await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		});
+		expect(built.status).toBe(200);
+		expect((await (await context.call(context.path)).json()).buildRequested).toBeUndefined();
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
 test("investigations and implementations cannot execute on the same workspace together", async () => {
 	let context = await setup();
 	let connection = await paired(context);
@@ -372,7 +406,43 @@ test("a deleted document cannot block implementation recovery sweeps", async () 
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
 });
 
-test("Build waits for an investigation-busy workspace before approving the graph", async () => {
+test("Build queues behind a running prototype and starts once it finishes (LIVE_BUILD)", async () => {
+	let context = await setup({ liveBuild: true });
+	let connection = await paired(context);
+	let investigation = await (await context.call(`/api/documents/${context.plan.id}/experiments`, {
+		id: crypto.randomUUID(),
+		brief: "Inspect a fixture",
+	})).json();
+	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
+	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
+	let response = await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	});
+	expect(response.status).toBe(200);
+	let build = await response.json();
+	expect(build.state).toBe("queued");
+	let snapshot = await (await context.call(context.path)).json();
+	expect(snapshot).toMatchObject({ build: { id: build.id }, waitingForPrototype: true });
+	expect(await tool(context, connection.token, "claim_implementation_build", { id: build.id }))
+		.toMatchObject({ isError: true });
+	// A prototype outlasting the pickup window keeps the build queued rather than failing it.
+	context.plan.builds = [{ ...context.plan.builds.at(-1)!, expiresAt: Date.now() - 1 }];
+	await context.implementations.sweep();
+	expect(context.plan.builds.at(-1)).toMatchObject({ id: build.id, state: "queued" });
+	expect(context.plan.builds.at(-1)!.expiresAt).toBeGreaterThan(Date.now());
+	await context.experiments.service.stop(investigation.id, "interrupted", "Finished.");
+	expect((await (await context.call(context.path)).json()).waitingForPrototype).toBeUndefined();
+	expect(await tool(context, connection.token, "wait_for_work"))
+		.toEqual({ id: build.id, kind: "implementation" });
+	expect(
+		(await tool(context, connection.token, "claim_implementation_build", { id: build.id })).build,
+	).toMatchObject({ id: build.id, state: "starting" });
+	await Plan.close(context.plan);
+});
+
+test("without LIVE_BUILD a build is refused while an investigation holds the workspace", async () => {
 	let context = await setup();
 	let connection = await paired(context);
 	let investigation = await (await context.call(`/api/documents/${context.plan.id}/experiments`, {
@@ -381,18 +451,35 @@ test("Build waits for an investigation-busy workspace before approving the graph
 	})).json();
 	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
-	let snapshot = await (await context.call(context.path)).json();
-	expect(snapshot.localAgent).toBe(true);
-	expect(
-		(await context.call(context.path, {
-			planRevision: 0,
-			graphVersion: 1,
-			graphRevision: 1,
-		})).status,
-	).toBe(409);
+	let response = await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	});
+	expect(response.status).toBe(409);
+	expect(await response.text()).toContain("workspace is offline or busy");
 	expect(context.plan.builds).toEqual([]);
-	expect(context.plan.graph?.versions[0].state).toBe("draft");
+	expect((await (await context.call(context.path)).json()).waitingForPrototype).toBeUndefined();
 	await Plan.close(context.plan);
+});
+
+test("without LIVE_BUILD a second document is refused while the connection builds another", async () => {
+	let context = await setup();
+	let second = await openSiblingPlan(context, "# Second plan\n");
+	await prepare(second);
+	let secondPath = `/api/channels/${second.id}/implementation`;
+	let review = { planRevision: 0, graphVersion: 1, graphRevision: 1 };
+	await paired(context);
+	try {
+		expect((await context.call(context.path, review)).status).toBe(200);
+		let refused = await context.call(secondPath, review);
+		expect(refused.status).toBe(409);
+		expect(await refused.text()).toContain("workspace is offline or busy");
+		expect(second.builds).toEqual([]);
+	} finally {
+		await Plan.close(second);
+		await Plan.close(context.plan);
+	}
 });
 
 test("a committed build wakes the waiting connector and a failed pickup can be retried", async () => {
@@ -471,8 +558,8 @@ test("returning a stopped implementation for changes durably unlocks it once", a
 	}
 });
 
-test("one connection builds two documents and a finished or deleted build never strands it", async () => {
-	let context = await setup();
+test("a second document queues behind the first on one connection, which a finished or deleted build never strands (LIVE_BUILD)", async () => {
+	let context = await setup({ liveBuild: true });
 	let second = await openSiblingPlan(context, "# Second plan\n");
 	await prepare(second);
 	context.plans.set(second.id, second);
@@ -481,21 +568,37 @@ test("one connection builds two documents and a finished or deleted build never 
 	let connection = await paired(context);
 	try {
 		let first = await (await context.call(context.path, review)).json();
-		expect((await context.call(secondPath, review)).status).toBe(409);
+		// The agent holds the first document's build, so the second queues behind it.
+		let waiting = await context.call(secondPath, review);
+		expect(waiting.status).toBe(200);
+		let next = await waiting.json();
+		expect(next).toMatchObject({ state: "queued", connectionId: connection.connection.id });
+		expect((await context.call(secondPath, review)).status).toBe(200);
+		expect(second.builds).toHaveLength(1);
+		let title = (await context.storage.channels.get(context.plan.id))!.title;
+		expect((await (await context.call(secondPath)).json()).waitingForDocument).toEqual({ title });
+		// Waiting behind another build renews the queued one instead of expiring it.
+		second.builds = [{ ...second.builds[0]!, expiresAt: Date.now() - 1 }];
+		await context.implementations.sweep();
+		expect(second.builds.at(-1)).toMatchObject({ state: "queued" });
+		expect(second.builds.at(-1)!.expiresAt).toBeGreaterThan(Date.now());
+		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
+			id: first.id,
+			kind: "implementation",
+		});
 		await tool(context, connection.token, "claim_implementation_build", { id: first.id });
 		await tool(context, connection.token, "report_implementation_build", {
 			id: first.id,
 			state: "failed",
 			error: "Startup failed",
 		});
-		let next = await (await context.call(secondPath, review)).json();
-		expect(next.connectionId).toBe(connection.connection.id);
 		expect(second.builds.at(-1)?.id).toBe(next.id);
 		expect(context.plan.builds).toHaveLength(1);
 		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
 			id: next.id,
 			kind: "implementation",
 		});
+		expect((await (await context.call(secondPath)).json()).waitingForDocument).toBeUndefined();
 		let claim = await tool(context, connection.token, "claim_implementation_build", {
 			id: next.id,
 		});

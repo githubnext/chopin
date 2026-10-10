@@ -50,8 +50,10 @@ import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
-import { locksEditing } from "./tasks/builds";
+import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
+import { BuildReadiness } from "./tasks/readiness";
+import { askJev } from "./conversation-plan/jev";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -131,6 +133,7 @@ let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
+let buildReadiness: BuildReadiness | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
 let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
@@ -188,6 +191,7 @@ function documentBackend(): Service.Backend {
 		onDocumentPersisted: target => {
 			summaryCoordinator?.schedule(target);
 			liveSync?.schedule(target);
+			buildReadiness?.schedule(target);
 		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
@@ -481,7 +485,10 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
 			await stopped;
 			await Service.close(held);
 		}
-		if (force || room.members.size === 0) Rooms.forget(room);
+		if (force || room.members.size === 0) {
+			Rooms.forget(room);
+			buildReadiness?.forget(room.id);
+		}
 	});
 	room.closing = closing;
 	try {
@@ -625,6 +632,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				if (
 					typeof frame.requestId !== "string" || !REQUEST_ID.test(frame.requestId)
 					|| !Number.isInteger(frame.planRevision) || frame.planRevision < 0
+					|| frame.build !== undefined && frame.build !== true
 				) {
 					fail(ws, frame.rid, "invalid task draft request");
 					return;
@@ -641,7 +649,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					fail(ws, frame.rid, refusal);
 					return;
 				}
-				let { text, said } = draftInstruction(opened, ws.data.handle);
+				let { text, said } = draftInstruction(opened, ws.data.handle, frame.build);
 				let result = await Chat.draftTasks(
 					chat(room, ws),
 					ws.data.handle,
@@ -653,6 +661,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					fail(ws, frame.rid, result.reason);
 					return;
 				}
+				if (frame.build) requestBuild(opened, ws.data.principalId);
 				reply(ws, frame.rid, {
 					kind: "implementation:draft",
 					ts: 0,
@@ -1265,6 +1274,7 @@ function drain(): Promise<void> {
 		if (summaryCoordinator) await attempt(() => summaryCoordinator!.flush());
 		summaryCoordinator?.close();
 		liveSync?.close();
+		buildReadiness?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
 		for (let result of await Promise.allSettled([stoppingJobs])) {
@@ -1426,7 +1436,9 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 }
 
 function archiveChannel(channelId: string, now: Date) {
-	return withDocumentTransition(channelId, () => archiveChannelLocked(channelId, now));
+	return withDocumentTransition(channelId, () => archiveChannelLocked(channelId, now)).finally(() =>
+		buildReadiness?.forget(channelId)
+	);
 }
 
 async function restoreChannelLocked(channelId: string, now: Date) {
@@ -1488,6 +1500,7 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 			ws.close(4404, "document deleted");
 		}
 		if (room) Rooms.forget(room);
+		buildReadiness?.forget(channelId);
 		void Service.announceDeletedUnanswered(server, storage, channel);
 		summaryCoordinator?.resume(channelId);
 		return true;
@@ -1677,6 +1690,7 @@ let hostedAuth = registerAuthRoutes(router, {
 	config: config.auth,
 	storage,
 	agent: config.agent,
+	liveBuild: !!config.liveBuild,
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
 });
@@ -1786,6 +1800,28 @@ referenceService = new ReferenceService({
 	research: researchService,
 	id: ulid,
 });
+// A living document or one with build history is past the question of readiness.
+function pastReadiness(channelId: string): boolean {
+	let held = Rooms.get(channelId)?.plan;
+	return !!held && (!!held.live || held.builds.length > 0 || held.lifecycle.history.length > 0);
+}
+if (config.liveBuild) {
+	buildReadiness = new BuildReadiness({
+		current: currentDocumentTarget,
+		skip: pastReadiness,
+		ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+			? request => askJev(request)
+			: undefined,
+		changed: (channelId, planRevision, ready) =>
+			broadcast(server, channelId, {
+				kind: "implementation:readiness",
+				ts: 0,
+				planRevision,
+				ready,
+			}),
+		error: err => console.error("chopin: build readiness failed -", err),
+	});
+}
 if (config.agent && config.backgroundJobs) {
 	summaryCoordinator = new DocumentSummaryCoordinator({
 		service: jobService,
@@ -1891,12 +1927,15 @@ registerMcpRoutes(router, hostedAuth, {
 	onDocumentPersisted: target => {
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
 		liveSync?.schedule(target);
+		buildReadiness?.schedule(target);
 	},
 	restoreChannel,
 	serializeDocument: (channelId, action) =>
 		withDocumentTransition(channelId, () => withDocumentLock(channelId, action)),
 });
 implementations = registerImplementationRoutes(router, hostedAuth, {
+	buildable: (id, planRevision) => buildReadiness?.ready(id, planRevision) ?? false,
+	liveBuild: !!config.liveBuild,
 	connections: experiments.connections,
 	busy: async connectionId =>
 		(await experiments!.service.store.active()).some(item =>
@@ -2005,6 +2044,7 @@ try {
 	await renewingLease;
 	summaryCoordinator?.close();
 	liveSync?.close();
+	buildReadiness?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});

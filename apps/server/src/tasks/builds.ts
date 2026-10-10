@@ -213,6 +213,7 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 				Object.assign(plan, previous);
 				throw error;
 			}
+			plan.buildRequested = undefined;
 			announceImplementation(plan);
 			return structuredClone(build);
 		});
@@ -349,6 +350,30 @@ export async function settleLive(
 		}
 		announceImplementation(plan);
 		return true;
+	});
+}
+
+/** Remember a one-click Build plan until its build starts, or forget it when cancelled. */
+export function requestBuild(plan: Plan, by: string | undefined): void {
+	let next = by === undefined ? undefined : { by, revision: plan.revision };
+	if (!next && !plan.buildRequested) return;
+	plan.buildRequested = next;
+	announceImplementation(plan);
+}
+
+/** Keep a queued build claimable while its connection finishes a prototype first. */
+export function renewQueued(plan: Plan, id: string): Promise<void> {
+	return exclusive(plan, async () => {
+		let build = plan.builds.at(-1);
+		if (build?.id !== id || build.state !== "queued") return;
+		let previous = plan.builds;
+		plan.builds = [...previous.slice(0, -1), { ...build, expiresAt: Date.now() + 90_000 }];
+		try {
+			await persistExclusive(plan, true);
+		} catch (error) {
+			plan.builds = previous;
+			throw error;
+		}
 	});
 }
 
@@ -827,6 +852,18 @@ export function liveSnapshot(plan: Plan, connections: Connection[]): LiveSnapsho
 	if (!live) return;
 	let { baseSource, target: _target, commits, ...rest } = live;
 	let rebuild = plan.builds.findLast(build => build.kind === "rebuild");
+	// The first build's tasks, then each rebuild's appended version, with their last reported state.
+	let first = plan.builds.find(build => build.id === live.buildId)?.graphVersion;
+	let history = plan.graph ? historyFor(plan.graph, plan.lifecycle) : [];
+	let tasks = (plan.graph?.versions ?? []).filter(version =>
+		first !== undefined && version.number >= first
+	).flatMap(version => {
+		let progress = history.findLast(item => item.run.graphVersion === version.number)?.progress;
+		return version.definition.tasks.map(task => {
+			let report = progress?.tasks.find(item => item.id === task.id);
+			return { ...structuredClone(task), ...(report ? { progress: structuredClone(report) } : {}) };
+		});
+	});
 	let unfinished = outstandingTasks(plan).map(({ id, title, state, blocker }) => ({
 		id,
 		title,
@@ -836,6 +873,7 @@ export function liveSnapshot(plan: Plan, connections: Connection[]): LiveSnapsho
 	return {
 		...structuredClone(rest),
 		commits: structuredClone(commits ?? []),
+		tasks,
 		...(unfinished.length ? { outstandingTasks: unfinished } : {}),
 		...(rebuild ? { rebuild: structuredClone(rebuild) } : {}),
 		outOfSync: source(plan) !== baseSource,

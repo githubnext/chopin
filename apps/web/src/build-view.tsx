@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { ApiError } from "./api";
 import {
 	advanceDraft,
+	ago,
 	buildPhase,
 	buildProgress,
 	draftInFlight,
@@ -10,12 +10,22 @@ import {
 	draftRefusalCopy,
 	elapsed,
 	plural,
+	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
+	startingLabel,
+	SYNC_LABEL,
+	syncHint,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
 } from "./build-model";
+import {
+	cancelBuildRequest,
+	implementationEndpoint,
+	implementationResponse as response,
+	startBuild,
+} from "./build-start";
 
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { ReactNode } from "react";
@@ -29,20 +39,8 @@ const requests = new Map<string, DraftRequest>();
 /** How long a request may wait for the server's answer before it counts as failed. */
 const ANSWER_WINDOW_MS = 10_000;
 
-async function response<T>(result: Response): Promise<T> {
-	let value = await result.json();
-	if (!result.ok) throw new ApiError(value.error ?? "Build is unavailable", result.status);
-	return value;
-}
-
 function sentence(text: string): string {
 	return text.replace(/^[a-z]/, letter => letter.toUpperCase());
-}
-
-/** The server's refusals for a connection it cannot reach mean the local agent is not running. */
-function offline(error: unknown): boolean {
-	return error instanceof ApiError && error.status === 409
-		&& /^no-workspace$|offline or busy/.test(error.message);
 }
 
 export function BuildView(
@@ -51,6 +49,7 @@ export function BuildView(
 		canEdit,
 		chatLoaded,
 		comments,
+		needsAgentSignal = 0,
 		onShowDecisions,
 		onShowDocument,
 		planner,
@@ -66,6 +65,8 @@ export function BuildView(
 		chatLoaded: boolean;
 		/** Accepted comments the document has not yet taken in. */
 		comments: number;
+		/** Increments when the header's Build plan found no local agent, to show how to start one. */
+		needsAgentSignal?: number;
 		onShowDecisions: () => void;
 		onShowDocument: () => void;
 		planner: boolean;
@@ -105,7 +106,7 @@ export function BuildView(
 	 */
 	let activation = useRef({ id: 0, decided: false, eligible: undefined as string | undefined });
 	let [autoSent, setAutoSent] = useState(0);
-	let endpoint = `/api/channels/${encodeURIComponent(room)}/implementation`;
+	let endpoint = implementationEndpoint(room);
 	let phase = buildPhase(snapshot);
 	let progress = buildProgress(snapshot);
 	let draft = phase.kind === "drafting" ? phase.draft : undefined;
@@ -221,7 +222,7 @@ export function BuildView(
 		return () => window.clearTimeout(timer);
 	}, [request?.state, request?.key]);
 
-	let pending = phase.kind === "building";
+	let pending = phase.kind === "building" || phase.kind === "live";
 	useEffect(() => {
 		if (!pending || !active) return;
 		setNow(Date.now());
@@ -231,6 +232,9 @@ export function BuildView(
 
 	// The local-agent note answers one press of one button; a new phase clears it.
 	useEffect(() => setNeedsAgent(false), [phase.kind]);
+	useEffect(() => {
+		if (needsAgentSignal > 0) setNeedsAgent(true);
+	}, [needsAgentSignal]);
 
 	useEffect(() => {
 		let follow = () => {
@@ -255,26 +259,13 @@ export function BuildView(
 	let start = async () => {
 		if (!snapshot?.graph || busy) return;
 		setActionError(undefined);
-		// The server picks the clicker's own connection; a snapshot can predate connecting.
 		setNeedsAgent(false);
 		setBusy(true);
 		try {
-			await response(
-				await fetch(endpoint, {
-					method: "POST",
-					headers: { "content-type": "application/json" },
-					body: JSON.stringify({
-						...(snapshot.build ? { retryOf: snapshot.build.id } : {}),
-						planRevision: snapshot.planRevision,
-						graphVersion: snapshot.graph.number,
-						graphRevision: snapshot.graph.revision,
-					}),
-				}),
-			);
-			setRefresh(value => value + 1);
+			if (await startBuild(room, snapshot) === "needs-agent") setNeedsAgent(true);
+			else setRefresh(value => value + 1);
 		} catch (error) {
-			if (offline(error)) setNeedsAgent(true);
-			else setActionError(sentence(error instanceof Error ? error.message : "Build failed"));
+			setActionError(sentence(error instanceof Error ? error.message : "Build failed"));
 		} finally {
 			setBusy(false);
 		}
@@ -302,7 +293,10 @@ export function BuildView(
 		}
 	};
 
-	let tasks = snapshot?.graph?.definition.tasks ?? [];
+	// A living document lists its first build's tasks and every rebuild's after them.
+	let tasks = phase.kind === "live"
+		? snapshot?.live?.tasks ?? []
+		: snapshot?.graph?.definition.tasks ?? [];
 	// Drafting: our turn is under way, or Build is about to ask, or it failed, or a person decides.
 	let awaitingAuto = !!key && key === activation.current.eligible
 		&& autoSent !== activation.current.id && !drafted.has(key);
@@ -393,17 +387,42 @@ export function BuildView(
 				</span>
 			)
 			: "This document can’t be built yet.";
+		// A one-click Build plan waits here and starts once the blockers clear.
+		if (canEdit && userId && snapshot?.buildRequested?.by === userId) {
+			action = (
+				<button
+					className="btn btn-md btn-outline shrink-0"
+					onClick={() => {
+						setActionError(undefined);
+						cancelBuildRequest(room).then(
+							() => setRefresh(value => value + 1),
+							error =>
+								setActionError(sentence(error instanceof Error ? error.message : "Cancel failed")),
+						);
+					}}
+					type="button"
+				>
+					Cancel build
+				</button>
+			);
+		}
 	} else if (phase.kind === "review") {
 		status = plural(tasks.length, "task", "tasks");
 		if (canEdit) action = primary;
 	} else if (phase.kind === "building") {
 		since = snapshot?.build && elapsed(snapshot.build.createdAt, now);
 		let who = startedBy(snapshot, userId);
+		let { hint, queued } = startingLabel(snapshot);
 		status = (
 			<>
-				<span aria-hidden="true" className="build-pulse" />
+				{queued
+					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
+					: <span aria-hidden="true" className="build-pulse" />}
 				<span className="min-w-0 flex-1">
-					Building{who ? ` · started by ${who === "you" ? who : `@${who}`}` : ""}
+					{queued ? "Queued" : "Building"}
+					{hint
+						? <span className="text-text-tertiary">{` · ${hint}`}</span>
+						: who && ` · started by ${who === "you" ? who : `@${who}`}`}
 				</span>
 			</>
 		);
@@ -423,9 +442,26 @@ export function BuildView(
 				</button>
 			);
 		}
+	} else if (phase.kind === "live") {
+		let commits = snapshot?.live?.commits.length ?? 0;
+		let hint = syncHint(phase.sync, snapshot, userId);
+		status = (
+			<>
+				{phase.sync.kind === "building" && <span aria-hidden="true" className="build-pulse" />}
+				<span className="min-w-0 flex-1">
+					Living document ·{" "}
+					{phase.sync.kind === "building" ? "Building" : SYNC_LABEL[phase.sync.kind]}
+					{phase.sync.kind === "in-sync"
+						&& ` · ${plural(commits, "commit", "commits")} since first build`}
+					{hint && <span className="text-text-tertiary">{` · ${hint}`}</span>}
+				</span>
+			</>
+		);
 	} else {
 		status = `Built · ${plural(phase.pullRequests, "pull request", "pull requests")}`;
 	}
+	// A pull request shared by several tasks lists its commits under the first of them.
+	let listed = new Set<string>();
 
 	return (
 		<div className="build-view">
@@ -501,14 +537,19 @@ export function BuildView(
 				{showTasks && (
 					<ol aria-label="Tasks" className="build-tasks" data-stale={staleTasks || undefined}>
 						{tasks.map(task => {
-							let report = progress?.tasks.find(item =>
-								item.id === task.id
-							);
+							let report = phase.kind === "live"
+								? snapshot?.live?.tasks.find(item =>
+									item.id === task.id
+								)?.progress
+								: progress?.tasks.find(item =>
+									item.id === task.id
+								);
+							let url = report?.pullRequest?.url;
+							let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
+							if (url) listed.add(url);
 							let state: TaskState = report?.state ?? "queued";
 							let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
-							let after = task.dependsOn.map(id =>
-								tasks.find(item => item.id === id)?.title ?? id
-							);
+							let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
 							let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
 							return (
 								<li className="build-task" id={`task-${task.id}`} key={task.id}>
@@ -521,6 +562,8 @@ export function BuildView(
 											number,
 										}}
 										blocker={report?.blocker}
+										commits={commits}
+										now={now}
 										state={state}
 										task={task}
 									/>
@@ -538,10 +581,12 @@ export function BuildView(
 }
 
 function TaskRow(
-	{ after, blocker, expanded, onToggle, pullRequest, state, task }: {
+	{ after, blocker, commits, expanded, now, onToggle, pullRequest, state, task }: {
 		after: string[];
 		blocker?: string;
+		commits: Array<{ sha: string; message: string; at: string }>;
 		expanded: boolean;
+		now: number;
 		onToggle: () => void;
 		pullRequest?: { url: string; state: "open" | "merged" | "closed"; number?: number };
 		state: TaskState;
@@ -589,6 +634,24 @@ function TaskRow(
 						)}
 						{after.length > 0 && <p className="m-0 text-text-tertiary">After {after.join(", ")}</p>}
 						{blocker && <p className="build-task-blocker">Blocked: {blocker}</p>}
+						{pullRequest && commits.length > 0 && (
+							<ul aria-label="Commits" className="build-task-commits">
+								{commits.map(commit => (
+									<li key={commit.sha}>
+										<a
+											className="build-task-sha"
+											href={`${pullRequest.url}/commits/${commit.sha}`}
+											rel="noreferrer"
+											target="_blank"
+										>
+											{commit.sha.slice(0, 7)}
+										</a>
+										<span className="min-w-0 flex-1 truncate">{commit.message}</span>
+										<span className="build-elapsed">{ago(commit.at, now)}</span>
+									</li>
+								))}
+							</ul>
+						)}
 					</div>
 				</div>
 			</div>

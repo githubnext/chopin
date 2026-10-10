@@ -1,5 +1,5 @@
 import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
-import { implementationStatus } from "../tasks/notifications";
+import { announceImplementation, implementationStatus } from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
  * The plan, as a room offers it.
@@ -228,6 +228,11 @@ export type Plan = {
 	lifecycle: Lifecycle;
 	/** The finished build this living document was last delivered from. */
 	live?: LiveBuild;
+	/**
+	 * A one-click Build plan waiting for its tasks, kept until the build starts or is cancelled so
+	 * the click outlives a decision the draft raised and a reload. In memory only (prototype).
+	 */
+	buildRequested?: { by: string; revision: number };
 	/** A claim has closed mutation ingress while accepted work drains. */
 	claiming: boolean;
 	/**
@@ -884,6 +889,7 @@ async function commitHosted(
 	}
 	try {
 		let sourceChanged = captured.source !== durable.committedSource;
+		let wasInSync = durable.committedSource === plan.live?.baseSource;
 		let result = await durable.storage.collaboration.commit({
 			channelId: durable.channelId,
 			lease: durable.lease(),
@@ -922,6 +928,10 @@ async function commitHosted(
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
 		announceUnanswered(plan);
+		// A living document's sync status flips only here, between rebuilds.
+		if (plan.live && wasInSync !== (captured.source === plan.live.baseSource)) {
+			announceImplementation(plan);
+		}
 		if (plan.document.epoch === captured.epoch) {
 			plan.document.checkpoint = new Uint8Array(captured.document);
 		}

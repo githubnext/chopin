@@ -164,6 +164,40 @@ async function settle(plan: Plan) {
 }
 
 describe("living-document sync", () => {
+	it("tells viewers only when an edit flips the document in or out of sync", async () => {
+		let { plan } = await harness();
+		let frames: string[] = [];
+		spyOn(plan.server, "publish").mockImplementation(
+			((_topic: string, data: string) => {
+				if (data.includes('"plan:implementation"')) frames.push(data);
+				return 0;
+			}) as never,
+		);
+		let write = async (text: string, key: string) => {
+			let result = await rewrite(plan, text, (value, revision) => ({
+				idempotencyKey: key,
+				fingerprint: key,
+				fromRevision: plan.revision,
+				client: { name: "test", version: "1" },
+				document: { source: value, revision, title: "Living document", url: "https://chopin.test" },
+			}));
+			expect(result.ok).toBe(true);
+			await settle(plan);
+		};
+		await write("The built paragraph.\n", "built");
+		expect(frames).toHaveLength(0);
+		// As a landed rebuild leaves it: the live base is the current source.
+		let built = source(plan);
+		plan.live = { ...plan.live!, baseSource: built };
+		await write(`${built}\nOne edit.\n`, "out-1");
+		expect(frames).toHaveLength(1);
+		await write(`${built}\nTwo edits.\n`, "out-2");
+		expect(frames).toHaveLength(1);
+		await write(built, "back");
+		expect(frames).toHaveLength(2);
+		await close(plan);
+	});
+
 	it("waits for 45 seconds of quiet before rebuilding", async () => {
 		let { plan, queued, edit, advance } = await harness();
 		edit();

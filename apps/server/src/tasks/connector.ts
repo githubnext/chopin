@@ -6,7 +6,14 @@ import { LIFECYCLE_TOOLS, lifecycleCall } from "../mcp/lifecycle";
 import { exclusive, source } from "../plan/service";
 import type { Plan } from "../plan/service";
 import { claimImplementation, reportImplementationLifecycle } from "./plan-graphs";
-import { pickBuild, readRebuild, rebuildReportSchema, reportBuild, reportRebuild } from "./builds";
+import {
+	pickBuild,
+	readRebuild,
+	rebuildReportSchema,
+	renewQueued,
+	reportBuild,
+	reportRebuild,
+} from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 
 export type WithPlan = <T>(id: string, action: (plan: Plan) => Promise<T>) => Promise<T>;
@@ -101,6 +108,8 @@ export function implementationConnector(
 	connections: Connections,
 	documentUrl: (id: string) => Promise<string>,
 	documentExists: (id: string) => Promise<boolean>,
+	/** Whether a prototype is executing on a connection; a build queued behind it waits. */
+	prototyping?: (connectionId: string) => Promise<boolean>,
 	options: { retryMs?: number; retries?: number } = {},
 ) {
 	let tracked = new Set<string>();
@@ -115,24 +124,26 @@ export function implementationConnector(
 		});
 		return operation;
 	};
+	/** The connection's current build; a finished one hands over to the next queued document. */
 	let pending = async (connection: Connection) => {
-		let documentId = connections.assigned(connection.id);
-		if (!documentId) return undefined;
-		try {
-			let build = await documentExists(documentId)
-				? await withPlan(documentId, async plan => {
-					let build = plan.builds.at(-1);
-					return build?.connectionId === connection.id && build.user === connection.owner
-						? build
-						: undefined;
-				})
-				: undefined;
-			if (!build || !["queued", "starting", "running"].includes(build.state)) {
+		// Bounded by the queue: each pass releases one document.
+		for (let pass = 0; pass <= 100; pass++) {
+			let documentId = connections.assigned(connection.id);
+			if (!documentId) return undefined;
+			try {
+				let build = await documentExists(documentId)
+					? await withPlan(documentId, async plan => {
+						let build = plan.builds.at(-1);
+						return build?.connectionId === connection.id && build.user === connection.owner
+							? build
+							: undefined;
+					})
+					: undefined;
+				if (build && ["queued", "starting", "running"].includes(build.state)) return build;
 				connections.release(connection.id, documentId);
+			} catch {
+				return undefined;
 			}
-			return build;
-		} catch {
-			return undefined;
 		}
 	};
 	let api = {
@@ -339,7 +350,18 @@ export function implementationConnector(
 						tracked.delete(id);
 						return;
 					}
-					if (!connections.get(build.connectionId) || build.expiresAt <= Date.now()) {
+					let connected = !!connections.get(build.connectionId);
+					// Queued behind another document's build on the same connection.
+					let behind = connections.assigned(build.connectionId) !== id
+						&& connections.queued(build.connectionId).includes(id);
+					if (
+						connected && build.state === "queued"
+						&& (behind || await prototyping?.(build.connectionId))
+					) {
+						await renewQueued(plan, build.id);
+						return;
+					}
+					if (!connected || build.expiresAt <= Date.now()) {
 						await reportBuild(plan, build.user, build.connectionId, build.id, {
 							state: "failed",
 							error: "Workspace disconnected or agent stopped responding. No automatic replay.",

@@ -2,17 +2,31 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	advanceDraft,
+	advanceFirstBuild,
+	ago,
+	attentionHint,
 	buildPhase,
 	draftKey,
 	draftRefusalCopy,
 	elapsed,
+	firstBuildStep,
+	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
+	startingHint,
+	startingLabel,
+	syncHint,
+	syncStatus,
 	taskStartsOpen,
+	waitingLabel,
 } from "./build-model";
 
-import type { BuildRequest, ImplementationSnapshot } from "@chopin/protocol/implementation";
+import type {
+	BuildRequest,
+	ImplementationSnapshot,
+	LiveSnapshot,
+} from "@chopin/protocol/implementation";
 
 type History = ImplementationSnapshot["lifecycle"]["history"][number];
 
@@ -38,6 +52,7 @@ function snapshot(change: Partial<ImplementationSnapshot> = {}): ImplementationS
 		},
 		localAgent: false,
 		blockers: [],
+		buildReady: true,
 		lifecycle: { execution: { state: "idle" }, history: [] },
 		...change,
 	};
@@ -274,5 +289,281 @@ describe("refusals", () => {
 			.toBe("Chopin is busy with other requests. Try again shortly.");
 		expect(draftRefusalCopy("not connected")).toBeUndefined();
 		expect(draftRefusalCopy("could not save the request")).toBeUndefined();
+	});
+});
+
+describe("first build", () => {
+	let idle = { stage: "idle" } as const;
+	let fresh = snapshot({ graph: undefined });
+
+	it("offers the button only for a ready document that was never built", () => {
+		expect(firstBuildStep(fresh, idle)).toEqual({ view: "ready" });
+		expect(firstBuildStep(snapshot(), idle)).toEqual({ view: "ready" });
+		expect(firstBuildStep(undefined, idle)).toEqual({ view: "hidden" });
+		expect(firstBuildStep(snapshot({ graph: undefined, buildReady: false }), idle).view)
+			.toBe("hidden");
+		expect(firstBuildStep(snapshot({ blockers: ["unanswered questionnaires"] }), idle).view)
+			.toBe("hidden");
+		expect(firstBuildStep(snapshot({ build: build("failed") }), idle).view).toBe("hidden");
+		expect(firstBuildStep(snapshot({ build: build("running") }), idle).view).toBe("working");
+	});
+
+	it("drafts, then starts the drafted tasks without a review step", () => {
+		let state = advanceFirstBuild(idle, { type: "press" });
+		expect(firstBuildStep(fresh, state)).toEqual({ view: "working", next: "draft" });
+		state = advanceFirstBuild(state, { type: "draft-sent" });
+		expect(firstBuildStep(fresh, state)).toEqual({ view: "working" });
+		// Tasks for an older revision are not the drafted ones.
+		let stale = snapshot({ planRevision: 5 });
+		expect(firstBuildStep(stale, state)).toEqual({ view: "working" });
+		expect(firstBuildStep(snapshot(), state)).toEqual({ view: "working", next: "start" });
+		state = advanceFirstBuild(state, { type: "start" });
+		expect(state).toEqual({ stage: "starting" });
+		expect(firstBuildStep(snapshot(), state)).toEqual({ view: "working" });
+		state = advanceFirstBuild(state, { type: "started" });
+		expect(firstBuildStep(snapshot(), state)).toEqual({ view: "working" });
+		expect(firstBuildStep(snapshot({ build: build("queued") }), state))
+			.toEqual({ view: "working", next: "reset" });
+	});
+
+	it("starts existing tasks for this revision at once", () => {
+		let state = advanceFirstBuild(idle, { type: "press" });
+		expect(firstBuildStep(snapshot(), state).next).toBe("start");
+	});
+
+	it("returns to the button when drafting or starting fails", () => {
+		let sent = advanceFirstBuild(advanceFirstBuild(idle, { type: "press" }), {
+			type: "draft-sent",
+		});
+		expect(advanceFirstBuild(sent, { type: "draft-ended", drafted: true })).toBe(sent);
+		let failed = advanceFirstBuild(sent, { type: "draft-ended", drafted: false });
+		expect(failed.stage).toBe("failed");
+		expect(firstBuildStep(fresh, failed)).toEqual({ view: "ready" });
+		expect(advanceFirstBuild(failed, { type: "press" })).toEqual({
+			stage: "drafting",
+			sent: false,
+		});
+
+		let starting = advanceFirstBuild(sent, { type: "start" });
+		let noAgent = advanceFirstBuild(starting, { type: "start-refused", agent: true });
+		expect(noAgent).toEqual({ stage: "failed", agent: true, message: undefined });
+		expect(firstBuildStep(snapshot(), noAgent)).toEqual({ view: "ready" });
+	});
+
+	it("waits through a decision the draft raised, then redrafts and starts", () => {
+		let requested = { buildRequested: { by: "me", revision: 4 } };
+		let state = advanceFirstBuild(advanceFirstBuild(idle, { type: "press" }), {
+			type: "draft-sent",
+		});
+		let blocked = snapshot({ blockers: ["unanswered questionnaires"], ...requested });
+		expect(firstBuildStep(blocked, state, "me")).toEqual({ view: "waiting", next: "wait" });
+		state = advanceFirstBuild(state, { type: "wait" });
+		expect(state).toEqual({ stage: "waiting" });
+		// The draft turn ending while blocked is not a failure.
+		expect(advanceFirstBuild(state, { type: "draft-ended", drafted: false })).toBe(state);
+		expect(firstBuildStep(blocked, state, "me")).toEqual({ view: "waiting" });
+		expect(waitingLabel(blocked)).toEqual({ label: "Waiting on a decision", target: "decisions" });
+		// Answering moved the document on, so the tasks are stale: draft them again.
+		let answered = snapshot({ planRevision: 5, ...requested });
+		expect(firstBuildStep(answered, state, "me")).toEqual({ view: "working", next: "draft" });
+		state = advanceFirstBuild(state, { type: "draft-sent" });
+		expect(firstBuildStep(answered, state, "me")).toEqual({ view: "working" });
+		let redrafted = snapshot({ ...requested });
+		expect(firstBuildStep(redrafted, state, "me")).toEqual({ view: "working", next: "start" });
+	});
+
+	it("resumes a request the server kept across a reload", () => {
+		let requested = { buildRequested: { by: "me", revision: 4 } };
+		let blocked = snapshot({ blockers: ["unanswered questionnaires"], ...requested });
+		expect(firstBuildStep(blocked, idle, "me")).toEqual({ view: "waiting", next: "resume" });
+		expect(firstBuildStep(snapshot(requested), idle, "me"))
+			.toEqual({ view: "working", next: "resume" });
+		// Someone else's request, or one for a document since built, is not this viewer's to resume.
+		expect(firstBuildStep(blocked, idle, "you").view).toBe("hidden");
+		expect(
+			firstBuildStep(
+				{
+					...blocked,
+					lifecycle: { ...blocked.lifecycle, history: [run({ kind: "implemented" })] },
+				},
+				idle,
+				"me",
+			).next,
+		).toBeUndefined();
+		let state = advanceFirstBuild(idle, { type: "resume" });
+		expect(state).toEqual({ stage: "waiting" });
+		expect(firstBuildStep(snapshot(requested), state, "me").next).toBe("start");
+		// Cancelled: the request is gone, so the wait ends.
+		expect(firstBuildStep(snapshot({ blockers: ["unanswered questionnaires"] }), state, "me"))
+			.toEqual({ view: "hidden", next: "reset" });
+	});
+});
+
+const PR = "https://github.com/o/r/pull/7";
+
+function live(change: Partial<LiveSnapshot> = {}): ImplementationSnapshot {
+	return snapshot({
+		live: {
+			buildId: "b",
+			user: "u",
+			repositoryId: "r",
+			checkout: { repository: "o/r", commit: "0".repeat(40) },
+			baseRevision: 4,
+			pullRequests: [PR],
+			commits: [],
+			tasks: [],
+			outOfSync: false,
+			builderConnected: true,
+			...change,
+		},
+	});
+}
+
+function rebuild(state: BuildRequest["state"]): BuildRequest {
+	return { ...build(state), id: "r1", kind: "rebuild", baseRevision: 4, targetRevision: 6 };
+}
+
+describe("living document sync", () => {
+	it("is absent until the first build has delivered", () => {
+		expect(syncStatus(snapshot())).toBeUndefined();
+		expect(syncStatus(undefined)).toBeUndefined();
+	});
+
+	it("reads as in sync when the pull requests match the document", () => {
+		expect(syncStatus(live())).toEqual({ kind: "in-sync" });
+		expect(buildPhase(live())).toEqual({ kind: "live", sync: { kind: "in-sync" } });
+	});
+
+	it("reads as building while a rebuild or the first build runs", () => {
+		for (let state of ["queued", "starting", "running"] as const) {
+			expect(syncStatus(live({ outOfSync: true, rebuild: rebuild(state) })))
+				.toEqual({ kind: "building" });
+		}
+		expect(syncStatus({ ...live(), build: build("running") })).toEqual({ kind: "building" });
+	});
+
+	it("explains a first build queued behind another document's build", () => {
+		let queued = snapshot({ build: build("queued"), waitingForDocument: { title: "Docs site" } });
+		expect(startingLabel(queued)).toEqual({
+			label: "Queued",
+			queued: true,
+			hint: "Starts when your agent finishes “Docs site”",
+		});
+		expect(startingHint(snapshot({ build: build("queued"), waitingForDocument: {} })))
+			.toBe("Starts when your agent finishes another document");
+	});
+
+	it("explains a first build queued behind a prototype", () => {
+		let queued = snapshot({ build: build("queued"), waitingForPrototype: true });
+		expect(firstBuildStep(queued, { stage: "idle" }).view).toBe("working");
+		expect(startingHint(queued)).toBe("Starts when the current prototype finishes");
+		expect(startingLabel(queued)).toEqual({
+			label: "Queued",
+			queued: true,
+			hint: "Starts when the current prototype finishes",
+		});
+		expect(startingLabel(snapshot({ build: build("queued") })))
+			.toEqual({ label: "Building…", queued: false });
+		expect(startingLabel(undefined)).toEqual({ label: "Building…", queued: false });
+		expect(startingHint(snapshot({ build: build("queued") }))).toBeUndefined();
+		expect(startingHint(snapshot({ build: build("running"), waitingForPrototype: true })))
+			.toBeUndefined();
+	});
+
+	it("explains why it is out of sync", () => {
+		let pending = live({ outOfSync: true, rebuild: rebuild("stopped") });
+		expect(syncStatus(pending)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 0 });
+		expect(syncHint(syncStatus(pending), pending, "me")).toBe("Changes will build shortly");
+		let waiting = { ...live({ outOfSync: true, builderConnected: false }), builtBy: "jev" };
+		expect(syncStatus(waiting)).toEqual({ kind: "out-of-sync", reason: "waiting", outstanding: 0 });
+		expect(syncHint(syncStatus(waiting), waiting, "me")).toBe("Waiting for @jev’s agent");
+		expect(syncHint(syncStatus(waiting), waiting, "u")).toBe("Waiting for your agent");
+		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
+		expect(syncStatus(failed)).toEqual({ kind: "out-of-sync", reason: "failed", outstanding: 0 });
+		expect(syncHint(syncStatus(failed), failed, "me")).toBe("The last rebuild failed");
+	});
+
+	it("needs attention while a blocked task waits for an edit, even in sync", () => {
+		let outstandingTasks = [
+			{ id: "a", title: "Store graphs", state: "blocked" as const, blocker: "Which database?" },
+			{ id: "b", title: "Render graphs", state: "queued" as const },
+		];
+		let stuck = live({ outstandingTasks });
+		expect(syncStatus(stuck)).toEqual({ kind: "needs-attention", outstanding: 2 });
+		expect(syncHint(syncStatus(stuck), stuck, "me"))
+			.toBe(
+				"“Store graphs” is blocked: Which database? (and 1 other). Edit the document to retry.",
+			);
+		let edited = live({ outstandingTasks, outOfSync: true });
+		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
+		expect(syncHint(syncStatus(edited), edited, "me"))
+			.toBe("Changes will build shortly · will also retry 2 blocked tasks");
+		// Syncing beats needing attention.
+		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
+			.toEqual({ kind: "building" });
+	});
+
+	it("ends a blocker's hint with one stop, whatever punctuation it brought", () => {
+		let hint = (blocker: string) =>
+			attentionHint(live({
+				outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker }],
+			}));
+		expect(hint("I can't decide this myself.")).toBe(
+			"“Ship” is blocked: I can't decide this myself. Edit the document to retry.",
+		);
+		expect(hint("Which database?")).toBe(
+			"“Ship” is blocked: Which database? Edit the document to retry.",
+		);
+	});
+
+	it("needs attention when a first build stopped on a blocker before any pull request", () => {
+		let stopped = live({
+			pullRequests: [],
+			outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker: "Pick a host" }],
+		});
+		expect(buildPhase(stopped)).toEqual({
+			kind: "live",
+			sync: { kind: "needs-attention", outstanding: 1 },
+		});
+		expect(attentionHint(stopped)).toBe(
+			"“Ship” is blocked: Pick a host. Edit the document to retry.",
+		);
+	});
+
+	it("does not call a failed rebuild out of sync once later edits match", () => {
+		expect(syncStatus(live({ rebuild: rebuild("failed") }))).toEqual({ kind: "in-sync" });
+		expect(syncHint({ kind: "in-sync" }, live(), "me")).toBeUndefined();
+	});
+});
+
+describe("living document commits", () => {
+	let commit = (sha: string, at: string, pullRequest = PR) => ({
+		pullRequest,
+		sha,
+		message: sha,
+		revision: 5,
+		at,
+	});
+
+	it("groups one pull request's commits, newest first", () => {
+		let value = live({
+			commits: [
+				commit("a", "2026-10-10T10:00:00.000Z"),
+				commit("b", "2026-10-10T11:00:00.000Z", "https://github.com/o/r/pull/8"),
+				commit("c", "2026-10-10T12:00:00.000Z"),
+				commit("d", "2026-10-10T12:00:00.000Z"),
+			],
+		});
+		expect(pullRequestCommits(value, PR).map(item => item.sha)).toEqual(["d", "c", "a"]);
+		expect(pullRequestCommits(snapshot(), PR)).toEqual([]);
+	});
+
+	it("says how long ago a commit landed", () => {
+		let now = Date.parse("2026-10-10T12:00:00.000Z");
+		expect(ago("2026-10-10T11:59:40.000Z", now)).toBe("just now");
+		expect(ago("2026-10-10T11:55:00.000Z", now)).toBe("5m ago");
+		expect(ago("2026-10-10T09:00:00.000Z", now)).toBe("3h ago");
+		expect(ago("2026-10-08T12:00:00.000Z", now)).toBe("2d ago");
+		expect(ago("nonsense", now)).toBeUndefined();
 	});
 });
