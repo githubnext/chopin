@@ -511,6 +511,27 @@
 	}
 }
 
+.agent-mark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 0.875rem;
+	height: 0.875rem;
+	color: var(--color-brand);
+}
+.agent-mark svg {
+	width: 0.875rem;
+	height: 0.875rem;
+}
+.agent-mark[data-circle] {
+	width: 1.5rem;
+	height: 1.5rem;
+	border-radius: var(--radius-full);
+	background: var(--color-brand);
+	color: var(--color-page);
+}
+
 /* Reader-local comment chrome must not move collaborative line boxes. */
 .plan-comment-layer {
 	pointer-events: none;

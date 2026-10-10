@@ -102,26 +102,6 @@
 .chat-composer .composer-mode[aria-pressed="true"] {
 	color: var(--color-brand-ink);
 }
-.chat-agent-mark {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-	width: 0.875rem;
-	height: 0.875rem;
-	color: var(--color-brand);
-}
-.chat-agent-mark svg {
-	width: 0.875rem;
-	height: 0.875rem;
-}
-.chat-agent-mark[data-circle] {
-	width: 1.5rem;
-	height: 1.5rem;
-	border-radius: var(--radius-full);
-	background: var(--color-brand);
-	color: var(--color-page);
-}
 .chat-composer .composer-notice {
 	display: flex;
 	align-items: center;

@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { ChopinMark } from "@chopin/editor";
 import { MessageIcon } from "@chopin/icons";
-
-import { ChopinMark } from "./agent-mark";
 
 export function ModeSwitch(
 	{ effectiveMode, disabled, onToggle }: {
