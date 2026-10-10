@@ -22,6 +22,7 @@ type Dependencies = {
 	github?: GitHub;
 	clock?: Clock;
 	agent?: boolean;
+	liveBuild?: boolean;
 	device?: DeviceAuthorization;
 	credentials?: LocalCredentials;
 	delay?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -343,6 +344,7 @@ export function registerAuthRoutes(
 			let reply = authenticated
 				? json({
 					agent: dependencies.agent ?? true,
+					...(dependencies.liveBuild ? { liveBuild: true } : {}),
 					...(local ? { auth: "local" } : {}),
 					installUrl: "/auth/github/install",
 					user: {
@@ -355,6 +357,7 @@ export function registerAuthRoutes(
 				: json({
 					user: null,
 					agent: dependencies.agent ?? true,
+					...(dependencies.liveBuild ? { liveBuild: true } : {}),
 					...(local ? { auth: "local" } : {}),
 				});
 			if (restoredCookie) reply.headers.append("set-cookie", restoredCookie);

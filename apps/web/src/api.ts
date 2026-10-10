@@ -7,6 +7,7 @@ export type User = {
 export type Session = {
 	user: User | null;
 	agent: boolean;
+	liveBuild?: boolean;
 	installUrl?: string;
 	expiresAt?: string;
 	auth?: "local";

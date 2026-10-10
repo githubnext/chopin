@@ -130,4 +130,60 @@ describe("BuildReadiness", () => {
 		readiness.close();
 		expect(clock.queue[0]!.cancelled).toBe(true);
 	});
+
+	test("skipped documents are never judged", async () => {
+		let asks: JevRequest[] = [];
+		let readiness = new BuildReadiness({
+			current: async () => target(long),
+			ask: jev(1, asks),
+			skip: () => true,
+		});
+		expect(readiness.ready("doc", 1)).toBe(false);
+		await Bun.sleep(0);
+		expect(asks.length).toBe(0);
+	});
+
+	test("caps remembered judgements", async () => {
+		let readiness = new BuildReadiness({
+			current: async id => ({ ...target(long), channelId: id }),
+			limit: 2,
+		});
+		for (let id of ["a", "b", "c"]) {
+			readiness.ready(id, 1);
+			await Bun.sleep(0);
+		}
+		expect(readiness.ready("c", 1)).toBe(true);
+		expect(readiness.ready("a", 1)).toBe(false);
+	});
+
+	test("a judgement requested mid-run runs again afterwards", async () => {
+		let revision = 1;
+		let gate: (() => void) | undefined;
+		let asks = 0;
+		let readiness = new BuildReadiness({
+			current: async () => target(long, revision),
+			ask: async request => {
+				asks++;
+				if (asks === 1) await new Promise<void>(resolve => (gate = resolve));
+				return jev(0.9)(request);
+			},
+		});
+		readiness.ready("doc", 1);
+		await Bun.sleep(0);
+		revision = 2;
+		readiness.ready("doc", 2);
+		gate!();
+		await Bun.sleep(5);
+		expect(asks).toBe(2);
+		expect(readiness.ready("doc", 2)).toBe(true);
+	});
+
+	test("forwards Jev errors before falling back", async () => {
+		let errors: unknown[] = [];
+		let failing = async (): Promise<JevResult> => {
+			throw new Error("down");
+		};
+		expect(await judgeBuildable(long, failing, err => errors.push(err))).toBe(true);
+		expect(errors.length).toBe(1);
+	});
 });
