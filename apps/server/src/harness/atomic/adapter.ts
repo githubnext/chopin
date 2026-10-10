@@ -515,7 +515,12 @@ export function createAtomicAdapter(
 
 			function observe(session: AgentSession, event: AgentSessionEvent): void {
 				let run = current;
-				if (!run) return;
+				if (!run) {
+					if (event.type === "agent_start" || event.type === "turn_start") {
+						void session.agent.abort();
+					}
+					return;
+				}
 				if (event.type === "turn_start") {
 					let offered = session.agent.state.tools.map(tool => tool.name);
 					if (!full && !sameNames(offered, activeNames(policy))) {
@@ -745,6 +750,7 @@ export function createAtomicAdapter(
 						try {
 							if (!run.stopped) {
 								run.emit({ type: "stream-start", modelId: agent.model?.id });
+								await agent.agent.waitForIdle();
 								await agent.prompt(text, { expandPromptTemplates: !!full });
 							}
 							if (run.failure) throw run.failure;
