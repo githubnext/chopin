@@ -36,7 +36,7 @@ function snapshot(change: Partial<ImplementationSnapshot> = {}): ImplementationS
 				}],
 			},
 		},
-		workspaces: [],
+		localAgent: false,
 		blockers: [],
 		lifecycle: { execution: { state: "idle" }, history: [] },
 		...change,

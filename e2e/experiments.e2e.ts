@@ -1,9 +1,15 @@
 import { performance } from "../packages/experiment/src/fixtures";
+import { testChannelPath } from "./database";
 import { content, expect, test } from "./room";
 
-test("owner pairs a workspace and publishes evidence that survives disconnect", async ({ baseURL, join, room, seed }) => {
+/** A connection serves every document in its repository, so each pairing test is its own person. */
+function person() {
+	return `ana-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+test("the clicker's own agent runs work and publishes evidence that survives disconnect", async ({ baseURL, join, room, seed }) => {
 	await seed("# Investigation\n\nCompare measured startup time.\n");
-	let page = await join("ana");
+	let page = await join(person());
 	let pairing = await (await fetch(`${baseURL}/api/connector/pairings`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -14,9 +20,15 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 		}),
 	})).json();
 	await page.goto(pairing.url);
-	await page.getByRole("combobox", { name: "Document", exact: true }).selectOption(room);
+	await expect(page.getByRole("heading", { name: "Connect this checkout of octo-org/score" }))
+		.toBeVisible();
+	await expect(page.getByRole("combobox")).toHaveCount(0);
 	await page.getByRole("button", { name: "Connect", exact: true }).click();
-	await page.getByRole("link", { name: "Open document", exact: true }).click();
+	await expect(page.getByRole("status")).toHaveText(
+		"Connected. Chopin can now run work for you in any octo-org/score document.",
+	);
+	await expect(page.getByText("a".repeat(8))).toHaveCount(0);
+	await page.goto(testChannelPath(room));
 	let paired = await (await fetch(`${baseURL}/api/connector/pairings/${pairing.id}/claim`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -38,9 +50,16 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 	]);
 	let experiment = await created.json();
 	let peer = await join("leo");
-	await expect(peer.getByRole("button", { name: "Run on my workspace", exact: true }))
-		.toBeDisabled();
-	await page.getByRole("button", { name: "Run on my workspace", exact: true }).click();
+	let proposal = page.getByRole("article", { name: "Compare startup approaches", exact: true });
+	await expect(proposal.getByRole("status")).toHaveText("Ready to run");
+	await expect(proposal.getByRole("combobox")).toHaveCount(0);
+	// Another person's Run never borrows Ana's agent.
+	let peerProposal = peer.getByRole("article", { name: "Compare startup approaches", exact: true });
+	await peerProposal.getByRole("button", { name: "Run", exact: true }).click();
+	await expect(peerProposal).toContainText("Start your local agent to run this:");
+	await expect(proposal.getByRole("status")).toHaveText("Ready to run");
+	await proposal.getByRole("button", { name: "Run", exact: true }).click();
+	await expect(proposal.getByRole("status")).toHaveText("Waiting for your local agent");
 	async function tool(name: string, args: unknown, token = paired.token) {
 		let response = await fetch(`${baseURL}/connector/mcp`, {
 			method: "POST",
@@ -104,18 +123,17 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 	});
 	expect(proposed.ok(), await proposed.text()).toBe(true);
 	let queued = page.getByRole("article", { name: "Check memory use", exact: true });
-	await queued.getByRole("button", { name: "Run on my workspace", exact: true }).click();
+	await queued.getByRole("button", { name: "Run", exact: true }).click();
 	await expect(queued.getByRole("button", { name: "Cancel investigation", exact: true }))
 		.toBeVisible();
 	await expect(peer.getByRole("button", { name: "Cancel investigation", exact: true })).toHaveCount(
 		0,
 	);
 	await queued.getByRole("button", { name: "Cancel investigation", exact: true }).click();
-	await expect(queued).toContainText("cancelled");
+	await expect(queued.getByRole("status")).toHaveText("Cancelled");
 	await queued.getByRole("button", { name: "Propose retry", exact: true }).click();
 	await expect(queued).toHaveCount(2);
-	await expect(queued.getByRole("button", { name: "Run on my workspace", exact: true }))
-		.toBeVisible();
+	await expect(queued.getByRole("button", { name: "Run", exact: true })).toBeVisible();
 	await tool("disconnect_workspace", {});
 	await page.reload();
 
@@ -132,7 +150,7 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 
 test("an incoming proposal appears inline and recovers from a failed detail load", async ({ join, seed, room }) => {
 	await seed("# Investigation\n\nCheck before choosing an approach.\n");
-	let page = await join("ana", {
+	let page = await join(person(), {
 		viewport: { width: 390, height: 844 },
 		isMobile: true,
 		hasTouch: true,
@@ -152,12 +170,12 @@ test("an incoming proposal appears inline and recovers from a failed detail load
 	});
 	await expect(card.getByRole("button", { name: "Retry loading", exact: true })).toBeVisible();
 	await card.getByRole("button", { name: "Retry loading", exact: true }).click();
-	await expect(card.getByRole("button", { name: "Run on my workspace", exact: true }))
-		.toBeDisabled();
-	await expect(card).toContainText("Connect a local workspace");
+	await expect(card.getByRole("status")).toHaveText("Ready to run");
+	await expect(card.getByRole("combobox")).toHaveCount(0);
+	await card.getByRole("button", { name: "Run", exact: true }).click();
+	await expect(card).toContainText("Start your local agent to run this:");
 	await expect(page.getByRole("alert")).toHaveCount(0);
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 	await page.reload();
-	await expect(card.getByRole("button", { name: "Run on my workspace", exact: true }))
-		.toBeDisabled();
+	await expect(card.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
 });

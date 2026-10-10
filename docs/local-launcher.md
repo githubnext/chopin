@@ -15,8 +15,9 @@ CHOPIN_URL=https://your-chopin-instance.example \
   bun run connector connect /absolute/path/to/project -- copilot --acp
 ```
 
-Open the printed pairing link, sign into Chopin, choose the document and select
-**Connect**. This is the existing investigation pairing flow. No GitHub bearer
+Open the printed pairing link, sign into Chopin and select **Connect**. This is
+the existing investigation pairing flow; one connection serves every document in
+the checkout's repository. No GitHub bearer
 needs to be configured in a second companion. The connector credential is held
 in memory and tied to the owner's browser login. Reconnect after a server
 restart or logout.
@@ -38,11 +39,12 @@ project instructions and configured services.
    [drafting tasks from Build](implementation-lifecycle.md#drafting-tasks-from-build).
 3. Review task goals, acceptance criteria and dependencies. To change them, ask
    Chopin in Chat.
-4. Select **Build on my laptop**. It uses your first available connected
-   workspace; without one, Build shows the connector command to start, and you
-   select it again once connected. Approval persists the reviewed document and
-   graph counters, checkout commit and connection owner, then freezes planning
-   edits.
+4. Select **Build on my laptop**. The build runs on your own local agent: the
+   server picks your most recently active connection for the repository that is
+   not busy, and derives the checkout from it. Without one, Build shows the
+   connector command to start, and you select it again once connected. Approval
+   persists the reviewed document and graph counters, checkout commit,
+   connection and the person who started it, then freezes planning edits.
 5. The connector creates an isolated worktree at that exact commit and an
    implementation branch, preserving existing local edits. It creates an ACP
    session and claims the graph before prompting the orchestrator.
@@ -65,8 +67,8 @@ not stop a run, and editing
 locks continue to update through the document socket. A `#task-<id>` link opens
 Build with that task expanded.
 
-Duplicate Build requests for the same owner, workspace and reviewed graph return
-the same durable intent. A picked-up build is never automatically replayed.
+Duplicate Build requests from the same person for the same reviewed graph
+return the same durable intent. A picked-up build is never automatically replayed.
 Refresh retains task progress, blockers, session
 identity and reported PRs. Expired connections or missing heartbeats mark tracked
 builds as needing attention; after a server restart, opening the document tracks
