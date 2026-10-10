@@ -371,6 +371,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	pinnedRef.current = pinned;
 	let [coarse, setCoarse] = useState(false);
 	let [primaryCoarse, setPrimaryCoarse] = useState(false);
+	let [sheetSurface, setSheetSurface] = useState<HTMLDivElement | null>(null);
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
 	let placedRef = useRef<PlacedThread[]>([]);
@@ -876,6 +877,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		host,
 		id: revealId,
 		passages: revealPassages,
+		sheet: sheetSurface,
 	});
 
 	useEffect(() => {
@@ -1309,6 +1311,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					label={compactLabel}
 					onBack={compactBack}
 					onClose={compactClose}
+					onSurface={setSheetSurface}
 				>
 					{compactContent}
 				</CommentSheet>

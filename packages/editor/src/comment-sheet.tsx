@@ -81,12 +81,14 @@ export type CommentSheetProps = {
 	/** Leave the thread for its block's list; shown when the heading is `back`. */
 	onBack?: () => void;
 	onClose: () => void;
+	/** The sheet's surface once it is mounted, for anything that keeps clear of it. */
+	onSurface?: (element: HTMLDivElement | null) => void;
 	/** A draft focuses its field; everything else focuses the close, so no keyboard springs up. */
 	focus?: "field" | "close";
 };
 
 export function CommentSheet(
-	{ children, focus = "close", heading, id, label, onBack, onClose }: CommentSheetProps,
+	{ children, focus = "close", heading, id, label, onBack, onClose, onSurface }: CommentSheetProps,
 ) {
 	let [open, setOpen] = useState(false);
 	let popup = useRef<HTMLDivElement>(null);
@@ -123,7 +125,10 @@ export function CommentSheet(
 								(focus === "field"
 									? popup.current?.querySelector<HTMLElement>("textarea")
 									: undefined) ?? close.current ?? true}
-							ref={popup}
+							ref={element => {
+								popup.current = element;
+								onSurface?.(element);
+							}}
 						>
 							<span aria-hidden="true" className="plan-comment-sheet-grabber" />
 							<Drawer.Title className="sr-only">{label}</Drawer.Title>
