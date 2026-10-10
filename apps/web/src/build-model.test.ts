@@ -13,6 +13,7 @@ import {
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
+	startingHint,
 	syncHint,
 	syncStatus,
 	taskStartsOpen,
@@ -395,6 +396,15 @@ describe("living document sync", () => {
 				.toEqual({ kind: "building" });
 		}
 		expect(syncStatus({ ...live(), build: build("running") })).toEqual({ kind: "building" });
+	});
+
+	it("explains a first build queued behind a prototype", () => {
+		let queued = snapshot({ build: build("queued"), waitingForPrototype: true });
+		expect(firstBuildStep(queued, { stage: "idle" }).view).toBe("working");
+		expect(startingHint(queued)).toBe("Starting after current prototype finishes");
+		expect(startingHint(snapshot({ build: build("queued") }))).toBeUndefined();
+		expect(startingHint(snapshot({ build: build("running"), waitingForPrototype: true })))
+			.toBeUndefined();
 	});
 
 	it("explains why it is out of sync", () => {

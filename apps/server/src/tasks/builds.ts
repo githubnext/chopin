@@ -352,6 +352,22 @@ export async function settleLive(
 	});
 }
 
+/** Keep a queued build claimable while its connection finishes a prototype first. */
+export function renewQueued(plan: Plan, id: string): Promise<void> {
+	return exclusive(plan, async () => {
+		let build = plan.builds.at(-1);
+		if (build?.id !== id || build.state !== "queued") return;
+		let previous = plan.builds;
+		plan.builds = [...previous.slice(0, -1), { ...build, expiresAt: Date.now() + 90_000 }];
+		try {
+			await persistExclusive(plan, true);
+		} catch (error) {
+			plan.builds = previous;
+			throw error;
+		}
+	});
+}
+
 /** Persist pickup before the companion receives permission to spawn a process. */
 export function pickBuild(
 	plan: Plan,

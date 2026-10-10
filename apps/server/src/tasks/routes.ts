@@ -7,7 +7,7 @@ import { exclusive } from "../plan/service";
 import { GitHubError } from "../github/client";
 import { AdmissionDenied } from "../auth/admission";
 import { implementationConnector } from "./connector";
-import type { Connections } from "../experiments/connections";
+import type { Connection, Connections } from "../experiments/connections";
 import type { HostedAuth } from "../auth/routes";
 import type { Plan } from "../plan/service";
 import type { RouteHandler, Router } from "../http/router";
@@ -74,6 +74,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			).href;
 		},
 		async id => !!await auth.storage.channels.get(id),
+		options.busy,
 	);
 	let safe = (handler: RouteHandler): RouteHandler => async (request, url, params) => {
 		try {
@@ -100,22 +101,23 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		return { session, channel, repository };
 	}
 	/**
-	 * The caller's live connections for a repository that can take a build for `id`: the one
-	 * last used for this document first, then the most recently heard from. A build already
-	 * waiting on this document does not make its connection busy, so a repeated request can
-	 * return that build.
+	 * The caller's live connections for a repository that can take a build for `id`: idle ones
+	 * before those still running a prototype, which take the build as soon as it finishes; within
+	 * each, the one last used for this document first, then the most recently heard from. A build
+	 * already waiting on this document does not make its connection busy, so a repeated request
+	 * can return that build. A connection building another document cannot take it.
 	 */
 	async function available(owner: string, repositoryId: string, id: string) {
-		let free = [];
+		let free: Connection[] = [];
+		let prototyping: Connection[] = [];
 		for (let connection of options.connections.candidates(repositoryId, owner, id)) {
 			let here = options.connections.assigned(connection.id) === id;
-			if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
-				continue;
-			}
-			if (here) free.unshift(connection);
-			else free.push(connection);
+			if (!here && await connector.busy(connection)) continue;
+			let list = await options.busy?.(connection.id) ? prototyping : free;
+			if (here) list.unshift(connection);
+			else list.push(connection);
 		}
-		return free;
+		return [...free, ...prototyping];
 	}
 	router.on(
 		"GET",
@@ -125,6 +127,9 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			connector.track(id);
 			// Cheap on purpose: whether one is free is decided when Build is pressed.
 			let localAgent = options.connections.list(channel.repositoryId, session.user.id).length > 0;
+			// Read before the plan lock; the experiment store has its own.
+			let queued = await options.withPlan(id, async plan => plan.builds.at(-1));
+			let waiting = queued?.state === "queued" && !!await options.busy?.(queued.connectionId);
 			let current = await options.withPlan(id, plan =>
 				exclusive(plan, async () => {
 					let ready = implementationReadiness(plan, plan.revision);
@@ -140,6 +145,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						blockers: ready.ok ? [] : ready.blockers,
 						localAgent,
 						buildReady: ready.ok && (options.buildable?.(id, plan.revision) ?? false),
+						...(waiting ? { waitingForPrototype: true as const } : {}),
 						lifecycle: plan.graph
 							? implementationLifecycle({
 								graph: plan.graph,
@@ -177,7 +183,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				throw new GitHubError("no-workspace", 409);
 			}
 			let [connection] = await available(session.user.id, channel.repositoryId, id);
-			if (!connection) throw new GitHubError("workspace is offline or busy", 409);
+			if (!connection) throw new GitHubError("Your local agent is building another document", 409);
 			let checkout = {
 				repository: connection.source.repository,
 				commit: connection.source.commit,
@@ -185,11 +191,9 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			};
 			connector.track(id);
 			return options.connections.locked(connection.id, async () => {
-				if (
-					!options.connections.get(connection.id)
-					|| !(await available(session.user.id, channel.repositoryId, id)).includes(connection)
-				) {
-					throw new GitHubError("workspace is offline or busy", 409);
+				if (!options.connections.get(connection.id)) throw new GitHubError("no-workspace", 409);
+				if (!(await available(session.user.id, channel.repositoryId, id)).includes(connection)) {
+					throw new GitHubError("Your local agent is building another document", 409);
 				}
 				return options.withPlan(id, async plan => {
 					try {

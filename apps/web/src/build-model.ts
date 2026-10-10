@@ -72,6 +72,13 @@ export function syncHint(
 		: "Waiting for the builder’s agent";
 }
 
+/** Why a first build has not started yet, when the viewer's agent is finishing a prototype. */
+export function startingHint(snapshot: Snapshot | undefined): string | undefined {
+	return snapshot?.waitingForPrototype && snapshot.build?.state === "queued"
+		? "Starting after current prototype finishes"
+		: undefined;
+}
+
 /** One pull request's living-document commits, newest first. */
 export function pullRequestCommits(snapshot: Snapshot | undefined, url: string) {
 	return (snapshot?.live?.commits ?? []).map((commit, index) => ({ commit, index }))

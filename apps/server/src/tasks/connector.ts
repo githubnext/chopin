@@ -6,7 +6,14 @@ import { LIFECYCLE_TOOLS, lifecycleCall } from "../mcp/lifecycle";
 import { exclusive, source } from "../plan/service";
 import type { Plan } from "../plan/service";
 import { claimImplementation, reportImplementationLifecycle } from "./plan-graphs";
-import { pickBuild, readRebuild, rebuildReportSchema, reportBuild, reportRebuild } from "./builds";
+import {
+	pickBuild,
+	readRebuild,
+	rebuildReportSchema,
+	renewQueued,
+	reportBuild,
+	reportRebuild,
+} from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 
 export type WithPlan = <T>(id: string, action: (plan: Plan) => Promise<T>) => Promise<T>;
@@ -101,6 +108,8 @@ export function implementationConnector(
 	connections: Connections,
 	documentUrl: (id: string) => Promise<string>,
 	documentExists: (id: string) => Promise<boolean>,
+	/** Whether a prototype is executing on a connection; a build queued behind it waits. */
+	prototyping?: (connectionId: string) => Promise<boolean>,
 	options: { retryMs?: number; retries?: number } = {},
 ) {
 	let tracked = new Set<string>();
@@ -339,7 +348,14 @@ export function implementationConnector(
 						tracked.delete(id);
 						return;
 					}
-					if (!connections.get(build.connectionId) || build.expiresAt <= Date.now()) {
+					let connected = !!connections.get(build.connectionId);
+					if (
+						connected && build.state === "queued" && await prototyping?.(build.connectionId)
+					) {
+						await renewQueued(plan, build.id);
+						return;
+					}
+					if (!connected || build.expiresAt <= Date.now()) {
 						await reportBuild(plan, build.user, build.connectionId, build.id, {
 							state: "failed",
 							error: "Workspace disconnected or agent stopped responding. No automatic replay.",

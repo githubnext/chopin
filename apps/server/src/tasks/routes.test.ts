@@ -372,7 +372,7 @@ test("a deleted document cannot block implementation recovery sweeps", async () 
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
 });
 
-test("Build waits for an investigation-busy workspace before approving the graph", async () => {
+test("Build queues behind a running prototype and starts once it finishes", async () => {
 	let context = await setup();
 	let connection = await paired(context);
 	let investigation = await (await context.call(`/api/documents/${context.plan.id}/experiments`, {
@@ -381,17 +381,30 @@ test("Build waits for an investigation-busy workspace before approving the graph
 	})).json();
 	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
+	let response = await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	});
+	expect(response.status).toBe(200);
+	let build = await response.json();
+	expect(build.state).toBe("queued");
 	let snapshot = await (await context.call(context.path)).json();
-	expect(snapshot.localAgent).toBe(true);
+	expect(snapshot).toMatchObject({ build: { id: build.id }, waitingForPrototype: true });
+	expect(await tool(context, connection.token, "claim_implementation_build", { id: build.id }))
+		.toMatchObject({ isError: true });
+	// A prototype outlasting the pickup window keeps the build queued rather than failing it.
+	context.plan.builds = [{ ...context.plan.builds.at(-1)!, expiresAt: Date.now() - 1 }];
+	await context.implementations.sweep();
+	expect(context.plan.builds.at(-1)).toMatchObject({ id: build.id, state: "queued" });
+	expect(context.plan.builds.at(-1)!.expiresAt).toBeGreaterThan(Date.now());
+	await context.experiments.service.stop(investigation.id, "interrupted", "Finished.");
+	expect((await (await context.call(context.path)).json()).waitingForPrototype).toBeUndefined();
+	expect(await tool(context, connection.token, "wait_for_work"))
+		.toEqual({ id: build.id, kind: "implementation" });
 	expect(
-		(await context.call(context.path, {
-			planRevision: 0,
-			graphVersion: 1,
-			graphRevision: 1,
-		})).status,
-	).toBe(409);
-	expect(context.plan.builds).toEqual([]);
-	expect(context.plan.graph?.versions[0].state).toBe("draft");
+		(await tool(context, connection.token, "claim_implementation_build", { id: build.id })).build,
+	).toMatchObject({ id: build.id, state: "starting" });
 	await Plan.close(context.plan);
 });
 

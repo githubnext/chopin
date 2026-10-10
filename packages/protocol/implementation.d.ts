@@ -99,6 +99,8 @@ export type ImplementationSnapshot = {
 	 * Judged in memory once edits settle, so it may lag the latest revision.
 	 */
 	buildReady: boolean;
+	/** `build` is queued on a connection that starts it once its running prototype finishes. */
+	waitingForPrototype?: true;
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
 	live?: LiveSnapshot;
 };
