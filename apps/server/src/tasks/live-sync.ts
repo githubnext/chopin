@@ -45,6 +45,8 @@ export class LiveSyncCoordinator {
 	#pending = new Map<string, { cancel: () => void }>();
 	#waiting = new Set<string>();
 	#chains = new Map<string, Promise<void>>();
+	/** Living documents seen by a check, so a reconnecting builder can find its own. */
+	#builders = new Map<string, { repositoryId: string; user: string }>();
 	#closed = false;
 
 	constructor(options: LiveSyncOptions) {
@@ -75,10 +77,16 @@ export class LiveSyncCoordinator {
 		if (!this.#pending.has(channelId)) void this.check(channelId);
 	}
 
-	/** A workspace (re)connected; catch up on a rebuild missed while the builder was away. */
-	connected(channelId: string): void {
-		if (this.#closed || this.#pending.has(channelId)) return;
-		void this.check(channelId);
+	/**
+	 * A local agent (re)connected to a repository; catch up on rebuilds missed while its owner's
+	 * builder was away. Only documents a check has already seen since startup are known here.
+	 */
+	connected(repositoryId: string, owner: string): void {
+		if (this.#closed) return;
+		for (let [channelId, builder] of this.#builders) {
+			if (builder.repositoryId !== repositoryId || builder.user !== owner) continue;
+			if (!this.#pending.has(channelId)) void this.check(channelId);
+		}
 	}
 
 	/** Serialized per document so a deferred check and a timer cannot both queue. */
@@ -98,7 +106,11 @@ export class LiveSyncCoordinator {
 		if (this.#closed) return;
 		let delta = await this.#options.withPlan(channelId, async plan => {
 			let live = plan.live;
-			if (!plan.persistence.liveBuild || !live) return;
+			if (!plan.persistence.liveBuild || !live) {
+				this.#builders.delete(channelId);
+				return;
+			}
+			this.#builders.set(channelId, { repositoryId: live.repositoryId, user: live.user });
 			let current = await readCurrentDocument(plan);
 			if (current.source === live.baseSource) return;
 			if (buildActive(plan)) {
@@ -131,5 +143,6 @@ export class LiveSyncCoordinator {
 		for (let pending of this.#pending.values()) pending.cancel();
 		this.#pending.clear();
 		this.#waiting.clear();
+		this.#builders.clear();
 	}
 }
