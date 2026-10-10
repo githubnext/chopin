@@ -521,10 +521,9 @@ function resumeOutstanding(
 		);
 		if (!item || item.state === "completed") continue;
 		let key = `${buildId}:${task.id}`;
-		let events: ProgressEvent[] = item.state === "blocked"
-			? [{ kind: "start", taskId: task.id, idempotencyKey: `${key}:start` }]
-			: [];
+		let events: ProgressEvent[] = [];
 		if (outcome.outcome === "blocked") {
+			// A live run replaces a blocker directly, so an unfinished dependency cannot refuse it.
 			events.push({
 				kind: "block",
 				taskId: task.id,
@@ -532,21 +531,28 @@ function resumeOutstanding(
 				idempotencyKey: `${key}:block`,
 			});
 		} else {
-			let url = outcome.pullRequest
-				?? (item.state !== "queued" ? item.pullRequest?.url : undefined);
+			let existing = item.state !== "queued" ? item.pullRequest?.url : undefined;
+			let url = outcome.pullRequest ?? existing;
 			if (!url) continue;
-			if (item.state === "queued") {
+			if (item.state !== "in_progress") {
 				events.push({ kind: "start", taskId: task.id, idempotencyKey: `${key}:start` });
 			}
-			events.push(
-				{ kind: "report_pr", taskId: task.id, url, state: "open", idempotencyKey: `${key}:pr` },
-				{
-					kind: "complete",
+			// Reporting the task's own pull request again as open would be refused once it merged.
+			if (url !== existing) {
+				events.push({
+					kind: "report_pr",
 					taskId: task.id,
-					summary: report.summary,
-					idempotencyKey: `${key}:done`,
-				},
-			);
+					url,
+					state: "open",
+					idempotencyKey: `${key}:pr`,
+				});
+			}
+			events.push({
+				kind: "complete",
+				taskId: task.id,
+				summary: report.summary,
+				idempotencyKey: `${key}:done`,
+			});
 		}
 		let next = resumeLiveRun(graph, lifecycle, live.buildId, events);
 		if (!next) continue;
