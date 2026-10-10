@@ -414,6 +414,21 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 			usage: { input_tokens: 10, output_tokens: 5 },
 		});
 	}
+	if ("rebuild" in request.questions) {
+		let changes = (request.state as { changes?: string }).changes ?? "";
+		let lines = changes.split("\n").filter(line => /^[-+] /.test(line));
+		let strip = (side: string) =>
+			lines.filter(line => line.startsWith(side)).map(line =>
+				line.slice(2).replace(/[\s\p{P}]/gu, "")
+			)
+				.join("\n");
+		let trivial = strip("-") === strip("+");
+		return Response.json({
+			model: "jev-e2e-fixture",
+			answers: { rebuild: { type: "noul", noul: trivial ? 0.03 : 0.96 } },
+			usage: { input_tokens: 10, output_tokens: 5 },
+		});
+	}
 	let scenario = current?.text && SCENARIOS[current.text];
 	if (!current?.id || !scenario) {
 		return Response.json({ error: "unknown Jev fixture scenario" }, { status: 501 });
