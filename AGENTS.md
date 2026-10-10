@@ -57,6 +57,9 @@ only when the existing client build is known to match the checkout.
 CI has three independent jobs: validation, browser integration, and a Docker
 image build. A documentation-only change should still pass `bun run ci`.
 
+Before opening a PR or repairing CI, use the repository's
+[PR readiness skill](.agents/skills/chopin-pr-readiness/SKILL.md).
+
 ## Repository map
 
 | Area                  | Responsibility                                            | Internal workspace dependencies                                                |

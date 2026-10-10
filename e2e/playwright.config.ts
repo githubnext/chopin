@@ -110,7 +110,7 @@ export default defineConfig({
 	 */
 	testMatch: "**/*.e2e.ts",
 
-	outputDir: "test-results",
+	outputDir: "test-results/integration",
 	fullyParallel: true,
 	// Some motion assertions poll a layer that exists only for its 180-250ms exit;
 	// at the default worker count on a developer machine they outlast that window.
@@ -118,7 +118,11 @@ export default defineConfig({
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
 	reporter: process.env.CI
-		? [["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+		? [
+			["github"],
+			["html", { open: "never", outputFolder: "playwright-report/integration" }],
+			["json", { outputFile: ".scratch/ci-reports/integration.json" }],
+		]
 		: [["list"]],
 
 	expect: {
