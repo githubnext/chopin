@@ -142,7 +142,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: browser-test-summary
-          path: e2e/.scratch/ci-reports
+          path: e2e/.scratch/ci-reports/*.json
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 7
 
       # Retry passes need their traces too. Keep each suite's output separate

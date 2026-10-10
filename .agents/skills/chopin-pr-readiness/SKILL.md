@@ -57,6 +57,9 @@ verification. Watch **all required GitHub checks on the final head**, including
 the browser and container jobs, using `land-prs` if available. Read retry counts
 even when the browser job is green.
 
+For CI reporting changes, inspect the uploaded artifact itself. Verify its
+contents and recorded revision against the completed job, including retry data.
+
 Handoff: PR URL, final head, verified checks and remaining risks. Preserve the
 user's merge-approval boundary: obtain explicit authorisation for the reviewed
 PR or identified set once its final checks are ready. Keep it ready until then.
