@@ -4,6 +4,7 @@ import {
 	advanceDraft,
 	advanceFirstBuild,
 	ago,
+	attentionHint,
 	buildPhase,
 	draftKey,
 	draftRefusalCopy,
@@ -500,6 +501,33 @@ describe("living document sync", () => {
 		// Syncing beats needing attention.
 		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
 			.toEqual({ kind: "building" });
+	});
+
+	it("ends a blocker's hint with one stop, whatever punctuation it brought", () => {
+		let hint = (blocker: string) =>
+			attentionHint(live({
+				outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker }],
+			}));
+		expect(hint("I can't decide this myself.")).toBe(
+			"“Ship” is blocked: I can't decide this myself. Edit the document to retry.",
+		);
+		expect(hint("Which database?")).toBe(
+			"“Ship” is blocked: Which database? Edit the document to retry.",
+		);
+	});
+
+	it("needs attention when a first build stopped on a blocker before any pull request", () => {
+		let stopped = live({
+			pullRequests: [],
+			outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker: "Pick a host" }],
+		});
+		expect(buildPhase(stopped)).toEqual({
+			kind: "live",
+			sync: { kind: "needs-attention", outstanding: 1 },
+		});
+		expect(attentionHint(stopped)).toBe(
+			"“Ship” is blocked: Pick a host. Edit the document to retry.",
+		);
 	});
 
 	it("does not call a failed rebuild out of sync once later edits match", () => {
