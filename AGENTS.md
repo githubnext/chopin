@@ -200,8 +200,9 @@ A comment thread is resolved or reopened through `comment:resolve` and
 `comment:reopen`. Both change only the sidecar record and persist before they
 are acknowledged or broadcast; reopening must also drop the store's recent
 resolution tombstone, which otherwise refuses replies. Resolved threads leave
-`comment:sync` and `plan:anchors` and are not rebased; reopening recovers the
-passage. Accepted and dismissed threads are legacy persisted states: nothing
+`comment:sync` and `plan:anchors` and are not rebased, except one whose Planner
+turn recorded a result: it stays synced and rebased so the left margin can mark
+what it wrote. Reopening recovers the passage. Accepted and dismissed threads are legacy persisted states: nothing
 creates them, but accepted `<Decision>` rows and their result anchors remain.
 
 Question and comment relationships have four deliberate states: pending,
