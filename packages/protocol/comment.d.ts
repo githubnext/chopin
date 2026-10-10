@@ -163,7 +163,7 @@ export declare namespace Comment {
 			& { id: string }
 			& (
 				| { ok: true; thread: Thread }
-				| { ok: false; reason: "missing" | "open" | "settled"; message: string }
+				| { ok: false; reason: "missing" | "open" | "settled" | "full"; message: string }
 			);
 	}
 
