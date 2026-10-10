@@ -7,7 +7,9 @@ import type { ReactNode } from "react";
  * a warm ground with the brand wash, and one card that holds whichever
  * sign-in step is current. Steps swap in place; nothing opens over the page.
  */
-export function LocalLoginShell({ children }: { children: ReactNode }) {
+export function LocalLoginShell(
+	{ children, title = "Open your workspace" }: { children: ReactNode; title?: string },
+) {
 	return (
 		<div className="sign-in-page" data-hosted="">
 			<header className="sign-in-header">
@@ -26,7 +28,7 @@ export function LocalLoginShell({ children }: { children: ReactNode }) {
 					</p>
 				</div>
 				<section aria-labelledby="sign-in-heading" className="sign-in-card">
-					<h2 className="text-lg font-semibold" id="sign-in-heading">Open your workspace</h2>
+					<h2 className="text-lg font-semibold" id="sign-in-heading">{title}</h2>
 					{children}
 				</section>
 			</main>

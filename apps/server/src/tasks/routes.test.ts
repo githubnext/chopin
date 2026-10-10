@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Sessions } from "../auth/session";
 import { Admission } from "../auth/admission";
 import { Router } from "../http/router";
-import { openPlan } from "../testing/plan";
+import { openPlan, openSiblingPlan } from "../testing/plan";
 import * as Plan from "../plan/service";
 import { registerExperimentRoutes } from "../experiments/routes";
 import { implementationGraphs } from "./plan-graphs";
@@ -11,6 +11,24 @@ import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
 
 let checkout = { repository: "owner/repository", branch: "main", commit: "a".repeat(40) };
+async function prepare(plan: Plan.Plan) {
+	await implementationGraphs().revise(plan, {
+		planRevision: 0,
+		graphRevision: 0,
+		operations: [{
+			op: "add",
+			task: {
+				id: "first",
+				title: "First",
+				context: "Tracer",
+				goal: "Launch",
+				acceptance: ["Starts", "Reports"],
+				dependsOn: [],
+			},
+		}],
+	});
+}
+
 async function setup() {
 	let context = await openPlan("# Launcher plan\n");
 	let github = {
@@ -81,23 +99,14 @@ async function setup() {
 			(await experiments.service.store.active()).some(item =>
 				item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
 			),
-		withPlan: async (_id, action) => action(context.plan),
+		withPlan: async (id, action) => {
+			let plan = plans.get(id);
+			if (!plan) throw new Error("document is unavailable");
+			return action(plan);
+		},
 	});
-	await implementationGraphs().revise(context.plan, {
-		planRevision: 0,
-		graphRevision: 0,
-		operations: [{
-			op: "add",
-			task: {
-				id: "first",
-				title: "First",
-				context: "Tracer",
-				goal: "Launch",
-				acceptance: ["Starts", "Reports"],
-				dependsOn: [],
-			},
-		}],
-	});
+	let plans = new Map([[context.plan.id, context.plan]]);
+	await prepare(context.plan);
 	let path = `/api/channels/${context.plan.id}/implementation`;
 	let call = async (
 		url: string,
@@ -129,6 +138,7 @@ async function setup() {
 		otherCookie: other.cookie,
 		implementations,
 		experiments,
+		plans,
 	};
 }
 
@@ -326,7 +336,7 @@ test("Build waits for an investigation-busy workspace before approving the graph
 	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
 	let snapshot = await (await context.call(context.path)).json();
-	expect(snapshot.localAgent).toBe(false);
+	expect(snapshot.localAgent).toBe(true);
 	expect(
 		(await context.call(context.path, {
 			planRevision: 0,
@@ -411,6 +421,82 @@ test("returning a stopped implementation for changes durably unlocks it once", a
 		expect(context.plan.lifecycle.history).toHaveLength(1);
 		expect(context.plan.lifecycle.history[0].events.at(-1)?.kind).toBe("request_revision");
 	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("one connection builds two documents and a finished or deleted build never strands it", async () => {
+	let context = await setup();
+	let second = await openSiblingPlan(context, "# Second plan\n");
+	await prepare(second);
+	context.plans.set(second.id, second);
+	let secondPath = `/api/channels/${second.id}/implementation`;
+	let review = { planRevision: 0, graphVersion: 1, graphRevision: 1 };
+	let connection = await paired(context);
+	try {
+		let first = await (await context.call(context.path, review)).json();
+		expect((await context.call(secondPath, review)).status).toBe(409);
+		await tool(context, connection.token, "claim_implementation_build", { id: first.id });
+		await tool(context, connection.token, "report_implementation_build", {
+			id: first.id,
+			state: "failed",
+			error: "Startup failed",
+		});
+		let next = await (await context.call(secondPath, review)).json();
+		expect(next.connectionId).toBe(connection.connection.id);
+		expect(second.builds.at(-1)?.id).toBe(next.id);
+		expect(context.plan.builds).toHaveLength(1);
+		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
+			id: next.id,
+			kind: "implementation",
+		});
+		let claim = await tool(context, connection.token, "claim_implementation_build", {
+			id: next.id,
+		});
+		expect(claim.documentId).toBe(second.id);
+		await tool(context, connection.token, "report_implementation_build", {
+			id: next.id,
+			state: "running",
+			session: "acp-session",
+		});
+		expect((await tool(context, claim.runToken, "read_implementation")).document.id).toBe(
+			second.id,
+		);
+
+		// Deleting the document under a queued build must not break pickup or a new build.
+		await tool(context, connection.token, "report_implementation_build", {
+			id: next.id,
+			state: "stopped",
+		});
+		let third = await openSiblingPlan(context, "# Third plan\n");
+		await prepare(third);
+		context.plans.set(third.id, third);
+		let thirdPath = `/api/channels/${third.id}/implementation`;
+		let queued = await (await context.call(thirdPath, review)).json();
+		expect(queued.state).toBe("queued");
+		await Plan.close(third);
+		context.plans.delete(third.id);
+		await context.storage.channels.archive({ id: third.id, now: context.now });
+		await context.storage.channels.delete(third.id);
+		let snapshot = await context.call(context.path);
+		expect(snapshot.status).toBe(200);
+		expect((await snapshot.json()).localAgent).toBe(true);
+		let investigation = await (await context.call(
+			`/api/documents/${context.plan.id}/experiments`,
+			{ id: crypto.randomUUID(), brief: "Still reachable" },
+		)).json();
+		let run = await context.call(
+			`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`,
+			{},
+		);
+		expect(run.status).toBe(200);
+		expect((await run.json()).connectionId).toBe(connection.connection.id);
+		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
+			id: investigation.id,
+			kind: "experiment",
+		});
+	} finally {
+		await Plan.close(second);
 		await Plan.close(context.plan);
 	}
 });

@@ -98,13 +98,14 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		return { session, channel, repository };
 	}
 	/**
-	 * The caller's live connections for a repository that can take a build for `id`, most
-	 * recently heard from first. A build already waiting on this document does not make its
-	 * connection busy, so a repeated request can return that build.
+	 * The caller's live connections for a repository that can take a build for `id`: the one
+	 * last used for this document first, then the most recently heard from. A build already
+	 * waiting on this document does not make its connection busy, so a repeated request can
+	 * return that build.
 	 */
 	async function available(owner: string, repositoryId: string, id: string) {
 		let free = [];
-		for (let connection of options.connections.list(repositoryId, owner)) {
+		for (let connection of options.connections.candidates(repositoryId, owner, id)) {
 			let here = options.connections.assigned(connection.id) === id;
 			if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
 				continue;
@@ -120,7 +121,8 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		safe(async (request, _url, { id }) => {
 			let { session, channel } = await browser(request, id);
 			connector.track(id);
-			let localAgent = (await available(session.user.id, channel.repositoryId, id)).length > 0;
+			// Cheap on purpose: whether one is free is decided when Build is pressed.
+			let localAgent = options.connections.list(channel.repositoryId, session.user.id).length > 0;
 			let current = await options.withPlan(id, plan =>
 				exclusive(plan, async () => {
 					let ready = implementationReadiness(plan, plan.revision);
@@ -133,10 +135,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							return build.graphVersion === graph?.number && build.graphRevision === graph.revision;
 						}),
 						blockers: ready.ok ? [] : ready.blockers,
-						localAgent: localAgent && !plan.builds.some(build =>
-							build.user === session.user.id
-							&& ["queued", "starting", "running"].includes(build.state)
-						),
+						localAgent,
 						lifecycle: plan.graph
 							? implementationLifecycle({
 								graph: plan.graph,
@@ -192,6 +191,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							checkout,
 						});
 						options.connections.assign(connection.id, id);
+						options.connections.use(id, connection.id);
 						options.connections.wake(channel.repositoryId);
 						return json(build);
 					} catch (error) {
