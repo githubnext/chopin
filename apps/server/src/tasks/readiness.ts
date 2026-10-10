@@ -12,6 +12,10 @@ export type ReadinessOptions = {
 	debounceMs?: number;
 	after?: (delayMs: number, action: () => void) => () => void;
 	error?: (err: unknown) => void;
+	/** Documents already past readiness (living, built, or implemented) are never judged. */
+	skip?: (channelId: string) => boolean;
+	/** Most judgements kept in memory. */
+	limit?: number;
 };
 
 const QUESTION =
@@ -27,7 +31,11 @@ export function looksBuildable(source: string): boolean {
 	return words >= 120 && headings >= 2;
 }
 
-export async function judgeBuildable(source: string, ask?: ReadinessAsk): Promise<boolean> {
+export async function judgeBuildable(
+	source: string,
+	ask?: ReadinessAsk,
+	error?: (err: unknown) => void,
+): Promise<boolean> {
 	if (!ask) return looksBuildable(source);
 	try {
 		let result = await ask({
@@ -47,7 +55,8 @@ export async function judgeBuildable(source: string, ask?: ReadinessAsk): Promis
 		let answer = result.answers.build_ready;
 		if (answer?.type !== "noul") throw new Error("invalid Jev readiness answer");
 		return answer.noul >= 0.5;
-	} catch {
+	} catch (err) {
+		error?.(err);
 		return looksBuildable(source);
 	}
 }
@@ -63,6 +72,7 @@ export class BuildReadiness {
 	#judged = new Map<string, { revision: number; ready: boolean }>();
 	#pending = new Map<string, () => void>();
 	#running = new Map<string, Promise<void>>();
+	#dirty = new Set<string>();
 	#closed = false;
 
 	constructor(options: ReadinessOptions) {
@@ -75,7 +85,12 @@ export class BuildReadiness {
 	 * its successor arrives, so a small edit does not hide a ready document.
 	 */
 	ready(channelId: string, revision: number): boolean {
+		if (this.#options.skip?.(channelId)) return false;
 		let judged = this.#judged.get(channelId);
+		if (judged) {
+			this.#judged.delete(channelId);
+			this.#judged.set(channelId, judged);
+		}
 		if (judged?.revision !== revision && !this.#pending.has(channelId)) {
 			void this.#judge(channelId);
 		}
@@ -84,7 +99,7 @@ export class BuildReadiness {
 
 	/** A committed edit: judge again once edits stop for the debounce window. */
 	schedule(target: DocumentTarget): void {
-		if (this.#closed) return;
+		if (this.#closed || this.#options.skip?.(target.channelId)) return;
 		this.#pending.get(target.channelId)?.();
 		let after = this.#options.after ?? ((delay, action) => {
 			let timer = setTimeout(action, delay);
@@ -101,21 +116,33 @@ export class BuildReadiness {
 	/** Judge the document as it stands now; concurrent calls share one judgement. */
 	#judge(channelId: string): Promise<void> {
 		let running = this.#running.get(channelId);
-		if (running) return running;
+		if (running) {
+			this.#dirty.add(channelId);
+			return running;
+		}
 		let work = (async () => {
+			let again = false;
 			try {
+				this.#dirty.delete(channelId);
 				let target = await this.#options.current(channelId);
 				if (!target || this.#closed) return;
-				let ready = await judgeBuildable(target.source, this.#options.ask);
+				let ready = await judgeBuildable(target.source, this.#options.ask, this.#options.error);
 				if (this.#closed) return;
 				let previous = this.#judged.get(channelId);
 				if (previous && previous.revision > target.revision) return;
+				this.#judged.delete(channelId);
 				this.#judged.set(channelId, { revision: target.revision, ready });
+				for (let key of this.#judged.keys()) {
+					if (this.#judged.size <= (this.#options.limit ?? 500)) break;
+					this.#judged.delete(key);
+				}
+				again = this.#dirty.has(channelId);
 				if (previous?.ready !== ready) this.#options.changed?.(channelId, target.revision, ready);
 			} catch (err) {
 				this.#options.error?.(err);
 			} finally {
 				this.#running.delete(channelId);
+				if (again && !this.#closed) void this.#judge(channelId);
 			}
 		})();
 		this.#running.set(channelId, work);
@@ -126,6 +153,7 @@ export class BuildReadiness {
 		this.#pending.get(channelId)?.();
 		this.#pending.delete(channelId);
 		this.#judged.delete(channelId);
+		this.#dirty.delete(channelId);
 	}
 
 	close(): void {
