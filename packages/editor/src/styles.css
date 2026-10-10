@@ -1071,6 +1071,13 @@
 		border-color var(--duration-fast) var(--ease-out);
 }
 
+/* A finger needs the whole row, not the 14px box. */
+@media (pointer: coarse) {
+	.plan-comment-address {
+		min-height: 2.75rem;
+	}
+}
+
 /* A note sent to Chopin leads with the address it was sent to. */
 .plan-comment-mention {
 	font-weight: 600;
