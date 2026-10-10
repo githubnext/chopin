@@ -701,6 +701,9 @@ function order(editor: LexicalEditor, key: string): number | undefined {
 /** The event that asks the open document to show a comment thread. */
 export const OPEN_COMMENT = "chopin:open-comment";
 
+/** A thread id, or one whose card should take focus once it opens. */
+export type OpenComment = string | { thread: string; focus: true };
+
 /**
  * Ask the document beside this page to open a comment thread, from anywhere.
  *
@@ -708,8 +711,12 @@ export const OPEN_COMMENT = "chopin:open-comment";
  * is navigation, and Chat pointing at a thread should not add history or wake
  * the router.
  */
-export function openCommentThread(thread: string): void {
-	dispatchEvent(new CustomEvent<string>(OPEN_COMMENT, { detail: thread }));
+export function openCommentThread(thread: string, options: { focus?: boolean } = {}): void {
+	dispatchEvent(
+		new CustomEvent<OpenComment>(OPEN_COMMENT, {
+			detail: options.focus ? { thread, focus: true } : thread,
+		}),
+	);
 }
 
 /** Mounted inside the editor, so resolution re-runs as the document changes. */

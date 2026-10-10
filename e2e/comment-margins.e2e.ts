@@ -36,7 +36,7 @@ const SOURCE = `${FIRST}\n\n`
 	+ `<Question id="${QUESTION}" header="Rollout" prompt="How should we roll this out?" multiple="false">\n`
 	+ LABELS.map((label, index) => `<Option id="${optionId(index)}" label="${label}" />`).join("\n")
 	+ `\n<Answer value="Team by team" />\n</Question>\n</Questionnaire>\n\n`
-	+ `${SECOND}\n\n${THIRD}\n\n${"Padding paragraph.\n\n".repeat(30)}`;
+	+ `${SECOND}\n\n${THIRD}\n\n${"Padding paragraph.\n\n".repeat(60)}`;
 
 const DECISION = {
 	id: WIDGET,
@@ -184,7 +184,7 @@ test("only a resolved comment that led to edits leaves a marker, stacked with a 
 	let page = await join("ana");
 
 	let decision = page.getByRole("button", { name: "Decision: Team by team" });
-	let besideMarker = resolvedMarker(page, "@chopin say who goes first");
+	let besideMarker = resolvedMarker(page, "say who goes first");
 	let editedMarker = resolvedMarker(page, "Should the review have a date?");
 	await expect(decision).toBeVisible();
 	await expect(besideMarker).toBeVisible();
@@ -246,18 +246,55 @@ test("reopening a resolved comment brings its thread back to the passage", async
 	let page = await join("ana");
 
 	let marker = resolvedMarker(page, "Should the review have a date?");
-	await marker.click();
-	await page.getByRole("dialog", { name: "Resolved comment" }).getByRole("button", {
+	await marker.focus();
+	await page.keyboard.press("Enter");
+	let reopen = page.getByRole("dialog", { name: "Resolved comment" }).getByRole("button", {
 		name: "Reopen",
-	}).click();
+	});
+	await reopen.focus();
+	await page.keyboard.press("Enter");
 
 	await expect(marker).toHaveCount(0);
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(thread).toContainText("Reads right now. Resolving.");
-	await expect(thread.getByRole("textbox", { name: "Reply", exact: true })).toBeVisible();
+	// Focus follows the thread into its live card rather than falling to the page.
+	await expect(thread.getByRole("textbox", { name: "Reply", exact: true })).toBeFocused();
 
 	await page.reload();
 	await ready(page);
 	await expect(page.getByRole("button", { name: /^Comment on “review the pilot”/ })).toBeVisible();
 	await expect(page.getByRole("button", { name: /^Resolved comment/ })).toHaveCount(0);
+});
+
+test("a refused reopen says why and keeps focus on Reopen", async ({ join, seed }) => {
+	let { edited } = await threads();
+	// A document at its ceiling of open threads refuses to reopen another.
+	let open = await Promise.all(
+		Array.from({ length: 50 }, async (_, index) => {
+			let { thread } = await storedResolvedComment(SOURCE, "Padding paragraph.", {
+				block: 4 + index,
+				notes: [`Open note ${index}`],
+				resolver: "ana",
+				result: [],
+			});
+			let { result: _r, quote: _q, resolver: _s, at: _a, ...rest } = thread;
+			return { ...rest, status: "open" };
+		}),
+	);
+	await seed(SOURCE, { threads: [edited.thread, ...open] });
+	let page = await join("ana");
+
+	let marker = resolvedMarker(page, "Should the review have a date?");
+	await marker.click();
+	let card = page.getByRole("dialog", { name: "Resolved comment" });
+	let reopen = card.getByRole("button", { name: "Reopen" });
+	await reopen.focus();
+	await page.keyboard.press("Enter");
+
+	await expect(card.getByRole("alert")).toHaveText(
+		"Couldn’t reopen: this document has too many open comments",
+	);
+	await expect(reopen).toBeFocused();
+	await expect(reopen).not.toHaveAttribute("aria-disabled", "true");
+	await expect(marker).toBeVisible();
 });

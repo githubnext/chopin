@@ -306,9 +306,10 @@ function CommentPopover(
 				</p>
 				{onReopen && (
 					<button
+						aria-disabled={pending || undefined}
 						className="btn btn-sm btn-outline"
-						disabled={pending}
-						onClick={onReopen}
+						// aria-disabled rather than disabled, so focus stays on the button while it works.
+						onClick={() => !pending && onReopen()}
 						type="button"
 					>
 						Reopen
@@ -709,7 +710,8 @@ export function ResolvedLayer(
 		if (!threads) return;
 		setReopening({ key });
 		void threads.reopen(id).then(outcome => {
-			if (!outcome.ok) {
+			// Somebody else reopened it first: it is open, which is what was asked.
+			if (!outcome.ok && outcome.reason !== "open") {
 				setReopening({
 					key,
 					error: outcome.reason === "full"
@@ -723,7 +725,7 @@ export function ResolvedLayer(
 			pointerRef.current = {};
 			dispatch({ type: "dismiss" });
 			// The comment layer opens the card once the thread has its passage back.
-			openCommentThread(id);
+			openCommentThread(id, { focus: true });
 		});
 	}, [threads]);
 
