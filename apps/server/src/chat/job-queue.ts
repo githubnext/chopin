@@ -81,6 +81,12 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 		let waiting = chat.waiting;
 		chat.waiting = [];
 		for (let item of waiting) {
+			// A queued comment turn will never run; its thread must stop showing work.
+			if (item.ended) {
+				void Promise.resolve()
+					.then(() => item.ended?.({ status: "failed" }))
+					.catch(err => console.error("[chat] a dropped turn's end could not be recorded:", err));
+			}
 			if (item.job) {
 				finishJob(item.job, {
 					status: "failed",

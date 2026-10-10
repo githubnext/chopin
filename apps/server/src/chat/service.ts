@@ -142,6 +142,8 @@ export type Instruction = {
 	 * called, with `skipped`, for a turn that never runs.
 	 */
 	ended?: (outcome: Ended) => void | Promise<void>;
+	/** Called when the turn begins running, so its owner knows what it was shown. */
+	started?: () => void;
 	/** Shown on the transcript notice, so Chat can draw it as a comment card. */
 	comment?: NonNullable<Wire.Entry["comment"]>;
 };
@@ -1794,6 +1796,11 @@ async function run(
 		chat.acting = thread;
 		(jobTurn ? jobState : state)(chat, server, room);
 	} else chat.acting = thread;
+	try {
+		about?.started?.();
+	} catch (err) {
+		console.error("[chat] an instruction's start could not be recorded:", err);
+	}
 	// Read directly: the drain has already taken this draft's queue entry.
 	let draft = context.draft && chat.draft?.id === context.draft ? chat.draft : undefined;
 	if (draft) {
@@ -2007,7 +2014,11 @@ async function run(
 	}
 
 	// Before the drain, so what it records is in place before the next turn reads anything.
-	if (about?.ended && !chat.closed) {
+	// A failed save closes the chat, and its owner still needs to hear that the turn failed.
+	if (about?.ended && (!chat.closed || persistenceError)) {
+		// The turn is over: nothing it does can be attributed to the thread any more,
+		// and anyone joining before the drain must not read it as still working.
+		if (chat.acting === thread) chat.acting = undefined;
 		let said = chat.entries.slice(firstEntry).findLast(entry => entry.author.kind === "agent");
 		let stopped = turnController.signal.aborted && !failed;
 		await report(about, {
