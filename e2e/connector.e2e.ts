@@ -57,7 +57,7 @@ for (let transport of ["stdio", "http"] as const) {
 			await page.getByRole("combobox", { name: "Document", exact: true }).selectOption(room);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
 			await page.getByRole("link", { name: "Open document", exact: true }).click();
-			await page.getByRole("button", { name: "Investigations", exact: true }).click();
+			await page.locator("summary").filter({ hasText: /^Propose investigation$/ }).click();
 			await page.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
 				"Produce the captured startup fixture",
 			);

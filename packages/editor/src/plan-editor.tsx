@@ -106,6 +106,8 @@ export type PlanEditorProps = {
 	onState?: (state: PlanState) => void;
 	/** Host-owned context shown above the document, in the prose column. */
 	preface?: ReactNode;
+	/** Host-owned work cards following the authored document in its scroll lane. */
+	afterword?: ReactNode;
 	className?: string;
 };
 
@@ -133,6 +135,7 @@ const UNDO_NOTICE = 3000;
 
 export function PlanEditor(
 	{
+		afterword,
 		busy,
 		experiments,
 		className,
@@ -446,6 +449,7 @@ export function PlanEditor(
 	return (
 		<div
 			className={`plan flex h-full w-full flex-col ${className ?? ""}`}
+			data-plan-afterword={!!afterword || undefined}
 			data-plan-offline={offline || undefined}
 		>
 			<div className="plan-workspace">
@@ -478,6 +482,7 @@ export function PlanEditor(
 							// its HTML visitors and quietly admits `html` nodes.
 							suppressHtmlProcessing
 						/>
+						{afterword && <div className="plan-afterword">{afterword}</div>}
 					</div>
 					{/* In the document column, so they track the prose, not the pane. */}
 					<PlanChanges motionImmediately={motionImmediately} store={changes} />

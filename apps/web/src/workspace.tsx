@@ -32,6 +32,7 @@ import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
 import type { DocumentActivity } from "./document-activity";
 import type {
 	WorkspaceDestination,
+	WorkspaceDocumentView,
 	WorkspaceEvent,
 	WorkspaceMode,
 	WorkspacePresentation,
@@ -57,6 +58,7 @@ export function useWorkspaceIds(): WorkspaceIds {
 	let instance = useId();
 	return {
 		heading: {
+			build: workspaceHeadingId("build", instance),
 			plan: workspaceHeadingId("plan", instance),
 			decisions: workspaceHeadingId("decisions", instance),
 			chat: workspaceHeadingId("chat", instance),
@@ -120,16 +122,18 @@ export type WorkspaceProps = {
 	chat?: ReactNode;
 	plan: ReactNode;
 	decisions: ReactNode;
+	build?: ReactNode;
+	buildEnabled?: boolean;
 	controls: ReactNode;
 	/** Connection and document status, right-aligned in the document header. */
 	status?: ReactNode;
 	ids: WorkspaceIds;
 	mode: WorkspaceMode;
 	state: WorkspaceState;
-	view: "plan" | "decisions";
+	view: WorkspaceDocumentView;
 	onChatOpen: (open: boolean) => void;
 	onDesktopChatOpen: (open: boolean) => void;
-	onDestination: (destination: "plan" | "decisions") => void;
+	onDestination: (destination: WorkspaceDocumentView) => void;
 	unanswered: number;
 	chatActivity: { unread: number; busy: boolean };
 	documentActivity?: DocumentActivity;
@@ -223,6 +227,7 @@ function destinationLabel(
 	activity: WorkspaceProps["chatActivity"],
 	document: DocumentActivity,
 ): string {
+	if (destination === "build") return "Build";
 	if (destination === "plan") return documentActivityLabel(document);
 	if (destination === "decisions" && unanswered > 0) {
 		return `Decisions, ${unanswered} unanswered`;
@@ -242,6 +247,8 @@ function destinationLabel(
 export function Workspace(
 	{
 		available = 950,
+		build,
+		buildEnabled = true,
 		frame,
 		chat,
 		controls,
@@ -301,7 +308,7 @@ export function Workspace(
 		: view;
 	let [travel, setTravel] = useState({ destination, back: false });
 	if (travel.destination !== destination) {
-		let order = workspaceDestinations();
+		let order = workspaceDestinations(profile.implementation);
 		setTravel({
 			back: order.indexOf(destination) < order.indexOf(travel.destination),
 			destination,
@@ -311,7 +318,7 @@ export function Workspace(
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousChatOpen = useRef(state.chatOpen);
 	let chatInactive = !presentation.chatVisible;
-	let destinations = workspaceDestinations();
+	let destinations = workspaceDestinations(profile.implementation);
 	let focusDestination = (destination: WorkspaceDestination) => {
 		root.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.heading[destination])}`)
 			?.focus({ preventScroll: true });
@@ -395,7 +402,9 @@ export function Workspace(
 			{mode !== "split" && (
 				<nav
 					aria-label="Workspace view"
-					className="workspace-navigation hairline-b grid shrink-0 grid-cols-3 bg-ground p-1"
+					className={`workspace-navigation hairline-b grid shrink-0 bg-ground p-1 ${
+						profile.implementation ? "grid-cols-4" : "grid-cols-3"
+					}`}
 				>
 					{destinations.map(destination => {
 						let active = destination === "chat"
@@ -413,12 +422,15 @@ export function Workspace(
 								aria-label={label}
 								aria-pressed={active}
 								className="btn btn-md btn-ghost min-h-11 min-w-0"
+								disabled={destination === "build" && !buildEnabled}
 								key={destination}
 								onClick={event => navigate(destination, event.currentTarget)}
 								type="button"
 							>
 								{destination === "chat"
 									? "Chat"
+									: destination === "build"
+									? "Build"
 									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
@@ -545,6 +557,23 @@ export function Workspace(
 									{decisions}
 								</section>
 							</ContentSwapLayer>
+							{profile.implementation && (
+								<ContentSwapLayer
+									active={presentation.documentVisible && presentation.documentView === "build"}
+									className="workspace-document-layer min-h-0"
+									immediately={immediately}
+									motion={contentSwapMotion}
+								>
+									<section
+										aria-labelledby={ids.heading.build}
+										className="h-full min-h-0 overflow-auto p-6"
+										data-document-view="build"
+									>
+										<h2 className="sr-only" id={ids.heading.build} tabIndex={-1}>Build</h2>
+										{build}
+									</section>
+								</ContentSwapLayer>
+							)}
 						</div>
 					</div>
 				</main>

@@ -127,10 +127,10 @@ that mutate the plan are refused until the implementation finishes or requests
 revision. Progress and archived runs remain durable sidecar state.
 
 The protocol defines a `plan:lifecycle` projection for active progress and run
-history. `plan:implementation` invalidates the Build dialog's authenticated
+history. `plan:implementation` invalidates the Build panel's authenticated
 snapshot after committed graph, build and lifecycle changes. It includes the
 storage revision and current editing lock; `plan:open` supplies that lock on
-reconnect even when the Build dialog is closed. The dialog refreshes when opened
+reconnect even when the Build panel is not selected. The panel refreshes when selected
 or notified rather than polling every document in the background.
 
 Archiving does not release an active graph lock or terminate its run. A coding
