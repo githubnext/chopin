@@ -226,8 +226,22 @@ async function scriptResearch(
 
 async function startInlineResearch(page: Page, question: string) {
 	let editor = content(page);
-	await editor.click();
-	await page.keyboard.press("ControlOrMeta+End");
+	await editor.getByRole("heading", { level: 1 }).click();
+	await expect(editor).toBeFocused();
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+	await expect.poll(() =>
+		editor.evaluate(element => {
+			let selection = getSelection();
+			if (!selection?.isCollapsed || !selection.anchorNode) return false;
+			if (!element.contains(selection.anchorNode)) return false;
+			let remaining = document.createRange();
+			remaining.selectNodeContents(element);
+			remaining.setStart(selection.anchorNode, selection.anchorOffset);
+			return remaining.toString() === "";
+		})
+	).toBe(true);
+	// Let the browser's selectionchange reach Lexical before the next keydown.
+	await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
 	await page.keyboard.press("Enter");
