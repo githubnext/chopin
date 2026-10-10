@@ -48,6 +48,13 @@
 	padding-left: 44px;
 }
 
+/* With the top bar hidden, the sheet clears the floating Show sidebar trigger itself. */
+.navigation-content[data-project-sidebar-trigger]
+	.workspace-root[data-document-expanded]
+	> .workspace-frame {
+	margin-left: calc(44px + env(safe-area-inset-left));
+}
+
 .anchored-child-host,
 .anchored-child-parent {
 	position: relative;
@@ -117,6 +124,17 @@
 	margin: 0;
 	border-radius: 0;
 	box-shadow: none;
+}
+
+/* The child sheet is already paper; its workspace keeps no second sheet or header gap. */
+.anchored-child-surface .workspace-root .workspace-document-panel {
+	margin-top: 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.anchored-child-surface .workspace-root .workspace-chat-panel {
+	padding-top: 0;
 }
 
 @keyframes anchored-child-enter {
