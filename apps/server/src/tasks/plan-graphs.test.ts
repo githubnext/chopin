@@ -6,7 +6,7 @@ import {
 	implementationGraphs,
 	reportImplementationLifecycle,
 } from "./plan-graphs";
-import { readRebuild, reportBuild, reportRebuild } from "./builds";
+import { liveSnapshot, readRebuild, reportBuild, reportRebuild } from "./builds";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { claimStored, close, implementationActive, open, source } from "../plan/service";
 
@@ -843,6 +843,16 @@ describe("living-document builds", () => {
 
 		let restored = await open(context.channel.id, context.backend, context.server);
 		expect(restored.live?.outstanding).toEqual(["model"]);
+		// In sync, yet the blocked task still needs an edit to retry it.
+		expect(liveSnapshot(restored, [])).toMatchObject({
+			outOfSync: false,
+			outstandingTasks: [{
+				id: "model",
+				title: "Model graphs",
+				state: "blocked",
+				blocker: "Which storage engine should the graph use?",
+			}],
+		});
 		let rebuildId = crypto.randomUUID();
 		restored.builds = [...restored.builds, {
 			...restored.builds[0]!,
@@ -889,6 +899,7 @@ describe("living-document builds", () => {
 			}),
 		).toEqual({ kind: "accepted" });
 		expect(restored.live?.outstanding).toBeUndefined();
+		expect(liveSnapshot(restored, [])?.outstandingTasks).toBeUndefined();
 		await close(restored);
 	});
 
