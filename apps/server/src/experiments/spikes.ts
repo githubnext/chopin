@@ -55,7 +55,7 @@ function paragraph(...children: PhrasingContent[]): BlockContent {
 	return { type: "paragraph", children };
 }
 
-/** Canonical report MDX: bold headline, findings, recommendation, then screenshots. */
+/** Canonical report MDX: bold headline, the recommendation first, findings, then screenshots. */
 export function spikeReport(input: SpikeSubmission): string {
 	let items: ListItem[] = input.findings.map(finding => ({
 		type: "listItem",
@@ -66,11 +66,11 @@ export function spikeReport(input: SpikeSubmission): string {
 		type: "root",
 		children: [
 			paragraph({ type: "strong", children: [{ type: "text", value: input.headline }] }),
-			{ type: "list", ordered: false, spread: false, children: items },
 			paragraph(
 				{ type: "strong", children: [{ type: "text", value: "Recommendation:" }] },
 				{ type: "text", value: ` ${input.recommendation}` },
 			),
+			{ type: "list", ordered: false, spread: false, children: items },
 			...input.images.map((url, index) =>
 				paragraph({ type: "image", url, alt: `Prototype screenshot ${index + 1}` })
 			),
@@ -121,19 +121,19 @@ export function spikeCallout(value: Investigation): RootContent {
 		]);
 	}
 	if (key === "queued") {
-		return callout(spike.callout, "note", "Queued", [
+		return callout(spike.callout, "note", "Prototype queued", [
 			paragraph({
 				type: "text",
-				value: `${spike.login}'s coding agent will build a quick prototype to test the passage `
-					+ "above once it finishes its current work. Delete this callout to cancel it.",
+				value: `@${spike.login}’s coding agent will prototype the passage above when it’s free. `
+					+ "Delete this callout to cancel.",
 			}),
 		]);
 	}
 	return callout(spike.callout, "note", "Prototyping…", [
 		paragraph({
 			type: "text",
-			value: `${spike.login}'s coding agent is building a quick prototype to test the passage `
-				+ "above. Delete this callout to stop it.",
+			value: `@${spike.login}’s coding agent is testing the passage above with a quick prototype. `
+				+ "Delete this callout to stop it.",
 		}),
 	]);
 }

@@ -47,6 +47,18 @@
 	font-weight: var(--font-weight-medium);
 }
 
+/* A status dot stays on the first line when the reason wraps. */
+.build-status-line > .build-task-dot {
+	align-self: flex-start;
+	margin-block-start: calc((1lh - var(--spacing) * 3) / 2);
+}
+
+/* The reason or count after a status, quieter than the status itself. */
+.build-status-detail {
+	color: var(--color-text-tertiary);
+	font-weight: var(--font-weight-normal);
+}
+
 .build-elapsed {
 	flex: none;
 	color: var(--color-text-tertiary);
@@ -162,6 +174,8 @@
 
 .build-tasks {
 	display: grid;
+	/* An auto column grows to a long title's width and pushes capsules past the edge. */
+	grid-template-columns: minmax(0, 1fr);
 	margin: calc(var(--spacing) * 4) 0 0;
 	padding: 0;
 	list-style: none;
@@ -293,6 +307,27 @@
 	margin: 0;
 	padding-inline-start: calc(var(--spacing) * 4);
 	list-style: disc;
+}
+
+.build-task-summary {
+	margin: 0;
+	color: var(--color-text-primary);
+}
+
+/* Tasks a living document's later syncs added, after the first build's. */
+.build-since {
+	margin-block-start: calc(var(--spacing) * 6);
+}
+
+.build-since-heading {
+	margin: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	font-weight: var(--font-weight-medium);
+}
+
+.build-since .build-tasks {
+	margin-block-start: calc(var(--spacing) * 2);
 }
 
 .build-task-blocker {

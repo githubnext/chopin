@@ -823,6 +823,16 @@ test("report_rebuild appends a completed version, records commits and advances t
 		});
 		expect(snapshot.live.baseSource).toBeUndefined();
 		expect(snapshot.lifecycle.history.at(-1).outcome.kind).toBe("implemented");
+		expect(snapshot.live.tasks.at(-1)).toMatchObject({
+			id: "rebuild-2-1",
+			acceptance: ["Updates pull request #7.", "Matches the document as edited."],
+		});
+		// A Planner draft started after the build is not built work, so the list ignores it.
+		plan.graph!.versions.push({ ...structuredClone(plan.graph!.versions[0]!), number: 3 });
+		plan.graph!.versions.at(-1)!.state = "draft";
+		let drafted = await (await context.call(context.path)).json();
+		expect(drafted.live.tasks).toEqual(snapshot.live.tasks);
+		plan.graph!.versions.pop();
 		let live = plan.live;
 		await Plan.close(plan);
 		closed = true;

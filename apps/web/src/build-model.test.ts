@@ -10,6 +10,7 @@ import {
 	draftRefusalCopy,
 	elapsed,
 	firstBuildStep,
+	liveTaskGroups,
 	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
@@ -17,7 +18,9 @@ import {
 	startingHint,
 	startingLabel,
 	syncHint,
+	syncLabel,
 	syncStatus,
+	syncTooltip,
 	taskStartsOpen,
 	waitingLabel,
 } from "./build-model";
@@ -473,14 +476,17 @@ describe("living document sync", () => {
 	it("explains why it is out of sync", () => {
 		let pending = live({ outOfSync: true, rebuild: rebuild("stopped") });
 		expect(syncStatus(pending)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 0 });
-		expect(syncHint(syncStatus(pending), pending, "me")).toBe("Changes will build shortly");
+		expect(syncHint(syncStatus(pending), pending, "me")).toBe("Your edits will sync shortly");
 		let waiting = { ...live({ outOfSync: true, builderConnected: false }), builtBy: "jev" };
 		expect(syncStatus(waiting)).toEqual({ kind: "out-of-sync", reason: "waiting", outstanding: 0 });
 		expect(syncHint(syncStatus(waiting), waiting, "me")).toBe("Waiting for @jev’s agent");
 		expect(syncHint(syncStatus(waiting), waiting, "u")).toBe("Waiting for your agent");
 		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
 		expect(syncStatus(failed)).toEqual({ kind: "out-of-sync", reason: "failed", outstanding: 0 });
-		expect(syncHint(syncStatus(failed), failed, "me")).toBe("The last rebuild failed");
+		expect(syncHint(syncStatus(failed), failed, "me")).toBe("The next edit will try again");
+		expect(syncLabel({ kind: "out-of-sync", reason: "failed", outstanding: 0 })).toBe("Sync failed");
+		expect(syncLabel({ kind: "out-of-sync", reason: "waiting", outstanding: 0 }))
+			.toBe("Out of sync");
 	});
 
 	it("needs attention while a blocked task waits for an edit, even in sync", () => {
@@ -497,7 +503,7 @@ describe("living document sync", () => {
 		let edited = live({ outstandingTasks, outOfSync: true });
 		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
 		expect(syncHint(syncStatus(edited), edited, "me"))
-			.toBe("Changes will build shortly · will also retry 2 blocked tasks");
+			.toBe("Your edits will sync shortly · will also retry 2 blocked tasks");
 		// Syncing beats needing attention.
 		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
 			.toEqual({ kind: "building" });
@@ -533,6 +539,27 @@ describe("living document sync", () => {
 	it("does not call a failed rebuild out of sync once later edits match", () => {
 		expect(syncStatus(live({ rebuild: rebuild("failed") }))).toEqual({ kind: "in-sync" });
 		expect(syncHint({ kind: "in-sync" }, live(), "me")).toBeUndefined();
+	});
+
+	it("names every state with one sync vocabulary and a tooltip", () => {
+		expect(syncLabel({ kind: "in-sync" })).toBe("In sync");
+		expect(syncLabel({ kind: "building" })).toBe("Syncing…");
+		expect(syncTooltip({ kind: "in-sync" }, live(), "me")).toBe("Pull requests match the document");
+		expect(syncTooltip({ kind: "building" }, live(), "me"))
+			.toBe("Updating pull requests to match the document");
+		let pending = live({ outOfSync: true, rebuild: rebuild("stopped") });
+		expect(syncTooltip(syncStatus(pending)!, pending, "me")).toBe("Your edits will sync shortly");
+	});
+
+	it("splits the first build's tasks from those later syncs added", () => {
+		let tasks = [{ id: "workspace" }, { id: "rebuild-2-1" }, { id: "notes" }, {
+			id: "rebuild-3-1",
+		}];
+		expect(liveTaskGroups(tasks)).toEqual({
+			first: [{ id: "workspace" }, { id: "notes" }],
+			since: [{ id: "rebuild-2-1" }, { id: "rebuild-3-1" }],
+		});
+		expect(liveTaskGroups([{ id: "workspace" }]).since).toEqual([]);
 	});
 });
 

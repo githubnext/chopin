@@ -7,9 +7,9 @@ import {
 	draftRefusalCopy,
 	firstBuildStep,
 	startingLabel,
-	SYNC_LABEL,
-	syncHint,
+	syncLabel,
 	syncStatus,
+	syncTooltip,
 	waitingLabel,
 } from "./build-model";
 import {
@@ -148,16 +148,17 @@ export function BuildPlanButton(
 
 	let sync = syncStatus(snapshot);
 	if (sync) {
-		let hint = syncHint(sync, snapshot, userId);
+		let hint = syncTooltip(sync, snapshot, userId);
 		return (
 			<button
 				aria-busy={sync.kind === "building" || undefined}
 				aria-description={hint}
 				className="btn btn-compact btn-ghost shrink-0"
+				data-build-slot=""
 				data-sync={sync.kind}
 				data-tooltip={hint}
-				data-tooltip-detail={hint ? "" : undefined}
-				data-tooltip-verbatim={hint ? "" : undefined}
+				data-tooltip-detail=""
+				data-tooltip-verbatim=""
 				onClick={onShowBuild}
 				type="button"
 			>
@@ -172,7 +173,7 @@ export function BuildPlanButton(
 							: "queued"}
 					/>
 				)}
-				{SYNC_LABEL[sync.kind]}
+				{syncLabel(sync)}
 			</button>
 		);
 	}
@@ -202,6 +203,7 @@ export function BuildPlanButton(
 				aria-busy="true"
 				aria-description={hint}
 				className="btn btn-compact btn-ghost shrink-0"
+				data-build-slot=""
 				data-tooltip={hint}
 				data-tooltip-detail={hint ? "" : undefined}
 				data-tooltip-verbatim={hint ? "" : undefined}
@@ -222,12 +224,16 @@ export function BuildPlanButton(
 		<>
 			<button
 				className="btn btn-compact btn-outline shrink-0"
+				data-build-slot=""
 				data-tooltip={failure}
+				data-tooltip-detail={failure ? "" : undefined}
 				data-tooltip-verbatim={failure ? "" : undefined}
 				onClick={() => dispatch({ type: "press" })}
 				type="button"
 			>
-				Build plan
+				{/* A failed attempt stays visible after the alert, not only on hover. */}
+				{failure && <span aria-hidden="true" className="build-task-dot" data-state="blocked" />}
+				{failure ? "Retry build" : "Build plan"}
 			</button>
 			{failure && <span className="sr-only" role="alert">{failure}</span>}
 		</>

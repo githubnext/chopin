@@ -1,3 +1,4 @@
+import { CheckIcon } from "@chopin/icons";
 import { useEffect, useId, useRef, useState } from "react";
 
 import {
@@ -9,14 +10,15 @@ import {
 	draftKey,
 	draftRefusalCopy,
 	elapsed,
+	liveTaskGroups,
 	plural,
 	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
 	startingLabel,
-	SYNC_LABEL,
 	syncHint,
+	syncLabel,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
 } from "./build-model";
@@ -88,6 +90,7 @@ export function BuildView(
 	let [open, setOpen] = useState<Record<string, boolean>>({});
 	let [linked, setLinked] = useState<string>();
 	let [now, setNow] = useState(() => Date.now());
+	let sinceHeading = useId();
 	let [request, setRequestState] = useState(() => requests.get(room));
 	let setRequest = (next: DraftRequest | undefined) => {
 		if (next) requests.set(room, next);
@@ -421,7 +424,7 @@ export function BuildView(
 				<span className="min-w-0 flex-1">
 					{queued ? "Queued" : "Building"}
 					{hint
-						? <span className="text-text-tertiary">{` · ${hint}`}</span>
+						? <span className="build-status-detail">{` · ${hint}`}</span>
 						: who && ` · started by ${who === "you" ? who : `@${who}`}`}
 				</span>
 			</>
@@ -444,16 +447,26 @@ export function BuildView(
 		}
 	} else if (phase.kind === "live") {
 		let commits = snapshot?.live?.commits.length ?? 0;
-		let hint = syncHint(phase.sync, snapshot, userId);
+		let detail = syncHint(phase.sync, snapshot, userId)
+			?? (phase.sync.kind === "in-sync" && commits > 0
+				? `${plural(commits, "commit", "commits")} since first build`
+				: undefined);
 		status = (
 			<>
 				{phase.sync.kind === "building" && <span aria-hidden="true" className="build-pulse" />}
+				{phase.sync.kind === "in-sync" && (
+					<CheckIcon aria-hidden="true" className="shrink-0 text-text-tertiary" />
+				)}
+				{phase.sync.kind === "out-of-sync" && (
+					<span
+						aria-hidden="true"
+						className="build-task-dot"
+						data-state={phase.sync.reason === "failed" ? "blocked" : "queued"}
+					/>
+				)}
 				<span className="min-w-0 flex-1">
-					Living document ·{" "}
-					{phase.sync.kind === "building" ? "Building" : SYNC_LABEL[phase.sync.kind]}
-					{phase.sync.kind === "in-sync"
-						&& ` · ${plural(commits, "commit", "commits")} since first build`}
-					{hint && <span className="text-text-tertiary">{` · ${hint}`}</span>}
+					{syncLabel(phase.sync)}
+					{detail && <span className="build-status-detail">{` · ${detail}`}</span>}
 				</span>
 			</>
 		);
@@ -462,6 +475,39 @@ export function BuildView(
 	}
 	// A pull request shared by several tasks lists its commits under the first of them.
 	let listed = new Set<string>();
+	// A living document lists the tasks its later syncs added under their own heading.
+	let groups = phase.kind === "live" ? liveTaskGroups(tasks) : { first: tasks, since: [] };
+	let renderTask = (task: (typeof tasks)[number]) => {
+		let report = phase.kind === "live"
+			? snapshot?.live?.tasks.find(item => item.id === task.id)?.progress
+			: progress?.tasks.find(item => item.id === task.id);
+		let url = report?.pullRequest?.url;
+		let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
+		if (url) listed.add(url);
+		let state: TaskState = report?.state ?? "queued";
+		let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
+		let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
+		let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
+		return (
+			<li className="build-task" id={`task-${task.id}`} key={task.id}>
+				<TaskRow
+					after={after}
+					expanded={expanded}
+					onToggle={() => setOpen(current => ({ ...current, [task.id]: !expanded }))}
+					pullRequest={report?.pullRequest && {
+						...report.pullRequest,
+						number,
+					}}
+					blocker={report?.blocker}
+					commits={commits}
+					summary={report?.state === "completed" ? report.summary : undefined}
+					now={now}
+					state={state}
+					task={task}
+				/>
+			</li>
+		);
+	};
 
 	return (
 		<div className="build-view">
@@ -535,42 +581,19 @@ export function BuildView(
 					</div>
 				)}
 				{showTasks && (
-					<ol aria-label="Tasks" className="build-tasks" data-stale={staleTasks || undefined}>
-						{tasks.map(task => {
-							let report = phase.kind === "live"
-								? snapshot?.live?.tasks.find(item =>
-									item.id === task.id
-								)?.progress
-								: progress?.tasks.find(item =>
-									item.id === task.id
-								);
-							let url = report?.pullRequest?.url;
-							let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
-							if (url) listed.add(url);
-							let state: TaskState = report?.state ?? "queued";
-							let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
-							let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
-							let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
-							return (
-								<li className="build-task" id={`task-${task.id}`} key={task.id}>
-									<TaskRow
-										after={after}
-										expanded={expanded}
-										onToggle={() => setOpen(current => ({ ...current, [task.id]: !expanded }))}
-										pullRequest={report?.pullRequest && {
-											...report.pullRequest,
-											number,
-										}}
-										blocker={report?.blocker}
-										commits={commits}
-										now={now}
-										state={state}
-										task={task}
-									/>
-								</li>
-							);
-						})}
+					<ol
+						aria-label="Tasks"
+						className="build-tasks"
+						data-stale={staleTasks || undefined}
+					>
+						{groups.first.map(renderTask)}
 					</ol>
+				)}
+				{showTasks && groups.since.length > 0 && (
+					<section aria-labelledby={sinceHeading} className="build-since">
+						<h2 className="build-since-heading" id={sinceHeading}>Since first build</h2>
+						<ol className="build-tasks">{groups.since.map(renderTask)}</ol>
+					</section>
 				)}
 				{phase.kind === "review" && canEdit && planner && (
 					<p className="build-hint">To change tasks, ask Chopin in Chat.</p>
@@ -581,7 +604,7 @@ export function BuildView(
 }
 
 function TaskRow(
-	{ after, blocker, commits, expanded, now, onToggle, pullRequest, state, task }: {
+	{ after, blocker, commits, expanded, now, onToggle, pullRequest, state, summary, task }: {
 		after: string[];
 		blocker?: string;
 		commits: Array<{ sha: string; message: string; at: string }>;
@@ -590,6 +613,8 @@ function TaskRow(
 		onToggle: () => void;
 		pullRequest?: { url: string; state: "open" | "merged" | "closed"; number?: number };
 		state: TaskState;
+		/** What a finished task did, in place of what finishing it required. */
+		summary?: string;
 		task: { id: string; title: string; goal: string; acceptance: string[] };
 	},
 ) {
@@ -627,7 +652,8 @@ function TaskRow(
 				<div inert={!expanded}>
 					<div className="build-task-detail">
 						<p className="m-0">{task.goal}</p>
-						{task.acceptance.length > 0 && (
+						{summary && <p className="build-task-summary">{summary}</p>}
+						{!summary && task.acceptance.length > 0 && (
 							<ul className="build-task-acceptance">
 								{task.acceptance.map((item, index) => <li key={index}>{item}</li>)}
 							</ul>

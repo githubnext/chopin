@@ -782,6 +782,19 @@ body {
 	flex: 1;
 }
 
+/* Alone, the build slot sits in the page's top inset at the trailing edge, not on its corner. */
+.workspace-status-row > [data-build-slot] {
+	position: absolute;
+	inset-block-start: calc(var(--spacing) * 2);
+	inset-inline-end: calc(var(--spacing) * 3);
+}
+
+.workspace-status-row:has(.plan-status:is([data-level="notice"], [data-level="alert"]))
+	> [data-build-slot] {
+	position: static;
+	margin-inline-start: calc(var(--spacing) * 2);
+}
+
 .workspace-status-row .plan-status .btn {
 	margin-inline-start: auto;
 }

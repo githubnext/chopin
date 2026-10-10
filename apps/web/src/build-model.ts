@@ -63,12 +63,13 @@ export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefin
 	};
 }
 
-export const SYNC_LABEL: Record<SyncStatus["kind"], string> = {
-	building: "Building…",
-	"in-sync": "In sync",
-	"needs-attention": "Needs attention",
-	"out-of-sync": "Out of sync",
-};
+/** One vocabulary for a living document: in sync, out of sync, syncing, or a failed sync. */
+export function syncLabel(status: SyncStatus): string {
+	if (status.kind === "building") return "Syncing…";
+	if (status.kind === "in-sync") return "In sync";
+	if (status.kind === "needs-attention") return "Needs attention";
+	return status.reason === "failed" ? "Sync failed" : "Out of sync";
+}
 
 /** Why the pull requests lag the document, naming the builder whose agent must run them. */
 export function syncHint(
@@ -81,8 +82,9 @@ export function syncHint(
 	let retry = status.outstanding
 		? ` · will also retry ${plural(status.outstanding, "blocked task", "blocked tasks")}`
 		: "";
-	if (status.reason === "pending") return `Changes will build shortly${retry}`;
-	if (status.reason === "failed") return `The last rebuild failed${retry}`;
+	if (status.reason === "pending") return `Your edits will sync shortly${retry}`;
+	// Every edit schedules another sync, so a failure is retried by the next one.
+	if (status.reason === "failed") return `The next edit will try again${retry}`;
 	if (snapshot?.live?.user === userId) return `Waiting for your agent${retry}`;
 	return snapshot?.builtBy
 		? `Waiting for @${snapshot.builtBy}’s agent${retry}`
@@ -100,6 +102,17 @@ export function attentionHint(snapshot: Snapshot | undefined): string | undefine
 	let more = tasks.length > 1 ? ` (and ${plural(tasks.length - 1, "other", "others")})` : "";
 	let said = `${reason}${more}`;
 	return `${said}${/[?!…]$/.test(said) ? "" : "."} Edit the document to retry.`;
+}
+
+/** The header's tooltip: what the sync status means, or why it lags. */
+export function syncTooltip(
+	status: SyncStatus,
+	snapshot: Snapshot | undefined,
+	userId: string | undefined,
+): string {
+	if (status.kind === "in-sync") return "Pull requests match the document";
+	if (status.kind === "building") return "Updating pull requests to match the document";
+	return syncHint(status, snapshot, userId) ?? "Pull requests lag the document";
 }
 
 /** Why a first build has not started yet, when the viewer's agent is finishing a prototype. */
@@ -123,6 +136,15 @@ export function startingLabel(
 ): { label: string; queued: boolean; hint?: string } {
 	let hint = startingHint(snapshot);
 	return hint ? { label: "Queued", queued: true, hint } : { label: "Building…", queued: false };
+}
+
+/**
+ * A living document's tasks split at its first build: the tasks it started with, then the
+ * ones each later sync added. The server names a sync's tasks `rebuild-<version>-<n>`.
+ */
+export function liveTaskGroups<T extends { id: string }>(tasks: T[]): { first: T[]; since: T[] } {
+	let since = tasks.filter(task => task.id.startsWith("rebuild-"));
+	return { first: tasks.filter(task => !since.includes(task)), since };
 }
 
 /** One pull request's living-document commits, newest first. */
