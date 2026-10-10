@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { jevJudge, SpikeScout } from "./spike-scout";
+import { FOLLOW_UP_MS, jevJudge, SpikeScout } from "./spike-scout";
 
 import type { Investigation } from "@chopin/experiment/records";
 import type { SpikeBlock, SpikeHost, SpikeJudge, SpikeSnapshot } from "./spike-scout";
@@ -19,6 +19,7 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 	let records: Investigation[] = [];
 	let connected = true;
 	let timers: Array<() => void> = [];
+	let delays: number[] = [];
 	let state: SpikeSnapshot = {
 		repositoryId: "R_1",
 		live: false,
@@ -53,7 +54,8 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 			judged.push(blocks.map(item => item.digest));
 			return verdict ? verdict(blocks) : blocks.map(item => item.text.includes("unsure"));
 		},
-		after: (_delay, action) => {
+		after: (delay, action) => {
+			delays.push(delay);
 			timers.push(action);
 			return () => {};
 		},
@@ -66,6 +68,7 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 		judged,
 		records,
 		timers,
+		delays,
 		disconnect: () => connected = false,
 	};
 }
@@ -186,6 +189,59 @@ test("a living build still dismisses a deleted callout's spike", async () => {
 	} as Investigation);
 	h.scout.schedule({ channelId: "D", editor: "U_1" });
 	await h.scout.check("D");
+	expect(h.dismissed).toEqual(["X"]);
+	expect(h.judged).toHaveLength(0);
+});
+
+test("a scan that leaves passages unjudged looks at the next batch shortly", async () => {
+	let digests = ["a", "b", "c", "d", "e", "f", "g"];
+	let h = harness(
+		{ blocks: digests.map(digest => block(digest, `Settled passage ${digest} about lists.`)) },
+	);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	h.timers[0]();
+	await Bun.sleep(1);
+	expect(h.judged).toEqual([["a", "b", "c", "d", "e"]]);
+	expect(h.delays.at(-1)).toBe(FOLLOW_UP_MS);
+	h.timers.at(-1)!();
+	await Bun.sleep(1);
+	expect(h.judged[1]).toEqual(["f", "g"]);
+	// Everything has been judged, so no further follow-up is scheduled.
+	let scheduled = h.timers.length;
+	await h.scout.check("D");
+	expect(h.timers).toHaveLength(scheduled);
+});
+
+test("a rewritten passage directly above a spike callout is not spiked again", async () => {
+	let h = harness({
+		blocks: [
+			{ ...block("a2"), calloutAfter: "CALLOUTa" },
+			{ ...block("b"), calloutAfter: "SOMEONE_ELSES" },
+		],
+		callouts: new Set(["CALLOUTa", "SOMEONE_ELSES"]),
+	});
+	h.records.push({
+		id: "X",
+		state: "completed",
+		spike: { digest: "a", callout: "CALLOUTa", placed: true },
+	} as Investigation);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.judged).toEqual([["b"]]);
+	expect(h.started).toEqual(["b"]);
+});
+
+test("deleting a callout stops its spike on the edit, before the scan", async () => {
+	let h = harness({ blocks: [block("a")] });
+	h.records.push({
+		id: "X",
+		state: "running",
+		spike: { digest: "a", callout: "GONE", placed: true },
+	} as Investigation);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await Bun.sleep(0);
+	await h.scout.refresh("D");
 	expect(h.dismissed).toEqual(["X"]);
 	expect(h.judged).toHaveLength(0);
 });

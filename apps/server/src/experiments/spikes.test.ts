@@ -82,7 +82,13 @@ test("running and stopped spikes render their own callouts without naming a mach
 	let source = serialize({ type: "root", children: [spikeCallout(stopped)] });
 	expect(source).toContain(`type="warning"`);
 	expect(source).toContain("Agent stopped: cancelled");
-	expect(renderKey(spike("queued"))).toBe("running");
+	expect(renderKey(spike("running"))).toBe("running");
+	expect(renderKey(spike("requested"))).toBe("queued");
+	expect(renderKey(spike("queued"))).toBe("queued");
+	let queued = serialize({ type: "root", children: [spikeCallout(spike("queued"))] });
+	expect(queued).toContain(`title="Queued"`);
+	expect(queued).not.toContain("Prototyping");
+	room.validate(queued);
 	expect(renderKey(spike("interrupted"))).toBe("stopped");
 });
 

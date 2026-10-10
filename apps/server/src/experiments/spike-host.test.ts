@@ -45,7 +45,7 @@ test("a spike is durably placing before its callout is published", async () => {
 		});
 		expect(states[0]).toEqual({ placing: true, placed: false });
 		let [value] = await context.service.store.list(context.plan.id);
-		expect(value.spike).toMatchObject({ placed: true, rendered: "running" });
+		expect(value.spike).toMatchObject({ placed: true, rendered: "queued" });
 		expect(value.spike?.placing).toBeUndefined();
 	} finally {
 		spy.mockRestore();

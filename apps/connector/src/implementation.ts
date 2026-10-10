@@ -1,19 +1,63 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { imageFileArguments } from "./image-file";
 import type { remote } from "./mcp";
 
-export async function implementationBridge(api: Awaited<ReturnType<typeof remote>>) {
-	let tools = await api.tools();
-	let names = new Set(tools.tools.map(tool => tool.name));
+/**
+ * Relay a run's server tools. With a worktree `root`, a run that may upload images also gets the
+ * connector-local upload_image_file, which reads the file here and forwards its bytes.
+ */
+export async function implementationBridge(
+	api: Pick<Awaited<ReturnType<typeof remote>>, "tools" | "invoke">,
+	root?: string,
+) {
+	let listed = await api.tools();
+	let names = new Set(listed.tools.map(tool => tool.name));
+	let local = !!root && names.has("upload_investigation_image");
+	let tools = local
+		? {
+			...listed,
+			tools: [...listed.tools, {
+				name: "upload_image_file",
+				description:
+					"Upload a PNG, JPEG or WebP screenshot (at most 1 MiB) saved in this worktree and "
+					+ "return its image path for submit_spike_result.",
+				inputSchema: {
+					type: "object" as const,
+					properties: {
+						path: {
+							type: "string",
+							description: "The image file, relative to the worktree root.",
+						},
+					},
+					required: ["path"],
+					additionalProperties: false,
+				},
+			}],
+		}
+		: listed;
 	let server = new Server({ name: "chopin-implementation", version: "0.1.0" }, {
 		capabilities: { tools: {} },
 	});
 	server.setRequestHandler(ListToolsRequestSchema, () => tools);
 	server.setRequestHandler(CallToolRequestSchema, async request => {
+		let args = request.params.arguments ?? {};
+		if (local && request.params.name === "upload_image_file") {
+			try {
+				if (typeof args.path !== "string" || !args.path) throw new Error("Give an image path.");
+				return await api.invoke(
+					"upload_investigation_image",
+					await imageFileArguments(root!, args.path),
+				);
+			} catch (error) {
+				let text = error instanceof Error ? error.message : "Image upload failed.";
+				return { isError: true, content: [{ type: "text", text }] };
+			}
+		}
 		if (!names.has(request.params.name)) {
 			return { isError: true, content: [{ type: "text", text: "Tool unavailable for this run." }] };
 		}
-		return api.invoke(request.params.name, request.params.arguments ?? {});
+		return api.invoke(request.params.name, args);
 	});
 	return server;
 }

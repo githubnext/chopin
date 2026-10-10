@@ -27,7 +27,7 @@ async function bridge() {
 	let server;
 	// A spike's tools are the server's run-scoped list, relayed as they are.
 	if (["implementation", "spike"].includes(process.env.CHOPIN_BRIDGE_KIND ?? "")) {
-		server = await implementationBridge(api);
+		server = await implementationBridge(api, process.env.CHOPIN_BRIDGE_ROOT);
 	} else {
 		let context = await api.call("read_experiment") as { input: unknown };
 		server = createBridge(requestSchema.parse(context.input), async result => {

@@ -3,7 +3,12 @@ import { uncertain } from "./spikes";
 import type { JevRequest, JevResult } from "../conversation-plan/jev";
 import type { Investigation } from "@chopin/experiment/records";
 
-export type SpikeBlock = { digest: string; text: string };
+export type SpikeBlock = {
+	digest: string;
+	text: string;
+	/** Id of the Callout directly after this passage, if one is. */
+	calloutAfter?: string;
+};
 export type SpikeSnapshot = {
 	repositoryId: string;
 	/** The document already has a living build; spikes are for the plan before it. */
@@ -46,6 +51,8 @@ export const heuristicJudge: SpikeJudge = async blocks =>
 export const SPIKE_THRESHOLD = 0.6;
 export const MAX_CANDIDATES = 5;
 export const MAX_ACTIVE = 3;
+/** How soon a scan that left passages unjudged looks at the next batch. */
+export const FOLLOW_UP_MS = 5_000;
 const ACTIVE = ["requested", "queued", "running", "publishing"];
 
 /**
@@ -103,6 +110,9 @@ export class SpikeScout {
 	/** Digests already judged per document, so unchanged passages are never asked again. */
 	#seen = new Map<string, Set<string>>();
 	#editors = new Map<string, string>();
+	#followUps = new Map<string, () => void>();
+	/** Documents with a dismissal check already queued, so a burst of edits shares one. */
+	#dismissing = new Set<string>();
 	#closed = false;
 
 	constructor(options: SpikeScoutOptions) {
@@ -115,17 +125,44 @@ export class SpikeScout {
 		let id = target.channelId;
 		this.#editors.set(id, target.editor);
 		this.#pending.get(id)?.cancel();
-		let after = this.#options.after ?? ((delay, action) => {
-			let timer = setTimeout(action, delay);
-			return () => clearTimeout(timer);
-		});
+		this.#followUps.get(id)?.();
+		this.#followUps.delete(id);
+		// A deleted callout stops its spike now rather than after the scan's debounce.
+		if (!this.#dismissing.has(id)) {
+			this.#dismissing.add(id);
+			void this.#serial(id, async () => {
+				this.#dismissing.delete(id);
+				let snapshot = await this.#options.host.snapshot(id);
+				if (snapshot) await this.#dismiss(id, snapshot);
+			});
+		}
 		let entry = { cancel: () => {} };
-		entry.cancel = after(this.#options.debounceMs ?? 20_000, () => {
+		entry.cancel = this.#after(this.#options.debounceMs ?? 20_000, () => {
 			if (this.#pending.get(id) !== entry) return;
 			this.#pending.delete(id);
 			void this.check(id);
 		});
 		this.#pending.set(id, entry);
+	}
+
+	#after(delay: number, action: () => void): () => void {
+		if (this.#options.after) return this.#options.after(delay, action);
+		let timer = setTimeout(action, delay);
+		return () => clearTimeout(timer);
+	}
+
+	/** Stop the spikes whose placed callouts are gone; returns every spike of the document. */
+	async #dismiss(channelId: string, snapshot: SpikeSnapshot): Promise<Investigation[]> {
+		let host = this.#options.host;
+		let spikes = await host.spikes(channelId);
+		for (let value of spikes) {
+			let spike = value.spike!;
+			if (spike.placed && !spike.dismissed && !snapshot.callouts.has(spike.callout)) {
+				await host.dismiss(channelId, value.id);
+				spike.dismissed = true;
+			}
+		}
+		return spikes;
 	}
 
 	/** A spike record changed; project it into its callout. */
@@ -153,14 +190,7 @@ export class SpikeScout {
 		let host = this.#options.host;
 		let snapshot = await host.snapshot(channelId);
 		if (!snapshot) return;
-		let spikes = await host.spikes(channelId);
-		for (let value of spikes) {
-			let spike = value.spike!;
-			if (spike.placed && !spike.dismissed && !snapshot.callouts.has(spike.callout)) {
-				await host.dismiss(channelId, value.id);
-				spike.dismissed = true;
-			}
-		}
+		let spikes = await this.#dismiss(channelId, snapshot);
 		// A living build ends new scouting, but deleting a callout must still stop its spike.
 		if (snapshot.live) return;
 		let editor = this.#editors.get(channelId);
@@ -171,9 +201,13 @@ export class SpikeScout {
 		let seen = this.#seen.get(channelId) ?? new Set<string>();
 		this.#seen.set(channelId, seen);
 		let started = new Set(spikes.map(value => value.spike!.digest));
-		let candidates = snapshot.blocks.filter(block =>
+		let spikeCallouts = new Set(spikes.map(value => value.spike!.callout));
+		// A rewritten passage keeps the spike callout under it, so it is not spiked again.
+		let unjudged = snapshot.blocks.filter(block =>
 			!seen.has(block.digest) && !started.has(block.digest)
-		).slice(0, MAX_CANDIDATES);
+			&& !(block.calloutAfter && spikeCallouts.has(block.calloutAfter))
+		);
+		let candidates = unjudged.slice(0, MAX_CANDIDATES);
 		if (!candidates.length) return;
 		// Without the editor's local agent there is nowhere to run; judge these again after an edit.
 		let connection = await host.connection(snapshot.repositoryId, editor, channelId);
@@ -190,12 +224,24 @@ export class SpikeScout {
 			seen.add(block.digest);
 			await host.start(channelId, { owner: editor, connection, block });
 		}
+		// Later passages are judged in the next batch soon, not only after another edit.
+		if (unjudged.length > candidates.length && !this.#closed && !this.#pending.has(channelId)) {
+			this.#followUps.get(channelId)?.();
+			let cancel = this.#after(FOLLOW_UP_MS, () => {
+				if (this.#followUps.get(channelId) !== cancel) return;
+				this.#followUps.delete(channelId);
+				void this.check(channelId);
+			});
+			this.#followUps.set(channelId, cancel);
+		}
 	}
 
 	close(): void {
 		this.#closed = true;
 		for (let pending of this.#pending.values()) pending.cancel();
 		this.#pending.clear();
+		for (let cancel of this.#followUps.values()) cancel();
+		this.#followUps.clear();
 		this.#seen.clear();
 		this.#editors.clear();
 	}

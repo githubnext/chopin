@@ -289,10 +289,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (channel.repositoryId !== connection.source.repositoryId) fail("repository-forbidden");
 	}
 	/** The connection's queued, running, or publishing investigations across its repository. */
+	/** A connection's work in creation order, so queued runs are dispatched first come first served. */
 	async function work(connection: Connection, states: string[]) {
 		return (await service.store.active()).filter(item =>
 			item.connectionId === connection.id && states.includes(item.state)
-		);
+		).sort((a, b) => a.createdAt - b.createdAt);
 	}
 	route(
 		"GET",

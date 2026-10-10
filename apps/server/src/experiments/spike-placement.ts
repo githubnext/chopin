@@ -27,7 +27,7 @@ export type CalloutPlacement =
 	| { status: "missing" }
 	| { status: "deferred" };
 
-function calloutId(node: RootContent): string | undefined {
+export function calloutId(node: RootContent): string | undefined {
 	if (node.type !== "mdxJsxFlowElement" || node.name !== "Callout") return undefined;
 	let id = node.attributes.find(item => item.type === "mdxJsxAttribute" && item.name === "id");
 	return typeof id?.value === "string" ? id.value : undefined;
