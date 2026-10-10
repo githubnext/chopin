@@ -270,6 +270,19 @@ describe("resolving a thread", () => {
 		expect(Store.reply(threads, records, record.id, "ana", "Still talking.").ok).toBe(true);
 	});
 
+	it("will not reopen past the ceiling on unresolved threads", async () => {
+		let { records, record } = thread(await document());
+		let threads = Store.create();
+		Store.resolve(threads, records, record.id, "kris", QUOTE);
+		for (let i = 0; i < Store.MAX_OPEN; i++) {
+			records.set(`open-${i}`, { ...record, id: `open-${i}`, status: "open" });
+		}
+
+		expect(Store.reopen(threads, records, record.id)).toMatchObject({ ok: false, reason: "full" });
+		expect(records.get(record.id)!.status).toBe("resolved");
+		expect(threads.closed.has(record.id)).toBe(true);
+	});
+
 	it("reopens only what was resolved", async () => {
 		let { records, record } = thread(await document());
 		let threads = Store.create();

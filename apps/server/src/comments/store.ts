@@ -189,7 +189,7 @@ export function reopen(
 	id: string,
 ):
 	| { ok: true; thread: Thread; previous: Thread }
-	| { ok: false; reason: "missing" | "open" | "settled"; message: string }
+	| { ok: false; reason: "missing" | "open" | "settled" | "full"; message: string }
 {
 	let record = records.get(id);
 	if (!record) return { ok: false, reason: "missing", message: "No such comment thread." };
@@ -199,6 +199,9 @@ export function reopen(
 	if (record.status !== "resolved") {
 		return { ok: false, reason: "settled", message: "That thread was decided and cannot reopen." };
 	}
+	// Reopening is another way to add an open thread, so the same ceiling applies.
+	let full = room(records);
+	if (full) return full;
 
 	threads.closed.delete(id);
 	let next: Thread = { ...record, status: "open" };

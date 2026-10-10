@@ -439,9 +439,9 @@ export const documentTools = {
 					Comments.invalidate(context.plan, "plan_changed");
 
 					// After invalidating, so it is not immediately undone. If
-					// this turn was started by accepting a comment, what it
-					// just wrote is what that decision produced — unless the
-					// agent says otherwise with `anchor_plan`, which wins.
+					// this turn is acting on a comment thread, what it just
+					// wrote is what that thread produced — unless the agent
+					// says otherwise with `anchor_plan`, which wins.
 					let acting = context.plan.chat.acting;
 					if (acting) Comments.attribute(context.plan, acting, outcome.touched);
 
