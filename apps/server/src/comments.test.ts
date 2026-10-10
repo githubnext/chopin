@@ -554,7 +554,7 @@ describe("resolving and reopening, as the service orders it", () => {
 		let joiner = member("kris");
 		Comments.greet(plan, joiner.socket);
 		let sync = joiner.replies.find(frame => frame.kind === "comment:sync");
-		expect((sync?.threads as Array<{ id: string }>).map(each => each.id)).toEqual(["accepted"]);
+		expect((sync!.threads as Array<{ id: string }>).map(each => each.id)).toEqual(["accepted"]);
 		expect(Comments.anchors(plan).map(each => each.thread)).toEqual(["accepted"]);
 	});
 });
