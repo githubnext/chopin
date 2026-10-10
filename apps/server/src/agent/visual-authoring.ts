@@ -1,4 +1,13 @@
+import { DIAGRAM_ALIASES, DIAGRAM_TYPES } from "@chopin/diagrams";
 import { SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
+
+import { visualChoices } from "./visual-catalog";
+
+let choices = visualChoices();
+let catalog = Object.keys(DIAGRAM_TYPES)
+	.map(type => `- \`${type}\`: ${choices[type]}`).join("\n");
+let aliases = Object.entries(DIAGRAM_ALIASES)
+	.map(([alias, type]) => `\`${alias}\` → \`${type}\``).join(", ");
 
 /** Chopin-owned guidance loaded with the Planner on every supported harness. */
 export const DIAGRAM_AUTHORING = `Chopin visual authoring guide v1
@@ -20,6 +29,25 @@ conditional and explain unknown links in prose. Diagram the engineering
 relationship, not the order people commented. Put one sentence beside the
 diagram explaining its takeaway. Use a \`${SEECODE_LANGUAGE}\` fence only when the
 visual makes that takeaway easier to understand.
+
+Available native SeeCode types
+
+The examples below are not an exhaustive list. Numerical charts are supported
+in the same \`seecode\` JSON fence; no separate chart fence or uploaded image is
+needed. These fences remain \`code\` blocks in \`read_plan\`; the browser derives
+the chart from the fence language and JSON type. A \`code\` block is not evidence
+that a chart is unrendered. \`edit_plan\` validates new SeeCode specs before saving.
+The registered types and their evidence requirements are:
+${catalog}
+
+Registered presentation aliases (alias → canonical type): ${aliases}.
+An alias uses its canonical type's data shape with a presentation variant.
+
+For quantitative charts, preserve source values, categories, units, ordering,
+and the meaning of the denominator. Do not invent measurements, silently omit
+values, mix counts with percentages, or infer a remainder from overlapping
+categories. Keep synthetic examples explicitly synthetic. If the source is
+incomplete, ask for the missing data or explain the limitation in prose.
 
 Native document composition
 
@@ -75,6 +103,11 @@ Sequence (messages refer to participant ids, in order):
 State (edges connect named states and may label transitions):
 \`\`\`${SEECODE_LANGUAGE}
 {"type":"state","nodes":[{"id":"draft","label":"Draft","row":0,"col":0},{"id":"saved","label":"Saved","row":0,"col":1}],"edges":[["draft","saved","publish"]]}
+\`\`\`
+
+Bar chart (synthetic example; replace all categories and values with source data):
+\`\`\`${SEECODE_LANGUAGE}
+{"type":"bar","title":"Synthetic completed jobs","axis":"Completed jobs","data":[["Alpha",12],["Beta",7],["Gamma",19]]}
 \`\`\`
 
 Call \`read_plan\` before \`edit_plan\`. If \`edit_plan\` rejects a new diagram,
