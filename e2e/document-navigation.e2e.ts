@@ -177,6 +177,13 @@ test("header actions menu is start-aligned to its trigger", async ({ join }) => 
 	expect(layout.top).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height);
 });
 
+/** The header sits above Chat only, so click its trailing padding rather than a fixed offset. */
+async function clickBannerPadding(page: import("@playwright/test").Page) {
+	let banner = page.getByRole("banner");
+	let box = (await banner.boundingBox())!;
+	await banner.click({ position: { x: box.width - 4, y: 10 } });
+}
+
 test("account menu closes on Escape and outside click, and returns focus", async ({ join }) => {
 	let page = await join("ana");
 	let account = sidebar(page).locator(".project-sidebar-account");
@@ -194,7 +201,7 @@ test("account menu closes on Escape and outside click, and returns focus", async
 	await expect(account).toBeFocused();
 	await account.click();
 	await expect(menu).toBeVisible();
-	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await clickBannerPadding(page);
 	await expect(menu).toHaveCount(0);
 	await expect(account).toHaveAttribute("aria-expanded", "false");
 });
@@ -315,7 +322,7 @@ test("the header title renames in place with click, F2, Escape, and blur", async
 	await button.press("F2");
 	await expect(field).toBeFocused();
 	await field.fill(title);
-	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await clickBannerPadding(page);
 	await expect(field).toHaveCount(0);
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
 	await expect(header.getByRole("button", { name: `Rename ${title}`, exact: true })).toBeVisible();
@@ -380,7 +387,7 @@ test("leaving a rejected title reverts it without retrying", async ({ join, room
 		"A document with this title already exists. Try a different title.",
 	);
 
-	await page.getByRole("banner").click({ position: { x: 600, y: 10 } });
+	await clickBannerPadding(page);
 	await expect(field).toHaveCount(0);
 	await expect(headerDocument(page)).toHaveAttribute("aria-label", before!);
 	expect(patches).toBe(1);
