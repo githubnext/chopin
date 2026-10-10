@@ -6,6 +6,7 @@ import {
 	buildPhase,
 	draftRefusalCopy,
 	firstBuildStep,
+	startingHint,
 	SYNC_LABEL,
 	syncHint,
 	syncStatus,
@@ -160,10 +161,15 @@ export function BuildPlanButton(
 	}
 	if (step.view === "hidden") return null;
 	if (step.view === "working") {
+		let hint = startingHint(snapshot);
 		return (
 			<button
 				aria-busy="true"
+				aria-description={hint}
 				className="btn btn-compact btn-ghost shrink-0"
+				data-tooltip={hint}
+				data-tooltip-detail={hint ? "" : undefined}
+				data-tooltip-verbatim={hint ? "" : undefined}
 				onClick={onShowBuild}
 				type="button"
 			>
