@@ -169,7 +169,7 @@ test("linked images can grow within the paragraph and still open a preview", asy
 	await loadImage(page);
 	await seed(`[![An open working document](${IMAGE_URL})](https://example.com/details)\n`);
 	await join("ana");
-	await page.getByRole("button", { name: "Hide chat", exact: true }).click();
+	await page.getByRole("button", { name: "Expand document", exact: true }).click();
 	await expect.poll(() => width(page)).toBe(480);
 	await image(page).hover();
 	let corner = content(page).getByRole("slider", {
@@ -244,7 +244,7 @@ Neighboring notes.
 </Columns>
 `);
 	await join("ana");
-	await page.getByRole("button", { name: "Hide chat", exact: true }).click();
+	await page.getByRole("button", { name: "Expand document", exact: true }).click();
 	await expect.poll(() =>
 		image(page).evaluate(element => {
 			let column = element.closest(".planColumn")!;

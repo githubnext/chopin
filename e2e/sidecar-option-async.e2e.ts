@@ -110,7 +110,7 @@ test("Escape during a delayed option reply restores focus and respects moving aw
 	await ana.keyboard.press("Escape");
 	await expect(field).toHaveCount(0);
 	await expect(trigger).toBeFocused();
-	await ana.getByRole("button", { name: "Hide chat" }).click();
+	await ana.getByRole("button", { name: "Expand document" }).click();
 	let chatOpener = ana.getByRole("button", { name: "Show chat" });
 	await expect(chatOpener).toHaveAttribute("aria-expanded", "false");
 	await expect(chatOpener).toBeFocused();

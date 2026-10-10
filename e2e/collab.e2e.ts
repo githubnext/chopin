@@ -48,7 +48,7 @@ test("typing faster than the server takes updates still reaches everyone", async
 test("the header represents everyone here as faces", async ({ join }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
-	let header = ana.getByRole("banner");
+	let header = ana.getByRole("group", { name: /^People here:/ });
 
 	await expect(header.getByRole("img", { name: "ana" })).toHaveCount(1);
 	await expect(header.getByRole("img", { name: "bo" })).toHaveCount(1);
@@ -71,14 +71,14 @@ test("the header represents one account once across its open tabs", async ({ joi
 	await Promise.all([second.goto(first.url()), third.goto(first.url())]);
 	await Promise.all([ready(second), ready(third)]);
 
-	let people = first.getByRole("banner").getByRole("group", {
+	let people = first.getByRole("group", {
 		exact: true,
 		name: "People here: e2e",
 	});
 	await expect(people.getByRole("img", { name: "e2e" })).toHaveCount(1);
 
 	await first.close();
-	let remaining = third.getByRole("banner").getByRole("group", {
+	let remaining = third.getByRole("group", {
 		exact: true,
 		name: "People here: e2e",
 	});

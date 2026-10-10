@@ -150,7 +150,7 @@ test(
 				let views = page.getByRole("group", { name: "Document view" });
 				await expect(views).toBeVisible();
 				if (width === 724 && fromCompactChat) {
-					await page.getByRole("button", { name: "Hide chat" }).click();
+					await page.getByRole("button", { name: "Expand document" }).click();
 					await expect(chat).toBeHidden();
 					let showChat = page.getByRole("button", { name: "Show chat" });
 					await expect(showChat).toBeFocused();
@@ -431,7 +431,7 @@ test("landscape split controls respect inline safe areas", async ({ join, page, 
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	let header = page.getByRole("banner");
 	let headerControls = header.getByRole("button");
-	let chatToggle = page.getByRole("button", { name: "Hide chat" });
+	let chatToggle = page.getByRole("button", { name: "Expand document" });
 	let viewControls = page.getByRole("group", { name: "Document view" }).getByRole("button");
 	let [headerFirst, headerLast, chatButton, viewFirst, viewLast] = await Promise.all([
 		headerControls.first().boundingBox(),
@@ -488,7 +488,7 @@ test("the Projects drawer below 1198px keeps the split workspace", async ({ join
 	await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
 	await expect(content(page)).toBeEditable();
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
-	await page.getByRole("button", { name: "Hide chat" }).click();
+	await page.getByRole("button", { name: "Expand document" }).click();
 	await expect(chat).toBeHidden();
 	let opener = page.getByRole("button", { name: "Show chat" });
 	await expect(opener).toBeFocused();
@@ -547,7 +547,7 @@ test("a representative desktop retains the split Chat layout", async ({ join, se
 	await expect(chatPane(page)).toBeVisible();
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Hide chat" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Expand document" })).toBeVisible();
 	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
 	await expect(content(page)).toBeEditable();
 });
@@ -671,7 +671,7 @@ test("the obsolete auto-saved Chat key does not hide Chat or persist a new choic
 	await join("ana");
 	await expect(chatPane(page)).toBeVisible();
 	expect(await page.evaluate(() => localStorage.getItem("chopin:pane:chat:choice"))).toBeNull();
-	await page.getByRole("button", { name: "Hide chat" }).click();
+	await page.getByRole("button", { name: "Expand document" }).click();
 	await expect.poll(() => page.evaluate(() => localStorage.getItem("chopin:pane:chat:choice")))
 		.toBe("false");
 });
