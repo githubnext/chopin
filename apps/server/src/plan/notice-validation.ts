@@ -11,6 +11,18 @@ export function validateNotice(
 	entry: Record<string, JsonValue>,
 	savedMessages: Map<JsonValue, Record<string, JsonValue>>,
 ): void {
+	if (Object.hasOwn(entry, "comment")) {
+		let author = entry.author as Record<string, JsonValue>;
+		let comment = entry.comment as Record<string, JsonValue> | null;
+		if (
+			author.kind !== "system" || !comment || typeof comment !== "object"
+			|| Array.isArray(comment)
+			|| Object.keys(comment).some(key => !["thread", "excerpt", "note"].includes(key))
+			|| typeof comment.thread !== "string" || !ULID.test(comment.thread)
+			|| typeof comment.excerpt !== "string" || comment.excerpt.length > 200
+			|| typeof comment.note !== "string" || comment.note.length > 4_000
+		) throw new Error("hosted channel has an invalid transcript entry");
+	}
 	if (Object.hasOwn(entry, "decision")) {
 		let author = entry.author as Record<string, JsonValue>;
 		let decision = entry.decision;

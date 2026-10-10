@@ -33,6 +33,7 @@ export declare namespace Comment {
 		| Said
 		| Resolved
 		| Reopened
+		| Working
 		| Start.Reply
 		| Reply.Reply
 		| Resolve.Reply
@@ -42,13 +43,30 @@ export declare namespace Comment {
 	/** `accepted` and `dismissed` are only ever read back from storage. */
 	export type Status = "open" | "resolved" | "accepted" | "dismissed";
 
-	export type Note = {
-		id: string;
-		handle: string;
-		text: string;
-		/** Unix seconds. */
-		ts: number;
-	};
+	/**
+	 * One thing said on a thread, by a member or by the Planner.
+	 *
+	 * `to` records that a member addressed the Planner. The mention a client
+	 * shows is drawn from it; the text never carries one, and the server never
+	 * looks for one there.
+	 */
+	export type Note =
+		& {
+			id: string;
+			text: string;
+			/** Unix seconds. */
+			ts: number;
+			to?: "planner";
+		}
+		& ({ author: "member"; handle: string } | { author: "planner" });
+
+	/**
+	 * What became of a note sent to the Planner, as its sender is told.
+	 *
+	 * `running` and `queued` mean a turn will read the thread; `off` means this
+	 * server runs without a Planner, so the note is saved and nothing more.
+	 */
+	export type Planner = "running" | "queued" | "off";
 
 	export type Thread = {
 		id: string;
@@ -66,6 +84,13 @@ export declare namespace Comment {
 		resolver?: string;
 		/** When they did, Unix seconds. */
 		at?: number;
+		/**
+		 * A Planner turn is running or queued for this thread.
+		 *
+		 * Derived from the live turn and its queue when a client joins, and never
+		 * stored: a turn does not survive a restart, so neither does this.
+		 */
+		working?: boolean;
 	};
 
 	/** Every thread the plan holds, sent when a client joins. */
@@ -98,13 +123,15 @@ export declare namespace Comment {
 			length: number;
 			/** The first note. */
 			text: string;
+			/** Address the Planner. The wire destination, never a mention, decides. */
+			to?: "planner";
 		};
 
 		export type Reply =
 			& KIND<"comment:start">
 			& (
-				| { ok: true; thread: Thread }
-				| { ok: false; reason: "invalid" | "full"; message: string }
+				| { ok: true; thread: Thread; planner?: Planner }
+				| { ok: false; reason: "invalid" | "full" | "busy"; message: string }
 			);
 	}
 
@@ -123,14 +150,14 @@ export declare namespace Comment {
 		| { ok: false; reason: "resolved"; status: Status; resolver: string };
 
 	export namespace Reply {
-		export type Ask = KIND<"comment:reply"> & { id: string; text: string };
+		export type Ask = KIND<"comment:reply"> & { id: string; text: string; to?: "planner" };
 
 		export type Reply =
 			& KIND<"comment:reply">
 			& { id: string }
 			& (
-				| { ok: true; note: Note }
-				| { ok: false; reason: "invalid" | "full"; message: string }
+				| { ok: true; note: Note; planner?: Planner }
+				| { ok: false; reason: "invalid" | "full" | "busy"; message: string }
 				| Blocked
 			);
 	}
@@ -179,6 +206,19 @@ export declare namespace Comment {
 
 	/** A resolved thread is open again. Followed by a `plan:anchors`. */
 	export type Reopened = KIND<"comment:reopened"> & { thread: Thread };
+
+	/**
+	 * Whether the Planner is working on a thread.
+	 *
+	 * True once a turn for it is running or queued. False when the last one
+	 * ends; `reason` says why when it did not finish on its own: it was stopped,
+	 * it failed, or there is no Planner to run it.
+	 */
+	export type Working = KIND<"comment:working"> & {
+		id: string;
+		working: boolean;
+		reason?: "stopped" | "failed" | "off";
+	};
 
 	/**
 	 * Somebody is writing a reply.

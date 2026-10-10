@@ -88,6 +88,8 @@ export type Waiting = Wire.Waiting & {
 	message?: boolean;
 	/** The comment thread this turn was started to act on, if one was. */
 	thread?: string;
+	/** Told how the turn went, before the queue moves on; see `Instruction`. */
+	ended?: Instruction["ended"];
 	/** Login session whose Copilot entitlement owns this queued turn. */
 	sessionId?: string;
 	/** Verified member identity, retained only for a queued composer message. */
@@ -122,11 +124,62 @@ export type ActiveMemberRequest = {
 
 type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId">;
 
+/** How a turn started by an instruction finished, for whoever started it. */
+export type Ended = {
+	/** `skipped` means it never ran, because it was spent or withdrawn first. */
+	status: "done" | "stopped" | "failed" | "skipped";
+	/** The last thing the Planner said in Chat during the turn, if anything. */
+	text?: string;
+};
+
 /** What a turn other than a message needs to say about itself. */
 export type Instruction = {
 	spent?: () => boolean;
 	thread?: string;
+	/**
+	 * Awaited once the turn has been persisted and before the next one starts,
+	 * so whatever it records lands before anything the next turn does. Also
+	 * called, with `skipped`, for a turn that never runs.
+	 */
+	ended?: (outcome: Ended) => void | Promise<void>;
+	/** Shown on the transcript notice, so Chat can draw it as a comment card. */
+	comment?: NonNullable<Wire.Entry["comment"]>;
 };
+
+/** Tell an instruction's owner how it went; their failure is theirs, not the queue's. */
+async function report(about: Instruction | undefined, outcome: Ended): Promise<void> {
+	if (!about?.ended) return;
+	try {
+		await about.ended(outcome);
+	} catch (err) {
+		console.error("[chat] an instruction's end could not be recorded:", err);
+	}
+}
+
+/**
+ * Whether an instruction about `thread` would run now, wait, or be refused.
+ *
+ * Asked before anything is saved, so a full queue refuses a comment rather than
+ * saving one nobody will act on. A thread that already has a turn waiting
+ * folds into it instead of queueing again, so it never counts against the cap.
+ */
+export function admission(
+	context: Pick<Room, "chat" | "config">,
+	thread?: string,
+): "running" | "queued" | "off" | "busy" {
+	let { chat, config } = context;
+	if (!config.agent) return "off";
+	if (thread && queuedFor(chat, thread)) return "queued";
+	if (!chat.busy) return "running";
+	return chat.waiting.length >= MAX_QUEUE ? "busy" : "queued";
+}
+
+/** The waiting turn for a thread, if one is queued and still worth running. */
+export function queuedFor(chat: Chat, thread: string): Waiting | undefined {
+	return chat.waiting.find(item =>
+		item.thread === thread && !item.message && !item.job && !item.draft && !item.spent?.()
+	);
+}
 
 export type Chat = {
 	job?: ConversationPlan.Job;
@@ -785,9 +838,19 @@ export let { notice, noticeOnce, noticeExclusive, refreshNoticeExclusive } = cre
 	announce,
 });
 
-function instructionNotice(context: Room, text: string): void | Promise<void> {
+function instructionNotice(
+	context: Room,
+	text: string,
+	comment?: Instruction["comment"],
+): void | Promise<void> {
 	let { chat, room, server } = context;
-	let entry: Wire.Entry = { id: ulid(), author: { kind: "system" }, text, ts: now() };
+	let entry: Wire.Entry = {
+		id: ulid(),
+		author: { kind: "system" },
+		text,
+		ts: now(),
+		...(comment ? { comment } : {}),
+	};
 	chat.entries.push(entry);
 	return context.persist().then(() => announce(server, room, entry));
 }
@@ -825,28 +888,39 @@ export function instruct(
 			return context.persist().then(() => announce(server, room, entry));
 		}
 
+		// A thread that already has a turn waiting is told about the newer note
+		// by that turn: its prompt is replaced, since it reads the whole thread.
+		let folded = about.thread ? queuedFor(chat, about.thread) : undefined;
+		if (folded) {
+			folded.handle = handle;
+			folded.text = text;
+			return;
+		}
+
 		if (chat.busy) {
 			if (chat.waiting.length >= MAX_QUEUE) {
-				return void say(chat, server, room, {
+				say(chat, server, room, {
 					id: ulid(),
 					author: { kind: "system" },
 					text: "The queue is full. Wait for the current turn to finish.",
 					ts: now(),
 				});
+				return report(about, { status: "failed" });
 			}
+			let { comment: _comment, ...rest } = about;
 			chat.waiting.push({
 				id: ulid(),
 				handle,
 				text,
-				...about,
+				...rest,
 				sessionId: context.claimantSessionId,
 			});
 			return queued(chat, server, room);
 		}
 
-		startRun(context, handle, text, about.thread, context.claimantSessionId);
+		startRun(context, handle, text, about, context.claimantSessionId);
 	};
-	let announced = instructionNotice(context, said);
+	let announced = instructionNotice(context, said, about.comment);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }
 
@@ -997,6 +1071,7 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
 	if (!found || found.job || found.handle !== ws.data.handle) return;
 	chat.waiting = chat.waiting.filter(item => item.id !== msg.id);
 	queued(chat, server, room);
+	void report(found, { status: "skipped" });
 }
 
 /**
@@ -1696,7 +1771,7 @@ async function run(
 	context: Room,
 	handle: string,
 	text: string,
-	thread: string | undefined,
+	about: Instruction | undefined,
 	claimantSessionId: string | undefined,
 	reserved = false,
 	member?: MemberRequest,
@@ -1708,6 +1783,10 @@ async function run(
 		if (jobTurn) finishJob(jobTurn, { status: "failed", reason: "The document closed." });
 		return;
 	}
+	let thread = about?.thread;
+	// Where this turn's own messages begin, so its last word can be found again.
+	let firstEntry = chat.entries.length;
+	let failed = false;
 
 	if (!reserved) {
 		chat.busy = true;
@@ -1805,6 +1884,8 @@ async function run(
 		}
 	} catch (err) {
 		console.error("[chat] turn failed:", err);
+		// A stop the room asked for is not a failure; an interruption is.
+		failed = !turnController.signal.aborted || !!chat.interruption;
 		if (jobTurn) {
 			outcome = chat.closed
 				? { status: "failed", reason: "The document closed." }
@@ -1925,6 +2006,16 @@ async function run(
 		finishJob(jobTurn, outcome ?? { status: "failed", reason: "The Planner turn ended." });
 	}
 
+	// Before the drain, so what it records is in place before the next turn reads anything.
+	if (about?.ended && !chat.closed) {
+		let said = chat.entries.slice(firstEntry).findLast(entry => entry.author.kind === "agent");
+		let stopped = turnController.signal.aborted && !failed;
+		await report(about, {
+			status: failed || persistenceError ? "failed" : stopped ? "stopped" : "done",
+			...(said?.text.trim() ? { text: said.text } : {}),
+		});
+	}
+
 	if (chat.closed) return;
 	let next = pending(chat);
 	while (next) {
@@ -1955,7 +2046,7 @@ async function run(
 			{ ...context, invokedBy: next.invokedBy, draft: next.draft },
 			next.handle,
 			next.text,
-			next.thread,
+			next,
 			next.invokedBy ? next.sessionId : next.sessionId ?? context.claimantSessionId,
 			false,
 			next.message && next.userId ? { entryId: next.id, userId: next.userId } : undefined,
@@ -1974,7 +2065,7 @@ function startRun(
 	context: Room,
 	handle: string,
 	text: string,
-	thread: string | undefined,
+	about: Instruction | undefined,
 	claimantSessionId: string | undefined,
 	reserved = false,
 	member?: MemberRequest,
@@ -1989,7 +2080,7 @@ function startRun(
 		context,
 		handle,
 		text,
-		thread,
+		about,
 		claimantSessionId,
 		reserved,
 		member,
@@ -2012,7 +2103,10 @@ function startRun(
  */
 export function pending(chat: Chat): Waiting | undefined {
 	let next = chat.waiting.shift();
-	while (next?.spent?.()) next = chat.waiting.shift();
+	while (next?.spent?.()) {
+		void report(next, { status: "skipped" });
+		next = chat.waiting.shift();
+	}
 	if (next?.message && !next.posted) {
 		let entry: MemberEntry = {
 			id: next.id,

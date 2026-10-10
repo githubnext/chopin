@@ -178,7 +178,7 @@ describe("a thread while it is open", () => {
 
 		expect(Store.reply(threads, records, record.id, "kris", "Agreed.").ok).toBe(true);
 
-		expect(records.get(record.id)!.notes.map(note => note.handle)).toEqual(["ana", "kris"]);
+		expect(records.get(record.id)!.notes.map(Store.speaker)).toEqual(["ana", "kris"]);
 	});
 
 	it("refuses a thread nobody started", async () => {
@@ -307,7 +307,7 @@ describe("projecting a decision", () => {
 			quote: QUOTE,
 			by: "kris",
 			at: "2026-07-28T10:14:00Z",
-			notes: record.notes.map(note => ({ by: note.handle, text: note.text })),
+			notes: record.notes.map(note => ({ by: Store.speaker(note), text: note.text })),
 		});
 
 		let source = room.project(doc);
@@ -606,12 +606,26 @@ describe("what a thread owes the agent", () => {
 			.toContain("has changed");
 	});
 
-	it("refuses to anchor a thread nobody accepted", async () => {
+	it("refuses to anchor a dismissed thread", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
 		let id = await mark(plan, server, ana);
+		plan.threads.set(id, { ...plan.threads.get(id)!, status: "dismissed" });
 
-		expect(Comments.relate(plan, id, [])).toContain("was not accepted");
+		expect(Comments.relate(plan, id, [])).toContain("was dismissed");
+	});
+
+	/** A thread sent to the Planner is open while it acts, and what it wrote is its result. */
+	it("anchors what a turn wrote for an open thread", async () => {
+		let { plan, server } = await opened();
+		let ana = member("ana");
+		let id = await mark(plan, server, ana);
+		let digest = room.digests(plan.document)[1]!;
+
+		expect(Comments.relate(plan, id, [{ index: 1, digest }])).toBeUndefined();
+		expect(plan.threads.get(id)?.result).toMatchObject({ pending: false });
+		// An open thread owes no review; only accepted ones ever did.
+		expect(Comments.outstanding(plan)).toEqual([]);
 	});
 
 	/**
@@ -654,10 +668,22 @@ describe("what a thread owes the agent", () => {
 		expect(plan.threads.get(id)?.result?.anchors).toHaveLength(2);
 	});
 
-	it("attributes nothing to a thread nobody accepted", async () => {
+	it("adds each turn's writes to an open thread's result", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
 		let id = await mark(plan, server, ana);
+
+		Comments.attribute(plan, id, [1]);
+		Comments.attribute(plan, id, [1, 2]);
+
+		expect(plan.threads.get(id)?.result?.anchors).toHaveLength(2);
+	});
+
+	it("attributes nothing to a thread that is resolved", async () => {
+		let { plan, server } = await opened();
+		let ana = member("ana");
+		let id = await mark(plan, server, ana);
+		await resolve(plan, server, ana, id);
 
 		Comments.attribute(plan, id, [1]);
 

@@ -162,7 +162,7 @@ test("starts research immediately only for an explicit current request", () => {
 	expect(PROMPT).toContain("starts public research immediately");
 	expect(PROMPT).toContain("Do not refine, rewrite, or broaden");
 	expect(PROMPT).toContain("Never claim that research has completed");
-	expect(PROMPT).toContain("accepted-comment instruction, stale context");
+	expect(PROMPT).toContain("a comment sent to you, stale context");
 });
 
 test("allows only Chopin-returned hosted image paths", () => {
