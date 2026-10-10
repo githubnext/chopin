@@ -12,14 +12,13 @@ test("320×568 uses the compact comment drawer", async ({ join, seed }) => {
 	let page = await join("ana", { hasTouch: true, viewport });
 	await page.getByRole("button", { name: /Comment on “/ }).first().tap();
 	let sheet = page.getByRole("dialog", { name: "Comment thread" });
-	await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
 	await expect.poll(async () => (await sheet.boundingBox())!.y / viewport.height).toBeLessThan(0.9);
 	let box = await sheet.boundingBox();
 	expect(box).not.toBeNull();
 	expect(box!.y / viewport.height).toBeGreaterThan(0.14);
 	expect(box!.x).toBe(0);
 	expect(box!.width).toBe(viewport.width);
-	await expect(sheet.getByRole("button", { name: "Close comment" })).toHaveClass(/sr-only/);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
 		viewport.width,
 	);
@@ -27,7 +26,7 @@ test("320×568 uses the compact comment drawer", async ({ join, seed }) => {
 	await page.setViewportSize({ width: 768, height: 1_024 });
 	let popover = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(popover).not.toHaveAttribute("aria-modal", "true");
-	await expect(page.getByRole("button", { name: "Resize comment sheet" })).toHaveCount(0);
+	await expect(page.locator("[data-plan-comment-sheet]")).toHaveCount(0);
 	await expect(popover.getByRole("button", { name: "More actions" })).toBeFocused();
 });
 
@@ -38,7 +37,7 @@ test("768×1024 keeps comments in a document popover", async ({ join, seed }) =>
 	let popover = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(popover).toBeVisible();
 	await expect(popover).not.toHaveAttribute("aria-modal", "true");
-	await expect(page.getByRole("button", { name: "Resize comment sheet" })).toHaveCount(0);
+	await expect(page.locator("[data-plan-comment-sheet]")).toHaveCount(0);
 });
 
 test("a representative compact viewport keeps a passage above the sheet and restores the document", async ({ join, seed }) => {
@@ -89,7 +88,7 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		let passageBox = await passage.boundingBox();
 		return sheetBox!.y >= passageBox!.y + passageBox!.height;
 	}).toBe(true);
-	// The draft sheet closes visibly from its grabber row; there is no header row of its own.
+	// The draft sheet closes visibly from its one header row, beside the quoted passage.
 	let draftClose = draft.getByRole("button", { name: "Close comment" });
 	await expect(draftClose).toHaveCount(1);
 	await expect(draftClose).toBeVisible();
@@ -129,29 +128,17 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 
 	let sheet = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(sheet).toHaveAttribute("aria-modal", "true");
-	let grabber = sheet.getByRole("button", { name: "Resize comment sheet" });
-	await expect(grabber).toBeFocused();
-	let accessibleClose = sheet.getByRole("button", { name: "Close comment" });
-	await expect(accessibleClose).toHaveClass(/sr-only/);
-	await expect(accessibleClose.locator("svg")).toHaveCount(0);
+	let close = sheet.getByRole("button", { name: "Close comment" });
+	await expect(close).toBeFocused();
+	await expect(close).toBeVisible();
 	await expect(page.locator("[data-plan-comment-sheet-backdrop]")).toBeVisible();
-
-	let drawerStyles = await sheet.evaluate(element => {
-		let styles = getComputedStyle(element);
-		return {
-			offset: styles.getPropertyValue("--drawer-snap-point-offset"),
-			transform: styles.transform,
-		};
-	});
-	expect(drawerStyles.offset).not.toBe("");
-	expect(drawerStyles.transform).not.toBe("none");
 
 	await expect.poll(async () => (await sheet.boundingBox())!.y).toBeLessThan(
 		viewport.height * 0.9,
 	);
-	let medium = await sheet.boundingBox();
-	expect(medium).not.toBeNull();
-	expect(medium!.y).toBeGreaterThan(viewport.height * 0.14);
+	let sheetBox = await sheet.boundingBox();
+	expect(sheetBox).not.toBeNull();
+	expect(sheetBox!.y).toBeGreaterThan(viewport.height * 0.14);
 
 	let navigation = page.getByRole("navigation", {
 		name: "Workspace view",
@@ -172,25 +159,6 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		let passageBox = await passage.boundingBox();
 		return sheetBox!.y >= passageBox!.y + passageBox!.height;
 	}).toBe(true);
-	let grabberBox = await grabber.boundingBox();
-	expect(grabberBox).not.toBeNull();
-	let touch = await page.context().newCDPSession(page);
-	let x = grabberBox!.x + grabberBox!.width / 2;
-	let y = grabberBox!.y + grabberBox!.height / 2;
-	await touch.send("Input.dispatchTouchEvent", {
-		touchPoints: [{ x, y }],
-		type: "touchStart",
-	});
-	for (let step = 1; step <= 12; step++) {
-		await touch.send("Input.dispatchTouchEvent", {
-			touchPoints: [{ x, y: y + (64 - y) * step / 12 }],
-			type: "touchMove",
-		});
-	}
-	await touch.send("Input.dispatchTouchEvent", { touchPoints: [], type: "touchEnd" });
-	await expect.poll(async () => (await sheet.boundingBox())!.y).toBeLessThan(
-		viewport.height * 0.12,
-	);
 	await page.keyboard.press("Escape");
 	await expect(sheet).toHaveCount(0);
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeCloseTo(
