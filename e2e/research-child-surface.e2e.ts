@@ -161,6 +161,14 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	expect(parentBox).not.toBeNull();
 	expect(childBox).not.toBeNull();
 	expect(headerBox).not.toBeNull();
+	// The visible header row sits above the expanded parent sheet's tab row.
+	let parentTab = await parentPaper.getByRole("button", {
+		exact: true,
+		includeHidden: true,
+		name: "Decisions",
+	}).first().boundingBox();
+	expect(parentTab).not.toBeNull();
+	expect(headerBox!.y + headerBox!.height).toBeLessThanOrEqual(parentTab!.y);
 	expect(childBox!.x).toBeGreaterThan(parentBox!.x);
 	expect(childBox!.y).toBeGreaterThan(parentBox!.y);
 	expect(childBox!.x + childBox!.width).toBeLessThan(parentBox!.x + parentBox!.width);
