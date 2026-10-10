@@ -211,7 +211,7 @@ function refused(reason: string): Reduction {
 	return { kind: "refused", reason };
 }
 
-function reduceEvent(state: ReducerState, stored: ProgressEvent): Reduction {
+function reduceEvent(state: ReducerState, stored: ProgressEvent, live = false): Reduction {
 	let { run, tasks } = state.context;
 	let progress = state.progress;
 	if (state.phase === "revision_requested") return refused("terminal");
@@ -313,8 +313,13 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent): Reduction {
 			};
 			break;
 		case "block":
-			// A blocker found before start_task implicitly starts the task, so it is never lost.
-			if (item.state !== "in_progress" && item.state !== "queued") return refused("task-state");
+			// A blocker found before start_task implicitly starts the task, so it is never lost. A
+			// live run's rebuild may replace a blocker directly; restarting first would recheck
+			// dependencies that may still be outstanding.
+			if (
+				item.state !== "in_progress" && item.state !== "queued"
+				&& !(live && item.state === "blocked")
+			) return refused("task-state");
 			if (!text(stored.reason)) return refused("reason");
 			next = {
 				id: item.id,
@@ -379,7 +384,7 @@ function settled(state: ReducerState): ReducerState {
 function foldRun(tasks: Task[], run: Run, events: ProgressEvent[], live = false): Reduction {
 	let state = initial(tasks, run);
 	for (let stored of events) {
-		let result = reduceEvent(state, stored);
+		let result = reduceEvent(state, stored, live);
 		if (result.kind === "refused") return result;
 		state = live ? settled(result.state) : result.state;
 	}

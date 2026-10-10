@@ -972,6 +972,43 @@ describe("living-document builds", () => {
 		await close(plan);
 	});
 
+	it("finishes an outstanding task whose recorded pull request already merged", async () => {
+		let { plan } = await builtPlan(true, "block");
+		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
+		let archived = plan.lifecycle.history.at(-1)!;
+		archived.events = archived.events.map(event =>
+			event.kind === "report_pr" ? { ...event, state: "merged" as const } : event
+		);
+		let rebuildId = crypto.randomUUID();
+		plan.builds = [...plan.builds, {
+			...plan.builds[0]!,
+			id: rebuildId,
+			kind: "rebuild",
+			baseRevision: plan.revision,
+			targetRevision: plan.revision,
+			state: "running",
+		}];
+		plan.live = {
+			...plan.live!,
+			target: { buildId: rebuildId, revision: plan.revision, source: source(plan) },
+		};
+		expect(
+			await reportRebuild(plan, rebuildId, {
+				summary: "The merged pull request already finished graph storage.",
+				commits: [],
+				tasks: [],
+				outstanding: [{ taskId: "model", outcome: "done" }],
+			}),
+		).toEqual({ kind: "accepted" });
+		expect(plan.live?.outstanding).toBeUndefined();
+		expect(historyFor(plan.graph!, plan.lifecycle)[0]!.progress.tasks[0]).toMatchObject({
+			id: "model",
+			state: "completed",
+			pullRequest: { url: "https://github.com/octo-org/score/pull/49", state: "merged" },
+		});
+		await close(plan);
+	});
+
 	it("keeps a still-blocked outstanding task outstanding with its new blocker", async () => {
 		let { plan } = await builtPlan(true, "block");
 		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
