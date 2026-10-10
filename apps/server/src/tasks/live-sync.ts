@@ -75,6 +75,12 @@ export class LiveSyncCoordinator {
 		if (!this.#pending.has(channelId)) void this.check(channelId);
 	}
 
+	/** A workspace (re)connected; catch up on a rebuild missed while the builder was away. */
+	connected(channelId: string): void {
+		if (this.#closed || this.#pending.has(channelId)) return;
+		void this.check(channelId);
+	}
+
 	/** Serialized per document so a deferred check and a timer cannot both queue. */
 	check(channelId: string): Promise<void> {
 		let previous = this.#chains.get(channelId) ?? Promise.resolve();
