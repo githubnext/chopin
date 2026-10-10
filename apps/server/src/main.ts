@@ -50,10 +50,12 @@ import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
+import { jevJudge, SpikeScout } from "./experiments/spike-scout";
+import { spikeHost } from "./experiments/spike-host";
+import { askJev } from "./conversation-plan/jev";
 import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { BuildReadiness } from "./tasks/readiness";
-import { askJev } from "./conversation-plan/jev";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -114,6 +116,7 @@ const LEASE_SAFETY_MS = 5_000;
 const SESSION_CLEANUP_MS = 5 * 60_000;
 const ACCESS_RECHECK_MS = 60_000;
 const RESEARCH_RECOVERY_RETRY_MS = 10_000;
+const SPIKE_SETTLE_MS = 30_000;
 
 let server: Server<SocketData>;
 let heldLease: Lease | undefined;
@@ -134,6 +137,7 @@ let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
 let buildReadiness: BuildReadiness | undefined;
+let spikeScout: SpikeScout | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
 let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
@@ -192,6 +196,7 @@ function documentBackend(): Service.Backend {
 			summaryCoordinator?.schedule(target);
 			liveSync?.schedule(target);
 			buildReadiness?.schedule(target);
+			spikeScout?.schedule(target);
 		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
@@ -199,6 +204,8 @@ function documentBackend(): Service.Backend {
 			void relinkDecisions(id).catch(err =>
 				console.error("chopin: could not re-link decisions after a build -", err)
 			);
+			// Spike callouts the lock deferred land now.
+			void spikeScout?.refresh(id);
 		},
 	};
 }
@@ -322,6 +329,9 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled(opened)) Inject.ask(opened, server, room.id);
 			if (Marks.enabled(opened)) await Marks.mark(opened);
+			// A lock that released while the room was closed left spike callouts deferred.
+			// Retrying only when unlocked keeps the retry's own room open from looping.
+			if (spikeScout && !Service.implementationActive(opened)) void spikeScout.refresh(room.id);
 		}
 		return opened;
 	});
@@ -1275,6 +1285,7 @@ function drain(): Promise<void> {
 		summaryCoordinator?.close();
 		liveSync?.close();
 		buildReadiness?.close();
+		spikeScout?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
 		for (let result of await Promise.allSettled([stoppingJobs])) {
@@ -1719,10 +1730,20 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 				}
 			});
 		}),
+	async settleSpikes(documentId) {
+		if (!spikeScout) return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		// Bounded: a stuck placement must not hold a build forever.
+		await Promise.race([
+			spikeScout.settle(documentId),
+			new Promise<void>(resolve => timer = setTimeout(resolve, SPIKE_SETTLE_MS)),
+		]).finally(() => clearTimeout(timer));
+	},
 	changed(documentId) {
 		if (server && !draining) {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
 		}
+		void spikeScout?.refresh(documentId);
 	},
 	async canMutate(id) {
 		let active = Rooms.get(id)?.plan;
@@ -1959,6 +1980,21 @@ if (config.liveBuild) {
 		error: err => console.error("chopin: living-document rebuild failed -", err),
 	});
 }
+if (config.liveSpikes) {
+	let jev = config.conversationPlanModel ?? "jev-latest";
+	let timeoutMs = config.conversationPlanTimeoutMs ?? 30_000;
+	spikeScout = new SpikeScout({
+		host: spikeHost({
+			service: experiments.service,
+			connections: experiments.connections,
+			withPlan: withImplementationPlan,
+		}),
+		judge: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+			? jevJudge(request => askJev(request, { model: jev, timeoutMs }))
+			: undefined,
+		error: err => console.error("chopin: living-document spike failed -", err),
+	});
+}
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
@@ -2045,6 +2081,7 @@ try {
 	summaryCoordinator?.close();
 	liveSync?.close();
 	buildReadiness?.close();
+	spikeScout?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});

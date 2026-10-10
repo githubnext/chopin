@@ -1,10 +1,16 @@
 import { createInterface } from "node:readline/promises";
 import { requestSchema } from "@chopin/experiment";
 import type { BuildRequest } from "@chopin/protocol/implementation";
-import type { remote } from "./mcp";
+import { remote } from "./mcp";
 import { runAgent } from "./acp";
+import { serveLocalBridge } from "./local-bridge";
 import { git, prepareWorkspace } from "./workspace";
-import { implementationPrompt, liveImplementationPrompt, rebuildPrompt } from "./implementation";
+import {
+	implementationPrompt,
+	liveImplementationPrompt,
+	rebuildPrompt,
+	relay,
+} from "./implementation";
 
 type Options = {
 	root: string;
@@ -26,6 +32,8 @@ export async function runWork(
 		build: BuildRequest;
 		/** A living document's first build, whose run ends at its last complete_task. */
 		live?: boolean;
+		/** An unprompted prototype under a passage, run on a throwaway branch. */
+		spike?: boolean;
 		input: unknown;
 		generation: number;
 		runToken: string;
@@ -55,12 +63,15 @@ export async function runWork(
 			if ((result as { state?: string } | undefined)?.state === "stopped") clearInterval(heartbeat);
 		}).catch(() => abort.abort()).finally(() => renewing = false);
 	}, options.heartbeatMs ?? 10_000);
+	let local: ReturnType<typeof serveLocalBridge> | undefined;
+	let bridgeApi: Promise<Awaited<ReturnType<typeof remote>>> | undefined;
 	try {
 		let prepared = await prepareWorkspace(options.root, options.directory, input);
 		// A rebuild commits onto the existing pull request branches the agent checks out itself.
 		if (implementation && !rebuild) {
 			git(prepared.path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
 		}
+		if (claim.spike) git(prepared.path, "checkout", "-b", `chopin/spike-${input.id.slice(0, 8)}`);
 		console.error(`Running ${input.id} in ${prepared.path}`);
 		let stop = await runAgent({
 			command: options.command,
@@ -69,28 +80,58 @@ export async function runWork(
 				? rebuildPrompt
 				: implementation
 				? claim.live ? liveImplementationPrompt : implementationPrompt
+				: claim.spike
+				? "Use read_investigation from the Chopin MCP server to read the spike brief and "
+					+ "follow it: build the smallest prototype on this throwaway branch, take 1-3 "
+					+ "1280x800 PNG screenshots of the running prototype with Playwright, save them in "
+					+ "this worktree, upload each with upload_image_file({path}), and report with "
+					+ "submit_spike_result, then finish. Never push."
 				: "Use read_investigation from the Chopin MCP server to read the authorized request. "
 					+ "Perform that investigation using your normal project instructions and tools. "
 					+ "Submit a bounded result with submit_investigation_result, then finish. "
 					+ "Do not commit or push unless the authorized brief specifically requests it.",
-			mcpServers: http =>
-				http
-					? [{
-						name: implementation ? "chopin-implementation" : "chopin-investigation",
+			// A spike needs the connector-local upload_image_file, so its tools come from this process:
+			// a loopback HTTP bridge when the agent accepts HTTP servers, the stdio bridge otherwise.
+			mcpServers(http) {
+				let name = implementation ? "chopin-implementation" : "chopin-investigation";
+				if (http && claim.spike) {
+					let tools: ReturnType<typeof relay> | undefined;
+					local = serveLocalBridge(() => {
+						tools ??= (bridgeApi ??= remote(options.url, claim.runToken))
+							.then(api => relay(api, prepared.path))
+							.catch(error => {
+								tools = bridgeApi = undefined;
+								throw error;
+							});
+						return tools.then(make => make());
+					});
+					return [{
+						name,
+						type: "http",
+						url: local.url,
+						headers: [{ name: "Authorization", value: `Bearer ${local.token}` }],
+					}];
+				}
+				if (http) {
+					return [{
+						name,
 						type: "http",
 						url: options.url + "/connector/mcp",
 						headers: [{ name: "Authorization", value: `Bearer ${claim.runToken}` }],
-					}]
-					: [{
-						name: implementation ? "chopin-implementation" : "chopin-investigation",
-						command: process.execPath,
-						args: [options.script, "bridge"],
-						env: [
-							{ name: "CHOPIN_BRIDGE_ORIGIN", value: options.url },
-							{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
-							{ name: "CHOPIN_BRIDGE_KIND", value: kind },
-						],
-					}],
+					}];
+				}
+				return [{
+					name,
+					command: process.execPath,
+					args: [options.script, "bridge"],
+					env: [
+						{ name: "CHOPIN_BRIDGE_ORIGIN", value: options.url },
+						{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
+						{ name: "CHOPIN_BRIDGE_KIND", value: claim.spike ? "spike" : kind },
+						...(claim.spike ? [{ name: "CHOPIN_BRIDGE_ROOT", value: prepared.path }] : []),
+					],
+				}];
+			},
 			signal: abort.signal,
 			onSession: implementation
 				? session =>
@@ -139,6 +180,8 @@ export async function runWork(
 				: message.slice(0, 2000),
 		}).catch(() => {});
 	} finally {
+		local?.close();
+		await bridgeApi?.then(api => api.close()).catch(() => {});
 		clearInterval(heartbeat);
 		options.signal.removeEventListener("abort", cancel);
 	}

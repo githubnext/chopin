@@ -6,7 +6,7 @@ import {
 	parseResult,
 	requestSchema,
 } from "@chopin/experiment";
-import type { Investigation, InvestigationState } from "@chopin/experiment/records";
+import type { Investigation, InvestigationState, Spike } from "@chopin/experiment/records";
 import type { RunInput } from "@chopin/experiment";
 import { applySelection, selectionPatchSchema } from "@chopin/experiment/selection";
 import type { ExperimentStore } from "../storage/experiments";
@@ -34,6 +34,7 @@ export class Experiments {
 		brief: string,
 		id: string = crypto.randomUUID(),
 		parentId?: string,
+		spike?: Spike,
 	) {
 		let existing = await this.store.get(id);
 		if (existing) {
@@ -52,6 +53,7 @@ export class Experiments {
 			requester,
 			brief,
 			parentId,
+			...(spike ? { spike } : {}),
 			revision: 0,
 			state: "requested",
 			generation: 0,

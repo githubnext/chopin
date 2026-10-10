@@ -15,6 +15,10 @@ import { implementationSchemas } from "../tasks/connector";
 import type { ImplementationConnector } from "../tasks/connector";
 import { connectorSchemas } from "./mcp-schema";
 import type { Lease } from "../storage/model";
+import { createHash } from "node:crypto";
+import { imagePath } from "../images/format";
+import { MAX_IMAGE_REQUEST_BYTES, prepareImage } from "../mcp/image";
+import { spikeReport, spikeSubmissionSchema } from "./spikes";
 
 export type ExperimentRuntime = ReturnType<typeof registerExperimentRoutes>;
 type Options = {
@@ -32,21 +36,30 @@ type Options = {
 		decision: string,
 		remove: boolean,
 	) => Promise<void>;
+	/** Land a document's finished spike results before a first build claims it. */
+	settleSpikes?: (documentId: string) => Promise<void>;
 };
 const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
 	label: z.string().trim().min(1).max(100),
 }).strict();
 
-async function body(request: Request) {
+const MAX_BODY_BYTES = limits.resultBytes + 64 * 1024;
+/** Screenshots a spike run may upload; distinct images, so a retried upload is free. */
+export const MAX_SPIKE_IMAGES = 3;
+
+async function raw(request: Request, max: number) {
 	let size = 0;
 	let chunks: Uint8Array[] = [];
 	if (!request.body) fail("invalid-request");
 	for await (let chunk of request.body) {
 		size += chunk.length;
-		if (size > limits.resultBytes + 64 * 1024) fail("request-too-large");
+		if (size > max) fail("request-too-large");
 		chunks.push(chunk);
 	}
-	return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+	return Buffer.concat(chunks);
+}
+async function body(request: Request, max = MAX_BODY_BYTES) {
+	return JSON.parse((await raw(request, max)).toString("utf8"));
 }
 function json(value: unknown, status = 200) {
 	return Response.json(value, {
@@ -65,6 +78,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		options.changed(id);
 	};
 	let service = new Experiments(auth.storage.experiments, options.lease, changed);
+	/** Image hashes each spike run uploaded; a run may only cite its own screenshots. */
+	let uploads = new Map<string, Set<string>>();
 	async function access(session: AuthenticatedSession | undefined, id: string, write: boolean) {
 		if (!session) fail("authentication-required");
 		let channel = await auth.storage.channels.get(id);
@@ -182,16 +197,19 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("GET", "/api/documents/:id/experiments", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
 		return json({
-			experiments: (await service.store.list(params.id)).map(value => ({
-				id: value.id,
-				brief: value.brief,
-				state: value.state,
-				revision: value.revision,
-				requester: value.requester,
-				decisionCount: value.decisions.length,
-				progress: value.progress,
-				createdAt: value.createdAt,
-			})),
+			// A spike's callout under its passage is its record in the document.
+			experiments: (await service.store.list(params.id)).filter(value => !value.spike).map(
+				value => ({
+					id: value.id,
+					brief: value.brief,
+					state: value.state,
+					revision: value.revision,
+					requester: value.requester,
+					decisionCount: value.decisions.length,
+					progress: value.progress,
+					createdAt: value.createdAt,
+				}),
+			),
 		});
 	});
 	route("POST", "/api/documents/:id/experiments", async (request, params) => {
@@ -273,10 +291,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (channel.repositoryId !== connection.source.repositoryId) fail("repository-forbidden");
 	}
 	/** The connection's queued, running, or publishing investigations across its repository. */
+	/** A connection's work in creation order, so queued runs are dispatched first come first served. */
 	async function work(connection: Connection, states: string[]) {
 		return (await service.store.active()).filter(item =>
 			item.connectionId === connection.id && states.includes(item.state)
-		);
+		).sort((a, b) => a.createdAt - b.createdAt);
 	}
 	route(
 		"GET",
@@ -359,16 +378,27 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { connection, grant, session } = await connector(token);
 		let implementation = options.implementations?.();
 		let implementationRun = grant.run?.kind === "implementation" || grant.run?.kind === "rebuild";
+		let spikeRun = !!grant.run && !implementationRun
+			&& !!(await service.store.get(grant.run.id))?.spike;
 		let schemas = implementationRun ? implementationSchemas(true, grant.run?.kind === "rebuild") : {
-			...connectorSchemas(!!grant.run),
+			...connectorSchemas(!!grant.run, spikeRun),
 			...(!grant.run && implementation ? implementationSchemas(false) : {}),
 		};
+		// Only a spike run's image upload may exceed the ordinary connector body limit.
+		let bytes = await raw(
+			request,
+			spikeRun ? Math.max(MAX_BODY_BYTES, MAX_IMAGE_REQUEST_BYTES) : MAX_BODY_BYTES,
+		);
 		let call = z.object({
 			jsonrpc: z.literal("2.0"),
 			id: z.union([z.string(), z.number()]).optional(),
 			method: z.string(),
 			params: z.record(z.string(), z.unknown()).optional(),
-		}).parse(await body(request));
+		}).parse(JSON.parse(bytes.toString("utf8")));
+		if (
+			bytes.length > MAX_BODY_BYTES
+			&& (call.method !== "tools/call" || call.params?.name !== "upload_investigation_image")
+		) fail("request-too-large");
 		let respond = (result: unknown) => json({ jsonrpc: "2.0", id: call.id, result });
 		if (call.method.startsWith("notifications/")) return new Response(null, { status: 202 });
 		if (call.method === "initialize") {
@@ -438,6 +468,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
 				if (documentId) await target(session, connection, documentId);
 				if (name === "claim_implementation_build") {
+					// A build queued behind a spike on this connection must start with its findings.
+					if (documentId) await options.settleSpikes?.(documentId);
 					value = await connections.locked(connection.id, async () => {
 						if ((await work(connection, ["running", "publishing"])).length) {
 							fail("workspace-busy");
@@ -483,6 +515,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					return {
 						input: claimed.input,
 						generation: claimed.generation,
+						...(claimed.spike ? { spike: true } : {}),
 						runToken: connections.runToken(
 							connection.id,
 							claimed.documentId,
@@ -515,6 +548,62 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						);
 					} else if (name === "fail_experiment") {
 						value = await service.stop(id, "failed", z.string().max(2000).parse(args.error));
+					} else if (name === "upload_investigation_image") {
+						if (!current.spike) fail("tool-forbidden");
+						let prepared = prepareImage({ id: current.documentId, ...args });
+						if (!prepared) fail("invalid-image");
+						if ("refusal" in prepared) fail(prepared.refusal);
+						let { bytes, mimeType } = prepared.input;
+						let sha256 = createHash("sha256").update(bytes).digest("hex");
+						// Parallel uploads share one set and reserve their slot before awaiting storage,
+						// so neither overwrites the other's record nor slips past the cap.
+						let uploaded = uploads.get(id);
+						if (!uploaded) uploads.set(id, uploaded = new Set<string>());
+						let reserved = !uploaded.has(sha256);
+						if (reserved && uploaded.size >= MAX_SPIKE_IMAGES) {
+							fail("image-limit", `A spike may upload at most ${MAX_SPIKE_IMAGES} images.`);
+						}
+						uploaded.add(sha256);
+						try {
+							await auth.storage.images.put({
+								channelId: current.documentId,
+								sha256,
+								mimeType,
+								bytes,
+								uploadedBy: session.user.id,
+								now: new Date(),
+							});
+						} catch (err) {
+							if (reserved) uploaded.delete(sha256);
+							throw err;
+						}
+						value = { path: imagePath(sha256, mimeType) };
+					} else if (name === "submit_spike_result") {
+						if (!current.spike) fail("tool-forbidden");
+						let input = spikeSubmissionSchema.parse(args);
+						for (let path of input.images) {
+							let sha256 = path.slice("/images/".length).split(".")[0];
+							if (
+								!uploads.get(id)?.has(sha256)
+								|| !await auth.storage.images.get(current.documentId, sha256)
+							) fail("missing-image", `Upload ${path} with upload_investigation_image first.`);
+						}
+						let report = canonicalReport(spikeReport(input));
+						if ("issues" in report) {
+							fail("invalid-report", report.issues.map(issue => issue.message).join("; "));
+						}
+						value = await service.candidate(id, connection.id, generation, {
+							schemaVersion: 1,
+							report: report.source,
+							datasets: [],
+							views: [],
+							evidence: [],
+							provenance: {
+								environment: "Throwaway prototype by the editor's local coding agent.",
+								checks: [],
+								limitations: [],
+							},
+						});
 					} else if (name === "submit_experiment_result") {
 						let result = args.result as { report?: unknown };
 						if (!result || typeof result.report !== "string") fail("invalid-result");
@@ -539,7 +628,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				value = {
 					accepted: true,
 					state: (value as { state?: string }).state,
-					...(name === "read_experiment" ? value as object : {}),
+					...(name === "read_experiment" || name === "upload_investigation_image"
+						? value as object
+						: {}),
 				};
 			}
 			return respond({ content: [{ type: "text", text: JSON.stringify(value) }] });
@@ -561,7 +652,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		connections.sweep();
 		await service.recover();
 		await options.implementations?.()?.sweep();
-		for (let value of await service.store.active()) {
+		let active = await service.store.active();
+		for (let id of uploads.keys()) {
+			if (!active.some(value => value.id === id)) uploads.delete(id);
+		}
+		for (let value of active) {
 			if (value.connectionId && !connections.get(value.connectionId)) {
 				await service.stop(
 					value.id,

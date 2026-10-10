@@ -369,3 +369,167 @@ test("builds queued behind a connection's build take its place in the order they
 	expect(connections.assigned(id)).toBeUndefined();
 	expect(connections.queued(id)).toEqual([]);
 });
+
+test("a spike runs with an image upload and a structured report, and stays out of the list", async () => {
+	let { alice, documentId, request, tool, pair, runtime } = await setup();
+	let paired = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await runtime.service.create(documentId, "alice", "Spike brief", id, undefined, {
+		digest: "sha256:x",
+		passage: "Unsure whether this works.",
+		callout: "01JAAAAAAAAAAAAAAAAAAAAAAA",
+		login: "alice",
+		placed: true,
+	});
+	await runtime.service.authorize(id, paired.connection.id, {
+		id,
+		documentId,
+		requester: "alice",
+		authorizer: "alice",
+		brief: "Spike brief",
+		source: paired.connection.source,
+		context: "# Context",
+	});
+	let listed =
+		await (await request(`/api/documents/${documentId}/experiments`, undefined, alice.cookie))
+			.json();
+	expect(listed.experiments).toEqual([]);
+	let claim = text(await tool(paired.token, "claim_experiment", { id }));
+	expect(claim.spike).toBe(true);
+	let tools = await (await request(
+		"/connector/mcp",
+		{ jsonrpc: "2.0", id: 1, method: "tools/list" },
+		undefined,
+		claim.runToken,
+	)).json();
+	expect(tools.result.tools.map((item: { name: string }) => item.name)).toContain(
+		"submit_spike_result",
+	);
+	let png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+	let uploaded = text(
+		await tool(claim.runToken, "upload_investigation_image", {
+			data: png.toString("base64"),
+			mimeType: "image/png",
+		}),
+	);
+	expect(uploaded.path).toMatch(/^\/images\/[0-9a-f]{64}\.png$/);
+	let missing = `/images/${"b".repeat(64)}.png`;
+	expect(
+		error(
+			await tool(claim.runToken, "submit_spike_result", {
+				headline: "It works",
+				findings: ["Yes."],
+				recommendation: "Ship.",
+				images: [missing],
+			}),
+		),
+	).toContain("missing-image");
+	expect(
+		error(
+			await tool(claim.runToken, "submit_spike_result", {
+				headline: "It works",
+				findings: ["Pointer events fire.", "Latency is fine."],
+				recommendation: "Ship it.",
+				images: [uploaded.path],
+			}),
+		),
+	).toBe("");
+	await tool(paired.token, "complete_experiment", { id, generation: claim.generation });
+	let value = await runtime.service.store.get(id);
+	expect(value?.state).toBe("completed");
+	expect(value?.result?.report).toContain("**It works**");
+	expect(value?.result?.report).toContain(uploaded.path);
+});
+
+test("an ordinary run cannot upload images or send an image-sized body", async () => {
+	let { alice, documentId, request, tool, pair } = await setup();
+	let paired = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
+	let claim = text(await tool(paired.token, "claim_experiment", { id }));
+	let tools = await (await request(
+		"/connector/mcp",
+		{ jsonrpc: "2.0", id: 1, method: "tools/list" },
+		undefined,
+		claim.runToken,
+	)).json();
+	let names = tools.result.tools.map((item: { name: string }) => item.name);
+	expect(names).not.toContain("upload_investigation_image");
+	expect(names).not.toContain("submit_spike_result");
+	let png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+	expect(
+		error(
+			await tool(claim.runToken, "upload_investigation_image", {
+				data: png.toString("base64"),
+				mimeType: "image/png",
+			}),
+		),
+	).toContain("tool-forbidden");
+	let large = await request(
+		"/connector/mcp",
+		{
+			jsonrpc: "2.0",
+			id: 1,
+			method: "tools/call",
+			params: { name: "read_experiment", arguments: { padding: "x".repeat(1_200_000) } },
+		},
+		undefined,
+		claim.runToken,
+	);
+	expect((await large.json()).error).toBe("request-too-large");
+});
+
+test("a spike uploads at most three images and cites only its own", async () => {
+	let { alice, documentId, tool, pair, runtime, storage } = await setup();
+	let paired = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await runtime.service.create(documentId, "alice", "Spike brief", id, undefined, {
+		digest: "sha256:x",
+		passage: "Unsure whether this works.",
+		callout: "01JAAAAAAAAAAAAAAAAAAAAAAA",
+		login: "alice",
+		placed: true,
+	});
+	await runtime.service.authorize(id, paired.connection.id, {
+		id,
+		documentId,
+		requester: "alice",
+		authorizer: "alice",
+		brief: "Spike brief",
+		source: paired.connection.source,
+		context: "# Context",
+	});
+	let claim = text(await tool(paired.token, "claim_experiment", { id }));
+	let upload = (seed: number) =>
+		tool(claim.runToken, "upload_investigation_image", {
+			data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, seed]).toString("base64"),
+			mimeType: "image/png",
+		});
+	// Parallel uploads in one run must all count, and the cap must hold across them.
+	let results = await Promise.all([1, 2, 3, 4].map(upload));
+	expect(results.filter(result => error(result).includes("image-limit"))).toHaveLength(1);
+	let seeds = [1, 2, 3, 4].filter((_seed, index) => !error(results[index]));
+	let paths: string[] = seeds.map(seed => text(results[seed - 1]).path);
+	expect(paths).toHaveLength(3);
+	expect(text(await upload(seeds[0])).path).toBe(paths[0]);
+	expect(error(await upload(5))).toContain("image-limit");
+	let foreign = "c".repeat(64);
+	await storage.images.put({
+		channelId: documentId,
+		sha256: foreign,
+		mimeType: "image/png",
+		bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+		uploadedBy: "bob",
+		now: new Date(),
+	});
+	let submit = (images: string[]) =>
+		tool(claim.runToken, "submit_spike_result", {
+			headline: "It works",
+			findings: ["Yes."],
+			recommendation: "Ship.",
+			images,
+		});
+	expect(error(await submit([`/images/${foreign}.png`]))).toContain("missing-image");
+	expect(error(await submit(paths))).toBe("");
+});
