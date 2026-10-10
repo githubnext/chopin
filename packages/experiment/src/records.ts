@@ -37,8 +37,15 @@ export const spikeSchema = z.object({
 	/** GitHub login of the person whose local agent runs it. */
 	login: z.string().min(1).max(100),
 	placed: z.boolean(),
+	/**
+	 * Set before the callout is first published and cleared once `placed` is persisted, so a
+	 * crash in between recovers by finding the callout in place rather than inserting another.
+	 */
+	placing: z.boolean().optional(),
 	/** The state last written into the callout, so progress renewals never rewrite edits. */
 	rendered: z.string().max(40).optional(),
+	/** Digest of the callout block as last rendered; a different block holds human edits. */
+	calloutDigest: z.string().max(100).optional(),
 	dismissed: z.boolean().optional(),
 }).strict();
 export type Spike = z.infer<typeof spikeSchema>;

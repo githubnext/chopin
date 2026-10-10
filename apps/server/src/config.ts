@@ -121,7 +121,7 @@ export function load(): Config {
 	let conversationPlan = process.env.CONVERSATION_PLAN === "on";
 	let plannerVisuals = process.env.PLANNER_VISUALS === "on" && agent;
 	let liveBuild = process.env.LIVE_BUILD === "on";
-	let liveSpikes = liveBuild || process.env.LIVE_SPIKES === "on";
+	let liveSpikes = process.env.LIVE_SPIKES === "on";
 	let conversationPlanModel = process.env.JEV_MODEL || "jev-latest";
 	let timeoutRaw = process.env.JEV_TIMEOUT_MS;
 	let conversationPlanTimeoutMs = timeoutRaw === undefined ? 30_000 : Number(timeoutRaw);

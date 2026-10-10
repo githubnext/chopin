@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { jevJudge, SpikeScout } from "./spike-scout";
 
 import type { Investigation } from "@chopin/experiment/records";
-import type { SpikeBlock, SpikeHost, SpikeSnapshot } from "./spike-scout";
+import type { SpikeBlock, SpikeHost, SpikeJudge, SpikeSnapshot } from "./spike-scout";
 
 function block(
 	digest: string,
@@ -12,7 +12,7 @@ function block(
 	return { digest, text };
 }
 
-function harness(snapshot: Partial<SpikeSnapshot> = {}) {
+function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 	let started: string[] = [];
 	let dismissed: string[] = [];
 	let judged: string[][] = [];
@@ -51,7 +51,7 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}) {
 		host,
 		judge: async blocks => {
 			judged.push(blocks.map(item => item.digest));
-			return blocks.map(item => item.text.includes("unsure"));
+			return verdict ? verdict(blocks) : blocks.map(item => item.text.includes("unsure"));
 		},
 		after: (_delay, action) => {
 			timers.push(action);
@@ -133,7 +133,7 @@ test("a removed callout dismisses its spike and the passage never re-triggers", 
 	expect(h.judged).toHaveLength(0);
 });
 
-test("Jev decides at 0.6 and falls back to explicit uncertainty when it fails", async () => {
+test("Jev decides at 0.6 and a failure decides nothing", async () => {
 	let asked = 0;
 	let judge = jevJudge(async request => {
 		asked++;
@@ -154,5 +154,38 @@ test("Jev decides at 0.6 and falls back to explicit uncertainty when it fails", 
 	let failing = jevJudge(async () => {
 		throw new Error("timeout");
 	});
-	expect(await failing(blocks)).toEqual([false, true]);
+	expect(await failing(blocks)).toBeUndefined();
+});
+
+test("a judge that cannot decide leaves every passage to be judged again", async () => {
+	let h = harness({ blocks: [block("a")] }, async () => undefined);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	await h.scout.check("D");
+	expect(h.judged).toEqual([["a"], ["a"]]);
+	expect(h.started).toEqual([]);
+});
+
+test("approved passages over capacity are started by a later scan", async () => {
+	let h = harness({ blocks: ["a", "b", "c", "d"].map(digest => block(digest)) });
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.started).toEqual(["a", "b", "c"]);
+	h.records[0].state = "completed";
+	await h.scout.check("D");
+	expect(h.judged[1]).toEqual(["d"]);
+	expect(h.started).toEqual(["a", "b", "c", "d"]);
+});
+
+test("a living build still dismisses a deleted callout's spike", async () => {
+	let h = harness({ live: true, blocks: [block("a")] });
+	h.records.push({
+		id: "X",
+		state: "running",
+		spike: { digest: "a", callout: "GONE", placed: true },
+	} as Investigation);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.dismissed).toEqual(["X"]);
+	expect(h.judged).toHaveLength(0);
 });

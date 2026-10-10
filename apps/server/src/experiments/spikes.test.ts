@@ -5,7 +5,7 @@ import { ulid } from "@chopin/dialect/ulid";
 
 import * as room from "../plan/room";
 import { canonical } from "../mcp/create";
-import { callouts, reconcileCallout } from "./spike-placement";
+import { calloutDigest, callouts, reconcileCallout, withCallout } from "./spike-placement";
 import { renderKey, spikeCallout, spikeReport, uncertain } from "./spikes";
 
 import type { Investigation } from "@chopin/experiment/records";
@@ -137,6 +137,39 @@ test("a callout lands directly under its passage and is later replaced in place"
 		document.doc.destroy();
 		errors.mockRestore();
 	}
+});
+
+test("an edited callout keeps its edits and the new state lands in a sibling after it", () => {
+	let value = spike("running");
+	let running = spikeCallout(value);
+	let rendered = calloutDigest(running);
+	let passage = parse("Passage that started the spike.\n").children[0];
+	let edited = parse(
+		serialize({ type: "root", children: [running] }).replace("quick prototype", "tiny prototype"),
+	).children[0];
+	let done = spike("failed");
+	done.spike = value.spike;
+	let untouched = withCallout([passage, running], {
+		callout: value.spike!.callout,
+		node: spikeCallout(done),
+		rendered,
+	});
+	if (typeof untouched === "string") throw new Error("expected a replacement");
+	expect(untouched.callout).toBe(value.spike!.callout);
+	expect(untouched.children).toHaveLength(2);
+	let kept = withCallout([passage, edited], {
+		callout: value.spike!.callout,
+		node: spikeCallout(done),
+		rendered,
+	});
+	if (typeof kept === "string") throw new Error("expected a sibling");
+	expect(kept.callout).not.toBe(value.spike!.callout);
+	expect(kept.children).toHaveLength(3);
+	let source = serialize({ type: "root", children: kept.children });
+	expect(source).toContain("tiny prototype");
+	expect(source).toContain(`<Callout id="${kept.callout}" type="warning"`);
+	expect(source.indexOf("tiny prototype")).toBeLessThan(source.indexOf(kept.callout));
+	room.validate(source);
 });
 
 test("explicit uncertainty is the fallback signal", () => {

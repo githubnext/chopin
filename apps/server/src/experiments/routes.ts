@@ -41,7 +41,11 @@ const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
 	label: z.string().trim().min(1).max(100),
 }).strict();
 
-async function body(request: Request, max = limits.resultBytes + 64 * 1024) {
+const MAX_BODY_BYTES = limits.resultBytes + 64 * 1024;
+/** Screenshots a spike run may upload; distinct images, so a retried upload is free. */
+export const MAX_SPIKE_IMAGES = 3;
+
+async function raw(request: Request, max: number) {
 	let size = 0;
 	let chunks: Uint8Array[] = [];
 	if (!request.body) fail("invalid-request");
@@ -50,7 +54,10 @@ async function body(request: Request, max = limits.resultBytes + 64 * 1024) {
 		if (size > max) fail("request-too-large");
 		chunks.push(chunk);
 	}
-	return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+	return Buffer.concat(chunks);
+}
+async function body(request: Request, max = MAX_BODY_BYTES) {
+	return JSON.parse((await raw(request, max)).toString("utf8"));
 }
 function json(value: unknown, status = 200) {
 	return Response.json(value, {
@@ -69,6 +76,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		options.changed(id);
 	};
 	let service = new Experiments(auth.storage.experiments, options.lease, changed);
+	/** Image hashes each spike run uploaded; a run may only cite its own screenshots. */
+	let uploads = new Map<string, Set<string>>();
 	async function access(session: AuthenticatedSession | undefined, id: string, write: boolean) {
 		if (!session) fail("authentication-required");
 		let channel = await auth.storage.channels.get(id);
@@ -372,14 +381,21 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			...connectorSchemas(!!grant.run, spikeRun),
 			...(!grant.run && implementation ? implementationSchemas(false) : {}),
 		};
+		// Only a spike run's image upload may exceed the ordinary connector body limit.
+		let bytes = await raw(
+			request,
+			spikeRun ? Math.max(MAX_BODY_BYTES, MAX_IMAGE_REQUEST_BYTES) : MAX_BODY_BYTES,
+		);
 		let call = z.object({
 			jsonrpc: z.literal("2.0"),
 			id: z.union([z.string(), z.number()]).optional(),
 			method: z.string(),
 			params: z.record(z.string(), z.unknown()).optional(),
-		}).parse(
-			await body(request, Math.max(limits.resultBytes + 64 * 1024, MAX_IMAGE_REQUEST_BYTES)),
-		);
+		}).parse(JSON.parse(bytes.toString("utf8")));
+		if (
+			bytes.length > MAX_BODY_BYTES
+			&& (call.method !== "tools/call" || call.params?.name !== "upload_investigation_image")
+		) fail("request-too-large");
 		let respond = (result: unknown) => json({ jsonrpc: "2.0", id: call.id, result });
 		if (call.method.startsWith("notifications/")) return new Response(null, { status: 202 });
 		if (call.method === "initialize") {
@@ -528,11 +544,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					} else if (name === "fail_experiment") {
 						value = await service.stop(id, "failed", z.string().max(2000).parse(args.error));
 					} else if (name === "upload_investigation_image") {
+						if (!current.spike) fail("tool-forbidden");
 						let prepared = prepareImage({ id: current.documentId, ...args });
 						if (!prepared) fail("invalid-image");
 						if ("refusal" in prepared) fail(prepared.refusal);
 						let { bytes, mimeType } = prepared.input;
 						let sha256 = createHash("sha256").update(bytes).digest("hex");
+						let uploaded = uploads.get(id) ?? new Set<string>();
+						if (!uploaded.has(sha256) && uploaded.size >= MAX_SPIKE_IMAGES) {
+							fail("image-limit", `A spike may upload at most ${MAX_SPIKE_IMAGES} images.`);
+						}
 						await auth.storage.images.put({
 							channelId: current.documentId,
 							sha256,
@@ -541,15 +562,17 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 							uploadedBy: session.user.id,
 							now: new Date(),
 						});
+						uploads.set(id, uploaded.add(sha256));
 						value = { path: imagePath(sha256, mimeType) };
 					} else if (name === "submit_spike_result") {
 						if (!current.spike) fail("tool-forbidden");
 						let input = spikeSubmissionSchema.parse(args);
 						for (let path of input.images) {
 							let sha256 = path.slice("/images/".length).split(".")[0];
-							if (!await auth.storage.images.get(current.documentId, sha256)) {
-								fail("missing-image", `Upload ${path} with upload_investigation_image first.`);
-							}
+							if (
+								!uploads.get(id)?.has(sha256)
+								|| !await auth.storage.images.get(current.documentId, sha256)
+							) fail("missing-image", `Upload ${path} with upload_investigation_image first.`);
 						}
 						let report = canonicalReport(spikeReport(input));
 						if ("issues" in report) {
@@ -615,7 +638,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		connections.sweep();
 		await service.recover();
 		await options.implementations?.()?.sweep();
-		for (let value of await service.store.active()) {
+		let active = await service.store.active();
+		for (let id of uploads.keys()) {
+			if (!active.some(value => value.id === id)) uploads.delete(id);
+		}
+		for (let value of active) {
 			if (value.connectionId && !connections.get(value.connectionId)) {
 				await service.stop(
 					value.id,
