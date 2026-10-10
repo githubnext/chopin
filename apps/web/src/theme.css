@@ -782,6 +782,23 @@ body {
 	flex: 1;
 }
 
+/*
+ * The build slot stays for the life of the document, unlike a status blip, so its row takes
+ * space above the document instead of floating over scrolled text.
+ */
+.workspace-status-row:has(> [data-build-slot]) {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3) 0;
+}
+
+.workspace-status-row:has(.plan-status:is([data-level="notice"], [data-level="alert"]))
+	> [data-build-slot] {
+	margin-inline-start: calc(var(--spacing) * 2);
+}
+
 .workspace-status-row .plan-status .btn {
 	margin-inline-start: auto;
 }

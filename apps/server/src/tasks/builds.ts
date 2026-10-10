@@ -774,8 +774,12 @@ export function reportRebuild(
 						`Living-document rebuild of revisions ${live.baseRevision} to ${target.revision}.`,
 					goal: task.goal,
 					acceptance: [
-						`Committed on ${task.pullRequest}.`,
-						`Reflects the document change since revision ${live.baseRevision}.`,
+						`Updates pull request ${
+							task.pullRequest.startsWith(prefix)
+								? `#${task.pullRequest.slice(prefix.length)}`
+								: task.pullRequest
+						}.`,
+						"Matches the document as edited.",
 					],
 					dependsOn: [],
 				})),
@@ -884,8 +888,10 @@ export function liveSnapshot(plan: Plan, connections: Connection[]): LiveSnapsho
 	// The first build's tasks, then each rebuild's appended version, with their last reported state.
 	let first = plan.builds.find(build => build.id === live.buildId)?.graphVersion;
 	let history = plan.graph ? historyFor(plan.graph, plan.lifecycle) : [];
+	// Only versions that ran: a Planner draft started since would list unbuilt duplicates.
 	let tasks = (plan.graph?.versions ?? []).filter(version =>
 		first !== undefined && version.number >= first
+		&& history.some(item => item.run.graphVersion === version.number)
 	).flatMap(version => {
 		let progress = history.findLast(item => item.run.graphVersion === version.number)?.progress;
 		return version.definition.tasks.map(task => {

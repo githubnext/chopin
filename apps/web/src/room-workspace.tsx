@@ -388,6 +388,7 @@ export function RoomWorkspace(
 	});
 	let [showImplementation, setShowImplementation] = useState(false);
 	let [needsAgent, setNeedsAgent] = useState(0);
+	let [buildWaits, setBuildWaits] = useState(false);
 	let liveBuild = useLiveBuild();
 	useEffect(() => {
 		setImplementation({ revision: -1, locked: false });
@@ -1132,7 +1133,9 @@ export function RoomWorkspace(
 								}}
 								onShowBuild={() => selectDestination("build")}
 								onShowDecisions={() => selectDestination("decisions")}
+								onWaiting={setBuildWaits}
 								room={room}
+								showing={workspacePresentation.documentVisible ? view : undefined}
 								userId={userId}
 								wire={wire}
 							/>
@@ -1165,10 +1168,20 @@ export function RoomWorkspace(
 				decisions={
 					<Decisions
 						additional={
-							<EvidenceDecisions
-								store={experiments}
-								canEdit={!!workspaceCanEdit && status === "connected"}
-							/>
+							<>
+								{/* The header's waiting slot hides here, so the view says why to answer. */}
+								{buildWaits && unanswered > 0 && (
+									<p className="m-0 mb-3 text-sm text-text-tertiary">
+										{unanswered === 1
+											? "Answering this starts the build."
+											: "Answering these starts the build."}
+									</p>
+								)}
+								<EvidenceDecisions
+									store={experiments}
+									canEdit={!!workspaceCanEdit && status === "connected"}
+								/>
+							</>
 						}
 						hasAdditional={[...experiments.values.values()].some(item => item.decisions.length > 0)}
 						cardMeta={cardMeta}

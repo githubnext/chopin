@@ -1,24 +1,32 @@
+import { CheckIcon, ClockIcon } from "@chopin/icons";
 import { useEffect, useId, useRef, useState } from "react";
 
 import {
 	advanceDraft,
 	ago,
+	attentionHint,
+	blockerLabelled,
+	blockerText,
 	buildPhase,
 	buildProgress,
 	draftInFlight,
 	draftKey,
 	draftRefusalCopy,
 	elapsed,
+	linkParts,
+	liveTaskGroups,
+	liveTaskState,
 	plural,
 	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
 	startingLabel,
-	SYNC_LABEL,
 	syncHint,
+	syncLabel,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
+	unfinishedReason,
 } from "./build-model";
 import {
 	cancelBuildRequest,
@@ -88,6 +96,7 @@ export function BuildView(
 	let [open, setOpen] = useState<Record<string, boolean>>({});
 	let [linked, setLinked] = useState<string>();
 	let [now, setNow] = useState(() => Date.now());
+	let sinceHeading = useId();
 	let [request, setRequestState] = useState(() => requests.get(room));
 	let setRequest = (next: DraftRequest | undefined) => {
 		if (next) requests.set(room, next);
@@ -410,18 +419,19 @@ export function BuildView(
 		status = plural(tasks.length, "task", "tasks");
 		if (canEdit) action = primary;
 	} else if (phase.kind === "building") {
-		since = snapshot?.build && elapsed(snapshot.build.createdAt, now);
 		let who = startedBy(snapshot, userId);
 		let { hint, queued } = startingLabel(snapshot);
+		// A queued build has not started, so it has no time to count.
+		since = !queued && snapshot?.build ? elapsed(snapshot.build.createdAt, now) : undefined;
 		status = (
 			<>
 				{queued
-					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
+					? <ClockIcon aria-hidden="true" className="build-status-icon" size={12} />
 					: <span aria-hidden="true" className="build-pulse" />}
 				<span className="min-w-0 flex-1">
 					{queued ? "Queued" : "Building"}
 					{hint
-						? <span className="text-text-tertiary">{` · ${hint}`}</span>
+						? <span className="build-status-detail">{` · ${hint}`}</span>
 						: who && ` · started by ${who === "you" ? who : `@${who}`}`}
 				</span>
 			</>
@@ -444,16 +454,29 @@ export function BuildView(
 		}
 	} else if (phase.kind === "live") {
 		let commits = snapshot?.live?.commits.length ?? 0;
-		let hint = syncHint(phase.sync, snapshot, userId);
+		// The blocked row below shows the blocker, so the status line only says what to do.
+		let detail = (phase.sync.kind === "needs-attention"
+			? attentionHint(snapshot, true)
+			: syncHint(phase.sync, snapshot, userId))
+			?? (phase.sync.kind === "in-sync" && commits > 0
+				? `${plural(commits, "commit", "commits")} since first build`
+				: undefined);
 		status = (
 			<>
 				{phase.sync.kind === "building" && <span aria-hidden="true" className="build-pulse" />}
+				{phase.sync.kind === "in-sync" && (
+					<CheckIcon aria-hidden="true" className="build-status-icon" size={12} />
+				)}
+				{phase.sync.kind === "out-of-sync" && phase.sync.reason !== "failed" && (
+					<ClockIcon aria-hidden="true" className="build-status-icon" size={12} />
+				)}
+				{(phase.sync.kind === "needs-attention"
+					|| phase.sync.kind === "out-of-sync" && phase.sync.reason === "failed") && (
+					<span aria-hidden="true" className="build-task-dot" data-state="blocked" />
+				)}
 				<span className="min-w-0 flex-1">
-					Living document ·{" "}
-					{phase.sync.kind === "building" ? "Building" : SYNC_LABEL[phase.sync.kind]}
-					{phase.sync.kind === "in-sync"
-						&& ` · ${plural(commits, "commit", "commits")} since first build`}
-					{hint && <span className="text-text-tertiary">{` · ${hint}`}</span>}
+					{syncLabel(phase.sync)}
+					{detail && <span className="build-status-detail">{` · ${detail}`}</span>}
 				</span>
 			</>
 		);
@@ -462,6 +485,50 @@ export function BuildView(
 	}
 	// A pull request shared by several tasks lists its commits under the first of them.
 	let listed = new Set<string>();
+	// A living document lists the tasks its later syncs added under their own heading.
+	let groups = phase.kind === "live" ? liveTaskGroups(tasks) : { first: tasks, since: [] };
+	let noChange = phase.kind === "live" ? [...(snapshot?.live?.noChange ?? [])].reverse() : [];
+	let outstanding = new Set(snapshot?.live?.outstandingTasks?.map(task => task.id));
+	let syncing = phase.kind === "live" && phase.sync.kind === "building";
+	let renderTask = (task: (typeof tasks)[number]) => {
+		let report = phase.kind === "live"
+			? snapshot?.live?.tasks.find(item => item.id === task.id)?.progress
+			: progress?.tasks.find(item => item.id === task.id);
+		let url = report?.pullRequest?.url;
+		let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
+		if (url) listed.add(url);
+		let state: TaskState = phase.kind === "live"
+			? liveTaskState(report?.state ?? "queued", outstanding.has(task.id), syncing)
+			: report?.state ?? "queued";
+		// A task the build left unfinished says why where a blocked one shows its blocker.
+		let stopped = phase.kind === "live" && outstanding.has(task.id) && !report?.blocker
+				&& state === "blocked"
+			? unfinishedReason(report)
+			: undefined;
+		let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
+		let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
+		let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
+		return (
+			<li className="build-task" id={`task-${task.id}`} key={task.id}>
+				<TaskRow
+					after={after}
+					expanded={expanded}
+					onToggle={() => setOpen(current => ({ ...current, [task.id]: !expanded }))}
+					pullRequest={report?.pullRequest && {
+						...report.pullRequest,
+						number,
+					}}
+					blocker={report?.blocker}
+					commits={commits}
+					stopped={stopped}
+					summary={report?.state === "completed" ? report.summary : undefined}
+					now={now}
+					state={state}
+					task={task}
+				/>
+			</li>
+		);
+	};
 
 	return (
 		<div className="build-view">
@@ -535,42 +602,32 @@ export function BuildView(
 					</div>
 				)}
 				{showTasks && (
-					<ol aria-label="Tasks" className="build-tasks" data-stale={staleTasks || undefined}>
-						{tasks.map(task => {
-							let report = phase.kind === "live"
-								? snapshot?.live?.tasks.find(item =>
-									item.id === task.id
-								)?.progress
-								: progress?.tasks.find(item =>
-									item.id === task.id
-								);
-							let url = report?.pullRequest?.url;
-							let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
-							if (url) listed.add(url);
-							let state: TaskState = report?.state ?? "queued";
-							let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
-							let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
-							let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
-							return (
-								<li className="build-task" id={`task-${task.id}`} key={task.id}>
-									<TaskRow
-										after={after}
-										expanded={expanded}
-										onToggle={() => setOpen(current => ({ ...current, [task.id]: !expanded }))}
-										pullRequest={report?.pullRequest && {
-											...report.pullRequest,
-											number,
-										}}
-										blocker={report?.blocker}
-										commits={commits}
-										now={now}
-										state={state}
-										task={task}
-									/>
-								</li>
-							);
-						})}
+					<ol
+						aria-label="Tasks"
+						className="build-tasks"
+						data-stale={staleTasks || undefined}
+					>
+						{groups.first.map(renderTask)}
 					</ol>
+				)}
+				{showTasks && (groups.since.length > 0 || noChange.length > 0) && (
+					<section aria-labelledby={sinceHeading} className="build-since">
+						<h2 className="build-since-heading" id={sinceHeading}>Since first build</h2>
+						<ol className="build-tasks">
+							{groups.since.map(renderTask)}
+							{/* A sync that needed no code change still says what it checked. */}
+							{noChange.map(item => (
+								<li className="build-no-change" key={item.buildId}>
+									<CheckIcon aria-hidden="true" className="build-status-icon" size={12} />
+									<span className="min-w-0 flex-1">
+										No code change needed
+										<span className="build-status-detail">{` · ${item.summary}`}</span>
+									</span>
+									<span className="build-elapsed">{ago(item.at, now)}</span>
+								</li>
+							))}
+						</ol>
+					</section>
 				)}
 				{phase.kind === "review" && canEdit && planner && (
 					<p className="build-hint">To change tasks, ask Chopin in Chat.</p>
@@ -581,7 +638,19 @@ export function BuildView(
 }
 
 function TaskRow(
-	{ after, blocker, commits, expanded, now, onToggle, pullRequest, state, task }: {
+	{
+		after,
+		blocker,
+		commits,
+		expanded,
+		now,
+		onToggle,
+		pullRequest,
+		state,
+		stopped,
+		summary,
+		task,
+	}: {
 		after: string[];
 		blocker?: string;
 		commits: Array<{ sha: string; message: string; at: string }>;
@@ -590,10 +659,15 @@ function TaskRow(
 		onToggle: () => void;
 		pullRequest?: { url: string; state: "open" | "merged" | "closed"; number?: number };
 		state: TaskState;
+		/** Why a task the build left unfinished stopped. */
+		stopped?: string;
+		/** What a finished task did, in place of what finishing it required. */
+		summary?: string;
 		task: { id: string; title: string; goal: string; acceptance: string[] };
 	},
 ) {
 	let panel = useId();
+	let reason = blocker && blockerText(blocker);
 	return (
 		<>
 			<div className="build-task-head">
@@ -627,13 +701,24 @@ function TaskRow(
 				<div inert={!expanded}>
 					<div className="build-task-detail">
 						<p className="m-0">{task.goal}</p>
-						{task.acceptance.length > 0 && (
+						{summary && <p className="build-task-summary">{summary}</p>}
+						{!summary && task.acceptance.length > 0 && (
 							<ul className="build-task-acceptance">
 								{task.acceptance.map((item, index) => <li key={index}>{item}</li>)}
 							</ul>
 						)}
 						{after.length > 0 && <p className="m-0 text-text-tertiary">After {after.join(", ")}</p>}
-						{blocker && <p className="build-task-blocker">Blocked: {blocker}</p>}
+						{reason && (
+							<p className="build-task-blocker">
+								{!blockerLabelled(reason) && "Blocked: "}
+								<Linked text={reason} />
+							</p>
+						)}
+						{stopped && (
+							<p className="build-task-blocker">
+								<Linked text={stopped} />
+							</p>
+						)}
 						{pullRequest && commits.length > 0 && (
 							<ul aria-label="Commits" className="build-task-commits">
 								{commits.map(commit => (
@@ -656,5 +741,18 @@ function TaskRow(
 				</div>
 			</div>
 		</>
+	);
+}
+
+/** An agent's text with its links clickable, GitHub ones shortened to `owner/repo#N`. */
+function Linked({ text }: { text: string }) {
+	return linkParts(text).map((part, index) =>
+		part.href
+			? (
+				<a href={part.href} key={index} rel="noreferrer" target="_blank">
+					{part.text}
+				</a>
+			)
+			: part.text
 	);
 }

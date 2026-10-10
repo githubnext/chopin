@@ -29,7 +29,8 @@ export type BuildPhase =
  * them, so a document otherwise in sync with any `needs-attention`.
  */
 export type SyncStatus =
-	| { kind: "building" }
+	/** `first` while the first build finishes, so it keeps its own label until it ends. */
+	| { kind: "building"; first?: true }
 	| { kind: "in-sync" }
 	| { kind: "needs-attention"; outstanding: number }
 	| { kind: "out-of-sync"; reason: "pending" | "waiting" | "failed"; outstanding: number };
@@ -44,11 +45,11 @@ const RUNNING = ["queued", "starting", "running"];
 export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefined {
 	let live = snapshot?.live;
 	if (!snapshot || !live) return;
+	if (live.rebuild && RUNNING.includes(live.rebuild.state)) return { kind: "building" };
 	if (
-		live.rebuild && RUNNING.includes(live.rebuild.state)
-		|| snapshot.build && RUNNING.includes(snapshot.build.state)
+		snapshot.build && RUNNING.includes(snapshot.build.state)
 		|| snapshot.lifecycle.execution.state === "active"
-	) return { kind: "building" };
+	) return { kind: "building", first: true };
 	let outstanding = live.outstandingTasks?.length ?? 0;
 	if (!live.outOfSync) {
 		return outstanding ? { kind: "needs-attention", outstanding } : { kind: "in-sync" };
@@ -63,12 +64,13 @@ export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefin
 	};
 }
 
-export const SYNC_LABEL: Record<SyncStatus["kind"], string> = {
-	building: "Building…",
-	"in-sync": "In sync",
-	"needs-attention": "Needs attention",
-	"out-of-sync": "Out of sync",
-};
+/** One vocabulary for a living document: in sync, out of sync, syncing, or a failed sync. */
+export function syncLabel(status: SyncStatus): string {
+	if (status.kind === "building") return status.first ? "Building…" : "Syncing…";
+	if (status.kind === "in-sync") return "In sync";
+	if (status.kind === "needs-attention") return "Needs attention";
+	return status.reason === "failed" ? "Sync failed" : "Out of sync";
+}
 
 /** Why the pull requests lag the document, naming the builder whose agent must run them. */
 export function syncHint(
@@ -78,28 +80,146 @@ export function syncHint(
 ): string | undefined {
 	if (status?.kind === "needs-attention") return attentionHint(snapshot);
 	if (status?.kind !== "out-of-sync") return;
-	let retry = status.outstanding
-		? ` · will also retry ${plural(status.outstanding, "blocked task", "blocked tasks")}`
-		: "";
-	if (status.reason === "pending") return `Changes will build shortly${retry}`;
-	if (status.reason === "failed") return `The last rebuild failed${retry}`;
-	if (snapshot?.live?.user === userId) return `Waiting for your agent${retry}`;
-	return snapshot?.builtBy
-		? `Waiting for @${snapshot.builtBy}’s agent${retry}`
-		: `Waiting for the builder’s agent${retry}`;
+	let tasks = status.outstanding
+		? plural(status.outstanding, "blocked task", "blocked tasks")
+		: undefined;
+	if (status.reason === "pending") {
+		return tasks ? `Your edits and ${tasks} will sync shortly` : "Your edits will sync shortly";
+	}
+	// Every edit schedules another sync, so a failure is retried by the next one.
+	if (status.reason === "failed") {
+		return tasks
+			? `The next edit will retry the sync and ${tasks}`
+			: "The next edit will try again";
+	}
+	let agent = snapshot?.live?.user === userId
+		? "your agent"
+		: snapshot?.builtBy
+		? `@${snapshot.builtBy}’s agent`
+		: "the builder’s agent";
+	return tasks ? `Waiting for ${agent} to sync your edits and ${tasks}` : `Waiting for ${agent}`;
 }
 
-/** What an unfinished task is stuck on, and that an edit retries it. */
-export function attentionHint(snapshot: Snapshot | undefined): string | undefined {
+/** The longest blocker a tooltip quotes; the Build view's task row shows all of it. */
+const BLOCKER_CHARS = 120;
+
+/** Labels an agent puts before its reason, which the row already says: "Blocked: …". */
+const BLOCKER_LABEL = /^\s*(?:blocked|blocker)\s*[:–—-]\s*/i;
+const LINK = /https?:\/\/[^\s<>()"“”]+[^\s<>()"“”.,;:!?'’]/g;
+
+/** An agent's blocker without the "Blocked:" labels it stacked in front. */
+export function blockerText(raw: string): string {
+	let text = raw.trim();
+	while (BLOCKER_LABEL.test(text)) text = text.replace(BLOCKER_LABEL, "");
+	return text;
+}
+
+/** Whether a reason opens with its own short label, such as "Awaiting review: …". */
+export function blockerLabelled(text: string): boolean {
+	return /^[^\s:][^:.?!]{0,40}:\s/.test(text) && !/^https?:/.test(text);
+}
+
+/** A GitHub pull request or issue link as `owner/repo#N`, noting a link to one comment. */
+export function shortUrl(url: string): string | undefined {
+	let match = url.match(
+		/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(?:pull|issues)\/(\d+)(?:[/?#](\S*))?$/,
+	);
+	if (!match) return;
+	let comment = /(?:^|[#&])(?:issuecomment|discussion_r|pullrequestreview)-?\d/.test(
+		match[3] ?? "",
+	);
+	return `${match[1]}#${match[2]}${comment ? " comment" : ""}`;
+}
+
+/** Prose with its links split out, each labelled for reading. */
+export function linkParts(text: string): Array<{ text: string; href?: string }> {
+	let parts: Array<{ text: string; href?: string }> = [];
+	let last = 0;
+	for (let match of text.matchAll(LINK)) {
+		if (match.index > last) parts.push({ text: text.slice(last, match.index) });
+		parts.push({ text: shortUrl(match[0]) ?? match[0], href: match[0] });
+		last = match.index + match[0].length;
+	}
+	if (last < text.length) parts.push({ text: text.slice(last) });
+	return parts;
+}
+
+/** One line of an agent's text for a tooltip: links shortened, capped at a word boundary. */
+function quote(raw: string): string {
+	let text = linkParts(blockerText(raw)).map(part => part.text).join("")
+		.replace(/\s+/g, " ").replace(/\.+$/, "");
+	return text.length > BLOCKER_CHARS
+		? `${text.slice(0, BLOCKER_CHARS).replace(/\s+\S*$/, "")}…`
+		: text;
+}
+
+/**
+ * Why a task the build left unfinished stopped: the agent's last report, or where it
+ * stopped when it said nothing.
+ */
+export function unfinishedReason(
+	progress: { summary?: string; pullRequest?: unknown } | undefined,
+): string {
+	let summary = progress?.summary?.trim();
+	if (summary) return summary;
+	return progress?.pullRequest
+		? "Your agent stopped before finishing this task"
+		: "Your agent stopped before opening a pull request";
+}
+
+/**
+ * What an unfinished task is stuck on, and that an edit retries it. `brief` names only the
+ * task to retry, for the Build view, whose task row already says why.
+ */
+export function attentionHint(
+	snapshot: Snapshot | undefined,
+	brief = false,
+): string | undefined {
 	let tasks = snapshot?.live?.outstandingTasks ?? [];
 	if (!tasks.length) return;
 	let first = tasks.find(task => task.blocker) ?? tasks[0]!;
+	if (brief) {
+		let others = tasks.length > 1 ? ` and ${plural(tasks.length - 1, "other", "others")}` : "";
+		return `Edit the document to retry “${first.title}”${others}`;
+	}
+	let progress = snapshot?.live?.tasks.find(task => task.id === first.id)?.progress;
 	let reason = first.blocker
-		? `“${first.title}” is blocked: ${first.blocker.trim().replace(/\.+$/, "")}`
-		: `“${first.title}” didn’t finish`;
+		? `“${first.title}” is blocked: ${quote(first.blocker)}`
+		: `“${first.title}” didn’t finish: ${
+			quote(unfinishedReason(progress)).replace(/^Your agent/, "your agent")
+		}`;
 	let more = tasks.length > 1 ? ` (and ${plural(tasks.length - 1, "other", "others")})` : "";
 	let said = `${reason}${more}`;
-	return `${said}${/[?!…]$/.test(said) ? "" : "."} Edit the document to retry.`;
+	return `${said}${/[?!…]$/.test(said) ? "" : "."} Edit the document to retry ${
+		tasks.length > 1 ? "them" : "it"
+	}.`;
+}
+
+/**
+ * How a living document's task row reads: a task the first build left unfinished shows
+ * as needing attention, not as queued, until a sync picks it up again.
+ */
+export function liveTaskState(
+	state: TaskState,
+	outstanding: boolean,
+	syncing: boolean,
+): TaskState {
+	return outstanding && !syncing && state === "queued" ? "blocked" : state;
+}
+
+/** The header's tooltip: what the sync status means, or why it lags. */
+export function syncTooltip(
+	status: SyncStatus,
+	snapshot: Snapshot | undefined,
+	userId: string | undefined,
+): string {
+	if (status.kind === "in-sync") return "Pull requests match the document";
+	if (status.kind === "building") {
+		return status.first
+			? "Finishing the first build"
+			: "Updating pull requests to match the document";
+	}
+	return syncHint(status, snapshot, userId) ?? "Pull requests lag the document";
 }
 
 /** Why a first build has not started yet, when the viewer's agent is finishing a prototype. */
@@ -123,6 +243,15 @@ export function startingLabel(
 ): { label: string; queued: boolean; hint?: string } {
 	let hint = startingHint(snapshot);
 	return hint ? { label: "Queued", queued: true, hint } : { label: "Building…", queued: false };
+}
+
+/**
+ * A living document's tasks split at its first build: the tasks it started with, then the
+ * ones each later sync added. The server names a sync's tasks `rebuild-<version>-<n>`.
+ */
+export function liveTaskGroups<T extends { id: string }>(tasks: T[]): { first: T[]; since: T[] } {
+	let since = tasks.filter(task => task.id.startsWith("rebuild-"));
+	return { first: tasks.filter(task => !since.includes(task)), since };
 }
 
 /** One pull request's living-document commits, newest first. */
