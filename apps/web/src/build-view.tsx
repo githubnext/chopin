@@ -14,6 +14,7 @@ import {
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
+	startingLabel,
 	SYNC_LABEL,
 	syncHint,
 	TASK_STATE_LABEL,
@@ -391,11 +392,17 @@ export function BuildView(
 	} else if (phase.kind === "building") {
 		since = snapshot?.build && elapsed(snapshot.build.createdAt, now);
 		let who = startedBy(snapshot, userId);
+		let { hint, queued } = startingLabel(snapshot);
 		status = (
 			<>
-				<span aria-hidden="true" className="build-pulse" />
+				{queued
+					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
+					: <span aria-hidden="true" className="build-pulse" />}
 				<span className="min-w-0 flex-1">
-					Building{who ? ` · started by ${who === "you" ? who : `@${who}`}` : ""}
+					{queued ? "Queued" : "Building"}
+					{hint
+						? <span className="text-text-tertiary">{` · ${hint}`}</span>
+						: who && ` · started by ${who === "you" ? who : `@${who}`}`}
 				</span>
 			</>
 		);

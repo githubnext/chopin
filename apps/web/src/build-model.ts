@@ -75,8 +75,19 @@ export function syncHint(
 /** Why a first build has not started yet, when the viewer's agent is finishing a prototype. */
 export function startingHint(snapshot: Snapshot | undefined): string | undefined {
 	return snapshot?.waitingForPrototype && snapshot.build?.state === "queued"
-		? "Starting after current prototype finishes"
+		? "Starts when the current prototype finishes"
 		: undefined;
+}
+
+/**
+ * The header slot while a first build is under way: `queued` while it waits for
+ * the agent's prototype, so the wait reads without hovering for the hint.
+ */
+export function startingLabel(
+	snapshot: Snapshot | undefined,
+): { label: string; queued: boolean; hint?: string } {
+	let hint = startingHint(snapshot);
+	return hint ? { label: "Queued", queued: true, hint } : { label: "Building…", queued: false };
 }
 
 /** One pull request's living-document commits, newest first. */

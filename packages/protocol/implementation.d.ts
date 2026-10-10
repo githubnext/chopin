@@ -123,6 +123,8 @@ export declare namespace Implementation {
 		requestId: string;
 		/** The revision the asker saw; the server drafts against its current revision. */
 		planRevision: number;
+		/** Asked by the one-click Build plan, which starts the tasks once they are drafted. */
+		build?: true;
 	};
 
 	/** The document's live request, new or `existing`; `ended` if its turn finished first. */

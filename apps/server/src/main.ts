@@ -632,6 +632,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				if (
 					typeof frame.requestId !== "string" || !REQUEST_ID.test(frame.requestId)
 					|| !Number.isInteger(frame.planRevision) || frame.planRevision < 0
+					|| frame.build !== undefined && frame.build !== true
 				) {
 					fail(ws, frame.rid, "invalid task draft request");
 					return;
@@ -648,7 +649,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					fail(ws, frame.rid, refusal);
 					return;
 				}
-				let { text, said } = draftInstruction(opened, ws.data.handle);
+				let { text, said } = draftInstruction(opened, ws.data.handle, frame.build);
 				let result = await Chat.draftTasks(
 					chat(room, ws),
 					ws.data.handle,
