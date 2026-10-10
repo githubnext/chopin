@@ -341,12 +341,6 @@ describe("feedback motion", () => {
 		expect(THEME).not.toContain("@keyframes feedback-");
 	});
 
-	it("uses the short control transition for Chat hover glyphs", () => {
-		expect(THEME).toMatch(
-			/:root\[data-motion-input="pointer"\] \.chat-toggle-icon\s*{[^}]*opacity var\(--duration-fast\) var\(--ease-out\)/s,
-		);
-	});
-
 	it("leaves feedback opacity to the component", () => {
 		for (let kind of ["icon", "count", "alert"]) {
 			let settled = new RegExp(

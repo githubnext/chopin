@@ -486,45 +486,12 @@ body {
 	}
 }
 
-.chat-toggle-icon-sidebar {
-	opacity: 0;
-}
-
 .panel-header {
 	block-size: var(--panel-header-height);
 }
 
 .panel-header-control {
 	margin-inline-start: calc(-1 * var(--panel-header-control-offset));
-}
-
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-default {
-	opacity: 0;
-}
-
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-sidebar {
-	opacity: 1;
-}
-
-@media (hover: hover) and (pointer: fine) {
-	.chat-header-control {
-		opacity: 0;
-		transition: opacity var(--duration-fast) var(--ease-out);
-	}
-
-	.chat-header:is(:hover, :focus-within) .chat-header-control {
-		opacity: 1;
-	}
-}
-
-@media (any-pointer: coarse) {
-	.chat-header-control {
-		opacity: 1;
-	}
-}
-
-:root[data-motion-input="pointer"] .chat-toggle-icon {
-	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 :root[data-motion-input="pointer"] .motion-picker-option {
@@ -1695,14 +1662,6 @@ button.question-add:disabled {
 	}
 
 	.workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-pane-moving] {
-		transition: none;
-	}
-
-	.chat-header-control {
-		transition: none;
-	}
-
-	:root[data-motion-input="pointer"] .chat-toggle-icon {
 		transition: none;
 	}
 

@@ -65,6 +65,12 @@ function detail(
 	};
 }
 
+let toolbarOf = (markup: string) =>
+	markup.slice(
+		markup.indexOf('data-document-toolbar="true"'),
+		markup.indexOf('data-document-view="plan"'),
+	);
+
 describe("hosted routes", () => {
 	it("recognizes canonical document routes and rejects the removed research route", () => {
 		expect(hostedRoute("/")).toEqual({ page: "repositories" });
@@ -346,6 +352,63 @@ describe("anchored child lifecycle", () => {
 			toolbar.indexOf("Close Source review"),
 		);
 		expect(markup.indexOf("<main")).toBeLessThan(markup.indexOf("<aside"));
+	});
+
+	let splitProps = {
+		chat: createElement("div", null, "Chat body"),
+		controls: createElement("div", null, "Document controls"),
+		chatActivity: { busy: true, unread: 0 },
+		decisions: createElement("div", null, "Decisions"),
+		header: createElement("header", null, "Room header"),
+		identity: "room",
+		ids: workspaceIds,
+		mode: "split" as const,
+		onChatOpen() {},
+		onDesktopChatOpen() {},
+		onDestination() {},
+		plan: createElement("div", null, "Paper"),
+		presence: createElement("div", { "aria-label": "People here: ana", role: "group" }),
+		presentation: { type: "document" as const },
+		unanswered: 0,
+		view: "plan" as const,
+	};
+
+	it("orders the tab row expand, tabs, presence, with no Chat header", () => {
+		let markup = renderToStaticMarkup(createElement(Workspace, {
+			...splitProps,
+			state: { chatOpen: false, desktopChatOpen: true },
+		}));
+		let toolbar = toolbarOf(markup);
+
+		expect(markup).not.toContain("data-chat-header");
+		expect(markup).not.toContain("data-chat-identity");
+		expect(markup).not.toContain('aria-label="Hide chat"');
+		expect(markup).toMatch(/<h2 class="sr-only" id="[^"]+" tabindex="-1">Chat<\/h2>/);
+		expect(toolbar).toContain('aria-label="Expand document"');
+		expect(toolbar.indexOf("Expand document")).toBeLessThan(toolbar.indexOf("Document controls"));
+		expect(toolbar.indexOf("Document controls")).toBeLessThan(toolbar.indexOf("People here: ana"));
+		expect(markup).toContain('aria-label="Resize chat"');
+		expect(markup.indexOf("Room header")).toBeLessThan(markup.indexOf("workspace-frame"));
+		expect(markup).not.toContain("data-document-expanded");
+		expect(markup).toMatch(/class="workspace-root[^"]*"[^>]*style="--chat-width:\d+px"/);
+	});
+
+	it("trades Chat and its top bar for a Chat button when expanded", () => {
+		let markup = renderToStaticMarkup(createElement(Workspace, {
+			...splitProps,
+			state: { chatOpen: false, desktopChatOpen: false },
+		}));
+		let toolbar = toolbarOf(markup);
+		let slot = markup.match(/<div[^>]*class="workspace-header-slot[^"]*"[^>]*>/)?.[0];
+
+		expect(markup).toContain('data-document-expanded="true"');
+		expect(slot).toContain('inert=""');
+		expect(slot).toContain('aria-hidden="true"');
+		expect(toolbar).toContain('aria-label="Show chat, Planner working"');
+		expect(toolbar).toContain(">Chat</span>");
+		expect(toolbar).not.toContain("Expand document");
+		expect(toolbar.indexOf("Show chat")).toBeLessThan(toolbar.indexOf("Document controls"));
+		expect(markup).not.toContain('aria-label="Resize chat"');
 	});
 
 	it("gives a compact child all three workspace destinations", () => {
