@@ -41,6 +41,42 @@ export function restoreBuilds(value: unknown, repositoryId?: string): BuildReque
 	return builds;
 }
 
+let liveSchema = z.object({
+	buildId: z.string().uuid(),
+	user: z.string().min(1).max(128),
+	repositoryId: z.string().min(1).max(128),
+	checkout: checkoutSchema,
+	baseRevision: z.number().int().nonnegative(),
+	baseSource: z.string(),
+	pullRequests: z.array(z.string().url()).min(1).max(100),
+}).strict();
+
+/** The built source a living document compares later edits against. */
+export type LiveBuild = z.infer<typeof liveSchema>;
+
+/** Restore a live record only when it names a finished build of this document. */
+export function restoreLive(
+	value: unknown,
+	builds: BuildRequest[],
+	history: Array<{ run: { id: string }; live?: true }>,
+	revision: number,
+): LiveBuild {
+	let live = liveSchema.parse(value);
+	let build = builds.find(item => item.id === live.buildId);
+	if (
+		!build || build.user !== live.user || build.repositoryId !== live.repositoryId
+		|| build.checkout.repository !== live.checkout.repository
+		|| build.checkout.branch !== live.checkout.branch
+		|| build.checkout.commit !== live.checkout.commit
+		|| !history.some(item => item.run.id === live.buildId && item.live)
+		|| live.baseRevision > revision
+		|| new Set(live.pullRequests).size !== live.pullRequests.length
+	) {
+		throw new Error("invalid live build");
+	}
+	return live;
+}
+
 type BuildInput = {
 	retryOf?: string;
 	planRevision: number;
