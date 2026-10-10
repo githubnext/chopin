@@ -333,11 +333,20 @@ export function SelectionBubble(
 	let place = useCallback(() => {
 		let element = ref.current;
 		if (!element || !anchor) return;
-		let liveAnchor = nativeSelectionRect();
-		if (!liveAnchor || (liveAnchor.width === 0 && liveAnchor.height === 0)) {
+		let rect = nativeSelectionRect();
+		if (!rect || (rect.width === 0 && rect.height === 0)) {
 			setPosition(undefined);
 			return;
 		}
+		// A DOMRect's sides are prototype getters, which `visibleAnchor`'s spread would drop.
+		let liveAnchor = {
+			bottom: rect.bottom,
+			height: rect.height,
+			left: rect.left,
+			right: rect.right,
+			top: rect.top,
+			width: rect.width,
+		};
 		let viewport = editorSurfaceViewport(editor);
 		let visible = visibleAnchor(liveAnchor, viewport);
 		if (!visible) {
@@ -364,8 +373,8 @@ export function SelectionBubble(
 			{ width, height },
 			viewport,
 			8,
-			// A touch selection has the system's own callout above it.
-			coarse ? "auto" : "above",
+			// Above, so the bubble never covers the line after the selection.
+			"above",
 		);
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top
@@ -382,6 +391,30 @@ export function SelectionBubble(
 	}, [anchor, editor, place]);
 
 	if (!anchor || disabled || hidden) return null;
+
+	let comment = onComment && (
+		<button
+			type="button"
+			aria-label="Comment on this passage"
+			data-tooltip="Add comment"
+			title="Comment on this passage"
+			/*
+			 * The passage is captured now, inside the click, because
+			 * the composer this opens takes focus — and the selection
+			 * goes with it. A draft that forgot what it was about the
+			 * moment you started typing would be no use.
+			 */
+			onClick={() => {
+				onComment();
+				setAnchor(undefined);
+				setPosition(undefined);
+			}}
+			className={`${CELL} ${CELL_OFF}`}
+			data-press="small"
+		>
+			<MessagePlusIcon aria-hidden="true" />
+		</button>
+	);
 
 	return (
 		<div
@@ -453,6 +486,13 @@ export function SelectionBubble(
 				)
 				: (
 					<>
+						{/* Commenting is what a reader on a phone selects text for, so it leads there. */}
+						{comment && coarse && (
+							<>
+								{comment}
+								<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
+							</>
+						)}
 						<button
 							type="button"
 							aria-label={`Block type: ${describe(block).label}`}
@@ -467,7 +507,7 @@ export function SelectionBubble(
 							<ChevronIcon aria-hidden="true" className="size-3.5 rotate-90" />
 						</button>
 
-						<span aria-hidden="true" className={`${SEAM}`} />
+						<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
 
 						{MARKS.filter(mark => !coarse || PHONE_ROW.has(mark.format)).map(mark => (
 							<button
@@ -485,7 +525,7 @@ export function SelectionBubble(
 							</button>
 						))}
 
-						<span aria-hidden="true" className={`${SEAM}`} />
+						<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
 
 						<button
 							type="button"
@@ -498,30 +538,10 @@ export function SelectionBubble(
 							<LinkPlusIcon aria-hidden="true" />
 						</button>
 
-						{onComment && (
+						{onComment && !coarse && (
 							<>
-								<span aria-hidden="true" className={`${SEAM}`} />
-								<button
-									type="button"
-									aria-label="Comment on this passage"
-									data-tooltip="Add comment"
-									title="Comment on this passage"
-									/*
-									 * The passage is captured now, inside the click, because
-									 * the composer this opens takes focus — and the selection
-									 * goes with it. A draft that forgot what it was about the
-									 * moment you started typing would be no use.
-									 */
-									onClick={() => {
-										onComment();
-										setAnchor(undefined);
-										setPosition(undefined);
-									}}
-									className={`${CELL} ${CELL_OFF}`}
-									data-press="small"
-								>
-									<MessagePlusIcon aria-hidden="true" />
-								</button>
+								<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />
+								{comment}
 							</>
 						)}
 					</>
