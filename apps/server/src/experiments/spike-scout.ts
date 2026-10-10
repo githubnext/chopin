@@ -34,8 +34,11 @@ export type SpikeHost = {
 	refresh(channelId: string): Promise<void>;
 };
 
-/** Which candidate passages would materially benefit from a quick prototype. */
-export type SpikeJudge = (blocks: SpikeBlock[]) => Promise<boolean[]>;
+/**
+ * Which candidate passages would materially benefit from a quick prototype. `undefined` means
+ * the judge could not decide, so every passage stays unjudged for the next scan.
+ */
+export type SpikeJudge = (blocks: SpikeBlock[]) => Promise<boolean[] | undefined>;
 
 export const heuristicJudge: SpikeJudge = async blocks =>
 	blocks.map(block => uncertain(block.text));
@@ -45,7 +48,10 @@ export const MAX_CANDIDATES = 5;
 export const MAX_ACTIVE = 3;
 const ACTIVE = ["requested", "queued", "running", "publishing"];
 
-/** One Jev noul per passage; any failure falls back to explicit-uncertainty matching. */
+/**
+ * One Jev noul per passage. A failure decides nothing: explicit-uncertainty matching is only
+ * for deployments with no Jev key, never a silent substitute for a configured judge.
+ */
 export function jevJudge(ask: (request: JevRequest) => Promise<JevResult>): SpikeJudge {
 	return async blocks => {
 		if (!blocks.length) return [];
@@ -73,7 +79,7 @@ export function jevJudge(ask: (request: JevRequest) => Promise<JevResult>): Spik
 				return found.noul >= SPIKE_THRESHOLD;
 			});
 		} catch {
-			return heuristicJudge(blocks);
+			return undefined;
 		}
 	};
 }
@@ -146,7 +152,7 @@ export class SpikeScout {
 	async #check(channelId: string): Promise<void> {
 		let host = this.#options.host;
 		let snapshot = await host.snapshot(channelId);
-		if (!snapshot || snapshot.live) return;
+		if (!snapshot) return;
 		let spikes = await host.spikes(channelId);
 		for (let value of spikes) {
 			let spike = value.spike!;
@@ -155,6 +161,8 @@ export class SpikeScout {
 				spike.dismissed = true;
 			}
 		}
+		// A living build ends new scouting, but deleting a callout must still stop its spike.
+		if (snapshot.live) return;
 		let editor = this.#editors.get(channelId);
 		if (!editor) return;
 		let capacity = MAX_ACTIVE
@@ -171,10 +179,15 @@ export class SpikeScout {
 		let connection = await host.connection(snapshot.repositoryId, editor, channelId);
 		if (!connection) return;
 		let verdicts = await (this.#options.judge ?? heuristicJudge)(candidates);
-		for (let block of candidates) seen.add(block.digest);
+		if (!verdicts) return;
+		// Approved passages beyond capacity stay unseen so a later scan can start them.
 		let hits = candidates.filter((_block, index) => verdicts[index]).slice(0, capacity);
+		for (let [index, block] of candidates.entries()) {
+			if (!verdicts[index]) seen.add(block.digest);
+		}
 		for (let block of hits) {
 			if (this.#closed) return;
+			seen.add(block.digest);
 			await host.start(channelId, { owner: editor, connection, block });
 		}
 	}
