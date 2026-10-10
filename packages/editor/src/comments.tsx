@@ -22,7 +22,7 @@ import { PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
 
 import type { KeyboardEvent, ReactNode } from "react";
 import type { Comment } from "@chopin/protocol";
-import type { ThreadView } from "./threads";
+import type { Sent, ThreadView } from "./threads";
 
 /** Notes past which the middle of a thread folds behind "Show N replies". */
 const FOLD_AFTER = 3;
@@ -274,8 +274,12 @@ export function composerKey(
 export function mention(
 	value: string,
 	caret: number,
+	final = false,
 ): { text: string; caret: number } | undefined {
-	let match = /(^|\s)@chopin(?=[\s,.;:!?])/i.exec(value);
+	// While typing, the word must be ended, or `@chopinesque` could never be
+	// written. At send it may end the text.
+	let match = (final ? /(^|\s)@chopin(?=[\s,.;:!?]|$)/i : /(^|\s)@chopin(?=[\s,.;:!?])/i)
+		.exec(value);
 	if (!match) return undefined;
 	let start = match.index + match[1]!.length;
 	let end = start + "@chopin".length;
@@ -305,7 +309,7 @@ function Composer({
 	autoFocus?: boolean;
 	mode: "new" | "reply";
 	onCancel?: () => void;
-	onSend: (text: string, to?: "planner") => void;
+	onSend: (text: string, to?: "planner") => void | Promise<Sent>;
 	onTyping?: (writing: boolean) => void;
 }) {
 	let [text, setText] = useState("");
@@ -313,6 +317,7 @@ function Composer({
 	let [focused, setFocused] = useState(false);
 	let [coarse, setCoarse] = useState(false);
 	let [indent, setIndent] = useState(0);
+	let [refusal, setRefusal] = useState<string>();
 	let ref = useRef<HTMLTextAreaElement>(null);
 	let chip = useRef<HTMLSpanElement>(null);
 	let caret = useRef<number | undefined>(undefined);
@@ -354,16 +359,34 @@ function Composer({
 			value = value.replace(/^\s+/, "");
 		}
 		setText(value);
+		setRefusal(undefined);
 		onTyping?.(value.length > 0);
 	};
 
 	let send = () => {
-		let value = text.trim();
-		if (!value) return;
+		let typed = text.trim();
+		if (!typed) return;
+		// A mention that ends the text has nothing after it to end the word while typing.
+		let found = mention(typed, typed.length, true);
+		let value = (found?.text ?? typed).trim();
+		let addressed = to || !!found;
+		if (!value) {
+			setText("");
+			setTo(addressed);
+			return;
+		}
 		setText("");
 		setTo(false);
+		setRefusal(undefined);
 		onTyping?.(false);
-		onSend(value, to ? "planner" : undefined);
+		let sent = onSend(value, addressed ? "planner" : undefined);
+		// Refused: put the words back, unless something new was typed meanwhile, and say why.
+		void sent?.then(result => {
+			if (result.ok) return;
+			setRefusal(result.message);
+			setText(current => current ? current : value);
+			setTo(current => current || addressed);
+		});
 		// A clicked send disables itself and drops focus without a blur, which would leave
 		// the field believing it still had focus; the field takes it back instead.
 		ref.current?.focus({ preventScroll: true });
@@ -428,6 +451,7 @@ function Composer({
 					value={text}
 				/>
 			</div>
+			{refusal && <p className="plan-comment-refusal" role="alert">{refusal}</p>}
 			<div className="plan-comment-composer-fold">
 				<div className="plan-comment-composer-footer" inert={!open || undefined}>
 					<label className="plan-comment-address" htmlFor={checkbox}>
@@ -469,7 +493,7 @@ export type ThreadCardProps = {
 	canEdit?: boolean;
 	/** An address that opens this thread, for Copy link. */
 	link?: string;
-	onReply: (text: string, to?: "planner") => void;
+	onReply: (text: string, to?: "planner") => void | Promise<Sent>;
 	onResolve: () => void;
 	onTyping: (writing: boolean) => void;
 	onFocus: () => void;
@@ -661,7 +685,7 @@ export function ThreadList({ autoFocus = true, onSelect, returnTo, views }: Thre
 }
 
 export type DraftCardProps = {
-	onSend: (text: string, to?: "planner") => void;
+	onSend: (text: string, to?: "planner") => void | Promise<Sent>;
 	onCancel: () => void;
 };
 

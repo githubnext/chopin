@@ -577,3 +577,36 @@ describe("Chopin's turn on a thread", () => {
 		});
 	});
 });
+
+describe("a send that is refused", () => {
+	it("keeps the draft open and says why", async () => {
+		let subject = store();
+		let { transport } = wire(() => ({
+			kind: "comment:start",
+			ok: false,
+			reason: "busy",
+			message: "Chopin has too much waiting already.",
+		}));
+		subject.listen(transport);
+		subject.draft({ blocks: [1], quote: "the phrase", offset: 3, length: 10 });
+
+		expect(await subject.start("Shorter.", "planner")).toEqual({
+			ok: false,
+			message: "Chopin has too much waiting already.",
+		});
+		expect(subject.snapshot().draft).toMatchObject({ quote: "the phrase" });
+	});
+
+	it("passes on why a reply failed rather than swallowing it", async () => {
+		let subject = store();
+		let { transport } = wire(() => new Error("repository write access is required"));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1" })]);
+
+		expect(await subject.reply("t1", "Hello", "planner")).toEqual({
+			ok: false,
+			message: "repository write access is required",
+		});
+		expect(subject.snapshot().threads[0]?.thread.notes).toHaveLength(1);
+	});
+});

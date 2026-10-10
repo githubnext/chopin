@@ -87,6 +87,18 @@ export type ThreadState = {
 
 const EMPTY: ThreadState = { threads: [], writing: {} };
 
+/** Whether a note was taken, and if not, why, in words the composer can show. */
+export type Sent = { ok: true } | { ok: false; message: string };
+
+const UNSENT: Sent = { ok: false, message: "Not connected. Try again in a moment." };
+
+function failed(err: unknown): Sent {
+	return {
+		ok: false,
+		message: err instanceof Error && err.message ? err.message : "Couldn't send. Try again.",
+	};
+}
+
 export class ThreadStore {
 	#state: ThreadState = EMPTY;
 	#listeners = new Set<() => void>();
@@ -160,13 +172,18 @@ export class ThreadStore {
 
 	// -- acting ----------------------------------------------------------------
 
-	/** Send the drafted comment. The thread arrives back as `comment:opened`. */
-	start(text: string, to?: "planner"): void {
+	/**
+	 * Send the drafted comment. The thread arrives back as `comment:opened`.
+	 *
+	 * A refusal keeps the draft open and settles with the server's reason, so
+	 * the composer can put the text back and say why rather than losing both.
+	 */
+	start(text: string, to?: "planner"): Promise<Sent> {
 		let draft = this.#draft;
-		if (!draft || !this.#wire) return;
+		if (!draft || !this.#wire) return Promise.resolve(UNSENT);
 
 		let { blocks, length, offset, quote } = draft;
-		void this.#wire
+		return this.#wire
 			.ask<Comment.Start.Reply>("comment:start", {
 				blocks,
 				quote,
@@ -175,29 +192,39 @@ export class ThreadStore {
 				text,
 				...(to ? { to } : {}),
 			})
-			.then(frame => {
-				if (frame.ok) {
-					this.#sent(frame.thread.id, frame.planner);
-					return this.opened(frame.thread);
-				}
-				// The plan moved under the selection, or there are too many
-				// open threads. Either way the draft is no longer sendable.
-				this.#draft = undefined;
-				this.#error = frame.message;
-				this.refresh();
+			.then((frame): Sent => {
+				if (!frame.ok) return { ok: false, message: frame.message };
+				this.#sent(frame.thread.id, frame.planner);
+				this.opened(frame.thread);
+				return { ok: true };
 			})
-			.catch(() => {});
+			.catch(failed);
 	}
 
-	reply(id: string, text: string, to?: "planner"): void {
-		void this.#wire
-			?.ask<Comment.Reply.Reply>("comment:reply", { id, text, ...(to ? { to } : {}) })
-			.then(frame => {
-				if (!frame.ok) return;
+	/** Add to a thread; settles with the server's reason when it is refused. */
+	reply(id: string, text: string, to?: "planner"): Promise<Sent> {
+		if (!this.#wire) return Promise.resolve(UNSENT);
+		return this.#wire
+			.ask<Comment.Reply.Reply>("comment:reply", { id, text, ...(to ? { to } : {}) })
+			.then((frame): Sent => {
+				if (!frame.ok) {
+					return {
+						ok: false,
+						message: frame.reason === "resolved"
+							? "This comment was resolved."
+							: frame.message,
+					};
+				}
 				this.#sent(id, frame.planner);
 				this.said(id, frame.note);
+				return { ok: true };
 			})
-			.catch(() => {});
+			.catch(failed);
+	}
+
+	/** A thread's status, including one that is hidden because it was resolved. */
+	status(id: string): Comment.Status | undefined {
+		return this.#threads.get(id)?.status;
 	}
 
 	/**

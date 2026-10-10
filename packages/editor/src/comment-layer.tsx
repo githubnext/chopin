@@ -716,9 +716,23 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		let follow = () => {
 			if (location.hash.startsWith(LINK)) setLinked(location.hash.slice(LINK.length));
 		};
+		// Chat can point at a thread that has since gone; say so rather than
+		// leaving a request to open it waiting for a thread that will not come.
 		let open = (event: Event) => {
 			let id = (event as CustomEvent<unknown>).detail;
-			if (typeof id === "string") setLinked(id);
+			if (typeof id !== "string") return;
+			let status = store.status(id);
+			let view = store.snapshot().threads.find(entry => entry.thread.id === id);
+			let gone = status === "resolved"
+				? "This comment was resolved"
+				: status !== "open"
+				? "This comment is no longer here"
+				: view?.orphaned || view?.drifted
+				? "This comment's passage has changed"
+				: undefined;
+			if (!gone) return setLinked(id);
+			setLinked(undefined);
+			setNotice({ id, text: gone, undo: false });
 		};
 		addEventListener("hashchange", follow);
 		addEventListener(OPEN_COMMENT, open);
@@ -726,7 +740,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			removeEventListener("hashchange", follow);
 			removeEventListener(OPEN_COMMENT, open);
 		};
-	}, []);
+	}, [store]);
 
 	// A copied link opens its thread once the thread has somewhere to stand.
 	useEffect(() => {

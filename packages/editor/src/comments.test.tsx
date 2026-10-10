@@ -233,6 +233,11 @@ describe("mention", () => {
 		expect(mention("@chopin, why?", 8)).toEqual({ text: ", why?", caret: 1 });
 	});
 
+	it("takes a mention that ends the text only when sending", () => {
+		expect(mention("please fix @chopin", 18)).toBeUndefined();
+		expect(mention("please fix @chopin", 18, true)).toEqual({ text: "please fix ", caret: 11 });
+	});
+
 	it("leaves other words alone", () => {
 		expect(mention("@chopinesque ", 13)).toBeUndefined();
 		expect(mention("mail@chopin ", 12)).toBeUndefined();

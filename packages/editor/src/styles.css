@@ -1071,6 +1071,15 @@
 		border-color var(--duration-fast) var(--ease-out);
 }
 
+/* Why a send was refused, under the field it can be retried from. */
+.plan-comment-refusal {
+	margin: 0.375rem 0 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-warning-ink);
+	text-wrap: pretty;
+}
+
 /* A finger needs the whole row, not the 14px box. */
 @media (pointer: coarse) {
 	.plan-comment-address {
