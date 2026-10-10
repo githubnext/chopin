@@ -12,10 +12,12 @@ export async function implementationResponse<T>(result: Response): Promise<T> {
 	return value;
 }
 
-/** Refusals that mean no local agent is connected, including the planned `no-workspace` 409. */
+/**
+ * The planned `no-workspace` 409: no local agent is connected. A connected agent that is still
+ * prototyping takes the build once it finishes, so busy is not offline.
+ */
 function offline(error: unknown): boolean {
-	return error instanceof ApiError && error.status === 409
-		&& /^no-workspace$|offline or busy/.test(error.message);
+	return error instanceof ApiError && error.status === 409 && error.message === "no-workspace";
 }
 
 /**

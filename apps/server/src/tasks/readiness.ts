@@ -1,3 +1,6 @@
+import { parse } from "@chopin/dialect/parse";
+import { serialize } from "@chopin/dialect/serialize";
+
 import type { JevRequest, JevResult } from "../conversation-plan/jev";
 import type { DocumentTarget } from "../plan/service";
 
@@ -29,6 +32,25 @@ export function looksBuildable(source: string): boolean {
 	let headings = lines.filter(line => /^#{1,6}\s+\S/.test(line)).length;
 	let words = source.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.length ?? 0;
 	return words >= 120 && headings >= 2;
+}
+
+/**
+ * The document without its top-level callouts. Spike results arrive as callouts, and a verdict
+ * that changed whenever one was inserted would make Build plan flicker.
+ */
+export function withoutCallouts(source: string): string {
+	try {
+		// Always reserialized, so a source with and without callouts compare equal.
+		let root = parse(source);
+		return serialize({
+			...root,
+			children: root.children.filter(node =>
+				node.type !== "mdxJsxFlowElement" || node.name !== "Callout"
+			),
+		});
+	} catch {
+		return source;
+	}
 }
 
 export async function judgeBuildable(
@@ -69,7 +91,8 @@ export async function judgeBuildable(
 export class BuildReadiness {
 	#options: ReadinessOptions;
 	#debounceMs: number;
-	#judged = new Map<string, { revision: number; ready: boolean }>();
+	/** `key` hashes the judged source without callouts, so callout-only edits keep the verdict. */
+	#judged = new Map<string, { revision: number; ready: boolean; key: bigint | number }>();
 	#pending = new Map<string, () => void>();
 	#running = new Map<string, Promise<void>>();
 	#dirty = new Set<string>();
@@ -126,12 +149,17 @@ export class BuildReadiness {
 				this.#dirty.delete(channelId);
 				let target = await this.#options.current(channelId);
 				if (!target || this.#closed) return;
-				let ready = await judgeBuildable(target.source, this.#options.ask, this.#options.error);
+				let source = withoutCallouts(target.source);
+				let key = Bun.hash(source);
+				let known = this.#judged.get(channelId);
+				let ready = known?.key === key
+					? known.ready
+					: await judgeBuildable(source, this.#options.ask, this.#options.error);
 				if (this.#closed) return;
 				let previous = this.#judged.get(channelId);
 				if (previous && previous.revision > target.revision) return;
 				this.#judged.delete(channelId);
-				this.#judged.set(channelId, { revision: target.revision, ready });
+				this.#judged.set(channelId, { revision: target.revision, ready, key });
 				for (let key of this.#judged.keys()) {
 					if (this.#judged.size <= (this.#options.limit ?? 500)) break;
 					this.#judged.delete(key);

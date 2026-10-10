@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BuildReadiness, judgeBuildable, looksBuildable } from "./readiness";
+import { BuildReadiness, judgeBuildable, looksBuildable, withoutCallouts } from "./readiness";
 
 import type { JevRequest, JevResult } from "../conversation-plan/jev";
 import type { DocumentTarget } from "../plan/service";
@@ -95,9 +95,10 @@ describe("BuildReadiness", () => {
 		let clock = timers();
 		let noul = 0.9;
 		let revision = 1;
+		let source = long;
 		let changes: boolean[] = [];
 		let readiness = new BuildReadiness({
-			current: async () => target(long, revision),
+			current: async () => target(source, revision),
 			ask: request => jev(noul)(request),
 			after: clock.after,
 			changed: (_id, _revision, ready) => changes.push(ready),
@@ -107,13 +108,51 @@ describe("BuildReadiness", () => {
 		expect(readiness.ready("doc", 1)).toBe(true);
 		revision = 2;
 		noul = 0.1;
-		readiness.schedule(target(long, 2));
+		source = `${long}\n\nMore detail.`;
+		readiness.schedule(target(source, 2));
 		// Pending: the previous judgement stands and no new one starts early.
 		expect(readiness.ready("doc", 2)).toBe(true);
 		clock.fire();
 		await Bun.sleep(0);
 		expect(readiness.ready("doc", 2)).toBe(false);
 		expect(changes).toEqual([true, false]);
+	});
+
+	test("callout-only edits keep the last verdict without asking again", async () => {
+		let asks: JevRequest[] = [];
+		let noul = 0.9;
+		let revision = 1;
+		let source = long;
+		let changes: boolean[] = [];
+		let readiness = new BuildReadiness({
+			current: async () => target(source, revision),
+			ask: request => jev(noul, asks)(request),
+			changed: (_id, _revision, ready) => changes.push(ready),
+		});
+		readiness.ready("doc", 1);
+		await Bun.sleep(0);
+		expect(readiness.ready("doc", 1)).toBe(true);
+		noul = 0.1;
+		revision = 2;
+		source = long.replace(
+			"## Steps",
+			'<Callout id="01K0N4W3B7P27CBAEC7A8C8WEA" type="note">\n\tPrototyping…\n</Callout>\n\n## Steps',
+		);
+		readiness.ready("doc", 2);
+		await Bun.sleep(0);
+		expect(readiness.ready("doc", 2)).toBe(true);
+		expect(asks).toHaveLength(1);
+		expect(JSON.stringify(asks[0]!.state)).not.toContain("Callout");
+		expect(changes).toEqual([true]);
+	});
+
+	test("strips top-level callouts from the judged source", () => {
+		let source = 'Intro.\n\n<Callout type="note">\n\tA spike.\n</Callout>\n\nOutro.\n';
+		let stripped = withoutCallouts(source);
+		expect(stripped).toContain("Intro.");
+		expect(stripped).toContain("Outro.");
+		expect(stripped).not.toContain("Callout");
+		expect(withoutCallouts(source)).toBe(withoutCallouts("Intro.\n\nOutro.\n"));
 	});
 
 	test("without Jev, the heuristic decides", async () => {
@@ -158,10 +197,11 @@ describe("BuildReadiness", () => {
 
 	test("a judgement requested mid-run runs again afterwards", async () => {
 		let revision = 1;
+		let source = long;
 		let gate: (() => void) | undefined;
 		let asks = 0;
 		let readiness = new BuildReadiness({
-			current: async () => target(long, revision),
+			current: async () => target(source, revision),
 			ask: async request => {
 				asks++;
 				if (asks === 1) await new Promise<void>(resolve => (gate = resolve));
@@ -171,6 +211,7 @@ describe("BuildReadiness", () => {
 		readiness.ready("doc", 1);
 		await Bun.sleep(0);
 		revision = 2;
+		source = `${long}\n\nMore detail.`;
 		readiness.ready("doc", 2);
 		gate!();
 		await Bun.sleep(5);
