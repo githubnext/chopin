@@ -727,12 +727,12 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) Comments.typing(room.plan, ws, frame);
 			return;
 
-		case "comment:accept":
-			if (room.plan) await Comments.accept(chat(room, ws), ws, frame);
+		case "comment:resolve":
+			if (room.plan) await Comments.resolve(room.plan, server, room.id, ws, frame);
 			return;
 
-		case "comment:dismiss":
-			if (room.plan) await Comments.dismiss(chat(room, ws), ws, frame);
+		case "comment:reopen":
+			if (room.plan) await Comments.reopen(room.plan, server, room.id, ws, frame);
 			return;
 
 		case "job:list":

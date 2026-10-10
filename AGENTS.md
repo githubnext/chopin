@@ -150,10 +150,10 @@ Planner destination without a mention.
 
 `instruction()` strips the mention before model input. Recent room messages that
 did not address the Planner still enter a bounded backscroll for the next turn.
-An accepted comment also starts an explicit Planner turn after it commits. So does
-`implementation:draft` from Build: the server writes the instruction from the
-plan, rechecks write access as for `chat:send`, records only a system notice of
-who asked, and keeps one live draft per document. An MCP
+`implementation:draft` from Build also starts an explicit Planner turn: the
+server writes the instruction from the plan, rechecks write access as for
+`chat:send`, records only a system notice of who asked, and keeps one live draft
+per document. An MCP
 `invoke_planner` call posts its instruction as the caller's member message and
 runs under the channel's existing Planner owner; only a caller with a live
 browser login can claim an unowned channel.
@@ -195,6 +195,14 @@ offset hint, and block indices, not an unbounded copy of selected text. The
 server resolves the locator and mints relative positions. It handles stale or
 ambiguous passages conservatively, but does not yet enforce every client-side
 size and ordering bound on custom wire input.
+
+A comment thread is resolved or reopened through `comment:resolve` and
+`comment:reopen`. Both change only the sidecar record and persist before they
+are acknowledged or broadcast; reopening must also drop the store's recent
+resolution tombstone, which otherwise refuses replies. Resolved threads leave
+`comment:sync` and `plan:anchors` and are not rebased; reopening recovers the
+passage. Accepted and dismissed threads are legacy persisted states: nothing
+creates them, but accepted `<Decision>` rows and their result anchors remain.
 
 Question and comment relationships have four deliberate states: pending,
 linked, deliberately empty, and orphaned. Preserve the distinction. Empty means
