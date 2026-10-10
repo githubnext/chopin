@@ -924,8 +924,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			: `thread:${pinned}`;
 		compactId = dialogId(pinned);
 		compactLabel = pinnedView ? "Comment thread" : "Comments";
-		let count = pinnedView?.thread.notes.length;
-		compactTitle = count ? count === 1 ? "Comment" : `${count} comments` : "Comments";
+		// A thread's own note count would read as a second, contradicting count beside a
+		// list's "All N comments", so one thread is only ever "Comment".
+		compactTitle = pinnedView ? "Comment" : "Comments";
 		compactClose = dismiss;
 		compactContent = pinnedView ? card(pinnedView) : (
 			<ThreadList
