@@ -441,7 +441,7 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 	await page.keyboard.press("ControlOrMeta+A");
 	let selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
 	expect(selected).toContain("selected sentence");
-	await page.getByRole("button", { name: /Hide chat/ }).click();
+	await page.getByRole("button", { name: /Expand document/ }).click();
 	await page.getByRole("button", { name: /Show chat/ }).click();
 	await expect(editor).toBeVisible();
 	await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))

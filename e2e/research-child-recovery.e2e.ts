@@ -302,7 +302,7 @@ test(
 		let research = await scriptResearch(page, room, port(baseURL!));
 		let opened = await join("ana");
 		await opened.setViewportSize({ width: 1500, height: 895 });
-		let hideChat = opened.getByRole("button", { name: "Hide chat", exact: true });
+		let hideChat = opened.getByRole("button", { name: "Expand document", exact: true });
 		if (await hideChat.isVisible()) await hideChat.click();
 		let editor = content(opened);
 		await expect.poll(async () => (await editor.locator("p").first().boundingBox())!.width)
