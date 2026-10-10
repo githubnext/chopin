@@ -946,6 +946,11 @@
 	margin-block: -0.125rem;
 }
 
+/* The shared button's display would otherwise outrank the attribute. */
+.plan-comment-send[hidden] {
+	display: none;
+}
+
 .plan-comment-composer[data-mode="reply"]:focus-within {
 	border-color: var(--color-brand);
 }
