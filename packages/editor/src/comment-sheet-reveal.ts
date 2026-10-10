@@ -18,10 +18,13 @@ export function useCommentSheetReveal({
 	host,
 	id,
 	passages,
+	sheet,
 }: {
 	host: HTMLElement | undefined;
 	id: string | undefined;
 	passages: Rect[] | undefined;
+	/** The sheet's surface, which mounts a frame after the comment opens. */
+	sheet: HTMLElement | null;
 }) {
 	useLayoutEffect(() => {
 		if (!host || !id) return;
@@ -34,7 +37,7 @@ export function useCommentSheetReveal({
 	}, [host, id]);
 
 	useLayoutEffect(() => {
-		if (!host || !id || !passages || passages.length === 0) return;
+		if (!host || !id || !sheet || !passages || passages.length === 0) return;
 		let scroller = planScroller(host);
 		if (!scroller) return;
 		// Passages are measured relative to the scroll position they were taken at.
@@ -43,9 +46,7 @@ export function useCommentSheetReveal({
 		let reveal = () => {
 			cancelAnimationFrame(frame);
 			frame = requestAnimationFrame(() => {
-				if (!scroller.isConnected) return;
-				let sheet = document.querySelector<HTMLElement>("[data-plan-comment-sheet]");
-				if (!sheet) return;
+				if (!scroller.isConnected || !sheet.isConnected) return;
 				let viewport = currentViewport();
 				let keyboard = Math.max(0, window.innerHeight - viewport.top - viewport.height);
 				let shift = scroller.scrollTop - measuredAt;
@@ -66,13 +67,12 @@ export function useCommentSheetReveal({
 		};
 		reveal();
 		let observer = new ResizeObserver(reveal);
-		let sheet = document.querySelector<HTMLElement>("[data-plan-comment-sheet]");
-		if (sheet) observer.observe(sheet);
+		observer.observe(sheet);
 		let off = listenToViewportChanges(reveal);
 		return () => {
 			cancelAnimationFrame(frame);
 			observer.disconnect();
 			off();
 		};
-	}, [host, id, passages]);
+	}, [host, id, passages, sheet]);
 }
