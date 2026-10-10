@@ -207,3 +207,93 @@ export function draftRefusalCopy(message: string): string | undefined {
 	}
 	if (/cannot be built/.test(message)) return "This document can’t be built.";
 }
+
+/** Whether this document has ever been handed to a coding agent. */
+export function hasBuilt(snapshot: Snapshot): boolean {
+	return !!snapshot.build || snapshot.lifecycle.execution.state === "active"
+		|| snapshot.lifecycle.history.length > 0;
+}
+
+/**
+ * The header's one-click first build: draft the tasks, then start them, with
+ * no review in between. `failed` keeps the button so a person can try again;
+ * `agent` says the last start found no local agent to run it.
+ */
+export type FirstBuild =
+	| { stage: "idle" }
+	| { stage: "drafting"; sent: boolean }
+	| { stage: "starting" }
+	| { stage: "started" }
+	| { stage: "failed"; agent?: boolean; message?: string };
+
+export type FirstBuildEvent =
+	| { type: "press" }
+	| { type: "draft-sent" }
+	/** The draft turn ended; `drafted` when a fresh read then had tasks to start. */
+	| { type: "draft-ended"; drafted: boolean }
+	| { type: "draft-refused"; message?: string }
+	| { type: "start" }
+	| { type: "started" }
+	| { type: "start-refused"; agent: boolean; message?: string }
+	| { type: "reset" };
+
+export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): FirstBuild {
+	switch (event.type) {
+		case "press":
+			return state.stage === "idle" || state.stage === "failed"
+				? { stage: "drafting", sent: false }
+				: state;
+		case "draft-sent":
+			return state.stage === "drafting" ? { stage: "drafting", sent: true } : state;
+		case "draft-ended":
+			return state.stage === "drafting" && state.sent && !event.drafted
+				? { stage: "failed", message: "Chopin couldn’t break the plan into tasks." }
+				: state;
+		case "draft-refused":
+			return state.stage === "drafting" ? { stage: "failed", message: event.message } : state;
+		case "start":
+			return state.stage === "drafting" || state.stage === "failed"
+				? { stage: "starting" }
+				: state;
+		case "started":
+			return state.stage === "starting" ? { stage: "started" } : state;
+		case "start-refused":
+			return state.stage === "starting"
+				? { stage: "failed", agent: event.agent, message: event.message }
+				: state;
+		case "reset":
+			return { stage: "idle" };
+	}
+}
+
+/**
+ * What the header shows for a snapshot and the first build's stage, and the
+ * one step the browser should take next, if any.
+ *
+ * The button appears only for a document judged ready that has never been
+ * built. Once pressed it reads as working until the build runs or the attempt
+ * ends; `reset` hands any later state back to the Build view.
+ */
+export function firstBuildStep(
+	snapshot: Snapshot | undefined,
+	state: FirstBuild,
+): { view: "hidden" | "ready" | "working"; next?: "draft" | "start" | "reset" } {
+	if (!snapshot) return { view: state.stage === "idle" ? "hidden" : "working" };
+	let phase = buildPhase(snapshot);
+	if (phase.kind === "building") {
+		return { view: "working", ...(state.stage === "idle" ? {} : { next: "reset" as const }) };
+	}
+	if (state.stage === "idle" || state.stage === "failed") {
+		let open = phase.kind === "drafting" || phase.kind === "review";
+		return { view: snapshot.buildReady && open && !hasBuilt(snapshot) ? "ready" : "hidden" };
+	}
+	if (state.stage === "starting") return { view: "working" };
+	if (state.stage === "started") {
+		return phase.kind === "review" ? { view: "working" } : { view: "hidden", next: "reset" };
+	}
+	if (phase.kind === "review") return { view: "working", next: "start" };
+	if (phase.kind === "drafting") {
+		return { view: "working", ...(state.sent ? {} : { next: "draft" }) };
+	}
+	return { view: "hidden", next: "reset" };
+}

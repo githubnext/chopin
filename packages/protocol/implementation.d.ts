@@ -86,6 +86,11 @@ export type ImplementationSnapshot = {
 	/** Whether the viewer has a connected local agent for this repository; it may be busy. */
 	localAgent: boolean;
 	blockers: string[];
+	/**
+	 * The document reads as complete enough to build and nothing blocks it.
+	 * Judged in memory once edits settle, so it may lag the latest revision.
+	 */
+	buildReady: boolean;
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
 	live?: LiveSnapshot;
 };
@@ -100,7 +105,7 @@ export type ImplementationSnapshot = {
  */
 export declare namespace Implementation {
 	export type Incoming = Request<Draft>;
-	export type Outgoing = Drafted | Drafting;
+	export type Outgoing = Drafted | Drafting | Readiness;
 
 	/** Draft or revise the tasks for the document as it now stands. */
 	export type Draft = KIND<"implementation:draft"> & {
@@ -123,5 +128,11 @@ export declare namespace Implementation {
 		id: string;
 		planRevision: number;
 		state: "queued" | "running" | "ended";
+	};
+
+	/** Broadcast when a document's build readiness judgement changes; read the snapshot again. */
+	export type Readiness = KIND<"implementation:readiness"> & {
+		planRevision: number;
+		ready: boolean;
 	};
 }

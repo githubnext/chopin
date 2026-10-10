@@ -1,0 +1,133 @@
+import { describe, expect, test } from "bun:test";
+import { BuildReadiness, judgeBuildable, looksBuildable } from "./readiness";
+
+import type { JevRequest, JevResult } from "../conversation-plan/jev";
+import type { DocumentTarget } from "../plan/service";
+
+let long = `# Title\n\n## Goal\n\n${"word ".repeat(130)}\n\n## Steps\n\nDo it.`;
+
+function target(source: string, revision = 1): DocumentTarget {
+	return { channelId: "doc", revision, source, sourceHash: String(revision) };
+}
+
+function jev(noul: number, seen: JevRequest[] = []) {
+	return async (request: JevRequest): Promise<JevResult> => {
+		seen.push(request);
+		return {
+			model: "test",
+			answers: { build_ready: { type: "noul", noul } },
+			usage: { input_tokens: 1, output_tokens: 1 },
+			latencyMs: 0,
+		};
+	};
+}
+
+function timers() {
+	let queue: Array<{ delay: number; action: () => void; cancelled: boolean }> = [];
+	return {
+		queue,
+		after(delay: number, action: () => void) {
+			let entry = { delay, action, cancelled: false };
+			queue.push(entry);
+			return () => {
+				entry.cancelled = true;
+			};
+		},
+		fire() {
+			for (let entry of queue.splice(0)) if (!entry.cancelled) entry.action();
+		},
+	};
+}
+
+describe("looksBuildable", () => {
+	test("needs enough words and two headings", () => {
+		expect(looksBuildable(long)).toBe(true);
+		expect(looksBuildable(`# One\n\n${"word ".repeat(200)}`)).toBe(false);
+		expect(looksBuildable("# One\n\n## Two\n\nShort.")).toBe(false);
+		expect(looksBuildable("")).toBe(false);
+	});
+});
+
+describe("judgeBuildable", () => {
+	test("asks Jev one noul question about the document", async () => {
+		let seen: JevRequest[] = [];
+		expect(await judgeBuildable("tiny", jev(0.9, seen))).toBe(true);
+		expect(Object.keys(seen[0]!.questions)).toEqual(["build_ready"]);
+		expect(seen[0]!.questions.build_ready!.type).toBe("noul");
+		expect(await judgeBuildable(long, jev(0.2))).toBe(false);
+	});
+
+	test("falls back to the heuristic when Jev fails or is absent", async () => {
+		let failing = async () => {
+			throw new Error("Jev API key is not configured");
+		};
+		expect(await judgeBuildable(long, failing)).toBe(true);
+		expect(await judgeBuildable("tiny", failing)).toBe(false);
+		expect(await judgeBuildable(long)).toBe(true);
+	});
+});
+
+describe("BuildReadiness", () => {
+	test("judges once edits settle and reports a change", async () => {
+		let clock = timers();
+		let source = "tiny";
+		let revision = 1;
+		let changes: boolean[] = [];
+		let asks: JevRequest[] = [];
+		let readiness = new BuildReadiness({
+			current: async () => target(source, revision),
+			ask: jev(0, asks),
+			after: clock.after,
+			changed: (_id, _revision, ready) => changes.push(ready),
+		});
+		readiness.schedule(target(source, 1));
+		readiness.schedule(target(source, 1));
+		expect(clock.queue.map(entry => entry.delay)).toEqual([10_000, 10_000]);
+		expect(clock.queue[0]!.cancelled).toBe(true);
+		clock.fire();
+		await Bun.sleep(0);
+		expect(asks.length).toBe(1);
+		expect(readiness.ready("doc", 1)).toBe(false);
+		expect(changes).toEqual([false]);
+	});
+
+	test("reads trigger a judgement and keep the last one until the next arrives", async () => {
+		let clock = timers();
+		let noul = 0.9;
+		let revision = 1;
+		let changes: boolean[] = [];
+		let readiness = new BuildReadiness({
+			current: async () => target(long, revision),
+			ask: request => jev(noul)(request),
+			after: clock.after,
+			changed: (_id, _revision, ready) => changes.push(ready),
+		});
+		expect(readiness.ready("doc", 1)).toBe(false);
+		await Bun.sleep(0);
+		expect(readiness.ready("doc", 1)).toBe(true);
+		revision = 2;
+		noul = 0.1;
+		readiness.schedule(target(long, 2));
+		// Pending: the previous judgement stands and no new one starts early.
+		expect(readiness.ready("doc", 2)).toBe(true);
+		clock.fire();
+		await Bun.sleep(0);
+		expect(readiness.ready("doc", 2)).toBe(false);
+		expect(changes).toEqual([true, false]);
+	});
+
+	test("without Jev, the heuristic decides", async () => {
+		let readiness = new BuildReadiness({ current: async () => target(long) });
+		readiness.ready("doc", 1);
+		await Bun.sleep(0);
+		expect(readiness.ready("doc", 1)).toBe(true);
+	});
+
+	test("close cancels a pending judgement", () => {
+		let clock = timers();
+		let readiness = new BuildReadiness({ current: async () => target(long), after: clock.after });
+		readiness.schedule(target(long));
+		readiness.close();
+		expect(clock.queue[0]!.cancelled).toBe(true);
+	});
+});

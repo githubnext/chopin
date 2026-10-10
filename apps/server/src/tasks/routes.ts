@@ -18,6 +18,8 @@ type Options = {
 	connections: Connections;
 	/** Whether an investigation is executing on a connection, in any document. */
 	busy?: (connectionId: string) => Promise<boolean>;
+	/** Whether the document reads as ready to build, apart from its blockers. */
+	buildable?: (id: string, planRevision: number) => boolean;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
@@ -137,6 +139,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						}),
 						blockers: ready.ok ? [] : ready.blockers,
 						localAgent,
+						buildReady: ready.ok && (options.buildable?.(id, plan.revision) ?? false),
 						lifecycle: plan.graph
 							? implementationLifecycle({
 								graph: plan.graph,
