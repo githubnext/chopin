@@ -114,7 +114,7 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 		childTitle,
 		CHILD_SOURCE,
 	);
-	// A child inherits the parent's Chat state; closed here so the child toolbar shows its toggle.
+	// A child inherits the parent's Chat state; closed here so the parent is expanded.
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await join("ana");
 	await page.setViewportSize({ width: 1920, height: 1080 });
@@ -135,7 +135,13 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	await expect(parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }))
 		.toBeVisible();
 	await expect(parentHeader.getByText(childTitle, { exact: true })).toBeVisible();
-	await expect(parentHeader.getByRole("group", { name: /People here:/ })).toBeVisible();
+	await expect(parentHeader).toBeVisible();
+	await expect(
+		parent.locator("[data-document-toolbar]").getByRole("group", {
+			includeHidden: true,
+			name: /People here:/,
+		}),
+	).toBeVisible();
 	await expect(parentPaper).toHaveAttribute("inert", "");
 	await expect(parentPaper).toHaveAttribute("aria-hidden", "true");
 	await expect(parentPaper).toHaveCSS("filter", "none");
@@ -155,6 +161,14 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	expect(parentBox).not.toBeNull();
 	expect(childBox).not.toBeNull();
 	expect(headerBox).not.toBeNull();
+	// The visible header row sits above the expanded parent sheet's tab row.
+	let parentTab = await parentPaper.getByRole("button", {
+		exact: true,
+		includeHidden: true,
+		name: "Decisions",
+	}).first().boundingBox();
+	expect(parentTab).not.toBeNull();
+	expect(headerBox!.y + headerBox!.height).toBeLessThanOrEqual(parentTab!.y);
 	expect(childBox!.x).toBeGreaterThan(parentBox!.x);
 	expect(childBox!.y).toBeGreaterThan(parentBox!.y);
 	expect(childBox!.x + childBox!.width).toBeLessThan(parentBox!.x + parentBox!.width);
@@ -265,8 +279,8 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	});
 	await expect(parentChat).not.toContainText(childRoomMessage);
 	await expect(parentChat).not.toContainText(childPlannerTranscript);
-	await childChat.getByRole("button", {
-		name: "Hide chat",
+	await surface.locator("[data-document-toolbar]").getByRole("button", {
+		name: "Expand document",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();
@@ -304,8 +318,8 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect(parentChat).toContainText(parentRoomMessage);
 	await expect(childChat.getByText(childRoomMessage, { exact: true })).toBeVisible();
 	await expect(childChat.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
-	await childChat.getByRole("button", {
-		name: "Hide chat",
+	await surface.locator("[data-document-toolbar]").getByRole("button", {
+		name: "Expand document",
 		exact: true,
 	}).click();
 	await parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }).click();
@@ -411,8 +425,8 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeHidden();
-	await childChat.getByRole("button", {
-		name: "Hide chat",
+	await surface.locator("[data-document-toolbar]").getByRole("button", {
+		name: "Expand document",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();

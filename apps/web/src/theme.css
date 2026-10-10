@@ -486,45 +486,12 @@ body {
 	}
 }
 
-.chat-toggle-icon-sidebar {
-	opacity: 0;
-}
-
 .panel-header {
 	block-size: var(--panel-header-height);
 }
 
 .panel-header-control {
 	margin-inline-start: calc(-1 * var(--panel-header-control-offset));
-}
-
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-default {
-	opacity: 0;
-}
-
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-sidebar {
-	opacity: 1;
-}
-
-@media (hover: hover) and (pointer: fine) {
-	.chat-header-control {
-		opacity: 0;
-		transition: opacity var(--duration-fast) var(--ease-out);
-	}
-
-	.chat-header:is(:hover, :focus-within) .chat-header-control {
-		opacity: 1;
-	}
-}
-
-@media (any-pointer: coarse) {
-	.chat-header-control {
-		opacity: 1;
-	}
-}
-
-:root[data-motion-input="pointer"] .chat-toggle-icon {
-	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 :root[data-motion-input="pointer"] .motion-picker-option {
@@ -618,7 +585,7 @@ body {
 	box-shadow: var(--shadow-resting);
 }
 
-/* The split workspace is one elevated surface; its panes only own the divider. */
+/* The split frame only places the panes; the document panel below is the raised sheet. */
 .workspace-root[data-workspace-mode="split"] .workspace-frame {
 	margin-left: calc(var(--spacing) * 3 + env(safe-area-inset-left));
 	margin-right: calc(var(--spacing) * 3 + env(safe-area-inset-right));
@@ -634,6 +601,92 @@ body {
 
 .workspace-root[data-workspace-mode="split"] .workspace-frame > main {
 	min-width: 9rem;
+}
+
+/*
+ * Split: Chat and its top bar sit on the ground; the document is the only sheet.
+ * The frame spans both rows so the sheet rises to the top margin beside the bar.
+ */
+.workspace-root[data-workspace-mode="split"] {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: var(--document-shell-header-height) minmax(0, 1fr);
+}
+
+.workspace-root[data-workspace-mode="split"] > .workspace-header-slot {
+	z-index: 1;
+	grid-area: 1 / 1;
+	width: var(--chat-width, 0px);
+	min-width: 0;
+	transition: opacity var(--panel-open-dur) var(--motion-smooth-out);
+}
+
+.workspace-root[data-workspace-mode="split"][data-header-hidden] > .workspace-header-slot {
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity var(--panel-close-dur) var(--motion-smooth-out),
+		visibility 0s linear var(--panel-close-dur);
+}
+
+.workspace-root[data-workspace-mode="split"] > .workspace-frame {
+	grid-area: 1 / 1 / 3 / 2;
+}
+
+/* A visible header while expanded (a child is open) keeps the sheet below its row. */
+.workspace-root[data-workspace-mode="split"][data-document-expanded]:not([data-header-hidden])
+	> .workspace-frame {
+	grid-area: 2 / 1;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	padding-top: var(--document-shell-header-height);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-body {
+	padding-inline-end: calc(var(--spacing) * 2);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-document-panel {
+	margin-top: calc(var(--spacing) * 3);
+	overflow: hidden;
+	border-radius: var(--radius-panel);
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.workspace-surface-toggle-slot {
+	padding-inline-end: var(--spacing);
+	margin-inline-end: var(--spacing);
+	border-inline-end: var(--edge-width) solid var(--color-divider);
+}
+
+/* The restore state carries a label, so it trades the square icon size for padding. */
+.surface-toggle-restore {
+	width: auto;
+	gap: calc(var(--spacing) * 1.5);
+	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
+	border: var(--edge-width) solid var(--color-edge);
+	background: var(--color-inset);
+	color: var(--color-text-secondary);
+}
+
+.surface-toggle-restore:hover {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+/* On the ground a white composer is the brightest thing in the column. */
+.workspace-root .chat-composer .field {
+	background: var(--color-inset);
+	box-shadow: none;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel .chat-composer {
+	padding-inline: var(--spacing);
+	padding-bottom: env(safe-area-inset-bottom);
 }
 
 .motion-panel {
@@ -667,7 +720,7 @@ body {
 	transform: none;
 }
 
-.workspace-root[data-workspace-mode="split"] .workspace-chat-panel > * {
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel > .workspace-chat-body {
 	width: var(--chat-width, 0px);
 }
 
@@ -1698,11 +1751,8 @@ button.question-add:disabled {
 		transition: none;
 	}
 
-	.chat-header-control {
-		transition: none;
-	}
-
-	:root[data-motion-input="pointer"] .chat-toggle-icon {
+	.workspace-root[data-workspace-mode="split"] > .workspace-header-slot,
+	.workspace-root[data-workspace-mode="split"][data-header-hidden] > .workspace-header-slot {
 		transition: none;
 	}
 

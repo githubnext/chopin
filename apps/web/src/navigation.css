@@ -48,6 +48,14 @@
 	padding-left: 44px;
 }
 
+/* With the top bar hidden, the sheet clears the floating Show sidebar trigger itself. */
+.navigation-content[data-project-sidebar-trigger]
+	.workspace-root[data-document-expanded]:not(.anchored-child-surface .workspace-root)
+	> .workspace-frame {
+	/* Padding, not margin: the frame's width picks split or compact and must not shrink here. */
+	padding-left: calc(44px - var(--spacing) * 3);
+}
+
 .anchored-child-host,
 .anchored-child-parent {
 	position: relative;
@@ -113,10 +121,24 @@
 }
 
 .anchored-child-surface .workspace-root .workspace-frame,
-.anchored-child-surface .workspace-root[data-workspace-mode="split"] .workspace-frame {
+.anchored-child-surface
+	.workspace-root[data-workspace-mode="split"][data-workspace-mode="split"]
+	.workspace-frame {
 	margin: 0;
 	border-radius: 0;
 	box-shadow: none;
+}
+
+/* The child sheet is already paper; its workspace keeps no second sheet or header gap. */
+.anchored-child-surface .workspace-root.workspace-root .workspace-document-panel {
+	margin-top: 0;
+	border-radius: 0;
+	box-shadow: none;
+	outline: none;
+}
+
+.anchored-child-surface .workspace-root.workspace-root .workspace-chat-panel {
+	padding-top: 0;
 }
 
 @keyframes anchored-child-enter {

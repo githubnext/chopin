@@ -101,6 +101,38 @@ const QUESTION_MOTION = {
 	immediately: settleMotionImmediately,
 };
 
+export function RoomMembers(
+	{ members, ring }: { members: Session.Member[]; ring: "ground" | "page" },
+) {
+	let people = peopleHere(members);
+	return (
+		<div
+			aria-label={`People here: ${people.join(", ")}`}
+			className="room-members ml-auto flex shrink-0 items-center"
+			role="group"
+		>
+			{people.map(handle => (
+				<span
+					className="room-member-face -ml-1.5 first:ml-0"
+					data-tooltip={handle}
+					data-tooltip-verbatim=""
+					key={handle.toLowerCase()}
+				>
+					<Face handle={handle} ring={ring} size={24} textSize="2xs" titled={false} />
+				</span>
+			))}
+			{people.length > 3 && (
+				<span
+					aria-hidden="true"
+					className="room-member-overflow ml-1 hidden text-xs text-text-tertiary"
+				>
+					+{people.length - 3}
+				</span>
+			)}
+		</div>
+	);
+}
+
 export function Header(
 	{
 		archivedAt,
@@ -118,7 +150,7 @@ export function Header(
 		archivedAt?: string;
 		canManage: boolean;
 		editing?: TitleEdit;
-		members: Session.Member[];
+		members?: Session.Member[];
 		label: string;
 		onAction: (action: DocumentAction) => void;
 		onEditingChange: (editing?: TitleEdit) => void;
@@ -128,7 +160,6 @@ export function Header(
 		room: string;
 	},
 ) {
-	let people = peopleHere(members);
 	let header = useRef<HTMLElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
 	let previousEdit = useRef(editing);
@@ -254,30 +285,7 @@ export function Header(
 					</span>
 				)}
 			</div>
-			<div
-				aria-label={`People here: ${people.join(", ")}`}
-				className="room-members ml-auto flex shrink-0 items-center"
-				role="group"
-			>
-				{people.map(handle => (
-					<span
-						className="room-member-face -ml-1.5 first:ml-0"
-						data-tooltip={handle}
-						data-tooltip-verbatim=""
-						key={handle.toLowerCase()}
-					>
-						<Face handle={handle} ring="ground" size={24} textSize="2xs" titled={false} />
-					</span>
-				))}
-				{people.length > 3 && (
-					<span
-						aria-hidden="true"
-						className="room-member-overflow ml-1 hidden text-xs text-text-tertiary"
-					>
-						+{people.length - 3}
-					</span>
-				)}
-			</div>
+			{members && <RoomMembers members={members} ring="ground" />}
 		</header>
 	);
 }
@@ -1039,7 +1047,7 @@ export function RoomWorkspace(
 						archivedAt={workspaceArchivedAt}
 						canManage={effectiveCanManage}
 						editing={titleEdit}
-						members={members}
+						members={mode === "split" ? undefined : members}
 						label={metadata.title}
 						onAction={action => onDocumentAction(room, action)}
 						onEditingChange={setTitleEdit}
@@ -1124,6 +1132,7 @@ export function RoomWorkspace(
 				ids={workspaceIds}
 				identity={room}
 				mode={mode}
+				presence={<RoomMembers members={members} ring="page" />}
 				onDesktopChatOpen={setDesktopChatOpen}
 				onChatOpen={open => dispatch({ type: "set-chat", open })}
 				onDestination={selectDestination}

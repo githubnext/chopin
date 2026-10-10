@@ -8,6 +8,12 @@ function outlineStyle(target: Locator) {
 	return target.evaluate(element => getComputedStyle(element).outlineStyle);
 }
 
+function isTextField(target: Locator) {
+	return target.evaluate(element =>
+		element.matches('input, textarea, [contenteditable="true"], [role="combobox"]')
+	);
+}
+
 function modality(page: Page) {
 	return page.evaluate(() => document.documentElement.dataset.focusInput);
 }
@@ -31,6 +37,13 @@ test("Tab shows the focus ring on the next control", async ({ join }) => {
 	expect(await modality(page)).toBe("keyboard");
 	let next = page.locator(":focus");
 	await expect(next).not.toHaveAttribute("aria-label", "Resize chat");
+	// Chat has no header now, so the first stop is the composer, a text field that
+	// is exempt from the ring; walk on to the next non-text control.
+	for (let step = 0; step < 4 && (await isTextField(next)); step += 1) {
+		await page.keyboard.press("Tab");
+		next = page.locator(":focus");
+	}
+	expect(await isTextField(next)).toBe(false);
 	expect(await outlineStyle(next)).toBe("solid");
 });
 

@@ -253,7 +253,8 @@ test("a GitHub session joins its authorized channel", async ({ join, room }) => 
 
 	await expect(page).toHaveURL(roomPath(room));
 	await expect(repository).toHaveAttribute("aria-expanded", "true");
-	await expect(page.getByRole("banner").getByRole("img", { name: "ana" })).toHaveCount(1);
+	await expect(page.getByRole("group", { name: /^People here:/ }).getByRole("img", { name: "ana" }))
+		.toHaveCount(1);
 });
 
 test("an unauthenticated visitor is asked to sign in", async ({ page }) => {

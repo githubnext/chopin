@@ -388,3 +388,27 @@ export function PauseIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+/** Diagonal arrows pointing outward: let the document fill the workspace. */
+export function ExpandIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<polyline points="11 2.75 15.25 2.75 15.25 7" />
+			<line x1="15.25" x2="10.25" y1="2.75" y2="7.75" />
+			<polyline points="7 15.25 2.75 15.25 2.75 11" />
+			<line x1="2.75" x2="7.75" y1="15.25" y2="10.25" />
+		</LineIcon>
+	);
+}
+
+/** Diagonal arrows pointing inward: give the workspace back to Chat. */
+export function CollapseIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<polyline points="10.25 3.5 10.25 7.75 14.5 7.75" />
+			<line x1="10.25" x2="15.25" y1="7.75" y2="2.75" />
+			<polyline points="7.75 14.5 7.75 10.25 3.5 10.25" />
+			<line x1="7.75" x2="2.75" y1="10.25" y2="15.25" />
+		</LineIcon>
+	);
+}

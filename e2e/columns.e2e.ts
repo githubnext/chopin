@@ -68,7 +68,7 @@ The narrative continues after the layout.
 test("columns render side by side, stack in a narrow document, and unwrap in order", async ({ join, room, seed }) => {
 	await seed(SOURCE);
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
-	await page.getByRole("button", { name: "Hide chat" }).click();
+	await page.getByRole("button", { name: "Expand document" }).click();
 	await expect.poll(() =>
 		page.locator(".plan-document").evaluate(element => element.getBoundingClientRect().width)
 	).toBeGreaterThan(800);
@@ -224,7 +224,7 @@ test("a two-image gallery keeps its ratio, captions, and responsive reading orde
 		}));
 	await seed(DISPLAY_GALLERY);
 	await join("ana");
-	await page.getByRole("button", { name: "Hide chat" }).click();
+	await page.getByRole("button", { name: "Expand document" }).click();
 	await expect(page.getByRole("button", { name: "Show chat" })).toBeVisible();
 	await expect.poll(() =>
 		page.locator(".workspace-chat-panel").evaluate(element => element.getBoundingClientRect().width)
