@@ -23,12 +23,14 @@ import { blockElement, scrollToKey } from "./scroll";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
-import type { Chat, Comment, Plan } from "@chopin/protocol";
+import type { Comment, Plan } from "@chopin/protocol";
 import type { Marked as Selected, Points } from "./passage";
 import type { Transport } from "./transport";
 
 /** A thread being written but not yet sent. It has no id until the server gives it one. */
 export type Draft = Selected & {
+	/** The selection it was drafted from, kept washed while the composer is open. */
+	points?: Points;
 	/** Local card position; the server verifies prose, not client pixels. */
 	placement?: {
 		top: number;
@@ -87,7 +89,6 @@ export class ThreadStore {
 	#threads = new Map<string, Comment.Thread>();
 	#anchors = new Map<string, Plan.ThreadAnchors>();
 	#writing = new Map<string, Map<string, string>>();
-	#retryRequests = new Map<string, string>();
 	#draft: Draft | undefined;
 	#focused: string | undefined;
 	#error: string | undefined;
@@ -139,6 +140,7 @@ export class ThreadStore {
 			wire.on<Comment.Opened>("comment:opened", frame => this.opened(frame.thread)),
 			wire.on<Comment.Said>("comment:said", frame => this.said(frame.id, frame.note)),
 			wire.on<Comment.Resolved>("comment:resolved", frame => this.resolved(frame)),
+			wire.on<Comment.Reopened>("comment:reopened", frame => this.reopened(frame.thread)),
 			wire.on<Comment.Typing.Output>("comment:typing", frame => this.typing(frame)),
 		];
 
@@ -178,33 +180,43 @@ export class ThreadStore {
 			.catch(() => {});
 	}
 
-	accept(id: string): void {
-		void this.#wire?.ask("comment:accept", { id }).catch(() => {});
-	}
-
-	dismiss(id: string): void {
-		void this.#wire?.ask("comment:dismiss", { id }).catch(() => {});
-	}
-
 	/**
-	 * Ask the agent to have another go at an accepted thread.
+	 * Close a thread, hiding it at once.
 	 *
-	 * An ordinary chat message, because that is what it is: the decision was
-	 * already made and recorded, and what is missing is a turn. Inventing a
-	 * frame for "run that again" would be a second way to start one.
+	 * Optimistic because a resolve changes nothing anybody else is relying on,
+	 * and a card that lingers after its check was pressed reads as a miss. A
+	 * refusal other than "somebody already did" puts it back.
 	 */
-	retry(id: string): void {
-		let view = this.#state.threads.find(entry => entry.thread.id === id);
-		if (!view || !this.#wire) return;
-		let requestId = this.#retryRequests.get(id) ?? crypto.randomUUID();
-		this.#retryRequests.set(id, requestId);
-		void this.#wire.ask<Chat.Sent>("chat:send", {
-			requestId,
-			text: `apply the accepted comment on "${view.quote}" — it has not been actioned yet.`,
-			to: "planner",
-		}).then(() => {
-			if (this.#retryRequests.get(id) === requestId) this.#retryRequests.delete(id);
-		}).catch(() => {});
+	resolve(id: string): void {
+		let thread = this.#threads.get(id);
+		if (!thread || thread.status !== "open" || !this.#wire) return;
+		this.#threads.set(id, { ...thread, status: "resolved" });
+		this.refresh();
+
+		let restore = () => {
+			let current = this.#threads.get(id);
+			if (current?.status !== "resolved" || current.resolver) return;
+			this.#threads.set(id, { ...current, status: "open" });
+			this.refresh();
+		};
+		void this.#wire
+			.ask<Comment.Resolve.Reply>("comment:resolve", { id })
+			.then(frame => {
+				if (!frame.ok && frame.reason !== "resolved") restore();
+			})
+			.catch(restore);
+	}
+
+	/** Open a resolved thread again. Settles true once the server has it back. */
+	reopen(id: string): Promise<boolean> {
+		if (!this.#wire) return Promise.resolve(false);
+		return this.#wire
+			.ask<Comment.Reopen.Reply>("comment:reopen", { id })
+			.then(frame => {
+				if (frame.ok) this.reopened(frame.thread);
+				return frame.ok;
+			})
+			.catch(() => false);
 	}
 
 	announce(id: string, writing: boolean): void {
@@ -223,6 +235,12 @@ export class ThreadStore {
 		this.#threads.set(thread.id, thread);
 		// The card that was being drafted is now a real thread.
 		this.#draft = undefined;
+		this.refresh();
+	}
+
+	/** Unlike `opened`, leaves any draft alone: somebody else's undo is not a reply to it. */
+	reopened(thread: Comment.Thread): void {
+		this.#threads.set(thread.id, thread);
 		this.refresh();
 	}
 
@@ -354,10 +372,12 @@ export class ThreadStore {
 		let views: ThreadView[] = [];
 		let marks: Points[] = [];
 
-		// Dismissed threads are not shown at all — the transcript is where they
-		// left their trace — so they are dropped once here rather than in each
-		// branch below, where one copy of the rule could outlive the other.
-		let live = [...this.#threads.values()].filter(thread => thread.status !== "dismissed");
+		// Resolved and dismissed threads are not shown at all, so they are
+		// dropped once here rather than in each branch below, where one copy of
+		// the rule could outlive the other.
+		let live = [...this.#threads.values()].filter(thread =>
+			thread.status !== "dismissed" && thread.status !== "resolved"
+		);
 
 		let build = () => {
 			for (let thread of live) {
@@ -420,6 +440,7 @@ export class ThreadStore {
 
 		if (editor && binding) editor.getEditorState().read(build);
 		else build();
+		if (this.#draft?.points) marks.push(this.#draft.points);
 
 		views.sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
 		if (editor) paint(editor, "comments", marks);

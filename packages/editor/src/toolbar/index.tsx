@@ -8,7 +8,7 @@
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getSelection } from "lexical";
+import { $getSelection, $isRangeSelection } from "lexical";
 import { useEffect, useState } from "react";
 
 import { $describe } from "../passage";
@@ -48,10 +48,26 @@ export function Toolbar() {
 				? selection.getRangeAt(0).getBoundingClientRect()
 				: undefined;
 			editor.getEditorState().read(() => {
-				let marked = $describe($getSelection());
+				let current = $getSelection();
+				let marked = $describe(current);
 				if (marked) {
+					let [start, end] = $isRangeSelection(current)
+						? current.isBackward()
+							? [current.focus, current.anchor]
+							: [current.anchor, current.focus]
+						: [];
 					threads.draft({
 						...marked,
+						...(start && end
+							? {
+								points: {
+									anchorKey: start.key,
+									anchorOffset: start.offset,
+									focusKey: end.key,
+									focusOffset: end.offset,
+								},
+							}
+							: {}),
 						...(range
 							? {
 								placement: {
