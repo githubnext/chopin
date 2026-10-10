@@ -25,6 +25,7 @@ import {
 } from "@chopin/editor";
 
 import { BuildPlanButton } from "./build-plan-button";
+import { liveBuildEnabled } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
 import { ChildProvenance } from "./child-provenance";
@@ -1121,7 +1122,8 @@ export function RoomWorkspace(
 								: undefined}
 							synced={planState.synced}
 						/>
-						{profile.implementation && workspaceCanEdit && status === "connected" && (
+						{profile.implementation && liveBuildEnabled() && workspaceCanEdit
+							&& status === "connected" && (
 							<BuildPlanButton
 								onNeedsAgent={() => {
 									setNeedsAgent(count => count + 1);

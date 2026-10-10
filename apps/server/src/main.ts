@@ -485,7 +485,10 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
 			await stopped;
 			await Service.close(held);
 		}
-		if (force || room.members.size === 0) Rooms.forget(room);
+		if (force || room.members.size === 0) {
+			Rooms.forget(room);
+			buildReadiness?.forget(room.id);
+		}
 	});
 	room.closing = closing;
 	try {
@@ -1431,7 +1434,9 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 }
 
 function archiveChannel(channelId: string, now: Date) {
-	return withDocumentTransition(channelId, () => archiveChannelLocked(channelId, now));
+	return withDocumentTransition(channelId, () => archiveChannelLocked(channelId, now)).finally(() =>
+		buildReadiness?.forget(channelId)
+	);
 }
 
 async function restoreChannelLocked(channelId: string, now: Date) {
@@ -1493,6 +1498,7 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 			ws.close(4404, "document deleted");
 		}
 		if (room) Rooms.forget(room);
+		buildReadiness?.forget(channelId);
 		void Service.announceDeletedUnanswered(server, storage, channel);
 		summaryCoordinator?.resume(channelId);
 		return true;
@@ -1682,6 +1688,7 @@ let hostedAuth = registerAuthRoutes(router, {
 	config: config.auth,
 	storage,
 	agent: config.agent,
+	liveBuild: !!config.liveBuild,
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
 });
@@ -1791,15 +1798,28 @@ referenceService = new ReferenceService({
 	research: researchService,
 	id: ulid,
 });
-buildReadiness = new BuildReadiness({
-	current: currentDocumentTarget,
-	ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
-		? request => askJev(request)
-		: undefined,
-	changed: (channelId, planRevision, ready) =>
-		broadcast(server, channelId, { kind: "implementation:readiness", ts: 0, planRevision, ready }),
-	error: err => console.error("chopin: build readiness failed -", err),
-});
+// A living document or one with build history is past the question of readiness.
+function pastReadiness(channelId: string): boolean {
+	let held = Rooms.get(channelId)?.plan;
+	return !!held && (!!held.live || held.builds.length > 0 || held.lifecycle.history.length > 0);
+}
+if (config.liveBuild) {
+	buildReadiness = new BuildReadiness({
+		current: currentDocumentTarget,
+		skip: pastReadiness,
+		ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+			? request => askJev(request)
+			: undefined,
+		changed: (channelId, planRevision, ready) =>
+			broadcast(server, channelId, {
+				kind: "implementation:readiness",
+				ts: 0,
+				planRevision,
+				ready,
+			}),
+		error: err => console.error("chopin: build readiness failed -", err),
+	});
+}
 if (config.agent && config.backgroundJobs) {
 	summaryCoordinator = new DocumentSummaryCoordinator({
 		service: jobService,

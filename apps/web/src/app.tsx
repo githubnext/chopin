@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 
 import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading } from "./hosted";
+import { setLiveBuild } from "./live-build";
 import { clearRepositoryCache } from "./repository-cache";
 
 let loadHostedLogin = () => import("./hosted-login");
@@ -33,6 +34,7 @@ export function App() {
 
 	useEffect(() => {
 		if (!session) return;
+		setLiveBuild(session.liveBuild);
 		let parameters = new URLSearchParams(location.search);
 		let accessChanged = parameters.get("repository_access") === "changed";
 		if (!session.user) clearRepositoryCache();
