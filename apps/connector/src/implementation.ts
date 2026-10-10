@@ -32,6 +32,21 @@ export let implementationPrompt = [
 	"If your agent cannot delegate to sub-agents, report a task blocker explaining that limitation and stop.",
 ].join("\n");
 
+/** A living document's first build: its run ends at the last complete_task, with no verification. */
+export let liveImplementationPrompt = [
+	"Read the human-approved graph and document with read_implementation from Chopin's MCP server.",
+	"You are the orchestrator. You MUST use sub-agents for independent dependency-ready tasks.",
+	"Give each sub-agent explicit file ownership and tell it other agents are working in the repository.",
+	"Use separate worktrees for concurrent PRs; integrate prerequisite changes before dependent work.",
+	"Own all MCP reporting: start_task, block_task, report_pr and complete_task.",
+	"The connector already claimed this exact graph. Never claim another run or change the approved plan.",
+	"Open small reviewable PRs, linking the document URL and its #task-ID anchors. Never merge PRs.",
+	"If a new human decision is needed, block the affected task with its question and stop that work.",
+	"Verify each task's acceptance criteria before completing it. Never invent verification evidence.",
+	"This is a living document: the run ends at the last complete_task. Stop there.",
+	"If your agent cannot delegate to sub-agents, report a task blocker explaining that limitation and stop.",
+].join("\n");
+
 export let rebuildPrompt = [
 	"The document changed after its pull requests were built. Bring those pull requests up to date.",
 	"Call read_rebuild from Chopin's MCP server; implement only the change from before to after.",

@@ -197,6 +197,7 @@ test("a paired workspace claims a browser build once and reports through run-sco
 	});
 	let claim = await tool(context, connection.token, "claim_implementation_build", { id: built.id });
 	expect(claim.build.id).toBe(built.id);
+	expect(claim.live).toBe(false);
 	expect(
 		(await tool(context, connection.token, "claim_implementation_build", { id: built.id })).isError,
 	).toBe(true);
@@ -574,6 +575,8 @@ async function rebuilding() {
 		graphRevision: 1,
 	})).json();
 	let claim = await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	// The connector gives a living document's first build a prompt that ends at complete_task.
+	expect(claim.live).toBe(true);
 	await tool(context, connection.token, "report_implementation_build", {
 		id: built.id,
 		state: "running",
@@ -603,6 +606,7 @@ async function rebuilding() {
 		id: queued.build.id,
 	});
 	expect(rebuild.build.kind).toBe("rebuild");
+	expect(rebuild.live).toBe(false);
 	await tool(context, connection.token, "report_implementation_build", {
 		id: queued.build.id,
 		state: "running",
@@ -708,6 +712,39 @@ test("report_rebuild appends a completed version, records commits and advances t
 		await Plan.close(restored);
 	} finally {
 		if (!closed) await Plan.close(context.plan);
+	}
+});
+
+test("a landed rebuild keeps its heartbeat and a retried report harmless", async () => {
+	let { context, connection, rebuild } = await rebuilding();
+	try {
+		let report = {
+			summary: "Rendered the rebuilt paragraph.",
+			commits: [{ pullRequest, sha: "c".repeat(40), message: "Add the rebuilt paragraph" }],
+			tasks: [],
+		};
+		expect(await tool(context, rebuild.runToken, "report_rebuild", report)).toEqual({
+			state: "stopped",
+		});
+		let landed = structuredClone({ live: context.plan.live, graph: context.plan.graph });
+		expect(
+			await tool(context, connection.token, "renew_implementation_build", {
+				id: rebuild.build.id,
+			}),
+		).toEqual({ accepted: true, state: "stopped" });
+		expect(await tool(context, rebuild.runToken, "report_rebuild", report)).toEqual({
+			state: "stopped",
+		});
+		expect({ live: context.plan.live, graph: context.plan.graph }).toEqual(landed);
+		expect(context.plan.builds.at(-1)!.state).toBe("stopped");
+		expect(
+			(await tool(context, rebuild.runToken, "report_rebuild", {
+				...report,
+				commits: [{ ...report.commits[0], sha: "d".repeat(40) }],
+			})).isError,
+		).toBe(true);
+	} finally {
+		await Plan.close(context.plan);
 	}
 });
 

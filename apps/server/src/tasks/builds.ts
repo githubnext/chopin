@@ -238,7 +238,11 @@ export async function queueRebuild(
 			&& connection.source.repositoryId === live.repositoryId;
 		let connection = original && connections.get(original.connectionId);
 		if (!usable(connection)) connection = connections.list(plan.id).find(usable);
-		if (!original || !connection || plan.builds.length >= 100) return { kind: "unavailable" };
+		if (!original || !connection) return { kind: "unavailable" };
+		if (plan.builds.length >= 100) {
+			console.warn(`chopin: living document ${plan.id} cannot rebuild - build history is full`);
+			return { kind: "unavailable" };
+		}
 		let build: BuildRequest = buildSchema.parse({
 			id: crypto.randomUUID(),
 			kind: "rebuild",

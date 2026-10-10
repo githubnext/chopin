@@ -192,6 +192,23 @@ export function implementationConnector(
 				) fail("build-forbidden");
 				if (grant.run) {
 					let rebuild = build.kind === "rebuild";
+					// A retried report of a rebuild that already landed returns the same result.
+					if (
+						rebuild && name === "report_rebuild" && build.state === "stopped"
+						&& grant.run.kind === "rebuild" && grant.run.generation === 1
+					) {
+						let report = rebuildReportSchema.safeParse(args);
+						if (!report.success) fail("invalid-request");
+						let commits = plan.live?.commits ?? [];
+						if (
+							plan.lifecycle.history.some(item => item.run.id === build.id)
+							|| report.data.commits.every(commit =>
+								commits.some(item =>
+									item.sha === commit.sha && item.pullRequest === commit.pullRequest
+								)
+							)
+						) return { state: "stopped" };
+					}
 					if (
 						grant.run.kind !== (rebuild ? "rebuild" : "implementation")
 						|| grant.run.generation !== 1
@@ -238,6 +255,8 @@ export function implementationConnector(
 					if (!picked) fail("build-already-claimed");
 					return {
 						build: picked,
+						// A first build of a living document ends at its last complete_task.
+						live: picked.kind !== "rebuild" && !!plan.persistence.liveBuild && !plan.live,
 						documentId: plan.id,
 						source: { ...picked.checkout, repositoryId: picked.repositoryId },
 						runToken: connections.runToken(
@@ -249,11 +268,14 @@ export function implementationConnector(
 						),
 					};
 				}
-				// A reported rebuild has already stopped; the connector's own stop report is a no-op.
-				if (
-					build.kind === "rebuild" && build.state === "stopped"
-					&& name === "report_implementation_build" && args.state === "stopped"
-				) return { accepted: true };
+				// A reported rebuild has already stopped; the connector's own stop report is a no-op and
+				// a heartbeat learns to stop renewing.
+				if (build.kind === "rebuild" && build.state === "stopped") {
+					if (name === "renew_implementation_build") return { accepted: true, state: "stopped" };
+					if (name === "report_implementation_build" && args.state === "stopped") {
+						return { accepted: true };
+					}
+				}
 				if (!["starting", "running"].includes(build.state) || build.expiresAt <= Date.now()) {
 					fail("build-inactive");
 				}
