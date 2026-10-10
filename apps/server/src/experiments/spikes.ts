@@ -44,9 +44,10 @@ export function spikeBrief(passage: string): string {
 		quoted,
 		"",
 		"You are on a throwaway branch in a disposable worktree. Do not push or open a pull request.",
-		"Take 1-3 screenshots that show what you found (Playwright or your browser tool), upload "
-		+ "each with upload_investigation_image, then call submit_spike_result with a one-line "
-		+ "headline, 3-6 short findings, a recommendation, and the uploaded image paths.",
+		"Take 1-3 screenshots of the running prototype with Playwright at a 1280x800 viewport, "
+		+ "saved as PNG files in this worktree, and upload each with upload_image_file({path}). "
+		+ "Then call submit_spike_result with a one-line headline, 3-6 short findings, a "
+		+ "recommendation, and the uploaded image paths.",
 	].join("\n");
 }
 
@@ -82,6 +83,8 @@ export function spikeReport(input: SpikeSubmission): string {
 export function renderKey(value: Investigation): string {
 	if (value.state === "completed") return "completed";
 	if (["failed", "interrupted", "cancelled"].includes(value.state)) return "stopped";
+	// Spikes run one at a time per local agent; until one claims this run it is only waiting.
+	if (value.state === "requested" || value.state === "queued") return "queued";
 	return "running";
 }
 
@@ -114,6 +117,15 @@ export function spikeCallout(value: Investigation): RootContent {
 			paragraph({
 				type: "text",
 				value: value.progress.trim() || "The coding agent stopped before reporting.",
+			}),
+		]);
+	}
+	if (key === "queued") {
+		return callout(spike.callout, "note", "Queued", [
+			paragraph({
+				type: "text",
+				value: `${spike.login}'s coding agent will build a quick prototype to test the passage `
+					+ "above once it finishes its current work. Delete this callout to cancel it.",
 			}),
 		]);
 	}
