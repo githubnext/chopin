@@ -86,6 +86,15 @@ let liveSchema = z.object({
 	).max(200).optional(),
 	/** Tasks a first build stopped short of; the next rebuild finishes them. */
 	outstanding: z.array(z.string().min(1).max(128)).min(1).max(100).optional(),
+	/** Rebuilds that landed without a commit or task, newest last, so they still leave a trace. */
+	noChange: z.array(
+		z.object({
+			buildId: z.string().uuid(),
+			revision: z.number().int().nonnegative(),
+			summary: z.string().min(1).max(2000),
+			at: z.string().datetime(),
+		}).strict(),
+	).max(50).optional(),
 	/** The source a queued rebuild targets, sealed so later edits join the next delta. */
 	target: z.object({
 		buildId: z.string().uuid(),
@@ -637,6 +646,14 @@ export function reportRebuild(
 				...(live.commits ?? []),
 				...report.commits.map(commit => ({ ...commit, revision: target.revision, at })),
 			].slice(-200),
+			...(report.commits.length === 0 && report.tasks.length === 0
+				? {
+					noChange: [
+						...(live.noChange ?? []),
+						{ buildId, revision: target.revision, summary: report.summary, at },
+					].slice(-50),
+				}
+				: {}),
 		};
 		plan.builds = [...plan.builds.slice(0, -1), buildSchema.parse({ ...build, state: "stopped" })];
 		try {
@@ -664,9 +681,16 @@ export function liveSnapshot(plan: Plan, connections: Connection[]): LiveSnapsho
 	if (!live) return;
 	let { baseSource, target: _target, commits, ...rest } = live;
 	let rebuild = plan.builds.findLast(build => build.kind === "rebuild");
+	let unfinished = outstandingTasks(plan).map(({ id, title, state, blocker }) => ({
+		id,
+		title,
+		state,
+		...(blocker ? { blocker } : {}),
+	}));
 	return {
 		...structuredClone(rest),
 		commits: structuredClone(commits ?? []),
+		...(unfinished.length ? { outstandingTasks: unfinished } : {}),
 		...(rebuild ? { rebuild: structuredClone(rebuild) } : {}),
 		outOfSync: source(plan) !== baseSource,
 		builderConnected: connections.some(connection =>

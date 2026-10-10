@@ -713,6 +713,40 @@ test("report_rebuild appends a completed version, records commits and advances t
 	}
 });
 
+test("a rebuild that needed no code change still leaves a trace", async () => {
+	let { context, rebuild } = await rebuilding();
+	let closed = false;
+	try {
+		let report = { summary: "The edit only clarified wording.", commits: [], tasks: [] };
+		expect(await tool(context, rebuild.runToken, "report_rebuild", report)).toEqual({
+			state: "stopped",
+		});
+		expect(context.plan.live!.noChange).toEqual([{
+			buildId: rebuild.build.id,
+			revision: 1,
+			summary: report.summary,
+			at: expect.any(String),
+		}]);
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.live.commits).toEqual([]);
+		expect(snapshot.live.noChange).toEqual([
+			expect.objectContaining({ buildId: rebuild.build.id, summary: report.summary }),
+		]);
+		let live = context.plan.live;
+		await Plan.close(context.plan);
+		closed = true;
+		let restored = await Plan.open(
+			context.plan.id,
+			{ ...context.backend, liveBuild: true },
+			context.server,
+		);
+		expect(restored.live).toEqual(live);
+		await Plan.close(restored);
+	} finally {
+		if (!closed) await Plan.close(context.plan);
+	}
+});
+
 test("a landed rebuild keeps its heartbeat and a retried report harmless", async () => {
 	let { context, connection, rebuild } = await rebuilding();
 	try {
