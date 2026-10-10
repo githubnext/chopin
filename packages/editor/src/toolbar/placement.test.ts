@@ -65,6 +65,20 @@ test("prefers above a selection and flips below only without room", () => {
 	expect(placeSurface(cramped, surface, viewport, 8, "above").top).toBe(58);
 });
 
+test("prefers below a touch selection and flips above only without room", () => {
+	let viewport = { left: 0, top: 0, width: 390, height: 506 };
+	let surface = { width: 300, height: 54 };
+	let selection = { left: 40, right: 240, top: 100, bottom: 120, width: 200, height: 20 };
+	// Auto would pick below here too; near the top it still stays below.
+	expect(placeSurface(selection, surface, viewport, 8, "below").top).toBe(128);
+	// Above the keyboard, with too little room beneath, it flips over the selection.
+	let low = { ...selection, top: 440, bottom: 460 };
+	expect(placeSurface(low, surface, viewport, 8, "below").top).toBe(378);
+	// Even with more room above, it stays below while it fits.
+	let middle = { ...selection, top: 300, bottom: 320 };
+	expect(placeSurface(middle, surface, viewport, 8, "below").top).toBe(328);
+});
+
 test("clamps a preferred-above surface horizontally", () => {
 	let placed = placeSurface(
 		{ left: 700, right: 790, top: 300, bottom: 320, width: 90, height: 20 },

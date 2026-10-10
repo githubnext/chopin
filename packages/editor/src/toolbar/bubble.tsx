@@ -373,8 +373,9 @@ export function SelectionBubble(
 			{ width, height },
 			viewport,
 			8,
-			// Above, so the bubble never covers the line after the selection.
-			"above",
+			// A touch selection has the system's own callout above it, so the bubble goes
+			// below, flipping above only when the visible viewport has no room there.
+			coarse ? "below" : "above",
 		);
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top

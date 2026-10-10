@@ -67,6 +67,13 @@ async function draft(page: Page): Promise<Locator> {
 	let passage = content(page).locator("p").filter({ hasText: SECOND });
 	await passage.selectText();
 	let action = page.getByRole("button", { name: "Comment on this passage", exact: true });
+	// Touch leaves the space above the selection to the system's callout.
+	let bubble = page.getByRole("toolbar", { name: "Text formatting" });
+	await bubble.evaluate(element => Promise.all(element.getAnimations().map(item => item.finished)));
+	let selection = await page.evaluate(() =>
+		getSelection()!.getRangeAt(0).getBoundingClientRect().bottom
+	);
+	expect((await size(bubble)).y).toBeGreaterThanOrEqual(selection);
 	await action.click();
 	let sheet = page.getByRole("dialog", { name: "New comment" });
 	await expect(sheet.getByPlaceholder("Add a comment")).toBeFocused();
