@@ -633,6 +633,12 @@ body {
 	grid-area: 1 / 1 / 3 / 2;
 }
 
+/* A visible header while expanded (a child is open) keeps the sheet below its row. */
+.workspace-root[data-workspace-mode="split"][data-document-expanded]:not([data-header-hidden])
+	> .workspace-frame {
+	grid-area: 2 / 1;
+}
+
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
 	padding-top: var(--document-shell-header-height);
 }
