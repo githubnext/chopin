@@ -25,11 +25,14 @@ export type BuildPhase =
  * Whether a living document's pull requests match it. `out-of-sync` says why:
  * `pending` waits for the builder's connected agent to pick the edits up,
  * `waiting` for that agent to connect, and `failed` that the last rebuild failed.
+ * `outstanding` counts tasks an earlier build left unfinished; only an edit retries
+ * them, so a document otherwise in sync with any `needs-attention`.
  */
 export type SyncStatus =
 	| { kind: "building" }
 	| { kind: "in-sync" }
-	| { kind: "out-of-sync"; reason: "pending" | "waiting" | "failed" };
+	| { kind: "needs-attention"; outstanding: number }
+	| { kind: "out-of-sync"; reason: "pending" | "waiting" | "failed"; outstanding: number };
 
 const RUNNING = ["queued", "starting", "running"];
 
@@ -46,14 +49,24 @@ export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefin
 		|| snapshot.build && RUNNING.includes(snapshot.build.state)
 		|| snapshot.lifecycle.execution.state === "active"
 	) return { kind: "building" };
-	if (!live.outOfSync) return { kind: "in-sync" };
-	if (live.rebuild?.state === "failed") return { kind: "out-of-sync", reason: "failed" };
-	return { kind: "out-of-sync", reason: live.builderConnected ? "pending" : "waiting" };
+	let outstanding = live.outstandingTasks?.length ?? 0;
+	if (!live.outOfSync) {
+		return outstanding ? { kind: "needs-attention", outstanding } : { kind: "in-sync" };
+	}
+	if (live.rebuild?.state === "failed") {
+		return { kind: "out-of-sync", reason: "failed", outstanding };
+	}
+	return {
+		kind: "out-of-sync",
+		reason: live.builderConnected ? "pending" : "waiting",
+		outstanding,
+	};
 }
 
 export const SYNC_LABEL: Record<SyncStatus["kind"], string> = {
 	building: "Building…",
 	"in-sync": "In sync",
+	"needs-attention": "Needs attention",
 	"out-of-sync": "Out of sync",
 };
 
@@ -63,20 +76,41 @@ export function syncHint(
 	snapshot: Snapshot | undefined,
 	userId: string | undefined,
 ): string | undefined {
+	if (status?.kind === "needs-attention") return attentionHint(snapshot);
 	if (status?.kind !== "out-of-sync") return;
-	if (status.reason === "pending") return "Changes will build shortly";
-	if (status.reason === "failed") return "The last rebuild failed";
-	if (snapshot?.live?.user === userId) return "Waiting for your agent";
+	let retry = status.outstanding
+		? ` · will also retry ${plural(status.outstanding, "blocked task", "blocked tasks")}`
+		: "";
+	if (status.reason === "pending") return `Changes will build shortly${retry}`;
+	if (status.reason === "failed") return `The last rebuild failed${retry}`;
+	if (snapshot?.live?.user === userId) return `Waiting for your agent${retry}`;
 	return snapshot?.builtBy
-		? `Waiting for @${snapshot.builtBy}’s agent`
-		: "Waiting for the builder’s agent";
+		? `Waiting for @${snapshot.builtBy}’s agent${retry}`
+		: `Waiting for the builder’s agent${retry}`;
+}
+
+/** What an unfinished task is stuck on, and that an edit retries it. */
+export function attentionHint(snapshot: Snapshot | undefined): string | undefined {
+	let tasks = snapshot?.live?.outstandingTasks ?? [];
+	if (!tasks.length) return;
+	let first = tasks.find(task => task.blocker) ?? tasks[0]!;
+	let reason = first.blocker
+		? `“${first.title}” is blocked: ${first.blocker}`
+		: `“${first.title}” didn’t finish`;
+	let more = tasks.length > 1 ? ` (and ${plural(tasks.length - 1, "other", "others")})` : "";
+	return `${reason}${more}. Edit the document to retry.`;
 }
 
 /** Why a first build has not started yet, when the viewer's agent is finishing a prototype. */
 export function startingHint(snapshot: Snapshot | undefined): string | undefined {
-	return snapshot?.waitingForPrototype && snapshot.build?.state === "queued"
-		? "Starts when the current prototype finishes"
-		: undefined;
+	if (snapshot?.build?.state !== "queued") return;
+	let other = snapshot.waitingForDocument;
+	if (other) {
+		return `Starts when your agent finishes ${
+			other.title ? `“${other.title}”` : "another document"
+		}`;
+	}
+	return snapshot.waitingForPrototype ? "Starts when the current prototype finishes" : undefined;
 }
 
 /**
@@ -314,12 +348,18 @@ export function hasBuilt(snapshot: Snapshot): boolean {
 export type FirstBuild =
 	| { stage: "idle" }
 	| { stage: "drafting"; sent: boolean }
+	/** The draft raised a blocker, or a reload found the request: continue once it clears. */
+	| { stage: "waiting" }
 	| { stage: "starting" }
 	| { stage: "started" }
 	| { stage: "failed"; agent?: boolean; message?: string };
 
 export type FirstBuildEvent =
 	| { type: "press" }
+	/** The server still holds this viewer's one-click request, e.g. after a reload. */
+	| { type: "resume" }
+	/** The draft left the document blocked; keep the intent until the blockers clear. */
+	| { type: "wait" }
 	| { type: "draft-sent" }
 	/** The draft turn ended; `drafted` when a fresh read then had tasks to start. */
 	| { type: "draft-ended"; drafted: boolean }
@@ -335,8 +375,14 @@ export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): Fi
 			return state.stage === "idle" || state.stage === "failed"
 				? { stage: "drafting", sent: false }
 				: state;
+		case "resume":
+			return state.stage === "idle" ? { stage: "waiting" } : state;
+		case "wait":
+			return state.stage === "drafting" ? { stage: "waiting" } : state;
 		case "draft-sent":
-			return state.stage === "drafting" ? { stage: "drafting", sent: true } : state;
+			return state.stage === "drafting" || state.stage === "waiting"
+				? { stage: "drafting", sent: true }
+				: state;
 		case "draft-ended":
 			return state.stage === "drafting" && state.sent && !event.drafted
 				? { stage: "failed", message: "Chopin couldn’t break the plan into tasks." }
@@ -344,7 +390,7 @@ export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): Fi
 		case "draft-refused":
 			return state.stage === "drafting" ? { stage: "failed", message: event.message } : state;
 		case "start":
-			return state.stage === "drafting" || state.stage === "failed"
+			return state.stage === "drafting" || state.stage === "waiting" || state.stage === "failed"
 				? { stage: "starting" }
 				: state;
 		case "started":
@@ -364,16 +410,28 @@ export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): Fi
  *
  * The button appears only for a document judged ready that has never been
  * built. Once pressed it reads as working until the build runs or the attempt
- * ends; `reset` hands any later state back to the Build view.
+ * ends; `reset` hands any later state back to the Build view. A draft that
+ * raises a decision does not drop the press: the slot reads `waiting` until the
+ * blockers clear, then drafts again if the tasks are stale and starts them. The
+ * server keeps the press (`buildRequested`), so a reload `resume`s it.
  */
 export function firstBuildStep(
 	snapshot: Snapshot | undefined,
 	state: FirstBuild,
-): { view: "hidden" | "ready" | "working"; next?: "draft" | "start" | "reset" } {
+	userId?: string,
+): {
+	view: "hidden" | "ready" | "working" | "waiting";
+	next?: "draft" | "start" | "reset" | "resume" | "wait";
+} {
 	if (!snapshot) return { view: state.stage === "idle" ? "hidden" : "working" };
 	let phase = buildPhase(snapshot);
 	if (phase.kind === "building") {
 		return { view: "working", ...(state.stage === "idle" ? {} : { next: "reset" as const }) };
+	}
+	let requested = !!userId && snapshot.buildRequested?.by === userId && !hasBuilt(snapshot);
+	let pending = phase.kind === "blocked" || phase.kind === "drafting" || phase.kind === "review";
+	if (state.stage === "idle" && requested && pending) {
+		return { view: phase.kind === "blocked" ? "waiting" : "working", next: "resume" };
 	}
 	if (state.stage === "idle" || state.stage === "failed") {
 		let open = phase.kind === "drafting" || phase.kind === "review";
@@ -383,9 +441,32 @@ export function firstBuildStep(
 	if (state.stage === "started") {
 		return phase.kind === "review" ? { view: "working" } : { view: "hidden", next: "reset" };
 	}
+	if (state.stage === "waiting") {
+		// Cancelled, or someone else built it: nothing is left to continue.
+		if (!requested) return { view: "hidden", next: "reset" };
+		if (phase.kind === "blocked") return { view: "waiting" };
+		if (phase.kind === "drafting") return { view: "working", next: "draft" };
+		if (phase.kind === "review") return { view: "working", next: "start" };
+		return { view: "hidden", next: "reset" };
+	}
 	if (phase.kind === "review") return { view: "working", next: "start" };
 	if (phase.kind === "drafting") {
 		return { view: "working", ...(state.sent ? {} : { next: "draft" }) };
 	}
+	if (phase.kind === "blocked") return { view: "waiting", next: "wait" };
 	return { view: "hidden", next: "reset" };
+}
+
+/** The header's wait for a blocked one-click build, and where pressing it leads. */
+export function waitingLabel(
+	snapshot: Snapshot | undefined,
+): { label: string; target: "decisions" | "build" } {
+	let phase = snapshot && buildPhase(snapshot);
+	if (phase?.kind === "blocked" && phase.decisions) {
+		return { label: "Waiting on a decision", target: "decisions" };
+	}
+	if (phase?.kind === "blocked" && phase.comments) {
+		return { label: "Waiting on comments", target: "build" };
+	}
+	return { label: "Waiting to build", target: "build" };
 }

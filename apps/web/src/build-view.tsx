@@ -21,6 +21,7 @@ import {
 	taskStartsOpen,
 } from "./build-model";
 import {
+	cancelBuildRequest,
 	implementationEndpoint,
 	implementationResponse as response,
 	startBuild,
@@ -386,6 +387,25 @@ export function BuildView(
 				</span>
 			)
 			: "This document can’t be built yet.";
+		// A one-click Build plan waits here and starts once the blockers clear.
+		if (canEdit && userId && snapshot?.buildRequested?.by === userId) {
+			action = (
+				<button
+					className="btn btn-md btn-outline shrink-0"
+					onClick={() => {
+						setActionError(undefined);
+						cancelBuildRequest(room).then(
+							() => setRefresh(value => value + 1),
+							error =>
+								setActionError(sentence(error instanceof Error ? error.message : "Cancel failed")),
+						);
+					}}
+					type="button"
+				>
+					Cancel build
+				</button>
+			);
+		}
 	} else if (phase.kind === "review") {
 		status = plural(tasks.length, "task", "tasks");
 		if (canEdit) action = primary;

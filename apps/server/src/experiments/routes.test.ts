@@ -338,3 +338,34 @@ test("expired pairing and connections cannot be revived by replay", () => {
 	now = 301_000;
 	expect(() => connections.claim(pending.id, pending.secret)).toThrow("pairing-expired");
 });
+
+test("builds queued behind a connection's build take its place in the order they queued", () => {
+	let connections = new Connections(() => 0);
+	let pending = connections.create({
+		repository: "org/repo",
+		commit: "a".repeat(40),
+		label: "Laptop",
+	});
+	let { id } = connections.approve(
+		pending.id,
+		{ id: "alice", login: "alice", sessionId: "s" },
+		"repo",
+	);
+	connections.assign(id, "one");
+	connections.enqueue(id, "two");
+	connections.enqueue(id, "three");
+	connections.enqueue(id, "two");
+	connections.enqueue(id, "one");
+	expect(connections.queued(id)).toEqual(["two", "three"]);
+	// A queued document that gives up leaves its place without moving the current build.
+	connections.release(id, "three");
+	connections.enqueue(id, "three");
+	connections.release(id, "one");
+	expect(connections.assigned(id)).toBe("two");
+	expect(connections.queued(id)).toEqual(["three"]);
+	connections.release(id, "two");
+	expect(connections.assigned(id)).toBe("three");
+	connections.release(id, "three");
+	expect(connections.assigned(id)).toBeUndefined();
+	expect(connections.queued(id)).toEqual([]);
+});

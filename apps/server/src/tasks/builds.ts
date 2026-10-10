@@ -213,6 +213,7 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 				Object.assign(plan, previous);
 				throw error;
 			}
+			plan.buildRequested = undefined;
 			announceImplementation(plan);
 			return structuredClone(build);
 		});
@@ -350,6 +351,14 @@ export async function settleLive(
 		announceImplementation(plan);
 		return true;
 	});
+}
+
+/** Remember a one-click Build plan until its build starts, or forget it when cancelled. */
+export function requestBuild(plan: Plan, by: string | undefined): void {
+	let next = by === undefined ? undefined : { by, revision: plan.revision };
+	if (!next && !plan.buildRequested) return;
+	plan.buildRequested = next;
+	announceImplementation(plan);
 }
 
 /** Keep a queued build claimable while its connection finishes a prototype first. */

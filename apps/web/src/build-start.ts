@@ -52,3 +52,10 @@ export async function startBuild(
 		throw error;
 	}
 }
+
+/** Give up a one-click Build plan that is still waiting for its tasks. */
+export async function cancelBuildRequest(room: string): Promise<void> {
+	await implementationResponse(
+		await fetch(`${implementationEndpoint(room)}/request`, { method: "DELETE" }),
+	);
+}

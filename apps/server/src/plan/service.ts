@@ -228,6 +228,11 @@ export type Plan = {
 	lifecycle: Lifecycle;
 	/** The finished build this living document was last delivered from. */
 	live?: LiveBuild;
+	/**
+	 * A one-click Build plan waiting for its tasks, kept until the build starts or is cancelled so
+	 * the click outlives a decision the draft raised and a reload. In memory only (prototype).
+	 */
+	buildRequested?: { by: string; revision: number };
 	/** A claim has closed mutation ingress while accepted work drains. */
 	claiming: boolean;
 	/**

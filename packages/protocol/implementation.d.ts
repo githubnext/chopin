@@ -101,6 +101,16 @@ export type ImplementationSnapshot = {
 	buildReady: boolean;
 	/** `build` is queued on a connection that starts it once its running prototype finishes. */
 	waitingForPrototype?: true;
+	/**
+	 * `build` is queued behind another document's build on the same agent; it starts when that
+	 * one finishes. `title` names the other document when it is known.
+	 */
+	waitingForDocument?: { title?: string };
+	/**
+	 * A one-click Build plan is waiting for its tasks: `by` (a user id) pressed it at `revision`.
+	 * It holds through open decisions and reloads until the build starts or is cancelled.
+	 */
+	buildRequested?: { by: string; revision: number };
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
 	live?: LiveSnapshot;
 };

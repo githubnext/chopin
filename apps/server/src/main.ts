@@ -50,7 +50,7 @@ import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
-import { locksEditing } from "./tasks/builds";
+import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { BuildReadiness } from "./tasks/readiness";
 import { askJev } from "./conversation-plan/jev";
@@ -661,6 +661,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					fail(ws, frame.rid, result.reason);
 					return;
 				}
+				if (frame.build) requestBuild(opened, ws.data.principalId);
 				reply(ws, frame.rid, {
 					kind: "implementation:draft",
 					ts: 0,

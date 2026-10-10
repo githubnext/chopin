@@ -124,24 +124,26 @@ export function implementationConnector(
 		});
 		return operation;
 	};
+	/** The connection's current build; a finished one hands over to the next queued document. */
 	let pending = async (connection: Connection) => {
-		let documentId = connections.assigned(connection.id);
-		if (!documentId) return undefined;
-		try {
-			let build = await documentExists(documentId)
-				? await withPlan(documentId, async plan => {
-					let build = plan.builds.at(-1);
-					return build?.connectionId === connection.id && build.user === connection.owner
-						? build
-						: undefined;
-				})
-				: undefined;
-			if (!build || !["queued", "starting", "running"].includes(build.state)) {
+		// Bounded by the queue: each pass releases one document.
+		for (let pass = 0; pass <= 100; pass++) {
+			let documentId = connections.assigned(connection.id);
+			if (!documentId) return undefined;
+			try {
+				let build = await documentExists(documentId)
+					? await withPlan(documentId, async plan => {
+						let build = plan.builds.at(-1);
+						return build?.connectionId === connection.id && build.user === connection.owner
+							? build
+							: undefined;
+					})
+					: undefined;
+				if (build && ["queued", "starting", "running"].includes(build.state)) return build;
 				connections.release(connection.id, documentId);
+			} catch {
+				return undefined;
 			}
-			return build;
-		} catch {
-			return undefined;
 		}
 	};
 	let api = {
@@ -349,8 +351,12 @@ export function implementationConnector(
 						return;
 					}
 					let connected = !!connections.get(build.connectionId);
+					// Queued behind another document's build on the same connection.
+					let behind = connections.assigned(build.connectionId) !== id
+						&& connections.queued(build.connectionId).includes(id);
 					if (
-						connected && build.state === "queued" && await prototyping?.(build.connectionId)
+						connected && build.state === "queued"
+						&& (behind || await prototyping?.(build.connectionId))
 					) {
 						await renewQueued(plan, build.id);
 						return;

@@ -42,6 +42,8 @@ export class Connections {
 	#runTokens = new Map<string, string>();
 	#waiters = new Map<string, Set<() => void>>();
 	#builds = new Map<string, string>();
+	/** Documents whose builds wait behind a connection's current one, first queued first. */
+	#queued = new Map<string, string[]>();
 	#used = new Map<string, string>();
 	#locks = new Map<string, Promise<unknown>>();
 	constructor(private now = () => Date.now()) {}
@@ -127,9 +129,40 @@ export class Connections {
 	assigned(connectionId: string) {
 		return this.#builds.get(connectionId);
 	}
-	/** Forget a finished, deleted, or unreachable build so it cannot strand the connection. */
+	/** Queue a document's build behind the other document's build a connection holds. */
+	enqueue(connectionId: string, documentId: string) {
+		if (!this.#connections.has(connectionId) || this.#builds.get(connectionId) === documentId) {
+			return;
+		}
+		let queue = this.#queued.get(connectionId) ?? [];
+		if (!queue.includes(documentId)) this.#queued.set(connectionId, [...queue, documentId]);
+	}
+	/** Documents whose builds wait for this connection, in the order they will start. */
+	queued(connectionId: string): string[] {
+		return [...(this.#queued.get(connectionId) ?? [])];
+	}
+	/**
+	 * Forget a finished, deleted, or unreachable build so it cannot strand the connection. The
+	 * next document queued behind it takes its place, and the connector is woken to claim it.
+	 */
 	release(connectionId: string, documentId: string) {
-		if (this.#builds.get(connectionId) === documentId) this.#builds.delete(connectionId);
+		let queue = this.#queued.get(connectionId) ?? [];
+		if (this.#builds.get(connectionId) === documentId) {
+			let [next, ...rest] = queue;
+			if (next === undefined) {
+				this.#builds.delete(connectionId);
+				return;
+			}
+			this.#builds.set(connectionId, next);
+			if (rest.length) this.#queued.set(connectionId, rest);
+			else this.#queued.delete(connectionId);
+			let connection = this.#connections.get(connectionId);
+			if (connection) this.wake(connection.source.repositoryId);
+			return;
+		}
+		let rest = queue.filter(id => id !== documentId);
+		if (rest.length) this.#queued.set(connectionId, rest);
+		else this.#queued.delete(connectionId);
 	}
 	/** Remember the connection that last ran work for a document, to prefer it next time. */
 	use(documentId: string, connectionId: string) {
@@ -164,6 +197,7 @@ export class Connections {
 		let connection = this.#connections.get(id);
 		this.#connections.delete(id);
 		this.#builds.delete(id);
+		this.#queued.delete(id);
 		for (let [document, used] of this.#used) if (used === id) this.#used.delete(document);
 		for (let key of this.#runTokens.keys()) {
 			if (key.startsWith(`${id}:`)) this.#runTokens.delete(key);

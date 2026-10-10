@@ -18,6 +18,7 @@ import {
 	syncHint,
 	syncStatus,
 	taskStartsOpen,
+	waitingLabel,
 } from "./build-model";
 
 import type {
@@ -348,11 +349,52 @@ describe("first build", () => {
 		expect(firstBuildStep(snapshot(), noAgent)).toEqual({ view: "ready" });
 	});
 
-	it("hands a blocked attempt back to the Build view", () => {
-		let state = advanceFirstBuild(idle, { type: "press" });
-		let blocked = snapshot({ blockers: ["unanswered questionnaires"] });
-		expect(firstBuildStep(blocked, state)).toEqual({ view: "hidden", next: "reset" });
-		expect(advanceFirstBuild(state, { type: "reset" })).toEqual(idle);
+	it("waits through a decision the draft raised, then redrafts and starts", () => {
+		let requested = { buildRequested: { by: "me", revision: 4 } };
+		let state = advanceFirstBuild(advanceFirstBuild(idle, { type: "press" }), {
+			type: "draft-sent",
+		});
+		let blocked = snapshot({ blockers: ["unanswered questionnaires"], ...requested });
+		expect(firstBuildStep(blocked, state, "me")).toEqual({ view: "waiting", next: "wait" });
+		state = advanceFirstBuild(state, { type: "wait" });
+		expect(state).toEqual({ stage: "waiting" });
+		// The draft turn ending while blocked is not a failure.
+		expect(advanceFirstBuild(state, { type: "draft-ended", drafted: false })).toBe(state);
+		expect(firstBuildStep(blocked, state, "me")).toEqual({ view: "waiting" });
+		expect(waitingLabel(blocked)).toEqual({ label: "Waiting on a decision", target: "decisions" });
+		// Answering moved the document on, so the tasks are stale: draft them again.
+		let answered = snapshot({ planRevision: 5, ...requested });
+		expect(firstBuildStep(answered, state, "me")).toEqual({ view: "working", next: "draft" });
+		state = advanceFirstBuild(state, { type: "draft-sent" });
+		expect(firstBuildStep(answered, state, "me")).toEqual({ view: "working" });
+		let redrafted = snapshot({ ...requested });
+		expect(firstBuildStep(redrafted, state, "me")).toEqual({ view: "working", next: "start" });
+	});
+
+	it("resumes a request the server kept across a reload", () => {
+		let requested = { buildRequested: { by: "me", revision: 4 } };
+		let blocked = snapshot({ blockers: ["unanswered questionnaires"], ...requested });
+		expect(firstBuildStep(blocked, idle, "me")).toEqual({ view: "waiting", next: "resume" });
+		expect(firstBuildStep(snapshot(requested), idle, "me"))
+			.toEqual({ view: "working", next: "resume" });
+		// Someone else's request, or one for a document since built, is not this viewer's to resume.
+		expect(firstBuildStep(blocked, idle, "you").view).toBe("hidden");
+		expect(
+			firstBuildStep(
+				{
+					...blocked,
+					lifecycle: { ...blocked.lifecycle, history: [run({ kind: "implemented" })] },
+				},
+				idle,
+				"me",
+			).next,
+		).toBeUndefined();
+		let state = advanceFirstBuild(idle, { type: "resume" });
+		expect(state).toEqual({ stage: "waiting" });
+		expect(firstBuildStep(snapshot(requested), state, "me").next).toBe("start");
+		// Cancelled: the request is gone, so the wait ends.
+		expect(firstBuildStep(snapshot({ blockers: ["unanswered questionnaires"] }), state, "me"))
+			.toEqual({ view: "hidden", next: "reset" });
 	});
 });
 
@@ -399,6 +441,17 @@ describe("living document sync", () => {
 		expect(syncStatus({ ...live(), build: build("running") })).toEqual({ kind: "building" });
 	});
 
+	it("explains a first build queued behind another document's build", () => {
+		let queued = snapshot({ build: build("queued"), waitingForDocument: { title: "Docs site" } });
+		expect(startingLabel(queued)).toEqual({
+			label: "Queued",
+			queued: true,
+			hint: "Starts when your agent finishes “Docs site”",
+		});
+		expect(startingHint(snapshot({ build: build("queued"), waitingForDocument: {} })))
+			.toBe("Starts when your agent finishes another document");
+	});
+
 	it("explains a first build queued behind a prototype", () => {
 		let queued = snapshot({ build: build("queued"), waitingForPrototype: true });
 		expect(firstBuildStep(queued, { stage: "idle" }).view).toBe("working");
@@ -418,15 +471,35 @@ describe("living document sync", () => {
 
 	it("explains why it is out of sync", () => {
 		let pending = live({ outOfSync: true, rebuild: rebuild("stopped") });
-		expect(syncStatus(pending)).toEqual({ kind: "out-of-sync", reason: "pending" });
+		expect(syncStatus(pending)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 0 });
 		expect(syncHint(syncStatus(pending), pending, "me")).toBe("Changes will build shortly");
 		let waiting = { ...live({ outOfSync: true, builderConnected: false }), builtBy: "jev" };
-		expect(syncStatus(waiting)).toEqual({ kind: "out-of-sync", reason: "waiting" });
+		expect(syncStatus(waiting)).toEqual({ kind: "out-of-sync", reason: "waiting", outstanding: 0 });
 		expect(syncHint(syncStatus(waiting), waiting, "me")).toBe("Waiting for @jev’s agent");
 		expect(syncHint(syncStatus(waiting), waiting, "u")).toBe("Waiting for your agent");
 		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
-		expect(syncStatus(failed)).toEqual({ kind: "out-of-sync", reason: "failed" });
+		expect(syncStatus(failed)).toEqual({ kind: "out-of-sync", reason: "failed", outstanding: 0 });
 		expect(syncHint(syncStatus(failed), failed, "me")).toBe("The last rebuild failed");
+	});
+
+	it("needs attention while a blocked task waits for an edit, even in sync", () => {
+		let outstandingTasks = [
+			{ id: "a", title: "Store graphs", state: "blocked" as const, blocker: "Which database?" },
+			{ id: "b", title: "Render graphs", state: "queued" as const },
+		];
+		let stuck = live({ outstandingTasks });
+		expect(syncStatus(stuck)).toEqual({ kind: "needs-attention", outstanding: 2 });
+		expect(syncHint(syncStatus(stuck), stuck, "me"))
+			.toBe(
+				"“Store graphs” is blocked: Which database? (and 1 other). Edit the document to retry.",
+			);
+		let edited = live({ outstandingTasks, outOfSync: true });
+		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
+		expect(syncHint(syncStatus(edited), edited, "me"))
+			.toBe("Changes will build shortly · will also retry 2 blocked tasks");
+		// Syncing beats needing attention.
+		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
+			.toEqual({ kind: "building" });
 	});
 
 	it("does not call a failed rebuild out of sync once later edits match", () => {

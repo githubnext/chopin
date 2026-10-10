@@ -7,7 +7,7 @@ import * as Plan from "../plan/service";
 import { registerExperimentRoutes } from "../experiments/routes";
 import { implementationGraphs } from "./plan-graphs";
 import { registerImplementationRoutes } from "./routes";
-import { queueRebuild } from "./builds";
+import { queueRebuild, requestBuild } from "./builds";
 import { implementationStatus } from "./notifications";
 import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
@@ -137,6 +137,7 @@ async function setup() {
 		router,
 		path,
 		call,
+		cookie: issued.cookie,
 		otherCookie: other.cookie,
 		implementations,
 		experiments,
@@ -309,6 +310,38 @@ test("a build runs only on the clicker's own connection and records who started 
 	)
 		.toBe(true);
 	await Plan.close(context.plan);
+});
+
+test("a one-click build request outlives a reload until its build starts or is cancelled", async () => {
+	let context = await setup();
+	let cancel = () =>
+		context.router.handle(
+			new Request(`${context.auth.config.origin}${context.path}/request`, {
+				method: "DELETE",
+				headers: { origin: context.auth.config.origin, cookie: context.cookie.split(";")[0] },
+			}),
+		);
+	try {
+		expect((await (await context.call(context.path)).json()).buildRequested).toBeUndefined();
+		requestBuild(context.plan, "U_test");
+		expect((await (await context.call(context.path)).json()).buildRequested).toEqual({
+			by: "U_test",
+			revision: context.plan.revision,
+		});
+		expect((await cancel())!.status).toBe(200);
+		expect(context.plan.buildRequested).toBeUndefined();
+		requestBuild(context.plan, "U_test");
+		await paired(context);
+		let built = await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		});
+		expect(built.status).toBe(200);
+		expect((await (await context.call(context.path)).json()).buildRequested).toBeUndefined();
+	} finally {
+		await Plan.close(context.plan);
+	}
 });
 
 test("investigations and implementations cannot execute on the same workspace together", async () => {
@@ -484,7 +517,7 @@ test("returning a stopped implementation for changes durably unlocks it once", a
 	}
 });
 
-test("one connection builds two documents and a finished or deleted build never strands it", async () => {
+test("a second document queues behind the first on one connection, which a finished or deleted build never strands", async () => {
 	let context = await setup();
 	let second = await openSiblingPlan(context, "# Second plan\n");
 	await prepare(second);
@@ -494,21 +527,37 @@ test("one connection builds two documents and a finished or deleted build never 
 	let connection = await paired(context);
 	try {
 		let first = await (await context.call(context.path, review)).json();
-		expect((await context.call(secondPath, review)).status).toBe(409);
+		// The agent holds the first document's build, so the second queues behind it.
+		let waiting = await context.call(secondPath, review);
+		expect(waiting.status).toBe(200);
+		let next = await waiting.json();
+		expect(next).toMatchObject({ state: "queued", connectionId: connection.connection.id });
+		expect((await context.call(secondPath, review)).status).toBe(200);
+		expect(second.builds).toHaveLength(1);
+		let title = (await context.storage.channels.get(context.plan.id))!.title;
+		expect((await (await context.call(secondPath)).json()).waitingForDocument).toEqual({ title });
+		// Waiting behind another build renews the queued one instead of expiring it.
+		second.builds = [{ ...second.builds[0]!, expiresAt: Date.now() - 1 }];
+		await context.implementations.sweep();
+		expect(second.builds.at(-1)).toMatchObject({ state: "queued" });
+		expect(second.builds.at(-1)!.expiresAt).toBeGreaterThan(Date.now());
+		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
+			id: first.id,
+			kind: "implementation",
+		});
 		await tool(context, connection.token, "claim_implementation_build", { id: first.id });
 		await tool(context, connection.token, "report_implementation_build", {
 			id: first.id,
 			state: "failed",
 			error: "Startup failed",
 		});
-		let next = await (await context.call(secondPath, review)).json();
-		expect(next.connectionId).toBe(connection.connection.id);
 		expect(second.builds.at(-1)?.id).toBe(next.id);
 		expect(context.plan.builds).toHaveLength(1);
 		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
 			id: next.id,
 			kind: "implementation",
 		});
+		expect((await (await context.call(secondPath)).json()).waitingForDocument).toBeUndefined();
 		let claim = await tool(context, connection.token, "claim_implementation_build", {
 			id: next.id,
 		});
