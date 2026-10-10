@@ -1745,7 +1745,8 @@ button.question-add:disabled {
 		transition: none;
 	}
 
-	.workspace-root[data-workspace-mode="split"] > .workspace-header-slot {
+	.workspace-root[data-workspace-mode="split"] > .workspace-header-slot,
+	.workspace-root[data-workspace-mode="split"][data-document-expanded] > .workspace-header-slot {
 		transition: none;
 	}
 
