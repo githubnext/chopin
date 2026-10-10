@@ -680,6 +680,15 @@ export function ResolvedLayer(
 
 	let view = shown(pointer);
 	let open = view ? placed.find(entry => entry.item.key === view.key) : undefined;
+	let sheet = compact && open && view?.pinned && open.item.kind === "comment"
+		? open.item
+		: undefined;
+	let sheetKey = sheet?.key;
+	// Measuring waits while the sheet is up, and catches up on what moved once it goes.
+	useLayoutEffect(() => {
+		sheetOpen.current = !!sheetKey;
+		if (!sheetKey) measure();
+	}, [measure, sheetKey]);
 
 	// One wash at a time, and only the one this layer put up is taken down.
 	let openKey = open?.item.key;
@@ -701,7 +710,11 @@ export function ResolvedLayer(
 		let outside = (event: PointerEvent) => {
 			if (!pointer.pinned) return;
 			// The sheet closes itself, from its backdrop, close or a swipe.
-			if ((event.target as Element).closest?.("[data-plan-comment-sheet]")) return;
+			if (
+				(event.target as Element).closest?.(
+					"[data-plan-comment-sheet], [data-plan-comment-sheet-backdrop]",
+				)
+			) return;
 			if (root.current?.contains(event.target as Node)) return;
 			if (markers.current?.contains(event.target as Node)) return;
 			act({ type: "dismiss" });
@@ -771,10 +784,6 @@ export function ResolvedLayer(
 	let page = rect(host.getBoundingClientRect());
 	let width = Math.min(POPOVER_WIDTH, host.clientWidth - 16);
 	let value: PopoverValue | undefined;
-	let sheet = compact && open && view?.pinned && open.item.kind === "comment"
-		? open.item
-		: undefined;
-	sheetOpen.current = !!sheet;
 	if (open && view && !sheet) {
 		let at = popoverBelow(open.anchor, page, width, height);
 		let maxHeight = Math.max(0, page.height - 16);
