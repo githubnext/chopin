@@ -17,7 +17,6 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import { WorkspaceNotice } from "./workspace-notice";
 import { documentRouteIdentity } from "./document-route-swap";
@@ -602,7 +601,10 @@ export function NavigationShell(
 	}, [clearLastDocument, upsertDocument]);
 	let documentDeleted = useCallback((documentId: string) => {
 		let channel = knownChannelsRef.current.get(documentId);
-		if (channel) forgetChannel(user.id, channel);
+		// Loaded on demand: forgetting a deleted document's recovery state is not first-paint work.
+		if (channel) {
+			void import("./channel-recovery").then(recovery => recovery.forgetChannel(user.id, channel));
+		}
 		removeDocument(documentId);
 		clearLastDocument(documentId);
 		let current = resolvedDocumentRef.current;
