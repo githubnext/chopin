@@ -65,9 +65,11 @@ function reference(): string {
 	}).filter(Boolean).join("\n");
 }
 
-const DIAGRAM_INTRO = `Diagrams and formulas can clarify a plan. Use a \`${SEECODE_LANGUAGE}\` fence
-for architecture, sequences, or state transitions when a compact structured
-view helps; \`${MERMAID_LANGUAGE}\` remains available for other simple flows.
+const DIAGRAM_INTRO =
+	`Charts, diagrams and formulas can clarify a plan. Use a \`${SEECODE_LANGUAGE}\` JSON
+fence for the registered numerical charts and diagrams described below.
+\`${MERMAID_LANGUAGE}\` also supports diagrams and numerical charts, including
+\`pie\` and \`xychart-beta\` bar/line charts; it is not limited to flows.
 Set a formula wherever the plan turns`;
 const ROUTED_DIAGRAM_INTRO = `A Jev-selected diagram uses a \`${SEECODE_LANGUAGE}\` fence.
 Set a formula wherever the plan turns`;

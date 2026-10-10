@@ -385,7 +385,12 @@ completed description, if any, remains visible while work is pending or failed.
 ## Diagrams and wireframes
 
 The prompt teaches two validated fence languages. `seecode` holds a JSON spec
-for an architecture, sequence, or state diagram. `wireframe` holds an indented
+for any registered SeeCode diagram or numerical chart. The ordinary prompt lists
+the full native catalog, including bar, line, scatter, radar, polar, waterfall,
+treemap, heatmap, and Sankey, and includes a labelled synthetic bar example.
+This capability does not require `PLANNER_VISUALS`; that flag selects the
+experimental Jev routing workflow described above. Mermaid also supports
+numerical charts such as pie and bar/line charts. `wireframe` holds an indented
 outline of interface parts for layouts and mockups, and the prompt forbids
 box-drawing or ASCII art in text fences. `edit_plan` and MCP `update_document`
 refuse a batch that introduces or changes an invalid fence of either language;
