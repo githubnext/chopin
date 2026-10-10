@@ -140,6 +140,19 @@ describe("adaptive workspace", () => {
 			separatorVisible: false,
 		});
 	});
+
+	it("expands the document only when split Chat is hidden", () => {
+		let hidden: WorkspaceState = { chatOpen: false, desktopChatOpen: false };
+		let shown: WorkspaceState = { chatOpen: false, desktopChatOpen: true };
+		let unset: WorkspaceState = { chatOpen: false, desktopChatOpen: undefined };
+
+		expect(presentWorkspace(hidden, "split", "plan").documentExpanded).toBe(true);
+		expect(presentWorkspace(shown, "split", "plan").documentExpanded).toBe(false);
+		expect(presentWorkspace(unset, "split", "plan").documentExpanded).toBe(false);
+		expect(presentWorkspace(hidden, "compact", "plan").documentExpanded).toBe(false);
+		expect(presentWorkspace({ ...hidden, chatOpen: true }, "split", "plan").documentExpanded)
+			.toBe(false);
+	});
 });
 
 it("opens Chat by default and accepts only an explicit saved choice", () => {
