@@ -1129,6 +1129,7 @@ export function RoomWorkspace(
 								}}
 								onShowBuild={() => selectDestination("build")}
 								room={room}
+								userId={userId}
 								wire={wire}
 							/>
 						)}

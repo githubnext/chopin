@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import {
 	advanceDraft,
+	ago,
 	buildPhase,
 	buildProgress,
 	draftInFlight,
@@ -9,9 +10,12 @@ import {
 	draftRefusalCopy,
 	elapsed,
 	plural,
+	pullRequestCommits,
 	pullRequestNumber,
 	shouldAutoDraft,
 	startedBy,
+	SYNC_LABEL,
+	syncHint,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
 } from "./build-model";
@@ -216,7 +220,7 @@ export function BuildView(
 		return () => window.clearTimeout(timer);
 	}, [request?.state, request?.key]);
 
-	let pending = phase.kind === "building";
+	let pending = phase.kind === "building" || phase.kind === "live";
 	useEffect(() => {
 		if (!pending || !active) return;
 		setNow(Date.now());
@@ -287,7 +291,10 @@ export function BuildView(
 		}
 	};
 
-	let tasks = snapshot?.graph?.definition.tasks ?? [];
+	// A living document lists its first build's tasks and every rebuild's after them.
+	let tasks = phase.kind === "live"
+		? snapshot?.live?.tasks ?? []
+		: snapshot?.graph?.definition.tasks ?? [];
 	// Drafting: our turn is under way, or Build is about to ask, or it failed, or a person decides.
 	let awaitingAuto = !!key && key === activation.current.eligible
 		&& autoSent !== activation.current.id && !drafted.has(key);
@@ -408,9 +415,26 @@ export function BuildView(
 				</button>
 			);
 		}
+	} else if (phase.kind === "live") {
+		let commits = snapshot?.live?.commits.length ?? 0;
+		let hint = syncHint(phase.sync, snapshot, userId);
+		status = (
+			<>
+				{phase.sync.kind === "building" && <span aria-hidden="true" className="build-pulse" />}
+				<span className="min-w-0 flex-1">
+					Living document ·{" "}
+					{phase.sync.kind === "building" ? "Building" : SYNC_LABEL[phase.sync.kind]}
+					{phase.sync.kind === "in-sync"
+						&& ` · ${plural(commits, "commit", "commits")} since first build`}
+					{hint && <span className="text-text-tertiary">{` · ${hint}`}</span>}
+				</span>
+			</>
+		);
 	} else {
 		status = `Built · ${plural(phase.pullRequests, "pull request", "pull requests")}`;
 	}
+	// A pull request shared by several tasks lists its commits under the first of them.
+	let listed = new Set<string>();
 
 	return (
 		<div className="build-view">
@@ -486,14 +510,19 @@ export function BuildView(
 				{showTasks && (
 					<ol aria-label="Tasks" className="build-tasks" data-stale={staleTasks || undefined}>
 						{tasks.map(task => {
-							let report = progress?.tasks.find(item =>
-								item.id === task.id
-							);
+							let report = phase.kind === "live"
+								? snapshot?.live?.tasks.find(item =>
+									item.id === task.id
+								)?.progress
+								: progress?.tasks.find(item =>
+									item.id === task.id
+								);
+							let url = report?.pullRequest?.url;
+							let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
+							if (url) listed.add(url);
 							let state: TaskState = report?.state ?? "queued";
 							let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
-							let after = task.dependsOn.map(id =>
-								tasks.find(item => item.id === id)?.title ?? id
-							);
+							let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
 							let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
 							return (
 								<li className="build-task" id={`task-${task.id}`} key={task.id}>
@@ -506,6 +535,8 @@ export function BuildView(
 											number,
 										}}
 										blocker={report?.blocker}
+										commits={commits}
+										now={now}
 										state={state}
 										task={task}
 									/>
@@ -523,10 +554,12 @@ export function BuildView(
 }
 
 function TaskRow(
-	{ after, blocker, expanded, onToggle, pullRequest, state, task }: {
+	{ after, blocker, commits, expanded, now, onToggle, pullRequest, state, task }: {
 		after: string[];
 		blocker?: string;
+		commits: Array<{ sha: string; message: string; at: string }>;
 		expanded: boolean;
+		now: number;
 		onToggle: () => void;
 		pullRequest?: { url: string; state: "open" | "merged" | "closed"; number?: number };
 		state: TaskState;
@@ -574,6 +607,24 @@ function TaskRow(
 						)}
 						{after.length > 0 && <p className="m-0 text-text-tertiary">After {after.join(", ")}</p>}
 						{blocker && <p className="build-task-blocker">Blocked: {blocker}</p>}
+						{pullRequest && commits.length > 0 && (
+							<ul aria-label="Commits" className="build-task-commits">
+								{commits.map(commit => (
+									<li key={commit.sha}>
+										<a
+											className="build-task-sha"
+											href={`${pullRequest.url}/commits/${commit.sha}`}
+											rel="noreferrer"
+											target="_blank"
+										>
+											{commit.sha.slice(0, 7)}
+										</a>
+										<span className="min-w-0 flex-1 truncate">{commit.message}</span>
+										<span className="build-elapsed">{ago(commit.at, now)}</span>
+									</li>
+								))}
+							</ul>
+						)}
 					</div>
 				</div>
 			</div>

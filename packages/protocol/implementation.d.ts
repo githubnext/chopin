@@ -54,6 +54,12 @@ export type LiveSnapshot = {
 		revision: number;
 		at: string;
 	}>;
+	/** The first build's tasks, then every rebuild's, each with its last reported progress. */
+	tasks: Array<
+		NonNullable<ImplementationSnapshot["graph"]>["definition"]["tasks"][number] & {
+			progress?: Plan.ImplementationProgress["tasks"][number];
+		}
+	>;
 	/** The latest rebuild; its state distinguishes building from failed. */
 	rebuild?: BuildRequest;
 	/** The current document differs from the source last built onto the pull requests. */
@@ -83,6 +89,8 @@ export type ImplementationSnapshot = {
 	build?: BuildRequest;
 	/** The GitHub login of whoever requested `build`, when it is still known. */
 	startedBy?: string;
+	/** The GitHub login of the living document's builder (`live.user`), when it is still known. */
+	builtBy?: string;
 	/** Whether the viewer has a connected local agent for this repository; it may be busy. */
 	localAgent: boolean;
 	blockers: string[];

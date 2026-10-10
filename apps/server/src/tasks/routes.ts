@@ -153,7 +153,12 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				}));
 			// Read outside the plan lock; a missing user only loses the attribution.
 			let login = current.build && (await auth.storage.users.get(current.build.user))?.login;
-			return json(login ? { ...current, startedBy: login } : current);
+			let builder = current.live && (await auth.storage.users.get(current.live.user))?.login;
+			return json({
+				...current,
+				...(login ? { startedBy: login } : {}),
+				...(builder ? { builtBy: builder } : {}),
+			});
 		}),
 	);
 	router.on(

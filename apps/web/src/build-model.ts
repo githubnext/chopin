@@ -17,7 +17,79 @@ export type BuildPhase =
 	| { kind: "failed" }
 	/** The build ended while its run still holds the tasks and the document lock. */
 	| { kind: "stopped" }
-	| { kind: "done"; pullRequests: number };
+	| { kind: "done"; pullRequests: number }
+	/** A living document: its pull requests follow later edits. */
+	| { kind: "live"; sync: SyncStatus };
+
+/**
+ * Whether a living document's pull requests match it. `out-of-sync` says why:
+ * `pending` waits for the builder's connected agent to pick the edits up,
+ * `waiting` for that agent to connect, and `failed` that the last rebuild failed.
+ */
+export type SyncStatus =
+	| { kind: "building" }
+	| { kind: "in-sync" }
+	| { kind: "out-of-sync"; reason: "pending" | "waiting" | "failed" };
+
+const RUNNING = ["queued", "starting", "running"];
+
+/**
+ * The living document's sync status, or `undefined` before its first build has delivered.
+ * The snapshot's `build` is the first build, or nothing once a rebuild adds a task version,
+ * so a running rebuild is read from `live.rebuild`.
+ */
+export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefined {
+	let live = snapshot?.live;
+	if (!snapshot || !live) return;
+	if (
+		live.rebuild && RUNNING.includes(live.rebuild.state)
+		|| snapshot.build && RUNNING.includes(snapshot.build.state)
+		|| snapshot.lifecycle.execution.state === "active"
+	) return { kind: "building" };
+	if (!live.outOfSync) return { kind: "in-sync" };
+	if (live.rebuild?.state === "failed") return { kind: "out-of-sync", reason: "failed" };
+	return { kind: "out-of-sync", reason: live.builderConnected ? "pending" : "waiting" };
+}
+
+export const SYNC_LABEL: Record<SyncStatus["kind"], string> = {
+	building: "Building…",
+	"in-sync": "In sync",
+	"out-of-sync": "Out of sync",
+};
+
+/** Why the pull requests lag the document, naming the builder whose agent must run them. */
+export function syncHint(
+	status: SyncStatus | undefined,
+	snapshot: Snapshot | undefined,
+	userId: string | undefined,
+): string | undefined {
+	if (status?.kind !== "out-of-sync") return;
+	if (status.reason === "pending") return "Changes will build shortly";
+	if (status.reason === "failed") return "The last rebuild failed";
+	if (snapshot?.live?.user === userId) return "Waiting for your agent";
+	return snapshot?.builtBy
+		? `Waiting for @${snapshot.builtBy}’s agent`
+		: "Waiting for the builder’s agent";
+}
+
+/** One pull request's living-document commits, newest first. */
+export function pullRequestCommits(snapshot: Snapshot | undefined, url: string) {
+	return (snapshot?.live?.commits ?? []).map((commit, index) => ({ commit, index }))
+		.filter(item => item.commit.pullRequest === url)
+		.sort((a, b) => Date.parse(b.commit.at) - Date.parse(a.commit.at) || b.index - a.index)
+		.map(item => item.commit);
+}
+
+/** "just now", "5m ago", "3h ago" or "2d ago". */
+export function ago(at: string, now: number): string | undefined {
+	let start = Date.parse(at);
+	if (!Number.isFinite(start)) return;
+	let minutes = Math.max(0, Math.floor((now - start) / 60_000));
+	if (minutes < 1) return "just now";
+	if (minutes < 60) return `${minutes}m ago`;
+	let hours = Math.floor(minutes / 60);
+	return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
+}
 
 function latestRun(snapshot: Snapshot) {
 	let graph = snapshot.graph;
@@ -34,6 +106,8 @@ export function buildProgress(snapshot: Snapshot | undefined): Progress | undefi
 
 export function buildPhase(snapshot: Snapshot | undefined): BuildPhase {
 	if (!snapshot) return { kind: "loading" };
+	let sync = syncStatus(snapshot);
+	if (sync) return { kind: "live", sync };
 	let run = latestRun(snapshot);
 	let active = snapshot.lifecycle.execution.state === "active";
 	let build = snapshot.build;
