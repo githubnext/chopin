@@ -2,13 +2,16 @@ import { describe, expect, it } from "bun:test";
 
 import { carriedByMarkers } from "./widgets/questionnaire";
 import {
+	commentKey,
 	keyOf,
 	markerPoint,
 	markerReach,
 	point,
 	popoverBelow,
 	prune,
+	resolvedCommentMeta,
 	shown,
+	stack,
 	unchosen,
 	verticalReach,
 } from "./resolved";
@@ -198,5 +201,62 @@ describe("a card carried by markers", () => {
 		expect(carriedByMarkers(value("A", "B"), { q0: 1, q1: 0 })).toBe(false);
 		expect(carriedByMarkers(value("A"), undefined)).toBe(false);
 		expect(carriedByMarkers(value(undefined), { q0: 1 })).toBe(false);
+	});
+});
+
+describe("markers sharing a lane", () => {
+	it("keeps markers that do not touch where they are", () => {
+		expect(stack([{ top: 0, left: 8, height: 24 }, { top: 40, left: 8, height: 24 }])).toEqual([
+			0,
+			40,
+		]);
+	});
+
+	it("steps a second marker on one block below the first", () => {
+		expect(stack([{ top: 10, left: 8, height: 24 }, { top: 10, left: 8, height: 24 }])).toEqual([
+			10,
+			38,
+		]);
+	});
+
+	it("keeps stepping until the lane is clear, in document order", () => {
+		expect(
+			stack([
+				{ top: 10, left: 8, height: 24 },
+				{ top: 10, left: 8, height: 24 },
+				{ top: 20, left: 8, height: 24 },
+			]),
+		).toEqual([10, 38, 66]);
+	});
+
+	it("leaves a marker in another lane alone", () => {
+		expect(stack([{ top: 10, left: 8, height: 24 }, { top: 10, left: 40, height: 24 }])).toEqual([
+			10,
+			10,
+		]);
+	});
+});
+
+function name(handle: string): string {
+	return handle.toUpperCase();
+}
+
+describe("a resolved comment's preview line", () => {
+	it("counts replies, names the resolver and says Chopin edited", () => {
+		expect(resolvedCommentMeta({ notes: 3, resolver: "jev" }, name)).toBe(
+			"2 replies · Resolved by JEV · Edited by Chopin",
+		);
+		expect(resolvedCommentMeta({ notes: 2, resolver: "jev" }, name)).toBe(
+			"1 reply · Resolved by JEV · Edited by Chopin",
+		);
+	});
+
+	it("drops the reply count for a lone note", () => {
+		expect(resolvedCommentMeta({ notes: 1 }, name)).toBe("Resolved · Edited by Chopin");
+	});
+
+	it("keys comments apart from decisions", () => {
+		expect(commentKey("01K")).toBe("comment:01K");
+		expect(keyOf({ widget: "comment", question: "01K" })).not.toBe(commentKey("01K"));
 	});
 });
