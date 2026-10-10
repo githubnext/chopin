@@ -828,6 +828,7 @@ body {
 	gap: 0.25rem;
 	margin-left: 2.25rem;
 	padding: 0.5rem 0.75rem;
+	border: 0;
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 	box-shadow: var(--shadow-resting);
@@ -836,7 +837,8 @@ body {
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	color: var(--color-text-primary);
-	text-decoration: none;
+	text-align: left;
+	cursor: pointer;
 }
 
 @media (prefers-reduced-motion: no-preference) {

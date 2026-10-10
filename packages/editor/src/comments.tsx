@@ -411,7 +411,7 @@ function Composer({
 		>
 			<div className="plan-comment-composer-input">
 				{to && (
-					<span aria-hidden="true" className="plan-comment-chip" ref={chip}>
+					<span aria-hidden="true" className="plan-comment-address-chip" ref={chip}>
 						@Chopin
 					</span>
 				)}
