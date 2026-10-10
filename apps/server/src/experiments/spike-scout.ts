@@ -175,6 +175,14 @@ export class SpikeScout {
 		});
 	}
 
+	/**
+	 * Land every spike result now, after any refresh already queued, without scouting further.
+	 * A first build waits on this before it claims, so it starts with the findings in place.
+	 */
+	settle(channelId: string): Promise<void> {
+		return this.#serial(channelId, () => this.#options.host.refresh(channelId));
+	}
+
 	check(channelId: string): Promise<void> {
 		return this.#serial(channelId, () => this.#check(channelId));
 	}

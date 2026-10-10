@@ -123,7 +123,7 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 							callout: spike.callout,
 							node: spikeCallout(value),
 							rendered: spike.calloutDigest,
-						}),
+						}, { queued: true }),
 				);
 				if (placed.status === "missing") await dismiss(channelId, value.id);
 				else if (placed.status !== "deferred") {

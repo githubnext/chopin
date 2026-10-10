@@ -8,6 +8,8 @@ import * as Comments from "../comments/service";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Questions from "../questions/service";
+import { carryQueued, queuedOnly } from "../tasks/builds";
+import { announceImplementation } from "../tasks/notifications";
 
 import type { RootContent } from "mdast";
 
@@ -111,12 +113,19 @@ function digestOf(source: string, callout: string): string | undefined {
 	return found && calloutDigest(found);
 }
 
+/**
+ * Place or update a spike's callout. With `queued`, an update may also land under a first build
+ * that is only queued, so the build starts with the spike's findings: the callout-only revision
+ * carries the build and its approved graph in the same commit. Any other lock defers it.
+ */
 export function placeSpikeCallout(
 	plan: Service.Plan,
 	input: CalloutInput,
+	options: { queued?: boolean } = {},
 ): Promise<CalloutPlacement> {
 	return Service.exclusive(plan, async (): Promise<CalloutPlacement> => {
-		if (Service.implementationActive(plan)) return { status: "deferred" };
+		let queued = Service.implementationActive(plan) && !!options.queued && !!queuedOnly(plan);
+		if (Service.implementationActive(plan) && !queued) return { status: "deferred" };
 		let document = await room.restore(
 			plan.document.epoch,
 			Y.encodeStateAsUpdate(plan.document.doc),
@@ -146,9 +155,23 @@ export function placeSpikeCallout(
 			Comments.rebase(candidate);
 			let digest = digestOf(room.project(document), placed.callout);
 			if (!digest) throw new Error("callout did not land");
+			let carried = queued
+				? carryQueued(
+					plan,
+					room.project(document) === plan.persistence.committedSource
+						? plan.revision
+						: plan.revision + 1,
+				)
+				: undefined;
+			if (carried) Object.assign(candidate, carried);
 			await Service.publishStaged(plan, plan.server, plan.id, candidate, placed.mutation, {
 				agent: true,
+				queuedBuild: queued,
 			});
+			if (carried) {
+				Object.assign(plan, carried);
+				announceImplementation(plan);
+			}
 			return { status: "placed", callout: placed.callout, digest };
 		} finally {
 			document.doc.destroy();
