@@ -75,7 +75,7 @@ export function paintDecided(editor: LexicalEditor, ranges: Range[]): void {
 	if (!available()) return;
 	let all = decidedRanges();
 	if (all.length === 0) CSS.highlights.delete(DECIDED);
-	else CSS.highlights.set(DECIDED, new Highlight(...all));
+	else CSS.highlights.set(DECIDED, highlight(DECIDED, all));
 }
 /**
  * Named highlights painted by more than one editor.
@@ -84,6 +84,25 @@ export function paintDecided(editor: LexicalEditor, ranges: Range[]): void {
  * their ranges here and every write publishes the union for that name.
  */
 const shared = new Map<string, Map<LexicalEditor, Range[]>>();
+
+/**
+ * Which wash wins where two overlap. Decided prose sits at the default 0; a
+ * commented passage rises with attention, so an open card's underline is never
+ * hidden under another wash.
+ */
+const PRIORITY: { [name: string]: number } = {
+	"plan-comment": 1,
+	"plan-comment-hover": 2,
+	"plan-comment-resolved": 2,
+	"plan-comment-open": 3,
+	"plan-comment-pin": 3,
+};
+
+function highlight(name: string, ranges: Range[]): Highlight {
+	let made = new Highlight(...ranges);
+	made.priority = PRIORITY[name] ?? 0;
+	return made;
+}
 
 /** Replace one editor's ranges under a shared name and publish the union. */
 export function paintShared(name: string, editor: LexicalEditor, ranges: Range[]): void {
@@ -95,7 +114,7 @@ export function paintShared(name: string, editor: LexicalEditor, ranges: Range[]
 	if (!available()) return;
 	let all = [...owners.values()].flat();
 	if (all.length === 0) CSS.highlights.delete(name);
-	else CSS.highlights.set(name, new Highlight(...all));
+	else CSS.highlights.set(name, highlight(name, all));
 }
 
 /**
@@ -367,7 +386,7 @@ function render(editor: LexicalEditor): void {
 
 	for (let [name, found] of Object.entries(ranges)) {
 		if (found.length === 0) CSS.highlights.delete(name);
-		else CSS.highlights.set(name, new Highlight(...found));
+		else CSS.highlights.set(name, highlight(name, found));
 	}
 }
 
