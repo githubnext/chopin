@@ -42,6 +42,7 @@ import { useResolvedActions } from "./resolved-actions";
 import { decisionHostVisible } from "./decision-placement";
 import { when } from "./card";
 import { Note, stamp } from "./comments";
+import { CommentSheet, commentSheetHeading, usesCommentSheet } from "./comment-sheet";
 import { displayName } from "./display-name";
 import { Face } from "./face";
 import { $rangeOf, paintShared } from "./marks";
@@ -62,6 +63,7 @@ import {
 	verticalReach,
 } from "./resolved";
 import { useQuestionnaires, useRelations } from "./questionnaires";
+import { PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
 import { blockElement } from "./scroll";
 import { openCommentThread } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
@@ -264,11 +266,13 @@ function Popover(
 }
 
 function CommentPopover(
-	{ close, error, onReopen, pending, value }: {
+	{ close, error, onReopen, pending, sheet, value }: {
 		close: () => void;
 		error?: string;
 		onReopen?: () => void;
 		pending: boolean;
+		/** A sheet has its own close in its header row. */
+		sheet?: boolean;
 		value: PopoverValue;
 	},
 ) {
@@ -315,15 +319,17 @@ function CommentPopover(
 						Reopen
 					</button>
 				)}
-				<button
-					aria-label="Close"
-					className="btn btn-icon btn-ghost plan-resolved-comment-close"
-					data-plan-decision-close=""
-					onClick={close}
-					type="button"
-				>
-					<CloseIcon aria-hidden="true" size={14} />
-				</button>
+				{!sheet && (
+					<button
+						aria-label="Close"
+						className="btn btn-icon btn-ghost plan-resolved-comment-close"
+						data-plan-decision-close=""
+						onClick={close}
+						type="button"
+					>
+						<CloseIcon aria-hidden="true" size={14} />
+					</button>
+				)}
 			</div>
 			<ol className="plan-comment-notes">
 				{thread.notes.map(note => <Note key={note.id} note={note} />)}
@@ -424,6 +430,21 @@ export function ResolvedLayer(
 	let pressing = useRef(false);
 	let enterPopover = useRef(false);
 	let origin = useRef<HTMLElement | undefined>(undefined);
+	let [primaryCoarse, setPrimaryCoarse] = useState(false);
+	useEffect(() => {
+		let query = matchMedia(PRIMARY_COARSE_POINTER_QUERY);
+		let update = () => setPrimaryCoarse(query.matches);
+		update();
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
+	}, []);
+	// On a phone a pinned resolved comment opens in the comment sheet, not a popover over the prose.
+	let compact = options.commentPresentation === "sheet"
+		&& usesCommentSheet({ coarse: primaryCoarse, width: host?.clientWidth ?? Infinity });
+	let compactRef = useRef(compact);
+	compactRef.current = compact;
+	// A modal sheet hides the document from assistive tech; that is not the document going away.
+	let sheetOpen = useRef(false);
 
 	let decisions = useMemo<Decision[]>(() => {
 		let out: Decision[] = [];
@@ -513,6 +534,7 @@ export function ResolvedLayer(
 	}, [editor]);
 
 	let measure = useCallback(() => {
+		if (sheetOpen.current) return;
 		if (!host || !decisionHostVisible(host)) {
 			if (wasVisible.current) act({ type: "dismiss" });
 			wasVisible.current = false;
@@ -637,6 +659,18 @@ export function ResolvedLayer(
 		act({ type: "dismiss" });
 		restoreFocus();
 	}, [act, restoreFocus]);
+	// The sheet still holds focus as it closes, so give it back once it has gone.
+	let dismissSheet = useCallback(() => {
+		act({ type: "dismiss" });
+		let target = origin.current;
+		requestAnimationFrame(() => {
+			if (!target?.isConnected) return;
+			// Giving focus back is not a request for the preview.
+			restoring.current = true;
+			target.focus({ preventScroll: true });
+			restoring.current = false;
+		});
+	}, [act]);
 
 	useEffect(() => {
 		if (!pointer.pinned || !enterPopover.current) return;
@@ -666,12 +700,15 @@ export function ResolvedLayer(
 		if (!pointer.pinned && !pointer.hover) return;
 		let outside = (event: PointerEvent) => {
 			if (!pointer.pinned) return;
+			// The sheet closes itself, from its backdrop, close or a swipe.
+			if ((event.target as Element).closest?.("[data-plan-comment-sheet]")) return;
 			if (root.current?.contains(event.target as Node)) return;
 			if (markers.current?.contains(event.target as Node)) return;
 			act({ type: "dismiss" });
 		};
 		let escape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
+			if (compactRef.current && document.querySelector("[data-plan-comment-sheet]")) return;
 			// A hover preview goes quietly; only a pinned popover owns the key, so
 			// Escape still reaches whatever else (a child document) it would close.
 			if (pointer.pinned) event.preventDefault();
@@ -734,7 +771,11 @@ export function ResolvedLayer(
 	let page = rect(host.getBoundingClientRect());
 	let width = Math.min(POPOVER_WIDTH, host.clientWidth - 16);
 	let value: PopoverValue | undefined;
-	if (open && view) {
+	let sheet = compact && open && view?.pinned && open.item.kind === "comment"
+		? open.item
+		: undefined;
+	sheetOpen.current = !!sheet;
+	if (open && view && !sheet) {
 		let at = popoverBelow(open.anchor, page, width, height);
 		let maxHeight = Math.max(0, page.height - 16);
 		if (open.item.kind === "comment" || open.item.decision.meta) {
@@ -877,6 +918,33 @@ export function ResolvedLayer(
 				}}
 				value={value}
 			/>
+			{sheet && (
+				<CommentSheet
+					heading={commentSheetHeading({
+						kind: "thread",
+						quote: sheet.comment.thread.quote ?? "",
+						siblings: 1,
+					})}
+					id={popoverId}
+					key={sheet.key}
+					label="Resolved comment"
+					onClose={dismissSheet}
+				>
+					<div className="plan-resolved-comment-sheet">
+						<CommentPopover
+							close={dismiss}
+							error={reopening?.key === sheet.key ? reopening.error : undefined}
+							onReopen={!!threads && options.canEdit !== false && options.connected === true
+									&& editable
+								? () => reopen(sheet.key, sheet.comment.thread.id)
+								: undefined}
+							pending={reopening?.key === sheet.key && !reopening.error}
+							sheet
+							value={{ item: sheet, pinned: true, style: {} }}
+						/>
+					</div>
+				</CommentSheet>
+			)}
 		</div>,
 		host,
 	);
