@@ -584,6 +584,21 @@
 	border-radius: var(--radius-sm);
 }
 
+/*
+ * Touch has no hover to find a quiet chip by, so at rest it carries the
+ * passage's amber and a darker ink, and keeps its icon beside the count.
+ */
+:root[data-plan-coarse-pointer] .plan-comment-chip {
+	background: var(--color-comment-wash-strong);
+	color: var(--color-comment-marker-ink);
+}
+
+:root[data-plan-coarse-pointer] .plan-comment-button[data-slim] .plan-comment-chip {
+	gap: 0.0625rem;
+	font-size: var(--text-2xs);
+	letter-spacing: -0.01em;
+}
+
 /* Another thread's card is open: this marker steps back and cannot be pressed. */
 .plan-comment-button[data-dimmed] {
 	opacity: 0.4;
