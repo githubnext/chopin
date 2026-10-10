@@ -27,7 +27,7 @@ test("Chat grows to available space and preserves a preferred width across narro
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(476, 0);
 	await expect.poll(() => page.evaluate(() => localStorage.getItem("chopin:pane:chat")))
 		.toBe(String(preferred));
-	await handle.press("ArrowRight");
+	await handle.press("ArrowLeft");
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(460, 0);
 
 	await page.setViewportSize({ width: 1600, height: 900 });
@@ -62,12 +62,12 @@ test("desktop Chat retains its width and stays beside the document as the window
 				let chatBox = frame.querySelector("aside")!.getBoundingClientRect();
 				return {
 					chatWidth: Math.round(chatBox.width),
-					documentStart: Math.round(documentBox.x - frameBox.x),
-					gap: Math.round(chatBox.x - documentBox.right),
-					chatEnd: Math.round(frameBox.right - chatBox.right),
+					chatStart: Math.round(chatBox.x - frameBox.x),
+					gap: Math.round(documentBox.x - chatBox.right),
+					documentEnd: Math.round(frameBox.right - documentBox.right),
 				};
 			})
-		).toEqual({ chatWidth: Math.round(initialWidth), documentStart: 0, gap: 0, chatEnd: 0 });
+		).toEqual({ chatWidth: Math.round(initialWidth), chatStart: 0, gap: 0, documentEnd: 0 });
 	}
 
 	await expect(chat).toBeVisible();
@@ -76,7 +76,7 @@ test("desktop Chat retains its width and stays beside the document as the window
 	await expectNoHorizontalOverflow(page);
 });
 
-test("the left Chat edge grows left, keeps its right-side reopen control, and remembers its width", async ({ join, page }) => {
+test("the right Chat edge grows right, keeps its left-side reopen control, and remembers its width", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
 	let chat = chatPane(page);
@@ -88,16 +88,16 @@ test("the left Chat edge grows left, keeps its right-side reopen control, and re
 
 	await page.mouse.move(dragX, dragY);
 	await page.mouse.down();
-	await page.mouse.move(dragX - 20, dragY, {
+	await page.mouse.move(dragX + 20, dragY, {
 		steps: 4,
 	});
 	await page.mouse.up();
 	await expect.poll(async () => (await box(chat)).width).toBeGreaterThan(initial.width + 10);
 	let widened = await box(chat);
-	expect(widened.x + widened.width).toBeCloseTo(initial.x + initial.width, 0);
+	expect(widened.x).toBeCloseTo(initial.x, 0);
 	let pointerWidth = (await box(chat)).width;
 
-	await handle.press("ArrowLeft");
+	await handle.press("ArrowRight");
 	await expect.poll(async () => (await box(chat)).width).toBeGreaterThan(pointerWidth);
 	let rememberedWidth = (await box(chat)).width;
 	expect(rememberedWidth).toBeGreaterThanOrEqual(250);
@@ -109,9 +109,9 @@ test("the left Chat edge grows left, keeps its right-side reopen control, and re
 	let opener = page.getByRole("button", { name: "Show chat" });
 	let openerBox = await box(opener);
 	expect(openerBox.x + openerBox.width).toBeLessThanOrEqual(frame.x + frame.width);
-	expect(frame.x + frame.width - openerBox.x - openerBox.width).toBeLessThan(32);
+	expect(openerBox.x - frame.x).toBeLessThan(32);
 	let controlsBox = await box(page.getByRole("group", { name: "Document view" }));
-	expect(controlsBox.x + controlsBox.width).toBeLessThanOrEqual(openerBox.x);
+	expect(openerBox.x + openerBox.width).toBeLessThanOrEqual(controlsBox.x);
 	await opener.click();
 	await expect(chat).toBeVisible();
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(rememberedWidth, 0);
