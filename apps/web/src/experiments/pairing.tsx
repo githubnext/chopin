@@ -5,6 +5,7 @@ import { LocalLoginShell } from "../local-login-shell";
 type Pairing = {
 	input: { repository: string };
 	owner: string;
+	code: string;
 };
 
 export default function PairingPage() {
@@ -46,25 +47,27 @@ export default function PairingPage() {
 	}
 	let repository = pairing?.input.repository;
 	return (
-		<LocalLoginShell>
-			<h1 className="text-xl font-semibold">
-				{repository ? `Connect this checkout of ${repository}` : "Connect your checkout"}
-			</h1>
-			{error && <p role="alert" className="text-sm text-destructive-ink">{error}</p>}
+		<LocalLoginShell title="Connect your local agent">
+			{error && <p role="alert" className="m-0 text-sm text-destructive-ink">{error}</p>}
 			{pairing && (
 				<div className="flex flex-col gap-4 text-sm">
 					{url
 						? (
 							<>
-								<p className="m-0" role="status">
-									Connected. Chopin can now run work for you in any {repository} document.
-								</p>
+								<p className="m-0" role="status">Connected.</p>
 								<a className="btn btn-md btn-primary" href={url}>Open {repository}</a>
 							</>
 						)
 						: (
 							<>
-								<p className="m-0 text-text-secondary">Signed in as {pairing.owner}.</p>
+								<p className="m-0">
+									Connect this checkout of {repository}{" "}
+									so Chopin can run work for you in any of its documents.
+								</p>
+								<p className="m-0 text-text-secondary">
+									Check that your terminal shows{" "}
+									<code className="font-mono text-text-primary">{pairing.code}</code>
+								</p>
 								<button
 									className="btn btn-md btn-primary"
 									disabled={busy}

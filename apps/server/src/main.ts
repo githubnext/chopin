@@ -311,10 +311,6 @@ function conversation(
 						investigations: (await experiments!.service.store.list(room.id)).slice(0, 20).map(
 							value => ({ id: value.id, brief: value.brief.slice(0, 400), state: value.state }),
 						),
-						workspaces: experiments!.connections.list(repository.id).map(value => ({
-							label: value.label,
-							owner: value.login,
-						})),
 					};
 				},
 				async read(id, dataset, offset = 0) {

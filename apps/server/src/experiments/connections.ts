@@ -17,6 +17,8 @@ type Pending = {
 	id: string;
 	input: PairingInput;
 	proof: string;
+	/** Shown by both the connector and the pairing page so a person can cross-check them. */
+	code: string;
 	expiresAt: number;
 	connection?: Connection;
 	token?: string;
@@ -26,6 +28,13 @@ export type Grant = {
 	run?: { id: string; documentId: string; generation: number; kind?: "implementation" };
 };
 
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function confirmation() {
+	let bytes = randomBytes(8);
+	let code = [...bytes].map(byte => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("");
+	return `${code.slice(0, 4)}-${code.slice(4)}`;
+}
+
 export class Connections {
 	#pending = new Map<string, Pending>();
 	#connections = new Map<string, Connection>();
@@ -33,6 +42,7 @@ export class Connections {
 	#runTokens = new Map<string, string>();
 	#waiters = new Map<string, Set<() => void>>();
 	#builds = new Map<string, string>();
+	#used = new Map<string, string>();
 	#locks = new Map<string, Promise<unknown>>();
 	constructor(private now = () => Date.now()) {}
 	create(input: PairingInput) {
@@ -40,13 +50,15 @@ export class Connections {
 		if (this.#pending.size >= 100) fail("pairing-capacity");
 		let secret = randomBytes(32).toString("base64url");
 		let id = crypto.randomUUID();
+		let code = confirmation();
 		this.#pending.set(id, {
 			id,
 			input,
 			proof: fingerprint(secret),
+			code,
 			expiresAt: this.now() + 300_000,
 		});
-		return { id, secret };
+		return { id, secret, code };
 	}
 	pending(id: string) {
 		let value = this.#pending.get(id);
@@ -115,6 +127,21 @@ export class Connections {
 	assigned(connectionId: string) {
 		return this.#builds.get(connectionId);
 	}
+	/** Forget a finished, deleted, or unreachable build so it cannot strand the connection. */
+	release(connectionId: string, documentId: string) {
+		if (this.#builds.get(connectionId) === documentId) this.#builds.delete(connectionId);
+	}
+	/** Remember the connection that last ran work for a document, to prefer it next time. */
+	use(documentId: string, connectionId: string) {
+		this.#used.set(documentId, connectionId);
+	}
+	/** Live connections for a repository, the one last used for `documentId` first. */
+	candidates(repositoryId: string, owner: string, documentId: string) {
+		let last = this.#used.get(documentId);
+		return this.list(repositoryId, owner).sort((a, b) =>
+			Number(b.id === last) - Number(a.id === last)
+		);
+	}
 	runToken(
 		connectionId: string,
 		documentId: string,
@@ -137,6 +164,7 @@ export class Connections {
 		let connection = this.#connections.get(id);
 		this.#connections.delete(id);
 		this.#builds.delete(id);
+		for (let [document, used] of this.#used) if (used === id) this.#used.delete(document);
 		for (let key of this.#runTokens.keys()) {
 			if (key.startsWith(`${id}:`)) this.#runTokens.delete(key);
 		}

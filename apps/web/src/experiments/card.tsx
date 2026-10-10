@@ -61,7 +61,8 @@ export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 			<h3 className="m-0 break-words text-sm font-semibold">{summary.brief}</h3>
 			<p role="status" className="m-0 text-xs text-text-secondary">
 				{WORDS[summary.state] ?? summary.state}
-				{summary.state === "running" && summary.progress && ` · ${summary.progress}`}
+				{["running", "failed", "interrupted"].includes(summary.state) && summary.progress
+					&& ` · ${summary.progress}`}
 			</p>
 			{error && <p role="alert" className="m-0 text-sm text-destructive-ink">{error}</p>}
 			{!item && loading && <p role="status" className="m-0 text-sm">Loading investigation…</p>}

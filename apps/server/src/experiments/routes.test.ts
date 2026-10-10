@@ -12,6 +12,10 @@ function text(value: { result: { content: Array<{ text: string }> } }) {
 	return JSON.parse(value.result.content[0].text);
 }
 
+function error(value: { result: { isError?: boolean; content: Array<{ text: string }> } }) {
+	return value.result.isError ? value.result.content[0].text : "";
+}
+
 async function setup() {
 	let storage = new MemoryStorage();
 	let now = new Date();
@@ -41,8 +45,10 @@ async function setup() {
 	let alice = await sessions.issue("alice", grant);
 	let bob = await sessions.issue("bob", grant);
 	let github = {
-		repositoryAccess: async (_token: string, _owner: string, name: string) => ({
+		repositoryAccess: async (_token: string, owner: string, name: string) => ({
 			id: name,
+			owner,
+			name,
 			permissions: { pull: true, push: true, admin: false },
 		}),
 	} as unknown as GitHub;
@@ -54,7 +60,8 @@ async function setup() {
 		encryptionKey: new Uint8Array(32),
 	};
 	let router = new Router();
-	registerExperimentRoutes(router, {
+	let lock = { locked: false };
+	let runtime = registerExperimentRoutes(router, {
 		storage,
 		sessions,
 		github,
@@ -65,6 +72,7 @@ async function setup() {
 		lease: () => lease,
 		changed: () => {},
 		context: async () => ({ source: "# Context", revision: 0 }),
+		canMutate: async () => !lock.locked,
 	});
 	async function request(path: string, body?: unknown, cookie?: string, token?: string) {
 		return (await router.handle(
@@ -102,7 +110,20 @@ async function setup() {
 			})).json(),
 		};
 	}
-	return { storage, sessions, config, alice, bob, document, documentId, request, tool, pair };
+	return {
+		storage,
+		sessions,
+		config,
+		alice,
+		bob,
+		document,
+		documentId,
+		request,
+		tool,
+		pair,
+		lock,
+		runtime,
+	};
 }
 
 test("work runs on the clicker's own connection; scoped claims publish", async () => {
@@ -210,8 +231,95 @@ test("one connection serves every document in its repository and no other", asyn
 		(await request(`/api/documents/${second}/experiments/${foreign}/run`, {}, bob.cookie))
 			.status,
 	).toBe(409);
-	expect((await tool(connection.token, "claim_experiment", { id: foreign })).result.isError)
-		.toBe(true);
+	let claimed = await tool(connection.token, "claim_experiment", { id: foreign });
+	expect(claimed.result.isError).toBe(true);
+	expect(claimed.result.content[0].text).toStartWith("connection-forbidden");
+});
+
+test("a claim refuses a document in another repository and interrupts archived or locked ones", async () => {
+	let { alice, document, documentId, request, tool, pair, lock, runtime, storage } = await setup();
+	let connection = await pair(alice.cookie);
+	async function queued(target: string) {
+		let id = crypto.randomUUID();
+		await request(`/api/documents/${target}/experiments`, { id, brief: "Measure" }, alice.cookie);
+		expect(
+			(await request(`/api/documents/${target}/experiments/${id}/run`, {}, alice.cookie))
+				.status,
+		).toBe(200);
+		return id;
+	}
+
+	// A record bound to this connection in another repository is never claimable through it.
+	let elsewhere = await document("other");
+	let foreign = crypto.randomUUID();
+	await runtime.service.create(elsewhere, "alice", "Foreign", foreign);
+	await runtime.service.authorize(foreign, connection.connection.id, {
+		id: foreign,
+		documentId: elsewhere,
+		requester: "alice",
+		authorizer: "alice",
+		brief: "Foreign",
+		source: { repositoryId: "other", repository: "org/other", commit: "a".repeat(40) },
+		context: "Document revision 0",
+	});
+	expect(error(await tool(connection.token, "claim_experiment", { id: foreign })))
+		.toStartWith("repository-forbidden");
+	await runtime.service.stop(foreign, "cancelled");
+
+	let locked = await queued(documentId);
+	lock.locked = true;
+	expect(error(await tool(connection.token, "claim_experiment", { id: locked })))
+		.toStartWith("invalid-state");
+	expect((await runtime.service.store.get(locked))?.state).toBe("interrupted");
+	lock.locked = false;
+
+	let second = await document();
+	let archived = await queued(second);
+	await storage.channels.archive({ id: second, now: new Date() });
+	expect(error(await tool(connection.token, "claim_experiment", { id: archived })))
+		.toStartWith("invalid-state");
+	expect((await runtime.service.store.get(archived))?.state).toBe("interrupted");
+});
+
+test("logging out revokes a run already in progress", async () => {
+	let { alice, documentId, request, tool, pair, sessions, config } = await setup();
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
+	let claim = text(await tool(connection.token, "claim_experiment", { id }));
+	expect(text(await tool(claim.runToken, "read_experiment", {})).input.id).toBe(id);
+	await sessions.revoke(
+		new Request(config.origin, { headers: { cookie: alice.cookie.split(";")[0] } }),
+	);
+	let refused = await request(
+		"/connector/mcp",
+		{
+			jsonrpc: "2.0",
+			id: 1,
+			method: "tools/call",
+			params: { name: "read_experiment", arguments: {} },
+		},
+		undefined,
+		claim.runToken,
+	);
+	expect(refused.status).toBe(401);
+});
+
+test("a pairing carries a confirmation code the page can show", async () => {
+	let { alice, request } = await setup();
+	let pending = await (await request("/api/connector/pairings", {
+		repository: "org/repo",
+		commit: "a".repeat(40),
+		label: "Laptop",
+	})).json();
+	expect(pending.code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+	expect(pending.url).not.toContain(pending.code);
+	let shown =
+		await (await request(`/api/connector/pairings/${pending.id}`, undefined, alice.cookie))
+			.json();
+	expect(shown.code).toBe(pending.code);
+	expect(shown.documents).toBeUndefined();
 });
 
 test("expired pairing and connections cannot be revived by replay", () => {

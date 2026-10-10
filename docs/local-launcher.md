@@ -15,7 +15,8 @@ CHOPIN_URL=https://your-chopin-instance.example \
   bun run connector connect /absolute/path/to/project -- copilot --acp
 ```
 
-Open the printed pairing link, sign into Chopin and select **Connect**. This is
+Open the printed pairing link, sign into Chopin, check that the page shows the
+confirmation code printed in your terminal, and select **Connect**. This is
 the existing investigation pairing flow; one connection serves every document in
 the checkout's repository. No GitHub bearer
 needs to be configured in a second companion. The connector credential is held
@@ -40,8 +41,8 @@ project instructions and configured services.
 3. Review task goals, acceptance criteria and dependencies. To change them, ask
    Chopin in Chat.
 4. Select **Build on my laptop**. The build runs on your own local agent: the
-   server picks your most recently active connection for the repository that is
-   not busy, and derives the checkout from it. Without one, Build shows the
+   server picks your idle connection for the repository, preferring the one that
+   last ran work for this document, and derives the checkout from it. Without one, Build shows the
    connector command to start, and you select it again once connected. Approval
    persists the reviewed document and graph counters, checkout commit,
    connection and the person who started it, then freezes planning edits.

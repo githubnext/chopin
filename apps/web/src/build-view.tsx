@@ -441,13 +441,14 @@ export function BuildView(
 					{since && <span className="build-elapsed">{since}</span>}
 					{action}
 				</div>
-				{needsAgent && (phase.kind === "review" || phase.kind === "failed") && (
+				{(needsAgent || snapshot?.localAgent === false)
+					&& (phase.kind === "review" || phase.kind === "failed") && (
 					<div className="build-note">
 						<p className="m-0">Start your local agent to build:</p>
 						<code className="build-command">
 							{`CHOPIN_URL=${location.origin} bun run connector connect /path/to/project -- copilot --acp`}
 						</code>
-						<p className="m-0">Open the link it prints, then press {primaryLabel} again.</p>
+						<p className="m-0">Open the link it prints, then press {primaryLabel}.</p>
 					</div>
 				)}
 				{phase.kind === "stopped" && returning && (

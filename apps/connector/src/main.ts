@@ -78,6 +78,7 @@ async function connect(args: string[]) {
 		let { root: _root, ...source } = info;
 		let pairing = await post("/api/connector/pairings", { ...source, label: basename(info.root) });
 		console.error(`Connect this checkout of ${info.repository} in Chopin: ${pairing.url}`);
+		console.error(`Confirm code ${pairing.code} in Chopin.`);
 		let token: string | undefined;
 		while (!abort.signal.aborted && !token) {
 			let claim = await post(`/api/connector/pairings/${pairing.id}/claim`, {

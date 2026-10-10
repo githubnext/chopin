@@ -337,7 +337,8 @@ test("Build without a running local agent says how to start one", async ({ seed,
 	await openBuildView(page);
 	let view = buildView(page);
 	await expect(view).toContainText("2 tasks");
-	await expect(view.getByText("Start your local agent to build:")).toHaveCount(0);
+	// The snapshot already knows nobody's agent is connected.
+	await expect(view.getByText("Start your local agent to build:")).toBeVisible();
 	await view.getByRole("button", { name: "Build on my laptop", exact: true }).click();
 	await expect(view.getByText("Start your local agent to build:", { exact: true })).toBeVisible();
 	await expect(view.locator("code")).toContainText("bun run connector connect");

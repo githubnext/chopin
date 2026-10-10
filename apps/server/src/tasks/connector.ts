@@ -53,14 +53,23 @@ export function implementationConnector(
 	let tracked = new Set<string>();
 	let pending = async (connection: Connection) => {
 		let documentId = connections.assigned(connection.id);
-		return documentId
-			? withPlan(documentId, async plan => {
-				let build = plan.builds.at(-1);
-				return build?.connectionId === connection.id && build.user === connection.owner
-					? build
-					: undefined;
-			})
-			: undefined;
+		if (!documentId) return undefined;
+		try {
+			let build = await documentExists(documentId)
+				? await withPlan(documentId, async plan => {
+					let build = plan.builds.at(-1);
+					return build?.connectionId === connection.id && build.user === connection.owner
+						? build
+						: undefined;
+				})
+				: undefined;
+			if (!build || !["queued", "starting", "running"].includes(build.state)) {
+				connections.release(connection.id, documentId);
+			}
+			return build;
+		} catch {
+			return undefined;
+		}
 	};
 	return {
 		track(id: string) {
@@ -176,6 +185,7 @@ export function implementationConnector(
 				await withPlan(id, async plan => {
 					let build = plan.builds.at(-1);
 					if (!build || !["queued", "starting", "running"].includes(build.state)) {
+						if (build) connections.release(build.connectionId, id);
 						tracked.delete(id);
 						return;
 					}
@@ -184,6 +194,7 @@ export function implementationConnector(
 							state: "failed",
 							error: "Workspace disconnected or agent stopped responding. No automatic replay.",
 						});
+						connections.release(build.connectionId, id);
 						tracked.delete(id);
 					}
 				});

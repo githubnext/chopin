@@ -167,6 +167,62 @@ export async function storedResolvedComment(
 	}
 }
 
+async function checkpoint(
+	storage: MemoryStorage,
+	lease: NonNullable<Awaited<ReturnType<MemoryStorage["leases"]["acquire"]>>>,
+	channelId: string,
+	now: Date,
+	source: string,
+	state: SeedState,
+) {
+	let sidecar = {
+		version: 1,
+		revision: state.revision ?? 0,
+		documentSeq: 0,
+		questions: state.questions ?? [],
+		openQuestions: state.openQuestions ?? [],
+		threads: state.threads ?? [],
+		transcript: state.transcript ?? [],
+		...(state.graph ? { graph: state.graph } : {}),
+	} as JsonValue;
+	let document = await Room.create(source);
+	let canonical = Room.project(document);
+	await storage.collaboration.checkpoint({
+		channelId,
+		lease,
+		expectedRevision: 0,
+		generation: crypto.randomUUID(),
+		revision: 0,
+		throughSequence: 0,
+		epoch: document.epoch,
+		source: canonical,
+		sourceHash: `sha256:${createHash("sha256").update(canonical).digest("hex")}`,
+		document: Y.encodeStateAsUpdate(document.doc),
+		sidecar,
+		createdAt: now,
+	});
+	document.doc.destroy();
+}
+
+/** Open another document in the same repository and storage as `context`. */
+export async function openSiblingPlan(
+	context: Awaited<ReturnType<typeof openPlan>>,
+	source = "",
+	state: SeedState = {},
+) {
+	let channel = await context.storage.channels.create({
+		repositoryId: "R_test",
+		repositoryOwner: "owner",
+		repositoryName: "repository",
+		createdBy: "U_test",
+		now: context.now,
+		id: crypto.randomUUID(),
+		title: `Sibling ${crypto.randomUUID()}`,
+	});
+	await checkpoint(context.storage, context.lease, channel.id, context.now, source, state);
+	return Service.open(channel.id, context.backend, context.server);
+}
+
 export async function openPlan(source = "", state: SeedState = {}) {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();
@@ -190,33 +246,7 @@ export async function openPlan(source = "", state: SeedState = {}) {
 	});
 	let lease = await storage.leases.acquire("writer", crypto.randomUUID(), 60_000);
 	if (!lease) throw new Error("could not acquire test lease");
-	let sidecar = {
-		version: 1,
-		revision: state.revision ?? 0,
-		documentSeq: 0,
-		questions: state.questions ?? [],
-		openQuestions: state.openQuestions ?? [],
-		threads: state.threads ?? [],
-		transcript: state.transcript ?? [],
-		...(state.graph ? { graph: state.graph } : {}),
-	} as JsonValue;
-	let document = await Room.create(source);
-	let canonical = Room.project(document);
-	await storage.collaboration.checkpoint({
-		channelId: channel.id,
-		lease,
-		expectedRevision: 0,
-		generation: crypto.randomUUID(),
-		revision: 0,
-		throughSequence: 0,
-		epoch: document.epoch,
-		source: canonical,
-		sourceHash: `sha256:${createHash("sha256").update(canonical).digest("hex")}`,
-		document: Y.encodeStateAsUpdate(document.doc),
-		sidecar,
-		createdAt: now,
-	});
-	document.doc.destroy();
+	await checkpoint(storage, lease, channel.id, now, source, state);
 	let broadcasts: Array<Record<string, unknown>> = [];
 	let broken: string | undefined;
 	let server = {

@@ -60,8 +60,12 @@ for (let transport of ["stdio", "http"] as const) {
 		try {
 			let page = await enter(person());
 			await page.goto(await pairing);
+			let printed = () => output.match(/Confirm code ([A-Z2-9]{4}-[A-Z2-9]{4}) in Chopin/)?.[1];
+			await expect.poll(printed).toBeTruthy();
+			let code = printed();
+			await expect(page.getByText(code!, { exact: true })).toBeVisible();
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
-			await expect(page.getByRole("status")).toContainText("Connected.");
+			await expect(page.getByRole("status")).toHaveText("Connected.");
 			await page.goto(testChannelPath(room));
 			await page.locator("summary").filter({ hasText: /^Propose investigation$/ }).click();
 			await page.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
