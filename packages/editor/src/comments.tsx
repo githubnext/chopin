@@ -189,11 +189,11 @@ export function composerKey(
 }
 
 /**
- * The field and its footer, shared by new comments and replies.
+ * The field and its send, shared by new comments and replies.
  *
- * A new comment's footer is always open. A reply is one quiet line until it is
- * focused or holds text, then folds its footer open inside the same frame. The
- * footer's leading side is left empty for the options a send can carry.
+ * A new comment has a footer row whose leading side is left empty for the
+ * options a send can carry. A reply is one quiet line; focus or text shows its
+ * send inline at the end of the line, and the field grows only with its text.
  */
 function Composer({
 	autoFocus,
@@ -260,6 +260,21 @@ function Composer({
 
 	let open = mode === "new" || focused || text.length > 0;
 	let label = mode === "new" ? "Post comment" : "Send reply";
+	let action = (
+		<button
+			aria-label={label}
+			className="plan-comment-send btn btn-icon btn-primary rounded-full"
+			data-press="small"
+			data-tooltip="Send"
+			data-tooltip-shortcut={coarse ? undefined : "↵"}
+			disabled={!text.trim()}
+			hidden={!open}
+			onClick={send}
+			type="button"
+		>
+			<ArrowUpIcon aria-hidden="true" size={14} />
+		</button>
+	);
 
 	return (
 		<div
@@ -285,22 +300,13 @@ function Composer({
 				rows={1}
 				value={text}
 			/>
-			<div className="plan-comment-composer-fold">
-				<div className="plan-comment-composer-footer" inert={!open || undefined}>
-					<button
-						aria-label={label}
-						className="plan-comment-send btn btn-icon btn-primary rounded-full"
-						data-press="small"
-						data-tooltip="Send"
-						data-tooltip-shortcut={coarse ? undefined : "↵"}
-						disabled={!text.trim()}
-						onClick={send}
-						type="button"
-					>
-						<ArrowUpIcon aria-hidden="true" size={14} />
-					</button>
-				</div>
-			</div>
+			{mode === "new"
+				? (
+					<div className="plan-comment-composer-fold">
+						<div className="plan-comment-composer-footer">{action}</div>
+					</div>
+				)
+				: action}
 		</div>
 	);
 }
