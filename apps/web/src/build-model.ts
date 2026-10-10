@@ -95,10 +95,11 @@ export function attentionHint(snapshot: Snapshot | undefined): string | undefine
 	if (!tasks.length) return;
 	let first = tasks.find(task => task.blocker) ?? tasks[0]!;
 	let reason = first.blocker
-		? `“${first.title}” is blocked: ${first.blocker}`
+		? `“${first.title}” is blocked: ${first.blocker.trim().replace(/\.+$/, "")}`
 		: `“${first.title}” didn’t finish`;
 	let more = tasks.length > 1 ? ` (and ${plural(tasks.length - 1, "other", "others")})` : "";
-	return `${reason}${more}. Edit the document to retry.`;
+	let said = `${reason}${more}`;
+	return `${said}${/[?!…]$/.test(said) ? "" : "."} Edit the document to retry.`;
 }
 
 /** Why a first build has not started yet, when the viewer's agent is finishing a prototype. */
