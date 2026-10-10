@@ -141,7 +141,7 @@ export function CommentSheet(
 								)}
 								{heading.kind === "back" && (
 									<button
-										className="plan-comment-sheet-back btn btn-ghost"
+										className="plan-comment-sheet-back btn btn-md btn-ghost"
 										data-plan-comment-back
 										onClick={onBack}
 										type="button"
