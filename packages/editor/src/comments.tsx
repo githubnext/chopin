@@ -10,11 +10,12 @@
  * never shown here: an accepted one renders through its `<Decision>`.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUpIcon, CheckIcon, ChevronIcon, EllipsisIcon, LinkIcon } from "@chopin/icons";
 
 import { limits } from "@chopin/dialect";
 
+import { ChopinMark } from "./chopin-mark";
 import { displayName } from "./display-name";
 import { Face } from "./face";
 import { PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
@@ -72,15 +73,92 @@ export function Author(
 	);
 }
 
+/** Chopin's author row: Chat's mark at the note-avatar size, its name, the time. */
+function ChopinAuthor({ textSize = "sm", ts }: { textSize?: "xs" | "sm"; ts?: number }) {
+	return (
+		<span
+			className={`flex min-w-0 items-center gap-2 ${textSize === "xs" ? "text-xs" : "text-sm"}`}
+		>
+			<span aria-hidden="true" className="plan-comment-agent">
+				<ChopinMark circle />
+			</span>
+			<span className="min-w-0 truncate font-semibold text-text-primary">Chopin</span>
+			{ts !== undefined && (
+				<time
+					className="shrink-0 text-xs text-text-quaternary tabular-nums"
+					dateTime={new Date(ts * 1_000).toISOString()}
+				>
+					{stamp(ts)}
+				</time>
+			)}
+		</span>
+	);
+}
+
+/** Whoever wrote a note: a member by their face and name, or Chopin by its mark. */
+export function NoteAuthor(
+	{ note, textSize, ts }: { note: Comment.Note; textSize?: "xs" | "sm"; ts?: number },
+) {
+	return note.author === "planner"
+		? <ChopinAuthor textSize={textSize} ts={ts} />
+		: <Author handle={note.handle} textSize={textSize} ts={ts} />;
+}
+
+/** The address a note was sent with, drawn from `to` because the text never carries it. */
+function Mention() {
+	return <span className="plan-comment-mention">@Chopin</span>;
+}
+
 function Note({ actions, note }: { actions?: ReactNode; note: Comment.Note }) {
 	return (
-		<li className="plan-comment-note">
+		<li className="plan-comment-note" data-planner={note.author === "planner" || undefined}>
 			<div className="plan-comment-note-head">
-				<Author handle={note.handle} ts={note.ts} />
+				<NoteAuthor note={note} ts={note.ts} />
 				{actions}
 			</div>
-			<p className="plan-comment-note-body">{note.text}</p>
+			<p className="plan-comment-note-body">
+				{note.to === "planner" && (
+					<>
+						<Mention />
+						{" "}
+					</>
+				)}
+				{note.text}
+			</p>
 		</li>
+	);
+}
+
+/** Three dots that rise in turn; still under reduced motion. */
+function Dots() {
+	return (
+		<span aria-hidden="true" className="plan-comment-dots">
+			<i />
+			<i />
+			<i />
+		</span>
+	);
+}
+
+/** What the reader is told about Chopin's turn on this thread, while it runs or once it stopped. */
+const OUTCOME: Record<NonNullable<ThreadView["planner"]>, string> = {
+	working: "Chopin is working on it",
+	stopped: "Chopin stopped",
+	failed: "Chopin couldn't reply",
+	off: "Chopin isn't running",
+};
+
+function PlannerStatus({ state }: { state: NonNullable<ThreadView["planner"]> }) {
+	return (
+		<div
+			aria-live="polite"
+			className="plan-comment-planner"
+			data-plan-comment-planner={state}
+			role="status"
+		>
+			{state === "working" && <Dots />}
+			<span>{OUTCOME[state]}</span>
+		</div>
 	);
 }
 
@@ -189,11 +267,33 @@ export function composerKey(
 }
 
 /**
+ * Whether the text just typed addresses Chopin: `@chopin` as a word of its own,
+ * once the next character ends it. Returns the text without the mention, and
+ * where the caret belongs afterwards, or nothing when there is no mention.
+ */
+export function mention(
+	value: string,
+	caret: number,
+): { text: string; caret: number } | undefined {
+	let match = /(^|\s)@chopin(?=[\s,.;:!?])/i.exec(value);
+	if (!match) return undefined;
+	let start = match.index + match[1]!.length;
+	let end = start + "@chopin".length;
+	// The chip carries its own gap, so the space that ended the mention goes too.
+	if (/\s/.test(value[end] ?? "")) end += 1;
+	let text = (value.slice(0, start) + value.slice(end)).replace(/^\s+/, "");
+	let removed = value.length - text.length;
+	return { text, caret: Math.max(0, Math.min(text.length, caret - removed)) };
+}
+
+/**
  * The field and its send, shared by new comments and replies.
  *
- * A new comment has a footer row whose leading side is left empty for the
- * options a send can carry. A reply is one quiet line; focus or text shows its
- * send inline at the end of the line, and the field grows only with its text.
+ * Its footer holds Send to Chopin and the send. A new comment shows the footer
+ * always; a reply is one quiet line until it is focused or holds something,
+ * then grows to reveal it. Addressing Chopin — the checkbox, or `@chopin` typed
+ * as a word — puts an `@Chopin` chip at the start of the text. The chip is not
+ * text and is never sent: the destination is.
  */
 function Composer({
 	autoFocus,
@@ -205,18 +305,27 @@ function Composer({
 	autoFocus?: boolean;
 	mode: "new" | "reply";
 	onCancel?: () => void;
-	onSend: (text: string) => void;
+	onSend: (text: string, to?: "planner") => void;
 	onTyping?: (writing: boolean) => void;
 }) {
 	let [text, setText] = useState("");
+	let [to, setTo] = useState(false);
 	let [focused, setFocused] = useState(false);
 	let [coarse, setCoarse] = useState(false);
+	let [indent, setIndent] = useState(0);
 	let ref = useRef<HTMLTextAreaElement>(null);
+	let chip = useRef<HTMLSpanElement>(null);
+	let caret = useRef<number | undefined>(undefined);
+	let checkbox = useId();
 
 	useEffect(() => {
 		setCoarse(matchMedia(PRIMARY_COARSE_POINTER_QUERY).matches);
 		if (autoFocus) ref.current?.focus({ preventScroll: true });
 	}, [autoFocus]);
+
+	useLayoutEffect(() => {
+		setIndent(to && chip.current ? chip.current.offsetWidth : 0);
+	}, [to]);
 
 	useLayoutEffect(() => {
 		let field = ref.current;
@@ -225,24 +334,50 @@ function Composer({
 		let height = Math.min(field.scrollHeight, 160);
 		field.style.height = `${height}px`;
 		field.style.overflowY = field.scrollHeight > height ? "auto" : "hidden";
-	}, [text]);
+		if (caret.current !== undefined) {
+			field.setSelectionRange(caret.current, caret.current);
+			caret.current = undefined;
+		}
+	}, [text, indent]);
 
 	// Whoever is typing stops being told about the moment this goes away, so
 	// an unmount does not leave a caret blinking in somebody else's card.
 	useEffect(() => () => onTyping?.(false), [onTyping]);
 
+	let change = (value: string, at: number) => {
+		let found = mention(value, at);
+		if (found) {
+			caret.current = found.caret;
+			setTo(true);
+			value = found.text;
+		} else if (to) {
+			value = value.replace(/^\s+/, "");
+		}
+		setText(value);
+		onTyping?.(value.length > 0);
+	};
+
 	let send = () => {
 		let value = text.trim();
 		if (!value) return;
 		setText("");
+		setTo(false);
 		onTyping?.(false);
-		onSend(value);
+		onSend(value, to ? "planner" : undefined);
 		// A clicked send disables itself and drops focus without a blur, which would leave
 		// the field believing it still had focus; the field takes it back instead.
 		ref.current?.focus({ preventScroll: true });
 	};
 
 	let key = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		let field = event.currentTarget;
+		if (
+			event.key === "Backspace" && to && field.selectionStart === 0 && field.selectionEnd === 0
+		) {
+			event.preventDefault();
+			setTo(false);
+			return;
+		}
 		let action = composerKey(
 			{
 				key: event.key,
@@ -261,23 +396,8 @@ function Composer({
 		}
 	};
 
-	let open = mode === "new" || focused || text.length > 0;
+	let open = mode === "new" || focused || text.length > 0 || to;
 	let label = mode === "new" ? "Post comment" : "Send reply";
-	let action = (
-		<button
-			aria-label={label}
-			className="plan-comment-send btn btn-icon btn-primary rounded-full"
-			data-press="small"
-			data-tooltip="Send"
-			data-tooltip-shortcut={coarse ? undefined : "↵"}
-			disabled={!text.trim()}
-			hidden={!open}
-			onClick={send}
-			type="button"
-		>
-			<ArrowUpIcon aria-hidden="true" size={14} />
-		</button>
-	);
 
 	return (
 		<div
@@ -289,27 +409,54 @@ function Composer({
 			}}
 			onFocus={() => setFocused(true)}
 		>
-			<textarea
-				aria-label={mode === "new" ? "Comment" : "Reply"}
-				className="plan-comment-composer-field"
-				maxLength={limits.MAX_NOTE}
-				onChange={event => {
-					setText(event.target.value);
-					onTyping?.(event.target.value.length > 0);
-				}}
-				onKeyDown={key}
-				placeholder={mode === "new" ? "Add a comment" : "Reply"}
-				ref={ref}
-				rows={1}
-				value={text}
-			/>
-			{mode === "new"
-				? (
-					<div className="plan-comment-composer-fold">
-						<div className="plan-comment-composer-footer">{action}</div>
-					</div>
-				)
-				: action}
+			<div className="plan-comment-composer-input">
+				{to && (
+					<span aria-hidden="true" className="plan-comment-chip" ref={chip}>
+						@Chopin
+					</span>
+				)}
+				<textarea
+					aria-label={mode === "new" ? "Comment" : "Reply"}
+					className="plan-comment-composer-field"
+					maxLength={limits.MAX_NOTE}
+					onChange={event => change(event.target.value, event.target.selectionStart)}
+					onKeyDown={key}
+					placeholder={mode === "new" ? "Add a comment" : "Reply"}
+					ref={ref}
+					rows={1}
+					style={indent ? { textIndent: `calc(${indent}px + 0.25rem)` } : undefined}
+					value={text}
+				/>
+			</div>
+			<div className="plan-comment-composer-fold">
+				<div className="plan-comment-composer-footer" inert={!open || undefined}>
+					<label className="plan-comment-address" htmlFor={checkbox}>
+						<input
+							checked={to}
+							className="plan-comment-address-box choice-control"
+							id={checkbox}
+							onChange={event => {
+								setTo(event.target.checked);
+								ref.current?.focus({ preventScroll: true });
+							}}
+							type="checkbox"
+						/>
+						Send to Chopin
+					</label>
+					<button
+						aria-label={label}
+						className="plan-comment-send btn btn-icon btn-primary rounded-full"
+						data-press="small"
+						data-tooltip="Send"
+						data-tooltip-shortcut={coarse ? undefined : "↵"}
+						disabled={!text.trim()}
+						onClick={send}
+						type="button"
+					>
+						<ArrowUpIcon aria-hidden="true" size={14} />
+					</button>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -322,7 +469,7 @@ export type ThreadCardProps = {
 	canEdit?: boolean;
 	/** An address that opens this thread, for Copy link. */
 	link?: string;
-	onReply: (text: string) => void;
+	onReply: (text: string, to?: "planner") => void;
 	onResolve: () => void;
 	onTyping: (writing: boolean) => void;
 	onFocus: () => void;
@@ -416,6 +563,8 @@ export function ThreadCard({
 				</div>
 			)}
 
+			{view.planner && <PlannerStatus state={view.planner} />}
+
 			{writing && writing.length > 0 && (
 				<p className="m-0 text-sm text-text-secondary">
 					{writing.join(", ")} {writing.length === 1 ? "is" : "are"} writing…
@@ -494,7 +643,7 @@ export function ThreadList({ autoFocus = true, onSelect, returnTo, views }: Thre
 								type="button"
 							>
 								<span className="plan-comment-note-head">
-									{opening && <Author handle={opening.handle} ts={opening.ts} />}
+									{opening && <NoteAuthor note={opening} ts={opening.ts} />}
 									{replies > 0 && (
 										<span className="plan-comment-group-replies">
 											{replies} {replies === 1 ? "reply" : "replies"}
@@ -512,7 +661,7 @@ export function ThreadList({ autoFocus = true, onSelect, returnTo, views }: Thre
 }
 
 export type DraftCardProps = {
-	onSend: (text: string) => void;
+	onSend: (text: string, to?: "planner") => void;
 	onCancel: () => void;
 };
 

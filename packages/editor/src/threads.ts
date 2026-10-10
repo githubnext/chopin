@@ -68,6 +68,11 @@ export type ThreadView = {
 	quote: string;
 	/** Position in the document, for ordering the pane. Undefined if unresolved. */
 	at?: number;
+	/**
+	 * Chopin's turn on this thread: running or queued, or why the last one
+	 * ended without finishing. Absent once it finished, or if it never started.
+	 */
+	planner?: "working" | "stopped" | "failed" | "off";
 };
 
 export type ThreadState = {
@@ -89,6 +94,8 @@ export class ThreadStore {
 	#threads = new Map<string, Comment.Thread>();
 	#anchors = new Map<string, Plan.ThreadAnchors>();
 	#writing = new Map<string, Map<string, string>>();
+	/** Chopin's turn per thread, from `comment:working` and the replies to addressed notes. */
+	#planner = new Map<string, NonNullable<ThreadView["planner"]>>();
 	#draft: Draft | undefined;
 	#focused: string | undefined;
 	#error: string | undefined;
@@ -142,6 +149,7 @@ export class ThreadStore {
 			wire.on<Comment.Resolved>("comment:resolved", frame => this.resolved(frame)),
 			wire.on<Comment.Reopened>("comment:reopened", frame => this.reopened(frame.thread)),
 			wire.on<Comment.Typing.Output>("comment:typing", frame => this.typing(frame)),
+			wire.on<Comment.Working>("comment:working", frame => this.working(frame)),
 		];
 
 		return () => {
@@ -153,15 +161,25 @@ export class ThreadStore {
 	// -- acting ----------------------------------------------------------------
 
 	/** Send the drafted comment. The thread arrives back as `comment:opened`. */
-	start(text: string): void {
+	start(text: string, to?: "planner"): void {
 		let draft = this.#draft;
 		if (!draft || !this.#wire) return;
 
 		let { blocks, length, offset, quote } = draft;
 		void this.#wire
-			.ask<Comment.Start.Reply>("comment:start", { blocks, quote, offset, length, text })
+			.ask<Comment.Start.Reply>("comment:start", {
+				blocks,
+				quote,
+				offset,
+				length,
+				text,
+				...(to ? { to } : {}),
+			})
 			.then(frame => {
-				if (frame.ok) return this.opened(frame.thread);
+				if (frame.ok) {
+					this.#sent(frame.thread.id, frame.planner);
+					return this.opened(frame.thread);
+				}
 				// The plan moved under the selection, or there are too many
 				// open threads. Either way the draft is no longer sendable.
 				this.#draft = undefined;
@@ -171,13 +189,34 @@ export class ThreadStore {
 			.catch(() => {});
 	}
 
-	reply(id: string, text: string): void {
+	reply(id: string, text: string, to?: "planner"): void {
 		void this.#wire
-			?.ask<Comment.Reply.Reply>("comment:reply", { id, text })
+			?.ask<Comment.Reply.Reply>("comment:reply", { id, text, ...(to ? { to } : {}) })
 			.then(frame => {
-				if (frame.ok) this.said(id, frame.note);
+				if (!frame.ok) return;
+				this.#sent(id, frame.planner);
+				this.said(id, frame.note);
 			})
 			.catch(() => {});
+	}
+
+	/**
+	 * What the sender of an addressed note learns at once.
+	 *
+	 * The room hears the same from `comment:working`; this only spares the
+	 * sender a beat of nothing, and says when no Planner will come at all.
+	 */
+	#sent(id: string, planner: Comment.Planner | undefined): void {
+		if (!planner) return;
+		this.#planner.set(id, planner === "off" ? "off" : "working");
+	}
+
+	/** Chopin started, finished or stopped working on a thread. */
+	working(event: Comment.Working): void {
+		if (event.working) this.#planner.set(event.id, "working");
+		else if (event.reason) this.#planner.set(event.id, event.reason);
+		else this.#planner.delete(event.id);
+		this.refresh();
 	}
 
 	/**
@@ -233,6 +272,9 @@ export class ThreadStore {
 	/** Replace everything, from `comment:sync`. */
 	sync(threads: Comment.Thread[]): void {
 		this.#threads = new Map(threads.map(thread => [thread.id, thread]));
+		this.#planner = new Map(
+			threads.flatMap(thread => thread.working ? [[thread.id, "working" as const]] : []),
+		);
 		this.refresh();
 	}
 
@@ -404,7 +446,7 @@ export class ThreadStore {
 					// Nothing resolves before the editor exists; the card still
 					// renders, with the quote and no highlight.
 					let placement = editor && binding && anchors
-						? this.#places(binding, anchors)
+						? this.#places(binding, anchors, thread.status === "open")
 						: { places: [] };
 					let { places } = placement;
 					let targetKey = thread.status === "open" ? placement.targetKey : undefined;
@@ -424,6 +466,7 @@ export class ThreadStore {
 						applied: !!anchors && !anchors.result.pending,
 						quote: thread.quote ?? anchors?.subject.quote ?? "",
 						...(first && editor ? { at: order(editor, first.anchorKey) } : {}),
+						...(this.#planner.has(thread.id) ? { planner: this.#planner.get(thread.id) } : {}),
 					});
 
 					// Accepted threads render through their inline Decision instead.
@@ -488,23 +531,36 @@ export class ThreadStore {
 	#places(
 		binding: Binding,
 		anchors: Plan.ThreadAnchors,
+		open: boolean,
 	): { places: Points[]; targetKey?: string } {
 		let { result, subject } = anchors;
 
 		// Pending means nobody has checked this since the plan moved, so it is
 		// not somewhere worth sending a reader.
-		if (result.anchors.length > 0 && !result.pending) {
-			let produced = result.anchors
-				.map(anchor => resolve(binding, anchor))
-				.flatMap(key => (key ? [$blockPoints(key)] : []))
-				.filter((points): points is Points => !!points);
-			if (produced.length > 0) return { places: produced };
+		let produced = () =>
+			result.anchors.length > 0 && !result.pending
+				? result.anchors
+					.map(anchor => resolve(binding, anchor))
+					.flatMap(key => (key ? [$blockPoints(key)] : []))
+					.filter((points): points is Points => !!points)
+				: [];
+
+		// An open thread is still about the phrase somebody marked, even after
+		// Chopin has written something for it; only once that phrase is gone
+		// does it follow what was written.
+		if (!open) {
+			let written = produced();
+			if (written.length > 0) return { places: written };
 		}
 
 		let targetKey = subject.blocks
 			.map(block => resolve(binding, block))
 			.find((key): key is string => !!key);
 		let found = locate(binding, subject) ?? this.#recover(binding, subject);
+		if (!found && open) {
+			let written = produced();
+			if (written.length > 0) return { places: written };
+		}
 		return {
 			places: found ? [found] : [],
 			...(targetKey ? { targetKey } : {}),

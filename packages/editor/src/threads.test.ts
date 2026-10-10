@@ -17,7 +17,7 @@ import { ThreadStore } from "./threads";
 import type { Comment, Plan } from "@chopin/protocol";
 
 function note(handle: string, text: string, id = `${handle}-${text}`): Comment.Note {
-	return { id, handle, text, ts: 1 };
+	return { id, author: "member", handle, text, ts: 1 };
 }
 
 function thread(over: Partial<Comment.Thread> = {}): Comment.Thread {
@@ -93,7 +93,11 @@ describe("holding what threads say", () => {
 		subject.sync([value]);
 		subject.said(value.id, note("kris", "Agreed."));
 
-		expect(subject.snapshot().threads[0]?.thread.notes.map(each => each.handle))
+		expect(
+			subject.snapshot().threads[0]?.thread.notes.map(each =>
+				each.author === "member" ? each.handle : "chopin"
+			),
+		)
 			.toEqual(["ana", "kris"]);
 	});
 
@@ -499,5 +503,77 @@ describe("publishing", () => {
 		subject.said(value.id, note("kris", "Agreed."));
 
 		expect(seen).toBe(1);
+	});
+});
+
+describe("Chopin's turn on a thread", () => {
+	it("sends the destination, never a mention, and shows Chopin working at once", async () => {
+		let subject = store();
+		let { sent, transport } = wire(() => ({
+			kind: "comment:reply",
+			id: "t1",
+			ok: true,
+			note: { ...note("ana", "Shorter, please."), to: "planner" },
+			planner: "queued",
+		}));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1" })]);
+
+		subject.reply("t1", "Shorter, please.", "planner");
+		await Bun.sleep(0);
+
+		expect(sent).toEqual([{
+			kind: "comment:reply",
+			payload: { id: "t1", text: "Shorter, please.", to: "planner" },
+		}]);
+		expect(subject.snapshot().threads[0]?.planner).toBe("working");
+	});
+
+	it("says when no Chopin is running to read it", async () => {
+		let subject = store();
+		let { transport } = wire(() => ({
+			kind: "comment:reply",
+			id: "t1",
+			ok: true,
+			note: note("ana", "Hello?"),
+			planner: "off",
+		}));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1" })]);
+
+		subject.reply("t1", "Hello?", "planner");
+		await Bun.sleep(0);
+
+		expect(subject.snapshot().threads[0]?.planner).toBe("off");
+	});
+
+	it("follows the room's working frames, keeping why a turn stopped", () => {
+		let subject = store();
+		subject.sync([thread({ id: "t1", working: true })]);
+		expect(subject.snapshot().threads[0]?.planner).toBe("working");
+
+		subject.working({
+			kind: "comment:working",
+			ts: 0,
+			id: "t1",
+			working: false,
+			reason: "stopped",
+		});
+		expect(subject.snapshot().threads[0]?.planner).toBe("stopped");
+
+		subject.working({ kind: "comment:working", ts: 0, id: "t1", working: true });
+		subject.working({ kind: "comment:working", ts: 0, id: "t1", working: false });
+		expect(subject.snapshot().threads[0]).not.toHaveProperty("planner");
+	});
+
+	it("shows the Planner's note in the thread", () => {
+		let subject = store();
+		subject.sync([thread({ id: "t1" })]);
+
+		subject.said("t1", { id: "p1", author: "planner", text: "Done.", ts: 2 });
+
+		expect(subject.snapshot().threads[0]?.thread.notes.at(-1)).toMatchObject({
+			author: "planner",
+		});
 	});
 });
