@@ -1260,9 +1260,11 @@ test("clicking a comment button pins its document card and preserves the related
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	card = await thread(page);
 
-	await expect.poll(() => washed(page)).toBeGreaterThan(0);
+	// The pinned card underlines its passage, and keeps it while the pointer is elsewhere.
+	await expect.poll(() => washed(page, ["plan-comment-open"])).toBe(1);
 	await content(page).hover();
-	await expect.poll(() => washed(page)).toBeGreaterThan(0);
+	await expect.poll(() => washed(page, ["plan-comment-open"])).toBe(1);
+	await expect.poll(() => washed(page, ["plan-comment"])).toBe(0);
 });
 
 test("a live text edit preserves its document comment", async ({ join, seed }) => {
@@ -1339,10 +1341,14 @@ test("a remotely orphaned compact comment closes its sheet and restores editor f
 	await expect(page.getByRole("button", { name: "1 orphaned comments" })).toBeVisible();
 });
 
-function washed(page: import("@playwright/test").Page): Promise<number> {
-	return page.evaluate(() =>
-		["plan-comment", "plan-comment-hover", "plan-comment-open"]
-			.reduce((total, name) => total + (CSS.highlights.get(name)?.size ?? 0), 0)
+/** Commented passages washed in any tone, or only in the named ones. */
+function washed(
+	page: import("@playwright/test").Page,
+	names = ["plan-comment", "plan-comment-hover", "plan-comment-open"],
+): Promise<number> {
+	return page.evaluate(
+		names => names.reduce((total, name) => total + (CSS.highlights.get(name)?.size ?? 0), 0),
+		names,
 	);
 }
 
