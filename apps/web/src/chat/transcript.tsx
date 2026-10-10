@@ -4,10 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore }
 import { CloseIcon, MessageIcon, SignInIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
-import { Face, useCardMeta } from "@chopin/editor";
+import { ChopinMark, Face, useCardMeta } from "@chopin/editor";
 import { EmptyState } from "@chopin/visuals";
 
-import { ChopinMark } from "./agent-mark";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";

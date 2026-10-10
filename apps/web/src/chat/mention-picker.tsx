@@ -1,5 +1,4 @@
-import { ChopinMark } from "./agent-mark";
-import { Face } from "@chopin/editor";
+import { ChopinMark, Face } from "@chopin/editor";
 import { useEffect } from "react";
 
 import { referenceOptionId } from "./reference-picker";
