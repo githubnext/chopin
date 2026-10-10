@@ -27,6 +27,7 @@ import { sidebarMoving, usePaneMotion, usePaneSettledWidth } from "./pane-motion
 import { listenForShortcuts } from "./global-shortcuts";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
+import { BUILD_UNAVAILABLE } from "./decision-view-control";
 
 import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
 import type { DocumentActivity } from "./document-activity";
@@ -319,6 +320,7 @@ export function Workspace(
 	let previousChatOpen = useRef(state.chatOpen);
 	let chatInactive = !presentation.chatVisible;
 	let destinations = workspaceDestinations(profile.implementation);
+	let buildReason = useId();
 	let focusDestination = (destination: WorkspaceDestination) => {
 		root.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.heading[destination])}`)
 			?.focus({ preventScroll: true });
@@ -416,15 +418,21 @@ export function Workspace(
 							chatActivity,
 							active ? undefined : documentActivity,
 						);
+						let unavailable = destination === "build" && !buildEnabled;
 						return (
 							<button
 								aria-current={active ? "page" : undefined}
+								aria-describedby={unavailable ? buildReason : undefined}
+								aria-disabled={unavailable || undefined}
 								aria-label={label}
 								aria-pressed={active}
-								className="btn btn-md btn-ghost min-h-11 min-w-0"
-								disabled={destination === "build" && !buildEnabled}
+								className={`btn btn-md btn-ghost min-h-11 min-w-0 ${
+									unavailable ? "cursor-default opacity-40" : ""
+								}`}
 								key={destination}
-								onClick={event => navigate(destination, event.currentTarget)}
+								onClick={event => {
+									if (!unavailable) navigate(destination, event.currentTarget);
+								}}
 								type="button"
 							>
 								{destination === "chat"
@@ -453,6 +461,9 @@ export function Workspace(
 							</button>
 						);
 					})}
+					{profile.implementation && !buildEnabled && (
+						<span className="sr-only" id={buildReason}>{BUILD_UNAVAILABLE}</span>
+					)}
 				</nav>
 			)}
 
@@ -566,7 +577,7 @@ export function Workspace(
 								>
 									<section
 										aria-labelledby={ids.heading.build}
-										className="h-full min-h-0 overflow-auto p-6"
+										className="h-full min-h-0"
 										data-document-view="build"
 									>
 										<h2 className="sr-only" id={ids.heading.build} tabIndex={-1}>Build</h2>
