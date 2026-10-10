@@ -1,7 +1,7 @@
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
-import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
+import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-attention";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { IconButton } from "./icon-button";
 import { MenuItem, MenuSeparator } from "./menu-item";

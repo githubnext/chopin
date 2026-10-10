@@ -1,33 +1,10 @@
-import { Count } from "@chopin/editor";
-import { useEffect, useId, useRef, useState } from "react";
+import { Count } from "@chopin/editor/count";
+import { useId } from "react";
 
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
 
 import type { WorkspaceDocumentView } from "./workspace-model";
 import type { DocumentActivity } from "./document-activity";
-
-export function decisionAttention(previous: number, current: number): boolean {
-	return current > previous;
-}
-
-export function useDecisionAttention(unanswered: number): boolean {
-	let previous = useRef(unanswered);
-	let [attention, setAttention] = useState(false);
-	useEffect(() => {
-		let prior = previous.current;
-		previous.current = unanswered;
-		if (!decisionAttention(prior, unanswered)) return;
-		setAttention(true);
-		let timer = window.setTimeout(() => setAttention(false), 200);
-		return () => window.clearTimeout(timer);
-	}, [unanswered]);
-	return attention;
-}
-
-export function unansweredDecisionsLabel(label: string, unanswered: number): string {
-	if (unanswered <= 0) return label;
-	return `${label}, ${unanswered} unanswered ${unanswered === 1 ? "decision" : "decisions"}`;
-}
 
 /** Why Build cannot open yet, for its tooltip and accessible description. */
 export const BUILD_UNAVAILABLE = "Write the document before building it";
@@ -36,6 +13,7 @@ export function DecisionViewControl(
 	{
 		attention,
 		buildEnabled,
+		hasGraph,
 		documentActivity,
 		onView,
 		unanswered,
@@ -43,6 +21,7 @@ export function DecisionViewControl(
 	}: {
 		attention?: boolean;
 		buildEnabled?: boolean;
+		hasGraph?: boolean;
 		documentActivity?: DocumentActivity;
 		onView: (view: WorkspaceDocumentView) => void;
 		unanswered: number;
@@ -104,6 +83,21 @@ export function DecisionViewControl(
 					</span>
 				)}
 			</button>
+			{hasGraph && (
+				<button
+					aria-current={view === "graph" ? "page" : undefined}
+					aria-pressed={view === "graph"}
+					className={`btn btn-sm ${
+						view === "graph"
+							? "bg-ground font-medium text-gray-800"
+							: "text-text-tertiary hover:bg-hover"
+					}`}
+					onClick={() => onView("graph")}
+					type="button"
+				>
+					Task graph
+				</button>
+			)}
 			{buildEnabled !== undefined && (
 				<BuildSegment ready={buildEnabled} selected={view === "build"} onView={onView} />
 			)}

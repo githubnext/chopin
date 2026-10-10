@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { unansweredDecisionsLabel } from "./decision-view-control";
+import { unansweredDecisionsLabel } from "./decision-attention";
 import {
 	acceptDecisionCounts,
 	applyDecisionCounts,

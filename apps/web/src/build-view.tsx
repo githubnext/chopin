@@ -2,6 +2,12 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { ApiError } from "./api";
 import {
+	implementationResponse as response,
+	useImplementationSnapshot,
+} from "./implementation-snapshot";
+import { TaskGraphView } from "./task-graph-view";
+import { taskGraphModel } from "./task-graph-model";
+import {
 	advanceDraft,
 	buildPhase,
 	buildProgress,
@@ -17,7 +23,7 @@ import {
 	taskStartsOpen,
 } from "./build-model";
 
-import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
+import type { Implementation } from "@chopin/protocol/implementation";
 import type { ReactNode } from "react";
 import type { DraftEvent, DraftRequest, TaskState } from "./build-model";
 import type { Wire } from "./wire";
@@ -28,12 +34,6 @@ const drafted = new Set<string>();
 const requests = new Map<string, DraftRequest>();
 /** How long a request may wait for the server's answer before it counts as failed. */
 const ANSWER_WINDOW_MS = 10_000;
-
-async function response<T>(result: Response): Promise<T> {
-	let value = await result.json();
-	if (!result.ok) throw new ApiError(value.error ?? "Build is unavailable", result.status);
-	return value;
-}
 
 function sentence(text: string): string {
 	return text.replace(/^[a-z]/, letter => letter.toUpperCase());
@@ -51,6 +51,8 @@ export function BuildView(
 		canEdit,
 		chatLoaded,
 		comments,
+		graph = false,
+		onShowBuild,
 		onShowDecisions,
 		onShowDocument,
 		planner,
@@ -66,6 +68,9 @@ export function BuildView(
 		chatLoaded: boolean;
 		/** Accepted comments the document has not yet taken in. */
 		comments: number;
+		/** Both presentations share launch, recovery and snapshot handling. */
+		graph?: boolean;
+		onShowBuild?: () => void;
 		onShowDecisions: () => void;
 		onShowDocument: () => void;
 		planner: boolean;
@@ -76,11 +81,10 @@ export function BuildView(
 		wire?: Wire;
 	},
 ) {
-	let [snapshot, setSnapshot] = useState<ImplementationSnapshot>();
-	let [loadError, setLoadError] = useState<string>();
 	let [actionError, setActionError] = useState<string>();
 	let [busy, setBusy] = useState(false);
-	let [refresh, setRefresh] = useState(0);
+	let actionPending = useRef(false);
+	let [selectedWorkspace, setSelectedWorkspace] = useState("");
 	let [needsAgent, setNeedsAgent] = useState(false);
 	let [returning, setReturning] = useState(false);
 	let [reason, setReason] = useState("");
@@ -97,7 +101,7 @@ export function BuildView(
 		let next = advanceDraft(requests.get(room), event);
 		if (!next) return;
 		setRequest(next);
-		if (next.state === "ended") setRefresh(value => value + 1);
+		if (next.state === "ended") refresh();
 	};
 	/**
 	 * One entry into Build. Only its first read decides whether to draft, and it
@@ -105,59 +109,41 @@ export function BuildView(
 	 */
 	let activation = useRef({ id: 0, decided: false, eligible: undefined as string | undefined });
 	let [autoSent, setAutoSent] = useState(0);
-	let endpoint = `/api/channels/${encodeURIComponent(room)}/implementation`;
+	let { snapshot, loadError, refresh, endpoint } = useImplementationSnapshot({
+		active,
+		room,
+		wire,
+		onLoad(value) {
+			if (graph) return;
+			let next = buildPhase(value);
+			let nextKey = next.kind === "drafting"
+				? draftKey(room, value.planRevision, next.draft)
+				: undefined;
+			let current = activation.current;
+			if (!current.decided) {
+				current.decided = true;
+				current.eligible = nextKey;
+			}
+			let latest = requests.get(room);
+			if (latest?.state === "ended") {
+				setRequest(nextKey === latest.key ? { ...latest, state: "failed" } : undefined);
+			}
+		},
+	});
 	let phase = buildPhase(snapshot);
 	let progress = buildProgress(snapshot);
 	let draft = phase.kind === "drafting" ? phase.draft : undefined;
 	let key = snapshot && draft ? draftKey(room, snapshot.planRevision, draft) : undefined;
-	let canDraft = canEdit && planner;
+	let canDraft = canEdit && planner && !graph;
+	let workspace = selectedWorkspace
+		? snapshot?.workspaces.find(item => item.id === selectedWorkspace)
+		: snapshot?.workspaces.find(item => item.available);
+	let workspaceUnavailable = graph && !!snapshot?.workspaces.length && !workspace?.available;
 
 	useEffect(() => {
 		if (!active) return;
 		activation.current = { id: activation.current.id + 1, decided: false, eligible: undefined };
 	}, [active]);
-
-	useEffect(() => {
-		if (!active) return;
-		let controller = new AbortController();
-		let entered = activation.current.id;
-		void (async () => {
-			try {
-				let value = await response<ImplementationSnapshot>(
-					await fetch(endpoint, { signal: controller.signal, cache: "no-store" }),
-				);
-				if (controller.signal.aborted) return;
-				setSnapshot(current => !current || value.revision >= current.revision ? value : current);
-				setLoadError(undefined);
-				let next = buildPhase(value);
-				let nextKey = next.kind === "drafting"
-					? draftKey(room, value.planRevision, next.draft)
-					: undefined;
-				let current = activation.current;
-				if (current.id === entered && !current.decided) {
-					current.decided = true;
-					current.eligible = nextKey;
-				}
-				// A turn that ended and left nothing to review failed, as far as Build can tell.
-				let latest = requests.get(room);
-				if (latest?.state === "ended") {
-					setRequest(nextKey === latest.key ? { ...latest, state: "failed" } : undefined);
-				}
-			} catch (error) {
-				if (controller.signal.aborted) return;
-				setLoadError(error instanceof Error ? error.message : "Connection failed");
-			}
-		})();
-		return () => controller.abort();
-	}, [active, endpoint, refresh]);
-
-	useEffect(() => {
-		if (!active) return;
-		let reload = () => setRefresh(value => value + 1);
-		let off = ["plan:implementation", "plan:open", "plan:update", "experiment:changed"]
-			.map(kind => wire?.on(kind, reload));
-		return () => off.forEach(remove => remove?.());
-	}, [active, wire]);
 
 	// The server answers with the document's live request, which may be a collaborator's.
 	let sendDraft = async () => {
@@ -179,17 +165,17 @@ export function BuildView(
 			}
 			if (requests.get(room)?.state === "sending") setRequest(undefined);
 			setActionError(copy);
-			setRefresh(value => value + 1);
+			refresh();
 		}
 	};
 
 	useEffect(
 		() =>
-			wire?.on<Implementation.Drafting>(
+			graph ? undefined : wire?.on<Implementation.Drafting>(
 				"implementation:drafting",
 				frame => advance({ type: "drafting", id: frame.id, state: frame.state }),
 			),
-		[wire, room],
+		[wire, room, graph],
 	);
 
 	// Opening Build drafts the tasks, once, and never while the Planner is in a turn.
@@ -233,6 +219,7 @@ export function BuildView(
 	useEffect(() => setNeedsAgent(false), [phase.kind]);
 
 	useEffect(() => {
+		if (graph) return;
 		let follow = () => {
 			if (!location.hash.startsWith("#task-")) return;
 			let id = location.hash.slice("#task-".length);
@@ -242,7 +229,7 @@ export function BuildView(
 		follow();
 		addEventListener("hashchange", follow);
 		return () => removeEventListener("hashchange", follow);
-	}, []);
+	}, [graph]);
 
 	let graphNumber = snapshot?.graph?.number;
 	useEffect(() => {
@@ -253,14 +240,14 @@ export function BuildView(
 	}, [active, linked, graphNumber]);
 
 	let start = async () => {
-		if (!snapshot?.graph || busy) return;
-		let workspace = snapshot.workspaces.find(item => item.available);
+		if (!snapshot?.graph || actionPending.current || !canEdit || !wire?.connected) return;
 		setActionError(undefined);
-		if (!workspace) {
+		if (!workspace?.available) {
 			setNeedsAgent(true);
 			return;
 		}
 		setNeedsAgent(false);
+		actionPending.current = true;
 		setBusy(true);
 		try {
 			await response(
@@ -277,17 +264,19 @@ export function BuildView(
 					}),
 				}),
 			);
-			setRefresh(value => value + 1);
+			refresh();
 		} catch (error) {
 			if (offline(error)) setNeedsAgent(true);
 			else setActionError(sentence(error instanceof Error ? error.message : "Build failed"));
 		} finally {
+			actionPending.current = false;
 			setBusy(false);
 		}
 	};
 
 	let returnToPlanning = async () => {
-		if (!snapshot?.build || busy) return;
+		if (!snapshot?.build || actionPending.current || !canEdit || !wire?.connected) return;
+		actionPending.current = true;
 		setBusy(true);
 		setActionError(undefined);
 		try {
@@ -300,10 +289,11 @@ export function BuildView(
 			);
 			setReason("");
 			setReturning(false);
-			setRefresh(value => value + 1);
+			refresh();
 		} catch (error) {
 			setActionError(sentence(error instanceof Error ? error.message : "Return failed"));
 		} finally {
+			actionPending.current = false;
 			setBusy(false);
 		}
 	};
@@ -328,7 +318,7 @@ export function BuildView(
 		<button
 			aria-busy={busy || undefined}
 			className="btn btn-md btn-primary shrink-0"
-			disabled={busy}
+			disabled={busy || !!loadError || !wire?.connected || workspaceUnavailable}
 			onClick={() => void start()}
 			type="button"
 		>
@@ -354,7 +344,14 @@ export function BuildView(
 			? <span className="text-destructive-ink">{sentence(loadError)}</span>
 			: <span className="sr-only">Loading tasks</span>;
 	} else if (phase.kind === "drafting") {
-		if (!drafting) {
+		if (graph) {
+			status = "Review the tasks in Build.";
+			action = (
+				<button className="btn btn-md btn-outline" onClick={onShowBuild} type="button">
+					Open Build
+				</button>
+			);
+		} else if (!drafting) {
 			status = "No tasks yet.";
 		} else if (drafting === "working") {
 			status = (
@@ -432,21 +429,69 @@ export function BuildView(
 	} else {
 		status = `Built · ${plural(phase.pullRequests, "pull request", "pull requests")}`;
 	}
+	let graphStatus = graph && snapshot ? taskGraphModel(snapshot).label : undefined;
+	let who = startedBy(snapshot, userId);
 
 	return (
-		<div className="build-view">
+		<div className={`build-view${graph ? " build-view-graph" : ""}`}>
 			<div className="build-view-content" data-build-view-scroll="">
 				<div className="build-status">
 					<p
 						aria-live={phase.kind === "blocked" ? undefined : "polite"}
 						className="build-status-line"
 					>
-						{status}
+						{graphStatus ?? status}
 					</p>
 					{/* Outside the live region, so a ticking clock is not announced. */}
 					{since && <span className="build-elapsed">{since}</span>}
 					{action}
 				</div>
+				{graph && phase.kind === "blocked" && <div className="mt-2 text-sm">{status}</div>}
+				{graph && snapshot?.build && (
+					<p className="mt-2 text-sm text-text-tertiary">
+						{who ? `Started by ${who === "you" ? who : `@${who}`} · ` : ""}
+						{snapshot.build.checkout.repository} ·{" "}
+						{snapshot.build.checkout.branch ?? "Detached checkout"}
+						{" · "}
+						{snapshot.build.checkout.commit.slice(0, 7)}
+					</p>
+				)}
+				{graph && canEdit && (phase.kind === "review" || phase.kind === "failed")
+					&& !!snapshot?.workspaces.length && (
+					<label className="mt-3 flex flex-col gap-1 text-sm">
+						Local workspace
+						<select
+							className="field w-full"
+							value={workspace?.id ?? ""}
+							disabled={busy}
+							onChange={event => setSelectedWorkspace(event.target.value)}
+						>
+							{!workspace && <option value="">Choose an available workspace</option>}
+							{snapshot.workspaces.map(item => (
+								<option key={item.id} value={item.id} disabled={!item.available}>
+									{item.label} · {item.checkout.branch ?? "Detached checkout"} ·{" "}
+									{item.checkout.commit.slice(0, 7)}
+									{item.available ? "" : " · Busy"}
+								</option>
+							))}
+						</select>
+					</label>
+				)}
+				{workspaceUnavailable && (phase.kind === "review" || phase.kind === "failed") && (
+					<p className="mt-2 text-sm text-text-tertiary">
+						{snapshot?.workspaces.some(item => item.available)
+							? "Choose an available workspace to start."
+							: "Your connected workspaces are busy."}
+					</p>
+				)}
+				{loadError && (
+					<div className="build-note" role="alert">
+						{sentence(loadError)}{" "}
+						<button className="btn btn-sm btn-outline" type="button" onClick={refresh}>
+							Retry
+						</button>
+					</div>
+				)}
 				{needsAgent && (phase.kind === "review" || phase.kind === "failed") && (
 					<div className="build-note">
 						<p className="m-0">Start your local agent to build:</p>
@@ -479,7 +524,7 @@ export function BuildView(
 						<div className="flex gap-2">
 							<button
 								className="btn btn-md btn-primary"
-								disabled={busy || !reason.trim()}
+								disabled={busy || !reason.trim() || !canEdit || !wire?.connected}
 								type="submit"
 							>
 								Return to planning
@@ -503,7 +548,8 @@ export function BuildView(
 						{[0, 1, 2, 3, 4].map(index => <span key={index} />)}
 					</div>
 				)}
-				{showTasks && (
+				{graph && snapshot?.graph && <TaskGraphView snapshot={snapshot} room={room} />}
+				{!graph && showTasks && (
 					<ol aria-label="Tasks" className="build-tasks" data-stale={staleTasks || undefined}>
 						{tasks.map(task => {
 							let report = progress?.tasks.find(item =>

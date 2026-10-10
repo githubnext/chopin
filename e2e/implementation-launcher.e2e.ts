@@ -1,4 +1,5 @@
-import { content, expect, roomPath, test } from "./room";
+import { authenticate, content, expect, roomPath, test } from "./room";
+import type { ImplementationSnapshot } from "../packages/protocol/implementation";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -83,7 +84,12 @@ test("Build shares the document pane beside Chat and a task link reopens it afte
 	let page = await enter("ana");
 	let controls = page.getByRole("group", { name: "Document view", exact: true });
 	let view = page.getByRole("region", { name: "Build", exact: true });
-	await expect(controls.getByRole("button")).toHaveText(["Document", "Decisions", "Build"]);
+	await expect(controls.getByRole("button")).toHaveText([
+		"Document",
+		"Decisions",
+		"Task graph",
+		"Build",
+	]);
 	await controls.getByRole("button", { name: "Build", exact: true }).click();
 	await expect(view).toContainText("Connect the local agent");
 	await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -437,4 +443,224 @@ test("a build in progress shows who started it and offers no action", async ({ s
 	} finally {
 		await local.close();
 	}
+});
+
+test(
+	"Task graph follows availability and live status without losing inspection or zoom",
+	async ({ seed, join: enter, page, room }, testInfo) => {
+		let graph = preparedGraph();
+		graph.versions[0].definition.tasks.push({
+			...graph.versions[0].definition.tasks[0],
+			id: "parallel",
+			title: "Independent task",
+		});
+		await seed("# Graph review\n\nReview this document.\n", { graph });
+		let announce: ((hasGraph: boolean) => void) | undefined;
+		let drafts = 0;
+		await page.routeWebSocket("**/ws?**", route => {
+			let server = route.connectToServer();
+			let revision = 0;
+			route.onMessage(message => {
+				if (typeof message === "string" && JSON.parse(message).kind === "implementation:draft") {
+					drafts++;
+				}
+				server.send(message);
+			});
+			server.onMessage(message => {
+				if (typeof message !== "string") return route.send(message);
+				let frame = JSON.parse(message);
+				if (frame.kind === "plan:open") {
+					revision = frame.implementation.revision;
+					frame.implementation.hasGraph = false;
+					announce = hasGraph =>
+						route.send(JSON.stringify({
+							kind: "plan:implementation",
+							ts: 0,
+							revision: ++revision,
+							locked: false,
+							hasGraph,
+						}));
+				}
+				route.send(JSON.stringify(frame));
+			});
+		});
+		let state: ImplementationSnapshot | undefined;
+		let failRead = false;
+		await page.route(`**/api/channels/${room}/implementation`, async route => {
+			if (failRead) return route.fulfill({ status: 503, json: { error: "Connection failed" } });
+			state ??= await (await route.fetch()).json();
+			await route.fulfill({ json: state });
+		});
+		await enter("ana");
+		await page.setViewportSize({ width: 390, height: 844 });
+		let navigation = page.getByRole("navigation", { name: "Workspace view" });
+		let tab = navigation.getByRole("button", { name: "Task graph", exact: true });
+		await expect(tab).toHaveCount(0);
+		announce!(true);
+		await expect(tab).toBeVisible();
+		await expect(navigation.getByRole("button", { name: "Document", exact: true })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		await tab.click();
+		let view = page.getByRole("region", { name: "Task graph", exact: true });
+		let first = view.getByRole("button", { name: "Connect the local agent, Queued", exact: true });
+		await first.focus();
+		await page.keyboard.press("Enter");
+		let details = view.getByRole("complementary", { name: "Diagram details" });
+		await expect(details).toContainText("The agent can read the graph.");
+		await view.getByRole("button", { name: "Zoom in diagram", exact: true }).click();
+		await expect(view.getByLabel("Diagram zoom", { exact: true })).toHaveText("115%");
+		state!.workspaces = [{
+			id: "busy-workspace",
+			label: "Local checkout",
+			available: false,
+			checkout: { repository: "octo-org/score", branch: "main", commit: "a".repeat(40) },
+		}];
+		state!.revision++;
+		announce!(true);
+		await expect(view.getByText("Your connected workspaces are busy.", { exact: true }))
+			.toBeVisible();
+		await expect(view.getByRole("button", { name: "Build on my laptop", exact: true }))
+			.toBeDisabled();
+		state!.workspaces[0].available = true;
+		state!.revision++;
+		announce!(true);
+		await expect(view.getByRole("button", { name: "Build on my laptop", exact: true }))
+			.toBeEnabled();
+		state!.revision++;
+		state!.graph!.state = "locked";
+		state!.lifecycle = {
+			execution: { state: "active" },
+			history: [],
+			activity: { events: [], tasks: [{ id: "connect", state: "in_progress" }] },
+		};
+		announce!(true);
+		await expect(view).toContainText("Implementing");
+		await expect(
+			view.getByRole("button", { name: "Connect the local agent, In progress", exact: true }),
+		).toHaveAttribute("aria-pressed", "true");
+		await expect(details).toContainText("The agent can read the graph.");
+		await expect(view.getByLabel("Diagram zoom", { exact: true })).toHaveText("115%");
+		state!.revision++;
+		state!.lifecycle.activity!.tasks[0] = {
+			id: "connect",
+			state: "blocked",
+			blocker: "Choose the runtime",
+		};
+		announce!(true);
+		await expect(details).toContainText("Blocked: Choose the runtime");
+		await expect(view).toContainText("0 of 3 tasks complete · 1 blocked");
+		await page.mouse.move(0, 0);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+			390,
+		);
+		await view.locator("[data-build-view-scroll]").evaluate(element => element.scrollTop = 0);
+		await view.screenshot({ path: testInfo.outputPath("task-graph-mobile.png") });
+		await page.setViewportSize({ width: 1440, height: 1000 });
+		await view.locator("[data-build-view-scroll]").evaluate(element => element.scrollTop = 0);
+		await view.screenshot({ path: testInfo.outputPath("task-graph-desktop.png") });
+		failRead = true;
+		announce!(true);
+		await expect(view.getByRole("alert")).toContainText("Connection failed");
+		await expect(details).toContainText("Blocked: Choose the runtime");
+		failRead = false;
+		state!.revision++;
+		state!.planRevision++;
+		await view.getByRole("button", { name: "Retry", exact: true }).click();
+		await expect(view).toContainText("Out of date");
+		await expect(view.getByRole("alert")).toHaveCount(0);
+		expect(drafts).toBe(0);
+		announce!(false);
+		await expect(page.getByRole("button", { name: "Task graph", exact: true })).toHaveCount(0);
+		await expect(content(page)).toBeVisible();
+	},
+);
+
+for (let mode of ["block", "complete", "startup-failure"] as const) {
+	test(`Task graph hands off to the local connector and restores its outcome (${mode})`, async ({ seed, join: enter, room, baseURL }) => {
+		test.setTimeout(60_000);
+		await seed("# Graph implementation\n\nImplement this document.\n", { graph: preparedGraph() });
+		let local = await connector(baseURL!, [
+			"bun",
+			join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
+			...(mode === "complete" ? ["--complete", "--http"] : []),
+			...(mode === "startup-failure" ? ["--fail-start"] : []),
+		]);
+		try {
+			let page = await enter("ana");
+			await page.goto(await local.pairing);
+			await page.getByRole("combobox", { name: "Document", exact: true }).selectOption(room);
+			await page.getByRole("button", { name: "Connect", exact: true }).click();
+			await page.getByRole("link", { name: "Open document", exact: true }).click();
+			let open = () =>
+				page.getByRole("group", { name: "Document view", exact: true })
+					.getByRole("button", { name: "Task graph", exact: true }).click();
+			await open();
+			let view = page.getByRole("region", { name: "Task graph", exact: true });
+			await expect(view.getByRole("combobox", { name: "Local workspace" })).toBeVisible();
+			await view.getByRole("button", { name: "Connect the local agent, Queued", exact: true })
+				.click();
+			let launches = 0;
+			page.on("request", request => {
+				if (
+					request.method() === "POST" && request.url().endsWith(`/channels/${room}/implementation`)
+				) launches++;
+			});
+			await view.getByRole("button", { name: "Build on my laptop", exact: true }).evaluate(
+				element => {
+					(element as HTMLButtonElement).click();
+					(element as HTMLButtonElement).click();
+				},
+			);
+			let expected = mode === "complete"
+				? "Verified"
+				: mode === "block"
+				? "Implementation stopped"
+				: "Startup failed";
+			await expect(view).toContainText(expected, { timeout: 30_000 });
+			expect(launches).toBe(1);
+			let details = view.getByRole("complementary", { name: "Diagram details" });
+			if (mode === "complete") {
+				await expect(view).toContainText("2 of 2 tasks complete");
+				await expect(details.getByRole("link", { name: "Pull request #101 · open", exact: true }))
+					.toBeVisible();
+				await view.getByText("Verification passed", { exact: true }).click();
+				await expect(view).toContainText("Protocol fixture verified");
+			} else if (mode === "block") {
+				await expect(details).toContainText("Blocked: Choose the next tracer");
+			}
+			await page.reload();
+			await open();
+			await expect(view).toContainText(expected);
+			if (mode === "block") {
+				await view.getByRole("button", { name: "Return to planning", exact: true }).click();
+				await view.getByRole("textbox", { name: "What needs to change?" }).fill(
+					"Choose the next tracer.",
+				);
+				await view.getByRole("button", { name: "Return to planning", exact: true }).click();
+				await expect(view).toContainText("Returned for changes");
+			} else if (mode === "startup-failure") {
+				await view.getByRole("button", { name: "Try again", exact: true }).click();
+				await expect.poll(() => launches).toBe(2);
+			}
+			expect(await local.localEdit()).toBe("uncommitted local edit");
+		} finally {
+			await local.close();
+		}
+	});
+}
+
+test("a read-only collaborator can inspect Task graph", async ({ seed, page, room, baseURL }) => {
+	await seed("# Shared graph\n\nEveryone can review.\n", { graph: preparedGraph() });
+	await authenticate(page, `score-reader-${room.slice(0, 8)}`, baseURL!);
+	await page.goto(roomPath(room));
+	await page.getByRole("group", { name: "Document view", exact: true })
+		.getByRole("button", { name: "Task graph", exact: true }).click();
+	let view = page.getByRole("region", { name: "Task graph", exact: true });
+	await view.getByRole("button", { name: "Review the connection, Queued", exact: true }).click();
+	await expect(view).toContainText("Waiting for: Connect the local agent");
+	await expect(view.getByRole("button", { name: "Build on my laptop", exact: true })).toHaveCount(
+		0,
+	);
 });

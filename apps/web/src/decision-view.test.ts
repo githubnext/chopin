@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { visibleDecisionView } from "@chopin/editor";
 
-import { BUILD_UNAVAILABLE, decisionAttention, DecisionViewControl } from "./decision-view-control";
+import { BUILD_UNAVAILABLE, DecisionViewControl } from "./decision-view-control";
+import { decisionAttention } from "./decision-attention";
 import { storedDocumentView } from "./workspace-model";
 
 test("a questionnaire-only document opens Decisions while prose keeps Plan visible", () => {

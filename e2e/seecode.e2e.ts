@@ -33,6 +33,19 @@ let astro = {
 	],
 };
 
+test("document diagrams retain their descriptive node labels", async ({ seed, join }) => {
+	await seed(`# Descriptive diagram\n\n\`\`\`seecode\n${
+		JSON.stringify({
+			...first,
+			nodes: [{ id: "web", label: "Web", sub: "Browser client" }, { id: "api", label: "API" }],
+		})
+	}\n\`\`\`\n`);
+	let page = await join("ana");
+	let preview = content(page).getByRole("region", { name: "Diagram preview" });
+	await expect(preview.getByRole("button", { name: "Web, Browser client", exact: true }))
+		.toBeVisible();
+});
+
 test(
 	"a wide diagram derives a readable narrower view with bounded zoom and unchanged source",
 	async ({ join, room, seed }, testInfo) => {
