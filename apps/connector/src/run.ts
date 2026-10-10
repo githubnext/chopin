@@ -26,6 +26,8 @@ export async function runWork(
 		build: BuildRequest;
 		/** A living document's first build, whose run ends at its last complete_task. */
 		live?: boolean;
+		/** An unprompted prototype under a passage, run on a throwaway branch. */
+		spike?: boolean;
 		input: unknown;
 		generation: number;
 		runToken: string;
@@ -61,6 +63,7 @@ export async function runWork(
 		if (implementation && !rebuild) {
 			git(prepared.path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
 		}
+		if (claim.spike) git(prepared.path, "checkout", "-b", `chopin/spike-${input.id.slice(0, 8)}`);
 		console.error(`Running ${input.id} in ${prepared.path}`);
 		let stop = await runAgent({
 			command: options.command,
@@ -69,6 +72,11 @@ export async function runWork(
 				? rebuildPrompt
 				: implementation
 				? claim.live ? liveImplementationPrompt : implementationPrompt
+				: claim.spike
+				? "Use read_investigation from the Chopin MCP server to read the spike brief and "
+					+ "follow it: build the smallest prototype on this throwaway branch, upload 1-3 "
+					+ "screenshots with upload_investigation_image, and report with submit_spike_result, "
+					+ "then finish. Never push."
 				: "Use read_investigation from the Chopin MCP server to read the authorized request. "
 					+ "Perform that investigation using your normal project instructions and tools. "
 					+ "Submit a bounded result with submit_investigation_result, then finish. "
@@ -88,7 +96,7 @@ export async function runWork(
 						env: [
 							{ name: "CHOPIN_BRIDGE_ORIGIN", value: options.url },
 							{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
-							{ name: "CHOPIN_BRIDGE_KIND", value: kind },
+							{ name: "CHOPIN_BRIDGE_KIND", value: claim.spike ? "spike" : kind },
 						],
 					}],
 			signal: abort.signal,
