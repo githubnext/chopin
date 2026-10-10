@@ -244,3 +244,85 @@ test("a resolved comment's marker opens its thread in the phone sheet", async ({
 	await expect(marker).toBeFocused();
 	await expect(page.locator(".plan-decision-pop")).toHaveCount(0);
 });
+
+test("a backdrop tap closes a resolved comment's sheet with its exit and returns focus", async ({ join, seed }) => {
+	let { thread } = await storedResolvedComment(SOURCE, "review the pilot", {
+		block: 1,
+		notes: ["Should the review have a date?", "Added the two-week mark to the review."],
+		resolver: "ana",
+		result: [1],
+	});
+	await seed(SOURCE, { threads: [thread] });
+	let page = await join("ana", IPHONE);
+	let marker = page.getByRole("button", {
+		name: "Resolved comment: Should the review have a date?",
+	});
+	await marker.tap();
+	let sheet = page.getByRole("dialog", { name: "Resolved comment" });
+	await settled(sheet);
+	let exit = page.evaluate(async () => {
+		let frames: number[] = [];
+		for (let index = 0; index < 40; index++) {
+			await new Promise(requestAnimationFrame);
+			let popup = document.querySelector("[data-plan-comment-sheet]");
+			if (popup) frames.push(popup.getBoundingClientRect().y);
+		}
+		return frames;
+	});
+	await page.touchscreen.tap(195, 40);
+	let frames = await exit;
+	// It slides away rather than vanishing in the frame after the tap.
+	expect(frames.length).toBeGreaterThan(2);
+	expect(Math.max(...frames)).toBeGreaterThan(frames[0]! + 20);
+	await expect(sheet).toHaveCount(0);
+	await expect(marker).toBeFocused();
+});
+
+test("a phone sheet keeps its passage above it as the sheet grows", async ({ join, seed }) => {
+	// Deep enough in the document that it can sit where the sheet will stand.
+	let low = `${"Lead paragraph.\n\n".repeat(16)}${SECOND}\n\n${
+		"Padding paragraph.\n\n".repeat(30)
+	}`;
+	let { thread } = await storedResolvedComment(low, "review the pilot", {
+		block: 16,
+		notes: ["Is two weeks enough?"],
+		resolver: "ana",
+		result: [],
+	});
+	let { result: _result, quote: _quote, resolver: _resolver, at: _at, ...rest } = thread;
+	await seed(low, { threads: [{ ...rest, status: "open" }] });
+	let page = await join("ana", IPHONE);
+	// Not by role: the modal sheet hides the editor from the accessibility tree.
+	let passage = page.locator(".plan-content > p").filter({ hasText: SECOND });
+	// Start with the passage low on the screen, where the sheet will stand.
+	await passage.evaluate(element => {
+		let scroller = element.closest("[data-plan-scroll]")!;
+		let box = element.getBoundingClientRect();
+		scroller.scrollTop -= innerHeight - 60 - box.bottom;
+	});
+	expect((await size(passage)).y).toBeGreaterThan(844 / 2);
+	await page.getByRole("button", { name: /^Comment on “review the pilot”/ }).tap();
+	let sheet = page.getByRole("dialog", { name: "Comment thread" });
+	await settled(sheet);
+	// The commented words, not their whole paragraph, are what must stay in view.
+	let above = async () => {
+		let sheetBox = await size(sheet);
+		let bottom = await passage.evaluate(element => {
+			let text = element.firstChild!;
+			while (text.nodeType !== Node.TEXT_NODE) text = text.firstChild!;
+			let start = text.textContent!.indexOf("review the pilot");
+			let range = document.createRange();
+			range.setStart(text, start);
+			range.setEnd(text, start + "review the pilot".length);
+			return range.getBoundingClientRect().bottom;
+		});
+		return bottom <= sheetBox.y;
+	};
+	await expect.poll(above).toBe(true);
+
+	let reply = sheet.getByRole("textbox", { name: "Reply", exact: true });
+	await reply.fill(Array.from({ length: 6 }, (_, index) => `Line ${index + 1}`).join("\n"));
+	await expect.poll(async () => (await size(reply)).height).toBeGreaterThan(80);
+	await settled(sheet);
+	await expect.poll(above).toBe(true);
+});
