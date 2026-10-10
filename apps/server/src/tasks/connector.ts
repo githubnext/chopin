@@ -51,13 +51,17 @@ export function implementationConnector(
 	documentExists: (id: string) => Promise<boolean>,
 ) {
 	let tracked = new Set<string>();
-	let pending = async (connection: Connection) =>
-		withPlan(connection.documentId, async plan => {
-			let build = plan.builds.at(-1);
-			return build?.connectionId === connection.id && build.user === connection.owner
-				? build
-				: undefined;
-		});
+	let pending = async (connection: Connection) => {
+		let documentId = connections.assigned(connection.id);
+		return documentId
+			? withPlan(documentId, async plan => {
+				let build = plan.builds.at(-1);
+				return build?.connectionId === connection.id && build.user === connection.owner
+					? build
+					: undefined;
+			})
+			: undefined;
+	};
 	return {
 		track(id: string) {
 			tracked.add(id);
@@ -73,8 +77,10 @@ export function implementationConnector(
 			return !!build && ["queued", "starting", "running"].includes(build.state);
 		},
 		async call(connection: Connection, grant: Grant, name: string, args: Record<string, unknown>) {
-			tracked.add(connection.documentId);
-			return withPlan(connection.documentId, async plan => {
+			let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
+			if (!documentId) fail("build-forbidden");
+			tracked.add(documentId);
+			return withPlan(documentId, async plan => {
 				let build = plan.builds.at(-1);
 				if (
 					!build || build.connectionId !== connection.id || build.user !== connection.owner
@@ -118,7 +124,7 @@ export function implementationConnector(
 						build: picked,
 						documentId: plan.id,
 						source: { ...picked.checkout, repositoryId: picked.repositoryId },
-						runToken: connections.runToken(connection.id, picked.id, 1, "implementation"),
+						runToken: connections.runToken(connection.id, plan.id, picked.id, 1, "implementation"),
 					};
 				}
 				if (!["starting", "running"].includes(build.state) || build.expiresAt <= Date.now()) {
