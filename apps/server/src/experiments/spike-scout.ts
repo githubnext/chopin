@@ -133,6 +133,8 @@ export class SpikeScout {
 	#waiting = new Set<string>();
 	/** Documents with a dismissal check already queued, so a burst of edits shares one. */
 	#dismissing = new Set<string>();
+	/** Documents whose last scan found no local agent, by repository, to rescan on reconnect. */
+	#offline = new Map<string, string>();
 	#closed = false;
 
 	constructor(options: SpikeScoutOptions) {
@@ -198,6 +200,19 @@ export class SpikeScout {
 			}
 		}
 		return spikes;
+	}
+
+	/**
+	 * A local agent (re)connected to a repository. Rescan its owner's documents whose last scan
+	 * stopped for want of one, so a passage written while it was away needs no further edit.
+	 */
+	connected(repositoryId: string, owner: string): void {
+		if (this.#closed) return;
+		for (let [channelId, repository] of this.#offline) {
+			if (repository !== repositoryId || this.#editors.get(channelId) !== owner) continue;
+			this.#offline.delete(channelId);
+			if (!this.#pending.has(channelId)) void this.check(channelId);
+		}
 	}
 
 	/** A spike record changed; project it into its callout, and scan again if it freed capacity. */
@@ -282,9 +297,13 @@ export class SpikeScout {
 		// The hourly caps are spent: judge nothing now, so these passages wait for a later edit.
 		if (allowance <= 0) return;
 		let candidates = unjudged.slice(0, MAX_CANDIDATES);
-		// Without the editor's local agent there is nowhere to run; judge these again after an edit.
+		// Without the editor's local agent there is nowhere to run; judge these again on reconnect.
 		let connection = await host.connection(snapshot.repositoryId, editor, channelId);
-		if (!connection) return;
+		if (!connection) {
+			this.#offline.set(channelId, snapshot.repositoryId);
+			return;
+		}
+		this.#offline.delete(channelId);
 		let verdicts = await judge(candidates);
 		if (!verdicts) return;
 		// Approved passages beyond capacity stay unseen so a later scan can start them.
@@ -325,5 +344,6 @@ export class SpikeScout {
 		this.#changed.clear();
 		this.#starts.clear();
 		this.#waiting.clear();
+		this.#offline.clear();
 	}
 }

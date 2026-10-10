@@ -31,6 +31,8 @@ export const MAX_IMAGE_WIDTH = 4096;
 
 export const MAX_TAB_LABEL = 60;
 export const MAX_CALLOUT_TITLE = 100;
+/** A folded callout keeps at most this many leading blocks visible. */
+export const MAX_CALLOUT_FOLD = 3;
 
 /** Questionnaire shape, matching the `ask` tool's contract. */
 export const MAX_QUESTIONS = 10;

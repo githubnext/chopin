@@ -6,7 +6,7 @@ import { ulid } from "@chopin/dialect/ulid";
 import * as room from "../plan/room";
 import { canonical } from "../mcp/create";
 import { calloutDigest, callouts, reconcileCallout, withCallout } from "./spike-placement";
-import { renderKey, spikeCallout, spikeReport, uncertain } from "./spikes";
+import { renderKey, resolveInstruction, spikeCallout, spikeReport, uncertain } from "./spikes";
 
 import type { Investigation } from "@chopin/experiment/records";
 
@@ -63,7 +63,7 @@ test("a submitted spike renders as a titled callout with findings and screenshot
 	expect(renderKey(value)).toBe("completed");
 	let source = serialize({ type: "root", children: [spikeCallout(value)] });
 	expect(source).toContain(`<Callout id="${value.spike!.callout}" type="tip"`);
-	expect(source).toContain(`title="Drag handles work on touch with a 44px target"`);
+	expect(source).toContain(`title="Drag handles work on touch with a 44px target" fold="1"`);
 	expect(source).toContain("- Pointer events fire on iOS Safari.");
 	expect(source).toContain("**Recommendation:** Keep drag handles");
 	// The recommendation leads; the findings that support it follow.
@@ -184,4 +184,30 @@ test("explicit uncertainty is the fallback signal", () => {
 	expect(uncertain("We need to know whether WebSockets survive the proxy.")).toBe(true);
 	expect(uncertain("This is an open decision for the team.")).toBe(true);
 	expect(uncertain("The page lists every document in the repository.")).toBe(false);
+});
+
+test("a one-block result does not fold, and a landed result names its passage and callout", () => {
+	let value = spike(
+		"completed",
+		spikeReport({ headline: "It works", findings: ["Yes."], recommendation: "Ship.", images: [] }),
+	);
+	value.result!.report = "**It works**\n\n**Recommendation:** Ship.\n";
+	let source = serialize({ type: "root", children: [spikeCallout(value)] });
+	expect(source).not.toContain("fold=");
+	let { text, said } = resolveInstruction(value);
+	expect(text).toContain("> We are unsure whether drag handles work on touch.");
+	expect(text).toContain(value.spike!.callout);
+	expect(text).toContain("Keep the callout");
+	expect(said).toBe("Updating the passage the prototype answered");
+});
+
+test("over-escaped quotes from an agent's tool call read as plain quotes", () => {
+	let report = spikeReport({
+		headline: 'Use \\"No notes yet\\"',
+		findings: ["It\\'s clear."],
+		recommendation: 'Show \\"No notes yet\\" in a card.',
+		images: [],
+	});
+	expect(report).not.toContain("\\");
+	expect(report).toContain('Show "No notes yet" in a card.');
 });

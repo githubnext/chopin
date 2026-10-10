@@ -44,6 +44,7 @@ export type { ConvertOptions } from "./convert";
 export { plugins, registry, tablePlugin } from "./registry";
 export type { Registry } from "./registry";
 
+export { calloutFoldState } from "./nodes/callout-fold";
 export {
 	$createColumnNode,
 	$createColumnsNode,

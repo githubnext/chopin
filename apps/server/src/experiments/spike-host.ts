@@ -10,12 +10,15 @@ import { eligible, renderKey, spikeBrief, spikeCallout, text } from "./spikes";
 
 import type { Connections } from "./connections";
 import type { Experiments } from "./service";
+import type { Investigation } from "@chopin/experiment/records";
 import type { SpikeHost } from "./spike-scout";
 
 type Options = {
 	service: Experiments;
 	connections: Connections;
 	withPlan: <T>(channelId: string, action: (plan: Service.Plan) => Promise<T>) => Promise<T>;
+	/** A spike's result was just written into its callout. */
+	landed?: (channelId: string, value: Investigation) => void;
 };
 
 /** Digests of a source's eligible passages, as the scout's snapshot computes them. */
@@ -28,7 +31,7 @@ export function blockDigests(source: string): Set<string> {
 }
 
 /** Spike records live with investigations; their callouts are projections placed after commit. */
-export function spikeHost({ service, connections, withPlan }: Options): SpikeHost {
+export function spikeHost({ service, connections, withPlan, landed }: Options): SpikeHost {
 	let spikes = async (channelId: string) =>
 		(await service.store.list(channelId)).filter(value => value.spike);
 	let dismiss = async (_channelId: string, id: string) => {
@@ -154,6 +157,9 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 						item.spike!.callout = callout;
 						item.spike!.calloutDigest = digest;
 					});
+					if (placed.status === "placed" && key === "completed" && spike.rendered !== key) {
+						landed?.(channelId, value);
+					}
 				}
 			}
 		},

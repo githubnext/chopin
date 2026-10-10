@@ -7,6 +7,8 @@
  * working.
  */
 
+import { $getState, $setState } from "lexical";
+
 import {
 	$createCalloutNode,
 	$createTabNode,
@@ -17,6 +19,7 @@ import {
 } from "./containers";
 import { $createColumnNode, $createColumnsNode, $isColumnNode, $isColumnsNode } from "./columns";
 import { attribute, identity, isFlow, PRIORITY } from "./shared";
+import { calloutFoldState } from "./callout-fold";
 
 import type { LexicalExportVisitor, MdastImportVisitor } from "@mdxeditor/editor";
 import type { LexicalNode } from "lexical";
@@ -63,12 +66,15 @@ export const MdastTabVisitor = importer(
 	node => $createTabNode(attribute(node, "id") ?? "", attribute(node, "label") ?? ""),
 );
 
-export const MdastCalloutVisitor = importer("Callout", node =>
-	$createCalloutNode(
+export const MdastCalloutVisitor = importer("Callout", node => {
+	let callout = $createCalloutNode(
 		attribute(node, "id") ?? "",
 		(attribute(node, "type") ?? "note") as CalloutType,
 		attribute(node, "title") ?? "",
-	));
+	);
+	let fold = calloutFoldState.parse(Number(attribute(node, "fold") ?? 0));
+	return fold ? $setState(callout, calloutFoldState, fold) : callout;
+});
 
 export const MdastColumnsVisitor = importer(
 	"Columns",
@@ -95,7 +101,14 @@ export const LexicalTabVisitor: Exporter<TabNode> = exporter(
 export const LexicalCalloutVisitor: Exporter<CalloutNode> = exporter(
 	"Callout",
 	$isCalloutNode,
-	node => identity(node.getId(), { type: node.getCalloutType(), title: node.getTitle() }),
+	node =>
+		identity(node.getId(), {
+			type: node.getCalloutType(),
+			title: node.getTitle(),
+			fold: $getState(node, calloutFoldState)
+				? String($getState(node, calloutFoldState))
+				: undefined,
+		}),
 );
 
 export const LexicalColumnsVisitor: Exporter<ColumnsNode> = exporter(

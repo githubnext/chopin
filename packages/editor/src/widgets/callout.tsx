@@ -21,16 +21,33 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import * as Select from "@radix-ui/react-select";
-import { $getNodeByKey, $getRoot, $isElementNode } from "lexical";
-import { $isCalloutNode, CALLOUT_TYPES, limits } from "@chopin/dialect";
+import {
+	$getNodeByKey,
+	$getRoot,
+	$getSelection,
+	$getState,
+	$isElementNode,
+	$isRangeSelection,
+	setDOMUnmanaged,
+} from "lexical";
+import { $isCalloutNode, CALLOUT_TYPES, calloutFoldState, limits } from "@chopin/dialect";
 
+import { foldOf } from "./callout-fold";
 import { registerCalloutNormalization } from "./callout-shape";
 
 import type { CalloutType } from "@chopin/dialect";
 import type { IconSize } from "@chopin/icons";
 import type { ElementNode, LexicalEditor } from "lexical";
 
-type Callout = { key: string; type: CalloutType; title: string };
+type Callout = {
+	key: string;
+	type: CalloutType;
+	title: string;
+	fold: number;
+	blocks: number;
+	/** Index of the body block holding the caret, when it is inside this callout. */
+	caret?: number;
+};
 
 const LABELS: Record<CalloutType, string> = {
 	note: "Note",
@@ -60,13 +77,25 @@ function collect(editor: LexicalEditor): Callout[] {
 	let out: Callout[] = [];
 
 	editor.getEditorState().read(() => {
+		let selection = $getSelection();
+		let anchor = $isRangeSelection(selection) ? selection.anchor.getNode() : undefined;
 		let walk = (node: ElementNode) => {
 			for (let child of node.getChildren()) {
 				if ($isCalloutNode(child)) {
+					let fold = $getState(child, calloutFoldState);
+					let caret: number | undefined;
+					if (fold && anchor) {
+						let block = anchor.getParents().find(parent => parent.getParent()?.is(child))
+							?? (anchor.getParent()?.is(child) ? anchor : undefined);
+						if (block) caret = block.getIndexWithinParent();
+					}
 					out.push({
 						key: child.getKey(),
 						type: child.getCalloutType(),
 						title: child.getTitle(),
+						fold,
+						blocks: child.getChildrenSize(),
+						...(caret === undefined ? {} : { caret }),
 					});
 				}
 				if ($isElementNode(child)) walk(child);
@@ -309,10 +338,68 @@ function Heading(
 	);
 }
 
+/**
+ * Where a folded callout's disclosure renders: after the body, outside the slot Lexical
+ * reconciles, and marked unmanaged so its mutation observer leaves it in place.
+ */
+function disclosureHost(editor: LexicalEditor, key: string): HTMLElement | null {
+	let element = editor.getElementByKey(key);
+	if (!element) return null;
+	let host = element.querySelector<HTMLElement>(":scope > [data-plan-chrome='callout-fold']");
+	if (host) return host;
+	host = document.createElement("div");
+	host.dataset.planChrome = "callout-fold";
+	setDOMUnmanaged(host);
+	element.append(host);
+	return host;
+}
+
+/** Opens or closes the blocks a callout folds; a reader's own view, never the document. */
+function FoldToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+	return (
+		<div contentEditable={false} className="plan-callout-fold">
+			<button aria-expanded={open} className="plan-research-more" onClick={onToggle} type="button">
+				{open ? "Show less" : "Show more"}
+			</button>
+		</div>
+	);
+}
+
 export function CalloutPlugin() {
 	let [editor] = useLexicalComposerContext();
 	let disabled = useCellValue(readOnly$);
 	let [callouts, setCallouts] = useState<Callout[]>([]);
+	let [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+	let folds = new Map(callouts.map(callout => [
+		callout.key,
+		foldOf({ ...callout, opened: opened.has(callout.key) }),
+	]));
+
+	// Mirrored onto the callout's own element; Lexical leaves attributes it does not own alone.
+	useLayoutEffect(() => {
+		for (let callout of callouts) {
+			let element = editor.getElementByKey(callout.key);
+			if (!element) continue;
+			let fold = folds.get(callout.key) ?? "none";
+			let lead = fold === "none" ? undefined : String(callout.fold);
+			if (element.dataset.foldState !== (fold === "none" ? undefined : fold)) {
+				if (fold === "none") delete element.dataset.foldState;
+				else element.dataset.foldState = fold;
+			}
+			if (element.dataset.foldLead !== lead) {
+				if (lead) element.dataset.foldLead = lead;
+				else delete element.dataset.foldLead;
+			}
+		}
+	});
+
+	let toggle = (key: string) =>
+		setOpened(previous => {
+			let next = new Set(previous);
+			if (next.has(key)) next.delete(key);
+			else next.add(key);
+			return next;
+		});
 
 	useEffect(() => registerCalloutNormalization(editor), [editor]);
 
@@ -328,11 +415,20 @@ export function CalloutPlugin() {
 				let host = editor.getElementByKey(callout.key)
 					?.querySelector<HTMLElement>("[data-plan-chrome='callout']");
 				if (!host) return null;
-				return createPortal(
-					<Heading callout={callout} editor={editor} disabled={disabled} />,
-					host,
-					callout.key,
-				);
+				let fold = folds.get(callout.key);
+				let foldHost = fold === "none" ? null : disclosureHost(editor, callout.key);
+				return [
+					createPortal(
+						<Heading callout={callout} editor={editor} disabled={disabled} />,
+						host,
+						callout.key,
+					),
+					foldHost && createPortal(
+						<FoldToggle open={fold === "open"} onToggle={() => toggle(callout.key)} />,
+						foldHost,
+						`${callout.key}-fold`,
+					),
+				];
 			})}
 		</>
 	);
