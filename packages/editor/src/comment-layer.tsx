@@ -1028,7 +1028,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactLabel = "Orphaned comments";
 		compactHeading = commentSheetHeading({
 			kind: "other",
-			title: `${orphaned.length} comments without prose`,
+			title: `${commentCount(orphaned.length)} without prose`,
 		});
 		compactClose = dismiss;
 		compactContent = orphaned.map(view => card(view));
@@ -1247,7 +1247,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						}}
 						type="button"
 					>
-						{orphaned.length} comments without prose
+						{commentCount(orphaned.length)} without prose
 					</button>
 					<CommentSurface
 						compact={false}
