@@ -387,7 +387,9 @@ completed description, if any, remains visible while work is pending or failed.
 The prompt teaches two validated fence languages. `seecode` holds a JSON spec
 for any registered SeeCode diagram or numerical chart. The ordinary prompt lists
 the full native catalog, including bar, line, scatter, radar, polar, waterfall,
-treemap, heatmap, and Sankey, and includes a labelled synthetic bar example.
+treemap, heatmap, and Sankey. Numerical aliases have variant-specific purpose
+and data requirements; the guide includes labelled synthetic bar, Marimekko and
+dumbbell examples that are checked against the renderer.
 This capability does not require `PLANNER_VISUALS`; that flag selects the
 experimental Jev routing workflow described above. Ordinary and Atomic Planners
 prefer native `seecode` whenever a registered type can represent the required

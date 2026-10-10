@@ -41,7 +41,31 @@ The registered types and their evidence requirements are:
 ${catalog}
 
 Registered presentation aliases (alias → canonical type): ${aliases}.
-An alias uses its canonical type's data shape with a presentation variant.
+Aliases select renderer variants; their inputs and meanings are not interchangeable.
+Do not change only \`type\` without checking the variant's data requirements:
+- \`marimekko\` compares group totals and composition. Supply \`columns\`, each with
+  a \`label\` and \`segments: [[name, value], ...]\`. Values must be additive,
+  nonnegative and in the same unit, with a positive total in every column.
+  Column widths encode totals; segment heights encode shares within that column.
+- \`dumbbell\` compares two measurements for each category. Supply
+  \`data: [[label, before, after], ...]\` in a common unit, with \`from\` and \`to\`
+  naming the two measurements. One value per category is insufficient.
+- \`slopegraph\` compares two ordered positions using the line shape: two \`x\`
+  labels and two values per named series. Do not discard intermediate observations.
+- \`ridgeline\` compares distributions using shared \`x\` bins and named
+  \`series[].values\` of supplied nonnegative frequencies or densities, with a
+  positive maximum. Do not substitute unrelated measurements for distributions.
+- \`streamgraph\` shows additive, nonnegative series across shared \`x\` positions,
+  using \`series[].values\` in a common unit and at least one positive total.
+- \`bump\` uses the line shape for ranks over time: \`series[].values\` must be
+  ranks from 1 to the number of series, not raw measured quantities.
+- \`bubble\` needs a supplied nonnegative size measure in addition to x and y:
+  \`points: [[label, x, y, size], ...]\`. Do not invent size from another value.
+- \`beeswarm\` compares individual x observations, optionally grouped: use
+  \`points: [{label, x, group}, ...]\`. Vertical packing is layout, not a y measure.
+- \`funnel\` shows ordered conversion stages. Measured drop-off needs comparable
+  nonnegative counts in \`levels[].value\` and a positive first-stage count;
+  label-only levels are schematic, not evidence of measured drop-off.
 
 For quantitative charts, preserve source values, categories, units, ordering,
 and the meaning of the denominator. Do not invent measurements, silently omit
@@ -108,6 +132,16 @@ State (edges connect named states and may label transitions):
 Bar chart (synthetic example; replace all categories and values with source data):
 \`\`\`${SEECODE_LANGUAGE}
 {"type":"bar","title":"Synthetic completed jobs","axis":"Completed jobs","data":[["Alpha",12],["Beta",7],["Gamma",19]]}
+\`\`\`
+
+Marimekko (synthetic composition; replace every segment with source data):
+\`\`\`${SEECODE_LANGUAGE}
+{"type":"marimekko","title":"Synthetic job composition","columns":[{"label":"North","segments":[["Complete",12],["Queued",3]]},{"label":"South","segments":[["Complete",6],["Queued",4]]}]}
+\`\`\`
+
+Dumbbell (synthetic paired measurements; replace both values in every row):
+\`\`\`${SEECODE_LANGUAGE}
+{"type":"dumbbell","title":"Synthetic completed jobs","from":"Before","to":"After","data":[["North",8,12],["South",5,7]]}
 \`\`\`
 
 Call \`read_plan\` before \`edit_plan\`. If \`edit_plan\` rejects a new diagram,
