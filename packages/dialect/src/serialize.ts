@@ -14,8 +14,8 @@ import { gfmTaskListItemToMarkdown } from "mdast-util-gfm-task-list-item";
 import { mathToMarkdown } from "mdast-util-math";
 import { mdxJsxToMarkdown } from "mdast-util-mdx-jsx";
 
-import type { Root } from "mdast";
-import type { Unsafe } from "mdast-util-to-markdown";
+import type { Nodes, Root } from "mdast";
+import type { Handle, Unsafe } from "mdast-util-to-markdown";
 
 /**
  * Fixed formatting. These are part of the persisted contract: changing one
@@ -65,13 +65,40 @@ const UNSAFE: Unsafe[] = [{
  * drift, and the drift is silent — so there is one.
  */
 export function extensions() {
+	let jsx = mdxJsxToMarkdown();
+	let original = jsx.handlers!.mdxJsxTextElement!;
+	let image: Handle = (node: Nodes, parent, state, info) => {
+		let component = (node.type === "mdxJsxTextElement" || node.type === "mdxJsxFlowElement")
+				&& node.name === "Image"
+			? node
+			: undefined;
+		let escaped = node;
+		if (component) {
+			// Upstream escapes quotes but leaves authored entity-like strings open to decoding.
+			escaped = {
+				...component,
+				attributes: component.attributes.map(attribute =>
+					attribute.type === "mdxJsxAttribute" && typeof attribute.value === "string"
+						? { ...attribute, value: attribute.value.replace(/&/g, "&#38;") }
+						: attribute
+				),
+			};
+		}
+		let output = original(escaped, parent, state, info);
+		// JSX attributes bypass GFM's escaping; literal pipes and line endings split table cells.
+		return component && state.stack.includes("tableCell")
+			? output.replace(/\|/g, "&#124;").replace(/\r/g, "&#13;").replace(/\n/g, "&#10;")
+			: output;
+	};
+	jsx.handlers!.mdxJsxTextElement = Object.assign(image, original);
+	jsx.handlers!.mdxJsxFlowElement = jsx.handlers!.mdxJsxTextElement;
 	return [
 		gfmTableToMarkdown({ tableCellPadding: true, tablePipeAlign: true }),
 		gfmStrikethroughToMarkdown(),
 		gfmTaskListItemToMarkdown(),
 		gfmFootnoteToMarkdown(),
 		mathToMarkdown(),
-		mdxJsxToMarkdown(),
+		jsx,
 	];
 }
 

@@ -1339,6 +1339,10 @@
 	color: var(--color-text-primary);
 }
 
+.plan-content h4 :is(strong, b) {
+	font-weight: inherit;
+}
+
 /* Structural components ------------------------------------------------- */
 
 .plan-content pre {
