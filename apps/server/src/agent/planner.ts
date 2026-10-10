@@ -65,11 +65,15 @@ function reference(): string {
 	}).filter(Boolean).join("\n");
 }
 
-const DIAGRAM_INTRO = `Diagrams and formulas can clarify a plan. Use a \`${SEECODE_LANGUAGE}\` fence
-for architecture, sequences, or state transitions when a compact structured
-view helps; \`${MERMAID_LANGUAGE}\` remains available for other simple flows.
+const DIAGRAM_INTRO = `Charts, diagrams and formulas can clarify a plan. Use Chopin's native
+\`${SEECODE_LANGUAGE}\` charts and diagrams by default whenever a registered type
+can represent the required information. Author its JSON fence using the catalogue below.
+Use \`${MERMAID_LANGUAGE}\` only when no native type can provide the required
+representation or the user explicitly requests Mermaid. Mermaid supports diagrams
+and numerical charts, including \`pie\` and \`xychart-beta\` bar/line charts.
 Set a formula wherever the plan turns`;
 const ROUTED_DIAGRAM_INTRO = `A Jev-selected diagram uses a \`${SEECODE_LANGUAGE}\` fence.
+Do not substitute Mermaid for a Jev-selected diagram.
 Set a formula wherever the plan turns`;
 
 /** One compact grammar summary and example; the parser owns the full rules. */

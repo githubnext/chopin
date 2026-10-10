@@ -8,6 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
+import { DIAGRAM_FIXTURES } from "@chopin/diagrams/fixtures";
 
 import * as edit from "./edit";
 import * as room from "./room";
@@ -60,6 +61,19 @@ describe("applying a batch", () => {
 		expect(outcome).toMatchObject({ ok: true, touched: [2] });
 		expect(room.project(subject.document)).toContain(DIAGRAM.trim());
 	});
+
+	it.each([...DIAGRAM_FIXTURES])(
+		"authors and reopens the registered $type fixture as a code block",
+		async fixture => {
+			let source = `\`\`\`seecode\n${JSON.stringify(fixture.spec)}\n\`\`\`\n`;
+			expect(edit.apply(subject, 1, [{ op: "insert_root", source }]).ok).toBe(true);
+			let saved = room.project(subject.document);
+			expect(saved).toContain(source.trim());
+			let reopened = await plan(saved);
+			expect(room.project(reopened.document)).toBe(saved);
+			expect(edit.outline(reopened).find(block => block.type === "code")).toBeDefined();
+		},
+	);
 
 	it("revises a diagram only when its new spec renders", async () => {
 		let held = await plan(`# Title\n\n${DIAGRAM}`);

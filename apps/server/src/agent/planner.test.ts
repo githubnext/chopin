@@ -1,25 +1,75 @@
 import { expect, test } from "bun:test";
 
-import { parseWireframe, renderDiagram, WIREFRAME_KINDS } from "@chopin/diagrams";
+import {
+	DIAGRAM_ALIASES,
+	DIAGRAM_TYPES,
+	parseWireframe,
+	renderDiagram,
+	WIREFRAME_KINDS,
+} from "@chopin/diagrams";
 import { parse } from "@chopin/dialect/parse";
 import { ulid } from "@chopin/dialect/ulid";
 import { validate } from "@chopin/dialect/validate";
 
 import { DIAGRAM_AUTHORING, plannerInstructions, PROMPT, WIREFRAME_AUTHORING } from "./planner";
 
-test("offers grounded optional diagrams with three valid authoring examples", () => {
+test("offers grounded optional diagrams with valid diagram and chart authoring examples", () => {
 	expect(PROMPT).toContain(DIAGRAM_AUTHORING);
 	expect(plannerInstructions("octo-org/score")).toContain(DIAGRAM_AUTHORING);
 	expect(DIAGRAM_AUTHORING).toContain("Start from the reader's question");
 	expect(DIAGRAM_AUTHORING).toContain("ordinary multiple-choice");
 	expect(DIAGRAM_AUTHORING).toContain("field-specific validation message");
 	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)];
-	expect(examples).toHaveLength(3);
+	expect(examples).toHaveLength(6);
 	for (let [index, example] of examples.entries()) {
 		let rendered = renderDiagram(JSON.parse(example[1]!) as unknown);
 		expect(rendered.ok, `example ${index + 1}`).toBe(true);
 	}
 });
+
+test("ordinary and Atomic Planner instructions expose the registered visual inventory", () => {
+	for (let workspace of [undefined, { cwd: "/tmp/chopin-test", checkout: false }]) {
+		let prompt = plannerInstructions("octo-org/score", undefined, workspace);
+		let advertised = [...prompt.matchAll(/^- `([^`]+)`: /gm)].map(match => match[1]);
+		expect(advertised.sort()).toEqual(Object.keys(DIAGRAM_TYPES).sort());
+		for (let [alias, canonical] of Object.entries(DIAGRAM_ALIASES)) {
+			expect(prompt).toContain(`\`${alias}\` → \`${canonical}\``);
+		}
+	}
+});
+
+test("ordinary and Atomic guidance prefers native diagrams with a bounded Mermaid fallback", () => {
+	for (let workspace of [undefined, { cwd: "/tmp/chopin-test", checkout: false }]) {
+		let prompt = plannerInstructions("octo-org/score", undefined, workspace).replace(/\s+/g, " ");
+		expect(prompt).toContain(
+			"Use Chopin's native `seecode` charts and diagrams by default whenever a registered type can represent the required information.",
+		);
+		expect(prompt).toContain(
+			"Use `mermaid` only when no native type can provide the required representation or the user explicitly requests Mermaid.",
+		);
+		expect(prompt).toContain("including `pie` and `xychart-beta` bar/line charts");
+	}
+});
+
+test("ordinary guidance supplies an executable numerical chart example", () => {
+	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)]
+		.map(match => JSON.parse(match[1]!));
+	let bar = examples.find(example => example.type === "bar");
+	expect(bar).toBeDefined();
+	expect(renderDiagram(bar)).toMatchObject({ ok: true, type: "bar" });
+});
+
+test.each(["marimekko", "dumbbell"])(
+	"supplies a valid %s example with its variant data shape",
+	type => {
+		let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)]
+			.map(match => JSON.parse(match[1]!));
+		let example = examples.find(spec => spec.type === type);
+		expect(example).toBeDefined();
+		expect(renderDiagram(example)).toMatchObject({ ok: true, type: "bar" });
+		expect(DIAGRAM_AUTHORING).not.toContain("An alias uses its canonical type's data shape");
+	},
+);
 
 test("teaches wireframe fences with a valid example and every kind", () => {
 	expect(PROMPT).toContain(WIREFRAME_AUTHORING);
@@ -44,6 +94,9 @@ test("makes Jev the only visual decision maker in routed Planner sessions", () =
 	expect(routed).toContain("do not make");
 	expect(routed).toContain("Pass visual_route to edit_plan");
 	expect(routed).toContain("Chopin Jev visual authoring guide");
+	expect(routed).toContain("Do not substitute Mermaid for a Jev-selected diagram.");
+	expect(routed).not.toContain("Use `mermaid` only when");
+	expect(routed).not.toContain("the user explicitly requests Mermaid");
 	expect(routed).toContain("repair the named field using the same visual_route");
 	expect(routed).toContain("unavailable, do not write that explanatory passage");
 	expect(routed).not.toContain("use the prose route and state the limitation");
