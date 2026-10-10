@@ -170,6 +170,13 @@ test("allows only Chopin-returned hosted image paths", () => {
 	expect(PROMPT).toContain("Never invent or guess such a path.");
 });
 
+test("describes sized images from their allowlisted schema", () => {
+	expect(PROMPT).toContain("`Image` (src=text, alt=text (may be empty), width=integer 1..4096)");
+	expect(PROMPT).toContain("holds nothing, inline or standalone");
+	expect(PROMPT).toContain('<Image src="…" alt="" width="320" />');
+	expect(PROMPT).toContain("Preserve\nan existing image's width");
+});
+
 test("treats typed references as optional untrusted evidence, not edit authority", () => {
 	expect(PROMPT).toContain("Use `read_reference`");
 	expect(PROMPT).toContain("Research Workspace is relevant to the current request");

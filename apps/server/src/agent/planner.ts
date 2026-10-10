@@ -29,7 +29,7 @@ import { DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING } from "./visual-authoring"
 export { DIAGRAM_AUTHORING };
 
 /** Components the agent writes itself. The rest are created for it. */
-const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
+const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline", "Image"];
 
 /**
  * Describe the dialect from the dialect.
@@ -45,9 +45,15 @@ function reference(): string {
 		if (!spec) return undefined;
 
 		let attributes = Object.entries(spec.attributes)
-			.filter(([, value]) => value.type === "text" || value.type === "enum")
+			.filter(([, value]) => ["text", "enum", "integer"].includes(value.type))
 			.map(([key, value]) => {
-				let detail = value.type === "enum" ? value.values.join(" | ") : "text";
+				let detail = value.type === "enum"
+					? value.values.join(" | ")
+					: value.type === "integer"
+					? `integer ${value.min}..${value.max}`
+					: value.type === "text" && value.empty
+					? "text (may be empty)"
+					: "text";
 				return `${key}${value.required ? "" : "?"}=${detail}`;
 			});
 
@@ -61,7 +67,8 @@ function reference(): string {
 
 		let parent = spec.parent ? `, only inside ${spec.parent.join(" or ")}` : "";
 		let attrs = attributes.length > 0 ? ` (${attributes.join(", ")})` : "";
-		return `- \`${name}\`${attrs} — holds ${holds}${parent}.`;
+		let placement = spec.kind === "both" ? ", inline or standalone" : "";
+		return `- \`${name}\`${attrs} — holds ${holds}${parent}${placement}.`;
 	}).filter(Boolean).join("\n");
 }
 
@@ -249,6 +256,10 @@ code fences, footnotes, links (\`https:\` and \`mailto:\` only, plus
 repository-relative paths), and images. Images use an absolute \`https:\` URL
 or a \`/images/<sha256>.<ext>\` path that Chopin returned when the image was
 uploaded to this document. Never invent or guess such a path.
+A resized image uses \`<Image src="…" alt="" width="320" />\`; width is a quoted
+integer in pixels, and its height follows the intrinsic aspect ratio. Preserve
+an existing image's width when editing its surrounding content. Ordinary
+Markdown images keep their automatic size.
 
 ${DIAGRAM_INTRO}
 quantitative — a cost model, a bound, a threshold — rather than spelling the

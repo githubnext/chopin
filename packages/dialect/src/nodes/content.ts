@@ -23,6 +23,7 @@ import {
 } from "lexical";
 
 import { render } from "./render";
+import { MAX_IMAGE_WIDTH } from "../limits";
 
 import type {
 	EditorConfig,
@@ -55,6 +56,10 @@ export const metaState = createState("plan-meta", { parse: text });
 export const inlineState = createState("plan-inline", { parse: flag });
 export const srcState = createState("plan-src", { parse: text });
 export const altState = createState("plan-alt", { parse: text });
+// Preserve invalid peer state for projection validation instead of silently resetting the width.
+export const imageWidthState = createState("plan-image-width", {
+	parse: value => value === undefined ? 0 : typeof value === "number" ? value : NaN,
+});
 export const identifierState = createState("plan-identifier", { parse: text });
 
 // -- code ------------------------------------------------------------------
@@ -266,7 +271,10 @@ export function $isMathNode(node: LexicalNode | null | undefined): node is MathN
 
 // -- image -----------------------------------------------------------------
 
-type SerializedImage = Spread<{ planSrc: string; planAlt: string }, SerializedLexicalNode>;
+type SerializedImage = Spread<
+	{ planSrc: string; planAlt: string; planWidth?: number },
+	SerializedLexicalNode
+>;
 
 /** An image, referenced by absolute `https:` URL or by a Chopin-hosted `/images/<sha256>.<ext>` path. */
 export class ImageNode extends DecoratorNode<unknown> {
@@ -298,14 +306,31 @@ export class ImageNode extends DecoratorNode<unknown> {
 		return $setState(this.getWritable(), altState, value);
 	}
 
+	getWidth(): number {
+		return $getState(this, imageWidthState);
+	}
+
+	setWidth(value: number): this {
+		if (!Number.isInteger(value) || value < 0 || value > MAX_IMAGE_WIDTH) {
+			throw new RangeError(`Image width must be an integer from 0 to ${MAX_IMAGE_WIDTH}`);
+		}
+		return $setState(this.getWritable(), imageWidthState, value);
+	}
+
 	override exportJSON(): SerializedImage {
-		return { ...super.exportJSON(), planSrc: this.getSrc(), planAlt: this.getAlt() };
+		return {
+			...super.exportJSON(),
+			planSrc: this.getSrc(),
+			planAlt: this.getAlt(),
+			...(this.getWidth() ? { planWidth: this.getWidth() } : {}),
+		};
 	}
 
 	override updateFromJSON(serialized: LexicalUpdateJSON<SerializedImage>): this {
 		return super.updateFromJSON(serialized)
 			.setSrc(serialized.planSrc ?? "")
-			.setAlt(serialized.planAlt ?? "");
+			.setAlt(serialized.planAlt ?? "")
+			.setWidth(serialized.planWidth === undefined ? this.getWidth() : serialized.planWidth);
 	}
 
 	override createDOM(): HTMLElement {
@@ -325,8 +350,8 @@ export class ImageNode extends DecoratorNode<unknown> {
 	}
 }
 
-export function $createImageNode(src = "", alt = ""): ImageNode {
-	return $applyNodeReplacement(new ImageNode().setSrc(src).setAlt(alt));
+export function $createImageNode(src = "", alt = "", width = 0): ImageNode {
+	return $applyNodeReplacement(new ImageNode().setSrc(src).setAlt(alt).setWidth(width));
 }
 
 export function $isImageNode(node: LexicalNode | null | undefined): node is ImageNode {

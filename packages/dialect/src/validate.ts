@@ -166,7 +166,7 @@ class Validator {
 		}
 
 		let expected = node.type === "mdxJsxFlowElement" ? "flow" : "text";
-		if (spec.kind !== expected) {
+		if (spec.kind !== "both" && spec.kind !== expected) {
 			this.add(
 				"wrong-kind",
 				`\`${spec.name}\` is a ${spec.kind} component but was used as ${expected}`,
@@ -201,6 +201,7 @@ class Validator {
 		this.#attributes(node, spec, path);
 		this.#content(node, spec, path, parentNode);
 		if (spec.name === "Question") this.#questionChoices(node, path);
+		if (spec.name === "Image") this.#image(stringAttribute(node, "src") ?? "", path, node);
 
 		this.#descend(node, path, depth, [...ancestors, spec.name]);
 	}
@@ -349,12 +350,28 @@ class Validator {
 					break;
 
 				case "text":
-					if (!value.trim() && !["Question", "Option", "Answer"].includes(spec.name)) {
+					if (
+						!value.trim() && !attribute.empty
+						&& !["Question", "Option", "Answer"].includes(spec.name)
+					) {
 						this.add("empty-attribute", `\`${spec.name}.${name}\` cannot be empty`, path, node);
 					} else if (value.length > attribute.max) {
 						this.add(
 							"attribute-too-long",
 							`\`${spec.name}.${name}\` exceeds ${attribute.max} characters`,
+							path,
+							node,
+						);
+					}
+					break;
+				case "integer":
+					if (
+						!/^(0|[1-9][0-9]*)$/.test(value) || Number(value) < attribute.min
+						|| Number(value) > attribute.max
+					) {
+						this.add(
+							"bad-attribute-value",
+							`\`${spec.name}.${name}\` must be an integer from ${attribute.min} to ${attribute.max}`,
 							path,
 							node,
 						);
@@ -534,10 +551,21 @@ export function assert(root: Root, options: Options = {}): void {
 	if (!result.ok) throw new PlanValidationError(result.issues);
 }
 
+/** The URL destination shared by Markdown images and their sized JSX representation. */
+function destination(node: Nodes): { url: string; kind: "link" | "image" } | undefined {
+	if (node.type === "link" || node.type === "image") return { url: node.url, kind: node.type };
+	if (isJsx(node) && node.name === "Image") {
+		let url = stringAttribute(node, "src");
+		if (url !== undefined) return { url, kind: "image" };
+	}
+	return undefined;
+}
+
 /** Every link and image URL under these nodes. */
 function urls(nodes: readonly Nodes[], found = new Set<string>()): Set<string> {
 	for (let node of nodes) {
-		if (node.type === "link" || node.type === "image") found.add(node.url);
+		let target = destination(node);
+		if (target) found.add(target.url);
 		urls(children(node), found);
 	}
 	return found;
@@ -567,11 +595,12 @@ export function assertIntroducedUrls(before: readonly Nodes[], after: readonly N
 			let index = counts.get(name) ?? 0;
 			counts.set(name, index + 1);
 			let here = `${path} > ${name}[${index}]`;
-			if ((node.type === "link" || node.type === "image") && !known.has(node.url)) {
-				let problem = dialect.disguisedUrl(node.url, node.type);
+			let target = destination(node);
+			if (target && !known.has(target.url)) {
+				let problem = dialect.disguisedUrl(target.url, target.kind);
 				if (problem) {
 					issues.push({
-						code: node.type === "image" ? "bad-image" : "bad-link",
+						code: target.kind === "image" ? "bad-image" : "bad-link",
 						message: problem,
 						path: here,
 						...(node.position ? { offset: node.position.start.offset } : {}),
