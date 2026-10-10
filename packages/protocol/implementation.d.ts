@@ -34,6 +34,18 @@ export type LiveSnapshot = {
 	pullRequests: string[];
 	/** Tasks the first build stopped short of; the next rebuild finishes them. */
 	outstanding?: string[];
+	/**
+	 * The outstanding tasks still unfinished, with any blocker. Only an edit starts the rebuild
+	 * that retries them, so an in-sync document with any of these needs attention.
+	 */
+	outstandingTasks?: Array<{
+		id: string;
+		title: string;
+		state: "queued" | "in_progress" | "blocked";
+		blocker?: string;
+	}>;
+	/** Rebuilds that landed with no commit or task: the document needed no code change. */
+	noChange?: Array<{ buildId: string; revision: number; summary: string; at: string }>;
 	commits: Array<{
 		pullRequest: string;
 		sha: string;
