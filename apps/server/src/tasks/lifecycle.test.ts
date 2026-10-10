@@ -719,6 +719,27 @@ describe("implementation task lifecycle", () => {
 		});
 	});
 
+	it("starts a queued task implicitly when it is blocked before start_task", async () => {
+		let module = await lifecycle() as {
+			transition: (state: any, input: any) => any;
+			progressFor: (graph: Graph, lifecycle: unknown, execution?: Run) => any;
+		};
+		let state: any = { graph, execution, lifecycle: { history: [] } };
+		let result = module.transition(state, {
+			kind: "block",
+			runId: execution.id,
+			taskId: "delivery",
+			reason: "Needs a product decision.",
+			idempotencyKey: "block-delivery",
+		});
+		expect(result.kind).toBe("accepted");
+		expect(module.progressFor(graph, result.state.lifecycle, execution).tasks[1]).toEqual({
+			id: "delivery",
+			state: "blocked",
+			blocker: "Needs a product decision.",
+		});
+	});
+
 	it("preserves revision request as an unsuccessful release", async () => {
 		let module = await lifecycle() as {
 			transition: (state: any, input: any) => any;
