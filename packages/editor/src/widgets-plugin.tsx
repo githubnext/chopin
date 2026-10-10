@@ -51,7 +51,9 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		if (params?.questions) {
 			let store = params.questions;
 			realm.pub(addComposerChild$, () => <QuestionnaireObserver store={store} />);
-			realm.pub(addComposerChild$, () => <ResolvedLayer store={store} />);
+			let threads = params.threads;
+			// One lane, and one pin, for resolved decisions and resolved comments alike.
+			realm.pub(addComposerChild$, () => <ResolvedLayer store={store} threads={threads} />);
 		}
 		if (params?.threads) {
 			let store = params.threads;

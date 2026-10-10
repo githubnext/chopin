@@ -109,7 +109,8 @@ function Mention() {
 	return <span className="plan-comment-mention">@Chopin</span>;
 }
 
-function Note({ actions, note }: { actions?: ReactNode; note: Comment.Note }) {
+/** One note: its author row and body. Also read back, without actions, in a resolved thread. */
+export function Note({ actions, note }: { actions?: ReactNode; note: Comment.Note }) {
 	return (
 		<li className="plan-comment-note" data-planner={note.author === "planner" || undefined}>
 			<div className="plan-comment-note-head">

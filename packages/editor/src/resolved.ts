@@ -223,3 +223,55 @@ export function verticalReach(
 		return { top, bottom };
 	});
 }
+
+/** Space between markers stacked beside one block. */
+export const STACK_GAP = 4;
+
+/**
+ * Markers that would land on top of each other step down the lane instead.
+ *
+ * A decision and a resolved comment can both stand beside one block, and so
+ * can two of either. Each keeps its own top unless the marker above it in the
+ * same lane reaches it, in which case it sits just below. The input is in
+ * document order, which is the order they stack in.
+ */
+export function stack(
+	markers: readonly { top: number; left: number; height: number }[],
+	gap = STACK_GAP,
+): number[] {
+	let order = markers.map((_, index) => index)
+		.sort((a, b) => markers[a]!.top - markers[b]!.top || a - b);
+	let tops: number[] = markers.map(marker => marker.top);
+	let placed: number[] = [];
+	for (let index of order) {
+		let marker = markers[index]!;
+		let top = marker.top;
+		for (let other of placed) {
+			let above = markers[other]!;
+			if (Math.abs(above.left - marker.left) > 1) continue;
+			let bottom = tops[other]! + above.height + gap;
+			if (tops[other]! <= top && top < bottom) top = bottom;
+		}
+		tops[index] = top;
+		placed.push(index);
+	}
+	return tops;
+}
+
+/** How a resolved comment's marker is keyed, beside decisions' `widget/question`. */
+export function commentKey(thread: string): string {
+	return `comment:${thread}`;
+}
+
+/** The quiet line under a resolved comment's opening note. */
+export function resolvedCommentMeta(
+	{ notes, resolver }: { notes: number; resolver?: string },
+	name: (handle: string) => string,
+): string {
+	let replies = Math.max(0, notes - 1);
+	return [
+		...(replies > 0 ? [`${replies} ${replies === 1 ? "reply" : "replies"}`] : []),
+		...(resolver ? [`Resolved by ${name(resolver)}`] : ["Resolved"]),
+		"Edited by Chopin",
+	].join(" · ");
+}

@@ -112,6 +112,52 @@ export async function storedAcceptedComment(
 	}
 }
 
+/**
+ * A resolved comment whose Planner turn wrote the blocks at `result`, as stored.
+ *
+ * The notes alternate between the member and Chopin, starting with the member.
+ */
+export async function storedResolvedComment(
+	source: string,
+	quote: string,
+	{ block = 0, notes, resolver, result }: {
+		block?: number;
+		notes: string[];
+		resolver: string;
+		result: number[];
+	},
+) {
+	let document = await Room.create(source);
+	try {
+		let passage = Room.passageAt(document, [block], quote, 0, quote.length);
+		let hashes = Room.digests(document);
+		let at = new Date("2026-08-13T12:00:00.000Z").getTime() / 1_000;
+		let id = ulid();
+		return {
+			id,
+			thread: {
+				id,
+				status: "resolved",
+				passage,
+				notes: notes.map((text, index) =>
+					index % 2 === 0
+						? { id: ulid(), author: "member", handle: resolver, text, ts: at + index * 60 }
+						: { id: ulid(), author: "planner", text, ts: at + index * 60 }
+				),
+				quote,
+				resolver,
+				at: at + notes.length * 60,
+				result: {
+					anchors: result.map(index => Room.anchorAt(document, index, hashes[index]!)),
+					pending: false,
+				},
+			},
+		};
+	} finally {
+		document.doc.destroy();
+	}
+}
+
 export async function openPlan(source = "", state: SeedState = {}) {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();
