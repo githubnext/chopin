@@ -11,7 +11,7 @@ import {
 } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
-import { ChopinMark, Face, useCardMeta } from "@chopin/editor";
+import { ChopinMark, Face, openCommentThread, useCardMeta } from "@chopin/editor";
 import { EmptyState } from "@chopin/visuals";
 
 import { MessageMarkdown } from "./markdown";
@@ -106,24 +106,6 @@ function SystemEntry(
 	);
 }
 
-/** The fragment a comment's Copy link writes, which the document follows to open it. */
-const COMMENT_LINK = "#comment-";
-
-/**
- * Open a comment thread in the document beside this Chat.
- *
- * Through the same fragment a copied link uses, so there is one way in. The
- * fragment is cleared first when it already names the thread, or following it
- * again would change nothing and the thread would stay closed.
- */
-function openComment(thread: string): void {
-	let hash = `${COMMENT_LINK}${thread}`;
-	if (location.hash === hash) {
-		history.replaceState(history.state, "", `${location.pathname}${location.search}`);
-	}
-	location.hash = hash;
-}
-
 /** A comment sent to Chopin: what it was about and what it said, linking back to the thread. */
 function CommentSystemEntry(
 	{ comment, enter }: {
@@ -132,16 +114,12 @@ function CommentSystemEntry(
 	},
 ) {
 	return (
-		<a
+		<button
 			className="chat-comment-notice"
 			data-chat-comment={comment.thread}
 			data-chat-enter={enter || undefined}
-			href={`${COMMENT_LINK}${comment.thread}`}
-			onClick={event => {
-				if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-				event.preventDefault();
-				openComment(comment.thread);
-			}}
+			onClick={() => openCommentThread(comment.thread)}
+			type="button"
 		>
 			<span className="chat-comment-notice-head">
 				<MessageForwardIcon aria-hidden="true" className="icon-first-line" size={14} />
@@ -153,7 +131,7 @@ function CommentSystemEntry(
 			<span className="chat-comment-notice-body">
 				<span className="chat-comment-notice-mention">@Chopin</span> {comment.note}
 			</span>
-		</a>
+		</button>
 	);
 }
 

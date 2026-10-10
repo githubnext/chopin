@@ -953,7 +953,7 @@
 	min-width: 0;
 }
 
-.plan-comment-chip {
+.plan-comment-address-chip {
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -970,14 +970,14 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.plan-comment-chip {
+	.plan-comment-address-chip {
 		transition:
 			opacity var(--duration-fast) var(--ease-out),
 			scale var(--duration-fast) var(--ease-out);
 	}
 
 	@starting-style {
-		.plan-comment-chip {
+		.plan-comment-address-chip {
 			opacity: 0;
 			scale: 0.9;
 		}

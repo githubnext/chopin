@@ -15,7 +15,7 @@ import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
-import { useThreads } from "./threads";
+import { OPEN_COMMENT, useThreads } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
@@ -716,8 +716,16 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		let follow = () => {
 			if (location.hash.startsWith(LINK)) setLinked(location.hash.slice(LINK.length));
 		};
+		let open = (event: Event) => {
+			let id = (event as CustomEvent<unknown>).detail;
+			if (typeof id === "string") setLinked(id);
+		};
 		addEventListener("hashchange", follow);
-		return () => removeEventListener("hashchange", follow);
+		addEventListener(OPEN_COMMENT, open);
+		return () => {
+			removeEventListener("hashchange", follow);
+			removeEventListener(OPEN_COMMENT, open);
+		};
 	}, []);
 
 	// A copied link opens its thread once the thread has somewhere to stand.

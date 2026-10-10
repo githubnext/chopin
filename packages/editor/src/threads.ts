@@ -600,6 +600,20 @@ function order(editor: LexicalEditor, key: string): number | undefined {
 	}
 }
 
+/** The event that asks the open document to show a comment thread. */
+export const OPEN_COMMENT = "chopin:open-comment";
+
+/**
+ * Ask the document beside this page to open a comment thread, from anywhere.
+ *
+ * An event rather than the fragment a copied link uses: following a fragment
+ * is navigation, and Chat pointing at a thread should not add history or wake
+ * the router.
+ */
+export function openCommentThread(thread: string): void {
+	dispatchEvent(new CustomEvent<string>(OPEN_COMMENT, { detail: thread }));
+}
+
 /** Mounted inside the editor, so resolution re-runs as the document changes. */
 export function ThreadObserver({ store }: { store: ThreadStore }) {
 	let [editor] = useLexicalComposerContext();
