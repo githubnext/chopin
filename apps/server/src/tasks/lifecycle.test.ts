@@ -740,6 +740,48 @@ describe("implementation task lifecycle", () => {
 		});
 	});
 
+	it("replaces a blocker on a live run without rechecking dependencies", async () => {
+		let module = await lifecycle() as {
+			transition: (state: any, input: any) => any;
+			resumeLiveRun: (graph: Graph, lifecycle: any, runId: string, added: any[]) => any;
+			historyFor: (graph: Graph, lifecycle: unknown) => any;
+		};
+		let state: any = { graph, execution, lifecycle: { history: [] } };
+		for (let taskId of ["foundation", "delivery"]) {
+			state = apply(module, state, {
+				kind: "block",
+				runId: execution.id,
+				taskId,
+				reason: `Waiting on ${taskId}.`,
+				idempotencyKey: `block-${taskId}`,
+			});
+		}
+		let reblock = {
+			kind: "block",
+			taskId: "delivery",
+			reason: "Still needs a product decision.",
+			idempotencyKey: "reblock-delivery",
+		};
+		expect(module.transition(state, { ...reblock, runId: execution.id })).toEqual({
+			kind: "refused",
+			reason: "task-state",
+		});
+		state = apply(module, state, {
+			kind: "request_revision",
+			runId: execution.id,
+			reason: "Later edits resume the outstanding tasks.",
+			idempotencyKey: "live-stop",
+		});
+		state.lifecycle.history[0].live = true;
+		let resumed = module.resumeLiveRun(state.graph, state.lifecycle, execution.id, [reblock]);
+		expect(resumed).toBeDefined();
+		expect(module.historyFor(state.graph, resumed)[0].progress.tasks[1]).toEqual({
+			id: "delivery",
+			state: "blocked",
+			blocker: "Still needs a product decision.",
+		});
+	});
+
 	it("preserves revision request as an unsuccessful release", async () => {
 		let module = await lifecycle() as {
 			transition: (state: any, input: any) => any;

@@ -19,6 +19,47 @@ export type BuildRequest = {
 	state: "queued" | "starting" | "running" | "stopped" | "failed";
 	session?: string;
 	error?: string;
+	/** A rebuild carries edits since `baseRevision` onto a live build's pull requests. */
+	kind?: "rebuild";
+	baseRevision?: number;
+	targetRevision?: number;
+};
+/** A living document's last delivered build and its sync state, without the built source. */
+export type LiveSnapshot = {
+	buildId: string;
+	user: string;
+	repositoryId: string;
+	checkout: CheckoutContext;
+	baseRevision: number;
+	pullRequests: string[];
+	/** Tasks the first build stopped short of; the next rebuild finishes them. */
+	outstanding?: string[];
+	/**
+	 * The outstanding tasks still unfinished, with any blocker. Only an edit starts the rebuild
+	 * that retries them, so an in-sync document with any of these needs attention.
+	 */
+	outstandingTasks?: Array<{
+		id: string;
+		title: string;
+		state: "queued" | "in_progress" | "blocked";
+		blocker?: string;
+	}>;
+	/** Rebuilds that landed with no commit or task: the document needed no code change. */
+	noChange?: Array<{ buildId: string; revision: number; summary: string; at: string }>;
+	commits: Array<{
+		pullRequest: string;
+		sha: string;
+		message: string;
+		/** The document revision this commit brought its pull request up to. */
+		revision: number;
+		at: string;
+	}>;
+	/** The latest rebuild; its state distinguishes building from failed. */
+	rebuild?: BuildRequest;
+	/** The current document differs from the source last built onto the pull requests. */
+	outOfSync: boolean;
+	/** A workspace of the live build's user is connected for this document. */
+	builderConnected: boolean;
 };
 export type ImplementationSnapshot = {
 	revision: number;
@@ -46,6 +87,7 @@ export type ImplementationSnapshot = {
 	localAgent: boolean;
 	blockers: string[];
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
+	live?: LiveSnapshot;
 };
 
 /**

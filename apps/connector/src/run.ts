@@ -4,7 +4,7 @@ import type { BuildRequest } from "@chopin/protocol/implementation";
 import type { remote } from "./mcp";
 import { runAgent } from "./acp";
 import { git, prepareWorkspace } from "./workspace";
-import { implementationPrompt } from "./implementation";
+import { implementationPrompt, liveImplementationPrompt, rebuildPrompt } from "./implementation";
 
 type Options = {
 	root: string;
@@ -13,6 +13,7 @@ type Options = {
 	url: string;
 	script: string;
 	signal: AbortSignal;
+	heartbeatMs?: number;
 };
 export async function runWork(
 	api: Awaited<ReturnType<typeof remote>>,
@@ -21,7 +22,15 @@ export async function runWork(
 	options: Options,
 ) {
 	let implementation = kind === "implementation";
-	let claim = raw as { build: BuildRequest; input: unknown; generation: number; runToken: string };
+	let claim = raw as {
+		build: BuildRequest;
+		/** A living document's first build, whose run ends at its last complete_task. */
+		live?: boolean;
+		input: unknown;
+		generation: number;
+		runToken: string;
+	};
+	let rebuild = implementation && claim.build.kind === "rebuild";
 	let input = implementation
 		? {
 			id: claim.build.id,
@@ -41,19 +50,25 @@ export async function runWork(
 		void api.call(implementation ? "renew_implementation_build" : "renew_experiment", {
 			...identity,
 			...(!implementation ? { progress: latestProgress } : {}),
+		}).then(result => {
+			// A rebuild stops once its report lands; the agent may still be finishing its turn.
+			if ((result as { state?: string } | undefined)?.state === "stopped") clearInterval(heartbeat);
 		}).catch(() => abort.abort()).finally(() => renewing = false);
-	}, 10_000);
+	}, options.heartbeatMs ?? 10_000);
 	try {
 		let prepared = await prepareWorkspace(options.root, options.directory, input);
-		if (implementation) {
+		// A rebuild commits onto the existing pull request branches the agent checks out itself.
+		if (implementation && !rebuild) {
 			git(prepared.path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
 		}
 		console.error(`Running ${input.id} in ${prepared.path}`);
 		let stop = await runAgent({
 			command: options.command,
 			cwd: prepared.path,
-			prompt: implementation
-				? implementationPrompt
+			prompt: rebuild
+				? rebuildPrompt
+				: implementation
+				? claim.live ? liveImplementationPrompt : implementationPrompt
 				: "Use read_investigation from the Chopin MCP server to read the authorized request. "
 					+ "Perform that investigation using your normal project instructions and tools. "
 					+ "Submit a bounded result with submit_investigation_result, then finish. "

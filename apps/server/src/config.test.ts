@@ -35,6 +35,13 @@ describe("configuration", () => {
 		).toBe(false);
 	});
 
+	it("keeps living-document builds opt-in", () => {
+		expect(configured().liveBuild).toBe(false);
+		expect(configured({ LIVE_BUILD: "yes" }).liveBuild).toBe(false);
+		expect(configured({ LIVE_BUILD: "on" }).liveBuild).toBe(true);
+		expect(description(configured({ LIVE_BUILD: "on" }))).toContain("live build: on");
+	});
+
 	it("gates background execution and web research behind the hosted agent", () => {
 		expect(configured()).toMatchObject({ agent: true, backgroundJobs: true, webResearch: true });
 		expect(configured({ WEB_RESEARCH: "off" })).toMatchObject({

@@ -6,13 +6,14 @@ import { LIFECYCLE_TOOLS, lifecycleCall } from "../mcp/lifecycle";
 import { exclusive, source } from "../plan/service";
 import type { Plan } from "../plan/service";
 import { claimImplementation, reportImplementationLifecycle } from "./plan-graphs";
-import { pickBuild, reportBuild } from "./builds";
+import { pickBuild, readRebuild, rebuildReportSchema, reportBuild, reportRebuild } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 
 export type WithPlan = <T>(id: string, action: (plan: Plan) => Promise<T>) => Promise<T>;
 
 export function implementationSchemas(
 	runScoped: boolean,
+	rebuild = false,
 ): Record<string, z.ZodType<Record<string, unknown>>> {
 	if (!runScoped) {
 		let id = z.string().uuid();
@@ -27,6 +28,9 @@ export function implementationSchemas(
 				error: z.string().max(2000).optional(),
 			}).strict(),
 		};
+	}
+	if (rebuild) {
+		return { read_rebuild: z.object({}).strict(), report_rebuild: rebuildReportSchema };
 	}
 	return {
 		read_implementation: z.object({}).strict(),
@@ -187,10 +191,40 @@ export function implementationConnector(
 					|| build.id !== (grant.run?.id ?? args.id)
 				) fail("build-forbidden");
 				if (grant.run) {
+					let rebuild = build.kind === "rebuild";
+					// A retried report of a rebuild that already landed returns the same result.
 					if (
-						grant.run.kind !== "implementation" || grant.run.generation !== 1
+						rebuild && name === "report_rebuild" && build.state === "stopped"
+						&& grant.run.kind === "rebuild" && grant.run.generation === 1
+					) {
+						let report = rebuildReportSchema.safeParse(args);
+						if (!report.success) fail("invalid-request");
+						let commits = plan.live?.commits ?? [];
+						if (
+							plan.lifecycle.history.some(item => item.run.id === build.id)
+							|| report.data.commits.every(commit =>
+								commits.some(item =>
+									item.sha === commit.sha && item.pullRequest === commit.pullRequest
+								)
+							)
+						) return { state: "stopped" };
+					}
+					if (
+						grant.run.kind !== (rebuild ? "rebuild" : "implementation")
+						|| grant.run.generation !== 1
 						|| build.state !== "running" || build.expiresAt <= Date.now()
 					) fail("build-inactive");
+					if (rebuild) {
+						if (name === "read_rebuild") {
+							return await readRebuild(plan, build.id) ?? fail("build-inactive");
+						}
+						if (name !== "report_rebuild") fail("tool-forbidden");
+						let report = rebuildReportSchema.safeParse(args);
+						if (!report.success) fail("invalid-request");
+						let result = await reportRebuild(plan, build.id, report.data);
+						if (result.kind === "refused") fail(result.reason);
+						return { state: "stopped" };
+					}
 					if (name === "read_implementation") {
 						return exclusive(plan, async () => ({
 							document: {
@@ -221,10 +255,26 @@ export function implementationConnector(
 					if (!picked) fail("build-already-claimed");
 					return {
 						build: picked,
+						// A first build of a living document ends at its last complete_task.
+						live: picked.kind !== "rebuild" && !!plan.persistence.liveBuild && !plan.live,
 						documentId: plan.id,
 						source: { ...picked.checkout, repositoryId: picked.repositoryId },
-						runToken: connections.runToken(connection.id, plan.id, picked.id, 1, "implementation"),
+						runToken: connections.runToken(
+							connection.id,
+							plan.id,
+							picked.id,
+							1,
+							picked.kind === "rebuild" ? "rebuild" : "implementation",
+						),
 					};
+				}
+				// A reported rebuild has already stopped; the connector's own stop report is a no-op and
+				// a heartbeat learns to stop renewing.
+				if (build.kind === "rebuild" && build.state === "stopped") {
+					if (name === "renew_implementation_build") return { accepted: true, state: "stopped" };
+					if (name === "report_implementation_build" && args.state === "stopped") {
+						return { accepted: true };
+					}
 				}
 				if (!["starting", "running"].includes(build.state) || build.expiresAt <= Date.now()) {
 					fail("build-inactive");
@@ -240,8 +290,18 @@ export function implementationConnector(
 						session?: string;
 						error?: string;
 					};
+					if (build.kind === "rebuild" && report.state === "stopped") {
+						// Only report_rebuild lands a rebuild; ending without it leaves the live base alone.
+						report = {
+							state: "failed",
+							error: "The agent finished without reporting the rebuild.",
+						};
+					}
 					if (report.state === "running") {
 						if (!report.session || build.state !== "starting") fail("invalid-state");
+					}
+					// A rebuild leaves the document open, so it never claims or locks the graph.
+					if (report.state === "running" && report.session && build.kind !== "rebuild") {
 						let claim = await claimImplementation(plan, {
 							planRevision: build.planRevision,
 							graphRevision: build.graphRevision,

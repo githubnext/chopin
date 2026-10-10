@@ -1,5 +1,6 @@
 import { AgentApp, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { McpServer } from "@agentclientprotocol/sdk";
+import { spawnSync } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -8,6 +9,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 if (process.argv.includes("--fail-start")) process.exit(1);
 
 let servers: McpServer[] = [];
+let cwd = "";
 let app = new AgentApp()
 	.onRequest(
 		"initialize",
@@ -18,9 +20,29 @@ let app = new AgentApp()
 	)
 	.onRequest("session/new", ({ params }) => {
 		servers = params.mcpServers;
+		cwd = params.cwd;
 		return { sessionId: "implementation-acp-session" };
 	})
 	.onRequest("session/prompt", async ({ params }) => {
+		if (process.argv.includes("--rebuild")) {
+			let text = params.prompt.map(part => part.type === "text" ? part.text : "").join("\n");
+			if (!text.includes("read_rebuild") || text.includes("MUST use sub-agents")) {
+				throw new Error("Rebuild instruction missing");
+			}
+			let branch = spawnSync("git", ["-C", cwd, "branch", "--show-current"], { encoding: "utf8" });
+			if (branch.stdout.trim()) throw new Error(`Rebuild started on a branch: ${branch.stdout}`);
+			// Outlive a heartbeat, as an agent finishing its turn after report_rebuild does.
+			if (process.argv.includes("--slow")) await new Promise(resolve => setTimeout(resolve, 200));
+			return { stopReason: "end_turn" as const };
+		}
+		if (process.argv.includes("--live")) {
+			let text = params.prompt.map(part => part.type === "text" ? part.text : "").join("\n");
+			if (
+				!text.includes("ends at the last complete_task") || text.includes("report_verification")
+				|| text.includes("request_revision")
+			) throw new Error("Live instruction missing");
+			return { stopReason: "end_turn" as const };
+		}
 		if (
 			!params.prompt.some(part => part.type === "text" && part.text.includes("MUST use sub-agents"))
 		) {

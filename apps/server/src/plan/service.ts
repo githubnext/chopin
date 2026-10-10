@@ -1,4 +1,4 @@
-import { restoreBuilds } from "../tasks/builds";
+import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
 import { implementationStatus } from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
@@ -62,6 +62,7 @@ import type {
 import type { StorageAdapter } from "../storage/port";
 import type { PendingCardAction } from "../questions/card-actions";
 import type { ClaimInput, ClaimResult, Graph, Run } from "../tasks/graphs";
+import type { LiveBuild } from "../tasks/builds";
 import type { Lifecycle, LifecycleInput, LifecycleResult } from "../tasks/lifecycle";
 
 /** Updates are grouped for this long before being applied together. */
@@ -113,6 +114,12 @@ export type Backend = {
 	lease: () => Lease;
 	fatal: (error: unknown) => void;
 	onDocumentPersisted?: (target: DocumentTarget) => void;
+	/** Keep a finished build's source so later edits can rebuild onto its pull requests. */
+	liveBuild?: boolean;
+	/** A build reached a terminal state after its stop was persisted. */
+	onBuildStopped?: (channelId: string) => void;
+	/** A living document's editing lock was released and announced; links it refused are owed. */
+	onEditingUnlocked?: (channelId: string) => void;
 };
 
 export type DocumentTarget = {
@@ -219,6 +226,8 @@ export type Plan = {
 	execution?: Run;
 	/** Mutable task progress and prior runs, separate from claim identity. */
 	lifecycle: Lifecycle;
+	/** The finished build this living document was last delivered from. */
+	live?: LiveBuild;
 	/** A claim has closed mutation ingress while accepted work drains. */
 	claiming: boolean;
 	/**
@@ -260,6 +269,7 @@ type Sidecar = {
 	graph?: Graph;
 	execution?: Run;
 	lifecycle?: Lifecycle;
+	live?: LiveBuild;
 	mcpUpdates?: McpUpdateRecord[];
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
@@ -288,6 +298,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		...(plan.lifecycle.events?.length || plan.lifecycle.history.length > 0
 			? { lifecycle: plan.lifecycle }
 			: {}),
+		...(plan.live ? { live: plan.live } : {}),
 		...(plan.mcpUpdates.length > 0 ? { mcpUpdates: plan.mcpUpdates } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
@@ -481,6 +492,7 @@ function restoredState(
 	if (Object.hasOwn(item, "graph")) expected.push("graph");
 	if (Object.hasOwn(item, "execution")) expected.push("execution");
 	if (Object.hasOwn(item, "lifecycle")) expected.push("lifecycle");
+	if (Object.hasOwn(item, "live")) expected.push("live");
 	if (Object.hasOwn(item, "mcpUpdates")) expected.push("mcpUpdates");
 	if (Object.hasOwn(item, "conversationPlan")) expected.push("conversationPlan");
 	if (Object.hasOwn(item, "conversationPlanRetries")) expected.push("conversationPlanRetries");
@@ -521,6 +533,9 @@ function restoredState(
 		throw new Error("hosted channel has an invalid implementation lifecycle");
 	}
 	let lifecycle = hasLifecycle ? restoredLifecycle : undefined;
+	let live = Object.hasOwn(item, "live")
+		? restoreLive(item.live, builds, lifecycle?.history ?? [], item.revision)
+		: undefined;
 	let questions = objects(item.questions, "question record");
 	let records = questions.map(question => Questions.normalizeRecord(question));
 	let openQuestions = objects(item.openQuestions, "open questionnaire");
@@ -655,6 +670,7 @@ function restoredState(
 		...(builds.length ? { builds } : {}),
 		...(execution ? { execution } : {}),
 		...(lifecycle ? { lifecycle } : {}),
+		...(live ? { live } : {}),
 		...(mcpUpdates.length > 0 ? { mcpUpdates } : {}),
 		questions: records,
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
@@ -1146,10 +1162,7 @@ export async function drain(plan: Plan): Promise<void> {
 
 /** One gate for every path that can mutate a plan during implementation. */
 export function implementationActive(plan: Plan): boolean {
-	return plan.claiming || !!plan.execution
-		|| plan.builds.some(build =>
-			build.state === "queued" || build.state === "starting" || build.state === "running"
-		);
+	return plan.claiming || !!plan.execution || plan.builds.some(locksEditing);
 }
 
 /** Sidecar-only commit for a caller already holding `exclusive`. */
@@ -1361,6 +1374,7 @@ export async function open(
 		graph: sidecar.graph,
 		execution: sidecar.execution,
 		lifecycle: sidecar.lifecycle ?? { history: [] },
+		...(sidecar.live ? { live: sidecar.live } : {}),
 		claiming: false,
 		queue: [],
 		timer: undefined,

@@ -29,6 +29,65 @@ import type { Plan } from "../plan/service";
 import type { JobService } from "../jobs/service";
 import type { SocketData } from "../wire";
 
+/**
+ * One implementation task, exactly as `Arguments.graphPlan` and `graphs.validate` accept it.
+ * An untyped `task` left the Planner guessing fields such as `description`.
+ */
+export const GRAPH_TASK_SCHEMA = {
+	type: "object",
+	description: "One implementation task. Give every field; no others are accepted.",
+	properties: {
+		id: {
+			type: "string",
+			minLength: 1,
+			description: "Stable, unique task id, such as `api-routes`. Other tasks depend on it.",
+		},
+		title: { type: "string", minLength: 1, description: "Short imperative task title." },
+		context: {
+			type: "string",
+			minLength: 1,
+			description: "What the coding agent needs to know from the plan before starting.",
+		},
+		goal: {
+			type: "string",
+			minLength: 1,
+			description: "The outcome this task delivers. Put the task's description here.",
+		},
+		acceptance: {
+			type: "array",
+			minItems: 2,
+			maxItems: 8,
+			items: { type: "string", minLength: 1 },
+			description: "Two to eight checkable acceptance criteria.",
+		},
+		dependsOn: {
+			type: "array",
+			items: { type: "string", minLength: 1 },
+			description: "Ids of tasks that must finish first; [] for none. At least one task in the "
+				+ "graph has none, and dependencies cannot form a cycle.",
+		},
+	},
+	required: ["id", "title", "context", "goal", "acceptance", "dependsOn"],
+	additionalProperties: false,
+} as const;
+
+/** Readable reasons for `graphs.validate` and revision refusals the Planner can correct. */
+const GRAPH_REFUSALS: Record<string, string> = {
+	task: "Every task needs non-empty id, title, context and goal text, and acceptance and "
+		+ "dependsOn arrays.",
+	duplicate: "Two tasks share an id; task ids must be unique.",
+	acceptance: "Each task needs 2 to 8 non-empty acceptance criteria.",
+	missing: "An operation or dependsOn names a task id that is not in the graph.",
+	self: "A task cannot depend on itself.",
+	cycle: "dependsOn forms a cycle.",
+	root: "At least one task must have an empty dependsOn.",
+	operation: "An operation is malformed: add needs task, replace needs id and task, remove "
+		+ "needs id, reorder needs ids.",
+	reorder: "reorder must list every current task id exactly once.",
+	"stale-plan": "The plan changed. Call read_implementation_graph again.",
+	"stale-graph": "The graph changed. Call read_implementation_graph again.",
+};
+
 /** Every tool answers with a string; a failure is a value, not a throw. */
 async function answer(name: string, produce: () => unknown): Promise<string> {
 	try {
@@ -602,9 +661,19 @@ export const documentTools = {
 						type: "object",
 						properties: {
 							op: { type: "string", enum: ["add", "replace", "reorder", "remove"] },
-							id: { type: "string" },
-							task: { type: "object" },
-							ids: { type: "array", items: { type: "string" } },
+							id: {
+								type: "string",
+								description: "The task to replace or remove. Required for both.",
+							},
+							task: {
+								...GRAPH_TASK_SCHEMA,
+								description: "Required for add and replace. " + GRAPH_TASK_SCHEMA.description,
+							},
+							ids: {
+								type: "array",
+								items: { type: "string" },
+								description: "Every task id in its new order. Required for reorder.",
+							},
 						},
 						required: ["op"],
 						additionalProperties: false,
@@ -621,9 +690,9 @@ export const documentTools = {
 				let ready = implementationReadiness(context.plan, args.planRevision);
 				if (!ready.ok) return { ok: false, reason: "not-ready", blockers: ready.blockers };
 				let result = await implementationGraphs().revise(context.plan, args);
-				return result.ok
-					? { ok: true, graph: result.value }
-					: { ok: false, reason: result.reason };
+				if (result.ok) return { ok: true, graph: result.value };
+				let message = GRAPH_REFUSALS[result.reason];
+				return { ok: false, reason: result.reason, ...(message ? { message } : {}) };
 			}),
 	}),
 

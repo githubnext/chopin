@@ -1,7 +1,8 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
-import { type DocumentRoom, documentTools } from "./tools";
+import { type DocumentRoom, documentTools, GRAPH_TASK_SCHEMA } from "./tools";
+import { ArgumentError, GRAPH_TASK_FIELDS, graphPlan } from "./arguments";
 import { forgetWorkspaces, rememberCheckout } from "../harness/atomic/workspace";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
@@ -10,7 +11,7 @@ import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Store from "../questions/store";
 import { openPlan } from "../testing/plan";
-import { approveGraph } from "../tasks/graphs";
+import { approveGraph, validate } from "../tasks/graphs";
 
 import type { HostedAuth } from "../auth/routes";
 import type { SeedState } from "../testing/plan";
@@ -751,7 +752,7 @@ test("planner graph edits draft a revision without changing plan prose", async (
 		toolName: "edit_implementation_graph",
 		arguments: args,
 	});
-	expect(JSON.parse(stale as string)).toEqual({ ok: false, reason: "stale-graph" });
+	expect(JSON.parse(stale as string)).toMatchObject({ ok: false, reason: "stale-graph" });
 	expect(room.project(plan.document)).toBe(before);
 });
 
@@ -1142,6 +1143,97 @@ test("planner graph edits name readiness blockers before changing a graph", asyn
 		ok: false,
 		reason: "not-ready",
 		blockers: ["unanswered questionnaires"],
+	});
+	expect(plan.graph).toBeUndefined();
+});
+
+test("the graph tool advertises exactly the task fields its validators accept", async () => {
+	let task = {
+		id: "routes",
+		title: "Add the routes",
+		context: "The plan settles the route shape.",
+		goal: "Serve the new routes.",
+		acceptance: ["The routes respond.", "Unknown routes are refused."],
+		dependsOn: [],
+	};
+	let schema = (documentTools.edit_implementation_graph.inputSchema as {
+		jsonSchema: { properties: { operations: { items: { properties: { task: unknown } } } } };
+	}).jsonSchema.properties.operations.items.properties.task as typeof GRAPH_TASK_SCHEMA;
+	expect(schema.properties).toEqual(GRAPH_TASK_SCHEMA.properties);
+	expect(Object.keys(schema.properties).sort()).toEqual([...GRAPH_TASK_FIELDS].sort());
+	expect([...schema.required as readonly string[]].sort()).toEqual([...GRAPH_TASK_FIELDS].sort());
+	expect(schema.additionalProperties).toBe(false);
+	expect(Object.keys(task).sort()).toEqual([...GRAPH_TASK_FIELDS].sort());
+	expect(schema.properties.acceptance).toMatchObject({ minItems: 2, maxItems: 8 });
+
+	let parsed = graphPlan({
+		plan_revision: 1,
+		graph_revision: 0,
+		operations: [{ op: "add", task }],
+	});
+	expect(parsed.operations).toEqual([{ op: "add", task }]);
+	expect(validate({ tasks: [task] })).toEqual({ ok: true, value: { tasks: [task] } });
+	// One criterion fewer than the advertised minimum fails both validators.
+	expect(validate({ tasks: [{ ...task, acceptance: ["Only one."] }] })).toEqual({
+		ok: false,
+		reason: "acceptance",
+	});
+	expect(() =>
+		graphPlan({
+			plan_revision: 1,
+			graph_revision: 0,
+			operations: [{ op: "add", task: { ...task, acceptance: ["Only one."] } }],
+		})
+	).toThrow(ArgumentError);
+
+	let { goal: _goal, ...guessed } = task;
+	let attempt = () =>
+		graphPlan({
+			plan_revision: 1,
+			graph_revision: 0,
+			operations: [{ op: "add", task: { ...guessed, description: "Serve the new routes." } }],
+		});
+	expect(attempt).toThrow(ArgumentError);
+	expect(attempt).toThrow(/unexpected field: description/);
+	expect(attempt).toThrow(
+		/exactly id, title, context, goal, acceptance \(2-8 criteria\) and dependsOn/,
+	);
+});
+
+test("graph refusals explain how to correct the batch", async () => {
+	let { plan, server } = await opened("Prepare the implementation.\n");
+	plan.chat.busy = true;
+	plan.chat.turn = { id: "turn", handle: "ana", started: 1, entryOffset: 0, responded: false };
+	let graph = fixtureTools({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	}).find(tool => tool.name === "edit_implementation_graph");
+	if (!graph?.handler) throw new Error("edit_implementation_graph is missing");
+	let task = {
+		id: "loop",
+		title: "Depend on a missing task",
+		context: "Demonstrates a refusal.",
+		goal: "Refuse the batch.",
+		acceptance: ["The refusal names the problem.", "No graph is created."],
+		dependsOn: ["absent"],
+	};
+	let args = { plan_revision: plan.revision, graph_revision: 0, operations: [{ op: "add", task }] };
+	let response = await graph.handler(args, {
+		sessionId: "session",
+		toolCallId: "call",
+		toolName: "edit_implementation_graph",
+		arguments: args,
+	});
+	expect(JSON.parse(response as string)).toEqual({
+		ok: false,
+		reason: "missing",
+		message: "An operation or dependsOn names a task id that is not in the graph.",
 	});
 	expect(plan.graph).toBeUndefined();
 });

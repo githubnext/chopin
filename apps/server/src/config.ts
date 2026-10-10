@@ -43,6 +43,8 @@ export type Config = {
 	conversationPlanTimeoutMs?: number;
 	/** Explicitly enables Jev-routed foreground visual authoring. */
 	plannerVisuals?: boolean;
+	/** Keep a finished build's document as the source for later rebuilds. */
+	liveBuild?: boolean;
 	/**
 	 * Origin of a running Vite, when developing.
 	 *
@@ -116,6 +118,7 @@ export function load(): Config {
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
 	let conversationPlan = process.env.CONVERSATION_PLAN === "on";
 	let plannerVisuals = process.env.PLANNER_VISUALS === "on" && agent;
+	let liveBuild = process.env.LIVE_BUILD === "on";
 	let conversationPlanModel = process.env.JEV_MODEL || "jev-latest";
 	let timeoutRaw = process.env.JEV_TIMEOUT_MS;
 	let conversationPlanTimeoutMs = timeoutRaw === undefined ? 30_000 : Number(timeoutRaw);
@@ -150,6 +153,7 @@ export function load(): Config {
 		conversationPlanModel,
 		conversationPlanTimeoutMs,
 		plannerVisuals,
+		liveBuild,
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
 		auth: loadAuth(serverPort, selection.host),
@@ -191,6 +195,7 @@ export function describe(config: Config): string {
 		config.plannerVisuals
 			? `Planner visuals: ${config.conversationPlanModel}`
 			: "Planner visuals: off",
+		config.liveBuild ? "live build: on" : "live build: off",
 		admission,
 		`storage: ${config.storage.driver}`,
 	];

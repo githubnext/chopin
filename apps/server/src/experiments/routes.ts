@@ -23,6 +23,8 @@ type Options = {
 	context: (id: string) => Promise<{ source: string; revision: number } | undefined>;
 	changed: (id: string) => void;
 	canMutate?: (id: string) => Promise<boolean>;
+	/** A local agent was paired to a repository for one of its owner's sessions. */
+	connected?: (repositoryId: string, owner: string) => void;
 	place?: (
 		documentId: string,
 		experiment: string,
@@ -168,6 +170,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			repository.id,
 		);
 		connections.wake(repository.id);
+		options.connected?.(repository.id, session!.user.id);
 		return json({ id: connection.id, url: documentsPath(repository.owner, repository.name) });
 	});
 	route("POST", "/api/connector/pairings/:id/claim", async (request, params) => {
@@ -355,8 +358,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
 		let { connection, grant, session } = await connector(token);
 		let implementation = options.implementations?.();
-		let implementationRun = grant.run?.kind === "implementation";
-		let schemas = implementationRun ? implementationSchemas(true) : {
+		let implementationRun = grant.run?.kind === "implementation" || grant.run?.kind === "rebuild";
+		let schemas = implementationRun ? implementationSchemas(true, grant.run?.kind === "rebuild") : {
 			...connectorSchemas(!!grant.run),
 			...(!grant.run && implementation ? implementationSchemas(false) : {}),
 		};

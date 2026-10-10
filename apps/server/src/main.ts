@@ -48,6 +48,10 @@ import { JobRunner } from "./jobs/runner";
 import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
+import { liveClassifier } from "./tasks/live-gate";
+import { LiveSyncCoordinator } from "./tasks/live-sync";
+import { locksEditing } from "./tasks/builds";
+import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -126,6 +130,7 @@ let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
+let liveSync: LiveSyncCoordinator | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
 let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
@@ -180,8 +185,59 @@ function documentBackend(): Service.Backend {
 			console.error("chopin: plan persistence failed -", err);
 			signal();
 		},
-		onDocumentPersisted: target => summaryCoordinator?.schedule(target),
+		onDocumentPersisted: target => {
+			summaryCoordinator?.schedule(target);
+			liveSync?.schedule(target);
+		},
+		liveBuild: !!config.liveBuild,
+		onBuildStopped: id => liveSync?.stopped(id),
+		onEditingUnlocked: id => {
+			void relinkDecisions(id).catch(err =>
+				console.error("chopin: could not re-link decisions after a build -", err)
+			);
+		},
 	};
+}
+
+/**
+ * Re-attempt decision links a first build's lock refused, under the existing Planner owner.
+ * Never claims ownership: without an owner the cards stay pending until the next Planner turn.
+ */
+async function relinkDecisions(channelId: string): Promise<void> {
+	if (!config.agent || deletingChannels.has(channelId)) return;
+	let opened = Rooms.get(channelId)?.plan;
+	if (!opened || pendingLinks(opened).length === 0) return;
+	let binding = await ownerBindings?.resolve(channelId);
+	if (!binding) return;
+	let repository = binding.repository;
+	binding.release();
+	await withDocumentTransition(channelId, async () => {
+		await Rooms.get(channelId)?.closing;
+		let held = Rooms.hold(channelId);
+		let release = () => {
+			held.release();
+			evict(held.room);
+		};
+		let running = false;
+		try {
+			let current = await plan(held.room, server);
+			let pending = pendingLinks(current);
+			if (pending.length === 0) return;
+			let context = conversation(held.room, undefined, repository);
+			await Chat.instruct(
+				context,
+				"Chopin",
+				relinkInstruction(pending),
+				"Linking decisions to the document after the build",
+			);
+			if (context.chat.running) {
+				running = true;
+				void context.chat.running.finally(release).catch(() => {});
+			}
+		} finally {
+			if (!running) release();
+		}
+	});
 }
 
 function placeResearchReference(
@@ -1208,6 +1264,7 @@ function drain(): Promise<void> {
 		}
 		if (summaryCoordinator) await attempt(() => summaryCoordinator!.flush());
 		summaryCoordinator?.close();
+		liveSync?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
 		for (let result of await Promise.allSettled([stoppingJobs])) {
@@ -1522,6 +1579,22 @@ function announceResearchTerminal(channelId: string, id: string, text: string): 
 	});
 }
 
+/** Open a document for implementation work, under its transition and document locks. */
+function withImplementationPlan<T>(id: string, action: (plan: Service.Plan) => Promise<T>) {
+	return withDocumentTransition(id, async () => {
+		if (deletingChannels.has(id)) throw new Error("document is unavailable");
+		await Rooms.get(id)?.closing;
+		let held = Rooms.hold(id);
+		try {
+			let opened = await plan(held.room, server);
+			return await withDocumentLock(id, () => action(opened));
+		} finally {
+			held.release();
+			evict(held.room);
+		}
+	});
+}
+
 async function currentDocumentTarget(
 	channelId: string,
 ): Promise<Service.DocumentTarget | undefined> {
@@ -1614,6 +1687,7 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 	context: currentDocumentTarget,
+	connected: (repositoryId, owner) => liveSync?.connected(repositoryId, owner),
 	place: (id, experiment, view, decision, remove) =>
 		withDocumentTransition(id, async () => {
 			await Rooms.get(id)?.closing;
@@ -1641,10 +1715,9 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		if (active) return !Service.implementationActive(active);
 		let stored = await storage.collaboration.load(id, new Date());
 		let sidecar = stored?.sidecar as
-			| { execution?: unknown; builds?: Array<{ state: string }> }
+			| { execution?: unknown; builds?: Array<{ state: string; kind?: string }> }
 			| undefined;
-		return !sidecar?.execution
-			&& !sidecar?.builds?.some(build => ["queued", "starting", "running"].includes(build.state));
+		return !sidecar?.execution && !sidecar?.builds?.some(locksEditing);
 	},
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
@@ -1817,6 +1890,7 @@ registerMcpRoutes(router, hostedAuth, {
 	onChannelRenamed: announceChannel,
 	onDocumentPersisted: target => {
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
+		liveSync?.schedule(target);
 	},
 	restoreChannel,
 	serializeDocument: (channelId, action) =>
@@ -1828,20 +1902,24 @@ implementations = registerImplementationRoutes(router, hostedAuth, {
 		(await experiments!.service.store.active()).some(item =>
 			item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
 		),
-	withPlan: (id, action) =>
-		withDocumentTransition(id, async () => {
-			if (deletingChannels.has(id)) throw new Error("document is unavailable");
-			await Rooms.get(id)?.closing;
-			let held = Rooms.hold(id);
-			try {
-				let opened = await plan(held.room, server);
-				return await withDocumentLock(id, () => action(opened));
-			} finally {
-				held.release();
-				evict(held.room);
-			}
-		}),
+	withPlan: withImplementationPlan,
 });
+if (config.liveBuild) {
+	let runtime = experiments;
+	liveSync = new LiveSyncCoordinator({
+		withPlan: withImplementationPlan,
+		connections: runtime.connections,
+		classifier: liveClassifier({
+			model: config.conversationPlanModel ?? "jev-latest",
+			timeoutMs: config.conversationPlanTimeoutMs ?? 30_000,
+		}),
+		queued: (id, build) => {
+			implementations?.track(id);
+			runtime.connections.wake(build.repositoryId);
+		},
+		error: err => console.error("chopin: living-document rebuild failed -", err),
+	});
+}
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
@@ -1926,6 +2004,7 @@ try {
 	await cleaningSessions;
 	await renewingLease;
 	summaryCoordinator?.close();
+	liveSync?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});

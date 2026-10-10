@@ -25,7 +25,7 @@ type Pending = {
 };
 export type Grant = {
 	connectionId: string;
-	run?: { id: string; documentId: string; generation: number; kind?: "implementation" };
+	run?: { id: string; documentId: string; generation: number; kind?: "implementation" | "rebuild" };
 };
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -147,7 +147,7 @@ export class Connections {
 		documentId: string,
 		id: string,
 		generation: number,
-		kind?: "implementation",
+		kind?: "implementation" | "rebuild",
 	) {
 		let key = `${connectionId}:${id}:${generation}:${kind ?? "experiment"}`;
 		let existing = this.#runTokens.get(key);
