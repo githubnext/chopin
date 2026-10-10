@@ -74,15 +74,17 @@ export async function runWork(
 				? claim.live ? liveImplementationPrompt : implementationPrompt
 				: claim.spike
 				? "Use read_investigation from the Chopin MCP server to read the spike brief and "
-					+ "follow it: build the smallest prototype on this throwaway branch, upload 1-3 "
-					+ "screenshots with upload_investigation_image, and report with submit_spike_result, "
-					+ "then finish. Never push."
+					+ "follow it: build the smallest prototype on this throwaway branch, take 1-3 "
+					+ "1280x800 PNG screenshots of the running prototype with Playwright, save them in "
+					+ "this worktree, upload each with upload_image_file({path}), and report with "
+					+ "submit_spike_result, then finish. Never push."
 				: "Use read_investigation from the Chopin MCP server to read the authorized request. "
 					+ "Perform that investigation using your normal project instructions and tools. "
 					+ "Submit a bounded result with submit_investigation_result, then finish. "
 					+ "Do not commit or push unless the authorized brief specifically requests it.",
+			// A spike always uses the stdio bridge, which serves the worktree-local upload_image_file.
 			mcpServers: http =>
-				http
+				http && !claim.spike
 					? [{
 						name: implementation ? "chopin-implementation" : "chopin-investigation",
 						type: "http",
@@ -97,6 +99,7 @@ export async function runWork(
 							{ name: "CHOPIN_BRIDGE_ORIGIN", value: options.url },
 							{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
 							{ name: "CHOPIN_BRIDGE_KIND", value: claim.spike ? "spike" : kind },
+							...(claim.spike ? [{ name: "CHOPIN_BRIDGE_ROOT", value: prepared.path }] : []),
 						],
 					}],
 			signal: abort.signal,

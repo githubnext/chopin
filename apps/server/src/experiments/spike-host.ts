@@ -5,7 +5,7 @@ import { ulid } from "@chopin/dialect/ulid";
 
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
-import { calloutDigest, callouts, placeSpikeCallout } from "./spike-placement";
+import { calloutDigest, calloutId, placeSpikeCallout } from "./spike-placement";
 import { eligible, renderKey, spikeBrief, spikeCallout, text } from "./spikes";
 
 import type { Connections } from "./connections";
@@ -32,14 +32,21 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 		snapshot: channelId =>
 			withPlan(channelId, async plan => {
 				let current = await Service.readCurrentDocument(plan);
+				let children = parse(current.source).children;
 				return {
 					repositoryId: plan.persistence.repositoryId,
 					live: !!plan.live,
-					blocks: parse(current.source).children.filter(eligible).map(node => ({
-						digest: room.digest(serialize({ type: "root", children: [node] })),
-						text: text(node).replace(/\s+/g, " ").trim().slice(0, 4000),
-					})),
-					callouts: callouts(current.source),
+					blocks: children.flatMap((node, index) => {
+						if (!eligible(node)) return [];
+						let next = children[index + 1];
+						let after = next && calloutId(next);
+						return [{
+							digest: room.digest(serialize({ type: "root", children: [node] })),
+							text: text(node).replace(/\s+/g, " ").trim().slice(0, 4000),
+							...(after ? { calloutAfter: after } : {}),
+						}];
+					}),
+					callouts: new Set(children.flatMap(node => calloutId(node) ?? [])),
 				};
 			}),
 		spikes,
@@ -74,7 +81,7 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 			await service.mutate(id, item => {
 				item.spike!.placed = true;
 				delete item.spike!.placing;
-				item.spike!.rendered = "running";
+				item.spike!.rendered = renderKey(created);
 				item.spike!.callout = placed.callout;
 				item.spike!.calloutDigest = placed.digest;
 			});
