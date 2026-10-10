@@ -50,6 +50,7 @@ export function ImageEditor(
 				noValidate
 				onSubmit={event => {
 					event.preventDefault();
+					if (!editor.isEditable()) return;
 					let checked = checkUrl(url, RULES);
 					if (!checked.url) return setProblem(checked.problem);
 					let updated = false;

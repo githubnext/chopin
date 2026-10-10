@@ -9,7 +9,7 @@
 
 import * as limits from "./limits";
 
-export type Kind = "flow" | "text";
+export type Kind = "flow" | "text" | "both";
 
 /** What a component may contain. */
 export type Content =
@@ -28,7 +28,9 @@ export type Attribute =
 	/** Safe opaque identifier owned by a record outside the document. */
 	| { type: "reference"; required: true; max: number }
 	/** Plain text, length-bounded. */
-	| { type: "text"; required: boolean; max: number }
+	| { type: "text"; required: boolean; max: number; empty?: true }
+	/** Canonical decimal integer, quoted rather than evaluated. */
+	| { type: "integer"; required: boolean; min: number; max: number }
 	/** One of a fixed set. */
 	| { type: "enum"; required: boolean; values: readonly string[] };
 
@@ -63,8 +65,7 @@ function component(spec: Spec): Component {
 /**
  * A component with no identity of its own.
  *
- * Two kinds qualify, and they are spelled the same because they need the same
- * thing — nothing added.
+ * Formatting, content without an anchor identity, and projections need no added id.
  *
  * A pure formatting mark carries no state. Giving it an id would also make it
  * behave badly: applying a mark to a selection has to split and merge wrappers,
@@ -73,6 +74,7 @@ function component(spec: Spec): Component {
  *
  * A read-only projection of state owned elsewhere is addressed through its
  * parent, so a separate id would create a second identity for one fact.
+ * Images already use their ordinary Lexical/Yjs node identity.
  */
 function plain(spec: Spec): Component {
 	return { ...spec, attributes: { ...spec.attributes } };
@@ -81,6 +83,17 @@ function plain(spec: Spec): Component {
 export const CALLOUT_TYPES = ["note", "tip", "important", "warning", "danger"] as const;
 
 export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
+	Image: plain({
+		name: "Image",
+		// A sole JSX image parses as flow; one inside prose parses as text.
+		kind: "both",
+		content: { type: "empty" },
+		attributes: {
+			src: { type: "text", required: true, max: limits.MAX_SOURCE_BYTES },
+			alt: { type: "text", required: true, max: limits.MAX_SOURCE_BYTES, empty: true },
+			width: { type: "integer", required: true, min: 1, max: limits.MAX_IMAGE_WIDTH },
+		},
+	}),
 	Experiment: component({
 		name: "Experiment",
 		kind: "flow",

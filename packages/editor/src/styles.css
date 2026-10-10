@@ -1413,35 +1413,122 @@
 .plan-content [data-plan-src] {
 	position: relative;
 	display: inline-block;
+	min-inline-size: 0;
 	max-inline-size: 100%;
 	vertical-align: middle;
 }
 
-.plan-content .plan-image-edit {
+.plan-content .plan-image-frame {
+	position: relative;
+	display: inline-block;
+	max-inline-size: 100%;
+	vertical-align: middle;
+}
+
+.plan-content .plan-image-view {
+	display: block;
+	inline-size: 100%;
+	max-inline-size: 100%;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: zoom-in;
+}
+
+.plan-content .plan-image {
+	display: block;
+	inline-size: 100%;
+	outline: var(--edge-width) solid var(--color-edge);
+}
+
+.plan-content .plan-image-toolbar {
 	position: absolute;
 	inset-block-start: 0.5rem;
 	inset-inline-end: 0.5rem;
+	display: flex;
+	gap: 0.25rem;
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-resting);
+}
+
+.plan-content :is(.plan-image-toolbar, .plan-image-resize) {
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-.plan-content [data-plan-src]:hover .plan-image-edit,
-.plan-content .plan-image-edit:is([data-selected], :focus-visible) {
+.plan-content
+	.plan-image-frame:is(:hover, :focus-within, [data-resizing])
+	:is(.plan-image-toolbar, .plan-image-resize) {
 	opacity: 1;
 	pointer-events: auto;
 }
 
+.plan-content .plan-image-resize {
+	position: absolute;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	touch-action: none;
+}
+
+.plan-content .plan-image-resize::after {
+	position: absolute;
+	inset: 0.5rem;
+	border: var(--edge-width) solid var(--color-brand);
+	border-radius: var(--radius-sm);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	content: "";
+}
+
+.plan-content .plan-image-resize[data-corner^="top"] {
+	inset-block-start: -0.75rem;
+}
+
+.plan-content .plan-image-resize[data-corner^="bottom"] {
+	inset-block-end: -0.75rem;
+}
+
+.plan-content .plan-image-resize[data-corner$="left"] {
+	inset-inline-start: -0.75rem;
+}
+
+.plan-content .plan-image-resize[data-corner$="right"] {
+	inset-inline-end: -0.75rem;
+}
+
+.plan-content .plan-image-resize:is([data-corner="top left"], [data-corner="bottom right"]) {
+	cursor: nwse-resize;
+}
+
+.plan-content .plan-image-resize:is([data-corner="top right"], [data-corner="bottom left"]) {
+	cursor: nesw-resize;
+}
+
+.plan-content :is(.plan-image-view, .plan-image-resize):focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
 @media (hover: none) {
-	.plan-content .plan-image-edit {
+	.plan-content :is(.plan-image-toolbar, .plan-image-resize) {
 		opacity: 1;
 		pointer-events: auto;
 	}
 }
 
 .plan-image-editor {
+	position: fixed;
+	inset: 0;
 	inline-size: min(24rem, calc(100vw - 2rem));
 	max-inline-size: 100%;
+	max-block-size: calc(100dvh - 2rem);
+	margin: auto;
+	overflow: auto;
 	padding: 1rem;
 	border: var(--edge-width) solid var(--color-control-edge);
 	border-radius: var(--radius-lg);
@@ -1480,6 +1567,57 @@
 	justify-content: flex-end;
 	gap: 0.5rem;
 	margin-block-start: 0.25rem;
+}
+
+.plan-image-lightbox {
+	position: fixed;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100dvh;
+	max-inline-size: none;
+	max-block-size: none;
+	margin: 0;
+	padding: 4rem 1.5rem 1.5rem;
+	border: 0;
+	background: var(--color-text-primary);
+	color: var(--color-page);
+	font-family: var(--font-sans);
+}
+
+.plan-image-lightbox-toolbar {
+	position: absolute;
+	inset-block-start: 1rem;
+	inset-inline-end: 1rem;
+	display: flex;
+	gap: 0.5rem;
+}
+
+.plan-image-lightbox-scroll {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+.plan-image-lightbox-scroll img {
+	display: block;
+	max-inline-size: 100%;
+	max-block-size: 100%;
+	object-fit: contain;
+}
+
+.plan-image-lightbox-scroll[data-zoomed] {
+	display: block;
+}
+
+.plan-image-lightbox-scroll[data-zoomed] img {
+	max-inline-size: none;
+	max-block-size: none;
+	block-size: auto;
+	margin-inline: auto;
 }
 
 /* Visual top-level blocks can use the document beyond the prose measure. */
@@ -1528,6 +1666,7 @@
 .plan-content
 	> p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child) {
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	place-items: center;
 }
 
@@ -1568,13 +1707,16 @@
 
 .plan-content
 	p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)
-	> [data-plan-src]:has(> .plan-image-missing) {
+	> [data-plan-src]:has(.plan-image-missing),
+.plan-content
+	p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)
+	.plan-image-frame:has(.plan-image-missing) {
 	display: block;
 }
 
 /* The managed break after a block frame would add an empty line beneath it. */
 .plan-content
-	p:has(> [data-plan-src]:first-child > .plan-image-missing)
+	p:has(> [data-plan-src]:first-child .plan-image-missing)
 	> br[data-lexical-managed-linebreak]:last-child {
 	display: none;
 }

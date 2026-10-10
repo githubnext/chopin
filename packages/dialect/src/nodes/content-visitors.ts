@@ -15,13 +15,15 @@ import {
 	$isMathNode,
 } from "./content";
 import { HOSTED_IMAGE_PATH, IMAGE_PROTOCOLS } from "../dialect";
-import { PRIORITY } from "./shared";
+import { attribute, PRIORITY } from "./shared";
+import { MAX_IMAGE_WIDTH } from "../limits";
 
-import { $createTextNode } from "lexical";
+import { $createParagraphNode, $createTextNode } from "lexical";
 
 import type { LexicalExportVisitor, MdastImportVisitor } from "@mdxeditor/editor";
 import type { ElementNode, LexicalNode } from "lexical";
 import type * as Mdast from "mdast";
+import type { Jsx } from "./shared";
 // Math nodes are contributed to mdast by this package rather than @types/mdast.
 import type { InlineMath, Math } from "mdast-util-math";
 import type {
@@ -129,9 +131,41 @@ export const MdastImageVisitor: MdastImportVisitor<Mdast.Image> = {
 	priority: PRIORITY,
 };
 
-export const LexicalImageVisitor: LexicalExportVisitor<ImageNode, Mdast.Image> = {
+export const MdastSizedImageVisitor: MdastImportVisitor<Jsx> = {
+	testNode: node =>
+		(node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement")
+		&& node.name === "Image",
+	visitNode({ mdastNode, lexicalParent }) {
+		let src = attribute(mdastNode, "src") ?? "";
+		let alt = attribute(mdastNode, "alt") ?? "";
+		let raw = attribute(mdastNode, "width") ?? "";
+		let width = Number(raw);
+		let valid = permitted(src) && /^[1-9][0-9]*$/.test(raw) && width <= MAX_IMAGE_WIDTH;
+		let image = valid
+			? $createImageNode(src, alt, width)
+			: $createTextNode(`<Image src="${src}" alt="${alt}" width="${raw}" />`);
+		// Sized and ordinary images share paragraph layout, selection and captions.
+		(lexicalParent as ElementNode).append(
+			mdastNode.type === "mdxJsxFlowElement" ? $createParagraphNode().append(image) : image,
+		);
+	},
+	priority: PRIORITY,
+};
+
+export const LexicalImageVisitor: LexicalExportVisitor<ImageNode, Mdast.Image | Jsx> = {
 	testLexicalNode: $isImageNode,
 	visitLexicalNode({ lexicalNode, actions }) {
+		if (lexicalNode.getWidth() !== 0) {
+			actions.addAndStepInto("mdxJsxTextElement", {
+				name: "Image",
+				attributes: Object.entries({
+					src: lexicalNode.getSrc(),
+					alt: lexicalNode.getAlt(),
+					width: String(lexicalNode.getWidth()),
+				}).map(([name, value]) => ({ type: "mdxJsxAttribute", name, value })),
+			}, false);
+			return;
+		}
 		actions.addAndStepInto(
 			"image",
 			{ url: lexicalNode.getSrc(), alt: lexicalNode.getAlt() || null },
@@ -198,6 +232,7 @@ export const CONTENT_IMPORT_VISITORS: MdastImportVisitor<never>[] = [
 	MdastMathVisitor,
 	MdastInlineMathVisitor,
 	MdastImageVisitor,
+	MdastSizedImageVisitor,
 	MdastFootnoteReferenceVisitor,
 	MdastFootnoteDefinitionVisitor,
 ] as unknown as MdastImportVisitor<never>[];

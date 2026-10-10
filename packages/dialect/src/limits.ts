@@ -26,6 +26,9 @@ export const MAX_ID = 200;
 /** Image nodes per plan. Each is a remote fetch when the plan renders. */
 export const MAX_IMAGES = 100;
 
+/** Persisted image width in pixels; zero in Lexical means intrinsic/automatic size. */
+export const MAX_IMAGE_WIDTH = 4096;
+
 export const MAX_TAB_LABEL = 60;
 export const MAX_CALLOUT_TITLE = 100;
 

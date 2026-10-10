@@ -4,7 +4,7 @@ import { contentEditableClassName$, corePlugin, readOnly$ } from "@mdxeditor/edi
 import { Realm } from "@mdxeditor/gurx";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
-import { $getRoot } from "lexical";
+import { $getRoot, $isElementNode } from "lexical";
 import * as Y from "yjs";
 import { toMarkdown } from "mdast-util-to-markdown";
 
@@ -14,6 +14,7 @@ import { parse } from "./parse";
 import { plugins, registry } from "./registry";
 import { extensions } from "./serialize";
 import { validate } from "./validate";
+import { $isImageNode } from "./nodes/content";
 
 import type { Nodes } from "mdast";
 import type { Provider } from "@lexical/yjs";
@@ -83,6 +84,10 @@ Text with **bold**, _italic_, ~~struck~~, \`code\`, a [link](https://example.com
 an ![image](https://example.com/x.png) and $a + b$ inline math.\\
 A hard break precedes this line.
 
+Inline <Image src="https://example.com/inline.png" alt="Inline" width="180" /> here.
+
+<Image src="https://example.com/sized.png" alt="Sized" width="320" />
+
 ---
 
 > Quoted.
@@ -112,6 +117,8 @@ A reference[^01K0N4V4E7Y6P4MJ5WD8XZF3B2] and <Underline>x</Underline> inline.
 
 Inside.
 
+<Image src="https://example.com/callout.png" alt="Callout" width="240" />
+
 </Callout>
 
 <Tabs id="01K0N4TR8K7JGM4R1J7PW4R8YJ">
@@ -126,6 +133,8 @@ Tab body.
 <Column id="01K0N4W3B7P27CBAEC7A8C8WEC">
 
 Left side.
+
+<Image src="/images/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png" alt="Hosted" width="280" />
 
 </Column>
 <Column id="01K0N4W3B7P27CBAEC7A8C8WED">
@@ -256,12 +265,18 @@ describe("markdown extensions", () => {
 				);
 				expect(text).toBeDefined();
 				text!.setTextContent("Edited left side.");
+				let image = $getRoot().getChildren().flatMap(node =>
+					$isElementNode(node) ? node.getChildren() : []
+				).find(node => $isImageNode(node) && node.getWidth() === 320);
+				expect($isImageNode(image)).toBe(true);
+				if ($isImageNode(image)) image.setWidth(640);
 			}, { discrete: true });
 			Y.applyUpdate(target.doc, Y.encodeStateAsUpdate(source.doc, before));
 			await flush(target);
 			expect(errors).toEqual([]);
 			let edited = exportPlan(source.editor, { registry: reg });
 			expect(edited).toContain("Edited left side.");
+			expect(edited).toContain('alt="Sized" width="640"');
 			expect(exportPlan(target.editor, { registry: reg })).toBe(edited);
 
 			Y.applyUpdate(restored.doc, Y.encodeStateAsUpdate(target.doc));
