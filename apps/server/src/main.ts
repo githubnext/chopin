@@ -48,6 +48,7 @@ import { JobRunner } from "./jobs/runner";
 import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
+import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { locksEditing } from "./tasks/builds";
 import { registerMcpRoutes } from "./mcp/routes";
@@ -1861,6 +1862,10 @@ if (config.liveBuild) {
 	liveSync = new LiveSyncCoordinator({
 		withPlan: withImplementationPlan,
 		connections: runtime.connections,
+		classifier: liveClassifier({
+			model: config.conversationPlanModel ?? "jev-latest",
+			timeoutMs: config.conversationPlanTimeoutMs ?? 30_000,
+		}),
 		queued: id => {
 			implementations?.track(id);
 			runtime.connections.wake(id);
