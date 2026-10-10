@@ -1,4 +1,5 @@
 import { registerImplementationRoutes } from "./tasks/routes";
+import { draftInstruction, draftRefusal } from "./tasks/draft";
 /**
  * The server.
  *
@@ -449,6 +450,51 @@ function evict(room: Rooms.Room): void {
 	}, EVICT_MS);
 }
 
+const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Whether this socket may start Planner work in this room now.
+ *
+ * A Planner turn spends the claimant's entitlement and can edit the document,
+ * so access is rechecked at the moment of asking rather than trusted from the
+ * upgrade, and the room must still be the one the socket joined.
+ */
+async function plannerWritable(
+	room: Rooms.Room,
+	ws: Socket,
+	rid: string,
+): Promise<boolean> {
+	let opened = await readyPlan(room);
+	if (!opened) {
+		fail(ws, rid, "document is unavailable");
+		return false;
+	}
+	let access = await refreshAccess(ws);
+	if (access === "unavailable") {
+		fail(ws, rid, "authorization is temporarily unavailable");
+		return false;
+	}
+	if (access === "denied") {
+		fail(ws, rid, "authorization expired");
+		ws.close(4403, "authorization expired");
+		return false;
+	}
+	if (!ws.data.canEdit) {
+		fail(ws, rid, "repository write access is required");
+		return false;
+	}
+	if (
+		Rooms.get(room.id) !== room || room.plan !== opened
+		|| room.closing || archivingChannels.has(room.id) || deletingChannels.has(room.id)
+		|| ws.data.closed || ws.data.room !== room.id
+		|| room.members.get(ws.data.client) !== ws
+	) {
+		fail(ws, rid, "document is unavailable");
+		return false;
+	}
+	return true;
+}
+
 async function receive(ws: Socket, raw: string): Promise<void> {
 	let frame = incomingFrame(raw);
 	if (!frame) return;
@@ -515,37 +561,56 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "chat:send":
 			try {
-				let opened = await readyPlan(room);
-				if (!opened) {
-					fail(ws, frame.rid, "document is unavailable");
-					return;
-				}
-				let access = await refreshAccess(ws);
-				if (access === "unavailable") {
-					fail(ws, frame.rid, "authorization is temporarily unavailable");
-					return;
-				}
-				if (access === "denied") {
-					fail(ws, frame.rid, "authorization expired");
-					ws.close(4403, "authorization expired");
-					return;
-				}
-				if (!ws.data.canEdit) {
-					fail(ws, frame.rid, "repository write access is required");
-					return;
-				}
-				if (
-					Rooms.get(room.id) !== room || room.plan !== opened
-					|| room.closing || archivingChannels.has(room.id) || deletingChannels.has(room.id)
-					|| ws.data.closed || ws.data.room !== room.id
-					|| room.members.get(ws.data.client) !== ws
-				) {
-					fail(ws, frame.rid, "document is unavailable");
-					return;
-				}
+				if (!await plannerWritable(room, ws, frame.rid)) return;
 				await Chat.send(chat(room, ws), ws, frame);
 			} catch (error) {
 				fail(ws, frame.rid, error instanceof Error ? error.message : "cannot send message");
+			}
+			return;
+
+		case "implementation:draft":
+			try {
+				if (
+					typeof frame.requestId !== "string" || !REQUEST_ID.test(frame.requestId)
+					|| !Number.isInteger(frame.planRevision) || frame.planRevision < 0
+				) {
+					fail(ws, frame.rid, "invalid task draft request");
+					return;
+				}
+				let channel = await storage.channels.get(room.id);
+				if (!channel || channel.parentChannelId) {
+					fail(ws, frame.rid, "this document cannot be built");
+					return;
+				}
+				if (!await plannerWritable(room, ws, frame.rid)) return;
+				let opened = room.plan!;
+				let refusal = draftRefusal(opened);
+				if (refusal) {
+					fail(ws, frame.rid, refusal);
+					return;
+				}
+				let { text, said } = draftInstruction(opened, ws.data.handle);
+				let result = await Chat.draftTasks(
+					chat(room, ws),
+					ws.data.handle,
+					opened.revision,
+					text,
+					said,
+				);
+				if (!result.ok) {
+					fail(ws, frame.rid, result.reason);
+					return;
+				}
+				reply(ws, frame.rid, {
+					kind: "implementation:draft",
+					ts: 0,
+					id: result.draft.id,
+					planRevision: result.draft.planRevision,
+					state: result.state,
+					existing: result.existing,
+				});
+			} catch (error) {
+				fail(ws, frame.rid, error instanceof Error ? error.message : "cannot draft tasks");
 			}
 			return;
 
