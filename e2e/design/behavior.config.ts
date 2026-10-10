@@ -10,6 +10,9 @@ export default defineConfig<DesignOptions>({
 	reporter: [
 		["list"],
 		["html", { outputFolder: "../playwright-report/design-behavior", open: "never" }],
+		...(process.env.CI
+			? [["json", { outputFile: "../.scratch/ci-reports/design.json" }]] as const
+			: []),
 	],
 	use: { ...visual.use, visualReview: false },
 });
