@@ -11,6 +11,14 @@ export async function implementationBridge(
 	api: Pick<Awaited<ReturnType<typeof remote>>, "tools" | "invoke">,
 	root?: string,
 ) {
+	return (await relay(api, root))();
+}
+
+/** List the run's tools once and return a factory for relaying servers, one per transport. */
+export async function relay(
+	api: Pick<Awaited<ReturnType<typeof remote>>, "tools" | "invoke">,
+	root?: string,
+) {
 	let listed = await api.tools();
 	let names = new Set(listed.tools.map(tool => tool.name));
 	let local = !!root && names.has("upload_investigation_image");
@@ -36,6 +44,7 @@ export async function implementationBridge(
 			}],
 		}
 		: listed;
+	return () => {
 	let server = new Server({ name: "chopin-implementation", version: "0.1.0" }, {
 		capabilities: { tools: {} },
 	});
@@ -55,11 +64,15 @@ export async function implementationBridge(
 			}
 		}
 		if (!names.has(request.params.name)) {
-			return { isError: true, content: [{ type: "text", text: "Tool unavailable for this run." }] };
+				return {
+					isError: true,
+					content: [{ type: "text", text: "Tool unavailable for this run." }],
+				};
 		}
 		return api.invoke(request.params.name, args);
 	});
 	return server;
+	};
 }
 
 export let implementationPrompt = [

@@ -245,3 +245,39 @@ test("deleting a callout stops its spike on the edit, before the scan", async ()
 	expect(h.dismissed).toEqual(["X"]);
 	expect(h.judged).toHaveLength(0);
 });
+
+test("passages waiting at the active-spike cap are judged when a spike frees capacity", async () => {
+	let asked: string[][] = [];
+	let judge = jevJudge(async request => {
+		let passages = (request.state as { passages: Array<{ key: string }> }).passages;
+		asked.push(passages.map(passage => passage.key));
+		return {
+			answers: Object.fromEntries(
+				passages.map(passage => [passage.key, { type: "noul", noul: 0.9 }]),
+			),
+		} as never;
+	});
+	let h = harness(
+		{ blocks: ["a", "b", "c", "d", "e", "f", "g"].map(digest => block(digest)) },
+		judge,
+	);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	h.timers[0]();
+	await Bun.sleep(1);
+	expect(h.started).toEqual(["a", "b", "c"]);
+	// The follow-up for f and g finds no capacity and judges nothing.
+	h.timers.at(-1)!();
+	await Bun.sleep(1);
+	expect(h.judged).toHaveLength(1);
+	// A refresh while every spike is still active changes nothing.
+	await h.scout.refresh("D");
+	expect(h.judged).toHaveLength(1);
+	h.records[1].state = "failed";
+	await h.scout.refresh("D");
+	expect(h.judged[1]).toEqual(["d", "e", "f", "g"]);
+	expect(h.started).toEqual(["a", "b", "c", "d"]);
+	h.records[0].state = "completed";
+	await h.scout.refresh("D");
+	expect(h.started).toEqual(["a", "b", "c", "d", "e"]);
+	expect(asked).toHaveLength(3);
+});
