@@ -50,6 +50,9 @@ import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
+import { jevJudge, SpikeScout } from "./experiments/spike-scout";
+import { spikeHost } from "./experiments/spike-host";
+import { askJev } from "./conversation-plan/jev";
 import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { BuildReadiness } from "./tasks/readiness";
@@ -134,6 +137,7 @@ let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
 let buildReadiness: BuildReadiness | undefined;
+let spikeScout: SpikeScout | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
 let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
@@ -192,6 +196,7 @@ function documentBackend(): Service.Backend {
 			summaryCoordinator?.schedule(target);
 			liveSync?.schedule(target);
 			buildReadiness?.schedule(target);
+			spikeScout?.schedule(target);
 		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
@@ -1275,6 +1280,7 @@ function drain(): Promise<void> {
 		summaryCoordinator?.close();
 		liveSync?.close();
 		buildReadiness?.close();
+		spikeScout?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
 		for (let result of await Promise.allSettled([stoppingJobs])) {
@@ -1723,6 +1729,7 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		if (server && !draining) {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
 		}
+		void spikeScout?.refresh(documentId);
 	},
 	async canMutate(id) {
 		let active = Rooms.get(id)?.plan;
@@ -1959,6 +1966,21 @@ if (config.liveBuild) {
 		error: err => console.error("chopin: living-document rebuild failed -", err),
 	});
 }
+if (config.liveSpikes) {
+	let jev = config.conversationPlanModel ?? "jev-latest";
+	let timeoutMs = config.conversationPlanTimeoutMs ?? 30_000;
+	spikeScout = new SpikeScout({
+		host: spikeHost({
+			service: experiments.service,
+			connections: experiments.connections,
+			withPlan: withImplementationPlan,
+		}),
+		judge: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+			? jevJudge(request => askJev(request, { model: jev, timeoutMs }))
+			: undefined,
+		error: err => console.error("chopin: living-document spike failed -", err),
+	});
+}
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
@@ -2045,6 +2067,7 @@ try {
 	summaryCoordinator?.close();
 	liveSync?.close();
 	buildReadiness?.close();
+	spikeScout?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});

@@ -1,0 +1,158 @@
+import { expect, test } from "bun:test";
+
+import { jevJudge, SpikeScout } from "./spike-scout";
+
+import type { Investigation } from "@chopin/experiment/records";
+import type { SpikeBlock, SpikeHost, SpikeSnapshot } from "./spike-scout";
+
+function block(
+	digest: string,
+	text = `Passage ${digest} is unsure whether this works.`,
+): SpikeBlock {
+	return { digest, text };
+}
+
+function harness(snapshot: Partial<SpikeSnapshot> = {}) {
+	let started: string[] = [];
+	let dismissed: string[] = [];
+	let judged: string[][] = [];
+	let records: Investigation[] = [];
+	let connected = true;
+	let timers: Array<() => void> = [];
+	let state: SpikeSnapshot = {
+		repositoryId: "R_1",
+		live: false,
+		blocks: [],
+		callouts: new Set(),
+		...snapshot,
+	};
+	let host: SpikeHost = {
+		snapshot: async () => state,
+		spikes: async () => records,
+		connection: async () => connected ? { id: "C_1", login: "maggie" } : undefined,
+		start: async (_id, input) => {
+			started.push(input.block.digest);
+			state.callouts.add(`CALLOUT${input.block.digest}`);
+			records.push({
+				state: "running",
+				spike: {
+					digest: input.block.digest,
+					callout: `CALLOUT${input.block.digest}`,
+					placed: true,
+				},
+			} as Investigation);
+		},
+		dismiss: async (_id, id) => {
+			dismissed.push(id);
+		},
+		refresh: async () => {},
+	};
+	let scout = new SpikeScout({
+		host,
+		judge: async blocks => {
+			judged.push(blocks.map(item => item.digest));
+			return blocks.map(item => item.text.includes("unsure"));
+		},
+		after: (_delay, action) => {
+			timers.push(action);
+			return () => {};
+		},
+	});
+	return {
+		scout,
+		state,
+		started,
+		dismissed,
+		judged,
+		records,
+		timers,
+		disconnect: () => connected = false,
+	};
+}
+
+test("a settled edit starts spikes for uncertain passages and never re-judges them", async () => {
+	let h = harness({
+		blocks: [block("a"), block("b", "A settled descriptive paragraph about lists.")],
+	});
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	expect(h.timers).toHaveLength(1);
+	h.timers[0]();
+	await h.scout.check("D");
+	expect(h.started).toEqual(["a"]);
+	expect(h.judged).toEqual([["a", "b"]]);
+	await h.scout.check("D");
+	expect(h.judged).toHaveLength(1);
+	expect(h.started).toEqual(["a"]);
+});
+
+test("edits by the server alone never schedule a scan", () => {
+	let h = harness({ blocks: [block("a")] });
+	h.scout.schedule({ channelId: "D" });
+	expect(h.timers).toHaveLength(0);
+});
+
+test("a scan judges at most five passages and keeps three spikes active", async () => {
+	let h = harness({ blocks: ["a", "b", "c", "d", "e", "f", "g"].map(digest => block(digest)) });
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.judged[0]).toEqual(["a", "b", "c", "d", "e"]);
+	expect(h.started).toEqual(["a", "b", "c"]);
+	await h.scout.check("D");
+	expect(h.judged).toHaveLength(1);
+	expect(h.dismissed).toEqual([]);
+});
+
+test("a living build stops the scout", async () => {
+	let h = harness({ live: true, blocks: [block("a")] });
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.judged).toHaveLength(0);
+	expect(h.started).toHaveLength(0);
+});
+
+test("without the editor's local agent nothing starts and nothing is judged", async () => {
+	let h = harness({ blocks: [block("a")] });
+	h.disconnect();
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.judged).toHaveLength(0);
+	expect(h.started).toHaveLength(0);
+});
+
+test("a removed callout dismisses its spike and the passage never re-triggers", async () => {
+	let h = harness({ blocks: [block("a")] });
+	h.records.push({
+		id: "X",
+		state: "running",
+		spike: { digest: "a", callout: "GONE", placed: true },
+	} as Investigation);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.dismissed).toEqual(["X"]);
+	expect(h.started).toEqual([]);
+	expect(h.judged).toHaveLength(0);
+});
+
+test("Jev decides at 0.6 and falls back to explicit uncertainty when it fails", async () => {
+	let asked = 0;
+	let judge = jevJudge(async request => {
+		asked++;
+		expect(Object.keys(request.questions)).toEqual(["spike_0", "spike_1"]);
+		return {
+			model: "jev",
+			answers: {
+				spike_0: { type: "noul", noul: 0.61 },
+				spike_1: { type: "noul", noul: 0.59 },
+			},
+			usage: { input_tokens: 1, output_tokens: 1 },
+			latencyMs: 1,
+		};
+	});
+	let blocks = [block("a", "Plain text."), block("b")];
+	expect(await judge(blocks)).toEqual([true, false]);
+	expect(asked).toBe(1);
+	let failing = jevJudge(async () => {
+		throw new Error("timeout");
+	});
+	expect(await failing(blocks)).toEqual([false, true]);
+});

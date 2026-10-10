@@ -127,6 +127,8 @@ export type DocumentTarget = {
 	revision: number;
 	source: string;
 	sourceHash: string;
+	/** The person whose update this was, when one person's edit caused it. */
+	editor?: string;
 };
 
 /** Durable MCP context for a document created through the hosted surface. */
@@ -163,6 +165,8 @@ type Persistence = Backend & {
 	committedDocument: Uint8Array;
 	committedSidecar: JsonValue;
 	closing: boolean;
+	/** The member whose batch is committing, for derived work that follows their edit. */
+	editor?: string;
 };
 
 type Captured = {
@@ -942,6 +946,7 @@ async function commitHosted(
 					revision: captured.revision,
 					source: captured.source,
 					sourceHash: captured.sourceHash,
+					...(durable.editor ? { editor: durable.editor } : {}),
 				});
 			} catch (err) {
 				console.warn(`[plan] could not schedule derived work for ${durable.channelId}:`, err);
@@ -1640,6 +1645,7 @@ async function commit(plan: Plan): Promise<void> {
 		createHash("sha256").update(merged).digest("hex")
 	}`;
 	try {
+		plan.persistence.editor = batch.at(-1)?.ws.data.principalId;
 		await commitHosted(
 			plan,
 			merged,
@@ -1655,6 +1661,8 @@ async function commit(plan: Plan): Promise<void> {
 		plan.threads = previousThreads;
 		await rejectBatch(plan, batch, ["research-reference-conflict"]);
 		return;
+	} finally {
+		plan.persistence.editor = undefined;
 	}
 
 	for (let item of batch) {

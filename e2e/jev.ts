@@ -414,6 +414,21 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 			usage: { input_tokens: 10, output_tokens: 5 },
 		});
 	}
+	if (Object.keys(request.questions).some(key => key.startsWith("spike_"))) {
+		let passages = (request.state as { passages?: Array<{ key: string; text: string }> })
+			.passages ?? [];
+		let open = /\b(unsure|whether|open decision|need to know|prototype)\b/i;
+		return Response.json({
+			model: "jev-e2e-fixture",
+			answers: Object.fromEntries(
+				passages.map(passage => [passage.key, {
+					type: "noul",
+					noul: open.test(passage.text) ? 0.9 : 0.1,
+				}]),
+			),
+			usage: { input_tokens: 10, output_tokens: 5 },
+		});
+	}
 	if ("rebuild" in request.questions) {
 		let changes = (request.state as { changes?: string }).changes ?? "";
 		let lines = changes.split("\n").filter(line => /^[-+] /.test(line));

@@ -15,6 +15,10 @@ import { implementationSchemas } from "../tasks/connector";
 import type { ImplementationConnector } from "../tasks/connector";
 import { connectorSchemas } from "./mcp-schema";
 import type { Lease } from "../storage/model";
+import { createHash } from "node:crypto";
+import { imagePath } from "../images/format";
+import { MAX_IMAGE_REQUEST_BYTES, prepareImage } from "../mcp/image";
+import { spikeReport, spikeSubmissionSchema } from "./spikes";
 
 export type ExperimentRuntime = ReturnType<typeof registerExperimentRoutes>;
 type Options = {
@@ -37,13 +41,13 @@ const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
 	label: z.string().trim().min(1).max(100),
 }).strict();
 
-async function body(request: Request) {
+async function body(request: Request, max = limits.resultBytes + 64 * 1024) {
 	let size = 0;
 	let chunks: Uint8Array[] = [];
 	if (!request.body) fail("invalid-request");
 	for await (let chunk of request.body) {
 		size += chunk.length;
-		if (size > limits.resultBytes + 64 * 1024) fail("request-too-large");
+		if (size > max) fail("request-too-large");
 		chunks.push(chunk);
 	}
 	return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -182,16 +186,19 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("GET", "/api/documents/:id/experiments", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
 		return json({
-			experiments: (await service.store.list(params.id)).map(value => ({
-				id: value.id,
-				brief: value.brief,
-				state: value.state,
-				revision: value.revision,
-				requester: value.requester,
-				decisionCount: value.decisions.length,
-				progress: value.progress,
-				createdAt: value.createdAt,
-			})),
+			// A spike's callout under its passage is its record in the document.
+			experiments: (await service.store.list(params.id)).filter(value => !value.spike).map(
+				value => ({
+					id: value.id,
+					brief: value.brief,
+					state: value.state,
+					revision: value.revision,
+					requester: value.requester,
+					decisionCount: value.decisions.length,
+					progress: value.progress,
+					createdAt: value.createdAt,
+				}),
+			),
 		});
 	});
 	route("POST", "/api/documents/:id/experiments", async (request, params) => {
@@ -359,8 +366,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { connection, grant, session } = await connector(token);
 		let implementation = options.implementations?.();
 		let implementationRun = grant.run?.kind === "implementation" || grant.run?.kind === "rebuild";
+		let spikeRun = !!grant.run && !implementationRun
+			&& !!(await service.store.get(grant.run.id))?.spike;
 		let schemas = implementationRun ? implementationSchemas(true, grant.run?.kind === "rebuild") : {
-			...connectorSchemas(!!grant.run),
+			...connectorSchemas(!!grant.run, spikeRun),
 			...(!grant.run && implementation ? implementationSchemas(false) : {}),
 		};
 		let call = z.object({
@@ -368,7 +377,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			id: z.union([z.string(), z.number()]).optional(),
 			method: z.string(),
 			params: z.record(z.string(), z.unknown()).optional(),
-		}).parse(await body(request));
+		}).parse(
+			await body(request, Math.max(limits.resultBytes + 64 * 1024, MAX_IMAGE_REQUEST_BYTES)),
+		);
 		let respond = (result: unknown) => json({ jsonrpc: "2.0", id: call.id, result });
 		if (call.method.startsWith("notifications/")) return new Response(null, { status: 202 });
 		if (call.method === "initialize") {
@@ -483,6 +494,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					return {
 						input: claimed.input,
 						generation: claimed.generation,
+						...(claimed.spike ? { spike: true } : {}),
 						runToken: connections.runToken(
 							connection.id,
 							claimed.documentId,
@@ -515,6 +527,46 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						);
 					} else if (name === "fail_experiment") {
 						value = await service.stop(id, "failed", z.string().max(2000).parse(args.error));
+					} else if (name === "upload_investigation_image") {
+						let prepared = prepareImage({ id: current.documentId, ...args });
+						if (!prepared) fail("invalid-image");
+						if ("refusal" in prepared) fail(prepared.refusal);
+						let { bytes, mimeType } = prepared.input;
+						let sha256 = createHash("sha256").update(bytes).digest("hex");
+						await auth.storage.images.put({
+							channelId: current.documentId,
+							sha256,
+							mimeType,
+							bytes,
+							uploadedBy: session.user.id,
+							now: new Date(),
+						});
+						value = { path: imagePath(sha256, mimeType) };
+					} else if (name === "submit_spike_result") {
+						if (!current.spike) fail("tool-forbidden");
+						let input = spikeSubmissionSchema.parse(args);
+						for (let path of input.images) {
+							let sha256 = path.slice("/images/".length).split(".")[0];
+							if (!await auth.storage.images.get(current.documentId, sha256)) {
+								fail("missing-image", `Upload ${path} with upload_investigation_image first.`);
+							}
+						}
+						let report = canonicalReport(spikeReport(input));
+						if ("issues" in report) {
+							fail("invalid-report", report.issues.map(issue => issue.message).join("; "));
+						}
+						value = await service.candidate(id, connection.id, generation, {
+							schemaVersion: 1,
+							report: report.source,
+							datasets: [],
+							views: [],
+							evidence: [],
+							provenance: {
+								environment: "Throwaway prototype by the editor's local coding agent.",
+								checks: [],
+								limitations: [],
+							},
+						});
 					} else if (name === "submit_experiment_result") {
 						let result = args.result as { report?: unknown };
 						if (!result || typeof result.report !== "string") fail("invalid-result");
@@ -539,7 +591,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				value = {
 					accepted: true,
 					state: (value as { state?: string }).state,
-					...(name === "read_experiment" ? value as object : {}),
+					...(name === "read_experiment" || name === "upload_investigation_image"
+						? value as object
+						: {}),
 				};
 			}
 			return respond({ content: [{ type: "text", text: JSON.stringify(value) }] });
