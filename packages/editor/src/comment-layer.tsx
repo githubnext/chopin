@@ -121,6 +121,11 @@ function chipWidth(count: number): number {
 	return 27 + 7 * String(count).length;
 }
 
+/** A touch chip in a phone's narrow padding still shows its icon beside the count. */
+function slimChipWidth(count: number): number {
+	return 15 + 7 * String(count).length;
+}
+
 /** What a chip's tooltip says, and its label for a block with several threads. */
 export function commentCount(count: number): string {
 	return count === 1 ? "1 comment" : `${count} comments`;
@@ -518,7 +523,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				block,
 				line,
 				width: chipWidth(threads.length),
-				...(threads.length >= 10 ? { minimum: 18 } : {}),
+				...(coarse
+					? { minimum: slimChipWidth(threads.length) }
+					: threads.length >= 10
+					? { minimum: 18 }
+					: {}),
 				held: focused === key
 					|| pinnedRef.current === `${LIST}${key}`
 					|| threads.some(({ view }) => view.thread.id === pinnedRef.current),
@@ -1184,10 +1193,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							className="plan-comment-chip"
 							style={{ left: button.left - left, top: (height - CHIP) / 2, width: button.width }}
 						>
-							{(single || !button.slim) && (
+							{(single || !button.slim || coarse) && (
 								<MessageIcon aria-hidden="true" size={button.slim ? 10 : 14} />
 							)}
-							{(!single || !button.slim) && (
+							{(!single || !button.slim || coarse) && (
 								<span className="plan-comment-count">{views.length}</span>
 							)}
 						</span>
