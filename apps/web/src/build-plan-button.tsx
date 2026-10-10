@@ -10,8 +10,14 @@ import {
 	SYNC_LABEL,
 	syncHint,
 	syncStatus,
+	waitingLabel,
 } from "./build-model";
-import { implementationEndpoint, implementationResponse, startBuild } from "./build-start";
+import {
+	cancelBuildRequest,
+	implementationEndpoint,
+	implementationResponse,
+	startBuild,
+} from "./build-start";
 
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { FirstBuild } from "./build-model";
@@ -31,10 +37,11 @@ const RELOAD_ON = [
  * requests still match the living document.
  */
 export function BuildPlanButton(
-	{ onNeedsAgent, onShowBuild, room, userId, wire }: {
+	{ onNeedsAgent, onShowBuild, onShowDecisions, room, userId, wire }: {
 		/** No local agent could take the build; the Build view explains how to start one. */
 		onNeedsAgent: () => void;
 		onShowBuild: () => void;
+		onShowDecisions: () => void;
 		room: string;
 		userId?: string;
 		wire?: Wire;
@@ -85,11 +92,18 @@ export function BuildPlanButton(
 		[wire],
 	);
 
-	let step = firstBuildStep(snapshot, state);
+	// A failed attempt gives up the server's request, so a reload does not try it again.
+	useEffect(() => {
+		if (state.stage === "failed" && snapshot?.buildRequested?.by === userId) {
+			void cancelBuildRequest(room).catch(() => {});
+		}
+	}, [state.stage]);
+
+	let step = firstBuildStep(snapshot, state, userId);
 	useEffect(() => {
 		if (!step.next) return;
-		if (step.next === "reset") {
-			dispatch({ type: "reset" });
+		if (step.next === "reset" || step.next === "resume" || step.next === "wait") {
+			dispatch({ type: step.next });
 			return;
 		}
 		if (step.next === "draft") {
@@ -149,11 +163,13 @@ export function BuildPlanButton(
 			>
 				{sync.kind === "building" && <LoaderIcon aria-hidden="true" data-button-loader="" />}
 				{sync.kind === "in-sync" && <CheckIcon aria-hidden="true" className="text-text-tertiary" />}
-				{sync.kind === "out-of-sync" && (
+				{(sync.kind === "out-of-sync" || sync.kind === "needs-attention") && (
 					<span
 						aria-hidden="true"
 						className="build-task-dot"
-						data-state={sync.reason === "failed" ? "blocked" : "queued"}
+						data-state={sync.kind === "needs-attention" || sync.reason === "failed"
+							? "blocked"
+							: "queued"}
 					/>
 				)}
 				{SYNC_LABEL[sync.kind]}
@@ -161,6 +177,24 @@ export function BuildPlanButton(
 		);
 	}
 	if (step.view === "hidden") return null;
+	if (step.view === "waiting") {
+		let { label, target } = waitingLabel(snapshot);
+		let hint = "Building starts once this is resolved";
+		return (
+			<button
+				aria-description={hint}
+				className="btn btn-compact btn-ghost shrink-0"
+				data-tooltip={hint}
+				data-tooltip-detail=""
+				data-tooltip-verbatim=""
+				onClick={target === "decisions" ? onShowDecisions : onShowBuild}
+				type="button"
+			>
+				<span aria-hidden="true" className="build-task-dot" data-state="queued" />
+				{label}
+			</button>
+		);
+	}
 	if (step.view === "working") {
 		let { hint, label, queued } = startingLabel(snapshot);
 		return (

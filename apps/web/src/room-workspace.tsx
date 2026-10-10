@@ -1318,6 +1318,7 @@ export function RoomWorkspace(
 						selectDestination("build");
 					}}
 					onShowBuild={() => selectDestination("build")}
+					onShowDecisions={() => selectDestination("decisions")}
 					room={room}
 					userId={userId}
 					wire={wire}
