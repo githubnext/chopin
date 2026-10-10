@@ -36,6 +36,8 @@ type Options = {
 		decision: string,
 		remove: boolean,
 	) => Promise<void>;
+	/** Land a document's finished spike results before a first build claims it. */
+	settleSpikes?: (documentId: string) => Promise<void>;
 };
 const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
 	label: z.string().trim().min(1).max(100),
@@ -466,6 +468,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
 				if (documentId) await target(session, connection, documentId);
 				if (name === "claim_implementation_build") {
+					// A build queued behind a spike on this connection must start with its findings.
+					if (documentId) await options.settleSpikes?.(documentId);
 					value = await connections.locked(connection.id, async () => {
 						if ((await work(connection, ["running", "publishing"])).length) {
 							fail("workspace-busy");

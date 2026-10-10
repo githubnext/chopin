@@ -1,4 +1,4 @@
-import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
+import { locksEditing, queuedOnly, restoreBuilds, restoreLive } from "../tasks/builds";
 import { announceImplementation, implementationStatus } from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
@@ -1734,9 +1734,16 @@ export async function publishStaged(
 	roomId: string,
 	candidate: Plan,
 	mutation?: room.Mutation,
-	options?: { notifyDocumentPersisted?: boolean; agent?: boolean },
+	options?: {
+		notifyDocumentPersisted?: boolean;
+		agent?: boolean;
+		/** A callout-only edit the caller carries a queued first build across. */
+		queuedBuild?: boolean;
+	},
 ): Promise<void> {
-	if (implementationActive(plan)) throw new ImplementationActiveError();
+	if (implementationActive(plan) && !(options?.queuedBuild && queuedOnly(plan))) {
+		throw new ImplementationActiveError();
+	}
 	let source = room.project(candidate.document);
 	if (!mutation && source !== room.project(plan.document)) {
 		throw new Error("staged document changed without a mutation");

@@ -55,6 +55,35 @@ export function locksEditing(build: { state: string; kind?: string }): boolean {
 	return build.kind !== "rebuild" && ["queued", "starting", "running"].includes(build.state);
 }
 
+/**
+ * A first build still waiting for its connection, when it is all that locks editing and it is
+ * bound to the current revision. Only callout-only edits may land under it, carried by
+ * `carryQueued`.
+ */
+export function queuedOnly(plan: Plan): BuildRequest | undefined {
+	if (plan.claiming || plan.execution) return undefined;
+	let locking = plan.builds.filter(locksEditing);
+	let build = locking.length === 1 ? locking[0] : undefined;
+	let version = plan.graph?.versions.at(-1);
+	return build?.state === "queued" && build === plan.builds.at(-1)
+			&& build.planRevision === plan.revision && version?.state === "approved"
+			&& version.planRevision === plan.revision
+		? build
+		: undefined;
+}
+
+/** Rebind the queued build and its approved graph to the revision a callout-only edit makes. */
+export function carryQueued(
+	plan: Plan,
+	revision: number,
+): { builds: BuildRequest[]; graph: Graph } {
+	let build = queuedOnly(plan);
+	if (!build) throw new Error("no queued build to carry");
+	let graph = structuredClone(plan.graph!);
+	graph.versions[graph.versions.length - 1].planRevision = revision;
+	return { builds: [...plan.builds.slice(0, -1), { ...build, planRevision: revision }], graph };
+}
+
 export function restoreBuilds(value: unknown, repositoryId?: string): BuildRequest[] {
 	if (value === undefined) return [];
 	let builds = z.array(buildSchema).max(100).parse(value);

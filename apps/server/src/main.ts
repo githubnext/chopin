@@ -116,6 +116,7 @@ const LEASE_SAFETY_MS = 5_000;
 const SESSION_CLEANUP_MS = 5 * 60_000;
 const ACCESS_RECHECK_MS = 60_000;
 const RESEARCH_RECOVERY_RETRY_MS = 10_000;
+const SPIKE_SETTLE_MS = 30_000;
 
 let server: Server<SocketData>;
 let heldLease: Lease | undefined;
@@ -1729,6 +1730,15 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 				}
 			});
 		}),
+	async settleSpikes(documentId) {
+		if (!spikeScout) return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		// Bounded: a stuck placement must not hold a build forever.
+		await Promise.race([
+			spikeScout.settle(documentId),
+			new Promise<void>(resolve => timer = setTimeout(resolve, SPIKE_SETTLE_MS)),
+		]).finally(() => clearTimeout(timer));
+	},
 	changed(documentId) {
 		if (server && !draining) {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
