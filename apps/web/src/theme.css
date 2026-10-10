@@ -822,6 +822,66 @@ body {
 	}
 }
 
+/* A comment sent to Chopin: a compact card in the message column that opens its thread. */
+.chat-comment-notice {
+	display: grid;
+	gap: 0.25rem;
+	margin-left: 2.25rem;
+	padding: 0.5rem 0.75rem;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-primary);
+	text-decoration: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.chat-comment-notice {
+		transition: outline-color var(--duration-fast) var(--ease-out);
+	}
+}
+
+.chat-comment-notice:hover {
+	outline-color: var(--color-control-edge);
+}
+
+.chat-comment-notice:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+.chat-comment-notice-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.375rem;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.chat-comment-notice-title {
+	font-weight: 500;
+	color: var(--color-text-secondary);
+}
+
+.chat-comment-notice-body {
+	overflow-wrap: anywhere;
+	text-wrap: pretty;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 4;
+	overflow: hidden;
+}
+
+.chat-comment-notice-mention {
+	font-weight: 600;
+	color: var(--color-brand);
+}
+
 .chat-message-body:has([data-analysis-trigger]) {
 	min-height: calc(var(--spacing) * 7);
 }
