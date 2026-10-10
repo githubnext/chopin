@@ -180,11 +180,14 @@ export function BuildPlanButton(
 	if (step.view === "hidden") return null;
 	if (step.view === "waiting") {
 		let { label, target } = waitingLabel(snapshot);
-		let hint = "Building starts once this is resolved";
+		let hint = target === "decisions"
+			? "The build starts once the open decisions are answered"
+			: "The build starts once the document is updated";
 		return (
 			<button
 				aria-description={hint}
 				className="btn btn-compact btn-ghost shrink-0"
+				data-build-slot=""
 				data-tooltip={hint}
 				data-tooltip-detail=""
 				data-tooltip-verbatim=""

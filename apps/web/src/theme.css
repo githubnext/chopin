@@ -789,6 +789,11 @@ body {
 	inset-inline-end: calc(var(--spacing) * 3);
 }
 
+/* Alone it floats over scrolled document text, so a ghost slot needs the page behind it. */
+.workspace-status-row > .btn-ghost[data-build-slot]:not(:hover, :active) {
+	background-color: var(--color-page);
+}
+
 .workspace-status-row:has(.plan-status:is([data-level="notice"], [data-level="alert"]))
 	> [data-build-slot] {
 	position: static;

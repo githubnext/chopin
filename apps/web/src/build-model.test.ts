@@ -484,7 +484,9 @@ describe("living document sync", () => {
 		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
 		expect(syncStatus(failed)).toEqual({ kind: "out-of-sync", reason: "failed", outstanding: 0 });
 		expect(syncHint(syncStatus(failed), failed, "me")).toBe("The next edit will try again");
-		expect(syncLabel({ kind: "out-of-sync", reason: "failed", outstanding: 0 })).toBe("Sync failed");
+		expect(syncLabel({ kind: "out-of-sync", reason: "failed", outstanding: 0 })).toBe(
+			"Sync failed",
+		);
 		expect(syncLabel({ kind: "out-of-sync", reason: "waiting", outstanding: 0 }))
 			.toBe("Out of sync");
 	});
@@ -504,6 +506,8 @@ describe("living document sync", () => {
 		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
 		expect(syncHint(syncStatus(edited), edited, "me"))
 			.toBe("Your edits will sync shortly · will also retry 2 blocked tasks");
+		expect(syncLabel(syncStatus(stuck)!)).toBe("Needs attention");
+		expect(syncTooltip(syncStatus(stuck)!, stuck, "me")).toContain("Edit the document to retry.");
 		// Syncing beats needing attention.
 		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
 			.toEqual({ kind: "building" });

@@ -457,11 +457,13 @@ export function BuildView(
 				{phase.sync.kind === "in-sync" && (
 					<CheckIcon aria-hidden="true" className="shrink-0 text-text-tertiary" />
 				)}
-				{phase.sync.kind === "out-of-sync" && (
+				{(phase.sync.kind === "out-of-sync" || phase.sync.kind === "needs-attention") && (
 					<span
 						aria-hidden="true"
 						className="build-task-dot"
-						data-state={phase.sync.reason === "failed" ? "blocked" : "queued"}
+						data-state={phase.sync.kind === "needs-attention" || phase.sync.reason === "failed"
+							? "blocked"
+							: "queued"}
 					/>
 				)}
 				<span className="min-w-0 flex-1">
@@ -477,6 +479,7 @@ export function BuildView(
 	let listed = new Set<string>();
 	// A living document lists the tasks its later syncs added under their own heading.
 	let groups = phase.kind === "live" ? liveTaskGroups(tasks) : { first: tasks, since: [] };
+	let noChange = phase.kind === "live" ? [...(snapshot?.live?.noChange ?? [])].reverse() : [];
 	let renderTask = (task: (typeof tasks)[number]) => {
 		let report = phase.kind === "live"
 			? snapshot?.live?.tasks.find(item => item.id === task.id)?.progress
@@ -589,10 +592,22 @@ export function BuildView(
 						{groups.first.map(renderTask)}
 					</ol>
 				)}
-				{showTasks && groups.since.length > 0 && (
+				{showTasks && (groups.since.length > 0 || noChange.length > 0) && (
 					<section aria-labelledby={sinceHeading} className="build-since">
 						<h2 className="build-since-heading" id={sinceHeading}>Since first build</h2>
-						<ol className="build-tasks">{groups.since.map(renderTask)}</ol>
+						<ol className="build-tasks">
+							{groups.since.map(renderTask)}
+							{/* A sync that needed no code change still says what it checked. */}
+							{noChange.map(item => (
+								<li className="build-no-change" key={item.buildId}>
+									<span className="min-w-0 flex-1">
+										No code change needed
+										<span className="build-status-detail">{` · ${item.summary}`}</span>
+									</span>
+									<span className="build-elapsed">{ago(item.at, now)}</span>
+								</li>
+							))}
+						</ol>
 					</section>
 				)}
 				{phase.kind === "review" && canEdit && planner && (
