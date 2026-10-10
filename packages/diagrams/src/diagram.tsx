@@ -6,6 +6,7 @@ import type {
 	KeyboardEvent,
 	MouseEvent,
 	PointerEvent,
+	ReactNode,
 } from "react";
 
 import {
@@ -43,6 +44,17 @@ export type DiagramProps = {
 	description?: string;
 	/** Optional label within generated SVG resource IDs. */
 	idPrefix?: string;
+	/** Keep inspection and viewport state while this graph's live data changes. */
+	stateKey?: string;
+	/** Reader-owned presentation, separate from the saved diagram specification. */
+	nodePresentation?: ReadonlyMap<string, {
+		label: string;
+		description?: string;
+		tone?: "neutral" | "active" | "warning" | "success";
+	}>;
+	renderNodeDetails?: (id: string) => ReactNode;
+	/** A host may offer an equivalent textual view when a diagram cannot render. */
+	fallback?: ReactNode;
 };
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
@@ -85,6 +97,8 @@ function DiagramView({
 	title,
 	description,
 	idPrefix,
+	nodePresentation,
+	renderNodeDetails,
 	onWidth,
 }: Omit<DiagramProps, "spec"> & { result: ReadyDiagram; onWidth: (width: number) => void }) {
 	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -94,6 +108,7 @@ function DiagramView({
 	let descriptionId = `${prefix}-description`;
 	let stageRef = useRef<HTMLDivElement>(null);
 	let svgRef = useRef<SVGSVGElement>(null);
+	let sourceLabels = useRef(new WeakMap<SVGElement, string>());
 	let [preview, setPreview] = useState<Item | null>(null);
 	let [selected, setSelected] = useState<Item | null>(null);
 	let [reduced, setReduced] = useState(prefersReducedMotion);
@@ -179,23 +194,34 @@ function DiagramView({
 		for (let element of svg.querySelectorAll<SVGElement>("[data-sc-node]")) {
 			let nodeId = element.getAttribute("data-sc-node");
 			let node = nodes.find((entry) => entry.id === nodeId);
+			let presentation = nodeId === null ? undefined : nodePresentation?.get(nodeId);
+			let label = sourceLabels.current.get(element)
+				?? element.getAttribute("aria-label") ?? node?.label ?? `Node ${nodeId}`;
+			sourceLabels.current.set(element, label);
 			element.setAttribute("tabindex", tabIndex(element));
 			element.setAttribute("role", "button");
-			if (!element.hasAttribute("aria-label")) {
-				element.setAttribute("aria-label", node?.label ?? `Node ${nodeId}`);
-			}
+			element.setAttribute(
+				"aria-label",
+				presentation
+					? [presentation.label, presentation.description].filter(Boolean).join(", ")
+					: label,
+			);
+			if (presentation?.tone) element.setAttribute("data-sc-tone", presentation.tone);
+			else element.removeAttribute("data-sc-tone");
 		}
 		for (let element of svg.querySelectorAll<SVGElement>("[data-sc-edge]")) {
 			let edgeId = element.getAttribute("data-sc-edge");
 			let edge = edges.find((entry) => entry.id === edgeId);
 			if (!edge) continue;
-			let from = nodes.find((entry) => entry.id === edge.from)?.label ?? edge.from;
-			let to = nodes.find((entry) => entry.id === edge.to)?.label ?? edge.to;
+			let from = nodePresentation?.get(edge.from)?.label
+				?? nodes.find((entry) => entry.id === edge.from)?.label ?? edge.from;
+			let to = nodePresentation?.get(edge.to)?.label
+				?? nodes.find((entry) => entry.id === edge.to)?.label ?? edge.to;
 			element.setAttribute("tabindex", tabIndex(element));
 			element.setAttribute("role", "button");
 			element.setAttribute("aria-label", `${from} to ${to}`);
 		}
-	}, [body, playback, edges, nodes, step]);
+	}, [body, playback, edges, nodes, step, nodePresentation]);
 
 	useEffect(() => {
 		let svg = svgRef.current;
@@ -222,6 +248,14 @@ function DiagramView({
 		for (let element of svg.querySelectorAll<SVGElement>("[data-sc-node], [data-sc-edge]")) {
 			let nodeId = element.getAttribute("data-sc-node");
 			let edgeId = element.getAttribute("data-sc-edge");
+			element.setAttribute(
+				"aria-pressed",
+				String(
+					nodeId !== null
+						? selected?.kind === "node" && selected.id === nodeId
+						: selected?.kind === "edge" && selected.id === edgeId,
+				),
+			);
 			element.classList.toggle(
 				"is-lit",
 				nodeId !== null ? litNodes.has(nodeId) : litEdges.has(edgeId ?? ""),
@@ -233,7 +267,7 @@ function DiagramView({
 					: active?.kind === "edge" && active.id === edgeId,
 			);
 		}
-	}, [active, body, playback, edges]);
+	}, [active, selected, body, playback, edges]);
 
 	// Before paint, so a resumed playback never flashes steps that were already on screen.
 	useLayoutEffect(() => {
@@ -314,11 +348,13 @@ function DiagramView({
 		: [];
 	let stepping = maxStep > 0;
 	let zoomable = result.viewBox[2] > available || zoom !== 1;
-	let labelFor = (nodeId: string) => nodes.find((node) => node.id === nodeId)?.label ?? nodeId;
+	let labelFor = (nodeId: string) =>
+		nodePresentation?.get(nodeId)?.label
+			?? nodes.find((node) => node.id === nodeId)?.label ?? nodeId;
 	let status = maxStep > 0 && !isRunning && (mode.kind === "paused" || reduced)
 		? `Step ${current} of ${maxStep}`
 		: selectedNode
-		? `${selectedNode.label}: ${related.length} connection${related.length === 1 ? "" : "s"}`
+		? `${labelFor(selectedNode.id)}: ${related.length} connection${related.length === 1 ? "" : "s"}`
 		: selectedEdge
 		? `${labelFor(selectedEdge.from)} to ${labelFor(selectedEdge.to)}`
 		: "";
@@ -459,7 +495,7 @@ function DiagramView({
 						<div>
 							<p>{selected.kind === "node" ? "Node" : "Connection"}</p>
 							<h3>
-								{selectedNode?.label ?? (selectedEdge
+								{selectedNode ? labelFor(selectedNode.id) : (selectedEdge
 									? `${labelFor(selectedEdge.from)} → ${labelFor(selectedEdge.to)}`
 									: selected.id)}
 							</h3>
@@ -473,8 +509,9 @@ function DiagramView({
 						</button>
 					</div>
 					{selectedNode?.group && <p className="ch-diagram__group">{selectedNode.group}</p>}
+					{selectedNode && renderNodeDetails?.(selectedNode.id)}
 					{related.length > 0 && (
-						<ul>
+						<ul className="ch-diagram__connections">
 							{related.map((edge) => {
 								let other = edge.from === selectedNode?.id ? edge.to : edge.from;
 								return (
@@ -505,6 +542,7 @@ export function Diagram({ spec, ...props }: DiagramProps) {
 	let [availableWidth, setAvailableWidth] = useState<number>();
 	let result = useMemo(() => renderDiagram(spec, { availableWidth }), [spec, availableWidth]);
 	if (!result.ok) {
+		if (props.fallback !== undefined) return <>{props.fallback}</>;
 		return (
 			<div className="ch-diagram ch-diagram--error" role="alert">
 				<p>Unable to render diagram</p>
@@ -519,12 +557,14 @@ export function Diagram({ spec, ...props }: DiagramProps) {
 	let fingerprint = JSON.stringify(spec);
 	return (
 		<DiagramView
-			key={fingerprint}
+			key={props.stateKey ?? fingerprint}
 			result={result}
 			onWidth={setAvailableWidth}
 			title={props.title}
 			description={props.description}
 			idPrefix={props.idPrefix}
+			nodePresentation={props.nodePresentation}
+			renderNodeDetails={props.renderNodeDetails}
 		/>
 	);
 }

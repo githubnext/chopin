@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Count } from "@chopin/editor/count";
-import { DecisionIcon, DocumentIcon, MessageIcon, WrenchIcon } from "@chopin/icons";
+import { DecisionIcon, DiagramIcon, DocumentIcon, MessageIcon, WrenchIcon } from "@chopin/icons";
 
 import { DocumentActivityDot } from "./document-activity";
 import "./phone-workspace.css";
@@ -19,8 +19,20 @@ const TOP_BAR_SLOP = 6;
 const SCROLLERS =
 	"[data-plan-scroll], [data-plan-decisions-scroll], [data-build-view-scroll], [data-chat-scroll]";
 
-const ICONS = { build: WrenchIcon, chat: MessageIcon, decisions: DecisionIcon, plan: DocumentIcon };
-const NAMES = { build: "Build", chat: "Chat", decisions: "Decisions", plan: "Document" };
+const ICONS = {
+	build: WrenchIcon,
+	chat: MessageIcon,
+	decisions: DecisionIcon,
+	graph: DiagramIcon,
+	plan: DocumentIcon,
+};
+const NAMES = {
+	build: "Build",
+	chat: "Chat",
+	decisions: "Decisions",
+	graph: "Graph",
+	plan: "Document",
+};
 
 export function PhoneTabBar(
 	{

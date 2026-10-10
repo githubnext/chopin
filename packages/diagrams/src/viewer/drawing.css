@@ -79,6 +79,33 @@
 	fill: var(--sc-store);
 	stroke: var(--sc-rule-solid);
 }
+.ch-diagram [data-sc-tone="neutral"] {
+	--sc-status-surface: var(--color-neutral-surface);
+	--sc-status-icon: var(--color-text-tertiary);
+	--sc-status-ink: var(--color-text-secondary);
+}
+.ch-diagram [data-sc-tone="active"] {
+	--sc-status-surface: var(--color-brand-wash);
+	--sc-status-icon: var(--color-brand);
+	--sc-status-ink: var(--color-brand-ink);
+}
+.ch-diagram [data-sc-tone="warning"] {
+	--sc-status-surface: var(--color-warning-surface);
+	--sc-status-icon: var(--color-warning-icon);
+	--sc-status-ink: var(--color-warning-ink);
+}
+.ch-diagram [data-sc-tone="success"] {
+	--sc-status-surface: var(--color-success-surface);
+	--sc-status-icon: var(--color-success-icon);
+	--sc-status-ink: var(--color-success-ink);
+}
+.ch-diagram [data-sc-tone] .n-box {
+	fill: var(--sc-status-surface);
+	stroke: var(--sc-status-icon);
+}
+.ch-diagram [data-sc-tone] .n-tag {
+	fill: var(--sc-status-ink);
+}
 .ch-diagram .n-label {
 	fill: var(--sc-ink);
 	font-size: var(--diagram-label-font-size);

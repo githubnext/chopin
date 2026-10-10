@@ -22,6 +22,7 @@ import type { ChannelDetail } from "./api";
 
 const workspaceIds = {
 	heading: {
+		graph: "workspace-graph-heading",
 		build: "workspace-build-heading",
 		chat: "workspace-chat-heading",
 		decisions: "workspace-decisions-heading",

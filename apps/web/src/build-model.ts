@@ -23,6 +23,7 @@ function latestRun(snapshot: Snapshot) {
 	let graph = snapshot.graph;
 	return snapshot.lifecycle.history.findLast(item =>
 		item.run.graphVersion === graph?.number && item.run.graphRevision === graph?.revision
+		&& item.run.planRevision === graph?.planRevision
 	);
 }
 

@@ -63,7 +63,8 @@ import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
-import { DecisionViewControl, useDecisionAttention } from "./decision-view-control";
+import { DecisionViewControl } from "./decision-view-control";
+import { useDecisionAttention } from "./decision-attention";
 import {
 	advanceDocumentActivity,
 	ANSWER_FOLLOW_MS,
@@ -508,10 +509,11 @@ export function RoomWorkspace(
 	let [implementation, setImplementation] = useState<Plan.ImplementationStatus>({
 		revision: -1,
 		locked: false,
+		hasGraph: false,
 	});
-	let [showImplementation, setShowImplementation] = useState(false);
+	let [implementationView, setImplementationView] = useState<"build" | "graph">();
 	useEffect(() => {
-		setImplementation({ revision: -1, locked: false });
+		setImplementation({ revision: -1, locked: false, hasGraph: false });
 		let update = (value: Plan.ImplementationStatus) => {
 			setImplementation(current => value.revision >= current.revision ? value : current);
 		};
@@ -599,13 +601,21 @@ export function RoomWorkspace(
 		};
 	});
 	let typing = useDocumentEditing(room);
+	let hasGraph = profile.implementation && implementation.hasGraph;
 	// A child someone opened is what they came to read, so a blank root's routing to Decisions
 	// waits until it closes; an explicit choice of view still applies.
-	let view: WorkspaceDocumentView = showImplementation && profile.implementation
-		? "build"
+	let view: WorkspaceDocumentView = implementationView && profile.implementation
+			&& (implementationView !== "graph" || hasGraph)
+		? implementationView
 		: presentation.type === "parent-with-child" && decisionView.phase !== "complete"
 		? "plan"
 		: visibleDecisionView(decisionView, hasPlanContent, unanswered, typing);
+	useEffect(() => {
+		if (implementation.revision < 0 || hasGraph || implementationView !== "graph") return;
+		setImplementationView(undefined);
+		setDecisionView(state => selectDecisionView(state, "plan"));
+		requestAnimationFrame(() => document.getElementById(workspaceIds.heading.plan)?.focus());
+	}, [hasGraph, implementation.revision, implementationView, workspaceIds.heading.plan]);
 	let attention = useDecisionAttention(unanswered);
 	let latestCanEdit = useRef(canEdit);
 	let latestCanManage = useRef(canManage);
@@ -692,7 +702,7 @@ export function RoomWorkspace(
 	useEffect(() => {
 		if (!taskLink || !hasPlanContent) return;
 		setTaskLink(false);
-		setShowImplementation(true);
+		setImplementationView("build");
 		dispatch({ type: "set-chat", open: false });
 	}, [taskLink, hasPlanContent, dispatch]);
 
@@ -759,8 +769,12 @@ export function RoomWorkspace(
 	};
 
 	let selectDestination = (destination: WorkspaceDocumentView) => {
-		setShowImplementation(destination === "build");
-		if (destination !== "build") selectView(destination, mode === "split");
+		setImplementationView(
+			destination === "build" || destination === "graph" ? destination : undefined,
+		);
+		if (destination === "plan" || destination === "decisions") {
+			selectView(destination, mode === "split");
+		}
 		dispatch({ type: "set-chat", open: false });
 	};
 	let latestSelectDestination = useRef(selectDestination);
@@ -1405,6 +1419,7 @@ export function RoomWorkspace(
 				<Workspace
 					available={available}
 					buildEnabled={hasPlanContent}
+					hasGraph={hasGraph}
 					frame={frame}
 					chat={
 						<Chat
@@ -1501,6 +1516,7 @@ export function RoomWorkspace(
 							<DecisionViewControl
 								attention={attention}
 								buildEnabled={profile.implementation ? hasPlanContent : undefined}
+								hasGraph={hasGraph}
 								documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 								onView={selectDestination}
 								unanswered={unanswered}
@@ -1532,6 +1548,24 @@ export function RoomWorkspace(
 					onDesktopChatOpen={setDesktopChatOpen}
 					onChatOpen={open => dispatch({ type: "set-chat", open })}
 					onDestination={selectDestination}
+					graph={hasGraph && (
+						<BuildView
+							graph
+							active={workspacePresentation.documentVisible && view === "graph"}
+							canEdit={!!workspaceCanEdit && status === "connected"}
+							chatLoaded={chatActivity.loaded}
+							comments={acceptedComments}
+							onShowBuild={() => selectDestination("build")}
+							onShowDecisions={() => selectDestination("decisions")}
+							onShowDocument={() => selectDestination("plan")}
+							planner={agent}
+							plannerBusy={chatActivity.busy}
+							room={room}
+							unanswered={unanswered}
+							userId={userId}
+							wire={wire}
+						/>
+					)}
 					build={profile.implementation && (
 						<BuildView
 							active={workspacePresentation.documentVisible && view === "build"}
