@@ -19,6 +19,10 @@ type FakeHarnessSettings = {
 
 const SCRIPTED_TOOLS = ["read_plan", "list_pull_requests"] as const;
 const SLOW_PROMPT = "SLOW-LIVE";
+/** A comment turn's prompt names its thread; this finds it. */
+const COMMENT_THREAD = /using thread ([0-9A-HJKMNP-TV-Z]{26})/;
+/** A comment saying this is answered only in Chat, so the server's backstop posts it. */
+const BACKSTOP_PROMPT = "COMMENT-BACKSTOP";
 const STEP_MS = 2_500;
 
 function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
@@ -98,10 +102,11 @@ export function createFakeHarness(
 					let callTool = (
 						toolName: string,
 						toolCallId = crypto.randomUUID(),
+						input: Record<string, unknown> = {},
 					): Promise<{ output: unknown; isError?: boolean }> => {
 						let outcome = Promise.withResolvers<{ output: unknown; isError?: boolean }>();
 						pending.set(toolCallId, { toolName, resolve: outcome.resolve });
-						turn.emit({ type: "tool-call", toolCallId, toolName, input: "{}" });
+						turn.emit({ type: "tool-call", toolCallId, toolName, input: JSON.stringify(input) });
 						return outcome.promise;
 					};
 
@@ -111,7 +116,62 @@ export function createFakeHarness(
 					};
 					let pause = () => new Promise<void>(resolve => setTimeout(resolve, STEP_MS));
 
-					if (promptText(turn.prompt).includes(SLOW_PROMPT)) {
+					let prompt = promptText(turn.prompt);
+					let thread = COMMENT_THREAD.exec(prompt)?.[1];
+					let finish = () => {
+						turn.emit({
+							type: "finish-step",
+							finishReason: { unified: "stop", raw: undefined },
+							usage,
+						});
+						turn.emit({
+							type: "finish",
+							finishReason: { unified: "stop", raw: undefined },
+							totalUsage: usage,
+						});
+					};
+
+					if (thread && !prompt.includes(SLOW_PROMPT)) {
+						// A comment sent to Chopin: answer in the thread, unless the comment
+						// asks to be answered only in Chat so the server's backstop is exercised.
+						void (async () => {
+							try {
+								await pause();
+								if (turn.abortSignal?.aborted) return;
+								await callTool("read_plan");
+								let backstop = prompt.includes(BACKSTOP_PROMPT);
+								if (!backstop) {
+									let replied = await callTool("reply_comment", undefined, {
+										thread,
+										text: "Done. I tightened the passage you marked.",
+									});
+									if (replied.isError || String(replied.output).startsWith("Error")) {
+										throw new Error(`reply_comment failed: ${String(replied.output)}`);
+									}
+								}
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: backstop ? "Answered from Chat " : "I replied ",
+								});
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: backstop ? "only." : "in the comment thread.",
+								});
+								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (prompt.includes(SLOW_PROMPT)) {
 						void (async () => {
 							try {
 								let toolCallId = crypto.randomUUID();
