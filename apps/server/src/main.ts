@@ -18,6 +18,7 @@ import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
 import { registerImageRoutes } from "./images/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
+import type { Investigation } from "@chopin/experiment/records";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
@@ -52,6 +53,7 @@ import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { jevJudge, SpikeScout } from "./experiments/spike-scout";
 import { spikeHost } from "./experiments/spike-host";
+import { resolveInstruction } from "./experiments/spikes";
 import { askJev } from "./conversation-plan/jev";
 import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
@@ -214,14 +216,62 @@ function documentBackend(): Service.Backend {
  * Re-attempt decision links a first build's lock refused, under the existing Planner owner.
  * Never claims ownership: without an owner the cards stay pending until the next Planner turn.
  */
-async function relinkDecisions(channelId: string): Promise<void> {
+function relinkDecisions(channelId: string): Promise<void> {
+	return serverInstruction(channelId, current => {
+		let pending = pendingLinks(current);
+		if (pending.length === 0) return;
+		return {
+			handle: "Chopin",
+			text: relinkInstruction(pending),
+			said: "Linking decisions to the document after the build",
+		};
+	});
+}
+
+/**
+ * A spike's result landed: have the Planner settle the passage it answered. Runs under the
+ * existing Planner owner, or claims one for the person whose edit started the spike while they
+ * have the document open. A build that has since locked the document skips it.
+ */
+function settleSpikePassage(channelId: string, value: Investigation): Promise<void> {
+	return serverInstruction(channelId, current => {
+		if (Service.implementationActive(current)) return;
+		let { text, said } = resolveInstruction(value);
+		return { handle: value.spike!.login, text, said };
+	}, value.requester);
+}
+
+/**
+ * Start a Planner turn nobody typed. `claimant` is a user whose open, writable socket in the
+ * room may claim an unowned Planner; without one, only an existing owner will do.
+ */
+async function serverInstruction(
+	channelId: string,
+	compose: (plan: Service.Plan) => { handle: string; text: string; said: string } | undefined,
+	claimant?: string,
+): Promise<void> {
 	if (!config.agent || deletingChannels.has(channelId)) return;
 	let opened = Rooms.get(channelId)?.plan;
-	if (!opened || pendingLinks(opened).length === 0) return;
-	let binding = await ownerBindings?.resolve(channelId);
-	if (!binding) return;
-	let repository = binding.repository;
-	binding.release();
+	if (!opened || !compose(opened)) return;
+	let socket = claimant
+		? [...(Rooms.get(channelId)?.members.values() ?? [])].find(ws =>
+			ws.data.principalId === claimant && ws.data.canEdit && !ws.data.closed
+		)
+		: undefined;
+	let repository: Chat.Room["repository"] | undefined;
+	if (socket) {
+		repository = {
+			id: socket.data.repositoryId,
+			owner: socket.data.repositoryOwner,
+			name: socket.data.repositoryName,
+			defaultBranch: socket.data.repositoryDefaultBranch,
+		};
+	} else {
+		let binding = await ownerBindings?.resolve(channelId);
+		if (!binding) return;
+		repository = binding.repository;
+		binding.release();
+	}
 	await withDocumentTransition(channelId, async () => {
 		await Rooms.get(channelId)?.closing;
 		let held = Rooms.hold(channelId);
@@ -232,15 +282,10 @@ async function relinkDecisions(channelId: string): Promise<void> {
 		let running = false;
 		try {
 			let current = await plan(held.room, server);
-			let pending = pendingLinks(current);
-			if (pending.length === 0) return;
-			let context = conversation(held.room, undefined, repository);
-			await Chat.instruct(
-				context,
-				"Chopin",
-				relinkInstruction(pending),
-				"Linking decisions to the document after the build",
-			);
+			let instruction = compose(current);
+			if (!instruction) return;
+			let context = conversation(held.room, socket?.data.sessionId, repository);
+			await Chat.instruct(context, instruction.handle, instruction.text, instruction.said);
 			if (context.chat.running) {
 				running = true;
 				void context.chat.running.finally(release).catch(() => {});
@@ -1712,7 +1757,10 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 	context: currentDocumentTarget,
-	connected: (repositoryId, owner) => liveSync?.connected(repositoryId, owner),
+	connected: (repositoryId, owner) => {
+		liveSync?.connected(repositoryId, owner);
+		spikeScout?.connected(repositoryId, owner);
+	},
 	place: (id, experiment, view, decision, remove) =>
 		withDocumentTransition(id, async () => {
 			await Rooms.get(id)?.closing;
@@ -1988,6 +2036,11 @@ if (config.liveSpikes) {
 			service: experiments.service,
 			connections: experiments.connections,
 			withPlan: withImplementationPlan,
+			landed: (channelId, value) => {
+				void settleSpikePassage(channelId, value).catch(err =>
+					console.error("chopin: could not settle a prototyped passage -", err)
+				);
+			},
 		}),
 		judge: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
 			? jevJudge(request => askJev(request, { model: jev, timeoutMs }))

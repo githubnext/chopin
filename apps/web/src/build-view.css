@@ -198,7 +198,7 @@
 
 .build-task-head {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: calc(var(--spacing) * 2);
 }
 
@@ -207,9 +207,10 @@
 	min-width: 0;
 	min-height: calc(var(--spacing) * 10);
 	flex: 1;
-	align-items: center;
+	align-items: flex-start;
 	gap: calc(var(--spacing) * 3);
-	padding: 0;
+	/* One line sits centred in the 40px row; a wrapped title grows it from the top. */
+	padding: calc((var(--spacing) * 10 - 1lh) / 2) 0;
 	border: 0;
 	background: none;
 	color: var(--color-text-primary);
@@ -220,10 +221,19 @@
 }
 
 .build-task-title {
+	display: -webkit-box;
 	min-width: 0;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	overflow-wrap: anywhere;
+	text-wrap: pretty;
+}
+
+/* A title that wraps keeps its dot and pull request on its first line. */
+.build-task-toggle > .build-task-dot {
+	margin-block-start: calc((1lh - var(--spacing) * 3) / 2);
 }
 
 /* Hollow queued, petrol partial ring in progress, success done, warning blocked. */
@@ -259,6 +269,9 @@
 	--build-pr-surface: var(--color-success-surface);
 	--build-pr-icon: var(--color-success-icon);
 	flex: none;
+	/* A fixed 22px capsule, centred on the 40px first line. */
+	margin-block-start: calc(var(--spacing) * 2.25);
+	line-height: calc(var(--spacing) * 4);
 	padding: calc(var(--spacing) / 2) calc(var(--spacing) * 2);
 	border: var(--edge-width) solid color-mix(in srgb, var(--build-pr-icon) 12%, transparent);
 	border-radius: var(--radius-full);

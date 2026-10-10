@@ -135,6 +135,15 @@ describe("structural components", () => {
 		expect(canonical(deep)).toContain("| a | b |");
 	});
 
+	it("round-trips a callout's fold and rejects one out of range", () => {
+		let folded =
+			`<Callout id="${ID}" type="tip" title="Result" fold="1">\n\nLead.\n\n- detail\n\n</Callout>\n`;
+		expect(canonical(folded)).toContain(`<Callout id="${ID}" type="tip" title="Result" fold="1">`);
+		expect(validate(parse(folded))).toEqual({ ok: true });
+		expect(validate(parse(folded.replace(`fold="1"`, `fold="4"`))).ok).toBe(false);
+		expect(validate(parse(folded.replace(`fold="1"`, `fold="0"`))).ok).toBe(false);
+	});
+
 	it("omits optional attributes that are unset", () => {
 		let out = canonical(`<Callout id="${ID}" type="note">\n\nx\n\n</Callout>\n`);
 		expect(out).not.toContain("title=");

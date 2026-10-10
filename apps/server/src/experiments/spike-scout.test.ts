@@ -70,6 +70,7 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 		timers,
 		delays,
 		disconnect: () => connected = false,
+		reconnect: () => connected = true,
 	};
 }
 
@@ -280,4 +281,42 @@ test("passages waiting at the active-spike cap are judged when a spike frees cap
 	await h.scout.refresh("D");
 	expect(h.started).toEqual(["a", "b", "c", "d", "e"]);
 	expect(asked).toHaveLength(3);
+});
+
+test("a reconnecting local agent rescans its owner's documents missed while it was away", async () => {
+	let h = harness({ blocks: [block("a")] });
+	h.disconnect();
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	h.timers[0]();
+	await h.scout.check("D");
+	expect(h.started).toEqual([]);
+	h.reconnect();
+	h.scout.connected("R_2", "U_1");
+	h.scout.connected("R_1", "U_2");
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(h.started).toEqual([]);
+	h.scout.connected("R_1", "U_1");
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(h.started).toEqual(["a"]);
+});
+
+test("a reconnect rescans only documents its owner's scan could not serve", async () => {
+	let h = harness({ blocks: [block("a")] });
+	h.disconnect();
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	h.timers[0]();
+	await h.scout.check("D");
+	h.reconnect();
+	let checks = 0;
+	let original = h.scout.check.bind(h.scout);
+	h.scout.check = id => {
+		checks++;
+		return original(id);
+	};
+	h.scout.connected("R_1", "U_1");
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(checks).toBe(1);
+	expect(h.started).toEqual(["a"]);
+	h.scout.connected("R_1", "U_1");
+	expect(checks).toBe(1);
 });

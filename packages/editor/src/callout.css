@@ -160,6 +160,33 @@
 	margin-block-end: 0;
 }
 
+/* A folded callout keeps its leading blocks; each reader opens the rest for themselves. */
+.plan-content [data-fold-state="folded"][data-fold-lead="1"] > [data-plan-body] > :nth-child(n+2),
+.plan-content [data-fold-state="folded"][data-fold-lead="2"] > [data-plan-body] > :nth-child(n+3),
+.plan-content [data-fold-state="folded"][data-fold-lead="3"] > [data-plan-body] > :nth-child(n+4) {
+	display: none;
+}
+
+.plan-content [data-fold-state="folded"] > [data-plan-body] > * {
+	margin-block-end: 0;
+}
+
+.plan-content [data-fold-state="open"][data-fold-lead="1"] > [data-plan-body] > :nth-child(n+2),
+.plan-content [data-fold-state="open"][data-fold-lead="2"] > [data-plan-body] > :nth-child(n+3),
+.plan-content [data-fold-state="open"][data-fold-lead="3"] > [data-plan-body] > :nth-child(n+4) {
+	animation: plan-callout-reveal var(--duration-base) var(--ease-out);
+}
+
+.plan-callout-fold {
+	padding-inline-start: 2.125rem;
+	margin-block-start: 0.25rem;
+}
+
+.plan-callout-fold > .plan-research-more {
+	padding-block: 0.25rem;
+	margin-block: -0.25rem;
+}
+
 .plan-callout-menu {
 	z-index: 20;
 	width: 10rem;
@@ -218,8 +245,16 @@
 	}
 }
 
+@keyframes plan-callout-reveal {
+	from {
+		opacity: 0;
+		transform: translateY(-0.25rem);
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
-	.plan-callout-menu {
+	.plan-callout-menu,
+	.plan-content [data-fold-state="open"] > [data-plan-body] > * {
 		animation: none;
 	}
 }

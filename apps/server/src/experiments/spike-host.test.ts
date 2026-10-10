@@ -22,12 +22,14 @@ const PASSAGE = "We are unsure whether drag handles work on touch screens at all
 async function hosted(source = `# Plan\n\n${PASSAGE}\n\nAnother paragraph.\n`) {
 	let context = await openPlan(source);
 	let service = new Experiments(context.storage.experiments, () => context.lease);
+	let landed: string[] = [];
 	let host = spikeHost({
 		service,
 		connections: new Connections(),
 		withPlan: (_id, action) => action(context.plan),
+		landed: (_channelId, value) => landed.push(value.id),
 	});
-	return { ...context, service, host };
+	return { ...context, service, host, landed };
 }
 
 test("a spike is durably placing before its callout is published", async () => {
@@ -286,6 +288,40 @@ test("a spike that finishes while a first build is queued lands before the build
 		expect(room.project(plan.document)).not.toContain('type="warning"');
 	} finally {
 		scout.close();
+		errors.mockRestore();
+		await Service.close(plan);
+	}
+});
+
+test("a landed result asks once for its passage to be settled", async () => {
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	let context = await hosted();
+	let { plan } = context;
+	try {
+		await context.host.start(plan.id, {
+			owner: "U_test",
+			connection: { id: "gone", login: "maggie" },
+			block: { digest: room.digests(plan.document)[1], text: PASSAGE },
+		});
+		let [value] = await context.service.store.list(plan.id);
+		await context.service.mutate(value.id, item => {
+			item.state = "completed";
+			item.result = {
+				schemaVersion: 1,
+				report: "**Handles work**\n\n**Recommendation:** Keep them.\n\n- Fine on iOS.\n",
+				datasets: [],
+				views: [],
+				evidence: [],
+				provenance: { environment: "test", checks: [], limitations: [] },
+			};
+		});
+		await context.host.refresh(plan.id);
+		await context.host.refresh(plan.id);
+		expect(context.landed).toEqual([value.id]);
+		let source = room.project(plan.document);
+		expect(source).toContain(`title="Handles work" fold="1"`);
+		room.validate(source);
+	} finally {
 		errors.mockRestore();
 		await Service.close(plan);
 	}
