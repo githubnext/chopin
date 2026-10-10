@@ -120,7 +120,7 @@ describe("holding what threads say", () => {
 		expect(subject.snapshot().threads).toHaveLength(0);
 	});
 
-	it("never shows a dismissed thread", () => {
+	it("never shows a resolved or dismissed thread", () => {
 		let subject = store();
 		let value = thread();
 		subject.sync([value]);
@@ -133,7 +133,18 @@ describe("holding what threads say", () => {
 			at: 2,
 			quote: "q",
 		});
+		expect(subject.snapshot().threads).toHaveLength(0);
 
+		subject.sync([value]);
+		subject.resolved({
+			kind: "comment:resolved",
+			ts: 0,
+			id: value.id,
+			status: "resolved",
+			resolver: "kris",
+			at: 2,
+			quote: "q",
+		});
 		expect(subject.snapshot().threads).toHaveLength(0);
 	});
 
@@ -182,32 +193,99 @@ describe("what an accepted thread still owes", () => {
 
 		expect(subject.snapshot().threads[0]?.applied).toBe(true);
 	});
+});
 
-	it("asks the Planner to retry an unapplied accepted comment without composer syntax", () => {
-		let sent: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
-		let subject = store();
-		subject.listen({
+/** A wire that answers each ask with whatever the test says the server would. */
+function wire(answer: (kind: string, payload?: Record<string, unknown>) => unknown) {
+	let sent: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+	return {
+		sent,
+		transport: {
 			on: () => () => {},
 			send: () => {},
 			ask: async <T>(kind: string, payload?: Record<string, unknown>) => {
 				sent.push({ kind, payload });
-				return { kind: "chat:send", ts: 0, id: "entry", queued: false } as T;
+				let value = answer(kind, payload);
+				if (value instanceof Error) throw value;
+				return value as T;
 			},
-		});
-		subject.sync([thread({ id: "t1", status: "accepted", quote: "shorten this" })]);
+		},
+	};
+}
 
-		subject.retry("t1");
+describe("resolving and reopening", () => {
+	it("hides a thread the moment it is resolved", () => {
+		let subject = store();
+		let { sent, transport } = wire(() => new Promise(() => {}));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1" })]);
 
-		expect(sent).toEqual([{
-			kind: "chat:send",
-			payload: {
-				requestId: expect.stringMatching(
-					/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-				),
-				text: 'apply the accepted comment on "shorten this" — it has not been actioned yet.',
-				to: "planner",
-			},
-		}]);
+		subject.resolve("t1");
+
+		expect(sent).toEqual([{ kind: "comment:resolve", payload: { id: "t1" } }]);
+		expect(subject.snapshot().threads).toHaveLength(0);
+	});
+
+	it("puts it back when the server refuses", async () => {
+		let subject = store();
+		let { transport } = wire(() => new Error("disk full"));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1" })]);
+
+		subject.resolve("t1");
+		await Bun.sleep(0);
+
+		expect(subject.snapshot().threads.map(view => view.thread.status)).toEqual(["open"]);
+	});
+
+	it("leaves it hidden when somebody else resolved it first", async () => {
+		let subject = store();
+		let { transport } = wire((_kind, payload) => ({
+			kind: "comment:resolve",
+			ts: 0,
+			id: payload?.id,
+			ok: false,
+			reason: "resolved",
+			status: "resolved",
+			resolver: "kris",
+		}));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1" })]);
+
+		subject.resolve("t1");
+		await Bun.sleep(0);
+
+		expect(subject.snapshot().threads).toHaveLength(0);
+	});
+
+	it("shows a reopened thread again, and keeps an unrelated draft", async () => {
+		let subject = store();
+		let reopened = thread({ id: "t1" });
+		let { sent, transport } = wire(() => ({
+			kind: "comment:reopen",
+			ts: 0,
+			id: "t1",
+			ok: true,
+			thread: reopened,
+		}));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1", status: "resolved", resolver: "ana", at: 2 })]);
+		subject.draft({ blocks: [1], quote: "the phrase", offset: 3, length: 10 });
+		expect(subject.snapshot().threads).toHaveLength(0);
+
+		expect(await subject.reopen("t1")).toBe(true);
+
+		expect(sent).toEqual([{ kind: "comment:reopen", payload: { id: "t1" } }]);
+		expect(subject.snapshot().threads.map(view => view.thread.status)).toEqual(["open"]);
+		expect(subject.snapshot().draft).toBeDefined();
+	});
+
+	it("says so when a reopen fails", async () => {
+		let subject = store();
+		let { transport } = wire(() => new Error("gone"));
+		subject.listen(transport);
+
+		expect(await subject.reopen("t1")).toBe(false);
 	});
 });
 
@@ -275,7 +353,7 @@ describe("who is writing", () => {
 			kind: "comment:resolved",
 			ts: 0,
 			id: value.id,
-			status: "accepted",
+			status: "resolved",
 			resolver: "ana",
 			at: 2,
 			quote: "q",
