@@ -283,6 +283,13 @@ export function relate(
 
 	// An empty list is a real answer: reviewed, and deliberately related to
 	// nothing. It is not the same as never having looked.
+	// A thread sent to the Planner gathers what each of its turns produced. Only
+	// an accepted thread's single revision is replaced outright.
+	if (record.status !== "accepted" && record.result) {
+		let seen = new Set(found.map(anchor => anchor.digest));
+		let kept = record.result.anchors.filter(anchor => !anchor.orphaned && !seen.has(anchor.digest));
+		found = [...kept, ...found];
+	}
 	plan.threads.set(thread, { ...record, result: { anchors: found, pending: false } });
 	return undefined;
 }
@@ -455,6 +462,8 @@ async function send(context: Addressed, id: string, note: Wire.Note): Promise<vo
 	if (!record || record.status !== "open") return;
 	let quote = reading(plan, record).quote;
 	let handle = Store.speaker(note);
+	// How many notes the turn could read when it began; set again if a folded turn starts.
+	let seen = { notes: record.notes.length };
 	try {
 		await Chat.instruct(
 			context,
@@ -465,7 +474,10 @@ async function send(context: Addressed, id: string, note: Wire.Note): Promise<vo
 				thread: id,
 				// Resolved before its turn came round: nobody is waiting for it now.
 				spent: () => plan.threads.get(id)?.status !== "open",
-				ended: outcome => ended(context, id, outcome),
+				started: () => {
+					seen.notes = plan.threads.get(id)?.notes.length ?? 0;
+				},
+				ended: outcome => ended(context, id, outcome, seen.notes),
 				comment: { thread: id, excerpt: excerpt(quote), note: note.text },
 			},
 		);
@@ -473,7 +485,8 @@ async function send(context: Addressed, id: string, note: Wire.Note): Promise<vo
 		console.error("[comments] could not send a comment to the Planner:", err);
 		return announce(context, id, working(plan, id), "failed");
 	}
-	announce(context, id, working(plan, id));
+	// Only when a turn is now running or queued; a refusal already said why it is not.
+	if (working(plan, id)) announce(context, id, true);
 }
 
 /**
@@ -484,12 +497,20 @@ async function send(context: Addressed, id: string, note: Wire.Note): Promise<vo
  * where they will look. Only when the thread is still open and nothing from the
  * Planner has followed the latest note sent to it.
  */
-async function ended(context: Addressed, id: string, outcome: Chat.Ended): Promise<void> {
+async function ended(
+	context: Addressed,
+	id: string,
+	outcome: Chat.Ended,
+	seen: number,
+): Promise<void> {
 	let { plan } = context;
 	let record = plan.threads.get(id);
 	let text = outcome.text?.trim().slice(0, limits.MAX_NOTE);
-	if (outcome.status === "done" && record?.status === "open" && text) {
-		let last = record.notes.findLastIndex(note => note.to === "planner");
+	// A note that arrived mid-turn is answered by the turn queued for it, not by
+	// whatever this one last said about something else.
+	let following = !!Chat.queuedFor(plan.chat, id);
+	if (outcome.status === "done" && record?.status === "open" && text && !following) {
+		let last = record.notes.slice(0, seen).findLastIndex(note => note.to === "planner");
 		let answered = record.notes.slice(last + 1).some(note => note.author === "planner");
 		if (!answered) {
 			await post(plan, context.server, context.room, id, text).catch(err => {

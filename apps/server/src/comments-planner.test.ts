@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import * as Chat from "./chat/service";
 import * as Comments from "./comments/service";
 import * as Service from "./plan/service";
+import * as room from "./plan/room";
 import { openPlan } from "./testing/plan";
 
 import type { Config } from "./config";
@@ -334,6 +335,44 @@ describe("how a turn ends on its thread", () => {
 	});
 });
 
+describe("a note that arrives while Chopin is working", () => {
+	it("is answered by its own turn, not by the running turn's last word", async () => {
+		let { broadcasts, context, plan } = await opened();
+		let ana = member("ana");
+		let id = idOf(await start(context, ana));
+		let running = plan.chat.waiting.shift()!;
+		plan.chat.acting = id;
+		running.started?.();
+
+		await reply(context, ana, id, "Also, what about tunnels?");
+		expect(Chat.queuedFor(plan.chat, id)).toBeDefined();
+		await running.ended!({ status: "done", text: "Unrelated chatter about the header." });
+
+		expect(plan.threads.get(id)!.notes.some(note => note.author === "planner")).toBe(false);
+		expect(working(broadcasts).at(-1)).toEqual(expect.objectContaining({ id, working: true }));
+	});
+
+	it("does not count notes the turn never saw", async () => {
+		let { context, plan, server } = await opened();
+		let ana = member("ana");
+		let id = idOf(await start(context, ana));
+		let running = plan.chat.waiting.shift()!;
+		plan.chat.acting = id;
+		running.started?.();
+		await Comments.answer(plan, server, "test", id, "Shortened it.");
+		await reply(context, ana, id, "And the next one?");
+		// The follow-up is withdrawn, so nothing is queued when the first turn ends.
+		let follow = Chat.queuedFor(plan.chat, id)!;
+		plan.chat.waiting = plan.chat.waiting.filter(item => item !== follow);
+		await follow.ended!({ status: "skipped" });
+
+		await running.ended!({ status: "done", text: "Unrelated chatter." });
+
+		let planner = plan.threads.get(id)!.notes.filter(note => note.author === "planner");
+		expect(planner.map(note => note.text)).toEqual(["Shortened it."]);
+	});
+});
+
 describe("the Planner's reply", () => {
 	it("is refused for any thread but the one its turn was sent", async () => {
 		let { context, plan, server } = await opened();
@@ -441,6 +480,18 @@ describe("what a thread looks like to someone joining", () => {
 				result: expect.objectContaining({ pending: false }),
 			}),
 		]);
+	});
+
+	it("gathers what each turn on an open thread anchored", async () => {
+		let { context, plan } = await opened();
+		let id = idOf(await start(context, member("ana")));
+		let digests = room.digests(plan.document);
+
+		expect(Comments.relate(plan, id, [{ index: 1, digest: digests[1]! }])).toBeUndefined();
+		expect(Comments.relate(plan, id, [{ index: 2, digest: digests[2]! }])).toBeUndefined();
+		expect(Comments.relate(plan, id, [{ index: 2, digest: digests[2]! }])).toBeUndefined();
+
+		expect(plan.threads.get(id)?.result?.anchors).toHaveLength(2);
 	});
 
 	it("reads notes saved before notes named their author as a member's", () => {
