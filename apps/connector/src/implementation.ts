@@ -31,3 +31,15 @@ export let implementationPrompt = [
 	"Verify each task's acceptance criteria and graph-wide integration. Never invent verification evidence.",
 	"If your agent cannot delegate to sub-agents, report a task blocker explaining that limitation and stop.",
 ].join("\n");
+
+export let rebuildPrompt = [
+	"The document changed after its pull requests were built. Bring those pull requests up to date.",
+	"Call read_rebuild from Chopin's MCP server; implement only the change from before to after.",
+	"Decide which existing pull requests the change affects.",
+	"For each one, run `gh pr checkout <url>` in this worktree or a sub-worktree, implement only its",
+	"part of the change, make one commit named after the document change, and push.",
+	"Never open new pull requests. Never merge.",
+	"Code that fits no existing pull request goes on the most closely related one.",
+	"If the change needs no code, make no commits.",
+	"Finally call report_rebuild with a summary, every commit you pushed, and one task per change.",
+].join("\n");

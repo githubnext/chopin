@@ -4,7 +4,7 @@ import type { BuildRequest } from "@chopin/protocol/implementation";
 import type { remote } from "./mcp";
 import { runAgent } from "./acp";
 import { git, prepareWorkspace } from "./workspace";
-import { implementationPrompt } from "./implementation";
+import { implementationPrompt, rebuildPrompt } from "./implementation";
 
 type Options = {
 	root: string;
@@ -22,6 +22,7 @@ export async function runWork(
 ) {
 	let implementation = kind === "implementation";
 	let claim = raw as { build: BuildRequest; input: unknown; generation: number; runToken: string };
+	let rebuild = implementation && claim.build.kind === "rebuild";
 	let input = implementation
 		? {
 			id: claim.build.id,
@@ -45,14 +46,17 @@ export async function runWork(
 	}, 10_000);
 	try {
 		let prepared = await prepareWorkspace(options.root, options.directory, input);
-		if (implementation) {
+		// A rebuild commits onto the existing pull request branches the agent checks out itself.
+		if (implementation && !rebuild) {
 			git(prepared.path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
 		}
 		console.error(`Running ${input.id} in ${prepared.path}`);
 		let stop = await runAgent({
 			command: options.command,
 			cwd: prepared.path,
-			prompt: implementation
+			prompt: rebuild
+				? rebuildPrompt
+				: implementation
 				? implementationPrompt
 				: "Use read_investigation from the Chopin MCP server to read the authorized request. "
 					+ "Perform that investigation using your normal project instructions and tools. "
