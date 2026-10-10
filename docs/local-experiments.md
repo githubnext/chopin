@@ -19,9 +19,11 @@ client implementation; it does not invoke a vendor-specific SDK. The connector
 requires Bun 1.4.2 and Git. The agent must support local stdio ACP sessions and
 MCP tools through either advertised HTTP support or the default stdio transport. Authenticate the agent normally before connecting it.
 
-Open the printed pairing link, sign into Chopin, select a document in the same
-repository, and choose **Connect**. Both the browser and connector contact the
-server over outbound requests. The browser does not access your filesystem.
+Open the printed pairing link, sign into Chopin with push access to the
+checkout's repository, and choose **Connect**. One connection serves every
+document in that repository; there is no per-document pairing. Both the browser
+and connector contact the server over outbound requests. The browser does not
+access your filesystem.
 
 The connector credential is held in memory and tied to your browser login.
 Connector grants are deliberately process-bound even though hosted browser
@@ -30,13 +32,19 @@ sessions can survive releases. Reconnect after a server restart or logout.
 ## Run and inspect work
 
 At the end of the document, choose **Propose investigation** and enter a brief.
-The request appears as an inline card. Choose one of your connected workspaces
-and select **Run on my workspace**. A Planner can also propose an investigation;
-its card still needs a workspace owner's action. Progress and published results
-appear in that card automatically, without opening another tab or dialog.
+The request appears as an inline card marked **Ready to run**. Select **Run**:
+the work runs on your own local agent, never on another person's. Chopin uses
+your most recently active connection for the repository that is not already
+busy. Without one, the card shows the connector command to start, and you select
+**Run** again once connected. A Planner can also propose an investigation; its
+card still needs someone to run it. Progress and published results appear in
+that card automatically, without opening another tab or dialog.
 
-Several people can connect to the same document. Only a connection's owner can
-authorize its local work. Other document writers can inspect published results,
+Several people can connect checkouts of the same repository. Only a
+connection's owner can start or cancel work on it. The server rechecks the
+owner's repository push access on every connector call, and write access,
+archive state and the implementation lock on the target document when work is
+started and claimed. Other document writers can inspect published results,
 change shared selections, and record decisions.
 
 The first authorized investigation supplies the document's default experiment
