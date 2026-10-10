@@ -1926,7 +1926,40 @@
 /* The bubble's block trigger carries a label, and its seams cost width a phone lacks. */
 :root[data-plan-coarse-pointer] .plan-bubble-trigger {
 	width: auto;
-	padding-inline: 0.5rem 0.25rem;
+	padding-inline: 0.75rem 0.5rem;
+}
+
+/*
+ * A touch bubble is one row of 44px targets, its glyphs sized to match and its
+ * seams running the full height. Sized to its content, so a selection near the
+ * right edge moves the bubble rather than wrapping it.
+ */
+:root[data-plan-coarse-pointer] .plan-formatting-toolbar:not(.flex-col) {
+	width: max-content;
+	flex-wrap: nowrap;
+	align-items: stretch;
+}
+
+:root[data-plan-coarse-pointer] .plan-formatting-toolbar .plan-menu-cell {
+	font-size: var(--text-lg);
+}
+
+:root[data-plan-coarse-pointer]
+	.plan-formatting-toolbar
+	.plan-menu-cell:not(.plan-bubble-trigger)
+	svg {
+	width: 1.25rem;
+	height: 1.25rem;
+}
+
+:root[data-plan-coarse-pointer] .plan-formatting-toolbar .plan-bubble-trigger svg {
+	width: 1rem;
+	height: 1rem;
+}
+
+:root[data-plan-coarse-pointer] .plan-bubble-seam {
+	height: auto;
+	margin-block: -0.25rem;
 }
 
 /*
@@ -4452,7 +4485,7 @@
 	-webkit-line-clamp: 3;
 }
 
-.plan-decision-pop .plan-resolved-comment-meta {
+:is(.plan-decision-pop, .plan-resolved-comment-sheet) .plan-resolved-comment-meta {
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
 	color: var(--color-text-tertiary);
@@ -4465,7 +4498,7 @@
 	margin: -0.25rem -0.375rem -0.25rem 0;
 }
 
-.plan-decision-pop .plan-resolved-comment-status {
+:is(.plan-decision-pop, .plan-resolved-comment-sheet) .plan-resolved-comment-status {
 	display: inline-flex;
 	flex: 1;
 	align-items: center;
@@ -4484,6 +4517,25 @@
 
 .plan-resolved-comment-head .btn-outline {
 	color: var(--color-text-secondary);
+}
+
+/* A resolved thread on a phone: read-only, on the sheet itself, Reopen a full touch target. */
+.plan-resolved-comment-sheet {
+	padding: 0.25rem 1rem 1rem;
+}
+
+.plan-resolved-comment-sheet .plan-resolved-comment-head {
+	margin: 0;
+}
+
+.plan-resolved-comment-sheet .plan-resolved-comment-head .btn-outline {
+	position: relative;
+}
+
+.plan-resolved-comment-sheet .plan-resolved-comment-head .btn-outline::after {
+	content: "";
+	position: absolute;
+	inset: -0.375rem;
 }
 
 .plan-resolved-comment-close {
