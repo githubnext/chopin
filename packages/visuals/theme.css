@@ -341,6 +341,7 @@
 	--font-weight-normal: 400;
 	--font-weight-medium: 500;
 	--font-weight-semibold: 600;
+	--font-weight-bold: 700;
 	--font-weight-document-heading: 400;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }

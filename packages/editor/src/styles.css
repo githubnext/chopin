@@ -1224,9 +1224,14 @@
 	text-wrap: balance;
 }
 
-.plan-content :is(h1, h2, h3, h4) {
+.plan-content :is(h1, h2, h3) {
 	font-family: var(--font-document-heading);
 	font-weight: var(--font-weight-document-heading);
+}
+
+.plan-content h4 {
+	font-family: var(--font-sans);
+	font-weight: var(--font-weight-bold);
 }
 
 .plan-content :is(h5, h6) {
