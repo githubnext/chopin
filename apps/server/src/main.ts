@@ -48,6 +48,8 @@ import { JobRunner } from "./jobs/runner";
 import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
+import { LiveSyncCoordinator } from "./tasks/live-sync";
+import { locksEditing } from "./tasks/builds";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -126,6 +128,7 @@ let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
+let liveSync: LiveSyncCoordinator | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
 let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
@@ -180,8 +183,12 @@ function documentBackend(): Service.Backend {
 			console.error("chopin: plan persistence failed -", err);
 			signal();
 		},
-		onDocumentPersisted: target => summaryCoordinator?.schedule(target),
+		onDocumentPersisted: target => {
+			summaryCoordinator?.schedule(target);
+			liveSync?.schedule(target);
+		},
 		liveBuild: !!config.liveBuild,
+		onBuildStopped: id => liveSync?.stopped(id),
 	};
 }
 
@@ -1209,6 +1216,7 @@ function drain(): Promise<void> {
 		}
 		if (summaryCoordinator) await attempt(() => summaryCoordinator!.flush());
 		summaryCoordinator?.close();
+		liveSync?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
 		for (let result of await Promise.allSettled([stoppingJobs])) {
@@ -1523,6 +1531,22 @@ function announceResearchTerminal(channelId: string, id: string, text: string): 
 	});
 }
 
+/** Open a document for implementation work, under its transition and document locks. */
+function withImplementationPlan<T>(id: string, action: (plan: Service.Plan) => Promise<T>) {
+	return withDocumentTransition(id, async () => {
+		if (deletingChannels.has(id)) throw new Error("document is unavailable");
+		await Rooms.get(id)?.closing;
+		let held = Rooms.hold(id);
+		try {
+			let opened = await plan(held.room, server);
+			return await withDocumentLock(id, () => action(opened));
+		} finally {
+			held.release();
+			evict(held.room);
+		}
+	});
+}
+
 async function currentDocumentTarget(
 	channelId: string,
 ): Promise<Service.DocumentTarget | undefined> {
@@ -1642,10 +1666,9 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		if (active) return !Service.implementationActive(active);
 		let stored = await storage.collaboration.load(id, new Date());
 		let sidecar = stored?.sidecar as
-			| { execution?: unknown; builds?: Array<{ state: string }> }
+			| { execution?: unknown; builds?: Array<{ state: string; kind?: string }> }
 			| undefined;
-		return !sidecar?.execution
-			&& !sidecar?.builds?.some(build => ["queued", "starting", "running"].includes(build.state));
+		return !sidecar?.execution && !sidecar?.builds?.some(locksEditing);
 	},
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
@@ -1818,6 +1841,7 @@ registerMcpRoutes(router, hostedAuth, {
 	onChannelRenamed: announceChannel,
 	onDocumentPersisted: target => {
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
+		liveSync?.schedule(target);
 	},
 	restoreChannel,
 	serializeDocument: (channelId, action) =>
@@ -1829,20 +1853,20 @@ implementations = registerImplementationRoutes(router, hostedAuth, {
 		(await experiments!.service.store.active()).some(item =>
 			item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
 		),
-	withPlan: (id, action) =>
-		withDocumentTransition(id, async () => {
-			if (deletingChannels.has(id)) throw new Error("document is unavailable");
-			await Rooms.get(id)?.closing;
-			let held = Rooms.hold(id);
-			try {
-				let opened = await plan(held.room, server);
-				return await withDocumentLock(id, () => action(opened));
-			} finally {
-				held.release();
-				evict(held.room);
-			}
-		}),
+	withPlan: withImplementationPlan,
 });
+if (config.liveBuild) {
+	let runtime = experiments;
+	liveSync = new LiveSyncCoordinator({
+		withPlan: withImplementationPlan,
+		connections: runtime.connections,
+		queued: id => {
+			implementations?.track(id);
+			runtime.connections.wake(id);
+		},
+		error: err => console.error("chopin: living-document rebuild failed -", err),
+	});
+}
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
@@ -1927,6 +1951,7 @@ try {
 	await cleaningSessions;
 	await renewingLease;
 	summaryCoordinator?.close();
+	liveSync?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});

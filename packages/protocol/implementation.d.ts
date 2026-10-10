@@ -19,6 +19,10 @@ export type BuildRequest = {
 	state: "queued" | "starting" | "running" | "stopped" | "failed";
 	session?: string;
 	error?: string;
+	/** A rebuild carries edits since `baseRevision` onto a live build's pull requests. */
+	kind?: "rebuild";
+	baseRevision?: number;
+	targetRevision?: number;
 };
 export type ImplementationSnapshot = {
 	revision: number;

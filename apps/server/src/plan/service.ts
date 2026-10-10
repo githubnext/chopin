@@ -1,4 +1,4 @@
-import { restoreBuilds, restoreLive } from "../tasks/builds";
+import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
 import { implementationStatus } from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
@@ -116,6 +116,8 @@ export type Backend = {
 	onDocumentPersisted?: (target: DocumentTarget) => void;
 	/** Keep a finished build's source so later edits can rebuild onto its pull requests. */
 	liveBuild?: boolean;
+	/** A build reached a terminal state after its stop was persisted. */
+	onBuildStopped?: (channelId: string) => void;
 };
 
 export type DocumentTarget = {
@@ -1158,10 +1160,7 @@ export async function drain(plan: Plan): Promise<void> {
 
 /** One gate for every path that can mutate a plan during implementation. */
 export function implementationActive(plan: Plan): boolean {
-	return plan.claiming || !!plan.execution
-		|| plan.builds.some(build =>
-			build.state === "queued" || build.state === "starting" || build.state === "running"
-		);
+	return plan.claiming || !!plan.execution || plan.builds.some(locksEditing);
 }
 
 /** Sidecar-only commit for a caller already holding `exclusive`. */
