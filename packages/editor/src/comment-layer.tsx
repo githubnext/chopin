@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { MessageIcon } from "@chopin/icons";
+import { CheckIcon, MessageIcon } from "@chopin/icons";
 import { useCellValue } from "@mdxeditor/gurx";
 import { $getNodeByKey } from "lexical";
 
@@ -61,6 +61,16 @@ type MeasuredBlock = {
 
 /** A pinned list of one block's threads, as opposed to a pinned thread id. */
 const LIST = "list:";
+
+/** How long a resolve can be undone from its toast. */
+const UNDO_WINDOW = 6_000;
+
+/** The fragment Copy link writes and a page load follows. */
+const LINK = "#comment-";
+
+function linkTo(id: string): string {
+	return `${location.origin}${location.pathname}${location.search}${LINK}${id}`;
+}
 
 function dialogId(pinned: string): string {
 	return pinned.startsWith(LIST)
@@ -334,6 +344,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [previewMeasurement, setPreviewMeasurement] = useState<PreviewMeasurement>();
 	let [pinned, setPinned] = useState<string>();
 	let [returnTo, setReturnTo] = useState<string>();
+	let [undo, setUndo] = useState<string>();
+	let [linked, setLinked] = useState<string | undefined>(() =>
+		location.hash.startsWith(LINK) ? location.hash.slice(LINK.length) : undefined
+	);
 	let pinnedRef = useRef<string | undefined>(undefined);
 	pinnedRef.current = pinned;
 	let [coarse, setCoarse] = useState(false);
@@ -639,6 +653,41 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		store.draft(undefined);
 		restoreOrigin();
 	}, [restoreOrigin, store]);
+	let resolve = useCallback((id: string) => {
+		store.resolve(id);
+		setUndo(id);
+	}, [store]);
+	let reopen = useCallback((id: string) => {
+		setUndo(undefined);
+		void store.reopen(id).then(ok => {
+			if (!ok) return;
+			setReturnTo(undefined);
+			setPinned(id);
+		});
+	}, [store]);
+
+	useEffect(() => {
+		if (!undo) return;
+		let timer = setTimeout(() => setUndo(undefined), UNDO_WINDOW);
+		return () => clearTimeout(timer);
+	}, [undo]);
+
+	useEffect(() => {
+		let follow = () => {
+			if (location.hash.startsWith(LINK)) setLinked(location.hash.slice(LINK.length));
+		};
+		addEventListener("hashchange", follow);
+		return () => removeEventListener("hashchange", follow);
+	}, []);
+
+	// A copied link opens its thread once the thread has somewhere to stand.
+	useEffect(() => {
+		if (!linked || !placed.some(entry => entry.view.thread.id === linked)) return;
+		setLinked(undefined);
+		setReturnTo(undefined);
+		setPinned(linked);
+		store.reveal(linked);
+	}, [linked, placed, store]);
 
 	useLayoutEffect(() => {
 		let open = !!draft;
@@ -735,18 +784,15 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		selected.current = id;
 		setPinned(id);
 	};
-	let card = (view: ThreadView, showClose = true) => {
+	let card = (view: ThreadView) => {
 		let group = markerOf(view.thread.id);
 		let back = group && group.views.length > 1 ? group : undefined;
 		return (
 			<ThreadCard
 				backLabel={back ? `All ${back.views.length} comments` : undefined}
-				busy={false}
 				canEdit={canEdit}
-				focused={state.focused === view.thread.id}
-				inDocument
 				key={view.thread.id}
-				onAccept={() => store.accept(view.thread.id)}
+				link={linkTo(view.thread.id)}
 				onBack={back
 					? () => {
 						setReturnTo(view.thread.id);
@@ -754,14 +800,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					}
 					: undefined}
 				onBlur={() => unhover(view.thread.id)}
-				onClose={showClose ? dismiss : undefined}
-				onDismiss={() => store.dismiss(view.thread.id)}
 				onFocus={() => hover(view.thread.id)}
 				onReply={text => store.reply(view.thread.id, text)}
-				onRetry={() => store.retry(view.thread.id)}
+				onResolve={() => resolve(view.thread.id)}
 				onTyping={writing => store.announce(view.thread.id, writing)}
 				quote={view.quote}
-				showClose={showClose}
 				view={view}
 				writing={state.writing[view.thread.id]}
 			/>
@@ -826,21 +869,14 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactLabel = "New comment";
 		compactTitle = "New comment";
 		compactClose = cancelDraft;
-		compactContent = (
-			<DraftCard
-				busy={false}
-				onCancel={cancelDraft}
-				onSend={text => store.start(text)}
-				showClose={false}
-			/>
-		);
+		compactContent = <DraftCard onCancel={cancelDraft} onSend={text => store.start(text)} />;
 	} else if (compact && pinned === "orphans" && orphaned.length > 0) {
 		compactKey = "orphans";
 		compactId = "plan-comment-thread-orphans";
 		compactLabel = "Orphaned comments";
 		compactTitle = "Orphaned comments";
 		compactClose = dismiss;
-		compactContent = orphaned.map(view => card(view, false));
+		compactContent = orphaned.map(view => card(view));
 	} else if (compact && pinned && (pinnedView || pinnedList)) {
 		// One sheet serves a block's list and its threads, so moving between them does not reopen it.
 		compactKey = pinnedMarker && pinnedMarker.views.length > 1
@@ -851,12 +887,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		let count = pinnedView?.thread.notes.length;
 		compactTitle = count ? count === 1 ? "Comment" : `${count} comments` : "Comments";
 		compactClose = dismiss;
-		compactContent = pinnedView ? card(pinnedView, false) : (
+		compactContent = pinnedView ? card(pinnedView) : (
 			<ThreadList
 				autoFocus={false}
 				onSelect={selectThread}
 				returnTo={returnTo}
-				showClose={false}
 				views={pinnedList!.views}
 			/>
 		);
@@ -881,7 +916,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				? card(pinnedView)
 				: (
 					<ThreadList
-						onClose={dismiss}
 						onSelect={selectThread}
 						returnTo={returnTo}
 						views={pinnedMarker.views}
@@ -1008,13 +1042,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				value={draft?.placement && !compact
 					? {
 						ariaLabel: "New comment",
-						children: (
-							<DraftCard
-								busy={false}
-								onCancel={cancelDraft}
-								onSend={text => store.start(text)}
-							/>
-						),
+						children: <DraftCard onCancel={cancelDraft} onSend={text => store.start(text)} />,
 						className: "plan-comment-card",
 						onMeasure: element => rememberHeight("draft", element),
 						...cardPlacement(draft.placement, "draft"),
@@ -1055,9 +1083,24 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		host,
 	);
 
+	// Only the reader who resolved sees the toast, beneath the document they resolved it in.
+	let toast = undo && createPortal(
+		<div className="plan-comment-toast-region" style={{ left: page.left + page.width / 2 }}>
+			<div className="plan-comment-toast" key={undo} role="status">
+				<CheckIcon aria-hidden="true" size={14} />
+				<span>Comment resolved</span>
+				<button className="plan-comment-toast-undo" onClick={() => reopen(undo)} type="button">
+					Undo
+				</button>
+			</div>
+		</div>,
+		document.body,
+	);
+
 	return (
 		<>
 			{documentChrome}
+			{toast}
 			{compactKey && compactId && compactLabel && compactClose && (
 				<CommentSheet
 					closeVisible={compactKey === "draft"}
