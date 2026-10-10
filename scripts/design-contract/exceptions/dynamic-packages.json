@@ -238,6 +238,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > EllipsisIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > WrenchIcon > <LineIcon>",
 				1
 			],
@@ -375,7 +382,7 @@
 				1
 			]
 		],
-		"sourceHash": "85232eadf3b54966a7a97eeb61187a7ca4575e66856f446cf40aa0f8264ebcc1"
+		"sourceHash": "c269a30d83f2c87b5d42b7284f1c6e7e5cd0b80fbd2c40a11b95c13c3b8e44e0"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",
