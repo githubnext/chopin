@@ -41,11 +41,13 @@ const RELOAD_ON = [
  * because the view's own status line already says the same thing.
  */
 export function BuildPlanButton(
-	{ onNeedsAgent, onShowBuild, onShowDecisions, room, showing, userId, wire }: {
+	{ onNeedsAgent, onShowBuild, onShowDecisions, onWaiting, room, showing, userId, wire }: {
 		/** No local agent could take the build; the Build view explains how to start one. */
 		onNeedsAgent: () => void;
 		onShowBuild: () => void;
 		onShowDecisions: () => void;
+		/** Whether the one-click build waits on open decisions, which Decisions then says. */
+		onWaiting?: (decisions: boolean) => void;
 		room: string;
 		/** The view the document pane shows now, if it is visible. */
 		showing?: WorkspaceDocumentView;
@@ -151,6 +153,13 @@ export function BuildPlanButton(
 			});
 		});
 	}, [step.next, snapshot?.revision]);
+
+	let waitingOnDecisions = !syncStatus(snapshot) && step.view === "waiting"
+		&& waitingLabel(snapshot).target === "decisions";
+	useEffect(() => {
+		onWaiting?.(waitingOnDecisions);
+	}, [waitingOnDecisions]);
+	useEffect(() => () => onWaiting?.(false), []);
 
 	let sync = syncStatus(snapshot);
 	if (sync) {

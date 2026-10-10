@@ -5,12 +5,15 @@ import {
 	advanceDraft,
 	ago,
 	attentionHint,
+	blockerLabelled,
+	blockerText,
 	buildPhase,
 	buildProgress,
 	draftInFlight,
 	draftKey,
 	draftRefusalCopy,
 	elapsed,
+	linkParts,
 	liveTaskGroups,
 	liveTaskState,
 	plural,
@@ -23,6 +26,7 @@ import {
 	syncLabel,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
+	unfinishedReason,
 } from "./build-model";
 import {
 	cancelBuildRequest,
@@ -422,7 +426,7 @@ export function BuildView(
 		status = (
 			<>
 				{queued
-					? <ClockIcon aria-hidden="true" className="build-status-icon" />
+					? <ClockIcon aria-hidden="true" className="build-status-icon" size={12} />
 					: <span aria-hidden="true" className="build-pulse" />}
 				<span className="min-w-0 flex-1">
 					{queued ? "Queued" : "Building"}
@@ -461,10 +465,10 @@ export function BuildView(
 			<>
 				{phase.sync.kind === "building" && <span aria-hidden="true" className="build-pulse" />}
 				{phase.sync.kind === "in-sync" && (
-					<CheckIcon aria-hidden="true" className="build-status-icon" />
+					<CheckIcon aria-hidden="true" className="build-status-icon" size={12} />
 				)}
 				{phase.sync.kind === "out-of-sync" && phase.sync.reason !== "failed" && (
-					<ClockIcon aria-hidden="true" className="build-status-icon" />
+					<ClockIcon aria-hidden="true" className="build-status-icon" size={12} />
 				)}
 				{(phase.sync.kind === "needs-attention"
 					|| phase.sync.kind === "out-of-sync" && phase.sync.reason === "failed") && (
@@ -496,6 +500,11 @@ export function BuildView(
 		let state: TaskState = phase.kind === "live"
 			? liveTaskState(report?.state ?? "queued", outstanding.has(task.id), syncing)
 			: report?.state ?? "queued";
+		// A task the build left unfinished says why where a blocked one shows its blocker.
+		let stopped = phase.kind === "live" && outstanding.has(task.id) && !report?.blocker
+				&& state === "blocked"
+			? unfinishedReason(report)
+			: undefined;
 		let expanded = open[task.id] ?? taskStartsOpen(state, linked === task.id);
 		let after = task.dependsOn.map(id => tasks.find(item => item.id === id)?.title ?? id);
 		let number = report?.pullRequest && pullRequestNumber(report.pullRequest.url);
@@ -511,6 +520,7 @@ export function BuildView(
 					}}
 					blocker={report?.blocker}
 					commits={commits}
+					stopped={stopped}
 					summary={report?.state === "completed" ? report.summary : undefined}
 					now={now}
 					state={state}
@@ -628,7 +638,19 @@ export function BuildView(
 }
 
 function TaskRow(
-	{ after, blocker, commits, expanded, now, onToggle, pullRequest, state, summary, task }: {
+	{
+		after,
+		blocker,
+		commits,
+		expanded,
+		now,
+		onToggle,
+		pullRequest,
+		state,
+		stopped,
+		summary,
+		task,
+	}: {
 		after: string[];
 		blocker?: string;
 		commits: Array<{ sha: string; message: string; at: string }>;
@@ -637,12 +659,15 @@ function TaskRow(
 		onToggle: () => void;
 		pullRequest?: { url: string; state: "open" | "merged" | "closed"; number?: number };
 		state: TaskState;
+		/** Why a task the build left unfinished stopped. */
+		stopped?: string;
 		/** What a finished task did, in place of what finishing it required. */
 		summary?: string;
 		task: { id: string; title: string; goal: string; acceptance: string[] };
 	},
 ) {
 	let panel = useId();
+	let reason = blocker && blockerText(blocker);
 	return (
 		<>
 			<div className="build-task-head">
@@ -683,7 +708,17 @@ function TaskRow(
 							</ul>
 						)}
 						{after.length > 0 && <p className="m-0 text-text-tertiary">After {after.join(", ")}</p>}
-						{blocker && <p className="build-task-blocker">Blocked: {blocker}</p>}
+						{reason && (
+							<p className="build-task-blocker">
+								{!blockerLabelled(reason) && "Blocked: "}
+								<Linked text={reason} />
+							</p>
+						)}
+						{stopped && (
+							<p className="build-task-blocker">
+								<Linked text={stopped} />
+							</p>
+						)}
 						{pullRequest && commits.length > 0 && (
 							<ul aria-label="Commits" className="build-task-commits">
 								{commits.map(commit => (
@@ -706,5 +741,18 @@ function TaskRow(
 				</div>
 			</div>
 		</>
+	);
+}
+
+/** An agent's text with its links clickable, GitHub ones shortened to `owner/repo#N`. */
+function Linked({ text }: { text: string }) {
+	return linkParts(text).map((part, index) =>
+		part.href
+			? (
+				<a href={part.href} key={index} rel="noreferrer" target="_blank">
+					{part.text}
+				</a>
+			)
+			: part.text
 	);
 }

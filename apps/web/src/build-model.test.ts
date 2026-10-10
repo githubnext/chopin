@@ -5,15 +5,19 @@ import {
 	advanceFirstBuild,
 	ago,
 	attentionHint,
+	blockerLabelled,
+	blockerText,
 	buildPhase,
 	draftKey,
 	draftRefusalCopy,
 	elapsed,
 	firstBuildStep,
+	linkParts,
 	liveTaskGroups,
 	liveTaskState,
 	pullRequestCommits,
 	pullRequestNumber,
+	shortUrl,
 	shouldAutoDraft,
 	startedBy,
 	startingHint,
@@ -23,6 +27,7 @@ import {
 	syncStatus,
 	syncTooltip,
 	taskStartsOpen,
+	unfinishedReason,
 	waitingLabel,
 } from "./build-model";
 
@@ -501,7 +506,7 @@ describe("living document sync", () => {
 		expect(syncStatus(stuck)).toEqual({ kind: "needs-attention", outstanding: 2 });
 		expect(syncHint(syncStatus(stuck), stuck, "me"))
 			.toBe(
-				"“Store graphs” is blocked: Which database? (and 1 other). Edit the document to retry.",
+				"“Store graphs” is blocked: Which database? (and 1 other). Edit the document to retry them.",
 			);
 		let edited = live({ outstandingTasks, outOfSync: true });
 		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
@@ -514,7 +519,9 @@ describe("living document sync", () => {
 		expect(syncHint(syncStatus(failed), failed, "me"))
 			.toBe("The next edit will retry the sync and 2 blocked tasks");
 		expect(syncLabel(syncStatus(stuck)!)).toBe("Needs attention");
-		expect(syncTooltip(syncStatus(stuck)!, stuck, "me")).toContain("Edit the document to retry.");
+		expect(syncTooltip(syncStatus(stuck)!, stuck, "me")).toContain(
+			"Edit the document to retry them.",
+		);
 		// Syncing beats needing attention.
 		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
 			.toEqual({ kind: "building" });
@@ -528,11 +535,9 @@ describe("living document sync", () => {
 			],
 		});
 		expect(attentionHint(stuck, true))
-			.toBe("“Store graphs” is blocked (and 1 other). Edit the document to retry.");
+			.toBe("Edit the document to retry “Store graphs” and 1 other");
 		let unfinished = live({ outstandingTasks: [{ id: "a", title: "Ship", state: "queued" }] });
-		expect(attentionHint(unfinished, true)).toBe(
-			"“Ship” didn’t finish. Edit the document to retry.",
-		);
+		expect(attentionHint(unfinished, true)).toBe("Edit the document to retry “Ship”");
 	});
 
 	it("caps a long blocker in the tooltip at a word boundary", () => {
@@ -541,8 +546,75 @@ describe("living document sync", () => {
 			outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker }],
 		}))!;
 		expect(hint).toMatch(/^“Ship” is blocked: The repository has no app\. Should I .*…/);
-		expect(hint.endsWith("… Edit the document to retry.")).toBe(true);
+		expect(hint.endsWith("… Edit the document to retry it.")).toBe(true);
 		expect(hint.length).toBeLessThan(180);
+	});
+
+	it("says why an unfinished task stopped: its last report, else where the agent stopped", () => {
+		expect(unfinishedReason(undefined)).toBe("Your agent stopped before opening a pull request");
+		expect(unfinishedReason({ pullRequest: { url: PR, state: "open" } }))
+			.toBe("Your agent stopped before finishing this task");
+		expect(unfinishedReason({ summary: "  Tests still fail on CI. " }))
+			.toBe("Tests still fail on CI.");
+		let task = (progress: object) => ({
+			id: "a",
+			title: "Ship",
+			context: "",
+			goal: "",
+			acceptance: [],
+			dependsOn: [],
+			progress: { id: "a", state: "queued" as const, ...progress },
+		});
+		let quiet = live({
+			outstandingTasks: [{ id: "a", title: "Ship", state: "queued" }],
+			tasks: [task({})],
+		});
+		expect(attentionHint(quiet)).toBe(
+			"“Ship” didn’t finish: your agent stopped before opening a pull request. Edit the document to retry it.",
+		);
+		let reported = live({
+			outstandingTasks: [{ id: "a", title: "Ship", state: "queued" }],
+			tasks: [task({ summary: "Waiting on a review of https://github.com/o/r/pull/7." })],
+		});
+		expect(attentionHint(reported)).toBe(
+			"“Ship” didn’t finish: Waiting on a review of o/r#7. Edit the document to retry it.",
+		);
+	});
+
+	it("drops an agent's stacked Blocked: labels and keeps its own", () => {
+		expect(blockerText("Blocked: Blocker - Which database?")).toBe("Which database?");
+		expect(blockerText("Blocked by CI")).toBe("Blocked by CI");
+		expect(blockerLabelled("Awaiting human confirmation: Jev must confirm")).toBe(true);
+		expect(blockerLabelled("Which database? Postgres: or SQLite")).toBe(false);
+		expect(blockerLabelled("https://github.com/o/r/pull/1 fails")).toBe(false);
+		let hint = attentionHint(live({
+			outstandingTasks: [{
+				id: "a",
+				title: "Ship",
+				state: "blocked",
+				blocker: "Blocked: Awaiting review: see https://github.com/o/r/pull/28#issuecomment-339.",
+			}],
+		}));
+		expect(hint).toBe(
+			"“Ship” is blocked: Awaiting review: see o/r#28 comment. Edit the document to retry it.",
+		);
+	});
+
+	it("shortens GitHub links and leaves other links whole", () => {
+		expect(shortUrl("https://github.com/o/r/pull/28")).toBe("o/r#28");
+		expect(shortUrl("https://github.com/o/r/issues/3#issuecomment-12")).toBe("o/r#3 comment");
+		expect(shortUrl("https://github.com/o/r/pull/28/files")).toBe("o/r#28");
+		expect(shortUrl("https://example.com/o/r/pull/28")).toBeUndefined();
+		expect(
+			linkParts("on PR #28 (https://github.com/o/r/pull/28#issuecomment-9). See https://x.dev/a."),
+		).toEqual([
+			{ text: "on PR #28 (" },
+			{ text: "o/r#28 comment", href: "https://github.com/o/r/pull/28#issuecomment-9" },
+			{ text: "). See " },
+			{ text: "https://x.dev/a", href: "https://x.dev/a" },
+			{ text: "." },
+		]);
+		expect(linkParts("no links")).toEqual([{ text: "no links" }]);
 	});
 
 	it("shows a task the first build left unfinished as needing attention until a sync runs", () => {
@@ -559,10 +631,10 @@ describe("living document sync", () => {
 				outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker }],
 			}));
 		expect(hint("I can't decide this myself.")).toBe(
-			"“Ship” is blocked: I can't decide this myself. Edit the document to retry.",
+			"“Ship” is blocked: I can't decide this myself. Edit the document to retry it.",
 		);
 		expect(hint("Which database?")).toBe(
-			"“Ship” is blocked: Which database? Edit the document to retry.",
+			"“Ship” is blocked: Which database? Edit the document to retry it.",
 		);
 	});
 
@@ -576,7 +648,7 @@ describe("living document sync", () => {
 			sync: { kind: "needs-attention", outstanding: 1 },
 		});
 		expect(attentionHint(stopped)).toBe(
-			"“Ship” is blocked: Pick a host. Edit the document to retry.",
+			"“Ship” is blocked: Pick a host. Edit the document to retry it.",
 		);
 	});
 

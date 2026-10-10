@@ -40,7 +40,8 @@
 	min-width: 0;
 	flex: 1;
 	align-items: center;
-	gap: calc(var(--spacing) * 2);
+	/* The task rows' dot column: a 12px glyph and this gap put the label over their titles. */
+	gap: calc(var(--spacing) * 3);
 	margin: 0;
 	color: var(--color-text-primary);
 	font-size: var(--text-sm);
@@ -59,10 +60,6 @@
 .build-status-line > :is(.build-task-dot, .build-status-icon) {
 	align-self: flex-start;
 	margin-block-start: calc((1lh - var(--spacing) * 3) / 2);
-}
-
-.build-status-line > .build-status-icon {
-	margin-block-start: calc((1lh - var(--spacing) * 3.5) / 2);
 }
 
 /* The reason or count after a status, quieter than the status itself. */
@@ -252,9 +249,10 @@
 	background: var(--color-success-graphic);
 }
 
+/* The same warning family as the reason's ink, so the dot and its text read as one. */
 .build-task-dot[data-state="blocked"] {
-	border-color: var(--color-warning-graphic);
-	background: var(--color-warning-graphic);
+	border-color: var(--color-warning);
+	background: var(--color-warning);
 }
 
 .build-task-pr {
@@ -365,6 +363,17 @@
 .build-task-blocker {
 	margin: 0;
 	color: var(--color-warning-ink);
+}
+
+.build-task-blocker a {
+	color: inherit;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+	text-underline-offset: 2px;
+}
+
+.build-task-blocker a:hover {
+	text-decoration-color: currentColor;
 }
 
 /* A living document's commits on a task's pull request, newest first. */
