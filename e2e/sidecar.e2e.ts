@@ -1343,13 +1343,14 @@ function washed(page: import("@playwright/test").Page): Promise<number> {
 	return page.evaluate(() => CSS.highlights.get("plan-related")?.size ?? 0);
 }
 
-test("the reply field is one line until focused, then grows and reveals its send", async ({ join, seed }) => {
+test("the reply field is one line until focused, then grows and reveals Send to Chopin and its send", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	let card = await thread(page);
 	let composer = card.getByRole("textbox", { name: "Reply", exact: true });
-	let frame = composer.locator("xpath=..");
+	let frame = composer.locator("xpath=ancestor::*[@data-mode][1]");
 	let send = card.getByRole("button", { name: "Send reply" });
+	let address = card.getByRole("checkbox", { name: "Send to Chopin" });
 	let initial = await composer.evaluate(element => ({
 		height: element.clientHeight,
 		resize: getComputedStyle(element).resize,
@@ -1361,6 +1362,8 @@ test("the reply field is one line until focused, then grows and reveals its send
 	await expect(frame).toHaveAttribute("data-open", "true");
 	await expect(send).toBeVisible();
 	await expect(send).toBeDisabled();
+	await expect(address).toBeVisible();
+	await expect(address).not.toBeChecked();
 
 	await composer.fill("First line\nSecond line\nThird line\nFourth line\nFifth line");
 	await expect.poll(() => composer.evaluate(element => element.clientHeight)).toBeGreaterThan(
