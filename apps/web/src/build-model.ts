@@ -29,7 +29,8 @@ export type BuildPhase =
  * them, so a document otherwise in sync with any `needs-attention`.
  */
 export type SyncStatus =
-	| { kind: "building" }
+	/** `first` while the first build finishes, so it keeps its own label until it ends. */
+	| { kind: "building"; first?: true }
 	| { kind: "in-sync" }
 	| { kind: "needs-attention"; outstanding: number }
 	| { kind: "out-of-sync"; reason: "pending" | "waiting" | "failed"; outstanding: number };
@@ -44,11 +45,11 @@ const RUNNING = ["queued", "starting", "running"];
 export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefined {
 	let live = snapshot?.live;
 	if (!snapshot || !live) return;
+	if (live.rebuild && RUNNING.includes(live.rebuild.state)) return { kind: "building" };
 	if (
-		live.rebuild && RUNNING.includes(live.rebuild.state)
-		|| snapshot.build && RUNNING.includes(snapshot.build.state)
+		snapshot.build && RUNNING.includes(snapshot.build.state)
 		|| snapshot.lifecycle.execution.state === "active"
-	) return { kind: "building" };
+	) return { kind: "building", first: true };
 	let outstanding = live.outstandingTasks?.length ?? 0;
 	if (!live.outOfSync) {
 		return outstanding ? { kind: "needs-attention", outstanding } : { kind: "in-sync" };
@@ -65,7 +66,7 @@ export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefin
 
 /** One vocabulary for a living document: in sync, out of sync, syncing, or a failed sync. */
 export function syncLabel(status: SyncStatus): string {
-	if (status.kind === "building") return "Syncing…";
+	if (status.kind === "building") return status.first ? "Building…" : "Syncing…";
 	if (status.kind === "in-sync") return "In sync";
 	if (status.kind === "needs-attention") return "Needs attention";
 	return status.reason === "failed" ? "Sync failed" : "Out of sync";
@@ -213,7 +214,11 @@ export function syncTooltip(
 	userId: string | undefined,
 ): string {
 	if (status.kind === "in-sync") return "Pull requests match the document";
-	if (status.kind === "building") return "Updating pull requests to match the document";
+	if (status.kind === "building") {
+		return status.first
+			? "Finishing the first build"
+			: "Updating pull requests to match the document";
+	}
 	return syncHint(status, snapshot, userId) ?? "Pull requests lag the document";
 }
 

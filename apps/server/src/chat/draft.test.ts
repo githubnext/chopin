@@ -269,6 +269,8 @@ test("the draft instruction comes from the plan and refuses an unsettled one", a
 	let built = draftInstruction(plan, "ana", true);
 	expect(built.text).toContain("Chopin approves and starts these tasks automatically");
 	expect(built.text).toContain("do not describe them as unapproved or unstarted");
+	expect(built.text).toContain("do not add a task that prototypes that passage again");
+	expect(prepare.text).not.toContain("Prototyping");
 	expect(built.text).not.toContain("Do not approve or start implementation.");
 	expect(built.said).toBe(prepare.said);
 	expect(draftRefusal(plan)).toBeUndefined();

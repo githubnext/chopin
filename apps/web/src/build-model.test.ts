@@ -448,7 +448,16 @@ describe("living document sync", () => {
 			expect(syncStatus(live({ outOfSync: true, rebuild: rebuild(state) })))
 				.toEqual({ kind: "building" });
 		}
-		expect(syncStatus({ ...live(), build: build("running") })).toEqual({ kind: "building" });
+		expect(syncStatus({ ...live(), build: build("running") }))
+			.toEqual({ kind: "building", first: true });
+	});
+
+	it("keeps the first build's label while it finishes after delivering", () => {
+		let finishing = syncStatus({ ...live(), build: build("running") })!;
+		expect(syncLabel(finishing)).toBe("Building…");
+		expect(syncTooltip(finishing, undefined, "me")).toBe("Finishing the first build");
+		expect(syncLabel(syncStatus(live({ outOfSync: true, rebuild: rebuild("running") }))!))
+			.toBe("Syncing…");
 	});
 
 	it("explains a first build queued behind another document's build", () => {
