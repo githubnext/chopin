@@ -229,7 +229,7 @@ test("a narrow split document keeps the desktop comment popover", async ({ join,
 	let paragraph = content(page).locator("p").first();
 
 	await expect(card).not.toHaveAttribute("aria-modal", "true");
-	await expect(page.getByRole("button", { name: "Resize comment sheet" })).toHaveCount(0);
+	await expect(page.locator("[data-plan-comment-sheet]")).toHaveCount(0);
 	// No gutter is wide enough here, so the card sits below the passage inside its column.
 	await expect.poll(async () => {
 		let cardBox = await card.boundingBox();
@@ -1184,7 +1184,7 @@ test("a touch comment opens as a modal sheet and restores its marker", async ({ 
 	await marker.tap();
 	let sheet = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(sheet).toBeVisible();
-	await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
 	await expect.poll(() => editorIsModalBackground(page)).toBe(true);
 	await page.keyboard.press("Escape");
 	await expect(sheet).toHaveCount(0);
@@ -1308,7 +1308,7 @@ test("a compact orphan sheet owns focus and restores its opener", async ({ join,
 	await opener.tap();
 	let sheet = page.getByRole("dialog", { name: "Orphaned comments" });
 	await expect(sheet).toHaveAttribute("aria-modal", "true");
-	await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
 	await expect.poll(() => editorIsModalBackground(page)).toBe(true);
 	await page.keyboard.press("Shift+Tab");
 	await expect(sheet.getByRole("textbox", { name: "Reply", exact: true })).toBeFocused();
@@ -1327,7 +1327,7 @@ test("a remotely orphaned compact comment closes its sheet and restores editor f
 	});
 	let editor = content(page);
 	let sheet = await thread(page);
-	await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
 
 	let collaborator = await join("bo");
 	let subject = content(collaborator).locator("p").first();
