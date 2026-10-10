@@ -1509,11 +1509,6 @@
 	cursor: nesw-resize;
 }
 
-.plan-content :is(.plan-image-view, .plan-image-resize):focus-visible {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
-}
-
 @media (hover: none) {
 	.plan-content :is(.plan-image-toolbar, .plan-image-resize) {
 		opacity: 1;
