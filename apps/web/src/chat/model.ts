@@ -24,7 +24,14 @@ export type Message = {
 
 export type Group =
 	| { kind: "messages"; author: Speaker; messages: Message[]; queued: boolean }
-	| { kind: "system"; id: string; text: string; ts?: number; decision?: Chat.Entry["decision"] };
+	| {
+		kind: "system";
+		id: string;
+		text: string;
+		ts?: number;
+		decision?: Chat.Entry["decision"];
+		comment?: Chat.Entry["comment"];
+	};
 
 export type CompletedWork = {
 	turnId: string;
@@ -197,6 +204,7 @@ export function group(
 				text: row.text,
 				ts: row.ts,
 				decision: row.decision,
+				...(row.comment ? { comment: row.comment } : {}),
 			});
 			continue;
 		}

@@ -1,7 +1,14 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { CloseIcon, MessageIcon, SignInIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
+import {
+	CloseIcon,
+	MessageForwardIcon,
+	MessageIcon,
+	SignInIcon,
+	SparkleIcon,
+	WarningIcon,
+} from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { ChopinMark, Face, useCardMeta } from "@chopin/editor";
@@ -96,6 +103,57 @@ function SystemEntry(
 					</p>
 				)}
 		</div>
+	);
+}
+
+/** The fragment a comment's Copy link writes, which the document follows to open it. */
+const COMMENT_LINK = "#comment-";
+
+/**
+ * Open a comment thread in the document beside this Chat.
+ *
+ * Through the same fragment a copied link uses, so there is one way in. The
+ * fragment is cleared first when it already names the thread, or following it
+ * again would change nothing and the thread would stay closed.
+ */
+function openComment(thread: string): void {
+	let hash = `${COMMENT_LINK}${thread}`;
+	if (location.hash === hash) {
+		history.replaceState(history.state, "", `${location.pathname}${location.search}`);
+	}
+	location.hash = hash;
+}
+
+/** A comment sent to Chopin: what it was about and what it said, linking back to the thread. */
+function CommentSystemEntry(
+	{ comment, enter }: {
+		comment: NonNullable<Chat.Entry["comment"]>;
+		enter: boolean;
+	},
+) {
+	return (
+		<a
+			className="chat-comment-notice"
+			data-chat-comment={comment.thread}
+			data-chat-enter={enter || undefined}
+			href={`${COMMENT_LINK}${comment.thread}`}
+			onClick={event => {
+				if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+				event.preventDefault();
+				openComment(comment.thread);
+			}}
+		>
+			<span className="chat-comment-notice-head">
+				<MessageForwardIcon aria-hidden="true" className="icon-first-line" size={14} />
+				<span>
+					Comment on <span className="chat-comment-notice-title">“{comment.excerpt}”</span>{" "}
+					sent to Chopin
+				</span>
+			</span>
+			<span className="chat-comment-notice-body">
+				<span className="chat-comment-notice-mention">@Chopin</span> {comment.note}
+			</span>
+		</a>
 	);
 }
 
@@ -630,6 +688,8 @@ export function Transcript(
 										: true}
 								/>
 							)
+							: item.comment
+							? <CommentSystemEntry comment={item.comment} enter={enters(key)} key={key} />
 							: announced.has(readyChild(item.text) ?? "")
 							? null
 							: <SystemEntry enter={enters(key)} item={item} key={key} />
