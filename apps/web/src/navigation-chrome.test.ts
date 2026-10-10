@@ -10,7 +10,7 @@ import {
 	toggleCollapsedProjectIds,
 } from "./project-sidebar";
 import { ProjectSidebarExpandButton } from "./project-sidebar-chrome";
-import { Header } from "./room-workspace";
+import { Header, RoomMembers } from "./room-workspace";
 
 import type { ComponentProps } from "react";
 
@@ -170,6 +170,26 @@ describe("the Figma navigation chrome", () => {
 
 		expect(markup).toContain('aria-label="Load more documents in testing-sql-transcripts"');
 		expect(markup).not.toContain("No documents yet.");
+	});
+
+	test("leaves presence out of the header when the tab row owns it", () => {
+		let markup = renderToStaticMarkup(createElement(Header, {
+			canManage: true,
+			label: "Hushed mountain",
+			onAction() {},
+			onEditingChange() {},
+			onRenamed() {},
+			presentation: { type: "document" },
+			room: "room-one",
+		}));
+		let members = renderToStaticMarkup(createElement(RoomMembers, {
+			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
+			ring: "page",
+		}));
+
+		expect(markup).not.toContain("People here");
+		expect(members).toContain('aria-label="People here: MaggieAppleton"');
+		expect(members).toContain('role="group"');
 	});
 
 	test("keeps the document header to one project icon and document trigger", () => {
