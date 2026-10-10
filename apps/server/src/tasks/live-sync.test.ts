@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 
 import { LiveSyncCoordinator } from "./live-sync";
 import { reportBuild, reportRebuild } from "./builds";
@@ -35,7 +35,12 @@ function connection(id: string, documentId: string): Connection {
 
 /** A live document whose current source already differs from what was built. */
 async function harness(
-	options: { liveBuild?: boolean; classify?: (delta: LiveDelta) => boolean } = {},
+	options: {
+		liveBuild?: boolean;
+		classify?: (delta: LiveDelta) => boolean;
+		/** Runs after each document-locked action releases the lock. */
+		unlocked?: () => Promise<void>;
+	} = {},
 ) {
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "", now });
@@ -90,7 +95,11 @@ async function harness(
 	let deltas: LiveDelta[] = [];
 	let available = [connection("laptop", channel.id)];
 	coordinator = new LiveSyncCoordinator({
-		withPlan: (_id, action) => action(plan),
+		withPlan: async (_id, action) => {
+			let result = await action(plan);
+			await options.unlocked?.();
+			return result;
+		},
 		connections: {
 			get: id => available.find(item => item.id === id),
 			list: id => available.filter(item => item.documentId === id),
@@ -223,6 +232,42 @@ describe("living-document sync", () => {
 		await close(plan);
 	});
 
+	it("follows a build that stops just after a busy rebuild attempt", async () => {
+		let context: Awaited<ReturnType<typeof harness>> | undefined;
+		let attempted = false;
+		let started = false;
+		context = await harness({
+			classify: () => {
+				if (started) return true;
+				started = true;
+				// A build starts while the delta is being judged, so queueing finds it busy.
+				let plan = context!.plan;
+				plan.builds = [...plan.builds, {
+					...plan.builds[0]!,
+					id: crypto.randomUUID(),
+					connectionId: "laptop",
+					expiresAt: Number.MAX_SAFE_INTEGER,
+					state: "running",
+				}];
+				attempted = true;
+				return true;
+			},
+			unlocked: async () => {
+				if (!attempted) return;
+				attempted = false;
+				await context!.stop();
+			},
+		});
+		let { plan, queued, edit, advance } = context;
+		edit();
+		await advance(45_000);
+		// The follow-up check is chained behind the busy one, which waited out the stop.
+		await advance(0);
+		expect(queued).toHaveLength(1);
+		expect(plan.builds.at(-1)).toMatchObject({ id: queued[0], kind: "rebuild" });
+		await close(plan);
+	});
+
 	it("lands a reported rebuild and rebuilds edits made while it ran", async () => {
 		let { plan, queued, deltas, edit, advance } = await harness();
 		edit();
@@ -279,6 +324,24 @@ describe("living-document sync", () => {
 		expect(implementationActive(plan)).toBe(false);
 		expect(implementationStatus(plan).locked).toBe(false);
 		await close(plan);
+	});
+
+	it("warns when a full build history leaves no room for a rebuild", async () => {
+		let { plan, queued, edit, advance } = await harness();
+		plan.builds = Array.from({ length: 100 }, (_, index) => ({
+			...plan.builds[0]!,
+			id: index ? crypto.randomUUID() : buildId,
+		}));
+		let warn = spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			edit();
+			await advance(45_000);
+			expect(queued).toEqual([]);
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining("build history is full"));
+		} finally {
+			warn.mockRestore();
+			await close(plan);
+		}
 	});
 
 	it("does nothing when live builds are off", async () => {

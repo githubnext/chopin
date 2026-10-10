@@ -6,7 +6,12 @@ import { runWork } from "./run";
 import { git } from "./workspace";
 import type { remote } from "./mcp";
 
-test("a rebuild runs on a detached worktree with the rebuild prompt", async () => {
+/** Run one implementation claim against a fixture repository and record connector calls. */
+async function run(
+	build: { kind?: "rebuild"; live?: boolean },
+	flags: string[],
+	respond: (name: string) => unknown = () => ({}),
+) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-rebuild-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-rebuild-state-"));
 	try {
@@ -21,17 +26,18 @@ test("a rebuild runs on a detached worktree with the rebuild prompt", async () =
 		let api = {
 			call: async (name: string, args: Record<string, unknown> = {}) => {
 				calls.push([name, args]);
-				return {};
+				return respond(name);
 			},
 		} as unknown as Awaited<ReturnType<typeof remote>>;
 		let id = crypto.randomUUID();
 		await runWork(api, "implementation", {
 			build: {
 				id,
-				kind: "rebuild",
+				...(build.kind ? { kind: build.kind } : {}),
 				repositoryId: "R_repo",
 				checkout: { repository: "org/repo", commit: git(root, "rev-parse", "HEAD") },
 			},
+			live: build.live,
 			runToken: "token",
 		}, {
 			root,
@@ -39,23 +45,47 @@ test("a rebuild runs on a detached worktree with the rebuild prompt", async () =
 			command: [
 				process.execPath,
 				new URL("./testing/fake-implementer.ts", import.meta.url).pathname,
-				"--rebuild",
+				...flags,
 			],
 			url: "http://127.0.0.1:1",
 			script: "unused",
 			signal: new AbortController().signal,
+			heartbeatMs: 20,
 		});
-		expect(calls).toEqual([
-			["report_implementation_build", {
-				id,
-				state: "running",
-				session: "implementation-acp-session",
-			}],
-			["report_implementation_build", { id, state: "stopped" }],
-		]);
-		expect(git(root, "branch", "--list", "chopin/*")).toBe("");
+		return { id, calls, branches: git(root, "branch", "--list", "chopin/*") };
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
 	}
+}
+
+test("a rebuild runs on a detached worktree with the rebuild prompt", async () => {
+	let { id, calls, branches } = await run({ kind: "rebuild" }, ["--rebuild"]);
+	expect(calls.filter(([name]) => name !== "renew_implementation_build")).toEqual([
+		["report_implementation_build", {
+			id,
+			state: "running",
+			session: "implementation-acp-session",
+		}],
+		["report_implementation_build", { id, state: "stopped" }],
+	]);
+	expect(branches).toBe("");
+});
+
+test("a rebuild whose report landed stops renewing and exits cleanly", async () => {
+	let { id, calls } = await run(
+		{ kind: "rebuild" },
+		["--rebuild", "--slow"],
+		name => name === "renew_implementation_build" ? { accepted: true, state: "stopped" } : {},
+	);
+	expect(calls.filter(([name]) => name === "renew_implementation_build")).toHaveLength(1);
+	expect(calls.at(-1)).toEqual(["report_implementation_build", { id, state: "stopped" }]);
+});
+
+test("a living document's first build gets a prompt without verification or revision", async () => {
+	let { id, calls } = await run({ live: true }, ["--live"]);
+	expect(calls.filter(([name]) => name !== "renew_implementation_build").at(-1)).toEqual([
+		"report_implementation_build",
+		{ id, state: "stopped" },
+	]);
 });
