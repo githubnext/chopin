@@ -185,38 +185,43 @@ export class ThreadStore {
 	 *
 	 * Optimistic because a resolve changes nothing anybody else is relying on,
 	 * and a card that lingers after its check was pressed reads as a miss. A
-	 * refusal other than "somebody already did" puts it back.
+	 * refusal other than "somebody already did" puts it back, and settles false.
 	 */
-	resolve(id: string): void {
+	resolve(id: string): Promise<boolean> {
 		let thread = this.#threads.get(id);
-		if (!thread || thread.status !== "open" || !this.#wire) return;
+		if (!thread || thread.status !== "open" || !this.#wire) return Promise.resolve(false);
 		this.#threads.set(id, { ...thread, status: "resolved" });
 		this.refresh();
 
 		let restore = () => {
 			let current = this.#threads.get(id);
-			if (current?.status !== "resolved" || current.resolver) return;
+			if (current?.status !== "resolved" || current.resolver) return false;
 			this.#threads.set(id, { ...current, status: "open" });
 			this.refresh();
+			return false;
 		};
-		void this.#wire
+		return this.#wire
 			.ask<Comment.Resolve.Reply>("comment:resolve", { id })
-			.then(frame => {
-				if (!frame.ok && frame.reason !== "resolved") restore();
-			})
+			.then(frame => frame.ok || frame.reason === "resolved" || restore())
 			.catch(restore);
 	}
 
-	/** Open a resolved thread again. Settles true once the server has it back. */
-	reopen(id: string): Promise<boolean> {
-		if (!this.#wire) return Promise.resolve(false);
+	/**
+	 * Open a resolved thread again.
+	 *
+	 * Settles with the server's refusal rather than throwing, so whoever asked
+	 * can say why: a document at its ceiling of open threads refuses.
+	 */
+	reopen(id: string): Promise<{ ok: true } | { ok: false; reason?: string }> {
+		if (!this.#wire) return Promise.resolve({ ok: false });
 		return this.#wire
 			.ask<Comment.Reopen.Reply>("comment:reopen", { id })
 			.then(frame => {
-				if (frame.ok) this.reopened(frame.thread);
-				return frame.ok;
+				if (!frame.ok) return { ok: false as const, reason: frame.reason };
+				this.reopened(frame.thread);
+				return { ok: true as const };
 			})
-			.catch(() => false);
+			.catch(() => ({ ok: false as const }));
 	}
 
 	announce(id: string, writing: boolean): void {

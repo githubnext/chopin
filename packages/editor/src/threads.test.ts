@@ -220,7 +220,7 @@ describe("resolving and reopening", () => {
 		subject.listen(transport);
 		subject.sync([thread({ id: "t1" })]);
 
-		subject.resolve("t1");
+		void subject.resolve("t1");
 
 		expect(sent).toEqual([{ kind: "comment:resolve", payload: { id: "t1" } }]);
 		expect(subject.snapshot().threads).toHaveLength(0);
@@ -232,8 +232,7 @@ describe("resolving and reopening", () => {
 		subject.listen(transport);
 		subject.sync([thread({ id: "t1" })]);
 
-		subject.resolve("t1");
-		await Bun.sleep(0);
+		expect(await subject.resolve("t1")).toBe(false);
 
 		expect(subject.snapshot().threads.map(view => view.thread.status)).toEqual(["open"]);
 	});
@@ -252,8 +251,7 @@ describe("resolving and reopening", () => {
 		subject.listen(transport);
 		subject.sync([thread({ id: "t1" })]);
 
-		subject.resolve("t1");
-		await Bun.sleep(0);
+		expect(await subject.resolve("t1")).toBe(true);
 
 		expect(subject.snapshot().threads).toHaveLength(0);
 	});
@@ -273,7 +271,7 @@ describe("resolving and reopening", () => {
 		subject.draft({ blocks: [1], quote: "the phrase", offset: 3, length: 10 });
 		expect(subject.snapshot().threads).toHaveLength(0);
 
-		expect(await subject.reopen("t1")).toBe(true);
+		expect(await subject.reopen("t1")).toEqual({ ok: true });
 
 		expect(sent).toEqual([{ kind: "comment:reopen", payload: { id: "t1" } }]);
 		expect(subject.snapshot().threads.map(view => view.thread.status)).toEqual(["open"]);
@@ -285,7 +283,24 @@ describe("resolving and reopening", () => {
 		let { transport } = wire(() => new Error("gone"));
 		subject.listen(transport);
 
-		expect(await subject.reopen("t1")).toBe(false);
+		expect(await subject.reopen("t1")).toEqual({ ok: false });
+	});
+
+	it("passes on why the server refused a reopen", async () => {
+		let subject = store();
+		let { transport } = wire(() => ({
+			kind: "comment:reopen",
+			ts: 0,
+			id: "t1",
+			ok: false,
+			reason: "full",
+			message: "Too many.",
+		}));
+		subject.listen(transport);
+		subject.sync([thread({ id: "t1", status: "resolved", resolver: "ana", at: 2 })]);
+
+		expect(await subject.reopen("t1")).toEqual({ ok: false, reason: "full" });
+		expect(subject.snapshot().threads).toHaveLength(0);
 	});
 });
 
