@@ -38,6 +38,19 @@ test("ordinary and Atomic Planner instructions expose the registered visual inve
 	}
 });
 
+test("ordinary and Atomic guidance prefers native diagrams with a bounded Mermaid fallback", () => {
+	for (let workspace of [undefined, { cwd: "/tmp/chopin-test", checkout: false }]) {
+		let prompt = plannerInstructions("octo-org/score", undefined, workspace).replace(/\s+/g, " ");
+		expect(prompt).toContain(
+			"Use Chopin's native `seecode` charts and diagrams by default whenever a registered type can represent the required information.",
+		);
+		expect(prompt).toContain(
+			"Use `mermaid` only when no native type can provide the required representation or the user explicitly requests Mermaid.",
+		);
+		expect(prompt).toContain("including `pie` and `xychart-beta` bar/line charts");
+	}
+});
+
 test("ordinary guidance supplies an executable numerical chart example", () => {
 	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)]
 		.map(match => JSON.parse(match[1]!));
@@ -69,6 +82,9 @@ test("makes Jev the only visual decision maker in routed Planner sessions", () =
 	expect(routed).toContain("do not make");
 	expect(routed).toContain("Pass visual_route to edit_plan");
 	expect(routed).toContain("Chopin Jev visual authoring guide");
+	expect(routed).toContain("Do not substitute Mermaid for a Jev-selected diagram.");
+	expect(routed).not.toContain("Use `mermaid` only when");
+	expect(routed).not.toContain("the user explicitly requests Mermaid");
 	expect(routed).toContain("repair the named field using the same visual_route");
 	expect(routed).toContain("unavailable, do not write that explanatory passage");
 	expect(routed).not.toContain("use the prose route and state the limitation");
