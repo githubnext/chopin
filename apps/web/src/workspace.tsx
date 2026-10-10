@@ -262,6 +262,8 @@ export function Workspace(
 		? workspacePresentation
 		: undefined;
 	let paperObscured = workspacePresentation.type === "parent-with-child";
+	// A child's own header is hidden, so the parent's carries its breadcrumb and Return control.
+	let headerHidden = presentation.documentExpanded && !paperObscured;
 	let immediately = motionImmediately();
 	let contentSwapMotion = motionContract("content-swap");
 	let chatPresence = useTransitionPresence(
@@ -355,7 +357,11 @@ export function Workspace(
 		}
 		let pane = root.current?.querySelector(`#${CSS.escape(ids.pane.chat)}`);
 		// Keep focus where it was unless closing the pane would strand it.
-		if (mode !== "split" || pane?.contains(document.activeElement)) dismissChat();
+		let active = document.activeElement;
+		// Hiding Chat also hides the top bar while expanded, so focus there would be stranded too.
+		let stranded = pane?.contains(active)
+			|| root.current?.querySelector(".workspace-header-slot")?.contains(active);
+		if (mode !== "split" || stranded) dismissChat();
 		else onDesktopChatOpen(false);
 	};
 	let chatShortcutEnabled = !!chat && !paperObscured;
@@ -368,6 +374,7 @@ export function Workspace(
 		<div
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
 			data-document-expanded={presentation.documentExpanded || undefined}
+			data-header-hidden={headerHidden || undefined}
 			data-workspace-mode={mode}
 			data-workspace-room={identity}
 			data-workspace-surface={profile.surface}
@@ -376,9 +383,9 @@ export function Workspace(
 			style={mode === "split" ? { "--chat-width": `${chatWidth}px` } as CSSProperties : undefined}
 		>
 			<div
-				aria-hidden={presentation.documentExpanded || undefined}
+				aria-hidden={headerHidden || undefined}
 				className="workspace-header-slot shrink-0"
-				inert={presentation.documentExpanded}
+				inert={headerHidden}
 			>
 				{header}
 			</div>

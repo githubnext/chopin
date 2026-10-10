@@ -125,6 +125,16 @@ test("the document expands and restores Chat from the keyboard and remembers it"
 	await expect(toolbar(page).getByRole("button", { name: "Show chat" })).toBeVisible();
 });
 
+test("the Chat shortcut from the top bar moves focus to the Show chat button", async ({ join, page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await join("ana");
+	await page.locator(".room-header").getByRole("button").first().focus();
+	await expect(page.locator(".room-header :focus")).toHaveCount(1);
+	await page.keyboard.press("Meta+.");
+	await expect(chatPane(page)).toBeHidden();
+	await expect(toolbar(page).getByRole("button", { name: "Show chat" })).toBeFocused();
+});
+
 test("reduced motion swaps Chat and the top bar without transitions", async ({ join, page }) => {
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await page.setViewportSize({ width: 1440, height: 900 });
