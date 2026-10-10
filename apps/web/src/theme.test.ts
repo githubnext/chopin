@@ -219,6 +219,17 @@ describe("sidebar navigation", () => {
 	});
 });
 
+describe("document status row", () => {
+	it("keeps the build slot in flow so it never covers scrolled text", () => {
+		let rules = THEME.match(/[^{}]*\[data-build-slot\][^{}]*{[^}]*}/g) ?? [];
+		expect(rules.length).toBeGreaterThan(0);
+		for (let rule of rules) expect(rule).not.toMatch(/position:\s*absolute/);
+		expect(THEME).toMatch(
+			/\.workspace-status-row:has\(> \[data-build-slot\]\)\s*{[^}]*position:\s*relative/,
+		);
+	});
+});
+
 describe("motion contracts", () => {
 	it("uses semantic tokens for app popovers", () => {
 		expect(THEME).toMatch(

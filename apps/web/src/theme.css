@@ -782,21 +782,20 @@ body {
 	flex: 1;
 }
 
-/* Alone, the build slot sits in the page's top inset at the trailing edge, not on its corner. */
-.workspace-status-row > [data-build-slot] {
-	position: absolute;
-	inset-block-start: calc(var(--spacing) * 2);
-	inset-inline-end: calc(var(--spacing) * 3);
-}
-
-/* Alone it floats over scrolled document text, so a ghost slot needs the page behind it. */
-.workspace-status-row > .btn-ghost[data-build-slot]:not(:hover, :active) {
-	background-color: var(--color-page);
+/*
+ * The build slot stays for the life of the document, unlike a status blip, so its row takes
+ * space above the document instead of floating over scrolled text.
+ */
+.workspace-status-row:has(> [data-build-slot]) {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3) 0;
 }
 
 .workspace-status-row:has(.plan-status:is([data-level="notice"], [data-level="alert"]))
 	> [data-build-slot] {
-	position: static;
 	margin-inline-start: calc(var(--spacing) * 2);
 }
 
