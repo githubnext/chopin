@@ -289,16 +289,20 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 
 const GRAPH_OPERATION_FIELDS = ["op", "id", "task", "ids"];
 
+/** Every field a graph task carries; `tools.ts` advertises exactly these. */
+export const GRAPH_TASK_FIELDS = ["id", "title", "context", "goal", "acceptance", "dependsOn"];
+const GRAPH_TASK_SHAPE = "A task has exactly id, title, context, goal, acceptance (2-8 criteria) "
+	+ "and dependsOn (task ids, [] for none).";
+
 function graphTask(raw: unknown, name: string): Task {
 	let value = record(raw, name);
-	fields(value, ["id", "title", "context", "goal", "acceptance", "dependsOn"], [
-		"id",
-		"title",
-		"context",
-		"goal",
-		"acceptance",
-		"dependsOn",
-	], name);
+	try {
+		fields(value, GRAPH_TASK_FIELDS, GRAPH_TASK_FIELDS, name);
+	} catch (error) {
+		// The Planner guesses names like `description` or `dependencies`; say what fits instead.
+		if (error instanceof ArgumentError) fail(`${error.message} ${GRAPH_TASK_SHAPE}`);
+		throw error;
+	}
 	let acceptance = array(value.acceptance, `${name}.acceptance`, "criterion", 2, 8)
 		.map((criterion, index) => text(criterion, `${name}.acceptance[${index}]`));
 	let dependsOn = array(value.dependsOn, `${name}.dependsOn`, "dependency")
