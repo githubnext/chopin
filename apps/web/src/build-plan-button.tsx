@@ -6,7 +6,7 @@ import {
 	buildPhase,
 	draftRefusalCopy,
 	firstBuildStep,
-	startingHint,
+	startingLabel,
 	SYNC_LABEL,
 	syncHint,
 	syncStatus,
@@ -101,6 +101,7 @@ export function BuildPlanButton(
 			void wire.ask<Implementation.Drafted>("implementation:draft", {
 				requestId: crypto.randomUUID(),
 				planRevision: snapshot.planRevision,
+				build: true,
 			}).then(answer => {
 				draftId.current = answer.id;
 				if (answer.state === "ended") void drafted();
@@ -161,7 +162,7 @@ export function BuildPlanButton(
 	}
 	if (step.view === "hidden") return null;
 	if (step.view === "working") {
-		let hint = startingHint(snapshot);
+		let { hint, label, queued } = startingLabel(snapshot);
 		return (
 			<button
 				aria-busy="true"
@@ -173,8 +174,10 @@ export function BuildPlanButton(
 				onClick={onShowBuild}
 				type="button"
 			>
-				<LoaderIcon aria-hidden="true" data-button-loader="" />
-				Building…
+				{queued
+					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
+					: <LoaderIcon aria-hidden="true" data-button-loader="" />}
+				{label}
 			</button>
 		);
 	}

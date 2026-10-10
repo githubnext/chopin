@@ -14,6 +14,7 @@ import {
 	shouldAutoDraft,
 	startedBy,
 	startingHint,
+	startingLabel,
 	syncHint,
 	syncStatus,
 	taskStartsOpen,
@@ -401,7 +402,15 @@ describe("living document sync", () => {
 	it("explains a first build queued behind a prototype", () => {
 		let queued = snapshot({ build: build("queued"), waitingForPrototype: true });
 		expect(firstBuildStep(queued, { stage: "idle" }).view).toBe("working");
-		expect(startingHint(queued)).toBe("Starting after current prototype finishes");
+		expect(startingHint(queued)).toBe("Starts when the current prototype finishes");
+		expect(startingLabel(queued)).toEqual({
+			label: "Queued",
+			queued: true,
+			hint: "Starts when the current prototype finishes",
+		});
+		expect(startingLabel(snapshot({ build: build("queued") })))
+			.toEqual({ label: "Building…", queued: false });
+		expect(startingLabel(undefined)).toEqual({ label: "Building…", queued: false });
 		expect(startingHint(snapshot({ build: build("queued") }))).toBeUndefined();
 		expect(startingHint(snapshot({ build: build("running"), waitingForPrototype: true })))
 			.toBeUndefined();
