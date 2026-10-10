@@ -25,7 +25,7 @@ import {
 } from "@chopin/editor";
 
 import { BuildPlanButton } from "./build-plan-button";
-import { liveBuildEnabled } from "./live-build";
+import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
 import { ChildProvenance } from "./child-provenance";
@@ -388,6 +388,7 @@ export function RoomWorkspace(
 	});
 	let [showImplementation, setShowImplementation] = useState(false);
 	let [needsAgent, setNeedsAgent] = useState(0);
+	let liveBuild = useLiveBuild();
 	useEffect(() => {
 		setImplementation({ revision: -1, locked: false });
 		let update = (value: Plan.ImplementationStatus) => {
@@ -1122,7 +1123,7 @@ export function RoomWorkspace(
 								: undefined}
 							synced={planState.synced}
 						/>
-						{profile.implementation && liveBuildEnabled() && workspaceCanEdit
+						{profile.implementation && liveBuild && workspaceCanEdit
 							&& status === "connected" && (
 							<BuildPlanButton
 								onNeedsAgent={() => {
