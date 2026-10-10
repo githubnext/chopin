@@ -933,9 +933,17 @@
  * whole content, so its frame is not drawn.
  */
 .plan-comment-composer[data-mode="reply"] {
-	padding: 0.3125rem 0.5rem;
+	display: flex;
+	align-items: flex-end;
+	gap: 0.5rem;
+	padding: 0.3125rem 0.375rem 0.3125rem 0.5rem;
 	box-shadow: none;
 	transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+/* The disc is taller than the line, so it overhangs the padding rather than growing the field. */
+.plan-comment-composer[data-mode="reply"] .plan-comment-send {
+	margin-block: -0.125rem;
 }
 
 .plan-comment-composer[data-mode="reply"]:focus-within {
@@ -950,6 +958,8 @@
 .plan-comment-composer-field {
 	display: block;
 	width: 100%;
+	min-width: 0;
+	flex: 1;
 	min-height: var(--text-sm--line-height);
 	padding: 0;
 	border: 0;
