@@ -3,9 +3,9 @@ import type { Source } from "@chopin/experiment";
 import { fail, fingerprint } from "./service";
 
 export type PairingInput = Omit<Source, "repositoryId"> & { label: string };
+/** One owner's checkout of one repository; it serves every document in that repository. */
 export type Connection = {
 	id: string;
-	documentId: string;
 	owner: string;
 	login: string;
 	sessionId: string;
@@ -23,7 +23,7 @@ type Pending = {
 };
 export type Grant = {
 	connectionId: string;
-	run?: { id: string; generation: number; kind?: "implementation" };
+	run?: { id: string; documentId: string; generation: number; kind?: "implementation" };
 };
 
 export class Connections {
@@ -32,6 +32,7 @@ export class Connections {
 	#tokens = new Map<string, Grant>();
 	#runTokens = new Map<string, string>();
 	#waiters = new Map<string, Set<() => void>>();
+	#builds = new Map<string, string>();
 	#locks = new Map<string, Promise<unknown>>();
 	constructor(private now = () => Date.now()) {}
 	create(input: PairingInput) {
@@ -55,23 +56,20 @@ export class Connections {
 	approve(
 		id: string,
 		owner: { id: string; login: string; sessionId: string },
-		documentId: string,
 		repositoryId: string,
 	) {
 		let value = this.pending(id);
 		if (value.connection) {
-			if (value.connection.owner !== owner.id || value.connection.documentId !== documentId) {
-				fail("already-paired");
-			}
+			if (
+				value.connection.owner !== owner.id
+				|| value.connection.source.repositoryId !== repositoryId
+			) fail("already-paired");
 			return value.connection;
 		}
-		if (this.list(documentId).filter(item => item.owner === owner.id).length >= 8) {
-			fail("connection-limit");
-		}
+		if (this.list(repositoryId, owner.id).length >= 8) fail("connection-limit");
 		let { label, ...source } = value.input;
 		let connection: Connection = {
 			id: crypto.randomUUID(),
-			documentId,
 			owner: owner.id,
 			login: owner.login,
 			sessionId: owner.sessionId,
@@ -103,12 +101,27 @@ export class Connections {
 	touch(connection: Connection) {
 		connection.expiresAt = this.now() + 90_000;
 	}
-	list(documentId: string) {
+	/** Live connections for a repository, most recently heard from first. */
+	list(repositoryId: string, owner?: string) {
 		return [...this.#connections.values()].filter(value =>
-			value.documentId === documentId && value.expiresAt > this.now()
-		);
+			value.source.repositoryId === repositoryId && value.expiresAt > this.now()
+			&& (owner === undefined || value.owner === owner)
+		).sort((a, b) => b.expiresAt - a.expiresAt);
 	}
-	runToken(connectionId: string, id: string, generation: number, kind?: "implementation") {
+	/** Remember which document holds the build a connection was last given. */
+	assign(connectionId: string, documentId: string) {
+		if (this.#connections.has(connectionId)) this.#builds.set(connectionId, documentId);
+	}
+	assigned(connectionId: string) {
+		return this.#builds.get(connectionId);
+	}
+	runToken(
+		connectionId: string,
+		documentId: string,
+		id: string,
+		generation: number,
+		kind?: "implementation",
+	) {
 		let key = `${connectionId}:${id}:${generation}:${kind ?? "experiment"}`;
 		let existing = this.#runTokens.get(key);
 		if (existing) return existing;
@@ -116,18 +129,19 @@ export class Connections {
 		this.#runTokens.set(key, token);
 		this.#tokens.set(fingerprint(token), {
 			connectionId,
-			run: { id, generation, ...(kind ? { kind } : {}) },
+			run: { id, documentId, generation, ...(kind ? { kind } : {}) },
 		});
 		return token;
 	}
 	revoke(id: string) {
 		let connection = this.#connections.get(id);
 		this.#connections.delete(id);
+		this.#builds.delete(id);
 		for (let key of this.#runTokens.keys()) {
 			if (key.startsWith(`${id}:`)) this.#runTokens.delete(key);
 		}
 		for (let [key, grant] of this.#tokens) if (grant.connectionId === id) this.#tokens.delete(key);
-		if (connection) this.wake(connection.documentId);
+		if (connection) this.wake(connection.source.repositoryId);
 	}
 	revokeSession(sessionId: string) {
 		for (let connection of this.#connections.values()) {
@@ -142,17 +156,18 @@ export class Connections {
 			if (connection.expiresAt <= this.now()) this.revoke(id);
 		}
 	}
-	wake(documentId: string) {
-		for (let resolve of this.#waiters.get(documentId) ?? []) resolve();
+	/** Wake every connector waiting for work in a repository. */
+	wake(repositoryId: string) {
+		for (let resolve of this.#waiters.get(repositoryId) ?? []) resolve();
 	}
-	wait(documentId: string, signal: AbortSignal) {
+	wait(repositoryId: string, signal: AbortSignal) {
 		return new Promise<void>(resolve => {
-			let set = this.#waiters.get(documentId) ?? new Set();
-			this.#waiters.set(documentId, set);
+			let set = this.#waiters.get(repositoryId) ?? new Set();
+			this.#waiters.set(repositoryId, set);
 			let finish = () => {
 				clearTimeout(timer);
 				set.delete(finish);
-				if (!set.size) this.#waiters.delete(documentId);
+				if (!set.size) this.#waiters.delete(repositoryId);
 				signal.removeEventListener("abort", finish);
 				resolve();
 			};

@@ -8,20 +8,28 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { registerExperimentRoutes } from "./routes";
 import { Connections } from "./connections";
 
-test("pairing binds the browser owner; only that owner dispatches and scoped claims publish", async () => {
+function text(value: { result: { content: Array<{ text: string }> } }) {
+	return JSON.parse(value.result.content[0].text);
+}
+
+async function setup() {
 	let storage = new MemoryStorage();
-	let documentId = crypto.randomUUID();
 	let now = new Date();
 	for (let id of ["alice", "bob"]) await storage.users.put({ id, login: id, avatarUrl: "", now });
-	await storage.channels.create({
-		id: documentId,
-		repositoryId: "repo",
-		repositoryOwner: "org",
-		repositoryName: "repo",
-		title: "Investigate",
-		createdBy: "alice",
-		now,
-	});
+	async function document(repository = "repo") {
+		let id = crypto.randomUUID();
+		await storage.channels.create({
+			id,
+			repositoryId: repository,
+			repositoryOwner: "org",
+			repositoryName: repository,
+			title: `Investigate ${id}`,
+			createdBy: "alice",
+			now,
+		});
+		return id;
+	}
+	let documentId = await document();
 	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	let sessions = new Sessions(storage, true);
 	let grant = {
@@ -33,8 +41,8 @@ test("pairing binds the browser owner; only that owner dispatches and scoped cla
 	let alice = await sessions.issue("alice", grant);
 	let bob = await sessions.issue("bob", grant);
 	let github = {
-		repositoryAccess: async () => ({
-			id: "repo",
+		repositoryAccess: async (_token: string, _owner: string, name: string) => ({
+			id: name,
 			permissions: { pull: true, push: true, admin: false },
 		}),
 	} as unknown as GitHub;
@@ -72,6 +80,33 @@ test("pairing binds the browser owner; only that owner dispatches and scoped cla
 			}),
 		))!;
 	}
+	async function tool(token: string, name: string, args: unknown) {
+		return (await request(
+			"/connector/mcp",
+			{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } },
+			undefined,
+			token,
+		)).json();
+	}
+	async function pair(cookie: string, repository = "org/repo") {
+		let pending = await (await request("/api/connector/pairings", {
+			repository,
+			commit: "a".repeat(40),
+			label: "Laptop",
+		})).json();
+		await request(`/api/connector/pairings/${pending.id}/approve`, {}, cookie);
+		return {
+			...pending,
+			...await (await request(`/api/connector/pairings/${pending.id}/claim`, {
+				secret: pending.secret,
+			})).json(),
+		};
+	}
+	return { storage, sessions, config, alice, bob, document, documentId, request, tool, pair };
+}
+
+test("work runs on the clicker's own connection; scoped claims publish", async () => {
+	let { sessions, config, alice, bob, documentId, request } = await setup();
 	let pair = await (await request("/api/connector/pairings", {
 		repository: "org/repo",
 		commit: "a".repeat(40),
@@ -80,10 +115,9 @@ test("pairing binds the browser owner; only that owner dispatches and scoped cla
 	expect(
 		(await request(`/api/connector/pairings/${pair.id}/claim`, { secret: "x".repeat(32) })).status,
 	).toBe(403);
-	expect(
-		(await request(`/api/connector/pairings/${pair.id}/approve`, { documentId }, alice.cookie))
-			.status,
-	).toBe(200);
+	let approved = await request(`/api/connector/pairings/${pair.id}/approve`, {}, alice.cookie);
+	expect(approved.status).toBe(200);
+	expect((await approved.json()).url).toBe("/documents/org/repo");
 	let paired =
 		await (await request(`/api/connector/pairings/${pair.id}/claim`, { secret: pair.secret }))
 			.json();
@@ -94,11 +128,12 @@ test("pairing binds the browser owner; only that owner dispatches and scoped cla
 		bob.cookie,
 	);
 	let runPath = `/api/documents/${documentId}/experiments/${id}/run`;
-	expect((await request(runPath, { connectionId: paired.connection.id }, bob.cookie)).status).toBe(
-		403,
-	);
+	let refused = await request(runPath, {}, bob.cookie);
+	expect(refused.status).toBe(409);
+	expect((await refused.json()).error).toBe("no-workspace");
 	expect((await request(runPath, { connectionId: paired.connection.id }, alice.cookie)).status)
-		.toBe(200);
+		.toBe(409);
+	expect((await request(runPath, {}, alice.cookie)).status).toBe(200);
 	async function tool(name: string, args: unknown, token = paired.token) {
 		return (await request(
 			"/connector/mcp",
@@ -139,6 +174,46 @@ test("pairing binds the browser owner; only that owner dispatches and scoped cla
 	).toBe(401);
 });
 
+test("one connection serves every document in its repository and no other", async () => {
+	let { alice, bob, document, documentId, request, tool, pair } = await setup();
+	let second = await document();
+	let elsewhere = await document("other");
+	let connection = await pair(alice.cookie);
+	for (let target of [documentId, second]) {
+		let id = crypto.randomUUID();
+		await request(`/api/documents/${target}/experiments`, { id, brief: "Measure" }, alice.cookie);
+		let run = await request(`/api/documents/${target}/experiments/${id}/run`, {}, alice.cookie);
+		expect((await run.json()).connectionId).toBe(connection.connection.id);
+		expect(text(await tool(connection.token, "wait_for_experiment", {}))).toEqual({ id });
+		let claim = text(await tool(connection.token, "claim_experiment", { id }));
+		expect(claim.input.documentId).toBe(target);
+		let read = text(await tool(claim.runToken, "read_experiment", {}));
+		expect(read.input.documentId).toBe(target);
+		await tool(connection.token, "fail_experiment", {
+			id,
+			generation: claim.generation,
+			error: "Stopped",
+		});
+	}
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${elsewhere}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	let refused = await request(
+		`/api/documents/${elsewhere}/experiments/${id}/run`,
+		{},
+		alice.cookie,
+	);
+	expect(refused.status).toBe(409);
+	expect((await refused.json()).error).toBe("no-workspace");
+	let foreign = crypto.randomUUID();
+	await request(`/api/documents/${second}/experiments`, { id: foreign, brief: "Bob" }, bob.cookie);
+	expect(
+		(await request(`/api/documents/${second}/experiments/${foreign}/run`, {}, bob.cookie))
+			.status,
+	).toBe(409);
+	expect((await tool(connection.token, "claim_experiment", { id: foreign })).result.isError)
+		.toBe(true);
+});
+
 test("expired pairing and connections cannot be revived by replay", () => {
 	let now = 0;
 	let connections = new Connections(() => now);
@@ -147,7 +222,7 @@ test("expired pairing and connections cannot be revived by replay", () => {
 		commit: "a".repeat(40),
 		label: "Laptop",
 	});
-	connections.approve(pending.id, { id: "alice", login: "alice", sessionId: "s" }, "d", "repo");
+	connections.approve(pending.id, { id: "alice", login: "alice", sessionId: "s" }, "repo");
 	let result = connections.claim(pending.id, pending.secret);
 	if (!("token" in result)) throw new Error("missing token");
 	now = 91_000;

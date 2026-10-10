@@ -77,10 +77,10 @@ async function setup() {
 	});
 	implementations = registerImplementationRoutes(router, auth, {
 		connections: experiments.connections,
-		busy: async id =>
-			(await experiments.service.store.list(id)).filter(item =>
-				["running", "publishing"].includes(item.state)
-			).map(item => item.connectionId!),
+		busy: async connectionId =>
+			(await experiments.service.store.active()).some(item =>
+				item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
+			),
 		withPlan: async (_id, action) => action(context.plan),
 	});
 	await implementationGraphs().revise(context.plan, {
@@ -137,9 +137,7 @@ async function paired(context: Awaited<ReturnType<typeof setup>>, cookie?: strin
 		await (await context.call("/api/connector/pairings", { ...checkout, label: "Laptop" })).json();
 	await context.call(
 		`/api/connector/pairings/${pairing.id}/approve`,
-		{
-			documentId: context.plan.id,
-		},
+		{},
 		undefined,
 		undefined,
 		cookie,
@@ -168,10 +166,9 @@ test("a paired workspace claims a browser build once and reports through run-sco
 	let context = await setup();
 	let connection = await paired(context);
 	let snapshot = await (await context.call(context.path)).json();
-	expect(snapshot.workspaces[0].label).toBe("Laptop");
+	expect(snapshot.localAgent).toBe(true);
+	expect(JSON.stringify(snapshot)).not.toContain("Laptop");
 	let review = {
-		connectionId: connection.connection.id,
-		checkout,
 		planRevision: 0,
 		graphVersion: 1,
 		graphRevision: 1,
@@ -230,27 +227,31 @@ test("a paired workspace claims a browser build once and reports through run-sco
 	await Plan.close(context.plan);
 });
 
-test("build authorization rejects another owner's workspace and changed checkout", async () => {
+test("a build runs only on the clicker's own connection and records who started it", async () => {
 	let context = await setup();
 	let foreign = await paired(context, context.otherCookie);
 	let review = {
-		connectionId: foreign.connection.id,
-		checkout,
 		planRevision: 0,
 		graphVersion: 1,
 		graphRevision: 1,
 	};
-	expect((await context.call(context.path, review)).status).toBe(409);
-	let own = await paired(context);
-	expect(
-		(await context.call(context.path, {
-			...review,
-			connectionId: own.connection.id,
-			checkout: { ...checkout, commit: "b".repeat(40) },
-		})).status,
-	).toBe(409);
+	let refused = await context.call(context.path, review);
+	expect(refused.status).toBe(409);
+	expect((await refused.json()).error).toBe("no-workspace");
+	expect((await (await context.call(context.path)).json()).localAgent).toBe(false);
 	expect(context.plan.builds).toEqual([]);
 	expect(context.plan.graph?.versions[0].state).toBe("draft");
+	let own = await paired(context);
+	expect((await context.call(context.path, { ...review, planRevision: 1 })).status).toBe(409);
+	let built = await (await context.call(context.path, review)).json();
+	expect(built.connectionId).toBe(own.connection.id);
+	expect(built.connectionId).not.toBe(foreign.connection.id);
+	expect(built.user).toBe("U_test");
+	expect(built.checkout).toEqual(checkout);
+	expect(
+		(await tool(context, foreign.token, "claim_implementation_build", { id: built.id })).isError,
+	)
+		.toBe(true);
 	await Plan.close(context.plan);
 });
 
@@ -261,12 +262,8 @@ test("investigations and implementations cannot execute on the same workspace to
 		id: crypto.randomUUID(),
 		brief: "Inspect a fixture",
 	})).json();
-	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {
-		connectionId: connection.connection.id,
-	});
+	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	let build = await (await context.call(context.path, {
-		connectionId: connection.connection.id,
-		checkout,
 		planRevision: 0,
 		graphVersion: 1,
 		graphRevision: 1,
@@ -291,8 +288,6 @@ test("disconnect reconciles a pending build without automatic replay", async () 
 	let context = await setup();
 	let connection = await paired(context);
 	await context.call(context.path, {
-		connectionId: connection.connection.id,
-		checkout,
 		planRevision: 0,
 		graphVersion: 1,
 		graphRevision: 1,
@@ -309,8 +304,6 @@ test("a deleted document cannot block implementation recovery sweeps", async () 
 	let context = await setup();
 	let connection = await paired(context);
 	await context.call(context.path, {
-		connectionId: connection.connection.id,
-		checkout,
 		planRevision: 0,
 		graphVersion: 1,
 		graphRevision: 1,
@@ -330,16 +323,12 @@ test("Build waits for an investigation-busy workspace before approving the graph
 		id: crypto.randomUUID(),
 		brief: "Inspect a fixture",
 	})).json();
-	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {
-		connectionId: connection.connection.id,
-	});
+	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
 	let snapshot = await (await context.call(context.path)).json();
-	expect(snapshot.workspaces[0].available).toBe(false);
+	expect(snapshot.localAgent).toBe(false);
 	expect(
 		(await context.call(context.path, {
-			connectionId: connection.connection.id,
-			checkout,
 			planRevision: 0,
 			graphVersion: 1,
 			graphRevision: 1,
@@ -356,11 +345,9 @@ test("a committed build wakes the waiting connector and a failed pickup can be r
 	let abort = new AbortController();
 	try {
 		let woken = false;
-		let waiting = context.experiments.connections.wait(context.plan.id, abort.signal)
+		let waiting = context.experiments.connections.wait("R_test", abort.signal)
 			.then(() => woken = true);
 		let review = {
-			connectionId: connection.connection.id,
-			checkout,
 			planRevision: 0,
 			graphVersion: 1,
 			graphRevision: 1,
@@ -390,8 +377,6 @@ test("returning a stopped implementation for changes durably unlocks it once", a
 	let connection = await paired(context);
 	try {
 		let built = await (await context.call(context.path, {
-			connectionId: connection.connection.id,
-			checkout,
 			planRevision: 0,
 			graphVersion: 1,
 			graphRevision: 1,

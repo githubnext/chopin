@@ -311,7 +311,7 @@ function conversation(
 						investigations: (await experiments!.service.store.list(room.id)).slice(0, 20).map(
 							value => ({ id: value.id, brief: value.brief.slice(0, 400), state: value.state }),
 						),
-						workspaces: experiments!.connections.list(room.id).map(value => ({
+						workspaces: experiments!.connections.list(repository.id).map(value => ({
 							label: value.label,
 							owner: value.login,
 						})),
@@ -1828,10 +1828,10 @@ registerMcpRoutes(router, hostedAuth, {
 });
 implementations = registerImplementationRoutes(router, hostedAuth, {
 	connections: experiments.connections,
-	busy: async id =>
-		(await experiments!.service.store.list(id)).filter(item =>
-			["running", "publishing"].includes(item.state)
-		).map(item => item.connectionId!),
+	busy: async connectionId =>
+		(await experiments!.service.store.active()).some(item =>
+			item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
+		),
 	withPlan: (id, action) =>
 		withDocumentTransition(id, async () => {
 			if (deletingChannels.has(id)) throw new Error("document is unavailable");
