@@ -14,14 +14,15 @@
 
 .plan-content a[data-gh-state] {
 	display: inline-flex;
-	align-items: center;
+	align-items: baseline;
 	box-sizing: border-box;
 	/* 200px at the 16px root. */
 	max-width: min(12.5rem, 100%);
 	height: calc(var(--spacing) * 6);
+	padding-block: var(--spacing);
 	padding-inline: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
 	border-radius: var(--radius-full);
-	vertical-align: -0.4em;
+	vertical-align: baseline;
 	background: color-mix(in srgb, var(--gh-surface) 50%, var(--color-page));
 	border: var(--edge-width) solid color-mix(in srgb, var(--gh-icon) 12%, transparent);
 	color: var(--color-text-primary);
@@ -46,6 +47,8 @@
 .plan-content a[data-gh-state]::before {
 	content: "";
 	flex: none;
+	/* The label supplies the inline baseline; the glyph stays centered. */
+	align-self: center;
 	width: calc(var(--spacing) * 3.5);
 	height: calc(var(--spacing) * 3.5);
 	margin-inline-end: calc(var(--spacing) * 1.5);
