@@ -181,8 +181,9 @@ test("compact keeps its header presence and navigation, and split keeps expansio
 
 	await page.setViewportSize({ width: 600, height: 844 });
 	await page.getByRole("navigation", { name: "Workspace view" }).getByRole("button", {
-		name: /Chat/,
-	}).first().click();
+		exact: true,
+		name: "Chat",
+	}).click();
 	let compactField = chatPane(page).locator(".chat-composer .field");
 	await expect(compactField).toHaveCSS("box-shadow", "none");
 	await expect(compactField).toHaveCSS("background-color", await resolved(page, "--color-inset"));
