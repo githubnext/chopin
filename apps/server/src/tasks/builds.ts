@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { approveGraph, validate } from "./graphs";
 import { implementationReadiness } from "./plan-graphs";
-import { claimEligibility, historyFor, implementationLifecycle } from "./lifecycle";
+import {
+	claimEligibility,
+	historyFor,
+	implementationLifecycle,
+	progressFor,
+	transition,
+} from "./lifecycle";
 import { announceImplementation } from "./notifications";
 import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import { broadcast } from "../wire";
@@ -78,6 +84,8 @@ let liveSchema = z.object({
 			at: z.string().datetime(),
 		}).strict(),
 	).max(200).optional(),
+	/** Tasks a first build stopped short of; the next rebuild finishes them. */
+	outstanding: z.array(z.string().min(1).max(128)).min(1).max(100).optional(),
 	/** The source a queued rebuild targets, sealed so later edits join the next delta. */
 	target: z.object({
 		buildId: z.string().uuid(),
@@ -345,12 +353,21 @@ export function reportBuild(
 			throw new Error("build report is out of order");
 		}
 		let next = buildSchema.parse({ ...current, ...report });
-		let previous = plan.builds;
-		plan.builds = [...previous.slice(0, -1), next];
+		let previous = {
+			builds: plan.builds,
+			graph: plan.graph,
+			execution: plan.execution,
+			lifecycle: plan.lifecycle,
+			live: plan.live,
+		};
+		plan.builds = [...previous.builds.slice(0, -1), next];
+		if (current.state !== next.state && (next.state === "stopped" || next.state === "failed")) {
+			liveFromStopped(plan, next);
+		}
 		try {
 			await persistExclusive(plan, true);
 		} catch (error) {
-			plan.builds = previous;
+			Object.assign(plan, previous);
 			throw error;
 		}
 		if (
@@ -360,6 +377,83 @@ export function reportBuild(
 		if (current.state !== next.state && (next.state === "stopped" || next.state === "failed")) {
 			plan.persistence.onBuildStopped?.(plan.id);
 		}
+	});
+}
+
+/**
+ * A first live build that stops short of its last task still goes live from what it delivered, so
+ * later edits resume its outstanding tasks through a rebuild. It needs at least one pull request.
+ */
+function liveFromStopped(plan: Plan, build: BuildRequest): void {
+	let run = plan.execution;
+	if (
+		!plan.persistence.liveBuild || plan.live || build.kind === "rebuild" || !plan.graph
+		|| run?.id !== build.id
+	) return;
+	let progress = progressFor(plan.graph, plan.lifecycle, run);
+	if (!progress) return;
+	let pullRequests = [
+		...new Set(
+			progress.tasks.flatMap(task =>
+				task.state !== "queued" && task.pullRequest ? [task.pullRequest.url] : []
+			),
+		),
+	];
+	let outstanding = progress.tasks.flatMap(task => task.state === "completed" ? [] : [task.id]);
+	if (pullRequests.length === 0 || outstanding.length === 0) return;
+	let result = transition({
+		graph: plan.graph,
+		execution: run,
+		lifecycle: plan.lifecycle,
+	}, {
+		kind: "request_revision",
+		runId: run.id,
+		reason: "The build stopped with outstanding tasks. Later edits resume them.",
+		idempotencyKey: `${run.id}:live-stop`,
+	});
+	if (result.kind !== "accepted") return;
+	let archived = result.state.lifecycle.history.at(-1);
+	if (archived?.run.id !== run.id) return;
+	archived.live = true;
+	plan.graph = result.state.graph;
+	plan.execution = result.state.execution;
+	plan.lifecycle = result.state.lifecycle;
+	plan.live = {
+		buildId: build.id,
+		user: build.user,
+		repositoryId: build.repositoryId,
+		checkout: structuredClone(build.checkout),
+		baseRevision: plan.revision,
+		baseSource: source(plan),
+		pullRequests,
+		outstanding,
+	};
+}
+
+/** The tasks a first build left unfinished, with their blockers and any pull request. */
+function outstandingTasks(plan: Plan) {
+	let live = plan.live;
+	if (!live?.outstanding || !plan.graph) return [];
+	let index = plan.lifecycle.history.findIndex(item => item.run.id === live.buildId);
+	let archived = plan.lifecycle.history[index];
+	let version = archived
+		&& plan.graph.versions.find(item => item.number === archived.run.graphVersion);
+	let progress = historyFor(plan.graph, plan.lifecycle)[index]?.progress.tasks ?? [];
+	return live.outstanding.flatMap(id => {
+		let task = version?.definition.tasks.find(item => item.id === id);
+		let item = progress.find(item => item.id === id);
+		if (!task || !item || item.state === "completed") return [];
+		return [{
+			id,
+			title: task.title,
+			goal: task.goal,
+			acceptance: task.acceptance,
+			state: item.state,
+			...(item.state === "blocked" ? { blocker: item.blocker } : {}),
+			...(item.state !== "queued" && item.pullRequest
+				? { pullRequest: item.pullRequest.url }
+				: {}),
+		}];
 	});
 }
 
@@ -412,6 +506,7 @@ export function readRebuild(plan: Plan, buildId: string) {
 		let build = plan.builds.at(-1);
 		if (!live?.target || live.target.buildId !== buildId || build?.id !== buildId) return;
 		let tasks = liveTasks(plan);
+		let outstanding = outstandingTasks(plan);
 		return {
 			before: live.baseSource,
 			after: live.target.source,
@@ -422,6 +517,7 @@ export function readRebuild(plan: Plan, buildId: string) {
 				title: tasks.find(task => task.pullRequest === url)?.title ?? "",
 			})),
 			tasks,
+			...(outstanding.length ? { outstanding } : {}),
 		};
 	});
 }
@@ -443,10 +539,19 @@ export function reportRebuild(
 			!live || !target || !build || build.id !== buildId
 			|| build.kind !== "rebuild" || build.state !== "running" || target.buildId !== buildId
 		) return { kind: "refused", reason: "build-inactive" };
+		// Only an outstanding task that had no pull request may bring a new one, in the same repository.
+		let openings = outstandingTasks(plan).filter(task => !task.pullRequest).length;
+		let opened = [
+			...new Set(
+				[...report.commits, ...report.tasks].map(item => item.pullRequest).filter(url =>
+					!live.pullRequests.includes(url)
+				),
+			),
+		];
+		let prefix = `https://github.com/${live.checkout.repository}/pull/`;
 		if (
-			[...report.commits, ...report.tasks].some(item =>
-				!live.pullRequests.includes(item.pullRequest)
-			)
+			opened.length > openings
+			|| opened.some(url => !url.startsWith(prefix) || !/^\d+$/.test(url.slice(prefix.length)))
 		) return { kind: "refused", reason: "pull-request" };
 		let at = new Date().toISOString();
 		let graph = plan.graph && structuredClone(plan.graph);
@@ -514,7 +619,7 @@ export function reportRebuild(
 			});
 			lifecycle.history.push({ run, events, live: true });
 		}
-		let { target: _target, ...base } = live;
+		let { target: _target, outstanding: _outstanding, ...base } = live;
 		let previous = {
 			graph: plan.graph,
 			lifecycle: plan.lifecycle,
@@ -527,6 +632,7 @@ export function reportRebuild(
 			...base,
 			baseRevision: target.revision,
 			baseSource: target.source,
+			pullRequests: [...live.pullRequests, ...opened],
 			commits: [
 				...(live.commits ?? []),
 				...report.commits.map(commit => ({ ...commit, revision: target.revision, at })),
