@@ -1,4 +1,4 @@
-import { buildActive, queueRebuild } from "./builds";
+import { buildActive, queueRebuild, settleLive } from "./builds";
 import { readCurrentDocument } from "../plan/service";
 import type { RebuildConnections } from "./builds";
 import type { DocumentTarget, Plan } from "../plan/service";
@@ -104,7 +104,7 @@ export class LiveSyncCoordinator {
 
 	async #check(channelId: string): Promise<void> {
 		if (this.#closed) return;
-		let delta = await this.#options.withPlan(channelId, async plan => {
+		let checked = await this.#options.withPlan(channelId, async plan => {
 			let live = plan.live;
 			if (!plan.persistence.liveBuild || !live) {
 				this.#builders.delete(channelId);
@@ -118,17 +118,31 @@ export class LiveSyncCoordinator {
 				return;
 			}
 			return {
-				channelId,
-				baseRevision: live.baseRevision,
-				targetRevision: current.revision,
-				baseSource: live.baseSource,
-				source: current.source,
-				pullRequests: [...live.pullRequests],
+				outstanding: !!live.outstanding?.length,
+				delta: {
+					channelId,
+					baseRevision: live.baseRevision,
+					targetRevision: current.revision,
+					baseSource: live.baseSource,
+					source: current.source,
+					pullRequests: [...live.pullRequests],
+				},
 			};
 		});
-		if (!delta || this.#closed) return;
+		if (!checked || this.#closed) return;
+		let { delta } = checked;
+		// Outstanding tasks always rebuild; the gate only judges whether an edit alone needs code.
 		let classifier = this.#options.classifier ?? sourcesDiffer;
-		if (!await classifier.classify(delta)) return;
+		if (!checked.outstanding && !await classifier.classify(delta)) {
+			await this.#options.withPlan(channelId, plan =>
+				settleLive(plan, {
+					baseSource: delta.baseSource,
+					revision: delta.targetRevision,
+					source: delta.source,
+					summary: "The edit did not change what the software should do.",
+				}));
+			return;
+		}
 		let result = await this.#options.withPlan(channelId, async plan => {
 			let queued = await queueRebuild(plan, this.#options.connections);
 			// Under the lock, so a build that stops right after still finds this check waiting.
