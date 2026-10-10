@@ -1,0 +1,209 @@
+import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
+
+type Snapshot = ImplementationSnapshot;
+type Progress = NonNullable<Snapshot["lifecycle"]["activity"]>;
+export type TaskState = Progress["tasks"][number]["state"];
+
+/** What the Build view shows: one status line, at most one action, then the tasks. */
+export type BuildPhase =
+	| { kind: "loading" }
+	/** Tasks are missing, out of date or were returned; `draft` is the Planner request to send. */
+	| { kind: "drafting"; draft: "prepare" | "revise" | "returned" }
+	/** `stale` when there are no tasks for the current revision to show beneath the blockers. */
+	| { kind: "blocked"; decisions: boolean; comments: boolean; stale: boolean }
+	| { kind: "review" }
+	| { kind: "building" }
+	/** The build ended before it claimed the tasks; a retry is safe. */
+	| { kind: "failed" }
+	/** The build ended while its run still holds the tasks and the document lock. */
+	| { kind: "stopped" }
+	| { kind: "done"; pullRequests: number };
+
+function latestRun(snapshot: Snapshot) {
+	let graph = snapshot.graph;
+	return snapshot.lifecycle.history.findLast(item =>
+		item.run.graphVersion === graph?.number && item.run.graphRevision === graph?.revision
+	);
+}
+
+/** The task progress to show: the live run, else the last finished run of these tasks. */
+export function buildProgress(snapshot: Snapshot | undefined): Progress | undefined {
+	if (!snapshot) return;
+	return snapshot.lifecycle.activity ?? latestRun(snapshot)?.progress;
+}
+
+export function buildPhase(snapshot: Snapshot | undefined): BuildPhase {
+	if (!snapshot) return { kind: "loading" };
+	let run = latestRun(snapshot);
+	let active = snapshot.lifecycle.execution.state === "active";
+	let build = snapshot.build;
+	let ended = build?.state === "failed" || build?.state === "stopped";
+	if (run?.outcome.kind === "implemented" || run?.outcome.kind === "delivered") {
+		let urls = new Set(
+			(buildProgress(snapshot)?.tasks ?? []).flatMap(task =>
+				task.pullRequest ? [task.pullRequest.url] : []
+			),
+		);
+		return { kind: "done", pullRequests: urls.size };
+	}
+	if (active) return ended ? { kind: "stopped" } : { kind: "building" };
+	if (build && !ended) return { kind: "building" };
+	if (snapshot.blockers.length > 0) {
+		return {
+			kind: "blocked",
+			decisions: snapshot.blockers.includes("unanswered questionnaires"),
+			comments: snapshot.blockers.includes("accepted comments awaiting plan changes"),
+			stale: !snapshot.graph || snapshot.graph.planRevision !== snapshot.planRevision,
+		};
+	}
+	let graph = snapshot.graph;
+	if (!graph) return { kind: "drafting", draft: "prepare" };
+	if (graph.planRevision !== snapshot.planRevision) return { kind: "drafting", draft: "revise" };
+	if (run?.outcome.kind === "revision_requested") return { kind: "drafting", draft: "returned" };
+	if (ended) return { kind: "failed" };
+	return { kind: "review" };
+}
+
+/** One automatic Planner request per document, revision and reason in this page. */
+export function draftKey(
+	channel: string,
+	planRevision: number,
+	draft: "prepare" | "revise" | "returned",
+): string {
+	return `${channel}:${planRevision}:${draft}`;
+}
+
+export function pullRequestNumber(url: string): number | undefined {
+	let match = url.match(/\/pull\/(\d+)(?:[/?#]|$)/);
+	return match ? Number(match[1]) : undefined;
+}
+
+/** Whole minutes or hours and minutes, e.g. "38m" or "1h 5m". */
+export function elapsed(since: string, now: number): string | undefined {
+	let start = Date.parse(since);
+	if (!Number.isFinite(start)) return;
+	let minutes = Math.max(0, Math.floor((now - start) / 60_000));
+	if (minutes < 60) return `${minutes}m`;
+	let hours = Math.floor(minutes / 60);
+	let rest = minutes % 60;
+	return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
+export const TASK_STATE_LABEL: Record<TaskState, string> = {
+	queued: "queued",
+	in_progress: "in progress",
+	blocked: "blocked",
+	completed: "done",
+};
+
+/** Active and blocked rows start open; so does a linked task. */
+export function taskStartsOpen(state: TaskState, linked: boolean): boolean {
+	return linked || state === "in_progress" || state === "blocked";
+}
+
+export function plural(count: number, one: string, many: string): string {
+	return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Who a build in progress is attributed to: the viewer, a login, or nobody known. */
+export function startedBy(snapshot: Snapshot | undefined, userId: string): string | undefined {
+	if (!snapshot?.build) return;
+	if (snapshot.build.user === userId) return "you";
+	return snapshot.startedBy;
+}
+
+/** A Planner request for tasks, from sending until its turn has ended. */
+export type DraftRequest = {
+	key: string;
+	/** The server's id for the request, once it answers. */
+	id?: string;
+	state: "sending" | "queued" | "running" | "ended" | "failed";
+	/** Chat was seen busy while this request was live. */
+	busySeen?: boolean;
+};
+
+export function draftInFlight(request: DraftRequest | undefined): boolean {
+	return request?.state === "sending" || request?.state === "queued"
+		|| request?.state === "running";
+}
+
+export type DraftEvent =
+	| { type: "reply"; id: string; state: "queued" | "running" | "ended" }
+	| { type: "drafting"; id: string; state: "queued" | "running" | "ended" }
+	| { type: "busy"; busy: boolean }
+	| { type: "refused" };
+
+/**
+ * Follow one request through its own turn; `undefined` when nothing changes.
+ *
+ * Only events naming this request's id move it, so another turn ending never
+ * reads as this one failing. Chat going idle is a fallback for an `ended`
+ * broadcast missed across a reconnect: at once for a running request the
+ * server has acknowledged, and for a queued one only after it was seen busy.
+ */
+export function advanceDraft(
+	request: DraftRequest | undefined,
+	event: DraftEvent,
+): DraftRequest | undefined {
+	if (!request) return;
+	if (event.type === "refused") {
+		return request.state === "sending" ? { ...request, state: "failed" } : undefined;
+	}
+	if (event.type === "reply") {
+		if (request.state !== "sending") return;
+		return { ...request, id: event.id, state: event.state };
+	}
+	if (event.type === "drafting") {
+		if (!request.id || event.id !== request.id || !draftInFlight(request)) return;
+		return event.state === request.state ? undefined : { ...request, state: event.state };
+	}
+	if (request.state !== "queued" && request.state !== "running") return;
+	if (event.busy) return request.busySeen ? undefined : { ...request, busySeen: true };
+	return request.busySeen || request.state === "running"
+		? { ...request, state: "ended" }
+		: undefined;
+}
+
+/**
+ * Whether opening Build should ask for tasks now.
+ *
+ * Only the drafting need seen by the first read after entering Build counts, so
+ * a collaborator's edit while the view stays open never starts another turn.
+ */
+export function shouldAutoDraft(input: {
+	active: boolean;
+	canDraft: boolean;
+	chatLoaded: boolean;
+	plannerBusy: boolean;
+	connected: boolean;
+	key: string | undefined;
+	/** The key the first read of this activation needed, if it needed one. */
+	eligible: string | undefined;
+	autoSent: boolean;
+	alreadyDrafted: boolean;
+	request: DraftRequest | undefined;
+}): boolean {
+	return input.active && input.canDraft && input.chatLoaded && !input.plannerBusy
+		&& input.connected && !!input.key && input.key === input.eligible && !input.autoSent
+		&& !input.alreadyDrafted && !draftInFlight(input.request);
+}
+
+/**
+ * Plain copy for a refusal the server explains, or `undefined` for one it does
+ * not, which reads as Chopin failing to draft.
+ */
+export function draftRefusalCopy(message: string): string | undefined {
+	if (/unanswered questionnaires/.test(message)) return "Answer the open decisions first.";
+	if (/accepted comments/.test(message)) {
+		return "Update the document for accepted comments first.";
+	}
+	if (/implementation is already active/.test(message)) return "A build is already running.";
+	if (/queue is full|too many/.test(message)) {
+		return "Chopin is busy with other requests. Try again shortly.";
+	}
+	if (/Planner is not running/.test(message)) return "Chopin isn’t running for this document.";
+	if (/write access|authorization expired/.test(message)) {
+		return "You need write access to this repository to build.";
+	}
+	if (/cannot be built/.test(message)) return "This document can’t be built.";
+}

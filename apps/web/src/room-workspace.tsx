@@ -1,4 +1,3 @@
-import { ImplementationPanel } from "./implementation-panel";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { documentPath } from "@chopin/protocol/document-url";
 import { ArchiveIcon, ChevronIcon, DocumentIcon } from "@chopin/icons";
@@ -25,6 +24,7 @@ import {
 	visibleDecisionView,
 } from "@chopin/editor";
 
+import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
 import { ChildProvenance } from "./child-provenance";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
@@ -75,7 +75,6 @@ import type { DocumentAction } from "./document-actions-menu";
 import type { TitleEdit } from "./title-edit";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
-import type { ReactNode } from "react";
 import type { ChatDestination } from "./conversation-plan/source";
 import type { SourceDestination } from "./conversation-plan/card-parts";
 import type { WorkspaceDocumentView, WorkspacePresentation } from "./workspace-model";
@@ -104,7 +103,6 @@ const QUESTION_MOTION = {
 
 export function Header(
 	{
-		actions,
 		archivedAt,
 		canManage,
 		editing,
@@ -117,7 +115,6 @@ export function Header(
 		project,
 		room,
 	}: {
-		actions?: ReactNode;
 		archivedAt?: string;
 		canManage: boolean;
 		editing?: TitleEdit;
@@ -257,7 +254,6 @@ export function Header(
 					</span>
 				)}
 			</div>
-			{actions && <div className="ml-2 flex shrink-0 items-center">{actions}</div>}
 			<div
 				aria-label={`People here: ${people.join(", ")}`}
 				className="room-members ml-auto flex shrink-0 items-center"
@@ -405,22 +401,23 @@ export function RoomWorkspace(
 	}, [room, wire]);
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
+	// A `#task-` link waits for Build to be available, then opens it once.
+	let [taskLink, setTaskLink] = useState(false);
 	useEffect(() => {
 		let followTask = () => {
-			if (!profile.implementation || !location.hash.startsWith("#task-")) return;
-			setShowImplementation(true);
-			dispatch({ type: "set-chat", open: false });
+			if (profile.implementation && location.hash.startsWith("#task-")) setTaskLink(true);
 		};
 		followTask();
 		addEventListener("hashchange", followTask);
 		return () => removeEventListener("hashchange", followTask);
-	}, [profile.implementation, dispatch]);
+	}, [profile.implementation]);
 	let [questions] = useState(() => new QuestionnaireStore());
 	let experiments = useMemo(() => new ExperimentStore(room), [room]);
 	useSyncExternalStore(experiments.subscribe, experiments.snapshot);
 	useEffect(() => experiments.connect(wire), [experiments, wire]);
 	let [cardMeta] = useState(() => new CardMetaStore());
 	let [threads] = useState(() => new ThreadStore());
+	let threadState = useSyncExternalStore(threads.subscribe, threads.snapshot, threads.snapshot);
 	let [researchLauncher] = useState(() => new ResearchLauncher());
 	let research = useMemo(
 		() =>
@@ -484,11 +481,13 @@ export function RoomWorkspace(
 	let latestCanManage = useRef(canManage);
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
 	let chatActive = workspacePresentation.chatVisible;
-	let [chatActivity, setChatActivity] = useState({ unread: 0, busy: false });
+	// `loaded` once this socket's transcript arrived, so `busy` reflects the room.
+	let [chatActivity, setChatActivity] = useState({ unread: 0, busy: false, loaded: false });
 	let onChatActivity = useCallback(
-		(event: { type: "message" | "working"; busy: boolean }) => {
+		(event: { type: "message" | "working"; busy: boolean; history?: true }) => {
 			setChatActivity(current => ({
 				busy: event.busy,
+				loaded: current.loaded || !!event.history,
 				unread: event.type === "message" && !chatActive
 					? current.unread + 1
 					: current.unread,
@@ -534,6 +533,17 @@ export function RoomWorkspace(
 	useEffect(() => {
 		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
 	}, [hasPlanContent, unanswered]);
+
+	useEffect(() => {
+		if (!taskLink || !hasPlanContent) return;
+		setTaskLink(false);
+		setShowImplementation(true);
+		dispatch({ type: "set-chat", open: false });
+	}, [taskLink, hasPlanContent, dispatch]);
+
+	useEffect(() => {
+		setChatActivity(current => current.loaded ? { ...current, loaded: false } : current);
+	}, [wire]);
 
 	useEffect(() => {
 		if (!chatActive) return;
@@ -947,6 +957,8 @@ export function RoomWorkspace(
 			</div>
 		);
 	}
+	let acceptedComments =
+		threadState.threads.filter(item => item.thread.status === "accepted" && !item.applied).length;
 
 	return (
 		<>
@@ -1115,11 +1127,19 @@ export function RoomWorkspace(
 				onDesktopChatOpen={setDesktopChatOpen}
 				onChatOpen={open => dispatch({ type: "set-chat", open })}
 				onDestination={selectDestination}
-				build={showImplementation && profile.implementation && (
-					<ImplementationPanel
-						id={room}
+				build={profile.implementation && (
+					<BuildView
+						active={workspacePresentation.documentVisible && view === "build"}
 						canEdit={!!workspaceCanEdit && status === "connected"}
-						planner={agent && !chatActivity.busy}
+						chatLoaded={chatActivity.loaded}
+						comments={acceptedComments}
+						onShowDecisions={() => selectDestination("decisions")}
+						onShowDocument={() => selectDestination("plan")}
+						planner={agent}
+						plannerBusy={chatActivity.busy}
+						room={room}
+						unanswered={unanswered}
+						userId={userId}
 						wire={wire}
 					/>
 				)}

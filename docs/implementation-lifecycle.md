@@ -18,7 +18,7 @@ implementation, automatic restart and an installer remain future work.
 - The **hosted Planner** reads the current plan and drafts or revises tasks with
   `read_implementation_graph` and `edit_implementation_graph`.
 - A **person** is the only actor allowed by the domain model to approve a draft.
-  The browser's “Approve and build this plan” action approves the exact reviewed
+  The browser's “Build on my laptop” action approves the exact reviewed
   graph and queues its assigned paired workspace in one durable commit.
 - The **local connector** creates an exact-commit worktree and ACP session, then
   claims a browser-approved graph before prompting the orchestrator. Its scoped
@@ -155,10 +155,10 @@ that mutate the plan are refused until the implementation finishes or requests
 revision. Progress and archived runs remain durable sidecar state.
 
 The protocol defines a `plan:lifecycle` projection for active progress and run
-history. `plan:implementation` invalidates the Build panel's authenticated
+history. `plan:implementation` invalidates the Build view's authenticated
 snapshot after committed graph, build and lifecycle changes. It includes the
 storage revision and current editing lock; `plan:open` supplies that lock on
-reconnect even when the Build panel is not selected. The panel refreshes when selected
+reconnect even when the Build view is closed. The view refreshes when opened
 or notified rather than polling every document in the background.
 
 Archiving does not release an active graph lock or terminate its run. A coding

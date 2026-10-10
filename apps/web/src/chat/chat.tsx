@@ -100,7 +100,8 @@ export type ChatProps = {
 	/** Hosted mode keeps the shared chat while repository-scoped agent work is disabled. */
 	agent?: boolean;
 	active?: boolean;
-	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
+	/** `history` marks the transcript arriving, after which `busy` is known rather than assumed. */
+	onActivity?: (event: { type: "message" | "working"; busy: boolean; history?: true }) => void;
 	conversationPlan?: ConversationPlan.State;
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
@@ -360,7 +361,7 @@ export function Chat(
 				setRuns(frame.runs);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
-				activity.current?.({ type: "working", busy: frame.busy });
+				activity.current?.({ type: "working", busy: frame.busy, history: true });
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
 				if (loaded && !seen.has(frame.entry.id)) {
