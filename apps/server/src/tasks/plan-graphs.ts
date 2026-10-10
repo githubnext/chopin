@@ -1,9 +1,9 @@
 /** The hosted persistence boundary for implementation graphs. */
 
 import { claim, Graphs } from "./graphs";
-import { claimEligibility, implementationLifecycle, transition } from "./lifecycle";
+import { claimEligibility, historyFor, implementationLifecycle, transition } from "./lifecycle";
 import * as Comments from "../comments/service";
-import { drain, exclusive, persistExclusive } from "../plan/service";
+import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import { broadcast } from "../wire";
 import { announceImplementation } from "./notifications";
 
@@ -84,26 +84,54 @@ export function reportImplementationLifecycle(
 ): Promise<LifecycleResult> {
 	return exclusive(plan, async () => {
 		if (!plan.graph) return { kind: "refused", reason: "inactive" };
-		let result = transition({
-			graph: plan.graph,
-			execution: plan.execution,
-			lifecycle: plan.lifecycle,
-		}, input);
+		let build = plan.persistence.liveBuild && !plan.live
+			? plan.builds.find(item => item.id === plan.execution?.id)
+			: undefined;
+		let result = transition(
+			{
+				graph: plan.graph,
+				execution: plan.execution,
+				lifecycle: plan.lifecycle,
+			},
+			input,
+			!!build,
+		);
 		if (result.kind !== "accepted") return result;
 		let previous = {
 			graph: plan.graph,
 			execution: plan.execution,
 			lifecycle: plan.lifecycle,
+			live: plan.live,
 		};
 		plan.graph = result.state.graph;
 		plan.execution = result.state.execution;
 		plan.lifecycle = result.state.lifecycle;
+		let archived = result.state.lifecycle.history.at(-1);
+		if (build && !result.state.execution && archived?.run.id === build.id && archived.live) {
+			let delivered = historyFor(result.state.graph, result.state.lifecycle).at(-1)!;
+			plan.live = {
+				buildId: build.id,
+				user: build.user,
+				repositoryId: build.repositoryId,
+				checkout: structuredClone(build.checkout),
+				baseRevision: plan.revision,
+				baseSource: source(plan),
+				pullRequests: [
+					...new Set(
+						delivered.progress.tasks.flatMap(task =>
+							task.state === "completed" ? [task.pullRequest.url] : []
+						),
+					),
+				],
+			};
+		}
 		try {
 			await persistExclusive(plan, true);
 		} catch {
 			plan.graph = previous.graph;
 			plan.execution = previous.execution;
 			plan.lifecycle = previous.lifecycle;
+			plan.live = previous.live;
 			return { kind: "refused", reason: "durability" };
 		}
 		announceImplementation(plan);

@@ -181,6 +181,7 @@ function documentBackend(): Service.Backend {
 			signal();
 		},
 		onDocumentPersisted: target => summaryCoordinator?.schedule(target),
+		liveBuild: !!config.liveBuild,
 	};
 }
 

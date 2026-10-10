@@ -7,7 +7,7 @@ import {
 	reportImplementationLifecycle,
 } from "./plan-graphs";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { claimStored, close, open } from "../plan/service";
+import { claimStored, close, implementationActive, open, source } from "../plan/service";
 
 import type { Server } from "bun";
 import type { Backend, Plan } from "../plan/service";
@@ -716,5 +716,132 @@ describe("the plan graph adapter", () => {
 			graphRevision: 1,
 			run: run(0, 1, "run-2"),
 		})).toMatchObject({ result: { kind: "started" }, sidecar: {} });
+	});
+});
+
+describe("living-document builds", () => {
+	const buildId = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+
+	async function builtPlan(liveBuild: boolean) {
+		let context = await hosted();
+		context.backend.liveBuild = liveBuild;
+		let plan = await open(context.channel.id, context.backend, context.server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		plan.builds = [{
+			id: buildId,
+			user: "octocat",
+			connectionId: "connection-1",
+			repositoryId: "R_score",
+			checkout: { repository: "octo-org/score", branch: "main", commit: "a".repeat(40) },
+			planRevision: plan.revision,
+			graphVersion: 1,
+			graphRevision: 1,
+			createdAt: now.toISOString(),
+			expiresAt: now.getTime() + 60_000,
+			state: "running",
+			session: "session-1",
+		}];
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision, 1, buildId),
+			}),
+		).toMatchObject({ kind: "started" });
+		for (
+			let input of [
+				{ kind: "start" as const, taskId: "model", idempotencyKey: "start" },
+				{
+					kind: "report_pr" as const,
+					taskId: "model",
+					url: "https://github.com/octo-org/score/pull/49",
+					state: "open" as const,
+					idempotencyKey: "pr",
+				},
+				{
+					kind: "complete" as const,
+					taskId: "model",
+					summary: "The graph is durable.",
+					idempotencyKey: "complete",
+				},
+			]
+		) {
+			expect(await reportImplementationLifecycle(plan, { ...input, runId: buildId }))
+				.toMatchObject({ kind: "accepted" });
+		}
+		return { context, plan };
+	}
+
+	it("snapshots the built source when the last task completes", async () => {
+		let { context, plan } = await builtPlan(true);
+		expect(plan.execution).toBeUndefined();
+		expect(plan.live).toEqual({
+			buildId,
+			user: "octocat",
+			repositoryId: "R_score",
+			checkout: { repository: "octo-org/score", branch: "main", commit: "a".repeat(40) },
+			baseRevision: plan.revision,
+			baseSource: source(plan),
+			pullRequests: ["https://github.com/octo-org/score/pull/49"],
+		});
+		plan.builds = [{ ...plan.builds[0]!, state: "stopped" }];
+		expect(implementationActive(plan)).toBe(false);
+		let live = plan.live;
+		await close(plan);
+
+		let restored = await open(context.channel.id, context.backend, context.server);
+		expect(restored.live).toEqual(live);
+		expect(restored.execution).toBeUndefined();
+		expect(
+			await reportImplementationLifecycle(restored, {
+				kind: "report_pr",
+				runId: buildId,
+				taskId: "model",
+				url: "https://github.com/octo-org/score/pull/49",
+				state: "merged",
+				idempotencyKey: "merged",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		await close(restored);
+	});
+
+	it("keeps the verified lifecycle when live builds are off", async () => {
+		let { plan } = await builtPlan(false);
+		expect(plan.live).toBeUndefined();
+		expect(plan.execution?.id).toBe(buildId);
+		expect(implementationActive(plan)).toBe(true);
+		await close(plan);
+	});
+
+	it("rejects a sidecar whose live record names another build", async () => {
+		let { context, plan } = await builtPlan(true);
+		await close(plan);
+		let stored = await context.storage.collaboration.load(context.channel.id, now);
+		if (!stored?.snapshot || !stored.sidecar || typeof stored.sidecar !== "object") {
+			throw new Error("live plan was not stored");
+		}
+		let sidecar = stored.sidecar as Record<string, JsonValue>;
+		await context.storage.collaboration.commit({
+			channelId: context.channel.id,
+			lease: context.lease,
+			expectedRevision: stored.channel.revision,
+			operationId: "foreign-live-build",
+			epoch: stored.snapshot.epoch,
+			sidecar: {
+				...sidecar,
+				live: { ...(sidecar.live as Record<string, JsonValue>), buildId: crypto.randomUUID() },
+			},
+			events: [],
+			now,
+		});
+		await expect(open(context.channel.id, context.backend, context.server))
+			.rejects.toThrow("invalid live build");
 	});
 });
