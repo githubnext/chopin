@@ -111,6 +111,8 @@ export class SpikeScout {
 	#seen = new Map<string, Set<string>>();
 	#editors = new Map<string, string>();
 	#followUps = new Map<string, () => void>();
+	/** Documents whose last scan left passages waiting for a spike to free capacity. */
+	#waiting = new Set<string>();
 	/** Documents with a dismissal check already queued, so a burst of edits shares one. */
 	#dismissing = new Set<string>();
 	#closed = false;
@@ -165,9 +167,12 @@ export class SpikeScout {
 		return spikes;
 	}
 
-	/** A spike record changed; project it into its callout. */
+	/** A spike record changed; project it into its callout, and scan again if it freed capacity. */
 	refresh(channelId: string): Promise<void> {
-		return this.#serial(channelId, () => this.#options.host.refresh(channelId));
+		return this.#serial(channelId, async () => {
+			await this.#options.host.refresh(channelId);
+			if (this.#waiting.delete(channelId)) await this.#check(channelId);
+		});
 	}
 
 	check(channelId: string): Promise<void> {
@@ -197,7 +202,6 @@ export class SpikeScout {
 		if (!editor) return;
 		let capacity = MAX_ACTIVE
 			- spikes.filter(value => ACTIVE.includes(value.state) && !value.spike!.dismissed).length;
-		if (capacity <= 0) return;
 		let seen = this.#seen.get(channelId) ?? new Set<string>();
 		this.#seen.set(channelId, seen);
 		let started = new Set(spikes.map(value => value.spike!.digest));
@@ -207,15 +211,23 @@ export class SpikeScout {
 			!seen.has(block.digest) && !started.has(block.digest)
 			&& !(block.calloutAfter && spikeCallouts.has(block.calloutAfter))
 		);
+		this.#waiting.delete(channelId);
+		if (!unjudged.length) return;
+		// A finished, failed or dismissed spike refreshes the document and resumes this scan.
+		if (capacity <= 0) {
+			this.#waiting.add(channelId);
+			return;
+		}
 		let candidates = unjudged.slice(0, MAX_CANDIDATES);
-		if (!candidates.length) return;
 		// Without the editor's local agent there is nowhere to run; judge these again after an edit.
 		let connection = await host.connection(snapshot.repositoryId, editor, channelId);
 		if (!connection) return;
 		let verdicts = await (this.#options.judge ?? heuristicJudge)(candidates);
 		if (!verdicts) return;
 		// Approved passages beyond capacity stay unseen so a later scan can start them.
-		let hits = candidates.filter((_block, index) => verdicts[index]).slice(0, capacity);
+		let approved = candidates.filter((_block, index) => verdicts[index]);
+		let hits = approved.slice(0, capacity);
+		if (approved.length > hits.length) this.#waiting.add(channelId);
 		for (let [index, block] of candidates.entries()) {
 			if (!verdicts[index]) seen.add(block.digest);
 		}
@@ -244,5 +256,6 @@ export class SpikeScout {
 		this.#followUps.clear();
 		this.#seen.clear();
 		this.#editors.clear();
+		this.#waiting.clear();
 	}
 }
