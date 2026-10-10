@@ -319,15 +319,21 @@ test("enabling reduced motion settles an active drawer exit", async ({ join, see
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	await page.emulateMedia({ reducedMotion: "no-preference" });
+	let time = new Date("2026-01-01T00:00:00Z");
+	await page.clock.install({ time });
 	await page.getByRole("button", { name: "Show sidebar" }).click();
 	let drawer = page.getByRole("dialog", { includeHidden: true, name: "Projects" }).locator("../..");
+	await expect(drawer).toHaveClass(/\bis-open\b/);
+	// Hold the exit fallback timer: removal must come from the media change.
+	await page.clock.pauseAt(new Date(time.getTime() + 60_000));
 	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
 		position: { x: 382, y: 422 },
 	});
 	await expect(drawer).toHaveAttribute("aria-hidden", "true");
+	await expect(drawer).toHaveAttribute("inert", "");
 
 	await page.emulateMedia({ reducedMotion: "reduce" });
-	await expect(drawer).toHaveCount(0, { timeout: 100 });
+	await expect(drawer).toHaveCount(0);
 });
 
 test("a shifted visual viewport keeps workspace controls in the exposed rectangle", async ({ browser, baseURL, room, seed }) => {
