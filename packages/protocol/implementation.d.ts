@@ -32,6 +32,8 @@ export type LiveSnapshot = {
 	checkout: CheckoutContext;
 	baseRevision: number;
 	pullRequests: string[];
+	/** Tasks the first build stopped short of; the next rebuild finishes them. */
+	outstanding?: string[];
 	commits: Array<{
 		pullRequest: string;
 		sha: string;

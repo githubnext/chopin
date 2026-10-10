@@ -6,6 +6,7 @@ import {
 	implementationGraphs,
 	reportImplementationLifecycle,
 } from "./plan-graphs";
+import { readRebuild, reportBuild, reportRebuild } from "./builds";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { claimStored, close, implementationActive, open, source } from "../plan/service";
 
@@ -722,7 +723,10 @@ describe("the plan graph adapter", () => {
 describe("living-document builds", () => {
 	const buildId = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
 
-	async function builtPlan(liveBuild: boolean) {
+	async function builtPlan(
+		liveBuild: boolean,
+		ending: "complete" | "block" | "unreported" = "complete",
+	) {
 		let context = await hosted();
 		context.backend.liveBuild = liveBuild;
 		let plan = await open(context.channel.id, context.backend, context.server);
@@ -755,24 +759,30 @@ describe("living-document builds", () => {
 				run: run(plan.revision, 1, buildId),
 			}),
 		).toMatchObject({ kind: "started" });
-		for (
-			let input of [
-				{ kind: "start" as const, taskId: "model", idempotencyKey: "start" },
-				{
-					kind: "report_pr" as const,
-					taskId: "model",
-					url: "https://github.com/octo-org/score/pull/49",
-					state: "open" as const,
-					idempotencyKey: "pr",
-				},
-				{
+		let inputs = [
+			{ kind: "start" as const, taskId: "model", idempotencyKey: "start" },
+			...(ending === "unreported" ? [] : [{
+				kind: "report_pr" as const,
+				taskId: "model",
+				url: "https://github.com/octo-org/score/pull/49",
+				state: "open" as const,
+				idempotencyKey: "pr",
+			}]),
+			ending === "complete"
+				? {
 					kind: "complete" as const,
 					taskId: "model",
 					summary: "The graph is durable.",
 					idempotencyKey: "complete",
+				}
+				: {
+					kind: "block" as const,
+					taskId: "model",
+					reason: "Which storage engine should the graph use?",
+					idempotencyKey: "block",
 				},
-			]
-		) {
+		];
+		for (let input of inputs) {
 			expect(await reportImplementationLifecycle(plan, { ...input, runId: buildId }))
 				.toMatchObject({ kind: "accepted" });
 		}
@@ -810,6 +820,128 @@ describe("living-document builds", () => {
 			}),
 		).toMatchObject({ kind: "accepted" });
 		await close(restored);
+	});
+
+	it("goes live from a first build that stops with a blocked task", async () => {
+		let { context, plan } = await builtPlan(true, "block");
+		expect(plan.live).toBeUndefined();
+		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
+		expect(plan.execution).toBeUndefined();
+		expect(plan.live).toEqual({
+			buildId,
+			user: "octocat",
+			repositoryId: "R_score",
+			checkout: { repository: "octo-org/score", branch: "main", commit: "a".repeat(40) },
+			baseRevision: plan.revision,
+			baseSource: source(plan),
+			pullRequests: ["https://github.com/octo-org/score/pull/49"],
+			outstanding: ["model"],
+		});
+		expect(plan.lifecycle.history.at(-1)).toMatchObject({ run: { id: buildId }, live: true });
+		expect(implementationActive(plan)).toBe(false);
+		await close(plan);
+
+		let restored = await open(context.channel.id, context.backend, context.server);
+		expect(restored.live?.outstanding).toEqual(["model"]);
+		let rebuildId = crypto.randomUUID();
+		restored.builds = [...restored.builds, {
+			...restored.builds[0]!,
+			id: rebuildId,
+			kind: "rebuild",
+			baseRevision: restored.revision,
+			targetRevision: restored.revision,
+			state: "running",
+		}];
+		restored.live = {
+			...restored.live!,
+			target: { buildId: rebuildId, revision: restored.revision, source: source(restored) },
+		};
+		expect((await readRebuild(restored, rebuildId))?.outstanding).toEqual([{
+			id: "model",
+			title: "Model graphs",
+			goal: "Persist implementation work.",
+			acceptance: ["The graph is durable.", "The plan remains MDX only."],
+			state: "blocked",
+			blocker: "Which storage engine should the graph use?",
+			pullRequest: "https://github.com/octo-org/score/pull/49",
+		}]);
+		let task = {
+			title: "Finish graph storage",
+			goal: "Persist implementation work.",
+			pullRequest: "https://github.com/octo-org/score/pull/50",
+		};
+		expect(
+			await reportRebuild(restored, rebuildId, {
+				summary: "Finished.",
+				commits: [],
+				tasks: [task],
+			}),
+		).toEqual({ kind: "refused", reason: "pull-request" });
+		expect(
+			await reportRebuild(restored, rebuildId, {
+				summary: "Finished the blocked graph storage task.",
+				commits: [{
+					pullRequest: "https://github.com/octo-org/score/pull/49",
+					sha: "c".repeat(40),
+					message: "Store graphs in PostgreSQL",
+				}],
+				tasks: [{ ...task, pullRequest: "https://github.com/octo-org/score/pull/49" }],
+			}),
+		).toEqual({ kind: "accepted" });
+		expect(restored.live?.outstanding).toBeUndefined();
+		await close(restored);
+	});
+
+	it("lets an outstanding task without a pull request open one during a rebuild", async () => {
+		let { plan } = await builtPlan(true, "block");
+		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "failed" });
+		expect(plan.live?.outstanding).toEqual(["model"]);
+		// As if the blocked task had never reported its pull request.
+		let archived = plan.lifecycle.history.at(-1)!;
+		archived.events = archived.events.filter(event => event.kind !== "report_pr");
+		let rebuildId = crypto.randomUUID();
+		plan.builds = [...plan.builds, {
+			...plan.builds[0]!,
+			id: rebuildId,
+			kind: "rebuild",
+			baseRevision: plan.revision,
+			targetRevision: plan.revision,
+			state: "running",
+		}];
+		plan.live = {
+			...plan.live!,
+			target: { buildId: rebuildId, revision: plan.revision, source: source(plan) },
+		};
+		let task = { title: "Finish graph storage", goal: "Persist implementation work." };
+		let report = (urls: string[]) =>
+			reportRebuild(plan, rebuildId, {
+				summary: "Opened the missing pull request.",
+				commits: [],
+				tasks: urls.map(url => ({ ...task, pullRequest: url })),
+			});
+		expect(
+			await report([
+				"https://github.com/octo-org/score/pull/50",
+				"https://github.com/octo-org/score/pull/51",
+			]),
+		).toEqual({ kind: "refused", reason: "pull-request" });
+		expect(await report(["https://github.com/other/score/pull/50"]))
+			.toEqual({ kind: "refused", reason: "pull-request" });
+		expect(await report(["https://github.com/octo-org/score/pull/50"]))
+			.toEqual({ kind: "accepted" });
+		expect(plan.live?.pullRequests).toEqual([
+			"https://github.com/octo-org/score/pull/49",
+			"https://github.com/octo-org/score/pull/50",
+		]);
+		await close(plan);
+	});
+
+	it("stays unbuilt when a stopped first build opened no pull request", async () => {
+		let { plan } = await builtPlan(true, "unreported");
+		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
+		expect(plan.live).toBeUndefined();
+		expect(plan.execution?.id).toBe(buildId);
+		await close(plan);
 	});
 
 	it("keeps the verified lifecycle when live builds are off", async () => {
