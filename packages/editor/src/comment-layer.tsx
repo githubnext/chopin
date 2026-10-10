@@ -375,6 +375,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let origin = useRef<HTMLElement | undefined>(undefined);
 	let draftOpen = useRef(false);
 	let selected = useRef<string | undefined>(undefined);
+	/** A thread whose card should take focus once it is pinned, after a reopen from the margin. */
+	let focusOnOpen = useRef<string | undefined>(undefined);
 	let options = useCellValue(widgets$);
 	let canEdit = options.canEdit !== false;
 	let compact = options.commentPresentation === "sheet"
@@ -581,6 +583,20 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		store.light([]);
 	}, [store]);
 
+	// A chip lights every thread on its block; when that set changes under the pointer, follow it.
+	let litMarker = useRef<string | undefined>(undefined);
+	let lightMarker = useCallback((key: string | undefined, ids: string[]) => {
+		litMarker.current = key;
+		store.light(ids);
+	}, [store]);
+	useEffect(() => {
+		let key = litMarker.current;
+		if (!key) return;
+		let marker = markers.find(entry => entry.key === key);
+		if (!marker || marker.views.length < 2) lightMarker(undefined, []);
+		else store.light(marker.views.map(view => view.thread.id));
+	}, [lightMarker, markers, store]);
+
 	useEffect(() => {
 		if (!canEdit && state.draft) store.draft(undefined);
 	}, [canEdit, state.draft, store]);
@@ -741,8 +757,16 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		// Chat can point at a thread that has since gone; say so rather than
 		// leaving a request to open it waiting for a thread that will not come.
 		let open = (event: Event) => {
-			let id = (event as CustomEvent<unknown>).detail;
-			if (typeof id !== "string") return;
+			let detail = (event as CustomEvent<unknown>).detail;
+			let request = typeof detail === "string"
+				? { thread: detail, focus: false }
+				: detail && typeof detail === "object" && "thread" in detail
+						&& typeof detail.thread === "string"
+				? { thread: detail.thread, focus: "focus" in detail && detail.focus === true }
+				: undefined;
+			if (!request) return;
+			let id = request.thread;
+			focusOnOpen.current = request.focus ? id : undefined;
 			let status = store.status(id);
 			let view = store.snapshot().threads.find(entry => entry.thread.id === id);
 			let gone = status === "resolved"
@@ -797,6 +821,23 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		store.focus(undefined);
 		restoreOrigin();
 	}, [draft, editor, pinned, restoreOrigin, state.threads, store]);
+
+	// A thread reopened from its margin marker takes the focus its Reopen button had.
+	useLayoutEffect(() => {
+		let id = focusOnOpen.current;
+		if (!id || id !== pinned) return;
+		focusOnOpen.current = undefined;
+		let tries = 0;
+		let land = () => {
+			let dialog = document.getElementById(dialogId(id));
+			let target = dialog?.querySelector<HTMLElement>("[data-plan-comment-close]")
+				?? dialog?.querySelector<HTMLElement>("textarea")
+				?? dialog?.querySelector<HTMLElement>("button");
+			if (target) target.focus({ preventScroll: true });
+			else if (tries++ < 10) requestAnimationFrame(land);
+		};
+		land();
+	}, [pinned]);
 
 	// The list item that held focus is replaced by the thread it opened; focus its way back.
 	useLayoutEffect(() => {
@@ -1090,7 +1131,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						key={marker.key}
 						onBlur={() => {
 							if (single) unhover(single.thread.id);
-							else store.light([]);
+							else lightMarker(undefined, []);
 							// A focused marker whose passage scrolled away hides once focus leaves it.
 							measure();
 						}}
@@ -1102,9 +1143,13 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 								setPinned(single ? single.thread.id : `${LIST}${marker.key}`);
 							}
 						}}
-						onFocus={single ? () => hover(single.thread.id) : () => store.light(ids)}
-						onMouseEnter={single ? () => hover(single.thread.id) : () => store.light(ids)}
-						onMouseLeave={single ? () => unhover(single.thread.id) : () => store.light([])}
+						onFocus={single ? () => hover(single.thread.id) : () => lightMarker(marker.key, ids)}
+						onMouseEnter={single
+							? () => hover(single.thread.id)
+							: () => lightMarker(marker.key, ids)}
+						onMouseLeave={single
+							? () => unhover(single.thread.id)
+							: () => lightMarker(undefined, [])}
 						style={{
 							top: button.top - (height - CHIP) / 2,
 							left,
