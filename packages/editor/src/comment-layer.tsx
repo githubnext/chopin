@@ -7,7 +7,7 @@ import { CheckIcon, MessageIcon } from "@chopin/icons";
 import { useCellValue } from "@mdxeditor/gurx";
 import { $getNodeByKey } from "lexical";
 
-import { Author, DraftCard, ThreadCard, ThreadList } from "./comments";
+import { DraftCard, NoteAuthor, ThreadCard, ThreadList } from "./comments";
 import { blockMarkerPoints, commentCardPoint, markerRect, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
 import { CommentSheet, usesCommentSheet } from "./comment-sheet";
@@ -204,7 +204,7 @@ function PreviewContent({ view }: { view: ThreadView }) {
 			{opening && (
 				<>
 					<p className="plan-comment-preview-author">
-						<Author handle={opening.handle} textSize="xs" />
+						<NoteAuthor note={opening} textSize="xs" />
 					</p>
 					<p className="plan-comment-preview-note">{opening.text}</p>
 				</>
@@ -841,7 +841,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					: undefined}
 				onBlur={() => unhover(view.thread.id)}
 				onFocus={() => hover(view.thread.id)}
-				onReply={text => store.reply(view.thread.id, text)}
+				onReply={(text, to) => store.reply(view.thread.id, text, to)}
 				onResolve={() => resolve(view.thread.id)}
 				onTyping={writing => store.announce(view.thread.id, writing)}
 				quote={view.quote}
@@ -909,7 +909,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactLabel = "New comment";
 		compactTitle = "New comment";
 		compactClose = cancelDraft;
-		compactContent = <DraftCard onCancel={cancelDraft} onSend={text => store.start(text)} />;
+		compactContent = (
+			<DraftCard
+				onCancel={cancelDraft}
+				onSend={(text, to) => store.start(text, to)}
+			/>
+		);
 	} else if (compact && pinned === "orphans" && orphaned.length > 0) {
 		compactKey = "orphans";
 		compactId = "plan-comment-thread-orphans";
@@ -1084,7 +1089,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				value={draft?.placement && !compact
 					? {
 						ariaLabel: "New comment",
-						children: <DraftCard onCancel={cancelDraft} onSend={text => store.start(text)} />,
+						children: (
+							<DraftCard
+								onCancel={cancelDraft}
+								onSend={(text, to) => store.start(text, to)}
+							/>
+						),
 						className: "plan-comment-card",
 						onMeasure: element => rememberHeight("draft", element),
 						...cardPlacement(draft.placement, "draft"),

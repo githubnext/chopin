@@ -156,7 +156,7 @@ function thread(over: Partial<Comment.Thread> = {}): Comment.Thread {
 	return {
 		id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
 		status: "accepted",
-		notes: [{ id: "n1", handle: "ana", text: "Too long.", ts: 1 }],
+		notes: [{ id: "n1", author: "member", handle: "ana", text: "Too long.", ts: 1 }],
 		quote: QUOTE,
 		resolver: "kris",
 		at: 2,
