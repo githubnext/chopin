@@ -266,6 +266,11 @@ test("the draft instruction comes from the plan and refuses an unsettled one", a
 	expect(prepare.text).toContain("Prepare an implementation graph");
 	expect(prepare.text).toContain("Do not approve or start implementation.");
 	expect(prepare.said).toBe("@ana asked Chopin to break the plan into tasks.");
+	let built = draftInstruction(plan, "ana", true);
+	expect(built.text).toContain("Chopin approves and starts these tasks automatically");
+	expect(built.text).toContain("do not describe them as unapproved or unstarted");
+	expect(built.text).not.toContain("Do not approve or start implementation.");
+	expect(built.said).toBe(prepare.said);
 	expect(draftRefusal(plan)).toBeUndefined();
 	let revised = await implementationGraphs().revise(plan, {
 		planRevision: plan.revision,
@@ -287,6 +292,9 @@ test("the draft instruction comes from the plan and refuses an unsettled one", a
 	let revise = draftInstruction(plan, "ana");
 	expect(revise.text).toContain("Revise the implementation graph");
 	expect(revise.said).toBe("@ana asked Chopin to update the tasks.");
+	expect(revise.text).toContain("Do not approve or start implementation.");
+	expect(draftInstruction(plan, "ana", true).text)
+		.toContain("Chopin approves and starts these tasks automatically");
 	plan.builds = [{ state: "running" } as never];
 	expect(draftRefusal(plan)).toBe("implementation is already active");
 });
