@@ -149,13 +149,13 @@ text only when people need it to act or recover.
 
 ## Layout
 
-The workspace places Chat on the left and the document on the right when space permits. Document, Decisions, and Build switch the main pane; Build is available on parent documents. Local investigation proposals, approval controls, and results appear in the document flow. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 40.625rem (650px), with 3.75rem (60px) of top padding and at least 3.5rem (56px) of padding on each side. At browser widths of 600px or less, the horizontal padding becomes 1.5rem (24px). Images and diagrams can extend beyond the prose measure within those gutters; tables can grow toward the trailing gutter and retain their own scroll lane.
+The workspace places Chat on the left and the document on the right when space permits. Chat and its top bar (breadcrumb and document title) sit directly on the ground; the document is a raised sheet that rises to the top margin, and its tab row holds the expand control, the Document/Decisions/Build views and presence. Expanding the document hides Chat and the top bar; a Chat button in the same place restores them. Document, Decisions, and Build switch the main pane; Build is available on parent documents. Local investigation proposals, approval controls, and results appear in the document flow. The Projects sidebar slides over the document without resizing it; on narrower screens, panels take their own view. The document uses a maximum prose measure of 40.625rem (650px), with 3.75rem (60px) of top padding and at least 3.5rem (56px) of padding on each side. At browser widths of 600px or less, the horizontal padding becomes 1.5rem (24px). Images and diagrams can extend beyond the prose measure within those gutters; tables can grow toward the trailing gutter and retain their own scroll lane.
 
 Spacing starts from a 4px unit and uses the measured steps shown in the frontmatter. App chrome is dense; prose has larger margins and trailing space so the caret remains comfortable near the end of a document. Layout responds to both viewport and document container width. Safe-area insets and larger coarse-pointer targets are accounted for in the web styles.
 
 ## Elevation & Depth
 
-The system is mostly flat. Tonal separation and passive edges distinguish adjacent panes; subtle resting, raised, and overlay shadows distinguish surfaces that actually sit above others. In the split workspace, the frame owns elevation and its internal document pane does not add a second shadow.
+The system is mostly flat. Tonal separation and passive edges distinguish adjacent panes; subtle resting, raised, and overlay shadows distinguish surfaces that actually sit above others. In the split workspace the document panel is the only raised sheet; Chat has no surface of its own. The composer on the ground uses the inset surface without a shadow.
 
 ## Shapes
 
