@@ -133,7 +133,12 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	await expect(parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }))
 		.toBeVisible();
 	await expect(parentHeader.getByText(childTitle, { exact: true })).toBeVisible();
-	await expect(parent.locator("[data-document-toolbar] .room-members")).toBeVisible();
+	await expect(
+		parent.locator("[data-document-toolbar]").getByRole("group", {
+			includeHidden: true,
+			name: /People here:/,
+		}),
+	).toBeVisible();
 	await expect(parentPaper).toHaveAttribute("inert", "");
 	await expect(parentPaper).toHaveAttribute("aria-hidden", "true");
 	await expect(parentPaper).toHaveCSS("filter", "none");
@@ -828,7 +833,13 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 	await expect(parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }))
 		.toBeVisible();
 	let childCrumb = parentHeader.getByText(childTitle, { exact: true });
+	let members = parentHeader.getByRole("group", { name: /People here:/ });
 	await expect(childCrumb).toHaveCSS("text-overflow", "ellipsis");
+	let crumbBox = await childCrumb.boundingBox();
+	let membersBox = await members.boundingBox();
+	expect(crumbBox).not.toBeNull();
+	expect(membersBox).not.toBeNull();
+	expect(crumbBox!.x + crumbBox!.width).toBeLessThanOrEqual(membersBox!.x);
 	let parentPaper = page.locator('[data-workspace-surface="document"] .workspace-frame');
 	await expect(parentPaper).toHaveCSS("transform", "none");
 	expect(
