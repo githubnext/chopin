@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { ApiError } from "./api";
 import {
 	advanceDraft,
 	buildPhase,
@@ -16,6 +15,11 @@ import {
 	TASK_STATE_LABEL,
 	taskStartsOpen,
 } from "./build-model";
+import {
+	implementationEndpoint,
+	implementationResponse as response,
+	startBuild,
+} from "./build-start";
 
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { ReactNode } from "react";
@@ -29,20 +33,8 @@ const requests = new Map<string, DraftRequest>();
 /** How long a request may wait for the server's answer before it counts as failed. */
 const ANSWER_WINDOW_MS = 10_000;
 
-async function response<T>(result: Response): Promise<T> {
-	let value = await result.json();
-	if (!result.ok) throw new ApiError(value.error ?? "Build is unavailable", result.status);
-	return value;
-}
-
 function sentence(text: string): string {
 	return text.replace(/^[a-z]/, letter => letter.toUpperCase());
-}
-
-/** The server's refusals for a connection it cannot reach mean the local agent is not running. */
-function offline(error: unknown): boolean {
-	return error instanceof ApiError && error.status === 409
-		&& /^no-workspace$|offline or busy/.test(error.message);
 }
 
 export function BuildView(
@@ -51,6 +43,7 @@ export function BuildView(
 		canEdit,
 		chatLoaded,
 		comments,
+		needsAgentSignal = 0,
 		onShowDecisions,
 		onShowDocument,
 		planner,
@@ -66,6 +59,8 @@ export function BuildView(
 		chatLoaded: boolean;
 		/** Accepted comments the document has not yet taken in. */
 		comments: number;
+		/** Increments when the header's Build plan found no local agent, to show how to start one. */
+		needsAgentSignal?: number;
 		onShowDecisions: () => void;
 		onShowDocument: () => void;
 		planner: boolean;
@@ -105,7 +100,7 @@ export function BuildView(
 	 */
 	let activation = useRef({ id: 0, decided: false, eligible: undefined as string | undefined });
 	let [autoSent, setAutoSent] = useState(0);
-	let endpoint = `/api/channels/${encodeURIComponent(room)}/implementation`;
+	let endpoint = implementationEndpoint(room);
 	let phase = buildPhase(snapshot);
 	let progress = buildProgress(snapshot);
 	let draft = phase.kind === "drafting" ? phase.draft : undefined;
@@ -231,6 +226,9 @@ export function BuildView(
 
 	// The local-agent note answers one press of one button; a new phase clears it.
 	useEffect(() => setNeedsAgent(false), [phase.kind]);
+	useEffect(() => {
+		if (needsAgentSignal > 0) setNeedsAgent(true);
+	}, [needsAgentSignal]);
 
 	useEffect(() => {
 		let follow = () => {
@@ -255,26 +253,13 @@ export function BuildView(
 	let start = async () => {
 		if (!snapshot?.graph || busy) return;
 		setActionError(undefined);
-		// The server picks the clicker's own connection; a snapshot can predate connecting.
 		setNeedsAgent(false);
 		setBusy(true);
 		try {
-			await response(
-				await fetch(endpoint, {
-					method: "POST",
-					headers: { "content-type": "application/json" },
-					body: JSON.stringify({
-						...(snapshot.build ? { retryOf: snapshot.build.id } : {}),
-						planRevision: snapshot.planRevision,
-						graphVersion: snapshot.graph.number,
-						graphRevision: snapshot.graph.revision,
-					}),
-				}),
-			);
-			setRefresh(value => value + 1);
+			if (await startBuild(room, snapshot) === "needs-agent") setNeedsAgent(true);
+			else setRefresh(value => value + 1);
 		} catch (error) {
-			if (offline(error)) setNeedsAgent(true);
-			else setActionError(sentence(error instanceof Error ? error.message : "Build failed"));
+			setActionError(sentence(error instanceof Error ? error.message : "Build failed"));
 		} finally {
 			setBusy(false);
 		}

@@ -62,6 +62,8 @@ import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { locksEditing } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
+import { BuildReadiness } from "./tasks/readiness";
+import { askJev } from "./conversation-plan/jev";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -152,6 +154,7 @@ let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
+let buildReadiness: BuildReadiness | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
 let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
@@ -235,6 +238,7 @@ function documentBackend(): Service.Backend {
 		onDocumentPersisted: target => {
 			summaryCoordinator?.schedule(target);
 			liveSync?.schedule(target);
+			buildReadiness?.schedule(target);
 		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
@@ -1475,6 +1479,7 @@ function drain(): Promise<void> {
 		if (summaryCoordinator) await attempt(() => summaryCoordinator!.flush());
 		summaryCoordinator?.close();
 		liveSync?.close();
+		buildReadiness?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
 		plannerAttachments?.close();
@@ -1979,6 +1984,15 @@ referenceService = new ReferenceService({
 	research: researchService,
 	id: ulid,
 });
+buildReadiness = new BuildReadiness({
+	current: currentDocumentTarget,
+	ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+		? request => askJev(request)
+		: undefined,
+	changed: (channelId, planRevision, ready) =>
+		broadcast(server, channelId, { kind: "implementation:readiness", ts: 0, planRevision, ready }),
+	error: err => console.error("chopin: build readiness failed -", err),
+});
 if (config.agent && config.backgroundJobs) {
 	summaryCoordinator = new DocumentSummaryCoordinator({
 		service: jobService,
@@ -2067,12 +2081,14 @@ registerMcpRoutes(router, hostedAuth, {
 	onDocumentPersisted: target => {
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
 		liveSync?.schedule(target);
+		buildReadiness?.schedule(target);
 	},
 	restoreChannel,
 	serializeDocument: (channelId, action) =>
 		withDocumentTransition(channelId, () => withDocumentLock(channelId, action)),
 });
 implementations = registerImplementationRoutes(router, hostedAuth, {
+	buildable: (id, planRevision) => buildReadiness?.ready(id, planRevision) ?? false,
 	connections: experiments.connections,
 	busy: async connectionId =>
 		(await experiments!.service.store.active()).some(item =>
@@ -2192,6 +2208,7 @@ try {
 	await stoppingLease;
 	summaryCoordinator?.close();
 	liveSync?.close();
+	buildReadiness?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});
