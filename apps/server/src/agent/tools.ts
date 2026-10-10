@@ -133,12 +133,11 @@ export const documentTools = {
 				source: edit.source(context.plan),
 				blocks: edit.outline(context.plan),
 				/*
-				 * Accepted threads only.
+				 * Accepted threads only, which only the earlier lifecycle made.
 				 *
-				 * An open one is a conversation the room is still having, and
-				 * acting on feedback nobody has accepted would make the accept
-				 * button decorative. A dismissed one was decided against and
-				 * never reaches here at all.
+				 * An open one is a conversation the room is still having, and a
+				 * resolved or dismissed one was closed without asking for a
+				 * revision, so neither reaches here.
 				 */
 				comments: [...context.plan.threads.values()]
 					.filter(thread => thread.status === "accepted")

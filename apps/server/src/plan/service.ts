@@ -545,7 +545,7 @@ function restoredState(
 	let threads = objects(item.threads, "comment thread");
 	for (let thread of threads) {
 		if (
-			(thread.status !== "open" && thread.status !== "accepted" && thread.status !== "dismissed")
+			!["open", "resolved", "accepted", "dismissed"].includes(thread.status as string)
 			|| !thread.passage
 			|| typeof thread.passage !== "object"
 			|| Array.isArray(thread.passage)

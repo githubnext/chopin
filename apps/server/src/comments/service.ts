@@ -1,15 +1,13 @@
 /**
  * Comments, as a room offers them.
  *
- * A thread marks a phrase and collects what people said about it. Accepting one
- * is the room deciding: the thread freezes, a `<Decision>` goes into the plan,
- * and the agent is asked to revise the prose. Dismissing closes it without the
- * agent.
+ * A thread marks a phrase and collects what people said about it. Resolving one
+ * hides it and reopening brings it back; neither touches the document, so each
+ * is a record change that is persisted before anyone is told.
  *
- * Accepting is two-phase for the same reason answering a questionnaire is — the
- * record and the document both have to change, and nobody may be told it is
- * final until both have. If the document write fails the claim is rolled back
- * and the thread is still open, which every client already knows how to render.
+ * Threads accepted under the earlier lifecycle keep their `<Decision>` and their
+ * result anchors, and the agent still owes them a review. Nothing new becomes
+ * accepted or dismissed.
  *
  * Where a thread points is not in these frames. A passage moves whenever the
  * plan does, and `plan:anchors` already carries every such relationship as one
@@ -23,9 +21,7 @@ import * as room from "../plan/room";
 import * as Store from "./store";
 import { broadcast, fail, relay, reply, tell } from "../wire";
 
-import * as Chat from "../chat/service";
 import * as Service from "../plan/service";
-import { compose } from "./prompt";
 
 import type { Server } from "bun";
 // `Plan` is the room's plan here; the protocol namespace of the same name is
@@ -45,8 +41,9 @@ export type Record = {
 	/**
 	 * The phrase it marks.
 	 *
-	 * Rebased with the plan and never frozen: an accepted thread keeps its
-	 * prose highlighted, so it has to keep knowing where that prose is.
+	 * Rebased with the plan while the thread is tracked, and never frozen: an
+	 * accepted thread keeps its prose highlighted, so it has to keep knowing
+	 * where that prose is. A resolved thread's passage is recovered on reopen.
 	 */
 	passage: Wired.Passage;
 	notes: Wire.Note[];
@@ -90,6 +87,17 @@ function reading(plan: Plan, record: Record): { quote: string; record: Record } 
 // -- relationships ---------------------------------------------------------
 
 /**
+ * Whether a thread still points into the document.
+ *
+ * Resolved and dismissed threads are hidden, so nobody is shown where they
+ * point and their positions are not kept current. A resolved thread recovers
+ * its passage from its relative positions and quote when it is reopened.
+ */
+function tracked(record: Record): boolean {
+	return record.status === "open" || record.status === "accepted";
+}
+
+/**
  * A thread's relationships, with an entry for one that has never been anchored.
  *
  * An accepted thread with no result is pending: the agent owes a review. An
@@ -99,9 +107,7 @@ export function anchors(plan: Plan): Wired.ThreadAnchors[] {
 	let out: Wired.ThreadAnchors[] = [];
 
 	for (let record of plan.threads.values()) {
-		// Dismissed threads are not shown and never reach the agent, so there
-		// is nothing for anyone to point at.
-		if (record.status === "dismissed") continue;
+		if (!tracked(record)) continue;
 
 		let accepted = record.status === "accepted";
 		out.push({
@@ -121,7 +127,7 @@ export function anchors(plan: Plan): Wired.ThreadAnchors[] {
 /** Bring every thread forward onto the document as it is now. */
 export function rebase(plan: Plan): void {
 	for (let [id, record] of plan.threads) {
-		if (record.status === "dismissed") continue;
+		if (!tracked(record)) continue;
 
 		let next: Record = {
 			...record,
@@ -249,7 +255,7 @@ export function greet(plan: Plan, ws: Socket): void {
 		kind: "comment:sync",
 		ts: 0,
 		threads: [...plan.threads.values()]
-			.filter(record => record.status !== "dismissed")
+			.filter(tracked)
 			.map(wire),
 	});
 }
@@ -350,128 +356,85 @@ export function away(plan: Plan, ws: Socket): void {
 	Store.away(plan.comments, ws.data.client);
 }
 
-type Resolution = "accept" | "dismiss";
-
-/** Both resolutions answer with the same shape; only the kind differs. */
-type Settled =
-	| { ok: true; resolver: string; at: number }
-	| { ok: false; reason: "missing" | "resolving" | "invalid"; message: string }
-	| { ok: false; reason: "resolved"; status: Wire.Status; resolver: string };
-
-function answer(ws: Socket, rid: string, kind: Resolution, id: string, body: Settled): void {
-	if (kind === "accept") {
-		return reply(ws, rid, { kind: "comment:accept", ts: 0, id, ...body });
-	}
-	reply(ws, rid, { kind: "comment:dismiss", ts: 0, id, ...body });
-}
-
 /**
  * Close a thread.
  *
- * Accepting has a durable half — the `<Decision>` node — so it is claimed
- * first, written, and only then committed. Dismissing has none: nothing about
- * the plan changes, so there is nothing to roll back.
+ * Nothing about the document changes, so the record is the whole of it: change
+ * it, persist it, and only then answer and tell the room. A failed write puts
+ * the thread back as it was and tells nobody but the sender.
  */
-async function settle(
-	context: Chat.Room,
+export async function resolve(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
 	ws: Socket,
-	msg: Request<Wire.Accept.Ask | Wire.Dismiss.Ask>,
-	kind: Resolution,
+	msg: Request<Wire.Resolve.Ask>,
 ): Promise<void> {
-	let { plan, room: roomId, server } = context;
-	if (kind === "accept" && Service.implementationActive(plan)) {
-		return fail(ws, msg.rid, "implementation is active");
-	}
-
 	let held = plan.threads.get(msg.id);
-	// Read the passage before claiming: a decision records the prose as it read
-	// when somebody decided about it, not as it reads after the agent acts.
-	let quote = held ? reading(plan, held).quote : "";
+	let quote = held?.status === "open" ? reading(plan, held).quote : "";
 
-	let claimed = Store.claim(plan.comments, plan.threads, msg.id, kind, ws.data.handle, quote);
-	if (!claimed.ok) return answer(ws, msg.rid, kind, msg.id, claimed);
-	let mutationError: unknown;
-	let next: ReturnType<typeof Store.commit>;
-	await Service.exclusive(plan, async () => {
-		let mutation: { update: Uint8Array; source: string } | undefined;
-		if (kind === "accept") {
-			try {
-				let decision = {
-					id: msg.id,
-					quote: quote.slice(0, limits.MAX_QUOTE),
-					by: ws.data.handle,
-					at: new Date(claimed.claim.result.at * 1_000).toISOString(),
-					notes: claimed.thread.notes.map(note => ({ by: note.handle, text: note.text })),
-				};
-				let preview = await room.create(room.project(plan.document));
-				try {
-					room.insertDecision(preview, decision);
-					if (
-						!room.fitsOrShrinks(
-							room.project(plan.document),
-							room.project(preview),
-							plan.questions.open.size,
-						)
-					) {
-						throw new Error("The decision would leave no room for the open questions to expire");
-					}
-				} finally {
-					preview.doc.destroy();
-				}
-				mutation = room.insertDecision(plan.document, decision);
-			} catch (err) {
-				mutationError = err;
-				return;
-			}
-		}
-		next = Store.commit(plan.comments, plan.threads, claimed.claim);
-		if (mutation) await Service.publish(plan, server, roomId, mutation);
-		else await Service.persistExclusive(plan);
-	});
-	if (mutationError) {
-		Store.rollback(plan.comments, claimed.claim);
-		console.error("[comments] could not project a decision:", mutationError);
-		return answer(ws, msg.rid, kind, msg.id, {
-			ok: false,
-			reason: "invalid",
-			message: mutationError instanceof Error
-				? mutationError.message
-				: "could not record the decision",
-		});
+	let outcome = Store.resolve(plan.comments, plan.threads, msg.id, ws.data.handle, quote);
+	if (!outcome.ok) {
+		return reply(ws, msg.rid, { kind: "comment:resolve", ts: 0, id: msg.id, ...outcome });
 	}
 
-	let { at, resolver } = claimed.claim.result;
-	answer(ws, msg.rid, kind, msg.id, { ok: true, resolver, at });
+	try {
+		await Service.persist(plan);
+	} catch (err) {
+		Store.restore(plan.comments, plan.threads, outcome.previous);
+		console.error("[comments] could not save a resolved thread:", err);
+		return fail(ws, msg.rid, "could not resolve the comment");
+	}
+
+	let { at = 0, resolver = ws.data.handle } = outcome.thread;
+	reply(ws, msg.rid, { kind: "comment:resolve", ts: 0, id: msg.id, ok: true, resolver, at });
 	broadcast(server, roomId, {
 		kind: "comment:resolved",
 		ts: 0,
 		id: msg.id,
-		status: claimed.claim.result.status,
+		status: "resolved",
 		resolver,
 		at,
 		quote,
 	});
 	Service.anchors(plan, server, roomId);
+}
 
-	if (kind === "accept" && next) {
-		await Chat.instruct(
-			context,
-			resolver,
-			compose(next, quote),
-			`@${resolver} accepted a comment on "${excerpt(quote)}".`,
-			{
-				// Somebody else's turn may get to it first; running this one
-				// then would only have the agent read the plan and find
-				// nothing to do.
-				spent: () => applied(plan, msg.id),
-				// So the prose the turn writes can be recorded as what this
-				// decision produced, whether or not the agent says so.
-				thread: msg.id,
-			},
-		);
-	} else if (kind === "dismiss") {
-		await Chat.notice(context, `@${resolver} dismissed a comment on "${excerpt(quote)}".`);
+/**
+ * Open a resolved thread again.
+ *
+ * Its passage was not rebased while it was resolved, so it is brought forward
+ * now, before the room is told where it points.
+ */
+export async function reopen(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	ws: Socket,
+	msg: Request<Wire.Reopen.Ask>,
+): Promise<void> {
+	let outcome = Store.reopen(plan.comments, plan.threads, msg.id);
+	if (!outcome.ok) {
+		return reply(ws, msg.rid, { kind: "comment:reopen", ts: 0, id: msg.id, ...outcome });
 	}
+
+	let record: Record = {
+		...outcome.thread,
+		passage: room.rebasePassage(plan.document, outcome.thread.passage),
+	};
+	plan.threads.set(record.id, record);
+
+	try {
+		await Service.persist(plan);
+	} catch (err) {
+		Store.restore(plan.comments, plan.threads, outcome.previous);
+		console.error("[comments] could not save a reopened thread:", err);
+		return fail(ws, msg.rid, "could not reopen the comment");
+	}
+
+	reply(ws, msg.rid, { kind: "comment:reopen", ts: 0, id: msg.id, ok: true, thread: wire(record) });
+	broadcast(server, roomId, { kind: "comment:reopened", ts: 0, thread: wire(record) });
+	Service.anchors(plan, server, roomId);
 }
 
 /** Enough of the passage to recognise it in a line of transcript. */
@@ -482,12 +445,4 @@ export function excerpt(quote: string): string {
 	// Back up to a word boundary unless that would discard most of the excerpt.
 	let boundary = value[60] === " " ? 60 : cut.lastIndexOf(" ");
 	return `${(boundary > 30 ? cut.slice(0, boundary) : cut).replace(/[\s.,;:!?-]+$/, "")}…`;
-}
-
-export function accept(context: Chat.Room, ws: Socket, msg: Request<Wire.Accept.Ask>) {
-	return settle(context, ws, msg, "accept");
-}
-
-export function dismiss(context: Chat.Room, ws: Socket, msg: Request<Wire.Dismiss.Ask>) {
-	return settle(context, ws, msg, "dismiss");
 }

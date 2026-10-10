@@ -1,10 +1,10 @@
 /**
- * Commenting on the plan, and deciding about it.
+ * Commenting on the plan.
  *
- * The properties worth holding onto: a thread is frozen the moment it resolves,
- * only one resolution wins, accepting reaches both the record that owns the
- * decision and the plan that shows it — or neither — and dismissing changes the
- * plan not at all.
+ * The properties worth holding onto: a thread is frozen while it is resolved,
+ * reopening undoes that completely, neither changes the document, and the room
+ * hears about either only once it is durable. Threads accepted under the
+ * earlier lifecycle still load and still owe the agent a review.
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
@@ -13,11 +13,9 @@ import * as Comments from "./comments/service";
 import * as room from "./plan/room";
 import * as Service from "./plan/service";
 import * as Store from "./comments/store";
-import { compose } from "./comments/prompt";
 import { openPlan } from "./testing/plan";
 
 import type { Server } from "bun";
-import type * as Chat from "./chat/service";
 import type { Document } from "./plan/room";
 import type { Record } from "./comments/service";
 import type { Plan } from "./plan/service";
@@ -108,19 +106,41 @@ function ask<T extends object>(payload: T) {
 	return { ts: 0, rid: `r${++rid}`, ...payload } as T & { ts: number; rid: string };
 }
 
-/** Enough of a room for the handlers that start a turn. `AGENT=off` throughout. */
-function context(plan: Plan, server: Server<SocketData>): Chat.Room {
-	return {
-		chat: plan.chat,
-		config: { agent: false } as Chat.Room["config"],
+/** A thread accepted under the earlier lifecycle, as storage still holds some. */
+function accept(plan: Plan, id: string): void {
+	let record = plan.threads.get(id)!;
+	plan.threads.set(id, { ...record, status: "accepted", resolver: "ana", at: 1, quote: QUOTE });
+}
+
+/** Resolve over the wire, the way a client's `comment:resolve` does. */
+function resolve(
+	plan: Plan,
+	server: Server<SocketData>,
+	who: ReturnType<typeof member>,
+	id: string,
+) {
+	return Comments.resolve(
 		plan,
-		room: plan.id,
 		server,
-		auth: {} as Chat.Room["auth"],
-		claimantSessionId: "session",
-		repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
-		persist: () => Service.persist(plan),
-	};
+		"test",
+		who.socket,
+		ask({ kind: "comment:resolve" as const, id }),
+	);
+}
+
+function reopen(
+	plan: Plan,
+	server: Server<SocketData>,
+	who: ReturnType<typeof member>,
+	id: string,
+) {
+	return Comments.reopen(
+		plan,
+		server,
+		"test",
+		who.socket,
+		ask({ kind: "comment:reopen" as const, id }),
+	);
 }
 
 /** Mark the sentence, the way a client's `comment:start` does. */
@@ -202,12 +222,9 @@ describe("resolving a thread", () => {
 		let { records, record } = thread(await document());
 		let threads = Store.create();
 
-		let claimed = Store.claim(threads, records, record.id, "accept", "kris", QUOTE);
-		expect(claimed.ok).toBe(true);
-		if (!claimed.ok) return;
-		Store.commit(threads, records, claimed.claim);
+		expect(Store.resolve(threads, records, record.id, "kris", QUOTE).ok).toBe(true);
 
-		expect(records.get(record.id)!.status).toBe("accepted");
+		expect(records.get(record.id)!.status).toBe("resolved");
 		expect(records.get(record.id)!.quote).toBe(QUOTE);
 
 		let late = Store.reply(threads, records, record.id, "ana", "Actually…");
@@ -223,46 +240,47 @@ describe("resolving a thread", () => {
 		let { records, record } = thread(await document());
 		let threads = Store.create();
 
-		let first = Store.claim(threads, records, record.id, "accept", "kris", QUOTE);
-		if (!first.ok) throw new Error("expected a claim");
-		Store.commit(threads, records, first.claim);
+		Store.resolve(threads, records, record.id, "kris", QUOTE);
+		let second = Store.resolve(threads, records, record.id, "ana", QUOTE);
 
-		let second = Store.claim(threads, records, record.id, "dismiss", "ana", QUOTE);
-		expect(second.ok).toBe(false);
-		if (!second.ok && second.reason === "resolved") {
-			expect(second.status).toBe("accepted");
-			expect(second.resolver).toBe("kris");
-		} else {
-			throw new Error("expected the outcome, not an error");
-		}
-	});
-
-	it("refuses a rival while a resolution is in flight", async () => {
-		let { records, record } = thread(await document());
-		let threads = Store.create();
-
-		Store.claim(threads, records, record.id, "accept", "kris", QUOTE);
-		let rival = Store.claim(threads, records, record.id, "dismiss", "ana", QUOTE);
-
-		expect(rival.ok).toBe(false);
-		if (!rival.ok) expect(rival.reason).toBe("resolving");
+		expect(second).toMatchObject({
+			ok: false,
+			reason: "resolved",
+			status: "resolved",
+			resolver: "kris",
+		});
 	});
 
 	/**
-	 * The durable half is the `<Decision>` node. If it cannot be written the
-	 * decision is not final, and the thread has to be left in a state every
-	 * client already knows how to render — which is the one it was in.
+	 * The tombstone answers before the record does, so one left behind would
+	 * keep refusing replies to a thread that is open again.
 	 */
-	it("leaves the thread open when the plan could not be told", async () => {
+	it("takes replies again once reopened, tombstone and all", async () => {
 		let { records, record } = thread(await document());
 		let threads = Store.create();
 
-		let claimed = Store.claim(threads, records, record.id, "accept", "kris", QUOTE);
-		if (!claimed.ok) throw new Error("expected a claim");
-		Store.rollback(threads, claimed.claim);
+		Store.resolve(threads, records, record.id, "kris", QUOTE);
+		expect(threads.closed.has(record.id)).toBe(true);
 
-		expect(records.get(record.id)!.status).toBe("open");
+		let reopened = Store.reopen(threads, records, record.id);
+		expect(reopened.ok).toBe(true);
+		expect(threads.closed.has(record.id)).toBe(false);
+		expect(records.get(record.id)).not.toHaveProperty("resolver");
+		expect(records.get(record.id)).not.toHaveProperty("quote");
 		expect(Store.reply(threads, records, record.id, "ana", "Still talking.").ok).toBe(true);
+	});
+
+	it("reopens only what was resolved", async () => {
+		let { records, record } = thread(await document());
+		let threads = Store.create();
+
+		expect(Store.reopen(threads, records, record.id)).toMatchObject({ ok: false, reason: "open" });
+		records.set(record.id, { ...record, status: "accepted" });
+		expect(Store.reopen(threads, records, record.id)).toMatchObject({
+			ok: false,
+			reason: "settled",
+		});
+		expect(Store.reopen(threads, records, "nope")).toMatchObject({ ok: false, reason: "missing" });
 	});
 });
 
@@ -395,15 +413,11 @@ describe("marking a passage over the wire", () => {
 		expect(plan.threads.size).toBe(0);
 	});
 
-	it("keeps a dismissed thread off the wire for whoever joins next", async () => {
+	it("keeps a resolved thread off the wire for whoever joins next", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
 		let id = await mark(plan, server, ana);
-		await Comments.dismiss(
-			context(plan, server),
-			ana.socket,
-			ask({ kind: "comment:dismiss" as const, id }),
-		);
+		await resolve(plan, server, ana, id);
 
 		let joiner = member("kris");
 		Comments.greet(plan, joiner.socket);
@@ -411,108 +425,124 @@ describe("marking a passage over the wire", () => {
 		let sync = joiner.replies.find(frame => frame.kind === "comment:sync");
 		expect(sync?.threads).toEqual([]);
 		// The record survives; it is only hidden.
-		expect(plan.threads.get(id)?.status).toBe("dismissed");
+		expect(plan.threads.get(id)?.status).toBe("resolved");
 	});
 });
 
-describe("accepting, as the service orders it", () => {
-	async function accepted(options: { failPublish?: boolean } = {}) {
-		let { breakRelay, broadcasts, plan, server } = await opened();
-		let ana = member("ana");
-		let id = await mark(plan, server, ana);
-		ana.replies.length = 0;
-
-		// The document delta, which is what carries the new node to clients.
-		if (options.failPublish) breakRelay("plan:update");
-		await Comments.accept(
-			context(plan, server),
-			ana.socket,
-			ask({ kind: "comment:accept" as const, id }),
-		);
-		return { ana, broadcasts, id, plan };
-	}
-
-	it("reaches the record and the plan together", async () => {
-		let { ana, id, plan } = await accepted();
-
-		expect(ana.replies.at(-1)).toMatchObject({ kind: "comment:accept", ok: true, resolver: "ana" });
-		expect(plan.threads.get(id)?.status).toBe("accepted");
-		expect(plan.threads.get(id)?.quote).toBe(QUOTE);
-		expect(room.project(plan.document)).toContain(`<Decision id="${id}"`);
-	});
-
-	it("leaves an open thread and plan unchanged while implementation is active", async () => {
-		let { plan, server } = await opened();
+describe("resolving and reopening, as the service orders it", () => {
+	it("answers, tells the room, and drops the thread from the anchors", async () => {
+		let { broadcasts, plan, server } = await opened();
 		let ana = member("ana");
 		let id = await mark(plan, server, ana);
 		let source = room.project(plan.document);
-		ana.replies.length = 0;
-		plan.execution = { id: "run-1" } as never;
+		broadcasts.length = 0;
 
-		await Comments.accept(
-			context(plan, server),
-			ana.socket,
-			ask({ kind: "comment:accept" as const, id }),
-		);
+		await resolve(plan, server, ana, id);
 
-		expect(ana.replies).toHaveLength(1);
-		expect(ana.replies[0]).toMatchObject({
-			kind: "session:error",
-			message: "implementation is active",
+		expect(ana.replies.at(-1)).toMatchObject({
+			kind: "comment:resolve",
+			ok: true,
+			resolver: "ana",
 		});
-		expect(plan.threads.get(id)?.status).toBe("open");
+		expect(broadcasts[0]).toMatchObject({
+			kind: "comment:resolved",
+			id,
+			status: "resolved",
+			quote: QUOTE,
+		});
+		let anchors = broadcasts.findLast(frame => frame.kind === "plan:anchors");
+		expect(anchors?.threads).toEqual([]);
 		expect(room.project(plan.document)).toBe(source);
 	});
 
-	/**
-	 * Once the document holds the decision, committing is no longer optional.
-	 * Rolling back on a failed relay would leave a `<Decision>` in a plan whose
-	 * record says the thread is open — and the next accept would append a
-	 * second node carrying the same id. A relay nobody received is recoverable.
-	 */
-	it("stands even when the room could not be told", async () => {
-		// The relay failing is the point, and it logs. Quietened so the run
-		// does not print a stack trace that reads like a real one.
-		let complain = console.error;
-		console.error = () => {};
-		let { id, plan } = await accepted({ failPublish: true }).finally(() => {
-			console.error = complain;
-		});
-
-		expect(plan.threads.get(id)?.status).toBe("accepted");
-		let source = room.project(plan.document);
-		expect(source.split(`id="${id}"`)).toHaveLength(2);
-	});
-
-	it("says nothing more can be added, and nobody can resolve it twice", async () => {
-		let { id, plan } = await accepted();
+	it("brings a reopened thread back with its passage", async () => {
+		let { broadcasts, plan, server } = await opened();
+		let ana = member("ana");
 		let kris = member("kris");
+		let id = await mark(plan, server, ana);
+		await resolve(plan, server, ana, id);
+		broadcasts.length = 0;
 
-		Comments.respond(plan, kris.socket, ask({ kind: "comment:reply" as const, id, text: "Wait." }));
-		expect(kris.replies.at(-1)).toMatchObject({ ok: false, reason: "resolved" });
+		await reopen(plan, server, kris, id);
 
-		let after = context(plan, {} as Server<SocketData>);
-		await Comments.dismiss(after, kris.socket, ask({ kind: "comment:dismiss" as const, id }));
-		expect(kris.replies.at(-1)).toMatchObject({
-			ok: false,
-			reason: "resolved",
-			status: "accepted",
-			resolver: "ana",
+		expect(kris.replies.at(-1)).toMatchObject({ kind: "comment:reopen", ok: true });
+		expect(broadcasts[0]).toMatchObject({
+			kind: "comment:reopened",
+			thread: { id, status: "open" },
 		});
+		expect(broadcasts[0]?.thread).not.toHaveProperty("resolver");
+		let anchors = broadcasts.findLast(frame => frame.kind === "plan:anchors");
+		let pointed = (anchors?.threads as Array<{ thread: string }> | undefined)
+			?.find(each => each.thread === id);
+		expect(pointed).toMatchObject({ subject: { quote: QUOTE } });
+
+		Comments.respond(plan, kris.socket, ask({ kind: "comment:reply" as const, id, text: "Back." }));
+		await Bun.sleep(0);
+		expect(kris.replies.at(-1)).toMatchObject({ kind: "comment:reply", ok: true });
 	});
 
-	it("leaves the plan alone when the thread is dismissed instead", async () => {
+	/** Persistence precedes publication: a failed write is told to nobody but the sender. */
+	for (let action of ["resolve", "reopen"] as const) {
+		it(`tells nobody about a ${action} that could not be saved`, async () => {
+			let { broadcasts, plan, server } = await opened();
+			let ana = member("ana");
+			let id = await mark(plan, server, ana);
+			if (action === "reopen") await resolve(plan, server, ana, id);
+			let before = plan.threads.get(id)!.status;
+			broadcasts.length = 0;
+			ana.replies.length = 0;
+
+			let original = plan.persistence.storage.collaboration.commit;
+			let fatal = plan.persistence.fatal;
+			plan.persistence.fatal = () => {};
+			plan.persistence.storage.collaboration.commit = () => Promise.reject(new Error("disk full"));
+			let quiet = console.error;
+			console.error = () => {};
+			try {
+				await (action === "resolve" ? resolve : reopen)(plan, server, ana, id);
+			} finally {
+				console.error = quiet;
+				plan.persistence.storage.collaboration.commit = original;
+				plan.persistence.fatal = fatal;
+			}
+			// So closing the room afterwards does not inherit the failed write.
+			await Service.persist(plan);
+
+			expect(ana.replies).toEqual([expect.objectContaining({ kind: "session:error" })]);
+			expect(broadcasts).toEqual([]);
+			expect(plan.threads.get(id)?.status).toBe(before);
+			expect(plan.comments.closed.has(id)).toBe(action === "reopen");
+		});
+	}
+
+	it("refuses to reopen a thread accepted under the earlier lifecycle", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
 		let id = await mark(plan, server, ana);
-		await Comments.dismiss(
-			context(plan, server),
-			ana.socket,
-			ask({ kind: "comment:dismiss" as const, id }),
-		);
+		accept(plan, id);
 
-		expect(plan.threads.get(id)?.status).toBe("dismissed");
-		expect(room.project(plan.document)).not.toContain("<Decision");
+		await reopen(plan, server, ana, id);
+
+		expect(ana.replies.at(-1)).toMatchObject({ ok: false, reason: "settled" });
+		expect(plan.threads.get(id)?.status).toBe("accepted");
+	});
+
+	it("still loads accepted, dismissed and resolved threads from storage", async () => {
+		let doc = await document();
+		let { record } = thread(doc);
+		let stored = [
+			{ ...record, id: "accepted", status: "accepted", resolver: "ana", at: 1, quote: QUOTE },
+			{ ...record, id: "dismissed", status: "dismissed", resolver: "ana", at: 1, quote: QUOTE },
+			{ ...record, id: "resolved", status: "resolved", resolver: "ana", at: 1, quote: QUOTE },
+		];
+		let { plan } = await opened(SOURCE, { threads: JSON.parse(JSON.stringify(stored)) });
+
+		expect([...plan.threads.keys()]).toEqual(["accepted", "dismissed", "resolved"]);
+		let joiner = member("kris");
+		Comments.greet(plan, joiner.socket);
+		let sync = joiner.replies.find(frame => frame.kind === "comment:sync");
+		expect((sync?.threads as Array<{ id: string }>).map(each => each.id)).toEqual(["accepted"]);
+		expect(Comments.anchors(plan).map(each => each.thread)).toEqual(["accepted"]);
 	});
 });
 
@@ -521,11 +551,7 @@ describe("what a thread owes the agent", () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
 		let id = await mark(plan, server, ana);
-		await Comments.accept(
-			context(plan, server),
-			ana.socket,
-			ask({ kind: "comment:accept" as const, id }),
-		);
+		accept(plan, id);
 		return { id, plan };
 	}
 
@@ -646,26 +672,5 @@ describe("what a thread owes the agent", () => {
 		Comments.invalidate(plan, "plan_changed");
 
 		expect(Comments.outstanding(plan)).toEqual([{ thread: id, reason: "plan_changed" }]);
-	});
-});
-
-describe("what the agent is told", () => {
-	it("quotes the passage and the whole thread", async () => {
-		let { record } = thread(await document());
-		let prompt = compose(record, QUOTE);
-
-		expect(prompt.startsWith("accepted a comment")).toBe(true);
-		expect(prompt).toContain(`> ${QUOTE}`);
-		expect(prompt).toContain("@ana: 60s is too long.");
-		expect(prompt).toContain(record.id);
-	});
-
-	/** A rewritten passage is more information, not less. */
-	it("says so when the prose has moved on, and quotes both", async () => {
-		let { record } = thread(await document());
-		let prompt = compose(record, QUOTE, "caches tiles for 10 seconds");
-
-		expect(prompt).toContain("has since been rewritten");
-		expect(prompt).toContain("> caches tiles for 10 seconds");
 	});
 });

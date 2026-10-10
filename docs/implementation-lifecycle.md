@@ -43,7 +43,7 @@ The server rechecks write access and the room exactly as for a Chat message to
 the Planner, refuses a child document, unresolved decisions or accepted
 comments, and an active implementation, then writes the instruction itself from
 the plan. No member message is posted: Chat records a system line saying who
-asked, as it does for an accepted comment, and the turn runs under the asker's
+asked, and the turn runs under the asker's
 login for Planner ownership like any member turn. The notice is persisted
 before the turn starts or queues. A queued draft is not shown in the Chat
 queue.

@@ -9,7 +9,6 @@ import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Room from "../../plan/room";
 import * as Edit from "../../plan/edit";
-import * as Comments from "../../comments/service";
 import { hostInputRoom } from "../../testing/decisions";
 import { peer } from "../../testing/peer";
 import type { QuestionParams } from "@bastani/atomic";
@@ -560,112 +559,6 @@ test("an answer that would make the document too large leaves it unchanged and t
 	expect((await response).cancelled).toBe(true);
 });
 
-test(
-	"accepting a comment cannot leave too little room for an open question to expire",
-	async () => {
-		let f = await fixture();
-		let size = () => new TextEncoder().encode(Plan.source(f.plan)).length;
-		let quote = "caches tiles for 60 seconds";
-		let seeded = Edit.apply(f.plan, f.plan.revision, [{
-			op: "replace_root",
-			source: `# Plan\n\nThe renderer ${quote}.\n`,
-		}]);
-		if (!seeded.ok || !seeded.mutation) throw new Error("fixture edit failed");
-		await Plan.publish(f.plan, f.server, f.room.id, seeded.mutation);
-
-		let response = f.input.questionnaire({
-			questions: [{
-				header: "Choice",
-				question: "Which?",
-				options: [{ label: "A", description: "" }, { label: "B", description: "" }],
-			}],
-		}, f.options);
-		await f.cards(1);
-
-		let replies: any[] = [];
-		let ana = {
-			data: { handle: "ana", client: "client-ana", room: f.room.id },
-			send: (raw: string) => replies.push(JSON.parse(raw)),
-			publish() {},
-		} as unknown as Parameters<typeof Comments.start>[3];
-		await Comments.start(f.plan, f.server, f.room.id, ana, {
-			kind: "comment:start",
-			rid: "start",
-			ts: 0,
-			blocks: [1],
-			quote,
-			offset: 0,
-			length: quote.length,
-			text: "Too long.",
-		});
-		let id = replies.findLast(frame => frame.kind === "comment:start")?.thread?.id as string;
-		expect(id).toBeString();
-
-		let scratch = await Room.create(Plan.source(f.plan));
-		let before = size();
-		Room.insertDecision(scratch, {
-			id,
-			quote,
-			by: "ana",
-			at: new Date().toISOString(),
-			notes: [{ by: "ana", text: "Too long." }],
-		});
-		let decision = new TextEncoder().encode(Room.project(scratch)).length - before;
-		scratch.doc.destroy();
-
-		let target = limits.MAX_SOURCE_BYTES - decision - 10;
-		for (let fill = 1; fill > 0;) {
-			fill = Math.min(40_000, target - size() - 2);
-			if (fill < 1) break;
-			let edited = Edit.replace(
-				f.plan,
-				f.plan.revision,
-				`${Plan.source(f.plan)}\n${"x".repeat(fill)}\n`,
-			);
-			if (!edited.ok) throw new Error(`edit refused: ${edited.reason}`);
-			if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
-		}
-
-		let context = {
-			chat: f.plan.chat,
-			config: { agent: false },
-			plan: f.plan,
-			room: f.room.id,
-			server: f.server,
-			auth: {},
-			claimantSessionId: "session",
-			repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
-			persist: () => Plan.persist(f.plan),
-		} as unknown as Parameters<typeof Comments.accept>[0];
-		let complain = console.error;
-		console.error = () => {};
-		try {
-			await Comments.accept(context, ana, { kind: "comment:accept", rid: "accept", ts: 0, id });
-		} finally {
-			console.error = complain;
-		}
-		expect(replies.findLast(frame => frame.kind === "comment:accept")).toMatchObject({
-			ok: false,
-			reason: "invalid",
-		});
-		expect(f.plan.threads.get(id)?.status).toBe("open");
-
-		for (let { id: open } of Store.outstanding(f.plan.questions)) {
-			await Questions.expire(f.plan, f.server, f.room.id, open);
-		}
-		await response;
-
-		expect(size()).toBeLessThanOrEqual(limits.MAX_SOURCE_BYTES);
-		let retitled = Edit.replace(
-			f.plan,
-			f.plan.revision,
-			Plan.source(f.plan).replace("# Plan", "# Pla2"),
-		);
-		expect(retitled.ok).toBe(true);
-	},
-	30_000,
-);
-
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 async function seedDocument(f: Fixture) {
@@ -778,51 +671,6 @@ test(
 		];
 		let [first, second] = await f.cards(2);
 
-		let replies: any[] = [];
-		let ana = {
-			data: { handle: "ana", client: "client-ana", room: f.room.id },
-			send: (raw: string) => replies.push(JSON.parse(raw)),
-			publish() {},
-		} as unknown as Parameters<typeof Comments.start>[3];
-		await Comments.start(f.plan, f.server, f.room.id, ana, {
-			kind: "comment:start",
-			rid: "start",
-			ts: 0,
-			blocks: [1],
-			quote,
-			offset: 0,
-			length: quote.length,
-			text: "Too long.",
-		});
-		let thread = replies.findLast(frame => frame.kind === "comment:start")?.thread?.id as string;
-		expect(thread).toBeString();
-		let context = {
-			chat: f.plan.chat,
-			config: { agent: false },
-			plan: f.plan,
-			room: f.room.id,
-			server: f.server,
-			auth: {},
-			claimantSessionId: "session",
-			repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
-			persist: () => Plan.persist(f.plan),
-		} as unknown as Parameters<typeof Comments.accept>[0];
-		let accept = async () => {
-			let complain = console.error;
-			console.error = () => {};
-			try {
-				await Comments.accept(context, ana, {
-					kind: "comment:accept",
-					rid: `accept-${replies.length}`,
-					ts: 0,
-					id: thread,
-				});
-			} finally {
-				console.error = complain;
-			}
-			return replies.findLast(frame => frame.kind === "comment:accept");
-		};
-
 		// Planner text edits: two questions are open, so growth stops at their reserve.
 		await fillTo(f, max - 2 * expiry);
 		let source = Plan.source(f.plan);
@@ -865,22 +713,6 @@ test(
 		await fillTo(f, max - answered - expiry - 100);
 		await f.answer(first!.id, "");
 		expect(Store.outstanding(f.plan.questions).map(open => open.id)).toEqual([second!.id]);
-
-		// An accepted comment becomes a Decision in the document.
-		let decision = await growth(f, scratch =>
-			Room.insertDecision(scratch, {
-				id: thread,
-				quote,
-				by: "ana",
-				at: new Date().toISOString(),
-				notes: [{ by: "ana", text: "Too long." }],
-			}));
-		await fillTo(f, max - 10 - decision);
-		expect(await accept()).toMatchObject({ ok: false, reason: "invalid" });
-		expect(f.plan.threads.get(thread)?.status).toBe("open");
-		await fillTo(f, max - decision - expiry - 100);
-		expect(await accept()).toMatchObject({ ok: true });
-		expect(f.plan.threads.get(thread)?.status).not.toBe("open");
 
 		// A question that would take the document into the reserve, then one that fits.
 		let probe = {
