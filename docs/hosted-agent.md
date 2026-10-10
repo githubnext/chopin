@@ -311,7 +311,13 @@ through Atomic's session run control, and **Resume Planner** resumes the runs it
 paused. A run waiting on a question pauses too: Atomic withdraws the question
 from Decisions while the run is paused and presents it again on Resume, and an
 answer that arrives during the pause reaches the run only after Resume, so a
-paused run never advances. Chat shows the session's runs as one stack, one row
+paused run never advances. A run that ends blocked or failed while the Planner
+is between turns starts a Planner turn about it, on the kept session, so the
+Planner reports what happened and what the team needs to do; Chat records the
+run's end as that turn's reason, and the session is let go after the turn. The
+adapter stops any turn Atomic starts on its own, such as for its lifecycle
+notices, because Chopin would neither show nor record it.
+Chat shows the session's runs as one stack, one row
 per run: its name, status (running, waiting on Decisions, paused, or ended), and
 elapsed time. Several runs can be live at once. Runs waiting on Decisions come
 first, then running, paused, and ended runs, newest first within each, and more

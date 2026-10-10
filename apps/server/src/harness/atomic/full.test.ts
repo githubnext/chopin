@@ -157,7 +157,15 @@ async function run(
 		await writeFile(join(agentDir, "prompts", "marker.md"), "OPERATOR-PROMPT-MARKER");
 		await writeFile(
 			join(agentDir, "extensions", "marker.ts"),
-			`export default api => api.registerTool({name: "operator_tool", label: "Operator", description: "Marker", parameters: {type:"object"}, async execute() { return {content:[{type:"text",text:"marker"}], details:{}}; }});`,
+			`export default api => {
+	api.registerTool({name: "operator_tool", label: "Operator", description: "Marker", parameters: {type:"object"}, async execute() { return {content:[{type:"text",text:"marker"}], details:{}}; }});
+	let nudged = false;
+	api.on("agent_end", () => {
+		if (process.env.CHOPIN_TEST_SELF_STARTED_TURN !== "1" || nudged) return;
+		nudged = true;
+		setTimeout(() => api.sendMessage({ customType: "self-started", content: "SELF-STARTED", display: true }, { triggerTurn: true }), 20);
+	});
+};`,
 		);
 		if (checkout) {
 			let git = Bun.spawn(["git", "-C", cwd, "init", "--quiet"], {
@@ -524,6 +532,18 @@ test(
 	},
 	60_000,
 );
+
+test("a turn Atomic starts by itself between the Planner's turns is stopped before it reaches the model", async () => {
+	process.env.CHOPIN_TEST_SELF_STARTED_TURN = "1";
+	try {
+		let result = await run(true, "plain", {
+			afterTurn: () => new Promise(resolve => setTimeout(resolve, 500)),
+		});
+		expect(result.requests).toHaveLength(1);
+	} finally {
+		delete process.env.CHOPIN_TEST_SELF_STARTED_TURN;
+	}
+});
 
 test("worker sessions stay isolated, even beside a full Planner session on the same harness", async () => {
 	let alone = await run(false);
