@@ -6,8 +6,9 @@ import type { AuthenticatedSession } from "../auth/session";
 import type { Router } from "../http/router";
 import { canonical as canonicalReport } from "../mcp/create";
 import { parse } from "@chopin/dialect";
-import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
+import { documentsPath } from "@chopin/protocol/document-url";
 import { Connections } from "./connections";
+import type { Connection } from "./connections";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
 import { implementationSchemas } from "../tasks/connector";
@@ -55,7 +56,10 @@ function json(value: unknown, status = 200) {
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections();
 	let changed = (id: string) => {
-		connections.wake(id);
+		void auth.storage.channels.get(id).then(
+			channel => channel && connections.wake(channel.repositoryId),
+			() => {},
+		);
 		options.changed(id);
 	};
 	let service = new Experiments(auth.storage.experiments, options.lease, changed);
@@ -73,6 +77,35 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		) fail("repository-forbidden");
 		if (write && channel.archivedAt) fail("document-archived");
 		return { channel, repository, session };
+	}
+	/** Push or admin on a repository named by a checkout, resolved through the session. */
+	async function repositoryWrite(session: AuthenticatedSession | undefined, fullName: string) {
+		if (!session) fail("authentication-required");
+		let [owner, name] = fullName.split("/");
+		let { value: repository } = await auth.sessions.use(
+			session,
+			token => auth.github.repositoryAccess(token, owner, name),
+		);
+		if (!repository || !(repository.permissions.push || repository.permissions.admin)) {
+			fail("repository-forbidden");
+		}
+		return repository;
+	}
+	/** Work only ever runs on the clicker's own live connection for the document's repository. */
+	async function busy(connection: Connection) {
+		return (await service.store.active()).some(item =>
+			item.connectionId === connection.id && ["running", "publishing"].includes(item.state)
+		) || !!await options.implementations?.()?.busy(connection);
+	}
+	/**
+	 * The clicker's idle connection, preferring the one last used for this document. When every
+	 * connection is busy the work queues behind the first.
+	 */
+	async function choose(owner: string, repositoryId: string, documentId: string) {
+		let live = connections.candidates(repositoryId, owner, documentId);
+		if (!live.length) fail("no-workspace");
+		for (let connection of live) if (!await busy(connection)) return connection;
+		return live[0];
 	}
 	async function mutationAllowed(id: string) {
 		if (options.canMutate && !await options.canMutate(id)) fail("document-locked");
@@ -121,50 +154,21 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		let pending = connections.pending(params.id);
-		let [owner, name] = pending.input.repository.split("/");
-		let { value: repository } = await auth.sessions.use(
-			session,
-			token => auth.github.repositoryAccess(token, owner, name),
-		);
-		if (!repository || !(repository.permissions.push || repository.permissions.admin)) {
-			fail("repository-forbidden");
-		}
-		let documents = await auth.storage.channels.list(repository.id, 100);
-		return json({ input: pending.input, documents: documents.channels, owner: session.user.login });
+		await repositoryWrite(session, pending.input.repository);
+		return json({ input: pending.input, owner: session.user.login, code: pending.code });
 	});
 	route("POST", "/api/connector/pairings/:id/approve", async (request, params) => {
-		let { documentId } = z.object({ documentId: z.string().uuid() }).strict().parse(
-			await body(request),
-		);
-		let { session, channel } = await access(
-			await auth.sessions.authenticate(request),
-			documentId,
-			true,
-		);
+		z.object({}).strict().parse(await body(request));
+		let session = await auth.sessions.authenticate(request);
 		let pending = connections.pending(params.id);
-		if (
-			pending.input.repository.toLowerCase()
-				!== `${channel.repositoryOwner}/${channel.repositoryName}`.toLowerCase()
-		) fail("repository-forbidden");
+		let repository = await repositoryWrite(session, pending.input.repository);
 		let connection = connections.approve(
 			params.id,
-			{ id: session.user.id, login: session.user.login, sessionId: session.session.id },
-			documentId,
-			channel.repositoryId,
+			{ id: session!.user.id, login: session!.user.login, sessionId: session!.session.id },
+			repository.id,
 		);
-		changed(documentId);
-		let parent = channel.parentChannelId
-			? await auth.storage.channels.get(channel.parentChannelId)
-			: undefined;
-		let url = parent
-			? childDocumentPath(
-				channel.repositoryOwner,
-				channel.repositoryName,
-				parent.slug,
-				channel.slug,
-			)
-			: documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug);
-		return json({ id: connection.id, documentId, url });
+		connections.wake(repository.id);
+		return json({ id: connection.id, url: documentsPath(repository.owner, repository.name) });
 	});
 	route("POST", "/api/connector/pairings/:id/claim", async (request, params) => {
 		let { secret } = z.object({ secret: z.string().min(32).max(100) }).strict().parse(
@@ -174,9 +178,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	route("GET", "/api/documents/:id/experiments", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
-		connections.sweep();
 		return json({
-			connections: connections.list(params.id).map(({ sessionId: _session, ...value }) => value),
 			experiments: (await service.store.list(params.id)).map(value => ({
 				id: value.id,
 				brief: value.brief,
@@ -210,21 +212,20 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json(publicInvestigation(value));
 	});
 	route("POST", "/api/documents/:id/experiments/:experiment/run", async (request, params) => {
-		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
-		await mutationAllowed(params.id);
-		let { connectionId } = z.object({ connectionId: z.string().uuid() }).strict().parse(
-			await body(request),
+		let { session, channel } = await access(
+			await auth.sessions.authenticate(request),
+			params.id,
+			true,
 		);
-		let connection = connections.get(connectionId);
-		if (
-			!connection || connection.owner !== session.user.id || connection.documentId !== params.id
-		) fail("connection-forbidden");
+		await mutationAllowed(params.id);
+		z.object({}).strict().parse(await body(request));
 		let value = await service.store.get(params.experiment);
 		if (!value || value.documentId !== params.id) fail("not-found");
 		let context = await options.context(params.id);
 		if (!context) fail("not-found");
 		let previous = (await service.store.list(params.id)).toReversed().find(item => item.input);
-		let result = await service.authorize(value.id, connectionId, {
+		let connection = await choose(session.user.id, channel.repositoryId, params.id);
+		let result = await service.authorize(value.id, connection.id, {
 			id: value.id,
 			documentId: params.id,
 			requester: value.requester,
@@ -233,6 +234,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			source: previous?.input?.source ?? connection.source,
 			context: `Document revision ${context.revision}\n${context.source}`,
 		});
+		connections.use(params.id, connection.id);
 		return json(publicInvestigation(result));
 	});
 	route("POST", "/api/documents/:id/experiments/:experiment/cancel", async (request, params) => {
@@ -247,16 +249,31 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		);
 	});
 
+	/** Re-authorize the connection's owner for its repository, and for a run's document. */
 	async function connector(token: string) {
 		let found = connections.lookup(token);
-		await access(
-			await auth.sessions.resolve(found.connection.sessionId),
-			found.connection.documentId,
-			true,
-		);
+		let session = await auth.sessions.resolve(found.connection.sessionId);
+		let repository = await repositoryWrite(session, found.connection.source.repository);
+		if (repository.id !== found.connection.source.repositoryId) fail("repository-forbidden");
+		if (found.grant.run) await target(session, found.connection, found.grant.run.documentId);
 		if (!connections.get(found.connection.id)) fail("connection-unavailable");
 		connections.touch(found.connection);
-		return found;
+		return { ...found, session: session! };
+	}
+	/** Write access to a run's document, which must belong to the connection's repository. */
+	async function target(
+		session: AuthenticatedSession | undefined,
+		connection: Connection,
+		documentId: string,
+	) {
+		let { channel } = await access(session, documentId, true);
+		if (channel.repositoryId !== connection.source.repositoryId) fail("repository-forbidden");
+	}
+	/** The connection's queued, running, or publishing investigations across its repository. */
+	async function work(connection: Connection, states: string[]) {
+		return (await service.store.active()).filter(item =>
+			item.connectionId === connection.id && states.includes(item.state)
+		);
 	}
 	route(
 		"GET",
@@ -332,12 +349,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			(request.headers.get("authorization") ?? "").replace(/^Bearer /, ""),
 		);
 		if (!grant.run) connections.revoke(connection.id);
-		changed(connection.documentId);
 		return new Response(null, { status: 204 });
 	});
 	route("POST", "/connector/mcp", async request => {
 		let token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
-		let { connection, grant } = await connector(token);
+		let { connection, grant, session } = await connector(token);
 		let implementation = options.implementations?.();
 		let implementationRun = grant.run?.kind === "implementation";
 		let schemas = implementationRun ? implementationSchemas(true) : {
@@ -385,50 +401,52 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			let value: unknown;
 			if (name === "disconnect_workspace") {
 				connections.revoke(connection.id);
-				changed(connection.documentId);
-				for (let active of await service.store.list(connection.documentId)) {
-					if (
-						active.connectionId === connection.id
-						&& ["queued", "running", "publishing"].includes(active.state)
-					) await service.stop(active.id, "interrupted", "Workspace disconnected.");
+				for (let active of await work(connection, ["queued", "running", "publishing"])) {
+					await service.stop(active.id, "interrupted", "Workspace disconnected.");
 				}
 				value = { disconnected: true };
 			} else if (name === "wait_for_work") {
+				// A build in an archived document cannot be claimed; its expiry fails it in the sweep.
+				let build = async () => {
+					let offered = await implementation!.waiting(connection);
+					let documentId = connections.assigned(connection.id);
+					let channel = offered && documentId
+						? await auth.storage.channels.get(documentId)
+						: undefined;
+					return channel && !channel.archivedAt ? offered : undefined;
+				};
 				let queued = async () =>
-					await implementation!.waiting(connection)
+					await build()
 						?? (await implementation!.busy(connection)
 							? undefined
-							: (await service.store.list(connection.documentId)).filter(item =>
-								item.connectionId === connection.id && item.state === "queued"
-							).map(item => ({ id: item.id, kind: "experiment" }))[0]);
+							: (await work(connection, ["queued"])).map(item => ({
+								id: item.id,
+								kind: "experiment",
+							}))[0]);
 				value = await queued();
 				if (!value) {
-					await connections.wait(connection.documentId, request.signal);
+					await connections.wait(connection.source.repositoryId, request.signal);
 					await connector(token);
 					value = await queued();
 				}
 				value ??= { waiting: true };
 			} else if (implementationRun || Object.hasOwn(implementationSchemas(false), name)) {
 				if (!implementation) fail("tool-forbidden");
+				let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
+				if (documentId) await target(session, connection, documentId);
 				if (name === "claim_implementation_build") {
 					value = await connections.locked(connection.id, async () => {
-						if (
-							(await service.store.list(connection.documentId)).some(item =>
-								item.connectionId === connection.id
-								&& ["running", "publishing"].includes(item.state)
-							)
-						) fail("workspace-busy");
+						if ((await work(connection, ["running", "publishing"])).length) {
+							fail("workspace-busy");
+						}
 						return implementation.call(connection, grant, name, args);
 					});
 				} else value = await implementation.call(connection, grant, name, args);
 			} else if (name === "wait_for_experiment") {
-				let queued = async () =>
-					(await service.store.list(connection.documentId)).find(item =>
-						item.connectionId === connection.id && item.state === "queued"
-					);
+				let queued = async () => (await work(connection, ["queued"]))[0];
 				value = await queued();
 				if (!value) {
-					await connections.wait(connection.documentId, request.signal);
+					await connections.wait(connection.source.repositoryId, request.signal);
 					await connector(token);
 					value = await queued();
 				}
@@ -436,17 +454,38 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			} else if (name === "claim_experiment") {
 				let id = z.string().uuid().parse(args.id);
 				value = await connections.locked(connection.id, async () => {
-					let active = (await service.store.list(connection.documentId)).find(item =>
-						item.connectionId === connection.id && ["running", "publishing"].includes(item.state)
-					);
+					let active = (await work(connection, ["running", "publishing"]))[0];
 					if (active && active.id !== id || await implementation?.busy(connection)) {
 						fail("workspace-busy");
+					}
+					let offered = await service.store.get(id);
+					if (!offered || offered.connectionId !== connection.id) fail("connection-forbidden");
+					try {
+						await target(session, connection, offered.documentId);
+						await mutationAllowed(offered.documentId);
+					} catch (error) {
+						// One archived or building document must not stall the repository's connector.
+						if (
+							!(error instanceof ExperimentError)
+							|| !["document-archived", "document-locked"].includes(error.code)
+						) throw error;
+						await service.stop(
+							id,
+							"interrupted",
+							"The document changed before your local agent started. Propose a retry.",
+						);
+						fail("invalid-state");
 					}
 					let claimed = await service.claim(id, connection.id);
 					return {
 						input: claimed.input,
 						generation: claimed.generation,
-						runToken: connections.runToken(connection.id, id, claimed.generation),
+						runToken: connections.runToken(
+							connection.id,
+							claimed.documentId,
+							id,
+							claimed.generation,
+						),
 					};
 				});
 			} else {
@@ -455,9 +494,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					?? z.number().int().positive().parse(args.generation);
 				let current = await service.store.get(id);
 				if (
-					!current || current.documentId !== connection.documentId
-					|| current.connectionId !== connection.id
+					!current || current.connectionId !== connection.id
+					|| grant.run && current.documentId !== grant.run.documentId
 				) fail("connection-forbidden");
+				if (!grant.run) await target(session, connection, current.documentId);
 				if (name === "complete_experiment") {
 					value = await service.complete(id, connection.id, generation);
 				} else {

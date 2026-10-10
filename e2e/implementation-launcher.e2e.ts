@@ -3,10 +3,15 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { seedChildChannel } from "./database";
+import { seedChildChannel, testChannelPath } from "./database";
 import { ROOT } from "./servers";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 import type { Graph } from "../apps/server/src/tasks/graphs";
+
+/** A connection serves every document in its repository, so each pairing test is its own person. */
+function person() {
+	return `ana-${crypto.randomUUID().slice(0, 8)}`;
+}
 
 function preparedGraph(): Graph {
 	return {
@@ -194,11 +199,11 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				],
 		);
 		try {
-			let page = await enter("ana");
+			let page = await enter(person());
 			await page.goto(await local.pairing);
-			await page.getByRole("combobox", { name: "Document", exact: true }).selectOption(room);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
-			await page.getByRole("link", { name: "Open document", exact: true }).click();
+			await expect(page.getByRole("status")).toContainText("Connected.");
+			await page.goto(testChannelPath(room));
 			let view = page.getByRole("region", { name: "Build", exact: true });
 			let openBuild = () =>
 				page.getByRole("group", { name: "Document view" })
@@ -328,11 +333,12 @@ test("a #task link opens Build on that task, and rows toggle from the keyboard",
 
 test("Build without a running local agent says how to start one", async ({ seed, join: enter }) => {
 	await seed("# Offline build\n\nNo local agent is connected.\n", { graph: preparedGraph() });
-	let page = await enter("ana");
+	let page = await enter(person());
 	await openBuildView(page);
 	let view = buildView(page);
 	await expect(view).toContainText("2 tasks");
-	await expect(view.getByText("Start your local agent to build:")).toHaveCount(0);
+	// The snapshot already knows nobody's agent is connected.
+	await expect(view.getByText("Start your local agent to build:")).toBeVisible();
 	await view.getByRole("button", { name: "Build on my laptop", exact: true }).click();
 	await expect(view.getByText("Start your local agent to build:", { exact: true })).toBeVisible();
 	await expect(view.locator("code")).toContainText("bun run connector connect");
@@ -418,11 +424,11 @@ test("a build in progress shows who started it and offers no action", async ({ s
 	// An agent that never answers keeps the build starting until this test closes it.
 	let local = await connector(baseURL!, ["bun", "-e", "setInterval(() => {}, 1 << 30)"]);
 	try {
-		let page = await enter("ana");
+		let page = await enter(person());
 		await page.goto(await local.pairing);
-		await page.getByRole("combobox", { name: "Document", exact: true }).selectOption(room);
 		await page.getByRole("button", { name: "Connect", exact: true }).click();
-		await page.getByRole("link", { name: "Open document", exact: true }).click();
+		await expect(page.getByRole("status")).toContainText("Connected.");
+		await page.goto(testChannelPath(room));
 		await openBuildView(page);
 		let view = buildView(page);
 		await view.getByRole("button", { name: "Build on my laptop", exact: true }).click();

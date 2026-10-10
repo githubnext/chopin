@@ -42,7 +42,7 @@ function sentence(text: string): string {
 /** The server's refusals for a connection it cannot reach mean the local agent is not running. */
 function offline(error: unknown): boolean {
 	return error instanceof ApiError && error.status === 409
-		&& /workspace is (?:offline|unavailable)|offline or busy/.test(error.message);
+		&& /^no-workspace$|offline or busy/.test(error.message);
 }
 
 export function BuildView(
@@ -254,12 +254,8 @@ export function BuildView(
 
 	let start = async () => {
 		if (!snapshot?.graph || busy) return;
-		let workspace = snapshot.workspaces.find(item => item.available);
 		setActionError(undefined);
-		if (!workspace) {
-			setNeedsAgent(true);
-			return;
-		}
+		// The server picks the clicker's own connection; a snapshot can predate connecting.
 		setNeedsAgent(false);
 		setBusy(true);
 		try {
@@ -269,8 +265,6 @@ export function BuildView(
 					headers: { "content-type": "application/json" },
 					body: JSON.stringify({
 						...(snapshot.build ? { retryOf: snapshot.build.id } : {}),
-						connectionId: workspace.id,
-						checkout: workspace.checkout,
 						planRevision: snapshot.planRevision,
 						graphVersion: snapshot.graph.number,
 						graphRevision: snapshot.graph.revision,
@@ -447,13 +441,14 @@ export function BuildView(
 					{since && <span className="build-elapsed">{since}</span>}
 					{action}
 				</div>
-				{needsAgent && (phase.kind === "review" || phase.kind === "failed") && (
+				{(needsAgent || snapshot?.localAgent === false)
+					&& (phase.kind === "review" || phase.kind === "failed") && (
 					<div className="build-note">
 						<p className="m-0">Start your local agent to build:</p>
 						<code className="build-command">
 							{`CHOPIN_URL=${location.origin} bun run connector connect /path/to/project -- copilot --acp`}
 						</code>
-						<p className="m-0">Open the link it prints, then press {primaryLabel} again.</p>
+						<p className="m-0">Open the link it prints, then press {primaryLabel}.</p>
 					</div>
 				)}
 				{phase.kind === "stopped" && returning && (

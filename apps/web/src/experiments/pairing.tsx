@@ -3,15 +3,14 @@ import { experimentRequest } from "./api";
 import { LocalLoginShell } from "../local-login-shell";
 
 type Pairing = {
-	input: { label: string; repository: string; commit: string };
+	input: { repository: string };
 	owner: string;
-	documents: Array<{ id: string; title: string }>;
+	code: string;
 };
 
 export default function PairingPage() {
 	let id = new URLSearchParams(location.search).get("pairing");
 	let [pairing, setPairing] = useState<Pairing>();
-	let [documentId, setDocumentId] = useState("");
 	let [error, setError] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [url, setUrl] = useState("");
@@ -37,7 +36,7 @@ export default function PairingPage() {
 		try {
 			let result = await experimentRequest<{ url: string }>(
 				`/api/connector/pairings/${encodeURIComponent(id!)}/approve`,
-				{ documentId },
+				{},
 			);
 			setUrl(result.url);
 		} catch (error) {
@@ -46,41 +45,37 @@ export default function PairingPage() {
 			setBusy(false);
 		}
 	}
+	let repository = pairing?.input.repository;
 	return (
-		<LocalLoginShell>
-			<h1 className="text-xl font-semibold">Connect local workspace</h1>
-			{error && <p role="alert" className="text-sm text-destructive-ink">{error}</p>}
+		<LocalLoginShell title="Connect your local agent">
+			{error && <p role="alert" className="m-0 text-sm text-destructive-ink">{error}</p>}
 			{pairing && (
 				<div className="flex flex-col gap-4 text-sm">
-					<p>
-						{pairing.input.label} · {pairing.input.repository} · {pairing.input.commit.slice(0, 8)}
-					</p>
-					<p>Connected as {pairing.owner}. You authorize each investigation on this workspace.</p>
-					<label className="flex flex-col gap-2">
-						Document
-						<select
-							aria-label="Document"
-							className="rounded-md border p-2"
-							value={documentId}
-							onChange={event => setDocumentId(event.target.value)}
-							disabled={!!url}
-						>
-							<option value="">Choose a document</option>
-							{pairing.documents.map(document => (
-								<option key={document.id} value={document.id}>{document.title}</option>
-							))}
-						</select>
-					</label>
 					{url
-						? <a className="btn btn-md btn-primary" href={url}>Open document</a>
+						? (
+							<>
+								<p className="m-0" role="status">Connected.</p>
+								<a className="btn btn-md btn-primary" href={url}>Open {repository}</a>
+							</>
+						)
 						: (
-							<button
-								className="btn btn-md btn-primary"
-								disabled={!documentId || busy}
-								onClick={() => void connect()}
-							>
-								Connect
-							</button>
+							<>
+								<p className="m-0">
+									Connect this checkout of {repository}{" "}
+									so Chopin can run work for you in any of its documents.
+								</p>
+								<p className="m-0 text-text-secondary">
+									Check that your terminal shows{" "}
+									<code className="font-mono text-text-primary">{pairing.code}</code>
+								</p>
+								<button
+									className="btn btn-md btn-primary"
+									disabled={busy}
+									onClick={() => void connect()}
+								>
+									Connect
+								</button>
+							</>
 						)}
 				</div>
 			)}

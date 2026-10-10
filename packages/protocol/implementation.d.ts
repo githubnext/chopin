@@ -42,7 +42,8 @@ export type ImplementationSnapshot = {
 	build?: BuildRequest;
 	/** The GitHub login of whoever requested `build`, when it is still known. */
 	startedBy?: string;
-	workspaces: Array<{ id: string; label: string; checkout: CheckoutContext; available: boolean }>;
+	/** Whether the viewer has a connected local agent for this repository; it may be busy. */
+	localAgent: boolean;
 	blockers: string[];
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
 };

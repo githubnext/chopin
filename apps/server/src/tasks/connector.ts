@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Connection, Connections, Grant } from "../experiments/connections";
+import { ExperimentError } from "@chopin/experiment";
 import { fail } from "../experiments/service";
 import { LIFECYCLE_TOOLS, lifecycleCall } from "../mcp/lifecycle";
 import { exclusive, source } from "../plan/service";
@@ -44,21 +45,93 @@ export function implementationSchemas(
 	};
 }
 
+/**
+ * Next steps for a lifecycle refusal a coding agent can fix. `retry` marks refusals that a parallel
+ * call in the same batch may still resolve, so the server retries them before answering.
+ */
+const REFUSALS: Record<string, Record<string, { retry?: true; advice: string }>> = {
+	start_task: {
+		dependency: {
+			retry: true,
+			advice:
+				"A task this one depends on is not complete. Finish it with report_pr then complete_task, and retry start_task with the same idempotencyKey.",
+		},
+		"task-state": {
+			advice:
+				"The task is already in progress or completed. Continue with report_pr and complete_task.",
+		},
+	},
+	block_task: {
+		"task-state": {
+			advice:
+				"The task is already blocked or completed. Call start_task to resume a blocked task before blocking it again.",
+		},
+	},
+	report_pr: {
+		"task-state": {
+			retry: true,
+			advice:
+				"The task has not started. Call start_task for it, then retry report_pr with the same idempotencyKey.",
+		},
+		"pull-request": {
+			advice:
+				"report_pr needs the pull request's full GitHub URL and a state of open, merged or closed. Fix the arguments and retry.",
+		},
+	},
+	complete_task: {
+		"pull-request": {
+			retry: true,
+			advice:
+				"The task has no pull request yet. Call report_pr for it, wait for that call to finish, then retry complete_task with the same idempotencyKey.",
+		},
+		"task-state": {
+			retry: true,
+			advice:
+				"The task is not in progress. Call start_task (and report_pr) for it, then retry complete_task with the same idempotencyKey.",
+		},
+	},
+};
+
 export function implementationConnector(
 	withPlan: WithPlan,
 	connections: Connections,
 	documentUrl: (id: string) => Promise<string>,
 	documentExists: (id: string) => Promise<boolean>,
+	options: { retryMs?: number; retries?: number } = {},
 ) {
 	let tracked = new Set<string>();
-	let pending = async (connection: Connection) =>
-		withPlan(connection.documentId, async plan => {
-			let build = plan.builds.at(-1);
-			return build?.connectionId === connection.id && build.user === connection.owner
-				? build
-				: undefined;
+	// Lifecycle calls of one run apply in arrival order, one at a time.
+	let chains = new Map<string, Promise<unknown>>();
+	let serial = <T>(key: string, action: () => Promise<T>): Promise<T> => {
+		let operation = (chains.get(key) ?? Promise.resolve()).then(action, action);
+		let settled = operation.catch(() => {});
+		chains.set(key, settled);
+		void settled.then(() => {
+			if (chains.get(key) === settled) chains.delete(key);
 		});
-	return {
+		return operation;
+	};
+	let pending = async (connection: Connection) => {
+		let documentId = connections.assigned(connection.id);
+		if (!documentId) return undefined;
+		try {
+			let build = await documentExists(documentId)
+				? await withPlan(documentId, async plan => {
+					let build = plan.builds.at(-1);
+					return build?.connectionId === connection.id && build.user === connection.owner
+						? build
+						: undefined;
+				})
+				: undefined;
+			if (!build || !["queued", "starting", "running"].includes(build.state)) {
+				connections.release(connection.id, documentId);
+			}
+			return build;
+		} catch {
+			return undefined;
+		}
+	};
+	let api = {
 		track(id: string) {
 			tracked.add(id);
 		},
@@ -72,9 +145,41 @@ export function implementationConnector(
 			let build = await pending(connection);
 			return !!build && ["queued", "starting", "running"].includes(build.state);
 		},
+		/**
+		 * Agents often send start_task, report_pr and complete_task in one parallel batch. Serializing
+		 * them per run and briefly retrying order-dependent refusals lets the batch land in order.
+		 */
 		async call(connection: Connection, grant: Grant, name: string, args: Record<string, unknown>) {
-			tracked.add(connection.documentId);
-			return withPlan(connection.documentId, async plan => {
+			let run = grant.run;
+			if (!run || !LIFECYCLE_TOOLS.some(tool => tool.name === name)) {
+				return api.invoke(connection, grant, name, args);
+			}
+			let retries = options.retries ?? 4;
+			for (let attempt = 0;; attempt++) {
+				try {
+					return await serial(run.id, () => api.invoke(connection, grant, name, args));
+				} catch (error) {
+					let refusal = error instanceof ExperimentError ? REFUSALS[name]?.[error.code] : undefined;
+					if (!refusal) throw error;
+					if (refusal.retry && attempt < retries) {
+						await new Promise(resolve => setTimeout(resolve, options.retryMs ?? 250));
+						continue;
+					}
+					fail((error as ExperimentError).code, refusal.advice);
+				}
+			}
+		},
+		/** One connector call, unserialized. */
+		async invoke(
+			connection: Connection,
+			grant: Grant,
+			name: string,
+			args: Record<string, unknown>,
+		) {
+			let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
+			if (!documentId) fail("build-forbidden");
+			tracked.add(documentId);
+			return withPlan(documentId, async plan => {
 				let build = plan.builds.at(-1);
 				if (
 					!build || build.connectionId !== connection.id || build.user !== connection.owner
@@ -118,7 +223,7 @@ export function implementationConnector(
 						build: picked,
 						documentId: plan.id,
 						source: { ...picked.checkout, repositoryId: picked.repositoryId },
-						runToken: connections.runToken(connection.id, picked.id, 1, "implementation"),
+						runToken: connections.runToken(connection.id, plan.id, picked.id, 1, "implementation"),
 					};
 				}
 				if (!["starting", "running"].includes(build.state) || build.expiresAt <= Date.now()) {
@@ -170,6 +275,7 @@ export function implementationConnector(
 				await withPlan(id, async plan => {
 					let build = plan.builds.at(-1);
 					if (!build || !["queued", "starting", "running"].includes(build.state)) {
+						if (build) connections.release(build.connectionId, id);
 						tracked.delete(id);
 						return;
 					}
@@ -178,11 +284,13 @@ export function implementationConnector(
 							state: "failed",
 							error: "Workspace disconnected or agent stopped responding. No automatic replay.",
 						});
+						connections.release(build.connectionId, id);
 						tracked.delete(id);
 					}
 				});
 			}
 		},
 	};
+	return api;
 }
 export type ImplementationConnector = ReturnType<typeof implementationConnector>;

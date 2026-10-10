@@ -1,6 +1,6 @@
 import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
-import { checkoutSchema, queueBuild } from "./builds";
+import { queueBuild } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 import { implementationReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
@@ -16,12 +16,11 @@ import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
 type Options = {
 	withPlan<T>(id: string, action: (plan: Plan) => Promise<T>): Promise<T>;
 	connections: Connections;
-	busy?: (id: string) => Promise<string[]>;
+	/** Whether an investigation is executing on a connection, in any document. */
+	busy?: (connectionId: string) => Promise<boolean>;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
-	connectionId: z.string().uuid(),
-	checkout: checkoutSchema,
 	planRevision: z.number().int().nonnegative(),
 	graphVersion: z.number().int().positive(),
 	graphRevision: z.number().int().positive(),
@@ -59,7 +58,7 @@ async function body<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
 	}
 }
 
-/** Browser approval dispatches through the existing owner-paired connector. */
+/** A browser build runs on the clicker's own connection for the document's repository. */
 export function registerImplementationRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connector = implementationConnector(
 		options.withPlan,
@@ -98,13 +97,32 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		}
 		return { session, channel, repository };
 	}
+	/**
+	 * The caller's live connections for a repository that can take a build for `id`: the one
+	 * last used for this document first, then the most recently heard from. A build already
+	 * waiting on this document does not make its connection busy, so a repeated request can
+	 * return that build.
+	 */
+	async function available(owner: string, repositoryId: string, id: string) {
+		let free = [];
+		for (let connection of options.connections.candidates(repositoryId, owner, id)) {
+			let here = options.connections.assigned(connection.id) === id;
+			if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
+				continue;
+			}
+			if (here) free.unshift(connection);
+			else free.push(connection);
+		}
+		return free;
+	}
 	router.on(
 		"GET",
 		"/api/channels/:id/implementation",
 		safe(async (request, _url, { id }) => {
-			let { session } = await browser(request, id);
+			let { session, channel } = await browser(request, id);
 			connector.track(id);
-			let busy = await options.busy?.(id) ?? [];
+			// Cheap on purpose: whether one is free is decided when Build is pressed.
+			let localAgent = options.connections.list(channel.repositoryId, session.user.id).length > 0;
 			let current = await options.withPlan(id, plan =>
 				exclusive(plan, async () => {
 					let ready = implementationReadiness(plan, plan.revision);
@@ -117,20 +135,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							return build.graphVersion === graph?.number && build.graphRevision === graph.revision;
 						}),
 						blockers: ready.ok ? [] : ready.blockers,
-						workspaces: options.connections.list(id).filter(item => item.owner === session.user.id)
-							.map(item => ({
-								id: item.id,
-								label: item.label,
-								checkout: {
-									repository: item.source.repository,
-									commit: item.source.commit,
-									...(item.source.branch ? { branch: item.source.branch } : {}),
-								},
-								available: !busy.includes(item.id) && !plan.builds.some(build =>
-									build.connectionId === item.id
-									&& ["queued", "starting", "running"].includes(build.state)
-								),
-							})),
+						localAgent,
 						lifecycle: plan.graph
 							? implementationLifecycle({
 								graph: plan.graph,
@@ -158,25 +163,21 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				throw new GitHubError("repository write access is required", 403);
 			}
 			let input = await body(request, buildSchema);
-			let connection = options.connections.get(input.connectionId);
-			if (
-				!connection || connection.owner !== session.user.id || connection.documentId !== id
-				|| connection.source.repositoryId !== channel.repositoryId
-			) {
-				throw new GitHubError("workspace is unavailable", 409);
+			if (!options.connections.list(channel.repositoryId, session.user.id).length) {
+				throw new GitHubError("no-workspace", 409);
 			}
-			if (
-				input.checkout.repository.toLowerCase() !== connection.source.repository.toLowerCase()
-				|| input.checkout.branch !== connection.source.branch
-				|| input.checkout.commit !== connection.source.commit
-			) {
-				throw new GitHubError("workspace checkout changed; review again", 409);
-			}
+			let [connection] = await available(session.user.id, channel.repositoryId, id);
+			if (!connection) throw new GitHubError("workspace is offline or busy", 409);
+			let checkout = {
+				repository: connection.source.repository,
+				commit: connection.source.commit,
+				...(connection.source.branch ? { branch: connection.source.branch } : {}),
+			};
 			connector.track(id);
 			return options.connections.locked(connection.id, async () => {
 				if (
 					!options.connections.get(connection.id)
-					|| (await options.busy?.(id) ?? []).includes(connection.id)
+					|| !(await available(session.user.id, channel.repositoryId, id)).includes(connection)
 				) {
 					throw new GitHubError("workspace is offline or busy", 409);
 				}
@@ -185,10 +186,13 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						let build = await queueBuild(plan, {
 							...input,
 							user: session.user.id,
+							connectionId: connection.id,
 							repositoryId: channel.repositoryId,
-							checkout: input.checkout,
+							checkout,
 						});
-						options.connections.wake(id);
+						options.connections.assign(connection.id, id);
+						options.connections.use(id, connection.id);
+						options.connections.wake(channel.repositoryId);
 						return json(build);
 					} catch (error) {
 						throw new GitHubError(error instanceof Error ? error.message : "build refused", 409);

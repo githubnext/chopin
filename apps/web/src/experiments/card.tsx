@@ -3,7 +3,18 @@ import { ExperimentView } from "@chopin/experiment/react";
 import { StaticPlanEditor } from "@chopin/editor/static";
 import type { ExperimentStore } from "./store";
 import { EvidenceActions } from "./evidence";
-import type { InvestigationSummary } from "@chopin/experiment/records";
+import type { InvestigationState, InvestigationSummary } from "@chopin/experiment/records";
+
+const WORDS: Record<InvestigationState, string> = {
+	requested: "Ready to run",
+	queued: "Waiting for your local agent",
+	running: "Running",
+	publishing: "Writing up",
+	completed: "Done",
+	failed: "Failed",
+	cancelled: "Cancelled",
+	interrupted: "Interrupted",
+};
 
 export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 	store: ExperimentStore;
@@ -12,13 +23,12 @@ export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 	canEdit: boolean;
 	locked: boolean;
 }) {
-	let [connectionId, setConnectionId] = useState("");
+	let [needsAgent, setNeedsAgent] = useState(false);
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState("");
 	let [loadFailed, setLoadFailed] = useState(false);
 	let [loading, setLoading] = useState(!store.get(summary.id));
 	let item = store.get(summary.id);
-	let owned = store.connections.filter(connection => connection.owner === userId);
 	let load = async () => {
 		setLoading(true);
 		await store.load(summary.id);
@@ -32,10 +42,13 @@ export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 	async function act(action: () => Promise<unknown>) {
 		setBusy(true);
 		setError("");
+		setNeedsAgent(false);
 		try {
 			await action();
 		} catch (error) {
-			setError(String((error as Error).message));
+			let message = String((error as Error).message);
+			if (message === "no-workspace") setNeedsAgent(true);
+			else setError(message);
 		} finally {
 			setBusy(false);
 		}
@@ -47,7 +60,9 @@ export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 		>
 			<h3 className="m-0 break-words text-sm font-semibold">{summary.brief}</h3>
 			<p role="status" className="m-0 text-xs text-text-secondary">
-				{summary.state} {summary.progress && `· ${summary.progress}`}
+				{WORDS[summary.state] ?? summary.state}
+				{["running", "failed", "interrupted"].includes(summary.state) && summary.progress
+					&& ` · ${summary.progress}`}
 			</p>
 			{error && <p role="alert" className="m-0 text-sm text-destructive-ink">{error}</p>}
 			{!item && loading && <p role="status" className="m-0 text-sm">Loading investigation…</p>}
@@ -63,35 +78,23 @@ export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 			{item && (
 				<>
 					{canEdit && item.state === "requested" && (
-						<div className="flex flex-wrap gap-2">
-							{owned.length === 0 && (
-								<p className="w-full m-0 text-sm text-text-secondary">
-									Connect a local workspace to run this investigation.
-								</p>
-							)}
-							<select
-								aria-label="Your workspace"
-								className="field text-sm"
-								value={connectionId || (owned.length === 1 ? owned[0].id : "")}
-								onChange={event => setConnectionId(event.target.value)}
-							>
-								<option value="">Choose your workspace</option>
-								{owned.map(value => (
-									<option key={value.id} value={value.id}>
-										{value.label} · {value.source.commit.slice(0, 8)}
-									</option>
-								))}
-							</select>
+						<div className="flex flex-col items-start gap-3">
 							<button
 								className="btn btn-md btn-primary"
-								disabled={busy || locked || !(connectionId || owned.length === 1)}
-								onClick={() =>
-									void act(() =>
-										store.action(item.id, "run", { connectionId: connectionId || owned[0].id })
-									)}
+								disabled={busy || locked}
+								onClick={() => void act(() => store.action(item.id, "run", {}))}
 							>
-								Run on my workspace
+								Run
 							</button>
+							{needsAgent && (
+								<div className="grid w-full gap-2 rounded-md bg-inset p-3 text-sm text-text-secondary">
+									<p className="m-0">Start your local agent to run this:</p>
+									<code className="block overflow-x-auto rounded-sm border border-edge bg-page p-2 font-mono text-xs text-text-primary">
+										{`CHOPIN_URL=${location.origin} bun run connector connect /path/to/project -- copilot --acp`}
+									</code>
+									<p className="m-0">Open the link it prints, then press Run again.</p>
+								</div>
+							)}
 						</div>
 					)}
 					{canEdit && ["queued", "running", "publishing"].includes(item.state)

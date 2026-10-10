@@ -5,7 +5,8 @@ to an external coding agent. It persists a versioned dependency graph, lets a
 coding agent claim an approved version, records task and pull-request progress,
 and requires graph-wide verification before releasing a successful run. The
 ordinary MCP read-before-claim path accepts MCP-created documents. Browser plans
-use the owner-paired ACP connector and its run-scoped bridge; see the
+run on the clicker's own repository-scoped ACP connector and its run-scoped
+bridge; see the
 [local implementation tracer](local-launcher.md).
 
 The web application can prepare tasks through the Planner, review and approve
@@ -19,7 +20,8 @@ implementation, automatic restart and an installer remain future work.
   `read_implementation_graph` and `edit_implementation_graph`.
 - A **person** is the only actor allowed by the domain model to approve a draft.
   The browser's “Build on my laptop” action approves the exact reviewed
-  graph and queues its assigned paired workspace in one durable commit.
+  graph and queues it, with the clicker's own connection and checkout, in one
+  durable commit.
 - The **local connector** creates an exact-commit worktree and ACP session, then
   claims a browser-approved graph before prompting the orchestrator. Its scoped
   bridge fixes document and run identity for lifecycle reports.
@@ -126,7 +128,7 @@ the next reviewed build is a new attempt, not an automatic session replay.
 | `read_implementation`  | Read the approved graph, plan, and repository context by UUID or canonical URL.           |
 | `start_implementation` | Claim that exact graph while reporting the coding agent's repository, branch, and commit. |
 | `start_task`           | Move one dependency-ready task to in progress.                                            |
-| `block_task`           | Record a task blocker without releasing the graph lock.                                   |
+| `block_task`           | Record a task blocker without releasing the graph lock; a queued task starts implicitly.  |
 | `report_pr`            | Attach an open, merged, or closed pull request to a task.                                 |
 | `complete_task`        | Complete a task after its pull request and summary are recorded.                          |
 | `report_verification`  | Submit graph-wide review evidence and return failed tasks to work.                        |
