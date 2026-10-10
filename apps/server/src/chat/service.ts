@@ -90,6 +90,7 @@ export type Waiting = Wire.Waiting & {
 	thread?: string;
 	/** Told how the turn went, before the queue moves on; see `Instruction`. */
 	ended?: Instruction["ended"];
+	started?: Instruction["started"];
 	/** Login session whose Copilot entitlement owns this queued turn. */
 	sessionId?: string;
 	/** Verified member identity, retained only for a queued composer message. */
