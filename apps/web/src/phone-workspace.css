@@ -49,6 +49,14 @@
 	scroll-padding-top: calc(var(--phone-top-chrome) + var(--spacing) * 2);
 }
 
+/*
+ * The phone workspace already shrinks to the visual viewport above the keyboard, so a field
+ * only needs breathing room, not the keyboard's height again, below it.
+ */
+.workspace-root[data-workspace-phone] .question-field {
+	scroll-margin-block-end: calc(var(--spacing) * 4);
+}
+
 .workspace-root[data-workspace-phone] .workspace-chat-panel {
 	padding-bottom: var(--phone-bottom-chrome);
 }
