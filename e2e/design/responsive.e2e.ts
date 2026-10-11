@@ -42,7 +42,8 @@ test("wide table retains its own scroll lane", async ({ page }) => {
 	await expect.poll(() => lane.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
 });
 
-test("code preview keeps a keyboard-reachable scroll lane", async ({ page }, info) => {
+// A phone-width document wraps code rather than scrolling it.
+test("code preview is focusable and wraps at phone width", async ({ page }, info) => {
 	let preview = plate(page, "code").getByRole("group", { name: "Code preview", exact: true })
 		.first();
 	await expect(preview).toHaveAttribute("tabindex", "0");
@@ -53,8 +54,6 @@ test("code preview keeps a keyboard-reachable scroll lane", async ({ page }, inf
 		scroll: element.scrollWidth,
 	}));
 	if (info.project.name === "narrow") {
-		expect(metrics.scroll).toBeGreaterThan(metrics.client);
-		await page.keyboard.press("ArrowRight");
-		await expect.poll(() => preview.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+		expect(metrics.scroll).toBeLessThanOrEqual(metrics.client);
 	}
 });
