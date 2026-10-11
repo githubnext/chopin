@@ -22,7 +22,6 @@
 .decision-deck-slot {
 	border-radius: var(--radius-lg);
 	transform-origin: top center;
-	outline: none;
 }
 
 .decision-deck-slot[data-deck-top] {
@@ -46,10 +45,6 @@
 	padding: 0.625rem 0.75rem;
 	background: var(--color-inset);
 	box-shadow: var(--shadow-resting);
-}
-
-.decision-deck-slot[data-deck-top]:focus-visible {
-	box-shadow: 0 0 0 2px var(--color-brand);
 }
 
 .decision-deck-nav {
