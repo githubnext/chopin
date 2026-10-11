@@ -194,8 +194,9 @@ test("a phone draft sheet stands on the keyboard with Send to Chopin in reach", 
 test("a phone list leads into a thread and back from one header row", async ({ join, seed }) => {
 	await seed(SOURCE, {
 		threads: [
-			await open("review the pilot", ["Is two weeks enough?"]),
-			await open("widen it", ["Who decides?"]),
+			// Both passages start on the first line, so they share one chip.
+			await open("After two weeks", ["Is two weeks enough?"]),
+			await open("two weeks we", ["Who decides?"]),
 		],
 	});
 	let page = await join("ana", IPHONE);

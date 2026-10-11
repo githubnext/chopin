@@ -8,7 +8,14 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { $getNodeByKey } from "lexical";
 
 import { DraftCard, NoteAuthor, ThreadCard, ThreadList } from "./comments";
-import { blockMarkerPoints, commentCardPoint, markerRect, popoverPoint } from "./comment-geometry";
+import {
+	blockMarkerPoints,
+	commentCardPoint,
+	lineGroups,
+	markerRect,
+	passageLine,
+	popoverPoint,
+} from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
 import { CommentSheet, commentSheetHeading, usesCommentSheet } from "./comment-sheet";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
@@ -21,7 +28,7 @@ import { widgets$ } from "./widget-options";
 
 import type { CSSProperties, ReactNode } from "react";
 import type { CommentSheetHeading } from "./comment-sheet";
-import type { BlockMarkerPoint, CardSide, Point, Rect } from "./comment-geometry";
+import type { BlockMarkerPoint, CardSide, Line, Point, Rect } from "./comment-geometry";
 import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
 
@@ -33,34 +40,36 @@ const MARKER_LANE = 56;
 
 type PlacedThread = {
 	view: ThreadView;
-	/** The block marker that stands for this thread. */
+	/** The line marker that stands for this thread. */
 	marker: string;
 	hits: PassageHit[];
 	passages: Rect[];
 };
-/** One marker per commented block, standing for every open thread on it. */
+/** One marker per commented line, standing for every open thread whose passage starts on it. */
 type PlacedMarker = {
 	key: string;
 	views: ThreadView[];
 	excerpt: string;
 	button: BlockMarkerPoint;
-	/** The first line box's height; a touch target stays within it so the next line takes taps. */
+	/** The line box's height; a touch target stays within it so the next line takes taps. */
 	line: number;
 };
+/** One open thread, measured: the block it is in and the line its passage starts on. */
 type MeasuredThread = {
+	id: string;
+	/** The top-level block's key; threads share a marker only within one block. */
+	block: string;
+	line: Line;
+	/** The block's box, whose right edge the marker lane follows. */
+	box: Rect;
+	/** Where the passage starts on its line, so the leftmost one names a shared chip. */
+	start: number;
 	view: ThreadView;
 	passages: Rect[];
 	hits: Rect[];
 };
-type MeasuredBlock = {
-	key: string;
-	block: Rect;
-	line: { top: number; height: number };
-	excerpt: string;
-	threads: MeasuredThread[];
-};
 
-/** A pinned list of one block's threads, as opposed to a pinned thread id. */
+/** A pinned list of one line's threads, as opposed to a pinned thread id. */
 const LIST = "list:";
 
 /** How long a resolve can be undone from its toast, while nobody is pointing at it. */
@@ -116,7 +125,7 @@ function union(rects: Rect[]): Rect | undefined {
 	return { top, right, bottom, left, width: right - left, height: bottom - top };
 }
 
-/** An icon and the count of threads on the block: "1" included, so every chip reads alike. */
+/** An icon and the count of threads on the line: "1" included, so every chip reads alike. */
 function chipWidth(count: number): number {
 	return 27 + 7 * String(count).length;
 }
@@ -126,7 +135,7 @@ function slimChipWidth(count: number): number {
 	return 15 + 7 * String(count).length;
 }
 
-/** What a chip's tooltip says, and its label for a block with several threads. */
+/** What a chip's tooltip says, and its label for a line with several threads. */
 export function commentCount(count: number): string {
 	return count === 1 ? "1 comment" : `${count} comments`;
 }
@@ -466,7 +475,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let measure = () => {
 		if (!host) return;
 		let page = rect(host.getBoundingClientRect());
-		let blocks = new Map<string, MeasuredBlock>();
+		let measured: MeasuredThread[] = [];
 
 		for (let view of state.threads) {
 			if (view.thread.status !== "open") continue;
@@ -479,36 +488,47 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						? $getNodeByKey(anchor!)?.getTopLevelElement()?.getKey() ?? anchor!
 						: `thread:${view.thread.id}`;
 					if (exact) {
+						let start = exact.startContainer;
+						let styled = start instanceof Element ? start : start.parentElement;
 						return {
 							bounds: exact.getBoundingClientRect(),
 							element,
 							hits: Array.from(exact.getClientRects(), rect),
 							key,
+							lineHeight: styled ? parseFloat(getComputedStyle(styled).lineHeight) : undefined,
 						};
 					}
 					let fallback = view.targetKey ? blockElement(editor, view.targetKey) : undefined;
 					return fallback
-						? { bounds: fallback.getBoundingClientRect(), element: fallback, hits: [], key }
+						? {
+							bounds: fallback.getBoundingClientRect(),
+							element: fallback,
+							hits: [],
+							key,
+							lineHeight: undefined,
+						}
 						: undefined;
 				});
 				if (!target || (target.bounds.width === 0 && target.bounds.height === 0)) continue;
 				let targetRect = rect(target.bounds);
 				let passages = target.hits.length > 0 ? target.hits : [targetRect];
-				let block = blocks.get(target.key!);
-				if (!block) {
-					let box = target.element ? rect(target.element.getBoundingClientRect()) : targetRect;
-					block = {
-						key: target.key!,
-						block: box,
-						line: target.element
-							? firstLine(target.element, box)
-							: { top: box.top, height: Math.min(box.height, CHIP) },
-						excerpt: excerptOf(target.element?.textContent ?? view.quote),
-						threads: [],
-					};
-					blocks.set(block.key, block);
-				}
-				block.threads.push({ view, passages, hits: target.hits });
+				let box = target.element ? rect(target.element.getBoundingClientRect()) : targetRect;
+				// The chip sits beside the line the passage starts on, not its block's first line.
+				let line = passageLine(target.hits, target.lineHeight)
+					?? (target.element
+						? firstLine(target.element, box)
+						: { top: box.top, height: Math.min(box.height, CHIP) });
+				let start = target.hits.find(hit => hit.width > 0)?.left ?? box.left;
+				measured.push({
+					id: view.thread.id,
+					block: target.key,
+					line,
+					box,
+					start,
+					view,
+					passages,
+					hits: target.hits,
+				});
 			} catch (error) {
 				// A bad anchor must not break Lexical's update listener.
 				if (failures.current.has(view.thread.id)) continue;
@@ -517,36 +537,40 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			}
 		}
 
-		let measured = [...blocks.values()].sort((a, b) => a.block.top - b.block.top);
+		let groups = lineGroups(measured);
 		let focused = document.activeElement?.getAttribute("data-plan-comment-button");
 		let points = blockMarkerPoints(
-			measured.map(({ block, key, line, threads }) => ({
-				block,
+			groups.map(({ entries, key, line }) => ({
+				block: entries[0]!.box,
 				line,
-				width: chipWidth(threads.length),
+				width: chipWidth(entries.length),
 				...(coarse
-					? { minimum: slimChipWidth(threads.length) }
-					: threads.length >= 10
+					? { minimum: slimChipWidth(entries.length) }
+					: entries.length >= 10
 					? { minimum: 18 }
 					: {}),
 				held: focused === key
 					|| pinnedRef.current === `${LIST}${key}`
-					|| threads.some(({ view }) => view.thread.id === pinnedRef.current),
+					|| entries.some(({ id }) => id === pinnedRef.current),
 			})),
 			page,
 			{ size: CHIP },
 		);
-		let nextMarkers = measured.map<PlacedMarker>((entry, index) => ({
-			key: entry.key,
-			views: entry.threads.map(({ view }) => view),
-			excerpt: entry.excerpt,
+		let nextMarkers = groups.map<PlacedMarker>((group, index) => ({
+			key: group.key,
+			views: group.entries.map(({ view }) => view),
+			// The passage that starts first on the line names the chip.
+			excerpt: excerptOf(
+				group.entries.reduce((first, entry) => entry.start < first.start ? entry : first).view
+					.quote,
+			),
 			button: points[index]!,
-			line: entry.line.height,
+			line: group.line.height,
 		}));
-		let next = measured.flatMap(entry =>
-			entry.threads.map<PlacedThread>(thread => ({
+		let next = groups.flatMap(group =>
+			group.entries.map<PlacedThread>(thread => ({
 				view: thread.view,
-				marker: entry.key,
+				marker: group.key,
 				hits: passageHits(page, thread.hits),
 				passages: thread.passages,
 			}))
@@ -594,7 +618,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		store.light([]);
 	}, [store]);
 
-	// A chip lights every thread on its block; when that set changes under the pointer, follow it.
+	// A chip lights every thread on its line; when that set changes under the pointer, follow it.
 	let litMarker = useRef<string | undefined>(undefined);
 	let lightMarker = useCallback((key: string | undefined, ids: string[]) => {
 		litMarker.current = key;
@@ -1033,7 +1057,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactClose = dismiss;
 		compactContent = orphaned.map(view => card(view));
 	} else if (compact && pinned && (pinnedView || pinnedList)) {
-		// One sheet serves a block's list and its threads, so moving between them does not reopen it.
+		// One sheet serves a line's list and its threads, so moving between them does not reopen it.
 		compactKey = pinnedMarker && pinnedMarker.views.length > 1
 			? `marker:${pinnedMarker.key}`
 			: `thread:${pinned}`;

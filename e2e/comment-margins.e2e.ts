@@ -144,14 +144,15 @@ test("an open comment is washed at rest, stronger when pointed at, underlined wh
 	await expect.poll(() => sizes(page)).toMatchObject({ "plan-comment": 1, "plan-comment-open": 0 });
 });
 
-test("a block with several comments says how many in its chip's tooltip", async ({ join, seed }) => {
+test("a line with several comments says how many in its chip's tooltip", async ({ join, seed }) => {
 	let one = await storedResolvedComment(SOURCE, "review the pilot", {
 		block: 2,
 		notes: ["Is two weeks enough?"],
 		resolver: "ana",
 		result: [],
 	});
-	let two = await storedResolvedComment(SOURCE, "widen it", {
+	// Both passages start on the paragraph's first line, so they share one chip.
+	let two = await storedResolvedComment(SOURCE, "After two weeks", {
 		block: 2,
 		notes: ["Who decides?"],
 		resolver: "ana",
@@ -297,4 +298,154 @@ test("a refused reopen says why and keeps focus on Reopen", async ({ join, seed 
 	await expect(reopen).toBeFocused();
 	await expect(reopen).not.toHaveAttribute("aria-disabled", "true");
 	await expect(marker).toBeVisible();
+});
+
+const ITEMS = [
+	"Docs go first.",
+	"Support follows once the runbook reads well and the docs team says the pilot held up.",
+	"Everyone else joins at the end.",
+];
+const LONG = Array.from(
+	{ length: 14 },
+	(_, index) => `Sentence ${index + 1} keeps this paragraph wrapping across lines.`,
+).join(" ");
+const LINES = `${ITEMS.map(item => `- ${item}`).join("\n")}\n\n${LONG}\n`;
+
+/** Select a phrase that sits inside one text node of the editor, as a reader would. */
+async function selectPhrase(page: Page, phrase: string): Promise<void> {
+	await content(page).evaluate((root, phrase) => {
+		let walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			let text = node as Text;
+			let at = text.data.indexOf(phrase);
+			if (at < 0) continue;
+			let range = document.createRange();
+			range.setStart(text, at);
+			range.setEnd(text, at + phrase.length);
+			let selection = getSelection()!;
+			selection.removeAllRanges();
+			selection.addRange(range);
+			return;
+		}
+		throw new Error(`no text node holds “${phrase}”`);
+	}, phrase);
+}
+
+async function commentOnPhrase(page: Page, phrase: string, text: string): Promise<void> {
+	await selectPhrase(page, phrase);
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let draft = page.getByRole("dialog", { name: "New comment" });
+	await draft.getByPlaceholder("Add a comment").fill(text);
+	await draft.getByRole("button", { name: /^(Comment|Post comment)$/ }).click();
+	await expect(draft).toHaveCount(0);
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
+}
+
+/** The glyph box of a phrase's first line, as the browser lays it out now. */
+function phraseLine(page: Page, phrase: string) {
+	return content(page).evaluate((root, phrase) => {
+		let walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			let text = node as Text;
+			let at = text.data.indexOf(phrase);
+			if (at < 0) continue;
+			let range = document.createRange();
+			range.setStart(text, at);
+			range.setEnd(text, at + phrase.length);
+			let first = [...range.getClientRects()].find(rect => rect.width > 0)!;
+			return { top: first.top, bottom: first.bottom };
+		}
+		throw new Error(`no text node holds “${phrase}”`);
+	}, phrase);
+}
+
+async function chipCentre(page: Page, name: RegExp): Promise<number> {
+	let chip =
+		(await page.getByRole("button", { name }).locator(".plan-comment-chip").boundingBox())!;
+	return chip.y + chip.height / 2;
+}
+
+for (
+	let [name, viewport, hasTouch] of [
+		["desktop", { width: 1_440, height: 900 }, false],
+		["phone", { width: 390, height: 844 }, true],
+	] as const
+) {
+	test(`${name}: a comment on a list's last item sits beside that item, not the first`, async ({ join, seed }) => {
+		await seed(LINES);
+		let page = await join("ana", { hasTouch, viewport });
+		await commentOnPhrase(page, "Everyone else joins", "Which teams are left by then?");
+
+		let line = await phraseLine(page, "Everyone else joins");
+		let centre = await chipCentre(page, /^Comment on “Everyone else joins”/);
+		expect(centre).toBeGreaterThanOrEqual(line.top);
+		expect(centre).toBeLessThanOrEqual(line.bottom);
+		if (hasTouch) {
+			let hit = (await page.getByRole("button", { name: /^Comment on “Everyone else joins”/ })
+				.boundingBox())!;
+			expect(hit.width).toBeGreaterThanOrEqual(44);
+		}
+	});
+}
+
+test("a comment on a late line of a wrapped paragraph sits beside that line", async ({ join, seed }) => {
+	await seed(LINES);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	await commentOnPhrase(page, "Sentence 12 keeps", "Too long?");
+
+	let paragraph = (await content(page).locator("p").first().boundingBox())!;
+	let line = await phraseLine(page, "Sentence 12 keeps");
+	// The fixture has to wrap, or this proves nothing.
+	expect(line.top).toBeGreaterThan(paragraph.y + 40);
+	let centre = await chipCentre(page, /^Comment on “Sentence 12 keeps”/);
+	expect(centre).toBeGreaterThanOrEqual(line.top);
+	expect(centre).toBeLessThanOrEqual(line.bottom);
+
+	// The open card sits at the passage too, not up at the paragraph's first line.
+	await page.getByRole("button", { name: /^Comment on “Sentence 12 keeps”/ }).click();
+	let dialog = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(dialog).toBeVisible();
+	let card = (await dialog.boundingBox())!;
+	let side = await dialog.getAttribute("data-side");
+	let edge = side === "right" ? line.top : side === "below" ? line.bottom : line.top - card.height;
+	expect(Math.abs(card.y - edge)).toBeLessThan(16);
+});
+
+test("comments on different lines of one paragraph get one chip each", async ({ join, seed }) => {
+	await seed(LINES);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	await commentOnPhrase(page, "Sentence 1 keeps", "Opening line.");
+	await commentOnPhrase(page, "Sentence 12 keeps", "A later line.");
+
+	await expect(page.locator("[data-plan-comment-button]")).toHaveCount(2);
+	for (let phrase of ["Sentence 1 keeps", "Sentence 12 keeps"]) {
+		let line = await phraseLine(page, phrase);
+		let centre = await chipCentre(page, new RegExp(`^Comment on “${phrase}”`));
+		expect(centre).toBeGreaterThanOrEqual(line.top);
+		expect(centre).toBeLessThanOrEqual(line.bottom);
+	}
+});
+
+test("comments starting on the same line share one chip", async ({ join, seed }) => {
+	await seed(LINES);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	await commentOnPhrase(page, "Sentence 1 keeps", "First thought.");
+	await commentOnPhrase(page, "this paragraph wrapping", "Second thought.");
+
+	await expect(page.locator("[data-plan-comment-button]")).toHaveCount(1);
+	let chip = page.getByRole("button", { name: /^2 comments on “Sentence 1 keeps/ });
+	await expect(chip.locator(".plan-comment-count")).toHaveText("2");
+	let line = await phraseLine(page, "Sentence 1 keeps");
+	let centre = await chipCentre(page, /^2 comments on/);
+	expect(centre).toBeGreaterThanOrEqual(line.top);
+	expect(centre).toBeLessThanOrEqual(line.bottom);
+
+	// The shared chip's list stays open across a re-measure.
+	await chip.click();
+	let list = page.getByRole("dialog", { name: "Comments" });
+	await expect(list).toBeVisible();
+	await page.setViewportSize({ width: 1_400, height: 900 });
+	await expect(list).toBeVisible();
+	await expect(list.locator("[data-plan-comment-group-item]")).toHaveCount(2);
 });
