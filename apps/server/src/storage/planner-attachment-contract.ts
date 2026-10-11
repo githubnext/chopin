@@ -27,7 +27,9 @@ async function attachable(storage: StorageAdapter) {
 		createdBy: member.id,
 		now,
 	});
-	let sessions = new Sessions(storage, false);
+	let skew = { ms: 0 };
+	let clock = () => new Date(Date.now() + skew.ms);
+	let sessions = new Sessions(storage, false, clock);
 	let signIn = async (user: { id: string }) =>
 		(await sessions.issue(user.id, { ...GRANT, accessToken: `${user.id}-login` })).id;
 	let logins = { member: await signIn(member), rival: await signIn(rival) };
@@ -35,7 +37,7 @@ async function attachable(storage: StorageAdapter) {
 		config: { origin: "https://chopin.test" },
 		storage,
 		sessions,
-		clock: () => new Date(),
+		clock,
 		admission: { allowed: async () => true },
 		github: {
 			repositoryAccess: async () => ({
@@ -50,11 +52,17 @@ async function attachable(storage: StorageAdapter) {
 	};
 	let owner = async () => (await storage.channels.readAgent(channelId, new Date()))?.agent;
 	let request = (user: { id: string; login: string }) => ({ channelId, repository, user });
-	return { auth, sessions, member, rival, logins, channelId, owner, request };
+	return { auth, sessions, member, rival, logins, channelId, owner, request, skew };
 }
 
 function link(): PlannerLink {
 	return {} as PlannerLink;
+}
+
+function revocable() {
+	let refusals: { code: string; message: string }[] = [];
+	let revocable = { revoke: (code: string, message: string) => refusals.push({ code, message }) };
+	return { link: revocable as unknown as PlannerLink, refusals };
 }
 
 async function released(owner: () => Promise<{ ownerSessionId?: string } | undefined>) {
@@ -159,6 +167,82 @@ export function plannerAttachmentContract(name: string, factory: StorageFactory)
 				} finally {
 					restarted.close();
 				}
+			} finally {
+				attachments.close();
+				await storage.close();
+			}
+		});
+
+		test("an owner sign-in storage already sees expired releases the attachment as sign-in-required", async () => {
+			let storage = await openedStorage(factory);
+			let f = await attachable(storage);
+			let attachments = new PlannerAttachments(f.auth, 60_000);
+			try {
+				let attached = revocable();
+				expect((await attachments.attach(f.request(f.member), attached.link)).ok).toBe(true);
+				let generation = (await f.owner())!.generation;
+				f.skew.ms = 31 * 24 * 60 * 60 * 1_000;
+				expect((await storage.channels.readAgent(f.channelId, f.auth.clock()))?.agent)
+					.toMatchObject({ ownerSessionId: undefined, generation });
+				expect(await attachments.verify(f.channelId, attached.link)).toBe(false);
+				expect(attached.refusals).toEqual([{
+					code: "sign-in-required",
+					message: expect.stringContaining("The Chopin browser sign-in that made member"),
+				}]);
+				f.skew.ms = 0;
+				expect(await f.owner())
+					.toMatchObject({ ownerSessionId: undefined, generation, status: "unavailable" });
+				expect(attachments.holder(f.channelId)).toBeUndefined();
+			} finally {
+				attachments.close();
+				await storage.close();
+			}
+		});
+
+		test("a reset during a grace reattach refuses it and leaves the document free", async () => {
+			let storage = await openedStorage(factory);
+			let f = await attachable(storage);
+			let reading = Promise.withResolvers<void>();
+			let resume = Promise.withResolvers<void>();
+			let paused = false;
+			let channels = {
+				...storage.channels,
+				readAgent: async (channelId: string, now: Date) => {
+					let snapshot = await storage.channels.readAgent(channelId, now);
+					if (!paused) return snapshot;
+					paused = false;
+					reading.resolve();
+					await resume.promise;
+					return snapshot;
+				},
+			};
+			let attachments = new PlannerAttachments({ ...f.auth, storage: { channels } }, 60_000);
+			try {
+				let first = await attachments.attach(f.request(f.member), link());
+				if (first.ok) first.detach();
+				let held = (await f.owner())!;
+				paused = true;
+				let reattached = revocable();
+				let reattaching = attachments.attach(f.request(f.member), reattached.link);
+				await reading.promise;
+				expect(
+					await storage.channels.clearAgentOwner(
+						f.channelId,
+						held.ownerSessionId!,
+						held.generation,
+						new Date(),
+					),
+				).toBe(true);
+				attachments.ownerReset(f.channelId);
+				resume.resolve();
+				expect(await reattaching).toMatchObject({ ok: false, code: "access-revoked" });
+				expect(attachments.attached(f.channelId)).toBe(false);
+				expect(attachments.holder(f.channelId)).toBeUndefined();
+				expect(await f.owner())
+					.toMatchObject({ ownerSessionId: undefined, generation: held.generation });
+				expect((await attachments.attach(f.request(f.rival), link())).ok).toBe(true);
+				expect(await f.owner())
+					.toMatchObject({ ownerSessionId: f.logins.rival, generation: held.generation + 1 });
 			} finally {
 				attachments.close();
 				await storage.close();

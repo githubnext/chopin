@@ -390,6 +390,95 @@ describe("Planner link ownership", () => {
 		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
 	});
 
+	it("releases the Planner as sign-in-required when storage already sees its owner's sign-in expired", async () => {
+		let { auth, server, raw, channel, storage, clock } = await attachedMember(20);
+		let held = (await owner(storage, channel.id))!;
+		auth.clock = () => new Date(Date.now() + clock.skewMs);
+		clock.skewMs = 31 * 24 * 60 * 60 * 1_000;
+		expect(await raw.next("refused")).toMatchObject({
+			code: "sign-in-required",
+			message: expect.stringContaining("The Chopin browser sign-in that made member"),
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		clock.skewMs = 0;
+		expect(await owner(storage, channel.id)).toMatchObject({
+			ownerSessionId: undefined,
+			generation: held.generation,
+			status: "unavailable",
+		});
+	});
+
+	/** Holds the next attach's ownership read until `resume`, once `reading` says it started. */
+	function pauseOwnerRead(storage: Awaited<ReturnType<typeof linkAuth>>["storage"]) {
+		let readAgent = storage.channels.readAgent;
+		let reading = Promise.withResolvers<void>();
+		let resume = Promise.withResolvers<void>();
+		storage.channels.readAgent = async (channelId, now) => {
+			storage.channels.readAgent = readAgent;
+			let snapshot = await readAgent(channelId, now);
+			reading.resolve();
+			await resume.promise;
+			return snapshot;
+		};
+		return { reading: reading.promise, resume: () => resume.resolve() };
+	}
+
+	/** A member detached within the grace period, reattaching on a raw link paused at its ownership read. */
+	async function reattachingMember() {
+		let linked = await linkAuth();
+		let server = linkServer(linked.auth, 2_000, undefined, 2_000);
+		cleanups.push(server.stop);
+		linked.revocations.add(id => server.attachments.sessionRevoked(id));
+		let first = await attach(server.url, linked.channel.id, scriptedPlanner().handlers);
+		await first.detach();
+		let held = (await owner(linked.storage, linked.channel.id))!;
+		let paused = pauseOwnerRead(linked.storage);
+		let raw = await rawLink(server.url);
+		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: linked.channel.id });
+		await paused.reading;
+		return { ...linked, server, raw, held, resume: paused.resume };
+	}
+
+	it("refuses a grace reattach whose ownership a reset released while it was attaching", async () => {
+		let { server, raw, channel, storage, logins, held, resume } = await reattachingMember();
+		await storage.channels.clearAgentOwner(
+			channel.id,
+			held.ownerSessionId!,
+			held.generation,
+			new Date(),
+		);
+		server.attachments.ownerReset(channel.id);
+		resume();
+		expect(await raw.next("refused")).toEqual({
+			type: "refused",
+			code: "access-revoked",
+			message: "A repository writer reset this document's Planner, so member is no longer "
+				+ "attached. Attach again to resume.",
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		expect(server.attachments.holder(channel.id)).toBeUndefined();
+		expect(server.links).toEqual([]);
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
+		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+	});
+
+	it("refuses a grace reattach whose owner signed out while it was attaching", async () => {
+		let { server, raw, channel, storage, logins, signOut, resume } = await reattachingMember();
+		expect(await signOut("member")).toBe(logins.get("member"));
+		resume();
+		expect(await raw.next("refused")).toMatchObject({
+			code: "sign-in-required",
+			message: expect.stringContaining("The Chopin browser sign-in that made member"),
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		expect(server.links).toEqual([]);
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
+		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+	});
+
 	it("releases the attachment when a repository writer resets the document's Planner", async () => {
 		let { server, raw, channel, storage, logins } = await attachedMember();
 		let held = (await owner(storage, channel.id))!;

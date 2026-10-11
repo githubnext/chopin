@@ -330,9 +330,11 @@ message naming its GitHub login. A link that detaches or drops keeps the
 ownership for `PLANNER_ATTACH_GRACE_MS` (2 minutes by default): the same account
 can attach again within it and keeps the same ownership generation, and anyone
 else is refused. When it ends, the ownership is cleared under its generation, so
-a newer owner is never released by an old timer. Attachments live in the server
-process; startup already clears every owner reference, which releases every
-attachment.
+a newer owner is never released by an old timer. An attach, including a grace
+reattach, binds only if no sign-out, expiry, or Planner reset of its ownership
+landed while it was checking; otherwise it is refused like an attached link
+would be closed. Attachments live in the server process; startup already clears
+every owner reference, which releases every attachment.
 
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
