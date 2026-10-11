@@ -113,6 +113,74 @@ export function blockMarkerPoints(
 	});
 }
 
+/** A line box: where a line of prose starts and how tall it is. */
+export type Line = { top: number; height: number };
+
+/**
+ * The first line a passage starts on, from its range's client rects.
+ *
+ * The rect that ends earliest is a glyph run on that line: a fully selected
+ * element contributes its whole box, which ends below its first line, and the
+ * zero-width tail of a line the range starts at the end of is not a line. The
+ * run is narrower than its line box, so `lineHeight`, the start element's own
+ * computed one, is centred on it when it is known.
+ */
+export function passageLine(rects: Iterable<Rect>, lineHeight?: number): Line | undefined {
+	let first: Rect | undefined;
+	for (let item of rects) {
+		if (item.width <= 0 || item.height <= 0) continue;
+		if (
+			!first || item.bottom < first.bottom || (item.bottom === first.bottom && item.top < first.top)
+		) {
+			first = item;
+		}
+	}
+	if (!first) return undefined;
+	if (lineHeight === undefined || !Number.isFinite(lineHeight) || lineHeight <= 0) {
+		return { top: first.top, height: first.height };
+	}
+	return { top: first.top + (first.height - lineHeight) / 2, height: lineHeight };
+}
+
+/** Two line boxes are one visual line when they overlap by half the shorter one. */
+export function sameLine(a: Line, b: Line): boolean {
+	let overlap = Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top);
+	return overlap >= Math.min(a.height, b.height) / 2;
+}
+
+export type LineEntry = { id: string; block: string; line: Line };
+export type LineGroup<T extends LineEntry> = { key: string; line: Line; entries: T[] };
+
+/**
+ * Threads whose passages start on the same visual line of the same block share
+ * one marker; any other thread gets its own, beside its own line.
+ *
+ * A group is keyed by its earliest thread id (ids are ULIDs, so creation order)
+ * rather than its block or line index: a newer thread joining the line, a
+ * reflow, or another group appearing above leaves the key alone, so focus,
+ * hover and a pinned list survive re-measuring. Entries keep their given
+ * order; groups come out top to bottom.
+ */
+export function lineGroups<T extends LineEntry>(entries: T[]): LineGroup<T>[] {
+	let groups: LineGroup<T>[] = [];
+	let blocks: string[] = [];
+	for (let entry of entries) {
+		let index = groups.findIndex((group, at) =>
+			blocks[at] === entry.block && sameLine(group.line, entry.line)
+		);
+		let group = groups[index];
+		if (!group) {
+			groups.push({ key: entry.id, line: entry.line, entries: [entry] });
+			blocks.push(entry.block);
+			continue;
+		}
+		group.entries.push(entry);
+		if (entry.id < group.key) group.key = entry.id;
+		if (entry.line.top < group.line.top) group.line = entry.line;
+	}
+	return groups.sort((a, b) => a.line.top - b.line.top);
+}
+
 export function popoverPoint(
 	button: Rect,
 	host: Rect,

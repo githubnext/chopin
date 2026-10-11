@@ -4,9 +4,12 @@ import {
 	blockMarkerPoints,
 	commentCardPoint,
 	decisionPanelPoint,
+	lineGroups,
 	marginPoint,
 	markerRect,
+	passageLine,
 	popoverPoint,
+	sameLine,
 } from "./comment-geometry";
 
 import type { BlockMarker, CardPoint, Rect } from "./comment-geometry";
@@ -275,4 +278,67 @@ test("places a decision panel below its paragraph, then flips above at the viewp
 	expect(decisionPanelPoint({ ...target, top: 780, bottom: 840 }, page, 352, 180))
 		.toEqual({ top: 494, left: 60 });
 	expect(decisionPanelPoint({ ...target, left: 900 }, page, 352, 180).left).toBe(448);
+});
+
+function box(top: number, left: number, width: number, height: number): Rect {
+	return { top, right: left + width, bottom: top + height, left, width, height };
+}
+
+test("a passage's line is the first line its range starts on, not its block's", () => {
+	// Two glyph runs: the end of line five, then the start of line six.
+	let line = passageLine([box(300, 420, 280, 19), box(326, 200, 120, 19)]);
+	expect(line).toEqual({ top: 300, height: 19 });
+});
+
+test("a passage's line ignores whole-element boxes and empty line-end rects", () => {
+	let line = passageLine([
+		// The zero-width tail of the line above, where the range starts.
+		box(270, 700, 0, 19),
+		// A fully selected list item contributes its whole border box.
+		box(296, 200, 500, 60),
+		box(300, 220, 300, 19),
+	]);
+	expect(line).toEqual({ top: 300, height: 19 });
+});
+
+test("a passage's line takes its line box height, centred on the glyph run", () => {
+	expect(passageLine([box(300, 200, 100, 20)], 30)).toEqual({ top: 295, height: 30 });
+	expect(passageLine([box(300, 200, 100, 20)], Number.NaN)).toEqual({ top: 300, height: 20 });
+});
+
+test("a passage with no measurable rect has no line", () => {
+	expect(passageLine([])).toBeUndefined();
+	expect(passageLine([box(300, 200, 0, 19)])).toBeUndefined();
+});
+
+test("passages share a line only when their line boxes mostly overlap", () => {
+	expect(sameLine({ top: 300, height: 24 }, { top: 302, height: 20 })).toBe(true);
+	expect(sameLine({ top: 300, height: 24 }, { top: 326, height: 24 })).toBe(false);
+	// A heading's tall line and a small inline run on it still read as one line.
+	expect(sameLine({ top: 300, height: 40 }, { top: 312, height: 18 })).toBe(true);
+});
+
+test("groups threads by block and visual line, keyed by their earliest thread", () => {
+	let groups = lineGroups([
+		{ id: "01C", block: "list", line: { top: 380, height: 24 } },
+		{ id: "01B", block: "list", line: { top: 300, height: 24 } },
+		{ id: "01A", block: "list", line: { top: 301, height: 24 } },
+		{ id: "01D", block: "table", line: { top: 380, height: 24 } },
+	]);
+	expect(groups.map(group => ({ key: group.key, ids: group.entries.map(entry => entry.id) })))
+		.toEqual([
+			{ key: "01A", ids: ["01B", "01A"] },
+			{ key: "01C", ids: ["01C"] },
+			{ key: "01D", ids: ["01D"] },
+		]);
+	expect(groups[0]!.line).toEqual({ top: 300, height: 24 });
+});
+
+test("a group's key survives a newer thread joining its line", () => {
+	let before = lineGroups([{ id: "01B", block: "p", line: { top: 300, height: 24 } }]);
+	let after = lineGroups([
+		{ id: "01Z", block: "p", line: { top: 300, height: 24 } },
+		{ id: "01B", block: "p", line: { top: 300, height: 24 } },
+	]);
+	expect(after[0]!.key).toBe(before[0]!.key);
 });
