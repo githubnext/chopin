@@ -76,14 +76,16 @@ test("routing happens once per entry", async ({ join }) => {
 	let page = await join("ana");
 	await ask(page);
 	await expect(decisionsButton(page)).toHaveAttribute("aria-pressed", "true");
+	await expect(routed(page)).toHaveCount(1);
 	await answerAll(page);
+	// The document stays blank: only the once-per-entry latch can stop a second route.
 	await page.getByRole("button", { name: "Document", exact: true }).click();
-	await content(page).click();
-	await page.keyboard.type("A first line");
+	await expect(decisionsButton(page)).toHaveAttribute("aria-pressed", "false");
 	await chatInput(page).click();
 	await ask(page);
 	await expect(decisionsButton(page)).toContainText("3");
 	await expect(decisionsButton(page)).toHaveAttribute("aria-pressed", "false");
+	await expect(routed(page)).toHaveCount(1);
 });
 
 test("arrow keys shuffle the Decisions deck; reduced motion reorders instantly", async ({ join }) => {
