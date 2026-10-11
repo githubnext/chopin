@@ -49,6 +49,11 @@ export const spikeSchema = z.object({
 	dismissed: z.boolean().optional(),
 	/** When the local agent claimed it; a spike running 20 minutes past this is interrupted. */
 	startedAt: z.number().int().nonnegative().optional(),
+	/**
+	 * Set with `rendered = completed` and cleared once Chat accepts the Planner turn that
+	 * settles the passage, so a landing nobody could act on yet is retried.
+	 */
+	settle: z.boolean().optional(),
 }).strict();
 export type Spike = z.infer<typeof spikeSchema>;
 
