@@ -80,6 +80,12 @@ continues to expose MCP-created documents using their creation provenance. See
 authentication modes. It posts an instruction to an existing document's Planner
 and returns without waiting for the turn.
 
+A child document has no Chat of its own. An instruction for a child, by ID or
+URL, posts to its root document's Chat and runs there with the child as the
+turn's focus, under the root's Planner ownership. A child that no longer belongs
+to a live root in the same repository is refused with `document-unavailable`.
+Coding agents are not offered the child document tools.
+
 The instruction is posted as a Chat message under the MCP caller's own handle,
 and the turn runs under the document's Planner ownership rules, exactly as a
 browser `@chopin` message would:

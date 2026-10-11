@@ -28,6 +28,7 @@ import type { ExperimentRuntime } from "./experiments/routes";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
 import { createChildDocuments } from "./chat/children";
+import { createRootChat } from "./chat/root";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
@@ -56,6 +57,7 @@ import { JobRunner } from "./jobs/runner";
 import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
+import { invokeRouted } from "./mcp/invoke";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -353,7 +355,10 @@ function conversation(
 			: undefined,
 		persist: chat => Service.persist(opened, chat),
 		...(room.parentChannelId
-			? { rootChannelId: room.parentChannelId }
+			? {
+				rootChannelId: room.parentChannelId,
+				root: rootChat(room, room.parentChannelId, claimantSessionId, repository),
+			}
 			: {
 				children: createChildDocuments({
 					rootId: room.id,
@@ -481,6 +486,48 @@ function conversation(
 	});
 }
 
+/**
+ * A child room's way to its root's Chat.
+ *
+ * Opening the root holds both rooms, so the root's turn and the child's thread
+ * it answers stay loaded until that turn, and the queue it drains, is done. The
+ * turn runs under the root's Planner owner or the sender's session, exactly as
+ * a comment in the root does; the sender's write access was checked on the child.
+ */
+function rootChat(
+	child: Rooms.Room,
+	rootId: string,
+	claimantSessionId: string | undefined,
+	repository: Chat.Room["repository"],
+): Chat.RootChat {
+	return createRootChat({
+		rootId,
+		childId: child.id,
+		repositoryId: repository.id,
+		channels: storage.channels,
+		open: async () => {
+			if (deletingChannels.has(rootId)) throw new Error("the root document is unavailable");
+			await Rooms.get(rootId)?.closing;
+			let held = Rooms.hold(rootId);
+			let kept = Rooms.hold(child.id);
+			let release = () => {
+				for (let hold of [held, kept]) {
+					hold.release();
+					evict(hold.room);
+				}
+			};
+			try {
+				await plan(held.room, server);
+				return { context: conversation(held.room, claimantSessionId, repository), release };
+			} catch (err) {
+				release();
+				throw err;
+			}
+		},
+		live: () => Rooms.get(rootId)?.plan?.chat,
+	});
+}
+
 async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
 	if (room.closing) return room.closing;
 	let closing = withDocumentLock(room.id, async () => {
@@ -593,6 +640,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			try {
 				let opened = await plan(room, server);
 				implementations?.track(room.id);
+				let parent = room.parentChannelId;
 				await greetJoinedPlan(
 					opened,
 					ws,
@@ -603,6 +651,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						&& !room.closing && !deletingChannels.has(room.id)
 						&& !ws.data.closed && ws.data.room === room.id
 						&& room.members.get(ws.data.client) === ws,
+					// A child's threads are worked on by its root's Chat.
+					parent
+						? { working: thread => Chat.workingFor(Rooms.get(parent)?.plan?.chat, thread, room.id) }
+						: undefined,
 				);
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
@@ -1876,31 +1928,31 @@ registerMcpRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 }, {
+	// A child's instruction runs on its root's Chat with the child as focus.
 	invokePlanner: input =>
-		withDocumentTransition(input.channel.id, async () => {
-			let channel = await storage.channels.get(input.channel.id);
-			if (!channel || deletingChannels.has(channel.id)) return "document-unavailable";
-			if (channel.archivedAt) return "document-archived";
-			await Rooms.get(channel.id)?.closing;
-			let held = Rooms.hold(channel.id);
-			let release = () => {
-				held.release();
-				evict(held.room);
-			};
-			let running = false;
-			try {
-				await plan(held.room, server);
-				let context = conversation(held.room, input.session?.session.id, input.repository);
-				let code = await Chat.invoke(context, input.user, input.instruction, input.checkout);
-				if (!code && context.chat.running) {
-					running = true;
-					void context.chat.running.finally(release).catch(() => {});
+		invokeRouted({
+			channels: storage.channels,
+			deleting: id => deletingChannels.has(id),
+			transition: withDocumentTransition,
+			open: async rootId => {
+				await Rooms.get(rootId)?.closing;
+				let held = Rooms.hold(rootId);
+				let release = () => {
+					held.release();
+					evict(held.room);
+				};
+				try {
+					await plan(held.room, server);
+					return {
+						context: conversation(held.room, input.session?.session.id, input.repository),
+						release,
+					};
+				} catch (err) {
+					release();
+					throw err;
 				}
-				return code;
-			} finally {
-				if (!running) release();
-			}
-		}),
+			},
+		}, input),
 	archiveChannel,
 	isChannelDeleting: channelId => deletingChannels.has(channelId),
 	onChannelRenamed: announceChannel,

@@ -126,6 +126,16 @@ thread's result. If the turn ends having said something in Chat but nothing in
 the thread, that last message is posted to the thread for it. Background jobs
 cannot call `reply_comment`.
 
+A child document has no Chat. A comment sent to Chopin inside one is admitted
+by its root's queue and starts or joins a turn on the root's Chat, with the
+child as the turn's focus; the root's transcript notice names the child. That
+turn alone may `reply_comment` in that child thread, and its `edit_child` writes
+are the thread's result. The note is saved in the child before the turn is
+queued, and the reply is saved in the child before the child's room sees it.
+Each step re-asks storage that the child still belongs to a live root in the
+same repository, and refuses the note before saving it when it does not.
+Planner ownership is the root's.
+
 Issue and general search MCP tools are refused because linked objects and
 free-form qualifiers can cross the selected repository boundary. Repository
 REST tools construct owner and repository coordinates on the server, bound

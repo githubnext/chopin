@@ -14,10 +14,19 @@ import { speaker } from "./store";
 
 import type { Record as Thread } from "./service";
 
-/** Enough context to answer, without pretending block indices will still be valid. */
-export function address(thread: Thread, quote: string): string {
+/**
+ * Enough context to answer, without pretending block indices will still be valid.
+ *
+ * `child` is the child document holding the thread, whose tools the change goes through.
+ */
+export function address(thread: Thread, quote: string, child?: string): string {
+	let change = child
+		? `make it with \`edit_child\` on child ${child} first and anchor what you wrote with `
+			+ `\`anchor_child\`, using thread ${thread.id}`
+		: "make it with `edit_plan` first and anchor what you wrote with `anchor_plan`, "
+			+ `using thread ${thread.id}`;
 	return [
-		"sent you a comment on a passage of the plan.",
+		`sent you a comment on a passage of ${child ? `child document ${child}` : "the plan"}.`,
 		"",
 		"The passage it marks:",
 		"",
@@ -30,8 +39,7 @@ export function address(thread: Thread, quote: string): string {
 		),
 		"",
 		`Answer the latest note sent to you with \`reply_comment\`, using thread ${thread.id}. `
-		+ "If it asks for a change to the plan, make it with `edit_plan` first and anchor what "
-		+ `you wrote with \`anchor_plan\`, using thread ${thread.id}; then say in the reply, `
+		+ `If it asks for a change to the document, ${change}; then say in the reply, `
 		+ "briefly, what you changed. The reply is shown in a small card beside the passage, so "
 		+ "keep it to a sentence or two.",
 	].join("\n");

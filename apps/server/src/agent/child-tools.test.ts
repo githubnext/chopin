@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 
 import { createChildDocuments } from "../chat/children";
 import * as Service from "../plan/service";
-import { openPlan } from "../testing/plan";
+import { openPlan, seedOpenThread } from "../testing/plan";
 import { type DocumentRoom, documentTools } from "./tools";
 
 import type { Plan } from "../plan/service";
@@ -252,4 +252,32 @@ test("an unexpected storage failure reaches the model as a generic refusal", asy
 		child.backend.storage.channels.children = list;
 		console.error = original;
 	}
+});
+
+test("edit_child attributes the edit to the child thread the root turn is acting on", async () => {
+	let { call, child, root } = await rooted();
+	let thread = seedOpenThread(child.plan);
+	root.plan.chat.acting = thread;
+	root.plan.chat.actingChannel = child.channel.id;
+	let read = await call("read_child", { child: child.channel.id });
+	await call("edit_child", {
+		child: child.channel.id,
+		revision: read.revision,
+		operations: [{ op: "insert", index: read.blocks.length - 1, source: "Attributed." }],
+	});
+	expect(child.plan.threads.get(thread)?.result).toBeDefined();
+});
+
+test("edit_child does not attribute a root thread's turn to the child", async () => {
+	let { call, child, root } = await rooted();
+	let thread = seedOpenThread(child.plan);
+	root.plan.chat.acting = thread;
+	root.plan.chat.actingChannel = undefined;
+	let read = await call("read_child", { child: child.channel.id });
+	await call("edit_child", {
+		child: child.channel.id,
+		revision: read.revision,
+		operations: [{ op: "insert", index: read.blocks.length - 1, source: "Unattributed." }],
+	});
+	expect(child.plan.threads.get(thread)?.result).toBeUndefined();
 });

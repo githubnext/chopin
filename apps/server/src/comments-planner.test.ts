@@ -9,11 +9,15 @@
 
 import { afterEach, describe, expect, it } from "bun:test";
 
+import { documentTools } from "./agent/tools";
+import { createRootChat } from "./chat/root";
 import * as Chat from "./chat/service";
 import * as Comments from "./comments/service";
 import * as Service from "./plan/service";
 import * as room from "./plan/room";
 import { openPlan } from "./testing/plan";
+import { rooted } from "./testing/rooted";
+import * as Wire from "./wire";
 
 import type { Config } from "./config";
 import type { Plan } from "./plan/service";
@@ -31,8 +35,10 @@ const QUOTE = "caches tiles for 60 seconds";
 type Sent = { kind: string; [key: string]: unknown };
 
 let opens: Plan[] = [];
+let cleanups: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
+	for (let cleanup of cleanups.splice(0)) await cleanup();
 	for (let plan of opens) await Service.close(plan);
 	opens = [];
 });
@@ -314,9 +320,10 @@ describe("how a turn ends on its thread", () => {
 	it("does not repeat itself when the Planner already replied", async () => {
 		let { end, id, plan, server } = await ending("done", "Shortened it.");
 
-		expect(await Comments.answer(plan, server, "test", id, "Done — 30s now.")).toMatchObject({
-			ok: true,
-		});
+		expect(await Comments.answer(plan, server, "test", id, "Done — 30s now.", plan.chat.acting))
+			.toMatchObject({
+				ok: true,
+			});
 		await end();
 
 		let notes = plan.threads.get(id)!.notes;
@@ -359,7 +366,7 @@ describe("a note that arrives while Chopin is working", () => {
 		let running = plan.chat.waiting.shift()!;
 		plan.chat.acting = id;
 		running.started?.();
-		await Comments.answer(plan, server, "test", id, "Shortened it.");
+		await Comments.answer(plan, server, "test", id, "Shortened it.", plan.chat.acting);
 		await reply(context, ana, id, "And the next one?");
 		// The follow-up is withdrawn, so nothing is queued when the first turn ends.
 		let follow = Chat.queuedFor(plan.chat, id)!;
@@ -379,10 +386,11 @@ describe("the Planner's reply", () => {
 		let ana = member("ana");
 		let id = idOf(await start(context, ana));
 
-		expect(await Comments.answer(plan, server, "test", id, "Hello")).toMatchObject({
-			ok: false,
-			reason: "not-asked",
-		});
+		expect(await Comments.answer(plan, server, "test", id, "Hello", plan.chat.acting))
+			.toMatchObject({
+				ok: false,
+				reason: "not-asked",
+			});
 		expect(plan.threads.get(id)!.notes).toHaveLength(1);
 	});
 
@@ -402,10 +410,12 @@ describe("the Planner's reply", () => {
 			}),
 		);
 
-		expect(await Comments.answer(plan, server, "test", id, "Done")).toMatchObject({
-			ok: false,
-			reason: "resolved",
-		});
+		expect(await Comments.answer(plan, server, "test", id, "Done", plan.chat.acting)).toMatchObject(
+			{
+				ok: false,
+				reason: "resolved",
+			},
+		);
 	});
 
 	it("tells nobody, and keeps nothing, when it cannot be saved", async () => {
@@ -423,7 +433,9 @@ describe("the Planner's reply", () => {
 		console.error = () => {};
 		let outcome: unknown;
 		try {
-			outcome = await Comments.answer(plan, server, "test", id, "Done").catch(err => err);
+			outcome = await Comments.answer(plan, server, "test", id, "Done", plan.chat.acting).catch(
+				err => err,
+			);
 		} finally {
 			console.error = quiet;
 			plan.persistence.storage.collaboration.commit = original;
@@ -508,5 +520,180 @@ describe("what a thread looks like to someone joining", () => {
 			text: "Old.",
 			ts: 1,
 		});
+	});
+});
+
+// -- a comment inside a child document -----------------------------------------
+
+/** A root and its child sharing one store, wired as `main.ts` wires them. */
+async function rootAndChild() {
+	let fixture = await rooted({ root: SOURCE, child: SOURCE });
+	cleanups.push(fixture.close);
+	let { root, child, turns, repository } = fixture;
+	let committedAtBroadcast: string[] = [];
+	fixture.listen((topic, frame) => {
+		if (topic === Wire.topic(child.channel.id) && frame.kind === "comment:said") {
+			committedAtBroadcast.push(JSON.stringify(child.plan.persistence.committedSidecar));
+		}
+	});
+	child.context.root = createRootChat({
+		rootId: root.channel.id,
+		childId: child.channel.id,
+		repositoryId: repository.id,
+		channels: fixture.storage.channels,
+		open: async () => ({ context: root.context, release: () => {} }),
+		live: () => root.plan.chat,
+	});
+	let owner = { signal: new AbortController().signal, revalidate: async () => true };
+	let replyAs = async (thread: string, text: string) =>
+		JSON.parse(
+			String(
+				await documentTools.reply_comment.execute!({ thread, text } as never, {
+					context: { room: Chat.documentRoom(root.context), owner, repository },
+					toolCallId: "call",
+					messages: [],
+				} as never),
+			),
+		);
+	let ana = member("ana");
+	/** Sends a comment in the child to Chopin; the thread id, or the refusal. */
+	let sendToChopin = async (text: string) => {
+		let answered = await start(child.context, ana, text);
+		if (!answered?.ok) return answered as Sent;
+		await turns.started();
+		return idOf(answered);
+	};
+	return {
+		root: { prompts: turns.prompts, plan: root.plan, channel: root.channel },
+		rootChat: root.plan.chat,
+		child: {
+			channel: child.channel,
+			plan: child.plan,
+			root: child.context.root,
+			committedAtBroadcast,
+			sendToChopin,
+		},
+		events: fixture.events,
+		async startChildComment(text: string, _options: { to: "planner" }) {
+			return sendToChopin(text) as Promise<string>;
+		},
+		replyFromRootTurn: replyAs,
+		async replyWithWrongTarget(
+			which: "root-thread-while-child-acting" | "child-thread-while-root-acting",
+		) {
+			let rootThread = idOf(await start(root.context, member("kris"), "Root note.", null));
+			let childThread = idOf(await start(child.context, member("kris"), "Child note.", null));
+			if (which === "root-thread-while-child-acting") {
+				root.plan.chat.acting = childThread;
+				root.plan.chat.actingChannel = child.channel.id;
+				return replyAs(rootThread, "Wrong place.");
+			}
+			root.plan.chat.acting = rootThread;
+			root.plan.chat.actingChannel = undefined;
+			return replyAs(childThread, "Wrong place.");
+		},
+		async fillRootQueue() {
+			root.plan.chat.busy = true;
+			for (let i = 0; i < 20; i++) {
+				root.plan.chat.waiting.push({ id: `w${i}`, handle: "kris", text: "x" });
+			}
+		},
+		async endRootTurnWithChatOnly(text: string) {
+			turns.finish([
+				{ type: "text-start", id: "m" },
+				{ type: "text-delta", id: "m", text },
+				{ type: "text-end", id: "m" },
+				{ type: "finish" },
+			]);
+			await root.plan.chat.running;
+		},
+	};
+}
+
+describe("a comment sent to Chopin inside a child document", () => {
+	it("runs on the root's Chat with the child as focus", async () => {
+		let { root, child, rootChat, startChildComment } = await rootAndChild();
+		let thread = await startChildComment("@ana: tighten this", { to: "planner" });
+
+		// Notice in the root's transcript, linking back to the child thread.
+		let notice = rootChat.entries.find(entry => entry.comment?.thread === thread);
+		expect(notice?.comment?.channelId).toBe(child.channel.id);
+		// The child's own Chat never gains an entry or a turn.
+		expect(child.plan.chat.entries).toHaveLength(0);
+		expect(child.plan.chat.busy).toBe(false);
+		// The root turn names the child and knows which thread it acts on.
+		expect(root.prompts.at(-1)).toContain(`child id ${child.channel.id}`);
+		expect(root.prompts.at(-1)).toContain("`edit_child`");
+		expect(rootChat.acting).toBe(thread);
+		expect(rootChat.actingChannel).toBe(child.channel.id);
+	});
+
+	it("tells the child room the root's Planner is working on the thread", async () => {
+		let { child, events, startChildComment } = await rootAndChild();
+		let thread = await startChildComment("tighten this", { to: "planner" });
+		expect(events).toContainEqual({
+			topic: Wire.topic(child.channel.id),
+			frame: expect.objectContaining({ kind: "comment:working", id: thread, working: true }),
+		});
+		let joiner = member("kris");
+		Comments.greet(child.plan, joiner.socket, child.root);
+		expect(joiner.replies.find(frame => frame.kind === "comment:sync")?.threads).toEqual([
+			expect.objectContaining({ id: thread, working: true }),
+		]);
+	});
+
+	it("reply_comment from the root turn answers the child's thread, persisted before broadcast", async () => {
+		let { child, replyFromRootTurn } = await rootAndChild();
+		let thread = await child.sendToChopin("tighten this") as string;
+		let reply = await replyFromRootTurn(thread, "Done in the child.");
+		expect(reply).toMatchObject({ ok: true });
+		let record = child.plan.threads.get(thread)!;
+		expect(record.notes.at(-1)).toMatchObject({ author: "planner", text: "Done in the child." });
+		expect(child.committedAtBroadcast.at(-1)).toContain("Done in the child.");
+	});
+
+	it("reply_comment refuses a root thread while the turn acts on a child thread, and the reverse", async () => {
+		let { replyWithWrongTarget } = await rootAndChild();
+		expect(await replyWithWrongTarget("root-thread-while-child-acting")).toMatchObject({
+			ok: false,
+			reason: "not-asked",
+		});
+		expect(await replyWithWrongTarget("child-thread-while-root-acting")).toMatchObject({
+			ok: false,
+			reason: "not-asked",
+		});
+	});
+
+	it("a busy root queue refuses the child comment before saving it", async () => {
+		let { child, fillRootQueue } = await rootAndChild();
+		await fillRootQueue();
+		let refused = await child.sendToChopin("tighten this");
+		expect(refused).toMatchObject({ ok: false, reason: "busy" });
+		expect(child.plan.threads.size).toBe(0);
+	});
+
+	it("the backstop posts the root turn's last Chat word into the child thread", async () => {
+		let { child, endRootTurnWithChatOnly } = await rootAndChild();
+		let thread = await child.sendToChopin("tighten this") as string;
+		await endRootTurnWithChatOnly("Answered in Chat only.");
+		expect(child.plan.threads.get(thread)!.notes.at(-1)).toMatchObject({
+			author: "planner",
+			text: "Answered in Chat only.",
+		});
+	});
+
+	it("refuses the note when the child no longer belongs to the root", async () => {
+		let { child } = await rootAndChild();
+		await child.plan.persistence.storage.channels.archive({
+			id: child.channel.id,
+			now: new Date(),
+		});
+		let quiet = console.error;
+		console.error = () => {};
+		let refused = await child.sendToChopin("tighten this").finally(() => {
+			console.error = quiet;
+		});
+		expect(refused).toMatchObject({ ok: false });
+		expect(child.plan.threads.size).toBe(0);
 	});
 });

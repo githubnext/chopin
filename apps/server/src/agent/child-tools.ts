@@ -148,9 +148,13 @@ export const childTools = {
 				if (args.visualRoute) return { ok: false, reason: "visual-routing-unavailable" };
 				let children = await permitted(room, owner);
 				return children.open(child, async opened => {
+					let { acting, actingChannel } = room.plan.chat;
 					let result = await opened.exclusive(async () => {
 						await stillChild(children, owner, opened.id);
-						return applyBlockEdit(opened, args);
+						// Only a thread in this child is the one the root's turn was sent about.
+						return applyBlockEdit(opened, args, {
+							acting: actingChannel === opened.id ? acting : undefined,
+						});
 					});
 					return { ...result, child: opened.id };
 				});

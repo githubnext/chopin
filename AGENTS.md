@@ -169,6 +169,12 @@ per document. An MCP
 runs under the channel's existing Planner owner; only a caller with a live
 browser login can claim an unowned channel.
 
+`Chat.Send.focus` names the child a member has open. The server resolves it
+against storage and treats it as context, never as an authorization grant. A
+child has no Chat: a comment sent to Chopin inside a child, and an
+`invoke_planner` call naming a child, run on the root's Chat with that child as
+focus, and the turn answers in the child's thread.
+
 Under `copilot-sdk` and `pi` the Planner is a custom agent, not a general coding
 agent; under `atomic` it is a full Atomic session. Either way its turn runs
 through `HarnessAgent.stream()` from `@ai-sdk/harness`; the conversation stays

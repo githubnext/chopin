@@ -78,6 +78,7 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 		chat.busy = false;
 		chat.turn = undefined;
 		chat.acting = undefined;
+		chat.actingChannel = undefined;
 		let waiting = chat.waiting;
 		chat.waiting = [];
 		for (let item of waiting) {

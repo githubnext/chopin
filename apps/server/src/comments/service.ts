@@ -72,7 +72,7 @@ export function normalize(record: Record): Record {
 }
 
 /** The thread as clients see it. The passage travels on `plan:anchors`. */
-function wire(record: Record, plan?: Plan): Wire.Thread {
+function wire(record: Record, plan?: Plan, root?: Root): Wire.Thread {
 	return {
 		id: record.id,
 		status: record.status,
@@ -80,7 +80,7 @@ function wire(record: Record, plan?: Plan): Wire.Thread {
 		...(record.quote !== undefined ? { quote: record.quote } : {}),
 		...(record.resolver ? { resolver: record.resolver } : {}),
 		...(record.at !== undefined ? { at: record.at } : {}),
-		...(plan && working(plan, record.id) ? { working: true } : {}),
+		...(plan && working(plan, record.id, root) ? { working: true } : {}),
 	};
 }
 
@@ -89,13 +89,17 @@ function wire(record: Record, plan?: Plan): Wire.Thread {
  *
  * Read from the turn and its queue rather than stored, so it cannot outlive
  * them: a restart drops both, and a thread that said otherwise would spin
- * for good.
+ * for good. A child's threads are worked on by its root's Chat, so `root`
+ * answers for them.
  */
-export function working(plan: Plan, id: string): boolean {
+export function working(plan: Plan, id: string, root?: Root): boolean {
 	let record = plan.threads.get(id);
 	if (record?.status !== "open") return false;
-	return plan.chat.acting === id || !!Chat.queuedFor(plan.chat, id);
+	return root ? root.working(id) : Chat.workingFor(plan.chat, id);
 }
+
+/** What a child's comments need of its root's Chat to say whether a thread is worked on. */
+type Root = Pick<Chat.RootChat, "working">;
 
 /**
  * What the passage reads as right now.
@@ -296,14 +300,14 @@ export function relate(
 
 // -- sockets ---------------------------------------------------------------
 
-/** Every thread worth showing, for somebody who has just arrived. */
-export function greet(plan: Plan, ws: Socket): void {
+/** Every thread worth showing, for somebody who has just arrived; `root` for a child. */
+export function greet(plan: Plan, ws: Socket, root?: Root): void {
 	tell(ws, {
 		kind: "comment:sync",
 		ts: 0,
 		threads: [...plan.threads.values()]
 			.filter(tracked)
-			.map(record => wire(record, plan)),
+			.map(record => wire(record, plan, root)),
 	});
 }
 
@@ -323,12 +327,25 @@ type Admitted = { planner?: Wire.Planner } | { refused: string };
  *
  * A full queue refuses the note rather than saving one nobody will act on. A
  * server without a Planner still takes it — it is a comment either way — and
- * says so.
+ * says so. A child's note is admitted by its root's queue, which runs its turn,
+ * and refused if the child no longer belongs to a live root.
  */
-function admit(msg: { to?: unknown }, context: Addressed | undefined, thread?: string): Admitted {
+async function admit(
+	msg: { to?: unknown },
+	context: Addressed | undefined,
+	thread?: string,
+): Promise<Admitted> {
 	if (msg.to === undefined) return {};
 	if (msg.to !== "planner" || !context) return { refused: "A comment can only be sent to Chopin." };
-	let admitted = Chat.admission(context, thread);
+	let admitted: Wire.Planner | "busy";
+	if (context.root) {
+		try {
+			admitted = await context.root.admission(thread ?? "");
+		} catch (err) {
+			console.error("[comments] could not reach the root document's Chat:", err);
+			return { refused: "Chopin can't be reached from this document right now." };
+		}
+	} else admitted = Chat.admission(context, thread);
 	if (admitted === "busy") {
 		return { refused: "Chopin has too much waiting already. Try again when it has caught up." };
 	}
@@ -336,14 +353,14 @@ function admit(msg: { to?: unknown }, context: Addressed | undefined, thread?: s
 }
 
 /** Mark a phrase and say the first thing about it. */
-export function start(
+export async function start(
 	plan: Plan,
 	server: Server<SocketData>,
 	roomId: string,
 	ws: Socket,
 	msg: Request<Wire.Start.Ask>,
 	context?: Addressed,
-): void | Promise<void> {
+): Promise<void> {
 	let refuse = (reason: "invalid" | "full" | "busy", message: string) =>
 		reply(ws, msg.rid, { kind: "comment:start", ts: 0, ok: false, reason, message });
 
@@ -353,7 +370,7 @@ export function start(
 	let text = said(msg.text);
 	if (!text) return refuse("invalid", "A comment needs something in it.");
 
-	let admitted = admit(msg, context);
+	let admitted = await admit(msg, context);
 	if ("refused" in admitted) {
 		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused);
 	}
@@ -386,19 +403,19 @@ export function start(
 }
 
 /** Add to an open thread. */
-export function respond(
+export async function respond(
 	plan: Plan,
 	ws: Socket,
 	msg: Request<Wire.Reply.Ask>,
 	context?: Addressed,
-): void | Promise<void> {
+): Promise<void> {
 	let refuse = (reason: "invalid" | "busy", message: string) =>
 		reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ok: false, reason, message });
 
 	let text = said(msg.text);
 	if (!text) return refuse("invalid", "A comment needs something in it.");
 
-	let admitted = admit(msg, context, msg.id);
+	let admitted = await admit(msg, context, msg.id);
 	if ("refused" in admitted) {
 		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused);
 	}
@@ -453,9 +470,13 @@ function announce(
  * Only after the note is durable and the room has it, so the turn never reads
  * a thread somebody else cannot see. A server without a Planner says so on the
  * thread rather than in Chat: the note is the thing that was asked about.
+ *
+ * A child's note runs on its root's Chat, the only one, with the child as the
+ * turn's focus: the notice goes in the root's transcript and the turn edits the
+ * child and answers here.
  */
 async function send(context: Addressed, id: string, note: Wire.Note): Promise<void> {
-	let { plan } = context;
+	let { plan, root } = context;
 	if (!context.config.agent) return announce(context, id, false, "off");
 
 	let record = plan.threads.get(id);
@@ -464,29 +485,28 @@ async function send(context: Addressed, id: string, note: Wire.Note): Promise<vo
 	let handle = Store.speaker(note);
 	// How many notes the turn could read when it began; set again if a folded turn starts.
 	let seen = { notes: record.notes.length };
+	let text = address(plan.threads.get(id) ?? record, quote, root ? context.room : undefined);
+	let said = `Comment on “${excerpt(quote)}” sent to Chopin`;
+	let about: Chat.Instruction = {
+		thread: id,
+		// Resolved before its turn came round: nobody is waiting for it now.
+		spent: () => plan.threads.get(id)?.status !== "open",
+		started: () => {
+			seen.notes = plan.threads.get(id)?.notes.length ?? 0;
+		},
+		ended: outcome => ended(context, id, outcome, seen.notes),
+		comment: { thread: id, excerpt: excerpt(quote), note: note.text },
+	};
 	try {
-		await Chat.instruct(
-			context,
-			handle,
-			address(plan.threads.get(id) ?? record, quote),
-			`Comment on “${excerpt(quote)}” sent to Chopin`,
-			{
-				thread: id,
-				// Resolved before its turn came round: nobody is waiting for it now.
-				spent: () => plan.threads.get(id)?.status !== "open",
-				started: () => {
-					seen.notes = plan.threads.get(id)?.notes.length ?? 0;
-				},
-				ended: outcome => ended(context, id, outcome, seen.notes),
-				comment: { thread: id, excerpt: excerpt(quote), note: note.text },
-			},
-		);
+		await (root
+			? root.instruct(handle, text, said, about)
+			: Chat.instruct(context, handle, text, said, about));
 	} catch (err) {
 		console.error("[comments] could not send a comment to the Planner:", err);
-		return announce(context, id, working(plan, id), "failed");
+		return announce(context, id, working(plan, id, root), "failed");
 	}
 	// Only when a turn is now running or queued; a refusal already said why it is not.
-	if (working(plan, id)) announce(context, id, true);
+	if (working(plan, id, root)) announce(context, id, true);
 }
 
 /**
@@ -508,7 +528,8 @@ async function ended(
 	let text = outcome.text?.trim().slice(0, limits.MAX_NOTE);
 	// A note that arrived mid-turn is answered by the turn queued for it, not by
 	// whatever this one last said about something else.
-	let following = !!Chat.queuedFor(plan.chat, id);
+	let queued = () => context.root ? context.root.working(id) : !!Chat.queuedFor(plan.chat, id);
+	let following = queued();
 	if (outcome.status === "done" && record?.status === "open" && text && !following) {
 		let last = record.notes.slice(0, seen).findLastIndex(note => note.to === "planner");
 		let answered = record.notes.slice(last + 1).some(note => note.author === "planner");
@@ -519,7 +540,7 @@ async function ended(
 		}
 	}
 
-	let still = !!Chat.queuedFor(plan.chat, id);
+	let still = queued();
 	let reason = outcome.status === "stopped"
 		? "stopped" as const
 		: outcome.status === "failed"
@@ -551,9 +572,10 @@ async function post(
 /**
  * The Planner answers in a thread.
  *
- * Only the thread its running turn was sent: a turn has no business speaking in
- * a conversation nobody asked it into, and one about a thread resolved since is
- * refused like any other late reply.
+ * Only the thread its running turn was sent, `acting`: a turn has no business
+ * speaking in a conversation nobody asked it into, and one about a thread
+ * resolved since is refused like any other late reply. `plan` is the document
+ * holding the thread, which for a child is not the one whose turn is running.
  */
 export async function answer(
 	plan: Plan,
@@ -561,8 +583,9 @@ export async function answer(
 	roomId: string,
 	thread: string,
 	text: string,
+	acting: string | undefined,
 ): Promise<{ ok: true; note: string } | { ok: false; reason: string; message: string }> {
-	if (plan.chat.acting !== thread) {
+	if (acting !== thread) {
 		return {
 			ok: false,
 			reason: "not-asked",

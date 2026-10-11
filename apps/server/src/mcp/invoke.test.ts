@@ -1,6 +1,13 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 
 import { handler, TOOLS } from "../mcp";
+import { rooted } from "../testing/rooted";
+import { invokeRouted } from "./invoke";
+
+let cleanups: Array<() => Promise<void>> = [];
+afterEach(async () => {
+	for (let cleanup of cleanups.splice(0)) await cleanup();
+});
 
 import type { InvokePlanner, InvokePlannerInput } from "../mcp";
 
@@ -126,4 +133,69 @@ test("invoke_planner carries a refusal's message beside its code", async () => {
 		code: "planner-not-attached",
 		message,
 	});
+});
+
+/** A root and child, with `invokePlanner` routed as `main.ts` routes it. */
+async function routed() {
+	let fixture = await rooted({ root: "# Root\n\nRoot prose.\n", child: "# Child\n\nFinding.\n" });
+	cleanups.push(fixture.close);
+	let opened: string[] = [];
+	let released = 0;
+	let route = {
+		channels: fixture.storage.channels,
+		deleting: () => false,
+		transition: <T>(_id: string, action: () => Promise<T>) => action(),
+		open: async (rootId: string) => {
+			opened.push(rootId);
+			if (rootId !== fixture.root.channel.id) throw new Error(`unexpected room ${rootId}`);
+			return { context: fixture.root.context, release: () => released++ };
+		},
+	};
+	let invoke = async (channelId: string, repositoryId = fixture.repository.id) => {
+		let channel = (await fixture.storage.channels.get(channelId))!;
+		return invokeRouted(route, {
+			channel,
+			repository: {
+				...fixture.repository,
+				id: repositoryId,
+				permissions: { push: true, pull: true, admin: false },
+			},
+			user: { id: fixture.user.id, login: fixture.user.login, avatarUrl: "" },
+			instruction: "Summarize the open findings.",
+		} as never);
+	};
+	return { ...fixture, invoke, opened, released: () => released };
+}
+
+test("invoke_planner on a child posts to the root's Chat with the child as focus", async () => {
+	let { child, invoke, opened, root, turns } = await routed();
+	expect(await invoke(child.channel.id)).toBeUndefined();
+	await turns.started();
+	expect(opened).toEqual([root.channel.id]);
+	expect(root.plan.chat.entries.at(-1)).toMatchObject({
+		author: { kind: "member", handle: "ana" },
+		text: "Summarize the open findings.",
+	});
+	expect(child.plan.chat.entries).toEqual([]);
+	expect(child.plan.chat.busy).toBe(false);
+	expect(turns.prompts.at(-1)).toContain(`child id ${child.channel.id}`);
+});
+
+test("invoke_planner on a root runs on its own Chat without a focus", async () => {
+	let { invoke, root, turns } = await routed();
+	expect(await invoke(root.channel.id)).toBeUndefined();
+	await turns.started();
+	expect(turns.prompts.at(-1)).not.toContain("child id");
+});
+
+test("invoke_planner on a child that no longer belongs to its root fails closed", async () => {
+	let { child, invoke, opened, released, root, storage } = await routed();
+	await storage.channels.archive({ id: root.channel.id, now: new Date() });
+	expect(await invoke(child.channel.id)).toBe("document-archived");
+	await storage.channels.restore({ id: root.channel.id, now: new Date() });
+	// The caller's located repository is not the root's: ChildDocuments refuses it.
+	expect(await invoke(child.channel.id, "R_other")).toBe("document-unavailable");
+	expect(root.plan.chat.entries).toEqual([]);
+	expect(child.plan.chat.entries).toEqual([]);
+	expect(released()).toBe(opened.length);
 });

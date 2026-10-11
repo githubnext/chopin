@@ -107,9 +107,10 @@ export declare namespace Chat {
 		/**
 		 * A system notice that a comment was sent to the Planner; text remains its fallback.
 		 *
-		 * `excerpt` is a short cut of the marked passage, `note` the comment as sent.
+		 * `excerpt` is a short cut of the marked passage, `note` the comment as sent, and
+		 * `channelId` the child document holding the thread, absent when it is this one.
 		 */
-		comment?: { thread: string; excerpt: string; note: string };
+		comment?: { thread: string; excerpt: string; note: string; channelId?: string };
 		/** True while the agent is still writing this one. */
 		streaming?: boolean;
 		tools?: Activity[];

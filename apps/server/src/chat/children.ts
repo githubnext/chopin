@@ -58,27 +58,52 @@ export class UnknownChild extends Error {
 	}
 }
 
+/**
+ * A child of `rootId` in `repositoryId`, unarchived, under a live root; otherwise undefined.
+ *
+ * Every route into a child — a tool, a comment, an MCP instruction — asks this again.
+ */
+export async function resolveChild(
+	channels: Pick<ChannelStore, "get">,
+	rootId: string,
+	repositoryId: string,
+	childId: string,
+): Promise<ChildSummary | undefined> {
+	if (typeof childId !== "string" || !isChannelId(childId) || childId === rootId) {
+		return undefined;
+	}
+	if (!await rootLive(channels, rootId, repositoryId)) return undefined;
+	let child = await channels.get(childId);
+	return belongs(child, rootId, repositoryId) ? summary(child) : undefined;
+}
+
+async function rootLive(
+	channels: Pick<ChannelStore, "get">,
+	rootId: string,
+	repositoryId: string,
+): Promise<boolean> {
+	let root = await channels.get(rootId);
+	return !!root && !root.parentChannelId && !root.archivedAt && root.repositoryId === repositoryId;
+}
+
+function belongs(
+	child: ChannelRecord | undefined,
+	rootId: string,
+	repositoryId: string,
+): child is ChannelRecord {
+	return !!child && child.parentChannelId === rootId && child.repositoryId === repositoryId
+		&& !child.archivedAt;
+}
+
 export function createChildDocuments(deps: ChildDocumentDeps): ChildDocuments {
-	let belongs = (child: ChannelRecord | undefined): child is ChannelRecord =>
-		!!child && child.parentChannelId === deps.rootId
-		&& child.repositoryId === deps.repositoryId && !child.archivedAt;
-	let rootLive = async () => {
-		let root = await deps.channels.get(deps.rootId);
-		return !!root && !root.parentChannelId && !root.archivedAt
-			&& root.repositoryId === deps.repositoryId;
-	};
-	let resolve = async (childId: string) => {
-		if (typeof childId !== "string" || !isChannelId(childId) || childId === deps.rootId) {
-			return undefined;
-		}
-		if (!await rootLive()) return undefined;
-		let child = await deps.channels.get(childId);
-		return belongs(child) ? summary(child) : undefined;
-	};
+	let resolve = (childId: string) =>
+		resolveChild(deps.channels, deps.rootId, deps.repositoryId, childId);
 	return {
 		async list() {
-			if (!await rootLive()) return [];
-			return (await deps.channels.children(deps.rootId, MAX_CHILDREN)).filter(belongs).map(summary);
+			if (!await rootLive(deps.channels, deps.rootId, deps.repositoryId)) return [];
+			return (await deps.channels.children(deps.rootId, MAX_CHILDREN))
+				.filter(child => belongs(child, deps.rootId, deps.repositoryId))
+				.map(summary);
 		},
 		resolve,
 		async open(childId, action) {

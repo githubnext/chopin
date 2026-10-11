@@ -167,6 +167,44 @@ export async function storedResolvedComment(
 	}
 }
 
+/** Store `source` as a channel's first checkpoint, with an otherwise empty sidecar. */
+export async function checkpointSource(
+	storage: MemoryStorage,
+	lease: NonNullable<Awaited<ReturnType<MemoryStorage["leases"]["acquire"]>>>,
+	channelId: string,
+	source: string,
+	state: SeedState = {},
+	now = new Date(),
+): Promise<void> {
+	let sidecar = {
+		version: 1,
+		revision: state.revision ?? 0,
+		documentSeq: 0,
+		questions: state.questions ?? [],
+		openQuestions: state.openQuestions ?? [],
+		threads: state.threads ?? [],
+		transcript: state.transcript ?? [],
+		...(state.graph ? { graph: state.graph } : {}),
+	} as JsonValue;
+	let document = await Room.create(source);
+	let canonical = Room.project(document);
+	await storage.collaboration.checkpoint({
+		channelId,
+		lease,
+		expectedRevision: 0,
+		generation: crypto.randomUUID(),
+		revision: 0,
+		throughSequence: 0,
+		epoch: document.epoch,
+		source: canonical,
+		sourceHash: `sha256:${createHash("sha256").update(canonical).digest("hex")}`,
+		document: Y.encodeStateAsUpdate(document.doc),
+		sidecar,
+		createdAt: now,
+	});
+	document.doc.destroy();
+}
+
 export async function openPlan(source = "", state: SeedState = {}) {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();
@@ -190,33 +228,7 @@ export async function openPlan(source = "", state: SeedState = {}) {
 	});
 	let lease = await storage.leases.acquire("writer", crypto.randomUUID(), 60_000);
 	if (!lease) throw new Error("could not acquire test lease");
-	let sidecar = {
-		version: 1,
-		revision: state.revision ?? 0,
-		documentSeq: 0,
-		questions: state.questions ?? [],
-		openQuestions: state.openQuestions ?? [],
-		threads: state.threads ?? [],
-		transcript: state.transcript ?? [],
-		...(state.graph ? { graph: state.graph } : {}),
-	} as JsonValue;
-	let document = await Room.create(source);
-	let canonical = Room.project(document);
-	await storage.collaboration.checkpoint({
-		channelId: channel.id,
-		lease,
-		expectedRevision: 0,
-		generation: crypto.randomUUID(),
-		revision: 0,
-		throughSequence: 0,
-		epoch: document.epoch,
-		source: canonical,
-		sourceHash: `sha256:${createHash("sha256").update(canonical).digest("hex")}`,
-		document: Y.encodeStateAsUpdate(document.doc),
-		sidecar,
-		createdAt: now,
-	});
-	document.doc.destroy();
+	await checkpointSource(storage, lease, channel.id, source, state, now);
 	let broadcasts: Array<Record<string, unknown>> = [];
 	let broken: string | undefined;
 	let server = {
@@ -247,4 +259,19 @@ export async function openPlan(source = "", state: SeedState = {}) {
 			broken = kind;
 		},
 	};
+}
+
+/** An open comment thread on block `index` of `plan`, marking the block's first word. */
+export function seedOpenThread(plan: Service.Plan, index = 1): string {
+	let source = Room.project(plan.document).split("\n\n")[index] ?? "";
+	let quote = source.split(/\s+/)[0] ?? "";
+	let passage = Room.passageAt(plan.document, [index], quote, 0, quote.length);
+	let id = ulid();
+	plan.threads.set(id, {
+		id,
+		status: "open",
+		passage,
+		notes: [{ id: ulid(), author: "member", handle: "ana", text: "Tighten this.", ts: 1 }],
+	});
+	return id;
 }

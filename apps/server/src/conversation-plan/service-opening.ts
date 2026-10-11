@@ -79,12 +79,13 @@ export function greetJoinedPlan(
 	frame: Request<Wire.Open.Ask>,
 	conversationPlan: boolean,
 	current: () => boolean,
+	root?: Pick<Chat.RootChat, "working">,
 ): Promise<void> {
 	return Service.exclusive(opened, async () => {
 		if (!current()) throw new Error("document is unavailable");
 		Service.greet(opened, ws, frame);
 		Questions.greet(opened, ws);
-		Comments.greet(opened, ws);
+		Comments.greet(opened, ws, root);
 		// A child's Chat is its root's. A kept child may still hold what its old
 		// Chat derived, so it is shown an empty Conversation instead.
 		let child = !!opened.parentChannelId;

@@ -330,6 +330,16 @@ test("a child document's Planner cannot be invoked, so its Chat stays empty", as
 	expect(context.chat.busy).toBe(false);
 });
 
+test("an invoked instruction with focus names the child in its turn", async () => {
+	let { context, user } = await setup();
+	let seen = observe(context);
+	let focus = { channelId: "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b", title: "Source review" };
+	expect(await Chat.invoke(context, user, "Summarize the open findings.", undefined, focus))
+		.toBeUndefined();
+	await context.chat.running;
+	expect(seen[0]!.prompt).toContain(`child id ${focus.channelId}`);
+});
+
 test("failed persistence, an unavailable Planner and a full queue start no invoked turn", async () => {
 	let { context, events, user } = await setup();
 	context.config.agent = false;

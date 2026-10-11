@@ -106,6 +106,8 @@ export type Waiting = Wire.Waiting & {
 	draft?: string;
 	/** The child the member had open, resolved when the message was accepted. */
 	focus?: Focus;
+	/** The child holding `thread`, when the thread is not in this document. */
+	threadChannel?: string;
 };
 
 /** A request for implementation tasks, live while its turn is queued or running. */
@@ -152,6 +154,26 @@ export type Instruction = {
 	started?: () => void;
 	/** Shown on the transcript notice, so Chat can draw it as a comment card. */
 	comment?: NonNullable<Wire.Entry["comment"]>;
+	/** The child the turn is about; named ahead of the prompt like a member's focus. */
+	focus?: Focus;
+	/** The child holding `thread`, when the thread is not in this document. */
+	threadChannel?: string;
+};
+
+/**
+ * A child room's way to its root's Chat, which is the only one.
+ *
+ * Each call opens the root's room and re-asks storage that the child still
+ * belongs to it, so a child that moved, or a root that went away, refuses.
+ */
+export type RootChat = {
+	id: string;
+	/** Admission against the root's queue, opening the root's room if needed. */
+	admission(thread: string): Promise<"running" | "queued" | "off" | "busy">;
+	/** An explicit Planner turn on the root's Chat about a thread in this child. */
+	instruct(handle: string, text: string, said: string, about: Instruction): Promise<void>;
+	/** Whether the root's Chat is running or holding a turn for this child's thread. */
+	working(thread: string): boolean;
 };
 
 /** Tell an instruction's owner how it went; their failure is theirs, not the queue's. */
@@ -174,19 +196,32 @@ async function report(about: Instruction | undefined, outcome: Ended): Promise<v
 export function admission(
 	context: Pick<Room, "chat" | "config">,
 	thread?: string,
+	channel?: string,
 ): "running" | "queued" | "off" | "busy" {
 	let { chat, config } = context;
 	if (!config.agent) return "off";
-	if (thread && queuedFor(chat, thread)) return "queued";
+	if (thread && queuedFor(chat, thread, channel)) return "queued";
 	if (!chat.busy) return "running";
 	return chat.waiting.length >= MAX_QUEUE ? "busy" : "queued";
 }
 
-/** The waiting turn for a thread, if one is queued and still worth running. */
-export function queuedFor(chat: Chat, thread: string): Waiting | undefined {
+/**
+ * The waiting turn for a thread, if one is queued and still worth running.
+ *
+ * `channel` names the child holding the thread; absent, the thread is this document's.
+ */
+export function queuedFor(chat: Chat, thread: string, channel?: string): Waiting | undefined {
 	return chat.waiting.find(item =>
-		item.thread === thread && !item.message && !item.job && !item.draft && !item.spent?.()
+		item.thread === thread && item.threadChannel === channel
+		&& !item.message && !item.job && !item.draft && !item.spent?.()
 	);
+}
+
+/** Whether a turn is running or waiting for a thread; `channel` as for `queuedFor`. */
+export function workingFor(chat: Chat | undefined, thread: string, channel?: string): boolean {
+	if (!chat) return false;
+	return chat.acting === thread && chat.actingChannel === channel
+		|| !!queuedFor(chat, thread, channel);
 }
 
 export type Chat = {
@@ -229,6 +264,8 @@ export type Chat = {
 	 * that decision produced even when the agent forgets to say so itself.
 	 */
 	acting?: string;
+	/** The child holding `acting`, or undefined when the thread is in this document. */
+	actingChannel?: string;
 	/** The entry the agent is currently writing into. */
 	writing?: string;
 	/** The dedicated entry collecting tool calls for this turn. */
@@ -576,6 +613,8 @@ export type Room = {
 	children?: ChildDocuments;
 	/** Set only when this room is a child: its root, which owns the only Chat. */
 	rootChannelId?: string;
+	/** Set only when this room is a child: how its comments reach the root's Chat. */
+	root?: RootChat;
 };
 
 type Retained = {
@@ -617,6 +656,7 @@ export async function invoke(
 	user: { id: string; login: string },
 	text: string,
 	checkout?: string,
+	focus?: Focus,
 ): Promise<
 	| "planner-unavailable"
 	| "planner-not-attached"
@@ -671,6 +711,7 @@ export async function invoke(
 				sessionId: context.claimantSessionId,
 				userId: user.id,
 				invokedBy: user.id,
+				...(focus ? { focus } : {}),
 			});
 			queued(chat, server, room);
 		} else {
@@ -681,7 +722,7 @@ export async function invoke(
 				undefined,
 				context.claimantSessionId,
 				false,
-				{ entryId: entry.id, userId: user.id },
+				{ entryId: entry.id, userId: user.id, ...(focus ? { focus } : {}) },
 			);
 		}
 		return undefined;
@@ -948,7 +989,7 @@ export function instruct(
 
 		// A thread that already has a turn waiting is told about the newer note
 		// by that turn: its prompt is replaced, since it reads the whole thread.
-		let folded = about.thread ? queuedFor(chat, about.thread) : undefined;
+		let folded = about.thread ? queuedFor(chat, about.thread, about.threadChannel) : undefined;
 		if (folded) {
 			folded.handle = handle;
 			folded.text = text;
@@ -1857,8 +1898,12 @@ async function run(
 		chat.busy = true;
 		chat.turn = begin(handle, chat.entries.length);
 		chat.acting = thread;
+		chat.actingChannel = about?.threadChannel;
 		(jobTurn ? jobState : state)(chat, server, room);
-	} else chat.acting = thread;
+	} else {
+		chat.acting = thread;
+		chat.actingChannel = about?.threadChannel;
+	}
 	try {
 		about?.started?.();
 	} catch (err) {
@@ -1926,7 +1971,8 @@ async function run(
 			retainReferences(chat, promptReferences);
 			let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
-			if (member?.focus) prompt = `${focusContext(member.focus)}\n\n${prompt}`;
+			let focus = about?.focus ?? member?.focus;
+			if (focus) prompt = `${focusContext(focus)}\n\n${prompt}`;
 		}
 		sendStarted = true;
 		if (!jobTurn) {
@@ -2083,7 +2129,10 @@ async function run(
 	if (about?.ended && (!chat.closed || persistenceError)) {
 		// The turn is over: nothing it does can be attributed to the thread any more,
 		// and anyone joining before the drain must not read it as still working.
-		if (chat.acting === thread) chat.acting = undefined;
+		if (chat.acting === thread && chat.actingChannel === about.threadChannel) {
+			chat.acting = undefined;
+			chat.actingChannel = undefined;
+		}
 		let said = chat.entries.slice(firstEntry).findLast(entry => entry.author.kind === "agent");
 		let stopped = turnController.signal.aborted && !failed;
 		await report(about, {
@@ -2136,6 +2185,7 @@ async function run(
 	chat.busy = false;
 	chat.turn = undefined;
 	chat.acting = undefined;
+	chat.actingChannel = undefined;
 	(jobTurn ? jobState : state)(chat, server, room);
 }
 

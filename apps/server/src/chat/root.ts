@@ -1,0 +1,61 @@
+/**
+ * How a child document reaches its root's Chat.
+ *
+ * A child has no Chat of its own. A comment sent to Chopin inside one runs on
+ * the root's Chat, with the child as the turn's focus, and the turn answers in
+ * the child's thread. Every call opens the root's room and re-asks storage that
+ * the child still belongs to it, so a child that was archived or moved, or a
+ * root that went away, refuses rather than reaching the wrong document.
+ */
+import { resolveChild } from "./children";
+import * as Chat from "./service";
+
+import type { ChannelStore } from "../storage/port";
+
+export type RootChatDeps = {
+	rootId: string;
+	childId: string;
+	repositoryId: string;
+	channels: Pick<ChannelStore, "get">;
+	/** Opens the root's room and its Chat; `release` lets the room go again. */
+	open: () => Promise<{ context: Chat.Room; release: () => void }>;
+	/** The root's Chat if its room is open, without opening it. */
+	live: () => Chat.Chat | undefined;
+};
+
+export function createRootChat(deps: RootChatDeps): Chat.RootChat {
+	let opened = async () => {
+		let child = await resolveChild(deps.channels, deps.rootId, deps.repositoryId, deps.childId);
+		if (!child) throw new Error("this document no longer belongs to its root document");
+		let { context, release } = await deps.open();
+		return { child, context, release };
+	};
+	return {
+		id: deps.rootId,
+		async admission(thread) {
+			let { context, release } = await opened();
+			try {
+				return Chat.admission(context, thread, deps.childId);
+			} finally {
+				release();
+			}
+		},
+		async instruct(handle, text, said, about) {
+			let { child, context, release } = await opened();
+			try {
+				await Chat.instruct(context, handle, text, said, {
+					...about,
+					threadChannel: child.id,
+					focus: { channelId: child.id, title: child.title },
+					...(about.comment ? { comment: { ...about.comment, channelId: child.id } } : {}),
+				});
+			} finally {
+				// The running turn drains the queue, so it outlasts a turn queued or folded behind it.
+				let running = context.chat.running;
+				if (running) void running.finally(release).catch(() => {});
+				else release();
+			}
+		},
+		working: thread => Chat.workingFor(deps.live(), thread, deps.childId),
+	};
+}

@@ -384,7 +384,7 @@ describe("marking a passage over the wire", () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
 
-		Comments.start(
+		await Comments.start(
 			plan,
 			server,
 			"test",

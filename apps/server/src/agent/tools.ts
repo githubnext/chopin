@@ -26,6 +26,7 @@ import { childTools } from "./child-tools";
 import { experimentTools } from "./experiment-tools";
 import type { InvestigationTools } from "./experiment-tools";
 
+import type { ActiveOwnerBinding } from "./active-owner";
 import type { VisualSession } from "./visual-handoff";
 
 import type { Server } from "bun";
@@ -113,6 +114,13 @@ const roomContext = z.object({
 	),
 });
 const referenceContext = roomContext.extend({ repository: z.object({ id: z.string() }) });
+type Owner = Pick<ActiveOwnerBinding, "revalidate" | "signal">;
+// The owner is needed only to reach into a child, as for the child tools.
+const replyContext = roomContext.extend({
+	owner: z.custom<Owner>(value =>
+		!!value && typeof (value as Owner).revalidate === "function" && !!(value as Owner).signal
+	).optional(),
+});
 
 export const documentTools = {
 	...experimentTools,
@@ -348,8 +356,10 @@ export const documentTools = {
 					} else if (args.visualRoute) {
 						return { ok: false, reason: "visual-routing-unavailable" };
 					}
+					let { acting, actingChannel } = context.plan.chat;
 					return applyBlockEdit(context, args, {
-						acting: context.plan.chat.acting,
+						// A thread in a child is answered by `edit_child`, not by an edit here.
+						acting: actingChannel ? undefined : acting,
 						applied: () => {
 							if (context.visual) context.visual.pending = undefined;
 						},
@@ -579,7 +589,7 @@ export const documentTools = {
 	}),
 
 	reply_comment: tool({
-		contextSchema: roomContext,
+		contextSchema: replyContext,
 		description: "Reply in the comment thread this turn was sent. Use it once, after any edit "
 			+ "and `anchor_plan`, to answer the latest note sent to you — briefly, since it is "
 			+ "shown in a small card beside the passage. Only that thread can be answered, and "
@@ -593,7 +603,7 @@ export const documentTools = {
 			required: ["thread", "text"],
 			additionalProperties: false,
 		}),
-		execute: (raw, { context: { room: context } }) =>
+		execute: (raw, { context: { room: context, owner } }) =>
 			answer("reply_comment", async () => {
 				let args = raw as Record<string, unknown>;
 				if (
@@ -601,13 +611,18 @@ export const documentTools = {
 					|| typeof args.text !== "string"
 					|| Object.keys(args).some(key => key !== "thread" && key !== "text")
 				) throw new Error("reply_comment takes only `thread` and `text`, both text");
-				return Comments.answer(
-					context.plan,
-					context.server,
-					context.id,
-					args.thread,
-					args.text,
-				);
+				let { thread, text } = args;
+				let { acting, actingChannel } = context.plan.chat;
+				// A comment sent from a child: its thread, and the reply, live in that child.
+				if (actingChannel) {
+					if (!context.children) throw new Error("child documents are unavailable in this session");
+					if (!owner || owner.signal.aborted || !await owner.revalidate()) {
+						throw new Error("the Planner's repository access could not be confirmed");
+					}
+					return context.children.open(actingChannel, child =>
+						Comments.answer(child.plan, child.server, child.id, thread, text, acting));
+				}
+				return Comments.answer(context.plan, context.server, context.id, thread, text, acting);
 			}),
 	}),
 	...childTools,
