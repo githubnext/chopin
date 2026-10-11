@@ -42,7 +42,7 @@ function markup(stored?: string, entries = [RESOLVED], failed = false): string {
 	});
 
 	let store = new QuestionnaireStore();
-	store.set({ entries, hasPlanContent: true });
+	store.set({ entries, hasPlanContent: true, runs: [] });
 	if (failed) store.failOpen();
 	let motion: MotionDisclosureContract = {
 		className: "motion-collapse",

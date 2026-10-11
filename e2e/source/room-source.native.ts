@@ -64,6 +64,7 @@ test("actual host evidence requires current metadata and sources enter actual Ch
 	await page.evaluate(thread => {
 		window.roomSourceProbe.setQuestions({
 			hasPlanContent: true,
+			runs: [],
 			entries: [{
 				id: "card-1",
 				value: {
@@ -189,6 +190,7 @@ test("a conversation-linked card-only document stays in Document", async ({ page
 	await page.evaluate(() =>
 		window.roomSourceProbe.setQuestions({
 			hasPlanContent: false,
+			runs: [],
 			entries: [{
 				id: "conversation-card",
 				value: {
@@ -218,6 +220,7 @@ test("a Planner-only card opening still moves to Decisions", async ({ page }) =>
 	await page.evaluate(() =>
 		window.roomSourceProbe.setQuestions({
 			hasPlanContent: false,
+			runs: [],
 			entries: [{
 				id: "planner-card",
 				value: {
@@ -256,7 +259,7 @@ test("opening Decisions focuses reopened work ahead of settled history and later
 				}],
 			},
 		}));
-		window.roomSourceProbe.setQuestions({ hasPlanContent: true, entries });
+		window.roomSourceProbe.setQuestions({ hasPlanContent: true, runs: [], entries });
 		window.roomSourceProbe.receive({
 			kind: "question:meta",
 			id: "settled",

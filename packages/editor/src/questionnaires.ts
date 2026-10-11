@@ -17,6 +17,7 @@ import { useEffect } from "react";
 import { $isDecisionNode, $isQuestionnaireNode, QuestionnaireNode } from "@chopin/dialect";
 
 import { counts, relate, relations, resolve } from "./anchors";
+import { $collectDecisionRuns } from "./deck-runs";
 import { holds, paint, pin, unpin } from "./marks";
 import { $blockPoints } from "./passage";
 import { scrollToKey } from "./scroll";
@@ -37,6 +38,8 @@ export type QuestionnaireEntry = {
 export type PlanQuestionnaireState = {
 	entries: QuestionnaireEntry[];
 	hasPlanContent: boolean;
+	/** Adjacent questionnaires, two or more per run, in document order. */
+	runs: string[][];
 };
 
 export type DecisionsReadiness = "loading" | "ready" | "unavailable";
@@ -57,11 +60,11 @@ export function collectPlanState(): PlanQuestionnaireState {
 		if ($isParagraphNode(node) && node.getChildrenSize() === 0) return false;
 		return true;
 	});
-	return { entries, hasPlanContent };
+	return { entries, hasPlanContent, runs: $collectDecisionRuns() };
 }
 
 export class QuestionnaireStore {
-	#state: PlanQuestionnaireState = { entries: [], hasPlanContent: false };
+	#state: PlanQuestionnaireState = { entries: [], hasPlanContent: false, runs: [] };
 	#readiness: DecisionsReadiness = "loading";
 	#synced = false;
 	#readRevision = 0;
@@ -89,6 +92,11 @@ export class QuestionnaireStore {
 	};
 
 	snapshot = (): QuestionnaireEntry[] => this.#state.entries;
+	/** The run a questionnaire belongs to, if it sits beside another. */
+	runOf(id: string): readonly string[] | undefined {
+		return this.#state.runs.find(run => run.includes(id));
+	}
+
 	contentSnapshot = (): boolean => this.#state.hasPlanContent;
 	readinessSnapshot = (): DecisionsReadiness => this.#readiness;
 
@@ -126,8 +134,8 @@ export class QuestionnaireStore {
 		this.#synced = false;
 		this.#readRevision++;
 		let changed = this.#state.entries.length > 0 || this.#state.hasPlanContent
-			|| this.#readiness !== "loading";
-		this.#state = { entries: [], hasPlanContent: false };
+			|| this.#state.runs.length > 0 || this.#readiness !== "loading";
+		this.#state = { entries: [], hasPlanContent: false, runs: [] };
 		this.#readiness = "loading";
 		if (!changed) return;
 		for (let listener of this.#listeners) listener();

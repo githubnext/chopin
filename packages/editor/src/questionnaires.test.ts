@@ -47,14 +47,22 @@ function read(editor: LexicalEditor): PlanQuestionnaireState {
 }
 
 describe("plan questionnaire state", () => {
+	it("publishes adjacent questionnaires as a run", () => {
+		let second = QUESTIONNAIRE
+			.replace("01K0N4TR8K7JGM4R1J7PW4R8YJ", "01K0N4TR8K7JGM4R1J7PW4R8YK")
+			.replace("01K0N4V4E7Y6P4MJ5WD8XZF3B2", "01K0N4V4E7Y6P4MJ5WD8XZF3B3");
+		expect(state(`${QUESTIONNAIRE}\n${second}`).runs)
+			.toEqual([["01K0N4TR8K7JGM4R1J7PW4R8YJ", "01K0N4TR8K7JGM4R1J7PW4R8YK"]]);
+	});
+
 	it("keeps a questionnaire-only document out of plan content", () => {
-		expect(state("")).toEqual({ entries: [], hasPlanContent: false });
+		expect(state("")).toEqual({ entries: [], hasPlanContent: false, runs: [] });
 
 		let emptyParagraph = open("");
 		emptyParagraph.update(() => {
 			$getRoot().append($createParagraphNode());
 		}, { discrete: true });
-		expect(read(emptyParagraph)).toEqual({ entries: [], hasPlanContent: false });
+		expect(read(emptyParagraph)).toEqual({ entries: [], hasPlanContent: false, runs: [] });
 
 		expect(state(QUESTIONNAIRE)).toMatchObject({
 			entries: [{ id: "01K0N4TR8K7JGM4R1J7PW4R8YJ" }],
@@ -71,7 +79,7 @@ describe("plan questionnaire state", () => {
 				"```ts\nlet answer = 42;\n```\n",
 			]
 		) {
-			expect(state(source)).toEqual({ entries: [], hasPlanContent: true });
+			expect(state(source)).toEqual({ entries: [], hasPlanContent: true, runs: [] });
 		}
 	});
 

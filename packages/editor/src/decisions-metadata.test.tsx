@@ -21,7 +21,7 @@ function markup(meta?: Question.CardMeta, canEdit?: boolean) {
 		value: { getItem: () => null, setItem() {} },
 	});
 	let store = new QuestionnaireStore();
-	store.set({ entries: [{ id: DECIDED.id, value: DECIDED }], hasPlanContent: true });
+	store.set({ entries: [{ id: DECIDED.id, value: DECIDED }], hasPlanContent: true, runs: [] });
 	let cardMeta = new CardMetaStore(() => {});
 	let handlers = new Map<string, (frame: never) => void>();
 	let wire: Transport = {
