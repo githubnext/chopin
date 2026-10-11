@@ -370,15 +370,9 @@
 		background-color: var(--color-inset);
 		color: var(--color-text-tertiary);
 		box-shadow: none;
-		outline: none;
+		/* The primary edge would ring a control that cannot be focused while disabled. */
+		outline-color: var(--color-inset);
 		opacity: 1;
-	}
-	/*
-	 * Focus is a petrol edge on the pill itself rather than an offset ring.
-	 * Soft keyboards send keydown too, so this cannot depend on input modality.
-	 */
-	.chat-composer .composer-surface.field:focus-within {
-		outline-offset: calc(-1 * var(--edge-width));
 	}
 	/* Connection state becomes a slim first row inside the pill. */
 	.chat-composer .composer-connection-group:has(.composer-connection-label) {
