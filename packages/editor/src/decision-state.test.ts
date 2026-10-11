@@ -116,36 +116,39 @@ describe("decision attention", () => {
 		);
 	});
 
-	it("keeps a chat-linked inline card in Document while Planner questions still open Decisions", () => {
+	it("routes a blank document to Decisions whether or not its cards have threads", () => {
 		let plannerQuestion = entry([undefined]);
 		let conversationQuestion = entry([undefined]);
 		conversationQuestion.value = { ...conversationQuestion.value, thread: "thread-1" };
 		let initial: DecisionViewState = { phase: "initial", preferred: "plan" };
-		let plannerHasContent = documentHasPlanningContent(false, [plannerQuestion]);
-		let conversationHasContent = documentHasPlanningContent(false, [conversationQuestion]);
+		let unanswered = countUnanswered([plannerQuestion, conversationQuestion]);
 
-		expect(visibleDecisionView(
-			initial,
-			plannerHasContent,
-			countUnanswered([plannerQuestion]),
-		)).toBe("decisions");
-		expect(visibleDecisionView(
-			initial,
-			conversationHasContent,
-			countUnanswered([conversationQuestion]),
-		)).toBe("plan");
+		expect(documentHasPlanningContent(false)).toBe(false);
+		expect(visibleDecisionView(initial, false, unanswered)).toBe("decisions");
+		expect(advanceDecisionView(initial, false, unanswered).phase).toBe("forced");
+	});
 
-		let state = advanceDecisionView(
-			initial,
-			plannerHasContent,
-			countUnanswered([plannerQuestion]),
-		);
+	it("does not route a reader who is editing the document", () => {
+		let initial: DecisionViewState = { phase: "initial", preferred: "plan" };
+		expect(visibleDecisionView(initial, false, 2, true)).toBe("plan");
+		expect(advanceDecisionView(initial, false, 2, true))
+			.toEqual({ phase: "complete", preferred: "plan" });
+	});
+
+	it("holds forced Decisions while prose arrives and decisions are still open", () => {
+		let state = advanceDecisionView({ phase: "initial", preferred: "plan" }, false, 3);
+		state = advanceDecisionView(state, true, 2);
 		expect(state.phase).toBe("forced");
-		state = advanceDecisionView(
-			state,
-			conversationHasContent,
-			countUnanswered([plannerQuestion, conversationQuestion]),
-		);
+		expect(visibleDecisionView(state, true, 2)).toBe("decisions");
+		state = advanceDecisionView(state, true, 0);
+		expect(state).toEqual({ phase: "complete", preferred: "plan" });
+		expect(visibleDecisionView(state, true, 0)).toBe("plan");
+	});
+
+	it("never routes twice in one entry", () => {
+		let state = advanceDecisionView({ phase: "initial", preferred: "plan" }, false, 1);
+		state = advanceDecisionView(state, true, 0);
+		state = advanceDecisionView(state, false, 3);
 		expect(state).toEqual({ phase: "complete", preferred: "plan" });
 	});
 

@@ -37,26 +37,35 @@ export function firstOpenDecision(
 	});
 }
 
-/** A conversation-linked card is authored document content even before prose exists. */
-export function documentHasPlanningContent(
-	hasPlanProse: boolean,
-	entries: QuestionnaireEntry[],
-): boolean {
-	return hasPlanProse || entries.some(entry => !!entry.value.thread);
+/**
+ * Only prose makes a document more than its questions. A card, even one linked
+ * to a conversation, is a question waiting for an answer, and a blank page full
+ * of them belongs in Decisions.
+ */
+export function documentHasPlanningContent(hasPlanProse: boolean): boolean {
+	return hasPlanProse;
 }
 
-/** A forced opening yields to Plan only when prose first arrives. */
+/**
+ * The opening phase routes a blank document to Decisions once per entry.
+ *
+ * Editing declines routing for good: moving someone mid-thought costs more
+ * than one extra click. A forced view holds until prose exists and nothing is
+ * left to answer, so a Planner heading cannot pull the reader out mid-deck.
+ */
 export function advanceDecisionView(
 	state: DecisionViewState,
 	hasPlanContent: boolean,
 	unanswered: number,
+	editing = false,
 ): DecisionViewState {
 	if (state.phase === "complete") return state;
 	if (state.phase === "forced") {
-		return hasPlanContent ? { phase: "complete", preferred: "plan" } : state;
+		return hasPlanContent && unanswered === 0 ? { phase: "complete", preferred: "plan" } : state;
 	}
 	if (hasPlanContent) return { ...state, phase: "complete" };
-	return unanswered > 0 ? { ...state, phase: "forced" } : state;
+	if (unanswered === 0) return state;
+	return editing ? { ...state, phase: "complete" } : { ...state, phase: "forced" };
 }
 
 export function selectDecisionView(
@@ -70,8 +79,13 @@ export function visibleDecisionView(
 	state: DecisionViewState,
 	hasPlanContent: boolean,
 	unanswered: number,
+	editing = false,
 ): DecisionView {
-	if (state.phase === "forced") return hasPlanContent ? "plan" : "decisions";
-	if (state.phase === "initial" && !hasPlanContent && unanswered > 0) return "decisions";
+	if (state.phase === "forced") {
+		return hasPlanContent && unanswered === 0 ? "plan" : "decisions";
+	}
+	if (state.phase === "initial" && !hasPlanContent && unanswered > 0 && !editing) {
+		return "decisions";
+	}
 	return state.preferred;
 }

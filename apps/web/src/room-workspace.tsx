@@ -473,7 +473,7 @@ export function RoomWorkspace(
 	let cardMetadata = useSyncExternalStore(cardMeta.subscribe, cardMeta.snapshot, cardMeta.snapshot);
 	let unanswered = countUnanswered(entries, cardMetadata);
 	let hasPlanProse = useHasPlanContent(questions);
-	let hasPlanContent = documentHasPlanningContent(hasPlanProse, entries);
+	let hasPlanContent = documentHasPlanningContent(hasPlanProse);
 	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
 		let stored = localStorage.getItem("chopin:view:document");
 		return {
