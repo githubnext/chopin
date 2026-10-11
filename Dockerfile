@@ -16,6 +16,7 @@ COPY packages/draft/package.json ./packages/draft/package.json
 COPY packages/editor/package.json ./packages/editor/package.json
 COPY packages/experiment/package.json ./packages/experiment/package.json
 COPY packages/icons/package.json ./packages/icons/package.json
+COPY packages/planner-link/package.json ./packages/planner-link/package.json
 COPY packages/protocol/package.json ./packages/protocol/package.json
 COPY packages/question/package.json ./packages/question/package.json
 COPY packages/viewport/package.json ./packages/viewport/package.json
@@ -49,6 +50,7 @@ COPY --from=production-dependencies --chown=bun:bun /app/apps/server/node_module
 COPY --from=production-dependencies --chown=bun:bun /app/packages/dialect/node_modules ./packages/dialect/node_modules
 COPY --from=production-dependencies --chown=bun:bun /app/packages/draft/node_modules ./packages/draft/node_modules
 COPY --from=production-dependencies --chown=bun:bun /app/packages/experiment/node_modules ./packages/experiment/node_modules
+COPY --from=production-dependencies --chown=bun:bun /app/packages/planner-link/node_modules ./packages/planner-link/node_modules
 COPY --from=production-dependencies --chown=bun:bun /app/packages/question/node_modules ./packages/question/node_modules
 COPY --chown=bun:bun package.json bun.lock ./
 COPY --chown=bun:bun apps/server ./apps/server
