@@ -282,6 +282,8 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		attributes: {
 			type: { type: "enum", required: true, values: CALLOUT_TYPES },
 			title: { type: "text", required: false, max: limits.MAX_CALLOUT_TITLE },
+			/** How many leading blocks stay visible; the rest fold behind a disclosure. */
+			fold: { type: "integer", required: false, min: 1, max: limits.MAX_CALLOUT_FOLD },
 		},
 	}),
 

@@ -47,6 +47,13 @@ export const spikeSchema = z.object({
 	/** Digest of the callout block as last rendered; a different block holds human edits. */
 	calloutDigest: z.string().max(100).optional(),
 	dismissed: z.boolean().optional(),
+	/**
+	 * Set with `rendered = completed` and cleared once Chat accepts the Planner turn that
+	 * settles the passage, so a landing nobody could act on yet is retried.
+	 */
+	settle: z.boolean().optional(),
+	/** Automatic re-dispatches after its local agent's connection was lost; capped. */
+	retries: z.number().int().nonnegative().max(10).optional(),
 }).strict();
 export type Spike = z.infer<typeof spikeSchema>;
 

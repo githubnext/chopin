@@ -1,4 +1,4 @@
-import { uncertain } from "./spikes";
+import { retryable, uncertain } from "./spikes";
 
 import type { JevRequest, JevResult } from "../conversation-plan/jev";
 import type { Investigation } from "@chopin/experiment/records";
@@ -32,6 +32,12 @@ export type SpikeHost = {
 	start(
 		channelId: string,
 		input: { owner: string; connection: { id: string; login: string }; block: SpikeBlock },
+	): Promise<void>;
+	/** Hand a spike its lost connection interrupted to its owner's reconnected local agent. */
+	retry(
+		channelId: string,
+		id: string,
+		input: { owner: string; connection: { id: string; login: string } },
 	): Promise<void>;
 	/** A placed callout was removed: stop its spike and never re-trigger the passage. */
 	dismiss(channelId: string, id: string): Promise<void>;
@@ -115,6 +121,8 @@ export class SpikeScout {
 	#waiting = new Set<string>();
 	/** Documents with a dismissal check already queued, so a burst of edits shares one. */
 	#dismissing = new Set<string>();
+	/** Documents whose last scan found no local agent for these owners, to rescan on reconnect. */
+	#offline = new Map<string, { repositoryId: string; owners: Set<string> }>();
 	#closed = false;
 
 	constructor(options: SpikeScoutOptions) {
@@ -167,11 +175,30 @@ export class SpikeScout {
 		return spikes;
 	}
 
-	/** A spike record changed; project it into its callout, and scan again if it freed capacity. */
+	/**
+	 * A local agent (re)connected to a repository. Rescan its owner's documents whose last scan
+	 * stopped for want of one, so a passage written while it was away needs no further edit.
+	 */
+	connected(repositoryId: string, owner: string): void {
+		if (this.#closed) return;
+		for (let [channelId, away] of this.#offline) {
+			if (away.repositoryId !== repositoryId || !away.owners.has(owner)) continue;
+			this.#offline.delete(channelId);
+			if (!this.#pending.has(channelId)) void this.check(channelId);
+		}
+	}
+
+	/**
+	 * A spike record changed; project it into its callout, and scan again if it freed capacity
+	 * or a lost connection left a spike to hand to its owner's next local agent.
+	 */
 	refresh(channelId: string): Promise<void> {
 		return this.#serial(channelId, async () => {
 			await this.#options.host.refresh(channelId);
-			if (this.#waiting.delete(channelId)) await this.#check(channelId);
+			let waiting = this.#waiting.delete(channelId);
+			if (waiting || (await this.#options.host.spikes(channelId)).some(retryable)) {
+				await this.#check(channelId);
+			}
 		});
 	}
 
@@ -204,12 +231,32 @@ export class SpikeScout {
 		let snapshot = await host.snapshot(channelId);
 		if (!snapshot) return;
 		let spikes = await this.#dismiss(channelId, snapshot);
+		this.#offline.delete(channelId);
+		let retried = 0;
+		let active = () =>
+			retried
+			+ spikes.filter(value => ACTIVE.includes(value.state) && !value.spike!.dismissed).length;
+		// A spike its connection lost goes back to its owner's local agent once one is heard from.
+		for (let value of spikes.filter(retryable)) {
+			if (this.#closed) return;
+			if (active() >= MAX_ACTIVE) {
+				this.#waiting.add(channelId);
+				break;
+			}
+			let owner = value.requester;
+			let connection = await host.connection(snapshot.repositoryId, owner, channelId);
+			if (!connection) {
+				this.#away(channelId, snapshot.repositoryId, owner);
+				continue;
+			}
+			await host.retry(channelId, value.id, { owner, connection });
+			retried++;
+		}
 		// A living build ends new scouting, but deleting a callout must still stop its spike.
 		if (snapshot.live) return;
 		let editor = this.#editors.get(channelId);
 		if (!editor) return;
-		let capacity = MAX_ACTIVE
-			- spikes.filter(value => ACTIVE.includes(value.state) && !value.spike!.dismissed).length;
+		let capacity = MAX_ACTIVE - active();
 		let seen = this.#seen.get(channelId) ?? new Set<string>();
 		this.#seen.set(channelId, seen);
 		let started = new Set(spikes.map(value => value.spike!.digest));
@@ -227,9 +274,12 @@ export class SpikeScout {
 			return;
 		}
 		let candidates = unjudged.slice(0, MAX_CANDIDATES);
-		// Without the editor's local agent there is nowhere to run; judge these again after an edit.
+		// Without the editor's local agent there is nowhere to run; judge these again on reconnect.
 		let connection = await host.connection(snapshot.repositoryId, editor, channelId);
-		if (!connection) return;
+		if (!connection) {
+			this.#away(channelId, snapshot.repositoryId, editor);
+			return;
+		}
 		let verdicts = await (this.#options.judge ?? heuristicJudge)(candidates);
 		if (!verdicts) return;
 		// Approved passages beyond capacity stay unseen so a later scan can start them.
@@ -256,6 +306,12 @@ export class SpikeScout {
 		}
 	}
 
+	#away(channelId: string, repositoryId: string, owner: string) {
+		let away = this.#offline.get(channelId) ?? { repositoryId, owners: new Set<string>() };
+		away.owners.add(owner);
+		this.#offline.set(channelId, away);
+	}
+
 	close(): void {
 		this.#closed = true;
 		for (let pending of this.#pending.values()) pending.cancel();
@@ -265,5 +321,6 @@ export class SpikeScout {
 		this.#seen.clear();
 		this.#editors.clear();
 		this.#waiting.clear();
+		this.#offline.clear();
 	}
 }

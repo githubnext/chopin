@@ -15,20 +15,102 @@ import { Experiments } from "./service";
 import { spikeHost } from "./spike-host";
 import { calloutDigest, callouts, placeSpikeCallout } from "./spike-placement";
 import { SpikeScout } from "./spike-scout";
-import { spikeCallout } from "./spikes";
+import { MAX_SPIKE_RETRIES, spikeCallout } from "./spikes";
 
 const PASSAGE = "We are unsure whether drag handles work on touch screens at all.";
 
 async function hosted(source = `# Plan\n\n${PASSAGE}\n\nAnother paragraph.\n`) {
 	let context = await openPlan(source);
 	let service = new Experiments(context.storage.experiments, () => context.lease);
+	let landed: string[] = [];
+	let clock = { now: Date.now() };
+	let connections = new Connections(() => clock.now);
 	let host = spikeHost({
 		service,
-		connections: new Connections(),
+		connections,
 		withPlan: (_id, action) => action(context.plan),
+		landed: (_channelId, value) => landed.push(value.id),
 	});
-	return { ...context, service, host };
+	return { ...context, service, host, landed, connections, clock };
 }
+
+/** Pair a local agent for the plan's repository, as the connector and pairing page do. */
+function pair(context: Awaited<ReturnType<typeof hosted>>) {
+	let pending = context.connections.create({
+		repository: "org/repo",
+		commit: "a".repeat(40),
+		label: "laptop",
+	});
+	return context.connections.approve(
+		pending.id,
+		{ id: "U_test", login: "maggie", sessionId: "S_1" },
+		context.plan.persistence.repositoryId,
+	);
+}
+
+test("a spike its connection lost waits, then runs on reconnect a bounded number of times", async () => {
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	let context = await hosted();
+	let scout = new SpikeScout({ host: context.host });
+	let { plan, service } = context;
+	try {
+		await context.host.start(plan.id, {
+			owner: "U_test",
+			connection: { id: "gone", login: "maggie" },
+			block: { digest: room.digests(plan.document)[1], text: PASSAGE },
+		});
+		let [value] = await service.store.list(plan.id);
+		expect(value.state).toBe("interrupted");
+		// Nothing to run on yet: the callout waits for the owner's agent, without "Propose" copy.
+		await scout.refresh(plan.id);
+		expect(room.project(plan.document)).toContain("Waiting for @maggie’s coding agent");
+		expect(room.project(plan.document)).not.toContain("Propose");
+
+		for (let attempt = 1; attempt <= MAX_SPIKE_RETRIES; attempt++) {
+			let connection = pair(context);
+			scout.connected(plan.persistence.repositoryId, "U_test");
+			await scout.refresh(plan.id);
+			value = (await service.store.get(value.id))!;
+			expect(value).toMatchObject({ state: "queued", connectionId: connection.id });
+			expect(value.spike?.retries).toBe(attempt);
+			expect(room.project(plan.document)).toContain(`title="Prototype queued"`);
+			// The connector is killed again; the sweep's expiry interrupts it.
+			context.connections.revoke(connection.id);
+			await service.stop(value.id, "interrupted", "Workspace connection expired.");
+			await scout.refresh(plan.id);
+		}
+		// Out of retries: a fresh connection no longer restarts it, and it reads as stopped.
+		pair(context);
+		scout.connected(plan.persistence.repositoryId, "U_test");
+		await scout.refresh(plan.id);
+		expect((await service.store.get(value.id))?.state).toBe("interrupted");
+		expect(room.project(plan.document)).toContain('type="warning"');
+		expect(room.project(plan.document)).not.toContain("Waiting for");
+	} finally {
+		scout.close();
+		errors.mockRestore();
+		await Service.close(plan);
+	}
+});
+
+test("new spike work skips a connection silent for two heartbeats", async () => {
+	let context = await hosted();
+	try {
+		let connection = pair(context);
+		let repositoryId = context.plan.persistence.repositoryId;
+		expect(await context.host.connection(repositoryId, "U_test", context.plan.id)).toMatchObject({
+			id: connection.id,
+		});
+		context.clock.now += 50_000;
+		expect(context.connections.get(connection.id)).toBeDefined();
+		expect(await context.host.connection(repositoryId, "U_test", context.plan.id))
+			.toBeUndefined();
+		context.connections.touch(connection);
+		expect(await context.host.connection(repositoryId, "U_test", context.plan.id)).toBeDefined();
+	} finally {
+		await Service.close(context.plan);
+	}
+});
 
 test("a spike is durably placing before its callout is published", async () => {
 	let errors = spyOn(console, "error").mockImplementation(() => {});
@@ -171,8 +253,12 @@ test("a spike result deferred by a first build's lock lands once the lock releas
 			block: { digest: room.digests(plan.document)[1], text: PASSAGE },
 		});
 		let [value] = await context.service.store.list(plan.id);
-		expect(value.state).toBe("failed");
+		expect(value.state).toBe("interrupted");
 		expect(value.spike?.rendered).toBe("queued");
+		// Out of automatic retries, so it renders as stopped rather than waiting.
+		await context.service.mutate(value.id, item => {
+			item.spike!.retries = MAX_SPIKE_RETRIES;
+		});
 
 		plan.builds = [{ id: crypto.randomUUID(), state: "running" } as never];
 		announceImplementation(plan);
@@ -286,6 +372,41 @@ test("a spike that finishes while a first build is queued lands before the build
 		expect(room.project(plan.document)).not.toContain('type="warning"');
 	} finally {
 		scout.close();
+		errors.mockRestore();
+		await Service.close(plan);
+	}
+});
+
+test("a landed result asks once for its passage to be settled", async () => {
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	let context = await hosted();
+	let { plan } = context;
+	try {
+		await context.host.start(plan.id, {
+			owner: "U_test",
+			connection: { id: "gone", login: "maggie" },
+			block: { digest: room.digests(plan.document)[1], text: PASSAGE },
+		});
+		let [value] = await context.service.store.list(plan.id);
+		await context.service.mutate(value.id, item => {
+			item.state = "completed";
+			item.result = {
+				schemaVersion: 1,
+				report: "**Handles work**\n\n**Recommendation:** Keep them.\n\n- Fine on iOS.\n",
+				datasets: [],
+				views: [],
+				evidence: [],
+				provenance: { environment: "test", checks: [], limitations: [] },
+			};
+		});
+		await context.host.refresh(plan.id);
+		await context.host.refresh(plan.id);
+		expect(context.landed).toEqual([value.id]);
+		expect((await context.service.store.get(value.id))?.spike?.settle).toBe(true);
+		let source = room.project(plan.document);
+		expect(source).toContain(`title="Handles work" fold="1"`);
+		room.validate(source);
+	} finally {
 		errors.mockRestore();
 		await Service.close(plan);
 	}

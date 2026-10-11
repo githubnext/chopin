@@ -10,16 +10,19 @@ import { eligible, renderKey, spikeBrief, spikeCallout, text } from "./spikes";
 
 import type { Connections } from "./connections";
 import type { Experiments } from "./service";
+import type { Investigation } from "@chopin/experiment/records";
 import type { SpikeHost } from "./spike-scout";
 
 type Options = {
 	service: Experiments;
 	connections: Connections;
 	withPlan: <T>(channelId: string, action: (plan: Service.Plan) => Promise<T>) => Promise<T>;
+	/** A spike's result was just written into its callout; `spike.settle` is persisted. */
+	landed?: (channelId: string, value: Investigation) => void;
 };
 
 /** Spike records live with investigations; their callouts are projections placed after commit. */
-export function spikeHost({ service, connections, withPlan }: Options): SpikeHost {
+export function spikeHost({ service, connections, withPlan, landed }: Options): SpikeHost {
 	let spikes = async (channelId: string) =>
 		(await service.store.list(channelId)).filter(value => value.spike);
 	let dismiss = async (_channelId: string, id: string) => {
@@ -27,6 +30,38 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 			value.spike!.dismissed = true;
 		});
 		await service.stop(id, "cancelled", "Dismissed.");
+	};
+	/** Hand a requested spike to a local agent; a vanished connection leaves it retryable. */
+	let dispatch = async (
+		channelId: string,
+		value: Investigation,
+		owner: string,
+		connectionId: string,
+	) => {
+		let live = connections.get(connectionId);
+		try {
+			if (!live) throw new Error("connection gone");
+			let context = await withPlan(channelId, plan => Service.readCurrentDocument(plan));
+			await service.authorize(value.id, live.id, {
+				id: value.id,
+				documentId: channelId,
+				requester: owner,
+				authorizer: owner,
+				brief: value.brief,
+				source: live.source,
+				context: `Document revision ${context.revision}\n${context.source}`.slice(
+					0,
+					limits.context,
+				),
+			});
+			connections.use(channelId, live.id);
+		} catch {
+			await service.stop(
+				value.id,
+				live ? "failed" : "interrupted",
+				"The local agent disconnected before it could start.",
+			);
+		}
 	};
 	return {
 		snapshot: channelId =>
@@ -51,7 +86,10 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 			}),
 		spikes,
 		async connection(repositoryId, owner, channelId) {
-			let found = connections.candidates(repositoryId, owner, channelId)[0];
+			// A connection silent past two heartbeats is probably gone; let it reconnect first.
+			let found = connections.candidates(repositoryId, owner, channelId).find(value =>
+				connections.fresh(value)
+			);
 			return found && { id: found.id, login: found.login };
 		},
 		async start(channelId, { owner, connection, block }) {
@@ -85,26 +123,11 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 				item.spike!.callout = placed.callout;
 				item.spike!.calloutDigest = placed.digest;
 			});
-			let live = connections.get(connection.id);
-			try {
-				if (!live) throw new Error("connection gone");
-				let context = await withPlan(channelId, plan => Service.readCurrentDocument(plan));
-				await service.authorize(id, live.id, {
-					id,
-					documentId: channelId,
-					requester: owner,
-					authorizer: owner,
-					brief: value.brief,
-					source: live.source,
-					context: `Document revision ${context.revision}\n${context.source}`.slice(
-						0,
-						limits.context,
-					),
-				});
-				connections.use(channelId, live.id);
-			} catch {
-				await service.stop(id, "failed", "The local agent disconnected before it could start.");
-			}
+			await dispatch(channelId, value, owner, connection.id);
+		},
+		async retry(channelId, id, { owner, connection }) {
+			let value = await service.retry(id);
+			await dispatch(channelId, value, owner, connection.id);
 		},
 		dismiss,
 		async refresh(channelId) {
@@ -128,13 +151,17 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 				if (placed.status === "missing") await dismiss(channelId, value.id);
 				else if (placed.status !== "deferred") {
 					let { callout, digest } = placed;
-					await service.mutate(value.id, item => {
+					let landing = placed.status === "placed" && key === "completed"
+						&& spike.rendered !== key;
+					let updated = await service.mutate(value.id, item => {
 						item.spike!.placed = true;
 						delete item.spike!.placing;
 						item.spike!.rendered = key;
 						item.spike!.callout = callout;
 						item.spike!.calloutDigest = digest;
+						if (landing) item.spike!.settle = true;
 					});
+					if (landing) landed?.(channelId, updated);
 				}
 			}
 		},
