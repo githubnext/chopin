@@ -20,7 +20,7 @@
  * shown as coloured diff text instead, which is what it is.
  */
 
-import { Component, useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 
 import { fileNameOf, repaired, titled } from "./code";
 
@@ -36,6 +36,26 @@ type Renderer = {
 	parsePatchFiles: Core["parsePatchFiles"];
 	resolveLanguage: Core["resolveLanguage"];
 };
+
+/**
+ * A wrapped line's continuation starts 2ch further in than the line did, so
+ * it never reads as a line of its own. The renderer already pads each line
+ * by 1ch.
+ */
+const HANGING_INDENT = `[data-overflow="wrap"] [data-line] {
+	padding-inline-start: 3ch;
+	text-indent: -2ch;
+	overflow-wrap: anywhere;
+}`;
+
+type Overflow = "scroll" | "wrap";
+
+/** The stylesheet decides when code wraps; the renderer's shadow root cannot see its rules. */
+function readOverflow(element: HTMLElement): Overflow {
+	return getComputedStyle(element).getPropertyValue("--plan-code-overflow").trim() === "wrap"
+		? "wrap"
+		: "scroll";
+}
 
 /** What the highlighter calls text it has no grammar for. */
 const PLAIN = "text";
@@ -143,6 +163,8 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 	let [renderer, setRenderer] = useState<Renderer>();
 	let [broken, setBroken] = useState(false);
 	let [resolved, setResolved] = useState<string>();
+	let [overflow, setOverflow] = useState<Overflow>("scroll");
+	let view = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		let live = true;
@@ -170,6 +192,17 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			live = false;
 		};
 	}, [renderer, language]);
+
+	// The view's width follows its container, so a resize is when the switch can change.
+	useEffect(() => {
+		let element = view.current;
+		if (!element) return;
+		let update = () => setOverflow(readOverflow(element));
+		update();
+		let observer = new ResizeObserver(update);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [renderer, broken]);
 
 	/*
 	 * Everything handed to the library is memoised, and not as a courtesy: it
@@ -202,10 +235,11 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			// A diff's fallback has no title in the block's own header.
 			disableFileHeader: kind !== "diff" || !titled(meta),
 			disableLineNumbers: true,
-			overflow: "scroll" as const,
+			overflow,
+			unsafeCSS: HANGING_INDENT,
 			disableWorkerPool: true,
 		}),
-		[kind, meta],
+		[kind, meta, overflow],
 	);
 
 	let diffOptions = useMemo(
@@ -223,10 +257,10 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			 * which is what the source says too.
 			 */
 			hunkSeparators: "metadata" as const,
-			overflow: "scroll" as const,
+			overflow,
 			disableWorkerPool: true,
 		}),
-		[],
+		[overflow],
 	);
 
 	if (broken) return <div data-plan-error="">could not be rendered</div>;
@@ -238,6 +272,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 
 	return (
 		<div
+			ref={view}
 			className="plan-code-view"
 			contentEditable={false}
 			role="group"

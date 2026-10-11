@@ -1,4 +1,5 @@
 export { GitHubIcon } from "./brand";
+export { ExpandIcon } from "./expand";
 export { ChopinIcon } from "./filled";
 export {
 	IssueCompletedIcon,

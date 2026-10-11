@@ -7,6 +7,7 @@ import { useCellValue } from "@mdxeditor/gurx";
 
 import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY } from "../pointer";
 import { TableActionToolbar } from "./action-toolbar";
+import { useTableEdges } from "./edges";
 import { TableRails } from "./rails";
 import { useTableSupport } from "./support";
 
@@ -35,6 +36,7 @@ export function TableChrome() {
 	let [editor] = useLexicalComposerContext();
 	let disabled = useCellValue(readOnly$);
 	let tables = useTableSupport(editor);
+	useTableEdges(editor, tables);
 	let [mode, setMode] = useState<TableChromeMode>(() =>
 		readMode(
 			matchMedia(COMPACT_VIEWPORT_QUERY),

@@ -10,6 +10,14 @@ export function scrollEdges(
 	};
 }
 
+/** Names the hidden sides, for a stylesheet to fade; `undefined` when nothing overflows. */
+export function hiddenSides(
+	edges: { start: boolean; end: boolean },
+): "start" | "end" | "both" | undefined {
+	if (edges.start && edges.end) return "both";
+	return edges.start ? "start" : edges.end ? "end" : undefined;
+}
+
 /** Soft fade on whichever sides have more content; `undefined` when nothing overflows. */
 export function edgeMask(edges: { start: boolean; end: boolean }): string | undefined {
 	if (!edges.start && !edges.end) return undefined;

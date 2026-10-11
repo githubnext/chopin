@@ -1,12 +1,19 @@
 import { expect, test } from "bun:test";
 
-import { edgeMask, revealDelta, scrollEdges } from "./tab-edges";
+import { edgeMask, hiddenSides, revealDelta, scrollEdges } from "./tab-edges";
 
 test("reports the sides that hide content", () => {
 	expect(scrollEdges(0, 300, 300)).toEqual({ start: false, end: false });
 	expect(scrollEdges(0, 300, 900)).toEqual({ start: false, end: true });
 	expect(scrollEdges(200, 300, 900)).toEqual({ start: true, end: true });
 	expect(scrollEdges(600, 300, 900)).toEqual({ start: true, end: false });
+});
+
+test("names the hidden sides for a stylesheet fade", () => {
+	expect(hiddenSides({ start: false, end: false })).toBeUndefined();
+	expect(hiddenSides({ start: false, end: true })).toBe("end");
+	expect(hiddenSides({ start: true, end: false })).toBe("start");
+	expect(hiddenSides({ start: true, end: true })).toBe("both");
 });
 
 test("masks only when something overflows", () => {

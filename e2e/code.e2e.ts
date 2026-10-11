@@ -94,7 +94,8 @@ test("a wide preview scrolls inside its code widget", async ({ join, seed }) => 
 	await seed(
 		'```ts\nexport const unbrokenPreviewLine = "ThisPreviewLineIsDeliberatelyLongEnoughToRequireTheCodeWidgetToOwnHorizontalScrollingWithoutWideningTheCollaborativeDocument";\n```\n',
 	);
-	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	// Wide enough that the document keeps code on one line; a phone wraps it.
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	let preview = content(page).locator("[data-plan-preview]");
 	let rendered = preview.locator(":scope > div");
 

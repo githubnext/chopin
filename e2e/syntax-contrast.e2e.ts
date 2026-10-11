@@ -50,11 +50,12 @@ test("code and diff previews retain distinct syntax and accessible groups", asyn
 	expect(seen.size).toBeGreaterThanOrEqual(5);
 });
 
-test("a narrow code preview can be scrolled with the keyboard", async ({ join, seed }) => {
+// A phone-width document wraps code instead; see wide-content.e2e.ts.
+test("a code preview wider than its document can be scrolled with the keyboard", async ({ join, seed }) => {
 	await seed(
 		'```typescript\nexport const longLine = "ThisCodeLineIsIntentionallyLongEnoughToNeedItsOwnKeyboardScrollAreaInTheNarrowDocumentPane";\n```\n',
 	);
-	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	let preview = content(page).locator("[data-plan-preview] .plan-code-view");
 	await expect(preview).toBeVisible();
 	expect(await preview.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);

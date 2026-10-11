@@ -55,9 +55,11 @@ import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 import { enclosing, remember } from "../collapse";
 import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } from "./code";
 import { CodeView } from "./code-view";
+import { DiagramSheet, ExpandDiagram } from "./diagram-sheet";
 import { LanguageMenu } from "./language-menu";
 import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
+import { hiddenSides, scrollEdges } from "./tab-edges";
 import { CodeIcon, WarningIcon } from "@chopin/icons";
 
 import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
@@ -511,11 +513,8 @@ function DiagramError({ message }: { message: string }) {
 }
 
 /** Which sides of a scroller still hide some of the drawing. */
-function hiddenSides(element: HTMLElement): "start" | "end" | "both" | undefined {
-	let start = element.scrollLeft > 1;
-	let end = element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
-	if (start && end) return "both";
-	return start ? "start" : end ? "end" : undefined;
+function sidesOf(element: HTMLElement): ReturnType<typeof hiddenSides> {
+	return hiddenSides(scrollEdges(element.scrollLeft, element.clientWidth, element.scrollWidth));
 }
 
 /**
@@ -525,9 +524,10 @@ function hiddenSides(element: HTMLElement): "start" | "end" | "both" | undefined
  * measure makes its labels unreadable. A modest overshoot is scaled to fit;
  * anything wider keeps its size and scrolls, fading the side with more to see.
  */
-function Diagram({ html, stale }: { html: string; stale: boolean }) {
+function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean }) {
 	let region = useRef<HTMLDivElement>(null);
 	let [fit, setFit] = useState(false);
+	let [expanded, setExpanded] = useState(false);
 	let [more, setMore] = useState<ReturnType<typeof hiddenSides>>();
 
 	useEffect(() => {
@@ -540,9 +540,9 @@ function Diagram({ html, stale }: { html: string; stale: boolean }) {
 			let room = element.clientWidth - parseFloat(style.paddingInlineStart)
 				- parseFloat(style.paddingInlineEnd);
 			setFit(!(authored > 0) || room >= authored * MIN_DIAGRAM_SCALE);
-			setMore(hiddenSides(element));
+			setMore(sidesOf(element));
 		};
-		let scrolled = () => setMore(hiddenSides(element));
+		let scrolled = () => setMore(sidesOf(element));
 		measure();
 		let observer = new ResizeObserver(measure);
 		observer.observe(element);
@@ -556,24 +556,39 @@ function Diagram({ html, stale }: { html: string; stale: boolean }) {
 	// Fitting changes the drawing's width, so whether anything is hidden is
 	// only known after that has been laid out.
 	useEffect(() => {
-		if (region.current) setMore(hiddenSides(region.current));
+		if (region.current) setMore(sidesOf(region.current));
 	}, [fit, html]);
 
 	return (
-		<div
-			ref={region}
-			aria-label="Diagram preview"
-			className="plan-diagram"
-			data-fit={fit ? "" : undefined}
-			data-more={more}
-			data-stale={stale ? "" : undefined}
-			role="region"
-			tabIndex={0}
-			// Mermaid draws its labels as HTML. Inside the editable root, a
-			// click would otherwise put a caret in a label and type into it.
-			contentEditable={false}
-			dangerouslySetInnerHTML={{ __html: html }}
-		/>
+		<>
+			<div
+				ref={region}
+				aria-label="Diagram preview"
+				className="plan-diagram"
+				data-fit={fit ? "" : undefined}
+				data-more={more}
+				data-stale={stale ? "" : undefined}
+				role="region"
+				tabIndex={0}
+				// Mermaid draws its labels as HTML. Inside the editable root, a
+				// click would otherwise put a caret in a label and type into it.
+				contentEditable={false}
+				dangerouslySetInnerHTML={{ __html: html }}
+			/>
+			{!fit && <ExpandDiagram onExpand={() => setExpanded(true)} />}
+			{expanded && (
+				<DiagramSheet onClose={() => setExpanded(false)} zoomable>
+					<div
+						className="plan-diagram-sheet-drawing"
+						// The copy's IDs are its own, so its markers and styles
+						// never resolve to the drawing in the document.
+						dangerouslySetInnerHTML={{
+							__html: html.replaceAll(`ace-mermaid-${id}`, `ace-mermaid-${id}-sheet`),
+						}}
+					/>
+				</DiagramSheet>
+			)}
+		</>
 	);
 }
 
@@ -588,6 +603,31 @@ function WireframeError({ message }: { message: string }) {
 				<strong className="plan-error-title">This wireframe could not be drawn</strong>
 				<p className="plan-error-message">{message}</p>
 			</div>
+		</div>
+	);
+}
+
+/** A SeeCode drawing; its own controls offer the full-screen sheet where it overflows. */
+function SeeCode({ id, spec }: { id: string; spec: unknown }) {
+	let [expanded, setExpanded] = useState(false);
+	return (
+		<div
+			className="plan-seecode"
+			contentEditable={false}
+			role="region"
+			aria-label="Diagram preview"
+			tabIndex={0}
+		>
+			<Suspense fallback={null}>
+				<SeeCodeDiagram spec={spec} idPrefix={id} onExpand={() => setExpanded(true)} />
+			</Suspense>
+			{expanded && (
+				<DiagramSheet onClose={() => setExpanded(false)}>
+					<Suspense fallback={null}>
+						<SeeCodeDiagram spec={spec} idPrefix={`${id}-sheet`} />
+					</Suspense>
+				</DiagramSheet>
+			)}
 		</div>
 	);
 }
@@ -625,7 +665,7 @@ function Rendered(
 	if (block.kind === "mermaid" && (html || error)) {
 		return (
 			<>
-				{html && <Diagram html={html} stale={!!error} />}
+				{html && <Diagram id={block.key} html={html} stale={!!error} />}
 				{error && <DiagramError message={error} />}
 			</>
 		);
@@ -646,19 +686,7 @@ function Rendered(
 	}
 	if (block.kind === "seecode") {
 		if (spec === undefined) return null;
-		return (
-			<div
-				className="plan-seecode"
-				contentEditable={false}
-				role="region"
-				aria-label="Diagram preview"
-				tabIndex={0}
-			>
-				<Suspense fallback={null}>
-					<SeeCodeDiagram spec={spec} idPrefix={block.key} />
-				</Suspense>
-			</div>
-		);
+		return <SeeCode id={block.key} spec={spec} />;
 	}
 
 	if (!html) return null;

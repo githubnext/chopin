@@ -482,6 +482,11 @@
 	}
 }
 
+/* Only where the document is narrow; a wide one keeps its scroll lane and controls. */
+.plan-content :is(.plan-diagram-expand, .ch-diagram__expand) {
+	display: none;
+}
+
 @container (max-width: 40rem) {
 	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
 	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface, .plan-afterword) {
@@ -509,6 +514,73 @@
 		border-radius: var(--radius-lg);
 		background: var(--color-text-quaternary);
 	}
+
+	/* A wide table fades the side that still hides columns, as a drawn diagram does. */
+	.plan-content table {
+		--plan-table-fade: calc(var(--spacing) * 8);
+	}
+
+	.plan-content table[data-more="end"] {
+		mask-image: linear-gradient(to right, black calc(100% - var(--plan-table-fade)), transparent);
+	}
+
+	.plan-content table[data-more="start"] {
+		mask-image: linear-gradient(to right, transparent, black var(--plan-table-fade));
+	}
+
+	.plan-content table[data-more="both"] {
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			black var(--plan-table-fade),
+			black calc(100% - var(--plan-table-fade)),
+			transparent
+		);
+	}
+
+	/*
+	 * Phone-width code wraps rather than scrolling a few characters at a time.
+	 * The coloured copy is drawn in a shadow root, so it reads this switch
+	 * instead of the rule; a plain-text fence is laid out by hand and keeps
+	 * its lines.
+	 */
+	.plan-content .planCode:not([data-plan-text]) .plan-code-view {
+		--plan-code-overflow: wrap;
+	}
+
+	.plan-content .planCode:not([data-plan-text]) .plan-code-view > diffs-container {
+		min-inline-size: 0;
+	}
+
+	.plan-content .planCode:not([data-plan-text]) [data-plan-source] {
+		overflow-wrap: anywhere;
+	}
+
+	/* A diagram below its readability floor offers a full-screen reading. */
+	.plan-content .plan-diagram-expand {
+		display: inline-grid;
+	}
+
+	.plan-content .ch-diagram__expand {
+		display: flex;
+	}
+}
+
+.plan-content [data-plan-preview]:has(> .plan-diagram-expand) {
+	position: relative;
+}
+
+/* Clear of the block's floating controls, which sit over the drawing's top padding. */
+.plan-content .plan-diagram-expand {
+	position: absolute;
+	inset-block-start: calc(var(--spacing) * 10);
+	inset-inline-end: calc(var(--spacing) * 2);
+	z-index: 1;
+	place-items: center;
+	inline-size: var(--control-target-coarse);
+	block-size: var(--control-target-coarse);
+	border-radius: var(--radius-full);
+	box-shadow: var(--shadow-resting);
 }
 
 .agent-mark {
@@ -2371,6 +2443,107 @@
 	margin-inline: auto;
 }
 
+/*
+ * A dense diagram's full-screen reading. It rises from the bottom edge and
+ * settles; reduced motion only fades it in. The drawing keeps its authored
+ * size and scrolls natively, so it pans under a finger and pinches like the
+ * page does.
+ */
+.plan-diagram-sheet {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	inline-size: 100%;
+	block-size: 100dvh;
+	max-inline-size: none;
+	max-block-size: none;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: var(--color-page);
+	color: var(--color-text-primary);
+	font-family: var(--font-sans);
+	overscroll-behavior: contain;
+}
+
+.plan-diagram-sheet::backdrop {
+	background: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.plan-diagram-sheet[open] {
+		animation: plan-sheet-up var(--drawer-open-dur) var(--motion-smooth-out);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-diagram-sheet[open] {
+		animation: plan-source-in var(--duration-base) var(--ease-out);
+	}
+}
+
+@keyframes plan-sheet-up {
+	from {
+		transform: translateY(100%);
+	}
+}
+
+.plan-diagram-sheet-bar {
+	display: flex;
+	flex-shrink: 0;
+	justify-content: flex-end;
+	gap: calc(var(--spacing) * 2);
+	padding-block-start: calc(env(safe-area-inset-top, 0px) + var(--spacing) * 2);
+	padding-inline: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 2)
+		calc(env(safe-area-inset-right, 0px) + var(--spacing) * 2);
+}
+
+.plan-diagram-sheet .plan-diagram-sheet-button {
+	inline-size: var(--control-target-coarse);
+	block-size: var(--control-target-coarse);
+	border-radius: var(--radius-full);
+}
+
+.plan-diagram-sheet-scroll {
+	flex: 1;
+	min-block-size: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding-block: calc(var(--spacing) * 4)
+		calc(env(safe-area-inset-bottom, 0px) + var(--spacing) * 4);
+	padding-inline: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 4)
+		calc(env(safe-area-inset-right, 0px) + var(--spacing) * 4);
+}
+
+.plan-diagram-sheet-drawing {
+	inline-size: max-content;
+	margin-inline: auto;
+}
+
+.plan-diagram-sheet-drawing svg {
+	display: block;
+	max-inline-size: none;
+	block-size: auto;
+}
+
+/* Fitted: the whole shape at once, centred in the sheet. */
+.plan-diagram-sheet-scroll[data-fit] {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Auto margins rather than centring, so a tall drawing still scrolls from its top. */
+.plan-diagram-sheet-scroll[data-fit] .plan-diagram-sheet-drawing {
+	inline-size: auto;
+	max-inline-size: 100%;
+	margin-block: auto;
+}
+
+.plan-diagram-sheet-scroll[data-fit] .plan-diagram-sheet-drawing svg {
+	max-inline-size: 100%;
+}
+
 /* Visual top-level blocks can use the document beyond the prose measure. */
 .plan-content
 	> :is(p:has(> [data-plan-src]:first-child
@@ -3241,6 +3414,10 @@
 		padding-block-start: 0;
 	}
 
+	.plan-content .plan-diagram-expand {
+		inset-block-start: calc(var(--spacing) * 2);
+	}
+
 	.plan-content .planCode .plan-code-chrome {
 		background: none;
 	}
@@ -3821,6 +3998,34 @@
 	content: "";
 	position: absolute;
 	inset: calc(50% - 22px);
+}
+
+/*
+ * And around each tab, grown into a band the strip makes room for: the strip
+ * scrolls, so anything reaching past its box would be clipped.
+ */
+:root[data-plan-coarse-pointer] .plan-content .plan-tab-strip [role="tablist"] {
+	padding-block: calc((var(--control-target-coarse) - var(--icon-button-size)) / 2);
+	margin-block: calc((var(--control-target-coarse) - var(--icon-button-size)) / -2);
+}
+
+:root[data-plan-coarse-pointer] .plan-content .plan-tab > [role="tab"] {
+	position: relative;
+}
+
+:root[data-plan-coarse-pointer] .plan-content .plan-tab > [role="tab"]::after {
+	content: "";
+	position: absolute;
+	inset-block: calc(50% - var(--control-target-coarse) / 2);
+	inset-inline: 0;
+}
+
+/* The source toggle grows away from the language menu beside it, toward empty space. */
+:root[data-plan-coarse-pointer] .plan-content .plan-code-chrome .plan-code-toggle::after {
+	left: auto;
+	right: 0;
+	width: var(--control-target-coarse);
+	transform: translateY(-50%);
 }
 
 .plan-content .plan-tab-add {

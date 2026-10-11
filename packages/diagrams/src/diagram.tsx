@@ -12,6 +12,7 @@ import {
 	ActualSizeIcon,
 	ArrowLeftIcon,
 	ArrowRightIcon,
+	ExpandIcon,
 	FitWidthIcon,
 	MinusIcon,
 	PauseIcon,
@@ -43,6 +44,8 @@ export type DiagramProps = {
 	description?: string;
 	/** Optional label within generated SVG resource IDs. */
 	idPrefix?: string;
+	/** Offered beside the zoom controls when the drawing is wider than its stage. */
+	onExpand?: () => void;
 };
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
@@ -85,6 +88,7 @@ function DiagramView({
 	title,
 	description,
 	idPrefix,
+	onExpand,
 	onWidth,
 }: Omit<DiagramProps, "spec"> & { result: ReadyDiagram; onWidth: (width: number) => void }) {
 	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -451,6 +455,18 @@ function DiagramView({
 							</button>
 						</div>
 					)}
+					{zoomable && onExpand && (
+						<div className="ch-diagram__control-group ch-diagram__expand">
+							<button
+								className="ch-diagram__control"
+								type="button"
+								aria-label="Expand diagram"
+								onClick={onExpand}
+							>
+								<ExpandIcon />
+							</button>
+						</div>
+					)}
 				</div>
 			)}
 			{selected && (
@@ -525,6 +541,7 @@ export function Diagram({ spec, ...props }: DiagramProps) {
 			title={props.title}
 			description={props.description}
 			idPrefix={props.idPrefix}
+			onExpand={props.onExpand}
 		/>
 	);
 }
