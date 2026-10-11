@@ -391,9 +391,26 @@ test("Lift keeps the child for the surface toggle and presence, returns for the 
 	// Enter on the return control closes once and hands focus back to the opener.
 	let back = tabs.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` });
 	await back.focus();
+	let focusTrail = await page.evaluateHandle(() => {
+		let trail = { body: false, done: false };
+		let watch = () => {
+			let closing = document.querySelector(".anchored-child-card") !== null;
+			if (closing && document.activeElement === document.body) trail.body = true;
+			if (!trail.done) requestAnimationFrame(watch);
+		};
+		watch();
+		return trail;
+	});
 	await page.keyboard.press("Enter");
 	await expect(surface).toHaveCount(0);
 	await expect(childLink).toBeFocused();
+	// Focus stays on the return control through the 250ms close, then lands on the opener.
+	expect(
+		await focusTrail.evaluate(trail => {
+			trail.done = true;
+			return trail.body;
+		}),
+	).toBe(false);
 	await expect(page).toHaveURL(url => url.pathname.endsWith(`/test-${room.slice(0, 8)}`));
 
 	await childLink.click();

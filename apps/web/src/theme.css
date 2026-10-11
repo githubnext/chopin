@@ -697,15 +697,15 @@ body {
  * A covered Lift sheet's tab row is one Back control. The button fills the row beneath its
  * controls, so a click between tabs and keyboard focus both reach it.
  */
-.workspace-document-panel[data-child-covered] [data-document-toolbar] {
+[data-document-toolbar]:has(> .workspace-tab-row-return) {
 	position: relative;
 }
 
-.workspace-document-panel[data-child-covered] [data-document-toolbar] > * {
+[data-document-toolbar]:has(> .workspace-tab-row-return) > * {
 	position: relative;
 }
 
-.workspace-document-panel[data-child-covered] [data-document-toolbar] > .workspace-tab-row-return {
+[data-document-toolbar] > .workspace-tab-row-return {
 	position: absolute;
 	inset: 0;
 	cursor: pointer;

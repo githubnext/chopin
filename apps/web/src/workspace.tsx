@@ -509,12 +509,16 @@ export function Workspace(
 										}
 									}}
 								>
-									{liftCovered && (
+									{lift && (
 										// The covered row is one control: a click anywhere on it, or on a tab, returns
 										// through `<main>`'s capture handler, so this button needs no handler of its own.
+										// It stays mounted and focusable while closing so focus never falls to the body
+										// before it returns to the opener; `inert` would blur it just the same.
 										<button
+											aria-disabled={childClosing || undefined}
 											aria-label={`Back to ${nested!.path[0]!.label}`}
 											className="workspace-tab-row-return"
+											tabIndex={childClosing ? -1 : undefined}
 											type="button"
 										/>
 									)}
