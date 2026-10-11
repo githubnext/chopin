@@ -22,11 +22,20 @@ import type { SocketData } from "../wire";
 
 export type Frame = { kind: string; [key: string]: unknown };
 
-/** The real session opener over a stub that records each turn's prompt and holds it open. */
+/**
+ * The real session opener over a stub that records each turn's prompt and holds
+ * each turn open until `finish` lets it end.
+ */
 export function observe(context: Chat.Room) {
 	let prompts: string[] = [];
-	let gate = Promise.withResolvers<unknown[]>();
-	let opened = Promise.withResolvers<void>();
+	let gates: Array<PromiseWithResolvers<unknown[]>> = [];
+	let released = 0;
+	let after: unknown[] | undefined;
+	let seen = (count: number) =>
+		new Promise<void>(resolve => {
+			let check = () => prompts.length >= count ? resolve() : setTimeout(check, 1);
+			check();
+		});
 	context.openPlannerSession = (owner, channel) =>
 		openPlannerSession(owner, channel, {
 			githubTools: async () => ({ ok: true, value: {} }),
@@ -39,7 +48,9 @@ export function observe(context: Chat.Room) {
 				}),
 				stream: async (call: { prompt: string }) => {
 					prompts.push(call.prompt);
-					opened.resolve();
+					let gate = Promise.withResolvers<unknown[]>();
+					gates.push(gate);
+					if (after) gate.resolve(after);
 					let parts = await gate.promise;
 					return {
 						fullStream: (async function*() {
@@ -51,10 +62,18 @@ export function observe(context: Chat.Room) {
 		});
 	return {
 		prompts,
-		/** Settles once the first turn has reached the model. */
-		started: () => opened.promise,
-		/** Lets every turn end after streaming `parts`. */
-		finish: (parts: unknown[] = []) => gate.resolve(parts),
+		/** Settles once `count` turns have reached the model. */
+		started: (count = 1) => seen(count),
+		/** Lets the oldest turn still held end after streaming `parts`. */
+		finish: async (parts: unknown[] = []) => {
+			await seen(released + 1);
+			gates[released++]!.resolve(parts);
+		},
+		/** Lets every turn, now and later, end at once. */
+		finishAll: () => {
+			after = [];
+			for (let gate of gates) gate.resolve([]);
+		},
 	};
 }
 
@@ -177,7 +196,7 @@ export async function rooted(sources: { root: string; child: string }) {
 		child: { channel: childChannel, plan: childPlan, context: childContext },
 		turns,
 		async close() {
-			turns.finish();
+			turns.finishAll();
 			await rootPlan.chat.running;
 			owners.revokeAll();
 			await Service.close(rootPlan);

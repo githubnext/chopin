@@ -132,9 +132,11 @@ child as the turn's focus; the root's transcript notice names the child. That
 turn alone may `reply_comment` in that child thread, and its `edit_child` writes
 are the thread's result. The note is saved in the child before the turn is
 queued, and the reply is saved in the child before the child's room sees it.
-Each step re-asks storage that the child still belongs to a live root in the
-same repository, and refuses the note before saving it when it does not.
-Planner ownership is the root's.
+Admission, the turn's start, and `reply_comment` each re-ask storage that the
+child still belongs to a live root in the same repository; admission refuses the
+note before saving it when it does not. The end-of-turn fallback reply is posted
+to the child room the note came from, which stays held until that turn ends,
+without asking again. Planner ownership is the root's.
 
 Issue and general search MCP tools are refused because linked objects and
 free-form qualifiers can cross the selected repository boundary. Repository

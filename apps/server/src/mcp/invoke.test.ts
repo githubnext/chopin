@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 
+import * as Chat from "../chat/service";
 import { handler, TOOLS } from "../mcp";
 import { rooted } from "../testing/rooted";
 import { invokeRouted } from "./invoke";
@@ -198,4 +199,21 @@ test("invoke_planner on a child that no longer belongs to its root fails closed"
 	expect(root.plan.chat.entries).toEqual([]);
 	expect(child.plan.chat.entries).toEqual([]);
 	expect(released()).toBe(opened.length);
+});
+
+test("a child instruction queued behind a root turn holds the root until its own turn ends", async () => {
+	let { child, invoke, released, root, turns, user } = await routed();
+	expect(await Chat.invoke(root.context, user, "First")).toBeUndefined();
+	await turns.started(1);
+	expect(await invoke(child.channel.id)).toBeUndefined();
+	expect(released()).toBe(0);
+
+	await turns.finish();
+	await turns.started(2);
+	expect(turns.prompts[1]).toContain(`child id ${child.channel.id}`);
+	expect(released()).toBe(0);
+
+	await turns.finish();
+	await root.plan.chat.running;
+	expect(released()).toBe(1);
 });

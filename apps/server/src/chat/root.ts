@@ -42,19 +42,39 @@ export function createRootChat(deps: RootChatDeps): Chat.RootChat {
 		},
 		async instruct(handle, text, said, about) {
 			let { child, context, release } = await opened();
+			// Held until this instruction's own turn has ended, however it ends. A folded or
+			// refused instruction has no turn of its own, so nothing would ever say so.
+			let begun = false;
+			let settled = false;
+			let done = () => {
+				if (settled) return;
+				settled = true;
+				release();
+			};
+			let ended: Chat.Instruction["ended"] = async outcome => {
+				try {
+					await about.ended?.(outcome);
+				} finally {
+					done();
+				}
+			};
 			try {
 				await Chat.instruct(context, handle, text, said, {
 					...about,
+					started: () => {
+						begun = true;
+						about.started?.();
+					},
+					ended,
 					threadChannel: child.id,
 					focus: { channelId: child.id, title: child.title },
 					...(about.comment ? { comment: { ...about.comment, channelId: child.id } } : {}),
 				});
-			} finally {
-				// The running turn drains the queue, so it outlasts a turn queued or folded behind it.
-				let running = context.chat.running;
-				if (running) void running.finally(release).catch(() => {});
-				else release();
+			} catch (err) {
+				done();
+				throw err;
 			}
+			if (!begun && !context.chat.waiting.some(item => item.ended === ended)) done();
 		},
 		working: thread => Chat.workingFor(deps.live(), thread, deps.childId),
 	};

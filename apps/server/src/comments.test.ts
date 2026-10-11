@@ -407,7 +407,7 @@ describe("marking a passage over the wire", () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
 
-		Comments.start(
+		await Comments.start(
 			plan,
 			server,
 			"test",
@@ -489,7 +489,11 @@ describe("resolving and reopening, as the service orders it", () => {
 			?.find(each => each.thread === id);
 		expect(pointed).toMatchObject({ subject: { quote: QUOTE } });
 
-		Comments.respond(plan, kris.socket, ask({ kind: "comment:reply" as const, id, text: "Back." }));
+		await Comments.respond(
+			plan,
+			kris.socket,
+			ask({ kind: "comment:reply" as const, id, text: "Back." }),
+		);
 		await Bun.sleep(0);
 		expect(kris.replies.at(-1)).toMatchObject({ kind: "comment:reply", ok: true });
 	});

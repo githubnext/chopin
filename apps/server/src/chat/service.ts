@@ -657,6 +657,8 @@ export async function invoke(
 	text: string,
 	checkout?: string,
 	focus?: Focus,
+	/** Called once, when the invoked turn ends or is dropped; never when this refuses. */
+	settled?: () => void,
 ): Promise<
 	| "planner-unavailable"
 	| "planner-not-attached"
@@ -712,6 +714,7 @@ export async function invoke(
 				userId: user.id,
 				invokedBy: user.id,
 				...(focus ? { focus } : {}),
+				...(settled ? { ended: settled } : {}),
 			});
 			queued(chat, server, room);
 		} else {
@@ -724,6 +727,12 @@ export async function invoke(
 				false,
 				{ entryId: entry.id, userId: user.id, ...(focus ? { focus } : {}) },
 			);
+			// Started here, so this promise is this turn's own (and the queue it drains).
+			let running = chat.running;
+			if (settled) {
+				if (running) void running.finally(settled).catch(() => {});
+				else settled();
+			}
 		}
 		return undefined;
 	};
@@ -2506,6 +2515,8 @@ export async function close(chat: Chat): Promise<void> {
 	chat.activeRequest = undefined;
 	for (let waiting of chat.waiting) {
 		if (waiting.job) finishJob(waiting.job, { status: "failed", reason: "The document closed." });
+		// Whoever is waiting on a dropped turn, such as a child's comment, hears it will not run.
+		else if (waiting.ended) void report(waiting, { status: "skipped" });
 	}
 	if (chat.handoffJob) {
 		finishJob(chat.handoffJob, { status: "failed", reason: "The document closed." });

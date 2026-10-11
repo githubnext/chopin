@@ -536,12 +536,21 @@ async function rootAndChild() {
 			committedAtBroadcast.push(JSON.stringify(child.plan.persistence.committedSidecar));
 		}
 	});
+	let holds = { opened: 0, released: 0 };
 	child.context.root = createRootChat({
 		rootId: root.channel.id,
 		childId: child.channel.id,
 		repositoryId: repository.id,
 		channels: fixture.storage.channels,
-		open: async () => ({ context: root.context, release: () => {} }),
+		open: async () => {
+			holds.opened++;
+			return {
+				context: root.context,
+				release: () => {
+					holds.released++;
+				},
+			};
+		},
 		live: () => root.plan.chat,
 	});
 	let owner = { signal: new AbortController().signal, revalidate: async () => true };
@@ -574,6 +583,11 @@ async function rootAndChild() {
 			sendToChopin,
 		},
 		events: fixture.events,
+		holds,
+		turns,
+		user: fixture.user,
+		rootContext: root.context,
+		childContext: child.context,
 		async startChildComment(text: string, _options: { to: "planner" }) {
 			return sendToChopin(text) as Promise<string>;
 		},
@@ -599,7 +613,7 @@ async function rootAndChild() {
 			}
 		},
 		async endRootTurnWithChatOnly(text: string) {
-			turns.finish([
+			await turns.finish([
 				{ type: "text-start", id: "m" },
 				{ type: "text-delta", id: "m", text },
 				{ type: "text-end", id: "m" },
@@ -679,6 +693,67 @@ describe("a comment sent to Chopin inside a child document", () => {
 		expect(child.plan.threads.get(thread)!.notes.at(-1)).toMatchObject({
 			author: "planner",
 			text: "Answered in Chat only.",
+		});
+	});
+
+	it("keeps the root and child rooms held until a queued child turn has itself ended", async () => {
+		let { child, childContext, events, holds, rootChat, rootContext, turns, user } =
+			await rootAndChild();
+		// Busy without a running turn of its own, as while a member's message is being saved.
+		rootChat.busy = true;
+		let answered = await start(childContext, member("ana"), "tighten this");
+		expect(answered).toMatchObject({ ok: true, planner: "queued" });
+		let thread = idOf(answered);
+		// Admission released its hold; the queued turn's is still held.
+		expect(holds).toEqual({ opened: 2, released: 1 });
+
+		rootChat.busy = false;
+		expect(await Chat.invoke(rootContext, user, "First")).toBeUndefined();
+		await turns.finish();
+		await turns.started(2);
+		expect(rootChat.acting).toBe(thread);
+		expect(holds.released).toBe(1);
+
+		await turns.finish();
+		await rootChat.running;
+		expect(holds.released).toBe(2);
+		expect(events.findLast(event => event.frame.kind === "comment:working")).toEqual({
+			topic: Wire.topic(child.channel.id),
+			frame: expect.objectContaining({ id: thread, working: false }),
+		});
+	});
+
+	it("releases the root at once when a note folds into a turn already waiting", async () => {
+		let { childContext, holds, rootChat } = await rootAndChild();
+		rootChat.busy = true;
+		let thread = idOf(await start(childContext, member("ana"), "tighten this"));
+		expect(holds).toEqual({ opened: 2, released: 1 });
+		await reply(childContext, member("kris"), thread, "And shorten it.");
+		expect(holds).toEqual({ opened: 4, released: 3 });
+		expect(rootChat.waiting.filter(item => item.thread === thread)).toHaveLength(1);
+		rootChat.waiting = [];
+		rootChat.busy = false;
+	});
+
+	it("says the turn failed when the root cannot take it after the note is saved", async () => {
+		let { child, childContext, events } = await rootAndChild();
+		let root = child.root!;
+		childContext.root = {
+			...root,
+			instruct: async () => {
+				throw new Error("the root document is unavailable");
+			},
+		};
+		let quiet = console.error;
+		console.error = () => {};
+		let answered = await start(childContext, member("ana"), "tighten this").finally(() => {
+			console.error = quiet;
+		});
+		let thread = idOf(answered);
+		expect(child.plan.threads.get(thread)?.notes).toHaveLength(1);
+		expect(events.findLast(event => event.frame.kind === "comment:working")).toEqual({
+			topic: Wire.topic(child.channel.id),
+			frame: expect.objectContaining({ id: thread, working: false, reason: "failed" }),
 		});
 	});
 

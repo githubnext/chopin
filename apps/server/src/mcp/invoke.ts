@@ -43,16 +43,22 @@ export async function invokeRouted(
 			focus = { channelId: child.id, title: child.title };
 		}
 		let { context, release } = await route.open(rootId, input);
-		let running = false;
+		let code: InvokePlannerError | undefined;
 		try {
-			let code = await Chat.invoke(context, input.user, input.instruction, input.checkout, focus);
-			if (!code && context.chat.running) {
-				running = true;
-				void context.chat.running.finally(release).catch(() => {});
-			}
-			return code;
-		} finally {
-			if (!running) release();
+			// Released once the invoked turn itself ends, even when it waits behind others.
+			code = await Chat.invoke(
+				context,
+				input.user,
+				input.instruction,
+				input.checkout,
+				focus,
+				release,
+			);
+		} catch (err) {
+			release();
+			throw err;
 		}
+		if (code) release();
+		return code;
 	});
 }
