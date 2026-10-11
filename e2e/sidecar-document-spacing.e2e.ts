@@ -16,16 +16,22 @@ const SECOND_OPTION = "01K0N4W3B7P27CBAEC7A8C8WEC";
 
 const SECOND_WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YK";
 
+// Answered, so they settle as separate lines; adjacent open cards stack into a deck instead.
+// The closing prose keeps the injected development sample out of their run.
 const ADJACENT_CARDS = `<Questionnaire id="${WIDGET}" by="ana">
 <Question id="${QUESTION}" header="Rollout" prompt="How should we deploy?" multiple="false">
 <Option id="${OPTION}" label="Canary" />
+<Answer value="Canary" />
 </Question>
 </Questionnaire>
 <Questionnaire id="${SECOND_WIDGET}" by="ana">
 <Question id="${SECOND_QUESTION}" header="Scope" prompt="What belongs in the first cut?" multiple="false">
 <Option id="${SECOND_OPTION}" label="Anchors" />
+<Answer value="Anchors" />
 </Question>
-</Questionnaire>`;
+</Questionnaire>
+
+Closing paragraph.`;
 
 test("adjacent decision cards keep at most one line of space around one empty paragraph", async ({ baseURL, page, room, seed }) => {
 	await seed(ADJACENT_CARDS);
@@ -38,6 +44,8 @@ test("adjacent decision cards keep at most one line of space around one empty pa
 		`:scope > :is([data-plan-questionnaire="${WIDGET}"], [data-plan-questionnaire="${SECOND_WIDGET}"])`,
 	);
 	await expect(cards).toHaveCount(2);
+	await expect(cards.nth(0)).toBeVisible();
+	await expect(cards.nth(1)).toBeVisible();
 	let gap = async () => {
 		let first = await cards.nth(0).boundingBox();
 		let second = await cards.nth(1).boundingBox();
@@ -99,6 +107,8 @@ test("retained empty paragraphs between decisions compact after sync and reload"
 		let cards = editor.locator(
 			`:scope > :is([data-plan-questionnaire="${WIDGET}"], [data-plan-questionnaire="${SECOND_WIDGET}"])`,
 		);
+		await expect(cards.nth(0)).toBeVisible();
+		await expect(cards.nth(1)).toBeVisible();
 		let first = await cards.nth(0).boundingBox();
 		let second = await cards.nth(1).boundingBox();
 		if (!first || !second) throw new Error("decision card geometry unavailable");

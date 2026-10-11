@@ -24,6 +24,17 @@ test("adjacent decisions in a document form one deck", async ({ join, seed }) =>
 		await expect(slot).toHaveAttribute("inert", "");
 	}
 	await expect(deck(page).getByText("1 of 3")).toBeVisible();
+
+	// Followers and the caret paragraphs before them take no room of their own.
+	let followers = content(page).locator("[data-plan-questionnaire]:has(> [data-deck-follower])");
+	await expect(followers).toHaveCount(2);
+	for (let follower of await followers.all()) await expect(follower).toBeHidden();
+	let deckBox = (await deck(page).boundingBox())!;
+	let trailing = (await content(page).getByText("Trailing paragraph.").boundingBox())!;
+	let lineHeight = await content(page).evaluate(element =>
+		Number.parseFloat(getComputedStyle(element).lineHeight)
+	);
+	expect(trailing.y - (deckBox.y + deckBox.height)).toBeLessThanOrEqual(lineHeight * 1.5);
 });
 
 test("decisions separated by prose stay separate cards", async ({ join, seed }) => {

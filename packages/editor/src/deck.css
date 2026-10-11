@@ -13,6 +13,8 @@
 	/* The shuffle eases this box's measured height, padding included. */
 	box-sizing: border-box;
 	position: relative;
+	/* Slot z-indexes order cards; keep them from outranking editor overlays. */
+	isolation: isolate;
 	display: grid;
 	padding-block-start: calc(var(--deck-peek) * var(--deck-depth, 0));
 }

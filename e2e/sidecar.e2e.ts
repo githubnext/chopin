@@ -40,9 +40,14 @@ const ANCHORED_DEFINITION = {
 };
 
 function editorIsModalBackground(page: Page): Promise<boolean> {
-	return page.locator('[aria-label="editable markdown"]').evaluate(element =>
-		!!element.closest('[inert], [aria-hidden="true"]')
-	);
+	// A modal keeps live regions and their ancestors un-inerted so announcements
+	// still reach readers; everything else in the editor must be outside the modal.
+	return page.locator('[aria-label="editable markdown"]').evaluate(element => {
+		let covered = (node: Element): boolean =>
+			!!node.closest('[inert], [aria-hidden="true"]') || node.hasAttribute("aria-live")
+			|| (node.children.length > 0 && [...node.children].every(covered));
+		return covered(element);
+	});
 }
 const ANCHORED = `Anchored paragraph.
 
