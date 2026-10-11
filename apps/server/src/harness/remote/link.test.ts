@@ -7,7 +7,9 @@ import { PlannerLinkRefused } from "@chopin/planner-link/client";
 
 import { GitHubError } from "../../github/client";
 import * as Store from "../../questions/store";
+import { createPlannerAgent } from "../agents";
 import { createHumanInput } from "../atomic/human-input";
+import { openPlannerSession } from "../session";
 import { untilUnpaused } from "../atomic/full";
 import { hostInputRoom } from "../../testing/decisions";
 import {
@@ -23,8 +25,10 @@ import {
 } from "../../testing/planner-link";
 import { createRemoteAdapter } from "./adapter";
 import { admitPlannerLink } from "./endpoint";
+import { remotePlanner } from "./registry";
 
 import type { PlannerLinkClient, PlannerLinkHandlers } from "@chopin/planner-link/client";
+import type { ActiveOwnerBinding } from "../../agent/active-owner";
 import type { RemotePlanner } from "./registry";
 
 let cleanups: Array<() => unknown> = [];
@@ -660,5 +664,124 @@ describe("Planner link questions", () => {
 			message: "Decisions are not available to this session.",
 		});
 		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+	});
+
+	it("withdraws a question asked while a session starts when the start fails or times out", async () => {
+		let f = await hostInputRoom();
+		cleanups.push(f.close);
+		let asks: Promise<{ status: string }>[] = [];
+		let client: PlannerLinkClient | undefined;
+		let linked = await setup({
+			async start(message) {
+				asks.push(client!.ask(message.session, { method: "confirm", title: "Ship?", message: "" }));
+				await f.cards(1);
+				if (message.session === "refused") throw new Error("busy elsewhere");
+				await Bun.sleep(1_000);
+			},
+		});
+		client = linked.client;
+		let planner: RemotePlanner = {
+			channelId: f.room.id,
+			isolated: false,
+			humanInput: report => createHumanInput(f.room, undefined, undefined, report),
+		};
+		let harness = adapterFor(linked.server, planner);
+		let start = (sessionId: string) =>
+			harness.doStart({ sessionId, sandboxSession, sessionWorkDir: "/tmp" });
+		await expect(start("refused")).rejects.toThrow("refused the session: busy elsewhere");
+		expect(await asks[0]).toMatchObject({ status: "cancelled" });
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+		await expect(start("silent")).rejects.toThrow("did not start the session");
+		expect(await asks[1]).toMatchObject({ status: "cancelled" });
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+		expect([...f.plan.records.values()].map(record => record.status))
+			.toEqual(["cancelled", "cancelled"]);
+	});
+
+	/** Opens a real remote Planner session over the link whose turn waits in a host `ask`. */
+	async function askingTurn(ending: "detach" | "violation" | "destroy" | "turn-end") {
+		let f = await hostInputRoom();
+		cleanups.push(f.close);
+		let { server, client } = await setup({
+			async turn(context) {
+				let asked = context.callHostTool("ask", {
+					revision: f.plan.revision,
+					questions: [{
+						header: "Store",
+						question: "Which store?",
+						options: [{ label: "Postgres", description: "durable" }],
+						multiple: false,
+						blocks: [],
+					}],
+				});
+				if (ending !== "turn-end") return void await asked;
+				await f.cards(1);
+				context.end("failed", "The client gave up.");
+			},
+		});
+		let agent = createPlannerAgent(
+			createRemoteAdapter(sessionId => ({
+				link: server.links.at(-1)!,
+				planner: remotePlanner(sessionId)!,
+			})),
+		);
+		let toolSignal: AbortSignal | undefined;
+		let owner = {
+			channelId: f.room.id,
+			token: "test-token",
+			repository: { id: "R_test", owner: "org", name: "repo", defaultBranch: "main" },
+			signal: new AbortController().signal,
+			currentToken: () => "test-token",
+			revalidate: async () => true,
+			release() {},
+		} as unknown as ActiveOwnerBinding;
+		let opened = await openPlannerSession(owner, {
+			room: f.room,
+			repository: owner.repository,
+			instructions: "Plan.",
+			harness: "remote",
+		}, {
+			githubTools: async () => ({ ok: true, value: {} }),
+			createSandbox: async () => sandboxSession,
+			registerCredential: () => () => {},
+			agent: {
+				createSession: options => agent.createSession(options),
+				stream: call => {
+					toolSignal = (call.options as { toolSignal?: AbortSignal }).toolSignal;
+					return agent.stream(call);
+				},
+			} as typeof agent,
+		});
+		if (!opened.ok) throw new Error("Planner unavailable");
+		let session = opened.value;
+		cleanups.push(() => session.destroy());
+		let caller = new AbortController();
+		let parts: { type: string; error?: unknown }[] = [];
+		let streaming = (async () => {
+			let result = await session.stream("ask", caller.signal);
+			for await (let part of result.fullStream) parts.push(part);
+		})();
+		let [card] = await f.cards(1);
+		if (ending === "detach") await client.detach();
+		if (ending === "violation") client.send({ type: "attach", version: 1, document: "again" });
+		if (ending === "destroy") void session.destroy();
+		await streaming;
+		expect(parts.some(part => part.type === "abort")).toBe(false);
+		expect(caller.signal.aborted).toBe(false);
+		expect(toolSignal?.aborted).toBe(true);
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+		expect(f.plan.records.get(card!.id)).toMatchObject({ status: "cancelled" });
+		return parts.filter(part => part.type === "error").map(part => String(part.error));
+	}
+
+	it("stops a host ask, withdraws its Decision and fails the turn when the link drops mid-tool", async () => {
+		let disconnected = ["Error: The attached Planner disconnected during the turn."];
+		expect(await askingTurn("detach")).toEqual(disconnected);
+		expect(await askingTurn("violation")).toEqual(disconnected);
+	});
+
+	it("stops a host ask and withdraws its Decision when its turn ends before the tool does", async () => {
+		expect(await askingTurn("turn-end")).toEqual(["Error: The client gave up."]);
+		await askingTurn("destroy");
 	});
 });

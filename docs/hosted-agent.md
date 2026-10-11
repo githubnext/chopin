@@ -304,9 +304,13 @@ reports them as provider-executed `tool-call` and `tool-result` parts. An
 undeclared tool fails the turn as a tool boundary failure. Background job
 sessions start in `isolated` mode, where the client may offer no tools of its own
 and ask nothing. A turn ends with `turn-end`. An abort waits briefly for the
-client's `turn-end`, then ends the turn anyway. A link that closes mid-turn ends
-the turn with an error, its open questions are withdrawn, and runs it reported
-are shown stopped; nothing waits on a client that has gone.
+client's `turn-end`, then ends the turn anyway. A turn that ends while one of
+its host tools still runs, such as an `ask` waiting on Decisions, stops that tool
+and withdraws the cards it opened. A link that closes mid-turn ends the turn
+with an error rather than as a stop, its open questions are withdrawn, and runs
+it reported are shown stopped; nothing waits on a client that has gone. A
+session the client refuses or does not start in time is destroyed, and any
+question it asked while starting is withdrawn.
 
 **Questions.** An `input-request` carries one Atomic `HostInput` call
 (`questionnaire`, `confirm`, `select`, `input`, or `editor`) and becomes Decisions

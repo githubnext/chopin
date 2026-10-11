@@ -115,7 +115,10 @@ check leaves the link open.
 
 - `start` opens a Planner session. `mode` is `planner` for a Planner turn
   session or `isolated` for a background job's session, which may offer no
-  tools of its own and gets no Decisions. Answer within **10 seconds**.
+  tools of its own and gets no Decisions. Answer within **10 seconds**. A
+  session refused with `start-failed` or not answered in time gets `destroy`,
+  and any question asked for it meanwhile is withdrawn and answered
+  `cancelled`.
 - `turn` runs one turn. `tools` lists at most 256 of Chopin's host tools as
   `{ "name": "", "description?": "", "inputSchema?": {json schema} }`;
   `description` may be 64,000 characters. `instructions` is the Planner's
@@ -169,7 +172,9 @@ check leaves the link open.
   running the tool again. A name outside the turn's `tools` is answered with an
   error result.
 - `turn-end` ends the turn: `finished`, `failed` (with `message` as the error
-  shown), or `aborted`. Every turn needs exactly one.
+  shown), or `aborted`. Every turn needs exactly one. A host tool still running
+  in the server when the turn ends is stopped, and a Decision it opened is
+  withdrawn.
 - `input-request` and `input-cancel` ask and withdraw questions.
 - `runs` reports the session's workflow runs whenever they change. Report them
   before `turn-end` so the server keeps the session while runs are live. Reports
@@ -316,7 +321,8 @@ ids. When the link closes, the server shows the reported live runs as stopped.
 
 `protocol` covers a message before `attach` is answered, a second `attach`, and
 a repeated `input-request` id. When the link closes for any reason, the server
-ends a running turn with an error, withdraws open questions, and forgets the
+ends a running turn with an error, stops the turn's host tools still running,
+withdraws open questions and the Decisions those tools opened, and forgets the
 link; reattaching starts new sessions. A server never replays an interrupted turn.
 
 A client that receives a frame it cannot parse should close with 4400 and reason

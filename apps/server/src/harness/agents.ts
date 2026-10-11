@@ -46,10 +46,18 @@ type PlannerCallOptions = {
 	githubTools: ToolSet;
 	instructions: string;
 	model?: string;
+	/**
+	 * Also stops the host tools, beside the caller's signal: a remote Planner's turn can
+	 * end, or its link drop, while one of them still runs.
+	 */
+	toolSignal?: AbortSignal;
 };
 
-/** Tells the chat when a host tool's own execution ends; the harness reports its result only at step end. */
-function reporting(tools: ToolSet, room: DocumentRoom): ToolSet {
+/**
+ * Tells the chat when a host tool's own execution ends; the harness reports its result
+ * only at step end. A `toolSignal` stops the tool as the caller's signal does.
+ */
+function reporting(tools: ToolSet, room: DocumentRoom, toolSignal?: AbortSignal): ToolSet {
 	return Object.fromEntries(
 		Object.entries(tools).map(([name, original]) => {
 			let execute = original.execute;
@@ -58,8 +66,12 @@ function reporting(tools: ToolSet, room: DocumentRoom): ToolSet {
 				...original,
 				execute: async (input, options) => {
 					let output: Awaited<ReturnType<typeof execute>>;
+					let stops = [options.abortSignal, toolSignal].filter(signal => signal !== undefined);
 					try {
-						output = await execute(input, options);
+						output = await execute(
+							input,
+							toolSignal ? { ...options, abortSignal: AbortSignal.any(stops) } : options,
+						);
 					} catch (error) {
 						room.plan.chat?.toolFinished?.(options.toolCallId, error, false);
 						throw error;
@@ -98,6 +110,7 @@ export function createPlannerAgent(
 				tools: reporting(
 					scopedJobTools({ ...rest.tools, ...options.githubTools }, options.room),
 					options.room,
+					options.toolSignal,
 				),
 				toolsContext: Object.fromEntries(names.map(name => [name, {
 					room: options.room,
