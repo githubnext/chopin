@@ -495,6 +495,8 @@ export function ResolvedLayer(
 	itemsRef.current = items;
 
 	useEffect(() => editor.registerEditableListener(setEditable), [editor]);
+	// Reopening and discarding are sidecar actions, not prose edits, so a phone reader keeps them.
+	let actionable = editable || (options.editMode === "reading" && !options.blocked);
 	useEffect(() => {
 		let off = subscribeDecision(() => {
 			let current = currentDecision();
@@ -516,7 +518,7 @@ export function ResolvedLayer(
 	}, []);
 	let actions = useResolvedActions({
 		canEdit: options.canEdit !== false && options.connected === true
-			&& editable,
+			&& actionable,
 		dismiss: closeAfterReply,
 		editor,
 		entries,
@@ -875,7 +877,7 @@ export function ResolvedLayer(
 					if (current.item.kind === "comment") {
 						let { item } = current;
 						let canReopen = !!threads && options.canEdit !== false && options.connected === true
-							&& editable;
+							&& actionable;
 						return (
 							<CommentPopover
 								close={dismiss}
@@ -914,7 +916,7 @@ export function ResolvedLayer(
 									<ResolvedActions
 										className="mt-3 flex flex-wrap items-center justify-end gap-2"
 										disabled={options.canEdit === false || options.connected !== true
-											|| !editable || !options.wire}
+											|| !actionable || !options.wire}
 										key={`${decision.key}:${intent.current}`}
 										onDiscard={() => actions.request("discard", decision)}
 										onReopen={() => actions.request("reopen", decision)}
@@ -944,7 +946,7 @@ export function ResolvedLayer(
 							close={dismiss}
 							error={reopening?.key === sheet.key ? reopening.error : undefined}
 							onReopen={!!threads && options.canEdit !== false && options.connected === true
-									&& editable
+									&& actionable
 								? () => reopen(sheet.key, sheet.comment.thread.id)
 								: undefined}
 							pending={reopening?.key === sheet.key && !reopening.error}

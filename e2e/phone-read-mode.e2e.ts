@@ -135,9 +135,13 @@ test("formatting docks above the keyboard while editing", async ({ baseURL, brow
 		await expect(dock).toBeVisible();
 		await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeHidden();
 		await expect(done(page)).toBeVisible();
+		// Layout size, not the box: the dock rises in with a brief scale.
 		for (let control of await dock.getByRole("button").all()) {
-			let box = await control.boundingBox();
-			if (box) expect(box.height).toBeGreaterThanOrEqual(44);
+			let size = await control.evaluate(element => {
+				let html = element as HTMLElement;
+				return Math.min(html.offsetWidth, html.offsetHeight);
+			});
+			expect(size).toBeGreaterThanOrEqual(44);
 		}
 		let bottom = await dock.evaluate(element => element.getBoundingClientRect().bottom);
 		expect(bottom).toBeLessThanOrEqual(500);
