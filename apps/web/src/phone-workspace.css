@@ -40,19 +40,36 @@
 }
 
 /*
- * A child's stack bar sits under the top bar, and follows it when it tucks away. The child card
- * starts higher, so its padding runs under the bar, and the bar stays above it.
+ * A child's stack bar sits under the top bar and tucks away with it, leaving the screen entirely.
+ * The child card runs from the top edge like any phone pane, so nothing shows a second band
+ * through the glass, and its document starts below both bars.
  */
 .workspace-root[data-workspace-phone] .workspace-stack-bar {
 	z-index: 21;
 	top: var(--phone-top-chrome);
 	transition:
 		opacity var(--child-close-dur) var(--child-ease),
-		transform var(--phone-bar-dur) var(--ease-out);
+		transform var(--phone-bar-dur) var(--ease-out),
+		visibility 0s;
 }
 
 .workspace-root[data-workspace-phone][data-workspace-bar="hidden"] .workspace-stack-bar {
-	transform: translateY(calc(-1 * var(--phone-bar-height)));
+	visibility: hidden;
+	opacity: 0;
+	transform: translateY(calc(-1 * (var(--phone-top-chrome) + var(--child-bar-height))));
+	transition:
+		opacity var(--phone-bar-dur) var(--ease-out),
+		transform var(--phone-bar-dur) var(--ease-out),
+		visibility 0s linear var(--phone-bar-dur);
+}
+
+.workspace-root[data-workspace-phone][data-workspace-mode]
+	.workspace-document-stack
+	.anchored-child-card {
+	--document-top-inset: calc(
+		var(--phone-top-chrome) + var(--child-bar-height) + var(--spacing) * 4
+	);
+	inset: 0;
 }
 
 .workspace-root[data-workspace-phone] .plan [data-plan-scroll] {
