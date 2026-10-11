@@ -20,6 +20,7 @@
 		"@chopin/diagrams": "workspace:*",
 		"@chopin/draft": "workspace:*",
 		"@chopin/experiment": "workspace:*",
+		"@chopin/planner-link": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",
 		"@github/copilot": "catalog:copilot",

@@ -305,10 +305,13 @@ the plan, use the \`detach_question\` operation rather than deleting the block.`
 const ROUTED_PROMPT = PROMPT.replace(DIAGRAM_INTRO, ROUTED_DIAGRAM_INTRO)
 	.replace(DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING);
 
+/** Where a remote Planner's model and own tools run: the attached member's machine. */
+export type RemoteWorkspace = { remote: true };
+
 export function plannerInstructions(
 	repository: string,
 	bootstrap?: string,
-	workspace?: PlannerWorkspace,
+	workspace?: PlannerWorkspace | RemoteWorkspace,
 	visualRouting = false,
 ): string {
 	let visual = visualRouting
@@ -337,13 +340,6 @@ add a table or diagram without its route.`
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
 		return [prompt, visual, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
 	}
-	let place = workspace.checkout
-		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
-verified against its origin. Its branch and working tree may differ from what the
-repository tools read.`
-		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin keeps for
-this document. It is not a checkout and holds no repository files, so read
-${repository} through the repository tools.`;
 	let questions =
 		`\`ask_user_question\` and \`workflow\` questions appear to the document's members as
 Decisions. If one expires unanswered, proceed on your best judgement and say what you assumed.`;
@@ -354,6 +350,21 @@ tool result suggests it. When you start a workflow, say in plain words what it w
 where to follow it: Chat shows a card for each run with its stages and status, its questions
 appear under Decisions, **Stop Planner** pauses it, and **Resume Planner** resumes it. Offer to
 check on or steer a run yourself with your \`workflow\` and \`intercom\` tools when someone asks.`;
+	if ("remote" in workspace) {
+		let remote = `You run in a member's own session on their machine, attached to this document.
+Your own tools act on that machine and are not visible to the document's other members. The
+document changes only through this document's tools, and ${repository} is read through the
+repository tools, whatever that machine holds.`;
+		return [prompt, visual, reading, remote, questions, surface, bootstrap].filter(Boolean)
+			.join("\n\n");
+	}
+	let place = workspace.checkout
+		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
+verified against its origin. Its branch and working tree may differ from what the
+repository tools read.`
+		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin keeps for
+this document. It is not a checkout and holds no repository files, so read
+${repository} through the repository tools.`;
 	let implementing =
 		`Your own tools read files and the web but cannot edit files or run commands, so
 you do not implement the plan yourself. If a member asks to implement it

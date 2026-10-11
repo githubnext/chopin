@@ -6,8 +6,8 @@ import { harnesses, harnessFor, registerCredential, shutdownHarnesses } from "./
 
 afterEach(shutdownHarnesses);
 
-it("selects the tested Copilot SDK, Pi, and Atomic harnesses", () => {
-	expect(Object.keys(harnesses)).toEqual(["copilot-sdk", "pi", "atomic"]);
+it("selects the tested Copilot SDK, Pi, Atomic, and remote harnesses", () => {
+	expect(Object.keys(harnesses)).toEqual(["copilot-sdk", "pi", "atomic", "remote"]);
 	expect(harnessFor({ harness: "copilot-sdk" }).harnessId).toBe("copilot-sdk");
 	expect(() => harnessFor({ harness: "not-installed" })).toThrow("Unknown harness: not-installed");
 });
@@ -66,6 +66,16 @@ it("refuses Atomic's host-login auto mode on a non-loopback bind but accepts ai-
 	}
 	expect(harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" }).harnessId)
 		.toBe("atomic");
+});
+
+it("accepts the remote harness on any bind without HARNESS_AUTH, and refuses one", () => {
+	for (let host of ["0.0.0.0", "::", "192.168.1.2", "127.0.0.1"]) {
+		expect(harnessFor({ harness: "remote", host }).harnessId).toBe("remote");
+		expect(() => harnessFor({ harness: "remote", harnessAuth: "ai-gateway", host }))
+			.toThrow("HARNESS_AUTH does not apply to HARNESS=remote");
+	}
+	expect(() => harnessFor({ harness: "remote", harnessExtensions: [tmpdir()] }))
+		.toThrow("HARNESS_EXTENSIONS requires HARNESS=atomic, not remote");
 });
 
 it("accepts only existing absolute extension paths, and only for the atomic harness", () => {

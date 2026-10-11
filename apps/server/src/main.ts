@@ -13,6 +13,11 @@ import { join } from "node:path";
 import { ulid } from "@chopin/dialect";
 
 import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
+import {
+	admitPlannerLink,
+	isPlannerLinkSocket,
+	openPlannerLinkSocket,
+} from "./harness/remote/endpoint";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
@@ -74,7 +79,10 @@ import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
 
+import { PLANNER_LINK_PATH } from "@chopin/planner-link";
+
 import type { Server, ServerWebSocket } from "bun";
+import type { PlannerLinkSocketData } from "./harness/remote/endpoint";
 import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
@@ -800,7 +808,7 @@ const VIEWER_ALLOWED = new Set([
 	"conversation-plan:research-link",
 ]);
 
-type AnySocket = ServerWebSocket<SocketData | SidebarSocketData>;
+type AnySocket = ServerWebSocket<SocketData | SidebarSocketData | PlannerLinkSocketData>;
 
 function isSidebarSocket(ws: AnySocket): ws is SidebarSocket {
 	return ws.data.sidebar === true;
@@ -1110,8 +1118,8 @@ function closeSidebarSocket(ws: SidebarSocket): void {
 
 function upgraded(
 	req: Request,
-	self: Server<SocketData | SidebarSocketData>,
-	data: SocketData | SidebarSocketData,
+	self: Server<SocketData | SidebarSocketData | PlannerLinkSocketData>,
+	data: SocketData | SidebarSocketData | PlannerLinkSocketData,
 ): Response | undefined {
 	if (
 		req.headers.get("x-chopin-socket-probe") === "1"
@@ -1122,7 +1130,7 @@ function upgraded(
 }
 
 function listen(): Server<SocketData> {
-	return Bun.serve<SocketData | SidebarSocketData>({
+	return Bun.serve<SocketData | SidebarSocketData | PlannerLinkSocketData>({
 		hostname: config.host,
 		port: config.port,
 
@@ -1139,6 +1147,11 @@ function listen(): Server<SocketData> {
 				}
 				return upgraded(req, self, outcome.data);
 			}
+			if (url.pathname === PLANNER_LINK_PATH && config.agent && config.harness === "remote") {
+				let outcome = await admitPlannerLink(req, hostedAuth);
+				if (outcome instanceof Response) return outcome;
+				return upgraded(req, self, outcome);
+			}
 			if (url.pathname === "/ws/sidebar") {
 				let outcome = await admitSidebar(req, hostedAuth);
 				if ("status" in outcome) {
@@ -1154,11 +1167,16 @@ function listen(): Server<SocketData> {
 
 		websocket: {
 			open(ws: AnySocket) {
-				if (isSidebarSocket(ws)) scheduleSidebarRecheck(ws);
+				if (isPlannerLinkSocket(ws)) {
+					openPlannerLinkSocket(ws, hostedAuth, {
+						unavailable: channelId => deletingChannels.has(channelId),
+					});
+				} else if (isSidebarSocket(ws)) scheduleSidebarRecheck(ws);
 				else openRoomSocket(ws as Socket);
 			},
 
 			message(ws: AnySocket, raw) {
+				if (isPlannerLinkSocket(ws)) return ws.data.link?.receive(raw);
 				if (typeof raw !== "string") return;
 				let received = isSidebarSocket(ws) ? receiveSidebar(ws, raw) : receive(ws as Socket, raw);
 				void received.catch(err => {
@@ -1167,7 +1185,8 @@ function listen(): Server<SocketData> {
 			},
 
 			close(ws: AnySocket) {
-				if (isSidebarSocket(ws)) closeSidebarSocket(ws);
+				if (isPlannerLinkSocket(ws)) ws.data.link?.disconnected();
+				else if (isSidebarSocket(ws)) closeSidebarSocket(ws);
 				else closeRoomSocket(ws as Socket);
 			},
 		},

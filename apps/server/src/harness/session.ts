@@ -19,11 +19,13 @@ import {
 } from "./atomic/full";
 import { createHumanInput } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
+import { registerRemotePlanner, type RemotePlanner } from "./remote/registry";
 
 import type { HarnessAgent } from "@ai-sdk/harness/agent";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { HostedRepository } from "../agent/repository";
 import type { DocumentRoom } from "../agent/tools";
+import type { RemoteWorkspace } from "../agent/planner";
 
 export type OpenError =
 	| GitHubToolsError
@@ -38,9 +40,12 @@ type PlannerAgent = typeof plannerAgent;
 export type PlannerChannel = {
 	room: DocumentRoom;
 	repository: HostedRepository;
-	instructions: string | ((workspace?: PlannerWorkspace) => string);
+	instructions: string | ((workspace?: PlannerWorkspace | RemoteWorkspace) => string);
 	model?: string;
-	/** `atomic` runs the session as a full Atomic session in the channel's workspace. */
+	/**
+	 * `atomic` runs the session as a full Atomic session in the channel's workspace;
+	 * `remote` runs it in the client attached to the channel.
+	 */
 	harness?: string;
 };
 
@@ -54,7 +59,7 @@ export type PlannerSession = {
 	activeTools?: readonly string[];
 	stream: (prompt: string, abortSignal: AbortSignal) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
-	/** Workflow runs this session owns; only atomic Planner sessions report them. */
+	/** Workflow runs this session owns; only atomic and remote Planner sessions report them. */
 	runs?: () => PlannerRuns | undefined;
 	/** Subscribes to run changes; returns the unsubscribe function. */
 	watchRuns?: (listener: (runs: PlannerRuns) => void) => () => void;
@@ -67,6 +72,28 @@ export type PlannerSession = {
 	/** Resumes one paused run this session owns. */
 	resumeRun?: (runId: string) => Promise<void>;
 };
+
+/** Run control for a remote Planner: the attached client stops and resumes its own runs. */
+function remoteRunControl(
+	remote: RemotePlanner,
+	watchRuns: NonNullable<PlannerSession["watchRuns"]>,
+): Pick<
+	PlannerSession,
+	"runs" | "watchRuns" | "pauseRuns" | "resumeRuns" | "pauseRun" | "resumeRun"
+> {
+	let control = () => {
+		if (!remote.control) throw new Error("The Planner has no attached session to control.");
+		return remote.control;
+	};
+	return {
+		runs: () => remote.runs,
+		watchRuns,
+		pauseRuns: async () => control()("stop"),
+		resumeRuns: async () => control()("resume"),
+		pauseRun: async runId => control()("stop", runId),
+		resumeRun: async runId => control()("resume", runId),
+	};
+}
 
 export type PlannerSessionDependencies = {
 	agent?: PlannerAgent;
@@ -120,6 +147,7 @@ export async function openPlannerSession(
 	}
 	let unregister: (() => void) | undefined;
 	let unregisterFull: (() => void) | undefined;
+	let unregisterRemote: (() => void) | undefined;
 	let session: Awaited<ReturnType<HarnessAgent["createSession"]>> | undefined;
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
@@ -151,8 +179,31 @@ export async function openPlannerSession(
 			};
 			unregisterFull = registerFullPlanner(sessionId, planner);
 		}
+		let remote: RemotePlanner | undefined;
+		if (channel.harness === "remote") {
+			let held: RemotePlanner = { channelId: channel.room.id, isolated: !!job };
+			if (!job) {
+				held.humanInput = report =>
+					createHumanInput(
+						channel.room,
+						undefined,
+						(runId, signal) => untilUnpaused(held, runId, signal),
+						report,
+					);
+				held.onRuns = runs => {
+					for (let listener of listeners) listener(runs);
+				};
+				held.toolReport = (id, output, state) => {
+					let chat = channel.room.plan.chat;
+					if (state === "running") chat?.toolProgress?.(id, output);
+					else chat?.toolFinished?.(id, output, state === "done");
+				};
+			}
+			remote = held;
+			unregisterRemote = registerRemotePlanner(sessionId, held);
+		}
 		let instructions = typeof channel.instructions === "function"
-			? channel.instructions(workspace)
+			? channel.instructions(workspace ?? (remote && !job ? { remote: true } : undefined))
 			: channel.instructions;
 		let agent = deps.agent ?? (job?.kind === "heading"
 			? deps.headingAgent ?? headingPlannerAgent
@@ -186,18 +237,21 @@ export async function openPlannerSession(
 			}
 			return planner.workflows;
 		};
+		let watchRuns = (listener: (runs: PlannerRuns) => void) => {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		};
 		let runControl = planner
 			? {
 				runs: () => planner.runs,
-				watchRuns: (listener: (runs: PlannerRuns) => void) => {
-					listeners.add(listener);
-					return () => listeners.delete(listener);
-				},
+				watchRuns,
 				pauseRuns: () => pauseOwnedRuns(workflows()),
 				resumeRuns: () => resumeOwnedRuns(workflows()),
 				pauseRun: async (runId: string) => applied(await workflows().pause(runId)),
 				resumeRun: async (runId: string) => applied(await workflows().resume(runId)),
 			}
+			: remote && !job
+			? remoteRunControl(remote, watchRuns)
 			: {};
 		let fixedTools = Object.freeze([
 			...(job
@@ -210,7 +264,7 @@ export async function openPlannerSession(
 			ok: true,
 			value: {
 				get activeTools() {
-					return planner?.activeTools ?? fixedTools;
+					return planner?.activeTools ?? remote?.activeTools ?? fixedTools;
 				},
 				...runControl,
 				stream: (prompt, abortSignal) =>
@@ -235,6 +289,7 @@ export async function openPlannerSession(
 							} finally {
 								release();
 								unregisterFull?.();
+								unregisterRemote?.();
 							}
 						}
 					})(),
@@ -253,6 +308,7 @@ export async function openPlannerSession(
 		}
 		unregister?.();
 		unregisterFull?.();
+		unregisterRemote?.();
 		let message = cause instanceof Error ? cause.message : String(cause);
 		let kind: "Timeout" | "ShuttingDown" | "HarnessCapabilityUnsupported" | "Unavailable" =
 			message.includes("timed out")

@@ -1,0 +1,13 @@
+{
+	"name": "@chopin/planner-link",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": { "types": "tsgo --noEmit --skipLibCheck" },
+	"exports": {
+		".": "./src/index.ts",
+		"./client": "./src/client.ts"
+	},
+	"dependencies": { "zod": "catalog:harness" },
+	"devDependencies": { "@types/bun": "catalog:bun" }
+}

@@ -51,6 +51,17 @@ test("ordinary and Atomic guidance prefers native diagrams with a bounded Mermai
 	}
 });
 
+test("a remote Planner learns where it runs and that its questions become Decisions", () => {
+	let prompt = plannerInstructions("octo-org/score", "Earlier context.", { remote: true })
+		.replace(/\s+/g, " ");
+	expect(prompt).toContain("You run in a member's own session on their machine");
+	expect(prompt).toContain("questions appear to the document's members as Decisions");
+	expect(prompt).toContain("**Stop Planner** pauses it");
+	expect(prompt).not.toContain("You have no shell");
+	expect(prompt).not.toContain("Your working directory");
+	expect(prompt.endsWith("Earlier context.")).toBe(true);
+});
+
 test("ordinary guidance supplies an executable numerical chart example", () => {
 	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)]
 		.map(match => JSON.parse(match[1]!));

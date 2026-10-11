@@ -11,23 +11,31 @@ import type {
 } from "@bastani/atomic";
 import type { DocumentRoom } from "../../agent/tools";
 
+export type HumanInputStatus = "answered" | "expired" | "cancelled";
+
 /**
  * Atomic owns input requests; Chopin owns their shared decision records.
  *
  * A request nobody answers within `expiresInMs` expires: its cards stay in
  * Decisions marked expired, and Atomic gets no answer. An answer to a workflow
  * question is returned only once `hold` allows it, so a paused run stays stopped.
+ * `report` learns how each request ended, which the cancelled result alone
+ * cannot tell apart.
  */
 export function createHumanInput(
 	room: DocumentRoom,
 	expiresInMs = limits.INPUT_EXPIRY_MS,
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
+	report?: (status: HumanInputStatus) => void,
 ): HostInput {
 	async function questionnaire(
 		params: QuestionParams,
 		options: HostInputOptions,
 	): Promise<QuestionnaireResult> {
-		if (options.signal.aborted) return { answers: [], cancelled: true };
+		if (options.signal.aborted) {
+			report?.("cancelled");
+			return { answers: [], cancelled: true };
+		}
 		let definition = Questions.identify({
 			questions: params.questions.map(question => ({
 				header: question.header,
@@ -54,11 +62,15 @@ export function createHumanInput(
 			expiresInMs,
 		);
 		if (options.signal.aborted || ended.some(outcome => outcome.status === "expired")) {
+			report?.(options.signal.aborted ? "cancelled" : "expired");
 			return { answers: [], cancelled: true };
 		}
 		if (hold && options.workflowRunId !== undefined) {
 			await hold(options.workflowRunId, options.signal);
-			if (options.signal.aborted) return { answers: [], cancelled: true };
+			if (options.signal.aborted) {
+				report?.("cancelled");
+				return { answers: [], cancelled: true };
+			}
 		}
 		let answers: QuestionAnswer[] = [];
 		ended.forEach((outcome, questionIndex) => {
@@ -88,7 +100,9 @@ export function createHumanInput(
 				});
 			}
 		});
-		return { answers, cancelled: ended.some(outcome => outcome.status === "cancelled") };
+		let cancelled = ended.some(outcome => outcome.status === "cancelled");
+		report?.(cancelled ? "cancelled" : "answered");
+		return { answers, cancelled };
 	}
 	async function single(
 		header: string,

@@ -5,7 +5,8 @@ inspect one selected GitHub repository, co-author the shared document, ask the
 participants structured questions, and anchor decisions to prose. For documents
 used as plans, it can also draft an implementation graph. Under `copilot-sdk` and
 `pi` it does not implement code or change GitHub; under `atomic` it runs as a full
-Atomic session, described [below](#full-atomic-planner).
+Atomic session, described [below](#full-atomic-planner); under `remote` its model
+runs in a member's own client, described in [Remote Planner](#remote-planner).
 
 The product role is document co-authoring. The current prompt and tool vocabulary
 remain optimized for planning and may structure another document type as a plan;
@@ -15,9 +16,10 @@ Chopin runs the Planner through `@ai-sdk/harness`: `HARNESS` selects one adapter
 from a code-owned map, defaulting to `copilot-sdk`, a host-process adapter over
 `@github/copilot-sdk`. `pi`, over `@ai-sdk/harness-pi`, and `atomic`, which
 embeds Atomic's headless SDK (`@bastani/atomic`) in the server process, are
-further reviewed adapters. Both require an explicit `HARNESS_AUTH`. The
-harness owns the agent loop and model. Under `copilot-sdk` and `pi`, Chopin owns
-every tool the Planner can call.
+further reviewed adapters. Both require an explicit `HARNESS_AUTH`. `remote`
+runs no model in the server at all: each turn goes to a client attached over the
+Planner link. The harness owns the agent loop and model. Under `copilot-sdk` and
+`pi`, Chopin owns every tool the Planner can call.
 
 **Choosing `HARNESS=atomic` gives the Planner shell and filesystem access as the
 server process's user, on hosted instances as well as local ones.** No other flag
@@ -31,7 +33,9 @@ The first eligible editor to invoke the Planner or start a model-backed research
 request supplies the GitHub App user access token for that channel and, under
 the default `copilot-sdk` harness, the Copilot entitlement. Under `HARNESS=pi`
 and `HARNESS=atomic` the owner supplies only the GitHub token; model access
-comes from the operator's `HARNESS_AUTH` mode. The user must pass instance
+comes from the operator's `HARNESS_AUTH` mode. Under `HARNESS=remote` the owner
+also supplies only the GitHub token, and the model runs in the client attached
+to the document. The user must pass instance
 admission and have repository push or administration access. Ownership is
 assigned atomically in storage and guarded by a generation token.
 
@@ -247,6 +251,85 @@ A coding agent can hand an instruction to the Planner with
 any harness. The instruction is posted as the MCP caller's own message and runs
 under the document's Planner ownership rules (see [Ownership](#ownership)).
 Harnesses other than `atomic` ignore its `checkout`.
+
+## Remote Planner
+
+Under `HARNESS=remote` the Planner's model runs in a client attached to the
+document over the Planner link, usually a member's own Atomic session on their
+machine. The server keeps the document, Decisions, room writes, and anchors; the
+client keeps its code, model credentials, and its own tools. The adapter
+(`apps/server/src/harness/remote`) forwards each Planner session as `start` and
+each turn as `turn`, and re-emits the parts the client streams back.
+
+The link is a WebSocket at `/planner-link`, on the application's own origin.
+[Planner link](planner-link.md) is its complete wire format, written for
+clients that cannot import Chopin's packages. Its messages are declared and
+validated by `@chopin/planner-link` (`packages/planner-link`), whose minimal
+client in `@chopin/planner-link/client` uses only that wire format at runtime. Every message is a JSON text frame of at most
+2 MiB, checked against a strict schema; a binary, malformed, out-of-order, or
+oversized message ends the link (close codes 1008 or 1009) after an `error`
+message naming the problem.
+
+| Server to client                                      | Client to server                                                                       |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `attached` or `refused` (answers `attach`)            | `attach` (version, document id or URL, checkout identity)                              |
+| `start` (session, `planner` or `isolated` mode)       | `started` or `start-failed`                                                            |
+| `turn` (prompt, instructions, host tool specs)        | `tools` (the client's own tools for this turn)                                         |
+| `abort`                                               | `part` (text, reasoning, tool input, own tool call/result, finish-step, finish, error) |
+| `host-tool-result`                                    | `host-tool-call`                                                                       |
+| `input-result` (answered, expired, cancelled, failed) | `input-request`, `input-cancel`                                                        |
+| `stop`, `resume` (Stop and Resume Planner)            | `control-result`, `runs` (run cards for Chat)                                          |
+| `destroy`                                             | `turn-end`, `detach`                                                                   |
+
+**Attaching.** The upgrade request carries `Authorization: Bearer <GitHub token>`,
+checked exactly as hosted MCP checks it: the token must resolve through instance
+admission, a bad or missing token gets HTTP 401, a refused account 403, a foreign
+`Origin` 403, and GitHub outages 503, all before anything is upgraded. The first
+message must be `attach` with protocol version 1. Its document is resolved like
+an MCP document locator, and the bearer's own account must have pull access to
+the document's repository. An unsupported version, an unreadable repository, or
+a missing or archived document is refused with a `refused` message and close
+code 4426, 4403, or 4404. Neither attaching nor a refusal posts anything to the
+document. The account and repository access are checked again before every
+session the link starts; losing either refuses that session and closes the link.
+
+**Turns and tools.** Chopin's host tools (document, repository, and job tools)
+still run in the server against the room, under the document's Planner owner and
+the permission checks below. The client calls them with `host-tool-call` and
+receives `host-tool-result`. Its own tools run on its machine: it must declare
+them with `tools` before calling any, may not reuse a host tool's name, and
+reports them as provider-executed `tool-call` and `tool-result` parts. An
+undeclared tool fails the turn as a tool boundary failure. Background job
+sessions start in `isolated` mode, where the client may offer no tools of its own
+and ask nothing. A turn ends with `turn-end`. An abort waits briefly for the
+client's `turn-end`, then ends the turn anyway. A link that closes mid-turn ends
+the turn with an error, its open questions are withdrawn, and runs it reported
+are shown stopped; nothing waits on a client that has gone.
+
+**Questions.** An `input-request` carries one Atomic `HostInput` call
+(`questionnaire`, `confirm`, `select`, `input`, or `editor`) and becomes Decisions
+through the same path as the [full Atomic Planner](#full-atomic-planner): the same
+verbatim text, the same 30-minute expiry, cancellation that withdraws open
+cards, and answers to a workflow question held while the client reports that
+run's root as paused. `input-result` returns what Atomic would have received in
+process, with a status that tells an expiry from a cancellation.
+
+**Runs.** The client reports its workflow runs with `runs`; Chat shows those
+cards and keeps the session after its turn while any run is live or paused, as
+for an Atomic Planner. **Stop Planner** and **Resume Planner** send `stop` and
+`resume`, optionally for one run, and wait for `control-result`.
+
+**Trust boundary.** The server never holds the client's model credentials and
+gains no shell or filesystem access from this harness. The client, in turn,
+receives everything a Planner turn sees: the conversation, the document, and
+the results of repository tools that run with the document Planner owner's
+GitHub App token, limited to the document's repository, which its own account
+can already read. Attaching requires only pull access, yet the attached client
+decides what the Planner writes to the document during turns writers start, so
+attach only clients you would let edit the document. Until one Planner per
+document is enforced, the most recently attached link serves new sessions and
+earlier ones stay connected. Summary and research workers have no model in the
+server, so `HARNESS=remote` requires `BACKGROUND_JOBS=off`.
 
 ## Permission checks
 

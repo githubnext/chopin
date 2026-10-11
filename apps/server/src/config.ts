@@ -16,7 +16,7 @@ import type { StorageConfig } from "./storage/registry";
 export type Config = {
 	host: string;
 	port: number;
-	/** Planner model. */
+	/** Planner model. Empty under `HARNESS=remote` unless set, where the attached client chooses. */
 	model: string;
 	harness: string;
 	harnessAuth: string | undefined;
@@ -63,10 +63,12 @@ const DEFAULT_MODEL = "gpt-6-luna";
 
 /** The default is a Copilot model ID. Pi and Atomic resolve IDs against their
  * own catalogs, so those deployments must name a model rather than inherit one
- * the catalog lacks. */
+ * the catalog lacks. A remote Planner's client brings its own model; a
+ * configured one is only passed along as the turn's request. */
 function model(harness: string): string {
 	let configured = process.env.MODEL;
 	if (configured) return configured;
+	if (harness === "remote") return "";
 	if (harness === "pi" || harness === "atomic") {
 		throw new Error(`MODEL is required when HARNESS=${harness}`);
 	}
@@ -138,6 +140,11 @@ export function load(): Config {
 		throw new Error("JEV_MODEL must be a valid model alias");
 	}
 	let selection = harnessSelection();
+	if (selection.harness === "remote" && backgroundJobs) {
+		throw new Error(
+			"HARNESS=remote requires BACKGROUND_JOBS=off: summary and research workers have no model on the server",
+		);
+	}
 	let serverPort = port();
 	return {
 		...selection,
@@ -175,10 +182,15 @@ export function describe(config: Config): string {
 		"chopin",
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
-		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
+		config.agent
+			? `agent: ${config.model || "chosen by the attached client"} (on demand)`
+			: "agent: off",
 		`harness: ${config.harness}`,
 		...(config.harness === "atomic"
 			? ["Planner: full Atomic session (shell and filesystem access as this process's user)"]
+			: []),
+		...(config.harness === "remote"
+			? ["Planner: attached client over /planner-link (model and client tools run on its machine)"]
 			: []),
 		...(config.harnessExtensions.length
 			? [`Planner extensions: ${config.harnessExtensions.join(", ")}`]
