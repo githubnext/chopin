@@ -214,7 +214,7 @@
 				1
 			]
 		],
-		"sourceHash": "2ec3f9ca5014f4c45015c19edb0b1479e69597bf871816c2450e949b67de9d17"
+		"sourceHash": "6776932ad1c0842647fa490b87ad42234f71bcde1e1fe52f4db8827f9a9a9a21"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -242,7 +242,7 @@
 				1
 			]
 		],
-		"sourceHash": "2ec3f9ca5014f4c45015c19edb0b1479e69597bf871816c2450e949b67de9d17"
+		"sourceHash": "6776932ad1c0842647fa490b87ad42234f71bcde1e1fe52f4db8827f9a9a9a21"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
@@ -480,7 +480,7 @@
 				1
 			]
 		],
-		"sourceHash": "cbf31bf18ac5eec0ac5d73b98948b7377628977e717a5bfc969396e1279fd3c6"
+		"sourceHash": "dc998b993e2f8ca0980fc0424b635126eb34027828dee1f926d86892d543065e"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -494,6 +494,6 @@
 				1
 			]
 		],
-		"sourceHash": "cbf31bf18ac5eec0ac5d73b98948b7377628977e717a5bfc969396e1279fd3c6"
+		"sourceHash": "dc998b993e2f8ca0980fc0424b635126eb34027828dee1f926d86892d543065e"
 	}
 ]

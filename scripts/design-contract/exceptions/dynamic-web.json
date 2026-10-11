@@ -42,12 +42,12 @@
 	},
 	{
 		"file": "apps/web/src/document-workspace-host.tsx",
-		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function. Its returned keys contain no className or style; the parent presentation carries the child layer node, a finite \"open\" | \"closing\" state, a finite \"lift\" | \"zoom\" motion that Workspace renders only as a data attribute, path labels, and a close callback.",
+		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function. Its returned keys contain no className or style; the parent presentation carries the child layer node, a finite \"open\" | \"closing\" state, a finite \"lift\" | \"zoom\" motion that Workspace renders only as a data attribute, path labels, a close callback, the open child's channel id that Chat sends as its focus, and a child-open callback; a document presentation carries only that child-open callback.",
 		"cases": [
 			[
 				"dynamic",
 				"*",
-				"workspaceProps(\n\t\t\t\t\t\tloaded.parent,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\tchildVisible ? nested : { type: \"document\" },\n\t\t\t\t\t\tparentMetadataChanged,\n\t\t\t\t\t)",
+				"workspaceProps(\n\t\t\t\t\t\tloaded.parent,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\tchildVisible ? nested : { onChildOpen: openChild, type: \"document\" as const },\n\t\t\t\t\t\tparentMetadataChanged,\n\t\t\t\t\t)",
 				"unresolved JSX props > DocumentWorkspaceHost > <RoomWorkspace>",
 				1
 			],
@@ -59,7 +59,7 @@
 				1
 			]
 		],
-		"sourceHash": "e6a7f2b1c2e4bc8c306ce61527c8fca07a7608ad7f3d0907f75f33eac16273c6"
+		"sourceHash": "8fd3dc4e48d692cbb2dcac1a69bb4ef6cfe489f98def31aca5ad13f3a2a350f9"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
