@@ -391,7 +391,18 @@ export default function DocumentWorkspaceHost(
 					agent,
 					user,
 					childVisible
-						? { childLabel, onChildClose: closeChild, type: "parent-with-child" }
+						? {
+							// Task 4 moves the child layer into the stack; until then it still overlays.
+							child: null,
+							childState: presentation === "closing" ? "closing" : "open",
+							motion: "lift",
+							onChildClose: closeChild,
+							path: [
+								{ id: loaded.parent.channel.id, label: loaded.parent.channel.title },
+								{ id: loaded.child?.channel.id ?? "child", label: childLabel },
+							],
+							type: "parent-with-child",
+						}
 						: { type: "document" },
 					parentMetadataChanged,
 				)}

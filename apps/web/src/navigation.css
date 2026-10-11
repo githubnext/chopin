@@ -1339,13 +1339,6 @@
 	white-space: nowrap;
 }
 
-.document-parent-breadcrumb {
-	flex: 0 1 auto;
-	justify-content: flex-start;
-	font-weight: 500;
-	color: var(--color-text-secondary);
-}
-
 .document-project-prefix {
 	min-width: 0;
 	max-width: var(--label-measure-compact);
@@ -1365,17 +1358,6 @@
 	.document-project-separator {
 		display: none;
 	}
-}
-
-.document-breadcrumb-separator {
-	opacity: var(--opacity-quiet);
-}
-
-.document-child-breadcrumb {
-	min-width: 0;
-	flex: 1 1 auto;
-	font-weight: 400;
-	color: var(--color-text-primary);
 }
 
 /* A research child's provenance reads like the research card's own status line. */

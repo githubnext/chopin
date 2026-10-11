@@ -16,7 +16,7 @@ test("Chat grows to available space and preserves a preferred width across narro
 	await join("ana");
 	let chat = chatPane(page);
 	let handle = page.getByRole("separator", { name: "Resize chat" });
-	let document = page.locator(".workspace-frame > main");
+	let document = page.locator(".workspace-frame > .workspace-document-stack > main");
 	await handle.press("End");
 	let preferred = Number(await handle.getAttribute("aria-valuemax"));
 	expect(preferred).toBeGreaterThan(750);

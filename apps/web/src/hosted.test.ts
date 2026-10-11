@@ -284,76 +284,6 @@ describe("anchored child lifecycle", () => {
 		expect(markup).not.toContain("Expand");
 	});
 
-	it("obscures only the parent paper frame", () => {
-		let markup = renderToStaticMarkup(createElement(Workspace, {
-			chat: createElement("div", null, "Chat"),
-			controls: createElement("div", null, "Controls"),
-			chatActivity: { busy: false, unread: 0 },
-			decisions: createElement("div", null, "Decisions"),
-			header: createElement("header", null, "Parent header"),
-			identity: "parent-room",
-			ids: workspaceIds,
-			mode: "compact",
-			onChatOpen() {},
-			onDesktopChatOpen() {},
-			onDestination() {},
-			plan: createElement("div", null, "Parent paper"),
-			presentation: {
-				childLabel: "Source review",
-				onChildClose() {},
-				type: "parent-with-child",
-			},
-			state: { chatOpen: false, desktopChatOpen: false },
-			unanswered: 0,
-			view: "plan",
-		}));
-		let outer = markup.slice(0, markup.indexOf(">") + 1);
-		let frame = markup.match(/<div[^>]*class="workspace-frame[^"]*"[^>]*>/)?.[0];
-
-		expect(frame).toContain('aria-hidden="true"');
-		expect(frame).toContain('data-paper-obscured="true"');
-		expect(frame).toContain('inert=""');
-		expect(outer).not.toContain("aria-hidden");
-		expect(outer).not.toContain("inert");
-		expect(markup).toContain("Parent header");
-	});
-
-	it("renders a collapsed child Chat toggle before the document controls", () => {
-		let markup = renderToStaticMarkup(createElement(Workspace, {
-			chat: createElement("div", null, "Child chat"),
-			controls: createElement("div", null, "Document controls"),
-			chatActivity: { busy: true, unread: 2 },
-			decisions: createElement("div", null, "Decisions"),
-			header: createElement("header", null, "Child header"),
-			identity: "child-room",
-			ids: workspaceIds,
-			mode: "split",
-			onChatOpen() {},
-			onDesktopChatOpen() {},
-			onDestination() {},
-			plan: createElement("div", null, "Child paper"),
-			presentation: { label: "Source review", onClose() {}, type: "child" },
-			state: { chatOpen: false, desktopChatOpen: false },
-			unanswered: 0,
-			view: "plan",
-		}));
-		let toolbar = markup.slice(
-			markup.indexOf('data-document-toolbar="true"'),
-			markup.indexOf('data-document-view="plan"'),
-		);
-
-		expect(markup).toContain("Child chat");
-		expect(markup).toContain('aria-label="Show chat, Planner working"');
-		expect(markup).toContain('aria-label="Close Source review"');
-		expect(toolbar).toContain('aria-label="Show chat, Planner working"');
-		expect(toolbar).toContain('aria-label="Close Source review"');
-		expect(toolbar.indexOf("Show chat")).toBeLessThan(toolbar.indexOf("Document controls"));
-		expect(toolbar.indexOf("Show chat")).toBeLessThan(
-			toolbar.indexOf("Close Source review"),
-		);
-		expect(markup.indexOf("<main")).toBeLessThan(markup.indexOf("<aside"));
-	});
-
 	let splitProps = {
 		chat: createElement("div", null, "Chat body"),
 		controls: createElement("div", null, "Document controls"),
@@ -372,6 +302,81 @@ describe("anchored child lifecycle", () => {
 		unanswered: 0,
 		view: "plan" as const,
 	};
+
+	let withChild = (
+		motion: "lift" | "zoom",
+		view: "plan" | "decisions" = "plan",
+		expanded = false,
+	) =>
+		renderToStaticMarkup(createElement(Workspace, {
+			...splitProps,
+			controls: createElement("button", { type: "button" }, "Decisions"),
+			presentation: {
+				child: createElement("div", { "data-layer": "" }, "Child layer"),
+				childState: "open",
+				motion,
+				onChildClose() {},
+				path: [{ id: "room", label: "Root" }, { id: "child-room", label: "Source review" }],
+				type: "parent-with-child",
+			},
+			state: { chatOpen: false, desktopChatOpen: !expanded },
+			view,
+		}));
+
+	it("Lift covers the root sheet below its tab row and leaves Chat and the top bar live", () => {
+		let markup = withChild("lift");
+		let main = markup.match(/<main[^>]*>/)?.[0];
+		let swap = markup.match(/<div[^>]*data-workspace-document-swap[^>]*>/)?.[0];
+		let toolbar = markup.match(/<div[^>]*data-document-toolbar[^>]*>/)?.[0];
+		let stack = markup.slice(markup.indexOf("workspace-document-stack"), markup.indexOf("<aside"));
+
+		expect(markup).toContain('data-child-motion="lift"');
+		expect(main).toContain('data-child-covered="true"');
+		expect(swap).toContain('inert=""');
+		expect(toolbar).not.toContain("inert");
+		expect(toolbarOf(markup)).toContain("People here: ana");
+		expect(stack).toContain("workspace-child-scrim");
+		expect(stack.indexOf("</main>")).toBeLessThan(stack.indexOf("Child layer"));
+		expect(markup).not.toContain('aria-label="Document stack"');
+		expect(markup.match(/<aside[^>]*>/)?.[0]).not.toContain("inert");
+		expect(markup).not.toMatch(/<div[^>]*class="workspace-frame[^"]*"[^>]*inert/);
+		expect(markup).not.toContain("data-paper-obscured");
+	});
+
+	it("Lift makes the peeking tab row itself a keyboard control back to the root", () => {
+		let toolbar = toolbarOf(withChild("lift"));
+		let back = toolbar.match(/<button[^>]*aria-label="Back to Root"[^>]*>/)?.[0];
+
+		expect(back).toBeDefined();
+		expect(back).toContain("workspace-tab-row-return");
+		expect(back).not.toContain("tabindex");
+		expect(toolbar.indexOf("Back to Root")).toBeLessThan(toolbar.indexOf(">Decisions<"));
+		expect(toolbarOf(withChild("zoom"))).not.toContain("workspace-tab-row-return");
+	});
+
+	it("keeps the top bar visible over an expanded root while a child is open", () => {
+		let markup = withChild("lift", "plan", true);
+		let slot = markup.match(/<div[^>]*class="workspace-header-slot[^"]*"[^>]*>/)?.[0];
+
+		expect(markup).toContain('data-document-expanded="true"');
+		expect(markup).not.toContain("data-header-hidden");
+		expect(slot).not.toContain("inert");
+	});
+
+	it("Zoom keeps the root tabs live under a stack bar and hides the child off Document", () => {
+		let document = withChild("zoom");
+		let decisions = withChild("zoom", "decisions");
+		let plan = document.match(/<section[^>]*data-document-view="plan"[^>]*>/)?.[0];
+
+		expect(document).toContain('aria-label="Document stack"');
+		expect(document).toContain('aria-label="Back to Root"');
+		expect(document).toContain('aria-current="page">Source review<');
+		expect(plan).toContain("data-child-recede");
+		expect(plan).toContain('inert=""');
+		expect(document.match(/<main[^>]*>/)?.[0]).not.toContain("data-child-covered");
+		expect(decisions.match(/<div[^>]*workspace-child-slot[^>]*>/)?.[0]).toContain("hidden");
+		expect(decisions).not.toContain('aria-label="Document stack"');
+	});
 
 	it("orders the tab row expand, tabs, presence, with no Chat header", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
@@ -409,71 +414,6 @@ describe("anchored child lifecycle", () => {
 		expect(toolbar).not.toContain("Expand document");
 		expect(toolbar.indexOf("Show chat")).toBeLessThan(toolbar.indexOf("Document controls"));
 		expect(markup).not.toContain('aria-label="Resize chat"');
-	});
-
-	it("gives a compact child all three workspace destinations", () => {
-		let markup = renderToStaticMarkup(createElement(Workspace, {
-			chat: createElement("div", null, "Child chat"),
-			controls: createElement("div", null, "Document controls"),
-			chatActivity: { busy: false, unread: 0 },
-			decisions: createElement("div", null, "Decisions"),
-			header: createElement("header", null, "Child header"),
-			identity: "child-room",
-			ids: workspaceIds,
-			mode: "compact",
-			onChatOpen() {},
-			onDesktopChatOpen() {},
-			onDestination() {},
-			plan: createElement("div", null, "Child paper"),
-			presentation: { label: "Source review", onClose() {}, type: "child" },
-			state: { chatOpen: false, desktopChatOpen: false },
-			unanswered: 0,
-			view: "plan",
-		}));
-		let navigation = markup.slice(
-			markup.indexOf('aria-label="Workspace view"'),
-			markup.indexOf("</nav>"),
-		);
-
-		expect(navigation).toContain("grid-cols-3");
-		expect(navigation).toContain(">Chat<");
-		expect(navigation).toContain(">Document<");
-		expect(navigation).toContain(">Decisions<");
-	});
-
-	it("offers an X close control only inside a child document toolbar", () => {
-		let base = {
-			controls: createElement("div", null, "Document controls"),
-			chatActivity: { busy: false, unread: 0 },
-			decisions: createElement("div", null, "Decisions"),
-			header: createElement("header", null, "Workspace header"),
-			ids: workspaceIds,
-			mode: "split" as const,
-			onChatOpen() {},
-			onDesktopChatOpen() {},
-			onDestination() {},
-			plan: createElement("div", null, "Paper"),
-			state: { chatOpen: false, desktopChatOpen: false },
-			unanswered: 0,
-			view: "plan" as const,
-		};
-		let child = renderToStaticMarkup(createElement(Workspace, {
-			...base,
-			identity: "child-room",
-			presentation: { label: "Source review", onClose() {}, type: "child" },
-		}));
-		let parent = renderToStaticMarkup(createElement(Workspace, {
-			...base,
-			identity: "parent-room",
-			presentation: { type: "document" },
-		}));
-
-		expect(child).toContain('aria-label="Close Source review"');
-		expect(child).toContain('data-child-document-close="true"');
-		expect(child).toContain('<line x1="14" x2="4" y1="4" y2="14"></line>');
-		expect(child).toContain('height="14"');
-		expect(child).toContain('width="14"');
-		expect(parent).not.toContain("data-child-document-close");
 	});
 
 	it("marks an in-app child push without discarding existing history state", () => {

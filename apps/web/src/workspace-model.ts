@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
 import type { DecisionView, ResearchOpener } from "@chopin/editor";
+
+import type { ChildMotionStyle } from "./child-motion";
 
 export type WorkspaceMode = "compact" | "split";
 
@@ -6,7 +9,16 @@ export type WorkspaceSurface = "document" | "child";
 
 export type WorkspacePresentation =
 	| { type: "document" }
-	| { childLabel: string; onChildClose: () => void; type: "parent-with-child" }
+	| {
+		/** The host's layer, drawn in the root's document stack. */
+		child: ReactNode;
+		childState: "open" | "closing";
+		motion: ChildMotionStyle;
+		onChildClose: () => void;
+		/** Root first, open child last. */
+		path: { id: string; label: string }[];
+		type: "parent-with-child";
+	}
 	| { label: string; onClose: () => void; parent?: ChildParent; type: "child" };
 
 /** The document a child opened from, and a way back to the place that produced it. */

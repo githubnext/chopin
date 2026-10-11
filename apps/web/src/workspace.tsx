@@ -4,7 +4,7 @@ import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from 
 import { Count } from "@chopin/editor/count";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CloseIcon, CollapseIcon, ExpandIcon } from "@chopin/icons";
+import { ArrowLeftIcon, ChevronIcon, CollapseIcon, ExpandIcon } from "@chopin/icons";
 
 import {
 	CHAT_CHOICE_STORAGE_KEY,
@@ -258,12 +258,17 @@ export function Workspace(
 	};
 	let root = useRef<HTMLDivElement>(null);
 	let presentation = presentWorkspace(state, mode, view);
-	let childPresentation = workspacePresentation.type === "child"
+	let nested = workspacePresentation.type === "parent-with-child"
 		? workspacePresentation
 		: undefined;
-	let paperObscured = workspacePresentation.type === "parent-with-child";
-	// A child's own header is hidden, so the parent's carries its breadcrumb and Return control.
-	let headerHidden = presentation.documentExpanded && !paperObscured;
+	let childOpen = !!nested;
+	// The top bar stays while a child is open, so the root's title and actions remain over Chat.
+	let headerHidden = presentation.documentExpanded && !childOpen;
+	let lift = nested?.motion === "lift" && mode === "split";
+	let liftCovered = lift && nested?.childState === "open";
+	// Compact has no in-sheet tab row to peek, so it always uses the stack bar.
+	let stackBar = !!nested && !lift && view === "plan";
+	let planCovered = stackBar;
 	let immediately = motionImmediately();
 	let contentSwapMotion = motionContract("content-swap");
 	let chatPresence = useTransitionPresence(
@@ -364,7 +369,7 @@ export function Workspace(
 		if (mode !== "split" || stranded) dismissChat();
 		else onDesktopChatOpen(false);
 	};
-	let chatShortcutEnabled = !!chat && !paperObscured;
+	let chatShortcutEnabled = !!chat;
 	useEffect(() => {
 		if (!chatShortcutEnabled) return;
 		return listenForShortcuts(() => ({ "toggle-chat": () => toggleChat.current() }));
@@ -457,125 +462,166 @@ export function Workspace(
 			)}
 
 			<div
-				aria-hidden={paperObscured || undefined}
 				ref={frame}
 				className={`workspace-frame relative flex min-h-0 flex-1 ${
 					mode === "split"
 						? "mx-3 mb-3"
 						: "m-2 overflow-hidden rounded-panel bg-page shadow-resting ring-hairline"
 				}`}
-				data-paper-obscured={paperObscured || undefined}
-				inert={paperObscured}
 			>
-				<main
-					aria-hidden={!presentation.documentVisible || undefined}
-					className="workspace-document-panel relative min-w-0 w-full flex-1"
+				<div
+					className="workspace-document-stack relative flex min-w-0 flex-1"
+					data-child-motion={nested ? (lift ? "lift" : "zoom") : undefined}
 					hidden={documentPresence.phase === "closed"}
-					inert={!presentation.documentVisible}
 				>
-					<div className="relative flex h-full flex-col overflow-hidden">
-						{mode === "split" && (
-							<div
-								className="panel-header flex shrink-0 items-center overflow-x-auto overflow-y-hidden px-(--panel-toolbar-padding-inline) hairline-b"
-								data-document-toolbar
-								onFocusCapture={event => {
-									if (!(event.target instanceof HTMLElement)) return;
-									let control = event.target.getBoundingClientRect();
-									let toolbar = event.currentTarget.getBoundingClientRect();
-									if (control.left < toolbar.left) {
-										event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
-									} else if (control.right > toolbar.right) {
-										event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
-									}
-								}}
-							>
-								{chat && (
-									<span className="workspace-surface-toggle-slot flex shrink-0 items-center">
-										<SurfaceToggle
-											activity={chatActivity}
-											buttonRef={edgeTab}
-											controls={ids.pane.chat}
-											expanded={presentation.documentExpanded}
-											onToggle={presentation.documentExpanded ? showDesktopChat : dismissChat}
+					<main
+						aria-hidden={!presentation.documentVisible || undefined}
+						className="workspace-document-panel relative min-w-0 w-full flex-1"
+						data-child-covered={liftCovered || undefined}
+						inert={!presentation.documentVisible}
+						onClickCapture={liftCovered ? nested!.onChildClose : undefined}
+					>
+						<div className="relative flex h-full flex-col overflow-hidden">
+							{mode === "split" && (
+								<div
+									className="panel-header flex shrink-0 items-center overflow-x-auto overflow-y-hidden px-(--panel-toolbar-padding-inline) hairline-b"
+									data-document-toolbar
+									onFocusCapture={event => {
+										if (!(event.target instanceof HTMLElement)) return;
+										let control = event.target.getBoundingClientRect();
+										let toolbar = event.currentTarget.getBoundingClientRect();
+										if (control.left < toolbar.left) {
+											event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
+										} else if (control.right > toolbar.right) {
+											event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
+										}
+									}}
+								>
+									{liftCovered && (
+										// The covered row is one control: a click anywhere on it, or on a tab, returns
+										// through `<main>`'s capture handler, so this button needs no handler of its own.
+										<button
+											aria-label={`Back to ${nested!.path[0]!.label}`}
+											className="workspace-tab-row-return"
+											type="button"
 										/>
-									</span>
-								)}
-								{controls}
-								<div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-									{status}
-									{presence}
-									{childPresentation && (
-										<div className="flex shrink-0 items-center">
-											<button
-												aria-label={`Close ${childPresentation.label}`}
-												className="btn btn-icon btn-ghost -mr-1 shrink-0"
-												data-child-document-close
-												data-tooltip="Close document"
-												onClick={childPresentation.onClose}
-												type="button"
-											>
-												<CloseIcon aria-hidden="true" size={14} />
-											</button>
-										</div>
 									)}
+									{chat && (
+										<span className="workspace-surface-toggle-slot flex shrink-0 items-center">
+											<SurfaceToggle
+												activity={chatActivity}
+												buttonRef={edgeTab}
+												controls={ids.pane.chat}
+												expanded={presentation.documentExpanded}
+												onToggle={presentation.documentExpanded ? showDesktopChat : dismissChat}
+											/>
+										</span>
+									)}
+									{controls}
+									<div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+										{status}
+										{presence}
+									</div>
 								</div>
-							</div>
-						)}
-						{mode !== "split" && status && <div className="workspace-status-row">{status}</div>}
-						<div
-							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
-							data-workspace-document-swap
-							ref={documentSwap}
-						>
-							<ContentSwapLayer
-								active={presentation.documentVisible && presentation.documentView === "plan"}
-								className="workspace-document-layer min-h-0"
-								immediately={immediately}
-								motion={contentSwapMotion}
-							>
-								<section
-									aria-labelledby={ids.heading.plan}
-									className="h-full min-h-0"
-									data-document-view="plan"
+							)}
+							{stackBar && (
+								<nav
+									aria-label="Document stack"
+									className="workspace-stack-bar hairline-b flex shrink-0 items-center gap-1"
 								>
-									<h2 className="sr-only" id={ids.heading.plan} tabIndex={-1}>Document</h2>
-									{plan}
-								</section>
-							</ContentSwapLayer>
-							<ContentSwapLayer
-								active={presentation.documentVisible && presentation.documentView === "decisions"}
-								className="workspace-document-layer min-h-0"
-								immediately={immediately}
-								motion={contentSwapMotion}
+									<button
+										aria-label={`Back to ${nested!.path.at(-2)!.label}`}
+										className="btn btn-icon btn-ghost"
+										onClick={nested!.onChildClose}
+										type="button"
+									>
+										<ArrowLeftIcon aria-hidden="true" size={14} />
+									</button>
+									<ol className="workspace-stack-path flex min-w-0 items-center gap-1 text-xs">
+										{nested!.path.map((entry, index) => (
+											<li className="flex min-w-0 items-center gap-1" key={entry.id}>
+												{index > 0 && <ChevronIcon aria-hidden="true" size={12} />}
+												{index === nested!.path.length - 1
+													? <span aria-current="page">{entry.label}</span>
+													: (
+														<button
+															className="btn btn-compact btn-ghost min-w-0"
+															onClick={nested!.onChildClose}
+															type="button"
+														>
+															<span className="truncate">{entry.label}</span>
+														</button>
+													)}
+											</li>
+										))}
+									</ol>
+								</nav>
+							)}
+							{mode !== "split" && status && <div className="workspace-status-row">{status}</div>}
+							<div
+								className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
+								data-workspace-document-swap
+								inert={liftCovered || undefined}
+								ref={documentSwap}
 							>
-								<section
-									aria-labelledby={ids.heading.decisions}
-									className="h-full min-h-0"
-									data-document-view="decisions"
-								>
-									{decisions}
-								</section>
-							</ContentSwapLayer>
-							{profile.implementation && (
 								<ContentSwapLayer
-									active={presentation.documentVisible && presentation.documentView === "build"}
+									active={presentation.documentVisible && presentation.documentView === "plan"}
 									className="workspace-document-layer min-h-0"
 									immediately={immediately}
 									motion={contentSwapMotion}
 								>
 									<section
-										aria-labelledby={ids.heading.build}
+										aria-labelledby={ids.heading.plan}
 										className="h-full min-h-0"
-										data-document-view="build"
+										data-child-recede={planCovered || undefined}
+										data-document-view="plan"
+										inert={planCovered || undefined}
 									>
-										<h2 className="sr-only" id={ids.heading.build} tabIndex={-1}>Build</h2>
-										{build}
+										<h2 className="sr-only" id={ids.heading.plan} tabIndex={-1}>Document</h2>
+										{plan}
 									</section>
 								</ContentSwapLayer>
-							)}
+								<ContentSwapLayer
+									active={presentation.documentVisible && presentation.documentView === "decisions"}
+									className="workspace-document-layer min-h-0"
+									immediately={immediately}
+									motion={contentSwapMotion}
+								>
+									<section
+										aria-labelledby={ids.heading.decisions}
+										className="h-full min-h-0"
+										data-document-view="decisions"
+									>
+										{decisions}
+									</section>
+								</ContentSwapLayer>
+								{profile.implementation && (
+									<ContentSwapLayer
+										active={presentation.documentVisible && presentation.documentView === "build"}
+										className="workspace-document-layer min-h-0"
+										immediately={immediately}
+										motion={contentSwapMotion}
+									>
+										<section
+											aria-labelledby={ids.heading.build}
+											className="h-full min-h-0"
+											data-document-view="build"
+										>
+											<h2 className="sr-only" id={ids.heading.build} tabIndex={-1}>Build</h2>
+											{build}
+										</section>
+									</ContentSwapLayer>
+								)}
+							</div>
 						</div>
-					</div>
-				</main>
+						{lift && <div aria-hidden="true" className="workspace-child-scrim" />}
+					</main>
+					{nested && (
+						<div className="workspace-child-slot" hidden={!lift && view !== "plan"}>
+							{nested.child}
+						</div>
+					)}
+				</div>
 				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
 				{chat && (
 					<aside

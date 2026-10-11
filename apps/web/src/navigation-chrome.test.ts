@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ChevronIcon, DocumentIcon } from "@chopin/icons";
+import { DocumentIcon } from "@chopin/icons";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -179,7 +179,6 @@ describe("the Figma navigation chrome", () => {
 			onAction() {},
 			onEditingChange() {},
 			onRenamed() {},
-			presentation: { type: "document" },
 			room: "room-one",
 		}));
 		let members = renderToStaticMarkup(createElement(RoomMembers, {
@@ -201,7 +200,6 @@ describe("the Figma navigation chrome", () => {
 			onAction: () => {},
 			onEditingChange: () => {},
 			onRenamed: () => {},
-			presentation: { type: "document" as const },
 			room: "room-one",
 		};
 		let markup = renderToStaticMarkup(createElement(Header, props));
@@ -232,7 +230,6 @@ describe("the Figma navigation chrome", () => {
 			onAction() {},
 			onEditingChange() {},
 			onRenamed() {},
-			presentation: { type: "document" },
 			room: "room-one",
 		}));
 
@@ -243,34 +240,6 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).not.toContain(">Save</button>");
 	});
 
-	test("turns the parent title into a child-document breadcrumb", () => {
-		let markup = renderToStaticMarkup(createElement(Header, {
-			canManage: true,
-			label: "Release plan",
-			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
-			onAction() {},
-			onEditingChange() {},
-			onRenamed() {},
-			room: "room-one",
-			presentation: {
-				childLabel: "Source review",
-				onChildClose() {},
-				type: "parent-with-child",
-			},
-		}));
-
-		expect(markup).not.toContain('aria-label="Back to Release plan"');
-		expect(markup).toContain('aria-label="Return to Release plan"');
-		expect(markup).toContain('aria-label="Child document: Source review"');
-		expect(markup).toContain('aria-label="People here: MaggieAppleton"');
-		expect(markup).not.toContain('aria-label="Actions for Release plan"');
-		expect(markup).toContain(renderToStaticMarkup(createElement(ChevronIcon, {
-			className: "document-breadcrumb-separator shrink-0",
-		})));
-		expect(markup).toContain('class="document-breadcrumb-separator shrink-0"');
-		expect(markup).not.toContain(">›</span>");
-	});
-
 	test("labels archived headers while keeping management actions from viewers", () => {
 		let props = {
 			archivedAt: "2026-08-23T00:00:00.000Z",
@@ -279,7 +248,6 @@ describe("the Figma navigation chrome", () => {
 			onAction: () => {},
 			onEditingChange: () => {},
 			onRenamed: () => {},
-			presentation: { type: "document" as const },
 			room: "room-one",
 		};
 		let manager = renderToStaticMarkup(createElement(Header, { ...props, canManage: true }));

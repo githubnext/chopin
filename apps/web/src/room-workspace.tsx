@@ -77,7 +77,7 @@ import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
 import type { ChatDestination } from "./conversation-plan/source";
 import type { SourceDestination } from "./conversation-plan/card-parts";
-import type { WorkspaceDocumentView, WorkspacePresentation } from "./workspace-model";
+import type { WorkspaceDocumentView } from "./workspace-model";
 
 type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
@@ -143,7 +143,6 @@ export function Header(
 		onAction,
 		onEditingChange,
 		onRenamed,
-		presentation,
 		project,
 		room,
 	}: {
@@ -155,7 +154,6 @@ export function Header(
 		onAction: (action: DocumentAction) => void;
 		onEditingChange: (editing?: TitleEdit) => void;
 		onRenamed: (channel: DocumentMetadata) => void;
-		presentation: WorkspacePresentation;
 		project?: { id: string; name: string };
 		room: string;
 	},
@@ -188,7 +186,7 @@ export function Header(
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
 				<DocumentIcon className="shrink-0" />
-				{project && presentation.type !== "parent-with-child" && (
+				{project && (
 					<>
 						<span className="document-project-prefix truncate text-xs font-medium">
 							{project.name}
@@ -196,80 +194,55 @@ export function Header(
 						<span aria-hidden="true" className="document-project-separator text-xs">/</span>
 					</>
 				)}
-				{presentation.type === "parent-with-child"
-					? (
-						<>
+				<div className="title-control min-w-0 text-xs font-medium">
+					{editing && canManage && !archivedAt
+						? (
+							<DocumentRename
+								channel={{ id: room, title: label }}
+								inline
+								onCancel={finishEdit}
+								replay={editing === "new"}
+								onRenamed={detail => {
+									onRenamed(detail.channel);
+									finishEdit();
+								}}
+							/>
+						)
+						: canManage && !archivedAt
+						? (
 							<button
-								aria-label={`Return to ${label}`}
-								className="document-parent-breadcrumb btn btn-compact btn-ghost min-w-0"
-								onClick={presentation.onChildClose}
+								aria-label={`Rename ${label}`}
+								className="title-control-label document-title-trigger"
+								onClick={() => onEditingChange("rename")}
+								onKeyDown={event => {
+									if (event.key !== "F2") return;
+									event.preventDefault();
+									onEditingChange("rename");
+								}}
+								ref={title}
 								type="button"
 							>
 								<span className="truncate">{label}</span>
 							</button>
-							<ChevronIcon
-								aria-hidden="true"
-								className="document-breadcrumb-separator shrink-0"
-							/>
-							<span
-								aria-label={`Child document: ${presentation.childLabel}`}
-								className="document-child-breadcrumb truncate text-xs"
-							>
-								{presentation.childLabel}
-							</span>
-						</>
-					)
-					: (
-						<div className="title-control min-w-0 text-xs font-medium">
-							{editing && canManage && !archivedAt
-								? (
-									<DocumentRename
-										channel={{ id: room, title: label }}
-										inline
-										onCancel={finishEdit}
-										replay={editing === "new"}
-										onRenamed={detail => {
-											onRenamed(detail.channel);
-											finishEdit();
-										}}
-									/>
-								)
-								: canManage && !archivedAt
-								? (
-									<button
-										aria-label={`Rename ${label}`}
-										className="title-control-label document-title-trigger"
-										onClick={() => onEditingChange("rename")}
-										onKeyDown={event => {
-											if (event.key !== "F2") return;
-											event.preventDefault();
-											onEditingChange("rename");
-										}}
-										ref={title}
-										type="button"
-									>
-										<span className="truncate">{label}</span>
-									</button>
-								)
-								: <span className="title-control-label truncate">{label}</span>}
-							{canManage && (
-								<DocumentActionsMenu
-									align="start"
-									channel={{ archivedAt, title: label }}
-									className="title-control-action"
-									onAction={action =>
-										action === "rename" ? onEditingChange("rename") : onAction(action)}
-									trigger={
-										<ChevronIcon
-											aria-hidden="true"
-											className="rotate-90"
-											size={12}
-										/>
-									}
+						)
+						: <span className="title-control-label truncate">{label}</span>}
+					{canManage && (
+						<DocumentActionsMenu
+							align="start"
+							channel={{ archivedAt, title: label }}
+							className="title-control-action"
+							onAction={action =>
+								action === "rename" ? onEditingChange("rename") : onAction(action)}
+							trigger={
+								<ChevronIcon
+									aria-hidden="true"
+									className="rotate-90"
+									size={12}
 								/>
-							)}
-						</div>
+							}
+						/>
 					)}
+				</div>
 				{archivedAt && (
 					<span className="document-archived-status">
 						<Badge icon={ArchiveIcon} label="Archived" size="sm" textSize="2xs" tone="warning" />
@@ -1180,7 +1153,6 @@ export function RoomWorkspace(
 						onAction={action => onDocumentAction(room, action)}
 						onEditingChange={setTitleEdit}
 						onRenamed={updateMetadata}
-						presentation={presentation}
 						project={{ id: repository.id, name: repository.name }}
 						room={room}
 					/>

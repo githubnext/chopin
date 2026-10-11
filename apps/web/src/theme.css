@@ -627,7 +627,7 @@ body {
 	border-color: var(--color-divider);
 }
 
-.workspace-root[data-workspace-mode="split"] .workspace-frame > main {
+.workspace-root[data-workspace-mode="split"] .workspace-frame > .workspace-document-stack {
 	min-width: 9rem;
 }
 
@@ -675,8 +675,11 @@ body {
 	padding-inline-end: calc(var(--spacing) * 2);
 }
 
-.workspace-root[data-workspace-mode="split"] .workspace-document-panel {
+.workspace-root[data-workspace-mode="split"] .workspace-document-stack {
 	margin-top: calc(var(--spacing) * 3);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-document-panel {
 	overflow: hidden;
 	border-radius: var(--radius-panel);
 	background: var(--color-page);
@@ -688,6 +691,29 @@ body {
 	.workspace-document-panel:not(.anchored-child-surface *) {
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
+}
+
+/*
+ * A covered Lift sheet's tab row is one Back control. The button fills the row beneath its
+ * controls, so a click between tabs and keyboard focus both reach it.
+ */
+.workspace-document-panel[data-child-covered] [data-document-toolbar] {
+	position: relative;
+}
+
+.workspace-document-panel[data-child-covered] [data-document-toolbar] > * {
+	position: relative;
+}
+
+.workspace-document-panel[data-child-covered] [data-document-toolbar] > .workspace-tab-row-return {
+	position: absolute;
+	inset: 0;
+	cursor: pointer;
+}
+
+.workspace-tab-row-return:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
 .workspace-surface-toggle-slot {
