@@ -7,7 +7,7 @@
  * editing, not to reading and commenting.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { CheckIcon, CopyIcon, MessagePlusIcon } from "@chopin/icons";
@@ -21,7 +21,12 @@ import {
 	SELECTION_CHANGE_COMMAND,
 } from "lexical";
 
+import { planScroller } from "../scroll";
+import { nativeSelectionRect } from "./surface";
+
 const COPIED_FOR = 1_200;
+/** Space kept between a selection and the bar docked under it. */
+const CLEARANCE = 12;
 
 /** How much of the layout viewport the keyboard covers, so the bar can stand on it. */
 function keyboardInset(): number {
@@ -43,6 +48,7 @@ export function SelectionBar(
 	let [copied, setCopied] = useState(false);
 	let [keyboard, setKeyboard] = useState(0);
 	let copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	let bar = useRef<HTMLDivElement>(null);
 
 	let sync = useCallback(() => {
 		editor.getEditorState().read(() => {
@@ -81,6 +87,26 @@ export function SelectionBar(
 	}, [shown]);
 
 	useEffect(() => () => clearTimeout(copiedTimer.current), []);
+
+	/*
+	 * A selection low on the screen would sit under the bar, so the document
+	 * scrolls it clear when the bar appears or the keyboard moves it. Its
+	 * trailing space lets even the last line rise that far. Measured from the
+	 * bar's resting place, not its entrance transform.
+	 */
+	useLayoutEffect(() => {
+		let element = bar.current;
+		if (!shown || !element) return;
+		let range = nativeSelectionRect();
+		let scroller = planScroller(editor.getRootElement());
+		if (!range || !scroller) return;
+		let barTop = window.innerHeight - (parseFloat(getComputedStyle(element).bottom) || 0)
+			- element.offsetHeight;
+		let limit = barTop - CLEARANCE;
+		if (range.bottom <= limit) return;
+		let room = Math.max(0, range.top - scroller.getBoundingClientRect().top - CLEARANCE);
+		scroller.scrollTop += Math.min(range.bottom - limit, room);
+	}, [editor, keyboard, shown]);
 
 	// Escape lets go of the selection, as it does for the desktop toolbar.
 	useEffect(() => {
@@ -130,6 +156,7 @@ export function SelectionBar(
 			onPointerDown={event => {
 				if (event.pointerType !== "mouse") event.preventDefault();
 			}}
+			ref={bar}
 			role="toolbar"
 			style={{ "--plan-selection-bar-keyboard": `${keyboard}px` } as CSSProperties}
 		>
@@ -152,7 +179,6 @@ export function SelectionBar(
 				</>
 			)}
 			<button
-				aria-live="polite"
 				className="plan-selection-bar-action"
 				data-press="small"
 				onClick={copy}
@@ -161,6 +187,7 @@ export function SelectionBar(
 				{copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
 				{copied ? "Copied" : "Copy"}
 			</button>
+			<span className="sr-only" role="status">{copied ? "Copied to clipboard" : ""}</span>
 		</div>
 	);
 }

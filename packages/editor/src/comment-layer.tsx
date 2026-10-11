@@ -1083,16 +1083,23 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			.sort((a, b) => passageTop(a) - passageTop(b))
 			.map(entry => entry.view.thread.id);
 		let at = pinnedView ? order.indexOf(pinnedView.thread.id) : -1;
+		// Paging moves the way back too: closing returns focus to the marker of the thread shown.
 		let step = (by: number) => {
+			let next = order[at + by];
+			if (!next) return;
+			let marker = markerOf(next);
+			origin.current = (marker
+				&& root.current?.querySelector<HTMLElement>(`[data-plan-comment-button="${marker.key}"]`))
+				|| origin.current;
 			setReturnTo(undefined);
-			setPinned(order[(at + by + order.length) % order.length]);
+			setPinned(next);
 		};
 		compactPager = at >= 0
 			? {
 				count: order.length,
 				index: at,
-				onNext: () => step(1),
-				onPrevious: () => step(-1),
+				onNext: at < order.length - 1 ? () => step(1) : undefined,
+				onPrevious: at > 0 ? () => step(-1) : undefined,
 			}
 			: undefined;
 		compactContent = pinnedView ? card(pinnedView, true) : (
@@ -1369,6 +1376,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					label={compactLabel}
 					onBack={compactBack}
 					onClose={compactClose}
+					contentKey={pinned}
 					onDetentHeight={setSheetDetent}
 					onSurface={setSheetSurface}
 					pager={compactPager}

@@ -116,18 +116,22 @@ export type CommentSheetProps = {
 	pager?: CommentSheetPager;
 	/** How tall the sheet shows while it rests at the medium detent; undefined when it is large. */
 	onDetentHeight?: (height: number | undefined) => void;
+	/** What the sheet is showing; another thread opens at the medium detent again. */
+	contentKey?: string;
 };
 
 export type CommentSheetPager = {
 	index: number;
 	count: number;
-	onPrevious: () => void;
-	onNext: () => void;
+	/** Absent at the first thread: the pager stops at its ends rather than wrapping. */
+	onPrevious?: () => void;
+	onNext?: () => void;
 };
 
 export function CommentSheet(
 	{
 		children,
+		contentKey,
 		focus = "close",
 		heading,
 		id,
@@ -175,6 +179,8 @@ export function CommentSheet(
 		return () => observer.disconnect();
 	}, [medium, surface]);
 
+	useEffect(() => setDetent("medium"), [contentKey]);
+
 	useEffect(() => {
 		onDetentHeight?.(detent === "medium" ? medium : undefined);
 	}, [detent, medium, onDetentHeight]);
@@ -186,7 +192,11 @@ export function CommentSheet(
 			onOpenChangeComplete={next => {
 				if (!next) onClose();
 			}}
-			onSnapPointChange={point => setDetent(point === 1 ? "large" : "medium")}
+			// A sheet shorter than its medium detent has one snap point, which the drawer names
+			// as the large one; even a tap on its header settles there. It is still medium.
+			onSnapPointChange={point => {
+				if (point !== null) setDetent(point === 1 && tall ? "large" : "medium");
+			}}
 			open={open}
 			snapPoint={detent === "large" ? 1 : medium}
 			// Pixels above 1, a fraction at 1: the large detent is as tall as the content allows.
@@ -198,6 +208,7 @@ export function CommentSheet(
 						className="plan-comment-sheet-backdrop"
 						data-plan-comment-sheet-backdrop
 						data-plan-comment-sheet-detents={tall || undefined}
+						data-plan-comment-sheet-large={(tall && detent === "large") || undefined}
 						onClick={() => setOpen(false)}
 					/>
 					<Drawer.Viewport className="plan-comment-sheet-viewport">
@@ -225,6 +236,7 @@ export function CommentSheet(
 										<button
 											aria-label="Previous comment"
 											className="plan-comment-sheet-step btn btn-icon btn-ghost"
+											disabled={!pager.onPrevious}
 											onClick={pager.onPrevious}
 											type="button"
 										>
@@ -234,6 +246,7 @@ export function CommentSheet(
 										<button
 											aria-label="Next comment"
 											className="plan-comment-sheet-step btn btn-icon btn-ghost"
+											disabled={!pager.onNext}
 											onClick={pager.onNext}
 											type="button"
 										>

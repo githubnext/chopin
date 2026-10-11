@@ -1440,20 +1440,32 @@
 
 .plan-comment-sheet-backdrop {
 	--backdrop-opacity: 0.24;
+	--backdrop-opacity-large: 0.36;
 	position: fixed;
 	inset: 0;
 	z-index: 70;
 	background: rgb(var(--shadow-color));
-	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress, 0)));
+	opacity: var(--backdrop-opacity);
 	transition: opacity var(--duration-base) var(--ease-out);
 }
 
+/* Pulled up to the large detent, the sheet sets the document further back. */
+.plan-comment-sheet-backdrop[data-plan-comment-sheet-large] {
+	opacity: var(--backdrop-opacity-large);
+}
+
 /*
- * With two detents the drawer reports progress between them: 1 at the medium
- * detent, 0 at the large one. Pulling the sheet up sets the document further back.
+ * The drawer's progress is read only while a finger drags the sheet: it keeps
+ * its last value when the sheet's detents change underneath it. With one detent
+ * it runs from 0 open to 1 dismissed; with two, from 0 at the large detent to 1
+ * at the medium one.
  */
-.plan-comment-sheet-backdrop[data-plan-comment-sheet-detents] {
-	--backdrop-opacity-large: 0.36;
+body:has(.plan-comment-sheet-popup[data-swiping]) .plan-comment-sheet-backdrop {
+	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress, 0)));
+}
+
+body:has(.plan-comment-sheet-popup[data-swiping])
+	.plan-comment-sheet-backdrop[data-plan-comment-sheet-detents] {
 	opacity: calc(
 		var(--backdrop-opacity) +
 			(
@@ -5114,6 +5126,15 @@
 		opacity: 0;
 		transform: translate(-50%, calc(var(--spacing) * 4)) scale(var(--modal-scale));
 	}
+}
+
+/* While the bar shows, anything scrolled into view stops short of it. */
+[data-plan-scroll]:has([data-plan-selection-bar]) {
+	scroll-padding-bottom: calc(
+		var(--control-target-coarse) + var(--phone-bottom-chrome, 0px) +
+			env(safe-area-inset-bottom, 0px) +
+			calc(var(--spacing) * 6)
+	);
 }
 
 .plan-selection-bar-action {

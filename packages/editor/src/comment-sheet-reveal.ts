@@ -1,4 +1,4 @@
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 
@@ -30,15 +30,23 @@ export function useCommentSheetReveal({
 	/** The sheet's surface, which mounts a frame after the comment opens. */
 	sheet: HTMLElement | null;
 }) {
+	// The reader goes back to where they were only if the sheet still shows what it opened
+	// with; after paging to another thread, the document stays at that one.
+	let shown = useRef(id);
 	useLayoutEffect(() => {
-		if (!host || !id) return;
+		if (id) shown.current = id;
+	}, [id]);
+	let open = !!id;
+	useLayoutEffect(() => {
+		if (!host || !open) return;
 		let scroller = planScroller(host);
 		if (!scroller) return;
 		let top = scroller.scrollTop;
+		let opened = shown.current;
 		return () => {
-			if (scroller.isConnected) scroller.scrollTop = top;
+			if (scroller.isConnected && shown.current === opened) scroller.scrollTop = top;
 		};
-	}, [host, id]);
+	}, [host, open]);
 
 	useLayoutEffect(() => {
 		if (!host || !id || !sheet || !passages || passages.length === 0) return;

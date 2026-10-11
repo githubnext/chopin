@@ -444,7 +444,7 @@ test("a long phone thread opens at the medium detent, drags up to large and down
 	await expect(marker).toBeFocused();
 });
 
-test("a phone thread sheet steps through the document's threads", async ({ join, seed }) => {
+test("a phone thread sheet steps through the document's threads and stops at its ends", async ({ join, seed }) => {
 	await seed(SOURCE, {
 		threads: [
 			await open("starting with the docs team", ["Which team is next?"], 0),
@@ -458,14 +458,106 @@ test("a phone thread sheet steps through the document's threads", async ({ join,
 	await expect(sheet.locator("[data-plan-comment-sheet-quote]")).toHaveText(
 		"starting with the docs team",
 	);
+	await expect(sheet.getByRole("button", { name: "Previous comment" })).toBeDisabled();
 	let next = sheet.getByRole("button", { name: "Next comment" });
 	expect((await size(next)).height).toBeGreaterThanOrEqual(44);
 	await next.click();
 	await expect(sheet.getByText("2 of 2", { exact: true })).toBeVisible();
 	await expect(sheet.locator("[data-plan-comment-sheet-quote]")).toHaveText("review the pilot");
 	await expect(sheet).toContainText("Is two weeks enough?");
-	await sheet.getByRole("button", { name: "Next comment" }).click();
-	await expect(sheet.getByText("1 of 2", { exact: true })).toBeVisible();
+	await expect(sheet.getByRole("button", { name: "Next comment" })).toBeDisabled();
+
+	// Closing returns to the thread now shown, not the one the sheet opened with.
+	await sheet.getByRole("button", { name: "Close comment" }).click();
+	await expect(sheet).toHaveCount(0);
+	await expect(page.getByRole("button", { name: /^Comment on “review the pilot”/ })).toBeFocused();
+});
+
+test("paging between short and long threads keeps the medium detent and its backdrop", async ({ join, seed }) => {
+	let long = Array.from(
+		{ length: 4 },
+		(_, index) =>
+			`Note ${index + 1}. ${"A long note that wraps over several lines on a phone. ".repeat(8)}`,
+	);
+	await seed(SOURCE, {
+		threads: [
+			await open("starting with the docs team", ["Which team is next?"], 0),
+			await open("review the pilot", long, 1),
+		],
+	});
+	let page = await join("ana", IPHONE);
+	let backdrop = page.locator("[data-plan-comment-sheet-backdrop]");
+	let dim = () => backdrop.evaluate(element => Number(getComputedStyle(element).opacity));
+	let sheet = page.getByRole("dialog", { name: "Comment thread" });
+	await page.getByRole("button", { name: /^Comment on “starting with the docs team”/ }).tap();
+	await settled(sheet);
+	let resting = await dim();
+	expect(resting).toBeGreaterThan(0.1);
+
+	// A tap on the short sheet's header must not count as a pull to the large detent.
+	await sheet.getByRole("button", { name: "Next comment" }).tap();
+	await expect(sheet.locator("[data-plan-comment-sheet-quote]")).toHaveText("review the pilot");
+	await settled(sheet);
+	await expect(sheet).not.toHaveAttribute("data-expanded");
+	await expect.poll(async () => Math.abs((await size(sheet)).y - 844 / 2)).toBeLessThanOrEqual(2);
+	let passage = page.locator(".plan-content > p").filter({ hasText: SECOND });
+	await expect.poll(async () => {
+		let box = await size(passage);
+		return box.y + 10 <= (await size(sheet)).y;
+	}).toBe(true);
+	await expect.poll(dim).toBeCloseTo(resting, 2);
+
+	// Pulled up to large, then paged back: the next thread opens at medium again, and the
+	// backdrop returns to its resting depth rather than vanishing.
+	await drag(page, { x: 195, y: (await size(sheet)).y + 10 }, -300);
+	await expect(sheet).toHaveAttribute("data-expanded");
+	await expect.poll(dim).toBeGreaterThan(resting);
+	await sheet.getByRole("button", { name: "Previous comment" }).tap();
+	await expect(sheet.locator("[data-plan-comment-sheet-quote]")).toHaveText(
+		"starting with the docs team",
+	);
+	await expect(sheet).not.toHaveAttribute("data-expanded");
+	await expect.poll(dim).toBeCloseTo(resting, 2);
+});
+
+test("a selection low on a phone screen scrolls clear of the docked bar", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana", IPHONE);
+	let passage = content(page).locator("p").filter({ hasText: SECOND });
+	// Put the passage on the last lines of the screen, where the bar will dock.
+	await passage.evaluate(element => {
+		let scroller = element.closest("[data-plan-scroll]")!;
+		scroller.scrollTop += element.getBoundingClientRect().bottom - (innerHeight - 12);
+	});
+	expect((await size(passage)).y).toBeGreaterThan(844 - 80);
+	await passage.selectText();
+	let bar = page.getByRole("toolbar", { name: "Selection actions" });
+	await expect(bar).toBeVisible();
+	await bar.evaluate(element => Promise.all(element.getAnimations().map(item => item.finished)));
+	await expect.poll(async () => {
+		let selection = await page.evaluate(() =>
+			getSelection()!.getRangeAt(0).getBoundingClientRect().bottom
+		);
+		return selection <= (await size(bar)).y;
+	}).toBe(true);
+});
+
+test("the docked bar stands on the keyboard", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let emulation = await phone(browser, baseURL!, room);
+	try {
+		let { page } = emulation;
+		await content(page).locator("p").filter({ hasText: FIRST }).selectText();
+		let bar = page.getByRole("toolbar", { name: "Selection actions" });
+		await expect(bar).toBeVisible();
+		await setVisualViewport(page, { event: "resize", height: 506, offsetTop: 0 });
+		await expect.poll(async () => {
+			let box = await size(bar);
+			return box.y + box.height <= 506 && box.y + box.height > 506 - 48;
+		}).toBe(true);
+	} finally {
+		await emulation.close();
+	}
 });
 
 test("a phone marker reaches 44px into the empty margin without covering the next line", async ({ join, seed }) => {

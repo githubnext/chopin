@@ -138,8 +138,11 @@
 	outline: var(--button-edge-width) solid var(--color-control-edge);
 	outline-offset: calc(-1 * var(--button-edge-width));
 
-	&:hover:not(:disabled) {
-		background-color: var(--color-brand-hover);
+	/* Touch has no hover to leave, so a tapped button would keep it. */
+	@media (hover: hover) {
+		&:hover:not(:disabled) {
+			background-color: var(--color-brand-hover);
+		}
 	}
 
 	&:active:not(:disabled) {
@@ -153,8 +156,10 @@
 	outline: var(--button-edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--button-edge-width));
 
-	&:hover:not(:disabled) {
-		background-color: var(--color-gray-300);
+	@media (hover: hover) {
+		&:hover:not(:disabled) {
+			background-color: var(--color-gray-300);
+		}
 	}
 
 	&:active:not(:disabled) {
@@ -169,8 +174,10 @@
 	outline-offset: calc(-1 * var(--button-edge-width));
 	box-shadow: var(--shadow-resting);
 
-	&:hover:not(:disabled) {
-		background-color: var(--color-inset);
+	@media (hover: hover) {
+		&:hover:not(:disabled) {
+			background-color: var(--color-inset);
+		}
 	}
 
 	&:active:not(:disabled) {
@@ -185,8 +192,10 @@
 	outline: var(--button-edge-width) solid var(--color-danger-edge);
 	outline-offset: calc(-1 * var(--button-edge-width));
 
-	&:hover:not(:disabled) {
-		background-color: var(--color-danger-surface-hover);
+	@media (hover: hover) {
+		&:hover:not(:disabled) {
+			background-color: var(--color-danger-surface-hover);
+		}
 	}
 
 	&:active:not(:disabled) {
@@ -198,8 +207,10 @@
 	background-color: transparent;
 	color: var(--color-text-secondary);
 
-	&:hover:not(:disabled) {
-		background-color: var(--color-gray-200);
+	@media (hover: hover) {
+		&:hover:not(:disabled) {
+			background-color: var(--color-gray-200);
+		}
 	}
 
 	&:active:not(:disabled) {
@@ -213,8 +224,10 @@
 	outline: var(--button-edge-width) solid var(--color-control-edge);
 	outline-offset: calc(-1 * var(--button-edge-width));
 
-	&:hover:not(:disabled) {
-		background-color: var(--color-destructive-hover);
+	@media (hover: hover) {
+		&:hover:not(:disabled) {
+			background-color: var(--color-destructive-hover);
+		}
 	}
 
 	&:active:not(:disabled) {
