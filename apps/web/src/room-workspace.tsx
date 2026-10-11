@@ -54,7 +54,7 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
 import { PhoneHeader } from "./phone-header";
-import { useKeyboardOpen } from "./keyboard-open";
+import { useEditorFocus, useKeyboardOpen } from "./keyboard-open";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
@@ -213,6 +213,11 @@ export function Header(
 								channel={{ id: room, title: label }}
 								inline
 								onCancel={finishEdit}
+								// The body took focus as the save started; a refusal needs the field back.
+								onErrorChange={error =>
+									error !== undefined
+									&& header.current?.querySelector<HTMLInputElement>(".document-title-input")
+										?.focus()}
 								onSavingChange={saving => saving && handOff()}
 								replay={editing === "new"}
 								onRenamed={detail => {
@@ -499,6 +504,7 @@ export function RoomWorkspace(
 		[chatActive],
 	);
 	let planVisible = workspacePresentation.documentVisible && view === "plan";
+	let editorFocused = useEditorFocus(frame);
 	let latestPlanVisible = useRef(planVisible);
 	latestPlanVisible.current = planVisible;
 	let latestBusy = useRef(chatActivity.busy);
@@ -922,11 +928,14 @@ export function RoomWorkspace(
 		arrived.current = true;
 		if (opensEditing({ empty: planState.empty })) setEditing(true);
 	}, [planState.synced, planState.empty]);
+	// Only the document's own keyboard gets formatting: never Chat, a comment reply, or the title.
+	let docked = editMode === "editing" && keyboardOpen && planVisible && editorFocused;
 	let toggleEditing = () => {
 		// Synchronous, so the editor takes focus inside the tap and iOS raises the keyboard.
 		flushSync(() => {
 			setEditing(!editing);
-			if (!editing && view !== "plan") selectDestination("plan");
+			// Chat opens over the document without changing `view`, so ask what is on screen.
+			if (!editing && !planVisible) selectDestination("plan");
 		});
 	};
 	let actOnResearchOffer = (
@@ -1082,7 +1091,7 @@ export function RoomWorkspace(
 				key={workspaceArchivedAt ? "archived" : "active"}
 				disclosureMotion={motionContract("collapse")}
 				editMode={childRoom ? undefined : editMode}
-				formatDock={!childRoom && editMode === "editing" && keyboardOpen ? formatDock : undefined}
+				formatDock={!childRoom && docked ? formatDock : undefined}
 				motionImmediately={settleMotionImmediately}
 				onScrollTop={setPlanScrollTop}
 				onState={setPlanState}
@@ -1200,6 +1209,7 @@ export function RoomWorkspace(
 							archivedAt={workspaceArchivedAt}
 							canManage={effectiveCanManage}
 							editing={titleEdit}
+							editingDocument={editMode === "editing"}
 							label={metadata.title}
 							onAction={action => onDocumentAction(room, action)}
 							onEditingChange={setTitleEdit}
@@ -1250,9 +1260,7 @@ export function RoomWorkspace(
 				)}
 				// Formatting rides above the keyboard while typing. With the keyboard down the tabs
 				// return, and a selection gets the ordinary bubble instead.
-				phoneToolbar={editMode === "editing" && keyboardOpen && (
-					<div className="h-full" ref={setFormatDock} />
-				)}
+				phoneToolbar={docked && <div className="h-full" ref={setFormatDock} />}
 				identity={room}
 				mode={mode}
 				presence={<RoomMembers members={members} ring="page" />}

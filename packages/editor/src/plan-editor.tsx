@@ -400,7 +400,16 @@ export function PlanEditor(
 		if (previous !== "reading" || editMode !== "editing" || !editor.isEditable()) return;
 		let point = tapped.current;
 		tapped.current = undefined;
-		editor.getRootElement()?.focus({ preventScroll: true });
+		/*
+		 * A reader's tap focuses the root (Lexical gives a locked root `tabIndex=-1`), and iOS
+		 * Safari never moves focus to a tapped button, so the root can still hold focus here.
+		 * Focusing it again would be a no-op: no `focus` event, so Lexical never announces this
+		 * writer's caret, and iOS raises the keyboard only for focus gained inside the gesture.
+		 * Let go first, then take it back, both while the tap is still being handled.
+		 */
+		let root = editor.getRootElement();
+		if (root && document.activeElement === root) root.blur();
+		root?.focus({ preventScroll: true });
 		editor.update(() => placeCaret(point, editor, scroller.current), { discrete: true });
 	}, [binding, editMode]);
 

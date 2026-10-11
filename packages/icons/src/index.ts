@@ -59,5 +59,6 @@ export {
 	TabsIcon,
 	WrenchIcon,
 } from "./line";
+export { ListIcon } from "./list";
 export { ArchiveIcon, DocumentIcon, LoaderIcon, SearchIcon } from "./system";
 export { WarningIcon } from "./warning";

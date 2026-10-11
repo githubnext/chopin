@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { ChevronIcon, CodeIcon, LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
+import { ChevronIcon, CodeIcon, LinkPlusIcon, ListIcon, MessagePlusIcon } from "@chopin/icons";
 
 import { $linkAt, OPEN_LINK_EDITOR_COMMAND } from "./link";
 import { placeSurface, visibleAnchor } from "./placement";
@@ -63,13 +63,13 @@ import type { DOMRectLike, SurfacePlacement } from "./placement";
 export type Block = "paragraph" | "quote" | "bullet" | "number" | "task" | HeadingTagType;
 
 /** `glyph` is what shows; `label` is what it means, for hover and assistive tech. */
-const BLOCKS: Array<{ id: Block; glyph: string; label: string }> = [
+const BLOCKS: Array<{ id: Block; glyph: ReactNode; label: string }> = [
 	{ id: "paragraph", glyph: "T", label: "Text" },
 	{ id: "h1", glyph: "H1", label: "Heading 1" },
 	{ id: "h2", glyph: "H2", label: "Heading 2" },
 	{ id: "h3", glyph: "H3", label: "Heading 3" },
 	{ id: "quote", glyph: ">", label: "Quote" },
-	{ id: "bullet", glyph: "UL", label: "Bulleted list" },
+	{ id: "bullet", glyph: <ListIcon size={14} />, label: "Bulleted list" },
 	{ id: "number", glyph: "OL", label: "Numbered list" },
 ];
 
@@ -90,7 +90,10 @@ const SHORT: Partial<Record<Block, string>> = {
 function describe(block: Block): { short: string; label: string } {
 	if (block === "task") return { short: "Task list", label: "Task list" };
 	let known = BLOCKS.find(item => item.id === block);
-	if (known) return { short: SHORT[block] ?? known.glyph, label: known.label };
+	if (known) {
+		let glyph = typeof known.glyph === "string" ? known.glyph : known.label;
+		return { short: SHORT[block] ?? glyph, label: known.label };
+	}
 	return { short: block.toUpperCase(), label: `Heading ${block.slice(1)}` };
 }
 
@@ -435,7 +438,7 @@ export function SelectionBubble(
 		<div
 			ref={ref}
 			role="toolbar"
-			aria-label="Text formatting"
+			aria-label={commentOnly ? "Selection" : "Text formatting"}
 			data-focus-boundary=""
 			contentEditable={false}
 			// No translate utilities here: placement belongs to the layout effect,

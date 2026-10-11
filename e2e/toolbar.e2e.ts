@@ -676,7 +676,8 @@ test("an open selection toolbar follows its range while the editor scrolls", asy
 		let block = content(emulation.page).getByText("Paragraph 9.", { exact: true });
 		await block.scrollIntoViewIfNeeded();
 		await block.selectText();
-		let bubble = emulation.page.getByRole("toolbar", BUBBLE);
+		// A phone reader's selection: the bubble offers commenting only.
+		let bubble = emulation.page.getByRole("toolbar", { name: "Selection" });
 		await expect(bubble).toBeVisible();
 
 		await expectSurfaceToFollowEditorScroll(emulation.page, bubble);

@@ -118,7 +118,7 @@ export function Toolbar() {
 				follow={options.editMode === "reading"}
 				onEditing={setLinking}
 			/>
-			{dock && createPortal(<FormatDock disabled={disabled} />, dock)}
+			{dock && createPortal(<FormatDock disabled={disabled} onComment={comment} />, dock)}
 			<SlashMenu
 				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}
 				disabled={disabled}

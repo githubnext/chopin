@@ -3,6 +3,7 @@
  * editing-only chrome stays out of a reader's way. Desktop and viewers are unchanged.
  */
 
+import { chatInput } from "./chat-input";
 import { createChannel } from "./database";
 import { authenticate, content, edit, expect, openIsolatedRoom, roomPath, test } from "./room";
 import { RESPONSIVE_SOURCE } from "./responsive";
@@ -98,6 +99,7 @@ test("the pencil edits where the reader tapped and Done returns to reading", asy
 	await expect(content(page)).toHaveAttribute("contenteditable", "true");
 	await expect(content(page)).toBeFocused();
 	await expect(done(page)).toBeVisible();
+	await expect(page.locator(".phone-top-bar")).toContainText("Editing");
 	await page.keyboard.type("Typed ");
 	await expect(content(page)).toContainText("Typed ");
 	await expect(writer.getByText(/Typed /)).toBeVisible();
@@ -153,7 +155,28 @@ test("formatting docks above the keyboard while editing", async ({ baseURL, brow
 		// One formatting surface at a time.
 		await expect(page.getByRole("toolbar", { name: "Text formatting" })).toHaveCount(0);
 
-		await dock.getByRole("button", { name: "Hide keyboard" }).tap();
+		// The way out is pinned, never scrolled off the row.
+		let hide = dock.getByRole("button", { name: "Hide keyboard" });
+		let pinned = await hide.evaluate(element => {
+			let box = element.getBoundingClientRect();
+			let row = element.closest("[role=toolbar]")!.getBoundingClientRect();
+			return box.left >= row.left && box.right <= row.right && box.right <= innerWidth;
+		});
+		expect(pinned).toBe(true);
+
+		// A writer can comment while the keyboard is up.
+		await content(page).getByText("Members lose").evaluate(element => {
+			let text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!;
+			let range = document.createRange();
+			range.setStart(text, 0);
+			range.setEnd(text, 7);
+			getSelection()!.removeAllRanges();
+			getSelection()!.addRange(range);
+		});
+		await expect(dock.getByRole("button", { name: "Comment on this passage" })).toBeVisible();
+		await content(page).getByText("Second paragraph").click();
+
+		await hide.tap();
 		await expect(content(page)).not.toBeFocused();
 		await setVisualViewport(page, { event: "resize", height: 844 });
 		await expect(dock).toHaveCount(0);
@@ -207,4 +230,83 @@ test("an empty document opens ready to write", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await expect(done(page)).toBeVisible();
 	await expect(content(page)).toHaveAttribute("contenteditable", "true");
+});
+
+test("the pencil focuses the editor afresh even when a reader's tap already focused it", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana", PHONE);
+	await page.getByText("Second paragraph").tap();
+	// iOS never moves focus to a tapped button: click without letting focus leave the root.
+	await expect(content(page)).toBeFocused();
+	await content(page).evaluate(root => {
+		(window as typeof window & { focused?: number }).focused = 0;
+		root.addEventListener("focus", () => (window as typeof window & { focused: number }).focused++);
+	});
+	await pencil(page).evaluate(button => (button as HTMLButtonElement).click());
+	await expect(content(page)).toHaveAttribute("contenteditable", "true");
+	expect(await page.evaluate(() => (window as typeof window & { focused?: number }).focused))
+		.toBeGreaterThan(0);
+	await expect(content(page)).toBeFocused();
+});
+
+test("the pencil opens the document from Chat and Decisions", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana", PHONE);
+	let tabs = page.getByRole("navigation", { name: "Workspace view" });
+	for (let tab of [/^Chat/, /^Decisions/]) {
+		await tabs.getByRole("button", { name: tab }).tap();
+		await pencil(page).tap();
+		await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
+		await expect(content(page)).toBeFocused();
+		await done(page).tap();
+	}
+});
+
+test("only the document's own keyboard gets the formatting dock", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE, fakeKeyboard);
+	try {
+		let dock = page.getByRole("toolbar", { name: "Formatting" });
+		await pencil(page).tap();
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).tap();
+		let composer = chatInput(page.getByRole("complementary", { name: "Chat", exact: true }));
+		await composer.focus();
+		await setVisualViewport(page, { event: "resize", height: 500 });
+		await expect(page.locator("html")).toHaveAttribute("data-keyboard-open", "");
+		await expect(dock).toHaveCount(0);
+
+		await setVisualViewport(page, { event: "resize", height: 844 });
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: "Document", exact: true }).tap();
+		await page.locator(".phone-top-bar").getByRole("button", { name: /^Actions for / }).tap();
+		await page.getByRole("menuitem", { name: "Rename", exact: true }).tap();
+		await expect(page.getByRole("textbox", { name: "Document title" })).toBeFocused();
+		await setVisualViewport(page, { event: "resize", height: 500 });
+		await expect(dock).toHaveCount(0);
+	} finally {
+		await close();
+	}
+});
+
+test("Insert block starts a new paragraph and keeps its menu above the dock", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE, fakeKeyboard);
+	try {
+		await page.getByText("Second paragraph").tap();
+		await pencil(page).tap();
+		await setVisualViewport(page, { event: "resize", height: 500 });
+		let dock = page.getByRole("toolbar", { name: "Formatting" });
+		await dock.getByRole("button", { name: "Insert block" }).tap();
+		await expect(content(page)).toContainText("Second paragraph for the caret.");
+		let menu = page.getByRole("listbox", { name: "Insert block" });
+		await expect(menu).toBeVisible();
+		let [menuBottom, dockTop] = await Promise.all([
+			menu.evaluate(element => element.getBoundingClientRect().bottom),
+			dock.evaluate(element => element.getBoundingClientRect().top),
+		]);
+		expect(menuBottom).toBeLessThanOrEqual(dockTop);
+	} finally {
+		await close();
+	}
 });

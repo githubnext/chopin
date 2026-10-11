@@ -24,6 +24,7 @@ export function PhoneHeader(
 		archivedAt,
 		canManage,
 		editing,
+		editingDocument,
 		label,
 		onAction,
 		onEditingChange,
@@ -34,6 +35,8 @@ export function PhoneHeader(
 		archivedAt?: string;
 		canManage: boolean;
 		editing?: TitleEdit;
+		/** The document itself is in edit mode, which the bar says under the title. */
+		editingDocument?: boolean;
 		label: string;
 		onAction: (action: DocumentAction) => void;
 		onEditingChange: (editing?: TitleEdit) => void;
@@ -95,6 +98,11 @@ export function PhoneHeader(
 							channel={{ id: room, title: label }}
 							inline
 							onCancel={finishEdit}
+							// The body took focus as the save started; a refusal needs the field back.
+							onErrorChange={error =>
+								error !== undefined
+								&& header.current?.querySelector<HTMLInputElement>(".document-title-input")
+									?.focus()}
 							onSavingChange={saving => saving && handOff()}
 							replay={editing === "new"}
 							onRenamed={detail => {
@@ -104,7 +112,9 @@ export function PhoneHeader(
 						/>
 					)
 					: <span className="truncate">{label}</span>}
-				{archivedAt && <span className="phone-top-bar-subtitle">Archived</span>}
+				{archivedAt
+					? <span className="phone-top-bar-subtitle">Archived</span>
+					: editingDocument && <span className="phone-top-bar-subtitle">Editing</span>}
 			</div>
 			<div className="phone-top-bar-slot">
 				{canManage && (

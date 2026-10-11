@@ -5369,6 +5369,19 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	animation: plan-check-in var(--duration-fast) var(--ease-out);
 }
 
+/* A phone reader cannot tick a task, so the box drops its pressable look until editing. */
+.plan[data-plan-reading]
+	.plan-content
+	:is([class*="_listItemUnchecked"], [class*="_listItemChecked"]):before {
+	border-style: dashed;
+	box-shadow: none;
+	cursor: default;
+}
+
+.plan[data-plan-reading] .plan-content [class*="_listItemUnchecked"]:hover:before {
+	background-color: var(--color-page);
+}
+
 @keyframes plan-check-in {
 	from {
 		opacity: 0;
@@ -5517,20 +5530,35 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 .plan-format-dock {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
 	gap: calc(var(--spacing) / 2);
 	min-width: 0;
 	height: 100%;
 	padding-inline: var(--spacing);
-	overflow-x: auto;
-	overscroll-behavior-x: contain;
-	scrollbar-width: none;
 	-webkit-user-select: none;
 	user-select: none;
 }
 
-.plan-format-dock::-webkit-scrollbar {
+/* The commands scroll when a narrow phone cannot show them all; Hide keyboard stays pinned. */
+.plan-format-dock-scroll {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) / 2);
+	min-width: 0;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-width: none;
+}
+
+.plan-format-dock-scroll::-webkit-scrollbar {
 	display: none;
+}
+
+/* More waits past the trailing edge: fade it so the row reads as scrollable. */
+.plan-format-dock-scroll[data-more] {
+	-webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--spacing) * 8), transparent);
+	mask-image: linear-gradient(to right, #000 calc(100% - var(--spacing) * 8), transparent);
 }
 
 .plan-format-dock-button {

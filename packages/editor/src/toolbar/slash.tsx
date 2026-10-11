@@ -74,6 +74,7 @@ import {
 	SHELL,
 } from "./surface";
 
+import { aboveDock } from "./dock-clearance";
 import type { ReactElement } from "react";
 import type { IconProps } from "@chopin/icons";
 import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
@@ -512,11 +513,16 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 				editor.update(() => {
 					let selection = $getSelection();
 					if (!$isRangeSelection(selection)) return;
-					let offset = selection.anchor.offset;
-					let text = selection.anchor.getNode().getTextContent();
-					// The slash has to start a word to count as a trigger.
-					let before = selection.isCollapsed() && offset > 0 ? text[offset - 1] : undefined;
-					selection.insertText(before === undefined || /\s/.test(before) ? "/" : " /");
+					// A block with words in it gets a new paragraph after it, rather than a slash
+					// splitting a word or trailing a sentence.
+					let block = selection.anchor.getNode().getTopLevelElement();
+					if (block && block.getTextContentSize() > 0) {
+						let paragraph = $createParagraphNode();
+						block.insertAfter(paragraph);
+						paragraph.select();
+					}
+					let next = $getSelection();
+					if ($isRangeSelection(next)) next.insertText("/");
 				});
 				return true;
 			},
@@ -571,7 +577,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 			setPosition(undefined);
 			return;
 		}
-		let viewport = editorSurfaceViewport(editor);
+		let viewport = aboveDock(editorSurfaceViewport(editor));
 		element.style.maxWidth = `${Math.max(0, viewport.width - 16)}px`;
 		let next = placeSurface(
 			liveAnchor,
