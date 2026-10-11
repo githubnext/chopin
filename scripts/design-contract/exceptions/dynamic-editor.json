@@ -214,7 +214,7 @@
 				1
 			]
 		],
-		"sourceHash": "6872e7314570ac2e99b3e75cf5e0b276f3c5e0d9de304027751b57826e964e2a"
+		"sourceHash": "14ed5508ba3bf275de10434fd151130b02c3beee0e0164c012084402dd2d6eb7"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -242,7 +242,7 @@
 				1
 			]
 		],
-		"sourceHash": "6872e7314570ac2e99b3e75cf5e0b276f3c5e0d9de304027751b57826e964e2a"
+		"sourceHash": "14ed5508ba3bf275de10434fd151130b02c3beee0e0164c012084402dd2d6eb7"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
@@ -361,7 +361,7 @@
 				2
 			]
 		],
-		"sourceHash": "c73c56e66e1a75de4f82609d9347fa876effe2c499b58af96a921f566ccb0127"
+		"sourceHash": "a0feb156f5b197fb4cc5a06f849503d2b6f7436848439e86b2dcfeb140ab4382"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "6acedff97e85e2e456feb92c4e24aa5fbebfe2165f12be210e8bd76aad99accf"
+		"sourceHash": "cfa5c13295aeb09e48012ee5e809a81a5218bbcdf6219306aed7002a54dd5932"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -417,7 +417,7 @@
 				1
 			]
 		],
-		"sourceHash": "01110b02afe3ac02bea7998cac3ade4c0cdf4b0948204190d4b773aafeeaa4f5"
+		"sourceHash": "1336ed29b579fb70f60441876422b715090b41a9c3b3439b08a80494676240f6"
 	},
 	{
 		"file": "packages/editor/src/changes.ts",
@@ -466,7 +466,7 @@
 				1
 			]
 		],
-		"sourceHash": "6acedff97e85e2e456feb92c4e24aa5fbebfe2165f12be210e8bd76aad99accf"
+		"sourceHash": "cfa5c13295aeb09e48012ee5e809a81a5218bbcdf6219306aed7002a54dd5932"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",

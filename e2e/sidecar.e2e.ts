@@ -43,6 +43,7 @@ function editorIsModalBackground(page: Page): Promise<boolean> {
 	// A modal keeps live regions and their ancestors un-inerted so announcements
 	// still reach readers; everything else in the editor must be outside the modal.
 	return page.locator('[aria-label="editable markdown"]').evaluate(element => {
+		// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
 		let covered = (node: Element): boolean =>
 			!!node.closest('[inert], [aria-hidden="true"]') || node.hasAttribute("aria-live")
 			|| (node.children.length > 0 && [...node.children].every(covered));

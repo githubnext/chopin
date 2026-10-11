@@ -679,8 +679,12 @@ function focusCard(id: string) {
 }
 
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
+	let options = useCellValue(widgets$);
+	let phone = usePhone();
 	let deck = useInlineDeck(value.id);
-	if (!deck) return <InlineCard value={value} />;
+	// Phones answer in the Decisions pane, so each card is already a one-line chip; stacking
+	// chips in a deck would hide all but one pointer behind a gesture.
+	if (!deck || (phone && options.onShowDecision)) return <InlineCard value={value} />;
 	if (deck.layout.lead !== value.id) return <div data-deck-follower="" hidden />;
 	// Named by size, not "Decisions": a document can hold several decks beside the Decisions tab.
 	return (
