@@ -130,3 +130,59 @@ test("answering the last open card hands focus to its settled line", async ({ jo
 	);
 	await expect(settled).toBeFocused();
 });
+
+test("an answered decision settles to the back and focus follows the new top", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await top(page).getByText("Option 1", { exact: true }).click();
+	await top(page).getByRole("button", { name: "Save", exact: true }).click();
+
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+	await expect(deck(page).getByText("1 decided")).toBeVisible();
+	await expect(deck(page).getByRole("status"))
+		.toHaveText("Decided. Now showing 1 of 3: Scope");
+	await expect(top(page)).toBeFocused();
+});
+
+test("a collaborator's answer reorders without moving my top card", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let ana = await join("ana");
+	let ben = await join("ben");
+	await deck(ana).getByRole("button", { name: "Next decision" }).click();
+	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+
+	await top(ben).getByText("Option 1", { exact: true }).click();
+	await top(ben).getByRole("button", { name: "Save", exact: true }).click();
+
+	await expect(deck(ana).getByText("1 decided")).toBeVisible();
+	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+});
+
+test("answering every decision dissolves the deck", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 2);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	for (let index = 0; index < 2; index++) {
+		await top(page).getByText(`Option ${index + 1}`, { exact: true }).click();
+		await top(page).getByRole("button", { name: "Save", exact: true }).click();
+	}
+	await expect(deck(page)).toHaveCount(0);
+	await expect(page.locator('[data-document-view="plan"] [data-card-settled]')).toHaveCount(2);
+});
+
+test("revealing a back card brings it to the top", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await page.locator(`[data-deck-slot="${fixture.ids[2]}"]`).evaluate(element =>
+		element.dispatchEvent(
+			new CustomEvent("chopin:deck-front", {
+				bubbles: true,
+				detail: (element as HTMLElement).dataset.deckSlot,
+			}),
+		)
+	);
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[2] })).toBeVisible();
+});

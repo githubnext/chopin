@@ -16,6 +16,7 @@ import {
 	PlanStatus,
 	QuestionnaireStore,
 	ResearchLauncher,
+	revealDeckItem,
 	selectDecisionView,
 	ThreadStore,
 	useConnectionNotice,
@@ -743,6 +744,8 @@ export function RoomWorkspace(
 				}"]`,
 			);
 			if (!card) return;
+			// A card behind the top of a deck is inert and cannot take focus.
+			revealDeckItem(card);
 			card.tabIndex = -1;
 			card.focus();
 		});
