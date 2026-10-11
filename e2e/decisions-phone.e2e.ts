@@ -47,6 +47,41 @@ test("phone: the save bar appears only with unsaved answers, and Save confirms b
 	await expect(decisionsCard(page)).toHaveCount(0);
 });
 
+test("phone: an unsaved answer survives leaving Decisions and can still be saved", async ({ join, seed }) => {
+	await seed("Decisions on a phone.\n");
+	let page = await join("ana", PHONE);
+	await showDecisions(page);
+	await decisionsCard(page).getByText("In SQLite", { exact: true }).click();
+	let region = page.getByRole("region", { name: "Unsaved answers" });
+	await expect(region.getByRole("status")).toHaveText("1 unsaved answer");
+
+	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	await nav.getByRole("button", { name: "Document", exact: true }).click();
+	await nav.getByRole("button", { name: /^Decisions/ }).click();
+	await expect(region.getByRole("status")).toHaveText("1 unsaved answer");
+	await page.reload();
+	await showDecisions(page);
+	await expect(decisionsCard(page).getByRole("radio", { name: /In SQLite/ })).toBeChecked();
+	await expect(region.getByRole("status")).toHaveText("1 unsaved answer");
+
+	await region.getByRole("button", { name: "Save", exact: true }).click();
+	await expect(page.locator("[data-decision-confirmed]").getByRole("status"))
+		.toContainText("Decided · You");
+	await expect(page.getByRole("button", { name: "1 resolved" })).toBeVisible();
+});
+
+test("phone: a selection the bar is not counting keeps the card's own Save", async ({ join, seed }) => {
+	await seed("Decisions on a phone.\n");
+	let octocat = await join("octocat", PHONE);
+	let hubot = await join("hubot", PHONE);
+	for (let page of [octocat, hubot]) await showDecisions(page);
+	await decisionsCard(octocat).getByText("In SQLite", { exact: true }).click();
+	let card = decisionsCard(hubot);
+	await expect(card.getByRole("radio", { name: /In SQLite/ })).toBeChecked();
+	await expect(hubot.locator(".decision-save-bar")).not.toHaveAttribute("data-open");
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+});
+
 test("phone: the bar counts, clears and saves only this person's answers", async ({ join, seed }) => {
 	await seed("Decisions on a phone.\n");
 	let octocat = await join("octocat", PHONE);

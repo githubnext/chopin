@@ -26,6 +26,7 @@ import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { usePhone } from "./phone";
 import { PendingAnswersContext } from "../save-bar";
+import { setTouched, useTouched } from "../touched";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
@@ -319,6 +320,7 @@ function Undecided(
 	let editable = canEdit && answerable;
 	let previous = previousAnswers(value);
 	let pending = useContext(PendingAnswersContext);
+	let touched = useTouched(value.id);
 
 	return (
 		<SidecarCard
@@ -382,6 +384,8 @@ function Undecided(
 				status="open"
 				submitting={state.submitting}
 				deferSave={!!pending}
+				touched={pending ? touched : undefined}
+				onTouchedChange={pending ? next => setTouched(value.id, next) : undefined}
 				onPending={pending && (answers => pending.set(value.id, answers))}
 				{...pointing}
 			/>

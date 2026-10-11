@@ -15,6 +15,7 @@ import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { usePhone } from "./widgets/phone";
 import { useQuestionnaires } from "./questionnaires";
 import { PendingAnswersContext, PendingAnswersStore, SaveBar } from "./save-bar";
+import { setTouched } from "./touched";
 import { labels, QuestionnaireCard } from "./widgets/questionnaire";
 
 import type { Question } from "@chopin/protocol";
@@ -314,6 +315,12 @@ export function Decisions(
 			next.focus({ preventScroll: true });
 		} else heading.current?.focus({ preventScroll: true });
 	}, []);
+
+	// A decided or discarded card has nothing left of this person's to save.
+	let settledKey = entries.filter(entry => !open.has(entry.id)).map(entry => entry.id).join("\n");
+	useEffect(() => {
+		for (let id of settledKey.split("\n")) if (id) setTouched(id, false);
+	}, [settledKey]);
 
 	let pending = entries.filter(entry => open.has(entry.id) || closing.has(entry.id));
 	let settled = entries.filter(entry => !open.has(entry.id) && !closing.has(entry.id));

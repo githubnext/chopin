@@ -122,6 +122,12 @@ export type QuestionViewProps = {
 	deferSave?: boolean;
 	/** Reports this card's unsaved answers; undefined when there is nothing to save. */
 	onPending?: (pending: PendingAnswers | undefined) => void;
+	/**
+	 * Whether this person chose answers here, when the host keeps that beyond
+	 * this view's lifetime. Without it the view remembers only while mounted.
+	 */
+	touched?: boolean;
+	onTouchedChange?: (touched: boolean) => void;
 };
 
 export function currentQuestion(
@@ -737,6 +743,8 @@ export function QuestionView(props: QuestionViewProps) {
 		renderStep,
 		deferSave = false,
 		onPending,
+		touched: hostTouched,
+		onTouchedChange,
 	} = props;
 
 	let [suggestionEdits, dispatchSuggestionEdit] = useReducer(reduceSuggestionEditState, {
@@ -754,7 +762,12 @@ export function QuestionView(props: QuestionViewProps) {
 	};
 	// Which cards this person chose answers on, so a host's pane-wide Save
 	// never acts on a draft only a collaborator touched.
-	let [touched, setTouched] = useState(false);
+	let [ownTouched, setOwnTouched] = useState(false);
+	let touched = hostTouched ?? ownTouched;
+	let setTouched = (value: boolean) => {
+		setOwnTouched(value);
+		onTouchedChange?.(value);
+	};
 
 	let markComposerEdit = () => {
 		dispatchSuggestionEdit({ type: "composer-edited" });
@@ -848,6 +861,18 @@ export function QuestionView(props: QuestionViewProps) {
 		});
 	}, [answeredCount, complete, error, pendingEnabled, submitting]);
 	useEffect(() => () => reporting.current?.(undefined), []);
+	// A selection that is gone (cleared here or by someone else) is no longer this person's.
+	let forgetTouch = useRef(setTouched);
+	forgetTouch.current = setTouched;
+	// Only a selection that went away is forgotten: a choice just made is not in
+	// the draft yet, and a draft still syncing (disabled) looks empty too.
+	let hadAnswers = useRef(false);
+	useEffect(() => {
+		if (disabled) return;
+		let had = hadAnswers.current;
+		hadAnswers.current = answeredCount > 0;
+		if (touched && had && answeredCount === 0 && !submitting) forgetTouch.current(false);
+	}, [answeredCount, disabled, submitting, touched]);
 
 	if (status === "discarded") {
 		return (
@@ -934,6 +959,7 @@ export function QuestionView(props: QuestionViewProps) {
 	// Accepting a suggestion stays a deliberate choice on its own card.
 	let suggestion = projection.suggestion;
 	let acceptSuggestion = () => onSubmit?.(suggestion);
+	let saveHere = () => onSubmit?.();
 	let discard = onDiscard ?? onCancel;
 	let previousAnswer = previousFor(priorAnswers, current.id);
 	let step = (offset: number, from?: "primary") => {
@@ -1159,6 +1185,18 @@ export function QuestionView(props: QuestionViewProps) {
 										{submitting ? "Saving…" : error ? "Try again" : "Save"}
 									</button>
 								)}
+								{deferSave && onSubmit && !suggestion && !touched && answeredCount > 0
+									&& (!multiple || last) && (
+										// A selection the bar is not counting still needs a way to be saved.
+										<button
+											type="button"
+											onClick={saveHere}
+											disabled={disabled || submitting || !ready}
+											className="btn btn-sm btn-primary"
+										>
+											{submitting ? "Saving…" : error ? "Try again" : "Save"}
+										</button>
+									)}
 								{deferSave && onSubmit && suggestion && (
 									<button
 										type="button"
