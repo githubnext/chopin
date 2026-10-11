@@ -23,9 +23,8 @@ import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 
-let ActionSheet = lazy(() =>
-	import("./action-sheet").then(module => ({ default: module.ActionSheet }))
-);
+let loadActionSheet = () => import("./action-sheet");
+let ActionSheet = lazy(() => loadActionSheet().then(module => ({ default: module.ActionSheet })));
 
 export type DocumentAction = "copy-link" | "rename" | "archive" | "restore" | "delete";
 
@@ -47,16 +46,6 @@ export function documentMenuItems(channel: Pick<Api.Channel, "archivedAt">): Doc
 			{ action: "rename", label: "Rename", icon: PencilIcon },
 			{ action: "archive", label: "Archive", icon: ArchiveIcon },
 		];
-}
-
-/** On a phone, archiving reads as the menu's consequential choice, as deleting does everywhere. */
-export function documentSheetItems(channel: Pick<Api.Channel, "archivedAt">) {
-	return documentMenuItems(channel).map(item => ({
-		action: item.action,
-		icon: item.icon,
-		label: item.label,
-		tone: item.destructive || item.action === "archive" ? "danger" as const : "normal" as const,
-	}));
 }
 
 export type DocumentMenuKeyAction = "close" | "first" | "last" | "next" | "previous";
@@ -212,6 +201,13 @@ export function DocumentActionsMenu(
 		else if (open) closeMenu();
 		else openAt(0);
 	};
+	// A phone's first tap should open the sheet, not wait for its code.
+	let preload = phone
+		? () => {
+			void loadActionSheet();
+			void import("./copy-link");
+		}
+		: undefined;
 	let triggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
 		if (phone) return;
 		if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -249,6 +245,7 @@ export function DocumentActionsMenu(
 						data-tooltip="Document actions"
 						onClick={toggleMenu}
 						onKeyDown={triggerKeyDown}
+						onPointerDown={preload}
 						ref={button}
 						type="button"
 					>
@@ -259,7 +256,7 @@ export function DocumentActionsMenu(
 				<Suspense fallback={null}>
 					<ActionSheet
 						immediate={["copy-link"]}
-						items={documentSheetItems(channel)}
+						items={items}
 						label={`Actions for ${channel.title}`}
 						onClose={() => setSheetOpen(false)}
 						onSelect={action => onAction(action as DocumentAction)}

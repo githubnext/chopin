@@ -36,14 +36,70 @@ export function filterDocumentGroups(groups: DocumentGroup[], query: string): Do
 	});
 }
 
-/** Recents earn their place only once the tree holds more than they would repeat. */
-export const RECENT_DOCUMENTS = 3;
+const RECENT_LIMIT = 8;
 
-export function recentDocuments(parents: Channel[], limit = RECENT_DOCUMENTS): Channel[] {
-	if (parents.length <= limit + 1) return [];
-	return [...parents]
-		.sort((first, second) => Date.parse(second.updatedAt) - Date.parse(first.updatedAt))
+/** Storage access itself throws where site data is blocked. */
+export function browserStorage(): Storage | undefined {
+	try {
+		return localStorage;
+	} catch {
+		return undefined;
+	}
+}
+
+function recentKey(userId: string): string {
+	return `chopin:recent-documents:${userId}`;
+}
+
+/** Each project's documents this browser's user opened, newest first. */
+export function readRecentIds(
+	storage: Pick<Storage, "getItem"> | undefined,
+	userId: string,
+	repositoryId: string,
+): string[] {
+	try {
+		let value: unknown = JSON.parse(storage?.getItem(recentKey(userId)) ?? "{}");
+		let ids = value && typeof value === "object"
+			? (value as Record<string, unknown>)[repositoryId]
+			: undefined;
+		return Array.isArray(ids) ? ids.filter(id => typeof id === "string") : [];
+	} catch {
+		return [];
+	}
+}
+
+export function rememberOpened(
+	storage: Pick<Storage, "getItem" | "setItem"> | undefined,
+	userId: string,
+	repositoryId: string,
+	documentId: string,
+): void {
+	try {
+		let all: Record<string, unknown> = JSON.parse(storage?.getItem(recentKey(userId)) ?? "{}");
+		let ids = readRecentIds(storage, userId, repositoryId).filter(id => id !== documentId);
+		all[repositoryId] = [documentId, ...ids].slice(0, RECENT_LIMIT);
+		storage?.setItem(recentKey(userId), JSON.stringify(all));
+	} catch {
+		// Recents are a convenience; private modes and full storage simply go without.
+	}
+}
+
+/**
+ * Recently opened documents other than the one on screen, still active in the catalogue.
+ * One alone would only repeat the tree, so recents show from two.
+ */
+export function recentDocuments(
+	ids: string[],
+	channels: Channel[],
+	currentId: string | undefined,
+	limit = 3,
+): Channel[] {
+	let known = new Map(channels.map(channel => [channel.id, channel]));
+	let recent = ids.filter(id => id !== currentId)
+		.map(id => known.get(id))
+		.filter((channel): channel is Channel => channel !== undefined && !channel.archivedAt)
 		.slice(0, limit);
+	return recent.length >= 2 ? recent : [];
 }
 
 export function editedLabel(updatedAt: string, now: number, locale?: string): string {

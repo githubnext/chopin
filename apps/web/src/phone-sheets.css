@@ -61,7 +61,9 @@
 	background: var(--color-gray-300);
 }
 
+/* A 44px target around the small filled circle iOS sheets close with. */
 .phone-sheet-close {
+	position: relative;
 	display: grid;
 	width: var(--control-target-coarse);
 	height: var(--control-target-coarse);
@@ -72,8 +74,21 @@
 	-webkit-tap-highlight-color: transparent;
 }
 
-.phone-sheet-close:active {
-	background: var(--color-hover);
+.phone-sheet-close::before {
+	content: "";
+	position: absolute;
+	width: calc(var(--spacing) * 7.5);
+	height: calc(var(--spacing) * 7.5);
+	border-radius: var(--radius-full);
+	background: var(--color-inset);
+}
+
+.phone-sheet-close:active::before {
+	background: var(--color-selected);
+}
+
+.phone-sheet-close > svg {
+	position: relative;
 }
 
 /* Documents ------------------------------------------------------------ */
@@ -82,6 +97,7 @@
 	position: relative;
 	display: flex;
 	width: 100%;
+	max-width: var(--sheet-max-width);
 	height: min(
 		calc(100dvh * var(--sheet-large-detent)),
 		calc(100dvh - env(safe-area-inset-top) - var(--sheet-gap))
@@ -286,6 +302,10 @@
 
 [data-sheet-page="archived"] .documents-sheet-scroll {
 	padding-top: calc(var(--spacing) * 2);
+}
+
+/* Without the New document footer, the list itself keeps clear of the home indicator. */
+.documents-sheet-scroll:last-child {
 	padding-bottom: calc(var(--spacing) * 3 + env(safe-area-inset-bottom));
 }
 
@@ -328,11 +348,6 @@
 	border-radius: var(--radius-lg);
 	background: var(--color-inset);
 	-webkit-tap-highlight-color: transparent;
-}
-
-.documents-sheet-recent[aria-current="page"] {
-	outline: var(--focus-ring-width) solid var(--color-brand);
-	outline-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .documents-sheet-recent:active {
@@ -479,12 +494,24 @@
 	}
 }
 
+/* Renaming shows the title even where the bar keeps it hidden until the page scrolls. */
+.workspace-root[data-workspace-title] .phone-top-bar-title:has(input) {
+	opacity: 1;
+}
+
+/* A tap leaves :hover behind on touch screens; a trigger shouldn't stay filled under its sheet. */
+@media (hover: none) {
+	.phone-top-bar-slot .btn-ghost:hover:not(:active) {
+		background-color: transparent;
+	}
+}
+
 /* Action sheet --------------------------------------------------------- */
 
 .action-sheet {
 	display: grid;
 	width: 100%;
-	max-width: var(--phone-tab-row-max);
+	max-width: var(--sheet-max-width);
 	gap: var(--sheet-gap);
 	padding: 0 calc(var(--sheet-gap) + env(safe-area-inset-right))
 		max(var(--sheet-gap), env(safe-area-inset-bottom))
@@ -495,9 +522,7 @@
 	display: grid;
 	overflow: hidden;
 	border-radius: var(--radius-sheet);
-	background: var(--color-glass);
-	-webkit-backdrop-filter: var(--glass-filter);
-	backdrop-filter: var(--glass-filter);
+	background: var(--color-page);
 	box-shadow: var(--shadow-overlay);
 }
 

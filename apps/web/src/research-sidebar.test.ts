@@ -2,7 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { documentGroups, ProjectSidebar } from "./project-sidebar";
+import { documentGroups } from "./documents-sheet-model";
+import { ProjectSidebar } from "./project-sidebar";
 
 import type { ComponentProps } from "react";
 import type * as Api from "./api";

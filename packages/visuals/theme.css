@@ -258,6 +258,7 @@
 	/* Phone sheets: documents stand at a large detent; menus become grouped action sheets. */
 	--sheet-large-detent: 0.92;
 	--sheet-gap: calc(var(--spacing) * 2);
+	--sheet-max-width: 35rem;
 	--action-sheet-row-height: calc(var(--spacing) * 14);
 
 	/* Empty states share one illustration and copy rhythm. */

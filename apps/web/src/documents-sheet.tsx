@@ -19,16 +19,18 @@ import { ActionSheet } from "./action-sheet";
 import { unansweredDecisionsLabel } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import {
+	browserStorage,
 	documentGroups,
 	editedLabel,
 	filterDocumentGroups,
+	readRecentIds,
 	recentDocuments,
 } from "./documents-sheet-model";
-import { canManageProject } from "./navigation-model";
+import { canManageProject, documentDestination } from "./navigation-model";
 
 import "./phone-sheets.css";
 
-import type { MouseEvent } from "react";
+import type { MouseEvent, RefObject } from "react";
 import type * as Api from "./api";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
@@ -51,11 +53,11 @@ export function DocumentsSheet(
 		onCreateDocument,
 		onDocumentAction,
 		onLoadMore,
-		onClosed,
 		onNavigate,
 		onOpenChange,
 		onSignOut,
 		open,
+		opener,
 		pendingCreations,
 		projects,
 		user,
@@ -68,11 +70,11 @@ export function DocumentsSheet(
 		onCreateDocument: (project: Api.NavigationProject) => void;
 		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
-		onClosed: () => void;
 		onNavigate: (documentId: string, path: string) => void;
 		onOpenChange: (open: boolean) => void;
 		onSignOut: () => void;
 		open: boolean;
+		opener: RefObject<HTMLButtonElement | null>;
 		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
 		projects: ProjectDocuments[];
 		user: Api.User;
@@ -93,6 +95,7 @@ export function DocumentsSheet(
 	let [page, setPage] = useState<Page>("documents");
 	let [account, setAccount] = useState(false);
 	let close = useRef<HTMLButtonElement>(null);
+	let dismissed = useRef(false);
 	let back = useRef<HTMLButtonElement>(null);
 	let archivedRow = useRef<HTMLButtonElement>(null);
 	let projectListId = useId();
@@ -225,18 +228,27 @@ export function DocumentsSheet(
 		);
 	};
 
-	let recents = entry && page === "documents" && !query.trim()
-		? recentDocuments(documentGroups(entry.documents.channels, false).map(group => group.parent))
+	let recents = entry && open && page === "documents" && !query.trim()
+		? recentDocuments(
+			readRecentIds(browserStorage(), user.id, entry.project.repositoryId),
+			entry.documents.channels,
+			currentDocumentId,
+		)
 		: [];
 	let now = Date.now();
 
 	return (
 		<Drawer.Root
-			onOpenChange={onOpenChange}
+			onOpenChange={next => {
+				dismissed.current = !next;
+				onOpenChange(next);
+			}}
 			onOpenChangeComplete={next => {
 				if (next) return;
 				reset();
-				onClosed();
+				// A dismissal hands focus back once the sheet, and any field in it, has gone.
+				if (dismissed.current) opener.current?.focus({ preventScroll: true });
+				dismissed.current = false;
 			}}
 			open={ready && open}
 		>
@@ -337,15 +349,10 @@ export function DocumentsSheet(
 											<h3 className="documents-sheet-heading">Recent</h3>
 											<ul className="documents-sheet-recents">
 												{recents.map(channel => {
-													let path = documentPath(
-														channel.repositoryOwner,
-														channel.repositoryName,
-														channel.slug,
-													);
+													let path = documentDestination(projects, channel.id);
 													return (
 														<li key={channel.id}>
 															<a
-																aria-current={channel.id === currentDocumentId ? "page" : undefined}
 																className="documents-sheet-recent"
 																href={path}
 																onClick={follow(channel.id, path)}
@@ -445,7 +452,7 @@ export function DocumentsSheet(
 								immediate={["access", "sign-out"]}
 								items={[
 									{ action: "access", icon: LockIcon, label: "Manage repository access" },
-									{ action: "sign-out", icon: SignInIcon, label: "Sign out", tone: "danger" },
+									{ action: "sign-out", icon: SignInIcon, label: "Sign out" },
 								]}
 								label={`Account: ${user.login}`}
 								onClose={() => setAccount(false)}

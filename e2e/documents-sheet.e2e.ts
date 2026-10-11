@@ -76,6 +76,24 @@ test("the documents sheet filters inline and navigates to a document", async ({ 
 	await expect(page.locator(".phone-top-bar")).toContainText(title(other));
 });
 
+test("Recent lists the documents this person opened, not the one on screen", async ({ baseURL, join, room }) => {
+	let first = await otherDocument(baseURL!);
+	let second = await otherDocument(baseURL!);
+	let page = await join("ana", PHONE);
+	let recent = sheet(page).getByRole("region", { name: "Recent" });
+	for (let id of [first, second]) {
+		await documentsButton(page).click();
+		await sheet(page).getByRole("region", { name: "Documents" })
+			.getByRole("link", { name: title(id) }).click();
+		await expect(page.locator(".phone-top-bar")).toContainText(title(id));
+	}
+	await documentsButton(page).click();
+	await expect(recent.getByRole("link")).toHaveCount(2);
+	await expect(recent.getByRole("link").nth(0)).toContainText(title(first));
+	await expect(recent.getByRole("link").nth(1)).toContainText(title(room));
+	await expect(recent.getByRole("link", { name: new RegExp(title(second)) })).toHaveCount(0);
+});
+
 test("archived documents push a page inside the sheet and come back", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await documentsButton(page).click();
@@ -126,6 +144,8 @@ test("document menus open an action sheet on a phone", async ({ baseURL, join, r
 	await actions.getByRole("button", { name: "Rename", exact: true }).click();
 	let field = page.getByRole("textbox", { name: "Document title" });
 	await expect(field).toBeFocused();
+	// The bar hides its title until the page scrolls; renaming must show it regardless.
+	await expect(page.locator(".phone-top-bar-title")).toHaveCSS("opacity", "1");
 	expect(await field.evaluate(element => parseFloat(getComputedStyle(element).fontSize)))
 		.toBeGreaterThanOrEqual(16);
 	await field.press("Escape");

@@ -49,6 +49,7 @@ import {
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
+import { browserStorage, rememberOpened } from "./documents-sheet-model";
 import { PhoneHeader } from "./phone-header";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -317,6 +318,10 @@ export function RoomWorkspace(
 		onResearchChildOpen,
 		onResearchChildPublished,
 	} = useNavigationDocument();
+	// Phones list a project's recently opened documents in the documents sheet.
+	useEffect(() => {
+		if (!archivedAt) rememberOpened(browserStorage(), userId, repository.id, room);
+	}, [archivedAt, repository.id, room, userId]);
 	let [status, setStatus] = useState<Status>("connecting");
 	let [planState, setPlanState] = useState<PlanState>({ synced: false });
 	// Claimed while rendering, so a new document's title takes focus as soon as it mounts.

@@ -28,7 +28,6 @@ import {
 } from "@chopin/icons";
 import type * as Api from "./api";
 
-export { documentGroups } from "./documents-sheet-model";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentCreationPhase } from "./use-document-creation";

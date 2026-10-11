@@ -10,7 +10,8 @@ export type ActionSheetItem<Action extends string> = {
 	action: Action;
 	label: string;
 	icon?: (props: IconProps) => ReactNode;
-	tone?: "danger" | "normal";
+	/** Only for what cannot be undone; an archive has Undo, so it reads as ordinary. */
+	destructive?: boolean;
 };
 
 /**
@@ -75,7 +76,7 @@ export function ActionSheet<Action extends string>(
 							{items.map(item => (
 								<button
 									className="action-sheet-item"
-									data-tone={item.tone ?? "normal"}
+									data-tone={item.destructive ? "danger" : "normal"}
 									key={item.action}
 									onClick={() => choose(item.action)}
 									type="button"

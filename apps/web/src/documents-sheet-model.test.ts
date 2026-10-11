@@ -4,7 +4,9 @@ import {
 	documentGroups,
 	editedLabel,
 	filterDocumentGroups,
+	readRecentIds,
 	recentDocuments,
+	rememberOpened,
 } from "./documents-sheet-model";
 
 import type * as Api from "./api";
@@ -43,16 +45,32 @@ describe("documents sheet model", () => {
 		expect(filterDocumentGroups(groups, "nothing")).toEqual([]);
 	});
 
-	it("lists recents newest first only when the tree holds more than they repeat", () => {
-		expect(recentDocuments([offline, release], 3)).toEqual([]);
-		let more = [
-			release,
+	it("remembers opened documents per project and shows two or more besides the current", () => {
+		let values = new Map<string, string>();
+		let storage = {
+			getItem: (key: string) => values.get(key) ?? null,
+			setItem: (key: string, value: string) => void values.set(key, value),
+		};
+		for (let id of ["a", "b", "a", "c"]) rememberOpened(storage, "U", "R", id);
+		rememberOpened(storage, "U", "Other", "z");
+		expect(readRecentIds(storage, "U", "R")).toEqual(["c", "a", "b"]);
+		expect(readRecentIds(storage, "U", "Other")).toEqual(["z"]);
+		expect(readRecentIds(storage, "V", "R")).toEqual([]);
+		let archived = { ...release, archivedAt: "2026-10-11T00:00:00Z" };
+		expect(recentDocuments(["c", "a", "b"], [offline, archived, eviction], "c")).toEqual([]);
+		expect(recentDocuments(["c", "a", "b"], [offline, release, eviction], "c")).toEqual([
 			offline,
-			channel("d", "D", "2026-10-01T00:00:00Z"),
-			channel("e", "E", "2026-10-11T11:00:00Z"),
-			channel("f", "F", "2026-09-01T00:00:00Z"),
-		];
-		expect(recentDocuments(more, 3).map(value => value.id)).toEqual(["e", "a", "b"]);
+			release,
+		]);
+		expect(recentDocuments(["gone", "a"], [offline], undefined)).toEqual([]);
+		let broken = {
+			getItem: () => "{not json",
+			setItem: () => {
+				throw new Error("full");
+			},
+		};
+		expect(readRecentIds(broken, "U", "R")).toEqual([]);
+		expect(() => rememberOpened(broken, "U", "R", "a")).not.toThrow();
 	});
 
 	it("says when a document was edited", () => {

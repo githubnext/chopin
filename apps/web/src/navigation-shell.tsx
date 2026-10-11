@@ -266,10 +266,7 @@ export function NavigationShell(
 	let phone = usePhone();
 	// Phones navigate from a bottom sheet; it stays mounted once loaded so it can animate out.
 	let [sheetLoaded, setSheetLoaded] = useState(false);
-	let sheetDismissed = useRef(false);
-	useEffect(() => {
-		if (phone && drawerOpen) setSheetLoaded(true);
-	}, [drawerOpen, phone]);
+	if (phone && drawerOpen && !sheetLoaded) setSheetLoaded(true);
 	let immediateMotion = motionImmediately();
 	let previousMode = useRef(mode);
 	let modeChanged = previousMode.current !== mode;
@@ -650,7 +647,8 @@ export function NavigationShell(
 		if (action === "copy-link") {
 			let href =
 				new URL(documentDestination(projectsRef.current, channel.id), location.origin).href;
-			void import("./copy-link").then(module => module.copyLink(href, showNotice));
+			let written = (async () => navigator.clipboard.writeText(href))();
+			void import("./copy-link").then(module => module.copyLink(written, showNotice));
 			return;
 		}
 		if (action === "rename") {
@@ -845,9 +843,23 @@ export function NavigationShell(
 		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
 	let sidebarLoading = <ProjectSidebarLoading onCollapse={collapseSidebar} user={user} />;
+	// What the Projects sidebar and the phone documents sheet both read and do.
+	let catalogue = {
+		catalogueMode,
+		currentDocumentId,
+		onAddProject: () => showDialog("add"),
+		onCatalogueModeChange: setCatalogueMode,
+		onCreateDocument: (project: Api.NavigationProject) => void createDocument(project),
+		onDocumentAction: documentAction,
+		onLoadMore: loadMore,
+		pendingCreations: creation.pending,
+		projects,
+		user,
+	};
 	let sidebar = (
 		<Suspense fallback={sidebarLoading}>
 			<ProjectSidebar
+				{...catalogue}
 				accountMenu={accountPresence.phase !== "closed" && {
 					className: accountPresence.className,
 					closing: accountPresence.phase === "closing",
@@ -860,29 +872,19 @@ export function NavigationShell(
 				accountTriggerRef={accountTrigger}
 				accountWrapRef={accountWrap}
 				canCreateDocument={creationTarget.type !== "loading"}
-				pendingCreations={creation.pending}
 				newDocumentPhase={creationTarget.type === "loading"
 					? "loading"
 					: creationTarget.type === "project"
 					? creation.pending.get(creationTarget.project.repositoryId)
 					: undefined}
-				currentDocumentId={currentDocumentId}
 				onAccount={() => setAccountOpen(open => !open)}
 				focusProjectId={focusProjectId}
-				onAddProject={() => showDialog("add")}
 				onFocusedProject={() => setFocusProjectId(undefined)}
 				onRevealed={() => setReveal(undefined)}
 				reveal={reveal}
 				onCollapse={collapseSidebar}
-				onCreateDocument={project => void createDocument(project)}
-				onDocumentAction={documentAction}
-				onLoadMore={loadMore}
 				onNewDocument={newDocument}
 				onSearch={() => showDialog("search")}
-				onCatalogueModeChange={setCatalogueMode}
-				projects={projects}
-				catalogueMode={catalogueMode}
-				user={user}
 			/>
 		</Suspense>
 	);
@@ -1005,50 +1007,33 @@ export function NavigationShell(
 							shortcut={sidebarShortcut}
 						/>
 					)}
-					{phone && (sheetLoaded || drawerOpen) && (
-						<LazyDialogBoundary
-							onFailure={() => {
-								setDrawerOpen(false);
-								setDialogLoadFailed(true);
-							}}
-						>
-							<DocumentsSheet
-								activeRepositoryId={active?.repositoryId}
-								catalogueMode={catalogueMode}
-								currentDocumentId={currentDocumentId}
-								onAddProject={() => showDialog("add")}
-								onCatalogueModeChange={setCatalogueMode}
-								onCreateDocument={project => void createDocument(project)}
-								onDocumentAction={documentAction}
-								onLoadMore={loadMore}
-								onNavigate={navigateToDocument}
-								onClosed={() => {
-									// A dismissal hands focus back once the sheet, and any field in it, has gone.
-									if (sheetDismissed.current) drawerOpener.current?.focus({ preventScroll: true });
-									sheetDismissed.current = false;
-								}}
-								onOpenChange={open => {
-									sheetDismissed.current = !open;
-									setDrawerOpen(open);
-								}}
-								onSignOut={() => void signOut()}
-								open={drawerOpen}
-								pendingCreations={creation.pending}
-								projects={projects}
-								user={user}
-							/>
-						</LazyDialogBoundary>
-					)}
-					{drawerPresence.phase !== "closed" && (
+					{(phone ? sheetLoaded : drawerPresence.phase !== "closed") && (
 						<LazyDialogBoundary
 							onFailure={() => {
 								dismissDrawer();
 								setDialogLoadFailed(true);
 							}}
 						>
-							<NavigationDrawer motion={drawerPresence} onDismiss={dismissDrawer}>
-								{sidebar}
-							</NavigationDrawer>
+							{phone
+								? (
+									<DocumentsSheet
+										{...catalogue}
+										activeRepositoryId={active?.repositoryId}
+										onNavigate={navigateToDocument}
+										onOpenChange={setDrawerOpen}
+										onSignOut={signOut}
+										open={drawerOpen}
+										opener={drawerOpener}
+									/>
+								)
+								: (
+									<NavigationDrawer
+										motion={drawerPresence as Exclude<typeof drawerPresence, { phase: "closed" }>}
+										onDismiss={dismissDrawer}
+									>
+										{sidebar}
+									</NavigationDrawer>
+								)}
 						</LazyDialogBoundary>
 					)}
 					{children === undefined
