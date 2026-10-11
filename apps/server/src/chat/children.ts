@@ -51,6 +51,13 @@ function summary(child: ChannelRecord): ChildSummary {
 	return { id: child.id, title: child.title, createdAt: child.createdAt.toISOString() };
 }
 
+/** The one children failure whose text is written for the model. */
+export class UnknownChild extends Error {
+	constructor() {
+		super("no such child document of this document");
+	}
+}
+
 export function createChildDocuments(deps: ChildDocumentDeps): ChildDocuments {
 	let belongs = (child: ChannelRecord | undefined): child is ChannelRecord =>
 		!!child && child.parentChannelId === deps.rootId
@@ -75,10 +82,10 @@ export function createChildDocuments(deps: ChildDocumentDeps): ChildDocuments {
 		},
 		resolve,
 		async open(childId, action) {
-			if (!await resolve(childId)) throw new Error("no such child document of this document");
+			if (!await resolve(childId)) throw new UnknownChild();
 			return deps.withChildPlan(childId, async plan => {
 				// Archive and delete take the same transition, so this answer holds for the action.
-				if (!await resolve(childId)) throw new Error("no such child document of this document");
+				if (!await resolve(childId)) throw new UnknownChild();
 				return action(childRoom(childId, plan, deps.server));
 			});
 		},

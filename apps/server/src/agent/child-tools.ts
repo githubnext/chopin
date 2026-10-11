@@ -22,6 +22,7 @@ import {
 } from "./document-ops";
 import { implementationActive } from "../plan/service";
 
+import { UnknownChild } from "../chat/children";
 import type { ChildDocuments } from "../chat/children";
 import type { ActiveOwnerBinding } from "./active-owner";
 import type { DocumentRoom } from "./tools";
@@ -39,13 +40,32 @@ const childContext = z.object({
 
 const CHILD = { type: "string", minLength: 36, maxLength: 36 } as const;
 
+/** A message written for the model; any other failure is logged and reported generically. */
+class Refusal extends Error {}
+
+/** Storage and runtime errors can name hosts, queries or credentials; the model never sees them. */
+async function respond(name: string, produce: () => unknown): Promise<string> {
+	return answer(name, async () => {
+		try {
+			return await produce();
+		} catch (err) {
+			if (
+				err instanceof Refusal || err instanceof UnknownChild
+				|| err instanceof Arguments.ArgumentError
+			) throw err;
+			console.error(`[agent/${name}]`, err);
+			throw new Refusal("child documents are temporarily unavailable");
+		}
+	});
+}
+
 const MISSING = "no such child document of this document";
 
 /** The owner's session, admission and repository role, checked now rather than at turn start. */
 async function permitted(room: DocumentRoom, owner: Owner | undefined): Promise<ChildDocuments> {
-	if (!room.children) throw new Error("child documents are unavailable in this session");
+	if (!room.children) throw new Refusal("child documents are unavailable in this session");
 	if (!owner || owner.signal.aborted || !await owner.revalidate()) {
-		throw new Error("the Planner's repository access could not be confirmed");
+		throw new Refusal("the Planner's repository access could not be confirmed");
 	}
 	return room.children;
 }
@@ -53,9 +73,9 @@ async function permitted(room: DocumentRoom, owner: Owner | undefined): Promise<
 /** Parentage and root liveness again, at the moment of writing. */
 async function stillChild(children: ChildDocuments, owner: Owner, id: string) {
 	if (owner.signal.aborted) {
-		throw new Error("the Planner's repository access could not be confirmed");
+		throw new Refusal("the Planner's repository access could not be confirmed");
 	}
-	if (!await children.resolve(id)) throw new Error(MISSING);
+	if (!await children.resolve(id)) throw new Refusal(MISSING);
 }
 
 export const childTools = {
@@ -66,7 +86,7 @@ export const childTools = {
 		inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
 		metadata: { skipPermission: true },
 		execute: (_raw, { context: { room, owner } }) =>
-			answer("list_children", async () => {
+			respond("list_children", async () => {
 				let children = await permitted(room, owner);
 				let focus = room.currentMemberRequest?.()?.focus?.channelId;
 				return {
@@ -91,13 +111,13 @@ export const childTools = {
 		}),
 		metadata: { skipPermission: true },
 		execute: (raw, { context: { room, owner } }) =>
-			answer("read_child", async () => {
+			respond("read_child", async () => {
 				let { child, rest } = Arguments.childTarget(raw, "read_child");
-				if (Object.keys(rest).length) throw new Error("read_child accepts only `child`");
+				if (Object.keys(rest).length) throw new Refusal("read_child accepts only `child`");
 				let children = await permitted(room, owner);
 				return children.open(child, async opened => {
 					let summary = await children.resolve(opened.id);
-					if (!summary) throw new Error(MISSING);
+					if (!summary) throw new Refusal(MISSING);
 					return {
 						child: { id: opened.id, title: summary.title },
 						...await documentView(opened.plan),
@@ -123,7 +143,7 @@ export const childTools = {
 			additionalProperties: true,
 		}),
 		execute: (raw, { context: { room, owner } }) =>
-			answer("edit_child", async () => {
+			respond("edit_child", async () => {
 				let { child, rest } = Arguments.childTarget(raw, "edit_child");
 				let args = Arguments.editPlan(rest);
 				if (args.visualRoute) return { ok: false, reason: "visual-routing-unavailable" };
@@ -154,7 +174,7 @@ export const childTools = {
 			additionalProperties: false,
 		}),
 		execute: (raw, { context: { room, owner } }) =>
-			answer("anchor_child", async () => {
+			respond("anchor_child", async () => {
 				let { child, rest } = Arguments.childTarget(raw, "anchor_child");
 				let args = Arguments.anchorPlan(rest);
 				let children = await permitted(room, owner);

@@ -1,7 +1,7 @@
 import { installJobCleanup } from "./job.test-fixtures";
 import { expect, test } from "bun:test";
 import * as Chat from "./service";
-import { runJobTool } from "../agent/job-scope";
+import { refusal, runJobTool } from "../agent/job-scope";
 import { harness, JOB, until } from "./job.test-fixtures";
 
 installJobCleanup();
@@ -93,4 +93,11 @@ test("a successful retry clears a prior source-shape tool failure", async () => 
 	state.emit("session.idle");
 
 	expect(await running).toEqual({ status: "done", output: '{"added":1}' });
+});
+
+test("a background job is refused every child tool", () => {
+	let job = { kind: "prose" } as Parameters<typeof refusal>[0];
+	for (let name of ["list_children", "read_child", "edit_child", "anchor_child"]) {
+		expect(refusal(job, name)).toBeDefined();
+	}
 });

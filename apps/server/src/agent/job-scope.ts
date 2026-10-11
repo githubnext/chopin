@@ -21,7 +21,16 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"create_research_workspace",
 	"propose_investigation",
 	"revise_open_decision",
+	"edit_child",
+	"anchor_child",
 	...Object.values(JOB_TOOLS),
+]);
+
+export const CHILD_TOOLS: ReadonlySet<string> = new Set([
+	"list_children",
+	"read_child",
+	"edit_child",
+	"anchor_child",
 ]);
 
 export const INVESTIGATION_READS: ReadonlySet<string> = new Set([
@@ -38,6 +47,9 @@ export function refusal(job: Job | undefined, tool: string): string | undefined 
 	}
 	if (INVESTIGATION_READS.has(tool)) {
 		return "Investigation tools are available only to member Planner turns.";
+	}
+	if (CHILD_TOOLS.has(tool)) {
+		return "Child document tools are available only to member Planner turns.";
 	}
 	if (!WRITE_TOOLS.has(tool) || tool === own) return;
 	return `This is a background ${job.kind} job; use only ${own}. ${tool} is not available.`;

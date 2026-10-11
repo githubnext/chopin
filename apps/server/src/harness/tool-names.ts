@@ -1,5 +1,5 @@
 import type { ConversationPlan } from "@chopin/protocol";
-import { INVESTIGATION_READS, WRITE_TOOLS } from "../agent/job-scope";
+import { CHILD_TOOLS, INVESTIGATION_READS, WRITE_TOOLS } from "../agent/job-scope";
 
 export const PLANNER_TOOL_NAMES = [
 	"list_investigations",
@@ -16,6 +16,10 @@ export const PLANNER_TOOL_NAMES = [
 	"edit_implementation_graph",
 	"anchor_plan",
 	"reply_comment",
+	"list_children",
+	"read_child",
+	"edit_child",
+	"anchor_child",
 	"read_repository_file",
 	"list_repository_tree",
 	"search_repository",
@@ -32,7 +36,9 @@ export const VISUAL_PLANNER_TOOL_NAMES = Object.freeze([
 
 function jobNames(own: string): readonly string[] {
 	return Object.freeze([
-		...PLANNER_TOOL_NAMES.filter(name => !WRITE_TOOLS.has(name) && !INVESTIGATION_READS.has(name)),
+		...PLANNER_TOOL_NAMES.filter(name =>
+			!WRITE_TOOLS.has(name) && !INVESTIGATION_READS.has(name) && !CHILD_TOOLS.has(name)
+		),
 		own,
 	]);
 }

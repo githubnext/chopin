@@ -236,3 +236,20 @@ test("child tools are unavailable in a room without children", async () => {
 	} as never);
 	expect(String(output)).toContain("child documents are unavailable");
 });
+
+test("an unexpected storage failure reaches the model as a generic refusal", async () => {
+	let { call, child } = await rooted();
+	let original = console.error;
+	console.error = () => {};
+	let list = child.backend.storage.channels.children;
+	child.backend.storage.channels.children = async () => {
+		throw new Error("connection to 10.0.0.5:5432 refused password=hunter2");
+	};
+	try {
+		let text = await call("list_children", {});
+		expect(text).toBe("Error: child documents are temporarily unavailable");
+	} finally {
+		child.backend.storage.channels.children = list;
+		console.error = original;
+	}
+});

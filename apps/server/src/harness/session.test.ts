@@ -6,7 +6,7 @@ import { openPlannerSession } from "./session";
 import { fullPlanner } from "./atomic/full";
 import { forgetWorkspaces, rememberCheckout, stateDirectory } from "./atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
-import { BACKGROUND_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
+import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
 import { remotePlanner } from "./remote/registry";
 import { hostInputRoom } from "../testing/decisions";
 import { limits } from "@chopin/question";
@@ -378,4 +378,12 @@ describe("Planner workspaces", () => {
 			expect(instructions).not.toContain("intercom");
 		}
 	});
+});
+
+it("member Planner sessions include the child tools and background jobs never do", () => {
+	for (let name of ["list_children", "read_child", "edit_child", "anchor_child"]) {
+		expect(PLANNER_TOOL_NAMES).toContain(name);
+		expect(VISUAL_PLANNER_TOOL_NAMES).toContain(name);
+		for (let names of Object.values(BACKGROUND_TOOL_NAMES)) expect(names).not.toContain(name);
+	}
 });

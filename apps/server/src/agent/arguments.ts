@@ -146,7 +146,6 @@ function operation(raw: unknown, position: number): Operation {
 	}
 }
 
-/** Validate `edit_plan`'s tool input into the shape `edit.apply` expects. */
 /** A child tool's `child`, split from the arguments its root counterpart validates. */
 export function childTarget(raw: unknown, name: string): {
 	child: string;
@@ -160,6 +159,7 @@ export function childTarget(raw: unknown, name: string): {
 	return { child: child as string, rest };
 }
 
+/** Validate `edit_plan`'s tool input into the shape `edit.apply` expects. */
 export function editPlan(raw: unknown): {
 	revision: number;
 	operations: Operation[];

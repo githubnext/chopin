@@ -450,7 +450,7 @@ run `bun run ci` and validate relative links with exact casing.
 When a disposable Planner session is created, diagnostics report available tool
 names and the external GitHub MCP contribution. Counts vary with SDK and remote
 MCP versions. A healthy boundary includes Chopin's document tools (currently
-plan-named), repository tools, and allowed pull-request tools, and excludes
+plan-named), child document tools, repository tools, and allowed pull-request tools, and excludes
 ambient capabilities such as `bash`, filesystem access, URL fetch, host Git,
 issues, and unrestricted search. The exception is an `atomic` Planner session,
 which deliberately adds Atomic's builtins and coding tools; its summary and

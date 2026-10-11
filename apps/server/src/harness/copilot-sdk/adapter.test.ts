@@ -195,6 +195,45 @@ describe("copilot-sdk adapter", () => {
 		).rejects.toThrow(ToolMetadataMismatchError);
 	});
 
+	it("offers the child tools as host tools and fails closed when the live session drops one", async () => {
+		let names = ["read_plan", "list_children", "read_child", "edit_child", "anchor_child"];
+		let source = stubRuntimeSource();
+		let harness = createCopilotSdk({ credentials: () => "ghu_test", connect: () => source });
+		let session = await harness.doStart({
+			sessionId: "s1",
+			sandboxSession: { defaultWorkingDirectory: "/tmp" } as never,
+			sessionWorkDir: "/tmp",
+		});
+		let control = await session.doPromptTurn({
+			prompt: "children",
+			tools: names.map(name => ({ name })),
+			skills: [],
+			emit: () => {},
+		});
+		await control.done;
+		expect(source.sessions[0]!.config.availableTools)
+			.toEqual(names.map(name => `custom:${name}`));
+
+		let dropped = createCopilotSdk({
+			credentials: () => "ghu_test",
+			connect: () =>
+				stubRuntimeSource({
+					metadata: tools => metadataFor(tools.filter(tool => tool.name !== "edit_child")),
+				}),
+		});
+		let droppedSession = await dropped.doStart({
+			sessionId: "s2",
+			sandboxSession: { defaultWorkingDirectory: "/tmp" } as never,
+			sessionWorkDir: "/tmp",
+		});
+		await expect(droppedSession.doPromptTurn({
+			prompt: "children",
+			tools: names.map(name => ({ name })),
+			skills: [],
+			emit: () => {},
+		})).rejects.toThrow(ToolMetadataMismatchError);
+	});
+
 	it("fails closed when the live session reports an MCP tool alias", async () => {
 		let harness = createCopilotSdk({
 			credentials: () => "ghu_test",
