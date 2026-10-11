@@ -7,6 +7,10 @@ function deck(page: Page) {
 	return page.locator('[data-document-view="plan"] [data-deck]');
 }
 
+function slotOf(page: Page, id: string) {
+	return page.locator(`[data-document-view="plan"] [data-deck-slot="${id}"]`);
+}
+
 function top(page: Page) {
 	return deck(page).locator("[data-deck-top]");
 }
@@ -35,7 +39,7 @@ type Frame = { at: number; y: number; layer: number; opacity: number };
 
 /** Sample a card's shuffle at fractions of its duration, then let it finish. */
 async function sampleShuffle(page: Page, id: string, fractions: number[]) {
-	let slot = page.locator(`[data-deck-slot="${id}"]`);
+	let slot = slotOf(page, id);
 	await expect.poll(() =>
 		slot.evaluate(element => element.getAnimations().some(item => item.id === "deck-shuffle"))
 	).toBe(true);
@@ -196,7 +200,7 @@ test("an answered decision settles to the back and focus follows the new top", a
 	await expect(top(page)).toBeFocused();
 	// The answered card went to the back, and the rest moved up one place each.
 	await expect.poll(() => order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
-	await expect(page.locator(`[data-deck-slot="${fixture.ids[0]}"]`)).toHaveAttribute(
+	await expect(slotOf(page, fixture.ids[0]!)).toHaveAttribute(
 		"data-deck-settled",
 		"",
 	);
@@ -234,7 +238,7 @@ test("a collaborator's answer to my top card settles it and leaves my focus alon
 	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
 	await expect(deck(ana).getByText("1 of 3 · 1 decided")).toBeVisible();
 	await expect.poll(() => order(ana)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
-	await expect(ana.locator(`[data-deck-slot="${fixture.ids[0]}"]`)).toHaveAttribute(
+	await expect(slotOf(ana, fixture.ids[0]!)).toHaveAttribute(
 		"data-deck-settled",
 		"",
 	);
@@ -262,9 +266,11 @@ test("showing a back decision from Decisions brings it to the top and focuses it
 	await expect.poll(() => order(page)).toEqual(fixture.ids);
 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = page.locator(
-		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
-	)
+	// The Decisions tab is a deck too; bring the anchored card to its top first.
+	let decisionsDeck = page.locator('[data-document-view="decisions"] [data-deck]');
+	await decisionsDeck.getByRole("button", { name: "Next decision" }).click();
+	await decisionsDeck.getByRole("button", { name: "Next decision" }).click();
+	let card = decisionsDeck.locator("[data-deck-top] article[data-plan-sidecar-questionnaire]")
 		.filter({ hasText: fixture.prompts[2]! });
 	await card.getByRole("button", { name: /show in document/i }).click();
 

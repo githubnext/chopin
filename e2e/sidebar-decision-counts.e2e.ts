@@ -801,7 +801,9 @@ test("deleting an archived child updates the project total for a viewer in its p
 		let viewer = await join(`parent-viewer-${room.slice(0, 8)}`);
 		await addProject(viewer, baseURL!, ARCHIVED_CHILD);
 		await viewer.goto(parentPath);
-		await expect(content(viewer)).toHaveAttribute("aria-readonly", "true");
+		// A blank parent with open decisions opens on Decisions, so only wait for the room.
+		await expect(viewer.getByRole("button", { name: /^Decisions/, pressed: true }).first())
+			.toBeVisible();
 		await expect(viewer).toHaveURL(new RegExp(`${parentPath}$`));
 		let baseline = await catalogueTotal(viewer, ARCHIVED_CHILD.name);
 		let projects = sidebar(viewer);
