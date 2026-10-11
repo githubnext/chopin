@@ -1,6 +1,7 @@
 /** Browser coverage for decision card lifecycle states and metadata regrouping. */
 
 import { authenticate, content, expect, roomPath, test } from "./room";
+import { bringForward, deckSlot } from "./decision-deck-fixtures";
 import { expectNoHorizontalOverflow } from "./responsive";
 
 import type { Question } from "../packages/protocol/index";
@@ -86,6 +87,15 @@ test("discarding an open card moves it into a collapsed, persistent resolved his
 	await expect(card.getByText("Discard this decision?", { exact: true })).toBeVisible();
 	await card.getByRole("button", { name: "Discard", exact: true }).click();
 
+	// Discarded in this visit, it waits behind the open decision rather than leaving.
+	let slot = deckSlot(page, "Where should room state live?");
+	await expect(slot).toHaveAttribute("data-deck-settled", "");
+	await expect(slot).not.toHaveAttribute("data-deck-top");
+	await expect(slot).toContainText("Discarded by @ana");
+	await expect(page.getByRole("button", { name: /resolved$/ })).toHaveCount(0);
+
+	await page.reload();
+	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(
 		page.locator(`[data-document-view="decisions"] [data-plan-sidecar-questionnaire="${cardId}"]`),
 	)
@@ -116,22 +126,19 @@ test("discarding a decided card records the person who discarded it", async ({ j
 
 	await card(ana).getByText("In SQLite", { exact: true }).click();
 	await card(ana).getByRole("button", { name: "Save", exact: true }).click();
-	await expect(ben.getByRole("button", { name: "1 resolved" })).toBeVisible();
-	await ben.getByRole("button", { name: "1 resolved" }).click();
+	// Ben saw it open, so the decided card waits at the back of his deck.
+	await expect(deckSlot(ben, "Where should room state live?"))
+		.toHaveAttribute("data-deck-settled", "");
+	await bringForward(ben, "Where should room state live?");
 	await card(ben).getByRole("button", { name: "Discard", exact: true }).click();
 	await card(ben).getByRole("button", { name: "Discard decision" }).click();
 
-	await expect(ben.getByRole("button", { name: "1 resolved" }))
-		.toHaveAttribute("aria-expanded", "true");
 	let discardedCard = cardByPrompt(ben, "Where should room state live?");
 	await expect(discardedCard).toContainText("Discarded by @ben");
 	await expect(discardedCard).not.toContainText("Discarded by @ana");
 	await ben.reload();
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
-	await expect(ben.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
-		"aria-expanded",
-		"true",
-	);
+	await ben.getByRole("button", { name: "1 resolved" }).click();
 	await expect(cardByPrompt(ben, "Where should room state live?"))
 		.toContainText("Discarded by @ben");
 });
@@ -149,12 +156,15 @@ test("reopening a decision shares a fresh draft and a later Save survives reload
 
 	await card(ana).getByText("In SQLite", { exact: true }).click();
 	await card(ana).getByRole("button", { name: "Save", exact: true }).click();
-	await ana.getByRole("button", { name: "1 resolved" }).click();
+	await expect(deckSlot(ana, "Where should room state live?"))
+		.toHaveAttribute("data-deck-settled", "");
+	await bringForward(ana, "Where should room state live?");
 	let selected = card(ana).locator(".question-option[data-selected]");
 	await expect(selected).toHaveCount(1);
 	await expect(selected).toContainText("In SQLite");
 	await expect(card(ana).getByRole("radio")).toHaveCount(0);
 	await card(ana).getByRole("button", { name: "Reopen" }).click();
+	await bringForward(ben, "Where should room state live?");
 
 	for (let page of [ana, ben]) {
 		await expect(card(page).getByText("Previously: In SQLite · @ana")).toBeVisible();
@@ -163,13 +173,11 @@ test("reopening a decision shares a fresh draft and a later Save survives reload
 	await card(ben).getByText("On disk as MDX", { exact: true }).click();
 	await expect(card(ana).getByRole("radio", { name: "On disk as MDX" })).toBeChecked();
 	await card(ben).getByRole("button", { name: "Save", exact: true }).click();
-	await expect(ana.getByRole("button", { name: "1 resolved" })).toBeVisible();
+	await expect(deckSlot(ana, "Where should room state live?"))
+		.toHaveAttribute("data-deck-settled", "");
 	await ana.reload();
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	await expect(ana.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
-		"aria-expanded",
-		"true",
-	);
+	await ana.getByRole("button", { name: "1 resolved" }).click();
 	await expect(cardByPrompt(ana, "Where should room state live?"))
 		.toContainText("On disk as MDX");
 });
@@ -235,12 +243,12 @@ test("card metadata regroups Decisions before the document update arrives", asyn
 	await Promise.all([updateHeld, decided]);
 
 	await expect(ben.getByRole("button", { name: "Decisions, 1 unanswered" })).toBeVisible();
-	await expect(
-		questionnaire(ben).filter({
-			has: ben.getByRole("heading", { name: "Which of these belong in the first cut?" }),
-		}),
-	).toBeFocused();
-	await ben.getByRole("button", { name: "1 resolved" }).click();
+	// The deck moves the decided card behind and hands focus to the next open one.
+	await expect(deckSlot(ben, "Which of these belong in the first cut?")).toBeFocused();
+	// Its prompt arrives with the held document update, so find its slot by id.
+	await ben.getByRole("button", { name: "Next decision" }).click();
+	await expect(ben.locator(`[data-document-view="decisions"] [data-deck-slot="${questionId}"]`))
+		.toHaveAttribute("data-deck-top", "");
 	let decidedCard = ben.locator(
 		`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${questionId}"]`,
 	);

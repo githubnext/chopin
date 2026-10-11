@@ -1,6 +1,8 @@
 import { storedQuestion } from "../apps/server/src/testing/plan";
+import { expect } from "./room";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
+import type { Page } from "@playwright/test";
 
 /** The digest of a paragraph reading exactly `Anchored paragraph.` */
 export const ANCHORED_DIGEST =
@@ -85,4 +87,22 @@ ${choices.map(choice => `<Option id="${choice.id}" label="${choice.label}" />`).
 		prompts: PROMPTS.slice(0, count),
 		ids,
 	};
+}
+
+/** The desktop Decisions deck slot holding a decision, on top or waiting behind. */
+export function deckSlot(page: Page, prompt: string) {
+	return page.locator('[data-document-view="decisions"] [data-deck-slot]').filter({
+		hasText: prompt,
+	});
+}
+
+/** Cycle the desktop Decisions deck until a decision is on top and answerable. */
+export async function bringForward(page: Page, prompt: string) {
+	let slot = deckSlot(page, prompt);
+	let next = page.locator('[data-document-view="decisions"] [data-deck]')
+		.getByRole("button", { name: "Next decision" });
+	await expect(async () => {
+		if (await slot.getAttribute("data-deck-top") === null) await next.click();
+		await expect(slot).toHaveAttribute("data-deck-top", "", { timeout: 1_000 });
+	}).toPass();
 }

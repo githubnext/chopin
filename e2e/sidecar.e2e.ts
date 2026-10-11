@@ -13,6 +13,7 @@ import { chatInput, expectChatValue } from "./chat-input";
  */
 
 import { authenticate, content, edit, expect, ready, roomPath, test } from "./room";
+import { bringForward, deckSlot } from "./decision-deck-fixtures";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { Locator, Page } from "@playwright/test";
@@ -493,7 +494,8 @@ for (
 		let decisions = page.getByRole("button", { name: /^Decisions/ });
 		let plan = page.getByRole("button", { name: "Document", exact: true });
 		let stack = page.locator("[data-plan-decisions-scroll]");
-		let first = questionnaire(page).first();
+		// Desktop opens open decisions as a deck; choosing the tab focuses its top.
+		let first = page.locator('[data-document-view="decisions"] [data-deck-top]');
 
 		await decisions.click();
 		if (example.compact) {
@@ -585,13 +587,45 @@ test("decision cards save independently with progressive custom answers", async 
 
 	await storage.getByRole("radio", { name: /On disk as MDX/ }).check();
 	await saveStorage.click();
+	// The answered card waits behind the deck's next open decision.
 	await expect(scope).toBeVisible();
-	await expect(scope).toBeFocused();
+	await expect(deckSlot(page, "Which of these belong in the first cut?")).toBeFocused();
+	await expect(deckSlot(page, "Where should room state live?")).toContainText("Answered by @ana");
 	await expect(scope.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 	await expect(scope).not.toContainText("Answered by");
 	await expect(scope.getByRole("checkbox", { name: "Anchors" })).not.toBeChecked();
+	await expect(page.getByRole("button", { name: /resolved$/ })).toHaveCount(0);
 
-	let history = page.getByRole("button", { name: "1 resolved" });
+	let addRow = scope.getByRole("button", { name: "Add an option" });
+	await addRow.focus();
+	await page.keyboard.press("Enter");
+	let field = scope.getByRole("textbox", { name: "New option" });
+	await expect(field).toBeFocused();
+	let saveScope = scope.getByRole("button", { name: "Save", exact: true });
+	await expect(saveScope).toBeDisabled();
+	await field.press("Escape");
+	await expect(field).toHaveCount(0);
+	await expect(addRow).toBeFocused();
+	await addRow.click();
+	field = scope.getByRole("textbox", { name: "New option" });
+	await field.fill("Only collaborative anchors");
+	await field.press("Enter");
+	// It joins everyone's list as the next lettered row and is not chosen for anyone.
+	let added = scope.getByRole("checkbox", { name: "Only collaborative anchors" });
+	await expect(added).toBeVisible();
+	await expect(added).not.toBeChecked();
+	await expect(scope.locator("label", { hasText: "Only collaborative anchors" })).toContainText(
+		"D",
+	);
+	await expect(addRow).toBeFocused();
+	await expect(saveScope).toBeDisabled();
+	await added.check();
+	await scope.getByRole("checkbox", { name: /^Anchors/ }).check();
+	await saveScope.click();
+
+	// With nothing left open, the deck gives way to resolved history.
+	let history = page.getByRole("button", { name: "2 resolved" });
+	await expect(history).toBeVisible();
 	let historyIcon = history.locator("[data-feedback-icon]");
 	await history.hover();
 	await page.evaluate(() => {
@@ -629,6 +663,11 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
 	await expect(resolved.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+	let resolvedScope = questionnaire(page).filter({
+		hasText: "Which of these belong in the first cut?",
+	});
+	await expect(resolvedScope).toContainText("Only collaborative anchors");
+	await expect(resolvedScope).toContainText("Answered by @ana");
 	let iconStarts = await page.evaluate(() => {
 		let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
 		return record.starts;
@@ -662,47 +701,13 @@ test("decision cards save independently with progressive custom answers", async 
 	).toBe(iconStarts);
 	await expect(history).not.toHaveAttribute("aria-controls");
 	await expect(historyContent).toHaveCount(0);
-
-	let addRow = scope.getByRole("button", { name: "Add an option" });
-	await addRow.focus();
-	await page.keyboard.press("Enter");
-	let field = scope.getByRole("textbox", { name: "New option" });
-	await expect(field).toBeFocused();
-	let saveScope = scope.getByRole("button", { name: "Save", exact: true });
-	await expect(saveScope).toBeDisabled();
-	await field.press("Escape");
-	await expect(field).toHaveCount(0);
-	await expect(addRow).toBeFocused();
-	await addRow.click();
-	field = scope.getByRole("textbox", { name: "New option" });
-	await field.fill("Only collaborative anchors");
-	await field.press("Enter");
-	// It joins everyone's list as the next lettered row and is not chosen for anyone.
-	let added = scope.getByRole("checkbox", { name: "Only collaborative anchors" });
-	await expect(added).toBeVisible();
-	await expect(added).not.toBeChecked();
-	await expect(scope.locator("label", { hasText: "Only collaborative anchors" })).toContainText(
-		"D",
-	);
-	await expect(addRow).toBeFocused();
-	await expect(saveScope).toBeDisabled();
-	await added.check();
-	await scope.getByRole("checkbox", { name: /^Anchors/ }).check();
-	await saveScope.click();
-	let allResolved = page.getByRole("button", { name: "2 resolved" });
-	await expect(allResolved).toBeVisible();
-	await allResolved.click();
-	let resolvedScope = questionnaire(page).filter({
-		hasText: "Which of these belong in the first cut?",
-	});
-	await expect(resolvedScope).toContainText("Only collaborative anchors");
-	await expect(resolvedScope).toContainText("Answered by @ana");
 });
 
 test("Save and Next wait for a chosen answer", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
+	await bringForward(page, "Which of these belong in the first cut?");
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
 	});
@@ -737,6 +742,7 @@ test("a rejected save is announced as an alert with motion feedback", async ({ j
 	await seed(PROSE);
 	await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
+	await bringForward(page, "Which of these belong in the first cut?");
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
 	});
@@ -879,10 +885,10 @@ test("an option one member adds is shared, durable, and choosable by another", a
 	await chosen.check();
 	await storage(bo).getByRole("button", { name: "Save", exact: true }).click();
 
+	// Each reader saw it open, so the answered card waits behind the open deck.
 	for (let page of [ana, bo]) {
-		await page.getByRole("button", { name: "1 resolved" }).click();
-		await expect(questionnaire(page).filter({ hasText: "Where should room state live?" }))
-			.toContainText("In PostgreSQL");
+		await expect(deckSlot(page, "Where should room state live?")).toContainText("Answered by @bo");
+		await expect(deckSlot(page, "Where should room state live?")).toContainText("In PostgreSQL");
 	}
 });
 
@@ -955,6 +961,7 @@ test("discarding asks first", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
+	await bringForward(page, "Which of these belong in the first cut?");
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
 	});
