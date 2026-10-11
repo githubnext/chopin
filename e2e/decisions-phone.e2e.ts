@@ -1,3 +1,4 @@
+import { deckSeed } from "./decision-deck-fixtures";
 import { expect, test } from "./room";
 
 import type { Page } from "@playwright/test";
@@ -219,4 +220,14 @@ test("desktop keeps the in-card Save and the inline card", async ({ join, seed }
 	await expect(card.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
 	await expect(card.getByRole("button", { name: "Discard", exact: true })).toBeVisible();
 	await expect(page.locator(".decision-save-bar")).toHaveCount(0);
+});
+
+test("phone: several open decisions stay a list with the save bar, not a deck", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Decisions on a phone." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana", PHONE);
+	await showDecisions(page);
+	let view = page.locator('[data-document-view="decisions"]:visible');
+	await expect(view.locator("article[data-plan-sidecar-questionnaire]")).toHaveCount(3);
+	await expect(view.locator("[data-deck]")).toHaveCount(0);
 });
