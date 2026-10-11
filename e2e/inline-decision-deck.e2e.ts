@@ -34,8 +34,12 @@ function scrub(page: Page, fraction: number) {
 type Frame = { at: number; y: number; layer: number; opacity: number };
 
 /** Sample a card's shuffle at fractions of its duration, then let it finish. */
-function sampleShuffle(page: Page, id: string, fractions: number[]) {
-	return page.locator(`[data-deck-slot="${id}"]`).evaluate((element, points) => {
+async function sampleShuffle(page: Page, id: string, fractions: number[]) {
+	let slot = page.locator(`[data-deck-slot="${id}"]`);
+	await expect.poll(() =>
+		slot.evaluate(element => element.getAnimations().some(item => item.id === "deck-shuffle"))
+	).toBe(true);
+	return slot.evaluate((element, points) => {
 		let shuffle = element.getAnimations().find(animation => animation.id === "deck-shuffle");
 		if (!shuffle) return undefined;
 		shuffle.pause();
@@ -315,12 +319,15 @@ test("a tall card coming forward never paints over what is below the deck", asyn
 			let stage = element.querySelector<HTMLElement>(".decision-deck-stage")!;
 			let rect = incoming.getBoundingClientRect();
 			let scale = rect.height / incoming.offsetHeight;
-			let clip = /inset\([^)]*\)/.exec(getComputedStyle(incoming).clipPath)?.[0] ?? "";
-			let bottom = Number.parseFloat(clip.replace("inset(", "").split(" ")[2] ?? "0") || 0;
+			let clip = /inset\(([^)]*)\)/.exec(getComputedStyle(incoming).clipPath)?.[1] ?? "";
+			let bottom = Number.parseFloat(clip.split(/\s+/)[2] ?? "");
 			let visible = rect.top + (incoming.offsetHeight - bottom) * scale;
-			return visible - stage.getBoundingClientRect().bottom;
+			return { bottom, overshoot: visible - stage.getBoundingClientRect().bottom };
 		}, fixture.ids[1]!);
-		expect(overshoot, `at ${fraction}`).toBeLessThanOrEqual(2);
+		// A tall card coming forward is clipped; a missing clip must not read as zero.
+		expect(Number.isFinite(overshoot.bottom), `clip parsed at ${fraction}`).toBe(true);
+		expect(overshoot.bottom, `clip at ${fraction}`).toBeGreaterThan(0);
+		expect(overshoot.overshoot, `at ${fraction}`).toBeLessThanOrEqual(2);
 	}
 	await deck(page).evaluate(element => {
 		for (let animation of element.getAnimations({ subtree: true })) animation.finish();

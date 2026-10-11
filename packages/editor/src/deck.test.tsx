@@ -74,5 +74,8 @@ describe("deck time tokens", () => {
 		expect(parseMs(".6s", 1)).toBe(600);
 		expect(parseMs("0.45s", 1)).toBe(450);
 		expect(parseMs("", 600)).toBe(600);
+		expect(parseMs("600", 1)).toBe(600);
+		expect(parseMs("0s", 1)).toBe(0);
+		expect(parseMs("calc(var(--x) * 2)", 600)).toBe(600);
 	});
 });
