@@ -114,6 +114,18 @@ describe("configuration", () => {
 			.toThrow("HARNESS=remote requires BACKGROUND_JOBS=off");
 	});
 
+	it("keeps a detached remote Planner's ownership two minutes unless PLANNER_ATTACH_GRACE_MS says otherwise", () => {
+		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
+		expect(configured(remote).plannerAttachGraceMs).toBe(120_000);
+		expect(configured({ ...remote, PLANNER_ATTACH_GRACE_MS: "0" }).plannerAttachGraceMs).toBe(0);
+		expect(configured({ ...remote, PLANNER_ATTACH_GRACE_MS: "3600000" }).plannerAttachGraceMs)
+			.toBe(3_600_000);
+		for (let value of ["", "-1", "1.5", "3600001", "soon"]) {
+			expect(() => configured({ ...remote, PLANNER_ATTACH_GRACE_MS: value }))
+				.toThrow("PLANNER_ATTACH_GRACE_MS must be an integer between 0 and 3600000 milliseconds");
+		}
+	});
+
 	it("chooses a full Atomic Planner by harness alone, in hosted and local configuration", () => {
 		let atomic = { HARNESS: "atomic", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" };
 		for (let mode of [{}, LOCAL]) {

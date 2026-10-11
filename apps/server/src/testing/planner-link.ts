@@ -2,6 +2,8 @@ import { connectPlannerLink, linkSocket, plannerLinkUrl } from "@chopin/planner-
 
 import { AdmissionDenied } from "../auth/admission";
 import { GitHubError } from "../github/client";
+import { Sessions } from "../auth/session";
+import { PlannerAttachments } from "../harness/remote/attachments";
 import { admitPlannerLink, openPlannerLinkSocket } from "../harness/remote/endpoint";
 import { MemoryStorage } from "../storage/memory/adapter";
 
@@ -11,64 +13,122 @@ import type {
 	TurnContext,
 } from "@chopin/planner-link/client";
 import type { Repository } from "../github/client";
+import type { AttachmentAuth } from "../harness/remote/attachments";
 import type { PlannerLinkAuth, PlannerLinkSocketData } from "../harness/remote/endpoint";
 import type { PlannerLink } from "../harness/remote/link";
 
-export const READER_TOKEN = "reader-token";
+export const MEMBER_TOKEN = "member-token";
+export const RIVAL_TOKEN = "rival-token";
+export const VIEWER_TOKEN = "viewer-token";
+export const GUEST_TOKEN = "guest-token";
 export const OUTSIDER_TOKEN = "outsider-token";
 export const DENIED_TOKEN = "denied-token";
 
+const ACCOUNTS: Record<string, { id: string; login: string; push: boolean; signedIn: boolean }> = {
+	[MEMBER_TOKEN]: { id: "U_member", login: "member", push: true, signedIn: true },
+	[RIVAL_TOKEN]: { id: "U_rival", login: "rival", push: true, signedIn: true },
+	[VIEWER_TOKEN]: { id: "U_viewer", login: "viewer", push: false, signedIn: true },
+	[GUEST_TOKEN]: { id: "U_guest", login: "guest", push: true, signedIn: false },
+};
+
+function loginToken(login: string): string {
+	return `${login}-browser-login`;
+}
+
+function scoreRepository(owner: string, name: string, push: boolean): Repository {
+	return {
+		id: "R_score",
+		owner,
+		name,
+		fullName: `${owner}/${name}`,
+		private: true,
+		url: `https://github.test/${owner}/${name}`,
+		defaultBranch: "main",
+		permissions: { pull: true, push, admin: false },
+	};
+}
+
 /**
- * GitHub as hosted MCP sees it: the reader can pull `octo-org/score`, the
- * outsider is a valid account without access, the denied account fails
- * admission, and every other token is rejected by GitHub.
+ * GitHub as hosted MCP sees it: the member and the rival can push to
+ * `octo-org/score` and are signed in to Chopin in a browser, the viewer can
+ * only pull, the guest can push but never signed in, the outsider is a valid
+ * account without access, the denied account fails admission, and every other
+ * token is rejected by GitHub.
  */
 export async function linkAuth(channelId?: string) {
 	let storage = new MemoryStorage();
 	let now = new Date();
-	await storage.users.put({ id: "U_reader", login: "reader", avatarUrl: "", now });
+	for (let account of Object.values(ACCOUNTS)) {
+		await storage.users.put({ id: account.id, login: account.login, avatarUrl: "", now });
+	}
+	let sessions = new Sessions(storage, false);
+	let logins = new Map<string, string>();
+	for (let account of Object.values(ACCOUNTS)) {
+		if (!account.signedIn) continue;
+		let issued = await sessions.issue(account.id, {
+			accessToken: loginToken(account.login),
+			accessExpiresIn: 28_800,
+			refreshToken: "refresh-token",
+			refreshExpiresIn: 86_400,
+		});
+		logins.set(account.login, issued.id);
+	}
 	let channel = await storage.channels.create({
 		id: channelId ?? crypto.randomUUID(),
 		repositoryId: "R_score",
 		repositoryOwner: "octo-org",
 		repositoryName: "score",
 		title: "Linked document",
-		createdBy: "U_reader",
+		createdBy: "U_member",
 		now,
 	});
 	let auth = {
 		config: { origin: "https://chopin.test" },
 		storage,
+		sessions,
+		clock: () => new Date(),
 		admission: {
 			async user(token: string) {
 				if (token === DENIED_TOKEN) throw new AdmissionDenied();
-				if (token === READER_TOKEN) return { id: "U_reader", login: "reader", avatarUrl: "" };
+				let account = ACCOUNTS[token];
+				if (account) return { id: account.id, login: account.login, avatarUrl: "" };
 				if (token === OUTSIDER_TOKEN) return { id: "U_outsider", login: "outsider", avatarUrl: "" };
 				throw new GitHubError("Bad credentials", 401);
+			},
+			async allowed(token: string) {
+				return token !== DENIED_TOKEN;
 			},
 		},
 		github: {
 			async repository(token: string, owner: string, name: string): Promise<Repository> {
-				if (token !== READER_TOKEN) throw new GitHubError("Not Found", 404);
-				return {
-					id: "R_score",
-					owner,
-					name,
-					fullName: `${owner}/${name}`,
-					private: true,
-					url: `https://github.test/${owner}/${name}`,
-					defaultBranch: "main",
-					permissions: { pull: true, push: false, admin: false },
-				};
+				let account = ACCOUNTS[token];
+				if (!account) throw new GitHubError("Not Found", 404);
+				return scoreRepository(owner, name, account.push);
+			},
+			async repositoryAccess(token: string, owner: string, name: string) {
+				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token);
+				return account ? scoreRepository(owner, name, account.push) : undefined;
 			},
 		},
-	} as unknown as PlannerLinkAuth;
-	return { auth, storage, channel };
+	};
+	return {
+		auth: auth as unknown as PlannerLinkAuth & AttachmentAuth & { github: typeof auth.github },
+		storage,
+		sessions,
+		logins,
+		channel,
+	};
 }
 
 /** A Bun server that serves only the Planner link, as the Chopin server does under HARNESS=remote. */
-export function linkServer(auth: PlannerLinkAuth, timeoutMs = 2_000, revalidateEveryMs?: number) {
+export function linkServer(
+	auth: PlannerLinkAuth & AttachmentAuth,
+	timeoutMs = 2_000,
+	revalidateEveryMs?: number,
+	graceMs = 2_000,
+) {
 	let links: PlannerLink[] = [];
+	let attachments = new PlannerAttachments(auth, graceMs);
 	let server = Bun.serve<PlannerLinkSocketData>({
 		hostname: "127.0.0.1",
 		port: 0,
@@ -82,6 +142,7 @@ export function linkServer(auth: PlannerLinkAuth, timeoutMs = 2_000, revalidateE
 		websocket: {
 			open(ws) {
 				openPlannerLinkSocket(ws, auth, {
+					attachments,
 					timeoutMs,
 					revalidateEveryMs,
 					register(_channelId, link) {
@@ -102,15 +163,19 @@ export function linkServer(auth: PlannerLinkAuth, timeoutMs = 2_000, revalidateE
 	});
 	return {
 		url: `http://127.0.0.1:${server.port}`,
+		attachments,
 		get links() {
 			return links;
 		},
-		stop: () => server.stop(true),
+		stop: () => {
+			attachments.close();
+			return server.stop(true);
+		},
 	};
 }
 
-/** Raw frames over a socket that authenticated as the reader, for protocol violations. */
-export async function rawLink(url: string, token = READER_TOKEN) {
+/** Raw frames over a socket that authenticated as the member, for protocol violations. */
+export async function rawLink(url: string, token = MEMBER_TOKEN) {
 	let socket = linkSocket(plannerLinkUrl(url), token);
 	let messages: any[] = [];
 	let arrivals = new Set<() => void>();
@@ -205,7 +270,7 @@ export function attach(
 	url: string,
 	document: string,
 	handlers: PlannerLinkHandlers,
-	token = READER_TOKEN,
+	token = MEMBER_TOKEN,
 ): Promise<PlannerLinkClient> {
 	return connectPlannerLink({ url, token, document, handlers });
 }
@@ -223,7 +288,7 @@ export async function nodeClient(url: string, document: string) {
 		node,
 		new URL("./planner-link-node-client.mjs", import.meta.url).pathname,
 		url,
-		READER_TOKEN,
+		MEMBER_TOKEN,
 		document,
 	], { stdin: "pipe", stdout: "pipe", stderr: "inherit" });
 	let reader = child.stdout.getReader();

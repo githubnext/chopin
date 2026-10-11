@@ -67,7 +67,7 @@ export type PlannerLinkHandlers = {
 export type PlannerLinkOptions = {
 	/** The Chopin origin, or the link's own `ws:`/`wss:` URL. */
 	url: string | URL;
-	/** A GitHub token whose account can read the document's repository. */
+	/** A GitHub token whose account can push to or administer the document's repository. */
 	token: string;
 	/** The document's id or URL. */
 	document: string;

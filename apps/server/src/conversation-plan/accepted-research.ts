@@ -13,6 +13,8 @@ type AcceptedResearchDeps = {
 	refreshAccess: (ws: Socket, force: boolean) => Promise<AuthorizationResult>;
 	unavailable: (id: string) => boolean;
 	ownerAvailable: (id: string) => Promise<void>;
+	/** False under `HARNESS=remote`, where only an attached Planner takes ownership. */
+	claimsOwnership?: boolean;
 	placeReference: (channelId: string, workspaceId: string) => Promise<"placed" | "deferred">;
 	scheduleRecovery: (deferred: number) => void;
 };
@@ -44,7 +46,12 @@ export async function startAcceptedResearch(
 			|| deps.unavailable(room.id)
 		) return false;
 		try {
-			await Chat.resolveOwner(deps.auth, repository, room.id, ws.data.sessionId);
+			await Chat.resolveOwner(
+				deps.auth,
+				repository,
+				room.id,
+				deps.claimsOwnership === false ? undefined : ws.data.sessionId,
+			);
 			return true;
 		} catch {
 			return false;

@@ -138,9 +138,12 @@ collaborative state and external implementation runs are durable.
   summary and research workers stay isolated. There is no flag for this; the
   harness is the choice.
 - **`HARNESS=remote` moves the model, not the authority.** Turns run in a client
-  attached at `/planner-link` with a GitHub bearer and pull access; Chopin's
+  attached at `/planner-link` with a GitHub bearer and push access; Chopin's
   host tools, Decisions, and room writes still run in the server. The attached
-  client sees what a turn sees and steers its document writes. See
+  client sees what a turn sees and steers its document writes. Attaching makes
+  the account's live browser login the document's Planner owner, one client per
+  document; nothing else claims ownership, and Planner requests to a document
+  without one fail with `planner-not-attached`. See
   [Hosted agent](docs/hosted-agent.md#remote-planner).
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.

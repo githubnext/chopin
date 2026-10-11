@@ -155,6 +155,7 @@ export type InvokePlannerError =
 	| "document-unavailable"
 	| "repository-forbidden"
 	| "document-archived"
+	| "planner-not-attached"
 	| "planner-owner-unavailable"
 	| "checkout-unverified"
 	| "planner-unavailable"
@@ -163,7 +164,7 @@ export type InvokePlannerError =
 export type InvokePlanner<Caller> = {
 	invoke(caller: Caller, input: InvokePlannerInput): Promise<
 		| { kind: "invoked"; document: DocumentSummary & { url: string } }
-		| { kind: "refused"; code: InvokePlannerError }
+		| { kind: "refused"; code: InvokePlannerError; message?: string }
 	>;
 };
 
@@ -518,7 +519,10 @@ export const TOOLS: Tool[] = [
 		description: "Post an instruction to a document's Planner, attributed to the caller, and "
 			+ "return its URL without waiting for the turn. The turn runs under the document's "
 			+ "Planner owner; without one, the caller's live Chopin browser login becomes the "
-			+ "owner, and otherwise the call is refused. Questions appear in Decisions.",
+			+ "owner, and otherwise the call is refused. Where the Planner runs in an attached "
+			+ "client, a document with no attached Planner refuses the call with "
+			+ "planner-not-attached and a message saying how to attach one. Questions appear in "
+			+ "Decisions.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -554,15 +558,27 @@ export const TOOLS: Tool[] = [
 					required: ["id", "title", "url"],
 					additionalProperties: false,
 				},
-				outcome([
-					"document-unavailable",
-					"repository-forbidden",
-					"document-archived",
-					"planner-owner-unavailable",
-					"checkout-unverified",
-					"planner-unavailable",
-					"planner-queue-full",
-				]),
+				{
+					type: "object",
+					properties: {
+						code: {
+							type: "string",
+							enum: [
+								"document-unavailable",
+								"repository-forbidden",
+								"document-archived",
+								"planner-not-attached",
+								"planner-owner-unavailable",
+								"checkout-unverified",
+								"planner-unavailable",
+								"planner-queue-full",
+							],
+						},
+						message: { type: "string" },
+					},
+					required: ["code"],
+					additionalProperties: false,
+				},
 			],
 		},
 	},
@@ -1098,7 +1114,10 @@ export function handler<Caller>(
 					let result = await options.invoke.invoke(caller, args as InvokePlannerInput);
 					return result.kind === "invoked"
 						? respond(text(result.document))
-						: respond(text({ code: result.code }, true));
+						: respond(text({
+							code: result.code,
+							...(result.message ? { message: result.message } : {}),
+						}, true));
 				}
 				if (tool.name === "upload_image" && options.upload) {
 					let prepared = prepareImage(tool.arguments);

@@ -18,6 +18,8 @@ import {
 	isPlannerLinkSocket,
 	openPlannerLinkSocket,
 } from "./harness/remote/endpoint";
+import { notAttachedMessage, PlannerAttachments } from "./harness/remote/attachments";
+import { documentUrl } from "./channels/document-url";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
@@ -79,7 +81,7 @@ import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
 
-import { PLANNER_LINK_PATH } from "@chopin/planner-link";
+import { LINK_CLOSE, PLANNER_LINK_PATH } from "@chopin/planner-link";
 
 import type { Server, ServerWebSocket } from "bun";
 import type { PlannerLinkSocketData } from "./harness/remote/endpoint";
@@ -128,6 +130,7 @@ let renewingLease: Promise<void> | undefined;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
+let plannerAttachments: PlannerAttachments | undefined;
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
 let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -307,6 +310,19 @@ function conversation(
 		auth: hostedAuth,
 		claimantSessionId,
 		repository,
+		plannerNotAttached: plannerAttachments
+			? async () => {
+				if (plannerAttachments!.attached(room.id)) return undefined;
+				let channel = await storage.channels.get(room.id);
+				let path = channel
+					? await documentUrl(channel, storage.channels)
+					: `/channels/${room.id}`;
+				return notAttachedMessage(
+					new URL(path, hostedAuth.config.origin).href,
+					`${repository.owner}/${repository.name}`,
+				);
+			}
+			: undefined,
 		persist: chat => Service.persist(opened, chat),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
@@ -674,6 +690,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						refreshAccess,
 						unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
 						ownerAvailable: id => jobRunner?.ownerAvailable(id) ?? Promise.resolve(),
+						claimsOwnership: !plannerAttachments,
 						placeReference: placeResearchReference,
 						scheduleRecovery: scheduleResearchRecovery,
 					}),
@@ -1148,8 +1165,7 @@ function listen(): Server<SocketData> {
 				return upgraded(req, self, outcome.data);
 			}
 			if (url.pathname === PLANNER_LINK_PATH) {
-				let enabled = config.agent && config.harness === "remote";
-				let outcome = await admitPlannerLink(req, hostedAuth, enabled);
+				let outcome = await admitPlannerLink(req, hostedAuth, !!plannerAttachments);
 				if (outcome instanceof Response) return outcome;
 				return upgraded(req, self, outcome);
 			}
@@ -1169,7 +1185,9 @@ function listen(): Server<SocketData> {
 		websocket: {
 			open(ws: AnySocket) {
 				if (isPlannerLinkSocket(ws)) {
+					if (!plannerAttachments) return ws.close(LINK_CLOSE.failed, "unavailable");
 					openPlannerLinkSocket(ws, hostedAuth, {
+						attachments: plannerAttachments,
 						unavailable: channelId => deletingChannels.has(channelId),
 					});
 				} else if (isSidebarSocket(ws)) scheduleSidebarRecheck(ws);
@@ -1234,6 +1252,7 @@ function drain(): Promise<void> {
 		summaryCoordinator?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
+		plannerAttachments?.close();
 		for (let result of await Promise.allSettled([stoppingJobs])) {
 			if (result.status === "rejected") record(result.reason);
 		}
@@ -1672,6 +1691,9 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 	},
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
+if (config.agent && config.harness === "remote") {
+	plannerAttachments = new PlannerAttachments(hostedAuth, config.plannerAttachGraceMs);
+}
 let definitions: JobDefinition[] = [];
 if (config.backgroundJobs) {
 	definitions.push(researchBriefDefinition({ config }));
@@ -1888,7 +1910,7 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 				defaultBranch: repository.defaultBranch,
 			},
 			channel.id,
-			session.session.id,
+			plannerAttachments ? undefined : session.session.id,
 		);
 		await jobRunner?.ownerAvailable(channel.id);
 	},

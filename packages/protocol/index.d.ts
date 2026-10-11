@@ -110,6 +110,12 @@ export declare namespace Session {
 	/** A request could not be served. Carries the `rid` it answers. */
 	export type Failure = KIND<"session:error"> & {
 		message: string;
+		/**
+		 * Set for a refusal the client presents in full rather than as a generic
+		 * failure. `planner-not-attached`: a Planner request under `HARNESS=remote`
+		 * to a document no client is attached to; `message` says how to attach one.
+		 */
+		code?: "planner-not-attached";
 	};
 
 	/** Liveness, and the smallest thing that proves request correlation works. */

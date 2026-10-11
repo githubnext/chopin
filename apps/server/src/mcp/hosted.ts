@@ -7,6 +7,7 @@ import {
 } from "@chopin/protocol/document-url";
 
 import { documentUrl } from "../channels/document-url";
+import { notAttachedMessage } from "../harness/remote/attachments";
 import { deterministicChannelId, isChannelId } from "../channels/id";
 import { documentSlug } from "../channels/slug";
 import { GitHubError } from "../github/client";
@@ -336,15 +337,17 @@ export function hosted(
 						instruction: input.instruction,
 						...(input.checkout === undefined ? {} : { checkout: input.checkout }),
 					});
+					let url =
+						new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
+					if (code === "planner-not-attached") {
+						return {
+							kind: "refused",
+							code,
+							message: notAttachedMessage(url, `${repository.owner}/${repository.name}`),
+						};
+					}
 					if (code) return { kind: "refused", code };
-					return {
-						kind: "invoked",
-						document: {
-							...summary(channel),
-							url:
-								new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href,
-						},
-					};
+					return { kind: "invoked", document: { ...summary(channel), url } };
 				},
 			}
 			: undefined,

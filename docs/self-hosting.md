@@ -255,15 +255,18 @@ bind to a public interface. Startup refuses `HARNESS_AUTH` and requires
 model. The route exists only with `AGENT` on and `HARNESS=remote`.
 
 The trust boundary moves to whoever attaches. A client authenticates with a
-GitHub token bearer, checked like hosted MCP, and needs pull access to the
-document's repository, rechecked before every session and turn and every 5
-minutes while it stays attached. It then receives what a Planner turn sees,
-including repository reads made with the document Planner owner's token, and
-decides what the Planner writes during turns writers start; its run reports
-never start a turn. The server never runs the client's
-tools and gains no shell or filesystem access from this harness. Until one
-Planner per document is enforced, the most recently attached link serves new
-sessions. Without an attached client, a Planner turn fails as unavailable. See
+GitHub token bearer, checked like hosted MCP, and needs push or administration
+access to the document's repository, rechecked before every session and turn and
+every 5 minutes while it stays attached. The same account must have signed in to
+this server in a browser: attaching makes that login the document's Planner
+owner, one client per document, and a detached or dropped link keeps it for
+`PLANNER_ATTACH_GRACE_MS` so the same account can reattach. The client then
+receives what a Planner turn sees, including repository reads made with that
+owner's token, and decides what the Planner writes during turns writers start;
+its run reports never start a turn. The server never runs the client's tools and
+gains no shell or filesystem access from this harness. Without an attached
+client, `@chopin` and `invoke_planner` are refused with `planner-not-attached`
+and instructions to attach one. See
 [Remote Planner](hosted-agent.md#remote-planner) for the behaviour and
 [Planner link](planner-link.md) for the wire format. The link shares the
 application's origin and port with `/ws` and `/mcp`, so a TLS-terminating proxy
@@ -339,6 +342,7 @@ the image.
 | `PORT`                         | `8787`                | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `MODEL`                        | `gpt-6-luna`          | Model requested for hosted agent sessions. Required under `HARNESS=pi` and `HARNESS=atomic`; under `atomic` it must be `provider/model` from Atomic's catalog. Optional under `HARNESS=remote`, where the attached client chooses its model and a set value is only passed along as the turn's request.                                                                                                                                                                                                                                                                                |
 | `HARNESS`                      | `copilot-sdk`         | Adapter name selected from Chopin's harness map (`copilot-sdk`, `pi`, `atomic`, or `remote`). An unknown name refuses at startup. `remote` runs Planner turns in a client attached at `/planner-link`; see [The remote Planner](#the-remote-planner). `atomic` gives every Planner session shell and filesystem access as the server process's user, hosted instances included; see [Choose and trust a harness](#choose-and-trust-a-harness).                                                                                                                                         |
+| `PLANNER_ATTACH_GRACE_MS`      | `120000`              | Under `HARNESS=remote`, how long a detached or dropped Planner link keeps the document's Planner ownership so the same account can reattach, in milliseconds, an integer between 0 and 3600000.                                                                                                                                                                                                                                                                                                                                                                                        |
 | `HARNESS_AUTH`                 | unset                 | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `pi`, it is required: `auto`, `openai`, `anthropic`, and `custom` require a loopback-only `SERVER_HOST`, only `ai-gateway` is allowed otherwise, and `direct` is always refused. For `atomic`, it is required and must be `auto`, which requires a loopback-only `SERVER_HOST`, or `ai-gateway`; every other value is refused. For `remote`, any value is refused. |
 | `HARNESS_EXTENSIONS`           | unset                 | Extension or package paths every atomic Planner session loads, as Atomic's `--extension` flag would, separated by the platform path delimiter (`:`, or `;` on Windows). A package's extensions, skills, and workflows all register. Each path must be absolute and exist; any other harness refuses the variable at startup. Background workers never load them. The code runs in the server process as its user.                                                                                                                                                                      |
 | `AGENT`                        | on                    | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |

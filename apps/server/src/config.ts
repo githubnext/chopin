@@ -26,6 +26,11 @@ export type Config = {
 	 */
 	harnessExtensions: string[];
 	/**
+	 * Under `HARNESS=remote`, how long a detached or dropped Planner link keeps
+	 * the document's Planner ownership for the same account to reattach.
+	 */
+	plannerAttachGraceMs: number;
+	/**
 	 * Whether to run the agent at all.
 	 *
 	 * Off is a deliberate choice, not a fallback: the server still refuses to
@@ -59,6 +64,7 @@ export type Config = {
 };
 
 const DEFAULT_PORT = 8787;
+const DEFAULT_ATTACH_GRACE_MS = 120_000;
 const DEFAULT_MODEL = "gpt-6-luna";
 
 /** The default is a Copilot model ID. Pi and Atomic resolve IDs against their
@@ -139,6 +145,16 @@ export function load(): Config {
 	) {
 		throw new Error("JEV_MODEL must be a valid model alias");
 	}
+	let graceRaw = process.env.PLANNER_ATTACH_GRACE_MS;
+	let plannerAttachGraceMs = graceRaw === undefined ? DEFAULT_ATTACH_GRACE_MS : Number(graceRaw);
+	if (
+		(graceRaw !== undefined && !/^\d+$/.test(graceRaw))
+		|| !Number.isSafeInteger(plannerAttachGraceMs) || plannerAttachGraceMs > 3_600_000
+	) {
+		throw new Error(
+			"PLANNER_ATTACH_GRACE_MS must be an integer between 0 and 3600000 milliseconds",
+		);
+	}
 	let selection = harnessSelection();
 	if (selection.harness === "remote" && backgroundJobs) {
 		throw new Error(
@@ -150,6 +166,7 @@ export function load(): Config {
 		...selection,
 		port: serverPort,
 		model: model(selection.harness),
+		plannerAttachGraceMs,
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
