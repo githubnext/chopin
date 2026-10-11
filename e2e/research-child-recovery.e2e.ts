@@ -665,6 +665,15 @@ test("a ready research card and its Chat notice survive reconnect without anothe
 	await expect(provenance.getByText(brief, { exact: true })).toBeHidden();
 	await briefToggle.click();
 	await expect(provenance.getByText(brief, { exact: true })).toBeVisible();
+	let briefPanel = opened.locator(`[id="${await briefToggle.getAttribute("aria-controls")}"]`);
+	await expect(briefPanel).toHaveAttribute("data-slot", "unfold");
+	await expect(briefPanel).toHaveAttribute("data-open", "");
+	await briefToggle.click();
+	await expect(briefToggle).toHaveAttribute("aria-expanded", "false");
+	await expect(provenance.getByText(brief, { exact: true })).toBeHidden();
+	await expect(briefToggle).toBeFocused();
+	await briefToggle.click();
+	await expect(provenance.getByText(brief, { exact: true })).toBeVisible();
 	await expect(surface.getByRole("complementary", { name: "Chat" })).toHaveCount(0);
 	await expect(opened.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await provenance.getByRole("button", { name: parentTitle, exact: true }).click();

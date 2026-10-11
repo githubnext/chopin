@@ -1,5 +1,6 @@
-import { useEffect, useId, useState } from "react";
-import { ChevronIcon, SparkleIcon } from "@chopin/icons";
+import { useEffect, useState } from "react";
+import { SparkleIcon } from "@chopin/icons";
+import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
 
 import { researchProvenance } from "./research-requests";
 
@@ -13,8 +14,8 @@ function plural(count: number, noun: string): string {
 /** A quiet line above a research child that names its parent, brief, and sources. */
 export function ChildProvenance({ channelId, parent }: { channelId: string; parent: ChildParent }) {
 	let [provenance, setProvenance] = useState<Research.Provenance>();
-	let [briefOpen, setBriefOpen] = useState(false);
-	let briefId = useId();
+	let brief = useUnfold();
+	let setBriefOpen = brief.setOpen;
 	useEffect(() => {
 		let controller = new AbortController();
 		setProvenance(undefined);
@@ -26,7 +27,7 @@ export function ChildProvenance({ channelId, parent }: { channelId: string; pare
 			// Provenance is context, not content; the document stays usable without it.
 			.catch(() => {});
 		return () => controller.abort();
-	}, [channelId]);
+	}, [channelId, setBriefOpen]);
 	if (!provenance || provenance.parentChannelId !== parent.id) return null;
 	let requestId = provenance.requestId;
 	let returnToCard = () => {
@@ -71,23 +72,13 @@ export function ChildProvenance({ channelId, parent }: { channelId: string; pare
 						</span>
 					</span>
 				</span>
-				<button
-					aria-controls={briefId}
-					aria-expanded={briefOpen}
-					className="child-provenance-toggle btn btn-sm btn-ghost"
-					onClick={() => setBriefOpen(open => !open)}
-					type="button"
-				>
+				<UnfoldToggle className="child-provenance-toggle btn btn-sm btn-ghost" unfold={brief}>
 					Brief
-					<ChevronIcon
-						aria-hidden="true"
-						className={briefOpen ? "rotate-90" : undefined}
-					/>
-				</button>
+				</UnfoldToggle>
 			</p>
-			<blockquote className="child-provenance-brief" hidden={!briefOpen} id={briefId}>
-				{provenance.brief}
-			</blockquote>
+			<UnfoldPanel unfold={brief}>
+				<blockquote className="child-provenance-brief">{provenance.brief}</blockquote>
+			</UnfoldPanel>
 		</div>
 	);
 }
