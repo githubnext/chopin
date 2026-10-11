@@ -101,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "cf9223a300a5e36ab22e6394d5c344a6eab34736178d197ae6c6d2d8b7bfd1dc"
+		"sourceHash": "dd6b04ffeeb0a69121c30e09a20a5328d95eeed5aedb8e74c67d05500e015eac"
 	},
 	{
 		"file": "apps/web/src/project-sidebar.tsx",
@@ -115,7 +115,7 @@
 				1
 			]
 		],
-		"sourceHash": "cf9223a300a5e36ab22e6394d5c344a6eab34736178d197ae6c6d2d8b7bfd1dc"
+		"sourceHash": "dd6b04ffeeb0a69121c30e09a20a5328d95eeed5aedb8e74c67d05500e015eac"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -157,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "895d89913307fd6884c56a0f7ccf8e698988a4546ca525465105b69c365a5db7"
+		"sourceHash": "6a831eddad9bc4aa3ee4e0d0be0b76611110e72c36dda112fdc1650bc4f1719a"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -171,7 +171,7 @@
 				1
 			]
 		],
-		"sourceHash": "895d89913307fd6884c56a0f7ccf8e698988a4546ca525465105b69c365a5db7"
+		"sourceHash": "6a831eddad9bc4aa3ee4e0d0be0b76611110e72c36dda112fdc1650bc4f1719a"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -192,7 +192,7 @@
 				1
 			]
 		],
-		"sourceHash": "895d89913307fd6884c56a0f7ccf8e698988a4546ca525465105b69c365a5db7"
+		"sourceHash": "6a831eddad9bc4aa3ee4e0d0be0b76611110e72c36dda112fdc1650bc4f1719a"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -227,7 +227,7 @@
 				1
 			]
 		],
-		"sourceHash": "2d5faf85305b49b9e298aca9a1ade41909561175dc0d4d44fbda7471793ad4c3"
+		"sourceHash": "085a1e93a556df3e2e0374330c3272badfbb1d53e5cbd748e71a8a4b4c7e69be"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",
