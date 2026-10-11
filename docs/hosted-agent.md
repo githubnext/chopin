@@ -332,14 +332,19 @@ can attach again within it and keeps the same ownership generation, and anyone
 else is refused. When it ends, the ownership is cleared under its generation, so
 a newer owner is never released by an old timer. An attach, including a grace
 reattach, binds only if no sign-out, expiry, or Planner reset of its ownership
-landed while it was checking; otherwise it is refused like an attached link
-would be closed. Attachments live in the server process; startup already clears
+landed while it was checking, including the eligibility checks of the sign-in
+it is about to claim with; otherwise it is refused like an attached link would
+be closed. Attachments live in the server process; startup already clears
 every owner reference, which releases every attachment.
 
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period,
-is refused with `planner-not-attached` before anything is posted or queued. The
+is refused with `planner-not-attached` before anything is posted or queued.
+Before accepting either, the server rechecks an attached link as its periodic
+recheck would: if the owner's browser sign-in has ended or storage no longer
+assigns that owner, it closes the link, releases the ownership, and refuses the
+request the same way. The
 refusal names the document URL and says to connect a Planner client to it over
 the Planner link from a session in a checkout of the repository, which attaches
 that session as the Planner; the browser shows that text on the `@chopin`

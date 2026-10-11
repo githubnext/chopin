@@ -48,7 +48,7 @@ function card(status: "running" | "paused") {
  * login of their own; only the attached member may own the Planner.
  */
 async function remoteRoom() {
-	let { auth, storage, channel, logins, revocations, signOut } = await linkAuth();
+	let { auth, storage, channel, logins, revocations, signOut, clock } = await linkAuth();
 	let server = linkServer(auth);
 	cleanups.push(server.stop);
 	revocations.add(id => server.attachments.sessionRevoked(id));
@@ -79,7 +79,7 @@ async function remoteRoom() {
 		config: configured(REMOTE),
 		claimantSessionId: logins.get("rival"),
 		plannerNotAttached: async () =>
-			server.attachments.attached(channel.id)
+			await server.attachments.confirmed(channel.id)
 				? undefined
 				: notAttachedMessage(url, "octo-org/score"),
 		activeOwner: () => owners.resolve(channel.id),
@@ -123,7 +123,40 @@ async function remoteRoom() {
 	};
 	let owner = async () =>
 		(await storage.channels.readAgent(channel.id, new Date()))?.agent?.ownerSessionId;
-	return { context, server, storage, channel, logins, url, ws, send, owner, events, signOut };
+	return {
+		context,
+		server,
+		storage,
+		channel,
+		logins,
+		url,
+		ws,
+		send,
+		owner,
+		events,
+		signOut,
+		clock,
+	};
+}
+
+/**
+ * The room with the member attached as its Planner and every browser sign-in
+ * expired, before the link's periodic recheck or any cleanup has noticed,
+ * counting what Chat saves from then on.
+ */
+async function expiredOwnerRoom() {
+	let room = await remoteRoom();
+	let member = await attach(room.server.url, room.channel.id, scriptedPlanner().handlers);
+	cleanups.push(() => member.detach());
+	expect(await room.owner()).toBe(room.logins.get("member"));
+	room.clock.skewMs = 31 * 24 * 60 * 60 * 1_000;
+	let saves = 0;
+	let persist = room.context.persist;
+	room.context.persist = async chat => {
+		saves++;
+		await persist(chat);
+	};
+	return { ...room, member, saves: () => saves };
 }
 
 test("with no attached Planner, @chopin and invoke_planner are refused with how to attach one, and nothing is posted or queued", async () => {
@@ -135,7 +168,8 @@ test("with no attached Planner, @chopin and invoke_planner are refused with how 
 		saves++;
 		await persist(chat);
 	};
-	let message = "No Planner is attached to this document. To attach one, connect a Planner client to "
+	let message =
+		"No Planner is attached to this document. To attach one, connect a Planner client to "
 		+ `${room.url} over the Planner link from a session in a checkout of octo-org/score; `
 		+ "that session becomes this document's Planner.";
 
@@ -232,6 +266,36 @@ test("an attached Planner receives @chopin and invoke_planner turns as their own
 	expect(context.chat.entries.map(entry => entry.text)).toContain(
 		"@rival resumed the Planner's workflows.",
 	);
+});
+
+test("once the attached Planner's owner sign-in expires, @chopin is refused with how to attach one before its periodic recheck, and nothing is posted or queued", async () => {
+	let room = await expiredOwnerRoom();
+	let { context } = room;
+	expect(await room.send("@chopin draft the plan")).toMatchObject({
+		kind: "session:error",
+		code: "planner-not-attached",
+		message: "No Planner is attached to this document. To attach one, connect a Planner client to "
+			+ `${room.url} over the Planner link from a session in a checkout of octo-org/score; `
+			+ "that session becomes this document's Planner.",
+	});
+	expect(context.chat.entries).toEqual([]);
+	expect(context.chat.waiting).toEqual([]);
+	expect(room.saves()).toBe(0);
+	expect(room.events).toEqual([]);
+	expect(await room.member.closed).toEqual({ code: 4401, reason: "sign-in-required" });
+	expect(room.server.attachments.attached(room.channel.id)).toBe(false);
+	expect(await room.owner()).toBeUndefined();
+});
+
+test("once the attached Planner's owner sign-in expires, invoke_planner is refused as planner-not-attached before its periodic recheck", async () => {
+	let room = await expiredOwnerRoom();
+	let { context } = room;
+	expect(await Chat.invoke(context, RIVAL, "Draft the plan")).toBe("planner-not-attached");
+	expect(context.chat.entries).toEqual([]);
+	expect(context.chat.waiting).toEqual([]);
+	expect(room.saves()).toBe(0);
+	expect(await room.member.closed).toEqual({ code: 4401, reason: "sign-in-required" });
+	expect(await room.owner()).toBeUndefined();
 });
 
 test("once the attached Planner's owner signs out or is reset, @chopin and invoke_planner are refused again, and another member can attach", async () => {

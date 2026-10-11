@@ -144,10 +144,13 @@ including the same one, can attach again immediately:
 The same checks before every `start` and `turn`, and the periodic one, also
 find an expired sign-in or a released ownership that nothing reported; an
 expired sign-in is reported as `sign-in-required` even when the stored
-ownership already reads as released. An `attach` that is still in progress when
-one of these causes lands, including a reattach within the grace period, is
-refused with the same code and close code instead of attaching. The `message`
-says what happened:
+ownership already reads as released. An `@chopin` message or `invoke_planner`
+call makes the same check first, so a link it finds stale is closed this way and
+the request is refused as [without an attached Planner](#without-an-attached-planner).
+An `attach` that is still in progress when one of these causes lands, including
+a reattach within the grace period, is refused with the same code and close code
+instead of attaching; a fresh attach whose sign-in ends while the server checks
+it is refused with `sign-in-required` (4401). The `message` says what happened:
 
 ```text
 The Chopin browser sign-in that made octocat this document's Planner ended, so the Planner was released. Sign in to Chopin at https://chopin.example in a browser as octocat, then attach again.
@@ -171,8 +174,10 @@ This document's Planner ownership was released, so octocat is no longer attached
 On a server running `HARNESS=remote`, an `@chopin` message in the browser and
 an MCP `invoke_planner` call for a document with no attached client are refused
 with the code `planner-not-attached`, and nothing is posted or queued. A
-document whose Planner is within its grace period counts as unattached. The
-refusal's message names the document URL:
+document whose Planner is within its grace period counts as unattached, and so
+does one whose attached link the request finds stale: its owner's browser
+sign-in has ended or the stored ownership no longer names it. The request closes
+that link before it is refused. The refusal's message names the document URL:
 
 ```text
 No Planner is attached to this document. To attach one, connect a Planner client to <document URL> over the Planner link from a session in a checkout of <owner/name>; that session becomes this document's Planner.
