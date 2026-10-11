@@ -134,39 +134,20 @@
 	},
 	{
 		"file": "packages/editor/src/styles.css",
-		"reason": "Existing sheet backdrop consumes the legacy shadow channels through rgb(); preserve current appearance and flag the color-space mismatch for separate review.",
-		"cases": [
-			[
-				"color",
-				"background",
-				"rgb(var(--shadow-color))",
-				"CSS > .plan-comment-sheet-backdrop",
-				1
-			]
-		]
-	},
-	{
-		"file": "packages/editor/src/styles.css",
-		"reason": "Bottom-sheet upward shadow has established geometry distinct from shared downward surface shadows; retained pending dedicated visual review.",
-		"cases": [
-			[
-				"shadow",
-				"box-shadow",
-				"0 -1rem 3rem rgb(var(--shadow-color) / 22%)",
-				"CSS > .plan-comment-sheet-popup",
-				1
-			]
-		]
-	},
-	{
-		"file": "packages/editor/src/styles.css",
-		"reason": "Drawer duration multiplies a shared duration by the gesture library runtime swipe-strength scalar; preserve proportional gesture response.",
+		"reason": "Sheet rise multiplies the shared sheet duration by the gesture library's runtime swipe-strength scalar (Base UI's --drawer-swipe-strength); preserve proportional gesture response.",
 		"cases": [
 			[
 				"motion",
 				"transition",
-				"transform calc(var(--drawer-swipe-strength, 1) * var(--duration-base))\n\t\tvar(--ease-out)",
+				"transform calc(var(--drawer-swipe-strength, 1) * var(--sheet-rise-dur))\n\t\tvar(--sheet-ease)",
 				"CSS > .plan-comment-sheet-popup",
+				1
+			],
+			[
+				"motion",
+				"transition-duration",
+				"calc(var(--drawer-swipe-strength, 1) * var(--sheet-fall-dur))",
+				"CSS > .plan-comment-sheet-popup[data-ending-style]",
 				1
 			]
 		]
@@ -455,7 +436,7 @@
 			[
 				"typography",
 				"font-size",
-				"var(--field-text-min)",
+				"max(var(--field-text-min), 1em)",
 				"CSS > @layer base > @media (pointer: coarse) > :is(textarea, select, input:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"]), [contenteditable]:not([contenteditable=\"false\"], .plan-content))",
 				1
 			]
