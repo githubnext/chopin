@@ -1620,7 +1620,11 @@ async function sessionRevoked(sessionId: string): Promise<void> {
 	experiments?.connections.revokeSession(sessionId);
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);
-	await Promise.all([resetOpenAgents(() => true, sessionId), jobs]);
+	await Promise.all([
+		resetOpenAgents(() => true, sessionId),
+		jobs,
+		plannerAttachments?.sessionRevoked(sessionId),
+	]);
 }
 
 async function credentialsWillRotate(sessionId: string, revision: number): Promise<void> {
@@ -1640,6 +1644,7 @@ async function credentialsWillRotate(sessionId: string, revision: number): Promi
 async function channelOwnerReset(channelId: string): Promise<void> {
 	let jobs = jobRunner?.channelOwnerReset(channelId);
 	ownerBindings?.revokeChannel(channelId);
+	plannerAttachments?.ownerReset(channelId);
 	await Promise.all([resetOpenAgents(room => room.id === channelId), jobs]);
 }
 

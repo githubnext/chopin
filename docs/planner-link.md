@@ -130,15 +130,36 @@ sends `refused` with `access-revoked` and closes the link with 4403; the turn
 that triggered the check fails. A GitHub outage during a periodic check leaves
 the link open.
 
+The ownership also ends, without a grace period, when the browser sign-in it
+rests on ends or the document's Planner is reset. The server then sends
+`refused` and closes an attached link at once, and any eligible account,
+including the same one, can attach again immediately:
+
+| Cause                                                          | Refusal code       | Close code |
+| -------------------------------------------------------------- | ------------------ | ---------- |
+| The owner's browser sign-in signs out or expires               | `sign-in-required` | 4401       |
+| A repository writer resets the document's Planner              | `access-revoked`   | 4403       |
+| The stored ownership no longer names this attachment's sign-in | `access-revoked`   | 4403       |
+
+The same checks before every `start` and `turn`, and the periodic one, also
+find an expired sign-in or a released ownership that nothing reported. The
+`message` says what happened:
+
+```text
+The Chopin browser sign-in that made octocat this document's Planner ended, so the Planner was released. Sign in to Chopin at https://chopin.example in a browser as octocat, then attach again.
+A repository writer reset this document's Planner, so octocat is no longer attached. Attach again to resume.
+This document's Planner ownership was released, so octocat is no longer attached. Attach again to resume.
+```
+
 | Refusal code           | Close code | Meaning                                                                |
 | ---------------------- | ---------- | ---------------------------------------------------------------------- |
 | `unsupported-version`  | 4426       | The server speaks another `version`                                    |
 | `repository-forbidden` | 4403       | The account cannot push to or administer the document's repository     |
-| `sign-in-required`     | 4401       | The account has no live Chopin browser sign-in on this server          |
+| `sign-in-required`     | 4401       | The account has no live Chopin browser sign-in, or it ended            |
 | `planner-attached`     | 4409       | Another client holds the document's Planner; `message` names its login |
 | `document-unavailable` | 4404       | No document matches, or it is being deleted                            |
 | `document-archived`    | 4404       | The document is archived                                               |
-| `access-revoked`       | 4403       | Access was lost after attaching (see above)                            |
+| `access-revoked`       | 4403       | Access or the Planner ownership was lost after attaching (see above)   |
 | `unavailable`          | 1011       | The server could not check the document                                |
 
 ### Without an attached Planner

@@ -147,7 +147,8 @@ export function plannerLink(
 			let located = await locateDocument(auth, caller, channelId);
 			return typeof located === "object" && located.channel.id === channelId
 				&& writable(located.repository)
-				&& !located.channel.archivedAt && !hooks.unavailable?.(channelId);
+				&& !located.channel.archivedAt && !hooks.unavailable?.(channelId)
+				&& await hooks.attachments.verify(channelId, link);
 		} catch (err) {
 			if (revoked(err)) return false;
 			throw err;

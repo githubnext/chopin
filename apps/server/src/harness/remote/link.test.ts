@@ -329,6 +329,107 @@ describe("Planner link ownership", () => {
 		expect(await client.closed).toEqual({ code: LINK_CLOSE.forbidden, reason: "access-revoked" });
 		expect(server.links).toEqual([]);
 	});
+
+	/** A member's raw link attached to the document, with ended logins reaching `attachments`. */
+	async function attachedMember(revalidateEveryMs?: number) {
+		let linked = await linkAuth();
+		let server = linkServer(linked.auth, 2_000, revalidateEveryMs, 2_000);
+		cleanups.push(server.stop);
+		linked.revocations.add(id => server.attachments.sessionRevoked(id));
+		let raw = await rawLink(server.url);
+		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: linked.channel.id });
+		await raw.next("attached");
+		expect(server.attachments.attached(linked.channel.id)).toBe(true);
+		return { ...linked, server, raw };
+	}
+
+	async function rivalAttaches(
+		url: string,
+		channelId: string,
+		storage: Awaited<ReturnType<typeof linkAuth>>["storage"],
+		rival: string,
+	) {
+		let client = await attach(url, channelId, scriptedPlanner().handlers, RIVAL_TOKEN);
+		cleanups.push(() => client.detach());
+		expect(await owner(storage, channelId)).toMatchObject({ ownerSessionId: rival });
+	}
+
+	it("releases the Planner at once when its owner signs out of the browser", async () => {
+		let { server, raw, channel, storage, logins, signOut } = await attachedMember();
+		expect(await signOut("member")).toBe(logins.get("member"));
+		expect(await raw.next("refused")).toEqual({
+			type: "refused",
+			code: "sign-in-required",
+			message: "The Chopin browser sign-in that made member this document's Planner ended, so "
+				+ "the Planner was released. Sign in to Chopin at https://chopin.test in a browser as "
+				+ "member, then attach again.",
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		expect(server.attachments.holder(channel.id)).toBeUndefined();
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
+		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+	});
+
+	it("releases the Planner when its owner's browser sign-in expires", async () => {
+		let { server, raw, channel, storage, sessions, clock } = await attachedMember();
+		clock.skewMs = 31 * 24 * 60 * 60 * 1_000;
+		await sessions.cleanupExpired();
+		expect(await raw.next("refused")).toMatchObject({ code: "sign-in-required" });
+		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
+	});
+
+	it("notices an expired owner sign-in on its periodic recheck when nothing revoked it", async () => {
+		let { server, raw, channel, storage, clock } = await attachedMember(20);
+		clock.skewMs = 31 * 24 * 60 * 60 * 1_000;
+		expect(await raw.next("refused")).toMatchObject({ code: "sign-in-required" });
+		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
+	});
+
+	it("releases the attachment when a repository writer resets the document's Planner", async () => {
+		let { server, raw, channel, storage, logins } = await attachedMember();
+		let held = (await owner(storage, channel.id))!;
+		await storage.channels.clearAgentOwner(
+			channel.id,
+			held.ownerSessionId!,
+			held.generation,
+			new Date(),
+		);
+		server.attachments.ownerReset(channel.id);
+		expect(await raw.next("refused")).toEqual({
+			type: "refused",
+			code: "access-revoked",
+			message: "A repository writer reset this document's Planner, so member is no longer "
+				+ "attached. Attach again to resume.",
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+	});
+
+	it("closes a link whose stored ownership was released elsewhere on its next recheck", async () => {
+		let { server, raw, channel, storage, logins } = await attachedMember(20);
+		let held = (await owner(storage, channel.id))!;
+		await storage.channels.clearAgentOwner(
+			channel.id,
+			held.ownerSessionId!,
+			held.generation,
+			new Date(),
+		);
+		expect(await raw.next("refused")).toEqual({
+			type: "refused",
+			code: "access-revoked",
+			message: "This document's Planner ownership was released, so member is no longer "
+				+ "attached. Attach again to resume.",
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+	});
 });
 
 describe("Planner link protocol", () => {

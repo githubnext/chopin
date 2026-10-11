@@ -7,7 +7,14 @@ import { notAttachedMessage } from "../harness/remote/attachments";
 import { openPlannerSession } from "../harness/session";
 import * as Plan from "../plan/service";
 import { configured } from "../testing/config";
-import { attach, finishTurn, linkAuth, linkServer, scriptedPlanner } from "../testing/planner-link";
+import {
+	attach,
+	finishTurn,
+	linkAuth,
+	linkServer,
+	RIVAL_TOKEN,
+	scriptedPlanner,
+} from "../testing/planner-link";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
@@ -41,9 +48,10 @@ function card(status: "running" | "paused") {
  * login of their own; only the attached member may own the Planner.
  */
 async function remoteRoom() {
-	let { auth, storage, channel, logins } = await linkAuth();
+	let { auth, storage, channel, logins, revocations, signOut } = await linkAuth();
 	let server = linkServer(auth);
 	cleanups.push(server.stop);
+	revocations.add(id => server.attachments.sessionRevoked(id));
 	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	let events: Array<{ kind: string; [key: string]: unknown }> = [];
 	let publisher = {
@@ -115,7 +123,7 @@ async function remoteRoom() {
 	};
 	let owner = async () =>
 		(await storage.channels.readAgent(channel.id, new Date()))?.agent?.ownerSessionId;
-	return { context, server, channel, logins, url, ws, send, owner, events };
+	return { context, server, storage, channel, logins, url, ws, send, owner, events, signOut };
 }
 
 test("with no attached Planner, @chopin and invoke_planner are refused with how to attach one, and nothing is posted or queued", async () => {
@@ -224,4 +232,48 @@ test("an attached Planner receives @chopin and invoke_planner turns as their own
 	expect(context.chat.entries.map(entry => entry.text)).toContain(
 		"@rival resumed the Planner's workflows.",
 	);
+});
+
+test("once the attached Planner's owner signs out or is reset, @chopin and invoke_planner are refused again, and another member can attach", async () => {
+	let room = await remoteRoom();
+	let { context } = room;
+	let refusals = async () => {
+		expect(await room.send("@chopin draft the plan")).toMatchObject({
+			kind: "session:error",
+			code: "planner-not-attached",
+		});
+		expect(await Chat.invoke(context, RIVAL, "Draft the plan")).toBe("planner-not-attached");
+		expect(context.chat.entries).toEqual([]);
+		expect(context.chat.waiting).toEqual([]);
+	};
+
+	let member = await attach(room.server.url, room.channel.id, scriptedPlanner().handlers);
+	expect(await room.owner()).toBe(room.logins.get("member"));
+	await room.signOut("member");
+	expect(await member.closed).toEqual({ code: 4401, reason: "sign-in-required" });
+	expect(await room.owner()).toBeUndefined();
+	await refusals();
+
+	let script = scriptedPlanner();
+	let rival = await attach(room.server.url, room.channel.id, script.handlers, RIVAL_TOKEN);
+	expect(await room.owner()).toBe(room.logins.get("rival"));
+	let held = (await room.storage.channels.readAgent(room.channel.id, new Date()))!.agent!;
+	await room.storage.channels.clearAgentOwner(
+		room.channel.id,
+		held.ownerSessionId!,
+		held.generation,
+		new Date(),
+	);
+	room.server.attachments.ownerReset(room.channel.id);
+	expect(await rival.closed).toEqual({ code: 4403, reason: "access-revoked" });
+	await refusals();
+	expect(script.turns).toEqual([]);
+
+	let again = await attach(room.server.url, room.channel.id, script.handlers, RIVAL_TOKEN);
+	cleanups.push(() => again.detach());
+	expect(await room.send("@chopin draft the plan")).toMatchObject({ kind: "chat:send" });
+	await context.chat.running;
+	expect(script.turns.map(turn => turn.prompt)).toEqual([
+		expect.stringContaining("draft the plan"),
+	]);
 });
