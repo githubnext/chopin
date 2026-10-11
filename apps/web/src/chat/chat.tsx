@@ -86,6 +86,10 @@ import type { ComposerDraft, ReferenceTarget } from "./references";
 import type { Wire as Socket } from "../wire";
 
 export type ChatProps = {
+	/** The child document open beside this Chat, sent with a Planner message as its focus. */
+	focus?: string;
+	/** Open a child document and settle once it has synced. */
+	onOpenChild?: (channelId: string) => Promise<boolean>;
 	wire: Socket | undefined;
 	handle: string;
 	connected: boolean;
@@ -181,6 +185,8 @@ export function Chat(
 	{
 		active = true,
 		agent = true,
+		focus,
+		onOpenChild,
 		readonly = false,
 		archived = false,
 		connected,
@@ -474,6 +480,7 @@ export function Chat(
 			agent,
 			submitted.requestId,
 			referencesEnabled,
+			focus,
 		);
 		if (!payload) return;
 		let token = {};
@@ -636,6 +643,7 @@ export function Chat(
 			conversationPlanJobs={conversationPlanJobs}
 			onCardLink={onCardLink}
 			onAddExcerpt={onAddExcerpt}
+			onOpenChild={onOpenChild}
 			onRetryAnalysis={onRetryAnalysis}
 			onRetryJob={onRetryJob}
 			conversationPlan={conversationPlan}

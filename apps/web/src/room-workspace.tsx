@@ -1165,6 +1165,8 @@ export function RoomWorkspace(
 					<Chat
 						active={chatActive}
 						agent={agent}
+						focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
+						onOpenChild={presentation.onChildOpen}
 						connected={status === "connected"}
 						readonly={!workspaceCanEdit}
 						archived={!!workspaceArchivedAt}

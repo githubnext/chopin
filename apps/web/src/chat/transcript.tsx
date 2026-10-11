@@ -108,17 +108,27 @@ function SystemEntry(
 
 /** A comment sent to Chopin: what it was about and what it said, linking back to the thread. */
 function CommentSystemEntry(
-	{ comment, enter }: {
+	{ comment, enter, onOpenChild }: {
 		comment: NonNullable<Chat.Entry["comment"]>;
 		enter: boolean;
+		onOpenChild?: (channelId: string) => Promise<boolean>;
 	},
 ) {
+	// A thread in a child lives in that child's editor: open it, then ask for the thread once the
+	// child has synced. Thread ids are unique, so only that editor answers.
+	let open = () => {
+		if (!comment.channelId) return openCommentThread(comment.thread);
+		if (!onOpenChild) return;
+		void onOpenChild(comment.channelId).then(ready => {
+			if (ready) openCommentThread(comment.thread);
+		});
+	};
 	return (
 		<button
 			className="chat-comment-notice"
 			data-chat-comment={comment.thread}
 			data-chat-enter={enter || undefined}
-			onClick={() => openCommentThread(comment.thread)}
+			onClick={open}
 			type="button"
 		>
 			<span className="chat-comment-notice-head">
@@ -370,6 +380,7 @@ export function Transcript(
 		live,
 		onCardLink,
 		onAddExcerpt,
+		onOpenChild,
 		onRetryAnalysis,
 		onRetryJob,
 		onWithdraw,
@@ -385,6 +396,7 @@ export function Transcript(
 		conversationPlanJobs?: ConversationPlan.Job[];
 		onCardLink?: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+		onOpenChild?: (channelId: string) => Promise<boolean>;
 		onRetryAnalysis?: (
 			messageId: string,
 			actionId: string,
@@ -668,7 +680,14 @@ export function Transcript(
 								/>
 							)
 							: item.comment
-							? <CommentSystemEntry comment={item.comment} enter={enters(key)} key={key} />
+							? (
+								<CommentSystemEntry
+									comment={item.comment}
+									enter={enters(key)}
+									key={key}
+									onOpenChild={onOpenChild}
+								/>
+							)
 							: announced.has(readyChild(item.text) ?? "")
 							? null
 							: <SystemEntry enter={enters(key)} item={item} key={key} />

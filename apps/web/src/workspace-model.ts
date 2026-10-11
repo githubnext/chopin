@@ -7,14 +7,20 @@ export type WorkspaceMode = "compact" | "split";
 
 export type WorkspaceSurface = "document" | "child";
 
+/** Opens a child by id and settles true once its document has synced. */
+export type ChildOpen = (channelId: string) => Promise<boolean>;
+
 export type WorkspacePresentation =
-	| { type: "document" }
+	| { onChildOpen?: ChildOpen; type: "document" }
 	| {
 		/** The host's layer, drawn in the root's document stack. */
 		child: ReactNode;
+		/** The child open in the stack; Chat sends it as the Planner's focus. */
+		childId?: string;
 		childState: "open" | "closing";
 		motion: ChildMotionStyle;
 		onChildClose: () => void;
+		onChildOpen?: ChildOpen;
 		/** Root first, open child last. */
 		path: { id: string; label: string }[];
 		type: "parent-with-child";

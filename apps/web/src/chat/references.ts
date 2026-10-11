@@ -33,7 +33,7 @@ export type ReferenceInsertion = {
 	caret: number;
 };
 
-export type ChatSendPayload = Pick<Chat.Send, "references" | "requestId" | "text" | "to">;
+export type ChatSendPayload = Pick<Chat.Send, "focus" | "references" | "requestId" | "text" | "to">;
 
 export type TextReplacement = {
 	start: number;
@@ -284,6 +284,7 @@ export function chatSendPayload(
 	plannerEnabled: boolean,
 	requestId: string,
 	referencesEnabled = true,
+	focus?: string,
 ): ChatSendPayload | undefined {
 	let value = text.trim();
 	if (!value) return undefined;
@@ -315,11 +316,15 @@ export function chatSendPayload(
 		requests.push({ kind: "document", channelId: reference.channelId, start, end });
 	}
 
+	let to: Chat.Destination = plannerEnabled && addressedOutsideReferences(value, requests)
+		? "planner"
+		: "room";
 	return {
 		requestId,
 		text: value,
-		to: plannerEnabled && addressedOutsideReferences(value, requests) ? "planner" : "room",
+		to,
 		...(requests.length > 0 ? { references: requests } : {}),
+		...(to === "planner" && focus ? { focus } : {}),
 	};
 }
 

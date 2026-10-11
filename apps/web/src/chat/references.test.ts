@@ -376,3 +376,23 @@ describe("acknowledged composer drafts", () => {
 		expect(boundedChatError(new WireRefusal(message))).toEndWith("...");
 	});
 });
+
+describe("focus", () => {
+	let CHILD = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+
+	test("attaches the open child only to a Planner message", () => {
+		expect(chatSendPayload("@chopin tighten it", [], true, REQUEST_ID, true, CHILD)).toEqual({
+			requestId: REQUEST_ID,
+			text: "@chopin tighten it",
+			to: "planner",
+			focus: CHILD,
+		});
+		expect(chatSendPayload("tighten it", [], true, REQUEST_ID, true, CHILD)).toEqual({
+			requestId: REQUEST_ID,
+			text: "tighten it",
+			to: "room",
+		});
+		expect(chatSendPayload("@chopin tighten it", [], false, REQUEST_ID, true, CHILD)?.focus)
+			.toBeUndefined();
+	});
+});

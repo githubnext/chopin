@@ -161,6 +161,7 @@ function DocumentRouteSwap(
 		childOrigin,
 		onCanonicalPath,
 		onChildClose,
+		onChildOpen,
 		onChildClosing,
 		onParentRestored,
 		route,
@@ -170,6 +171,7 @@ function DocumentRouteSwap(
 		childOrigin: () => Element | undefined;
 		onCanonicalPath: (pathname: string) => void;
 		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
+		onChildOpen: (path: string) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
 		onParentRestored: (token: ChildFocusToken) => void;
 		route: DocumentRoute;
@@ -272,6 +274,7 @@ function DocumentRouteSwap(
 										Loading={Loading}
 										onCanonicalPath={metadataPath}
 										onChildClose={onChildClose}
+										onChildOpen={onChildOpen}
 										onChildClosing={onChildClosing}
 										onParentRestored={onParentRestored}
 										onReady={ready}
@@ -492,6 +495,7 @@ export function HostedApp(
 					childOrigin={childOrigin}
 					onCanonicalPath={canonicalPath}
 					onChildClose={closeChild}
+					onChildOpen={navigate}
 					onChildClosing={childClosing}
 					onParentRestored={restoreParentFocus}
 					route={route}
