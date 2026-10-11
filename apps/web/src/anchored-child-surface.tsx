@@ -48,6 +48,11 @@ export function rebaseChildHistoryState(
 	};
 }
 
+/** Resolves once every animation has finished or been cancelled, so a close never sticks. */
+export function animationsSettled(animations: { finished: Promise<unknown> }[]): Promise<void> {
+	return Promise.allSettled(animations.map(animation => animation.finished)).then(() => {});
+}
+
 export function AnchoredChildSurface(
 	{ entries, focusKey, motion, onClosed, presentation }: {
 		entries: { id: string; label: string; node: ReactNode }[];
@@ -72,10 +77,8 @@ export function AnchoredChildSurface(
 	useLayoutEffect(() => {
 		if (presentation !== "closing") return;
 		let current = true;
-		let running = layer.current?.getAnimations({ subtree: true }) ?? [];
-		void Promise.all(running.map(animation => animation.finished)).then(
+		void animationsSettled(layer.current?.getAnimations({ subtree: true }) ?? []).then(
 			() => current && closed.current(),
-			() => {},
 		);
 		return () => {
 			current = false;

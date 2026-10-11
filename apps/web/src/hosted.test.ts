@@ -6,6 +6,7 @@ import { ApiError } from "./api";
 import {
 	anchoredChildPaths,
 	AnchoredChildSurface,
+	animationsSettled,
 	childCloseAction,
 	childFocusTransition,
 	childHistoryState,
@@ -251,6 +252,17 @@ describe("anchored child lifecycle", () => {
 				parentPath: "/documents/octo-org/score/parent-one",
 			}).attempt?.generation,
 		).toBe(3);
+	});
+
+	it("settles a child close when an animation is cancelled", async () => {
+		let cancelled = Promise.reject(new DOMException("The animation was aborted", "AbortError"));
+		cancelled.catch(() => {});
+		let settled = false;
+		await animationsSettled([{ finished: cancelled }, { finished: Promise.resolve() }])
+			.then(() => {
+				settled = true;
+			});
+		expect(settled).toBe(true);
 	});
 
 	it("draws a Lift card with a title bar and a Zoom layer without one", () => {

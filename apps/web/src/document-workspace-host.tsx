@@ -147,6 +147,10 @@ export default function DocumentWorkspaceHost(
 	let closingFocus = useRef<ChildFocusToken | undefined>(undefined);
 	let parentScrollTop = useRef<number | undefined>(undefined);
 	let parentSurface = useRef<HTMLDivElement>(null);
+	// The card's key follows the child route, not the loaded channel, so loading never remounts
+	// it, and it outlives the route while the card closes.
+	let childKey = useRef<string | undefined>(undefined);
+	if (route.page === "child") childKey.current = route.childSlug;
 
 	useEffect(() => {
 		let active = true;
@@ -422,7 +426,7 @@ export default function DocumentWorkspaceHost(
 	let layer = (
 		<AnchoredChildSurface
 			entries={[{
-				id: loaded.child?.channel.id ?? (route.page === "child" ? route.childSlug : "child"),
+				id: childKey.current ?? "child",
 				label: childLabel,
 				node: child,
 			}]}
