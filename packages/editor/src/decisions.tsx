@@ -15,7 +15,7 @@ import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { usePhone } from "./widgets/phone";
 import { useQuestionnaires } from "./questionnaires";
 import { PendingAnswersContext, PendingAnswersStore, SaveBar } from "./save-bar";
-import { setTouched } from "./touched";
+import { forget } from "./touched";
 import { labels, QuestionnaireCard } from "./widgets/questionnaire";
 
 import type { Question } from "@chopin/protocol";
@@ -297,6 +297,7 @@ export function Decisions(
 		},
 		() => motionImmediately?.() ?? false,
 	);
+	let shown = useRef<HTMLElement | undefined>(undefined);
 	let showCard = useCallback((card: string) => {
 		let target = content.current?.querySelector<HTMLElement>(
 			`[data-plan-sidecar-questionnaire="${CSS.escape(card)}"]`,
@@ -305,7 +306,23 @@ export function Decisions(
 		target.scrollIntoView({ block: "center" });
 		target.tabIndex = -1;
 		target.focus({ preventScroll: true });
+		shown.current = target;
 	}, []);
+	// A card that saved alongside it may fold away above it afterwards, which
+	// would pull it out of view again. Follow it while it keeps focus.
+	useEffect(() => {
+		let target = shown.current;
+		if (!target) return;
+		if (!target.isConnected || document.activeElement !== target) {
+			shown.current = undefined;
+			return;
+		}
+		let timer = window.setTimeout(
+			() => target.scrollIntoView({ block: "center" }),
+			COLLAPSE_MS,
+		);
+		return () => window.clearTimeout(timer);
+	}, [closing]);
 	let leaveSaveBar = useCallback(() => {
 		let next = content.current?.querySelector<HTMLElement>(
 			"[data-plan-sidecar-questionnaire]",
@@ -319,7 +336,7 @@ export function Decisions(
 	// A decided or discarded card has nothing left of this person's to save.
 	let settledKey = entries.filter(entry => !open.has(entry.id)).map(entry => entry.id).join("\n");
 	useEffect(() => {
-		for (let id of settledKey.split("\n")) if (id) setTouched(id, false);
+		for (let id of settledKey.split("\n")) if (id) forget(id);
 	}, [settledKey]);
 
 	let pending = entries.filter(entry => open.has(entry.id) || closing.has(entry.id));

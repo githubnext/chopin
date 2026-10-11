@@ -127,7 +127,10 @@ export type QuestionViewProps = {
 	 * this view's lifetime. Without it the view remembers only while mounted.
 	 */
 	touched?: boolean;
+	/** False when this person cleared their answers here. */
 	onTouchedChange?: (touched: boolean) => void;
+	/** This person chose an answer here; the host can keep what they chose. */
+	onLocalChange?: (question: string, change: Partial<Draft>) => void;
 };
 
 export function currentQuestion(
@@ -745,6 +748,7 @@ export function QuestionView(props: QuestionViewProps) {
 		onPending,
 		touched: hostTouched,
 		onTouchedChange,
+		onLocalChange,
 	} = props;
 
 	let [suggestionEdits, dispatchSuggestionEdit] = useReducer(reduceSuggestionEditState, {
@@ -766,7 +770,7 @@ export function QuestionView(props: QuestionViewProps) {
 	let touched = hostTouched ?? ownTouched;
 	let setTouched = (value: boolean) => {
 		setOwnTouched(value);
-		onTouchedChange?.(value);
+		if (!value) onTouchedChange?.(false);
 	};
 
 	let markComposerEdit = () => {
@@ -861,18 +865,6 @@ export function QuestionView(props: QuestionViewProps) {
 		});
 	}, [answeredCount, complete, error, pendingEnabled, submitting]);
 	useEffect(() => () => reporting.current?.(undefined), []);
-	// A selection that is gone (cleared here or by someone else) is no longer this person's.
-	let forgetTouch = useRef(setTouched);
-	forgetTouch.current = setTouched;
-	// Only a selection that went away is forgotten: a choice just made is not in
-	// the draft yet, and a draft still syncing (disabled) looks empty too.
-	let hadAnswers = useRef(false);
-	useEffect(() => {
-		if (disabled) return;
-		let had = hadAnswers.current;
-		hadAnswers.current = answeredCount > 0;
-		if (touched && had && answeredCount === 0 && !submitting) forgetTouch.current(false);
-	}, [answeredCount, disabled, submitting, touched]);
 
 	if (status === "discarded") {
 		return (
@@ -1048,6 +1040,7 @@ export function QuestionView(props: QuestionViewProps) {
 								onChange={change => {
 									markHumanEdit();
 									setTouched(true);
+									onLocalChange?.(current.id, change);
 									onChange?.(current.id, change);
 								}}
 								suggestedOptionId={projection.suggestion?.optionId}

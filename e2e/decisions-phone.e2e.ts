@@ -118,6 +118,30 @@ test("phone: the bar counts, clears and saves only this person's answers", async
 	await expect(octocat.locator("[data-decision-confirmed] [role=status]")).toHaveCount(0);
 });
 
+for (let leave of [false, true]) {
+	test(`phone: a collaborator's later change leaves the bar${leave ? " while away" : ""}`, async ({ join, seed }) => {
+		await seed("Decisions on a phone.\n");
+		let octocat = await join("octocat", PHONE);
+		let hubot = await join("hubot", PHONE);
+		for (let page of [octocat, hubot]) await showDecisions(page);
+		let bar = octocat.locator(".decision-save-bar");
+
+		await decisionsCard(octocat).getByText("In SQLite", { exact: true }).click();
+		await expect(bar).toHaveAttribute("data-open", "");
+		let nav = octocat.getByRole("navigation", { name: "Workspace view" });
+		if (leave) await nav.getByRole("button", { name: "Document", exact: true }).click();
+
+		await decisionsCard(hubot).getByText("On disk as MDX", { exact: true }).click();
+		if (leave) await nav.getByRole("button", { name: /^Decisions/ }).click();
+		let card = decisionsCard(octocat);
+		await expect(card.getByRole("radio", { name: /On disk as MDX/ })).toBeChecked();
+		// hubot's choice is never saved under octocat's name from the bar…
+		await expect(bar).not.toHaveAttribute("data-open");
+		// …but octocat can still save it deliberately on the card.
+		await expect(card.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+	});
+}
+
 test("phone: an open decision in the document is a chip that opens it in Decisions", async ({ join, seed }) => {
 	await seed("Decisions on a phone.\n");
 	let page = await join("ana", PHONE);

@@ -26,7 +26,7 @@ import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { usePhone } from "./phone";
 import { PendingAnswersContext } from "../save-bar";
-import { setTouched, useTouched } from "../touched";
+import { forget, remember, selectionOf, stillMine, useSelections, withChange } from "../touched";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
@@ -320,7 +320,9 @@ function Undecided(
 	let editable = canEdit && answerable;
 	let previous = previousAnswers(value);
 	let pending = useContext(PendingAnswersContext);
-	let touched = useTouched(value.id);
+	// Counted in the save bar only while the shared draft still says what this person chose.
+	let selections = useSelections(value.id);
+	let touched = stillMine(selections, state.drafts);
 
 	return (
 		<SidecarCard
@@ -385,7 +387,11 @@ function Undecided(
 				submitting={state.submitting}
 				deferSave={!!pending}
 				touched={pending ? touched : undefined}
-				onTouchedChange={pending ? next => setTouched(value.id, next) : undefined}
+				onTouchedChange={pending ? () => forget(value.id) : undefined}
+				onLocalChange={pending
+					? (question, change) =>
+						remember(value.id, question, selectionOf(withChange(state.drafts[question], change)))
+					: undefined}
 				onPending={pending && (answers => pending.set(value.id, answers))}
 				{...pointing}
 			/>
