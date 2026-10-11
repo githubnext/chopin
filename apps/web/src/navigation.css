@@ -167,8 +167,8 @@
 /* The dim trails the grow slightly and lands with it. */
 .workspace-document-panel[data-child-covered] > .workspace-child-scrim {
 	opacity: var(--child-scrim-opacity);
-	transition-duration: calc(var(--child-open-dur) * 0.88);
-	transition-delay: calc(var(--child-open-dur) * 0.12);
+	transition-duration: var(--child-scrim-dur);
+	transition-delay: var(--child-scrim-lag-dur);
 }
 
 .workspace-document-panel[data-child-covered] [data-document-toolbar] {

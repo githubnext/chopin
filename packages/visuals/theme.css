@@ -344,6 +344,8 @@
 	/* Nested documents: a slow, settled open and a quick close. */
 	--child-open-dur: var(--duration-linger);
 	--child-close-dur: 250ms;
+	--child-scrim-dur: 528ms;
+	--child-scrim-lag-dur: 72ms;
 	--child-ease: var(--ease-out);
 	--child-recede-step: 0.03;
 	--child-scrim-opacity: 0.45;
