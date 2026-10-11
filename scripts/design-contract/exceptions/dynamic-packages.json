@@ -845,5 +845,68 @@
 			]
 		],
 		"sourceHash": "5c9709fd97d4f6777205da118ce8b24123537b0ae7e56d3fa4490db8538081bf"
+	},
+	{
+		"file": "packages/visuals/src/ui/unfold.tsx",
+		"reason": "Public visual primitive forwards typed DOM props. Literal style/class call sites remain scanned; runtime caller values need browser review. UnfoldToggle spreads caller button props (aria-controls, aria-expanded, onClick, ref and type are omitted from the type) and the useUnfold trigger object, which holds only ARIA state, a click handler, a ref and type=button; neither carries style.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > UnfoldToggle > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"unfold.trigger",
+				"unresolved JSX props > UnfoldToggle > <button>",
+				1
+			]
+		],
+		"sourceHash": "098bf723d102ac3e909c8ad91445adbce4d7a76a37ba324956866cdde04f4d68"
+	},
+	{
+		"file": "packages/visuals/src/ui/unfold.tsx",
+		"reason": "Public visual primitive forwards typed DOM props. Literal style/class call sites remain scanned; runtime caller values need browser review. UnfoldPanel spreads caller div props (id and ref omitted); the panel sets its own aria-hidden, inert, id and data attributes after the spread.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > UnfoldPanel > <div>",
+				1
+			]
+		],
+		"sourceHash": "098bf723d102ac3e909c8ad91445adbce4d7a76a37ba324956866cdde04f4d68"
+	},
+	{
+		"file": "packages/visuals/src/ui/unfold.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary. Every current caller passes a static string literal (child-provenance, experiments, research widget), which the scanner reads at the call site; classes() only joins it to a fixed cv-unfold base.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-unfold-toggle\", className)",
+				"class > UnfoldToggle > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-unfold\", className)",
+				"class > UnfoldPanel > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > UnfoldSection > <div>",
+				1
+			]
+		],
+		"sourceHash": "098bf723d102ac3e909c8ad91445adbce4d7a76a37ba324956866cdde04f4d68"
 	}
 ]
