@@ -168,14 +168,19 @@ check leaves the link open.
 - `part` streams the turn (see [Stream parts](#stream-parts)).
 - `host-tool-call` runs one of the turn's host tools in the server; `input` is
   its arguments as a JSON string. A `toolCallId` may be used once per turn,
-  including after its call has finished; reusing one fails the turn without
-  running the tool again. A name outside the turn's `tools` is answered with an
-  error result.
+  whether by a `host-tool-call` or a `tool-call` part, including after its call
+  has finished or was answered with an error result; reusing one fails the turn
+  without running the tool again. A name outside the turn's `tools` is answered
+  with an error result.
 - `turn-end` ends the turn: `finished`, `failed` (with `message` as the error
   shown), or `aborted`. Every turn needs exactly one. A host tool still running
   in the server when the turn ends is stopped, and a Decision it opened is
   withdrawn.
-- `input-request` and `input-cancel` ask and withdraw questions.
+- `input-request` and `input-cancel` ask and withdraw questions. A `request` id
+  may not repeat on the link, even after its question has its `input-result`.
+  The server remembers every open id and the last 1,024 ids it received; a
+  remembered id sent again is a `protocol` violation that closes the link. Use
+  fresh ids, such as UUIDs.
 - `runs` reports the session's workflow runs whenever they change. Report them
   before `turn-end` so the server keeps the session while runs are live. Reports
   only change run cards and Chat notices; they never start a Planner turn.
@@ -212,7 +217,8 @@ fields:
 - `tool-call` and `tool-result` parts are for the client's own declared tools
   only, and `tool-call` must say `"providerExecuted": true`. A `tool-result`
   must follow its own `tool-call`. Anything else fails the turn as a tool
-  boundary failure. Host tools are called with `host-tool-call`; the server
+  boundary failure, and a `tool-call` reusing a `toolCallId` fails it as a
+  repeated call. Host tools are called with `host-tool-call`; the server
   emits their call and result parts itself.
 - `tool-input-start` may name a host tool (its input streams before the
   `host-tool-call`) or a declared own tool.
@@ -320,10 +326,11 @@ ids. When the link closes, the server shows the reported live runs as stopped.
 | 4426       | `refused`                                      | `unsupported-version`                         |
 
 `protocol` covers a message before `attach` is answered, a second `attach`, and
-a repeated `input-request` id. When the link closes for any reason, the server
-ends a running turn with an error, stops the turn's host tools still running,
-withdraws open questions and the Decisions those tools opened, and forgets the
-link; reattaching starts new sessions. A server never replays an interrupted turn.
+a repeated `input-request` id the server remembers. When the link closes for
+any reason, the server ends a running turn with an error, stops the turn's host
+tools still running, withdraws open questions and the Decisions those tools
+opened, and forgets the link; reattaching starts new sessions. A server never
+replays an interrupted turn.
 
 A client that receives a frame it cannot parse should close with 4400 and reason
 `malformed-message`. Node.js's `WebSocket` lets a caller close only with 1000 or

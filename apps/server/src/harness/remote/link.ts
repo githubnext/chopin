@@ -34,6 +34,8 @@ import type { RemotePlanner } from "./registry";
 const OPERATION_TIMEOUT_MS = 10_000;
 const REVALIDATE_EVERY_MS = 5 * 60_000;
 const MAX_OPEN_INPUTS = 16;
+/** How many settled `input-request` ids a link remembers to refuse their reuse. */
+const REMEMBERED_INPUTS = 1_024;
 const LIVE_RUN = new Set(["running", "waiting", "paused"]);
 
 export type LinkSocket = {
@@ -142,7 +144,7 @@ type Turn = {
 	hostNames: Set<string>;
 	own: Set<string>;
 	ownCalls: Set<string>;
-	/** Every host call id the turn has used, so none runs twice. */
+	/** Every host call id the turn has used, refused ones too, so none runs twice. */
 	hostIds: Set<string>;
 	hostCalls: Map<string, string>;
 	stopped: boolean;
@@ -285,13 +287,13 @@ class RemoteSession {
 	}
 
 	#hostCall(turn: Turn, message: ClientMessageOf<"host-tool-call">): void {
+		if (turn.hostIds.has(message.toolCallId) || turn.ownCalls.has(message.toolCallId)) {
+			return this.#repeated(turn, message.toolCallId);
+		}
+		turn.hostIds.add(message.toolCallId);
 		if (!turn.hostNames.has(message.toolName)) {
 			return this.#refuseHostCall(turn, message, "unavailable");
 		}
-		if (turn.hostIds.has(message.toolCallId) || turn.ownCalls.has(message.toolCallId)) {
-			return this.#fail(turn, new Error(`Tool call ${message.toolCallId} was repeated.`));
-		}
-		turn.hostIds.add(message.toolCallId);
 		turn.hostCalls.set(message.toolCallId, message.toolName);
 		turn.emit({
 			type: "tool-call",
@@ -320,6 +322,10 @@ class RemoteSession {
 		});
 	}
 
+	#repeated(turn: Turn, toolCallId: string): void {
+		this.#fail(turn, new Error(`Tool call ${toolCallId} was repeated.`));
+	}
+
 	#part(turn: Turn, part: LinkPart): void {
 		let boundary = (name: string) =>
 			this.#fail(turn, new ToolBoundaryError(`Planner tool boundary failure: ${name}`));
@@ -332,8 +338,9 @@ class RemoteSession {
 				if (!turn.own.has(part.toolName)) return boundary(part.toolName);
 				return turn.emit({ ...part, providerExecuted: true, dynamic: true });
 			case "tool-call":
-				if (!turn.own.has(part.toolName) || turn.hostIds.has(part.toolCallId)) {
-					return boundary(part.toolName);
+				if (!turn.own.has(part.toolName)) return boundary(part.toolName);
+				if (turn.hostIds.has(part.toolCallId) || turn.ownCalls.has(part.toolCallId)) {
+					return this.#repeated(turn, part.toolCallId);
 				}
 				turn.ownCalls.add(part.toolCallId);
 				return turn.emit({ ...part, dynamic: true });
@@ -547,6 +554,8 @@ export class PlannerLink {
 	#forget: (() => void) | undefined;
 	#sessions = new Map<string, RemoteSession>();
 	#inputs = new Map<string, { session: string; controller: AbortController }>();
+	/** Recent `input-request` ids, oldest first, so a settled one cannot be reused. */
+	#inputIds = new Set<string>();
 	#controls = new Map<string, PromiseWithResolvers<void>>();
 	#watch: ReturnType<typeof setInterval> | undefined;
 	#port: Port;
@@ -770,8 +779,12 @@ export class PlannerLink {
 				...(value === undefined ? {} : { value: value as never }),
 				...(text === undefined ? {} : { message: text }),
 			});
-		if (this.#inputs.has(message.request)) {
+		if (this.#inputs.has(message.request) || this.#inputIds.has(message.request)) {
 			return this.#violate("protocol", `Input request ${message.request} was repeated.`);
+		}
+		this.#inputIds.add(message.request);
+		if (this.#inputIds.size > REMEMBERED_INPUTS) {
+			this.#inputIds.delete(this.#inputIds.values().next().value!);
 		}
 		let session = this.#sessions.get(message.session);
 		let humanInput = session?.planner.humanInput;
