@@ -447,11 +447,9 @@ export default function DocumentWorkspaceHost(
 		).child;
 		if (!path) return false;
 		onChildOpen(path);
-		return childSynced(channelId, () => {
-			let now = stateRef.current;
-			let child = now.status === "ready" ? now.loaded.child : undefined;
-			return current() && (!child || child.channel.id === channelId);
-		});
+		// During a switch from another child, `loaded.child` still names the old one until the
+		// new one is ready, so liveness is the request token alone.
+		return childSynced(channelId, current);
 	};
 	let child = loaded.child
 		? (
