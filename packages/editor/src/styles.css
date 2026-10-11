@@ -2499,6 +2499,8 @@
 }
 
 .plan-diagram-sheet-scroll {
+	display: flex;
+	flex-direction: column;
 	flex: 1;
 	min-block-size: 0;
 	overflow: auto;
@@ -2509,9 +2511,13 @@
 		calc(env(safe-area-inset-right, 0px) + var(--spacing) * 4);
 }
 
+/*
+ * Centred both ways when it is smaller than the sheet. Auto margins rather
+ * than centring, so a larger drawing still scrolls from its top-start corner.
+ */
 .plan-diagram-sheet-drawing {
 	inline-size: max-content;
-	margin-inline: auto;
+	margin: auto;
 }
 
 .plan-diagram-sheet-drawing svg {
@@ -2520,17 +2526,10 @@
 	block-size: auto;
 }
 
-/* Fitted: the whole shape at once, centred in the sheet. */
-.plan-diagram-sheet-scroll[data-fit] {
-	display: flex;
-	flex-direction: column;
-}
-
-/* Auto margins rather than centring, so a tall drawing still scrolls from its top. */
+/* Fitted: the whole shape at once. */
 .plan-diagram-sheet-scroll[data-fit] .plan-diagram-sheet-drawing {
 	inline-size: auto;
 	max-inline-size: 100%;
-	margin-block: auto;
 }
 
 .plan-diagram-sheet-scroll[data-fit] .plan-diagram-sheet-drawing svg {
