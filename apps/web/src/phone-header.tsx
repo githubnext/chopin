@@ -1,7 +1,7 @@
 /** The phone top bar: Documents on the left, a small centred title, and actions on the right. */
 
 import { useContext, useLayoutEffect, useRef } from "react";
-import { ArrowLeftIcon, EllipsisIcon } from "@chopin/icons";
+import { EllipsisIcon } from "@chopin/icons";
 
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
@@ -37,7 +37,7 @@ export function PhoneHeader(
 ) {
 	let header = useRef<HTMLElement>(null);
 	let trigger = useContext(SidebarTrigger);
-	// A child's own header is never shown: its parent's bar, with the way back, hosts the trigger.
+	// A child room renders its document alone; the root's bar keeps the trigger while a child is open.
 	let hostsTrigger = presentation.type !== "child" && trigger !== undefined;
 	let claim = trigger?.claim;
 	useLayoutEffect(() => hostsTrigger ? claim?.() : undefined, [claim, hostsTrigger]);
@@ -51,7 +51,6 @@ export function PhoneHeader(
 		}
 		onEditingChange();
 	};
-	let title = presentation.type === "parent-with-child" ? presentation.childLabel : label;
 
 	return (
 		<header className="room-header phone-top-bar" ref={header}>
@@ -59,19 +58,9 @@ export function PhoneHeader(
 				{hostsTrigger && trigger && (
 					<ProjectSidebarExpandButton buttonRef={trigger.buttonRef} onExpand={trigger.onExpand} />
 				)}
-				{presentation.type === "parent-with-child" && (
-					<button
-						aria-label={`Return to ${label}`}
-						className="btn btn-icon btn-ghost"
-						onClick={presentation.onChildClose}
-						type="button"
-					>
-						<ArrowLeftIcon aria-hidden="true" size={18} />
-					</button>
-				)}
 			</div>
 			<div className="phone-top-bar-title">
-				{editing && canManage && !archivedAt && presentation.type !== "parent-with-child"
+				{editing && canManage && !archivedAt
 					? (
 						<DocumentRename
 							channel={{ id: room, title: label }}
@@ -84,11 +73,11 @@ export function PhoneHeader(
 							}}
 						/>
 					)
-					: <span className="truncate">{title}</span>}
+					: <span className="truncate">{label}</span>}
 				{archivedAt && <span className="phone-top-bar-subtitle">Archived</span>}
 			</div>
 			<div className="phone-top-bar-slot">
-				{canManage && presentation.type !== "parent-with-child" && (
+				{canManage && (
 					<DocumentActionsMenu
 						channel={{ archivedAt, title: label }}
 						className="btn btn-icon btn-ghost"
