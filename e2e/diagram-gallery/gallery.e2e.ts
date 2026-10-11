@@ -222,10 +222,17 @@ test("a narrow wireframe stacks its rows and puts notes below", async ({ page })
 test("a wide wireframe keeps its flow across and its notes beside", async ({ page }) => {
 	test.skip((page.viewportSize()?.width ?? 0) < 800, "Wide layout only");
 	let tasks = page.locator('[data-wireframe-sample="tasks"]').getByRole("region");
-	let done = await tasks.getByText("Parse fences", { exact: true }).boundingBox();
-	let blocked = await tasks.getByText("Planner prompt", { exact: true }).boundingBox();
-	let note = await tasks.getByText("Waits on server validation", { exact: true }).boundingBox();
-	expect(Math.abs(blocked!.y - done!.y)).toBeLessThan(2);
+	let layout = async () => ({
+		done: await tasks.getByText("Parse fences", { exact: true }).boundingBox(),
+		blocked: await tasks.getByText("Planner prompt", { exact: true }).boundingBox(),
+		note: await tasks.getByText("Waits on server validation", { exact: true }).boundingBox(),
+	});
+	// The flow switches to a row once its container query applies; wait for that layout to settle.
+	await expect.poll(async () => {
+		let { blocked, done } = await layout();
+		return Math.abs(blocked!.y - done!.y);
+	}).toBeLessThan(2);
+	let { blocked, done, note } = await layout();
 	expect(blocked!.x).toBeGreaterThan(done!.x + done!.width);
 	expect(note!.x).toBeGreaterThan(blocked!.x);
 });
