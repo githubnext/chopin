@@ -59,7 +59,7 @@ test("an open unfold exposes its panel", () => {
 test("the toggle carries one decorative chevron after its label", () => {
 	let markup = renderToStaticMarkup(<Harness />);
 
-	let chevron = markup.match(/Preview(<svg[^>]*>)/)?.[1] ?? "";
+	let chevron = markup.match(/Preview(<(?:svg)[^>]*>)/)?.[1] ?? "";
 	expect(chevron).toContain('class="cv-unfold-chevron"');
 	expect(chevron).toContain('aria-hidden="true"');
 });
@@ -72,7 +72,7 @@ test("a section pairs a labelled toggle with its panel", () => {
 	);
 
 	expect(markup).toContain('data-slot="unfold-section"');
-	expect(markup).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Report<svg/);
+	expect(markup).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Report<(?:svg)/);
 	expect(markup).toContain('<div class="cv-unfold-section-body"><p>Body</p></div>');
 });
 

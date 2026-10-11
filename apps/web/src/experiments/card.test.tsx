@@ -104,7 +104,7 @@ test("a completed investigation folds to its brief and status", () => {
 	);
 	expect(markup).toMatch(/<p role="status"[^>]*>completed/);
 	expect(markup).toMatch(/<div[^>]*data-slot="unfold"[^>]*inert=""/);
-	expect(markup).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Report<svg/);
+	expect(markup).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Report<(?:svg)/);
 	expect(markup).not.toContain("<details");
 });
 
