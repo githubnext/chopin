@@ -31,7 +31,7 @@ async function expectPhoneWorkspaceChrome(page: Page): Promise<void> {
 	let header = page.getByRole("banner");
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let frame = page.locator(".workspace-frame");
-	let projects = page.getByRole("button", { name: "Show sidebar" });
+	let projects = header.getByRole("button", { name: "Documents", exact: true });
 	let document = header.getByRole("button", { name: /^Actions for / });
 	let destinations = nav.getByRole("button");
 
@@ -94,9 +94,9 @@ test("a representative compact phone exposes one mounted destination at a time",
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	await expectPhoneWorkspaceChrome(page);
-	let projects = page.getByRole("button", { name: "Show sidebar" });
+	let projects = page.getByRole("button", { name: "Documents", exact: true });
 	await projects.click();
-	let drawer = page.getByRole("dialog", { name: "Projects" });
+	let drawer = page.getByRole("dialog", { name: "Documents" });
 	await expect(drawer).toBeVisible();
 	await page.keyboard.press("Escape");
 	await expect(drawer).toBeHidden();
@@ -305,7 +305,8 @@ test("content swaps retain one interactive destination across pointer and immedi
 
 test("a pointer-dismissed Projects drawer becomes inert while it exits", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
-	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	// A narrow window without touch keeps the drawer; phones open the documents sheet instead.
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	let opener = page.getByRole("button", { name: "Show sidebar" });
 	await opener.click();
 	let drawer = page.getByRole("dialog", { includeHidden: true, name: "Projects" }).locator("../..");
@@ -321,7 +322,7 @@ test("a pointer-dismissed Projects drawer becomes inert while it exits", async (
 
 test("enabling reduced motion settles an active drawer exit", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
-	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.emulateMedia({ reducedMotion: "no-preference" });
 	let time = new Date("2026-01-01T00:00:00Z");
 	await page.clock.install({ time });
@@ -370,7 +371,7 @@ test("a shifted visual viewport keeps workspace controls in the exposed rectangl
 			width: 320,
 		});
 
-		let sidebarButton = page.getByRole("button", { name: "Show sidebar" });
+		let sidebarButton = page.getByRole("button", { name: "Documents", exact: true });
 		await expect(sidebarButton).toBeVisible();
 		await expectInsideViewport(sidebarButton);
 		// A keyboard-sized cover hides the phone tab bar rather than squeezing it above the keys.

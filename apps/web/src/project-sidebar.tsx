@@ -8,6 +8,7 @@ import { MenuItem, MenuSeparator } from "./menu-item";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
+import { documentGroups } from "./documents-sheet-model";
 import { canManageProject } from "./navigation-model";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { Count, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
@@ -26,6 +27,8 @@ import {
 	SignInIcon,
 } from "@chopin/icons";
 import type * as Api from "./api";
+
+export { documentGroups } from "./documents-sheet-model";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentCreationPhase } from "./use-document-creation";
@@ -45,25 +48,6 @@ export function toggleCollapsedProjectIds(
 	if (next.has(repositoryId)) next.delete(repositoryId);
 	else next.add(repositoryId);
 	return next;
-}
-
-export function documentGroups(
-	channels: Api.Channel[],
-	archiveMode: boolean,
-): Array<{ parent: Api.Channel; children: Api.Channel[] }> {
-	let parents = channels.filter(channel =>
-		channel.parentChannelId === undefined
-		&& (archiveMode ? channel.archivedAt !== undefined : channel.archivedAt === undefined)
-	);
-	let parentIds = new Set(parents.map(channel => channel.id));
-	let children = new Map<string, Api.Channel[]>();
-	for (let channel of channels) {
-		if (!channel.parentChannelId || !parentIds.has(channel.parentChannelId)) continue;
-		let nested = children.get(channel.parentChannelId) ?? [];
-		nested.push(channel);
-		children.set(channel.parentChannelId, nested);
-	}
-	return parents.map(parent => ({ parent, children: children.get(parent.id) ?? [] }));
 }
 
 function UnansweredCount({ unanswered }: { unanswered: number }) {

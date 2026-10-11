@@ -1,11 +1,11 @@
 /** The phone top bar: Documents on the left, a small centred title, and actions on the right. */
 
 import { useContext, useLayoutEffect, useRef } from "react";
-import { EllipsisIcon } from "@chopin/icons";
+import { DocumentIcon, EllipsisIcon } from "@chopin/icons";
 
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
-import { ProjectSidebarExpandButton, SidebarTrigger } from "./project-sidebar-chrome";
+import { SidebarTrigger } from "./project-sidebar-chrome";
 
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
@@ -56,7 +56,16 @@ export function PhoneHeader(
 		<header className="room-header phone-top-bar" ref={header}>
 			<div className="phone-top-bar-slot">
 				{hostsTrigger && trigger && (
-					<ProjectSidebarExpandButton buttonRef={trigger.buttonRef} onExpand={trigger.onExpand} />
+					<button
+						aria-haspopup="dialog"
+						aria-label="Documents"
+						className="btn btn-icon btn-ghost"
+						onClick={trigger.onExpand}
+						ref={trigger.buttonRef}
+						type="button"
+					>
+						<DocumentIcon aria-hidden="true" size={18} />
+					</button>
 				)}
 			</div>
 			<div className="phone-top-bar-title">

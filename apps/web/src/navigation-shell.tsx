@@ -13,6 +13,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath } from "@chopin/protocol/document-url";
 
@@ -84,6 +85,9 @@ class LazyDialogBoundary extends Component<
 }
 
 let NavigationNotice = lazy(() => import("./navigation-notice-view"));
+let DocumentsSheet = lazy(() =>
+	import("./documents-sheet").then(module => ({ default: module.DocumentsSheet }))
+);
 let NavigationDrawer = lazy(() =>
 	import("./navigation-drawer").then(module => ({ default: module.NavigationDrawer }))
 );
@@ -235,6 +239,14 @@ export function NavigationShell(
 	);
 	let [drawerOpen, setDrawerOpen] = useState(false);
 	let drawerOpener = useRef<HTMLButtonElement>(null);
+	// The phone bar and the shell can each host the trigger; one leaving must not clear the other.
+	let openerRef = useCallback((node: HTMLButtonElement | null) => {
+		if (!node) return;
+		drawerOpener.current = node;
+		return () => {
+			if (drawerOpener.current === node) drawerOpener.current = null;
+		};
+	}, []);
 	let [catalogueMode, setCatalogueMode] = useState<"active" | "archived">("active");
 	let [dialog, setDialog] = useState<
 		| "add"
@@ -251,6 +263,13 @@ export function NavigationShell(
 	let [reveal, setReveal] = useState<{ id: string; nonce: number }>();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
+	let phone = usePhone();
+	// Phones navigate from a bottom sheet; it stays mounted once loaded so it can animate out.
+	let [sheetLoaded, setSheetLoaded] = useState(false);
+	let sheetDismissed = useRef(false);
+	useEffect(() => {
+		if (phone && drawerOpen) setSheetLoaded(true);
+	}, [drawerOpen, phone]);
 	let immediateMotion = motionImmediately();
 	let previousMode = useRef(mode);
 	let modeChanged = previousMode.current !== mode;
@@ -265,7 +284,7 @@ export function NavigationShell(
 		immediateMotion || modeChanged,
 	);
 	let drawerPresence = useTransitionPresence(
-		mode === "drawer" && drawerOpen ? true : undefined,
+		mode === "drawer" && drawerOpen && !phone ? true : undefined,
 		180,
 		immediateMotion,
 	);
@@ -767,11 +786,11 @@ export function NavigationShell(
 	let dismissDialog = () => setDialog(undefined);
 	let [sidebarShortcut, setSidebarShortcut] = useState<string>();
 	let sidebarTrigger = useMemo(() => ({
-		buttonRef: drawerOpener,
+		buttonRef: openerRef,
 		claim: claimTrigger,
 		onExpand: expandSidebar,
 		shortcut: sidebarShortcut,
-	}), [claimTrigger, expandSidebar, sidebarShortcut]);
+	}), [claimTrigger, expandSidebar, openerRef, sidebarShortcut]);
 	let shortcutActions = useRef<ShortcutActions>({});
 	shortcutActions.current = {
 		search: () => showDialog("search"),
@@ -962,6 +981,8 @@ export function NavigationShell(
 				<div
 					className="navigation-shell"
 					data-navigation-mode={mode}
+					// The documents sheet is portalled out; the page beneath it is inert while it is up.
+					inert={phone && drawerOpen}
 					onClickCapture={navigateLink}
 				>
 					{sidebarPresence.phase !== "closed" && (
@@ -979,10 +1000,44 @@ export function NavigationShell(
 					)}
 					{triggerVisible && (
 						<ProjectSidebarExpandButton
-							buttonRef={drawerOpener}
+							buttonRef={openerRef}
 							onExpand={expandSidebar}
 							shortcut={sidebarShortcut}
 						/>
+					)}
+					{phone && (sheetLoaded || drawerOpen) && (
+						<LazyDialogBoundary
+							onFailure={() => {
+								setDrawerOpen(false);
+								setDialogLoadFailed(true);
+							}}
+						>
+							<DocumentsSheet
+								activeRepositoryId={active?.repositoryId}
+								catalogueMode={catalogueMode}
+								currentDocumentId={currentDocumentId}
+								onAddProject={() => showDialog("add")}
+								onCatalogueModeChange={setCatalogueMode}
+								onCreateDocument={project => void createDocument(project)}
+								onDocumentAction={documentAction}
+								onLoadMore={loadMore}
+								onNavigate={navigateToDocument}
+								onClosed={() => {
+									// A dismissal hands focus back once the sheet, and any field in it, has gone.
+									if (sheetDismissed.current) drawerOpener.current?.focus({ preventScroll: true });
+									sheetDismissed.current = false;
+								}}
+								onOpenChange={open => {
+									sheetDismissed.current = !open;
+									setDrawerOpen(open);
+								}}
+								onSignOut={() => void signOut()}
+								open={drawerOpen}
+								pendingCreations={creation.pending}
+								projects={projects}
+								user={user}
+							/>
+						</LazyDialogBoundary>
 					)}
 					{drawerPresence.phase !== "closed" && (
 						<LazyDialogBoundary

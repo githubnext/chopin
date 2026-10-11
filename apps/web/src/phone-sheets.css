@@ -1,0 +1,577 @@
+/*
+ * Phone sheets: the documents navigator and action sheets rise from the bottom edge over a dim,
+ * inert page. Base UI's drawer owns dragging, focus and dismissal; these rules own the surfaces.
+ */
+
+.phone-sheet-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 70;
+	background: var(--color-scrim);
+	opacity: calc(1 - var(--drawer-swipe-progress, 0));
+	transition: opacity var(--sheet-rise-dur) var(--tab-slide-ease);
+}
+
+.phone-sheet-backdrop[data-starting-style],
+.phone-sheet-backdrop[data-ending-style] {
+	opacity: 0;
+}
+
+.phone-sheet-backdrop[data-ending-style] {
+	transition-duration: var(--sheet-fall-dur);
+}
+
+.phone-sheet-viewport {
+	pointer-events: none;
+	position: fixed;
+	inset: 0;
+	z-index: 71;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+}
+
+:is(.documents-sheet, .action-sheet) {
+	pointer-events: auto;
+	overscroll-behavior: contain;
+	transform: translateY(var(--drawer-swipe-movement-y, 0px));
+	transition: transform var(--sheet-rise-dur) var(--tab-slide-ease);
+}
+
+:is(.documents-sheet, .action-sheet)[data-swiping] {
+	transition: none;
+}
+
+:is(.documents-sheet, .action-sheet)[data-starting-style],
+:is(.documents-sheet, .action-sheet)[data-ending-style] {
+	transform: translateY(100%);
+}
+
+:is(.documents-sheet, .action-sheet)[data-ending-style] {
+	transition-duration: var(--sheet-fall-dur);
+}
+
+.phone-sheet-grabber {
+	display: block;
+	width: calc(var(--spacing) * 9);
+	height: var(--spacing);
+	flex: none;
+	margin: calc(var(--spacing) * 1.5) auto 0;
+	border-radius: var(--radius-full);
+	background: var(--color-gray-300);
+}
+
+.phone-sheet-close {
+	display: grid;
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	flex: none;
+	place-items: center;
+	border-radius: var(--radius-full);
+	color: var(--color-text-secondary);
+	-webkit-tap-highlight-color: transparent;
+}
+
+.phone-sheet-close:active {
+	background: var(--color-hover);
+}
+
+/* Documents ------------------------------------------------------------ */
+
+.documents-sheet {
+	position: relative;
+	display: flex;
+	width: 100%;
+	height: min(
+		calc(100dvh * var(--sheet-large-detent)),
+		calc(100dvh - env(safe-area-inset-top) - var(--sheet-gap))
+	);
+	flex-direction: column;
+	overflow: hidden;
+	border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+	color: var(--color-text-primary);
+}
+
+/* A nested action sheet dims the documents beneath it, as its own backdrop would. */
+.documents-sheet::after {
+	pointer-events: none;
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: var(--color-scrim);
+	opacity: 0;
+	transition: opacity var(--sheet-rise-dur) var(--tab-slide-ease);
+}
+
+.documents-sheet[data-nested-drawer-open]::after {
+	opacity: 1;
+}
+
+.documents-sheet-pages {
+	position: relative;
+	min-height: 0;
+	flex: 1;
+	overflow: hidden;
+}
+
+/* Archived pushes in from the right; the documents page eases a little way left beneath it. */
+.documents-sheet-page {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--color-page);
+	transition: transform var(--sheet-page-dur) var(--tab-slide-ease);
+}
+
+.documents-sheet[data-page="archived"] [data-sheet-page="documents"] {
+	transform: translateX(-30%);
+}
+
+.documents-sheet [data-sheet-page="archived"] {
+	transform: translateX(100%);
+}
+
+.documents-sheet[data-page="archived"] [data-sheet-page="archived"] {
+	transform: none;
+	box-shadow: var(--shadow-overlay);
+}
+
+.documents-sheet-head {
+	display: flex;
+	min-height: var(--control-target-coarse);
+	flex: none;
+	align-items: center;
+	gap: var(--spacing);
+	padding: var(--spacing) calc(var(--spacing) * 2 + env(safe-area-inset-right)) 0
+		calc(var(--spacing) * 2 + env(safe-area-inset-left));
+}
+
+.documents-sheet-head > .phone-sheet-close {
+	margin-left: auto;
+}
+
+.documents-sheet-project,
+.documents-sheet-back {
+	display: flex;
+	min-width: 0;
+	height: var(--control-target-coarse);
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 2);
+	border-radius: var(--radius-lg);
+	font-weight: var(--font-weight-semibold);
+	-webkit-tap-highlight-color: transparent;
+}
+
+.documents-sheet-project {
+	font-size: var(--text-lg);
+}
+
+.documents-sheet-back {
+	gap: var(--spacing);
+	padding-inline: var(--spacing) calc(var(--spacing) * 2);
+	font-weight: var(--font-weight-medium);
+	color: var(--color-brand-ink);
+}
+
+.documents-sheet-project:active,
+.documents-sheet-back:active {
+	background: var(--color-hover);
+}
+
+.documents-sheet-project-chevron {
+	flex: none;
+	color: var(--color-text-tertiary);
+	transform: rotate(90deg);
+	transition: transform var(--duration-base) var(--ease-out);
+}
+
+.documents-sheet-project-chevron[data-open] {
+	transform: rotate(-90deg);
+}
+
+.documents-sheet-page-title {
+	position: absolute;
+	left: 50%;
+	margin: 0;
+	font-size: var(--text-base);
+	font-weight: var(--font-weight-semibold);
+	transform: translateX(-50%);
+}
+
+.documents-sheet-projects {
+	display: grid;
+	flex: none;
+	margin: var(--spacing) calc(var(--spacing) * 4) 0;
+	overflow: hidden;
+	border-radius: var(--radius-lg);
+	background: var(--color-inset);
+}
+
+.documents-sheet-projects > li + li {
+	border-top: var(--edge-width) solid var(--color-edge);
+}
+
+.documents-sheet-option {
+	display: flex;
+	width: 100%;
+	min-height: var(--control-target-coarse);
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3);
+	text-align: left;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.documents-sheet-option > svg:last-child {
+	margin-left: auto;
+	color: var(--color-brand);
+}
+
+.documents-sheet-option:active {
+	background: var(--color-hover);
+}
+
+/* The field fills the row, so the shared focus ring outlines the whole search box. */
+.documents-sheet-search {
+	position: relative;
+	display: block;
+	flex: none;
+	margin: calc(var(--spacing) * 2) calc(var(--spacing) * 4 + env(safe-area-inset-right))
+		calc(var(--spacing) * 2) calc(var(--spacing) * 4 + env(safe-area-inset-left));
+	color: var(--color-text-tertiary);
+}
+
+.documents-sheet-search > svg {
+	pointer-events: none;
+	position: absolute;
+	top: 50%;
+	left: calc(var(--spacing) * 3);
+	transform: translateY(-50%);
+}
+
+.documents-sheet-search input {
+	width: 100%;
+	height: var(--control-target-coarse);
+	padding-inline: calc(var(--spacing) * 9) calc(var(--spacing) * 3);
+	border-radius: var(--radius-lg);
+	background: var(--color-inset);
+	color: var(--color-text-primary);
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.documents-sheet-search input::-webkit-search-cancel-button {
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.documents-sheet-search input::placeholder {
+	color: var(--color-text-tertiary);
+}
+
+.documents-sheet-scroll {
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0 env(safe-area-inset-right) calc(var(--spacing) * 3) env(safe-area-inset-left);
+	-webkit-overflow-scrolling: touch;
+}
+
+[data-sheet-page="archived"] .documents-sheet-scroll {
+	padding-top: calc(var(--spacing) * 2);
+	padding-bottom: calc(var(--spacing) * 3 + env(safe-area-inset-bottom));
+}
+
+.documents-sheet-section + .documents-sheet-section {
+	margin-top: calc(var(--spacing) * 3);
+}
+
+.documents-sheet-heading {
+	margin: calc(var(--spacing) * 2) calc(var(--spacing) * 5) var(--spacing);
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-semibold);
+	color: var(--color-text-tertiary);
+}
+
+.documents-sheet-recents {
+	display: flex;
+	gap: calc(var(--spacing) * 2);
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	padding: var(--spacing) calc(var(--spacing) * 4);
+	scroll-padding-inline: calc(var(--spacing) * 4);
+	scroll-snap-type: x mandatory;
+	scrollbar-width: none;
+}
+
+.documents-sheet-recents > li {
+	flex: none;
+	width: min(42%, calc(var(--spacing) * 44));
+	scroll-snap-align: start;
+}
+
+.documents-sheet-recent {
+	display: flex;
+	height: 100%;
+	min-height: calc(var(--spacing) * 20);
+	flex-direction: column;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 2);
+	padding: calc(var(--spacing) * 3);
+	border-radius: var(--radius-lg);
+	background: var(--color-inset);
+	-webkit-tap-highlight-color: transparent;
+}
+
+.documents-sheet-recent[aria-current="page"] {
+	outline: var(--focus-ring-width) solid var(--color-brand);
+	outline-offset: calc(var(--focus-ring-width) * -1);
+}
+
+.documents-sheet-recent:active {
+	background: var(--color-selected);
+}
+
+.documents-sheet-recent-title {
+	display: -webkit-box;
+	overflow: hidden;
+	font-weight: var(--font-weight-medium);
+	line-height: 1.3;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+}
+
+.documents-sheet-recent-meta {
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.documents-sheet-list {
+	display: grid;
+	padding-inline: calc(var(--spacing) * 2);
+}
+
+.documents-sheet-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	border-radius: var(--radius-lg);
+}
+
+.documents-sheet-row[data-current] {
+	background: var(--color-selected);
+}
+
+.documents-sheet-link {
+	display: flex;
+	min-width: 0;
+	min-height: var(--control-target-coarse);
+	flex: 1;
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+	padding-inline: calc(var(--spacing) * 3);
+	border-radius: var(--radius-lg);
+	text-align: left;
+	-webkit-tap-highlight-color: transparent;
+	-webkit-touch-callout: none;
+}
+
+.documents-sheet-row[data-child] .documents-sheet-link {
+	padding-left: calc(var(--spacing) * 8);
+	color: var(--color-text-secondary);
+}
+
+.documents-sheet-row[data-current] .documents-sheet-link {
+	font-weight: var(--font-weight-medium);
+	color: var(--color-brand-ink);
+}
+
+.documents-sheet-link:active {
+	background: var(--color-hover);
+}
+
+.documents-sheet-row-icon {
+	flex: none;
+	color: var(--color-text-tertiary);
+}
+
+.documents-sheet-count {
+	display: grid;
+	min-width: calc(var(--spacing) * 5);
+	height: calc(var(--spacing) * 5);
+	flex: none;
+	margin-left: auto;
+	place-items: center;
+	padding-inline: calc(var(--spacing) * 1.5);
+	border-radius: var(--radius-full);
+	background: var(--color-brand);
+	font-size: var(--text-xs);
+	font-weight: var(--font-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	color: var(--color-page);
+}
+
+.documents-sheet-more {
+	display: grid;
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	flex: none;
+	place-items: center;
+	border-radius: var(--radius-full);
+	color: var(--color-text-tertiary);
+	-webkit-tap-highlight-color: transparent;
+}
+
+.documents-sheet-more:active {
+	background: var(--color-hover);
+}
+
+.documents-sheet-footer-list {
+	margin-top: calc(var(--spacing) * 3);
+	padding-top: calc(var(--spacing) * 3);
+	border-top: var(--edge-width) solid var(--color-edge);
+}
+
+.documents-sheet-status {
+	margin: calc(var(--spacing) * 2) calc(var(--spacing) * 5);
+	color: var(--color-text-tertiary);
+}
+
+.documents-sheet-load-more {
+	min-height: var(--control-target-coarse);
+	margin-inline: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3);
+	color: var(--color-brand-ink);
+}
+
+.documents-sheet-actions {
+	flex: none;
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4 + env(safe-area-inset-right))
+		max(calc(var(--spacing) * 3), env(safe-area-inset-bottom))
+		calc(var(--spacing) * 4 + env(safe-area-inset-left));
+	border-top: var(--edge-width) solid var(--color-edge);
+	background: var(--color-page);
+}
+
+.documents-sheet-new.btn {
+	width: 100%;
+	height: calc(var(--spacing) * 12);
+	gap: calc(var(--spacing) * 2);
+	border-radius: var(--radius-sheet);
+	font-size: var(--text-base);
+}
+
+/* A landscape phone has height only for the tree. */
+@media (max-height: 500px) {
+	.documents-sheet-section[data-recent] {
+		display: none;
+	}
+
+	.documents-sheet-section + .documents-sheet-section {
+		margin-top: 0;
+	}
+}
+
+/* Action sheet --------------------------------------------------------- */
+
+.action-sheet {
+	display: grid;
+	width: 100%;
+	max-width: var(--phone-tab-row-max);
+	gap: var(--sheet-gap);
+	padding: 0 calc(var(--sheet-gap) + env(safe-area-inset-right))
+		max(var(--sheet-gap), env(safe-area-inset-bottom))
+		calc(var(--sheet-gap) + env(safe-area-inset-left));
+}
+
+.action-sheet-group {
+	display: grid;
+	overflow: hidden;
+	border-radius: var(--radius-sheet);
+	background: var(--color-glass);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
+	box-shadow: var(--shadow-overlay);
+}
+
+.action-sheet-group > * + * {
+	border-top: var(--edge-width) solid var(--color-edge);
+}
+
+.action-sheet-title {
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+	overflow: hidden;
+	font-size: var(--text-sm);
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--color-text-tertiary);
+}
+
+.action-sheet-item,
+.action-sheet-cancel {
+	display: flex;
+	min-height: var(--action-sheet-row-height);
+	align-items: center;
+	justify-content: center;
+	gap: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 4);
+	font-size: var(--text-lg);
+	color: var(--color-brand-ink);
+	-webkit-tap-highlight-color: transparent;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.action-sheet-item[data-tone="danger"] {
+	color: var(--color-destructive-ink);
+}
+
+.action-sheet-item:active {
+	background: var(--color-hover);
+}
+
+.action-sheet-cancel {
+	border-radius: var(--radius-sheet);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	font-weight: var(--font-weight-semibold);
+}
+
+.action-sheet-cancel:active {
+	background: var(--color-inset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:is(.documents-sheet, .action-sheet),
+	:is(.documents-sheet, .action-sheet)[data-ending-style] {
+		transition: opacity var(--duration-base) var(--ease-out);
+	}
+
+	:is(.documents-sheet, .action-sheet)[data-starting-style],
+	:is(.documents-sheet, .action-sheet)[data-ending-style] {
+		opacity: 0;
+		transform: translateY(var(--drawer-swipe-movement-y, 0px));
+	}
+
+	.documents-sheet-page {
+		transition: opacity var(--duration-base) var(--ease-out);
+	}
+
+	.documents-sheet[data-page="archived"] [data-sheet-page="documents"],
+	.documents-sheet [data-sheet-page="archived"] {
+		opacity: 0;
+		transform: none;
+	}
+
+	.documents-sheet[data-page="archived"] [data-sheet-page="archived"] {
+		opacity: 1;
+	}
+}

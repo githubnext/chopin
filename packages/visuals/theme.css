@@ -94,6 +94,8 @@
 	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
 	/* Phone chrome floats over content: a translucent page that blurs what scrolls beneath. */
 	--color-glass: color-mix(in oklch, var(--color-page) 72%, transparent);
+	/* Dims the page beneath a phone sheet. */
+	--color-scrim: oklch(var(--shadow-color) / 32%);
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -253,6 +255,10 @@
 	--phone-tab-bar-gap: calc(var(--spacing) * 2.5);
 	--phone-tab-row-max: 30rem;
 	--glass-filter: blur(20px) saturate(180%);
+	/* Phone sheets: documents stand at a large detent; menus become grouped action sheets. */
+	--sheet-large-detent: 0.92;
+	--sheet-gap: calc(var(--spacing) * 2);
+	--action-sheet-row-height: calc(var(--spacing) * 14);
 
 	/* Empty states share one illustration and copy rhythm. */
 	--empty-state-icon-frame-size: calc(var(--spacing) * 14);
@@ -275,6 +281,7 @@
 	--radius-md: 0.375rem; /* 6px — cards, inputs, callouts, code blocks */
 	--radius-lg: 0.5rem; /* 8px — popovers and panels */
 	--radius-xl: 0.625rem; /* 10px — the document page */
+	--radius-sheet: 0.875rem; /* 14px — phone sheets and action sheet groups */
 	--radius-full: 9999px; /* saturated pill rounding */
 	--radius-composer-pill: calc(var(--spacing) * 5.5); /* 22px — half the phone composer at rest */
 
@@ -366,6 +373,10 @@
 	--tab-slide-dur: 380ms;
 	--tab-slide-ease: cubic-bezier(0.32, 0.72, 0, 1);
 	--phone-bar-dur: 250ms;
+	/* Sheets rise on the same spring-like curve and leave faster than they arrive. */
+	--sheet-rise-dur: 420ms;
+	--sheet-fall-dur: 260ms;
+	--sheet-page-dur: 350ms;
 	--route-swap-out-dur: 80ms;
 	--route-swap-in-dur: 150ms;
 	--icon-swap-dur: 250ms;

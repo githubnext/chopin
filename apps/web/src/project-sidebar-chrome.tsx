@@ -3,7 +3,7 @@ import { createContext } from "react";
 import panelIcon from "./assets/icons/panel-close.svg";
 import { IconButton } from "./icon-button";
 
-import type { RefObject } from "react";
+import type { Ref } from "react";
 import type * as Api from "./api";
 
 export const SIDEBAR_MIN = 250;
@@ -92,7 +92,7 @@ export function ProjectSidebarLoading(
  * its own floating trigger, so the button scrolls away with the bar instead of over it.
  */
 export type SidebarTriggerSlot = {
-	buttonRef: RefObject<HTMLButtonElement | null>;
+	buttonRef: Ref<HTMLButtonElement>;
 	claim: () => () => void;
 	onExpand: () => void;
 	shortcut?: string;
@@ -106,7 +106,7 @@ export function ProjectSidebarExpandButton(
 		onExpand,
 		shortcut,
 	}: {
-		buttonRef?: RefObject<HTMLButtonElement | null>;
+		buttonRef?: Ref<HTMLButtonElement>;
 		onExpand: () => void;
 		shortcut?: string;
 	},

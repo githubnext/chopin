@@ -41,8 +41,8 @@ test("a phone gets full-bleed panes under a top bar and a bottom tab bar", async
 	expect(frame).toEqual({ left: 0, right: 0, radius: "0px" });
 
 	// The sidebar trigger lives in the bar, so it is the only one.
-	await expect(page.getByRole("button", { name: "Show sidebar" })).toHaveCount(1);
-	await expect(topBar(page).getByRole("button", { name: "Show sidebar" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Show sidebar" })).toHaveCount(0);
+	await expect(topBar(page).getByRole("button", { name: "Documents", exact: true })).toBeVisible();
 	await expect(topBar(page).getByRole("button", { name: /^Actions for / })).toBeVisible();
 	for (let control of await topBar(page).getByRole("button").all()) {
 		let box = await control.boundingBox();

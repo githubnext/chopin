@@ -10,6 +10,7 @@
 		"types": "tsgo --noEmit --skipLibCheck"
 	},
 	"dependencies": {
+		"@base-ui/react": "1.7.0",
 		"@chopin/dialect": "workspace:*",
 		"@chopin/diagrams": "workspace:*",
 		"@chopin/draft": "workspace:*",

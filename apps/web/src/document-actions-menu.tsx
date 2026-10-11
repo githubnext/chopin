@@ -1,5 +1,15 @@
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
+import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
 
@@ -12,6 +22,10 @@ import { IconButton } from "./icon-button";
 import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+
+let ActionSheet = lazy(() =>
+	import("./action-sheet").then(module => ({ default: module.ActionSheet }))
+);
 
 export type DocumentAction = "copy-link" | "rename" | "archive" | "restore" | "delete";
 
@@ -33,6 +47,16 @@ export function documentMenuItems(channel: Pick<Api.Channel, "archivedAt">): Doc
 			{ action: "rename", label: "Rename", icon: PencilIcon },
 			{ action: "archive", label: "Archive", icon: ArchiveIcon },
 		];
+}
+
+/** On a phone, archiving reads as the menu's consequential choice, as deleting does everywhere. */
+export function documentSheetItems(channel: Pick<Api.Channel, "archivedAt">) {
+	return documentMenuItems(channel).map(item => ({
+		action: item.action,
+		icon: item.icon,
+		label: item.label,
+		tone: item.destructive || item.action === "archive" ? "danger" as const : "normal" as const,
+	}));
 }
 
 export type DocumentMenuKeyAction = "close" | "first" | "last" | "next" | "previous";
@@ -67,7 +91,9 @@ export function DocumentActionsMenu(
 	let button = useRef<HTMLButtonElement>(null);
 	let panel = useRef<HTMLDivElement>(null);
 	let initialItem = useRef(0);
+	let phone = usePhone();
 	let [open, setOpen] = useState(false);
+	let [sheetOpen, setSheetOpen] = useState(false);
 	let [position, setPosition] = useState<CSSProperties>();
 	let items = documentMenuItems(channel);
 	let immediately = motionImmediately();
@@ -181,8 +207,13 @@ export function DocumentActionsMenu(
 			: (current - 1 + controls.length) % controls.length;
 		controls[next]?.focus();
 	};
-	let toggleMenu = () => open ? closeMenu() : openAt(0);
+	let toggleMenu = () => {
+		if (phone) setSheetOpen(true);
+		else if (open) closeMenu();
+		else openAt(0);
+	};
 	let triggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+		if (phone) return;
 		if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
 		event.preventDefault();
 		openAt(event.key === "ArrowUp" ? items.length - 1 : 0);
@@ -194,7 +225,7 @@ export function DocumentActionsMenu(
 				? (
 					<IconButton
 						aria-controls={open ? id : undefined}
-						aria-expanded={open}
+						aria-expanded={open || sheetOpen}
 						aria-haspopup="menu"
 						aria-label={`Actions for ${channel.title}`}
 						data-tooltip="Document actions"
@@ -211,8 +242,8 @@ export function DocumentActionsMenu(
 				: (
 					<button
 						aria-controls={open ? id : undefined}
-						aria-expanded={open}
-						aria-haspopup="menu"
+						aria-expanded={open || sheetOpen}
+						aria-haspopup={phone ? "dialog" : "menu"}
 						aria-label={`Actions for ${channel.title}`}
 						className={className}
 						data-tooltip="Document actions"
@@ -224,6 +255,18 @@ export function DocumentActionsMenu(
 						{trigger}
 					</button>
 				)}
+			{sheetOpen && (
+				<Suspense fallback={null}>
+					<ActionSheet
+						immediate={["copy-link"]}
+						items={documentSheetItems(channel)}
+						label={`Actions for ${channel.title}`}
+						onClose={() => setSheetOpen(false)}
+						onSelect={action => onAction(action as DocumentAction)}
+						title={channel.title}
+					/>
+				</Suspense>
+			)}
 			{mounted && createPortal(
 				<div
 					aria-hidden={active ? undefined : "true"}
