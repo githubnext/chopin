@@ -549,7 +549,7 @@ export function RoomWorkspace(
 	useEffect(() => {
 		let next = advanceDecisionView(decisionView, hasPlanContent, unanswered, editing);
 		if (next === decisionView) return;
-		setDecisionView(next);
+		setDecisionView(state => (state === decisionView ? next : state));
 		if (decisionView.phase === "initial" && next.phase === "forced") {
 			setAnnouncement(current => ({
 				text: `Showing Decisions: ${unanswered} to answer`,
