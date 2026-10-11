@@ -21,7 +21,6 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import {
 	browserStorage,
 	documentGroups,
-	editedLabel,
 	filterDocumentGroups,
 	readRecentIds,
 	recentDocuments,
@@ -235,7 +234,6 @@ export function DocumentsSheet(
 			currentDocumentId,
 		)
 		: [];
-	let now = Date.now();
 
 	return (
 		<Drawer.Root
@@ -359,9 +357,6 @@ export function DocumentsSheet(
 															>
 																<span className="documents-sheet-recent-title">
 																	{channel.title}
-																</span>
-																<span className="documents-sheet-recent-meta">
-																	{editedLabel(channel.updatedAt, now)}
 																</span>
 															</a>
 														</li>

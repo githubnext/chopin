@@ -21,10 +21,14 @@ import { IconButton } from "./icon-button";
 
 import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+import type { ComponentProps, ComponentType, CSSProperties, KeyboardEvent, ReactNode } from "react";
 
-let loadActionSheet = () => import("./action-sheet");
-let ActionSheet = lazy(() => loadActionSheet().then(module => ({ default: module.ActionSheet })));
+// Once prefetched, the sheet renders directly: lazy() would still suspend its first render.
+let actionSheet: typeof import("./action-sheet") | undefined;
+export let loadActionSheet = () => import("./action-sheet").then(module => (actionSheet = module));
+let LazyActionSheet = lazy(() =>
+	loadActionSheet().then(module => ({ default: module.ActionSheet }))
+);
 
 export type DocumentAction = "copy-link" | "rename" | "archive" | "restore" | "delete";
 
@@ -81,6 +85,11 @@ export function DocumentActionsMenu(
 	let panel = useRef<HTMLDivElement>(null);
 	let initialItem = useRef(0);
 	let phone = usePhone();
+	// Chosen when opened, so a load finishing later never remounts an open sheet.
+	let sheet = useRef<
+		ComponentType<ComponentProps<typeof LazyActionSheet>>
+	>(LazyActionSheet);
+	let Sheet = sheet.current;
 	let [open, setOpen] = useState(false);
 	let [sheetOpen, setSheetOpen] = useState(false);
 	let [position, setPosition] = useState<CSSProperties>();
@@ -197,8 +206,10 @@ export function DocumentActionsMenu(
 		controls[next]?.focus();
 	};
 	let toggleMenu = () => {
-		if (phone) setSheetOpen(true);
-		else if (open) closeMenu();
+		if (phone) {
+			sheet.current = actionSheet?.ActionSheet ?? LazyActionSheet;
+			setSheetOpen(true);
+		} else if (open) closeMenu();
 		else openAt(0);
 	};
 	// A phone's first tap should open the sheet, not wait for its code.
@@ -254,7 +265,7 @@ export function DocumentActionsMenu(
 				)}
 			{sheetOpen && (
 				<Suspense fallback={null}>
-					<ActionSheet
+					<Sheet
 						immediate={["copy-link"]}
 						items={items}
 						label={`Actions for ${channel.title}`}

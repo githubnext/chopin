@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	documentGroups,
-	editedLabel,
 	filterDocumentGroups,
 	readRecentIds,
 	recentDocuments,
@@ -71,17 +70,5 @@ describe("documents sheet model", () => {
 		};
 		expect(readRecentIds(broken, "U", "R")).toEqual([]);
 		expect(() => rememberOpened(broken, "U", "R", "a")).not.toThrow();
-	});
-
-	it("says when a document was edited", () => {
-		let now = Date.parse("2026-10-11T12:00:00");
-		let at = (value: string) => new Date(value).toISOString();
-		expect(editedLabel(at("2026-10-11T11:59:40"), now)).toBe("Edited just now");
-		expect(editedLabel(at("2026-10-11T11:58:00"), now)).toBe("Edited 2 min ago");
-		expect(editedLabel(at("2026-10-11T09:00:00"), now)).toBe("Edited 3 hr ago");
-		expect(editedLabel(at("2026-10-10T08:00:00"), now)).toBe("Edited yesterday");
-		expect(editedLabel(at("2026-10-07T08:00:00"), now, "en-US")).toBe("Edited Wednesday");
-		expect(editedLabel(at("2026-09-20T08:00:00"), now, "en-US")).toBe("Edited Sep 20");
-		expect(editedLabel("not a date", now)).toBe("");
 	});
 });

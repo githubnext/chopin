@@ -101,24 +101,3 @@ export function recentDocuments(
 		.slice(0, limit);
 	return recent.length >= 2 ? recent : [];
 }
-
-export function editedLabel(updatedAt: string, now: number, locale?: string): string {
-	let then = Date.parse(updatedAt);
-	if (!Number.isFinite(then)) return "";
-	let minutes = Math.floor(Math.max(0, now - then) / 60_000);
-	if (minutes < 1) return "Edited just now";
-	if (minutes < 60) return `Edited ${minutes} min ago`;
-	let hours = Math.floor(minutes / 60);
-	if (hours < 24) return `Edited ${hours} hr ago`;
-	let date = new Date(then);
-	let today = new Date(now);
-	let days = Math.round(
-		(new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
-			- new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86_400_000,
-	);
-	if (days <= 1) return "Edited yesterday";
-	if (days < 7) {
-		return `Edited ${date.toLocaleDateString(locale, { weekday: "long" })}`;
-	}
-	return `Edited ${date.toLocaleDateString(locale, { month: "short", day: "numeric" })}`;
-}

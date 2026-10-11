@@ -3,8 +3,9 @@
 import { useContext, useEffect, useLayoutEffect, useRef } from "react";
 import { DocumentsIcon, EllipsisIcon } from "@chopin/icons";
 
-import { DocumentActionsMenu } from "./document-actions-menu";
+import { DocumentActionsMenu, loadActionSheet } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
+import { loadDocumentsSheet } from "./navigation-shell";
 import { SidebarTrigger } from "./project-sidebar-chrome";
 
 import type { DocumentMetadata } from "./document-actions";
@@ -13,8 +14,9 @@ import type { TitleEdit } from "./title-edit";
 import type { WorkspacePresentation } from "./workspace-model";
 
 // Warmed before the first tap, so opening the sheet never waits on its code.
-function loadDocumentsSheet() {
-	void import("./documents-sheet");
+function prefetchDocumentsSheet() {
+	void loadDocumentsSheet();
+	void loadActionSheet();
 }
 
 export function PhoneHeader(
@@ -50,7 +52,7 @@ export function PhoneHeader(
 		if (!hostsTrigger) return;
 		let idle = window.requestIdleCallback ?? ((task: () => void) => window.setTimeout(task, 1500));
 		let cancel = window.cancelIdleCallback ?? window.clearTimeout;
-		let handle = idle(loadDocumentsSheet);
+		let handle = idle(prefetchDocumentsSheet);
 		return () => cancel(handle);
 	}, [hostsTrigger]);
 
@@ -73,7 +75,7 @@ export function PhoneHeader(
 						aria-label="Documents"
 						className="btn btn-icon btn-ghost"
 						onClick={trigger.onExpand}
-						onPointerDown={loadDocumentsSheet}
+						onPointerDown={prefetchDocumentsSheet}
 						ref={trigger.buttonRef}
 						type="button"
 					>

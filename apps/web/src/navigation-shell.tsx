@@ -53,7 +53,13 @@ import { requestTitleEdit } from "./title-edit";
 
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
-import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type {
+	ComponentProps,
+	ComponentType,
+	CSSProperties,
+	MouseEvent as ReactMouseEvent,
+	ReactNode,
+} from "react";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { ShortcutActions } from "./global-shortcuts";
@@ -85,8 +91,12 @@ class LazyDialogBoundary extends Component<
 }
 
 let NavigationNotice = lazy(() => import("./navigation-notice-view"));
-let DocumentsSheet = lazy(() =>
-	import("./documents-sheet").then(module => ({ default: module.DocumentsSheet }))
+// Once prefetched, the sheet renders directly: lazy() would still suspend its first render.
+let documentsSheet: typeof import("./documents-sheet") | undefined;
+export let loadDocumentsSheet = () =>
+	import("./documents-sheet").then(module => (documentsSheet = module));
+let LazyDocumentsSheet = lazy(() =>
+	loadDocumentsSheet().then(module => ({ default: module.DocumentsSheet }))
 );
 let NavigationDrawer = lazy(() =>
 	import("./navigation-drawer").then(module => ({ default: module.NavigationDrawer }))
@@ -265,8 +275,13 @@ export function NavigationShell(
 	let mode = useNavigationMode();
 	let phone = usePhone();
 	// Phones navigate from a bottom sheet; it stays mounted once loaded so it can animate out.
-	let [sheetLoaded, setSheetLoaded] = useState(false);
-	if (phone && drawerOpen && !sheetLoaded) setSheetLoaded(true);
+	// Chosen once when first opened, so a load finishing later never remounts an open sheet.
+	let [Sheet, setSheet] = useState<
+		ComponentType<ComponentProps<typeof import("./documents-sheet").DocumentsSheet>>
+	>();
+	if (phone && drawerOpen && !Sheet) {
+		setSheet(() => documentsSheet?.DocumentsSheet ?? LazyDocumentsSheet);
+	}
 	let immediateMotion = motionImmediately();
 	let previousMode = useRef(mode);
 	let modeChanged = previousMode.current !== mode;
@@ -1007,7 +1022,7 @@ export function NavigationShell(
 							shortcut={sidebarShortcut}
 						/>
 					)}
-					{(phone ? sheetLoaded : drawerPresence.phase !== "closed") && (
+					{(phone ? Sheet : drawerPresence.phase !== "closed") && (
 						<LazyDialogBoundary
 							onFailure={() => {
 								dismissDrawer();
@@ -1016,15 +1031,17 @@ export function NavigationShell(
 						>
 							{phone
 								? (
-									<DocumentsSheet
-										{...catalogue}
-										activeRepositoryId={active?.repositoryId}
-										onNavigate={navigateToDocument}
-										onOpenChange={setDrawerOpen}
-										onSignOut={signOut}
-										open={drawerOpen}
-										opener={drawerOpener}
-									/>
+									Sheet && (
+										<Sheet
+											{...catalogue}
+											activeRepositoryId={active?.repositoryId}
+											onNavigate={navigateToDocument}
+											onOpenChange={setDrawerOpen}
+											onSignOut={signOut}
+											open={drawerOpen}
+											opener={drawerOpener}
+										/>
+									)
 								)
 								: (
 									<NavigationDrawer
