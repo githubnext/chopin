@@ -119,15 +119,17 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 	await tool("disconnect_workspace", {});
 	await page.reload();
 
-	await expect(
-		page.getByRole("article", { name: "Compare startup approaches", exact: true }).getByRole(
-			"table",
-			{
-				name: "Median startup time",
-				exact: true,
-			},
-		),
-	).toContainText("410");
+	let completed = page.getByRole("article", { name: "Compare startup approaches", exact: true });
+	let completedToggle = completed.getByRole("button", {
+		name: "Compare startup approaches",
+		exact: true,
+	});
+	await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
+	await expect(completed.getByRole("table", { name: "Median startup time", exact: true }))
+		.toBeHidden();
+	await completedToggle.click();
+	await expect(completed.getByRole("table", { name: "Median startup time", exact: true }))
+		.toContainText("410");
 });
 
 test("an incoming proposal appears inline and recovers from a failed detail load", async ({ join, seed, room }) => {
