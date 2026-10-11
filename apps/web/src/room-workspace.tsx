@@ -33,6 +33,7 @@ import { Chat } from "./chat/chat";
 import { ChildProvenance } from "./child-provenance";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
 import type { ResearchDraftController } from "./chat/research-draft-controller";
+import { useDocumentEditing } from "./document-editing";
 import { advanceConversationAnnouncement } from "./conversation-plan/announcements";
 import type { ConversationAnnouncementSummary } from "./conversation-plan/announcements";
 import { evidenceRows, hasEvidence } from "./conversation-plan/evidence";
@@ -481,9 +482,10 @@ export function RoomWorkspace(
 			preferred: initialDocumentView(profile, stored),
 		};
 	});
+	let editing = useDocumentEditing(room);
 	let view: WorkspaceDocumentView = showImplementation && profile.implementation
 		? "build"
-		: visibleDecisionView(decisionView, hasPlanContent, unanswered);
+		: visibleDecisionView(decisionView, hasPlanContent, unanswered, editing);
 	let attention = useDecisionAttention(unanswered);
 	let latestCanEdit = useRef(canEdit);
 	let latestCanManage = useRef(canManage);
@@ -543,8 +545,18 @@ export function RoomWorkspace(
 		}
 	}, [onDocumentChanged, room, userId]);
 
+	// Focus alone never routes: only new decisions or new prose re-evaluate the opening.
 	useEffect(() => {
-		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
+		let next = advanceDecisionView(decisionView, hasPlanContent, unanswered, editing);
+		if (next === decisionView) return;
+		setDecisionView(next);
+		if (decisionView.phase === "initial" && next.phase === "forced") {
+			setAnnouncement(current => ({
+				text: `Showing Decisions: ${unanswered} to answer`,
+				sequence: current.sequence + 1,
+			}));
+		}
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- editing and decisionView are read, not triggers
 	}, [hasPlanContent, unanswered]);
 
 	useEffect(() => {

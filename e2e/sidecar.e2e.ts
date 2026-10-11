@@ -285,26 +285,20 @@ test(
 );
 
 test(
-	"an unseeded document keeps linked questions inline and reveals them in Decisions",
+	"an unseeded document opens its Planner questions in Decisions",
 	async ({ baseURL, page, room }) => {
 		await authenticate(page, "ana", baseURL!);
 		await page.goto(roomPath(room));
-		await ready(page);
 		let decisions = page.getByRole("button", { name: /^Decisions/ });
-		await expect(decisions).toHaveAttribute("aria-pressed", "false");
-		await expect(page.getByRole("button", { name: "Document", exact: true }))
-			.toHaveAttribute("aria-pressed", "true");
-		await expect(content(page).locator("article[data-plan-sidecar-questionnaire]"))
-			.toHaveCount(2);
-		await decisions.click();
 		await expect(decisions).toHaveAttribute("aria-pressed", "true");
-		let card = questionnaire(page);
-		await expect(card).toHaveCount(2);
-		await expect(card.getByRole("heading", { name: "Where should room state live?" }))
-			.toBeVisible();
-		await expect(card.getByRole("heading", { name: "Which of these belong in the first cut?" }))
-			.toBeVisible();
-		await expect(card.getByRole("tablist")).toHaveCount(0);
+		await expect(page.getByRole("status").filter({ hasText: "Showing Decisions: 2 to answer" }))
+			.toHaveCount(1);
+		await expect(page.locator('[data-document-view="decisions"] [data-deck]'))
+			.toHaveAttribute("aria-label", "2 open decisions");
+		await page.getByRole("button", { name: "Document", exact: true }).click();
+		await ready(page);
+		await expect(decisions).toHaveAttribute("aria-pressed", "false");
+		await expect(content(page).locator("[data-deck]")).toHaveCount(1);
 	},
 );
 
@@ -431,10 +425,12 @@ test("compact Chat returns to the document after a collaborator adds prose", asy
 		{ timeout: 20_000 },
 	);
 	let nav = ana.getByRole("navigation", { name: "Workspace view" });
+	// A blank document opens in Decisions; choosing Document keeps the reader there.
+	await expect(nav.getByRole("button", { name: "Decisions, 2 unanswered", exact: true }))
+		.toHaveAttribute("aria-current", "page");
+	await nav.getByRole("button", { name: "Document", exact: true }).click();
 	await expect(nav.getByRole("button", { name: "Document", exact: true }))
 		.toHaveAttribute("aria-current", "page");
-	await expect(nav.getByRole("button", { name: "Decisions, 2 unanswered", exact: true }))
-		.toBeVisible();
 	await nav.getByRole("button", { name: /Chat/ }).click();
 
 	let boContext = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 } });

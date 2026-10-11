@@ -181,6 +181,22 @@ describe("decision attention", () => {
 		},
 	);
 
+	it("keeps a forced view when nothing is unanswered and no prose exists", () => {
+		let state = advanceDecisionView({ phase: "initial", preferred: "plan" }, false, 2);
+
+		state = advanceDecisionView(state, false, 0);
+
+		expect(state.phase).toBe("forced");
+		expect(visibleDecisionView(state, false, 0)).toBe("decisions");
+	});
+
+	it("ignores editing once the opening is forced", () => {
+		let state = advanceDecisionView({ phase: "initial", preferred: "plan" }, false, 2);
+
+		expect(advanceDecisionView(state, false, 2, true)).toBe(state);
+		expect(visibleDecisionView(state, false, 2, true)).toBe("decisions");
+	});
+
 	it("lets explicit Document navigation override a forced Decisions opening", () => {
 		let state = advanceDecisionView(
 			{ phase: "initial", preferred: "plan" },
