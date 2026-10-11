@@ -475,6 +475,8 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
 	await expect(childLink).toBeVisible();
 	await expect(childLink).toHaveAttribute("href", child.path);
+	await expect.poll(() => catalogueReads).toBe(readsBeforePublication + 1);
+	await opened.waitForTimeout(300);
 	expect(catalogueReads).toBe(readsBeforePublication + 1);
 	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
 
@@ -485,8 +487,14 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	await expect(opened).toHaveURL(url => url.pathname === child.path);
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await expect(surface.getByRole("button", { name: `Close ${childTitle}` })).toHaveCount(0);
+	await expect(surface.getByText("Discuss this report here.")).toHaveCount(0);
 	// Lift's peeking root tab row is the way back; Enter on it closes and refocuses the opener.
 	let back = opened.getByRole("button", { name: /^Back to / });
+	await surface.evaluate(async element => {
+		let finite = element.getAnimations({ subtree: true })
+			.filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity);
+		await Promise.allSettled(finite.map(animation => animation.finished));
+	});
 	await back.focus();
 	await opened.keyboard.press("Enter");
 	await expect(surface).toHaveCount(0);

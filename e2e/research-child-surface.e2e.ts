@@ -37,6 +37,9 @@ function rootSheet(page: Page, room: string) {
 async function returnToRoot(page: Page, room: string) {
 	let back = page.getByRole("navigation", { name: "Document stack" })
 		.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` });
+	let rowReturn = rootSheet(page, room).locator("[data-document-toolbar]")
+		.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` });
+	await expect(back.or(rowReturn)).toBeVisible();
 	if (await back.isVisible()) await back.click();
 	else {
 		// Click an empty stretch of the peeking row: tab buttons switch views, not just return.
@@ -248,9 +251,8 @@ test("the root's Chat stays live while a child is open, across every close path"
 	let childEditor = surface.getByRole("textbox", { name: "editable markdown" });
 	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
 	await childEditor.locator("p").first().selectText();
-	await page.getByRole("button", { name: "Comment on this passage", exact: true })
-		.evaluate(button => (button as HTMLButtonElement).click());
-	let commentDraft = page.getByRole("dialog", { name: "New comment" });
+	await surface.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let commentDraft = surface.getByRole("dialog", { name: "New comment" });
 	await expect(commentDraft.getByPlaceholder("Add a comment")).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(commentDraft).toHaveCount(0);
@@ -271,10 +273,11 @@ test("the root's Chat stays live while a child is open, across every close path"
 	}
 
 	// 1. The peeking tab row, closed twice in one task: only one close happens.
-	await sheet.locator("[data-document-toolbar] .workspace-tab-row-return").evaluate(button => {
-		(button as HTMLButtonElement).click();
-		(button as HTMLButtonElement).click();
-	});
+	await sheet.locator("[data-document-toolbar]")
+		.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).evaluate(button => {
+			(button as HTMLButtonElement).click();
+			(button as HTMLButtonElement).click();
+		});
 	await expectClosed();
 
 	// 2. Escape.
@@ -480,10 +483,9 @@ test("an in-app child opens and submits its own comment composer", async ({ base
 	await surface.getByRole("textbox", { name: "editable markdown" })
 		.getByText(passage, { exact: true })
 		.selectText();
-	await page.getByRole("button", { name: "Comment on this passage", exact: true })
-		.evaluate(button => (button as HTMLButtonElement).click());
+	await surface.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 
-	let draft = page.getByRole("dialog", { name: "New comment" });
+	let draft = surface.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Add a comment").fill("Keep this child passage.");
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 	await expect(surface.getByRole("button", { name: /Comment on “This ordinary child/ }))
@@ -603,6 +605,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 	});
 	await expect(firstSurface).toBeFocused();
 	await expect(childLink(secondTitle)).not.toBeFocused();
+	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
 	await page.keyboard.press("Escape");
 	await expect(firstSurface).toHaveCount(0);
 	await expect(childLink(firstTitle)).toBeFocused();
@@ -916,11 +919,16 @@ test("Zoom keeps an open child across root tab switches without remounting it", 
 	let tabs = rootSheet(page, room).locator("[data-document-toolbar]");
 	await tabs.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(surface).toBeHidden();
+	await expect(stack).toHaveCount(0);
+	// Decisions shows the root's decisions while the child stays open underneath.
+	await expect(rootSheet(page, room).locator('[data-document-view="decisions"]')).toBeVisible();
+	await expect(page.locator(`[data-workspace-room="${child.id}"] [data-document-view="decisions"]`))
+		.toHaveCount(0);
 	await page.keyboard.press("Escape");
 	await tabs.getByRole("button", { name: /^Document/ }).click();
 	await expect(surface).toBeVisible();
 	await expect(page).toHaveURL(url => url.pathname === child.path);
-	expect(await scroller.evaluate(element => element.scrollTop)).toBe(120);
+	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(120);
 	expect((await mounts.mounts()).filter(entry => entry === `mount ${child.id}`)).toHaveLength(1);
 	await stack.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).click();
 	await expect(surface).toHaveCount(0);
