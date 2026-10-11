@@ -288,7 +288,9 @@ test("only the document's own keyboard gets the formatting dock", async ({ baseU
 		await page.getByRole("navigation", { name: "Workspace view" })
 			.getByRole("button", { name: "Document", exact: true }).tap();
 		await page.locator(".phone-top-bar").getByRole("button", { name: /^Actions for / }).tap();
-		await page.getByRole("menuitem", { name: "Rename", exact: true }).tap();
+		// Phones open document actions as a sheet.
+		await page.getByRole("dialog", { name: /^Actions for / })
+			.getByRole("button", { name: "Rename", exact: true }).tap();
 		await expect(page.getByRole("textbox", { name: "Document title" })).toBeFocused();
 		await setVisualViewport(page, { event: "resize", height: 500 });
 		await expect(dock).toHaveCount(0);

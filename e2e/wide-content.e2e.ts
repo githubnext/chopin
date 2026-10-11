@@ -81,8 +81,11 @@ test("code wraps on a phone and keeps one preview when it stops", async ({ join,
 
 	// The source wraps too while someone is editing it; phones edit from the pencil.
 	await page.getByRole("button", { name: "Edit document" }).tap();
-	await content(page).getByRole("button", { name: "Show source" }).click();
+	// Editing puts the caret in the first block in view, which may already open this source.
+	let show = content(page).getByRole("button", { name: "Show source" });
 	let source = content(page).locator("[data-plan-source]");
+	await expect(show.or(source).first()).toBeVisible();
+	if (await show.isVisible()) await show.click();
 	await expect(source).toBeVisible();
 	expect(await source.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 	await expectNoHorizontalOverflow(page);
