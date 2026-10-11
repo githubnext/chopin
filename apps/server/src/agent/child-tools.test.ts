@@ -254,6 +254,43 @@ test("an unexpected storage failure reaches the model as a generic refusal", asy
 	}
 });
 
+test("reply_comment in a child hides an unexpected storage failure from the model", async () => {
+	let { call, child, root } = await rooted();
+	let thread = seedOpenThread(child.plan);
+	root.plan.chat.acting = thread;
+	root.plan.chat.actingChannel = child.channel.id;
+	let original = console.error;
+	console.error = () => {};
+	let get = child.backend.storage.channels.get;
+	child.backend.storage.channels.get = async () => {
+		throw new Error("connection to 10.0.0.5:5432 refused password=hunter2");
+	};
+	try {
+		let text = await call("reply_comment", { thread, text: "Done." });
+		expect(text).toBe("Error: child documents are temporarily unavailable");
+	} finally {
+		child.backend.storage.channels.get = get;
+		console.error = original;
+		root.plan.chat.actingChannel = undefined;
+	}
+});
+
+test("reply_comment in a child keeps its intentional refusals", async () => {
+	let { call, child, root } = await rooted({ access: async () => false });
+	let thread = seedOpenThread(child.plan);
+	root.plan.chat.acting = thread;
+	root.plan.chat.actingChannel = child.channel.id;
+	let original = console.error;
+	console.error = () => {};
+	try {
+		let text = await call("reply_comment", { thread, text: "Done." });
+		expect(text).toBe("Error: the Planner's repository access could not be confirmed");
+	} finally {
+		console.error = original;
+		root.plan.chat.actingChannel = undefined;
+	}
+});
+
 test("edit_child attributes the edit to the child thread the root turn is acting on", async () => {
 	let { call, child, root } = await rooted();
 	let thread = seedOpenThread(child.plan);

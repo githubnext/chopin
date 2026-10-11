@@ -40,22 +40,24 @@ const childContext = z.object({
 const CHILD = { type: "string", minLength: 36, maxLength: 36 } as const;
 
 /** A message written for the model; any other failure is logged and reported generically. */
-class Refusal extends Error {}
+export class Refusal extends Error {}
 
 /** Storage and runtime errors can name hosts, queries or credentials; the model never sees them. */
-async function respond(name: string, produce: () => unknown): Promise<string> {
-	return answer(name, async () => {
-		try {
-			return await produce();
-		} catch (err) {
-			if (
-				err instanceof Refusal || err instanceof UnknownChild
-				|| err instanceof Arguments.ArgumentError
-			) throw err;
-			console.error(`[agent/${name}]`, err);
-			throw new Refusal("child documents are temporarily unavailable");
-		}
-	});
+export async function shielded<T>(name: string, produce: () => Promise<T>): Promise<T> {
+	try {
+		return await produce();
+	} catch (err) {
+		if (
+			err instanceof Refusal || err instanceof UnknownChild
+			|| err instanceof Arguments.ArgumentError
+		) throw err;
+		console.error(`[agent/${name}]`, err);
+		throw new Refusal("child documents are temporarily unavailable");
+	}
+}
+
+async function respond(name: string, produce: () => Promise<unknown>): Promise<string> {
+	return answer(name, () => shielded(name, produce));
 }
 
 const MISSING = "no such child document of this document";

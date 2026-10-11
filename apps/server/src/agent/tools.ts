@@ -22,7 +22,7 @@ import * as Questions from "../questions/service";
 import { limits, ULID } from "@chopin/dialect";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
 import { documentIdentity, implementationActive } from "../plan/service";
-import { childTools } from "./child-tools";
+import { childTools, Refusal, shielded } from "./child-tools";
 import { experimentTools } from "./experiment-tools";
 import type { InvestigationTools } from "./experiment-tools";
 
@@ -615,12 +615,15 @@ export const documentTools = {
 				let { acting, actingChannel } = context.plan.chat;
 				// A comment sent from a child: its thread, and the reply, live in that child.
 				if (actingChannel) {
-					if (!context.children) throw new Error("child documents are unavailable in this session");
-					if (!owner || owner.signal.aborted || !await owner.revalidate()) {
-						throw new Error("the Planner's repository access could not be confirmed");
-					}
-					return context.children.open(actingChannel, child =>
-						Comments.answer(child.plan, child.server, child.id, thread, text, acting));
+					let children = context.children;
+					return shielded("reply_comment", async () => {
+						if (!children) throw new Refusal("child documents are unavailable in this session");
+						if (!owner || owner.signal.aborted || !await owner.revalidate()) {
+							throw new Refusal("the Planner's repository access could not be confirmed");
+						}
+						return children.open(actingChannel, child =>
+							Comments.answer(child.plan, child.server, child.id, thread, text, acting));
+					});
 				}
 				return Comments.answer(context.plan, context.server, context.id, thread, text, acting);
 			}),
