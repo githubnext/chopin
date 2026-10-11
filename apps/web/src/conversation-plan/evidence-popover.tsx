@@ -42,7 +42,10 @@ export function EvidencePopover({ rows, onSource }: {
 	onSource: (destination: SourceDestination) => void;
 }) {
 	return (
-		<section aria-label="Evidence" className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto p-3">
+		<section
+			aria-label="Evidence"
+			className="flex max-h-[60svh] flex-col gap-3 overflow-y-auto p-3"
+		>
 			{rows.map(row => (
 				<div className="flex flex-col gap-1" key={row.optionId ?? "question"}>
 					<h4 className="m-0 min-w-0 break-words text-sm font-medium text-text-primary [overflow-wrap:anywhere]">

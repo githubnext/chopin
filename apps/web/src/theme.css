@@ -34,14 +34,16 @@
 	}
 
 	/*
-	 * Controls answer the tap at once and never select or call out their label on a
-	 * long press. Content, links and fields keep both.
+	 * On touch, controls answer the tap at once and never select or call out their
+	 * label on a long press. Content, links and fields keep both.
 	 */
-	:where(button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) {
-		touch-action: manipulation;
-		-webkit-user-select: none;
-		user-select: none;
-		-webkit-touch-callout: none;
+	@media (pointer: coarse) {
+		:where(button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) {
+			touch-action: manipulation;
+			-webkit-user-select: none;
+			user-select: none;
+			-webkit-touch-callout: none;
+		}
 	}
 }
 
