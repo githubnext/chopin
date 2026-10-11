@@ -73,11 +73,14 @@ test("phone mention and reference pickers rest on the composer as a full-width l
 	await page.keyboard.type("@");
 	let mentions = chat.locator("[data-chat-mention-picker]");
 	await expect(mentions.getByRole("option", { name: "cy" })).toBeVisible();
-	let [list, pill] = await Promise.all([mentions.boundingBox(), surface.boundingBox()]);
-	expect(Math.abs(list!.x - pill!.x)).toBeLessThanOrEqual(1);
-	expect(Math.abs(list!.width - pill!.width)).toBeLessThanOrEqual(1);
-	expect(list!.y + list!.height).toBeLessThanOrEqual(pill!.y);
-	expect(pill!.y - (list!.y + list!.height)).toBeLessThanOrEqual(8);
+	let pill = (await surface.boundingBox())!;
+	// The list scales in from the menu entrance; measure once it has settled.
+	await expect.poll(async () => Math.abs((await mentions.boundingBox())!.width - pill.width))
+		.toBeLessThanOrEqual(1);
+	let list = (await mentions.boundingBox())!;
+	expect(Math.abs(list.x - pill.x)).toBeLessThanOrEqual(1);
+	expect(list.y + list.height).toBeLessThanOrEqual(pill.y);
+	expect(pill.y - (list.y + list.height)).toBeLessThanOrEqual(8);
 	let row = await mentions.getByRole("option", { name: "cy" }).boundingBox();
 	expect(row!.height).toBeGreaterThanOrEqual(44);
 	expect(await mentions.evaluate(element => getComputedStyle(element).overscrollBehaviorY))
@@ -87,9 +90,9 @@ test("phone mention and reference pickers rest on the composer as a full-width l
 	await page.keyboard.type("#");
 	let references = chat.locator("[data-chat-reference-picker]");
 	await expect(references).toBeVisible();
-	let referenceList = await references.boundingBox();
-	expect(Math.abs(referenceList!.width - pill!.width)).toBeLessThanOrEqual(1);
-	expect(referenceList!.height).toBeLessThanOrEqual(844 * 0.4 + 1);
+	await expect.poll(async () => Math.abs((await references.boundingBox())!.width - pill.width))
+		.toBeLessThanOrEqual(1);
+	expect((await references.boundingBox())!.height).toBeLessThanOrEqual(844 * 0.4 + 1);
 });
 
 test("an open keyboard leaves the phone transcript most of the exposed height", async ({ baseURL, browser, room }) => {
