@@ -307,6 +307,33 @@ test("the root's Chat stays live while a child is open, across every close path"
 	await expect(chatSends().filter(send => send.channelId === child.id)).toHaveLength(0);
 });
 
+test("Escape in root Chat stays in Chat while a child is open", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let childTitle = `Chat escape source ${room.slice(0, 8)}`;
+	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await join("ana");
+	let parentChat = page.locator(`[data-workspace-room="${room}"]`)
+		.getByRole("complementary", { name: "Chat" });
+	await page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: childTitle, exact: true }).click();
+	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
+	await expect(surface).toBeVisible();
+
+	let draft = chatInput(parentChat);
+	await draft.fill(`Draft while child open ${room.slice(0, 8)}`);
+	await draft.focus();
+	await page.keyboard.press("Escape");
+	await expect(draft).toBeFocused();
+	await expect(surface).toBeVisible();
+
+	let send = parentChat.getByRole("button", { name: "Send message" });
+	await send.focus();
+	await page.keyboard.press("Escape");
+	await expect(send).toBeFocused();
+	await expect(surface).toBeVisible();
+});
+
 test("Tab from an open child never reaches covered root content, and root Chat stays reachable", async ({ baseURL, join, page, room, seed }) => {
 	await seed(PARENT_SOURCE);
 	let childTitle = `Tab source ${room.slice(0, 8)}`;

@@ -300,6 +300,15 @@ export default function DocumentWorkspaceHost(
 			if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
 			// Escape dismisses the innermost thing first: a field gives up focus, then the next one closes.
 			let target = event.target instanceof Element ? event.target : undefined;
+			// Root Chat and the top bar stay live beside the child, so Escape there is theirs alone.
+			let rootWorkspace = document.querySelector(".workspace-child-slot")?.closest(
+				".workspace-root",
+			);
+			if (
+				target && rootWorkspace?.contains(target) && !target.closest(".workspace-document-stack")
+			) {
+				return;
+			}
 			if (target?.closest(DISMISSIBLE_TARGET)) {
 				event.preventDefault();
 				document.querySelector<HTMLElement>(".anchored-child-card:last-of-type")?.focus({
