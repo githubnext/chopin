@@ -114,3 +114,19 @@ test("an investigation that still needs work starts unfolded", () => {
 	expect(markup).toMatch(/<h3[^>]*><button[^>]*aria-expanded="true"/);
 	expect(markup).toContain("Run on my workspace");
 });
+
+test("the fold toggle only exists once its panel has loaded", () => {
+	let store = new ExperimentStore("document");
+	let item = investigation("completed");
+	let markup = renderToStaticMarkup(createElement(InvestigationCard, {
+		store,
+		summary: { ...item, decisionCount: 0 },
+		userId: "ana",
+		canEdit: true,
+		locked: false,
+	}));
+
+	expect(markup).toContain("Compare startup approaches");
+	expect(markup).not.toContain("aria-controls");
+	expect(markup).not.toContain("aria-expanded");
+});

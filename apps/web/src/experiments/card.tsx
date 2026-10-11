@@ -49,9 +49,13 @@ export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 			className="flex min-w-0 flex-col gap-3 rounded-md border border-edge p-4"
 		>
 			<h3 className="m-0 text-sm font-semibold">
-				<UnfoldToggle className="w-full justify-between" unfold={body}>
-					<span className="min-w-0 break-words">{summary.brief}</span>
-				</UnfoldToggle>
+				{item
+					? (
+						<UnfoldToggle className="w-full justify-between" unfold={body}>
+							<span className="min-w-0 break-words">{summary.brief}</span>
+						</UnfoldToggle>
+					)
+					: <span className="min-w-0 break-words">{summary.brief}</span>}
 			</h3>
 			<p role="status" className="m-0 text-xs text-text-secondary">
 				{summary.state} {summary.progress && `· ${summary.progress}`}

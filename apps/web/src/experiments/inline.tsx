@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
+import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
 import { InvestigationCard } from "./card";
 import { EvidenceDecisions } from "./evidence";
 import { RequestIdentity } from "./request-id";
@@ -12,7 +13,7 @@ export function InlineInvestigations({ store, userId, canEdit, locked }: {
 }) {
 	useSyncExternalStore(store.subscribe, store.snapshot);
 	let [brief, setBrief] = useState("");
-	let [open, setOpen] = useState(false);
+	let propose = useUnfold();
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState("");
 	let [creation] = useState(() => new RequestIdentity());
@@ -34,41 +35,41 @@ export function InlineInvestigations({ store, userId, canEdit, locked }: {
 			))}
 			<EvidenceDecisions store={store} canEdit={canEdit && !locked} />
 			{canEdit && !locked && (
-				<details
-					open={open}
-					onToggle={event => setOpen(event.currentTarget.open)}
-				>
-					<summary className="cursor-pointer text-sm text-text-tertiary">
+				<div>
+					<UnfoldToggle className="text-sm text-text-tertiary" unfold={propose}>
 						Propose investigation
-					</summary>
-					<form
-						className="mt-3 flex flex-col gap-2"
-						onSubmit={event => {
-							event.preventDefault();
-							if (busy) return;
-							setBusy(true);
-							setError("");
-							void store.action("", "", { id: creation.key({ brief }), brief }).then(() => {
-								creation.clear();
-								setBrief("");
-								setOpen(false);
-							}).catch(reason => setError(reason.message)).finally(() => setBusy(false));
-						}}
-					>
-						<label className="text-sm">
-							Investigation brief
-							<textarea
-								className="field mt-1 w-full"
-								value={brief}
-								maxLength={8000}
-								onChange={event => setBrief(event.target.value)}
-							/>
-						</label>
-						<button className="btn btn-md btn-primary" disabled={busy || !brief.trim()}>
-							Propose investigation
-						</button>
-					</form>
-				</details>
+					</UnfoldToggle>
+					<UnfoldPanel unfold={propose}>
+						<form
+							aria-label="New investigation"
+							className="flex flex-col gap-2 pt-3"
+							onSubmit={event => {
+								event.preventDefault();
+								if (busy) return;
+								setBusy(true);
+								setError("");
+								void store.action("", "", { id: creation.key({ brief }), brief }).then(() => {
+									creation.clear();
+									setBrief("");
+									propose.setOpen(false, { focusTrigger: true });
+								}).catch(reason => setError(reason.message)).finally(() => setBusy(false));
+							}}
+						>
+							<label className="text-sm">
+								Investigation brief
+								<textarea
+									className="field mt-1 w-full"
+									value={brief}
+									maxLength={8000}
+									onChange={event => setBrief(event.target.value)}
+								/>
+							</label>
+							<button className="btn btn-md btn-primary" disabled={busy || !brief.trim()}>
+								Propose investigation
+							</button>
+						</form>
+					</UnfoldPanel>
+				</div>
 			)}
 		</section>
 	);

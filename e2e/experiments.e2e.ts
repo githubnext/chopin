@@ -25,8 +25,20 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 
 	await expect(page.getByRole("button", { name: "Investigations", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("dialog", { name: "Investigations", exact: true })).toHaveCount(0);
-	await page.locator("summary").filter({ hasText: /^Propose investigation$/ }).click();
-	await page.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
+	let proposeToggle = page.getByRole("button", {
+		name: "Propose investigation",
+		exact: true,
+		expanded: false,
+	});
+	await proposeToggle.click();
+	let proposal = page.getByRole("form", { name: "New investigation", exact: true });
+	// A plain accordion folds at the accordion pace, not the card-preview pace.
+	expect(
+		await proposal.evaluate(form =>
+			getComputedStyle(form.closest("[data-slot='unfold']")!).transitionDuration
+		),
+	).toBe("0.25s");
+	await proposal.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
 		"Compare startup approaches",
 	);
 	let [created] = await Promise.all([
@@ -34,8 +46,11 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 			response.request().method() === "POST"
 			&& response.url().endsWith(`/documents/${room}/experiments`)
 		),
-		page.getByRole("button", { name: "Propose investigation", exact: true }).click(),
+		proposal.getByRole("button", { name: "Propose investigation", exact: true }).click(),
 	]);
+	// The submit button disables while busy; closing the fold returns focus to its toggle.
+	await expect(proposeToggle).toBeFocused();
+	await expect(proposal).toBeHidden();
 	let experiment = await created.json();
 	let peer = await join("leo");
 	await expect(peer.getByRole("button", { name: "Run on my workspace", exact: true }))

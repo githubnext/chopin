@@ -57,11 +57,16 @@ for (let transport of ["stdio", "http"] as const) {
 			await page.getByRole("combobox", { name: "Document", exact: true }).selectOption(room);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
 			await page.getByRole("link", { name: "Open document", exact: true }).click();
-			await page.locator("summary").filter({ hasText: /^Propose investigation$/ }).click();
-			await page.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
+			await page.getByRole("button", {
+				name: "Propose investigation",
+				exact: true,
+				expanded: false,
+			}).click();
+			let proposal = page.getByRole("form", { name: "New investigation", exact: true });
+			await proposal.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
 				"Produce the captured startup fixture",
 			);
-			await page.getByRole("button", { name: "Propose investigation", exact: true }).click();
+			await proposal.getByRole("button", { name: "Propose investigation", exact: true }).click();
 			await page.getByRole("button", { name: "Run on my workspace", exact: true }).click();
 			await expect(page.getByRole("table", { name: "Median startup time", exact: true }))
 				.toContainText("183", { timeout: 30_000 });

@@ -3,6 +3,7 @@ import { ExperimentView } from "@chopin/experiment/react";
 import type { PublishedInvestigation } from "@chopin/experiment/records";
 import type { View } from "@chopin/experiment";
 import type { ExperimentStore } from "./store";
+import { UnfoldSection } from "@chopin/visuals/unfold";
 import { RequestIdentity } from "./request-id";
 
 export function EvidenceActions({ store, item, view, disabled }: {
@@ -131,10 +132,9 @@ export function EvidenceDecisions(
 							Recorded by {decision.by} · Fixed evidence
 						</p>
 						{view && item.result && (
-							<details>
-								<summary>View saved evidence</summary>
+							<UnfoldSection label="View saved evidence">
 								<ExperimentView result={item.result} view={view} state={decision.state} disabled />
-							</details>
+							</UnfoldSection>
 						)}
 						{canEdit && (
 							<button
