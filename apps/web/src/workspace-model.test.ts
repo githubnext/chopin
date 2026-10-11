@@ -21,6 +21,7 @@ describe("adaptive workspace", () => {
 	it("derives child capabilities from the workspace presentation", () => {
 		expect(workspaceProfile(childPresentation))
 			.toEqual({
+				chat: false,
 				implementation: false,
 				persistChat: false,
 				persistPaneSize: false,
@@ -52,10 +53,11 @@ describe("adaptive workspace", () => {
 		expect(initialDocumentView(workspaceProfile(documentPresentation), "tasks")).toBe("plan");
 	});
 
-	it("limits a child to Document, Decisions, and Chat", () => {
+	it("gives a child no Chat, tabs, or persistence of its own", () => {
 		let capabilities = workspaceProfile(childPresentation);
 
 		expect(capabilities).toEqual({
+			chat: false,
 			implementation: false,
 			persistChat: false,
 			persistPaneSize: false,
@@ -63,15 +65,11 @@ describe("adaptive workspace", () => {
 			research: false,
 			surface: "child",
 		});
-		expect(workspaceDestinations(capabilities.implementation)).toEqual([
-			"chat",
-			"plan",
-			"decisions",
-		]);
 	});
 
 	it("keeps the parent's research and implementation capabilities", () => {
 		expect(workspaceProfile(documentPresentation)).toEqual({
+			chat: true,
 			implementation: true,
 			persistChat: true,
 			persistPaneSize: true,

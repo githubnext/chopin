@@ -843,7 +843,7 @@ export function RoomWorkspace(
 		setWire(socket);
 
 		let off = [
-			conversationStore.listen(socket),
+			...(profile.chat ? [conversationStore.listen(socket)] : []),
 			socket.on<ManagedHello>("session:hello", frame => {
 				let editable = frame.canEdit && !frame.archivedAt;
 				let accessChanged = latestCanEdit.current !== editable
@@ -899,6 +899,7 @@ export function RoomWorkspace(
 		research,
 		researchEnabled,
 		room,
+		profile.chat,
 		profile.surface,
 		threads,
 		cardMeta,
@@ -975,6 +976,129 @@ export function RoomWorkspace(
 	let acceptedComments =
 		threadState.threads.filter(item => item.thread.status === "accepted" && !item.applied).length;
 
+	let statusNotices = (
+		<>
+			{!!planState.lost && planState.lost !== lostSeen && (
+				<div className="plan-status" data-level="alert" role="alert">
+					<span className="plan-status-text">
+						<span
+							aria-hidden="true"
+							className="plan-status-label"
+							data-tooltip={LOST_EDITS}
+							data-tooltip-verbatim=""
+						>
+							Edits not saved
+						</span>
+						<span aria-hidden="true" className="plan-status-detail">{LOST_EDITS}</span>
+						<span className="sr-only">{LOST_EDITS}</span>
+					</span>
+					<button
+						className="btn btn-sm btn-ghost"
+						onClick={() =>
+							setLostSeen(planState.lost ?? 0)}
+						type="button"
+					>
+						Dismiss
+					</button>
+				</div>
+			)}
+			{/* Apart from PlanStatus, which would announce its end as "Reconnected". */}
+			{planState.refused && (
+				<div className="plan-status" data-level="notice">
+					<span aria-hidden="true" className="plan-status-dot" />
+					<span aria-hidden="true" className="plan-status-text">
+						<span
+							className="plan-status-label"
+							data-tooltip={UNDO_REFUSALS[planState.refused.reason]}
+							data-tooltip-verbatim=""
+						>
+							Can't undo
+						</span>
+						<span className="plan-status-detail">
+							{UNDO_REFUSALS[planState.refused.reason]}
+						</span>
+					</span>
+				</div>
+			)}
+			<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
+				{planState.refused && `Can't undo. ${UNDO_REFUSALS[planState.refused.reason]}`}
+			</span>
+			<PlanStatus
+				connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
+				failed={planState.failed}
+				onReconnect={wire && reconnects < RECONNECTS_BEFORE_RELOAD
+					? () => {
+						setReconnects(count => count + 1);
+						wire.reconnect();
+					}
+					: undefined}
+				synced={planState.synced}
+			/>
+		</>
+	);
+	let plan = (
+		<GitHubReferencesProvider value={githubReferences}>
+			<PlanEditor
+				experiments={experiments}
+				afterword={
+					<InlineInvestigations
+						store={experiments}
+						userId={userId}
+						canEdit={!!workspaceCanEdit && status === "connected"}
+						locked={implementation.locked}
+					/>
+				}
+				cardMeta={cardMeta}
+				evidence={showEvidence}
+				onCardSource={showCardSource}
+				hasCardSource={hasCardSource}
+				// A child has no Decisions pane to open, so its decisions stay inline.
+				onShowDecision={presentation.type === "child" ? undefined : showDecision}
+				planner={agent}
+				commentPresentation={mode === "split" ? "popover" : "sheet"}
+				connection={status === "deleted" ? "closed" : status}
+				key={workspaceArchivedAt ? "archived" : "active"}
+				disclosureMotion={motionContract("collapse")}
+				motionImmediately={settleMotionImmediately}
+				onScrollTop={setPlanScrollTop}
+				onState={setPlanState}
+				preface={presentation.type === "child" && presentation.parent
+					? <ChildProvenance channelId={room} parent={presentation.parent} />
+					: undefined}
+				questionMotion={QUESTION_MOTION}
+				questions={questions}
+				readOnly={!workspaceCanEdit || implementation.locked}
+				research={profile.research ? research : undefined}
+				researchLauncher={researchLauncher}
+				scrollTop={planScrollTop}
+				threads={threads}
+				user={user}
+				wire={wire}
+			/>
+		</GitHubReferencesProvider>
+	);
+	if (presentation.type === "child") {
+		return (
+			<div
+				className="child-document flex h-full min-h-0 flex-col bg-page"
+				data-workspace-room={room}
+				data-workspace-surface="child"
+			>
+				<p aria-live="polite" className="sr-only" role="status">
+					<span key={announcement.sequence}>{announcement.text}</span>
+				</p>
+				<div className="child-document-status">{statusNotices}</div>
+				<section
+					aria-label="Document"
+					className="child-document-scroll min-h-0 flex-1"
+					data-document-view="plan"
+				>
+					{plan}
+				</section>
+			</div>
+		);
+	}
+
 	return (
 		<>
 			<p aria-live="polite" className="sr-only" role="status">
@@ -999,9 +1123,6 @@ export function RoomWorkspace(
 								: "This document is archived."
 							: !workspaceCanEdit
 							? "You have read-only access to this document."
-							: undefined}
-						emptyNotice={presentation.type === "child"
-							? "Discuss this report here. Messages stay with the report."
 							: undefined}
 						onShowDecisions={() => selectDestination("decisions")}
 						onResearch={researchEnabled ? startResearch : undefined}
@@ -1076,66 +1197,7 @@ export function RoomWorkspace(
 						/>
 					</>
 				}
-				status={
-					<>
-						{!!planState.lost && planState.lost !== lostSeen && (
-							<div className="plan-status" data-level="alert" role="alert">
-								<span className="plan-status-text">
-									<span
-										aria-hidden="true"
-										className="plan-status-label"
-										data-tooltip={LOST_EDITS}
-										data-tooltip-verbatim=""
-									>
-										Edits not saved
-									</span>
-									<span aria-hidden="true" className="plan-status-detail">{LOST_EDITS}</span>
-									<span className="sr-only">{LOST_EDITS}</span>
-								</span>
-								<button
-									className="btn btn-sm btn-ghost"
-									onClick={() =>
-										setLostSeen(planState.lost ?? 0)}
-									type="button"
-								>
-									Dismiss
-								</button>
-							</div>
-						)}
-						{/* Apart from PlanStatus, which would announce its end as "Reconnected". */}
-						{planState.refused && (
-							<div className="plan-status" data-level="notice">
-								<span aria-hidden="true" className="plan-status-dot" />
-								<span aria-hidden="true" className="plan-status-text">
-									<span
-										className="plan-status-label"
-										data-tooltip={UNDO_REFUSALS[planState.refused.reason]}
-										data-tooltip-verbatim=""
-									>
-										Can't undo
-									</span>
-									<span className="plan-status-detail">
-										{UNDO_REFUSALS[planState.refused.reason]}
-									</span>
-								</span>
-							</div>
-						)}
-						<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
-							{planState.refused && `Can't undo. ${UNDO_REFUSALS[planState.refused.reason]}`}
-						</span>
-						<PlanStatus
-							connection={status === "deleted" ? "closed" : treatAsConnected ? undefined : status}
-							failed={planState.failed}
-							onReconnect={wire && reconnects < RECONNECTS_BEFORE_RELOAD
-								? () => {
-									setReconnects(count => count + 1);
-									wire.reconnect();
-								}
-								: undefined}
-							synced={planState.synced}
-						/>
-					</>
-				}
+				status={statusNotices}
 				ids={workspaceIds}
 				identity={room}
 				mode={mode}
@@ -1183,46 +1245,7 @@ export function RoomWorkspace(
 						wire={wire}
 					/>
 				}
-				plan={
-					<GitHubReferencesProvider value={githubReferences}>
-						<PlanEditor
-							experiments={experiments}
-							afterword={
-								<InlineInvestigations
-									store={experiments}
-									userId={userId}
-									canEdit={!!workspaceCanEdit && status === "connected"}
-									locked={implementation.locked}
-								/>
-							}
-							cardMeta={cardMeta}
-							evidence={showEvidence}
-							onCardSource={showCardSource}
-							hasCardSource={hasCardSource}
-							onShowDecision={showDecision}
-							planner={agent}
-							commentPresentation={mode === "split" ? "popover" : "sheet"}
-							connection={status === "deleted" ? "closed" : status}
-							key={workspaceArchivedAt ? "archived" : "active"}
-							disclosureMotion={motionContract("collapse")}
-							motionImmediately={settleMotionImmediately}
-							onScrollTop={setPlanScrollTop}
-							onState={setPlanState}
-							preface={presentation.type === "child" && presentation.parent
-								? <ChildProvenance channelId={room} parent={presentation.parent} />
-								: undefined}
-							questionMotion={QUESTION_MOTION}
-							questions={questions}
-							readOnly={!workspaceCanEdit || implementation.locked}
-							research={profile.research ? research : undefined}
-							researchLauncher={researchLauncher}
-							scrollTop={planScrollTop}
-							threads={threads}
-							user={user}
-							wire={wire}
-						/>
-					</GitHubReferencesProvider>
-				}
+				plan={plan}
 				state={workspace}
 				presentation={presentation}
 				unanswered={unanswered}

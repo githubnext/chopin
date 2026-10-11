@@ -17,6 +17,8 @@ export type ChildParent = {
 };
 
 export type WorkspaceProfile = {
+	/** Only a root document has a Chat. */
+	chat: boolean;
 	implementation: boolean;
 	persistChat: boolean;
 	persistPaneSize: boolean;
@@ -67,6 +69,7 @@ export function workspaceProfile(
 ): WorkspaceProfile {
 	let child = presentation.type === "child";
 	return {
+		chat: !child,
 		implementation: !child,
 		persistChat: !child,
 		persistPaneSize: !child,
