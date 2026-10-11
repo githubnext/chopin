@@ -38,9 +38,29 @@ test("owner pairs a workspace and publishes evidence that survives disconnect", 
 			getComputedStyle(form.closest("[data-slot='unfold']")!).transitionDuration
 		),
 	).toBe("0.25s");
-	await proposal.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
-		"Compare startup approaches",
-	);
+	let brief = proposal.getByRole("textbox", { name: "Investigation brief", exact: true });
+	await brief.focus();
+	await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished)));
+	// The clip must leave room for the focus ring outside a full-width control.
+	expect(
+		await brief.evaluate(control => {
+			// Outside a focus boundary the ring sits outside the control; that is the case at risk.
+			control.closest("[data-focus-boundary]")?.removeAttribute("data-focus-boundary");
+			let clipElement = control.closest<HTMLElement>(".cv-unfold-clip")!;
+			let clip = clipElement.getBoundingClientRect();
+			let box = control.getBoundingClientRect();
+			let style = getComputedStyle(control);
+			let reach = Math.max(parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset), 0);
+			let room = parseFloat(getComputedStyle(clipElement).paddingInlineStart);
+			return {
+				visible: style.outlineStyle !== "none",
+				outside: reach > 0,
+				roomed: room >= reach,
+				clipped: box.left - reach < clip.left || box.right + reach > clip.right,
+			};
+		}),
+	).toEqual({ visible: true, outside: true, roomed: true, clipped: false });
+	await brief.fill("Compare startup approaches");
 	let [created] = await Promise.all([
 		page.waitForResponse(response =>
 			response.request().method() === "POST"

@@ -19,8 +19,13 @@
 	grid-template-rows: 1fr;
 }
 
+/* The clip's padding holds the focus ring of full-width controls (an inset ring, as in a focus boundary, needs none); the matching negative
+   margin keeps the layout box (and the 0fr fold) unchanged. */
 .cv-unfold-clip {
+	--cv-unfold-ring-room: calc(var(--focus-ring-width) + max(var(--focus-ring-offset), 0px));
 	min-height: 0;
+	margin: calc(var(--cv-unfold-ring-room) * -1);
+	padding: var(--cv-unfold-ring-room);
 	overflow: hidden;
 	perspective: 50rem;
 }

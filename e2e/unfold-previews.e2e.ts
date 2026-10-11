@@ -105,6 +105,14 @@ test("a research preview unfolds by keyboard without opening the report", async 
 	await expect(source).toHaveAttribute("href", SOURCE.url);
 	await expect(card.getByText(QUESTION, { exact: true })).toBeVisible();
 	await expect(child).toHaveCount(0);
+	// Prose list defaults must not leak into the designed source list.
+	let list = card.getByRole("list");
+	expect(
+		await list.evaluate(element => {
+			let style = getComputedStyle(element);
+			return [style.listStyleType, style.paddingInlineStart];
+		}),
+	).toEqual(["none", "0px"]);
 
 	await page.keyboard.press("Tab");
 	await expect(source).toBeFocused();
@@ -254,6 +262,7 @@ test("using the preview leaves the editor selection alone", async ({ baseURL, jo
 	let popup = page.waitForEvent("popup");
 	await card.getByRole("link", { name: SOURCE.title, exact: true }).click();
 	await (await popup).close();
+	await expect(page.getByRole("region", { name: `Child document: ${title}` })).toHaveCount(0);
 	expect(await snapshot()).toEqual(before);
 
 	await toggle.click();

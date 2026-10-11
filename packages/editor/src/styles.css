@@ -107,8 +107,9 @@
 	color: var(--color-text-secondary);
 }
 
-.plan-research-preview-body p,
-.plan-research-preview-sources {
+.plan-research-preview .plan-research-preview-body p,
+.plan-research-preview .plan-research-preview-sources,
+.plan-research-preview .plan-research-preview-sources li {
 	margin: 0;
 }
 
@@ -124,7 +125,7 @@
 	-webkit-line-clamp: 3;
 }
 
-.plan-research-preview-sources {
+.plan-research-preview .plan-research-preview-sources {
 	display: grid;
 	gap: 0.25rem;
 	padding: 0;
