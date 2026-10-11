@@ -17,6 +17,12 @@ export type RemotePlanner =
 		humanInput?: (report: (status: HumanInputStatus) => void) => HostInput;
 		/** Stops or resumes the client's workflow runs; set while the session is open. */
 		control?: (action: "stop" | "resume", runId?: string) => Promise<void>;
+		/**
+		 * Stops the server's host tools for the next turn. That turn aborts it when it
+		 * ends without its caller stopping it, so a host tool still running, such as an
+		 * open Decision, ends with the turn instead of holding it open.
+		 */
+		hostTools?: AbortController;
 	};
 
 let planners = new Map<string, RemotePlanner>();

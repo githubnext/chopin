@@ -274,8 +274,11 @@ export async function openPlannerSession(
 					return planner?.activeTools ?? remote?.activeTools ?? fixedTools;
 				},
 				...runControl,
-				stream: (prompt, abortSignal) =>
-					agent.stream({
+				stream: (prompt, abortSignal) => {
+					// The remote turn aborts it when the turn ends or the link drops mid-tool.
+					let hostTools = remote ? new AbortController() : undefined;
+					if (remote) remote.hostTools = hostTools;
+					return agent.stream({
 						session: active,
 						prompt,
 						abortSignal,
@@ -284,8 +287,10 @@ export async function openPlannerSession(
 							instructions,
 							owner,
 							githubTools: tools.value,
+							...(hostTools ? { toolSignal: hostTools.signal } : {}),
 						},
-					}),
+					});
+				},
 				destroy: () =>
 					stopped ??= (async () => {
 						try {

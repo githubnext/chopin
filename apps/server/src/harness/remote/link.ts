@@ -148,6 +148,8 @@ type Turn = {
 	stopped: boolean;
 	ended: boolean;
 	settle: PromiseWithResolvers<void>;
+	/** Aborted when the turn ends, so the server's host tools still running for it stop too. */
+	hostTools?: AbortController;
 	grace?: ReturnType<typeof setTimeout>;
 	listeners: (() => void)[];
 };
@@ -385,6 +387,7 @@ class RemoteSession {
 		clearTimeout(turn.grace);
 		for (let release of turn.listeners.splice(0)) release();
 		if (this.#current === turn) this.#current = undefined;
+		turn.hostTools?.abort(error ?? new Error("The turn has ended."));
 		if (error) turn.settle.reject(error);
 		else turn.settle.resolve();
 	}
@@ -442,6 +445,8 @@ class RemoteSession {
 		await this.#port.revalidate();
 		this.#ready();
 		let hostNames = options.tools.map(tool => tool.name);
+		let hostTools = this.planner.hostTools;
+		this.planner.hostTools = undefined;
 		let turn: Turn = {
 			id: crypto.randomUUID(),
 			emit: options.emit,
@@ -453,6 +458,7 @@ class RemoteSession {
 			stopped: false,
 			ended: false,
 			settle: Promise.withResolvers<void>(),
+			...(hostTools ? { hostTools } : {}),
 			listeners: [],
 		};
 		let sent = this.#port.send({
@@ -580,8 +586,8 @@ export class PlannerLink {
 		try {
 			return await session.start();
 		} catch (error) {
-			this.#sessions.delete(sessionId);
-			this.#send({ type: "destroy", session: sessionId });
+			// Withdraws any question the client asked while the session was starting.
+			await session.close();
 			throw error;
 		}
 	}
