@@ -105,6 +105,19 @@ describe("shuffle frames", () => {
 			undefined,
 		]);
 	});
+
+	it("keeps a reversed card on its current layer and opacity until the midpoint", () => {
+		// Sent back, then called forward before the swap: it is still over the deck.
+		let frames = shuffleFrames("a", "b", "front", 3, false, undefined, {
+			zIndex: 104,
+			opacity: 0.4,
+		});
+		expect(frames.map(frame => frame.zIndex)).toEqual([104, 104, 104, 104]);
+		expect(frames[0]!.opacity).toBe(0.4);
+		// Called forward, then sent back before the swap: it is still under the deck.
+		let back = shuffleFrames("a", "b", "back", 3, false, undefined, { zIndex: 0, opacity: 1 });
+		expect(back.map(frame => frame.zIndex)).toEqual([0, 0, 0, 0]);
+	});
 });
 
 describe("moving card", () => {

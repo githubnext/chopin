@@ -85,6 +85,8 @@ export const SHUFFLE_MIDPOINT = "translate(4%, 72%) rotate(2.5deg) scale(0.97)";
  *
  * Pass `easing` here rather than to the whole animation: eased per half, the
  * layer swap lands at the midpoint in time instead of early in the gesture.
+ * `start` is the layer and opacity of a card caught mid-shuffle, so reversing
+ * it before the midpoint keeps it on the side of the deck it is already on.
  */
 export function shuffleFrames(
 	from: string,
@@ -93,13 +95,15 @@ export function shuffleFrames(
 	total: number,
 	hidden: boolean,
 	easing?: string,
+	start?: { zIndex: number; opacity: number },
 ): Keyframe[] {
 	// Above or below the `100 - depth` range, so the card passes every other one.
 	let [before, after] = direction === "back" ? [101 + total, 0] : [0, 101 + total];
 	let eased = easing === undefined ? {} : { easing };
+	let layer = start?.zIndex ?? before;
 	return [
-		{ offset: 0, transform: from, zIndex: before, opacity: 1, ...eased },
-		{ offset: 0.45, transform: SHUFFLE_MIDPOINT, zIndex: before, opacity: 1 },
+		{ offset: 0, transform: from, zIndex: layer, opacity: start?.opacity ?? 1, ...eased },
+		{ offset: 0.45, transform: SHUFFLE_MIDPOINT, zIndex: layer, opacity: 1 },
 		{ offset: 0.45, transform: SHUFFLE_MIDPOINT, zIndex: after, opacity: 1, ...eased },
 		{ offset: 1, transform: to, zIndex: after, opacity: hidden ? 0 : 1 },
 	];

@@ -99,11 +99,38 @@ function cssMs(name: string, fallback: number): number {
 	return Number.isFinite(value) ? value : fallback;
 }
 
+type Frozen = {
+	transform: string;
+	opacity: number;
+	zIndex: number;
+	/** Whether the card was mid-move, so its layer and opacity are not its slot's. */
+	moving: boolean;
+	background: string;
+};
+
+/** Cards repaint between paper and inset as they leave or reach the top. */
+const PAINT = "deck-paint";
+/** A move that holds the card on a layer outside its slot's. */
+const SHUFFLE = "deck-shuffle";
+
+function paint(element: HTMLElement): Animation[] {
+	let card = element.firstElementChild;
+	return card ? card.getAnimations().filter(animation => animation.id === PAINT) : [];
+}
+
 /** Freeze a card where it is so a new move starts from this frame, not its end. */
-function freeze(element: HTMLElement): { transform: string; opacity: string } {
+function freeze(element: HTMLElement): Frozen {
 	let style = getComputedStyle(element);
-	let frozen = { transform: style.transform, opacity: style.opacity };
-	for (let animation of element.getAnimations()) animation.cancel();
+	let card = element.firstElementChild;
+	let animations = element.getAnimations();
+	let frozen = {
+		transform: style.transform,
+		opacity: Number(style.opacity),
+		zIndex: Number(style.zIndex) || 0,
+		moving: animations.some(animation => animation.id === SHUFFLE),
+		background: card ? getComputedStyle(card).backgroundColor : "",
+	};
+	for (let animation of [...animations, ...paint(element)]) animation.cancel();
 	return frozen;
 }
 
@@ -143,11 +170,14 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 	let reorder = (next: string[], kind: "cycle" | "settle" | undefined, direction?: 1 | -1) => {
 		let previous = arrange(orderRef.current, itemsRef.current);
 		let still = reduced();
-		let frozen = new Map<string, { transform: string; opacity: string }>();
+		let frozen = new Map<string, Frozen>();
 		let height: number | undefined;
 		for (let [id, element] of slots.current) {
-			if (still) { for (let animation of element.getAnimations()) animation.cancel(); }
-			else frozen.set(id, freeze(element));
+			if (still) {
+				for (let animation of [...element.getAnimations(), ...paint(element)]) {
+					animation.cancel();
+				}
+			} else frozen.set(id, freeze(element));
 		}
 		let stageElement = stage.current;
 		if (stageElement && !still) height = stageElement.getBoundingClientRect().height;
@@ -173,17 +203,31 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 					next.length,
 					at > PEEKS,
 					easing,
+					from.moving ? from : undefined,
 				);
-				element.animate(frames, { duration: linger * 1.4 });
+				element.animate(frames, { id: SHUFFLE, duration: linger * 1.4 });
 				continue;
 			}
+			// A card caught mid-shuffle eases back to its slot's layer too.
+			let layer = (zIndex: number) => from.moving ? { zIndex } : {};
 			element.animate(
 				[
-					{ transform: from.transform, opacity: from.opacity },
-					{ transform: place.transform, opacity: place.opacity },
+					{ transform: from.transform, opacity: from.opacity, ...layer(from.zIndex) },
+					{ transform: place.transform, opacity: place.opacity, ...layer(place.zIndex) },
 				],
-				{ duration: linger, easing },
+				{ id: from.moving ? SHUFFLE : "", duration: linger, easing },
 			);
+		}
+		for (let [id, element] of slots.current) {
+			let card = element.firstElementChild;
+			let was = frozen.get(id)?.background;
+			let now = card ? getComputedStyle(card).backgroundColor : "";
+			if (!card || !was || was === now) continue;
+			card.animate([{ backgroundColor: was }, { backgroundColor: now }], {
+				id: PAINT,
+				duration: linger,
+				easing,
+			});
 		}
 		// The top card sets the stage's height; ease between the two so prose
 		// below does not jump mid-shuffle.
@@ -193,6 +237,23 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 				duration: linger * 1.4,
 				easing,
 			});
+		}
+		// The incoming top card joins the flow at its own height. Reveal what the
+		// old stage did not show at the stage's pace, so it never paints over the
+		// controls and prose below before the stage has grown to hold it.
+		let incoming = next[0] === previous[0] ? undefined : slots.current.get(next[0] ?? "");
+		if (stageElement && incoming && height !== undefined) {
+			let shown = height - Number.parseFloat(getComputedStyle(stageElement).paddingTop);
+			let hidden = incoming.offsetHeight - shown;
+			if (hidden > 0) {
+				incoming.animate(
+					[
+						{ clipPath: `inset(-2rem -2rem ${hidden}px -2rem)` },
+						{ clipPath: "inset(-2rem -2rem 0px -2rem)" },
+					],
+					{ duration: linger * 1.4, easing },
+				);
+			}
 		}
 	};
 
@@ -224,6 +285,7 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 
 	useEffect(() => () => {
 		window.clearTimeout(lingering.current);
+		lingering.current = undefined;
 		window.clearTimeout(announcing.current);
 	}, []);
 
@@ -258,8 +320,11 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 		let front = (event: Event) => {
 			let id = (event as CustomEvent<string>).detail;
 			for (let slotElement of slots.current.values()) {
-				for (let animation of slotElement.getAnimations()) animation.cancel();
+				for (let animation of [...slotElement.getAnimations(), ...paint(slotElement)]) {
+					animation.cancel();
+				}
 			}
+			for (let animation of stage.current?.getAnimations() ?? []) animation.cancel();
 			let next = bringForward(arrange(orderRef.current, itemsRef.current), id);
 			orderRef.current = next;
 			flushSync(() => setOrder(next));
