@@ -470,6 +470,8 @@ describe("child document shell", () => {
 			let token of [
 				"--child-open-dur",
 				"--child-close-dur",
+				"--child-scrim-dur",
+				"--child-scrim-lag-dur",
 				"--child-ease",
 				"--child-recede-step",
 				"--child-scrim-opacity",
