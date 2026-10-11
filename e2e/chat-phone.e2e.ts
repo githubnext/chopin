@@ -143,6 +143,54 @@ test("an open keyboard leaves the phone transcript most of the exposed height", 
 	}
 });
 
+test("a phone transcript at the bottom stays pinned when a message arrives with the keyboard open", async ({ baseURL, browser, join, room }) => {
+	let cy = await join("cy", { viewport: { width: 1440, height: 900 } });
+	let cyChat = chatPane(cy);
+	let cyDraft = chatInput(cyChat);
+	for (let index = 1; index <= 12; index++) {
+		await cyDraft.fill(`Earlier message ${index} long enough to take a line or two on a phone`);
+		await cyChat.getByRole("button", { name: "Send message" }).click();
+		await expect(cyChat.getByText(`Earlier message ${index} `)).toBeVisible();
+	}
+	let emulation = await openIsolatedRoom(
+		browser,
+		baseURL!,
+		room,
+		"ana",
+		PHONE,
+		context =>
+			installVisualViewport(context, {
+				height: 844,
+				offsetLeft: 0,
+				offsetTop: 0,
+				pageLeft: 0,
+				pageTop: 0,
+				scale: 1,
+				width: 390,
+			}),
+	);
+	try {
+		let page = emulation.page;
+		await openPhoneChat(page);
+		let chat = chatPane(page);
+		await chatInput(chat).click();
+		await setVisualViewport(page, { event: "resize", height: 508 });
+		await page.keyboard.type("Typing while cy talks");
+
+		await cyDraft.fill("The newest message from cy");
+		await cyChat.getByRole("button", { name: "Send message" }).click();
+		let newest = chat.getByText("The newest message from cy");
+		await expect(newest).toBeVisible();
+		let composer = chat.locator(".chat-composer");
+		await expect.poll(async () => {
+			let [message, below] = await Promise.all([newest.boundingBox(), composer.boundingBox()]);
+			return message!.y + message!.height <= below!.y && message!.y >= 0;
+		}).toBe(true);
+	} finally {
+		await emulation.close();
+	}
+});
+
 test("the desktop composer keeps its labelled mode switch, footer and dropdown pickers", async ({ join }) => {
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	await join("cy");

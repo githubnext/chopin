@@ -287,7 +287,8 @@
  * transcript keeps the space above the keyboard. Every phone-only rule lives
  * in this block, behind this one condition.
  */
-@media (pointer: coarse) and (max-width: 600px) {
+/* Landscape phones too; the shared `:root[data-phone]` hook can replace this condition. */
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
 	.chat-composer {
 		padding-inline: 0.5rem;
 		/* The home indicator's inset, but not while the keyboard covers it. */
@@ -333,8 +334,10 @@
 	.chat-composer .composer-run-control:empty {
 		display: none;
 	}
+	/* Room enough that the mode switch and send keep separate 44px targets. */
 	.chat-composer .send-action {
 		order: 5;
+		margin-inline-start: calc(var(--spacing) * 2);
 	}
 	/* Without the Planner the switch can never be used; the line above says why. */
 	.chat-composer[data-planner="off"] .composer-mode-trigger {
@@ -364,10 +367,18 @@
 		opacity: 0;
 	}
 	.chat-composer .send-action:disabled {
-		background-color: var(--color-gray-200);
+		background-color: var(--color-inset);
 		color: var(--color-text-tertiary);
 		box-shadow: none;
+		outline: none;
 		opacity: 1;
+	}
+	/*
+	 * Focus is a petrol edge on the pill itself rather than an offset ring.
+	 * Soft keyboards send keydown too, so this cannot depend on input modality.
+	 */
+	.chat-composer .composer-surface.field:focus-within {
+		outline-offset: calc(-1 * var(--edge-width));
 	}
 	/* Connection state becomes a slim first row inside the pill. */
 	.chat-composer .composer-connection-group:has(.composer-connection-label) {
