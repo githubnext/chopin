@@ -93,7 +93,8 @@ test("an in-app link navigates within Chopin", async ({ baseURL, join, room, see
 });
 
 test("the pencil edits where the reader tapped and Done returns to reading", async ({ join, seed }) => {
-	await seed(SOURCE);
+	// A heading, so the top bar's small title waits at the top of the document.
+	await seed(`# Field notes\n\n${SOURCE}`);
 	let page = await join("ana", PHONE);
 	let writer = await join("bo", { viewport: { width: 1440, height: 900 } });
 

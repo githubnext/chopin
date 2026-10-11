@@ -60,7 +60,9 @@ test("a wide table fades only the sides that still hide columns", async ({ join,
 	await expect(table).toHaveAttribute("data-more", "end");
 	await expectNoHorizontalOverflow(page);
 
-	// Editing a cell can give the table a new element; the fade must follow it.
+	// Editing a cell can give the table a new element; the fade must follow it. Phones open
+	// documents for reading, so the writer switches to editing first.
+	await page.getByRole("button", { name: "Edit document" }).tap();
 	await content(page).getByRole("cell", { name: "Same" }).click();
 	await page.keyboard.type(" as before, with a longer explanation");
 	await expect(content(page).getByRole("cell", { name: /longer explanation/ })).toBeVisible();
@@ -77,7 +79,8 @@ test("code wraps on a phone and keeps one preview when it stops", async ({ join,
 	await expect(view.locator("pre[data-overflow='wrap']")).toBeAttached();
 	expect(await view.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 
-	// The source wraps too while someone is editing it.
+	// The source wraps too while someone is editing it; phones edit from the pencil.
+	await page.getByRole("button", { name: "Edit document" }).tap();
 	await content(page).getByRole("button", { name: "Show source" }).click();
 	let source = content(page).locator("[data-plan-source]");
 	await expect(source).toBeVisible();

@@ -52,6 +52,8 @@ test("touch text fields stay at least 16px while desktop keeps its sizes", async
 	expect(await fontSize(desktop, "Callout title")).toBeLessThan(16);
 
 	let phone = await join("ana", PHONE);
+	// Phones open documents for reading; fields appear once the writer edits.
+	await phone.getByRole("button", { name: "Edit document" }).tap();
 	expect(await fontSize(phone, "Callout title")).toBeGreaterThanOrEqual(16);
 	await content(phone).locator("p").filter({ hasText: "The rollout" }).selectText();
 	await phone.getByRole("button", { name: "Comment on this passage", exact: true }).click();
