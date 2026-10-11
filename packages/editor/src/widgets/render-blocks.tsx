@@ -55,7 +55,9 @@ import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 import { enclosing, remember } from "../collapse";
 import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } from "./code";
 import { CodeView } from "./code-view";
+import { fitsLegibly } from "./diagram-fit";
 import { DiagramSheet, ExpandDiagram } from "./diagram-sheet";
+import { usePhone } from "./phone";
 import { LanguageMenu } from "./language-menu";
 import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
@@ -68,9 +70,6 @@ import type { Kind } from "./code";
 
 /** How long the source must sit still before a failed drawing is reported. */
 const ERROR_DELAY = 600;
-
-/** Below this, a scaled-down diagram's labels stop being comfortably legible. */
-const MIN_DIAGRAM_SCALE = 0.75;
 
 type Block = {
 	key: string;
@@ -528,6 +527,8 @@ function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean
 	let region = useRef<HTMLDivElement>(null);
 	let [fit, setFit] = useState(false);
 	let [expanded, setExpanded] = useState(false);
+	let phone = usePhone();
+	let expand = useRef<HTMLButtonElement>(null);
 	let [more, setMore] = useState<ReturnType<typeof hiddenSides>>();
 
 	useEffect(() => {
@@ -539,7 +540,7 @@ function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean
 			let style = getComputedStyle(element);
 			let room = element.clientWidth - parseFloat(style.paddingInlineStart)
 				- parseFloat(style.paddingInlineEnd);
-			setFit(!(authored > 0) || room >= authored * MIN_DIAGRAM_SCALE);
+			setFit(fitsLegibly(room, authored));
 			setMore(sidesOf(element));
 		};
 		let scrolled = () => setMore(sidesOf(element));
@@ -575,9 +576,15 @@ function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean
 				contentEditable={false}
 				dangerouslySetInnerHTML={{ __html: html }}
 			/>
-			{!fit && <ExpandDiagram onExpand={() => setExpanded(true)} />}
+			{phone && !fit && <ExpandDiagram buttonRef={expand} onExpand={() => setExpanded(true)} />}
 			{expanded && (
-				<DiagramSheet onClose={() => setExpanded(false)} zoomable>
+				<DiagramSheet
+					onClose={() => {
+						setExpanded(false);
+						// A tap never focuses the button, so closing would leave focus nowhere.
+						requestAnimationFrame(() => expand.current?.focus());
+					}}
+				>
 					<div
 						className="plan-diagram-sheet-drawing"
 						// The copy's IDs are its own, so its markers and styles
@@ -603,31 +610,6 @@ function WireframeError({ message }: { message: string }) {
 				<strong className="plan-error-title">This wireframe could not be drawn</strong>
 				<p className="plan-error-message">{message}</p>
 			</div>
-		</div>
-	);
-}
-
-/** A SeeCode drawing; its own controls offer the full-screen sheet where it overflows. */
-function SeeCode({ id, spec }: { id: string; spec: unknown }) {
-	let [expanded, setExpanded] = useState(false);
-	return (
-		<div
-			className="plan-seecode"
-			contentEditable={false}
-			role="region"
-			aria-label="Diagram preview"
-			tabIndex={0}
-		>
-			<Suspense fallback={null}>
-				<SeeCodeDiagram spec={spec} idPrefix={id} onExpand={() => setExpanded(true)} />
-			</Suspense>
-			{expanded && (
-				<DiagramSheet onClose={() => setExpanded(false)}>
-					<Suspense fallback={null}>
-						<SeeCodeDiagram spec={spec} idPrefix={`${id}-sheet`} />
-					</Suspense>
-				</DiagramSheet>
-			)}
 		</div>
 	);
 }
@@ -686,7 +668,19 @@ function Rendered(
 	}
 	if (block.kind === "seecode") {
 		if (spec === undefined) return null;
-		return <SeeCode id={block.key} spec={spec} />;
+		return (
+			<div
+				className="plan-seecode"
+				contentEditable={false}
+				role="region"
+				aria-label="Diagram preview"
+				tabIndex={0}
+			>
+				<Suspense fallback={null}>
+					<SeeCodeDiagram spec={spec} idPrefix={block.key} />
+				</Suspense>
+			</div>
+		);
 	}
 
 	if (!html) return null;

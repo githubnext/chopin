@@ -20,7 +20,7 @@
  * shown as coloured diff text instead, which is what it is.
  */
 
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { fileNameOf, repaired, titled } from "./code";
 
@@ -163,7 +163,8 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 	let [renderer, setRenderer] = useState<Renderer>();
 	let [broken, setBroken] = useState(false);
 	let [resolved, setResolved] = useState<string>();
-	let [overflow, setOverflow] = useState<Overflow>("scroll");
+	/** Unknown until the view is laid out, so the renderer is never handed a guess. */
+	let [overflow, setOverflow] = useState<Overflow>();
 	let view = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -193,8 +194,10 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 		};
 	}, [renderer, language]);
 
-	// The view's width follows its container, so a resize is when the switch can change.
-	useEffect(() => {
+	// The view's width follows its container, so a resize is when the switch can
+	// change. Read before paint and before the renderer mounts, so a phone never
+	// highlights a block twice.
+	useLayoutEffect(() => {
 		let element = view.current;
 		if (!element) return;
 		let update = () => setOverflow(readOverflow(element));
@@ -235,7 +238,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			// A diff's fallback has no title in the block's own header.
 			disableFileHeader: kind !== "diff" || !titled(meta),
 			disableLineNumbers: true,
-			overflow,
+			overflow: overflow ?? "scroll",
 			unsafeCSS: HANGING_INDENT,
 			disableWorkerPool: true,
 		}),
@@ -257,7 +260,8 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			 * which is what the source says too.
 			 */
 			hunkSeparators: "metadata" as const,
-			overflow,
+			overflow: overflow ?? "scroll",
+			unsafeCSS: HANGING_INDENT,
 			disableWorkerPool: true,
 		}),
 		[overflow],
@@ -280,7 +284,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			data-view={patch ? "diff" : "file"}
 			tabIndex={0}
 		>
-			{patch
+			{!overflow ? null : patch
 				? patch.map((fileDiff, index) => (
 					<FileDiff
 						// A patch names its files, but nothing stops it naming

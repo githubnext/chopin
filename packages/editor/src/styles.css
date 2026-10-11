@@ -482,11 +482,6 @@
 	}
 }
 
-/* Only where the document is narrow; a wide one keeps its scroll lane and controls. */
-.plan-content :is(.plan-diagram-expand, .ch-diagram__expand) {
-	display: none;
-}
-
 @container (max-width: 40rem) {
 	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
 	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface, .plan-afterword) {
@@ -514,73 +509,71 @@
 		border-radius: var(--radius-lg);
 		background: var(--color-text-quaternary);
 	}
-
-	/* A wide table fades the side that still hides columns, as a drawn diagram does. */
-	.plan-content table {
-		--plan-table-fade: calc(var(--spacing) * 8);
-	}
-
-	.plan-content table[data-more="end"] {
-		mask-image: linear-gradient(to right, black calc(100% - var(--plan-table-fade)), transparent);
-	}
-
-	.plan-content table[data-more="start"] {
-		mask-image: linear-gradient(to right, transparent, black var(--plan-table-fade));
-	}
-
-	.plan-content table[data-more="both"] {
-		mask-image: linear-gradient(
-			to right,
-			transparent,
-			black var(--plan-table-fade),
-			black calc(100% - var(--plan-table-fade)),
-			transparent
-		);
-	}
-
-	/*
-	 * Phone-width code wraps rather than scrolling a few characters at a time.
-	 * The coloured copy is drawn in a shadow root, so it reads this switch
-	 * instead of the rule; a plain-text fence is laid out by hand and keeps
-	 * its lines.
-	 */
-	.plan-content .planCode:not([data-plan-text]) .plan-code-view {
-		--plan-code-overflow: wrap;
-	}
-
-	.plan-content .planCode:not([data-plan-text]) .plan-code-view > diffs-container {
-		min-inline-size: 0;
-	}
-
-	.plan-content .planCode:not([data-plan-text]) [data-plan-source] {
-		overflow-wrap: anywhere;
-	}
-
-	/* A diagram below its readability floor offers a full-screen reading. */
-	.plan-content .plan-diagram-expand {
-		display: inline-grid;
-	}
-
-	.plan-content .ch-diagram__expand {
-		display: flex;
-	}
 }
 
-.plan-content [data-plan-preview]:has(> .plan-diagram-expand) {
-	position: relative;
+/* Rendered only on a phone, and shown only where the document is narrow too. */
+.plan-content .plan-diagram-actions {
+	display: none;
+	justify-content: flex-end;
+	padding-block-start: calc(var(--spacing) * 1);
+	padding-inline: calc(var(--spacing) * 1.5);
 }
 
-/* Clear of the block's floating controls, which sit over the drawing's top padding. */
-.plan-content .plan-diagram-expand {
-	position: absolute;
-	inset-block-start: calc(var(--spacing) * 10);
-	inset-inline-end: calc(var(--spacing) * 2);
-	z-index: 1;
-	place-items: center;
-	inline-size: var(--control-target-coarse);
-	block-size: var(--control-target-coarse);
-	border-radius: var(--radius-full);
-	box-shadow: var(--shadow-resting);
+/*
+ * Wide authored blocks on a phone: a coarse pointer on a small screen, and a
+ * narrow document. The media query is the phone class, kept identical to
+ * `PHONE_QUERY` in widgets/phone.ts; when the shell publishes it as
+ * `:root[data-phone]`, this one condition is what changes. Narrow desktop
+ * windows keep their scroll lanes untouched.
+ */
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
+	@container (max-width: 40rem) {
+		/* A wide table fades the side that still hides columns, as a drawn diagram does. */
+		.plan-content table {
+			--plan-table-fade: calc(var(--spacing) * 8);
+		}
+
+		.plan-content table[data-more="end"] {
+			mask-image: linear-gradient(to right, black calc(100% - var(--plan-table-fade)), transparent);
+		}
+
+		.plan-content table[data-more="start"] {
+			mask-image: linear-gradient(to right, transparent, black var(--plan-table-fade));
+		}
+
+		.plan-content table[data-more="both"] {
+			mask-image: linear-gradient(
+				to right,
+				transparent,
+				black var(--plan-table-fade),
+				black calc(100% - var(--plan-table-fade)),
+				transparent
+			);
+		}
+
+		/*
+		 * Code wraps rather than scrolling a few characters at a time. The
+		 * coloured copy is drawn in a shadow root, so it reads this switch
+		 * instead of the rule; a plain-text fence is laid out by hand and
+		 * keeps its lines.
+		 */
+		.plan-content .planCode:not([data-plan-text]) .plan-code-view {
+			--plan-code-overflow: wrap;
+		}
+
+		.plan-content .planCode:not([data-plan-text]) .plan-code-view > diffs-container {
+			min-inline-size: 0;
+		}
+
+		.plan-content .planCode:not([data-plan-text]) [data-plan-source] {
+			overflow-wrap: anywhere;
+		}
+
+		/* A diagram below its readability floor offers a full-screen reading. */
+		.plan-content .plan-diagram-actions {
+			display: flex;
+		}
+	}
 }
 
 .agent-mark {
@@ -3412,10 +3405,6 @@
 
 	.plan-content .planCode .plan-diagram {
 		padding-block-start: 0;
-	}
-
-	.plan-content .plan-diagram-expand {
-		inset-block-start: calc(var(--spacing) * 2);
 	}
 
 	.plan-content .planCode .plan-code-chrome {

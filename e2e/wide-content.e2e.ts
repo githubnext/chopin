@@ -1,10 +1,11 @@
 /**
- * Wide authored blocks on a phone-width document.
+ * Wide authored blocks on a phone.
  *
  * A table keeps its own scroll lane and fades whichever side still hides
  * columns; code wraps instead of scrolling a few characters at a time; a
- * diagram too dense for the measure opens full screen. A wide document keeps
- * all three as they were.
+ * diagram too dense for the measure opens full screen. The phone class is a
+ * coarse pointer on a small screen, so a narrow desktop window with Chat open
+ * keeps all three exactly as they were.
  */
 
 import { content, expect, test } from "./room";
@@ -12,8 +13,9 @@ import { expectNoHorizontalOverflow } from "./responsive";
 
 import type { Locator } from "@playwright/test";
 
-const PHONE = { width: 390, height: 844 };
-const DESKTOP = { width: 1440, height: 900 };
+const PHONE = { hasTouch: true, viewport: { width: 390, height: 844 } };
+/** Chat open beside a document narrower than 40rem, with a fine pointer. */
+const NARROW_DESKTOP = { viewport: { width: 1280, height: 800 } };
 
 const TABLE = `| Case | Today | After | Owner | Risk | Verification |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +44,7 @@ function mask(table: Locator): Promise<string> {
 
 test("a wide table fades only the sides that still hide columns", async ({ join, seed }) => {
 	await seed(TABLE);
-	let page = await join("ana", { viewport: PHONE });
+	let page = await join("ana", PHONE);
 	let table = content(page).locator("table");
 
 	await expect(table).toHaveAttribute("data-more", "end");
@@ -58,19 +60,22 @@ test("a wide table fades only the sides that still hide columns", async ({ join,
 	await expect(table).toHaveAttribute("data-more", "end");
 	await expectNoHorizontalOverflow(page);
 
-	// A wide document keeps its table unfaded.
-	await page.setViewportSize(DESKTOP);
-	await expect.poll(() => mask(table)).toBe("none");
+	// Editing a cell can give the table a new element; the fade must follow it.
+	await content(page).getByRole("cell", { name: "Same" }).click();
+	await page.keyboard.type(" as before, with a longer explanation");
+	await expect(content(page).getByRole("cell", { name: /longer explanation/ })).toBeVisible();
+	await table.evaluate(node => (node.scrollLeft = node.scrollWidth));
+	await expect(table).toHaveAttribute("data-more", "start");
+	await table.evaluate(node => (node.scrollLeft = 0));
+	await expect(table).toHaveAttribute("data-more", "end");
 });
 
-test("code wraps at phone width and scrolls on a wide document", async ({ join, seed }) => {
+test("code wraps on a phone and keeps one preview when it stops", async ({ join, seed }) => {
 	await seed(CODE);
-	let page = await join("ana", { viewport: PHONE });
-	let view = content(page).locator("[data-plan-preview] .plan-code-view");
-	await expect(view.locator("[data-file]")).toBeVisible();
-
-	await expect.poll(() => view.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+	let page = await join("ana", PHONE);
+	let view = content(page).getByRole("group", { name: "Code preview" });
 	await expect(view.locator("pre[data-overflow='wrap']")).toBeAttached();
+	expect(await view.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 
 	// The source wraps too while someone is editing it.
 	await content(page).getByRole("button", { name: "Show source" }).click();
@@ -78,40 +83,62 @@ test("code wraps at phone width and scrolls on a wide document", async ({ join, 
 	await expect(source).toBeVisible();
 	expect(await source.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 	await expectNoHorizontalOverflow(page);
+	await content(page).getByRole("button", { name: "Hide source" }).click();
 
-	await page.setViewportSize(DESKTOP);
+	// Leaving the phone class switches the same preview back to scrolling;
+	// it is never remounted, so one owner keeps the node.
+	await view.evaluate(node => node.setAttribute("data-test-identity", ""));
+	await page.setViewportSize({ width: 1024, height: 768 });
 	await expect(view.locator("pre[data-overflow='scroll']")).toBeAttached();
-	await expect.poll(() => view.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	await expect(view).toHaveAttribute("data-test-identity", "");
 });
 
-test("a dense diagram opens full screen and closes", async ({ join, seed }) => {
+test("a narrow desktop window keeps wide blocks as they were", async ({ join, seed }) => {
+	await seed(`${TABLE}\n${CODE}\n${DIAGRAM}`);
+	let page = await join("ana", NARROW_DESKTOP);
+	let document = content(page);
+	// The document is narrower than 40rem here; only the pointer differs from a phone.
+	expect(
+		await document.evaluate(node => node.closest(".plan-document")!.clientWidth),
+	).toBeLessThan(640);
+
+	let view = document.getByRole("group", { name: "Code preview" });
+	await expect(view.locator("pre[data-overflow='scroll']")).toBeAttached();
+	await expect.poll(() => view.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	await expect.poll(() => mask(document.locator("table"))).toBe("none");
+	await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
+	await expect(document.getByRole("button", { name: "Expand diagram" })).toHaveCount(0);
+});
+
+test("a dense diagram opens full screen at a readable size and closes", async ({ join, seed }) => {
 	await seed(DIAGRAM);
-	let page = await join("ana", { viewport: PHONE });
+	let page = await join("ana", PHONE);
+	let region = content(page).getByRole("region", { name: "Diagram preview" });
 	let expand = content(page).getByRole("button", { name: "Expand diagram" });
 	await expect(expand).toBeVisible();
-	let box = await expand.boundingBox();
-	expect(box?.width).toBeGreaterThanOrEqual(44);
-	expect(box?.height).toBeGreaterThanOrEqual(44);
+
+	// A row of its own under the scroll lane, never over the drawing.
+	let [drawing, button] = await Promise.all([region.boundingBox(), expand.boundingBox()]);
+	expect(button!.y).toBeGreaterThanOrEqual(drawing!.y + drawing!.height - 1);
 
 	await expand.click();
 	let sheet = page.getByRole("dialog", { name: "Diagram" });
 	await expect(sheet).toBeVisible();
 	let close = sheet.getByRole("button", { name: "Close diagram" });
 	await expect(close).toBeFocused();
-	await expect(sheet.locator("svg")).toBeVisible();
 
-	// At its authored size the drawing pans in its own scroller; fitting it
-	// shows the whole shape. Which it opens in depends on how wide it is.
+	// Fitting this one would shrink it past legibility, so it opens at its
+	// authored size and pans in its own scroller; Fit shows the whole shape.
 	let scroller = sheet.getByRole("region", { name: "Diagram, scroll to pan" });
-	let zoom = sheet.getByRole("button", { name: "Zoom in diagram" });
-	if (await zoom.isVisible()) await zoom.click();
-	await expect.poll(() => scroller.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(
-		true,
-	);
-	await sheet.getByRole("button", { name: "Fit diagram to screen" }).click();
+	let fit = sheet.getByRole("button", { name: "Fit diagram to screen" });
+	await expect(fit).toBeVisible();
+	expect(await scroller.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	await fit.click();
 	await expect.poll(() => scroller.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(
 		true,
 	);
+	let actual = sheet.getByRole("button", { name: "Actual size" });
+	await expect(actual).toBeVisible();
 
 	// Focus cycles inside the sheet rather than leaving it.
 	await close.focus();
@@ -119,18 +146,19 @@ test("a dense diagram opens full screen and closes", async ({ join, seed }) => {
 	await page.keyboard.press("Shift+Tab");
 	await expect(scroller).toBeFocused();
 	await page.keyboard.press("Tab");
-	await expect(sheet.getByRole("button", { name: "Zoom in diagram" })).toBeFocused();
+	await expect(actual).toBeFocused();
 
+	// Escape closes it and returns focus to the control that opened it.
 	await page.keyboard.press("Escape");
 	await expect(sheet).toBeHidden();
+	await expect(expand).toBeFocused();
 
-	await expand.click();
+	// So does a tap on Close, though the tap never focused the button.
+	await expand.evaluate(node => (node as HTMLElement).blur());
+	await expand.tap();
 	await expect(sheet).toBeVisible();
-	await close.click();
+	await close.tap();
 	await expect(sheet).toBeHidden();
+	await expect(expand).toBeFocused();
 	await expectNoHorizontalOverflow(page);
-
-	// A wide document keeps the scroll lane and has no full-screen control.
-	await page.setViewportSize(DESKTOP);
-	await expect(expand).toBeHidden();
 });

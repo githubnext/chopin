@@ -9,6 +9,8 @@ import type { Table } from "./ops";
 
 function mark(table: HTMLElement): void {
 	let more = hiddenSides(scrollEdges(table.scrollLeft, table.clientWidth, table.scrollWidth));
+	// Scroll fires every frame; an unchanged attribute should not restyle the table.
+	if ((table.getAttribute("data-more") ?? undefined) === more) return;
 	if (more) table.setAttribute("data-more", more);
 	else table.removeAttribute("data-more");
 }

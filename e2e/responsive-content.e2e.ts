@@ -417,12 +417,9 @@ for (let viewport of RESPONSIVE_VIEWPORTS) {
 		let code = document.locator("[data-plan-language='typescript'] [data-plan-preview] > div");
 		let table = document.locator("table");
 		if (viewport.name === "compact") {
-			// A phone-width document wraps code rather than scrolling it.
-			await expectInsideDocumentWidth("long code line", code);
-			await expect.poll(() => code.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(
-				true,
-			);
+			await expectOwnScroller("long code line", code);
 			await expectOwnScroller("wide table", table);
+			await expectHorizontalScroll("long code line", code);
 			await expectHorizontalScroll("wide table", table);
 		} else {
 			await expectInsideDocumentWidth("long code line", code);

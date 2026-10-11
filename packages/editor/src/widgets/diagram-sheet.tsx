@@ -1,38 +1,48 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { CloseIcon, ExpandIcon, MinusIcon, PlusIcon } from "@chopin/icons";
+import { ActualSizeIcon, CloseIcon, ExpandIcon, FitWidthIcon } from "@chopin/icons";
 
-import type { ReactNode } from "react";
+import { fitsLegibly } from "./diagram-fit";
 
-/** What Tab stops on inside the sheet: its buttons, the scroller, and the drawing's own controls. */
-const STOPS = "button:not([disabled]), [tabindex]:not([tabindex='-1'])";
+import type { ReactNode, Ref } from "react";
 
-/** Below this, a fitted overview is too small to recognise anything in. */
-const FIT_FLOOR = 0.2;
+/** What Tab can reach inside the sheet, including links a drawing may carry. */
+const STOPS = [
+	"a[href]",
+	"button:not([disabled])",
+	"input:not([disabled])",
+	"select:not([disabled])",
+	"textarea:not([disabled])",
+	"[tabindex]:not([tabindex='-1'])",
+].join(", ");
 
 /**
- * Opens a diagram too dense for a phone's measure full screen.
+ * A row under a diagram too dense for a phone's measure, offering it full
+ * screen. Under the scroll lane rather than over it, so it never covers the
+ * drawing or the fade that says there is more.
  *
- * Hidden by the stylesheet wherever the document has room, so a wide screen
- * keeps the scroll lane and controls it already had.
+ * Rendered only on a phone; the stylesheet also hides it wherever the
+ * document has room.
  */
-export function ExpandDiagram({ onExpand }: { onExpand: () => void }) {
+export function ExpandDiagram(
+	{ onExpand, buttonRef }: { onExpand: () => void; buttonRef?: Ref<HTMLButtonElement> },
+) {
 	return (
-		<button
-			type="button"
-			aria-label="Expand diagram"
-			className="plan-diagram-expand btn btn-icon btn-secondary"
-			contentEditable={false}
-			// Chrome, so a click here is not read as a click into the drawing.
-			data-plan-chrome="expand"
-			// Like the source toggle: a click in a non-editable island would
-			// otherwise move the caret into the source beside it.
-			onMouseDown={event => event.preventDefault()}
-			onClick={onExpand}
-		>
-			<ExpandIcon aria-hidden="true" />
-		</button>
+		<div className="plan-diagram-actions" contentEditable={false} data-plan-chrome="expand">
+			<button
+				ref={buttonRef}
+				type="button"
+				className="btn btn-sm btn-ghost gap-1 text-text-tertiary"
+				// Like the source toggle: a click in a non-editable island would
+				// otherwise move the caret into the source beside it.
+				onMouseDown={event => event.preventDefault()}
+				onClick={onExpand}
+			>
+				<ExpandIcon aria-hidden="true" />
+				Expand diagram
+			</button>
+		</div>
 	);
 }
 
@@ -43,31 +53,26 @@ export function ExpandDiagram({ onExpand }: { onExpand: () => void }) {
  * arrives as the dialog's cancel. The drawing scrolls natively, so a finger
  * pans it and a pinch zooms it the way it would anything else on the page.
  *
- * A `zoomable` drawing opens fitted to the width, for the whole shape, and
- * zooms to its authored size, where its labels are legible, like an image's
- * lightbox; one too wide to recognise when fitted opens at size. One with
- * zoom controls of its own leaves this off.
+ * It opens at the drawing's authored size, where its labels are legible,
+ * unless the whole drawing fits the screen at a legible scale; a toggle
+ * switches between the two, like an image's lightbox.
  */
-export function DiagramSheet(
-	{ onClose, zoomable = false, children }: {
-		onClose: () => void;
-		zoomable?: boolean;
-		children: ReactNode;
-	},
-) {
+export function DiagramSheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
 	let dialog = useRef<HTMLDialogElement>(null);
 	let close = useRef<HTMLButtonElement>(null);
-	let [zoomed, setZoomed] = useState(false);
+	let [fitted, setFitted] = useState(false);
 
 	useLayoutEffect(() => {
 		let element = dialog.current;
 		element?.showModal();
 		close.current?.focus();
-		// A drawing that would have to shrink past recognition opens at size.
 		let scroller = element?.querySelector<HTMLElement>(".plan-diagram-sheet-scroll");
 		let authored = Number(scroller?.querySelector("svg")?.getAttribute("width"));
-		if (zoomable && scroller && authored > 0 && scroller.clientWidth / authored < FIT_FLOOR) {
-			setZoomed(true);
+		if (scroller) {
+			let style = getComputedStyle(scroller);
+			let room = scroller.clientWidth - parseFloat(style.paddingInlineStart)
+				- parseFloat(style.paddingInlineEnd);
+			setFitted(fitsLegibly(room, authored));
 		}
 		return () => {
 			if (element?.open) element.close();
@@ -102,17 +107,14 @@ export function DiagramSheet(
 			}}
 		>
 			<div className="plan-diagram-sheet-bar">
-				{zoomable && (
-					<button
-						type="button"
-						className="plan-diagram-sheet-button btn btn-icon btn-secondary"
-						aria-label={zoomed ? "Fit diagram to screen" : "Zoom in diagram"}
-						aria-pressed={zoomed}
-						onClick={() => setZoomed(!zoomed)}
-					>
-						{zoomed ? <MinusIcon aria-hidden="true" /> : <PlusIcon aria-hidden="true" />}
-					</button>
-				)}
+				<button
+					type="button"
+					className="plan-diagram-sheet-button btn btn-icon btn-secondary"
+					aria-label={fitted ? "Actual size" : "Fit diagram to screen"}
+					onClick={() => setFitted(!fitted)}
+				>
+					{fitted ? <ActualSizeIcon aria-hidden="true" /> : <FitWidthIcon aria-hidden="true" />}
+				</button>
 				<button
 					ref={close}
 					type="button"
@@ -125,7 +127,7 @@ export function DiagramSheet(
 			</div>
 			<div
 				className="plan-diagram-sheet-scroll"
-				data-fit={zoomable && !zoomed ? "" : undefined}
+				data-fit={fitted ? "" : undefined}
 				role="region"
 				aria-label="Diagram, scroll to pan"
 				tabIndex={0}
