@@ -7,7 +7,7 @@
  * the source reads correctly on its own.
  */
 
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
 import { ChevronIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
 import {
@@ -22,6 +22,8 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
+import { Deck } from "../deck";
+import { deckLayout } from "../deck-runs";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { usePhone } from "./phone";
@@ -38,6 +40,8 @@ import type { Transport } from "@chopin/question/react";
 import type { Answer, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
 import type { QuestionStepMotion } from "../widget-options";
+import type { MemberState } from "../deck-runs";
+import type { QuestionnaireEntry } from "../questionnaires";
 
 /** The plan stores the chosen text; the shared view wants answer records. */
 function answers(value: Questionnaire): Answer[] | undefined {
@@ -607,7 +611,79 @@ function Expired({ value }: { value: Questionnaire }) {
 	);
 }
 
+/** How a document card takes part in a deck; mirrors the inline card's own rules. */
+export function inlineMemberState(
+	value: Questionnaire,
+	meta: Question.CardMeta | undefined,
+	places: { [question: string]: number } | undefined,
+	hasProseKey: boolean,
+): MemberState {
+	if (value.status === "expired") return "settled";
+	if ((!meta || meta.status === "decided") && carriedByMarkers(value, places) && !hasProseKey) {
+		return "hidden";
+	}
+	let shown = cardPresentation(value, meta, "inline");
+	return shown === "open" ? "open" : shown === "hidden" ? "hidden" : "settled";
+}
+
+// Stable empty snapshots: useSyncExternalStore loops on a fresh value per call.
+let NO_CARDS: ReadonlyMap<string, Question.CardMeta> = new Map();
+let NO_ENTRIES: QuestionnaireEntry[] = [];
+let noCards = () => NO_CARDS;
+let noEntries = () => NO_ENTRIES;
+let noop = () => () => {};
+
+function useInlineDeck(id: string) {
+	let options = useCellValue(widgets$);
+	let store = options.questions;
+	let entries = useSyncExternalStore(
+		store?.subscribe ?? noop,
+		store?.snapshot ?? noEntries,
+		store?.snapshot ?? noEntries,
+	);
+	let cards = useSyncExternalStore(
+		options.cardMeta?.subscribe ?? noop,
+		options.cardMeta?.snapshot ?? noCards,
+		options.cardMeta?.snapshot ?? noCards,
+	);
+	useRelations(store);
+	let run = store?.runOf(id);
+	if (!store || !run) return undefined;
+	let values = new Map(entries.map(entry => [entry.id, entry.value]));
+	let members = run.flatMap(member => {
+		let value = values.get(member);
+		if (!value) return [];
+		let state = inlineMemberState(
+			value,
+			cards.get(member),
+			store.counts(member),
+			!!store.proseKey(member),
+		);
+		return [{ id: member, state, value }];
+	});
+	let layout = deckLayout(members);
+	if (!layout?.members.includes(id)) return undefined;
+	return { layout, members: members.filter(member => layout.members.includes(member.id)) };
+}
+
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
+	let deck = useInlineDeck(value.id);
+	if (!deck) return <InlineCard value={value} />;
+	if (deck.layout.lead !== value.id) return <div data-deck-follower="" hidden />;
+	return (
+		<Deck
+			label="Decisions"
+			items={deck.members.map(member => ({
+				id: member.id,
+				settled: member.state !== "open",
+				label: member.value.questions[0]?.header ?? "Decision",
+				card: <InlineCard value={member.value} />,
+			}))}
+		/>
+	);
+}
+
+function InlineCard({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
 	let meta = useCardMeta(options.cardMeta, value.id);
 	let source = options.hasCardSource?.(value.id) ? options.onCardSource : undefined;

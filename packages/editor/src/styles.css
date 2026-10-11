@@ -2130,6 +2130,21 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	margin-block: 0;
 }
 
+/* A deck member drawn by its run's lead takes no room of its own. */
+.plan .plan-content [data-plan-questionnaire]:has(> [data-deck-follower]) {
+	display: none;
+	margin-block: 0;
+}
+
+/* The caret paragraph before a deck follower stays reachable but takes no room. */
+.plan
+	.plan-content
+	> p:has(> br:only-child):has(+ [data-plan-questionnaire] > [data-deck-follower]) {
+	block-size: 0;
+	margin-block: 0;
+	overflow: visible;
+}
+
 .plan .plan-content :is([data-plan-questionnaire], [data-plan-decision]) article {
 	width: 100%;
 }
