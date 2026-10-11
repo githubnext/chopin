@@ -482,10 +482,10 @@ export function RoomWorkspace(
 			preferred: initialDocumentView(profile, stored),
 		};
 	});
-	let editing = useDocumentEditing(room);
+	let typing = useDocumentEditing(room);
 	let view: WorkspaceDocumentView = showImplementation && profile.implementation
 		? "build"
-		: visibleDecisionView(decisionView, hasPlanContent, unanswered, editing);
+		: visibleDecisionView(decisionView, hasPlanContent, unanswered, typing);
 	let attention = useDecisionAttention(unanswered);
 	let latestCanEdit = useRef(canEdit);
 	let latestCanManage = useRef(canManage);
@@ -547,10 +547,10 @@ export function RoomWorkspace(
 
 	// Focus alone never routes: only new decisions or new prose re-evaluate the opening.
 	useEffect(() => {
-		let next = advanceDecisionView(decisionView, hasPlanContent, unanswered, editing);
+		let next = advanceDecisionView(decisionView, hasPlanContent, unanswered, typing);
 		if (next === decisionView) return;
 		setDecisionView(state => (state === decisionView ? next : state));
-		// oxlint-disable-next-line react-hooks/exhaustive-deps -- editing and decisionView are read, not triggers
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- typing and decisionView are read, not triggers
 	}, [hasPlanContent, unanswered]);
 
 	// Announce the route only once it has applied: a tab choice in the same
