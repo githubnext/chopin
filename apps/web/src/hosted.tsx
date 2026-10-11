@@ -4,6 +4,7 @@ import { parseChildDocumentPath, parseDocumentPath } from "@chopin/protocol/docu
 
 import * as Api from "./api";
 import { childCloseAction, childFocusTransition, childHistoryState } from "./child-history";
+import { rememberOriginRect } from "./child-origin";
 import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -155,6 +156,7 @@ function Loading({ label = "Loading" }: { label?: string }) {
 function DocumentRouteSwap(
 	{
 		agent,
+		childOrigin,
 		onCanonicalPath,
 		onChildClose,
 		onChildClosing,
@@ -163,6 +165,7 @@ function DocumentRouteSwap(
 		user,
 	}: {
 		agent: boolean;
+		childOrigin: () => Element | undefined;
 		onCanonicalPath: (pathname: string) => void;
 		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
@@ -257,6 +260,7 @@ function DocumentRouteSwap(
 								<Suspense fallback={<Loading label="Opening document…" />}>
 									<DocumentWorkspaceHost
 										agent={agent}
+										childOrigin={childOrigin}
 										Failure={Failure}
 										layerKey={layer.key}
 										Loading={Loading}
@@ -299,6 +303,9 @@ export function HostedApp(
 	let hostedRouteRef = useRef(route);
 	hostedRouteRef.current = route;
 	let childOpener = useRef<ResearchOpener | undefined>(undefined);
+	// The root document can replace a research card's opener while the child's first commit lays
+	// out, so the clicked element and its rect are kept from the click itself.
+	let childOriginElement = useRef<HTMLElement | undefined>(undefined);
 	let childFocus = useRef<ChildFocusState>({ generation: 0 });
 	let childFocusFrame = useRef<number | undefined>(undefined);
 	let cancelChildFocusFrame = useCallback(() => {
@@ -347,6 +354,8 @@ export function HostedApp(
 				let active = document.activeElement;
 				childOpener.current = options.opener
 					?? { current: active instanceof HTMLElement ? active : null };
+				childOriginElement.current = childOpener.current.current ?? undefined;
+				rememberOriginRect(childOriginElement.current);
 			}
 			if (siblingChild) history.replaceState(history.state, "", next);
 			else if (inAppChild) {
@@ -379,7 +388,10 @@ export function HostedApp(
 			parentPath,
 		});
 		let started = next !== current;
-		if (started) childOpener.current = undefined;
+		if (started) {
+			childOpener.current = undefined;
+			childOriginElement.current = undefined;
+		}
 		return { started, token: { generation: next.generation, parentId } };
 	}, [cancelChildFocusFrame, moveChildFocus]);
 	let closeChild = useCallback((parentId: string, parentPath: string, opener?: ResearchOpener) => {
@@ -430,6 +442,12 @@ export function HostedApp(
 			}
 		});
 	}, [cancelChildFocusFrame, moveChildFocus]);
+	let childOrigin = useCallback(
+		() =>
+			childOpener.current?.current ?? childOriginElement.current
+				?? childFocus.current.attempt?.opener?.current ?? undefined,
+		[],
+	);
 
 	useEffect(() => {
 		let changed = () => {
@@ -465,6 +483,7 @@ export function HostedApp(
 			workspace = (
 				<DocumentRouteSwap
 					agent={agent}
+					childOrigin={childOrigin}
 					onCanonicalPath={canonicalPath}
 					onChildClose={closeChild}
 					onChildClosing={childClosing}

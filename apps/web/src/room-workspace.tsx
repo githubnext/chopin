@@ -482,6 +482,10 @@ export function RoomWorkspace(
 	let latestBusy = useRef(chatActivity.busy);
 	latestBusy.current = chatActivity.busy;
 	let [documentWatch, setDocumentWatch] = useState(QUIET_DOCUMENT);
+	// Read through a ref: the host's callback changes as its route does, and the socket below must
+	// not reconnect (remounting the editor and losing its scroll) when a child opens over it.
+	let latestMetadataChanged = useRef(onMetadataChanged);
+	latestMetadataChanged.current = onMetadataChanged;
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
 		let previous = metadataRef.current;
 		let metadata = newestDocumentMetadata(previous, next);
@@ -494,8 +498,8 @@ export function RoomWorkspace(
 			currentRepository,
 		);
 		onDocumentChanged(room, metadata);
-		if (onMetadataChanged) {
-			onMetadataChanged(metadata);
+		if (latestMetadataChanged.current) {
+			latestMetadataChanged.current(metadata);
 			return;
 		}
 		let previousPath = documentPath(
@@ -509,7 +513,7 @@ export function RoomWorkspace(
 		if (location.pathname !== path) {
 			history.replaceState(history.state, "", `${path}${location.search}${location.hash}`);
 		}
-	}, [onDocumentChanged, onMetadataChanged, room, userId]);
+	}, [onDocumentChanged, room, userId]);
 
 	useEffect(() => {
 		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));

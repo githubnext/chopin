@@ -98,7 +98,7 @@ export default function DocumentWorkspaceHost(
 		user,
 	}: {
 		agent: boolean;
-		childOrigin?: () => DOMRect | undefined;
+		childOrigin?: () => Element | undefined;
 		Failure: ComponentType<{
 			channel?: { title?: string; slug?: string };
 			error: unknown;

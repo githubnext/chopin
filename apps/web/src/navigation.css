@@ -175,11 +175,29 @@
 	color: var(--color-text-secondary);
 }
 
-/* Zoom: a slim stack bar under the tabs; the root's plan pushes in towards the opener. */
+/* Zoom: a slim stack bar under the tabs; the root's plan pushes in towards the opener. The bar
+ * overlays the plan rather than sitting in flow, so the plan never shifts as it comes and goes. */
 .workspace-stack-bar {
+	position: absolute;
+	z-index: 1;
+	top: var(--panel-header-height);
 	height: var(--child-bar-height);
 	padding-inline: var(--panel-toolbar-padding-inline);
 	background: var(--color-page);
+	inset-inline: 0;
+	transition: opacity var(--child-close-dur) var(--child-ease);
+
+	@starting-style {
+		opacity: 0;
+	}
+}
+
+.workspace-root[data-workspace-mode="compact"] .workspace-stack-bar {
+	top: 0;
+}
+
+.workspace-stack-bar[data-closing] {
+	opacity: 0;
 }
 
 .workspace-stack-path [aria-current] {
@@ -218,6 +236,7 @@
 @media (prefers-reduced-motion: reduce) {
 	.workspace-root.workspace-root .workspace-document-stack > .workspace-document-panel,
 	.workspace-child-scrim,
+	.workspace-stack-bar,
 	.workspace-document-stack [data-document-view="plan"] {
 		transition: none;
 	}

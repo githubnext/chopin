@@ -265,7 +265,8 @@ export function Workspace(
 	// The top bar stays while a child is open, so the root's title and actions remain over Chat.
 	let headerHidden = presentation.documentExpanded && !childOpen;
 	let lift = nested?.motion === "lift" && mode === "split";
-	let liftCovered = lift && nested?.childState === "open";
+	let childClosing = nested?.childState === "closing";
+	let liftCovered = lift && !childClosing;
 	// Compact has no in-sheet tab row to peek, so it always uses the stack bar.
 	let stackBar = !!nested && !lift && view === "plan";
 	let planCovered = stackBar;
@@ -540,6 +541,8 @@ export function Workspace(
 								<nav
 									aria-label="Document stack"
 									className="workspace-stack-bar hairline-b flex shrink-0 items-center gap-1"
+									data-closing={childClosing || undefined}
+									inert={childClosing || undefined}
 								>
 									<button
 										aria-label={`Back to ${nested!.path.at(-2)!.label}`}
@@ -589,7 +592,7 @@ export function Workspace(
 									<section
 										aria-labelledby={ids.heading.plan}
 										className="h-full min-h-0"
-										data-child-recede={planCovered || undefined}
+										data-child-recede={(planCovered && !childClosing) || undefined}
 										data-document-view="plan"
 										inert={planCovered || undefined}
 									>
@@ -630,7 +633,8 @@ export function Workspace(
 								)}
 							</div>
 						</div>
-						{lift && <div aria-hidden="true" className="workspace-child-scrim" />}
+						{/* Always mounted, so the dim can transition in behind a newly opened child. */}
+						{mode === "split" && <div aria-hidden="true" className="workspace-child-scrim" />}
 					</main>
 					{nested && (
 						<div className="workspace-child-slot" hidden={!lift && view !== "plan"}>

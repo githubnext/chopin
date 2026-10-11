@@ -2,7 +2,11 @@ import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { MagnifierIcon } from "@chopin/icons";
 import { Fragment, useLayoutEffect, useRef } from "react";
 
+import { closeChild, openChild, rememberOpener } from "./child-motion-driver";
+import { openerRect } from "./child-origin";
+
 export { childCloseAction, childFocusTransition, childHistoryState } from "./child-history";
+export { animationsSettled } from "./child-motion-driver";
 export { childPresentation } from "./document-workspace-state";
 
 import type { CSSProperties, ReactNode } from "react";
@@ -48,18 +52,13 @@ export function rebaseChildHistoryState(
 	};
 }
 
-/** Resolves once every animation has finished or been cancelled, so a close never sticks. */
-export function animationsSettled(animations: { finished: Promise<unknown> }[]): Promise<void> {
-	return Promise.allSettled(animations.map(animation => animation.finished)).then(() => {});
-}
-
 export function AnchoredChildSurface(
-	{ entries, focusKey, motion, onClosed, presentation }: {
+	{ entries, focusKey, motion, onClosed, origin, presentation }: {
 		entries: { id: string; label: string; node: ReactNode }[];
 		focusKey?: string;
 		motion: ChildMotionStyle;
 		onClosed: () => void;
-		origin?: () => DOMRect | undefined;
+		origin?: () => Element | undefined;
 		presentation: ChildPresentation;
 	},
 ) {
@@ -74,16 +73,50 @@ export function AnchoredChildSurface(
 		layer.current?.querySelector<HTMLElement>(":scope > .anchored-child-card:last-of-type")
 			?.focus({ preventScroll: true });
 	}, [focusKey, presentation]);
+	let latestOrigin = useRef(origin);
+	latestOrigin.current = origin;
+	let generation = useRef(0);
+	let opening = useRef<{ card: HTMLElement; opener?: Element; rect?: DOMRect; at: number }>(
+		undefined,
+	);
+	let front = () =>
+		layer.current?.querySelector<HTMLElement>(":scope > .anchored-child-card:last-of-type");
 	useLayoutEffect(() => {
+		let card = front();
+		if (!card) return;
+		let token = ++generation.current;
+		if (presentation === "open") {
+			let opener = latestOrigin.current?.();
+			let rect = openerRect(opener);
+			opening.current = { at: performance.now(), card, opener, rect };
+			rememberOpener(card, opener);
+			openChild(card, rect, motion);
+			return;
+		}
+		opening.current = undefined;
 		if (presentation !== "closing") return;
-		let current = true;
-		void animationsSettled(layer.current?.getAnimations({ subtree: true }) ?? []).then(
-			() => current && closed.current(),
-		);
-		return () => {
-			current = false;
+		// The root may have replaced the opener since the open; prefer the one it shows now.
+		let live = latestOrigin.current?.();
+		if (live?.isConnected) rememberOpener(card, live);
+		let done = () => {
+			if (generation.current === token) closed.current();
 		};
+		void closeChild(card, motion).then(done, done);
 	}, [presentation]);
+	let cardKey = entries.at(-1)?.id;
+	useLayoutEffect(() => {
+		// A canonical URL can rekey the open card; the new one carries on from the same moment.
+		let card = front();
+		let open = opening.current;
+		if (!card || !open || open.card === card || presentation !== "open") return;
+		opening.current = { ...open, card };
+		rememberOpener(card, open.opener);
+		openChild(card, open.rect, motion);
+		let elapsed = performance.now() - open.at;
+		for (let animation of layer.current?.getAnimations({ subtree: true }) ?? []) {
+			animation.currentTime = elapsed;
+		}
+	}, [cardKey]);
 	return (
 		<div className="anchored-child-layer" data-child-motion={motion} ref={layer}>
 			{entries.map((entry, index) => (
