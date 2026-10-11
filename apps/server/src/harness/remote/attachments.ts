@@ -56,6 +56,13 @@ type Hold = {
 	releaseAt?: Date;
 };
 
+type PendingAttach = {
+	login: string;
+	held?: Hold;
+	sessionIds: Set<string>;
+	invalidated?: AttachRefusal;
+};
+
 /** What `@chopin` and `invoke_planner` say when no Planner is attached to the document. */
 export function notAttachedMessage(url: string, repository: string): string {
 	return `No Planner is attached to this document. To attach one, connect a Planner client to `
@@ -71,6 +78,7 @@ export class PlannerAttachments {
 	#auth: AttachmentAuth;
 	#graceMs: number;
 	#holds = new Map<string, Hold>();
+	#pending = new Map<string, PendingAttach>();
 	#queues = new Map<string, Promise<void>>();
 
 	constructor(auth: AttachmentAuth, graceMs: number) {
@@ -95,50 +103,52 @@ export class PlannerAttachments {
 
 	/** The browser login ended: every document it owns through an attachment is released. */
 	async sessionRevoked(sessionId: string): Promise<void> {
-		let held = [...this.#holds.values()].filter(hold => hold.ownerSessionId === sessionId);
-		for (let hold of held) {
-			this.#invalidate(hold, signInEndedRefusal(this.#auth.config.origin, hold.login));
+		let origin = this.#auth.config.origin;
+		for (let pending of this.#pending.values()) {
+			if (!pending.sessionIds.has(sessionId)) continue;
+			pending.invalidated ??= pending.held?.ownerSessionId === sessionId
+				? signInEndedRefusal(origin, pending.login)
+				: signInRefusal(origin, pending.login);
 		}
+		let held = [...this.#holds.values()].filter(hold => hold.ownerSessionId === sessionId);
+		for (let hold of held) this.#invalidate(hold, signInEndedRefusal(origin, hold.login));
 		await Promise.all(held.map(hold => this.#release(hold)));
 	}
 
 	/** A repository writer reset the document's Planner, which already cleared its stored owner. */
 	ownerReset(channelId: string): void {
+		let pending = this.#pending.get(channelId);
+		if (pending) pending.invalidated ??= resetRefusal(pending.login);
 		let hold = this.#holds.get(channelId);
-		if (!hold) return;
-		this.#invalidate(hold, {
-			ok: false,
-			code: "access-revoked",
-			message: `A repository writer reset this document's Planner, so ${hold.login} is no longer `
-				+ `attached. Attach again to resume.`,
-		});
+		if (hold) this.#invalidate(hold, resetRefusal(hold.login));
 	}
 
 	/**
-	 * Whether `link` still holds the document: the stored owner is still its
-	 * attachment's login and generation, and that login is still live.
+	 * Whether `link` still holds the document: its login is still live and the
+	 * stored owner is still its attachment's login and generation.
 	 * Otherwise the link closes and the document is free to attach.
 	 */
 	async verify(channelId: string, link: PlannerLink): Promise<boolean> {
 		let hold = this.#holds.get(channelId);
 		if (hold?.link !== link) return false;
 		let stored = await this.#auth.storage.channels.readAgent(channelId, this.#auth.clock());
+		let live = await this.#auth.sessions.resolve(hold.ownerSessionId);
 		if (this.#holds.get(channelId) !== hold || hold.link !== link) return false;
-		if (
-			stored?.agent?.ownerSessionId !== hold.ownerSessionId
-			|| stored.agent.generation !== hold.generation
-		) {
-			this.#invalidate(hold, {
-				ok: false,
-				code: "access-revoked",
-				message: `This document's Planner ownership was released, so ${hold.login} is no longer `
-					+ `attached. Attach again to resume.`,
-			});
+		if (!live) {
+			this.#invalidate(hold, signInEndedRefusal(this.#auth.config.origin, hold.login));
+			await this.#release(hold);
 			return false;
 		}
-		if (await this.#auth.sessions.resolve(hold.ownerSessionId)) return true;
-		this.#invalidate(hold, signInEndedRefusal(this.#auth.config.origin, hold.login));
-		await this.#release(hold);
+		if (
+			stored?.agent?.ownerSessionId === hold.ownerSessionId
+			&& stored.agent.generation === hold.generation
+		) return true;
+		this.#invalidate(hold, {
+			ok: false,
+			code: "access-revoked",
+			message: `This document's Planner ownership was released, so ${hold.login} is no longer `
+				+ `attached. Attach again to resume.`,
+		});
 		return false;
 	}
 
@@ -152,17 +162,49 @@ export class PlannerAttachments {
 		let { channelId, user } = request;
 		let held = this.#holds.get(channelId);
 		if (held && (held.link || held.userId !== user.id)) return attachedRefusal(held);
+		let pending: PendingAttach = {
+			login: user.login,
+			held,
+			sessionIds: new Set(held ? [held.ownerSessionId] : []),
+		};
+		this.#pending.set(channelId, pending);
+		try {
+			return await this.#attachPending(request, link, pending);
+		} finally {
+			if (this.#pending.get(channelId) === pending) this.#pending.delete(channelId);
+		}
+	}
+
+	/**
+	 * Takes or keeps the document for `request` while `pending` collects every
+	 * reset or ended login that lands during its awaits, so a hold binds only
+	 * if nothing released its ownership in the meantime.
+	 */
+	async #attachPending(
+		request: AttachRequest,
+		link: PlannerLink,
+		pending: PendingAttach,
+	): Promise<AttachGrant | AttachRefusal> {
+		let { channelId, user } = request;
 		let login = await this.#eligibleLogin(request);
 		if ("ok" in login) return login;
+		pending.sessionIds.add(login.session.id);
+		if (pending.invalidated) return pending.invalidated;
 		let now = this.#auth.clock();
-		if (held) {
+		let held = pending.held;
+		if (held && this.#holds.get(channelId) === held) {
 			let stored = await this.#auth.storage.channels.readAgent(channelId, now);
+			let live = await this.#auth.sessions.resolve(held.ownerSessionId);
+			if (pending.invalidated) return pending.invalidated;
 			if (
-				stored?.agent?.ownerSessionId === held.ownerSessionId
+				live && this.#holds.get(channelId) === held
+				&& stored?.agent?.ownerSessionId === held.ownerSessionId
 				&& stored.agent.generation === held.generation
 			) return this.#bind(held, link);
 			this.#drop(held);
+			if (!live) await this.#release(held);
 		}
+		if (pending.invalidated) return pending.invalidated;
 		let claimed = await this.#claim(channelId, login.session.id, now);
 		if (!claimed) throw new Error("The document's Planner owner changed while attaching.");
 		let hold: Hold = {
@@ -172,6 +214,13 @@ export class PlannerAttachments {
 			ownerSessionId: login.session.id,
 			generation: claimed.generation,
 		};
+		let live = await this.#auth.sessions.resolve(hold.ownerSessionId);
+		let refusal = pending.invalidated
+			?? (live ? undefined : signInRefusal(this.#auth.config.origin, user.login));
+		if (refusal) {
+			await this.#release(hold);
+			return refusal;
+		}
 		this.#holds.set(channelId, hold);
 		return this.#bind(hold, link);
 	}
@@ -282,6 +331,15 @@ export class PlannerAttachments {
 		});
 		return next;
 	}
+}
+
+function resetRefusal(login: string): AttachRefusal {
+	return {
+		ok: false,
+		code: "access-revoked",
+		message: `A repository writer reset this document's Planner, so ${login} is no longer `
+			+ `attached. Attach again to resume.`,
+	};
 }
 
 function attachedRefusal(hold: Hold): AttachRefusal {

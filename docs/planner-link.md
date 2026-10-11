@@ -142,8 +142,12 @@ including the same one, can attach again immediately:
 | The stored ownership no longer names this attachment's sign-in | `access-revoked`   | 4403       |
 
 The same checks before every `start` and `turn`, and the periodic one, also
-find an expired sign-in or a released ownership that nothing reported. The
-`message` says what happened:
+find an expired sign-in or a released ownership that nothing reported; an
+expired sign-in is reported as `sign-in-required` even when the stored
+ownership already reads as released. An `attach` that is still in progress when
+one of these causes lands, including a reattach within the grace period, is
+refused with the same code and close code instead of attaching. The `message`
+says what happened:
 
 ```text
 The Chopin browser sign-in that made octocat this document's Planner ended, so the Planner was released. Sign in to Chopin at https://chopin.example in a browser as octocat, then attach again.
