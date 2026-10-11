@@ -32,6 +32,17 @@
 	:is([data-nucleo-icon], [data-filled-icon]) {
 		flex-shrink: 0;
 	}
+
+	/*
+	 * Controls answer the tap at once and never select or call out their label on a
+	 * long press. Content, links and fields keep both.
+	 */
+	:where(button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) {
+		touch-action: manipulation;
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
 }
 
 /* Beside text that may wrap: centre on the first line instead of the whole block. */
@@ -331,6 +342,8 @@ html,
 body {
 	height: 100%;
 	overflow-x: hidden;
+	/* The fixed shell never scrolls the window: no pull-to-refresh or page bounce. */
+	overscroll-behavior: none;
 }
 
 #root {
@@ -545,6 +558,7 @@ body {
 	outline-offset: calc(-1 * var(--edge-width));
 	box-shadow: var(--shadow-overlay);
 	font-size: var(--text-sm);
+	overscroll-behavior: contain;
 }
 
 .menu-item {
@@ -592,7 +606,7 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-/* One owner per edge: top chrome owns the top inset, compact navigation the bottom one. */
+/* One owner per edge: top chrome owns the top inset. */
 .room-header {
 	padding-right: calc(0.5rem + env(safe-area-inset-right));
 	padding-left: calc(0.5rem + env(safe-area-inset-left));
@@ -608,7 +622,6 @@ body {
 
 .workspace-navigation {
 	padding-right: calc(0.25rem + env(safe-area-inset-right));
-	padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
 	padding-left: calc(0.25rem + env(safe-area-inset-left));
 }
 
@@ -1136,13 +1149,23 @@ button.chat-tool-call-toggle {
 	padding-block: 0.5rem;
 }
 
-/* iOS Safari zooms the page when it focuses a text field under 16px. */
-@media (pointer: coarse) {
-	.chat-composer .composer-draft-input[contenteditable],
-	textarea,
-	select,
-	input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]) {
-		font-size: max(1rem, var(--text-sm));
+/*
+ * Text fields on touch never drop below the 16px that stops iOS zooming in on focus.
+ * Field classes outrank any element selector, so the small type steps are raised on
+ * the field itself: whichever rule sizes it resolves to 16px and larger steps keep
+ * their size. The document body is already 16px and keeps its smaller inline steps.
+ * In the base layer so the floor never outranks a field's own larger size, and
+ * specific enough to beat the preflight that makes fields inherit their container's.
+ */
+@layer base {
+	@media (pointer: coarse) {
+		:is(textarea, select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), [contenteditable]:not([contenteditable="false"], .plan-content)) {
+			--text-2xs: var(--field-text-min);
+			--text-xs: var(--field-text-min);
+			--text-sm: var(--field-text-min);
+			--text-base: var(--field-text-min);
+			font-size: var(--field-text-min);
+		}
 	}
 }
 

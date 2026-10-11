@@ -10,7 +10,3 @@
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
 	flex-shrink: 0;
 }
-
-.workspace-root > .workspace-navigation {
-	padding-bottom: calc(var(--spacing));
-}

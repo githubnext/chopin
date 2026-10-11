@@ -83,7 +83,7 @@ export function ResizeHandle(
 			className={`absolute inset-y-0 z-10 w-1 cursor-col-resize
 				before:absolute before:inset-y-0 before:-inset-x-1 before:content-['']
 				after:absolute after:inset-x-px after:inset-y-0 after:rounded-full after:bg-brand
-				after:opacity-0 after:transition-opacity hover:after:opacity-100
+				after:opacity-0 after:transition-opacity pointer-fine:hover:after:opacity-100
 				data-dragging:after:opacity-100 ${side === "left" ? "left-0" : "right-0"}`}
 			data-dragging={dragging || undefined}
 			onKeyDown={event => {

@@ -197,6 +197,8 @@
 	/* Compact controls, panel chrome, and their shared icon slots. */
 	--control-height-compact: calc(var(--spacing) * 6);
 	--control-target-coarse: calc(var(--spacing) * 11);
+	/* iOS Safari zooms the page into a focused text field set below 16px. */
+	--field-text-min: 1rem;
 	--control-padding-inline: calc(var(--spacing) * 2);
 	--control-inset: var(--spacing);
 	--split-control-label-padding-start: var(--control-inset);

@@ -422,13 +422,41 @@
 	},
 	{
 		"file": "apps/web/src/theme.css",
-		"reason": "iOS Safari zooms the page when it focuses editable text under 16px; touch devices floor the existing token at 1rem.",
+		"reason": "iOS Safari zooms the page when it focuses editable text under 16px; touch devices raise a field's small type steps to the 1rem field floor.",
 		"cases": [
 			[
 				"typography",
+				"--text-2xs",
+				"var(--field-text-min)",
+				"CSS > @layer base > @media (pointer: coarse) > :is(textarea, select, input:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"]), [contenteditable]:not([contenteditable=\"false\"], .plan-content))",
+				1
+			],
+			[
+				"typography",
+				"--text-xs",
+				"var(--field-text-min)",
+				"CSS > @layer base > @media (pointer: coarse) > :is(textarea, select, input:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"]), [contenteditable]:not([contenteditable=\"false\"], .plan-content))",
+				1
+			],
+			[
+				"typography",
+				"--text-sm",
+				"var(--field-text-min)",
+				"CSS > @layer base > @media (pointer: coarse) > :is(textarea, select, input:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"]), [contenteditable]:not([contenteditable=\"false\"], .plan-content))",
+				1
+			],
+			[
+				"typography",
+				"--text-base",
+				"var(--field-text-min)",
+				"CSS > @layer base > @media (pointer: coarse) > :is(textarea, select, input:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"]), [contenteditable]:not([contenteditable=\"false\"], .plan-content))",
+				1
+			],
+			[
+				"typography",
 				"font-size",
-				"max(1rem, var(--text-sm))",
-				"CSS > @media (pointer: coarse) > .chat-composer .composer-draft-input[contenteditable],\n\ttextarea,\n\tselect,\n\tinput:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"])",
+				"var(--field-text-min)",
+				"CSS > @layer base > @media (pointer: coarse) > :is(textarea, select, input:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"]), [contenteditable]:not([contenteditable=\"false\"], .plan-content))",
 				1
 			]
 		]

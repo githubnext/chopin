@@ -224,7 +224,7 @@ export function DocumentPicker(
 					let node = event.currentTarget;
 					if (node.scrollHeight - node.scrollTop - node.clientHeight < 32) void more();
 				}}
-				style={{ maxHeight: "min(60vh, 384px)" }}
+				style={{ maxHeight: "min(60svh, 384px)" }}
 			>
 				{!page && !listError && (
 					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">Loading documents...</p>

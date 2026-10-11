@@ -691,8 +691,8 @@
 
 .navigation-shell > .project-sidebar-expand {
 	position: absolute;
-	left: 8px;
-	top: 11px;
+	left: calc(8px + env(safe-area-inset-left));
+	top: calc(11px + env(safe-area-inset-top));
 	z-index: 45;
 }
 
@@ -921,7 +921,7 @@
 }
 
 .navigation-palette-list.keyboard-shortcuts {
-	max-height: min(60vh, 28rem);
+	max-height: min(60svh, 28rem);
 	gap: calc(var(--spacing) * 3);
 	padding-inline: calc(var(--spacing) * 4);
 	padding-block: calc(var(--spacing) * 3);
@@ -989,10 +989,11 @@
 
 .navigation-dialog-list {
 	display: flex;
-	max-height: min(50vh, 20rem);
+	max-height: min(50svh, 20rem);
 	flex-direction: column;
 	gap: 4px;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 	margin-top: 12px;
 }
 
@@ -1021,7 +1022,7 @@
 	padding: 0;
 	/* Anchored near the top so the field stays put while results grow and shrink. */
 	align-self: start;
-	margin-top: 15vh;
+	margin-top: 15svh;
 }
 
 .navigation-palette-search {
@@ -1052,9 +1053,10 @@
 	display: flex;
 	/* Reserve the loading and empty height so results do not resize the palette. */
 	min-height: calc(var(--spacing) * 21);
-	max-height: min(50vh, 20rem);
+	max-height: min(50svh, 20rem);
 	flex-direction: column;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 	padding: calc(var(--spacing) * 1.5);
 	scroll-padding-block: calc(var(--spacing) * 1.5);
 }
