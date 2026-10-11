@@ -39,6 +39,22 @@
 	padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
 }
 
+/*
+ * A child's stack bar sits under the top bar, and follows it when it tucks away. The child card
+ * starts higher, so its padding runs under the bar, and the bar stays above it.
+ */
+.workspace-root[data-workspace-phone] .workspace-stack-bar {
+	z-index: 21;
+	top: var(--phone-top-chrome);
+	transition:
+		opacity var(--child-close-dur) var(--child-ease),
+		transform var(--phone-bar-dur) var(--ease-out);
+}
+
+.workspace-root[data-workspace-phone][data-workspace-bar="hidden"] .workspace-stack-bar {
+	transform: translateY(calc(-1 * var(--phone-bar-height)));
+}
+
 .workspace-root[data-workspace-phone] .plan [data-plan-scroll] {
 	scroll-padding-block: calc(var(--phone-top-chrome) + var(--spacing) * 4) 30%;
 }
@@ -394,6 +410,7 @@
 	}
 
 	.workspace-root[data-workspace-phone] > .phone-top-bar,
+	.workspace-root[data-workspace-phone] .workspace-stack-bar,
 	.phone-tab-indicator,
 	.phone-tab-row {
 		transition: none;
