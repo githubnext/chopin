@@ -484,7 +484,11 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	let surface = opened.getByRole("region", { name: `Child document: ${childTitle}` });
 	await expect(opened).toHaveURL(url => url.pathname === child.path);
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
-	await surface.getByRole("button", { name: `Close ${childTitle}`, exact: true }).click();
+	await expect(surface.getByRole("button", { name: `Close ${childTitle}` })).toHaveCount(0);
+	// Lift's peeking root tab row is the way back; Enter on it closes and refocuses the opener.
+	let back = opened.getByRole("button", { name: /^Back to / });
+	await back.focus();
+	await opened.keyboard.press("Enter");
 	await expect(surface).toHaveCount(0);
 	await expect(open).toBeFocused();
 });
@@ -653,8 +657,8 @@ test("a ready research card and its Chat notice survive reconnect without anothe
 	await expect(provenance.getByText(brief, { exact: true })).toBeHidden();
 	await briefToggle.click();
 	await expect(provenance.getByText(brief, { exact: true })).toBeVisible();
-	await expect(surface.getByRole("complementary", { name: "Chat" }))
-		.toContainText("Discuss this report here.");
+	await expect(surface.getByRole("complementary", { name: "Chat" })).toHaveCount(0);
+	await expect(opened.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await provenance.getByRole("button", { name: parentTitle, exact: true }).click();
 	await expect(surface).toHaveCount(0);
 	await expect(
