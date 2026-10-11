@@ -81,8 +81,13 @@ test("phone mention and reference pickers rest on the composer as a full-width l
 	expect(Math.abs(list.x - pill.x)).toBeLessThanOrEqual(1);
 	expect(list.y + list.height).toBeLessThanOrEqual(pill.y);
 	expect(pill.y - (list.y + list.height)).toBeLessThanOrEqual(8);
-	let row = await mentions.getByRole("option", { name: "cy" }).boundingBox();
-	expect(row!.height).toBeGreaterThanOrEqual(44);
+	// Layout height: the entrance's scale can leave the drawn box a hair short.
+	expect(
+		await mentions.getByRole("option", { name: "cy" }).evaluate(row =>
+			(row as HTMLElement).offsetHeight
+		),
+	)
+		.toBeGreaterThanOrEqual(44);
 	expect(await mentions.evaluate(element => getComputedStyle(element).overscrollBehaviorY))
 		.toBe("contain");
 
