@@ -50,11 +50,16 @@ function revoked(err: unknown): boolean {
 	return err instanceof AdmissionDenied || err instanceof GitHubError && err.status === 401;
 }
 
-/** The caller for an upgrade request, or the HTTP refusal; nothing is upgraded on refusal. */
+/**
+ * The caller for an upgrade request, or the HTTP refusal; nothing is upgraded on refusal.
+ * A server that does not run the remote Planner answers 404 rather than its web client.
+ */
 export async function admitPlannerLink(
 	request: Request,
 	auth: PlannerLinkAuth,
+	enabled = true,
 ): Promise<Response | PlannerLinkSocketData> {
+	if (!enabled) return refusal(404, "This Chopin does not accept Planner links.");
 	let origin = request.headers.get("origin");
 	if (origin !== null && origin !== auth.config.origin) {
 		return refusal(403, "origin is not allowed");
@@ -122,13 +127,13 @@ export function plannerLink(
 		if (!channelId) return false;
 		try {
 			await auth.admission.user(caller.oauthToken);
+			let located = await locateDocument(auth, caller, channelId);
+			return typeof located === "object" && located.channel.id === channelId
+				&& !located.channel.archivedAt && !hooks.unavailable?.(channelId);
 		} catch (err) {
 			if (revoked(err)) return false;
 			throw err;
 		}
-		let located = await locateDocument(auth, caller, channelId);
-		return typeof located === "object" && located.channel.id === channelId
-			&& !located.channel.archivedAt && !hooks.unavailable?.(channelId);
 	}
 	return new PlannerLink(socket, {
 		attach,

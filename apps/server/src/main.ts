@@ -1147,8 +1147,9 @@ function listen(): Server<SocketData> {
 				}
 				return upgraded(req, self, outcome.data);
 			}
-			if (url.pathname === PLANNER_LINK_PATH && config.agent && config.harness === "remote") {
-				let outcome = await admitPlannerLink(req, hostedAuth);
+			if (url.pathname === PLANNER_LINK_PATH) {
+				let enabled = config.agent && config.harness === "remote";
+				let outcome = await admitPlannerLink(req, hostedAuth, enabled);
 				if (outcome instanceof Response) return outcome;
 				return upgraded(req, self, outcome);
 			}

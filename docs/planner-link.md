@@ -18,7 +18,8 @@ runs it in Bun and as a separate Node.js process against a real socket.
 Open a WebSocket to `wss://<chopin origin>/planner-link` (`ws:` only for a
 loopback development server). It shares the application's origin and port with
 `/ws` and `/mcp`, behind the same TLS-terminating proxy. The route exists only
-when the server runs with `AGENT` on and `HARNESS=remote`; otherwise it is 404.
+when the server runs with `AGENT` on and `HARNESS=remote`; otherwise every
+request to it, upgrade or not, gets HTTP 404 before the bearer is checked.
 
 The upgrade request must carry `Authorization: Bearer <GitHub token>`, the same
 bearer [local agent MCP](local-agent-mcp.md) uses. Bun's and Node.js's built-in
@@ -31,6 +32,7 @@ so nothing is opened:
 
 | Status | Meaning                                                     |
 | ------ | ----------------------------------------------------------- |
+| 404    | The server does not run `HARNESS=remote` with `AGENT` on    |
 | 401    | Missing or malformed bearer, or GitHub rejected the token   |
 | 403    | The account fails instance admission, or a foreign `Origin` |
 | 503    | GitHub is unavailable or rate limiting; retry later         |
@@ -44,12 +46,15 @@ a field this page does not list is refused. Binary frames are refused.
 
 Shared limits, in characters unless stated:
 
-| Kind | Fields                                                                               | Limit      |
-| ---- | ------------------------------------------------------------------------------------ | ---------- |
-| id   | `session`, `turn`, `request`, `toolCallId`, part `id`, run and stage `id`, `run`     | 1 to 128   |
-| name | tool names, `toolName`, `modelId`, question `header`                                 | 1 to 128   |
-| note | `message`, `title`, error text, questions, option labels and descriptions, run names | up to 4000 |
-| text | `prompt`, `instructions`, `delta`, `input`                                           | the frame  |
+| Kind  | Fields                                                                                                                                                                                            | Limit      |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| id    | `session`, `turn`, `request`, `toolCallId`, part `id`, run and stage `id`, `run`, `workflowRunId`, `workflowStageId`, `rootRunId`, `active` and `paused` entries, `document.id` in `attached`     | 1 to 128   |
+| name  | tool names, `toolName`, `names` entries, `modelId`, `responseFormat.name`                                                                                                                         | 1 to 128   |
+| short | question `header`, `finishReason.raw`                                                                                                                                                             | up to 128  |
+| note  | `message`, every `title`, `error`, `turn.model`, `responseFormat.description`, question text, option `label` and `description`, `choices` entries, `placeholder`, `initial`, run and stage `name` | up to 4000 |
+| text  | `prompt`, `instructions`, `delta`, `input`                                                                                                                                                        | the frame  |
+
+Other fields state their own limits where they appear.
 
 `?` marks an optional field. `json` is any JSON value.
 
@@ -75,8 +80,9 @@ The server answers:
 { "type": "refused", "code": "<refusal code>", "message": "" }
 ```
 
-`attach` succeeds when the bearer's GitHub account has pull access to the
-document's repository. After `refused` the server closes the link.
+`attached.document.repository` is `owner/name`, at most 257 characters, and
+`url` at most 2048. `attach` succeeds when the bearer's GitHub account has pull
+access to the document's repository. After `refused` the server closes the link.
 
 The server checks the account's admission and pull access again before every
 `start` and every `turn`, and every 5 minutes while the link is attached. Once
@@ -312,3 +318,8 @@ ids. When the link closes, the server shows the reported live runs as stopped.
 a repeated `input-request` id. When the link closes for any reason, the server
 ends a running turn with an error, withdraws open questions, and forgets the
 link; reattaching starts new sessions. A server never replays an interrupted turn.
+
+A client that receives a frame it cannot parse should close with 4400 and reason
+`malformed-message`. Node.js's `WebSocket` lets a caller close only with 1000 or
+3000 to 4999, so a client cannot answer with 1008. The package client does
+this and settles everything still waiting on the link at once.

@@ -403,27 +403,30 @@ class RemoteSession {
 				let toolName = turn.hostCalls.get(toolCallId);
 				if (!toolName || turn.ended) return;
 				turn.hostCalls.delete(toolCallId);
-				let result = (output ?? null) as NonNullable<unknown>;
-				turn.emit({ type: "tool-result", toolCallId, toolName, result, isError });
-				if (turn.stopped) return;
-				let delivered = this.#port.send({
+				let carried: ServerMessageOf<"host-tool-result"> = {
 					type: "host-tool-result",
 					session: this.id,
 					turn: turn.id,
 					toolCallId,
-					output: result as never,
+					output: (output ?? null) as never,
 					...(isError ? { isError } : {}),
-				});
-				if (!delivered) {
-					this.#port.send({
-						type: "host-tool-result",
-						session: this.id,
-						turn: turn.id,
-						toolCallId,
+				};
+				if (!encodeMessage(carried)) {
+					carried = {
+						...carried,
 						output: hostError(`${toolName} returned more than the Planner link can carry.`),
 						isError: true,
-					});
+					};
 				}
+				let result = carried.output as NonNullable<unknown>;
+				turn.emit({
+					type: "tool-result",
+					toolCallId,
+					toolName,
+					result,
+					isError: carried.isError ?? isError,
+				});
+				if (!turn.stopped) this.#port.send(carried);
 			},
 			async submitToolApproval() {
 				// The remote Planner asks no approvals; host tools are already allowed.
