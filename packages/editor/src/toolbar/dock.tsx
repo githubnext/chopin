@@ -45,8 +45,8 @@ export function FormatDock(
 	let [editor] = useLexicalComposerContext();
 	let [state, setState] = useState<DockState>(IDLE);
 	let scroller = useRef<HTMLDivElement>(null);
-	/** Whether more buttons wait past the row's trailing edge, which then fades. */
-	let [more, setMore] = useState(false);
+	/** Which edges of the row have buttons scrolled past them; those edges fade. */
+	let [edges, setEdges] = useState({ start: false, end: false });
 
 	let sync = useCallback(() => {
 		editor.getEditorState().read(() => {
@@ -71,7 +71,13 @@ export function FormatDock(
 	useLayoutEffect(() => {
 		let element = scroller.current;
 		if (!element) return;
-		let measure = () => setMore(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
+		let measure = () => {
+			let start = element.scrollLeft > 1;
+			let end = element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+			setEdges(current =>
+				current.start === start && current.end === end ? current : { start, end }
+			);
+		};
 		measure();
 		let observer = new ResizeObserver(measure);
 		observer.observe(element);
@@ -96,7 +102,12 @@ export function FormatDock(
 			onPointerDown={event => event.preventDefault()}
 			role="toolbar"
 		>
-			<div className="plan-format-dock-scroll" data-more={more || undefined} ref={scroller}>
+			<div
+				className="plan-format-dock-scroll"
+				data-more-end={edges.end || undefined}
+				data-more-start={edges.start || undefined}
+				ref={scroller}
+			>
 				<DockButton
 					disabled={disabled}
 					label="Bold"

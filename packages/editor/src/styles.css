@@ -5555,10 +5555,33 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	display: none;
 }
 
-/* More waits past the trailing edge: fade it so the row reads as scrollable. */
-.plan-format-dock-scroll[data-more] {
-	-webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--spacing) * 8), transparent);
-	mask-image: linear-gradient(to right, #000 calc(100% - var(--spacing) * 8), transparent);
+/* Buttons scrolled past an edge: fade that edge so the row reads as scrollable. */
+.plan-format-dock-scroll {
+	--dock-fade: calc(var(--spacing) * 8);
+	--dock-fade-start: #000;
+	--dock-fade-end: #000;
+	-webkit-mask-image: linear-gradient(
+		to right,
+		var(--dock-fade-start),
+		#000 var(--dock-fade),
+		#000 calc(100% - var(--dock-fade)),
+		var(--dock-fade-end)
+	);
+	mask-image: linear-gradient(
+		to right,
+		var(--dock-fade-start),
+		#000 var(--dock-fade),
+		#000 calc(100% - var(--dock-fade)),
+		var(--dock-fade-end)
+	);
+}
+
+.plan-format-dock-scroll[data-more-start] {
+	--dock-fade-start: transparent;
+}
+
+.plan-format-dock-scroll[data-more-end] {
+	--dock-fade-end: transparent;
 }
 
 .plan-format-dock-button {

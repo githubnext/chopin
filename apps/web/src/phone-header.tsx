@@ -91,30 +91,36 @@ export function PhoneHeader(
 					</button>
 				)}
 			</div>
-			<div className="phone-top-bar-title">
-				{editing && canManage && !archivedAt
-					? (
-						<DocumentRename
-							channel={{ id: room, title: label }}
-							inline
-							onCancel={finishEdit}
-							// The body took focus as the save started; a refusal needs the field back.
-							onErrorChange={error =>
-								error !== undefined
-								&& header.current?.querySelector<HTMLInputElement>(".document-title-input")
-									?.focus()}
-							onSavingChange={saving => saving && handOff()}
-							replay={editing === "new"}
-							onRenamed={detail => {
-								onRenamed(detail.channel);
-								finishEdit();
-							}}
-						/>
-					)
-					: <span className="truncate">{label}</span>}
-				{archivedAt
-					? <span className="phone-top-bar-subtitle">Archived</span>
-					: editingDocument && <span className="phone-top-bar-subtitle">Editing</span>}
+			<div className="phone-top-bar-center">
+				<div className="phone-top-bar-title">
+					{editing && canManage && !archivedAt
+						? (
+							<DocumentRename
+								channel={{ id: room, title: label }}
+								inline
+								onCancel={finishEdit}
+								// The body took focus as the save started; a refusal needs the field back.
+								onErrorChange={error =>
+									error !== undefined
+									&& header.current?.querySelector<HTMLInputElement>(".document-title-input")
+										?.focus()}
+								onSavingChange={saving => saving && handOff()}
+								replay={editing === "new"}
+								onRenamed={detail => {
+									onRenamed(detail.channel);
+									finishEdit();
+								}}
+							/>
+						)
+						: <span className="truncate">{label}</span>}
+					{archivedAt
+						? <span className="phone-top-bar-subtitle">Archived</span>
+						: editingDocument && <span className="phone-top-bar-subtitle">Editing</span>}
+				</div>
+				{/* The title waits for the heading to scroll away; the mode must show regardless. */}
+				{editingDocument && !archivedAt && (
+					<span aria-hidden="true" className="phone-top-bar-mode">Editing</span>
+				)}
 			</div>
 			<div className="phone-top-bar-slot">
 				{canManage && (

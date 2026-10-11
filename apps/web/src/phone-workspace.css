@@ -147,12 +147,39 @@
 }
 
 /* The small title waits until the document's own title has scrolled away. */
-.phone-top-bar-title {
+.phone-top-bar-center {
+	display: grid;
+	min-width: 0;
+	place-items: center;
+}
+
+.phone-top-bar-center > * {
+	grid-area: 1 / 1;
+}
+
+.phone-top-bar-title,
+.phone-top-bar-mode {
 	transition: opacity var(--duration-base) var(--ease-out);
 }
 
 .workspace-root[data-workspace-title="hidden"] .phone-top-bar-title {
 	opacity: 0;
+}
+
+/* Stands in for the hidden title while editing, so the mode is always on screen. */
+.phone-top-bar-mode {
+	padding: calc(var(--spacing) / 2) calc(var(--spacing) * 2);
+	border-radius: var(--radius-full);
+	background: var(--color-brand-wash);
+	color: var(--color-brand-ink);
+	font-size: var(--text-2xs);
+	font-weight: var(--font-weight-medium);
+	opacity: 0;
+	pointer-events: none;
+}
+
+.workspace-root[data-workspace-title="hidden"] .phone-top-bar-mode {
+	opacity: 1;
 }
 
 .phone-top-bar-slot {

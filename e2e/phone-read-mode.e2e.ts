@@ -99,7 +99,9 @@ test("the pencil edits where the reader tapped and Done returns to reading", asy
 	await expect(content(page)).toHaveAttribute("contenteditable", "true");
 	await expect(content(page)).toBeFocused();
 	await expect(done(page)).toBeVisible();
-	await expect(page.locator(".phone-top-bar")).toContainText("Editing");
+	// At the top of the document the small title waits, but the mode still shows.
+	await expect(page.locator(".phone-top-bar-mode")).toHaveText("Editing");
+	await expect(page.locator(".phone-top-bar-mode")).toHaveCSS("opacity", "1");
 	await page.keyboard.type("Typed ");
 	await expect(content(page)).toContainText("Typed ");
 	await expect(writer.getByText(/Typed /)).toBeVisible();

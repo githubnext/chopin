@@ -514,7 +514,9 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 					let selection = $getSelection();
 					if (!$isRangeSelection(selection)) return;
 					// A block with words in it gets a new paragraph after it, rather than a slash
-					// splitting a word or trailing a sentence.
+					// splitting a word or trailing a sentence. Deliberately the top-level block: a
+					// table cell holds only inline text in the dialect, and the inserted components
+					// cannot live inside a list item, so those go after the whole table or list.
 					let block = selection.anchor.getNode().getTopLevelElement();
 					if (block && block.getTextContentSize() > 0) {
 						let paragraph = $createParagraphNode();
