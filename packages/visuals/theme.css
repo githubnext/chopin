@@ -215,6 +215,9 @@
 		(var(--icon-button-size-compact) - var(--icon-size-compact)) / 2
 	);
 	--count-control-size: calc(var(--spacing) * 4.5);
+	/* The phone composer pill: its 36px controls, their icons, and its 44px resting height. */
+	--composer-pill-control: calc(var(--spacing) * 9);
+	--composer-pill-icon: calc(var(--spacing) * 4.5);
 	--count-control-padding: calc(var(--spacing) / 4);
 	--menu-item-height-normal: calc(var(--spacing) * 8.5);
 	--menu-item-height-compact: calc(var(--spacing) * 7);
@@ -264,6 +267,7 @@
 	--radius-lg: 0.5rem; /* 8px — popovers and panels */
 	--radius-xl: 0.625rem; /* 10px — the document page */
 	--radius-full: 9999px; /* saturated pill rounding */
+	--radius-composer-pill: calc(var(--spacing) * 5.5); /* 22px — half the phone composer at rest */
 
 	/*
 	 * Warm-tinted depth, copied from the settled Figma shadow table.

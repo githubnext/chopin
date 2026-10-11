@@ -151,6 +151,11 @@
 }
 .chat-composer [data-chat-reference-picker] {
 	right: calc(-1 * var(--edge-width));
+	max-height: min(16rem, 45dvh, 45vh);
+}
+/* At most eight rows show before the list scrolls: 8 × 2rem plus the 0.25rem padding. */
+.chat-composer [data-chat-mention-picker] {
+	max-height: min(16.5rem, 45dvh, 45vh);
 }
 .chat-composer [data-chat-reference-picker] [role="option"] {
 	height: 2rem;
@@ -230,6 +235,9 @@
 	display: inline-flex;
 	min-width: 0;
 }
+.chat-composer .composer-connection-group {
+	display: contents;
+}
 .chat-composer .composer-connection-label {
 	display: inline-flex;
 	align-items: center;
@@ -271,4 +279,151 @@
  */
 [data-workspace-mode="split"] .chat-composer .composer-reconnect {
 	display: none;
+}
+
+/*
+ * Phones: one pill. The draft sits between a leading reference button and a
+ * trailing mode switch and send, so the composer rests at one line and the
+ * transcript keeps the space above the keyboard. Every phone-only rule lives
+ * in this block, behind this one condition.
+ */
+@media (pointer: coarse) and (max-width: 600px) {
+	.chat-composer {
+		padding-inline: 0.5rem;
+		/* The home indicator's inset, but not while the keyboard covers it. */
+		padding-bottom: max(0.5rem, calc(env(safe-area-inset-bottom) - var(--keyboard-inset, 0px)));
+	}
+	.chat-composer .composer-surface {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		padding: 0.25rem;
+		border-radius: var(--radius-composer-pill);
+	}
+	.chat-composer :is(.composer-footer, .composer-left, .composer-actions) {
+		display: contents;
+	}
+	.chat-composer .composer-draft-input {
+		order: 2;
+		flex: 1 1 0;
+		min-width: 0;
+		/* One line at rest; five before it scrolls, fewer above an open keyboard. */
+		min-height: var(--composer-pill-control);
+		max-height: min(calc(5lh + 0.75rem), calc(var(--app-height, 100dvh) * 0.3));
+		padding: 0.375rem 0.5rem;
+		/* theme.css keeps touch text at 16px or more, so focus never zooms. */
+		line-height: 1.5;
+	}
+	/* A narrow pill shortens the hint rather than wrapping it out of view. */
+	.chat-composer .composer-draft-input[data-empty]::before {
+		inset-inline: 0.5rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.chat-composer .composer-left > button {
+		order: 1;
+	}
+	.chat-composer .composer-mode-trigger {
+		order: 3;
+	}
+	.chat-composer .composer-run-control {
+		order: 4;
+	}
+	.chat-composer .composer-run-control:empty {
+		display: none;
+	}
+	.chat-composer .send-action {
+		order: 5;
+	}
+	/* Without the Planner the switch can never be used; the line above says why. */
+	.chat-composer[data-planner="off"] .composer-mode-trigger {
+		display: none;
+	}
+	:root[data-plan-coarse-pointer] .chat-composer .composer-surface button:not([role="option"]) {
+		min-width: var(--composer-pill-control);
+		min-height: var(--composer-pill-control);
+	}
+	.chat-composer .composer-surface :is(.btn-icon, .composer-mode) {
+		width: var(--composer-pill-control);
+		height: var(--composer-pill-control);
+		border-radius: var(--radius-full);
+	}
+	.chat-composer .composer-surface :is(.btn-icon, .composer-mode-symbol) svg {
+		width: var(--composer-pill-icon);
+		height: var(--composer-pill-icon);
+	}
+	/* The switch keeps its accessible name and drops the visible word. */
+	.chat-composer .composer-mode {
+		column-gap: 0;
+		padding-inline: calc((var(--composer-pill-control) - var(--composer-pill-icon)) / 2);
+	}
+	.chat-composer .composer-mode-label {
+		width: 0;
+		overflow: hidden;
+		opacity: 0;
+	}
+	.chat-composer .send-action:disabled {
+		background-color: var(--color-gray-200);
+		color: var(--color-text-tertiary);
+		box-shadow: none;
+		opacity: 1;
+	}
+	/* Connection state becomes a slim first row inside the pill. */
+	.chat-composer .composer-connection-group:has(.composer-connection-label) {
+		display: flex;
+		order: 0;
+		flex-basis: 100%;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.125rem 0.25rem 0 0.5rem;
+	}
+	.chat-composer
+		.composer-connection-group:not(:has(.composer-connection-label))
+		.composer-connection {
+		position: absolute;
+	}
+	.chat-composer .composer-connection-group .composer-reconnect {
+		min-height: var(--control-height-compact);
+	}
+	/* Status above the pill is one quiet line rather than a tab behind it. */
+	.chat-composer .composer-notice {
+		min-height: 0;
+		margin-bottom: 0;
+		padding: 0.25rem 0.75rem 0.375rem;
+		border-radius: var(--radius-md);
+		background: transparent;
+		font-size: var(--text-xs);
+		line-height: var(--text-xs--line-height);
+	}
+	.chat-composer .composer-notice[data-error] {
+		margin-bottom: 0.375rem;
+		background: var(--color-danger-surface);
+	}
+	.chat-composer .composer-unavailable {
+		flex-basis: 100%;
+		min-height: 0;
+	}
+	/* Pickers become a list resting on the composer, as wide as it is. */
+	.chat-composer
+		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker]) {
+		left: 0;
+		right: 0;
+		width: auto;
+		min-width: 0;
+		max-width: none;
+		max-height: calc(var(--app-height, 100dvh) * 0.4);
+		margin-bottom: 0.375rem;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		border-radius: var(--radius-lg);
+	}
+	.chat-composer
+		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker])
+		[role="option"] {
+		height: auto;
+		min-height: var(--control-target-coarse);
+		font-size: var(--text-base);
+	}
 }

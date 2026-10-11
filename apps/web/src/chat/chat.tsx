@@ -683,7 +683,11 @@ export function Chat(
 				</div>
 			)}
 
-			<div ref={composerRoot} className="chat-composer relative shrink-0 px-2.5 pb-2.5">
+			<div
+				ref={composerRoot}
+				className="chat-composer relative shrink-0 px-2.5 pb-2.5"
+				data-planner={agent ? undefined : "off"}
+			>
 				{referencesEnabled && (
 					<p className="sr-only" id={instructionsId}>
 						Type # to reference a document.
@@ -981,27 +985,30 @@ export function Chat(
 										)}
 									</div>
 									<div className="composer-actions">
-										{/* Always mounted, so the live region hears its first word. */}
-										<span className="composer-connection" id={connectionId} role="status">
-											{connectionLabel && (
-												<span
-													className="composer-connection-label"
-													data-offline={connectionLabel === "Offline" || undefined}
+										{/* A row of its own on a phone; see composer.css. */}
+										<span className="composer-connection-group">
+											{/* Always mounted, so the live region hears its first word. */}
+											<span className="composer-connection" id={connectionId} role="status">
+												{connectionLabel && (
+													<span
+														className="composer-connection-label"
+														data-offline={connectionLabel === "Offline" || undefined}
+													>
+														{connectionLabel}
+													</span>
+												)}
+											</span>
+											{/* Where the document header is out of view; see composer.css. */}
+											{connectionNotice === "offline" && wire && (
+												<button
+													className="composer-reconnect btn btn-sm btn-ghost"
+													onClick={() => wire.reconnect()}
+													type="button"
 												>
-													{connectionLabel}
-												</span>
+													Reconnect
+												</button>
 											)}
 										</span>
-										{/* Where the document header is out of view; see composer.css. */}
-										{connectionNotice === "offline" && wire && (
-											<button
-												className="composer-reconnect btn btn-sm btn-ghost"
-												onClick={() => wire.reconnect()}
-												type="button"
-											>
-												Reconnect
-											</button>
-										)}
 										<span className="composer-run-control">
 											{agent && (busy || counts.active > 0) && (
 												<button

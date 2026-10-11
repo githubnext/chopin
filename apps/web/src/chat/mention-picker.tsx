@@ -5,9 +5,6 @@ import { referenceOptionId } from "./reference-picker";
 
 import type { MentionCandidate } from "./mentions";
 
-/** At most this many rows show before the list scrolls: 8 × 2rem plus the 0.25rem padding. */
-const LIST_HEIGHT = "16.5rem";
-
 export function MentionPicker(
 	{
 		active,
@@ -36,7 +33,6 @@ export function MentionPicker(
 			data-chat-mention-picker=""
 			data-menu-enter=""
 			data-focus-boundary=""
-			style={{ maxHeight: `min(${LIST_HEIGHT}, 45dvh, 45vh)` }}
 		>
 			<div aria-label="Mentions" id={id} role="listbox">
 				{options.map((option, index) => (

@@ -247,7 +247,6 @@ export function ReferencePicker(
 			data-animate={animate || undefined}
 			data-menu-enter=""
 			data-focus-boundary=""
-			style={{ maxHeight: "min(16rem, 45dvh, 45vh)" }}
 		>
 			<div aria-busy={state.status === "loading"} aria-label={label} id={id} role="listbox">
 				{state.status === "loading" && (
