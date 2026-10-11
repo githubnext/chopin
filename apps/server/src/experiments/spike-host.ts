@@ -17,7 +17,7 @@ type Options = {
 	service: Experiments;
 	connections: Connections;
 	withPlan: <T>(channelId: string, action: (plan: Service.Plan) => Promise<T>) => Promise<T>;
-	/** A spike's result was just written into its callout. */
+	/** A spike's result was just written into its callout; `spike.settle` is persisted. */
 	landed?: (channelId: string, value: Investigation) => void;
 };
 
@@ -131,16 +131,17 @@ export function spikeHost({ service, connections, withPlan, landed }: Options): 
 				if (placed.status === "missing") await dismiss(channelId, value.id);
 				else if (placed.status !== "deferred") {
 					let { callout, digest } = placed;
-					await service.mutate(value.id, item => {
+					let landing = placed.status === "placed" && key === "completed"
+						&& spike.rendered !== key;
+					let updated = await service.mutate(value.id, item => {
 						item.spike!.placed = true;
 						delete item.spike!.placing;
 						item.spike!.rendered = key;
 						item.spike!.callout = callout;
 						item.spike!.calloutDigest = digest;
+						if (landing) item.spike!.settle = true;
 					});
-					if (placed.status === "placed" && key === "completed" && spike.rendered !== key) {
-						landed?.(channelId, value);
-					}
+					if (landing) landed?.(channelId, updated);
 				}
 			}
 		},

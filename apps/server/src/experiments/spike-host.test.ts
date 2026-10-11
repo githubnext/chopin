@@ -318,6 +318,7 @@ test("a landed result asks once for its passage to be settled", async () => {
 		await context.host.refresh(plan.id);
 		await context.host.refresh(plan.id);
 		expect(context.landed).toEqual([value.id]);
+		expect((await context.service.store.get(value.id))?.spike?.settle).toBe(true);
 		let source = room.project(plan.document);
 		expect(source).toContain(`title="Handles work" fold="1"`);
 		room.validate(source);

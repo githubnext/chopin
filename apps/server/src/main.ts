@@ -18,9 +18,10 @@ import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
 import { registerImageRoutes } from "./images/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
-import type { Investigation } from "@chopin/experiment/records";
+import type { Instruction } from "./chat/server-instruction";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
+import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
@@ -53,6 +54,7 @@ import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { jevJudge, SpikeScout } from "./experiments/spike-scout";
 import { spikeHost } from "./experiments/spike-host";
+import { spikeSettler } from "./experiments/spike-settle";
 import { resolveInstruction } from "./experiments/spikes";
 import { askJev } from "./conversation-plan/jev";
 import { locksEditing, requestBuild } from "./tasks/builds";
@@ -216,8 +218,8 @@ function documentBackend(): Service.Backend {
  * Re-attempt decision links a first build's lock refused, under the existing Planner owner.
  * Never claims ownership: without an owner the cards stay pending until the next Planner turn.
  */
-function relinkDecisions(channelId: string): Promise<void> {
-	return serverInstruction(channelId, current => {
+async function relinkDecisions(channelId: string): Promise<void> {
+	await serverInstruction(channelId, current => {
 		let pending = pendingLinks(current);
 		if (pending.length === 0) return;
 		return {
@@ -231,69 +233,59 @@ function relinkDecisions(channelId: string): Promise<void> {
 /**
  * A spike's result landed: have the Planner settle the passage it answered. Runs under the
  * existing Planner owner, or claims one for the person whose edit started the spike while they
- * have the document open. A build that has since locked the document skips it.
+ * have the document open. A build that has since locked the document skips it. Until Chat
+ * accepts the turn, `spike.settle` stays set and the room opening or an owner arriving retries.
  */
-function settleSpikePassage(channelId: string, value: Investigation): Promise<void> {
-	return serverInstruction(channelId, current => {
-		if (Service.implementationActive(current)) return;
-		let { text, said } = resolveInstruction(value);
-		return { handle: value.spike!.login, text, said };
-	}, value.requester);
+const spikeSettlement = spikeSettler({
+	get: id => experiments!.service.store.get(id),
+	list: id => experiments!.service.store.list(id),
+	mutate: (id, action) => experiments!.service.mutate(id, action),
+	start: (channelId, value) =>
+		serverInstruction(channelId, current => {
+			if (Service.implementationActive(current)) return;
+			let { text, said } = resolveInstruction(value);
+			return { handle: value.spike!.login, text, said };
+		}, value.requester),
+});
+
+function settlePendingSpikes(channelId: string): void {
+	if (!config.agent || !config.liveSpikes || !experiments) return;
+	void spikeSettlement.pending(channelId).catch(err =>
+		console.error("chopin: could not settle a prototyped passage -", err)
+	);
+}
+
+/** Wake owner-bound work: background jobs and spike settlements that waited for an owner. */
+function ownerAvailable(channelId: string): Promise<void> {
+	settlePendingSpikes(channelId);
+	return jobRunner?.ownerAvailable(channelId) ?? Promise.resolve();
 }
 
 /**
- * Start a Planner turn nobody typed. `claimant` is a user whose open, writable socket in the
- * room may claim an unowned Planner; without one, only an existing owner will do.
+ * Start a Planner turn nobody typed; true once Chat accepted it. `claimant` is a user whose
+ * open, writable socket in the room may claim an unowned Planner; without one, only an
+ * existing owner will do.
  */
-async function serverInstruction(
+function serverInstruction(
 	channelId: string,
-	compose: (plan: Service.Plan) => { handle: string; text: string; said: string } | undefined,
+	compose: (plan: Service.Plan) => Instruction | undefined,
 	claimant?: string,
-): Promise<void> {
-	if (!config.agent || deletingChannels.has(channelId)) return;
-	let opened = Rooms.get(channelId)?.plan;
-	if (!opened || !compose(opened)) return;
-	let socket = claimant
-		? [...(Rooms.get(channelId)?.members.values() ?? [])].find(ws =>
-			ws.data.principalId === claimant && ws.data.canEdit && !ws.data.closed
-		)
-		: undefined;
-	let repository: Chat.Room["repository"] | undefined;
-	if (socket) {
-		repository = {
-			id: socket.data.repositoryId,
-			owner: socket.data.repositoryOwner,
-			name: socket.data.repositoryName,
-			defaultBranch: socket.data.repositoryDefaultBranch,
-		};
-	} else {
-		let binding = await ownerBindings?.resolve(channelId);
-		if (!binding) return;
-		repository = binding.repository;
-		binding.release();
-	}
-	await withDocumentTransition(channelId, async () => {
-		await Rooms.get(channelId)?.closing;
-		let held = Rooms.hold(channelId);
-		let release = () => {
-			held.release();
-			evict(held.room);
-		};
-		let running = false;
-		try {
-			let current = await plan(held.room, server);
-			let instruction = compose(current);
-			if (!instruction) return;
-			let context = conversation(held.room, socket?.data.sessionId, repository);
-			await Chat.instruct(context, instruction.handle, instruction.text, instruction.said);
-			if (context.chat.running) {
-				running = true;
-				void context.chat.running.finally(release).catch(() => {});
-			}
-		} finally {
-			if (!running) release();
-		}
-	});
+): Promise<boolean> {
+	return runServerInstruction(
+		{
+			agent: !!config.agent,
+			unavailable: id => deletingChannels.has(id),
+			owner: async id => await ownerBindings?.resolve(id),
+			transition: withDocumentTransition,
+			open: room => plan(room, server),
+			conversation,
+			instruct: (context, { handle, text, said }) => Chat.instruct(context, handle, text, said),
+			evict,
+		},
+		channelId,
+		compose,
+		claimant,
+	);
 }
 
 function placeResearchReference(
@@ -377,6 +369,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			// A lock that released while the room was closed left spike callouts deferred.
 			// Retrying only when unlocked keeps the retry's own room open from looping.
 			if (spikeScout && !Service.implementationActive(opened)) void spikeScout.refresh(room.id);
+			settlePendingSpikes(room.id);
 		}
 		return opened;
 	});
@@ -416,7 +409,7 @@ function conversation(
 		repository,
 		persist: chat => Service.persist(opened, chat),
 		activeOwner: () => ownerBindings!.resolve(room.id),
-		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
+		ownerAvailable: () => ownerAvailable(room.id),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
 		investigations: experiments
@@ -510,7 +503,7 @@ function conversation(
 						originMessageId: request.entryId,
 						requestedBy: request.userId,
 						requestedByHandle: request.handle,
-						beforeStart: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
+						beforeStart: () => ownerAvailable(room.id),
 						placeReference: id => placeResearchReference(room.id, id),
 					});
 				} catch (err) {
@@ -781,7 +774,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						auth: hostedAuth,
 						refreshAccess,
 						unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
-						ownerAvailable: id => jobRunner?.ownerAvailable(id) ?? Promise.resolve(),
+						ownerAvailable,
 						placeReference: placeResearchReference,
 						scheduleRecovery: scheduleResearchRecovery,
 					}),
@@ -2037,7 +2030,7 @@ if (config.liveSpikes) {
 			connections: experiments.connections,
 			withPlan: withImplementationPlan,
 			landed: (channelId, value) => {
-				void settleSpikePassage(channelId, value).catch(err =>
+				void spikeSettlement.settle(channelId, value.id).catch(err =>
 					console.error("chopin: could not settle a prototyped passage -", err)
 				);
 			},
@@ -2072,7 +2065,7 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 			channel.id,
 			session.session.id,
 		);
-		await jobRunner?.ownerAvailable(channel.id);
+		await ownerAvailable(channel.id);
 	},
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
