@@ -31,6 +31,38 @@ export function spikeHost({ service, connections, withPlan, landed }: Options): 
 		});
 		await service.stop(id, "cancelled", "Dismissed.");
 	};
+	/** Hand a requested spike to a local agent; a vanished connection leaves it retryable. */
+	let dispatch = async (
+		channelId: string,
+		value: Investigation,
+		owner: string,
+		connectionId: string,
+	) => {
+		let live = connections.get(connectionId);
+		try {
+			if (!live) throw new Error("connection gone");
+			let context = await withPlan(channelId, plan => Service.readCurrentDocument(plan));
+			await service.authorize(value.id, live.id, {
+				id: value.id,
+				documentId: channelId,
+				requester: owner,
+				authorizer: owner,
+				brief: value.brief,
+				source: live.source,
+				context: `Document revision ${context.revision}\n${context.source}`.slice(
+					0,
+					limits.context,
+				),
+			});
+			connections.use(channelId, live.id);
+		} catch {
+			await service.stop(
+				value.id,
+				live ? "failed" : "interrupted",
+				"The local agent disconnected before it could start.",
+			);
+		}
+	};
 	return {
 		snapshot: channelId =>
 			withPlan(channelId, async plan => {
@@ -54,7 +86,10 @@ export function spikeHost({ service, connections, withPlan, landed }: Options): 
 			}),
 		spikes,
 		async connection(repositoryId, owner, channelId) {
-			let found = connections.candidates(repositoryId, owner, channelId)[0];
+			// A connection silent past two heartbeats is probably gone; let it reconnect first.
+			let found = connections.candidates(repositoryId, owner, channelId).find(value =>
+				connections.fresh(value)
+			);
 			return found && { id: found.id, login: found.login };
 		},
 		async start(channelId, { owner, connection, block }) {
@@ -88,26 +123,11 @@ export function spikeHost({ service, connections, withPlan, landed }: Options): 
 				item.spike!.callout = placed.callout;
 				item.spike!.calloutDigest = placed.digest;
 			});
-			let live = connections.get(connection.id);
-			try {
-				if (!live) throw new Error("connection gone");
-				let context = await withPlan(channelId, plan => Service.readCurrentDocument(plan));
-				await service.authorize(id, live.id, {
-					id,
-					documentId: channelId,
-					requester: owner,
-					authorizer: owner,
-					brief: value.brief,
-					source: live.source,
-					context: `Document revision ${context.revision}\n${context.source}`.slice(
-						0,
-						limits.context,
-					),
-				});
-				connections.use(channelId, live.id);
-			} catch {
-				await service.stop(id, "failed", "The local agent disconnected before it could start.");
-			}
+			await dispatch(channelId, value, owner, connection.id);
+		},
+		async retry(channelId, id, { owner, connection }) {
+			let value = await service.retry(id);
+			await dispatch(channelId, value, owner, connection.id);
 		},
 		dismiss,
 		async refresh(channelId) {

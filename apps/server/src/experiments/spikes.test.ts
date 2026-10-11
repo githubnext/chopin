@@ -6,7 +6,15 @@ import { ulid } from "@chopin/dialect/ulid";
 import * as room from "../plan/room";
 import { canonical } from "../mcp/create";
 import { calloutDigest, callouts, reconcileCallout, withCallout } from "./spike-placement";
-import { renderKey, resolveInstruction, spikeCallout, spikeReport, uncertain } from "./spikes";
+import {
+	MAX_SPIKE_RETRIES,
+	renderKey,
+	resolveInstruction,
+	retryable,
+	spikeCallout,
+	spikeReport,
+	uncertain,
+} from "./spikes";
 
 import type { Investigation } from "@chopin/experiment/records";
 
@@ -91,7 +99,27 @@ test("running and stopped spikes render their own callouts without naming a mach
 	expect(queued).toContain(`title="Prototype queued"`);
 	expect(queued).not.toContain("Prototyping");
 	room.validate(queued);
-	expect(renderKey(spike("interrupted"))).toBe("stopped");
+	expect(renderKey(spike("interrupted"))).toBe("waiting");
+});
+
+test("a spike its connection lost waits calmly, then stops once out of retries", () => {
+	let waiting = serialize({ type: "root", children: [spikeCallout(spike("interrupted"))] });
+	expect(waiting).toContain("Waiting for @maggie’s coding agent to reconnect");
+	expect(waiting).toContain(`type="note"`);
+	expect(waiting).not.toContain("Propose");
+	room.validate(waiting);
+	let spent = spike("interrupted");
+	spent.spike!.retries = MAX_SPIKE_RETRIES;
+	spent.progress = "Workspace connection expired. Propose a new attempt to retry.";
+	expect(renderKey(spent)).toBe("stopped");
+	let stopped = serialize({ type: "root", children: [spikeCallout(spent)] });
+	expect(stopped).toContain(`type="warning"`);
+	expect(stopped).not.toContain("Propose");
+	room.validate(stopped);
+	let dismissed = spike("interrupted");
+	dismissed.spike!.dismissed = true;
+	expect(retryable(dismissed)).toBe(false);
+	expect(retryable(spike("cancelled"))).toBe(false);
 });
 
 test("a callout lands directly under its passage and is later replaced in place", async () => {

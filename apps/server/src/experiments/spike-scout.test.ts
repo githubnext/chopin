@@ -14,6 +14,7 @@ function block(
 
 function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 	let started: string[] = [];
+	let retried: string[] = [];
 	let dismissed: string[] = [];
 	let judged: string[][] = [];
 	let records: Investigation[] = [];
@@ -43,6 +44,12 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 				},
 			} as Investigation);
 		},
+		retry: async (_channelId, id, input) => {
+			retried.push(`${id}:${input.owner}`);
+			let value = records.find(item => item.id === id)!;
+			value.state = "queued";
+			value.spike!.retries = (value.spike!.retries ?? 0) + 1;
+		},
 		dismiss: async (_id, id) => {
 			dismissed.push(id);
 		},
@@ -64,6 +71,7 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 		scout,
 		state,
 		started,
+		retried,
 		dismissed,
 		judged,
 		records,
@@ -319,4 +327,54 @@ test("a reconnect rescans only documents its owner's scan could not serve", asyn
 	expect(h.started).toEqual(["a"]);
 	h.scout.connected("R_1", "U_1");
 	expect(checks).toBe(1);
+});
+
+function interrupted(id: string, retries = 0): Investigation {
+	return {
+		id,
+		requester: "U_1",
+		state: "interrupted",
+		spike: { digest: id, callout: `CALLOUT${id}`, placed: true, retries },
+	} as Investigation;
+}
+
+test("a spike its connection lost is handed back on reconnect, with no edit", async () => {
+	let h = harness({ blocks: [block("a")], callouts: new Set(["CALLOUTa"]) });
+	h.records.push(interrupted("a"));
+	h.disconnect();
+	await h.scout.refresh("D");
+	expect(h.retried).toEqual([]);
+	h.reconnect();
+	h.scout.connected("R_1", "U_2");
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(h.retried).toEqual([]);
+	h.scout.connected("R_1", "U_1");
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(h.retried).toEqual(["a:U_1"]);
+	// The passage is never judged or started afresh.
+	expect(h.judged).toEqual([]);
+	expect(h.started).toEqual([]);
+});
+
+test("automatic retries stop at the cap", async () => {
+	let h = harness({ blocks: [block("a")], callouts: new Set(["CALLOUTa"]) });
+	h.records.push(interrupted("a", 2));
+	await h.scout.refresh("D");
+	h.scout.connected("R_1", "U_1");
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(h.retried).toEqual([]);
+	expect(h.started).toEqual([]);
+});
+
+test("a dismissed spike stays dismissed when its owner's agent reconnects", async () => {
+	let h = harness({ blocks: [block("a")] });
+	h.records.push(interrupted("a"));
+	h.disconnect();
+	// Its callout is gone, so the scan dismisses it rather than waiting to retry it.
+	await h.scout.refresh("D");
+	expect(h.dismissed).toEqual(["a"]);
+	h.reconnect();
+	h.scout.connected("R_1", "U_1");
+	await h.scout.refresh("D");
+	expect(h.retried).toEqual([]);
 });

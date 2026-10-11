@@ -85,9 +85,22 @@ export function spikeReport(input: SpikeSubmission): string {
 	return serialize(root);
 }
 
+/** Automatic re-dispatches of a spike whose local agent lost its connection. */
+export const MAX_SPIKE_RETRIES = 2;
+
+/**
+ * Only a lost connection interrupts a spike; dismissal cancels it. An interrupted spike waits
+ * for its owner's coding agent to reconnect, a bounded number of times.
+ */
+export function retryable(value: Investigation): boolean {
+	return value.state === "interrupted" && !!value.spike && !value.spike.dismissed
+		&& (value.spike.retries ?? 0) < MAX_SPIKE_RETRIES;
+}
+
 /** The callout state a spike's record implies; rewritten only when this changes. */
 export function renderKey(value: Investigation): string {
 	if (value.state === "completed") return "completed";
+	if (retryable(value)) return "waiting";
 	if (["failed", "interrupted", "cancelled"].includes(value.state)) return "stopped";
 	// Spikes run one at a time per local agent; until one claims this run it is only waiting.
 	if (value.state === "requested" || value.state === "queued") return "queued";
@@ -133,11 +146,24 @@ export function spikeCallout(value: Investigation): RootContent {
 			body.length > 1 ? 1 : undefined,
 		);
 	}
+	if (key === "waiting") {
+		return callout(spike.callout, "note", "Prototype paused", [
+			paragraph({
+				type: "text",
+				value: `Waiting for @${spike.login}’s coding agent to reconnect. It will pick the `
+					+ "prototype back up then. Delete this callout to cancel.",
+			}),
+		]);
+	}
 	if (key === "stopped") {
 		return callout(spike.callout, "warning", "Prototype stopped", [
 			paragraph({
 				type: "text",
-				value: value.progress.trim() || "The coding agent stopped before reporting.",
+				// Interruption copy is written for investigations; a spike says what happened.
+				value: value.state === "interrupted"
+					? `@${spike.login}’s coding agent kept losing its connection, so this prototype `
+						+ "stopped."
+					: value.progress.trim() || "The coding agent stopped before reporting.",
 			}),
 		]);
 	}

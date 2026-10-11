@@ -28,6 +28,11 @@ export type Grant = {
 	run?: { id: string; documentId: string; generation: number; kind?: "implementation" | "rebuild" };
 };
 
+/** A connector that stops polling is forgotten this long after it was last heard from. */
+const CONNECTION_MS = 90_000;
+/** Connectors poll at least every 20 seconds while idle and heartbeat every 10 while working. */
+const FRESH_MS = 45_000;
+
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function confirmation() {
 	let bytes = randomBytes(8);
@@ -89,7 +94,7 @@ export class Connections {
 			sessionId: owner.sessionId,
 			label,
 			source: { ...source, repositoryId },
-			expiresAt: this.now() + 90_000,
+			expiresAt: this.now() + CONNECTION_MS,
 		};
 		value.connection = connection;
 		value.token = randomBytes(32).toString("base64url");
@@ -113,7 +118,14 @@ export class Connections {
 		return value && value.expiresAt > this.now() ? value : undefined;
 	}
 	touch(connection: Connection) {
-		connection.expiresAt = this.now() + 90_000;
+		connection.expiresAt = this.now() + CONNECTION_MS;
+	}
+	/**
+	 * Heard from within about two of its long-poll or heartbeat intervals. A silent connection
+	 * stays usable until it expires, but new work should not be queued on it.
+	 */
+	fresh(connection: Connection) {
+		return connection.expiresAt - CONNECTION_MS > this.now() - FRESH_MS;
 	}
 	/** Live connections for a repository, most recently heard from first. */
 	list(repositoryId: string, owner?: string) {

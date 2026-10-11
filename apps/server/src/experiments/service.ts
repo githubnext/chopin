@@ -164,6 +164,21 @@ export class Experiments {
 			delete value.candidate;
 		});
 	}
+	/** Return a spike its lost connection interrupted to `requested`, for another local agent. */
+	retry(id: string) {
+		return this.mutate(id, value => {
+			if (value.state !== "interrupted" || !value.spike || value.spike.dismissed) {
+				fail("invalid-state");
+			}
+			value.state = "requested";
+			value.progress = "";
+			value.expiresAt = 0;
+			value.spike.retries = (value.spike.retries ?? 0) + 1;
+			delete value.connectionId;
+			delete value.input;
+			delete value.candidate;
+		});
+	}
 	async recover(all = false) {
 		for (let value of await this.store.active()) {
 			if (all || value.state !== "queued" && value.expiresAt <= this.now()) {

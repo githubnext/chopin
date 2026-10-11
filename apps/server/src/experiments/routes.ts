@@ -278,7 +278,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (repository.id !== found.connection.source.repositoryId) fail("repository-forbidden");
 		if (found.grant.run) await target(session, found.connection, found.grant.run.documentId);
 		if (!connections.get(found.connection.id)) fail("connection-unavailable");
+		let stale = !connections.fresh(found.connection);
 		connections.touch(found.connection);
+		// Work held back from a silent connection can go to it again now it is heard from.
+		if (stale) {
+			options.connected?.(found.connection.source.repositoryId, found.connection.owner);
+		}
 		return { ...found, session: session! };
 	}
 	/** Write access to a run's document, which must belong to the connection's repository. */

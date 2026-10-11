@@ -52,6 +52,8 @@ export const spikeSchema = z.object({
 	 * settles the passage, so a landing nobody could act on yet is retried.
 	 */
 	settle: z.boolean().optional(),
+	/** Automatic re-dispatches after its local agent's connection was lost; capped. */
+	retries: z.number().int().nonnegative().max(10).optional(),
 }).strict();
 export type Spike = z.infer<typeof spikeSchema>;
 
