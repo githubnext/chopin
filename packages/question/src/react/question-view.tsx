@@ -43,6 +43,18 @@ export type QuestionStepRenderProps = {
 
 export type PreviousAnswer = { labels: string[]; by: string };
 
+/** Unsaved answers on an open card, for a host that saves them from outside the card. */
+export type PendingAnswers = {
+	/** Questions with a selected answer that is not saved yet. */
+	answered: number;
+	/** Every question has an answer, so Save can submit this card. */
+	complete: boolean;
+	submitting: boolean;
+	save: () => void;
+	/** Deselect the unsaved answers in the shared draft. */
+	clear: () => void;
+};
+
 export type QuestionViewProps = {
 	definition: Definition;
 	drafts: Drafts;
@@ -101,6 +113,13 @@ export type QuestionViewProps = {
 	headerActions?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
 	renderStep?: (props: QuestionStepRenderProps) => ReactNode;
+	/**
+	 * The host shows Save outside the card, so the footer keeps only navigation
+	 * and the quieter discard.
+	 */
+	deferSave?: boolean;
+	/** Reports this card's unsaved answers; undefined when there is nothing to save. */
+	onPending?: (pending: PendingAnswers | undefined) => void;
 };
 
 export function currentQuestion(
@@ -314,7 +333,9 @@ function AddOption(
 			if (height >= previous || document.activeElement !== control || !control) return;
 			let bounds = control.getBoundingClientRect();
 			let top = viewport.offsetTop;
-			let bottom = top + viewport.height;
+			// The field's scroll margin is the room it wants below it, such as its hint.
+			let room = parseFloat(getComputedStyle(control).scrollMarginBlockEnd) || 0;
+			let bottom = top + viewport.height - room;
 			if (bounds.top >= top && bounds.bottom <= bottom) return;
 			requestAnimationFrame(() => control.scrollIntoView({ block: "nearest" }));
 		};
@@ -712,6 +733,8 @@ export function QuestionView(props: QuestionViewProps) {
 		onQuestionFocus,
 		onQuestionSelect,
 		renderStep,
+		deferSave = false,
+		onPending,
 	} = props;
 
 	let [suggestionEdits, dispatchSuggestionEdit] = useReducer(reduceSuggestionEditState, {
@@ -772,6 +795,51 @@ export function QuestionView(props: QuestionViewProps) {
 			suggestionEdits.answer || suggestionEdits.composer,
 		)
 		: { draft: drafts[current.id] };
+
+	let answeredCount =
+		definition.questions.filter(question =>
+			answered(question, question.id === current.id ? projection.draft : drafts[question.id])
+		).length;
+	let complete = answeredCount === definition.questions.length;
+	let pendingEnabled = status === "open" && !disabled && !!onSubmit && !!onChange;
+	let latest = useRef({ onChange, onSubmit, projection, markHumanEdit, drafts, definition });
+	latest.current = { onChange, onSubmit, projection, markHumanEdit, drafts, definition };
+	let reporting = useRef(onPending);
+	reporting.current = onPending;
+	useEffect(() => {
+		let report = reporting.current;
+		if (!report) return;
+		if (!pendingEnabled || (answeredCount === 0 && !submitting)) {
+			report(undefined);
+			return;
+		}
+		report({
+			answered: answeredCount,
+			complete,
+			submitting,
+			save: () => latest.current.onSubmit?.(latest.current.projection.suggestion),
+			clear: () => {
+				let { definition, drafts, markHumanEdit, onChange } = latest.current;
+				markHumanEdit();
+				for (let question of definition.questions) {
+					let draft = drafts[question.id];
+					if (!draft || !answered(question, draft)) continue;
+					onChange?.(
+						question.id,
+						question.multiple
+							? {
+								mode: "choices",
+								options: Object.fromEntries(
+									Object.keys(draft.options).map(option => [option, false]),
+								),
+							}
+							: { mode: "choices", choice: null },
+					);
+				}
+			},
+		});
+	}, [answeredCount, complete, pendingEnabled, submitting]);
+	useEffect(() => () => reporting.current?.(undefined), []);
 
 	if (status === "discarded") {
 		return (
@@ -1050,9 +1118,11 @@ export function QuestionView(props: QuestionViewProps) {
 										type="button"
 										onClick={() => setConfirming(true)}
 										disabled={disabled || submitting}
-										className="btn btn-sm btn-outline"
+										className={deferSave
+											? "btn btn-sm btn-ghost question-discard-quiet"
+											: "btn btn-sm btn-outline"}
 									>
-										Discard
+										{deferSave ? "Discard decision" : "Discard"}
 									</button>
 								)}
 								{multiple && !last && (
@@ -1066,7 +1136,7 @@ export function QuestionView(props: QuestionViewProps) {
 										Next
 									</button>
 								)}
-								{(onSubmit || showActions) && (!multiple || last) && (
+								{(onSubmit || showActions) && (!multiple || last) && !deferSave && (
 									<button
 										type="button"
 										onClick={() => onSubmit?.(projection.suggestion)}

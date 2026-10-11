@@ -121,9 +121,13 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			await expect(secondChoice).toBeChecked();
 			await expect(firstChoice).toBeChecked();
 
+			// A phone saves from the pane's bar; the card keeps only its quiet discard.
+			let saveBar = page.getByRole("region", { name: "Unsaved answers" });
+			await expect(saveBar.getByRole("status")).toHaveText("2 unsaved answers");
+			await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 			let actions = [
-				card.getByRole("button", { name: "Discard", exact: true }),
-				card.getByRole("button", { name: "Save", exact: true }),
+				card.getByRole("button", { name: "Discard decision", exact: true }),
+				saveBar.getByRole("button", { name: "Save", exact: true }),
 			];
 			for (let action of actions) {
 				await action.scrollIntoViewIfNeeded();

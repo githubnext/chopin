@@ -814,7 +814,8 @@ describe("migration", () => {
 				action: "Discard",
 				marker: "setConfirming(true)",
 				size: "btn-sm",
-				tiers: ["btn-outline"],
+				// Ghost where a phone's save bar owns Save and this is the card's quiet way out.
+				tiers: ["btn-outline", "btn-ghost"],
 			}],
 			["packages/question/src/react/question-view.tsx", {
 				action: "Save",

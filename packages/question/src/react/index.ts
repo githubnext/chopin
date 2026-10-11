@@ -18,6 +18,7 @@ export { QuestionView } from "./question-view";
 export type {
 	AddOptionResult,
 	Collaborator,
+	PendingAnswers,
 	QuestionStepRenderProps,
 	QuestionViewProps,
 } from "./question-view";

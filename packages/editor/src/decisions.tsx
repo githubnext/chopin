@@ -6,14 +6,16 @@
  * making a long-lived room open below the questions that still need an answer.
  */
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
-import { ChevronIcon, DecisionIcon } from "@chopin/icons";
+import { CheckIcon, ChevronIcon, DecisionIcon } from "@chopin/icons";
 import { EmptyState } from "@chopin/visuals";
 
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
+import { usePhone } from "./widgets/phone";
 import { useQuestionnaires } from "./questionnaires";
-import { QuestionnaireCard } from "./widgets/questionnaire";
+import { PendingAnswersContext, PendingAnswersStore, SaveBar } from "./save-bar";
+import { labels, QuestionnaireCard } from "./widgets/questionnaire";
 
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
@@ -80,6 +82,102 @@ function useHistory() {
 	}, [history]);
 
 	return [history, setHistory] as const;
+}
+
+/** How long a just-decided card holds its confirmation before it folds away. */
+export const CONFIRM_MS = 1100;
+/** Matches `--decision-closure-dur` on `.decision-confirmed-collapse`. */
+export const COLLAPSE_MS = 320;
+
+type Closing = "confirmed" | "collapsing";
+
+/**
+ * Cards that just left the open list because they were decided.
+ *
+ * Driven by the card status the server publishes after its commit, never by a
+ * local Save press, so the confirmation cannot run ahead of persistence.
+ */
+export function newlyDecided(
+	before: ReadonlySet<string>,
+	after: ReadonlySet<string>,
+	decided: (id: string) => boolean,
+): string[] {
+	return [...before].filter(id => !after.has(id) && decided(id));
+}
+
+function useClosing(
+	enabled: boolean,
+	open: ReadonlySet<string>,
+	decided: (id: string) => boolean,
+	immediately: () => boolean,
+) {
+	let [closing, setClosing] = useState<ReadonlyMap<string, Closing>>(new Map());
+	let before = useRef<ReadonlySet<string> | undefined>(undefined);
+	let timers = useRef(new Set<number>());
+	let key = [...open].join("\n");
+
+	useEffect(() => {
+		let previous = before.current;
+		before.current = open;
+		if (!enabled || !previous) return;
+		let fresh = newlyDecided(previous, open, decided);
+		if (fresh.length === 0) return;
+		let update = (id: string, phase: Closing | undefined) =>
+			setClosing(current => {
+				let next = new Map(current);
+				if (phase) next.set(id, phase);
+				else next.delete(id);
+				return next;
+			});
+		let later = (delay: number, action: () => void) => {
+			let timer = window.setTimeout(() => {
+				timers.current.delete(timer);
+				action();
+			}, delay);
+			timers.current.add(timer);
+		};
+		for (let id of fresh) {
+			update(id, "confirmed");
+			if (immediately()) later(CONFIRM_MS, () => update(id, undefined));
+			else {
+				later(CONFIRM_MS, () => update(id, "collapsing"));
+				later(CONFIRM_MS + COLLAPSE_MS, () => update(id, undefined));
+			}
+		}
+		// `key` stands for `open`, which is rebuilt every render.
+	}, [enabled, key]);
+
+	useEffect(() => () => {
+		for (let timer of timers.current) window.clearTimeout(timer);
+	}, []);
+
+	return closing;
+}
+
+function Confirmed({ entry, phase }: { entry: QuestionnaireEntry; phase: Closing }) {
+	let chosen = labels(entry.value);
+	let question = entry.value.questions.map(item => item.prompt).join(" · ");
+	return (
+		<div
+			className={`decision-confirmed-collapse${phase === "collapsing" ? " is-closing" : ""}`}
+			data-decision-confirmed={entry.id}
+		>
+			<div className="min-h-0 overflow-hidden">
+				<div className="decision-confirmed" role="status">
+					<span aria-hidden="true" className="decision-confirmed-mark">
+						<CheckIcon />
+					</span>
+					<span className="decision-confirmed-text">
+						<span className="decision-confirmed-label">Decided</span>
+						<span className="decision-confirmed-question">{question}</span>
+						<span className="decision-confirmed-answer">
+							{chosen.length ? chosen.join(", ") : "Saved decision"}
+						</span>
+					</span>
+				</div>
+			</div>
+		</div>
+	);
 }
 
 export function Decisions(
@@ -157,8 +255,27 @@ export function Decisions(
 		} else heading.current?.focus({ preventScroll: true });
 	}, [entries, metadata]);
 
-	let pending = entries.filter(entry => waiting(entry, metadata));
-	let settled = entries.filter(entry => !waiting(entry, metadata));
+	let phone = usePhone();
+	let [pendingAnswers] = useState(() => new PendingAnswersStore());
+	let open = new Set(entries.filter(entry => waiting(entry, metadata)).map(entry => entry.id));
+	let closing = useClosing(
+		phone,
+		open,
+		id => metadata.get(id)?.status === "decided",
+		() => motionImmediately?.() ?? false,
+	);
+	let leaveSaveBar = useCallback(() => {
+		let next = content.current?.querySelector<HTMLElement>(
+			"[data-plan-sidecar-questionnaire]",
+		);
+		if (next) {
+			next.tabIndex = -1;
+			next.focus({ preventScroll: true });
+		} else heading.current?.focus({ preventScroll: true });
+	}, []);
+
+	let pending = entries.filter(entry => open.has(entry.id) || closing.has(entry.id));
+	let settled = entries.filter(entry => !open.has(entry.id) && !closing.has(entry.id));
 
 	let outstanding = pending.length;
 	let resolved = settled.length;
@@ -187,8 +304,8 @@ export function Decisions(
 		/>
 	);
 
-	return (
-		<div className="plan-decisions">
+	let pane = (
+		<div className="plan-decisions" data-phone={phone ? "" : undefined}>
 			<h2 className="sr-only" id={headingId} ref={heading} tabIndex={-1}>Decisions</h2>
 
 			<div
@@ -248,7 +365,12 @@ export function Decisions(
 					)
 					: (
 						<div className="flex flex-col gap-3">
-							{pending.map(question)}
+							{pending.map(entry => {
+								let phase = closing.get(entry.id);
+								return phase
+									? <Confirmed entry={entry} key={entry.id} phase={phase} />
+									: question(entry);
+							})}
 						</div>
 					)}
 
@@ -286,6 +408,12 @@ export function Decisions(
 					</div>
 				)}
 			</div>
+			{phone && <SaveBar onFocusLeave={leaveSaveBar} store={pendingAnswers} />}
 		</div>
+	);
+	return (
+		<PendingAnswersContext.Provider value={phone ? pendingAnswers : undefined}>
+			{pane}
+		</PendingAnswersContext.Provider>
 	);
 }

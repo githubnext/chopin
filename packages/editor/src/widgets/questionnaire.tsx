@@ -7,9 +7,9 @@
  * the source reads correctly on its own.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { cardStatus } from "@chopin/dialect";
-import { DecisionIcon, MessageForwardIcon } from "@chopin/icons";
+import { ChevronIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
 import {
 	cardRelation,
 	NOT_LINKED,
@@ -24,6 +24,8 @@ import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
+import { usePhone } from "./phone";
+import { PendingAnswersContext } from "../save-bar";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
@@ -316,6 +318,7 @@ function Undecided(
 	let answerable = connected && !!state.definition;
 	let editable = canEdit && answerable;
 	let previous = previousAnswers(value);
+	let pending = useContext(PendingAnswersContext);
 
 	return (
 		<SidecarCard
@@ -373,6 +376,8 @@ function Undecided(
 					: undefined}
 				status="open"
 				submitting={state.submitting}
+				deferSave={!!pending}
+				onPending={pending && (answers => pending.set(value.id, answers))}
 				{...pointing}
 			/>
 		</SidecarCard>
@@ -393,7 +398,8 @@ function previousAnswers(value: Questionnaire) {
 	return Object.keys(previous).length === 0 ? undefined : previous;
 }
 
-function labels(value: Questionnaire): string[] {
+/** The chosen answers' labels, as the document projection records them. */
+export function labels(value: Questionnaire): string[] {
 	return value.questions.flatMap(question => {
 		let selected = question.choices?.flatMap(id => {
 			let option = question.options.find(candidate => candidate.id === id);
@@ -595,7 +601,13 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 		: null;
 	// Re-render when anchors arrive: whether the card collapses depends on them.
 	useRelations(options.questions);
+	let phone = usePhone();
 	let places = options.questions?.counts(value.id);
+	if (
+		phone && options.onShowDecision && cardPresentation(value, meta, "inline") === "open"
+	) {
+		return <DecisionChip onShow={options.onShowDecision} value={value} />;
+	}
 	if (
 		(!meta || meta.status === "decided") && carriedByMarkers(value, places)
 		&& !options.questions?.proseKey(value.id)
@@ -622,6 +634,33 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			value={value}
 			wire={options.wire}
 		/>
+	);
+}
+
+/**
+ * An open decision in the document, on a phone.
+ *
+ * Phones answer decisions in the Decisions pane only; the prose keeps a
+ * one-line pointer so the card is not shown, and answered, twice.
+ */
+function DecisionChip(
+	{ onShow, value }: { onShow: (questionnaireId: string) => void; value: Questionnaire },
+) {
+	let question = value.questions.map(item => item.prompt).join(" · ");
+	return (
+		<button
+			aria-label={`Decision: ${question}. Answer in Decisions`}
+			className="decision-chip"
+			data-plan-sidecar-questionnaire={value.id}
+			data-press="wide"
+			onClick={() => onShow(value.id)}
+			type="button"
+		>
+			<DecisionIcon aria-hidden="true" className="decision-chip-icon" size={14} />
+			<span className="decision-chip-kind">Decision</span>
+			<span className="decision-chip-question">{question}</span>
+			<ChevronIcon aria-hidden="true" className="decision-chip-chevron" size={14} />
+		</button>
 	);
 }
 

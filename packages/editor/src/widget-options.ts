@@ -68,6 +68,8 @@ export type WidgetOptions = {
 	onCardSource?: (questionnaireId: string) => void;
 	/** Whether a card has a Chat message to go back to. */
 	hasCardSource?: (questionnaireId: string) => boolean;
+	/** Open a decision in the Decisions pane; phones show open decisions there only. */
+	onShowDecision?: (questionnaireId: string) => void;
 	/** False when no Planner will review where decisions live. */
 	planner?: boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;

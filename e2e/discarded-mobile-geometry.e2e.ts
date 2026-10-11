@@ -18,7 +18,7 @@ test("compact Decisions keeps a discarded decision reachable in resolved history
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Where should room state live?" }),
 	});
-	await card.getByRole("button", { name: "Discard", exact: true }).click();
+	await card.getByRole("button", { name: "Discard decision", exact: true }).click();
 	await expect(card.getByText("Discard this decision?", { exact: true })).toBeVisible();
 	await card.getByRole("button", { name: "Discard", exact: true }).click();
 

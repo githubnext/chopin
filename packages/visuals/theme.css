@@ -349,6 +349,10 @@
 	--icon-swap-blur: 2px;
 	--badge-pop-dur: 180ms;
 	--badge-close-dur: 180ms;
+	/* Phone decisions: the save bar rises from the bottom edge; a decided card folds away. */
+	--save-bar-open-dur: 320ms;
+	--save-bar-close-dur: 180ms;
+	--decision-closure-dur: 320ms;
 	--acc-expand: 250ms;
 	--acc-collapse: 200ms;
 	--toast-open: 280ms;

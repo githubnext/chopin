@@ -616,6 +616,13 @@ export function RoomWorkspace(
 		if (destination !== "build") selectView(destination, mode === "split");
 		dispatch({ type: "set-chat", open: false });
 	};
+	let latestSelectDestination = useRef(selectDestination);
+	latestSelectDestination.current = selectDestination;
+	// Stable, because the editor rebuilds its plugins when a callback changes.
+	let showDecision = useCallback((questionnaireId: string) => {
+		latestSelectDestination.current("decisions");
+		setReveal({ widget: questionnaireId, token: Date.now() });
+	}, []);
 
 	useEffect(() => {
 		setSourceDestination(undefined);
@@ -1192,6 +1199,7 @@ export function RoomWorkspace(
 							evidence={showEvidence}
 							onCardSource={showCardSource}
 							hasCardSource={hasCardSource}
+							onShowDecision={showDecision}
 							planner={agent}
 							commentPresentation={mode === "split" ? "popover" : "sheet"}
 							connection={status === "deleted" ? "closed" : status}
