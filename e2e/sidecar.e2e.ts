@@ -1385,13 +1385,15 @@ test("the reply field is one line until focused, then grows and reveals Send to 
 		initial.height,
 	);
 	await expect(send).toBeEnabled();
-	let contained = await Promise.all([frame.boundingBox(), send.boundingBox()]).then(
-		([outer, button]) =>
-			!!outer && !!button && button.x >= outer.x && button.y >= outer.y
-			&& button.x + button.width <= outer.x + outer.width
-			&& button.y + button.height <= outer.y + outer.height,
-	);
-	expect(contained).toBe(true);
+	// The frame grows with the field; measure once it has caught up.
+	await expect.poll(() =>
+		Promise.all([frame.boundingBox(), send.boundingBox()]).then(
+			([outer, button]) =>
+				!!outer && !!button && button.x >= outer.x && button.y >= outer.y
+				&& button.x + button.width <= outer.x + outer.width
+				&& button.y + button.height <= outer.y + outer.height,
+		)
+	).toBe(true);
 });
 
 test("a reply joins the thread without a duplicate reply count", async ({ join, seed }) => {

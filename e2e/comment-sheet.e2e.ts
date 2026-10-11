@@ -362,10 +362,11 @@ test("a phone selection docks its actions at the foot of the screen instead of a
 	await expect(page.getByRole("toolbar", { name: "Text formatting" })).toHaveCount(0);
 	await expect(bar.getByRole("button", { name: "Bold" })).toHaveCount(0);
 
-	// Docked near the bottom edge, never over the selection or the lines just under it.
+	// Docked just above the tab bar, never over the selection or the lines just under it.
 	let barBox = await size(bar);
-	expect(barBox.y + barBox.height).toBeGreaterThan(844 - 48);
-	expect(barBox.y + barBox.height).toBeLessThanOrEqual(844);
+	let tabs = await size(page.getByRole("navigation", { name: "Workspace view" }));
+	expect(barBox.y + barBox.height).toBeGreaterThan(tabs.y - 48);
+	expect(barBox.y + barBox.height).toBeLessThanOrEqual(tabs.y);
 	let selection = await page.evaluate(() =>
 		getSelection()!.getRangeAt(0).getBoundingClientRect().bottom
 	);
@@ -527,13 +528,14 @@ test("paging between short and long threads keeps the medium detent and its back
 test("a selection low on a phone screen scrolls clear of the docked bar", async ({ join, seed }) => {
 	await seed(SOURCE);
 	let page = await join("ana", IPHONE);
-	let passage = content(page).locator("p").filter({ hasText: "Padding paragraph." }).nth(12);
-	// Put the passage on the last lines of the screen, where the bar will dock.
-	await passage.evaluate(element => {
+	let passage = content(page).locator("p").filter({ hasText: "Padding paragraph." }).nth(20);
+	// Put the passage on the last lines above the tab bar, where the selection bar will dock.
+	let tabs = await size(page.getByRole("navigation", { name: "Workspace view" }));
+	await passage.evaluate((element, dock) => {
 		let scroller = element.closest("[data-plan-scroll]")!;
-		scroller.scrollTop += element.getBoundingClientRect().bottom - (innerHeight - 12);
-	});
-	expect((await size(passage)).y).toBeGreaterThan(844 - 80);
+		scroller.scrollTop += element.getBoundingClientRect().bottom - (dock - 12);
+	}, tabs.y);
+	expect((await size(passage)).y).toBeGreaterThan(tabs.y - 80);
 	await passage.selectText();
 	let bar = page.getByRole("toolbar", { name: "Selection actions" });
 	await expect(bar).toBeVisible();

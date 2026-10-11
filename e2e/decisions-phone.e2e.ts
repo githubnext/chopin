@@ -200,7 +200,7 @@ test("phone: an open decision in the document is a chip that opens it in Decisio
 	await expect(
 		page.getByRole("navigation", { name: "Workspace view" })
 			.getByRole("button", { name: /^Decisions/ }),
-	).toHaveAttribute("aria-pressed", "true");
+	).toHaveAttribute("aria-current", "page");
 	await expect(
 		page.locator(`[data-document-view="decisions"] [data-plan-sidecar-questionnaire="${id}"]`),
 	).toBeFocused();

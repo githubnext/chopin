@@ -63,7 +63,7 @@ test("a phone composer rests as one pill with a reference button, draft and send
 test("phone mention and reference pickers rest on the composer as a full-width list", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await join("cy");
-	await expect(page.getByRole("group", { name: /People here: ana, cy$/ })).toBeVisible();
+	// The phone top bar carries no presence; the picker below waits for cy instead.
 	await openPhoneChat(page);
 	let chat = chatPane(page);
 	let draft = chatInput(chat);
