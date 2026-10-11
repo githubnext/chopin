@@ -373,7 +373,7 @@ describe("anchored child lifecycle", () => {
 		expect(slot).not.toContain("inert");
 	});
 
-	it("Zoom keeps the root tabs live under a stack bar and hides the child off Document", () => {
+	it("Zoom keeps the root tabs and stack bar live and hides the child off Document", () => {
 		let document = withChild("zoom");
 		let decisions = withChild("zoom", "decisions");
 		let plan = document.match(/<section[^>]*data-document-view="plan"[^>]*>/)?.[0];
@@ -385,7 +385,9 @@ describe("anchored child lifecycle", () => {
 		expect(plan).toContain('inert=""');
 		expect(document.match(/<main[^>]*>/)?.[0]).not.toContain("data-child-covered");
 		expect(decisions.match(/<div[^>]*workspace-child-slot[^>]*>/)?.[0]).toContain("hidden");
-		expect(decisions).not.toContain('aria-label="Document stack"');
+		// Off Document the bar stays, and its child crumb becomes a button back to Document.
+		expect(decisions).toContain('aria-label="Document stack"');
+		expect(decisions).toMatch(/<button aria-current="page"[^>]*><span[^>]*>Source review</);
 	});
 
 	it("orders the tab row expand, tabs, presence, with no Chat header", () => {

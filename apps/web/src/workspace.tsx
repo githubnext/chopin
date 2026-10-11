@@ -267,9 +267,10 @@ export function Workspace(
 	let lift = nested?.motion === "lift" && mode === "split";
 	let childClosing = nested?.childState === "closing";
 	let liftCovered = lift && !childClosing;
-	// Compact has no in-sheet tab row to peek, so it always uses the stack bar.
-	let stackBar = !!nested && !lift && view === "plan";
-	let planCovered = stackBar;
+	// Compact has no in-sheet tab row to peek, so it always uses the stack bar. It stays on every
+	// view, so a child left open under Decisions or Build is still in sight and one click away.
+	let stackBar = !!nested && !lift;
+	let planCovered = stackBar && view === "plan";
 	let immediately = motionImmediately();
 	let contentSwapMotion = motionContract("content-swap");
 	let chatPresence = useTransitionPresence(
@@ -479,6 +480,7 @@ export function Workspace(
 						aria-hidden={!presentation.documentVisible || undefined}
 						className="workspace-document-panel relative min-w-0 w-full flex-1"
 						data-child-covered={liftCovered || undefined}
+						data-child-stack={stackBar || undefined}
 						inert={!presentation.documentVisible}
 						onClickCapture={liftCovered
 							? event => {
@@ -557,7 +559,25 @@ export function Workspace(
 											<li className="flex min-w-0 items-center gap-1" key={entry.id}>
 												{index > 0 && <ChevronIcon aria-hidden="true" size={12} />}
 												{index === nested!.path.length - 1
-													? <span aria-current="page">{entry.label}</span>
+													? view === "plan"
+														? <span aria-current="page">{entry.label}</span>
+														: (
+															<button
+																aria-current="page"
+																className="btn btn-compact btn-ghost min-w-0"
+																onClick={() => {
+																	onDestination("plan");
+																	requestAnimationFrame(() => {
+																		root.current?.querySelector<HTMLElement>(
+																			".anchored-child-card:last-of-type",
+																		)?.focus({ preventScroll: true });
+																	});
+																}}
+																type="button"
+															>
+																<span className="truncate">{entry.label}</span>
+															</button>
+														)
 													: (
 														<button
 															className="btn btn-compact btn-ghost min-w-0"

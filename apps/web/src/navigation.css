@@ -200,6 +200,12 @@
 	opacity: 0;
 }
 
+/* Off Document the bar stays over the root's view, which steps down beneath it. */
+.workspace-document-panel[data-child-stack]
+	:is([data-document-view="decisions"], [data-document-view="build"]) {
+	padding-top: var(--child-bar-height);
+}
+
 .workspace-stack-path [aria-current] {
 	color: var(--color-text-primary);
 	font-weight: 500;

@@ -942,21 +942,38 @@ test("Zoom keeps an open child across root tab switches without remounting it", 
 		"page",
 	);
 	let scroller = surface.locator("[data-plan-scroll]");
-	await scroller.evaluate(element => element.scrollTop = 120);
+	// A scroll set while the child is still loading or growing can be reset, so set it until it holds.
+	await expect.poll(() =>
+		scroller.evaluate(element => {
+			element.scrollTop = 120;
+			return element.scrollTop;
+		})
+	).toBe(120);
 	let tabs = rootSheet(page, room).locator("[data-document-toolbar]");
 	await tabs.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(surface).toBeHidden();
-	await expect(stack).toHaveCount(0);
+	// The stack bar stays in sight off Document, so the open child is never lost.
+	await expect(stack).toBeVisible();
 	// Decisions shows the root's decisions while the child stays open underneath.
 	await expect(rootSheet(page, room).locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(page.locator(`[data-workspace-room="${child.id}"] [data-document-view="decisions"]`))
 		.toHaveCount(0);
 	await page.keyboard.press("Escape");
-	await tabs.getByRole("button", { name: /^Document/ }).click();
+	await expect(stack).toBeVisible();
+	await stack.getByRole("button", { name: childTitle, exact: true }).click();
 	await expect(surface).toBeVisible();
+	await expect(surface).toBeFocused();
+	await expect(tabs.getByRole("button", { name: /^Document/ })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
 	await expect(page).toHaveURL(url => url.pathname === child.path);
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(120);
 	expect((await mounts.mounts()).filter(entry => entry === `mount ${child.id}`)).toHaveLength(1);
+
+	// Back from another view still returns to the root, which keeps that view.
+	await tabs.getByRole("button", { name: /^Decisions/ }).click();
 	await stack.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).click();
 	await expect(surface).toHaveCount(0);
+	await expect(rootSheet(page, room).locator('[data-document-view="decisions"]')).toBeVisible();
 });
