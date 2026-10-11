@@ -53,6 +53,7 @@ import { $isTableCellNode, $isTableRowNode } from "@lexical/table";
 import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
+import { widgets$ } from "../widget-options";
 import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } from "./code";
 import { CodeView } from "./code-view";
 import { fitsLegibly } from "./diagram-fit";
@@ -265,11 +266,13 @@ function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => v
 
 /** Attaches a preview element beside a block's source, keyed to its content. */
 function Preview(
-	{ block, editor, collapsed, disabled, editing, onToggle, onHidable }: {
+	{ block, editor, collapsed, disabled, editing, onToggle, onHidable, reading }: {
 		block: Block;
 		editor: LexicalEditor;
 		collapsed: boolean;
 		disabled?: boolean;
+		/** A phone reader sees the rendered block; its source is authoring material. */
+		reading?: boolean;
 		/** The caret is in this block's source and the editor has focus. */
 		editing: boolean;
 		onToggle: () => void;
@@ -477,7 +480,7 @@ function Preview(
 							</span>
 						)
 					}
-					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
+					{hidable && !reading && <Toggle collapsed={collapsed} onToggle={onToggle} />}
 					{title && <span className="plan-code-title">{title}</span>}
 					{named && <Language block={block} editor={editor} disabled={disabled} />}
 				</div>,
@@ -885,6 +888,7 @@ const FOCUSABLE_PREVIEW = `.plan-code-view, .plan-diagram, .plan-seecode, ${WIRE
 export function PreviewPlugin() {
 	let [editor] = useLexicalComposerContext();
 	let disabled = useCellValue(readOnly$);
+	let reading = useCellValue(widgets$).editMode === "reading";
 	let [blocks, setBlocks] = useState<Block[]>([]);
 	/** Blocks whose source this viewer is looking at, and why. */
 	let [shown, setShown] = useState<Record<string, Shown>>({});
@@ -1311,8 +1315,9 @@ export function PreviewPlugin() {
 					key={block.key}
 					block={block}
 					editor={editor}
-					collapsed={!shown[block.key]}
+					collapsed={!shown[block.key] || reading}
 					disabled={disabled}
+					reading={reading}
 					editing={editing === block.key}
 					onToggle={() => toggle(block.key)}
 					onHidable={reportHidable}

@@ -25,6 +25,7 @@ import {
 	$isTextNode,
 	COLLABORATION_TAG,
 	COMMAND_PRIORITY_LOW,
+	createCommand,
 	HISTORIC_TAG,
 	KEY_DOWN_COMMAND,
 } from "lexical";
@@ -75,7 +76,7 @@ import {
 
 import type { ReactElement } from "react";
 import type { IconProps } from "@chopin/icons";
-import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
+import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 import type { OpenResearch } from "./research";
 
@@ -411,6 +412,12 @@ export type SlashMenuProps = {
 
 const NO_ACTIONS = new Set<string>();
 
+/**
+ * Type a `/` at the caret and open the menu for it, for a control that stands in for the key:
+ * a phone's docked toolbar, where a software keyboard may not report the key at all.
+ */
+export const OPEN_SLASH_MENU_COMMAND: LexicalCommand<void> = createCommand("OPEN_SLASH_MENU");
+
 export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 	let [editor] = useLexicalComposerContext();
 	let [query, setQuery] = useState<string>();
@@ -495,6 +502,27 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 			COMMAND_PRIORITY_LOW,
 		);
 	}, [editor]);
+
+	useEffect(() => {
+		if (disabled) return;
+		return editor.registerCommand(
+			OPEN_SLASH_MENU_COMMAND,
+			() => {
+				armed.current = true;
+				editor.update(() => {
+					let selection = $getSelection();
+					if (!$isRangeSelection(selection)) return;
+					let offset = selection.anchor.offset;
+					let text = selection.anchor.getNode().getTextContent();
+					// The slash has to start a word to count as a trigger.
+					let before = selection.isCollapsed() && offset > 0 ? text[offset - 1] : undefined;
+					selection.insertText(before === undefined || /\s/.test(before) ? "/" : " /");
+				});
+				return true;
+			},
+			COMMAND_PRIORITY_LOW,
+		);
+	}, [editor, disabled]);
 
 	// Track what follows the `/` so the list can filter as the user types.
 	useEffect(() => {

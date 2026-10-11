@@ -56,13 +56,18 @@ export function PhoneHeader(
 		return () => cancel(handle);
 	}, [hostsTrigger]);
 
-	let finishEdit = () => {
+	// Also runs as a save starts, not after it: keys typed while the rename travels would
+	// otherwise land in a field that is about to close.
+	let handOff = () => {
 		// Naming a new document leads into writing it, unless the user already tapped elsewhere.
 		if (editing === "new" && header.current?.contains(document.activeElement)) {
 			header.current.closest(".workspace-root")
 				?.querySelector<HTMLElement>(".plan-content[contenteditable='true']")
 				?.focus();
 		}
+	};
+	let finishEdit = () => {
+		handOff();
 		onEditingChange();
 	};
 
@@ -90,6 +95,7 @@ export function PhoneHeader(
 							channel={{ id: room, title: label }}
 							inline
 							onCancel={finishEdit}
+							onSavingChange={saving => saving && handOff()}
 							replay={editing === "new"}
 							onRenamed={detail => {
 								onRenamed(detail.channel);

@@ -14,7 +14,7 @@
  * which elements get rendered.
  */
 
-import { content, expect, openIsolatedRoom, test } from "./room";
+import { content, edit, expect, openIsolatedRoom, test } from "./room";
 import { expectFocusIndicator } from "./focus";
 import { installPointerMedia } from "./pointer-media";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
@@ -77,6 +77,7 @@ function items(page: Page): Locator {
 }
 
 async function touchToolbar(page: Page, cell: Locator = content(page).locator("td").first()) {
+	await edit(page);
 	await cell.tap();
 	let toolbar = page.getByRole("toolbar", { name: "Table actions" });
 	await expect(toolbar).toBeVisible();

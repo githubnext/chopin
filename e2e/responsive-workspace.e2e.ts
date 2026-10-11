@@ -1,4 +1,4 @@
-import { authenticate, content, expect, openIsolatedRoom, ready, test } from "./room";
+import { authenticate, content, edit, expect, openIsolatedRoom, ready, test } from "./room";
 import { chatInput, expectChatValue } from "./chat-input";
 import { expectInsideViewport, expectNoHorizontalOverflow, RESPONSIVE_SOURCE } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -117,7 +117,8 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expect(chatPane(page)).toBeHidden();
 	await expect(page.getByRole("dialog", { name: "Implementation", exact: true })).toHaveCount(0);
 	await nav.getByRole("button", { name: "Document", exact: true }).click();
-	await expect(content(page)).toBeEditable();
+	await expect(content(page)).toBeVisible();
+	await edit(page);
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -620,6 +621,7 @@ test("Chromium visual viewport emulation keeps document editing above the keyboa
 	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room);
 	try {
 		let editor = content(emulation.page);
+		await edit(emulation.page);
 		await editor.focus();
 		await setVisualViewport(emulation.page, {
 			event: "resize",

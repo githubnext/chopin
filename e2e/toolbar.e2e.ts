@@ -7,9 +7,18 @@
  * required. Everything here is on the other side of that line.
  */
 
-import { authenticate, content, expect, openIsolatedRoom, roomPath, test, written } from "./room";
+import {
+	authenticate,
+	content,
+	edit,
+	expect,
+	openIsolatedRoom,
+	roomPath,
+	test,
+	written,
+} from "./room";
 import { expectInsideViewport } from "./responsive";
-import { installVisualViewport } from "./visual-viewport";
+import { installVisualViewport, setVisualViewport } from "./visual-viewport";
 
 import type { Browser, Locator, Page } from "@playwright/test";
 
@@ -579,6 +588,7 @@ test("touch editor menus use reachable targets and stay inside the viewport", as
 		viewport: { width: 390, height: 844 },
 	});
 
+	await edit(page);
 	await content(page).click();
 	await page.keyboard.type("/");
 	let menu = page.getByRole("listbox", MENU);
@@ -634,6 +644,10 @@ test("an open slash menu follows its caret while the editor scrolls", async ({ b
 	await seed(LONG_EDITOR);
 	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room);
 	try {
+		// The keyboard hides the edit toggle; a reader opens editing before typing raises it.
+		await setVisualViewport(emulation.page, { event: "resize", height: 844, offsetTop: 0 });
+		await edit(emulation.page);
+		await setVisualViewport(emulation.page, { event: "resize", height: 640, offsetTop: 72 });
 		let block = content(emulation.page).getByText("Paragraph 9.", { exact: true });
 		await block.scrollIntoViewIfNeeded();
 		// Start in the upper third, so the menu opens below the caret and has room to stay there:

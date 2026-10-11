@@ -8,6 +8,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { markdownShortcutPlugin, MDXEditor } from "@mdxeditor/editor";
+import {
+	$getNearestNodeFromDOMNode,
+	$getRoot,
+	$isElementNode,
+	$isParagraphNode,
+	$isTextNode,
+	BLUR_COMMAND,
+} from "lexical";
 
 // Structural editor CSS, then our retheme over the top.
 import "@mdxeditor/editor/style.css";
@@ -35,6 +43,8 @@ import type { PlanProvider } from "./provider";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
+import type { EditMode } from "./edit-mode";
+import type { LexicalEditor } from "lexical";
 import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
 import type { Refusal } from "./history";
 import type { ResearchLauncher } from "./research-launcher";
@@ -77,6 +87,13 @@ export type PlanEditorProps = {
 	busy?: boolean;
 	/** Read-only because this participant may view but not edit. */
 	readOnly?: boolean;
+	/**
+	 * This client's own reading or editing mode on a phone. Reading locks the text like
+	 * `readOnly` but keeps selection and commenting; a permission lock still wins.
+	 */
+	editMode?: EditMode;
+	/** Host element for the docked formatting toolbar while editing on a phone. */
+	formatDock?: HTMLElement | null;
 	/**
 	 * Where the plan's questionnaires are published.
 	 *
@@ -125,6 +142,8 @@ export type PlanState = {
 	lost?: number;
 	/** Why it could not be opened at all, if it could not. */
 	failed?: string;
+	/** Whether the document held no content when it last finished opening. */
+	empty?: boolean;
 	/**
 	 * An undo or redo this person just asked for that could not be applied
 	 * safely, for the host to mention briefly. A new object for each refusal.
@@ -144,6 +163,8 @@ export function PlanEditor(
 		commentPresentation = "popover",
 		connection,
 		disclosureMotion,
+		editMode,
+		formatDock,
 		motionImmediately,
 		onScrollTop,
 		onState,
@@ -199,7 +220,9 @@ export function PlanEditor(
 
 	// The store resolves anchors itself, because a Lexical key is per-editor:
 	// the server's key for a block means nothing in this browser.
+	let bindingRef = useRef<Binding>(undefined);
 	let onBinding = useCallback((value: Binding | undefined) => {
+		bindingRef.current = value;
 		setBinding(value);
 		questions?.bind(value);
 		threads?.bind(value);
@@ -293,7 +316,9 @@ export function PlanEditor(
 			resume(value);
 		});
 		value.on("sync", synced => {
-			setState(prev => ({ ...prev, synced }));
+			let editor = bindingRef.current?.editor;
+			let empty = synced && editor ? isEmpty(editor) : undefined;
+			setState(prev => ({ ...prev, synced, empty: empty ?? prev.empty }));
 			questions?.setDocumentSynced(synced);
 		});
 		value.on("status", ({ message, status }) => {
@@ -328,7 +353,56 @@ export function PlanEditor(
 	// Locking waits out a blip, and edits made meanwhile wait in the outbox.
 	let offline = useConnectionNotice(connection !== undefined && connection !== "connected")
 		!== "none";
-	let locked = offline || !!busy || !!readOnly || !state.synced;
+	let blocked = offline || !!busy || !!readOnly || !state.synced;
+	let locked = blocked || editMode === "reading";
+
+	// Where a reader last tapped, so that choosing Edit can put the caret there.
+	let tapped = useRef<{ node: Node; offset: number }>(undefined);
+	useEffect(() => {
+		let element = scroller.current;
+		if (!element || editMode !== "reading") return;
+		let tap = (event: PointerEvent) => {
+			let point = caretAt(event.clientX, event.clientY);
+			if (point && element.querySelector(".plan-content")?.contains(point.node)) {
+				tapped.current = point;
+			}
+		};
+		element.addEventListener("pointerup", tap);
+		return () => element.removeEventListener("pointerup", tap);
+	}, [editMode, generation, wire]);
+
+	/*
+	 * Moving between reading and editing.
+	 *
+	 * Runs after MDXEditor has applied the lock, because its effects run before this parent's.
+	 * A host that changes mode inside the tap (with `flushSync`) keeps the focus inside the user
+	 * gesture, which is what lets iOS raise the keyboard.
+	 */
+	let previousMode = useRef(editMode);
+	useEffect(() => {
+		let previous = previousMode.current;
+		previousMode.current = editMode;
+		let editor = binding?.editor;
+		if (!editor || previous === editMode) return;
+		if (editMode === "reading") {
+			// A contenteditable that stops being editable while focused fires no blur, which would
+			// leave this client's caret showing to everyone else.
+			let root = editor.getRootElement();
+			let active = document.activeElement;
+			if (root && active instanceof HTMLElement && root.contains(active)) active.blur();
+			editor.dispatchCommand(BLUR_COMMAND, new FocusEvent("blur"));
+			let selection = window.getSelection();
+			if (root && selection?.anchorNode && root.contains(selection.anchorNode)) {
+				selection.removeAllRanges();
+			}
+			return;
+		}
+		if (previous !== "reading" || editMode !== "editing" || !editor.isEditable()) return;
+		let point = tapped.current;
+		tapped.current = undefined;
+		editor.getRootElement()?.focus({ preventScroll: true });
+		editor.update(() => placeCaret(point, editor, scroller.current), { discrete: true });
+	}, [binding, editMode]);
 
 	// Empty without a connection, and never used: the editor is not rendered
 	// at all until there is one, so there is nothing to configure.
@@ -393,6 +467,9 @@ export function PlanEditor(
 						wire,
 						connected: !offline,
 						canEdit: !readOnly,
+						editMode,
+						blocked,
+						formatDock,
 						self: user.name,
 						synced: state.synced,
 					}),
@@ -428,6 +505,9 @@ export function PlanEditor(
 			changes,
 			offline,
 			readOnly,
+			editMode,
+			blocked,
+			formatDock,
 			state.synced,
 		],
 	);
@@ -456,6 +536,7 @@ export function PlanEditor(
 			className={`plan flex h-full w-full flex-col ${className ?? ""}`}
 			data-plan-afterword={!!afterword || undefined}
 			data-plan-offline={offline || undefined}
+			data-plan-reading={editMode === "reading" || undefined}
 		>
 			<div className="plan-workspace">
 				<div className="plan-document">
@@ -495,4 +576,60 @@ export function PlanEditor(
 			</div>
 		</div>
 	);
+}
+
+/** Whether the document has nothing in it yet: no blocks, or one empty paragraph. */
+function isEmpty(editor: LexicalEditor): boolean {
+	return editor.read(() => {
+		let root = $getRoot();
+		let first = root.getFirstChild();
+		return root.getChildrenSize() === 0
+			|| (root.getChildrenSize() === 1 && $isParagraphNode(first)
+				&& first.getTextContentSize() === 0);
+	});
+}
+
+function caretAt(x: number, y: number): { node: Node; offset: number } | undefined {
+	if (document.caretPositionFromPoint) {
+		let position = document.caretPositionFromPoint(x, y);
+		return position ? { node: position.offsetNode, offset: position.offset } : undefined;
+	}
+	let range = document.caretRangeFromPoint?.(x, y);
+	return range ? { node: range.startContainer, offset: range.startOffset } : undefined;
+}
+
+/**
+ * Put the caret where the reader last tapped, or else at the start of the first block in view, so
+ * starting to edit never scrolls the reader away from what they were looking at. Call in an update.
+ */
+function placeCaret(
+	point: { node: Node; offset: number } | undefined,
+	editor: LexicalEditor,
+	scroller: HTMLElement | null,
+): void {
+	let node = point?.node.isConnected ? $getNearestNodeFromDOMNode(point.node) : null;
+	if ($isTextNode(node)) {
+		let offset = Math.min(point?.offset ?? 0, node.getTextContentSize());
+		node.select(offset, offset);
+		return;
+	}
+	if ($isElementNode(node) && !node.isInline()) {
+		node.selectStart();
+		return;
+	}
+	let root = editor.getRootElement();
+	// Content scrolls under the host's top bar, which the scroll padding accounts for.
+	let top = scroller
+		? scroller.getBoundingClientRect().top
+			+ (parseFloat(getComputedStyle(scroller).scrollPaddingTop) || 0)
+		: 0;
+	for (let child of root?.children ?? []) {
+		if (child.getBoundingClientRect().bottom <= top) continue;
+		let block = $getNearestNodeFromDOMNode(child);
+		if ($isElementNode(block)) {
+			block.selectStart();
+			return;
+		}
+	}
+	$getRoot().selectEnd();
 }

@@ -31,6 +31,8 @@ export {
 } from "./disclosure-motion";
 export type { MotionDisclosureContract } from "./disclosure-motion";
 export { displayName } from "./display-name";
+export { documentEditMode, opensEditing, selectionOffer } from "./edit-mode";
+export type { EditMode } from "./edit-mode";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
 export { GitHubReferencesProvider } from "./github-references";

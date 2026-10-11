@@ -10,11 +10,14 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection } from "lexical";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { selectionOffer } from "../edit-mode";
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
 import { usePhone } from "../phone";
 import { SelectionBubble } from "./bubble";
+import { FormatDock } from "./dock";
 import { LinkSurface } from "./link";
 import { ResearchComposerSurface } from "./research";
 import { ResearchLaunchRegistration } from "./research-launch";
@@ -38,6 +41,14 @@ export function Toolbar() {
 	let phone = usePhone();
 
 	useEffect(() => (disabled ? undefined : registerTaskRule(editor)), [editor, disabled]);
+
+	// A phone reader's lock is not a permission lock: the selection can still comment.
+	let offer = selectionOffer({
+		docked: !!options.formatDock,
+		locked: options.editMode ? !!options.blocked : disabled,
+		mode: options.editMode,
+	});
+	let dock = options.editMode === "editing" ? options.formatDock : undefined;
 
 	let threads = options.threads;
 
@@ -92,9 +103,22 @@ export function Toolbar() {
 	return (
 		<>
 			{phone
-				? <SelectionBar disabled={disabled} hidden={linking} onComment={comment} />
-				: <SelectionBubble disabled={disabled} hidden={linking} onComment={comment} />}
-			<LinkSurface binding={options.binding} disabled={disabled} onEditing={setLinking} />
+				? <SelectionBar disabled={offer === "none"} hidden={linking} onComment={comment} />
+				: (
+					<SelectionBubble
+						commentOnly={offer === "comment"}
+						disabled={offer === "none"}
+						hidden={linking}
+						onComment={comment}
+					/>
+				)}
+			<LinkSurface
+				binding={options.binding}
+				disabled={disabled}
+				follow={options.editMode === "reading"}
+				onEditing={setLinking}
+			/>
+			{dock && createPortal(<FormatDock disabled={disabled} />, dock)}
 			<SlashMenu
 				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}
 				disabled={disabled}

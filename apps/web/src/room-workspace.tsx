@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
 import { documentPath } from "@chopin/protocol/document-url";
-import { ArchiveIcon, ChevronIcon, DocumentIcon } from "@chopin/icons";
+import { ArchiveIcon, CheckIcon, ChevronIcon, DocumentIcon, PencilIcon } from "@chopin/icons";
 import { Badge } from "@chopin/visuals";
 import {
 	advanceDecisionView,
@@ -8,10 +9,12 @@ import {
 	countUnanswered,
 	cursor,
 	Decisions,
+	documentEditMode,
 	documentHasPlanningContent,
 	Face,
 	firstOpenDecision,
 	GitHubReferencesProvider,
+	opensEditing,
 	PlanEditor,
 	PlanStatus,
 	QuestionnaireStore,
@@ -51,6 +54,7 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
 import { PhoneHeader } from "./phone-header";
+import { useKeyboardOpen } from "./keyboard-open";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
@@ -170,13 +174,18 @@ export function Header(
 		// Hand the caret back only when the field took it with it, not after a blur commit.
 		if (!editing && previous && document.activeElement === document.body) title.current?.focus();
 	}, [editing]);
-	let finishEdit = () => {
+	// Also runs as a save starts, not after it: keys typed while the rename travels would
+	// otherwise land in a field that is about to close.
+	let handOff = () => {
 		// Naming a new document leads into writing it, unless the user already clicked elsewhere.
 		if (editing === "new" && header.current?.contains(document.activeElement)) {
 			header.current.closest(".workspace-root")
 				?.querySelector<HTMLElement>(".plan-content[contenteditable='true']")
 				?.focus();
 		}
+	};
+	let finishEdit = () => {
+		handOff();
 		onEditingChange();
 	};
 	return (
@@ -204,6 +213,7 @@ export function Header(
 								channel={{ id: room, title: label }}
 								inline
 								onCancel={finishEdit}
+								onSavingChange={saving => saving && handOff()}
 								replay={editing === "new"}
 								onRenamed={detail => {
 									onRenamed(detail.channel);
@@ -326,6 +336,11 @@ export function RoomWorkspace(
 	let [planState, setPlanState] = useState<PlanState>({ synced: false });
 	// Claimed while rendering, so a new document's title takes focus as soon as it mounts.
 	let [titleEdit, setTitleEdit] = useState(() => claimTitleEdit(room));
+	// A phone reads until its writer asks to edit. Local to this client and this document: it
+	// survives tab changes and reconnects, and the next document opens reading again.
+	let [editing, setEditing] = useState(() => opensEditing({ renaming: titleEdit === "new" }));
+	let [formatDock, setFormatDock] = useState<HTMLElement | null>(null);
+	let keyboardOpen = useKeyboardOpen();
 	useEffect(() => {
 		let listen = (event: Event) => {
 			if ((event as CustomEvent<string>).detail !== room) return;
@@ -895,6 +910,25 @@ export function RoomWorkspace(
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
+	let editMode = documentEditMode({
+		canEdit: !!workspaceCanEdit && !implementation.locked,
+		editing,
+		phone,
+	});
+	// An empty document has nothing to read, so it opens ready to write. Decided once, on arrival.
+	let arrived = useRef(false);
+	useEffect(() => {
+		if (!planState.synced || arrived.current) return;
+		arrived.current = true;
+		if (opensEditing({ empty: planState.empty })) setEditing(true);
+	}, [planState.synced, planState.empty]);
+	let toggleEditing = () => {
+		// Synchronous, so the editor takes focus inside the tap and iOS raises the keyboard.
+		flushSync(() => {
+			setEditing(!editing);
+			if (!editing && view !== "plan") selectDestination("plan");
+		});
+	};
 	let actOnResearchOffer = (
 		offerId: string,
 		choice: "research" | "dismiss" | "resume",
@@ -1022,6 +1056,8 @@ export function RoomWorkspace(
 			/>
 		</>
 	);
+	// A child room renders its document alone, with no tab bar for the edit toggle.
+	let childRoom = presentation.type === "child";
 	let plan = (
 		<GitHubReferencesProvider value={githubReferences}>
 			<PlanEditor
@@ -1045,6 +1081,8 @@ export function RoomWorkspace(
 				connection={status === "deleted" ? "closed" : status}
 				key={workspaceArchivedAt ? "archived" : "active"}
 				disclosureMotion={motionContract("collapse")}
+				editMode={childRoom ? undefined : editMode}
+				formatDock={!childRoom && editMode === "editing" && keyboardOpen ? formatDock : undefined}
 				motionImmediately={settleMotionImmediately}
 				onScrollTop={setPlanScrollTop}
 				onState={setPlanState}
@@ -1198,6 +1236,23 @@ export function RoomWorkspace(
 				}
 				status={statusNotices}
 				ids={workspaceIds}
+				phoneAction={editMode && (
+					<button
+						aria-label={editing ? "Done editing" : "Edit document"}
+						className="phone-tab-action"
+						data-editing={editing || undefined}
+						onClick={toggleEditing}
+						type="button"
+					>
+						<PencilIcon aria-hidden="true" data-edit-icon="edit" size={24} />
+						<CheckIcon aria-hidden="true" data-edit-icon="done" size={24} />
+					</button>
+				)}
+				// Formatting rides above the keyboard while typing. With the keyboard down the tabs
+				// return, and a selection gets the ordinary bubble instead.
+				phoneToolbar={editMode === "editing" && keyboardOpen && (
+					<div className="h-full" ref={setFormatDock} />
+				)}
 				identity={room}
 				mode={mode}
 				presence={<RoomMembers members={members} ring="page" />}

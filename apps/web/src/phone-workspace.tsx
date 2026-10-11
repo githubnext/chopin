@@ -32,6 +32,7 @@ export function PhoneTabBar(
 		documentActivity,
 		labels,
 		onSelect,
+		toolbar,
 		unanswered,
 	}: {
 		/** The circular control at the bar's trailing end, such as an edit toggle. */
@@ -44,13 +45,21 @@ export function PhoneTabBar(
 		documentActivity?: DocumentActivity;
 		labels: Record<WorkspaceDestination, string>;
 		onSelect: (destination: WorkspaceDestination, current: boolean, source: HTMLElement) => void;
+		/** Takes the tabs' place while set, such as formatting while editing; stays above the keyboard. */
+		toolbar?: ReactNode;
 		unanswered: number;
 	},
 ) {
 	let index = destinations.indexOf(active);
 	return (
-		<div className="phone-tab-row" data-phone-tab-row="">
+		<div
+			className="phone-tab-row"
+			data-phone-tab-row=""
+			data-phone-tab-toolbar={toolbar ? "" : undefined}
+		>
+			{toolbar && <div className="phone-tab-toolbar">{toolbar}</div>}
 			<nav
+				hidden={!!toolbar}
 				aria-label="Workspace view"
 				className="phone-tab-bar"
 				style={{ "--phone-tab-count": destinations.length } as CSSProperties}

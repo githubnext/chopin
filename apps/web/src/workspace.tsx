@@ -148,6 +148,8 @@ export type WorkspaceProps = {
 	phone?: boolean;
 	/** Extension point for a circular control at the end of the phone tab bar. */
 	phoneAction?: ReactNode;
+	/** Replaces the phone tabs while set, such as formatting while editing. */
+	phoneToolbar?: ReactNode;
 	unanswered: number;
 	chatActivity: { unread: number; busy: boolean };
 	documentActivity?: DocumentActivity;
@@ -251,6 +253,7 @@ export function Workspace(
 		onDestination,
 		phone = false,
 		phoneAction,
+		phoneToolbar,
 		plan,
 		presence,
 		presentation: workspacePresentation,
@@ -770,6 +773,7 @@ export function Workspace(
 						),
 					}}
 					onSelect={selectPhoneTab}
+					toolbar={phoneToolbar}
 					unanswered={unanswered}
 				/>
 			)}

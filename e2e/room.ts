@@ -128,9 +128,21 @@ export function content(page: Page) {
 	return page.getByRole("textbox", { name: "editable markdown" });
 }
 
-/** Wait until the channel has synchronized and can be typed into. */
+/**
+ * Wait until the channel has synchronized and can be typed into, or, on a phone, has opened for
+ * reading. Call `edit` before typing into a document opened on a phone.
+ */
 export async function ready(page: Page): Promise<void> {
-	await expect(content(page)).toHaveAttribute("contenteditable", "true", { timeout: 20_000 });
+	let editable = page.locator(".plan-content[contenteditable='true']");
+	let reading = page.locator(".plan[data-plan-reading] [data-plan-synced]");
+	await expect(editable.or(reading).first()).toBeAttached({ timeout: 20_000 });
+}
+
+/** A phone opens documents for reading; switch to editing the way a writer would. */
+export async function edit(page: Page): Promise<void> {
+	let pencil = page.getByRole("button", { name: "Edit document" });
+	if (await pencil.isVisible()) await pencil.click();
+	await expect(content(page)).toHaveAttribute("contenteditable", "true");
 }
 
 /** The status pane, which keeps its label in the DOM even when it draws nothing. */

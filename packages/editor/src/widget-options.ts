@@ -8,6 +8,7 @@ import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
+import type { EditMode } from "./edit-mode";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { Research } from "@chopin/protocol";
 import type { GitHubReference, GitHubReferenceResult } from "@chopin/protocol/github-reference";
@@ -82,6 +83,12 @@ export type WidgetOptions = {
 	connected?: boolean;
 	synced?: boolean;
 	canEdit?: boolean;
+	/** This client's reading or editing mode on a phone; see `edit-mode.ts`. */
+	editMode?: EditMode;
+	/** Locked for any reason other than reading mode, so a reader's selection can still comment. */
+	blocked?: boolean;
+	/** Where the host docks formatting while editing on a phone, replacing the selection bubble. */
+	formatDock?: HTMLElement | null;
 	/** The viewer's own handle. */
 	self?: string;
 };

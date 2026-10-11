@@ -55,7 +55,7 @@ import {
 } from "lexical";
 
 import type { HeadingTagType } from "@lexical/rich-text";
-import type { ElementNode, LexicalNode, TextFormatType } from "lexical";
+import type { ElementNode, LexicalEditor, LexicalNode, TextFormatType } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 /** Block shapes the bubble can switch between. */
@@ -145,6 +145,51 @@ export function $block(node: LexicalNode | null): Block {
 	return "paragraph";
 }
 
+/** Change the selected blocks from one shape to another, the same way the block menu does. */
+export function convertBlock(editor: LexicalEditor, block: Block, next: Block): void {
+	// Already a quote: converting again would nest one inside the other.
+	if (next === block || next === "task") return;
+
+	if (next === "bullet") {
+		editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
+		return;
+	}
+	if (next === "number") {
+		editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
+		return;
+	}
+	// Containers are unwrapped, not swapped: `$setBlocksType` converts the
+	// block it finds and leaves the list or quote standing around it.
+	if (block === "bullet" || block === "number" || block === "task") {
+		editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
+	}
+	if (block === "quote") {
+		editor.update(() => {
+			let selection = $getSelection();
+			if (!$isRangeSelection(selection)) return;
+			let inner = owner(selection.anchor.getNode());
+			// Only the wrapping shape needs lifting. Where the quote is
+			// itself the block, `$setBlocksType` below replaces it.
+			if ($isQuoteNode(inner)) return;
+			let quote = quoted(inner);
+			if (!quote) return;
+			for (let child of quote.getChildren()) quote.insertBefore(child);
+			quote.remove();
+		});
+	}
+
+	let build: () => ElementNode = next === "quote"
+		? $createQuoteNode
+		: next === "paragraph"
+		? $createParagraphNode
+		: () => $createHeadingNode(next);
+
+	editor.update(() => {
+		let selection = $getSelection();
+		if ($isRangeSelection(selection)) $setBlocksType(selection, build);
+	});
+}
+
 type Mark = { format: TextFormatType; label: string; glyph: ReactNode; shortcut: string };
 
 /** Each letter is drawn in the style it applies, so the row reads as a format bar. */
@@ -194,7 +239,9 @@ function usePrimaryCoarse(): boolean {
 }
 
 export function SelectionBubble(
-	{ disabled, hidden, onComment }: {
+	{ commentOnly, disabled, hidden, onComment }: {
+		/** A reader's selection: the text cannot change, so only commenting is offered. */
+		commentOnly?: boolean;
 		disabled?: boolean;
 		/** Another surface has taken the bubble's place for now. */
 		hidden?: boolean;
@@ -261,45 +308,7 @@ export function SelectionBubble(
 
 	let convert = useCallback((next: Block) => {
 		setChoosing(false);
-		// Already a quote: converting again would nest one inside the other.
-		if (next === block || next === "task") return;
-
-		if (next === "bullet") {
-			return editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
-		}
-		if (next === "number") {
-			return editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
-		}
-		// Containers are unwrapped, not swapped: `$setBlocksType` converts the
-		// block it finds and leaves the list or quote standing around it.
-		if (block === "bullet" || block === "number" || block === "task") {
-			editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
-		}
-		if (block === "quote") {
-			editor.update(() => {
-				let selection = $getSelection();
-				if (!$isRangeSelection(selection)) return;
-				let inner = owner(selection.anchor.getNode());
-				// Only the wrapping shape needs lifting. Where the quote is
-				// itself the block, `$setBlocksType` below replaces it.
-				if ($isQuoteNode(inner)) return;
-				let quote = quoted(inner);
-				if (!quote) return;
-				for (let child of quote.getChildren()) quote.insertBefore(child);
-				quote.remove();
-			});
-		}
-
-		let build: () => ElementNode = next === "quote"
-			? $createQuoteNode
-			: next === "paragraph"
-			? $createParagraphNode
-			: () => $createHeadingNode(next);
-
-		editor.update(() => {
-			let selection = $getSelection();
-			if ($isRangeSelection(selection)) $setBlocksType(selection, build);
-		});
+		convertBlock(editor, block, next);
 	}, [editor, block]);
 
 	/*
@@ -396,7 +405,7 @@ export function SelectionBubble(
 		return listenToEditorGeometry(editor, place);
 	}, [anchor, editor, place]);
 
-	if (!anchor || disabled || hidden) return null;
+	if (!anchor || disabled || hidden || (commentOnly && !onComment)) return null;
 
 	let comment = onComment && (
 		<button
@@ -445,7 +454,9 @@ export function SelectionBubble(
 			 */
 			onMouseDown={event => event.preventDefault()}
 		>
-			{choosing
+			{commentOnly
+				? comment
+				: choosing
 				? BLOCKS.map(item => (
 					<button
 						key={item.id}

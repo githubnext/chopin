@@ -227,6 +227,7 @@
 }
 
 .phone-tab-bar,
+.phone-tab-toolbar,
 .phone-tab-action {
 	background: var(--color-glass);
 	-webkit-backdrop-filter: var(--glass-filter);
@@ -244,6 +245,32 @@
 	height: var(--phone-tab-bar-height);
 	padding: var(--spacing);
 	border-radius: var(--radius-full);
+}
+
+.phone-tab-bar[hidden] {
+	display: none;
+}
+
+/* Editing on a phone: formatting takes the tabs' place and rides above the keyboard. */
+:root[data-keyboard-open] .phone-tab-row[data-phone-tab-toolbar] {
+	visibility: visible;
+	transform: none;
+}
+
+.phone-tab-toolbar {
+	flex: 1;
+	min-width: 0;
+	height: var(--phone-tab-bar-height);
+	border-radius: var(--radius-full);
+	overflow: hidden;
+	animation: phone-tab-toolbar-in var(--tab-slide-dur) var(--tab-slide-ease);
+}
+
+@keyframes phone-tab-toolbar-in {
+	from {
+		opacity: 0;
+		transform: translateY(calc(var(--spacing) * 3)) scale(0.98);
+	}
 }
 
 .phone-tab-indicator {
@@ -297,7 +324,8 @@
 	}
 }
 
-.phone-tab [data-nucleo-icon] {
+.phone-tab [data-nucleo-icon],
+.phone-tab-action [data-nucleo-icon] {
 	color: inherit;
 }
 
@@ -386,6 +414,31 @@
 	}
 }
 
+/* The edit toggle turns into a filled Done button while editing. */
+.phone-tab-action[data-editing] {
+	background: var(--color-brand);
+	color: var(--color-page);
+	outline-color: var(--color-brand);
+}
+
+.phone-tab-action > svg {
+	grid-area: 1 / 1;
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		transform var(--tab-slide-dur) var(--tab-slide-ease);
+}
+
+.phone-tab-action > [data-edit-icon="done"],
+.phone-tab-action[data-editing] > [data-edit-icon="edit"] {
+	opacity: 0;
+	transform: scale(0.4) rotate(45deg);
+}
+
+.phone-tab-action[data-editing] > [data-edit-icon="done"] {
+	opacity: 1;
+	transform: none;
+}
+
 /* Destinations ---------------------------------------------------------- */
 
 /* Sibling tabs glide in from the side their tab lies on and push the old one out. */
@@ -431,7 +484,12 @@
 	.workspace-root[data-workspace-phone] > .phone-top-bar,
 	.workspace-root[data-workspace-phone] .workspace-stack-bar,
 	.phone-tab-indicator,
-	.phone-tab-row {
+	.phone-tab-row,
+	.phone-tab-action > svg {
 		transition: none;
+	}
+
+	.phone-tab-toolbar {
+		animation: none;
 	}
 }

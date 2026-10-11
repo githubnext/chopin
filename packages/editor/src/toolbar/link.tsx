@@ -119,9 +119,11 @@ function follow(editor: LexicalEditor, key: NodeKey, url: string): void {
 }
 
 export function LinkSurface(
-	{ binding, disabled, onEditing }: {
+	{ binding, disabled, follow: following, onEditing }: {
 		binding?: Binding;
 		disabled?: boolean;
+		/** A reader's tap follows a link at once, as in any page, rather than previewing it. */
+		follow?: boolean;
 		onEditing?: (editing: boolean) => void;
 	},
 ) {
@@ -251,7 +253,7 @@ export function LinkSurface(
 				let found = node && ($isLinkNode(node) ? node : $findMatchingParent(node, $isLinkNode));
 				return found ? { key: found.getKey(), url: found.getURL() } : undefined;
 			});
-			if (event.button === 1 || event.metaKey || event.ctrlKey || !link) {
+			if (event.button === 1 || event.metaKey || event.ctrlKey || !link || following) {
 				event.stopPropagation();
 				window.open(anchor.href, "_blank", "noopener,noreferrer");
 				return;
@@ -269,7 +271,12 @@ export function LinkSurface(
 			current?.addEventListener("click", click);
 			current?.addEventListener("mouseup", middle);
 		});
-	}, [editor, sync]);
+	}, [editor, following, sync]);
+
+	// A reader never sees the preview, including one left open from editing.
+	useEffect(() => {
+		if (following) setOpen(undefined);
+	}, [following]);
 
 	let close = useCallback(() => {
 		setOpen(current => {

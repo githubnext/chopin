@@ -12,7 +12,7 @@ import { chatInput, expectChatValue } from "./chat-input";
  * test here writes the plan before anybody opens it.
  */
 
-import { authenticate, content, expect, ready, roomPath, test } from "./room";
+import { authenticate, content, edit, expect, ready, roomPath, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { Locator, Page } from "@playwright/test";
@@ -998,6 +998,7 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 		isMobile: true,
 		viewport: { width: 390, height: 844 },
 	});
+	await edit(page);
 	let editor = content(page);
 	let plan = page.getByRole("button", {
 		name: "Document",
@@ -1053,6 +1054,7 @@ test("submitting a compact new comment restores editor focus", async ({ join, se
 		isMobile: true,
 		viewport: { width: 390, height: 844 },
 	});
+	await edit(page);
 	let editor = content(page);
 	await editor.locator("p").nth(1).selectText();
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
@@ -1071,6 +1073,7 @@ test("resolving a compact comment restores editor focus", async ({ join, seed })
 		isMobile: true,
 		viewport: { width: 390, height: 844 },
 	});
+	await edit(page);
 	let editor = content(page);
 	let sheet = await thread(page);
 	await sheet.getByRole("button", { name: "Resolve", exact: true }).click();
@@ -1305,6 +1308,7 @@ test("a compact orphan sheet owns focus and restores its opener", async ({ join,
 		isMobile: true,
 		viewport: { width: 390, height: 844 },
 	});
+	await edit(page);
 	let first = content(page).locator("p").first();
 	await first.selectText();
 	await page.keyboard.press("Backspace");
@@ -1331,6 +1335,7 @@ test("a remotely orphaned compact comment closes its sheet and restores editor f
 		isMobile: true,
 		viewport: { width: 390, height: 844 },
 	});
+	await edit(page);
 	let editor = content(page);
 	let sheet = await thread(page);
 	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();

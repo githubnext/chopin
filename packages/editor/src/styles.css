@@ -5512,3 +5512,50 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	.plan-content {
 	padding-bottom: calc(var(--spacing) * 6);
 }
+
+/* Formatting docked above a phone's keyboard while editing; the host supplies the surface. */
+.plan-format-dock {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) / 2);
+	min-width: 0;
+	height: 100%;
+	padding-inline: var(--spacing);
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-width: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.plan-format-dock::-webkit-scrollbar {
+	display: none;
+}
+
+.plan-format-dock-button {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	border-radius: var(--radius-full);
+	color: var(--color-text-secondary);
+	font-size: var(--text-lg);
+	line-height: 1;
+	touch-action: manipulation;
+	-webkit-touch-callout: none;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.plan-format-dock-button:active:not(:disabled),
+.plan-format-dock-button[aria-pressed="true"] {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+.plan-format-dock-button:disabled {
+	opacity: var(--opacity-quiet);
+}

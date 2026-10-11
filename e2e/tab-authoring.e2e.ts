@@ -1,4 +1,4 @@
-import { content, expect, test, written } from "./room";
+import { content, edit, expect, test, written } from "./room";
 
 import type { WebSocketRoute } from "@playwright/test";
 
@@ -116,6 +116,7 @@ test("touch removes the selected tab with one tap", async ({ join, seed }) => {
 		hasTouch: true,
 		isMobile: true,
 	});
+	await edit(page);
 	let strip = content(page).getByRole("tablist");
 	let remove = content(page).getByRole("button", { name: "Remove Mobile", exact: true });
 	await expect(remove).toHaveCSS("opacity", "1");
