@@ -259,35 +259,14 @@
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
-		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > ChatToggle > <button>",
-				1
-			]
-		],
-		"sourceHash": "427d8b2f58632c71c1d404580dd3b23589a9dd2cc9793c28c5ecfb764d0521fe"
-	},
-	{
-		"file": "apps/web/src/workspace.tsx",
 		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
 		"cases": [
 			[
 				"dynamic",
 				"class",
 				"feedback",
-				"class > ChatToggle > <span>",
+				"class > SurfaceToggle > <span>",
 				2
-			],
-			[
-				"dynamic",
-				"class",
-				"feedback",
-				"class > ChatToggle > <img>",
-				1
 			],
 			[
 				"dynamic",
@@ -297,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "427d8b2f58632c71c1d404580dd3b23589a9dd2cc9793c28c5ecfb764d0521fe"
+		"sourceHash": "d3cbe78671d49dcc93ea6503f08492036ce88472fc45fd9528e268569e36e37a"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",

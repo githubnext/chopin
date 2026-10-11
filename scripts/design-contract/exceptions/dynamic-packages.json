@@ -380,9 +380,23 @@
 				"props",
 				"unresolved JSX props > PauseIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ExpandIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CollapseIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "c269a30d83f2c87b5d42b7284f1c6e7e5cd0b80fbd2c40a11b95c13c3b8e44e0"
+		"sourceHash": "7f9aee6935f77a6940153f60fb9aaa7850a3e33f4dc1864614091c028a850618"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",
