@@ -466,11 +466,15 @@ test("a phone thread sheet steps through the document's threads and stops at its
 	await expect(sheet.locator("[data-plan-comment-sheet-quote]")).toHaveText("review the pilot");
 	await expect(sheet).toContainText("Is two weeks enough?");
 	await expect(sheet.getByRole("button", { name: "Next comment" })).toBeDisabled();
+	// The thread paged away from leaves no preview card over the document.
+	await expect(page.locator(".plan-comment-preview")).toHaveCount(0);
 
 	// Closing returns to the thread now shown, not the one the sheet opened with.
 	await sheet.getByRole("button", { name: "Close comment" }).click();
 	await expect(sheet).toHaveCount(0);
 	await expect(page.getByRole("button", { name: /^Comment on “review the pilot”/ })).toBeFocused();
+	// Focus coming back on touch does not raise a hover preview.
+	await expect(page.locator(".plan-comment-preview")).toHaveCount(0);
 });
 
 test("paging between short and long threads keeps the medium detent and its backdrop", async ({ join, seed }) => {

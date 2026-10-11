@@ -454,6 +454,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		dialog?.querySelector<HTMLElement>("[data-plan-comment-close], button")?.focus();
 	}, [compact, pinned]);
 
+	// A preview belongs to the thread it was raised for; another pinned thread clears it.
+	useEffect(() => {
+		if (pinned) setPreview(current => current === pinned ? current : undefined);
+	}, [pinned]);
+
 	let enter = useCallback((id: string) => {
 		clearTimeout(close.current);
 		setPreview(id);
@@ -1092,6 +1097,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				&& root.current?.querySelector<HTMLElement>(`[data-plan-comment-button="${marker.key}"]`))
 				|| origin.current;
 			setReturnTo(undefined);
+			setPreview(undefined);
 			setPinned(next);
 		};
 		compactPager = at >= 0
@@ -1239,7 +1245,13 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 								setPinned(single ? single.thread.id : `${LIST}${marker.key}`);
 							}
 						}}
-						onFocus={single ? () => hover(single.thread.id) : () => lightMarker(marker.key, ids)}
+						// Touch has no hover to preview with; focus coming back from a closed sheet
+						// would otherwise leave a preview card standing over the prose.
+						onFocus={primaryCoarse
+							? undefined
+							: single
+							? () => hover(single.thread.id)
+							: () => lightMarker(marker.key, ids)}
 						onMouseEnter={single
 							? () => hover(single.thread.id)
 							: () => lightMarker(marker.key, ids)}
