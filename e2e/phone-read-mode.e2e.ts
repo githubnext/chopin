@@ -62,7 +62,10 @@ test("a phone opens a document for reading", async ({ join, seed }) => {
 		getSelection()!.removeAllRanges();
 		getSelection()!.addRange(range);
 	});
-	await expect(page.getByRole("button", { name: "Comment on this passage" })).toBeVisible();
+	// The phone's docked selection bar, not the editing bubble.
+	let bar = page.getByRole("toolbar", { name: "Selection actions" });
+	await expect(bar.getByRole("button", { name: "Comment on this passage" })).toBeVisible();
+	await expect(page.getByRole("toolbar", { name: "Text formatting" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Bold" })).toHaveCount(0);
 });
 
