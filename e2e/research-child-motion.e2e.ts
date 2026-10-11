@@ -323,16 +323,26 @@ test("reduced motion crossfades without transform animation", async ({ baseURL, 
 	let opened = await join("ana");
 	let opener = opened.getByRole("button", { name: `Open ${title}`, exact: true });
 	await expect(opener).toBeVisible();
-	let animated = () =>
+	// A short fade can end between two polls; a listener installed before the click cannot miss it.
+	await opened.evaluate(() => {
+		let names: string[] = [];
+		(window as unknown as { __childAnimations: string[] }).__childAnimations = names;
+		document.addEventListener("animationstart", event => {
+			let target = event.target as Element | null;
+			if (target?.closest(".anchored-child-layer, .workspace-document-stack")) {
+				names.push(event.animationName);
+			}
+		}, true);
+	});
+	let started = () =>
+		opened.evaluate(() => (window as unknown as { __childAnimations: string[] }).__childAnimations);
+	let transformed = () =>
 		opened.evaluate(() => {
 			let found = new Set<string>();
 			for (let animation of document.getAnimations()) {
 				let effect = animation.effect as KeyframeEffect | null;
-				let target = effect?.target;
-				if (!target?.closest(".anchored-child-layer, .workspace-document-stack")) continue;
-				let name = (animation as CSSAnimation).animationName;
-				if (name) found.add(name);
-				for (let keyframe of effect?.getKeyframes() ?? []) {
+				if (!effect?.target?.closest(".anchored-child-layer, .workspace-document-stack")) continue;
+				for (let keyframe of effect.getKeyframes()) {
 					for (let key of ["transform", "clipPath", "scale"]) {
 						if (key in keyframe && keyframe[key] != null && keyframe[key] !== "none") {
 							found.add(`prop:${key}`);
@@ -345,29 +355,22 @@ test("reduced motion crossfades without transform animation", async ({ baseURL, 
 	let rootTransform = () =>
 		opened.locator(".workspace-document-stack > .workspace-document-panel")
 			.evaluate(root => getComputedStyle(root).transform);
-	let seen = new Set<string>();
+	let props = new Set<string>();
 	let watch = async () => {
-		for (let name of await animated()) seen.add(name);
+		for (let name of await transformed()) props.add(name);
 		expect(await rootTransform()).toBe("none");
 	};
 	await opener.click();
 	await expect(cards(opened)).toHaveCount(1);
 	await watch();
-	await expect.poll(async () => (await animated()).includes("anchored-child-fade")).toBe(true)
-		.catch(async () => {
-			// The short fade may already be over; the sample above is the evidence.
-			expect(seen.has("anchored-child-fade")).toBe(true);
-		});
+	await expect.poll(started).toContain("anchored-child-fade");
 	await expect.poll(() => cards(opened).evaluate(card => getComputedStyle(card).clipPath))
 		.toMatch(/^(none|inset\(0px 0px 0px 0px)/);
 	await watch();
 	await opened.keyboard.press("Escape");
-	await expect.poll(async () => {
-		await watch();
-		return seen.has("anchored-child-fade-out");
-	}).toBe(true);
+	await expect.poll(started).toContain("anchored-child-fade-out");
+	await watch();
 	await expect(cards(opened)).toHaveCount(0);
 	await expect(opener).toBeFocused();
-	expect(seen.has("anchored-child-fade")).toBe(true);
-	expect([...seen].filter(name => name.startsWith("prop:"))).toEqual([]);
+	expect([...props]).toEqual([]);
 });
