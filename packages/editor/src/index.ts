@@ -22,6 +22,8 @@ export {
 export type { DecisionView, DecisionViewState, OpeningPhase } from "./decision-state";
 export { Decisions } from "./decisions";
 export type { DecisionsProps } from "./decisions";
+export { Deck, DECK_FRONT_EVENT, revealDeckItem } from "./deck";
+export type { DeckItem, DeckProps } from "./deck";
 export {
 	disclosureAccessibility,
 	MotionDisclosure,
