@@ -11,15 +11,19 @@ import type { Rect } from "./comment-geometry";
 /**
  * Keep a compact comment's passage above its sheet, then return the reader on close.
  *
- * The sheet is as tall as its content and rises with the keyboard, so the
- * passage is placed again whenever either changes, from where it is now.
+ * The sheet is as tall as its content, rests at a detent and rises with the
+ * keyboard, so the passage is placed again whenever any of them changes, from
+ * where it is now.
  */
 export function useCommentSheetReveal({
+	detent,
 	host,
 	id,
 	passages,
 	sheet,
 }: {
+	/** How much of the sheet shows at its medium detent; undefined at the large one. */
+	detent?: number;
 	host: HTMLElement | undefined;
 	id: string | undefined;
 	passages: Rect[] | undefined;
@@ -58,7 +62,7 @@ export function useCommentSheetReveal({
 					passageTop: Math.min(...passages.map(passage => passage.top)) - shift,
 					sheetTop: commentSheetTop(
 						{ top: 0, height: window.innerHeight - keyboard },
-						sheet.offsetHeight,
+						Math.min(sheet.offsetHeight, detent ?? Infinity),
 					),
 					viewportTop: host.getBoundingClientRect().top,
 				});
@@ -74,5 +78,5 @@ export function useCommentSheetReveal({
 			observer.disconnect();
 			off();
 		};
-	}, [host, id, passages, sheet]);
+	}, [detent, host, id, passages, sheet]);
 }

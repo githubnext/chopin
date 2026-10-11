@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	COMMENT_SHEET_LARGE,
+	COMMENT_SHEET_MEDIUM,
 	commentSheetHeading,
 	commentSheetHeight,
+	commentSheetMedium,
 	commentSheetTop,
 	usesCommentSheet,
 } from "./comment-sheet";
@@ -32,6 +34,19 @@ describe("comment sheet size", () => {
 		expect(commentSheetTop({ top: 0, height: 844 }, 300)).toBe(544);
 		expect(commentSheetTop({ top: 0, height: 506 }, 300)).toBe(206);
 		expect(commentSheetTop({ top: 0, height: 844 }, 2_000)).toBeCloseTo(67.52);
+	});
+
+	it("opens at a medium detent of half the space the keyboard leaves", () => {
+		expect(COMMENT_SHEET_MEDIUM).toBe(0.5);
+		expect(commentSheetMedium(844)).toBe(422);
+		expect(commentSheetMedium(361)).toBe(181);
+		expect(commentSheetMedium(0)).toBe(0);
+	});
+
+	it("keeps the header, a peek of the notes and the composer above the keyboard", () => {
+		expect(commentSheetMedium(361, 250)).toBe(250);
+		expect(commentSheetMedium(844, 250)).toBe(422);
+		expect(commentSheetMedium(361, 900)).toBeCloseTo(332);
 	});
 
 	it("reserves the drawer for phone-sized coarse pointers", () => {

@@ -21,11 +21,12 @@ async function emulatedVisualViewportPage(
 	browser: Browser,
 	baseURL: string,
 	room: string,
+	width = 390,
 ): Promise<{ close: () => Promise<void>; page: Page }> {
 	return openIsolatedRoom(browser, baseURL, room, "ana", {
 		hasTouch: true,
 		isMobile: true,
-		viewport: { width: 390, height: 844 },
+		viewport: { width, height: 844 },
 	}, context =>
 		installVisualViewport(context, {
 			height: 640,
@@ -34,7 +35,7 @@ async function emulatedVisualViewportPage(
 			pageLeft: 0,
 			pageTop: 0,
 			scale: 1,
-			width: 390,
+			width,
 		}));
 }
 
@@ -588,7 +589,31 @@ test("touch editor menus use reachable targets and stay inside the viewport", as
 	expect(rowHeights.every(height => height >= 44)).toBe(true);
 	await expectInsideViewport(menu);
 
+	// A phone's selection gets docked actions; formatting belongs to editing, not this bar.
 	await page.keyboard.press("Escape");
+	await content(page).click();
+	await page.keyboard.type("Format this selection.");
+	await page.keyboard.press("Shift+Home");
+	let bar = page.getByRole("toolbar", { name: "Selection actions" });
+	await expect(bar).toBeVisible();
+	await expect(page.getByRole("toolbar", BUBBLE)).toHaveCount(0);
+	await settled(bar);
+	let targets = await bar.getByRole("button").evaluateAll(buttons =>
+		buttons.map(button => {
+			let box = button.getBoundingClientRect();
+			return { height: box.height, width: box.width };
+		})
+	);
+	expect(targets.every(target => target.height >= 44 && target.width >= 44)).toBe(true);
+	await expectInsideViewport(bar);
+});
+
+test("a touch selection wider than a phone keeps the formatting bubble with reachable targets", async ({ join }) => {
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 768, height: 1_024 },
+	});
 	await content(page).click();
 	await page.keyboard.type("Format this selection.");
 	await page.keyboard.press("Shift+Home");
@@ -624,7 +649,8 @@ test("an open slash menu follows its caret while the editor scrolls", async ({ b
 
 test("an open selection toolbar follows its range while the editor scrolls", async ({ baseURL, browser, room, seed }) => {
 	await seed(LONG_EDITOR);
-	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room);
+	// Wider than a phone, where a touch selection still gets the floating bubble.
+	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room, 600);
 	try {
 		let block = content(emulation.page).getByText("Paragraph 9.", { exact: true });
 		await block.scrollIntoViewIfNeeded();

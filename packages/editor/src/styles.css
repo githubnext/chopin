@@ -664,6 +664,11 @@
 	letter-spacing: -0.01em;
 }
 
+/* A touch marker's reach into the empty margin, where a taller target covers no text. */
+.plan-comment-reach {
+	position: absolute;
+}
+
 /* Another thread's card is open: this marker steps back and cannot be pressed. */
 .plan-comment-button[data-dimmed] {
 	opacity: 0.4;
@@ -1443,6 +1448,23 @@
 	transition: opacity var(--duration-base) var(--ease-out);
 }
 
+/*
+ * With two detents the drawer reports progress between them: 1 at the medium
+ * detent, 0 at the large one. Pulling the sheet up sets the document further back.
+ */
+.plan-comment-sheet-backdrop[data-plan-comment-sheet-detents] {
+	--backdrop-opacity-large: 0.36;
+	opacity: calc(
+		var(--backdrop-opacity) +
+			(
+			var(--backdrop-opacity-large) - var(--backdrop-opacity)
+		) *
+			(
+			1 - var(--drawer-swipe-progress, 0)
+		)
+	);
+}
+
 /* Stands on the keyboard: the inset is what the visual viewport loses beneath it. */
 .plan-comment-sheet-viewport {
 	pointer-events: none;
@@ -1459,6 +1481,14 @@
  * keyboard. The header and a thread's composer stay put; only the notes scroll.
  */
 .plan-comment-sheet-popup {
+	/*
+	 * The drawer registers its offsets as non-inheriting, so the composer's lift
+	 * is worked out here, where they resolve, and inherited from this property.
+	 */
+	--plan-comment-sheet-lift: max(
+		0px,
+		var(--drawer-snap-point-offset, 0px) + min(0px, var(--drawer-swipe-movement-y, 0px))
+	);
 	pointer-events: auto;
 	display: flex;
 	width: 100%;
@@ -1479,6 +1509,11 @@
 		var(--ease-out);
 }
 
+/* The finger owns the sheet while it drags; the spring takes over on release. */
+.plan-comment-sheet-popup[data-swiping] {
+	transition: none;
+}
+
 .plan-comment-sheet-grabber {
 	display: block;
 	width: 2.25rem;
@@ -1494,9 +1529,34 @@
 	display: flex;
 	min-height: 2.75rem;
 	flex: none;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 0.5rem;
 	padding: 0 0.25rem 0 1rem;
+	touch-action: none;
+	cursor: grab;
+}
+
+/* With a pager the passage takes its own row beneath it. */
+.plan-comment-sheet-head:has(.plan-comment-sheet-pager) .plan-comment-sheet-quote {
+	flex-basis: 100%;
+	order: 1;
+	margin: 0 0.75rem 0.5rem 0;
+}
+
+.plan-comment-sheet-pager {
+	display: flex;
+	align-items: center;
+	margin-left: -0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--color-text-tertiary);
+	white-space: nowrap;
+}
+
+.plan-comment-sheet-step {
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	color: var(--color-text-secondary);
 }
 
 .plan-comment-sheet-quote {
@@ -1585,12 +1645,25 @@
 	overscroll-behavior: contain;
 }
 
-/* Pinned under the notes, its Send to Chopin row always in reach. */
+/*
+ * Pinned under the notes, its Send to Chopin row always in reach. At the
+ * medium detent the sheet's foot is below the screen, so the composer lifts by
+ * the same distance and stays on the visible edge; dragged down, it goes with
+ * the sheet.
+ */
 .plan-comment-sheet-content .plan-comment-thread-compose {
+	position: relative;
+	z-index: 1;
 	flex: none;
-	padding: 0.75rem 1rem;
+	padding: 0.5rem 1rem 0.75rem;
 	border-top: var(--edge-width) solid var(--color-edge);
 	background: var(--color-page);
+	transform: translateY(calc(-1 * var(--plan-comment-sheet-lift)));
+	transition: transform var(--duration-base) var(--ease-out);
+}
+
+.plan-comment-sheet-popup[data-swiping] .plan-comment-thread-compose {
+	transition: none;
 }
 
 .plan-comment-sheet-content [data-plan-comment-draft] {
@@ -1623,8 +1696,25 @@
 	padding-top: 0;
 }
 
+/* Send to Chopin is a 44px chip: the whole pill toggles it, and it fills when on. */
 .plan-comment-sheet-content .plan-comment-address {
+	min-height: var(--control-target-coarse);
+	margin-left: -0.375rem;
+	padding: 0 0.875rem 0 0.625rem;
+	border-radius: var(--radius-full);
 	font-size: var(--text-sm);
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.plan-comment-sheet-content .plan-comment-address:active {
+	background: var(--color-selected);
+}
+
+.plan-comment-sheet-content .plan-comment-address:has(:checked) {
+	background: var(--color-brand-wash);
+	color: var(--color-brand-ink);
 }
 
 .plan-comment-sheet-content .plan-comment-address-box {
@@ -1632,18 +1722,16 @@
 	height: 1.125rem;
 }
 
-/* A 32px disc with a 44px reach. */
+/* A full 44px disc, on the composer's edge. */
 .plan-comment-sheet-content .plan-comment-send {
-	position: relative;
-	width: 2rem;
-	height: 2rem;
-	margin-right: -0.25rem;
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	margin-right: -0.5rem;
 }
 
-.plan-comment-sheet-content .plan-comment-send::after {
-	content: "";
-	position: absolute;
-	inset: -0.375rem;
+.plan-comment-sheet-content .plan-comment-send svg {
+	width: 1.125rem;
+	height: 1.125rem;
 }
 
 /* Actions are always shown in a sheet, each a full 44px target that keeps the note head's line. */
@@ -1655,6 +1743,11 @@
 .plan-comment-sheet-content .plan-comment-action {
 	width: var(--control-target-coarse);
 	height: var(--control-target-coarse);
+}
+
+.plan-comment-sheet-content .plan-comment-action svg {
+	width: 1.125rem;
+	height: 1.125rem;
 }
 
 .plan-comment-sheet-popup[data-starting-style],
@@ -1681,7 +1774,8 @@
 	}
 
 	.plan-comment-sheet-backdrop,
-	.plan-comment-sheet-popup {
+	.plan-comment-sheet-popup,
+	.plan-comment-sheet-content .plan-comment-thread-compose {
 		transition-duration: 0ms;
 	}
 }
@@ -4984,6 +5078,85 @@
 @media (prefers-reduced-motion: reduce) {
 	.plan-formatting-toolbar {
 		animation: none;
+	}
+}
+
+/*
+ * A phone's selection actions, docked in the thumb zone: clear of the system
+ * callout over the selection and of the lines under it. It stands on the
+ * keyboard when one is open, and above any bottom chrome the app adds.
+ */
+.plan-selection-bar {
+	position: fixed;
+	left: 50%;
+	bottom: calc(
+		var(--plan-selection-bar-keyboard, 0px) + var(--phone-bottom-chrome, 0px) +
+			env(safe-area-inset-bottom, 0px) +
+			calc(var(--spacing) * 3)
+	);
+	z-index: 50;
+	display: flex;
+	align-items: stretch;
+	max-width: calc(100vw - calc(var(--spacing) * 4));
+	padding: var(--spacing);
+	border-radius: var(--radius-full);
+	background: var(--color-page);
+	border: var(--edge-width) solid var(--color-edge);
+	box-shadow: var(--shadow-overlay);
+	transform: translateX(-50%);
+	transition:
+		transform var(--panel-open-dur) var(--motion-smooth-out),
+		opacity var(--duration-fast) var(--ease-out);
+}
+
+@starting-style {
+	.plan-selection-bar {
+		opacity: 0;
+		transform: translate(-50%, calc(var(--spacing) * 4)) scale(var(--modal-scale));
+	}
+}
+
+.plan-selection-bar-action {
+	display: inline-flex;
+	min-width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	gap: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3.5);
+	border-radius: var(--radius-full);
+	color: var(--color-text-primary);
+	font-size: var(--text-base);
+	font-weight: var(--font-weight-medium);
+	white-space: nowrap;
+}
+
+.plan-selection-bar-action svg {
+	width: 1.25rem;
+	height: 1.25rem;
+	color: var(--color-text-secondary);
+}
+
+.plan-selection-bar-action:active {
+	background: var(--color-selected);
+}
+
+.plan-selection-bar-seam {
+	width: var(--edge-width);
+	margin-block: calc(var(--spacing) * 2.5);
+	background: var(--color-divider);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-selection-bar {
+		transition: opacity var(--duration-fast) var(--ease-out);
+	}
+
+	@starting-style {
+		.plan-selection-bar {
+			transform: translateX(-50%);
+		}
 	}
 }
 

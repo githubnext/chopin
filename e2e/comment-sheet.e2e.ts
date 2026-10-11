@@ -35,12 +35,34 @@ async function size(locator: Locator) {
 	return box!;
 }
 
-/** The sheet rises with a transition; measure it once it stands on the viewport's foot. */
+/**
+ * The sheet rises with a transition; measure it once it stands still on the viewport's foot.
+ * At the medium detent its foot is below the screen, so it reaches the bottom or past it.
+ */
 async function settled(sheet: Locator, bottom = 844) {
+	let last = Number.NaN;
 	await expect.poll(async () => {
 		let box = await size(sheet);
-		return Math.abs(box.y + box.height - bottom);
-	}).toBeLessThanOrEqual(1);
+		let still = Math.abs(box.y - last) < 0.5;
+		last = box.y;
+		return still && box.y + box.height >= bottom - 1;
+	}).toBe(true);
+}
+
+/** Drag with a finger, as the drawer reads touch pointers, in small steps. */
+async function drag(page: Page, from: { x: number; y: number }, by: number) {
+	let cdp = await page.context().newCDPSession(page);
+	let point = (y: number) => [{ x: from.x, y }];
+	await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(from.y) });
+	for (let step = 1; step <= 12; step++) {
+		await cdp.send("Input.dispatchTouchEvent", {
+			type: "touchMove",
+			touchPoints: point(from.y + (by * step) / 12),
+		});
+		await page.waitForTimeout(16);
+	}
+	await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+	await cdp.detach();
 }
 
 async function phone(browser: Browser, baseURL: string, room: string) {
@@ -67,13 +89,13 @@ async function draft(page: Page): Promise<Locator> {
 	let passage = content(page).locator("p").filter({ hasText: SECOND });
 	await passage.selectText();
 	let action = page.getByRole("button", { name: "Comment on this passage", exact: true });
-	// Touch leaves the space above the selection to the system's callout.
-	let bubble = page.getByRole("toolbar", { name: "Text formatting" });
-	await bubble.evaluate(element => Promise.all(element.getAnimations().map(item => item.finished)));
+	// A phone docks its selection actions at the foot of the screen, clear of the system's callout.
+	let bar = page.getByRole("toolbar", { name: "Selection actions" });
+	await bar.evaluate(element => Promise.all(element.getAnimations().map(item => item.finished)));
 	let selection = await page.evaluate(() =>
 		getSelection()!.getRangeAt(0).getBoundingClientRect().bottom
 	);
-	expect((await size(bubble)).y).toBeGreaterThanOrEqual(selection);
+	expect((await size(bar)).y).toBeGreaterThanOrEqual(selection);
 	await action.click();
 	let sheet = page.getByRole("dialog", { name: "New comment" });
 	await expect(sheet.getByPlaceholder("Add a comment")).toBeFocused();
@@ -326,4 +348,141 @@ test("a phone sheet keeps its passage above it as the sheet grows", async ({ joi
 	await expect.poll(async () => (await size(reply)).height).toBeGreaterThan(80);
 	await settled(sheet);
 	await expect.poll(above).toBe(true);
+});
+
+test("a phone selection docks its actions at the foot of the screen instead of a format bar", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana", IPHONE);
+	let passage = content(page).locator("p").filter({ hasText: SECOND });
+	await passage.selectText();
+	let bar = page.getByRole("toolbar", { name: "Selection actions" });
+	await expect(bar).toBeVisible();
+	await bar.evaluate(element => Promise.all(element.getAnimations().map(item => item.finished)));
+	// Formatting belongs to editing; the floating bubble does not appear on a phone.
+	await expect(page.getByRole("toolbar", { name: "Text formatting" })).toHaveCount(0);
+	await expect(bar.getByRole("button", { name: "Bold" })).toHaveCount(0);
+
+	// Docked near the bottom edge, never over the selection or the lines just under it.
+	let barBox = await size(bar);
+	expect(barBox.y + barBox.height).toBeGreaterThan(844 - 48);
+	expect(barBox.y + barBox.height).toBeLessThanOrEqual(844);
+	let selection = await page.evaluate(() =>
+		getSelection()!.getRangeAt(0).getBoundingClientRect().bottom
+	);
+	expect(barBox.y).toBeGreaterThan(selection);
+	await expectInsideViewport(bar);
+	for (let button of await bar.getByRole("button").all()) {
+		let box = await size(button);
+		expect(box.width).toBeGreaterThanOrEqual(44);
+		expect(box.height).toBeGreaterThanOrEqual(44);
+	}
+	await expect(bar.getByRole("button", { name: "Copy" })).toBeVisible();
+
+	// Comment opens the draft with its passage left in view above the sheet.
+	await bar.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let sheet = page.getByRole("dialog", { name: "New comment" });
+	await expect(sheet.getByPlaceholder("Add a comment")).toBeFocused();
+	await expect(bar).toHaveCount(0);
+	// Not by role: the modal sheet hides the editor from the accessibility tree.
+	let prose = page.locator(".plan-content > p").filter({ hasText: SECOND });
+	await expect.poll(async () => {
+		let sheetBox = await size(sheet);
+		let proseBox = await size(prose);
+		return proseBox.y + proseBox.height <= sheetBox.y && proseBox.y >= 0;
+	}).toBe(true);
+});
+
+test("a desktop selection still raises the formatting bubble", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	await content(page).locator("p").filter({ hasText: SECOND }).selectText();
+	let bubble = page.getByRole("toolbar", { name: "Text formatting" });
+	await expect(bubble).toBeVisible();
+	await expect(bubble.getByRole("button", { name: "Bold" })).toBeVisible();
+	await expect(bubble.getByRole("button", { name: "Comment on this passage" })).toBeVisible();
+	await expect(page.getByRole("toolbar", { name: "Selection actions" })).toHaveCount(0);
+});
+
+test("a long phone thread opens at the medium detent, drags up to large and down to dismiss", async ({ join, seed }) => {
+	let notes = Array.from(
+		{ length: 4 },
+		(_, index) =>
+			`Note ${index + 1}. ${"A long note that wraps over several lines on a phone. ".repeat(8)}`,
+	);
+	await seed(SOURCE, { threads: [await open("review the pilot", notes)] });
+	let page = await join("ana", IPHONE);
+	let marker = page.getByRole("button", { name: /^Comment on “review the pilot”/ });
+	await marker.tap();
+	let sheet = page.getByRole("dialog", { name: "Comment thread" });
+	await settled(sheet);
+
+	// Half the screen shows; the reply composer stays on its visible edge.
+	let medium = await size(sheet);
+	expect(Math.abs(medium.y - 844 / 2)).toBeLessThanOrEqual(2);
+	await expect(sheet).not.toHaveAttribute("data-expanded");
+	let reply = sheet.getByRole("textbox", { name: "Reply", exact: true });
+	await expectInsideViewport(reply);
+	expect((await size(sheet.getByRole("button", { name: "Send reply" }))).height)
+		.toBeGreaterThanOrEqual(44);
+
+	// The grabber row pulls it up to the large detent, where the backdrop deepens.
+	let backdrop = page.locator("[data-plan-comment-sheet-backdrop]");
+	let dim = () => backdrop.evaluate(element => Number(getComputedStyle(element).opacity));
+	let mediumDim = await dim();
+	await drag(page, { x: 195, y: medium.y + 10 }, -300);
+	await expect(sheet).toHaveAttribute("data-expanded");
+	await settled(sheet);
+	let large = await size(sheet);
+	expect(large.y).toBeLessThan(medium.y - 100);
+	expect(large.y).toBeGreaterThanOrEqual(844 * (1 - 0.92) - 1);
+	await expectInsideViewport(reply);
+	await expect.poll(dim).toBeGreaterThan(mediumDim);
+
+	// A downward flick dismisses it and hands focus back to the marker.
+	await drag(page, { x: 195, y: large.y + 10 }, 600);
+	await expect(sheet).toHaveCount(0);
+	await expect(marker).toBeFocused();
+});
+
+test("a phone thread sheet steps through the document's threads", async ({ join, seed }) => {
+	await seed(SOURCE, {
+		threads: [
+			await open("starting with the docs team", ["Which team is next?"], 0),
+			await open("review the pilot", ["Is two weeks enough?"], 1),
+		],
+	});
+	let page = await join("ana", IPHONE);
+	await page.getByRole("button", { name: /^Comment on “starting with the docs team”/ }).tap();
+	let sheet = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(sheet.getByText("1 of 2", { exact: true })).toBeVisible();
+	await expect(sheet.locator("[data-plan-comment-sheet-quote]")).toHaveText(
+		"starting with the docs team",
+	);
+	let next = sheet.getByRole("button", { name: "Next comment" });
+	expect((await size(next)).height).toBeGreaterThanOrEqual(44);
+	await next.click();
+	await expect(sheet.getByText("2 of 2", { exact: true })).toBeVisible();
+	await expect(sheet.locator("[data-plan-comment-sheet-quote]")).toHaveText("review the pilot");
+	await expect(sheet).toContainText("Is two weeks enough?");
+	await sheet.getByRole("button", { name: "Next comment" }).click();
+	await expect(sheet.getByText("1 of 2", { exact: true })).toBeVisible();
+});
+
+test("a phone marker reaches 44px into the empty margin without covering the next line", async ({ join, seed }) => {
+	await seed(SOURCE, { threads: [await open("review the pilot", ["Is two weeks enough?"])] });
+	let page = await join("ana", IPHONE);
+	let marker = page.getByRole("button", { name: /^Comment on “review the pilot”/ });
+	let chip = await size(marker.locator(".plan-comment-chip"));
+	let paragraph = await size(page.locator(".plan-content > p").filter({ hasText: SECOND }));
+	let hits = await page.evaluate(({ chip, paragraph }) => {
+		let middle = chip.y + chip.height / 2;
+		let gutter = Math.max(chip.x + chip.width / 2, paragraph.x + paragraph.width + 2);
+		return [
+			[gutter, middle - 20],
+			[gutter, middle + 20],
+			// The end of the second line still takes the tap as text.
+			[paragraph.x + paragraph.width - 2, middle + 24],
+		].map(([x, y]) => !!document.elementFromPoint(x!, y!)?.closest("[data-plan-comment-button]"));
+	}, { chip, paragraph });
+	expect(hits).toEqual([true, true, false]);
 });

@@ -13,10 +13,12 @@ import { useEffect, useState } from "react";
 
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
+import { usePhone } from "../phone";
 import { SelectionBubble } from "./bubble";
 import { LinkSurface } from "./link";
 import { ResearchComposerSurface } from "./research";
 import { ResearchLaunchRegistration } from "./research-launch";
+import { SelectionBar } from "./selection-bar";
 import { SlashMenu } from "./slash";
 import { registerTaskRule } from "./task-rule";
 
@@ -33,6 +35,7 @@ export function Toolbar() {
 	let [editor] = useLexicalComposerContext();
 	// The link editor sits where the bubble would, so only one shows.
 	let [linking, setLinking] = useState(false);
+	let phone = usePhone();
 
 	useEffect(() => (disabled ? undefined : registerTaskRule(editor)), [editor, disabled]);
 
@@ -88,7 +91,9 @@ export function Toolbar() {
 
 	return (
 		<>
-			<SelectionBubble disabled={disabled} hidden={linking} onComment={comment} />
+			{phone
+				? <SelectionBar disabled={disabled} hidden={linking} onComment={comment} />
+				: <SelectionBubble disabled={disabled} hidden={linking} onComment={comment} />}
 			<LinkSurface binding={options.binding} disabled={disabled} onEditing={setLinking} />
 			<SlashMenu
 				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}

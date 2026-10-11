@@ -27,7 +27,7 @@ import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
 import type { CSSProperties, ReactNode } from "react";
-import type { CommentSheetHeading } from "./comment-sheet";
+import type { CommentSheetHeading, CommentSheetPager } from "./comment-sheet";
 import type { BlockMarkerPoint, CardSide, Line, Point, Rect } from "./comment-geometry";
 import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
@@ -114,6 +114,10 @@ function proseColumn(root: HTMLElement): Rect {
 	let left = box.left + (parseFloat(style.paddingLeft) || 0);
 	let right = box.right - (parseFloat(style.paddingRight) || 0);
 	return { top: box.top, right, bottom: box.bottom, left, width: right - left, height: box.height };
+}
+
+function passageTop(entry: PlacedThread): number {
+	return Math.min(...entry.passages.map(passage => passage.top));
 }
 
 function union(rects: Rect[]): Rect | undefined {
@@ -381,6 +385,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [coarse, setCoarse] = useState(false);
 	let [primaryCoarse, setPrimaryCoarse] = useState(false);
 	let [sheetSurface, setSheetSurface] = useState<HTMLDivElement | null>(null);
+	let [sheetDetent, setSheetDetent] = useState<number>();
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
 	let placedRef = useRef<PlacedThread[]>([]);
@@ -898,6 +903,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		[compact, draft?.placement, sheetPassages],
 	);
 	useCommentSheetReveal({
+		detent: sheetDetent,
 		host,
 		id: revealId,
 		passages: revealPassages,
@@ -1014,6 +1020,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let compactHeading: CommentSheetHeading | undefined;
 	let compactBack: (() => void) | undefined;
 	let compactClose: (() => void) | undefined;
+	let compactPager: CommentSheetPager | undefined;
 	let compactContent: ReactNode = undefined;
 	let previewView = preview && pinned !== preview
 		? placed.find(entry => entry.view.thread.id === preview)?.view
@@ -1057,10 +1064,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactClose = dismiss;
 		compactContent = orphaned.map(view => card(view));
 	} else if (compact && pinned && (pinnedView || pinnedList)) {
-		// One sheet serves a line's list and its threads, so moving between them does not reopen it.
-		compactKey = pinnedMarker && pinnedMarker.views.length > 1
-			? `marker:${pinnedMarker.key}`
-			: `thread:${pinned}`;
+		// One sheet serves a line's list and every thread, so moving between them does not reopen it.
+		compactKey = "pinned";
 		compactId = dialogId(pinned);
 		compactLabel = pinnedView ? "Comment thread" : "Comments";
 		let back = pinnedView ? backTo(pinnedView) : undefined;
@@ -1073,6 +1078,23 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			: commentSheetHeading({ kind: "list", count: pinnedList!.views.length });
 		compactBack = back?.go;
 		compactClose = dismiss;
+		// The document's open threads in reading order, so the sheet can step through them.
+		let order = [...placed]
+			.sort((a, b) => passageTop(a) - passageTop(b))
+			.map(entry => entry.view.thread.id);
+		let at = pinnedView ? order.indexOf(pinnedView.thread.id) : -1;
+		let step = (by: number) => {
+			setReturnTo(undefined);
+			setPinned(order[(at + by + order.length) % order.length]);
+		};
+		compactPager = at >= 0
+			? {
+				count: order.length,
+				index: at,
+				onNext: () => step(1),
+				onPrevious: () => step(-1),
+			}
+			: undefined;
 		compactContent = pinnedView ? card(pinnedView, true) : (
 			<ThreadList
 				autoFocus={false}
@@ -1160,6 +1182,17 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					0,
 					Math.min(button.left - (width - button.width) / 2, page.width - width),
 				);
+				// Over the prose the target keeps to the first line; in the margin beside it, where
+				// there is no text to take a tap from, it reaches the full 44px.
+				let margin = Math.max(0, Math.min(left + width, page.width) - (column.right - page.left));
+				let reach = coarse && height < TOUCH_TARGET && margin > 0
+					? {
+						left: width - margin,
+						top: (height - TOUCH_TARGET) / 2,
+						width: margin,
+						height: TOUCH_TARGET,
+					}
+					: undefined;
 				return (
 					<button
 						aria-label={single
@@ -1215,6 +1248,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						}}
 						type="button"
 					>
+						{reach && <span aria-hidden="true" className="plan-comment-reach" style={reach} />}
 						<span
 							className="plan-comment-chip"
 							style={{ left: button.left - left, top: (height - CHIP) / 2, width: button.width }}
@@ -1335,7 +1369,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					label={compactLabel}
 					onBack={compactBack}
 					onClose={compactClose}
+					onDetentHeight={setSheetDetent}
 					onSurface={setSheetSurface}
+					pager={compactPager}
 				>
 					{compactContent}
 				</CommentSheet>

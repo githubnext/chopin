@@ -54,7 +54,7 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		name: "Comment on this passage",
 		exact: true,
 	});
-	// The toolbar enters with a scale; measure it once that has finished.
+	// The docked bar rises in; measure it once that has finished.
 	await commentAction.evaluate(element =>
 		Promise.all(element.closest("[role=toolbar]")!.getAnimations().map(item => item.finished))
 	);
@@ -62,9 +62,9 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 	let iconBox = await commentAction.locator("[data-nucleo-icon]").boundingBox();
 	expect(actionBox).not.toBeNull();
 	expect(iconBox).not.toBeNull();
-	expect(Math.abs(
-		actionBox!.x + actionBox!.width / 2 - (iconBox!.x + iconBox!.width / 2),
-	)).toBeLessThanOrEqual(1);
+	// An icon and its label, centred on one line inside a full touch target.
+	expect(actionBox!.height).toBeGreaterThanOrEqual(44);
+	await expect(commentAction).toHaveText("Comment");
 	expect(Math.abs(
 		actionBox!.y + actionBox!.height / 2 - (iconBox!.y + iconBox!.height / 2),
 	)).toBeLessThanOrEqual(1);
