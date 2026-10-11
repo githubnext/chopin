@@ -140,6 +140,7 @@ describe("Planner link messages", () => {
 			version: PLANNER_LINK_VERSION,
 			maxMessageBytes: MAX_LINK_MESSAGE_BYTES,
 			maxNoteLength: MAX_LINK_NOTE_LENGTH,
+			malformedClose: 4400,
 		});
 		let source = await Bun.file(new URL("./client.ts", import.meta.url)).text();
 		let imports = [...source.matchAll(/^import\s+(type\s+)?/gm)];

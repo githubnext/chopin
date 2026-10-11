@@ -22,6 +22,7 @@ import {
 	scriptedPlanner,
 } from "../../testing/planner-link";
 import { createRemoteAdapter } from "./adapter";
+import { admitPlannerLink } from "./endpoint";
 
 import type { PlannerLinkClient, PlannerLinkHandlers } from "@chopin/planner-link/client";
 import type { RemotePlanner } from "./registry";
@@ -147,6 +148,17 @@ describe("Planner link admission", () => {
 		await expect(attach(server.url, channel.id, scriptedPlanner().handlers, "bad-token"))
 			.rejects.toThrow("closed before attaching");
 		expect(server.links).toEqual([]);
+	});
+
+	it("answers 404 where the server does not run the remote Planner", async () => {
+		let { auth } = await linkAuth();
+		let request = new Request("https://chopin.test/planner-link", {
+			headers: { authorization: `Bearer ${READER_TOKEN}`, upgrade: "websocket" },
+		});
+		let refused = await admitPlannerLink(request, auth, false);
+		expect(refused).toBeInstanceOf(Response);
+		expect((refused as Response).status).toBe(404);
+		expect(await admitPlannerLink(request, auth, true)).toMatchObject({ plannerLink: true });
 	});
 
 	it("refuses a repository the caller cannot read, a missing or archived document, and another version", async () => {
@@ -314,6 +326,36 @@ describe("Planner link protocol", () => {
 		expect(isolated.errors.join("\n")).toContain("An isolated Planner turn cannot offer bash");
 	});
 
+	it("gives the server and the client the same error when a host result cannot cross the link", async () => {
+		let seen: unknown[] = [];
+		let { server, channel } = await setup({
+			async turn(context) {
+				seen.push(await context.callHostTool("read_plan", {}));
+				finishTurn(context);
+			},
+		});
+		let agent = new HarnessAgent({
+			harness: adapterFor(server, { channelId: channel.id, isolated: false }),
+			tools: {
+				read_plan: tool({
+					inputSchema: z.object({}),
+					execute: async () => "x".repeat(MAX_LINK_MESSAGE_BYTES),
+				}),
+			},
+			activeTools: ["read_plan"],
+			permissionMode: "allow-reads",
+		});
+		let session = await agent.createSession({ sandboxSession });
+		cleanups.push(() => session.destroy());
+		let outcome = await streamOn(agent, session, "large");
+		let failure = { error: "read_plan returned more than the Planner link can carry." };
+		expect(seen).toEqual([{ output: failure, isError: true }]);
+		expect(outcome.parts.filter(part => part.type === "tool-result" || part.type === "tool-error"))
+			.toMatchObject([{ toolName: "read_plan" }]);
+		expect(JSON.stringify(outcome.parts)).not.toContain("x".repeat(1_000));
+		expect(JSON.stringify(outcome.parts)).toContain(failure.error);
+	});
+
 	it("fails a session the client refuses or never starts, and tells it to let go", async () => {
 		let destroyed: string[] = [];
 		let { server, channel } = await setup({
@@ -397,6 +439,37 @@ describe("Planner link protocol", () => {
 		expect(server.links).toHaveLength(1);
 		auth.github.repository = async () => {
 			throw new GitHubError("Not Found", 404);
+		};
+		expect(await client.closed).toEqual({ code: LINK_CLOSE.forbidden, reason: "access-revoked" });
+		expect(server.links).toEqual([]);
+	});
+
+	it("detaches a link whose token GitHub rejects while admission is still cached", async () => {
+		let { server, channel, auth, client } = await setup({});
+		let agent = agentFor(adapterFor(server, { channelId: channel.id, isolated: false }));
+		let session = await agent.createSession({ sandboxSession });
+		cleanups.push(() => session.destroy());
+		auth.github.repository = async () => {
+			throw new GitHubError("Bad credentials", 401);
+		};
+		let revoked = await streamOn(agent, session, "second");
+		expect(revoked.errors.join("\n")).toContain("can no longer read this document");
+		expect(await client.closed).toEqual({ code: LINK_CLOSE.forbidden, reason: "access-revoked" });
+		expect(server.links).toEqual([]);
+	});
+
+	it("detaches on a rejected token at the periodic check but stays attached through an outage", async () => {
+		let { auth, channel } = await linkAuth();
+		let server = linkServer(auth, 300, 20);
+		cleanups.push(server.stop);
+		let client = await attach(server.url, channel.id, scriptedPlanner().handlers);
+		auth.github.repository = async () => {
+			throw new GitHubError("Service Unavailable", 503);
+		};
+		await Bun.sleep(80);
+		expect(server.links).toHaveLength(1);
+		auth.github.repository = async () => {
+			throw new GitHubError("Bad credentials", 401);
 		};
 		expect(await client.closed).toEqual({ code: LINK_CLOSE.forbidden, reason: "access-revoked" });
 		expect(server.links).toEqual([]);

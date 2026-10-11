@@ -21,6 +21,7 @@ export const WIRE = {
 	version: 1,
 	maxMessageBytes: 2 * 1024 * 1024,
 	maxNoteLength: 4_000,
+	malformedClose: 4400,
 } as const;
 
 export class PlannerLinkRefused extends Error {
@@ -369,10 +370,31 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 			...(options.checkout ? { checkout: options.checkout } : {}),
 		});
 	});
+	let released = false;
+	function release(closed: LinkClosed): void {
+		if (released) return;
+		released = true;
+		for (let turn of turns.values()) {
+			settleCalls(turn, LINK_CLOSED);
+			turn.controller.abort();
+		}
+		turns.clear();
+		for (let [request, resolve] of asks) {
+			resolve({ type: "input-result", request, status: "cancelled", message: LINK_CLOSED });
+		}
+		asks.clear();
+		attaching.reject(
+			new Error(`The Planner link closed before attaching (${closed.code} ${closed.reason}).`),
+		);
+		closing.resolve(closed);
+	}
 	socket.addEventListener("message", event => {
+		if (released) return;
 		let message = serverMessage(event.data);
 		if (!message) {
-			socket.close(1008, "malformed-message");
+			let closed = { code: WIRE.malformedClose, reason: "malformed-message" };
+			socket.close(closed.code, closed.reason);
+			release(closed);
 			return;
 		}
 		if (!attached) {
@@ -387,20 +409,6 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 		}
 		void serve(message);
 	});
-	socket.addEventListener("close", event => {
-		for (let turn of turns.values()) {
-			settleCalls(turn, LINK_CLOSED);
-			turn.controller.abort();
-		}
-		turns.clear();
-		for (let [request, resolve] of asks) {
-			resolve({ type: "input-result", request, status: "cancelled", message: LINK_CLOSED });
-		}
-		asks.clear();
-		attaching.reject(
-			new Error(`The Planner link closed before attaching (${event.code} ${event.reason}).`),
-		);
-		closing.resolve({ code: event.code, reason: event.reason });
-	});
+	socket.addEventListener("close", event => release({ code: event.code, reason: event.reason }));
 	return attaching.promise;
 }

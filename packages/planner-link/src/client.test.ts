@@ -173,3 +173,103 @@ describe("Planner link client", () => {
 		expect(client.send({ type: "detach" })).toBe(false);
 	});
 });
+
+describe("Planner link client facing a faulty server", () => {
+	/** Answers attach, then a frame no client can parse in place of the question's answer. */
+	function garblingServer() {
+		let closes: { code: number; reason: string }[] = [];
+		let server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(request, self) {
+				return self.upgrade(request) ? undefined : new Response("upgrade failed", { status: 400 });
+			},
+			websocket: {
+				message(ws, raw) {
+					let parsed = parseClientMessage(String(raw));
+					if (!parsed.ok) throw new Error(parsed.message);
+					if (parsed.message.type === "attach" && parsed.message.document === "garbled") {
+						ws.send("not JSON");
+					} else if (parsed.message.type === "attach") {
+						ws.send(JSON.stringify({
+							type: "attached",
+							version: 1,
+							document: { id: "d", title: "T", repository: "o/r" },
+						}));
+					} else if (parsed.message.type === "input-request") {
+						ws.send(new Uint8Array([1, 2, 3]));
+					}
+				},
+				close(_ws, code, reason) {
+					closes.push({ code, reason });
+				},
+			},
+		});
+		stops.push(() => server.stop(true));
+		return { url: `http://127.0.0.1:${server.port}`, closes };
+	}
+
+	async function faced(url: string) {
+		let early = await connectPlannerLink({
+			url,
+			token: "t",
+			document: "garbled",
+			handlers: {
+				turn() {},
+			},
+		}).then(() => "attached", (error: Error) => error.message);
+		let client = await connectPlannerLink({
+			url,
+			token: "t",
+			document: "d",
+			handlers: {
+				turn() {},
+			},
+		});
+		let answer = await client.ask("s", { method: "input", title: "Name?" });
+		return { early, answer, closed: await client.closed };
+	}
+
+	const expected = {
+		early: "The Planner link closed before attaching (4400 malformed-message).",
+		answer: {
+			type: "input-result",
+			request: expect.any(String),
+			status: "cancelled",
+			message: "The Planner link closed.",
+		},
+		closed: { code: 4400, reason: "malformed-message" },
+	};
+
+	it("closes the link and settles what waits on it", async () => {
+		let server = garblingServer();
+		expect(await faced(server.url) as unknown).toEqual(expected);
+		await Bun.sleep(50);
+		expect(server.closes).toEqual([expected.closed, expected.closed]);
+	});
+
+	it("does the same under Node.js's WebSocket", async () => {
+		let node = Bun.which("node");
+		let probe = node && Bun.spawnSync([node, "-p", "Boolean(process.features.typescript)"]);
+		if (!probe || probe.stdout.toString().trim() !== "true") return;
+		let server = garblingServer();
+		let script = `
+			import { connectPlannerLink } from ${
+			JSON.stringify(new URL("./client.ts", import.meta.url).href)
+		};
+			${faced.toString().replace("async function faced", "async function run")}
+			console.log(JSON.stringify(await run(process.argv[1])));
+		`;
+		let child = Bun.spawn([node!, "--input-type=module", "-e", script, server.url], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		let [stdout, stderr, exit] = await Promise.all([
+			new Response(child.stdout).text(),
+			new Response(child.stderr).text(),
+			child.exited,
+		]);
+		expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
+		expect(JSON.parse(stdout)).toEqual(expected);
+	});
+});
