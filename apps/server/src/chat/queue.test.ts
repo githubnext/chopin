@@ -849,6 +849,20 @@ describe("focus on a child document", () => {
 		expect(frames.at(-1)?.message).toBe("the open child document is unavailable");
 	});
 
+	it("answers a failed child lookup generically and queues nothing", async () => {
+		let { chat, context } = room({ busy: true });
+		context.children = {
+			...children().value,
+			resolve: async () => {
+				throw new Error('relation "channels" does not exist');
+			},
+		};
+		let frames: Sent[] = [];
+		await Chat.send(context, sender("ana", "U_ana", frames), focused("planner", CHILD));
+		expect(chat.waiting).toHaveLength(0);
+		expect(frames.at(-1)?.message).toBe("the open child document is unavailable");
+	});
+
 	it("refuses a malformed focus before resolving anything", async () => {
 		let { chat, context } = room({ busy: true });
 		let lookup = children();

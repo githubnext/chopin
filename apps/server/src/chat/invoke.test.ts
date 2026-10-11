@@ -1342,3 +1342,56 @@ test("a focused member turn names the child before the member's words", async ()
 	expect(context.chat.entries.find(entry => entry.author.kind === "member")?.text)
 		.toBe("shorten the summary");
 });
+
+test("a focused message queued behind a busy turn still names the child when it drains", async () => {
+	let { context } = await setup();
+	let child = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+	context.children = {
+		list: async () => [],
+		resolve: async id => id === child ? { id, title: "Source review", createdAt: "" } : undefined,
+		open: async () => {
+			throw new Error("not used");
+		},
+	};
+	let first = Promise.withResolvers<void>();
+	let opened = Promise.withResolvers<void>();
+	let prompts: string[] = [];
+	context.openPlannerSession = async () => ({
+		ok: true,
+		value: {
+			async stream(prompt) {
+				prompts.push(prompt);
+				opened.resolve();
+				return {
+					fullStream: (async function*() {
+						if (prompts.length === 1) await first.promise;
+						yield { type: "finish" };
+					})(),
+				} as never;
+			},
+			destroy: async () => {},
+		},
+	});
+	let ws = { data: { handle: "ana", principalId: "U_ana" }, send() {} } as unknown as Socket;
+	let send = (text: string, focus?: string) =>
+		Chat.send(context, ws, {
+			kind: "chat:send",
+			rid: crypto.randomUUID(),
+			requestId: crypto.randomUUID(),
+			to: "planner",
+			text,
+			...(focus ? { focus } : {}),
+			ts: 0,
+		} as never);
+	await send("@chopin first");
+	await opened.promise;
+	await send("@chopin shorten the summary", child);
+	expect(context.chat.waiting).toHaveLength(1);
+	first.resolve();
+	await context.chat.running;
+	expect(prompts).toHaveLength(2);
+	expect(prompts[0]).not.toContain(child);
+	let drained = prompts[1]!;
+	expect(drained.indexOf(`child id ${child}`)).toBeGreaterThanOrEqual(0);
+	expect(drained.indexOf(`child id ${child}`)).toBeLessThan(drained.indexOf("shorten the summary"));
+});

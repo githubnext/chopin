@@ -721,7 +721,13 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			return fail(ws, msg.rid, "invalid chat focus");
 		}
 		if (destination === "planner") {
-			let child = await context.children?.resolve(suppliedFocus);
+			let child: Awaited<ReturnType<ChildDocuments["resolve"]>>;
+			try {
+				child = await context.children?.resolve(suppliedFocus);
+			} catch (err) {
+				// Storage detail stays in the log; the member only learns the child is unavailable.
+				console.error("[chat] could not resolve the focused child document:", err);
+			}
 			if (!child) return fail(ws, msg.rid, "the open child document is unavailable");
 			focus = { channelId: child.id, title: child.title };
 		}
