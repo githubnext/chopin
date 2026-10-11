@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { ThreadStore } from "./threads";
+import { handlesOpenComment, openOutcome, openRequest, ThreadStore } from "./threads";
 
 import type { Comment, Plan } from "@chopin/protocol";
 
@@ -608,5 +608,38 @@ describe("a send that is refused", () => {
 			message: "repository write access is required",
 		});
 		expect(subject.snapshot().threads[0]?.thread.notes).toHaveLength(1);
+	});
+});
+
+describe("opening a thread from elsewhere", () => {
+	it("belongs to the document it names, and to any when it names none", () => {
+		expect(handlesOpenComment("root", "child")).toBe(false);
+		expect(handlesOpenComment("child", "child")).toBe(true);
+		expect(handlesOpenComment("root", undefined)).toBe(true);
+		expect(handlesOpenComment(undefined, "child")).toBe(true);
+	});
+
+	it("reads the request's document", () => {
+		expect(openRequest("t1")).toEqual({ thread: "t1", focus: false });
+		expect(openRequest({ thread: "t1", focus: true, channel: "c" })).toEqual({
+			thread: "t1",
+			focus: true,
+			channel: "c",
+		});
+		expect(openRequest({ nope: 1 })).toBeUndefined();
+	});
+
+	it("waits for a thread that has not arrived, then says it is gone", () => {
+		expect(openOutcome(undefined, undefined, false)).toEqual({ wait: true });
+		expect(openOutcome(undefined, undefined, true)).toEqual({
+			gone: "This comment is no longer here",
+		});
+		expect(openOutcome(undefined, "open", false)).toEqual({ open: true });
+		expect(openOutcome(undefined, "resolved", false)).toEqual({
+			gone: "This comment was resolved",
+		});
+		expect(openOutcome({ orphaned: true }, "open", false)).toEqual({
+			gone: "This comment's passage has changed",
+		});
 	});
 });

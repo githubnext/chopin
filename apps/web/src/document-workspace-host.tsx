@@ -83,15 +83,14 @@ const REVEAL_LIMIT = 200;
 const CHILD_SYNC_LIMIT = 8000;
 
 /** Settles true once a child's editor has synced, or false if it never does. */
-function childSynced(channelId: string): Promise<boolean> {
+function childSynced(channelId: string, current: () => boolean): Promise<boolean> {
 	let selector = `[data-workspace-room="${CSS.escape(channelId)}"] [data-plan-synced]`;
 	let started = performance.now();
 	return new Promise(resolve => {
 		let check = () => {
-			if (document.querySelector(selector)) {
-				// Thread state arrives just after the document; give it two frames.
-				requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
-			} else if (performance.now() - started > CHILD_SYNC_LIMIT) resolve(false);
+			if (!current()) resolve(false);
+			else if (document.querySelector(selector)) resolve(true);
+			else if (performance.now() - started > CHILD_SYNC_LIMIT) resolve(false);
 			else requestAnimationFrame(check);
 		};
 		check();
@@ -167,6 +166,8 @@ export default function DocumentWorkspaceHost(
 	let closingFocus = useRef<ChildFocusToken | undefined>(undefined);
 	let parentScrollTop = useRef<number | undefined>(undefined);
 	let parentSurface = useRef<HTMLDivElement>(null);
+	let openRequest = useRef(0);
+	useEffect(() => () => void (openRequest.current += 1), []);
 	// The card's key follows the child route, not the loaded channel, so loading never remounts
 	// it, and it outlives the route while the card closes.
 	let childKey = useRef<string | undefined>(undefined);
@@ -425,9 +426,17 @@ export default function DocumentWorkspaceHost(
 	let childLabel = loaded.child?.channel.title ?? (route.page === "child" ? route.childSlug : "");
 	let closeChild = () => onChildClose(loaded.parent.channel.id, parentPath);
 	let openChild: ChildOpen = async channelId => {
+		let request = ++openRequest.current;
+		let rootId = loaded.parent.channel.id;
+		// A newer request, a different root, or a closed child makes this one stale.
+		let current = () => {
+			let now = stateRef.current;
+			return request === openRequest.current && now.status === "ready"
+				&& now.loaded.parent.channel.id === rootId;
+		};
 		let detail = await Api.channel(channelId).catch(() => undefined);
 		// Only a child of this root opens here; the stored parentage is authoritative.
-		if (!detail || detail.channel.parentChannelId !== loaded.parent.channel.id) return false;
+		if (!current() || !detail || detail.channel.parentChannelId !== rootId) return false;
 		let path = anchoredChildPaths(
 			{
 				owner: loaded.parent.repository.owner,
@@ -438,7 +447,11 @@ export default function DocumentWorkspaceHost(
 		).child;
 		if (!path) return false;
 		onChildOpen(path);
-		return childSynced(channelId);
+		return childSynced(channelId, () => {
+			let now = stateRef.current;
+			let child = now.status === "ready" ? now.loaded.child : undefined;
+			return current() && (!child || child.channel.id === channelId);
+		});
 	};
 	let child = loaded.child
 		? (

@@ -114,6 +114,12 @@ function failed(err: unknown): Sent {
 }
 
 export class ThreadStore {
+	/** The document these threads belong to, so a request can name it. */
+	readonly channel: string | undefined;
+	constructor(channel?: string) {
+		this.channel = channel;
+	}
+
 	#state: ThreadState = EMPTY;
 	#listeners = new Set<() => void>();
 
@@ -701,20 +707,70 @@ function order(editor: LexicalEditor, key: string): number | undefined {
 /** The event that asks the open document to show a comment thread. */
 export const OPEN_COMMENT = "chopin:open-comment";
 
-/** A thread id, or one whose card should take focus once it opens. */
-export type OpenComment = string | { thread: string; focus: true };
+/** A thread id, or one whose card should take focus and whose document is named. */
+export type OpenComment = string | { thread: string; focus?: true; channel?: string };
+
+export type OpenRequest = { thread: string; focus: boolean; channel?: string };
+
+/** Read an open request from an event's detail, or nothing when it is not one. */
+export function openRequest(detail: unknown): OpenRequest | undefined {
+	if (typeof detail === "string") return { thread: detail, focus: false };
+	if (!detail || typeof detail !== "object" || !("thread" in detail)) return undefined;
+	if (typeof detail.thread !== "string") return undefined;
+	return {
+		thread: detail.thread,
+		focus: "focus" in detail && detail.focus === true,
+		...("channel" in detail && typeof detail.channel === "string"
+			? { channel: detail.channel }
+			: {}),
+	};
+}
 
 /**
- * Ask the document beside this page to open a comment thread, from anywhere.
+ * Whether a comment layer answers a request. A request naming a document belongs to that
+ * document alone: a root's editor stays mounted under an open child and must not claim the
+ * child's thread. A request naming none, or a layer with no identity, is answered by all.
+ */
+export function handlesOpenComment(layer: string | undefined, target: string | undefined): boolean {
+	return target === undefined || layer === undefined || layer === target;
+}
+
+/** What a layer does with a request for a thread: open it, wait for it to arrive, or say why not. */
+export function openOutcome(
+	view: { orphaned?: boolean; drifted?: boolean } | undefined,
+	status: Comment.Status | undefined,
+	waited: boolean,
+): { open: true } | { wait: true } | { gone: string } {
+	if (status === "resolved") return { gone: "This comment was resolved" };
+	if (status === undefined) {
+		// Thread state arrives after the document does; a request waits for it.
+		return waited ? { gone: "This comment is no longer here" } : { wait: true };
+	}
+	if (status !== "open") return { gone: "This comment is no longer here" };
+	if (view?.orphaned || view?.drifted) return { gone: "This comment's passage has changed" };
+	return { open: true };
+}
+
+/**
+ * Ask the open document to show a comment thread, from anywhere.
  *
  * An event rather than the fragment a copied link uses: following a fragment
  * is navigation, and Chat pointing at a thread should not add history or wake
- * the router.
+ * the router. Name `channel` to reach one document when several are mounted.
  */
-export function openCommentThread(thread: string, options: { focus?: boolean } = {}): void {
+export function openCommentThread(
+	thread: string,
+	options: { focus?: boolean; channel?: string } = {},
+): void {
 	dispatchEvent(
 		new CustomEvent<OpenComment>(OPEN_COMMENT, {
-			detail: options.focus ? { thread, focus: true } : thread,
+			detail: options.focus || options.channel
+				? {
+					thread,
+					...(options.focus ? { focus: true as const } : {}),
+					...(options.channel ? { channel: options.channel } : {}),
+				}
+				: thread,
 		}),
 	);
 }

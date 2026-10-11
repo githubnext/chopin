@@ -56,7 +56,15 @@ export type { ResearchLaunchBlock, ResearchLaunchResult } from "./research-launc
 export { SendAction } from "./send-action";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
-export { openCommentThread, ThreadObserver, ThreadStore, useThreads } from "./threads";
+export {
+	handlesOpenComment,
+	openCommentThread,
+	openOutcome,
+	openRequest,
+	ThreadObserver,
+	ThreadStore,
+	useThreads,
+} from "./threads";
 export type { Draft, ThreadState, ThreadView } from "./threads";
 export {
 	MENU_SURFACE,

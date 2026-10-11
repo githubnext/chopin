@@ -425,7 +425,7 @@ export function RoomWorkspace(
 	useSyncExternalStore(experiments.subscribe, experiments.snapshot);
 	useEffect(() => experiments.connect(wire), [experiments, wire]);
 	let [cardMeta] = useState(() => new CardMetaStore());
-	let [threads] = useState(() => new ThreadStore());
+	let [threads] = useState(() => new ThreadStore(room));
 	let threadState = useSyncExternalStore(threads.subscribe, threads.snapshot, threads.snapshot);
 	let [researchLauncher] = useState(() => new ResearchLauncher());
 	let research = useMemo(

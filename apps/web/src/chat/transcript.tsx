@@ -108,7 +108,8 @@ function SystemEntry(
 
 /** A comment sent to Chopin: what it was about and what it said, linking back to the thread. */
 function CommentSystemEntry(
-	{ comment, enter, onOpenChild }: {
+	{ comment, enter, onOpenChild, room }: {
+		room?: string;
 		comment: NonNullable<Chat.Entry["comment"]>;
 		enter: boolean;
 		onOpenChild?: (channelId: string) => Promise<boolean>;
@@ -117,10 +118,10 @@ function CommentSystemEntry(
 	// A thread in a child lives in that child's editor: open it, then ask for the thread once the
 	// child has synced. Thread ids are unique, so only that editor answers.
 	let open = () => {
-		if (!comment.channelId) return openCommentThread(comment.thread);
+		if (!comment.channelId) return openCommentThread(comment.thread, { channel: room });
 		if (!onOpenChild) return;
 		void onOpenChild(comment.channelId).then(ready => {
-			if (ready) openCommentThread(comment.thread);
+			if (ready) openCommentThread(comment.thread, { channel: comment.channelId });
 		});
 	};
 	return (
@@ -381,6 +382,7 @@ export function Transcript(
 		onCardLink,
 		onAddExcerpt,
 		onOpenChild,
+		room,
 		onRetryAnalysis,
 		onRetryJob,
 		onWithdraw,
@@ -397,6 +399,7 @@ export function Transcript(
 		onCardLink?: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
 		onOpenChild?: (channelId: string) => Promise<boolean>;
+		room?: string;
 		onRetryAnalysis?: (
 			messageId: string,
 			actionId: string,
@@ -686,6 +689,7 @@ export function Transcript(
 									enter={enters(key)}
 									key={key}
 									onOpenChild={onOpenChild}
+									room={room}
 								/>
 							)
 							: announced.has(readyChild(item.text) ?? "")

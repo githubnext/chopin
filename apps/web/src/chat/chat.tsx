@@ -644,6 +644,7 @@ export function Chat(
 			onCardLink={onCardLink}
 			onAddExcerpt={onAddExcerpt}
 			onOpenChild={onOpenChild}
+			room={room}
 			onRetryAnalysis={onRetryAnalysis}
 			onRetryJob={onRetryJob}
 			conversationPlan={conversationPlan}

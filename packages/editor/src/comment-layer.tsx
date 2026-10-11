@@ -22,7 +22,8 @@ import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY, usePhone } from "./pointer";
-import { OPEN_COMMENT, useThreads } from "./threads";
+import { handlesOpenComment, OPEN_COMMENT, openOutcome, openRequest, useThreads } from "./threads";
+import type { OpenRequest } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
@@ -83,6 +84,7 @@ const OWNS_UNDO = 'input, textarea, select, [contenteditable]:not([contenteditab
 
 /** The fragment Copy link writes and a page load follows. */
 const LINK = "#comment-";
+const OPEN_WAIT = 6000;
 
 function linkTo(id: string): string {
 	return `${location.origin}${location.pathname}${location.search}${LINK}${id}`;
@@ -398,6 +400,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let selected = useRef<string | undefined>(undefined);
 	/** A thread whose card should take focus once it is pinned, after a reopen from the margin. */
 	let focusOnOpen = useRef<string | undefined>(undefined);
+	/** A request for a thread the store has not received yet. */
+	let waiting = useRef<{ request: OpenRequest; timer: ReturnType<typeof setTimeout> } | undefined>(
+		undefined,
+	);
 	let options = useCellValue(widgets$);
 	let canEdit = options.canEdit !== false;
 	let phone = usePhone();
@@ -802,35 +808,52 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		};
 		// Chat can point at a thread that has since gone; say so rather than
 		// leaving a request to open it waiting for a thread that will not come.
-		let open = (event: Event) => {
-			let detail = (event as CustomEvent<unknown>).detail;
-			let request = typeof detail === "string"
-				? { thread: detail, focus: false }
-				: detail && typeof detail === "object" && "thread" in detail
-						&& typeof detail.thread === "string"
-				? { thread: detail.thread, focus: "focus" in detail && detail.focus === true }
-				: undefined;
-			if (!request) return;
+		let settle = (request: OpenRequest, waited: boolean): boolean => {
 			let id = request.thread;
-			focusOnOpen.current = request.focus ? id : undefined;
-			let status = store.status(id);
 			let view = store.snapshot().threads.find(entry => entry.thread.id === id);
-			let gone = status === "resolved"
-				? "This comment was resolved"
-				: status !== "open"
-				? "This comment is no longer here"
-				: view?.orphaned || view?.drifted
-				? "This comment's passage has changed"
-				: undefined;
-			if (!gone) return setLinked(id);
-			setLinked(undefined);
-			setNotice({ id, text: gone, undo: false });
+			let outcome = openOutcome(view, store.status(id), waited);
+			if ("wait" in outcome) return false;
+			focusOnOpen.current = request.focus ? id : undefined;
+			if ("open" in outcome) setLinked(id);
+			else {
+				setLinked(undefined);
+				setNotice({ id, text: outcome.gone, undo: false });
+			}
+			return true;
 		};
+		let open = (event: Event) => {
+			let request = openRequest((event as CustomEvent<unknown>).detail);
+			// The root's editor stays mounted under an open child; a request for the child's
+			// thread is the child's alone to answer.
+			if (!request || !handlesOpenComment(store.channel, request.channel)) return;
+			clearTimeout(waiting.current?.timer);
+			waiting.current = undefined;
+			if (settle(request, false)) return;
+			// Thread state follows the document; hold the request until the thread arrives,
+			// then say so plainly if it never does.
+			waiting.current = {
+				request,
+				timer: setTimeout(() => {
+					waiting.current = undefined;
+					settle(request, true);
+				}, OPEN_WAIT),
+			};
+		};
+		let arrived = store.subscribe(() => {
+			let pending = waiting.current;
+			if (!pending || store.status(pending.request.thread) === undefined) return;
+			clearTimeout(pending.timer);
+			waiting.current = undefined;
+			settle(pending.request, true);
+		});
 		addEventListener("hashchange", follow);
 		addEventListener(OPEN_COMMENT, open);
 		return () => {
 			removeEventListener("hashchange", follow);
 			removeEventListener(OPEN_COMMENT, open);
+			arrived();
+			clearTimeout(waiting.current?.timer);
+			waiting.current = undefined;
 		};
 	}, [store]);
 

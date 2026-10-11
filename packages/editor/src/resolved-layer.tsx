@@ -769,7 +769,7 @@ export function ResolvedLayer(
 			pointerRef.current = {};
 			dispatch({ type: "dismiss" });
 			// The comment layer opens the card once the thread has its passage back.
-			openCommentThread(id, { focus: true });
+			openCommentThread(id, { channel: threads.channel, focus: true });
 		});
 	}, [threads]);
 
