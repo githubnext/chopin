@@ -120,6 +120,7 @@ export default function DocumentWorkspaceHost(
 			resolution?: {
 				canonicalPath: string;
 				channel: Api.Channel;
+				requestKey: DocumentRouteIdentity;
 				routeKey: DocumentRouteIdentity;
 			},
 		) => void;
@@ -210,6 +211,7 @@ export default function DocumentWorkspaceHost(
 			let resolution = {
 				canonicalPath: prepared.pathname,
 				channel: (child ?? parent).channel,
+				requestKey: documentRouteIdentity(requestedRoute),
 				routeKey,
 			};
 			// The outgoing document stays on screen until this one has synced, briefly.

@@ -72,6 +72,8 @@ type DocumentRouteRequest = {
 export type DocumentRouteResolution = {
 	canonicalPath: string;
 	channel: Api.Channel;
+	/** The route identity this resolution answered, which a canonical rename can change. */
+	requestKey: DocumentRouteIdentity;
 	routeKey: DocumentRouteIdentity;
 };
 type DocumentRouteLayer = DocumentRouteSwapState<
@@ -221,8 +223,11 @@ function DocumentRouteSwap(
 	let published = useRef<DocumentRouteResolution | undefined>(undefined);
 	useEffect(() => {
 		let resolution = state.current.resolution;
-		// An outgoing route that resolves after a newer request must not canonicalize over it.
+		// An outgoing route that resolves after a newer request must not canonicalize over it. A
+		// parent and its child share a layer, so a child that resolves after a return to its
+		// parent arrives on the current layer and is told apart by the route it answered.
 		if (!resolution || state.pending || published.current === resolution) return;
+		if (resolution.requestKey !== state.current.routeKey) return;
 		published.current = resolution;
 		onCanonicalPath(resolution.canonicalPath);
 		void onDocumentLoaded(resolution.channel, resolution.routeKey);
@@ -231,6 +236,7 @@ function DocumentRouteSwap(
 		onDocumentLoaded,
 		state.current.key,
 		state.current.resolution,
+		state.current.routeKey,
 		state.pending,
 	]);
 
