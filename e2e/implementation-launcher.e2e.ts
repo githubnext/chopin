@@ -57,7 +57,7 @@ test("Build is a compact workspace view after Decisions", async ({ seed, join: e
 		"Build",
 	]);
 	await build.tap();
-	await expect(build).toHaveAttribute("aria-pressed", "true");
+	await expect(build).toHaveAttribute("aria-current", "page");
 	await expect(view).toBeVisible();
 	await expect(content(page)).not.toBeVisible();
 	await expect(view.getByText("No tasks yet.", { exact: true })).toBeVisible();

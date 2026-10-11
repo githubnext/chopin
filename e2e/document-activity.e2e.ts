@@ -31,8 +31,8 @@ async function rewrite(baseURL: string, room: string, plan: string): Promise<voi
 
 async function showDecisions(page: Page): Promise<void> {
 	let decisions = page.getByRole("button", { name: /^Decisions/ });
-	if (await decisions.getAttribute("aria-pressed") !== "true") await decisions.click();
-	await expect(decisions).toHaveAttribute("aria-pressed", "true");
+	if (await decisions.getAttribute("aria-current") !== "page") await decisions.click();
+	await expect(decisions).toHaveAttribute("aria-current", "page");
 }
 
 for (

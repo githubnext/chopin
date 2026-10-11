@@ -14,7 +14,7 @@ test("compact Decisions keeps a discarded decision reachable in resolved history
 		viewport: { width: 390, height: 844 },
 	});
 	let decisions = page.getByRole("button", { name: /^Decisions/ });
-	if (await decisions.getAttribute("aria-pressed") !== "true") await decisions.click();
+	if (await decisions.getAttribute("aria-current") !== "page") await decisions.click();
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Where should room state live?" }),
 	});

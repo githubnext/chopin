@@ -95,12 +95,12 @@
 	transition: transform var(--phone-bar-dur) var(--ease-out);
 }
 
-/* The whole bar tucks away; a glass strip stays under the status bar so prose never shows there. */
+/* The whole bar tucks away; a glass strip then takes its place under the status bar. */
 .workspace-root[data-workspace-bar="hidden"] > .phone-top-bar {
 	transform: translateY(-100%);
 }
 
-.workspace-root[data-workspace-phone]::before {
+.workspace-root[data-workspace-bar="hidden"]::before {
 	position: absolute;
 	z-index: 31;
 	inset-inline: 0;
@@ -279,6 +279,10 @@
 	white-space: nowrap;
 }
 
+.phone-tab-badge-inline {
+	display: none;
+}
+
 .phone-tab-badge {
 	position: absolute;
 	top: calc(var(--spacing) * -1.5);
@@ -337,11 +341,13 @@
 		height: calc(var(--spacing) * 4.5);
 	}
 
-	/* The label sits to the right now, so the count moves to the icon's leading corner. */
+	/* The label sits beside the icon, so the count follows the label inside the tab. */
 	.phone-tab-badge {
-		top: calc(var(--spacing) * -2.5);
-		right: calc(100% - var(--spacing) * 2);
-		left: auto;
+		display: none;
+	}
+
+	.phone-tab-badge-inline {
+		display: inline-flex;
 	}
 }
 

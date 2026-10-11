@@ -1031,7 +1031,7 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 	).toBe(true);
 	await page.mouse.click(destinationPoint.x, destinationPoint.y);
 	await expect(sheet).toHaveCount(0);
-	await expect(plan).toHaveAttribute("aria-pressed", "true");
+	await expect(plan).toHaveAttribute("aria-current", "page");
 	await expect(editor).toBeFocused();
 	sheet = await openDraft();
 	await page.locator("[data-plan-comment-sheet-backdrop]").click({

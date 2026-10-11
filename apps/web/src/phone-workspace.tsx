@@ -71,7 +71,6 @@ export function PhoneTabBar(
 							aria-describedby={unavailable ? buildReason : undefined}
 							aria-disabled={unavailable || undefined}
 							aria-label={labels[destination]}
-							aria-pressed={current}
 							className="phone-tab"
 							data-press="small"
 							key={destination}
@@ -100,6 +99,11 @@ export function PhoneTabBar(
 								)}
 							</span>
 							<span aria-hidden="true" className="phone-tab-label">{NAMES[destination]}</span>
+							{destination === "decisions" && unanswered > 0 && (
+								<span aria-hidden="true" className="phone-tab-badge-inline">
+									<Count>{unanswered}</Count>
+								</span>
+							)}
 						</button>
 					);
 				})}
@@ -133,7 +137,13 @@ export function usePhoneTopBar(
 		if (!enabled || !element) return;
 		let reduced = matchMedia("(prefers-reduced-motion: reduce)");
 		let last = new WeakMap<Element, number>();
+		let frame = 0;
+		// Collaborative edits mutate the document often; measure at most once a frame.
 		let measure = () => {
+			if (!frame) frame = requestAnimationFrame(measureNow);
+		};
+		let measureNow = () => {
+			frame = 0;
 			let scroller = element.querySelector<HTMLElement>(
 				'[data-document-view="plan"] [data-plan-scroll]',
 			);
@@ -174,6 +184,7 @@ export function usePhoneTopBar(
 		element.addEventListener("scroll", scroll, { capture: true, passive: true });
 		element.addEventListener("focusin", focus);
 		return () => {
+			cancelAnimationFrame(frame);
 			content.disconnect();
 			mutations.disconnect();
 			element.removeEventListener("scroll", scroll, { capture: true });
