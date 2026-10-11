@@ -30,6 +30,11 @@ const ASKED = [
 	{ header: "Scope", question: "What belongs in the first cut?" },
 	{ header: "Rollout", question: "How should we deploy?" },
 ];
+/** A member message asking the root's Planner to edit the child the member has open. */
+const CHILD_PROMPT = "CHILD-EDIT";
+const CHILD_TOOLS = ["list_children", "read_child", "edit_child"] as const;
+/** The focus line `focusContext()` writes ahead of the member's words. */
+const CHILD_FOCUS = /child id ([0-9a-f-]{36})/;
 const STEP_MS = 2_500;
 
 function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
@@ -125,6 +130,7 @@ export function createFakeHarness(
 
 					let prompt = promptText(turn.prompt);
 					let thread = COMMENT_THREAD.exec(prompt)?.[1];
+					let focused = CHILD_FOCUS.exec(prompt)?.[1];
 					let finish = () => {
 						turn.emit({
 							type: "finish-step",
@@ -145,7 +151,13 @@ export function createFakeHarness(
 							try {
 								await pause();
 								if (turn.abortSignal?.aborted) return;
-								await callTool("read_plan");
+								// A thread in a child is read through the child, which the turn has as focus.
+								let read = focused
+									? await callTool("read_child", undefined, { child: focused })
+									: await callTool("read_plan");
+								if (read.isError || String(read.output).startsWith("Error")) {
+									throw new Error(`reading the commented document failed: ${String(read.output)}`);
+								}
 								let backstop = prompt.includes(BACKSTOP_PROMPT);
 								if (!backstop) {
 									let replied = await callTool("reply_comment", undefined, {
@@ -197,6 +209,53 @@ export function createFakeHarness(
 										],
 									})),
 								});
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (prompt.includes(CHILD_PROMPT)) {
+						void (async () => {
+							try {
+								for (let toolName of CHILD_TOOLS) {
+									if (!available.has(toolName)) {
+										throw new Error(`e2e-fake harness expected host tool ${toolName}`);
+									}
+								}
+								if (!focused) throw new Error("CHILD-EDIT turn had no focused child");
+								let listed = await callTool("list_children");
+								let children = JSON.parse(String(listed.output)) as {
+									children: { id: string; focused?: boolean }[];
+								};
+								if (!children.children.some(item => item.id === focused && item.focused)) {
+									throw new Error("list_children did not mark the focused child");
+								}
+								let read = await callTool("read_child", undefined, { child: focused });
+								let view = JSON.parse(String(read.output)) as {
+									revision: number;
+									blocks: unknown[];
+								};
+								let edited = await callTool("edit_child", undefined, {
+									child: focused,
+									revision: view.revision,
+									operations: [{
+										op: "insert",
+										index: view.blocks.length - 1,
+										source: "Planner note from the root Chat.",
+									}],
+								});
+								if (!String(edited.output).includes('"ok": true')) {
+									throw new Error(`edit_child failed: ${String(edited.output)}`);
+								}
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({ type: "text-delta", id, delta: "I edited " });
+								turn.emit({ type: "text-delta", id, delta: "the open child." });
+								turn.emit({ type: "text-end", id });
 								finish();
 								settled.resolve();
 							} catch (err) {

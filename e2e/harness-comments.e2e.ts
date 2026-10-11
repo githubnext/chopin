@@ -2,6 +2,7 @@
  * A comment sent to Chopin, through the real server, sockets and host tools,
  * against the isolated `AGENT=on` fake-harness project.
  */
+import { startCommentToChopin } from "./comment-input";
 import { content, expect, ready, test } from "./room";
 
 import type { Page } from "@playwright/test";
@@ -62,10 +63,12 @@ test("typing @chopin addresses Chopin, who replies in the thread while Chat reco
 test("a turn that answers only in Chat still answers in the thread", async ({ join, seed }) => {
 	await seed("# Harness backstop\nThe harp needs new strings.\n");
 	let page = await join("ana");
-	let card = await draft(page);
-	await card.getByRole("checkbox", { name: "Send to Chopin" }).check();
-	await card.getByRole("textbox", { name: "Comment" }).fill("COMMENT-BACKSTOP is this right?");
-	await card.getByRole("button", { name: "Post comment", exact: true }).click();
+	await startCommentToChopin(
+		page,
+		page,
+		"The harp needs new strings.",
+		"COMMENT-BACKSTOP is this right?",
+	);
 
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
@@ -76,10 +79,7 @@ test("a turn that answers only in Chat still answers in the thread", async ({ jo
 test("stopping Chopin's turn says so on the thread", async ({ join, seed }) => {
 	await seed("# Harness stop\nThe harp needs new strings.\n");
 	let page = await join("ana");
-	let card = await draft(page);
-	await card.getByRole("checkbox", { name: "Send to Chopin" }).check();
-	await card.getByRole("textbox", { name: "Comment" }).fill("SLOW-LIVE take your time");
-	await card.getByRole("button", { name: "Post comment", exact: true }).click();
+	await startCommentToChopin(page, page, "The harp needs new strings.", "SLOW-LIVE take your time");
 
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
