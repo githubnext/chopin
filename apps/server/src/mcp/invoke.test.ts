@@ -93,6 +93,7 @@ test("invoke_planner exposes each refusal as an object code", async () => {
 			"document-unavailable",
 			"repository-forbidden",
 			"document-archived",
+			"planner-not-attached",
 			"planner-owner-unavailable",
 			"checkout-unverified",
 			"planner-unavailable",
@@ -106,4 +107,23 @@ test("invoke_planner exposes each refusal as an object code", async () => {
 		});
 		expect(result.result).toMatchObject({ isError: true, structuredContent: { code } });
 	}
+});
+
+test("invoke_planner carries a refusal's message beside its code", async () => {
+	let message = "No Planner is attached to this document. Connect a Planner client to attach one.";
+	let mcp = endpoint({
+		invoke: async () => ({ kind: "refused", code: "planner-not-attached", message }),
+	});
+	let result = await call(mcp, "tools/call", {
+		name: "invoke_planner",
+		arguments: { id: "document-id", instruction: "go" },
+	});
+	expect(result.result).toMatchObject({
+		isError: true,
+		structuredContent: { code: "planner-not-attached", message },
+	});
+	expect(JSON.parse(result.result.content[0].text)).toEqual({
+		code: "planner-not-attached",
+		message,
+	});
 });

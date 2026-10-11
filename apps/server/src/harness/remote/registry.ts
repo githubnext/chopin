@@ -26,7 +26,7 @@ export type RemotePlanner =
 	};
 
 let planners = new Map<string, RemotePlanner>();
-let links = new Map<string, PlannerLink[]>();
+let links = new Map<string, PlannerLink>();
 
 export function registerRemotePlanner(sessionId: string, planner: RemotePlanner): () => void {
 	if (planners.has(sessionId)) throw new Error("Remote Planner session is already registered");
@@ -40,19 +40,14 @@ export function remotePlanner(sessionId: string): RemotePlanner | undefined {
 	return planners.get(sessionId);
 }
 
-/**
- * Records a link attached to a document. Until one Planner per document is
- * enforced, the most recent attachment serves new sessions.
- */
+/** Records the link attached as a document's Planner; `PlannerAttachments` admits one per document. */
 export function attachLink(channelId: string, link: PlannerLink): () => void {
-	links.set(channelId, [...links.get(channelId) ?? [], link]);
+	links.set(channelId, link);
 	return () => {
-		let remaining = (links.get(channelId) ?? []).filter(candidate => candidate !== link);
-		if (remaining.length) links.set(channelId, remaining);
-		else links.delete(channelId);
+		if (links.get(channelId) === link) links.delete(channelId);
 	};
 }
 
 export function attachedLink(channelId: string): PlannerLink | undefined {
-	return links.get(channelId)?.at(-1);
+	return links.get(channelId);
 }

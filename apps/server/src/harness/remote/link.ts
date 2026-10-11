@@ -44,11 +44,16 @@ export type LinkSocket = {
 };
 
 export type AttachOutcome =
-	| { ok: true; document: ServerMessageOf<"attached">["document"] }
+	| {
+		ok: true;
+		document: ServerMessageOf<"attached">["document"];
+		/** Lets go of what attaching took, such as the document's Planner ownership. */
+		detach?: () => void;
+	}
 	| { ok: false; code: RefusalCode; message: string };
 
 export type LinkOptions = {
-	/** Resolves the document the client asked for, refusing what its caller cannot read. */
+	/** Resolves the document the client asked for and takes its Planner, or refuses. */
 	attach(message: ClientMessageOf<"attach">): Promise<AttachOutcome>;
 	/** Rechecks the caller's access; false closes the link. */
 	revalidate?(): Promise<boolean>;
@@ -65,6 +70,8 @@ const REFUSAL_CLOSE: Record<RefusalCode, number> = {
 	"access-revoked": LINK_CLOSE.forbidden,
 	"document-unavailable": LINK_CLOSE.unavailable,
 	"document-archived": LINK_CLOSE.unavailable,
+	"planner-attached": LINK_CLOSE.attached,
+	"sign-in-required": LINK_CLOSE.unauthorized,
 	unavailable: LINK_CLOSE.failed,
 };
 
@@ -601,11 +608,14 @@ export class PlannerLink {
 		}
 	}
 
-	/** Closes the link with `access-revoked` and throws when the caller can no longer read the document. */
+	/** Closes the link with `access-revoked` and throws when the caller may no longer be the Planner. */
 	async #recheck(): Promise<void> {
 		if (this.#options.revalidate && !await this.#options.revalidate()) {
-			this.#refuse("access-revoked", "The attached account can no longer read this document.");
-			throw new Error("The attached Planner can no longer read this document.");
+			this.#refuse(
+				"access-revoked",
+				"The attached account can no longer act as this document's Planner.",
+			);
+			throw new Error("The attached Planner can no longer act for this document.");
 		}
 		if (this.#state !== "attached") throw new Error("The Planner link closed.");
 	}
@@ -693,12 +703,20 @@ export class PlannerLink {
 			console.error("[planner-link] attach failed:", error);
 			outcome = { ok: false, code: "unavailable", message: "The document could not be checked." };
 		}
-		if (this.#state !== "attaching") return;
+		if (this.#state !== "attaching") {
+			if (outcome.ok) outcome.detach?.();
+			return;
+		}
 		if (!outcome.ok) return this.#refuse(outcome.code, outcome.message);
 		this.#channelId = outcome.document.id;
 		this.#state = "attached";
 		this.#send({ type: "attached", version: PLANNER_LINK_VERSION, document: outcome.document });
-		this.#forget = this.#options.register?.(outcome.document.id, this);
+		let unregister = this.#options.register?.(outcome.document.id, this);
+		let detach = outcome.detach;
+		this.#forget = () => {
+			unregister?.();
+			detach?.();
+		};
 		this.#watch = setInterval(
 			() => void this.#recheckAttached(),
 			this.#options.revalidateEveryMs ?? REVALIDATE_EVERY_MS,

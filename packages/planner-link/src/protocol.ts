@@ -18,6 +18,7 @@ export const LINK_CLOSE = {
 	unauthorized: 4401,
 	forbidden: 4403,
 	unavailable: 4404,
+	attached: 4409,
 	unsupportedVersion: 4426,
 } as const;
 
@@ -252,6 +253,8 @@ export const refusalCodeSchema = z.enum([
 	"document-unavailable",
 	"document-archived",
 	"access-revoked",
+	"planner-attached",
+	"sign-in-required",
 	"unavailable",
 ]);
 

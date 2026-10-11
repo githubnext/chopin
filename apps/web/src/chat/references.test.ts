@@ -18,6 +18,7 @@ import {
 	selectedReplacement,
 	withNoticesAfter,
 } from "./references";
+import { WireRefusal } from "../wire";
 
 import type { ReferenceDraft, ReferenceTarget } from "./references";
 
@@ -365,5 +366,11 @@ describe("acknowledged composer drafts", () => {
 		expect(bounded.length).toBeLessThanOrEqual(138);
 		expect(bounded).toEndWith("...");
 		expect(boundedChatError(new Error("connection lost"))).toContain("Check the connection");
+	});
+
+	test("shows a missing remote Planner's instructions whole, however long", () => {
+		let message = `No Planner is attached to this document. ${"Connect a Planner client. ".repeat(20)}`.trim();
+		expect(boundedChatError(new WireRefusal(message, "planner-not-attached"))).toBe(message);
+		expect(boundedChatError(new WireRefusal(message))).toEndWith("...");
 	});
 });

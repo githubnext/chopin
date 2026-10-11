@@ -276,6 +276,30 @@ describe("the hosted MCP adapter", () => {
 		}
 	});
 
+	it("tells an invocation with no attached Planner how to attach one, naming the document URL", async () => {
+		let context = setup();
+		context.github.repositoryValue.permissions.push = true;
+		let opened = await plan(context);
+		let adapter = hosted(context.auth, undefined, {
+			invokePlanner: async () => "planner-not-attached",
+		});
+		let caller = (await adapter.caller(request("Bearer allowed")))!;
+		try {
+			expect(
+				await adapter.invoke!.invoke(caller, { id: opened.channel.id, instruction: "Plan it." }),
+			).toEqual({
+				kind: "refused",
+				code: "planner-not-attached",
+				message: "No Planner is attached to this document. To attach one, connect a Planner client to "
+					+ "https://chopin.test/documents/octo-org/score/release-readiness over the Planner "
+					+ "link from a session in a checkout of octo-org/score; that session becomes this "
+					+ "document's Planner.",
+			});
+		} finally {
+			await Service.close(opened.plan);
+		}
+	});
+
 	it("passes a URL invocation's checkout through unverified for the harness to judge", async () => {
 		let context = setup();
 		context.github.repositoryValue.permissions.admin = true;

@@ -533,6 +533,12 @@ export type Room = {
 	 */
 	claimantSessionId: string | undefined;
 	repository: HostedRepository;
+	/**
+	 * Under `HARNESS=remote`, how to attach a Planner when none is attached, or
+	 * undefined while one is. Planner requests are refused before anything is
+	 * posted or queued, and only an attachment takes Planner ownership.
+	 */
+	plannerNotAttached?: () => Promise<string | undefined>;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	persist: (chat?: () => Pick<Chat, "entries" | "runs">) => Promise<void>;
 	commitRoomMessage?: (entry: Wire.Entry) => Promise<void>;
@@ -596,6 +602,7 @@ export async function invoke(
 	checkout?: string,
 ): Promise<
 	| "planner-unavailable"
+	| "planner-not-attached"
 	| "planner-owner-unavailable"
 	| "planner-queue-full"
 	| "checkout-unverified"
@@ -606,13 +613,14 @@ export async function invoke(
 	chat.pendingSends++;
 	let post = async () => {
 		if (!context.config.agent || chat.closed) return "planner-unavailable" as const;
+		if (await context.plannerNotAttached?.()) return "planner-not-attached" as const;
 		let verified: string | undefined;
 		if (checkout !== undefined && context.config.harness === "atomic") {
 			verified = await verifiedCheckout(context.repository, checkout);
 			if (!verified) return "checkout-unverified" as const;
 		}
 		try {
-			await resolveOwner(context.auth, context.repository, room, context.claimantSessionId);
+			await resolveOwner(context.auth, context.repository, room, claimant(context));
 		} catch {
 			return "planner-owner-unavailable" as const;
 		}
@@ -773,6 +781,10 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		for (let entry of entries) announce(server, room, entry);
 		return;
 	}
+
+	let unattached = await context.plannerNotAttached?.();
+	if (unattached) return fail(ws, msg.rid, unattached, "planner-not-attached");
+	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
 
 	if (chat.busy) {
 		if (chat.waiting.length >= MAX_QUEUE) {
@@ -1621,7 +1633,7 @@ async function repositorySession(
 		context.auth,
 		context.repository,
 		context.room,
-		claimantSessionId,
+		context.plannerNotAttached ? undefined : claimantSessionId,
 	);
 	if (context.ownerAvailable) void context.ownerAvailable().catch(() => {});
 	let { chat, auth } = context;
@@ -1704,6 +1716,11 @@ async function repositorySession(
 	} finally {
 		if (chat.openingOwner === openingOwner) chat.openingOwner = undefined;
 	}
+}
+
+/** The login that may claim Planner ownership for the room; none where only an attachment may. */
+function claimant(context: Room): string | undefined {
+	return context.plannerNotAttached ? undefined : context.claimantSessionId;
 }
 
 /**

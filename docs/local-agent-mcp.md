@@ -92,6 +92,20 @@ browser `@chopin` message would:
 - Without either, the call is refused with `planner-owner-unavailable` and
   nothing is posted.
 
+A server running `HARNESS=remote` claims no ownership here. Its Planner runs in
+a client attached to the document over the [Planner link](planner-link.md), and
+only attaching makes an account the owner. With a client attached the turn goes
+to it and runs under its owner, whoever invoked it. Without one, including
+while a detached Planner's grace period runs, the call is refused with
+`planner-not-attached` and a `message`, and nothing is posted or queued:
+
+```json
+{
+	"code": "planner-not-attached",
+	"message": "No Planner is attached to this document. To attach one, connect a Planner client to https://chopin.example/documents/octo-org/score/release-readiness over the Planner link from a session in a checkout of octo-org/score; that session becomes this document's Planner."
+}
+```
+
 The MCP bearer never becomes the owner or supplies its credentials. The bearer
 needs repository write access; an owner must also pass the GitHub App
 installation check.
@@ -131,8 +145,13 @@ browser need not already have the document open: Chopin keeps its room alive
 while the invoked turn and queue run. An interrupted turn is not replayed
 automatically on restart.
 
-Refusals return an object with `code`:
+Refusals return an object with `code`, and `planner-not-attached` also a
+`message`:
 
+- `planner-not-attached`: under `HARNESS=remote`, no client is attached as the
+  document's Planner. `message` names the document URL and says to connect a
+  Planner client to it over the Planner link from a session in a checkout of
+  the repository, which attaches that session as the Planner.
 - `planner-owner-unavailable`: the document has no usable Planner owner and the
   caller has no live browser login to claim it; sign in to Chopin in a browser
   as the MCP account, or ask the owner to sign in again.

@@ -10,6 +10,8 @@
  * same build work on localhost, over a LAN address, and through a tunnel.
  */
 
+import type { Session } from "@chopin/protocol";
+
 export type Status =
 	| "connecting"
 	| "connected"
@@ -19,6 +21,17 @@ export type Status =
 	| "closed";
 
 export type Unsubscribe = () => void;
+
+/** A request the server refused; `code` marks a refusal to present in full. */
+export class WireRefusal extends Error {
+	readonly code: Session.Failure["code"];
+
+	constructor(message: string, code?: Session.Failure["code"]) {
+		super(message);
+		this.name = "WireRefusal";
+		this.code = code;
+	}
+}
 
 type Frame = { kind: string; ts: number; rid?: string; sender?: string };
 
@@ -267,7 +280,8 @@ export class Wire {
 			if (waiting) {
 				this.#pending.delete(frame.rid);
 				if (frame.kind === "session:error") {
-					waiting.reject(new Error(String((frame as { message?: string }).message)));
+					let failure = frame as Partial<Session.Failure>;
+					waiting.reject(new WireRefusal(String(failure.message), failure.code));
 				} else {
 					waiting.resolve(frame as never);
 				}

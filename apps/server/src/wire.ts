@@ -11,7 +11,7 @@
  */
 
 import type { Server, ServerWebSocket } from "bun";
-import type { Frame, Outgoing } from "@chopin/protocol";
+import type { Frame, Outgoing, Session } from "@chopin/protocol";
 import type { DecisionWatch } from "./socket/decision-watch";
 
 export type Identity = {
@@ -82,8 +82,13 @@ export function reply<T extends Outgoing>(ws: Sender, rid: string, frame: T): vo
 }
 
 /** Refuse one request, on the socket that made it. */
-export function fail(ws: Sender, rid: string, message: string): void {
-	ws.send(stamp({ kind: "session:error", ts: 0, message }, { rid }));
+export function fail(
+	ws: Sender,
+	rid: string,
+	message: string,
+	code?: Session.Failure["code"],
+): void {
+	ws.send(stamp({ kind: "session:error", ts: 0, message, ...(code ? { code } : {}) }, { rid }));
 }
 
 /** Tell one socket something it did not ask for. */

@@ -81,23 +81,81 @@ The server answers:
 ```
 
 `attached.document.repository` is `owner/name`, at most 257 characters, and
-`url` at most 2048. `attach` succeeds when the bearer's GitHub account has pull
-access to the document's repository. After `refused` the server closes the link.
+`url` at most 2048. After `refused` the server closes the link.
 
-The server checks the account's admission and pull access again before every
-`start` and every `turn`, and every 5 minutes while the link is attached. Once
-either is lost it sends `refused` with `access-revoked` and closes the link with
-4403; the turn that triggered the check fails. A GitHub outage during a periodic
-check leaves the link open.
+### Ownership
 
-| Refusal code           | Close code | Meaning                                           |
-| ---------------------- | ---------- | ------------------------------------------------- |
-| `unsupported-version`  | 4426       | The server speaks another `version`               |
-| `repository-forbidden` | 4403       | The account cannot read the document's repository |
-| `document-unavailable` | 4404       | No document matches, or it is being deleted       |
-| `document-archived`    | 4404       | The document is archived                          |
-| `access-revoked`       | 4403       | Access was lost after attaching (see below)       |
-| `unavailable`          | 1011       | The server could not check the document           |
+Attaching makes the client the document's Planner and its account the
+document's Planner owner. `attach` succeeds when all of these hold:
+
+- The bearer's GitHub account has push or administration access to the
+  document's repository. Pull access alone is refused with
+  `repository-forbidden`.
+- The same account is signed in to Chopin in a browser, on this server, since
+  the server last started. Chopin's repository tools run with that sign-in's
+  GitHub App token, never with the link's bearer. Without one, `attach` is
+  refused with `sign-in-required`; sign in at the server's origin and attach
+  again.
+- That sign-in also passes instance admission and has push or administration
+  access to the repository.
+- No other client holds the document's Planner (see below).
+
+These are the checks every Planner owner passes. A document has one Planner at a
+time. While a client is attached, any other `attach` for that document is
+refused with `planner-attached`, including one from the same account, and the
+`message` names the holder's GitHub login:
+
+```text
+octocat is attached as this document's Planner. A document has one Planner at a time.
+```
+
+When the link closes, whether by `detach` or a dropped socket, its account keeps
+the ownership for a grace period, 2 minutes unless the operator sets
+`PLANNER_ATTACH_GRACE_MS`. During it the same account can attach again and keeps
+the ownership; another account is refused with `planner-attached`, and the
+`message` says until when the holder keeps it:
+
+```text
+octocat detached from this document's Planner and holds it until 2026-10-10T19:42:00.000Z unless they reattach. A document has one Planner at a time.
+```
+
+When the grace period ends the ownership is released and any eligible account
+can attach. A server restart releases every attachment and ownership at once;
+reattach after it.
+
+The server checks the account's admission and push or administration access
+again before every `start` and every `turn`, and every 5 minutes while the link
+is attached. Once either is lost, or the document is archived or deleted, it
+sends `refused` with `access-revoked` and closes the link with 4403; the turn
+that triggered the check fails. A GitHub outage during a periodic check leaves
+the link open.
+
+| Refusal code           | Close code | Meaning                                                                |
+| ---------------------- | ---------- | ---------------------------------------------------------------------- |
+| `unsupported-version`  | 4426       | The server speaks another `version`                                    |
+| `repository-forbidden` | 4403       | The account cannot push to or administer the document's repository     |
+| `sign-in-required`     | 4401       | The account has no live Chopin browser sign-in on this server          |
+| `planner-attached`     | 4409       | Another client holds the document's Planner; `message` names its login |
+| `document-unavailable` | 4404       | No document matches, or it is being deleted                            |
+| `document-archived`    | 4404       | The document is archived                                               |
+| `access-revoked`       | 4403       | Access was lost after attaching (see above)                            |
+| `unavailable`          | 1011       | The server could not check the document                                |
+
+### Without an attached Planner
+
+On a server running `HARNESS=remote`, an `@chopin` message in the browser and
+an MCP `invoke_planner` call for a document with no attached client are refused
+with the code `planner-not-attached`, and nothing is posted or queued. A
+document whose Planner is within its grace period counts as unattached. The
+refusal's message names the document URL:
+
+```text
+No Planner is attached to this document. To attach one, connect a Planner client to <document URL> over the Planner link from a session in a checkout of <owner/name>; that session becomes this document's Planner.
+```
+
+[Local agent MCP](local-agent-mcp.md#hand-an-instruction-to-the-planner) shows
+how `invoke_planner` returns it. Once a client is attached, both arrive as
+`turn`s on its link.
 
 ## Server to client
 
@@ -185,7 +243,8 @@ check leaves the link open.
   before `turn-end` so the server keeps the session while runs are live. Reports
   only change run cards and Chat notices; they never start a Planner turn.
 - `control-result` answers `stop` or `resume`.
-- `detach` closes the link with code 1000.
+- `detach` closes the link with code 1000. The account keeps the document's
+  Planner for the grace period in [Ownership](#ownership).
 
 Messages for a session or turn that has ended are ignored, except a
 `host-tool-call`, which gets an error result (`The turn has ended.` or
@@ -321,16 +380,19 @@ ids. When the link closes, the server shows the reported live runs as stopped.
 | 1008       | `error` with `malformed-message` or `protocol` | Unparseable, invalid, or out-of-order message |
 | 1009       | `error` with `message-too-large`               | A frame over 2 MiB                            |
 | 1011       | `refused` with `unavailable`                   | The server could not check the document       |
+| 4401       | `refused`                                      | `sign-in-required`                            |
 | 4403       | `refused`                                      | `repository-forbidden` or `access-revoked`    |
 | 4404       | `refused`                                      | `document-unavailable` or `document-archived` |
+| 4409       | `refused`                                      | `planner-attached`                            |
 | 4426       | `refused`                                      | `unsupported-version`                         |
 
 `protocol` covers a message before `attach` is answered, a second `attach`, and
 a repeated `input-request` id the server remembers. When the link closes for
 any reason, the server ends a running turn with an error, stops the turn's host
 tools still running, withdraws open questions and the Decisions those tools
-opened, and forgets the link; reattaching starts new sessions. A server never
-replays an interrupted turn.
+opened, and forgets the link; reattaching starts new sessions. The account keeps
+the document's Planner ownership for the grace period described in
+[Ownership](#ownership). A server never replays an interrupted turn.
 
 A client that receives a frame it cannot parse should close with 4400 and reason
 `malformed-message`. Node.js's `WebSocket` lets a caller close only with 1000 or

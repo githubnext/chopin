@@ -35,7 +35,8 @@ the default `copilot-sdk` harness, the Copilot entitlement. Under `HARNESS=pi`
 and `HARNESS=atomic` the owner supplies only the GitHub token; model access
 comes from the operator's `HARNESS_AUTH` mode. Under `HARNESS=remote` the owner
 also supplies only the GitHub token, and the model runs in the client attached
-to the document. The user must pass instance
+to the document; only [attaching](#remote-planner) makes an account the owner
+there. The user must pass instance
 admission and have repository push or administration access. Ownership is
 assigned atomically in storage and guarded by a generation token.
 
@@ -51,6 +52,10 @@ call follows the same rules. Its instruction is posted as the caller's own
 message; the turn runs under the channel's current owner, whoever that is. A
 channel without one is claimed for the caller's live browser login, hosted or
 local, and without such a login the call is refused and nothing is posted.
+Under `HARNESS=remote` neither `invoke_planner`, `@chopin`, nor a research
+request claims ownership: a document without an attached Planner refuses them
+with `planner-not-attached`, and one with an attached Planner runs them under
+its owner.
 
 Planner ownership stores only the owner session ID, referring to a login loaded
 in this process. Hosted logins separately persist encrypted credentials in
@@ -286,14 +291,48 @@ checked exactly as hosted MCP checks it: the token must resolve through instance
 admission, a bad or missing token gets HTTP 401, a refused account 403, a foreign
 `Origin` 403, and GitHub outages 503, all before anything is upgraded. The first
 message must be `attach` with protocol version 1. Its document is resolved like
-an MCP document locator, and the bearer's own account must have pull access to
-the document's repository. An unsupported version, an unreadable repository, or
-a missing or archived document is refused with a `refused` message and close
-code 4426, 4403, or 4404. Neither attaching nor a refusal posts anything to the
-document. The account and repository access are checked again before every
-session and every turn the link starts, including turns of a session kept for
-its runs, and every 5 minutes while the link stays attached; losing either
-fails that session or turn and closes the link with `access-revoked`.
+an MCP document locator, and the bearer's own account must have push or
+administration access to the document's repository. An unsupported version, a
+repository it cannot write, or a missing or archived document is refused with a
+`refused` message and close code 4426, 4403, or 4404. Neither attaching nor a
+refusal posts anything to the document. The account and repository access are
+checked again before every session and every turn the link starts, including
+turns of a session kept for its runs, and every 5 minutes while the link stays
+attached; losing either fails that session or turn and closes the link with
+`access-revoked`.
+
+**Ownership.** Attaching makes the account the document's Planner owner through
+the same generation-guarded storage claim as any other owner
+(`apps/server/src/harness/remote/attachments.ts`). The owner record names the
+account's live browser login, not the link, because Chopin's repository tools
+run with that login's GitHub App token and never with the link's bearer; an
+account with no live sign-in since the server started is refused with
+`sign-in-required` (4401). The login must pass the same eligibility as every
+Planner owner: instance admission and push or administration access. This is
+stricter than the design's "can read the repository", because an attached
+client steers what the Planner writes and runs repository tools as the owner.
+An owner left without an attachment, which only a race or an operator reset can
+produce, is cleared under its generation and the document is claimed again.
+
+One client holds a document's Planner. While it is attached, every other
+`attach` for that document is refused with `planner-attached` (4409) and a
+message naming its GitHub login. A link that detaches or drops keeps the
+ownership for `PLANNER_ATTACH_GRACE_MS` (2 minutes by default): the same account
+can attach again within it and keeps the same ownership generation, and anyone
+else is refused. When it ends, the ownership is cleared under its generation, so
+a newer owner is never released by an old timer. Attachments live in the server
+process; startup already clears every owner reference, which releases every
+attachment.
+
+**Unattached documents.** Members, MCP callers, and research requests never claim
+ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
+for a document with no attached client, including one within its grace period,
+is refused with `planner-not-attached` before anything is posted or queued. The
+refusal names the document URL and says to connect a Planner client to it over
+the Planner link from a session in a checkout of the repository, which attaches
+that session as the Planner; the browser shows that text on the `@chopin`
+request. Room messages are unaffected. Once a client is attached, both arrive as
+turns on its link and run under its ownership whoever sent them.
 
 **Turns and tools.** Chopin's host tools (document, repository, and job tools)
 still run in the server against the room, under the document's Planner owner and
@@ -333,12 +372,10 @@ gains no shell or filesystem access from this harness. The client, in turn,
 receives everything a Planner turn sees: the conversation, the document, and
 the results of repository tools that run with the document Planner owner's
 GitHub App token, limited to the document's repository, which its own account
-can already read. Attaching requires only pull access, yet the attached client
-decides what the Planner writes to the document during turns writers start, so
-attach only clients you would let edit the document. Until one Planner per
-document is enforced, the most recently attached link serves new sessions and
-earlier ones stay connected. Summary and research workers have no model in the
-server, so `HARNESS=remote` requires `BACKGROUND_JOBS=off`.
+can already read. The attached client decides what the Planner writes to the
+document during turns writers start, which is why attaching requires the push
+or administration access every Planner owner needs. Summary and research workers
+have no model in the server, so `HARNESS=remote` requires `BACKGROUND_JOBS=off`.
 
 ## Permission checks
 

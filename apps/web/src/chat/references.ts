@@ -364,6 +364,7 @@ export function acknowledgeDraft(current: ComposerDraft, submitted: ComposerDraf
 
 export function boundedChatError(error: unknown): string {
 	let detail = error instanceof Error ? error.message.trim() : "";
+	if (detail && (error as { code?: unknown }).code === "planner-not-attached") return detail;
 	if (!detail || /^(connection lost|disposed|not connected)$/i.test(detail)) {
 		return "Message not sent. Check the connection and try again.";
 	}

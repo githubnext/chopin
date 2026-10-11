@@ -16,12 +16,15 @@ import {
 	attach,
 	DENIED_TOKEN,
 	finishTurn,
+	GUEST_TOKEN,
 	linkAuth,
 	linkServer,
+	MEMBER_TOKEN,
 	OUTSIDER_TOKEN,
 	rawLink,
-	READER_TOKEN,
+	RIVAL_TOKEN,
 	scriptedPlanner,
+	VIEWER_TOKEN,
 } from "../../testing/planner-link";
 import { createRemoteAdapter } from "./adapter";
 import { admitPlannerLink } from "./endpoint";
@@ -145,7 +148,7 @@ describe("Planner link admission", () => {
 			.toBe(403);
 		expect(
 			(await upgradeRequest(server.url, {
-				authorization: `Bearer ${READER_TOKEN}`,
+				authorization: `Bearer ${MEMBER_TOKEN}`,
 				origin: "https://elsewhere.test",
 			})).status,
 		).toBe(403);
@@ -157,7 +160,7 @@ describe("Planner link admission", () => {
 	it("answers 404 where the server does not run the remote Planner", async () => {
 		let { auth } = await linkAuth();
 		let request = new Request("https://chopin.test/planner-link", {
-			headers: { authorization: `Bearer ${READER_TOKEN}`, upgrade: "websocket" },
+			headers: { authorization: `Bearer ${MEMBER_TOKEN}`, upgrade: "websocket" },
 		});
 		let refused = await admitPlannerLink(request, auth, false);
 		expect(refused).toBeInstanceOf(Response);
@@ -174,18 +177,18 @@ describe("Planner link admission", () => {
 				(error: PlannerLinkRefused) => error.code,
 			);
 		expect(await refusal(OUTSIDER_TOKEN, channel.id)).toBe("repository-forbidden");
-		expect(await refusal(READER_TOKEN, crypto.randomUUID())).toBe("document-unavailable");
+		expect(await refusal(MEMBER_TOKEN, crypto.randomUUID())).toBe("document-unavailable");
 		let raw = await rawLink(server.url);
 		raw.send({ type: "attach", version: PLANNER_LINK_VERSION + 1, document: channel.id });
 		expect(await raw.next("refused")).toMatchObject({ code: "unsupported-version" });
 		expect((await raw.closed).code).toBe(LINK_CLOSE.unsupportedVersion);
 		expect(await storage.channels.get(channel.id)).toEqual(before);
 		await storage.channels.archive({ id: channel.id, now: new Date() });
-		expect(await refusal(READER_TOKEN, channel.id)).toBe("document-archived");
+		expect(await refusal(MEMBER_TOKEN, channel.id)).toBe("document-archived");
 		expect(server.links).toEqual([]);
 	});
 
-	it("attaches a reader to the document by id or URL", async () => {
+	it("attaches a member to the document by id or URL", async () => {
 		let { server, channel } = await setup();
 		let client = await attach(server.url, channel.id, scriptedPlanner().handlers);
 		expect(client.document).toEqual({
@@ -194,11 +197,136 @@ describe("Planner link admission", () => {
 			repository: "octo-org/score",
 			url: `https://chopin.test/documents/octo-org/score/${channel.slug}`,
 		});
+		await client.detach();
 		let byUrl = await attach(server.url, client.document.url!, scriptedPlanner().handlers);
 		expect(byUrl.document.id).toBe(channel.id);
-		expect(server.links.map(link => link.channelId)).toEqual([channel.id, channel.id]);
+		expect(server.links.map(link => link.channelId)).toEqual([channel.id]);
 		await byUrl.detach();
-		await client.detach();
+		expect(server.links).toEqual([]);
+	});
+});
+
+describe("Planner link ownership", () => {
+	/** The code, message, and close code an attach is refused with. */
+	async function refused(url: string, document: string, token: string) {
+		let raw = await rawLink(url, token);
+		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document });
+		let refusal = await raw.next("refused");
+		return { code: refusal.code, message: refusal.message, close: (await raw.closed).code };
+	}
+
+	async function owner(
+		storage: Awaited<ReturnType<typeof linkAuth>>["storage"],
+		channelId: string,
+	) {
+		return (await storage.channels.readAgent(channelId, new Date()))?.agent;
+	}
+
+	it("makes the attaching member the owner through their browser login, replacing an unattached owner", async () => {
+		let { auth, storage, channel, logins } = await linkAuth();
+		let server = linkServer(auth);
+		cleanups.push(server.stop);
+		let stale = await storage.channels.claimAgentOwner(
+			channel.id,
+			logins.get("rival")!,
+			new Date(),
+		);
+		expect(stale).toMatchObject({ ownerSessionId: logins.get("rival"), generation: 1 });
+		let client = await attach(server.url, channel.id, scriptedPlanner().handlers);
+		cleanups.push(() => client.detach());
+		expect(await owner(storage, channel.id))
+			.toMatchObject({ ownerSessionId: logins.get("member"), generation: 2, status: "ready" });
+		expect(server.attachments.attached(channel.id)).toBe(true);
+		expect(server.attachments.holder(channel.id)).toBe("member");
+	});
+
+	it("refuses a second attach while a Planner is attached, naming the holder", async () => {
+		let { auth, storage, channel, logins } = await linkAuth();
+		let server = linkServer(auth);
+		cleanups.push(server.stop);
+		let client = await attach(server.url, channel.id, scriptedPlanner().handlers);
+		cleanups.push(() => client.detach());
+		let held = await owner(storage, channel.id);
+		expect(held).toMatchObject({ ownerSessionId: logins.get("member"), generation: 1 });
+		for (let token of [RIVAL_TOKEN, MEMBER_TOKEN]) {
+			expect(await refused(server.url, channel.id, token)).toEqual({
+				code: "planner-attached",
+				message: "member is attached as this document's Planner. "
+					+ "A document has one Planner at a time.",
+				close: LINK_CLOSE.attached,
+			});
+		}
+		expect(await owner(storage, channel.id)).toEqual(held);
+		expect(server.links).toHaveLength(1);
+	});
+
+	it("refuses an account that cannot push or has no browser login, and takes no ownership", async () => {
+		let { auth, storage, channel } = await linkAuth();
+		let server = linkServer(auth);
+		cleanups.push(server.stop);
+		expect(await refused(server.url, channel.id, VIEWER_TOKEN)).toEqual({
+			code: "repository-forbidden",
+			message: "Attaching as this document's Planner needs push or administration access to "
+				+ "octo-org/score.",
+			close: LINK_CLOSE.forbidden,
+		});
+		expect(await refused(server.url, channel.id, GUEST_TOKEN)).toEqual({
+			code: "sign-in-required",
+			message: "Sign in to Chopin at https://chopin.test in a browser as guest, then attach "
+				+ "again. The Planner's repository tools act with that sign-in.",
+			close: LINK_CLOSE.unauthorized,
+		});
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
+		expect(server.links).toEqual([]);
+	});
+
+	it("keeps ownership through the grace period for the same member, then releases it", async () => {
+		let { auth, storage, channel, logins } = await linkAuth();
+		let server = linkServer(auth, 2_000, undefined, 400);
+		cleanups.push(server.stop);
+		let first = await attach(server.url, channel.id, scriptedPlanner().handlers);
+		await first.detach();
+		expect(await owner(storage, channel.id))
+			.toMatchObject({ ownerSessionId: logins.get("member"), generation: 1 });
+		let refusal = await refused(server.url, channel.id, RIVAL_TOKEN);
+		expect(refusal).toMatchObject({ code: "planner-attached", close: LINK_CLOSE.attached });
+		expect(refusal.message).toStartWith(
+			"member detached from this document's Planner and holds it until ",
+		);
+
+		let dropped = await rawLink(server.url);
+		dropped.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+		await dropped.next("attached");
+		expect(await owner(storage, channel.id))
+			.toMatchObject({ ownerSessionId: logins.get("member"), generation: 1 });
+		dropped.socket.close();
+		await dropped.closed;
+		await Bun.sleep(100);
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBe(logins.get("member"));
+		for (let deadline = Date.now() + 3_000; Date.now() < deadline;) {
+			if (!(await owner(storage, channel.id))?.ownerSessionId) break;
+			await Bun.sleep(25);
+		}
+		expect(await owner(storage, channel.id))
+			.toMatchObject({ ownerSessionId: undefined, generation: 1, status: "unavailable" });
+
+		let rival = await attach(server.url, channel.id, scriptedPlanner().handlers, RIVAL_TOKEN);
+		cleanups.push(() => rival.detach());
+		expect(await owner(storage, channel.id))
+			.toMatchObject({ ownerSessionId: logins.get("rival"), generation: 2 });
+	});
+
+	it("detaches a link whose account loses push access while it stays attached", async () => {
+		let { auth, channel } = await linkAuth();
+		let server = linkServer(auth, 300, 20);
+		cleanups.push(server.stop);
+		let client = await attach(server.url, channel.id, scriptedPlanner().handlers);
+		let repository = auth.github.repository;
+		auth.github.repository = async (token, owner, name) => ({
+			...await repository(token, owner, name),
+			permissions: { pull: true, push: false, admin: false },
+		});
+		expect(await client.closed).toEqual({ code: LINK_CLOSE.forbidden, reason: "access-revoked" });
 		expect(server.links).toEqual([]);
 	});
 });
@@ -416,7 +544,7 @@ describe("Planner link protocol", () => {
 			throw new GitHubError("Not Found", 404);
 		};
 		await expect(harness.doStart({ sessionId: "second", sandboxSession, sessionWorkDir: "/tmp" }))
-			.rejects.toThrow("can no longer read this document");
+			.rejects.toThrow("can no longer act for this document");
 		expect(server.links).toEqual([]);
 	});
 
@@ -430,7 +558,7 @@ describe("Planner link protocol", () => {
 			throw new GitHubError("Not Found", 404);
 		};
 		let revoked = await streamOn(agent, session, "second");
-		expect(revoked.errors.join("\n")).toContain("can no longer read this document");
+		expect(revoked.errors.join("\n")).toContain("can no longer act for this document");
 		expect(server.links).toEqual([]);
 	});
 
@@ -457,7 +585,7 @@ describe("Planner link protocol", () => {
 			throw new GitHubError("Bad credentials", 401);
 		};
 		let revoked = await streamOn(agent, session, "second");
-		expect(revoked.errors.join("\n")).toContain("can no longer read this document");
+		expect(revoked.errors.join("\n")).toContain("can no longer act for this document");
 		expect(await client.closed).toEqual({ code: LINK_CLOSE.forbidden, reason: "access-revoked" });
 		expect(server.links).toEqual([]);
 	});
@@ -527,6 +655,8 @@ describe("Planner link protocol", () => {
 			})();
 			let outcome = await streamTurn(harness, "reuse");
 			await driving;
+			raw.socket.close();
+			await raw.closed;
 			return outcome.errors.join("\n");
 		}
 		readPlanRuns = 0;

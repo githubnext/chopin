@@ -145,8 +145,11 @@ harness sessions; see [Background jobs](background-jobs.md).
 
 Under `HARNESS=remote`, `/planner-link` accepts a WebSocket whose upgrade carries
 a GitHub bearer, checked like `/mcp`. The client attaches to one document and
-needs pull access to its repository, rechecked before every session and turn and
-periodically while attached. Turns run on the client's model; Chopin's host
+needs push or administration access to its repository, rechecked before every
+session and turn and periodically while attached. Attaching makes the account's
+live browser login the document's Planner owner, one client per document; a
+document without one refuses Planner requests with `planner-not-attached`.
+Turns run on the client's model; Chopin's host
 tools, Decisions, and room writes still run in the server under the document's
 Planner owner and the permission checks above. The client sees what a turn sees
 and steers its document writes during turns writers start; its run reports never
