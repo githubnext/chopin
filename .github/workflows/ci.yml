@@ -119,8 +119,11 @@ jobs:
       - name: Diagram gallery (rendering and keyboard behaviour)
         run: bun run diagrams:test
 
-      # Build once, and reject development previews before the long browser suite.
+      # Build once, and reject development previews before the long browser suite. The browser
+      # suite reuses this build, so it carries the same child-motion toggle as scripts/e2e.ts.
       - run: bun run build
+        env:
+          VITE_CHILD_MOTION_TOGGLE: "on"
 
       - name: Verify design audit stays out of production
         run: bun scripts/check-design-production.ts
