@@ -77,6 +77,53 @@
 	background: transparent;
 }
 
+/* The preview sits above the whole-card open button; only its links take the pointer. */
+.plan-research-preview-toggle {
+	position: relative;
+	z-index: 2;
+}
+
+.plan-research-card .plan-research-preview {
+	position: relative;
+	z-index: 2;
+	margin-block-start: -0.5rem;
+	pointer-events: none;
+}
+
+.plan-research-preview a {
+	pointer-events: auto;
+	color: var(--color-brand);
+	text-decoration: underline;
+	text-decoration-color: color-mix(in oklch, var(--color-brand) 30%, transparent);
+	text-underline-offset: 0.15em;
+}
+
+.plan-research-preview-body {
+	display: grid;
+	gap: 0.5rem;
+	padding-block-start: 1rem;
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-secondary);
+}
+
+.plan-research-preview-body p,
+.plan-research-preview-sources {
+	margin: 0;
+}
+
+.plan-research-preview-question {
+	display: grid;
+	gap: 0.125rem;
+}
+
+.plan-research-preview-sources {
+	display: grid;
+	gap: 0.25rem;
+	padding: 0;
+	list-style: none;
+}
+
 /* Composer, progress and result share the document's prose column. */
 .plan-research-composer,
 .plan-research-tracked {

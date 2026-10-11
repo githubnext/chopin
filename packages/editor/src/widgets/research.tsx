@@ -27,6 +27,7 @@ import { Fold, Swap, useLast } from "./research-motion";
 import { widgets$ } from "../widget-options";
 import { $isResearchNode } from "@chopin/dialect";
 import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
+import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
 
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 import type { Research } from "@chopin/protocol";
@@ -295,6 +296,48 @@ function plural(count: number, noun: string): string {
 	return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+const PREVIEW_SOURCES = 5;
+
+export function safeSourceHref(url: string): string | undefined {
+	try {
+		let parsed = new URL(url);
+		return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** What a reader sees before opening the report: what was asked and where it looked. */
+export function ResearchPreview(
+	{ question, sources }: { question: string; sources: readonly Research.Source[] },
+) {
+	let shown = sources.slice(0, PREVIEW_SOURCES);
+	let more = sources.length - shown.length;
+	return (
+		<div className="plan-research-preview-body">
+			<p className="plan-research-preview-question">
+				<span className="plan-research-meta">Asked</span>
+				<span>{question}</span>
+			</p>
+			{shown.length > 0 && (
+				<ul aria-label="Research sources" className="plan-research-preview-sources">
+					{shown.map(source => {
+						let href = safeSourceHref(source.url);
+						return (
+							<li key={source.url}>
+								{href
+									? <a href={href} rel="noreferrer" target="_blank">{source.title}</a>
+									: source.title}
+							</li>
+						);
+					})}
+				</ul>
+			)}
+			{more > 0 && <p className="plan-research-meta">{plural(more, "more source")}</p>}
+		</div>
+	);
+}
+
 export function ResearchCard(
 	{
 		actionError,
@@ -333,6 +376,7 @@ export function ResearchCard(
 		card?.focus({ preventScroll: true });
 	};
 	let shownSummary = useLast(ready?.summary);
+	let preview = useUnfold(false, "card");
 	let shownFound = useLast(found > 0 ? found : undefined);
 	let attention: ReactNode = shownMessages !== undefined && (
 		<div aria-hidden="true" className="plan-research-callout">
@@ -382,6 +426,14 @@ export function ResearchCard(
 							)}
 						</Swap>
 					</div>
+					{ready && (
+						<UnfoldToggle
+							aria-label={`Preview ${ready.title}`}
+							className="plan-research-preview-toggle btn btn-icon btn-ghost"
+							data-tooltip="Preview"
+							unfold={preview}
+						/>
+					)}
 				</div>
 				<Swap className="plan-research-title" id={ready ? "report" : "question"}>
 					{ready ? ready.title : <ResearchBrief text={request.question} />}
@@ -389,6 +441,11 @@ export function ResearchCard(
 				<Fold open={!!ready}>
 					{shownSummary !== undefined && <p className="plan-research-summary">{shownSummary}</p>}
 				</Fold>
+				{ready && (
+					<UnfoldPanel className="plan-research-preview" unfold={preview}>
+						<ResearchPreview question={request.question} sources={request.sources} />
+					</UnfoldPanel>
+				)}
 				<Fold open={message !== undefined}>{attention}</Fold>
 				<Fold open={!!footer}>
 					<div className="plan-research-footer">

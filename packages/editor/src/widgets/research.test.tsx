@@ -259,7 +259,16 @@ describe("research card", () => {
 		expect(markup).toMatch(
 			/<article[^>]*class="[^"]*\brelative\b[^"]*"[^>]*data-research-ready=""/,
 		);
-		expect(markup).not.toContain("https://example.com/releases");
+		expect(markup).toContain('aria-label="Preview Rollout evidence"');
+		expect(markup).toContain('data-tooltip="Preview"');
+		let panel = markup.match(/aria-controls="([^"]+)"/)?.[1];
+		expect(panel).toBeTruthy();
+		let escaped = panel!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		let tag = markup.match(new RegExp(`<div[^>]*id="${escaped}"[^>]*>`))?.[0] ?? "";
+		expect(tag).toContain("plan-research-preview");
+		expect(tag).toContain('inert=""');
+		expect(markup).toContain('href="https://example.com/releases"');
+		expect(markup).toContain(REQUEST_BASE.question);
 		expect(markup).not.toContain("Remove research reference");
 		expect(markup).not.toContain("Retry research");
 		expect(markup).not.toContain("Cancel research");
@@ -290,8 +299,59 @@ describe("research card", () => {
 		expect(zero).toContain("No sources");
 		expect(plural).toContain("3 sources");
 	});
+
+	it("offers no preview before the report is ready", async () => {
+		let { card: Card } = await components();
+		if (!Card) return;
+		let markup = renderToStaticMarkup(createElement(Card, { request: BASE, onCancel() {} }));
+
+		expect(markup).not.toContain("Preview");
+		expect(markup).not.toContain("plan-research-preview");
+	});
 });
 
+describe("research preview", () => {
+	it("links only http and https sources", async () => {
+		let { safeSourceHref } = await import("./research");
+
+		expect(safeSourceHref("https://example.com/a")).toBe("https://example.com/a");
+		expect(safeSourceHref("http://example.com")).toBe("http://example.com/");
+		expect(safeSourceHref("javascript:alert(1)")).toBeUndefined();
+		expect(safeSourceHref("data:text/html,hello")).toBeUndefined();
+		expect(safeSourceHref("not a url")).toBeUndefined();
+	});
+
+	it("shows the question, five sources, and how many more there are", async () => {
+		let { ResearchPreview } = await import("./research");
+		let sources = Array.from({ length: 7 }, (_, index) => ({
+			title: `Source ${index + 1}`,
+			url: index === 1 ? "javascript:alert(1)" : `https://example.com/${index + 1}`,
+		}));
+		let markup = renderToStaticMarkup(
+			createElement(ResearchPreview, { question: "Which evidence?", sources }),
+		);
+
+		expect(markup).toContain("Asked");
+		expect(markup).toContain("Which evidence?");
+		expect(markup).toContain('aria-label="Research sources"');
+		expect(markup.match(/<li>/g)).toHaveLength(5);
+		expect(markup).toContain('<a href="https://example.com/1" rel="noreferrer" target="_blank">');
+		expect(markup).toContain("<li>Source 2</li>");
+		expect(markup).not.toContain("javascript:");
+		expect(markup).not.toContain("Source 6");
+		expect(markup).toContain("2 more sources");
+	});
+
+	it("omits the source list when the report cites none", async () => {
+		let { ResearchPreview } = await import("./research");
+		let markup = renderToStaticMarkup(
+			createElement(ResearchPreview, { question: "Which evidence?", sources: [] }),
+		);
+
+		expect(markup).not.toContain("Research sources");
+		expect(markup).not.toContain("more source");
+	});
+});
 describe("active research deletion", () => {
 	it("blocks deletion while publication is still in progress", async () => {
 		let state = mutableStore({ ...BASE, stage: "publishing" });
