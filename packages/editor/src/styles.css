@@ -1827,8 +1827,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	opacity: 0;
 }
 
-/* Sheets leave faster than they arrive. */
-.plan-comment-sheet-popup[data-ending-style],
+/* Sheets leave faster than they arrive; a flick still sets the pace of a dismissal. */
+.plan-comment-sheet-popup[data-ending-style] {
+	transition-duration: calc(var(--drawer-swipe-strength, 1) * var(--sheet-fall-dur));
+}
+
 .plan-comment-sheet-backdrop[data-ending-style] {
 	transition-duration: var(--sheet-fall-dur);
 }

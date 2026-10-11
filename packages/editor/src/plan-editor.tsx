@@ -297,6 +297,21 @@ export function PlanEditor(
 		return () => observer.disconnect();
 	}, [generation, hasPreface, wire]);
 
+	// The formatting dock rises over the foot of the document; bring the caret's block back above
+	// it, once the host's scroll padding for the dock has applied.
+	let dockShown = !!formatDock;
+	useEffect(() => {
+		if (!dockShown) return;
+		let frame = requestAnimationFrame(() => {
+			let element = scroller.current;
+			let node = getSelection()?.focusNode;
+			let block = node instanceof Element ? node : node?.parentElement;
+			if (!element || !block || !element.contains(block)) return;
+			block.closest(".plan-content > *")?.scrollIntoView({ block: "nearest" });
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [dockShown]);
+
 	useEffect(() => () => changes.dispose(), [changes]);
 
 	useEffect(() => {

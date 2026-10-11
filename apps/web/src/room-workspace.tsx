@@ -965,6 +965,10 @@ export function RoomWorkspace(
 	let childChrome = useContext(ChildPhoneChromeContext);
 	let childRoom = presentation.type === "child";
 	let childOpen = presentation.type === "parent-with-child";
+	// A child opening over this document takes the pencil, so this one goes back to reading.
+	useEffect(() => {
+		if (childOpen) setEditing(false);
+	}, [childOpen]);
 	let [childEdit, setChildEdit] = useState<{ docked: boolean; editing: boolean }>();
 	let childToggle = useRef<() => void>(undefined);
 	let reportChildEdit = useCallback(
@@ -1157,7 +1161,7 @@ export function RoomWorkspace(
 				connection={status === "deleted" ? "closed" : status}
 				key={workspaceArchivedAt ? "archived" : "active"}
 				disclosureMotion={motionContract("collapse")}
-				editMode={childRoom && !childChrome ? undefined : editMode}
+				editMode={editMode}
 				formatDock={docked ? childRoom ? childChrome?.formatDock : formatDock : undefined}
 				motionImmediately={settleMotionImmediately}
 				onScrollTop={setPlanScrollTop}

@@ -76,6 +76,18 @@
 	scroll-padding-block: calc(var(--phone-top-chrome) + var(--spacing) * 4) 30%;
 }
 
+/*
+ * While formatting docks above the keyboard, the caret's block stops short of the dock. The
+ * workspace already ends at the keyboard (`--app-height`), so only the dock's row is added.
+ */
+.workspace-root[data-workspace-phone]:has(.phone-tab-row[data-phone-tab-toolbar])
+	.plan
+	[data-plan-scroll] {
+	scroll-padding-bottom: calc(
+		var(--phone-tab-bar-height) + var(--phone-tab-bar-offset) + var(--spacing) * 3
+	);
+}
+
 /* Focus and find-in-page scrolling stop below the top bar, never under it. */
 .workspace-root[data-workspace-phone]
 	:is([data-plan-decisions-scroll], [data-build-view-scroll], [data-chat-scroll]) {

@@ -5,10 +5,10 @@
  */
 
 import { seedChildChannel } from "./database";
-import { authenticate, expect, test } from "./room";
+import { authenticate, content, expect, openIsolatedRoom, test } from "./room";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
 
-import type { Browser, BrowserContext, Page } from "@playwright/test";
+import type { Browser, BrowserContext, Locator, Page } from "@playwright/test";
 
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
 const PROMPT = "Where should room state live?";
@@ -26,6 +26,7 @@ async function openChild(
 	handle: string,
 	options: Parameters<Browser["newContext"]>[0],
 	before?: (context: BrowserContext) => Promise<void>,
+	source = CHILD_SOURCE,
 ) {
 	let title = `Child ${crypto.randomUUID().slice(0, 8)}`;
 	let child = await seedChildChannel(
@@ -33,7 +34,7 @@ async function openChild(
 		room,
 		crypto.randomUUID(),
 		title,
-		CHILD_SOURCE,
+		source,
 	);
 	let context = await browser.newContext({ ...options, baseURL });
 	await before?.(context);
@@ -43,6 +44,56 @@ async function openChild(
 	let surface = page.getByRole("region", { name: `Child document: ${title}` });
 	await expect(surface.locator("[data-plan-synced]")).toBeAttached({ timeout: 20_000 });
 	return { context, page, surface };
+}
+
+const LONG = (name: string) =>
+	`# ${name}\n\n${
+		Array.from({ length: 30 }, (_, index) => `${name} passage ${index + 1}.`).join("\n\n")
+	}\n`;
+
+function fakeKeyboard(context: BrowserContext) {
+	return installVisualViewport(context, {
+		height: 844,
+		offsetLeft: 0,
+		offsetTop: 0,
+		pageLeft: 0,
+		pageTop: 0,
+		scale: 1,
+		width: 390,
+	});
+}
+
+/**
+ * Edit from a paragraph low on the screen, then raise the keyboard: the formatting dock comes
+ * up over where that paragraph was, and the paragraph must end up above the dock.
+ */
+async function expectCaretClearOfDock(page: Page, editor: Locator) {
+	let paragraphs = editor.locator(":scope > p");
+	let low = await paragraphs.evaluateAll(items =>
+		items.findIndex(item => {
+			let box = item.getBoundingClientRect();
+			return box.top > 560 && box.bottom < 740;
+		})
+	);
+	expect(low).toBeGreaterThanOrEqual(0);
+	let paragraph = paragraphs.nth(low);
+	await paragraph.tap();
+	await pencil(page).tap();
+	await expect(editor).toBeFocused();
+	await setVisualViewport(page, { event: "resize", height: 500 });
+	let dock = page.getByRole("toolbar", { name: "Formatting" });
+	await expect(dock).toBeVisible();
+	await dock.evaluate(element =>
+		Promise.all(
+			element.closest("[data-phone-tab-row]")!.getAnimations({ subtree: true })
+				.map(animation => animation.finished),
+		)
+	);
+	await expect.poll(async () => {
+		let row = (await dock.boundingBox())!;
+		let block = (await paragraph.boundingBox())!;
+		return block.y + block.height <= row.y && block.y >= 0;
+	}).toBe(true);
 }
 
 function pencil(page: Page) {
@@ -208,5 +259,57 @@ test("a child keeps no reading mode for viewers on a phone or anyone on desktop"
 		await expect(card.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 	} finally {
 		await desktop.context.close();
+	}
+});
+
+test("opening a child ends the parent's editing; the child opens for reading", async ({ baseURL, join, room, seed }) => {
+	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	let title = `Child ${crypto.randomUUID().slice(0, 8)}`;
+	await seedChildChannel(
+		Number(new URL(baseURL!).port),
+		room,
+		crypto.randomUUID(),
+		title,
+		CHILD_SOURCE,
+	);
+	let page = await join("ana", PHONE);
+	await pencil(page).tap();
+	await expect(content(page)).toHaveAttribute("contenteditable", "true");
+
+	await page.locator(".phone-top-bar").getByRole("button", { name: "Documents", exact: true })
+		.click();
+	await page.getByRole("dialog", { name: "Documents" }).getByRole("link", { name: title }).click();
+	let surface = page.getByRole("region", { name: `Child document: ${title}` });
+	await expect(childText(surface)).toHaveAttribute("contenteditable", "false");
+	await expect(parentText(page)).toHaveAttribute("contenteditable", "false");
+	await expect(pencil(page)).toBeVisible();
+	await expect(done(page)).toHaveCount(0);
+});
+
+test("the formatting dock keeps the caret's block clear in a root document", async ({ baseURL, browser, room, seed }) => {
+	await seed(LONG("Root"));
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE, fakeKeyboard);
+	try {
+		await expectCaretClearOfDock(page, content(page));
+	} finally {
+		await close();
+	}
+});
+
+test("the formatting dock keeps the caret's block clear in a child document", async ({ baseURL, browser, room, seed }) => {
+	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	let { context, page, surface } = await openChild(
+		browser,
+		baseURL!,
+		room,
+		"ana",
+		PHONE,
+		fakeKeyboard,
+		LONG("Child"),
+	);
+	try {
+		await expectCaretClearOfDock(page, childText(surface));
+	} finally {
+		await context.close();
 	}
 });

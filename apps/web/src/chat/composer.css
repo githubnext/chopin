@@ -287,8 +287,8 @@
  * transcript keeps the space above the keyboard. Every phone-only rule lives
  * in this block, behind this one condition.
  */
-/* Landscape phones too; the shared `:root[data-phone]` hook can replace this condition. */
-@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
+/* The phone class, landscape phones too. */
+:root[data-phone] {
 	.chat-composer {
 		padding-inline: 0.5rem;
 		/* The home indicator's inset, but not while the keyboard covers it. */
@@ -343,7 +343,7 @@
 	.chat-composer[data-planner="off"] .composer-mode-trigger {
 		display: none;
 	}
-	:root[data-plan-coarse-pointer] .chat-composer .composer-surface button:not([role="option"]) {
+	&[data-plan-coarse-pointer] .chat-composer .composer-surface button:not([role="option"]) {
 		min-width: var(--composer-pill-control);
 		min-height: var(--composer-pill-control);
 	}
