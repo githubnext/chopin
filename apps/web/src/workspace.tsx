@@ -479,7 +479,16 @@ export function Workspace(
 						className="workspace-document-panel relative min-w-0 w-full flex-1"
 						data-child-covered={liftCovered || undefined}
 						inert={!presentation.documentVisible}
-						onClickCapture={liftCovered ? nested!.onChildClose : undefined}
+						onClickCapture={liftCovered
+							? event => {
+								// The surface toggle and presence keep their own jobs under a Lift child.
+								let target = event.target instanceof Element ? event.target : undefined;
+								if (
+									target?.closest(".workspace-surface-toggle-slot, [data-toolbar-trailing]")
+								) return;
+								nested!.onChildClose();
+							}
+							: undefined}
 					>
 						<div className="relative flex h-full flex-col overflow-hidden">
 							{mode === "split" && (
@@ -518,7 +527,10 @@ export function Workspace(
 										</span>
 									)}
 									{controls}
-									<div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+									<div
+										className="ml-auto flex shrink-0 items-center gap-2 pl-2"
+										data-toolbar-trailing
+									>
 										{status}
 										{presence}
 									</div>
@@ -557,7 +569,11 @@ export function Workspace(
 									</ol>
 								</nav>
 							)}
-							{mode !== "split" && status && <div className="workspace-status-row">{status}</div>}
+							{mode !== "split" && status && (
+								<div className="workspace-status-row" inert={planCovered || undefined}>
+									{status}
+								</div>
+							)}
 							<div
 								className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
 								data-workspace-document-swap

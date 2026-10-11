@@ -8,6 +8,7 @@ import {
 	rebaseChildHistoryState,
 } from "./anchored-child-surface";
 import { readDocumentRecovery, rememberChannel } from "./channel-recovery";
+import { readChildMotionStyle } from "./child-motion-driver";
 import { prepareDocumentLoad } from "./document-loader";
 import { documentRouteIdentity } from "./document-route-swap";
 import {
@@ -70,6 +71,12 @@ function workspaceProps(
 	};
 }
 
+function parentScroller(host: HTMLElement | null): HTMLElement | null {
+	return host?.querySelector<HTMLElement>(
+		'[data-document-view="plan"] [data-plan-scroll]:not(.workspace-child-slot *)',
+	) ?? null;
+}
+
 // How long after a request the outgoing document may wait for this one to sync. Past
 // it, the header and body would disagree with the sidebar for too long.
 const REVEAL_LIMIT = 200;
@@ -77,6 +84,7 @@ const REVEAL_LIMIT = 200;
 export default function DocumentWorkspaceHost(
 	{
 		agent,
+		childOrigin,
 		Failure,
 		layerKey,
 		Loading,
@@ -90,6 +98,7 @@ export default function DocumentWorkspaceHost(
 		user,
 	}: {
 		agent: boolean;
+		childOrigin?: () => DOMRect | undefined;
 		Failure: ComponentType<{
 			channel?: { title?: string; slug?: string };
 			error: unknown;
@@ -148,7 +157,7 @@ export default function DocumentWorkspaceHost(
 		let currentState = stateRef.current;
 		let current = currentState.status === "ready" ? currentState.loaded : undefined;
 		if (requestedRoute.page === "child" && current && !current.child) {
-			let scroller = parentSurface.current?.querySelector<HTMLElement>("[data-plan-scroll]");
+			let scroller = parentScroller(parentSurface.current);
 			if (scroller) parentScrollTop.current = scroller.scrollTop;
 		}
 		let address = {
@@ -229,7 +238,7 @@ export default function DocumentWorkspaceHost(
 
 	useLayoutEffect(() => {
 		if (!loaded || parentScrollTop.current === undefined) return;
-		let scroller = parentSurface.current?.querySelector<HTMLElement>("[data-plan-scroll]");
+		let scroller = parentScroller(parentSurface.current);
 		if (scroller) scroller.scrollTop = parentScrollTop.current;
 		if (presentation === "closed") parentScrollTop.current = undefined;
 	}, [loaded, presentation]);
@@ -276,13 +285,10 @@ export default function DocumentWorkspaceHost(
 		send(action);
 	}, [onChildClosing, route, send]);
 
-	useEffect(() => {
-		if (presentation !== "closing") return;
-		let timer = window.setTimeout(() => {
-			send({ type: "closed" });
-		}, 190);
-		return () => window.clearTimeout(timer);
-	}, [presentation, send]);
+	let childClosed = useCallback(() => {
+		if (stateRef.current.presentation === "closing") send({ type: "closed" });
+	}, [send]);
+	let motion = readChildMotionStyle();
 
 	useEffect(() => {
 		if (presentation !== "open") return;
@@ -292,11 +298,12 @@ export default function DocumentWorkspaceHost(
 			let target = event.target instanceof Element ? event.target : undefined;
 			if (target?.closest(DISMISSIBLE_TARGET)) {
 				event.preventDefault();
-				document.querySelector<HTMLElement>(".anchored-child-surface")?.focus({
+				document.querySelector<HTMLElement>(".anchored-child-card:last-of-type")?.focus({
 					preventScroll: true,
 				});
 				return;
 			}
+			if (document.querySelector(".workspace-child-slot[hidden]")) return;
 			event.preventDefault();
 			let current = stateRef.current;
 			if (current.status === "ready") {
@@ -383,33 +390,6 @@ export default function DocumentWorkspaceHost(
 	let childVisible = presentation !== "closed";
 	let childLabel = loaded.child?.channel.title ?? (route.page === "child" ? route.childSlug : "");
 	let closeChild = () => onChildClose(loaded.parent.channel.id, parentPath);
-	let parent = (
-		<Suspense fallback={<Loading label="Opening document…" />}>
-			<RoomWorkspace
-				{...workspaceProps(
-					loaded.parent,
-					agent,
-					user,
-					childVisible
-						? {
-							// Task 4 moves the child layer into the stack; until then it still overlays.
-							child: null,
-							childState: presentation === "closing" ? "closing" : "open",
-							motion: "lift",
-							onChildClose: closeChild,
-							path: [
-								{ id: loaded.parent.channel.id, label: loaded.parent.channel.title },
-								{ id: loaded.child?.channel.id ?? "child", label: childLabel },
-							],
-							type: "parent-with-child",
-						}
-						: { type: "document" },
-					parentMetadataChanged,
-				)}
-				key={loaded.parent.channel.id}
-			/>
-		</Suspense>
-	);
 	let child = loaded.child
 		? (
 			<Suspense fallback={<Loading label="Opening child document…" />}>
@@ -439,18 +419,52 @@ export default function DocumentWorkspaceHost(
 			? <Failure error={error} onRetry={retryFailure} />
 			: <Loading label="Opening child document…" />
 		: undefined;
-	return (
+	let layer = (
 		<AnchoredChildSurface
-			child={child}
-			childLabel={childLabel}
+			entries={[{
+				id: loaded.child?.channel.id ?? (route.page === "child" ? route.childSlug : "child"),
+				label: childLabel,
+				node: child,
+			}]}
 			focusKey={loaded.child?.channel.id ?? (route.page === "child"
 				? `${route.parentSlug}/${route.childSlug}`
 				: undefined)}
-			onBackdropClick={closeChild}
-			parent={parent}
-			parentRef={parentSurface}
+			motion={motion}
+			onClosed={childClosed}
+			origin={childOrigin}
 			presentation={presentation}
-			key={loaded.parent.channel.id}
 		/>
+	);
+	let nested = {
+		child: layer,
+		childState: presentation === "closing" ? "closing" as const : "open" as const,
+		motion,
+		onChildClose: closeChild,
+		path: [
+			{ id: loaded.parent.channel.id, label: loaded.parent.channel.title },
+			{ id: loaded.child?.channel.id ?? "child", label: childLabel },
+		],
+		type: "parent-with-child" as const,
+	};
+	return (
+		<div
+			className="anchored-child-host"
+			data-child-presentation={presentation}
+			key={loaded.parent.channel.id}
+			ref={parentSurface}
+		>
+			<Suspense fallback={<Loading label="Opening document…" />}>
+				<RoomWorkspace
+					{...workspaceProps(
+						loaded.parent,
+						agent,
+						user,
+						childVisible ? nested : { type: "document" },
+						parentMetadataChanged,
+					)}
+					key={loaded.parent.channel.id}
+				/>
+			</Suspense>
+		</div>
 	);
 }

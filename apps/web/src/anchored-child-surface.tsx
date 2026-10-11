@@ -1,10 +1,12 @@
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
-import { useLayoutEffect, useRef } from "react";
+import { MagnifierIcon } from "@chopin/icons";
+import { Fragment, useLayoutEffect, useRef } from "react";
 
 export { childCloseAction, childFocusTransition, childHistoryState } from "./child-history";
 export { childPresentation } from "./document-workspace-state";
 
-import type { ReactNode, Ref } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { ChildMotionStyle } from "./child-motion";
 import type { ChildPresentation } from "./document-workspace-state";
 
 export type {
@@ -47,63 +49,61 @@ export function rebaseChildHistoryState(
 }
 
 export function AnchoredChildSurface(
-	{
-		child,
-		childLabel,
-		focusKey,
-		onBackdropClick,
-		parent,
-		parentRef,
-		presentation,
-	}: {
-		child?: ReactNode;
-		childLabel: string;
+	{ entries, focusKey, motion, onClosed, presentation }: {
+		entries: { id: string; label: string; node: ReactNode }[];
 		focusKey?: string;
-		onBackdropClick?: () => void;
-		parent: ReactNode;
-		parentRef?: Ref<HTMLDivElement>;
+		motion: ChildMotionStyle;
+		onClosed: () => void;
+		origin?: () => DOMRect | undefined;
 		presentation: ChildPresentation;
 	},
 ) {
-	let childVisible = presentation !== "closed";
-	let surface = useRef<HTMLElement>(null);
+	let layer = useRef<HTMLDivElement>(null);
 	let focused = useRef<string | undefined>(undefined);
+	let closed = useRef(onClosed);
+	closed.current = onClosed;
+	let depth = entries.length;
 	useLayoutEffect(() => {
-		if (presentation !== "open") {
-			if (presentation === "closed") focused.current = undefined;
-			return;
-		}
-		if (!focusKey || focused.current === focusKey) return;
+		if (presentation !== "open" || !focusKey || focused.current === focusKey) return;
 		focused.current = focusKey;
-		surface.current?.focus({ preventScroll: true });
+		layer.current?.querySelector<HTMLElement>(":scope > .anchored-child-card:last-of-type")
+			?.focus({ preventScroll: true });
 	}, [focusKey, presentation]);
+	useLayoutEffect(() => {
+		if (presentation !== "closing") return;
+		let current = true;
+		let running = layer.current?.getAnimations({ subtree: true }) ?? [];
+		void Promise.all(running.map(animation => animation.finished)).then(
+			() => current && closed.current(),
+			() => {},
+		);
+		return () => {
+			current = false;
+		};
+	}, [presentation]);
 	return (
-		<div
-			className="anchored-child-host"
-			data-child-presentation={presentation}
-			data-child-visible={childVisible || undefined}
-		>
-			<div className="anchored-child-parent" ref={parentRef}>
-				{parent}
-			</div>
-			{presentation === "open" && onBackdropClick && (
-				<div
-					aria-hidden="true"
-					className="anchored-child-backdrop"
-					data-child-backdrop
-					onClick={onBackdropClick}
-				/>
-			)}
-			{childVisible && (
-				<section
-					aria-label={`Child document: ${childLabel}`}
-					className="anchored-child-surface"
-					ref={surface}
-					tabIndex={-1}
-				>
-					{child}
-				</section>
-			)}
+		<div className="anchored-child-layer" data-child-motion={motion} ref={layer}>
+			{entries.map((entry, index) => (
+				<Fragment key={entry.id}>
+					{motion === "lift" && <div aria-hidden="true" className="anchored-child-shadow" />}
+					<section
+						aria-label={`Child document: ${entry.label}`}
+						className="anchored-child-card"
+						style={{ "--level": index + 1, "--depth": depth } as CSSProperties}
+						tabIndex={-1}
+					>
+						<div className="anchored-child-content">
+							{motion === "lift" && (
+								<div className="anchored-child-title">
+									<MagnifierIcon aria-hidden="true" size={14} />
+									<span>{entry.label}</span>
+								</div>
+							)}
+							{entry.node}
+						</div>
+					</section>
+				</Fragment>
+			))}
 		</div>
 	);
 }

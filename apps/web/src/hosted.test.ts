@@ -253,35 +253,33 @@ describe("anchored child lifecycle", () => {
 		).toBe(3);
 	});
 
-	it("keeps the parent shell visible around separate workspace rooms", () => {
-		let markup = renderToStaticMarkup(createElement(AnchoredChildSurface, {
-			child: createElement("div", { "data-workspace-room": "child-room" }),
-			childLabel: "Source review",
-			onBackdropClick() {},
-			parent: createElement("div", { "data-workspace-room": "parent-room" }),
+	it("draws a Lift card with a title bar and a Zoom layer without one", () => {
+		let entry = {
+			id: "child-room",
+			label: "Source review",
+			node: createElement("div", { "data-workspace-room": "child-room" }),
+		};
+		let lift = renderToStaticMarkup(createElement(AnchoredChildSurface, {
+			entries: [entry],
+			motion: "lift",
+			onClosed() {},
 			presentation: "open",
 		}));
-		let closing = renderToStaticMarkup(createElement(AnchoredChildSurface, {
-			child: createElement("div"),
-			childLabel: "Source review",
-			onBackdropClick() {},
-			parent: createElement("div"),
-			presentation: "closing",
+		let zoom = renderToStaticMarkup(createElement(AnchoredChildSurface, {
+			entries: [entry],
+			motion: "zoom",
+			onClosed() {},
+			presentation: "open",
 		}));
 
-		expect(markup).not.toContain('inert=""');
-		expect(markup).not.toContain('aria-label="Back to Release plan"');
-		expect(markup).toContain('class="anchored-child-backdrop"');
-		expect(markup).toContain('aria-hidden="true"');
-		expect(markup).not.toContain('<button aria-hidden="true" class="anchored-child-backdrop"');
-		expect(markup).toContain(
-			'<div aria-hidden="true" class="anchored-child-backdrop" data-child-backdrop="true"></div>',
-		);
-		expect(markup).toContain('data-child-backdrop="true"');
-		expect(closing).not.toContain("data-child-backdrop");
-		expect(markup).toContain('data-workspace-room="parent-room"');
-		expect(markup).toContain('data-workspace-room="child-room"');
-		expect(markup).not.toContain("Expand");
+		expect(lift).toContain('class="anchored-child-layer" data-child-motion="lift"');
+		expect(lift).toContain('style="--level:1;--depth:1"');
+		expect(lift).toContain('aria-label="Child document: Source review"');
+		expect(lift).toContain('<div class="anchored-child-title">');
+		expect(lift).toContain(">Source review</span>");
+		expect(zoom).not.toContain("anchored-child-title");
+		expect(zoom).not.toContain("anchored-child-shadow");
+		expect(zoom).toContain('data-workspace-room="child-room"');
 	});
 
 	let splitProps = {

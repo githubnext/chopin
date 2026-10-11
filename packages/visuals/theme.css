@@ -341,6 +341,14 @@
 	--panel-distance: 12px;
 	--panel-blur: 2px;
 	--page-slide-dur: 250ms;
+	/* Nested documents: a slow, settled open and a quick close. */
+	--child-open-dur: var(--duration-linger);
+	--child-close-dur: 250ms;
+	--child-ease: var(--ease-out);
+	--child-recede-step: 0.03;
+	--child-scrim-opacity: 0.45;
+	--child-zoom-push: 1.06;
+	--child-bar-height: calc(var(--spacing) * 9);
 	--page-slide-distance: 8px;
 	--page-blur: 3px;
 	--route-swap-out-dur: 80ms;

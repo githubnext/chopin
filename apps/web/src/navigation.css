@@ -56,104 +56,184 @@
 	padding-left: calc(44px - var(--spacing) * 3);
 }
 
-.anchored-child-host,
-.anchored-child-parent {
+.anchored-child-host {
 	position: relative;
 	height: 100%;
 	min-height: 0;
 }
 
-/* A calm dim over the live parent; opacity is the only thing that animates. */
-.anchored-child-parent::after {
-	content: "";
+.workspace-child-slot {
 	position: absolute;
 	z-index: 20;
-	inset: var(--document-shell-header-height) 0 0;
-	background: color-mix(in srgb, var(--color-text-primary) 12%, transparent);
+	inset: 0;
+	pointer-events: none;
+}
+
+.anchored-child-layer {
+	position: absolute;
+	inset: 0;
+}
+
+.anchored-child-card,
+.anchored-child-shadow {
+	position: absolute;
+	inset: calc(
+		min(var(--level, 1), 1) * var(--panel-header-height) +
+			max(var(--level, 1) - 1, 0) * var(--child-bar-height)
+	) 0 0;
+	border-radius: var(--radius-panel);
+	pointer-events: auto;
+}
+
+.anchored-child-shadow {
+	box-shadow: var(--shadow-overlay);
+	outline: var(--edge-width) solid var(--color-edge);
+	pointer-events: none;
+	transform-origin: 0 0;
+}
+
+.anchored-child-card {
+	overflow: hidden;
+	background: var(--color-page);
+}
+
+.anchored-child-content {
+	display: flex;
+	height: 100%;
+	flex-direction: column;
+}
+
+.anchored-child-content > :last-child {
+	min-height: 0;
+	flex: 1;
+}
+
+.anchored-child-face {
+	position: absolute;
+	margin: 0;
+	pointer-events: none;
+}
+
+.anchored-child-title {
+	display: flex;
+	height: var(--child-bar-height);
+	flex-shrink: 0;
+	align-items: center;
+	gap: 0.5rem;
+	padding-inline: 1rem;
+	border-bottom: var(--edge-width) solid var(--color-divider);
+	background: var(--color-page);
+	color: var(--color-text-primary);
+	font-size: var(--text-xs);
+	font-weight: 500;
+}
+
+.anchored-child-title svg {
+	flex-shrink: 0;
+	color: var(--color-text-tertiary);
+}
+
+.anchored-child-title span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Lift: the root sheet recedes about its top centre; only what is under its tab row dims. */
+.workspace-root.workspace-root
+	.workspace-document-stack[data-child-motion="lift"]
+	> .workspace-document-panel {
+	transform-origin: top center;
+	transition: transform var(--child-close-dur) var(--child-ease);
+}
+
+.workspace-root.workspace-root
+	.workspace-document-stack
+	> .workspace-document-panel[data-child-covered] {
+	transform: scale(calc(1 - var(--child-recede-step)));
+	cursor: pointer;
+	transition-duration: var(--child-open-dur);
+}
+
+.workspace-child-scrim {
+	position: absolute;
+	inset: var(--panel-header-height) 0 0;
+	background: var(--color-ground);
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity var(--modal-close-dur) var(--motion-smooth-out);
+	transition: opacity var(--child-close-dur) var(--child-ease);
 }
 
-.anchored-child-host[data-child-visible] .anchored-child-parent::after {
-	opacity: 1;
-	transition-duration: var(--modal-open-dur);
+/* The dim trails the grow slightly and lands with it. */
+.workspace-document-panel[data-child-covered] > .workspace-child-scrim {
+	opacity: var(--child-scrim-opacity);
+	transition-duration: calc(var(--child-open-dur) * 0.88);
+	transition-delay: calc(var(--child-open-dur) * 0.12);
 }
 
-.anchored-child-host[data-child-presentation="closing"] .anchored-child-parent::after {
-	opacity: 0;
-	transition-duration: var(--modal-close-dur);
+.workspace-document-panel[data-child-covered] [data-document-toolbar] {
+	color: var(--color-text-secondary);
 }
 
-.anchored-child-backdrop {
-	position: absolute;
-	z-index: 30;
-	inset: var(--document-shell-header-height) 0 0;
-	background: transparent;
-	cursor: pointer;
-	touch-action: manipulation;
-}
-
-/* The sheet is the only frame; the child workspace fills it edge to edge. */
-.anchored-child-surface {
-	position: absolute;
-	z-index: 40;
-	inset: calc(var(--document-shell-header-height) + 12px) 24px 24px;
-	overflow: hidden;
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-xl);
+/* Zoom: a slim stack bar under the tabs; the root's plan pushes in towards the opener. */
+.workspace-stack-bar {
+	height: var(--child-bar-height);
+	padding-inline: var(--panel-toolbar-padding-inline);
 	background: var(--color-page);
-	box-shadow: var(--shadow-overlay);
-	transform-origin: 50% 100%;
-	animation: anchored-child-enter var(--modal-open-dur) var(--modal-ease) both;
 }
 
-.anchored-child-host[data-child-presentation="closing"] .anchored-child-surface {
-	animation: anchored-child-exit var(--modal-close-dur) var(--modal-ease) both;
+.workspace-stack-path [aria-current] {
+	color: var(--color-text-primary);
+	font-weight: 500;
 }
 
-@keyframes anchored-child-enter {
-	from {
-		opacity: 0;
-		transform: translateY(var(--drawer-distance)) scale(var(--modal-scale));
-	}
-	to {
-		opacity: 1;
-		transform: none;
-	}
+.workspace-document-stack[data-child-motion="zoom"] [data-document-view="plan"] {
+	transition:
+		opacity var(--child-close-dur) var(--child-ease),
+		transform var(--child-close-dur) var(--child-ease);
 }
 
-@keyframes anchored-child-exit {
-	from {
-		opacity: 1;
-		transform: none;
-	}
-	to {
-		opacity: 0;
-		transform: translateY(var(--drawer-distance)) scale(var(--modal-scale-close));
-	}
+.workspace-document-stack [data-document-view="plan"][data-child-recede] {
+	opacity: 0;
+	transform: scale(var(--child-zoom-push));
+	transition-duration: var(--child-open-dur);
 }
 
-@media (max-width: 1197px) {
-	.anchored-child-surface {
-		inset: var(--document-shell-header-height) 0 0;
-		border: 0;
-		border-radius: 0;
-		box-shadow: none;
-	}
+.workspace-document-stack[data-child-motion="zoom"] .anchored-child-card {
+	inset: calc(var(--panel-header-height) + var(--child-bar-height)) 0 0;
+	border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+}
+
+/* Compact has no tab row to peek, so a Lift child takes Zoom's stack-bar chrome. */
+.workspace-root[data-workspace-mode="compact"] .workspace-document-stack .anchored-child-card {
+	inset: var(--child-bar-height) 0 0;
+	border-radius: 0;
+}
+
+.workspace-document-stack:not([data-child-motion="lift"])
+	:is(.anchored-child-title, .anchored-child-shadow) {
+	display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.anchored-child-parent::after {
+	.workspace-root.workspace-root .workspace-document-stack > .workspace-document-panel,
+	.workspace-child-scrim,
+	.workspace-document-stack [data-document-view="plan"] {
 		transition: none;
 	}
 
-	.anchored-child-surface {
-		animation-name: anchored-child-fade;
-		animation-duration: var(--duration-fast);
+	.workspace-root.workspace-root
+		.workspace-document-stack
+		> .workspace-document-panel[data-child-covered],
+	.workspace-document-stack [data-document-view="plan"][data-child-recede] {
+		transform: none;
 	}
 
-	.anchored-child-host[data-child-presentation="closing"] .anchored-child-surface {
+	.anchored-child-card {
+		animation: anchored-child-fade var(--duration-fast) var(--modal-ease) both;
+	}
+
+	.anchored-child-host[data-child-presentation="closing"] .anchored-child-card {
 		animation-name: anchored-child-fade-out;
 	}
 

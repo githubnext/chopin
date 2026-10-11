@@ -461,7 +461,21 @@ describe("child document shell", () => {
 			/\.room-header\s*\{[^}]*height:\s*var\(--document-shell-header-height\)/s,
 		);
 		expect(NAVIGATION).toMatch(
-			/@media \(max-width: 1197px\)[^{]*\{.*?\.anchored-child-surface\s*\{[^}]*inset:\s*var\(--document-shell-header-height\) 0 0/s,
+			/\.workspace-root\[data-workspace-mode="compact"\][^{]*\.anchored-child-card\s*\{[^}]*inset:\s*var\(--child-bar-height\) 0 0/s,
 		);
+	});
+
+	it("declares each child motion token once", () => {
+		for (
+			let token of [
+				"--child-open-dur",
+				"--child-close-dur",
+				"--child-ease",
+				"--child-recede-step",
+				"--child-scrim-opacity",
+				"--child-zoom-push",
+				"--child-bar-height",
+			]
+		) expect(THEME.match(new RegExp(`${token}:`, "g"))?.length).toBe(1);
 	});
 });
