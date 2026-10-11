@@ -47,7 +47,12 @@ export function revealDeckItem(element: Element): void {
 	);
 }
 
-export function deckKey(key: string, target: "control" | "slot" | "other"): 1 | -1 | undefined {
+export function deckKey(
+	key: string,
+	target: "control" | "slot" | "other",
+	modifiers: { alt?: boolean; ctrl?: boolean; meta?: boolean; shift?: boolean } = {},
+): 1 | -1 | undefined {
+	if (modifiers.alt || modifiers.ctrl || modifiers.meta || modifiers.shift) return undefined;
 	if (target === "other") return undefined;
 	if (key === "ArrowRight") return 1;
 	if (key === "ArrowLeft") return -1;
@@ -106,7 +111,13 @@ export function Deck({ className, items, label }: DeckProps) {
 				: target.matches("[data-deck-slot]")
 				? "slot"
 				: "other";
-			let direction = deckKey(event.key, kind);
+			if (event.defaultPrevented) return;
+			let direction = deckKey(event.key, kind, {
+				alt: event.altKey,
+				ctrl: event.ctrlKey,
+				meta: event.metaKey,
+				shift: event.shiftKey,
+			});
 			if (!direction) return;
 			event.preventDefault();
 			event.stopPropagation();
@@ -148,7 +159,7 @@ export function Deck({ className, items, label }: DeckProps) {
 					return (
 						<div
 							aria-hidden={isTop ? undefined : true}
-							aria-label={`${position(items, item.id)} of ${items.length}`}
+							aria-label={`${position(items, item.id)} of ${items.length}: ${item.label}`}
 							aria-roledescription="decision"
 							className="decision-deck-slot"
 							data-deck-settled={item.settled ? "" : undefined}
@@ -172,7 +183,7 @@ export function Deck({ className, items, label }: DeckProps) {
 			<div className="decision-deck-nav">
 				<span className="decision-deck-count">
 					{position(items, top)} of {items.length}
-					{decided > 0 && <span className="text-text-tertiary">· {decided} decided</span>}
+					{decided > 0 && <span className="text-text-tertiary">{" · "}{decided} decided</span>}
 				</span>
 				<button
 					aria-controls={stageId}

@@ -24,7 +24,7 @@ describe("deck semantics", () => {
 		expect(html).toContain('aria-roledescription="carousel"');
 		expect(html).toContain('aria-label="Decisions"');
 		expect(html).toContain('aria-roledescription="decision"');
-		expect(html).toContain('aria-label="1 of 3"');
+		expect(html).toContain('aria-label="1 of 3: Header a"');
 	});
 
 	it("leaves only the top card interactive", () => {
@@ -37,8 +37,7 @@ describe("deck semantics", () => {
 		let html = markup(["a"]);
 		expect(html).toContain('aria-label="Previous decision"');
 		expect(html).toContain('aria-label="Next decision"');
-		expect(html).toContain("2 of 3");
-		expect(html).toContain("1 decided");
+		expect(html.replace(/<[^>]*>|<!-- -->/g, "")).toContain("2 of 3 · 1 decided");
 	});
 
 	it("starts with open cards in front", () => {
@@ -52,6 +51,12 @@ describe("deck keyboard", () => {
 		expect(deckKey("ArrowLeft", "slot")).toBe(-1);
 		expect(deckKey("ArrowRight", "other")).toBeUndefined();
 		expect(deckKey("Enter", "control")).toBeUndefined();
+	});
+
+	it("ignores modified arrows", () => {
+		for (let modifier of ["alt", "ctrl", "meta", "shift"]) {
+			expect(deckKey("ArrowRight", "control", { [modifier]: true })).toBeUndefined();
+		}
 	});
 });
 
