@@ -109,6 +109,7 @@ test("the root Planner edits the open child from the root's Chat", async ({ base
 	// A child has no Chat of its own; the root's stays beside it.
 	await expect(surface.getByRole("complementary", { includeHidden: true, name: "Chat" }))
 		.toHaveCount(0);
+	await expect(chatPane(opened)).toHaveCount(1);
 
 	let chat = chatPane(opened);
 	await chatInput(chat).fill("@chopin CHILD-EDIT add a note to this report");
@@ -134,12 +135,11 @@ test("the root Planner edits the open child from the root's Chat", async ({ base
 	let childFrames = () => sockets.received(child.id);
 	expect(childFrames().length).toBeGreaterThan(0);
 	expect(
-		childFrames().some(frame => ["chat:message", "chat:tool", "chat:delta"].includes(frame.kind)),
+		childFrames().some(frame =>
+			["chat:history", "chat:message", "chat:tool", "chat:delta"].includes(frame.kind)
+		),
 	)
 		.toBe(false);
-	for (let history of childFrames().filter(frame => frame.kind === "chat:history")) {
-		expect((history as unknown as Chat.History).entries).toEqual([]);
-	}
 	let rid = crypto.randomUUID();
 	sockets.inject(child.id, {
 		kind: "chat:send",
