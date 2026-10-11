@@ -72,11 +72,25 @@ test("a reader editing the blank document is not moved", async ({ join }) => {
 	await expect(routed(ana)).toHaveCount(0);
 });
 
-test("routing happens once per entry", async ({ join }) => {
+test("an explicit tab pick keeps a blank document in Document when more decisions arrive", async ({ join }) => {
 	let page = await join("ana");
+	// The status region is one persistent element, so count announcements as they are inserted.
+	await page.evaluate(() => {
+		let seen = { count: 0 };
+		(window as unknown as { routings: typeof seen }).routings = seen;
+		new MutationObserver(records => {
+			for (let record of records) {
+				for (let node of record.addedNodes) {
+					if (node.textContent?.includes("Showing Decisions:")) seen.count++;
+				}
+			}
+		}).observe(document.body, { childList: true, subtree: true });
+	});
+	let routings = () =>
+		page.evaluate(() => (window as unknown as { routings: { count: number } }).routings.count);
 	await ask(page);
 	await expect(decisionsButton(page)).toHaveAttribute("aria-pressed", "true");
-	await expect(routed(page)).toHaveCount(1);
+	await expect.poll(routings).toBe(1);
 	await answerAll(page);
 	// The document stays blank: only the once-per-entry latch can stop a second route.
 	await page.getByRole("button", { name: "Document", exact: true }).click();
@@ -85,7 +99,7 @@ test("routing happens once per entry", async ({ join }) => {
 	await ask(page);
 	await expect(decisionsButton(page)).toContainText("3");
 	await expect(decisionsButton(page)).toHaveAttribute("aria-pressed", "false");
-	await expect(routed(page)).toHaveCount(1);
+	expect(await routings()).toBe(1);
 });
 
 test("arrow keys shuffle the Decisions deck; reduced motion reorders instantly", async ({ join }) => {
