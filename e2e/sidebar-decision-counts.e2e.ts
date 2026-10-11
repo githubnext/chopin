@@ -791,7 +791,10 @@ test("deleting an archived child updates the project total for a viewer in its p
 	);
 	try {
 		await editor.page.goto(`${parentPath}/children/${testChannelSlug(child)}`);
-		await ready(editor.page);
+		// The root stays mounted beneath the open child, so two editors are present.
+		for (let editable of [content(editor.page).first(), content(editor.page).last()]) {
+			await expect(editable).toHaveAttribute("contenteditable", "true", { timeout: 20_000 });
+		}
 		await expect.poll(() => storedCount(editor.page, ARCHIVED_CHILD.name, parent)).toBe(2);
 		await expect.poll(() => storedCount(editor.page, ARCHIVED_CHILD.name, child)).toBe(2);
 

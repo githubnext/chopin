@@ -407,9 +407,13 @@ test("a child document has no Build view", async ({ seed, join: enter, room, bas
 	let control = page.getByRole("group", { name: "Document view" });
 	await expect(control.getByRole("button", { name: "Build", exact: true })).toBeVisible();
 	await page.goto(child.path);
-	await expect(content(page)).toContainText("A child is never built.");
-	await expect(control.getByRole("button", { name: /^Decisions/ })).toBeVisible();
-	await expect(control.getByRole("button", { name: "Build", exact: true })).toHaveCount(0);
+	// The views belong to the root; the child card has none of its own.
+	let card = page.getByRole("region", { name: /^Child document:/ });
+	await expect(card.getByRole("textbox", { name: "editable markdown" })).toContainText(
+		"A child is never built.",
+	);
+	await expect(card.getByRole("group", { name: "Document view" })).toHaveCount(0);
+	await expect(card.getByRole("button", { name: "Build", exact: true })).toHaveCount(0);
 	await expect(buildView(page)).toHaveCount(0);
 });
 
