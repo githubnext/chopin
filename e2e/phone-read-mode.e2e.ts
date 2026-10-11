@@ -174,7 +174,9 @@ test("formatting docks above the keyboard while editing", async ({ baseURL, brow
 			getSelection()!.addRange(range);
 		});
 		await expect(dock.getByRole("button", { name: "Comment on this passage" })).toBeVisible();
-		await content(page).getByText("Second paragraph").click();
+		// Collapse the selection; the typing above may have split the second paragraph's words.
+		await page.keyboard.press("ArrowRight");
+		await expect(dock.getByRole("button", { name: "Comment on this passage" })).toHaveCount(0);
 
 		await hide.tap();
 		await expect(content(page)).not.toBeFocused();
