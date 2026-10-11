@@ -91,6 +91,16 @@ export class PlannerAttachments {
 		return this.#holds.get(channelId)?.link !== undefined;
 	}
 
+	/**
+	 * Whether a client is attached and its ownership still stands, checked as
+	 * the link's periodic recheck does. A stale attachment is closed and
+	 * released here, so a Planner request never proceeds on it.
+	 */
+	async confirmed(channelId: string): Promise<boolean> {
+		let link = this.#holds.get(channelId)?.link;
+		return link !== undefined && await this.verify(channelId, link);
+	}
+
 	/** The GitHub login holding the document's Planner, attached or within its grace period. */
 	holder(channelId: string): string | undefined {
 		return this.#holds.get(channelId)?.login;
@@ -186,9 +196,8 @@ export class PlannerAttachments {
 		pending: PendingAttach,
 	): Promise<AttachGrant | AttachRefusal> {
 		let { channelId, user } = request;
-		let login = await this.#eligibleLogin(request);
+		let login = await this.#eligibleLogin(request, pending);
 		if ("ok" in login) return login;
-		pending.sessionIds.add(login.session.id);
 		if (pending.invalidated) return pending.invalidated;
 		let now = this.#auth.clock();
 		let held = pending.held;
@@ -205,7 +214,17 @@ export class PlannerAttachments {
 			if (!live) await this.#release(held);
 		}
 		if (pending.invalidated) return pending.invalidated;
-		let claimed = await this.#claim(channelId, login.session.id, now);
+		let claimed;
+		try {
+			claimed = await this.#claim(channelId, login.session.id, now);
+		} catch (error) {
+			// Storage refuses a claim for a sign-in that ended after its last check.
+			if (pending.invalidated) return pending.invalidated;
+			if (!await this.#auth.sessions.resolve(login.session.id)) {
+				return signInRefusal(this.#auth.config.origin, user.login);
+			}
+			throw error;
+		}
 		if (!claimed) throw new Error("The document's Planner owner changed while attaching.");
 		let hold: Hold = {
 			channelId,
@@ -225,11 +244,19 @@ export class PlannerAttachments {
 		return this.#bind(hold, link);
 	}
 
-	async #eligibleLogin(request: AttachRequest): Promise<AuthenticatedSession | AttachRefusal> {
+	/**
+	 * The caller's browser login, registered with `pending` before its access
+	 * checks so that its sign-out during them refuses the attach.
+	 */
+	async #eligibleLogin(
+		request: AttachRequest,
+		pending: PendingAttach,
+	): Promise<AuthenticatedSession | AttachRefusal> {
 		let { repository, user } = request;
 		let fullName = `${repository.owner}/${repository.name}`;
 		let login = await this.#auth.sessions.forUser(user.id);
 		if (!login) return signInRefusal(this.#auth.config.origin, user.login);
+		pending.sessionIds.add(login.session.id);
 		let checked;
 		try {
 			checked = await this.#auth.sessions.use(

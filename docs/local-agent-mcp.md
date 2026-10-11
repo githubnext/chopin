@@ -97,7 +97,8 @@ a client attached to the document over the [Planner link](planner-link.md), and
 only attaching makes an account the owner. With a client attached the turn goes
 to it and runs under its owner, whoever invoked it. Without one, including
 while a detached Planner's grace period runs and once the attached Planner's
-owner signs out of the browser or its Planner is reset, the call is refused with
+owner signs out of the browser, that sign-in expires, or its Planner is reset,
+the call is refused with
 `planner-not-attached` and a `message`, and nothing is posted or queued:
 
 ```json

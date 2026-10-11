@@ -312,7 +312,7 @@ function conversation(
 		repository,
 		plannerNotAttached: plannerAttachments
 			? async () => {
-				if (plannerAttachments!.attached(room.id)) return undefined;
+				if (await plannerAttachments!.confirmed(room.id)) return undefined;
 				let channel = await storage.channels.get(room.id);
 				let path = channel
 					? await documentUrl(channel, storage.channels)

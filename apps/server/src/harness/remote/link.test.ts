@@ -479,6 +479,62 @@ describe("Planner link ownership", () => {
 		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
 	});
 
+	/** A member's fresh attach on a raw link, paused while GitHub checks its repository access. */
+	async function checkingMember() {
+		let linked = await linkAuth();
+		let server = linkServer(linked.auth);
+		cleanups.push(server.stop);
+		linked.revocations.add(id => server.attachments.sessionRevoked(id));
+		let { github } = linked.auth;
+		let repositoryAccess = github.repositoryAccess;
+		let checking = Promise.withResolvers<void>();
+		let resume = Promise.withResolvers<void>();
+		github.repositoryAccess = async (token, repositoryOwner, name) => {
+			github.repositoryAccess = repositoryAccess;
+			checking.resolve();
+			await resume.promise;
+			return repositoryAccess(token, repositoryOwner, name);
+		};
+		let raw = await rawLink(server.url);
+		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: linked.channel.id });
+		await checking.promise;
+		return { ...linked, server, raw, resume: () => resume.resolve() };
+	}
+
+	async function refusedSignIn(
+		attempt: Awaited<ReturnType<typeof checkingMember>>,
+	) {
+		let { server, raw, channel, storage } = attempt;
+		expect(await raw.next("refused")).toEqual({
+			type: "refused",
+			code: "sign-in-required",
+			message: "Sign in to Chopin at https://chopin.test in a browser as member, then attach "
+				+ "again. The Planner's repository tools act with that sign-in.",
+		});
+		expect(await raw.closed).toEqual({ code: LINK_CLOSE.unauthorized, reason: "sign-in-required" });
+		expect(server.attachments.attached(channel.id)).toBe(false);
+		expect(server.attachments.holder(channel.id)).toBeUndefined();
+		expect(server.links).toEqual([]);
+		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
+	}
+
+	it("refuses a fresh attach whose owner signed out while its repository access was checked", async () => {
+		let attempt = await checkingMember();
+		expect(await attempt.signOut("member")).toBe(attempt.logins.get("member"));
+		attempt.resume();
+		await refusedSignIn(attempt);
+		let { server, channel, storage, logins } = attempt;
+		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+	});
+
+	it("refuses a fresh attach whose sign-in storage saw expire before it claimed ownership", async () => {
+		let attempt = await checkingMember();
+		attempt.auth.clock = () => new Date(Date.now() + attempt.clock.skewMs);
+		attempt.clock.skewMs = 31 * 24 * 60 * 60 * 1_000;
+		attempt.resume();
+		await refusedSignIn(attempt);
+	});
+
 	it("releases the attachment when a repository writer resets the document's Planner", async () => {
 		let { server, raw, channel, storage, logins } = await attachedMember();
 		let held = (await owner(storage, channel.id))!;
