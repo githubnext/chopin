@@ -1312,3 +1312,33 @@ test("an old helper's card still gets its stop message when its release could no
 	);
 	expect(events.findLast(event => event.kind === "chat:state")?.runs).toEqual(context.chat.runs);
 });
+
+test("a focused member turn names the child before the member's words", async () => {
+	let { context } = await setup();
+	let child = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+	context.children = {
+		list: async () => [],
+		resolve: async id => id === child ? { id, title: "Source review", createdAt: "" } : undefined,
+		open: async () => {
+			throw new Error("not used");
+		},
+	};
+	let seen = observe(context);
+	let ws = { data: { handle: "ana", principalId: "U_ana" }, send() {} } as unknown as Socket;
+	await Chat.send(context, ws, {
+		kind: "chat:send",
+		rid: "send",
+		requestId: crypto.randomUUID(),
+		to: "planner",
+		text: "@chopin shorten the summary",
+		focus: child,
+		ts: 0,
+	} as never);
+	await context.chat.running;
+	expect(seen).toHaveLength(1);
+	let prompt = seen[0]!.prompt;
+	expect(prompt.indexOf(`child id ${child}`)).toBeGreaterThanOrEqual(0);
+	expect(prompt.indexOf(`child id ${child}`)).toBeLessThan(prompt.indexOf("shorten the summary"));
+	expect(context.chat.entries.find(entry => entry.author.kind === "member")?.text)
+		.toBe("shorten the summary");
+});

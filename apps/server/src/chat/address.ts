@@ -114,3 +114,15 @@ export function compose(
 	let catalog = referenceCatalog(catalogReferences);
 	return catalog ? `${prompt}\n\n${catalog}` : prompt;
 }
+
+export type Focus = { channelId: string; title: string };
+
+const MAX_FOCUS_TITLE = 200;
+
+/** Where the member is looking, ahead of what they said. The title is data, so it is quoted. */
+export function focusContext(focus: Focus): string {
+	let title = JSON.stringify(focus.title.slice(0, MAX_FOCUS_TITLE));
+	return `The member is viewing the child document ${title} (child id ${focus.channelId}). `
+		+ "Read it with `read_child` and change it with `edit_child` and `anchor_child`; "
+		+ "`read_plan` and `edit_plan` still address the root document.";
+}

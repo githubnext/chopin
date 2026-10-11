@@ -805,3 +805,91 @@ describe("draining the queue", () => {
 		}]);
 	});
 });
+
+const CHILD = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+let children = (known: string[] = [CHILD]) => {
+	let asked: string[] = [];
+	return {
+		asked,
+		value: {
+			list: async () => [],
+			resolve: async (id: string) => {
+				asked.push(id);
+				return known.includes(id) ? { id, title: "Source review", createdAt: "" } : undefined;
+			},
+			open: async () => {
+				throw new Error("not used");
+			},
+		},
+	};
+};
+
+describe("focus on a child document", () => {
+	let focused = (to: Wire.Destination, focus: unknown, requestId = crypto.randomUUID()) =>
+		({
+			...message("@chopin tighten this", to, undefined, "request", requestId),
+			focus,
+		}) as Request<Wire.Send>;
+
+	it("queues a planner message with the resolved child as focus", async () => {
+		let { chat, context } = room({ busy: true });
+		let lookup = children();
+		context.children = lookup.value;
+		await Chat.send(context, sender(), focused("planner", CHILD));
+		expect(chat.waiting[0]).toMatchObject({ focus: { channelId: CHILD, title: "Source review" } });
+		expect(lookup.asked).toEqual([CHILD]);
+	});
+
+	it("refuses a focus that is not this root's child and queues nothing", async () => {
+		let { chat, context } = room({ busy: true });
+		context.children = children([]).value;
+		let frames: Sent[] = [];
+		await Chat.send(context, sender("ana", "U_ana", frames), focused("planner", CHILD));
+		expect(chat.waiting).toHaveLength(0);
+		expect(frames.at(-1)?.message).toBe("the open child document is unavailable");
+	});
+
+	it("refuses a malformed focus before resolving anything", async () => {
+		let { chat, context } = room({ busy: true });
+		let lookup = children();
+		context.children = lookup.value;
+		let frames: Sent[] = [];
+		for (let bad of [42, "", "../x", { id: CHILD }]) {
+			await Chat.send(context, sender("ana", "U_ana", frames), focused("planner", bad));
+		}
+		expect(chat.waiting).toHaveLength(0);
+		expect(lookup.asked).toEqual([]);
+		expect(frames.filter(frame => frame.message === "invalid chat focus")).toHaveLength(4);
+	});
+
+	it("refuses focus in a room without children, such as a child document", async () => {
+		let { chat, context } = room({ busy: true });
+		let frames: Sent[] = [];
+		await Chat.send(context, sender("ana", "U_ana", frames), focused("planner", CHILD));
+		expect(chat.waiting).toHaveLength(0);
+		expect(frames.at(-1)?.message).toBe("the open child document is unavailable");
+	});
+
+	it("ignores focus on a room message without resolving it", async () => {
+		let { chat, context } = room();
+		let lookup = children();
+		context.children = lookup.value;
+		await Chat.send(context, sender(), focused("room", CHILD));
+		expect(chat.entries).toHaveLength(1);
+		expect(lookup.asked).toEqual([]);
+	});
+
+	it("treats a reused request id with a different focus as different content", async () => {
+		let { context } = room({ busy: true });
+		context.children = children([CHILD, "1a5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b"]).value;
+		let frames: Sent[] = [];
+		let requestId = crypto.randomUUID();
+		await Chat.send(context, sender("ana", "U_ana", frames), focused("planner", CHILD, requestId));
+		await Chat.send(
+			context,
+			sender("ana", "U_ana", frames),
+			focused("planner", "1a5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b", requestId),
+		);
+		expect(frames.at(-1)?.message).toBe("chat request id was reused with different content");
+	});
+});

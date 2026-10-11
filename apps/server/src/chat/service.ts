@@ -32,7 +32,7 @@ import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
-import { annotatedText, compose, referenceCatalog, remember } from "./address";
+import { annotatedText, compose, focusContext, referenceCatalog, remember } from "./address";
 import { createNotices } from "./notices";
 import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
 import { translateJob } from "./job-translate";
@@ -41,6 +41,7 @@ import { watchJobAbort } from "./job-fence";
 import { JOB_TOOLS } from "../agent/job-scope";
 import type { JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
+import { isChannelId } from "../channels/id";
 import { broadcast, fail, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
 
@@ -52,7 +53,7 @@ import type { HostedAuth } from "../auth/routes";
 import type { HostedRepository } from "../agent/repository";
 import type { JobService } from "../jobs/service";
 import type { Plan } from "../plan/service";
-import type { Said } from "./address";
+import type { Focus, Said } from "./address";
 import type { ReferenceService } from "./references";
 import type { Socket, SocketData } from "../wire";
 
@@ -103,6 +104,8 @@ export type Waiting = Wire.Waiting & {
 	invokedBy?: string;
 	/** The task draft this queued turn carries; it has no message to show in the queue. */
 	draft?: string;
+	/** The child the member had open, resolved when the message was accepted. */
+	focus?: Focus;
 };
 
 /** A request for implementation tasks, live while its turn is queued or running. */
@@ -122,9 +125,10 @@ export type ActiveMemberRequest = {
 	claimantSessionId: string | undefined;
 	turnId: string;
 	lifecycle: number;
+	focus?: Focus;
 };
 
-type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId">;
+type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId" | "focus">;
 
 /** How a turn started by an instruction finished, for whoever started it. */
 export type Ended = {
@@ -337,7 +341,15 @@ function requestFingerprint(msg: Request<Wire.Send>, principalId: string): strin
 			return Object.keys(item).sort().map(key => [key, item[key]]);
 		})
 		: msg.references ?? [];
-	return digest(JSON.stringify([principalId, msg.to, msg.text, references]));
+	// Appended only when present, so replays of entries saved before focus existed still match.
+	let focus = (msg as { focus?: unknown }).focus;
+	return digest(JSON.stringify([
+		principalId,
+		msg.to,
+		msg.text,
+		references,
+		...(focus !== undefined ? [focus] : []),
+	]));
 }
 
 function canonicalFingerprint(
@@ -702,6 +714,18 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	let request = requestFingerprint(msg, ws.data.principalId);
 	if (replay(chat, ws, msg, requestId, request)) return;
 	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
+	let focus: Focus | undefined;
+	let suppliedFocus = (msg as { focus?: unknown }).focus;
+	if (suppliedFocus !== undefined) {
+		if (typeof suppliedFocus !== "string" || !isChannelId(suppliedFocus)) {
+			return fail(ws, msg.rid, "invalid chat focus");
+		}
+		if (destination === "planner") {
+			let child = await context.children?.resolve(suppliedFocus);
+			if (!child) return fail(ws, msg.rid, "the open child document is unavailable");
+			focus = { channelId: child.id, title: child.title };
+		}
+	}
 	let projected: { text: string; references?: Wire.Reference[] };
 	try {
 		if (context.references) {
@@ -810,6 +834,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			message: true,
 			sessionId: context.claimantSessionId,
 			userId: ws.data.principalId,
+			...(focus ? { focus } : {}),
 		};
 		chat.waiting.push(waiting);
 		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: waiting.id, queued: true });
@@ -847,7 +872,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		undefined,
 		context.claimantSessionId,
 		true,
-		{ entryId: entry.id, userId: ws.data.principalId },
+		{ entryId: entry.id, userId: ws.data.principalId, ...(focus ? { focus } : {}) },
 		references,
 	);
 }
@@ -1843,6 +1868,7 @@ async function run(
 			claimantSessionId,
 			turnId: chat.turn.id,
 			lifecycle: chat.lifecycle,
+			...(member.focus ? { focus: member.focus } : {}),
 		}
 		: undefined;
 	chat.messageIds = new Map();
@@ -1887,6 +1913,7 @@ async function run(
 			retainReferences(chat, promptReferences);
 			let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
+			if (member?.focus) prompt = `${focusContext(member.focus)}\n\n${prompt}`;
 		}
 		sendStarted = true;
 		if (!jobTurn) {
@@ -2085,7 +2112,9 @@ async function run(
 			next,
 			next.invokedBy ? next.sessionId : next.sessionId ?? context.claimantSessionId,
 			false,
-			next.message && next.userId ? { entryId: next.id, userId: next.userId } : undefined,
+			next.message && next.userId
+				? { entryId: next.id, userId: next.userId, ...(next.focus ? { focus: next.focus } : {}) }
+				: undefined,
 			next.references,
 			next.job,
 		);

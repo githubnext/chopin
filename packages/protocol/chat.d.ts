@@ -218,6 +218,12 @@ export declare namespace Chat {
 		text: string;
 		to: Destination;
 		references?: ReferenceRequest[];
+		/**
+		 * The child document open beside this Chat, by channel id. Context for the
+		 * Planner only: the server resolves it against this root's children and
+		 * refuses one it cannot, and the Planner's child tools recheck it again.
+		 */
+		focus?: string;
 	};
 
 	/** The member message or queue entry is accepted by the server. */
