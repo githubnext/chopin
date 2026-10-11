@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Deck, deckAnnouncement, deckKey } from "./deck";
+import { Deck, deckAnnouncement, deckKey, parseMs } from "./deck";
 
 function markup(settled: string[] = []) {
 	return renderToStaticMarkup(createElement(Deck, {
@@ -65,5 +65,14 @@ describe("deck announcements", () => {
 		expect(deckAnnouncement("cycle", 2, 3, "Scope")).toBe("Decision 2 of 3: Scope");
 		expect(deckAnnouncement("settle", 2, 3, "Scope"))
 			.toBe("Decided. Now showing 2 of 3: Scope");
+	});
+});
+
+describe("deck time tokens", () => {
+	it("reads milliseconds and seconds, as a minified build may emit either", () => {
+		expect(parseMs("600ms", 1)).toBe(600);
+		expect(parseMs(".6s", 1)).toBe(600);
+		expect(parseMs("0.45s", 1)).toBe(450);
+		expect(parseMs("", 600)).toBe(600);
 	});
 });

@@ -96,9 +96,15 @@ function cssToken(name: string): string {
 	return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-function cssMs(name: string, fallback: number): number {
-	let value = Number.parseFloat(cssToken(name));
-	return Number.isFinite(value) ? value : fallback;
+/** A time token in milliseconds. The build may minify `600ms` to `.6s`, so read the unit. */
+export function cssMs(name: string, fallback: number): number {
+	return parseMs(cssToken(name), fallback);
+}
+
+export function parseMs(token: string, fallback: number): number {
+	let value = Number.parseFloat(token);
+	if (!Number.isFinite(value)) return fallback;
+	return /\ds$/.test(token) ? value * 1000 : value;
 }
 
 type Frozen = {

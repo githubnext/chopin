@@ -172,6 +172,7 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 - **GitHub reference pills:** A pull request or issue link in a document is a tinted capsule over the link itself: the state surface mixed half with the page, a hairline at 12% of the state icon colour, a 14px state glyph, the authored title in primary ink and a never-truncated `#number` in tertiary ink. Open is success, merged and completed are merged, closed is danger, and draft, not planned, loading and no access stay neutral.
 - **Document:** The authored page is white, readable, and wider only where content requires it. Headings, lists, tables, code, and callouts retain document semantics inside the editor.
 - **Document images:** Click opens a full-screen preview with zoom and close controls. Hover or keyboard focus reveals metadata editing and corner resize handles. Resizing preserves the image ratio, shares the chosen width with collaborators, and remains bounded by the document or column on narrow screens.
+- **Decision decks:** Adjacent decisions stack as a deck. The top card is live; up to two cards behind it show their header edges and are inert. Previous and next controls, Left and Right arrows, and a count of the top card's place cycle the deck with a short shuffle; answered decisions settle to the back. Reduced motion reorders without animation. Deck order is each reader's own.
 
 ## Do's and Don'ts
 

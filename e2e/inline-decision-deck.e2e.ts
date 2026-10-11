@@ -11,6 +11,50 @@ function top(page: Page) {
 	return deck(page).locator("[data-deck-top]");
 }
 
+/** Slot ids from front to back, read from each slot's layer. Valid at rest. */
+function order(page: Page) {
+	return deck(page).evaluate(element =>
+		[...element.querySelectorAll<HTMLElement>("[data-deck-slot]")]
+			.map(slot => ({ id: slot.dataset.deckSlot!, layer: Number(getComputedStyle(slot).zIndex) }))
+			.sort((a, b) => b.layer - a.layer)
+			.map(slot => slot.id)
+	);
+}
+
+/** Pause every animation in the deck at `fraction` of its own duration. */
+function scrub(page: Page, fraction: number) {
+	return deck(page).evaluate((element, at) => {
+		for (let animation of element.getAnimations({ subtree: true })) {
+			animation.pause();
+			animation.currentTime = at * Number(animation.effect!.getTiming().duration);
+		}
+	}, fraction);
+}
+
+type Frame = { at: number; y: number; layer: number; opacity: number };
+
+/** Sample a card's shuffle at fractions of its duration, then let it finish. */
+function sampleShuffle(page: Page, id: string, fractions: number[]) {
+	return page.locator(`[data-deck-slot="${id}"]`).evaluate((element, points) => {
+		let shuffle = element.getAnimations().find(animation => animation.id === "deck-shuffle");
+		if (!shuffle) return undefined;
+		shuffle.pause();
+		let duration = Number(shuffle.effect!.getTiming().duration);
+		let frames = points.map(at => {
+			shuffle!.currentTime = at * duration;
+			let style = getComputedStyle(element);
+			return {
+				at,
+				y: new DOMMatrix(style.transform).m42,
+				layer: Number(style.zIndex),
+				opacity: Number(style.opacity),
+			};
+		});
+		shuffle.finish();
+		return frames;
+	}, fractions) as Promise<Frame[] | undefined>;
+}
+
 test("adjacent decisions in a document form one deck", async ({ join, seed }) => {
 	let fixture = deckSeed({ before: "Intro paragraph.", after: "Trailing paragraph." }, 3);
 	await seed(fixture.source, fixture.state);
@@ -143,6 +187,12 @@ test("an answered decision settles to the back and focus follows the new top", a
 	await expect(deck(page).getByRole("status"))
 		.toHaveText("Decided. Now showing 1 of 3: Scope");
 	await expect(top(page)).toBeFocused();
+	// The answered card went to the back, and the rest moved up one place each.
+	await expect.poll(() => order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
+	await expect(page.locator(`[data-deck-slot="${fixture.ids[0]}"]`)).toHaveAttribute(
+		"data-deck-settled",
+		"",
+	);
 });
 
 test("a collaborator's answer reorders without moving my top card", async ({ join, seed }) => {
@@ -172,17 +222,140 @@ test("answering every decision dissolves the deck", async ({ join, seed }) => {
 	await expect(page.locator('[data-document-view="plan"] [data-card-settled]')).toHaveCount(2);
 });
 
-test("revealing a back card brings it to the top", async ({ join, seed }) => {
+test("showing a back decision from Decisions brings it to the top and focuses it", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Anchored paragraph." }, 3, { anchored: [2] });
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await expect.poll(() => order(page)).toEqual(fixture.ids);
+
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = page.locator(
+		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
+	)
+		.filter({ hasText: fixture.prompts[2]! });
+	await card.getByRole("button", { name: /show in document/i }).click();
+
+	await expect(page.getByRole("button", { name: "Document", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[2] })).toBeVisible();
+	await expect(top(page).locator(`article[data-plan-sidecar-questionnaire="${fixture.ids[2]}"]`))
+		.toBeFocused();
+	await expect.poll(() => order(page)).toEqual([fixture.ids[2], fixture.ids[0], fixture.ids[1]]);
+});
+
+test("cycling shuffles the outgoing card from over the deck to under it", async ({ join, seed }) => {
 	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
-	await page.locator(`[data-deck-slot="${fixture.ids[2]}"]`).evaluate(element =>
-		element.dispatchEvent(
-			new CustomEvent("chopin:deck-front", {
-				bubbles: true,
-				detail: (element as HTMLElement).dataset.deckSlot,
-			}),
-		)
-	);
-	await expect(top(page).getByRole("heading", { name: fixture.prompts[2] })).toBeVisible();
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await deck(page).getByRole("button", { name: "Next decision" }).click();
+	let fractions = Array.from({ length: 21 }, (_, step) => step / 20);
+	let frames = await sampleShuffle(page, fixture.ids[0]!, fractions);
+	expect(frames).toBeDefined();
+
+	// Out and down to the midpoint, then back up into the slot behind the deck.
+	let first = frames!.filter(frame => frame.at <= 0.45);
+	let second = frames!.filter(frame => frame.at >= 0.45);
+	for (let index = 1; index < first.length; index++) {
+		expect(first[index]!.y).toBeGreaterThanOrEqual(first[index - 1]!.y);
+	}
+	for (let index = 1; index < second.length; index++) {
+		expect(second[index]!.y).toBeLessThanOrEqual(second[index - 1]!.y);
+	}
+	expect(Math.max(...frames!.map(frame => frame.y))).toBeGreaterThan(40);
+	// No frame jumps: neighbouring samples stay within a card's travel.
+	let travel = Math.max(...frames!.map(frame => frame.y))
+		- Math.min(...frames!.map(frame => frame.y));
+	for (let index = 1; index < frames!.length; index++) {
+		expect(Math.abs(frames![index]!.y - frames![index - 1]!.y)).toBeLessThan(travel * 0.6);
+	}
+	// The card passes over the deck, then drops under it near the midpoint.
+	for (let frame of frames!) {
+		if (frame.at < 0.4) expect(frame.layer).toBeGreaterThan(100);
+		// At 1 the card has landed and returns to its slot's own layer.
+		if (frame.at > 0.5 && frame.at < 1) expect(frame.layer).toBe(0);
+		expect(frame.opacity).toBe(1);
+	}
+	await expect.poll(() => order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
+});
+
+test("an interrupted shuffle continues from its current frame and keeps its layer", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	let next = deck(page).getByRole("button", { name: "Next decision" });
+	let previous = deck(page).getByRole("button", { name: "Previous decision" });
+	await next.click();
+	await previous.click();
+	let frames = await sampleShuffle(page, fixture.ids[0]!, [0, 0.1, 0.2, 0.3, 0.44, 0.6, 1]);
+	expect(frames).toBeDefined();
+	// Reversed before the midpoint, the card never dips under the deck.
+	for (let frame of frames!.filter(frame => frame.at < 1)) {
+		expect(frame.layer).toBeGreaterThan(100);
+	}
+	// It resumes from where the first move had taken it, not from its slot.
+	expect(frames![0]!.y).not.toBe(0);
+	await expect.poll(() => order(page)).toEqual(fixture.ids);
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
+});
+
+test("a tall card coming forward never paints over what is below the deck", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph.", after: "Trailing paragraph." }, 3, {
+		optionCounts: [1, 8, 1],
+	});
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await deck(page).getByRole("button", { name: "Next decision" }).click();
+	for (let fraction of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+		await scrub(page, fraction);
+		let overshoot = await deck(page).evaluate((element, id) => {
+			let incoming = element.querySelector<HTMLElement>(`[data-deck-slot="${id}"]`)!;
+			let stage = element.querySelector<HTMLElement>(".decision-deck-stage")!;
+			let rect = incoming.getBoundingClientRect();
+			let scale = rect.height / incoming.offsetHeight;
+			let clip = /inset\([^)]*\)/.exec(getComputedStyle(incoming).clipPath)?.[0] ?? "";
+			let bottom = Number.parseFloat(clip.replace("inset(", "").split(" ")[2] ?? "0") || 0;
+			let visible = rect.top + (incoming.offsetHeight - bottom) * scale;
+			return visible - stage.getBoundingClientRect().bottom;
+		}, fixture.ids[1]!);
+		expect(overshoot, `at ${fraction}`).toBeLessThanOrEqual(2);
+	}
+	await deck(page).evaluate(element => {
+		for (let animation of element.getAnimations({ subtree: true })) animation.finish();
+	});
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+});
+
+test("reduced motion reorders instantly and in the right order", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await deck(page).getByRole("button", { name: "Next decision" }).click();
+	expect(await deck(page).evaluate(element => element.getAnimations({ subtree: true }).length))
+		.toBe(0);
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+	expect(await order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
+
+	// Answering settles the card to the back without any animation.
+	await top(page).getByText("Option 2", { exact: true }).click();
+	await top(page).getByRole("button", { name: "Save", exact: true }).click();
+	await expect.poll(() => order(page)).toEqual([fixture.ids[2], fixture.ids[0], fixture.ids[1]]);
+	expect(await deck(page).evaluate(element => element.getAnimations({ subtree: true }).length))
+		.toBe(0);
+});
+
+test("a deck fits a 390px document without horizontal scroll", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana", { viewport: { width: 390, height: 800 } });
+	let destination = page.getByRole("button", { name: "Document", exact: true });
+	if ((await destination.getAttribute("aria-pressed")) !== "true") await destination.click();
+	await expect(deck(page)).toBeVisible();
+	let box = (await deck(page).boundingBox())!;
+	expect(box.x).toBeGreaterThanOrEqual(0);
+	expect(box.x + box.width).toBeLessThanOrEqual(390);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

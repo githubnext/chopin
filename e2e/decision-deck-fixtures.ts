@@ -2,6 +2,9 @@ import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
 
+/** The digest of a paragraph reading exactly `Anchored paragraph.` */
+export const ANCHORED_DIGEST =
+	"sha256:3ccc3e648811df8180799f8b012c6934bcf44a306f5eb8b8c9d2676b0493ccf4";
 const HEADERS = ["Storage", "Scope", "Rollout", "Naming"];
 const PROMPTS = [
 	"Where should room state live?",
@@ -14,7 +17,7 @@ const PROMPTS = [
 export function deckSeed(
 	prose: { before?: string; after?: string },
 	count: number,
-	options: { separated?: boolean } = {},
+	options: { separated?: boolean; optionCounts?: number[]; anchored?: number[] } = {},
 ): { source: string; state: SeedState; prompts: string[]; ids: string[] } {
 	let ids: string[] = [];
 	let cards: string[] = [];
@@ -23,20 +26,25 @@ export function deckSeed(
 	for (let index = 0; index < count; index++) {
 		let widget = `01K0N4TR8K7JGM4R1J7PW4R8Y${index}`;
 		let question = `01K0N4V4E7Y6P4MJ5WD8XZF3B${index}`;
-		let option = `01K0N4W3B7P27CBAEC7A8C8WE${index}`;
+		let extra = (options.optionCounts?.[index] ?? 1) - 1;
+		let choices = Array.from({ length: extra + 1 }, (_, at) => ({
+			id: `01K0N4W3B7P27CBAEC7A8C8W${"EFGHJKMNPQRS"[at]}${index}`,
+			label: at === 0 ? `Option ${index + 1}` : `Extra option ${at}`,
+			description: at === 0 ? "" : "A longer option that adds height to the card.",
+		}));
 		let definition = {
 			questions: [{
 				id: question,
 				header: HEADERS[index]!,
 				question: PROMPTS[index]!,
 				multiple: false,
-				options: [{ id: option, label: `Option ${index + 1}`, description: "" }],
+				options: choices,
 			}],
 		};
 		ids.push(widget);
 		cards.push(`<Questionnaire id="${widget}">
 <Question id="${question}" header="${HEADERS[index]}" prompt="${PROMPTS[index]}" multiple="false">
-<Option id="${option}" label="Option ${index + 1}" />
+${choices.map(choice => `<Option id="${choice.id}" label="${choice.label}" />`).join("\n")}
 </Question>
 </Questionnaire>`);
 		questions.push({
@@ -47,6 +55,19 @@ export function deckSeed(
 			history: [],
 			optionOrigins: {},
 			editors: [],
+			...(options.anchored?.includes(index)
+				? {
+					anchors: {
+						widget,
+						questions: {
+							[question]: {
+								anchors: [{ epoch: "stale", position: "", digest: ANCHORED_DIGEST }],
+								pending: false,
+							},
+						},
+					},
+				}
+				: {}),
 		});
 		openQuestions.push({
 			definition,
