@@ -33,6 +33,13 @@ export function viewportVars(
 	};
 }
 
+/** Taller than any browser toolbar, shorter than any software keyboard. */
+export const KEYBOARD_OPEN_MIN = 120;
+
+export function keyboardOpen(variables: ViewportVariables): boolean {
+	return parseFloat(variables["--keyboard-inset"]) >= KEYBOARD_OPEN_MIN;
+}
+
 /** Keeps the mounted workspace sized to the pixels the browser currently exposes. */
 export function useVisualViewport(): void {
 	useEffect(() => {
@@ -45,6 +52,7 @@ export function useVisualViewport(): void {
 			for (let [name, value] of Object.entries(variables)) {
 				document.documentElement.style.setProperty(name, value);
 			}
+			document.documentElement.toggleAttribute("data-keyboard-open", keyboardOpen(variables));
 		};
 
 		update();

@@ -5,6 +5,7 @@ import { Count } from "@chopin/editor/count";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, ChevronIcon, CollapseIcon, ExpandIcon } from "@chopin/icons";
+import { usePhone } from "@chopin/editor/pointer";
 
 import {
 	CHAT_CHOICE_STORAGE_KEY,
@@ -26,6 +27,7 @@ import { listenForShortcuts } from "./global-shortcuts";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
 import { BUILD_UNAVAILABLE } from "./decision-view-control";
+import { phonePaneScroller, PhoneTabBar, usePhoneTopBar } from "./phone-workspace";
 
 import type { CSSProperties, Dispatch, ReactNode, RefObject } from "react";
 import type { DocumentActivity } from "./document-activity";
@@ -86,7 +88,14 @@ export function useWorkspaceLayout() {
 			document.removeEventListener("transitioncancel", measure);
 		};
 	}, []);
-	return { available, frame, mode: workspaceSizing(available, 500).mode };
+	// A phone keeps one destination at a time even when landscape gives it a wide window.
+	let phone = usePhone();
+	return {
+		available,
+		frame,
+		mode: phone ? "compact" as const : workspaceSizing(available, 500).mode,
+		phone,
+	};
 }
 
 /** Only the desktop Chat preference crosses a page load. */
@@ -135,6 +144,10 @@ export type WorkspaceProps = {
 	onChatOpen: (open: boolean) => void;
 	onDesktopChatOpen: (open: boolean) => void;
 	onDestination: (destination: WorkspaceDocumentView) => void;
+	/** Phone class: bottom tabs, a collapsing top bar, and full-bleed panes. */
+	phone?: boolean;
+	/** Extension point for a circular control at the end of the phone tab bar. */
+	phoneAction?: ReactNode;
 	unanswered: number;
 	chatActivity: { unread: number; busy: boolean };
 	documentActivity?: DocumentActivity;
@@ -236,6 +249,8 @@ export function Workspace(
 		onChatOpen,
 		onDesktopChatOpen,
 		onDestination,
+		phone = false,
+		phoneAction,
 		plan,
 		presence,
 		presentation: workspacePresentation,
@@ -271,11 +286,12 @@ export function Workspace(
 	// view, so a child left open under Decisions or Build is still in sight and one click away.
 	let stackBar = !!nested && !lift;
 	let planCovered = stackBar && view === "plan";
-	let immediately = motionImmediately();
-	let contentSwapMotion = motionContract("content-swap");
+	// Phones crossfade rather than cut under reduced motion, so only keyboard input is immediate.
+	let immediately = phone ? motionImmediately(undefined, false) : motionImmediately();
+	let contentSwapMotion = phone ? motionContract("tab-slide") : motionContract("content-swap");
 	let chatPresence = useTransitionPresence(
 		presentation.chatVisible ? true : undefined,
-		220,
+		phone ? contentSwapMotion.closeDuration : 220,
 		immediately,
 	);
 	let chatTrack = usePaneMotion(chatPresence.phase);
@@ -371,6 +387,18 @@ export function Workspace(
 		if (mode !== "split" || stranded) dismissChat();
 		else onDesktopChatOpen(false);
 	};
+	let topBarHidden = usePhoneTopBar(root, phone, destination);
+	let selectPhoneTab = (next: WorkspaceDestination, current: boolean, source: HTMLElement) => {
+		if (!current) return navigate(next, source);
+		let pane = root.current?.querySelector(
+			next === "chat" ? `#${CSS.escape(ids.pane.chat)}` : `[data-document-view="${next}"]`,
+		);
+		phonePaneScroller(pane)?.scrollTo({
+			behavior: motionImmediately() ? "auto" : "smooth",
+			top: 0,
+		});
+	};
+
 	let chatShortcutEnabled = !!chat;
 	useEffect(() => {
 		if (!chatShortcutEnabled) return;
@@ -382,22 +410,27 @@ export function Workspace(
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
 			data-document-expanded={presentation.documentExpanded || undefined}
 			data-header-hidden={headerHidden || undefined}
+			data-workspace-bar={topBarHidden ? "hidden" : undefined}
 			data-workspace-mode={mode}
+			data-workspace-phone={phone || undefined}
 			data-workspace-room={identity}
 			data-workspace-surface={profile.surface}
 			data-workspace-travel={travel.back ? "back" : undefined}
 			ref={root}
 			style={mode === "split" ? { "--chat-width": `${chatWidth}px` } as CSSProperties : undefined}
 		>
-			<div
-				aria-hidden={headerHidden || undefined}
-				className="workspace-header-slot shrink-0"
-				inert={headerHidden}
-			>
-				{header}
-			</div>
+			{/* The phone top bar is positioned against the workspace root, so it is not slotted. */}
+			{phone ? header : (
+				<div
+					aria-hidden={headerHidden || undefined}
+					className="workspace-header-slot shrink-0"
+					inert={headerHidden}
+				>
+					{header}
+				</div>
+			)}
 
-			{mode !== "split" && (
+			{mode !== "split" && !phone && (
 				<nav
 					aria-label="Workspace view"
 					className={`workspace-navigation hairline-b grid shrink-0 bg-ground p-1 ${
@@ -466,7 +499,9 @@ export function Workspace(
 			<div
 				ref={frame}
 				className={`workspace-frame relative flex min-h-0 flex-1 ${
-					mode === "split"
+					phone
+						? "overflow-hidden bg-page"
+						: mode === "split"
 						? "mx-3 mb-3"
 						: "m-2 overflow-hidden rounded-panel bg-page shadow-resting ring-hairline"
 				}`}
@@ -671,7 +706,9 @@ export function Workspace(
 					<aside
 						aria-hidden={chatInactive || undefined}
 						aria-labelledby={ids.heading.chat}
-						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden ${
+						className={`workspace-chat-panel ${
+							phone ? "motion-tab-slide" : "motion-panel"
+						} ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden ${
 							mode === "split" ? "" : "bg-chat-pane"
 						}`}
 						data-pane-moving={chatTrack.moving || undefined}
@@ -707,6 +744,32 @@ export function Workspace(
 					</aside>
 				)}
 			</div>
+			{phone && profile.implementation && !buildEnabled && (
+				<span className="sr-only" id={buildReason}>{BUILD_UNAVAILABLE}</span>
+			)}
+			{phone && (
+				<PhoneTabBar
+					action={phoneAction}
+					active={destination}
+					buildReason={buildEnabled ? undefined : buildReason}
+					chatActivity={chatActivity}
+					destinations={destinations}
+					documentActivity={documentActivity}
+					labels={{
+						build: destinationLabel("build", unanswered, chatActivity, documentActivity),
+						chat: destinationLabel("chat", unanswered, chatActivity, documentActivity),
+						decisions: destinationLabel("decisions", unanswered, chatActivity, documentActivity),
+						plan: destinationLabel(
+							"plan",
+							unanswered,
+							chatActivity,
+							destination === "plan" ? undefined : documentActivity,
+						),
+					}}
+					onSelect={selectPhoneTab}
+					unanswered={unanswered}
+				/>
+			)}
 		</div>
 	);
 }

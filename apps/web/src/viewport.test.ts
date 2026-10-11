@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { viewportVars } from "./viewport";
+import { keyboardOpen, viewportVars } from "./viewport";
 
 describe("viewport variables", () => {
 	it("uses the visible viewport and reports the covered keyboard area", () => {
@@ -55,5 +55,10 @@ describe("viewport variables", () => {
 				"--app-width": "320px",
 				"--keyboard-inset": "316px",
 			});
+	});
+
+	it("treats only a keyboard-sized cover as an open keyboard", () => {
+		expect(keyboardOpen(viewportVars(844, { height: 506, top: 22 }, 1))).toBe(true);
+		expect(keyboardOpen(viewportVars(844, { height: 790, top: 0 }, 1))).toBe(false);
 	});
 });

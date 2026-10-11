@@ -26,7 +26,8 @@ async function emulatedVisualViewportPage(
 		}));
 }
 
-async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
+/** A touch phone: full-bleed panes between a top bar and a bottom tab bar. */
+async function expectPhoneWorkspaceChrome(page: Page): Promise<void> {
 	let header = page.getByRole("banner");
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let frame = page.locator(".workspace-frame");
@@ -58,11 +59,14 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 			shadow: style.boxShadow,
 		};
 	});
-	expect(surface.left).toBe(12);
-	expect(surface.right).toBe(12);
-	expect(surface.radius).toBe("12px");
+	expect(surface.left).toBe(0);
+	expect(surface.right).toBe(0);
+	expect(surface.radius).toBe("0px");
 	expect(surface.overflow).toBe("hidden");
-	expect(surface.shadow).not.toBe("none");
+	let [navBox, frameBox] = await Promise.all([nav.boundingBox(), frame.boundingBox()]);
+	// The tab bar floats over the bottom of the panes, in the thumb zone.
+	expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(frameBox!.y + frameBox!.height);
+	expect(navBox!.y).toBeGreaterThan(frameBox!.y + frameBox!.height / 2);
 
 	let heights = await destinations.evaluateAll(buttons =>
 		buttons.map(button => button.getBoundingClientRect().height)
@@ -89,7 +93,7 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	await expectCompactWorkspaceChrome(page);
+	await expectPhoneWorkspaceChrome(page);
 	let projects = page.getByRole("button", { name: "Show sidebar" });
 	await projects.click();
 	let drawer = page.getByRole("dialog", { name: "Projects" });
@@ -369,9 +373,8 @@ test("a shifted visual viewport keeps workspace controls in the exposed rectangl
 		let sidebarButton = page.getByRole("button", { name: "Show sidebar" });
 		await expect(sidebarButton).toBeVisible();
 		await expectInsideViewport(sidebarButton);
-		let workspaceNavigation = page.getByRole("navigation", { name: "Workspace view" });
-		await expect(workspaceNavigation).toBeVisible();
-		await expectInsideViewport(workspaceNavigation);
+		// A keyboard-sized cover hides the phone tab bar rather than squeezing it above the keys.
+		await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeHidden();
 	} finally {
 		await context.close();
 	}
@@ -619,7 +622,8 @@ test("Chromium visual viewport emulation keeps document editing above the keyboa
 			offsetTop: 0,
 		});
 		await expectInsideViewport(editor.locator(":scope > p").first());
-		await expectInsideViewport(emulation.page.getByRole("navigation", { name: "Workspace view" }));
+		// A phone gives the keyboard the bottom edge: its tab bar steps aside.
+		await expect(emulation.page.getByRole("navigation", { name: "Workspace view" })).toBeHidden();
 	} finally {
 		await emulation.close();
 	}

@@ -4,7 +4,8 @@ export type MotionKind =
 	| "feedback"
 	| "popover"
 	| "route-swap"
-	| "sidebar";
+	| "sidebar"
+	| "tab-slide";
 
 export const MOTION_STATES = ["", "is-open", "is-closing"] as const;
 
@@ -32,6 +33,8 @@ let contracts = {
 	// `closeDelay` adds 50ms, so the incoming route starts as `--route-swap-out-dur` ends.
 	"route-swap": { className: "motion-route-swap", closeDuration: 30, states: MOTION_STATES },
 	sidebar: { className: "motion-sidebar", closeDuration: 180, states: MOTION_STATES },
+	// Phone destinations: matches `--tab-slide-dur`.
+	"tab-slide": { className: "motion-tab-slide", closeDuration: 380, states: MOTION_STATES },
 } as const satisfies Record<MotionKind, MotionContract>;
 
 export function motionContract<Kind extends MotionKind>(kind: Kind): (typeof contracts)[Kind] {

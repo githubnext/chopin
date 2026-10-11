@@ -49,6 +49,7 @@ import {
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
+import { PhoneHeader } from "./phone-header";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
@@ -359,7 +360,7 @@ export function RoomWorkspace(
 	let repositoryRef = useRef(repository);
 	repositoryRef.current = repository;
 	let user = useMemo(() => cursor(handle), [handle]);
-	let { available, frame, mode } = useWorkspaceLayout();
+	let { available, frame, mode, phone } = useWorkspaceLayout();
 	let workspaceIds = useWorkspaceIds();
 	let profile = workspaceProfile(presentation);
 	let [implementation, setImplementation] = useState<Plan.ImplementationStatus>({
@@ -1150,20 +1151,34 @@ export function RoomWorkspace(
 				}
 				chatActivity={chatActivity}
 				documentActivity={documentActivity(documentWatch, chatActivity.busy)}
-				header={
-					<Header
-						archivedAt={workspaceArchivedAt}
-						canManage={effectiveCanManage}
-						editing={titleEdit}
-						members={mode === "split" ? undefined : members}
-						label={metadata.title}
-						onAction={action => onDocumentAction(room, action)}
-						onEditingChange={setTitleEdit}
-						onRenamed={updateMetadata}
-						project={{ id: repository.id, name: repository.name }}
-						room={room}
-					/>
-				}
+				header={phone
+					? (
+						<PhoneHeader
+							archivedAt={workspaceArchivedAt}
+							canManage={effectiveCanManage}
+							editing={titleEdit}
+							label={metadata.title}
+							onAction={action => onDocumentAction(room, action)}
+							onEditingChange={setTitleEdit}
+							onRenamed={updateMetadata}
+							presentation={presentation}
+							room={room}
+						/>
+					)
+					: (
+						<Header
+							archivedAt={workspaceArchivedAt}
+							canManage={effectiveCanManage}
+							editing={titleEdit}
+							members={mode === "split" ? undefined : members}
+							label={metadata.title}
+							onAction={action => onDocumentAction(room, action)}
+							onEditingChange={setTitleEdit}
+							onRenamed={updateMetadata}
+							project={{ id: repository.id, name: repository.name }}
+							room={room}
+						/>
+					)}
 				controls={
 					<>
 						<DecisionViewControl
@@ -1181,6 +1196,7 @@ export function RoomWorkspace(
 				identity={room}
 				mode={mode}
 				presence={<RoomMembers members={members} ring="page" />}
+				phone={phone}
 				onDesktopChatOpen={setDesktopChatOpen}
 				onChatOpen={open => dispatch({ type: "set-chat", open })}
 				onDestination={selectDestination}

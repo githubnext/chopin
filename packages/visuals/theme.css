@@ -92,6 +92,8 @@
 	--color-icon: var(--color-gray-500);
 	--color-chat-body: oklch(0.38064 0.01903 136.21);
 	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
+	/* Phone chrome floats over content: a translucent page that blurs what scrolls beneath. */
+	--color-glass: color-mix(in oklch, var(--color-page) 84%, transparent);
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -240,10 +242,18 @@
 	--document-decisions-top-inset: calc(var(--spacing) * 12);
 	--document-gutter: calc(var(--spacing) * 14);
 	--document-gutter-compact: calc(var(--spacing) * 6);
+	--document-gutter-phone: calc(var(--spacing) * 5);
 	--document-trailing-space: 60vh;
 	--document-line-height: 1.6;
 	--decision-marker-size: calc(var(--spacing) * 6);
 	--choice-content-gap: calc(var(--spacing) * 3);
+
+	/* Phone chrome: a collapsing top bar and a floating bottom tab bar in the thumb zone. */
+	--phone-bar-height: calc(var(--spacing) * 11);
+	--phone-tab-bar-height: calc(var(--spacing) * 15);
+	--phone-tab-bar-gap: calc(var(--spacing) * 2.5);
+	--phone-tab-row-max: 30rem;
+	--glass-filter: blur(20px) saturate(180%);
 
 	/* Empty states share one illustration and copy rhythm. */
 	--empty-state-icon-frame-size: calc(var(--spacing) * 14);
@@ -353,6 +363,10 @@
 	--child-scrim-opacity: 0.45;
 	--child-zoom-push: 1.06;
 	--child-bar-height: calc(var(--spacing) * 9);
+	/* Phone destinations glide sideways by tab order; the top bar tucks away while reading. */
+	--tab-slide-dur: 380ms;
+	--tab-slide-ease: cubic-bezier(0.32, 0.72, 0, 1);
+	--phone-bar-dur: 250ms;
 	--route-swap-out-dur: 80ms;
 	--route-swap-in-dur: 150ms;
 	--icon-swap-dur: 250ms;

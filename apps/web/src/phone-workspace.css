@@ -1,0 +1,323 @@
+/*
+ * Phone class (`data-workspace-phone`): panes run full-bleed under a translucent top bar and a
+ * floating bottom tab bar. Each pane keeps its own scroller, padded so content starts below the
+ * top bar and can scroll beneath both bars.
+ */
+.workspace-root[data-workspace-phone] {
+	--phone-top-chrome: calc(var(--phone-bar-height) + env(safe-area-inset-top));
+	--phone-tab-bar-offset: max(
+		calc(env(safe-area-inset-bottom) - var(--spacing) * 3),
+		var(--phone-tab-bar-gap)
+	);
+	--phone-bottom-chrome: calc(
+		var(--phone-tab-bar-height) + var(--phone-tab-bar-offset) + var(--spacing) * 3
+	);
+	--document-top-inset: calc(var(--phone-top-chrome) + var(--spacing) * 4);
+	--document-decisions-top-inset: var(--document-top-inset);
+	position: relative;
+}
+
+:root[data-keyboard-open] .workspace-root[data-workspace-phone] {
+	--phone-bottom-chrome: 0px;
+}
+
+.workspace-root[data-workspace-phone] :is(.plan, .plan-decisions) {
+	--plan-gutter: var(--document-gutter-phone);
+}
+
+.workspace-root[data-workspace-phone] .build-view {
+	--build-gutter: var(--document-gutter-phone);
+}
+
+.workspace-root[data-workspace-phone] .workspace-frame {
+	margin: 0;
+	padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+}
+
+.workspace-root[data-workspace-phone] .plan [data-plan-scroll] {
+	scroll-padding-block: calc(var(--phone-top-chrome) + var(--spacing) * 4) 30%;
+}
+
+.workspace-root[data-workspace-phone] .workspace-chat-panel {
+	padding-bottom: var(--phone-bottom-chrome);
+}
+
+.workspace-root[data-workspace-phone] [data-chat-scroll] {
+	padding-top: calc(var(--phone-top-chrome) + var(--spacing) * 3);
+}
+
+.workspace-root[data-workspace-phone] .workspace-status-row {
+	inset-block-start: var(--phone-top-chrome);
+}
+
+/* Top bar -------------------------------------------------------------- */
+
+.workspace-root[data-workspace-phone] > .phone-top-bar {
+	position: absolute;
+	z-index: 30;
+	inset-inline: 0;
+	top: 0;
+	display: grid;
+	grid-template-columns: var(--control-target-coarse) minmax(0, 1fr) var(--control-target-coarse);
+	align-items: center;
+	gap: var(--spacing);
+	height: var(--phone-top-chrome);
+	min-height: 0;
+	padding: env(safe-area-inset-top) calc(var(--spacing) + env(safe-area-inset-right)) 0
+		calc(var(--spacing) + env(safe-area-inset-left));
+	background: var(--color-glass);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
+	border-bottom: var(--edge-width) solid var(--color-edge);
+	transition: transform var(--phone-bar-dur) var(--ease-out);
+}
+
+/* Only the bar tucks away; its safe-area band stays as the status bar's ground. */
+.workspace-root[data-workspace-bar="hidden"] > .phone-top-bar {
+	transform: translateY(calc(-1 * var(--phone-bar-height)));
+}
+
+.phone-top-bar-slot {
+	display: grid;
+	place-items: center;
+}
+
+.phone-top-bar-slot .btn-icon {
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	margin: 0;
+	border-radius: var(--radius-full);
+	color: var(--color-text-secondary);
+}
+
+.phone-top-bar-title {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	align-items: center;
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-semibold);
+	line-height: 1.2;
+	color: var(--color-text-primary);
+}
+
+.phone-top-bar-title > .truncate {
+	max-width: 100%;
+}
+
+.phone-top-bar-title input {
+	width: 100%;
+	text-align: center;
+}
+
+.phone-top-bar-subtitle {
+	font-size: var(--text-2xs);
+	font-weight: var(--font-weight-normal);
+	color: var(--color-text-tertiary);
+}
+
+/* Bottom tab bar ------------------------------------------------------- */
+
+.phone-tab-row {
+	position: absolute;
+	z-index: 40;
+	right: 0;
+	bottom: var(--phone-tab-bar-offset);
+	left: 0;
+	/* Landscape keeps a thumb-sized bar centred rather than stretched across the screen. */
+	width: min(
+		calc(100% - var(--spacing) * 8 - env(safe-area-inset-left) - env(safe-area-inset-right)),
+		var(--phone-tab-row-max)
+	);
+	margin-inline: auto;
+	display: flex;
+	align-items: center;
+	gap: var(--phone-tab-bar-gap);
+	transition: transform var(--tab-slide-dur) var(--tab-slide-ease), visibility 0s;
+}
+
+/* The keyboard owns the bottom edge while it is up. */
+:root[data-keyboard-open] .phone-tab-row {
+	visibility: hidden;
+	transform: translateY(calc(100% + var(--phone-tab-bar-offset) + var(--spacing) * 5));
+	transition:
+		transform var(--tab-slide-dur) var(--tab-slide-ease),
+		visibility 0s linear var(--tab-slide-dur);
+}
+
+.phone-tab-bar,
+.phone-tab-action {
+	background: var(--color-glass);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-overlay);
+}
+
+.phone-tab-bar {
+	position: relative;
+	display: grid;
+	flex: 1;
+	grid-template-columns: repeat(var(--phone-tab-count, 3), minmax(0, 1fr));
+	height: var(--phone-tab-bar-height);
+	padding: var(--spacing);
+	border-radius: var(--radius-full);
+}
+
+.phone-tab-indicator {
+	position: absolute;
+	inset-block: var(--spacing);
+	left: var(--spacing);
+	width: calc((100% - var(--spacing) * 2) / var(--phone-tab-count, 3));
+	border-radius: var(--radius-full);
+	background: var(--color-selected);
+	transform: translateX(calc(var(--phone-tab-index, 0) * 100%));
+	transition: transform var(--tab-slide-dur) var(--tab-slide-ease);
+}
+
+.phone-tab {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: calc(var(--spacing) / 2);
+	border-radius: var(--radius-full);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-2xs);
+	font-weight: var(--font-weight-medium);
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	transition:
+		color var(--duration-base) var(--ease-out),
+		transform var(--duration-fast) var(--ease-out);
+}
+
+.phone-tab:active {
+	transform: scale(0.94);
+}
+
+.phone-tab[aria-current="page"] {
+	color: var(--color-brand-ink);
+}
+
+.phone-tab[aria-disabled="true"] {
+	opacity: var(--opacity-quiet);
+}
+
+/* The narrowest phones give up gaps and label tracking, never target size. */
+@media (max-width: 359px) {
+	.phone-tab-row {
+		gap: calc(var(--spacing) * 1.5);
+		width: calc(100% - var(--spacing) * 4);
+	}
+
+	.phone-tab-label {
+		letter-spacing: -0.02em;
+	}
+}
+
+.phone-tab [data-nucleo-icon] {
+	color: inherit;
+}
+
+.phone-tab-icon {
+	position: relative;
+	display: grid;
+	place-items: center;
+}
+
+.phone-tab-label {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.phone-tab-badge {
+	position: absolute;
+	top: calc(var(--spacing) * -1.5);
+	left: calc(100% - var(--spacing) * 2);
+}
+
+.phone-tab-dot {
+	position: absolute;
+	top: 0;
+	right: calc(var(--spacing) * -0.5);
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 2);
+	border: 2px solid var(--color-page);
+	border-radius: var(--radius-full);
+	background: var(--color-brand);
+}
+
+/* A single circular control at the end of the bar (`phoneAction`); slices add its contents. */
+.phone-tab-action {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--phone-tab-bar-height);
+	height: var(--phone-tab-bar-height);
+	border-radius: var(--radius-full);
+	color: var(--color-text-primary);
+	touch-action: manipulation;
+	transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.phone-tab-action:active {
+	transform: scale(0.96);
+}
+
+/* Destinations ---------------------------------------------------------- */
+
+/* Sibling tabs glide in from the side their tab lies on and push the old one out. */
+.workspace-root[data-workspace-phone] .content-swap-stack > .motion-tab-slide {
+	grid-area: 1 / 1;
+	min-width: 0;
+}
+
+.motion-tab-slide {
+	transform: translateX(calc(100% * var(--swap-direction, 1)));
+	transition: transform var(--tab-slide-dur) var(--tab-slide-ease);
+	will-change: transform;
+}
+
+.motion-tab-slide.is-open {
+	transform: none;
+	will-change: auto;
+}
+
+.motion-tab-slide.is-closing {
+	pointer-events: none;
+	transform: translateX(calc(-100% * var(--swap-direction, 1)));
+}
+
+.workspace-root[data-workspace-phone] .workspace-chat-panel.motion-tab-slide {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.motion-tab-slide,
+	.motion-tab-slide.is-closing {
+		opacity: 0;
+		transform: none;
+		transition: opacity var(--duration-base) var(--ease-out);
+	}
+
+	.motion-tab-slide.is-open {
+		opacity: 1;
+	}
+
+	.workspace-root[data-workspace-phone] > .phone-top-bar,
+	.phone-tab-indicator,
+	.phone-tab-row {
+		transition: none;
+	}
+}

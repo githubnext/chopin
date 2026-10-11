@@ -42,6 +42,7 @@ import {
 	SIDEBAR_MAX,
 	SIDEBAR_MIN,
 	SIDEBAR_STORAGE_KEY,
+	SidebarTrigger,
 } from "./project-sidebar-chrome";
 import { clearRepositoryCache } from "./repository-cache";
 import { NavigationError } from "./navigation-error";
@@ -291,7 +292,12 @@ export function NavigationShell(
 	);
 	let dialogMotion = dialogPresence.phase === "closed" ? undefined : dialogPresence;
 	let presentedDialog = dialogMotion?.value;
-	let triggerVisible = !sidebarVisible && !drawerOpen;
+	let [triggerClaims, setTriggerClaims] = useState(0);
+	let claimTrigger = useCallback(() => {
+		setTriggerClaims(count => count + 1);
+		return () => setTriggerClaims(count => count - 1);
+	}, []);
+	let triggerVisible = !sidebarVisible && !drawerOpen && triggerClaims === 0;
 	let resyncDecisions = useRef<(repositoryId: string) => void>(() => {});
 	let {
 		beginTotalRequest,
@@ -733,6 +739,11 @@ export function NavigationShell(
 		workspaceDocumentAction,
 	]);
 
+	let expandSidebar = useCallback(
+		() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false),
+		[mode],
+	);
+
 	let signOut = async () => {
 		try {
 			await Api.logout();
@@ -755,6 +766,12 @@ export function NavigationShell(
 	};
 	let dismissDialog = () => setDialog(undefined);
 	let [sidebarShortcut, setSidebarShortcut] = useState<string>();
+	let sidebarTrigger = useMemo(() => ({
+		buttonRef: drawerOpener,
+		claim: claimTrigger,
+		onExpand: expandSidebar,
+		shortcut: sidebarShortcut,
+	}), [claimTrigger, expandSidebar, sidebarShortcut]);
 	let shortcutActions = useRef<ShortcutActions>({});
 	shortcutActions.current = {
 		search: () => showDialog("search"),
@@ -928,145 +945,147 @@ export function NavigationShell(
 
 	return (
 		<NavigationDocument.Provider value={navigationDocument}>
-			{countsReady && (
-				<SidebarFeatureBoundary>
-					<SidebarDecisionCounts
-						archived={catalogueMode === "archived"}
-						onCounts={updateDecisionCounts}
-						onSnapshot={updateDecisionSnapshot}
-						priorityRepositoryId={active?.repositoryId}
-						projects={projects}
-						refreshProject={refreshProject}
-						resync={resyncDecisions}
-					/>
-				</SidebarFeatureBoundary>
-			)}
-			<div
-				className="navigation-shell"
-				data-navigation-mode={mode}
-				onClickCapture={navigateLink}
-			>
-				{sidebarPresence.phase !== "closed" && (
-					<div
-						aria-hidden={sidebarPresence.phase === "closing" ? "true" : undefined}
-						className={`project-sidebar-frame ${sidebarMotion.className} ${sidebarPresence.className}`}
-						inert={sidebarPresence.phase === "closing"}
-						style={{ "--project-sidebar-width": `${width}px` } as CSSProperties}
-					>
-						<div className="project-sidebar-motion-content">{sidebar}</div>
-						<SidebarFeatureBoundary>
-							<SidebarResizeHandle onResize={resize} width={width} />
-						</SidebarFeatureBoundary>
-					</div>
+			<SidebarTrigger.Provider value={sidebarTrigger}>
+				{countsReady && (
+					<SidebarFeatureBoundary>
+						<SidebarDecisionCounts
+							archived={catalogueMode === "archived"}
+							onCounts={updateDecisionCounts}
+							onSnapshot={updateDecisionSnapshot}
+							priorityRepositoryId={active?.repositoryId}
+							projects={projects}
+							refreshProject={refreshProject}
+							resync={resyncDecisions}
+						/>
+					</SidebarFeatureBoundary>
 				)}
-				{triggerVisible && (
-					<ProjectSidebarExpandButton
-						buttonRef={drawerOpener}
-						onExpand={() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false)}
-						shortcut={sidebarShortcut}
-					/>
-				)}
-				{drawerPresence.phase !== "closed" && (
-					<LazyDialogBoundary
-						onFailure={() => {
-							dismissDrawer();
-							setDialogLoadFailed(true);
-						}}
-					>
-						<NavigationDrawer motion={drawerPresence} onDismiss={dismissDrawer}>
-							{sidebar}
-						</NavigationDrawer>
-					</LazyDialogBoundary>
-				)}
-				{children === undefined
-					? (
-						<main
-							className="navigation-content"
-							data-project-sidebar-trigger={triggerVisible || undefined}
-						>
-							{content}
-						</main>
-					)
-					: (
+				<div
+					className="navigation-shell"
+					data-navigation-mode={mode}
+					onClickCapture={navigateLink}
+				>
+					{sidebarPresence.phase !== "closed" && (
 						<div
-							className="navigation-content"
-							data-project-sidebar-trigger={triggerVisible || undefined}
+							aria-hidden={sidebarPresence.phase === "closing" ? "true" : undefined}
+							className={`project-sidebar-frame ${sidebarMotion.className} ${sidebarPresence.className}`}
+							inert={sidebarPresence.phase === "closing"}
+							style={{ "--project-sidebar-width": `${width}px` } as CSSProperties}
 						>
-							{content}
+							<div className="project-sidebar-motion-content">{sidebar}</div>
+							<SidebarFeatureBoundary>
+								<SidebarResizeHandle onResize={resize} width={width} />
+							</SidebarFeatureBoundary>
 						</div>
 					)}
-				{dialogMotion && presentedDialog === "add" && (
-					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
-						<AddProjectDialog
-							added={navigation?.projects ?? []}
-							motion={dialogMotion}
-							onAdded={project => {
-								catalogueRefreshes.current.set(project.repositoryId, Date.now());
-								setFocusProjectId(project.repositoryId);
-								setCollapsed(false);
-								if (mode === "drawer") {
-									setDrawerOpen(true);
-								}
-								void refresh();
+					{triggerVisible && (
+						<ProjectSidebarExpandButton
+							buttonRef={drawerOpener}
+							onExpand={expandSidebar}
+							shortcut={sidebarShortcut}
+						/>
+					)}
+					{drawerPresence.phase !== "closed" && (
+						<LazyDialogBoundary
+							onFailure={() => {
+								dismissDrawer();
+								setDialogLoadFailed(true);
 							}}
-							onDismiss={dismissDialog}
-							userId={user.id}
-						/>
-					</LazyDialogBoundary>
-				)}
-				{dialogMotion && presentedDialog === "new" && (
-					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
-						<Suspense fallback={null}>
-							<NewDocumentDialog
-								error={creation.error?.message}
+						>
+							<NavigationDrawer motion={drawerPresence} onDismiss={dismissDrawer}>
+								{sidebar}
+							</NavigationDrawer>
+						</LazyDialogBoundary>
+					)}
+					{children === undefined
+						? (
+							<main
+								className="navigation-content"
+								data-project-sidebar-trigger={triggerVisible || undefined}
+							>
+								{content}
+							</main>
+						)
+						: (
+							<div
+								className="navigation-content"
+								data-project-sidebar-trigger={triggerVisible || undefined}
+							>
+								{content}
+							</div>
+						)}
+					{dialogMotion && presentedDialog === "add" && (
+						<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
+							<AddProjectDialog
+								added={navigation?.projects ?? []}
 								motion={dialogMotion}
-								onAddProject={() =>
-									showDialog("add")}
-								onCreate={createDocument}
-								onDismiss={() => {
-									setDialog(undefined);
+								onAdded={project => {
+									catalogueRefreshes.current.set(project.repositoryId, Date.now());
+									setFocusProjectId(project.repositoryId);
+									setCollapsed(false);
 									if (mode === "drawer") {
-										requestAnimationFrame(() => drawerOpener.current?.focus());
+										setDrawerOpen(true);
 									}
+									void refresh();
 								}}
-								onRetry={retryProject ? () => createDocument(retryProject) : undefined}
-								pending={creation.pending}
-								projects={navigation?.projects ?? []}
+								onDismiss={dismissDialog}
+								userId={user.id}
 							/>
-						</Suspense>
-					</LazyDialogBoundary>
-				)}
-				{dialogMotion && presentedDialog === "search" && (
-					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
-						<DocumentSearchDialog
-							includeArchived={catalogueMode === "archived"}
-							motion={dialogMotion}
-							onDismiss={dismissDialog}
-							onSelect={navigateToDocument}
-							projects={navigation?.projects ?? []}
-							source={projects}
-							userId={user.id}
-						/>
-					</LazyDialogBoundary>
-				)}
-				{dialogMotion && presentedDialog === "shortcuts" && (
-					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
-						<KeyboardShortcutsDialog motion={dialogMotion} onDismiss={dismissDialog} />
-					</LazyDialogBoundary>
-				)}
-				{dialogMotion && typeof presentedDialog === "object"
-					&& presentedDialog.type === "delete" && (
-					<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
-						<DeleteDocumentDialog
-							channel={presentedDialog.channel}
-							motion={dialogMotion}
-							onDeleted={() =>
-								documentDeleted(presentedDialog.channel.id)}
-							onDismiss={dismissDialog}
-						/>
-					</LazyDialogBoundary>
-				)}
-			</div>
+						</LazyDialogBoundary>
+					)}
+					{dialogMotion && presentedDialog === "new" && (
+						<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
+							<Suspense fallback={null}>
+								<NewDocumentDialog
+									error={creation.error?.message}
+									motion={dialogMotion}
+									onAddProject={() =>
+										showDialog("add")}
+									onCreate={createDocument}
+									onDismiss={() => {
+										setDialog(undefined);
+										if (mode === "drawer") {
+											requestAnimationFrame(() => drawerOpener.current?.focus());
+										}
+									}}
+									onRetry={retryProject ? () => createDocument(retryProject) : undefined}
+									pending={creation.pending}
+									projects={navigation?.projects ?? []}
+								/>
+							</Suspense>
+						</LazyDialogBoundary>
+					)}
+					{dialogMotion && presentedDialog === "search" && (
+						<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
+							<DocumentSearchDialog
+								includeArchived={catalogueMode === "archived"}
+								motion={dialogMotion}
+								onDismiss={dismissDialog}
+								onSelect={navigateToDocument}
+								projects={navigation?.projects ?? []}
+								source={projects}
+								userId={user.id}
+							/>
+						</LazyDialogBoundary>
+					)}
+					{dialogMotion && presentedDialog === "shortcuts" && (
+						<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
+							<KeyboardShortcutsDialog motion={dialogMotion} onDismiss={dismissDialog} />
+						</LazyDialogBoundary>
+					)}
+					{dialogMotion && typeof presentedDialog === "object"
+						&& presentedDialog.type === "delete" && (
+						<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
+							<DeleteDocumentDialog
+								channel={presentedDialog.channel}
+								motion={dialogMotion}
+								onDeleted={() =>
+									documentDeleted(presentedDialog.channel.id)}
+								onDismiss={dismissDialog}
+							/>
+						</LazyDialogBoundary>
+					)}
+				</div>
+			</SidebarTrigger.Provider>
 		</NavigationDocument.Provider>
 	);
 }

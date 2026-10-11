@@ -1,3 +1,5 @@
+import { createContext } from "react";
+
 import panelIcon from "./assets/icons/panel-close.svg";
 import { IconButton } from "./icon-button";
 
@@ -84,6 +86,19 @@ export function ProjectSidebarLoading(
 		</aside>
 	);
 }
+
+/**
+ * Lets a phone top bar host the sidebar trigger. While a bar holds a claim, the shell drops
+ * its own floating trigger, so the button scrolls away with the bar instead of over it.
+ */
+export type SidebarTriggerSlot = {
+	buttonRef: RefObject<HTMLButtonElement | null>;
+	claim: () => () => void;
+	onExpand: () => void;
+	shortcut?: string;
+};
+
+export const SidebarTrigger = createContext<SidebarTriggerSlot | undefined>(undefined);
 
 export function ProjectSidebarExpandButton(
 	{
