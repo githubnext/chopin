@@ -42,13 +42,13 @@
 	},
 	{
 		"file": "apps/web/src/document-workspace-host.tsx",
-		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function.",
+		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function. Its returned keys contain no className or style; the parent presentation carries the child layer node, a finite \"open\" | \"closing\" state, a finite \"lift\" | \"zoom\" motion that Workspace renders only as a data attribute, path labels, and a close callback.",
 		"cases": [
 			[
 				"dynamic",
 				"*",
-				"workspaceProps(\n\t\t\t\t\tloaded.parent,\n\t\t\t\t\tagent,\n\t\t\t\t\tuser,\n\t\t\t\t\tchildVisible\n\t\t\t\t\t\t? { childLabel, onChildClose: closeChild, type: \"parent-with-child\" }\n\t\t\t\t\t\t: { type: \"document\" },\n\t\t\t\t\tparentMetadataChanged,\n\t\t\t\t)",
-				"unresolved JSX props > DocumentWorkspaceHost > parent > <RoomWorkspace>",
+				"workspaceProps(\n\t\t\t\t\t\tloaded.parent,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\tchildVisible ? nested : { type: \"document\" },\n\t\t\t\t\t\tparentMetadataChanged,\n\t\t\t\t\t)",
+				"unresolved JSX props > DocumentWorkspaceHost > <RoomWorkspace>",
 				1
 			],
 			[
@@ -59,7 +59,7 @@
 				1
 			]
 		],
-		"sourceHash": "890443cedd0584c3e57e5295f4fafff7f0bc8231c818cb706c061d097991b49a"
+		"sourceHash": "549feba39bf9ca7f2b678869255a586a1a26e442895650447f34f2ec44d03f27"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -276,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "d3cbe78671d49dcc93ea6503f08492036ce88472fc45fd9528e268569e36e37a"
+		"sourceHash": "f271af3baeb3b11d21422e597dea3da8a51f7a5e445327bd06323d10a2c93af7"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
