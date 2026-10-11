@@ -804,6 +804,8 @@ test("deleting an archived child updates the project total for a viewer in its p
 		// A blank parent with open decisions opens on Decisions, so only wait for the room.
 		await expect(viewer.getByRole("button", { name: /^Decisions/, pressed: true }).first())
 			.toBeVisible();
+		await expect(viewer.getByRole("textbox", { name: "editable markdown", includeHidden: true }))
+			.toHaveAttribute("aria-readonly", "true");
 		await expect(viewer).toHaveURL(new RegExp(`${parentPath}$`));
 		let baseline = await catalogueTotal(viewer, ARCHIVED_CHILD.name);
 		let projects = sidebar(viewer);
