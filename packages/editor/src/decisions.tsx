@@ -11,6 +11,8 @@ import { cardStatus } from "@chopin/dialect";
 import { CheckIcon, ChevronIcon, DecisionIcon } from "@chopin/icons";
 import { EmptyState } from "@chopin/visuals";
 
+import { decisionsDeck } from "./decision-state";
+import { Deck, revealDeckItem } from "./deck";
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { usePhone } from "./pointer";
 import { useQuestionnaires } from "./questionnaires";
@@ -49,8 +51,10 @@ export type DecisionsProps = {
 	 *
 	 * Carries a token as well as an id so asking for the same one twice still
 	 * scrolls — naming it again means "show me", not "it is already open".
+	 * `resume` means the tab itself was chosen: a deck keeps its current top
+	 * rather than bringing the named card forward.
 	 */
-	reveal?: { widget: string; token: number };
+	reveal?: { widget: string; token: number; resume?: boolean };
 };
 
 let EMPTY_CARDS: ReadonlyMap<string, Question.CardMeta> = new Map();
@@ -260,9 +264,12 @@ export function Decisions(
 			`[data-plan-sidecar-questionnaire="${id}"]`,
 		);
 		if (target) {
-			target.scrollIntoView({ block: "center" });
-			target.tabIndex = -1;
-			target.focus({ preventScroll: true });
+			let inDeck = target.closest<HTMLElement>("[data-deck]");
+			if (inDeck && !reveal.resume) revealDeckItem(target);
+			let focusTarget = inDeck?.querySelector<HTMLElement>("[data-deck-top]") ?? target;
+			focusTarget.scrollIntoView({ block: "center" });
+			focusTarget.tabIndex = -1;
+			focusTarget.focus({ preventScroll: true });
 		} else heading.current?.focus();
 	}, [entries, metadata, reveal]);
 
@@ -273,11 +280,15 @@ export function Decisions(
 		if (!previous || previous.isConnected || document.activeElement !== document.body) return;
 		focusedQuestionnaire.current = undefined;
 		let next = entries.find(entry => waiting(entry, metadata));
-		let target = next
+		let card = next
 			? content.current?.querySelector<HTMLElement>(
 				`[data-plan-sidecar-questionnaire="${CSS.escape(next.id)}"]`,
 			)
 			: undefined;
+		// A card behind a deck's top is inert, so the deck's top takes focus instead.
+		let target = card?.closest<HTMLElement>("[data-deck]")?.querySelector<HTMLElement>(
+			"[data-deck-top]",
+		) ?? card;
 		if (target) {
 			target.tabIndex = -1;
 			target.focus({ preventScroll: true });
@@ -332,7 +343,7 @@ export function Decisions(
 			following.current = undefined;
 		};
 	}, []);
-	let leaveSaveBar = useCallback(() => {
+	let focusRemaining = useCallback(() => {
 		let next = content.current?.querySelector<HTMLElement>(
 			"[data-plan-sidecar-questionnaire]",
 		);
@@ -351,9 +362,29 @@ export function Decisions(
 	let pending = entries.filter(entry => open.has(entry.id) || closing.has(entry.id));
 	let settled = entries.filter(entry => !open.has(entry.id) && !closing.has(entry.id));
 
+	// Cards open at some point in this mount, so one answered here waits in the deck.
+	let [seen, setSeen] = useState<ReadonlySet<string>>(() => new Set());
+	let openKey = [...open].join("\n");
+	useEffect(() => {
+		if ([...open].every(id => seen.has(id))) return;
+		setSeen(previous => new Set([...previous, ...open]));
+		// `openKey` stands for `open`, which is rebuilt every render.
+	}, [openKey]);
+	// Phones keep the one-pane list and its save bar.
+	let arranged = phone
+		? { deck: [], answered: [], history: settled.map(entry => entry.id) }
+		: decisionsDeck(
+			pending.map(entry => entry.id),
+			settled.map(entry => entry.id),
+			new Set([...seen, ...open]),
+		);
+	let byId = new Map(entries.map(entry => [entry.id, entry]));
+	let answeredHere = new Set(arranged.answered);
+	let listed = settled.filter(entry => !answeredHere.has(entry.id));
+
 	let outstanding = pending.length;
 	// A folding card already counts as resolved, so this agrees with the tab's badge.
-	let resolved = settled.length + closing.size;
+	let resolved = listed.length + closing.size;
 	let empty = outstanding === 0 && resolved === 0 && !hasAdditional;
 
 	let question = (entry: QuestionnaireEntry) => (
@@ -438,6 +469,24 @@ export function Decisions(
 							/>
 						</>
 					)
+					: arranged.deck.length > 0
+					? (
+						<Deck
+							label={`${arranged.deck.length} open decisions`}
+							onLeave={() => focusRemaining()}
+							items={arranged.deck.flatMap(id => {
+								let entry = byId.get(id);
+								return entry
+									? [{
+										id,
+										settled: answeredHere.has(id),
+										label: entry.value.questions[0]?.header ?? "Decision",
+										card: question(entry),
+									}]
+									: [];
+							})}
+						/>
+					)
 					: (
 						<div className="flex flex-col gap-3">
 							{pending.map(entry => {
@@ -484,7 +533,7 @@ export function Decisions(
 							surface="decision-history"
 						>
 							<div className="mt-2 flex flex-col gap-3">
-								{settled.map(question)}
+								{listed.map(question)}
 							</div>
 						</MotionDisclosure>
 					</div>
@@ -493,7 +542,7 @@ export function Decisions(
 			{phone && (
 				<SaveBar
 					onFailed={showCard}
-					onFocusLeave={leaveSaveBar}
+					onFocusLeave={focusRemaining}
 					onIncomplete={showCard}
 					store={pendingAnswers}
 				/>

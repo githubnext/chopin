@@ -11,7 +11,11 @@ export function useDocumentEditing(room: string): boolean {
 			target instanceof Element && !!target.closest(selector);
 		let focus = (event: FocusEvent) => setEditing(inEditor(event.target));
 		// During focusout activeElement is not yet the new target; relatedTarget is.
-		let blur = (event: FocusEvent) => setEditing(inEditor(event.relatedTarget));
+		let blur = (event: FocusEvent) => {
+			// The window losing focus keeps the editor's focus for when it returns.
+			if (event.relatedTarget === null && !document.hasFocus()) return;
+			setEditing(inEditor(event.relatedTarget));
+		};
 		setEditing(inEditor(document.activeElement));
 		document.addEventListener("focusin", focus);
 		document.addEventListener("focusout", blur);

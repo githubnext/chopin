@@ -108,3 +108,26 @@ test("a failed document open offers a retry instead of indefinite loading", () =
 	expect(failed).toContain("Try again");
 	expect(failed).not.toContain("Loading decisions…");
 });
+
+function openEntry(id: string, header: string): QuestionnaireEntry {
+	return {
+		id,
+		value: {
+			id,
+			questions: [{ id: `${id}-q`, header, prompt: `${header}?`, multiple: false, options: [] }],
+		},
+	};
+}
+
+test("two open decisions render as a desktop deck above resolved history", () => {
+	let html = markup(undefined, [openEntry("a", "Storage"), openEntry("b", "Scope"), RESOLVED]);
+	expect(html).toContain('aria-roledescription="carousel"');
+	expect(html).toContain('aria-label="2 open decisions"');
+	expect(html).toContain("1 of 2");
+	expect(html.indexOf("data-deck=")).toBeLessThan(html.indexOf("resolved</span>"));
+	expect(html).not.toContain("decision-save-bar");
+});
+
+test("one open decision renders without a deck", () => {
+	expect(markup(undefined, [openEntry("a", "Storage")])).not.toContain("data-deck");
+});

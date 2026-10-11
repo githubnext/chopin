@@ -468,7 +468,7 @@ export function RoomWorkspace(
 	let [researchErrors, setResearchErrors] = useState<Record<string, string>>({});
 	let [researchExecution, setResearchExecution] = useState(false);
 	let researchDrafts = useMemo(() => new Map<string, ResearchDraftController>(), [room]);
-	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
+	let [reveal, setReveal] = useState<{ widget: string; token: number; resume?: boolean }>();
 	let [planScrollTop, setPlanScrollTop] = useState(0);
 	let entries = useQuestionnaires(questions);
 	let cardMetadata = useSyncExternalStore(cardMeta.subscribe, cardMeta.snapshot, cardMeta.snapshot);
@@ -550,14 +550,22 @@ export function RoomWorkspace(
 		let next = advanceDecisionView(decisionView, hasPlanContent, unanswered, editing);
 		if (next === decisionView) return;
 		setDecisionView(state => (state === decisionView ? next : state));
-		if (decisionView.phase === "initial" && next.phase === "forced") {
-			setAnnouncement(current => ({
-				text: `Showing Decisions: ${unanswered} to answer`,
-				sequence: current.sequence + 1,
-			}));
-		}
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- editing and decisionView are read, not triggers
 	}, [hasPlanContent, unanswered]);
+
+	// Announce the route only once it has applied: a tab choice in the same
+	// batch makes the routing updater above a no-op.
+	let routedPhase = useRef(decisionView.phase);
+	useEffect(() => {
+		let before = routedPhase.current;
+		routedPhase.current = decisionView.phase;
+		if (before !== "initial" || decisionView.phase !== "forced") return;
+		setAnnouncement(current => ({
+			text: `Showing Decisions: ${unanswered} to answer`,
+			sequence: current.sequence + 1,
+		}));
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- the count is read when routing applies
+	}, [decisionView.phase]);
 
 	useEffect(() => {
 		if (!taskLink || !hasPlanContent) return;
@@ -624,7 +632,7 @@ export function RoomWorkspace(
 		}
 		if (next === "decisions" && revealFirst) {
 			let first = firstOpenDecision(entries, cardMetadata);
-			setReveal({ widget: first?.id ?? "", token: Date.now() });
+			setReveal({ widget: first?.id ?? "", token: Date.now(), resume: true });
 		}
 	};
 
