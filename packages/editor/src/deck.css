@@ -10,6 +10,8 @@
 }
 
 .decision-deck-stage {
+	/* The shuffle eases this box's measured height, padding included. */
+	box-sizing: border-box;
 	position: relative;
 	display: grid;
 	padding-block-start: calc(var(--deck-peek) * var(--deck-depth, 0));
