@@ -33,6 +33,8 @@ export type Room = {
 	eviction?: ReturnType<typeof setTimeout>;
 	/** MCP work keeps a memberless room alive until its turn and queue finish. */
 	holds?: number;
+	/** The root this room's document belongs to; set when its plan opens. Parents never change. */
+	parentChannelId?: string;
 };
 
 const rooms = new Map<string, Room>();

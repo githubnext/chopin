@@ -28,6 +28,7 @@ import { plannerInstructions } from "../agent/planner";
 import { askJev } from "../conversation-plan/jev";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
+import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
@@ -559,6 +560,10 @@ export type Room = {
 	hold?: () => () => void;
 	/** The task draft the turn being started carries. */
 	draft?: string;
+	/** This root's children. Absent when this room is itself a child. */
+	children?: ChildDocuments;
+	/** Set only when this room is a child: its root, which owns the only Chat. */
+	rootChannelId?: string;
 };
 
 type Retained = {
@@ -1484,6 +1489,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
+		children: context.children,
 		currentMemberRequest: () => currentMemberRequest(chat),
 		...(visualRouting(context) && {
 			visual: {

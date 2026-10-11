@@ -27,6 +27,7 @@ import { registerImageRoutes } from "./images/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
+import { createChildDocuments } from "./chat/children";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
@@ -172,6 +173,32 @@ function withDocumentTransition<T>(channelId: string, action: () => Promise<T>):
 	return operation;
 }
 
+/**
+ * Hold a child's room open for a root Planner tool.
+ *
+ * The child's document transition serializes this with archive and delete; the
+ * edit itself still queues behind the child's own browser batches through
+ * `Service.exclusive` inside the tool.
+ */
+function withChildPlan<T>(
+	childId: string,
+	action: (opened: Service.Plan) => Promise<T>,
+): Promise<T> {
+	return withDocumentTransition(childId, async () => {
+		if (deletingChannels.has(childId) || archivingChannels.has(childId)) {
+			throw new Error("child document is unavailable");
+		}
+		await Rooms.get(childId)?.closing;
+		let held = Rooms.hold(childId);
+		try {
+			return await action(await plan(held.room, server));
+		} finally {
+			held.release();
+			evict(held.room);
+		}
+	});
+}
+
 function presence(server: Server<SocketData>, room: Rooms.Room): void {
 	broadcast(server, room.id, {
 		kind: "session:presence",
@@ -258,6 +285,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 		let channel: ChannelRecord | undefined;
 		await prepareOpenedPlan(room, opened, async () => {
 			channel = await storage.channels.get(room.id);
+			room.parentChannelId = channel?.parentChannelId;
 			if (room.closing) throw new Error("document is unavailable");
 			if (config.conversationPlan && !channel?.archivedAt) {
 				await backfillPlannerAskThreads(opened);
@@ -324,6 +352,17 @@ function conversation(
 			}
 			: undefined,
 		persist: chat => Service.persist(opened, chat),
+		...(room.parentChannelId
+			? { rootChannelId: room.parentChannelId }
+			: {
+				children: createChildDocuments({
+					rootId: room.id,
+					repositoryId: repository.id,
+					channels: storage.channels,
+					server,
+					withChildPlan,
+				}),
+			}),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,

@@ -106,6 +106,8 @@ export type DocumentRoom = {
 	readReference?: (id: string, repositoryId: string) => Promise<unknown>;
 	/** Experimental foreground visual handoff; absent from production sessions. */
 	visual?: VisualSession;
+	/** This root's children; absent in a child room and in tests that do not need them. */
+	children?: import("../chat/children").ChildDocuments;
 };
 const roomContext = z.object({
 	room: z.custom<DocumentRoom>(value =>
