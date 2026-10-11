@@ -523,7 +523,7 @@ test("paging between short and long threads keeps the medium detent and its back
 test("a selection low on a phone screen scrolls clear of the docked bar", async ({ join, seed }) => {
 	await seed(SOURCE);
 	let page = await join("ana", IPHONE);
-	let passage = content(page).locator("p").filter({ hasText: SECOND });
+	let passage = content(page).locator("p").filter({ hasText: "Padding paragraph." }).nth(12);
 	// Put the passage on the last lines of the screen, where the bar will dock.
 	await passage.evaluate(element => {
 		let scroller = element.closest("[data-plan-scroll]")!;
