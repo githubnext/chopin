@@ -32,6 +32,7 @@ import type { HumanInputStatus } from "../atomic/human-input";
 import type { RemotePlanner } from "./registry";
 
 const OPERATION_TIMEOUT_MS = 10_000;
+const REVALIDATE_EVERY_MS = 5 * 60_000;
 const MAX_OPEN_INPUTS = 16;
 const LIVE_RUN = new Set(["running", "waiting", "paused"]);
 
@@ -47,11 +48,13 @@ export type AttachOutcome =
 export type LinkOptions = {
 	/** Resolves the document the client asked for, refusing what its caller cannot read. */
 	attach(message: ClientMessageOf<"attach">): Promise<AttachOutcome>;
-	/** Rechecks the caller's access before each session; false closes the link. */
+	/** Rechecks the caller's access; false closes the link. */
 	revalidate?(): Promise<boolean>;
 	/** Records the attached link and returns how to forget it. */
 	register?(channelId: string, link: PlannerLink): () => void;
 	timeoutMs?: number;
+	/** How often an attached link's access is rechecked while it stays open. */
+	revalidateEveryMs?: number;
 };
 
 const REFUSAL_CLOSE: Record<RefusalCode, number> = {
@@ -96,6 +99,10 @@ function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
 	}).join("\n\n");
 }
 
+function hostError(message: string): { error: string } {
+	return { error: message };
+}
+
 type LinkPart = ClientMessageOf<"part">["part"];
 type LinkUsage = Extract<LinkPart, { type: "finish-step" }>["usage"];
 
@@ -124,6 +131,8 @@ type Port = {
 	send(message: ServerMessage): boolean;
 	control(session: string, action: "stop" | "resume", runId?: string): Promise<void>;
 	forget(session: string): void;
+	/** Throws, closing the link, when the caller can no longer read the document. */
+	revalidate(): Promise<void>;
 	timeoutMs: number;
 };
 
@@ -133,6 +142,8 @@ type Turn = {
 	hostNames: Set<string>;
 	own: Set<string>;
 	ownCalls: Set<string>;
+	/** Every host call id the turn has used, so none runs twice. */
+	hostIds: Set<string>;
 	hostCalls: Map<string, string>;
 	stopped: boolean;
 	ended: boolean;
@@ -227,7 +238,7 @@ class RemoteSession {
 					session: this.id,
 					turn: message.turn,
 					toolCallId: message.toolCallId,
-					output: "The turn has ended.",
+					output: hostError("The turn has ended."),
 					isError: true,
 				});
 			}
@@ -275,9 +286,10 @@ class RemoteSession {
 		if (!turn.hostNames.has(message.toolName)) {
 			return this.#refuseHostCall(turn, message, "unavailable");
 		}
-		if (turn.hostCalls.has(message.toolCallId) || turn.ownCalls.has(message.toolCallId)) {
+		if (turn.hostIds.has(message.toolCallId) || turn.ownCalls.has(message.toolCallId)) {
 			return this.#fail(turn, new Error(`Tool call ${message.toolCallId} was repeated.`));
 		}
+		turn.hostIds.add(message.toolCallId);
 		turn.hostCalls.set(message.toolCallId, message.toolName);
 		turn.emit({
 			type: "tool-call",
@@ -297,9 +309,11 @@ class RemoteSession {
 			session: this.id,
 			turn: turn.id,
 			toolCallId: message.toolCallId,
-			output: reason === "aborted"
-				? "The turn was aborted."
-				: `${message.toolName} is not available in this turn.`,
+			output: hostError(
+				reason === "aborted"
+					? "The turn was aborted."
+					: `${message.toolName} is not available in this turn.`,
+			),
 			isError: true,
 		});
 	}
@@ -316,7 +330,7 @@ class RemoteSession {
 				if (!turn.own.has(part.toolName)) return boundary(part.toolName);
 				return turn.emit({ ...part, providerExecuted: true, dynamic: true });
 			case "tool-call":
-				if (!turn.own.has(part.toolName) || turn.hostCalls.has(part.toolCallId)) {
+				if (!turn.own.has(part.toolName) || turn.hostIds.has(part.toolCallId)) {
 					return boundary(part.toolName);
 				}
 				turn.ownCalls.add(part.toolCallId);
@@ -406,7 +420,7 @@ class RemoteSession {
 						session: this.id,
 						turn: turn.id,
 						toolCallId,
-						output: `${toolName} returned more than the Planner link can carry.`,
+						output: hostError(`${toolName} returned more than the Planner link can carry.`),
 						isError: true,
 					});
 				}
@@ -419,10 +433,11 @@ class RemoteSession {
 	}
 
 	async #prompt(options: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
-		if (this.#closed) throw new Error("The remote Planner session is closed.");
-		if (this.#current) throw new Error("The remote Planner session already has an active turn.");
+		this.#ready();
 		if (options.skills.length > 0) throw unsupported("skills");
 		let prompt = promptText(options.prompt);
+		await this.#port.revalidate();
+		this.#ready();
 		let hostNames = options.tools.map(tool => tool.name);
 		let turn: Turn = {
 			id: crypto.randomUUID(),
@@ -430,6 +445,7 @@ class RemoteSession {
 			hostNames: new Set(hostNames),
 			own: new Set(),
 			ownCalls: new Set(),
+			hostIds: new Set(),
 			hostCalls: new Map(),
 			stopped: false,
 			ended: false,
@@ -459,6 +475,11 @@ class RemoteSession {
 		this.#current = turn;
 		this.#listen(turn, options.abortSignal);
 		return this.#control(turn);
+	}
+
+	#ready(): void {
+		if (this.#closed) throw new Error("The remote Planner session is closed.");
+		if (this.#current) throw new Error("The remote Planner session already has an active turn.");
 	}
 
 	async close(): Promise<void> {
@@ -518,6 +539,7 @@ export class PlannerLink {
 	#sessions = new Map<string, RemoteSession>();
 	#inputs = new Map<string, { session: string; controller: AbortController }>();
 	#controls = new Map<string, PromiseWithResolvers<void>>();
+	#watch: ReturnType<typeof setInterval> | undefined;
 	#port: Port;
 
 	constructor(socket: LinkSocket, options: LinkOptions) {
@@ -530,6 +552,7 @@ export class PlannerLink {
 				this.#sessions.delete(session);
 				this.#cancelInputs(session);
 			},
+			revalidate: () => this.#recheck(),
 			timeoutMs: options.timeoutMs ?? OPERATION_TIMEOUT_MS,
 		};
 	}
@@ -548,11 +571,7 @@ export class PlannerLink {
 		if (this.#sessions.has(sessionId)) {
 			throw new Error("The remote Planner session is already open.");
 		}
-		if (this.#options.revalidate && !await this.#options.revalidate()) {
-			this.#refuse("access-revoked", "The attached account can no longer read this document.");
-			throw new Error("The attached Planner can no longer read this document.");
-		}
-		if (this.#state !== "attached") throw new Error("The Planner link closed.");
+		await this.#recheck();
 		let session = new RemoteSession(sessionId, planner, this.#port);
 		this.#sessions.set(sessionId, session);
 		try {
@@ -561,6 +580,23 @@ export class PlannerLink {
 			this.#sessions.delete(sessionId);
 			this.#send({ type: "destroy", session: sessionId });
 			throw error;
+		}
+	}
+
+	/** Closes the link with `access-revoked` and throws when the caller can no longer read the document. */
+	async #recheck(): Promise<void> {
+		if (this.#options.revalidate && !await this.#options.revalidate()) {
+			this.#refuse("access-revoked", "The attached account can no longer read this document.");
+			throw new Error("The attached Planner can no longer read this document.");
+		}
+		if (this.#state !== "attached") throw new Error("The Planner link closed.");
+	}
+
+	async #recheckAttached(): Promise<void> {
+		try {
+			await this.#recheck();
+		} catch (error) {
+			if (this.#state === "attached") console.error("[planner-link] access recheck failed:", error);
 		}
 	}
 
@@ -593,6 +629,7 @@ export class PlannerLink {
 	disconnected(): void {
 		if (this.#state === "closed") return;
 		this.#state = "closed";
+		clearInterval(this.#watch);
 		this.#forget?.();
 		this.#forget = undefined;
 		for (let session of this.#sessions.values()) session.linkClosed();
@@ -644,6 +681,10 @@ export class PlannerLink {
 		this.#state = "attached";
 		this.#send({ type: "attached", version: PLANNER_LINK_VERSION, document: outcome.document });
 		this.#forget = this.#options.register?.(outcome.document.id, this);
+		this.#watch = setInterval(
+			() => void this.#recheckAttached(),
+			this.#options.revalidateEveryMs ?? REVALIDATE_EVERY_MS,
+		);
 	}
 
 	#dispatch(message: ClientMessage): void {
@@ -658,8 +699,20 @@ export class PlannerLink {
 			case "tools":
 			case "part":
 			case "host-tool-call":
-			case "turn-end":
-				return this.#sessions.get(message.session)?.receive(message);
+			case "turn-end": {
+				let session = this.#sessions.get(message.session);
+				if (session) return session.receive(message);
+				if (message.type !== "host-tool-call") return;
+				this.#send({
+					type: "host-tool-result",
+					session: message.session,
+					turn: message.turn,
+					toolCallId: message.toolCallId,
+					output: hostError("The session has ended."),
+					isError: true,
+				});
+				return;
+			}
 			case "runs":
 				return this.#sessions.get(message.session)?.reportRuns(message);
 			case "control-result": {

@@ -32,6 +32,7 @@ export type PlannerLinkHooks = {
 	unavailable?: (channelId: string) => boolean;
 	register?: LinkOptions["register"];
 	timeoutMs?: number;
+	revalidateEveryMs?: number;
 };
 
 const BEARER = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/i;
@@ -134,6 +135,7 @@ export function plannerLink(
 		revalidate,
 		register: hooks.register ?? attachLink,
 		timeoutMs: hooks.timeoutMs,
+		revalidateEveryMs: hooks.revalidateEveryMs,
 	});
 }
 

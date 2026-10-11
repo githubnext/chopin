@@ -67,7 +67,7 @@ export async function linkAuth(channelId?: string) {
 }
 
 /** A Bun server that serves only the Planner link, as the Chopin server does under HARNESS=remote. */
-export function linkServer(auth: PlannerLinkAuth, timeoutMs = 2_000) {
+export function linkServer(auth: PlannerLinkAuth, timeoutMs = 2_000, revalidateEveryMs?: number) {
 	let links: PlannerLink[] = [];
 	let server = Bun.serve<PlannerLinkSocketData>({
 		hostname: "127.0.0.1",
@@ -83,6 +83,7 @@ export function linkServer(auth: PlannerLinkAuth, timeoutMs = 2_000) {
 			open(ws) {
 				openPlannerLinkSocket(ws, auth, {
 					timeoutMs,
+					revalidateEveryMs,
 					register(_channelId, link) {
 						links.push(link);
 						return () => {

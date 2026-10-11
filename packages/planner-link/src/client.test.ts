@@ -1,0 +1,175 @@
+import { afterEach, describe, expect, it } from "bun:test";
+
+import { connectPlannerLink } from "./client";
+import { MAX_LINK_NOTE_LENGTH, parseClientMessage } from "./protocol";
+
+import type { ServerWebSocket } from "bun";
+import type { HostToolResult, PlannerLinkHandlers, TurnContext } from "./client";
+import type { ClientMessage, ServerMessage } from "./protocol";
+
+let stops: Array<() => unknown> = [];
+afterEach(async () => {
+	for (let stop of stops.splice(0)) await stop();
+});
+
+/** A server that speaks only the wire format, so each test drives the client frame by frame. */
+function fakeServer() {
+	let socket: ServerWebSocket<unknown> | undefined;
+	let received: ClientMessage[] = [];
+	let arrivals = new Set<() => void>();
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request, self) {
+			return self.upgrade(request) ? undefined : new Response("upgrade failed", { status: 400 });
+		},
+		websocket: {
+			open(ws) {
+				socket = ws;
+			},
+			message(ws, raw) {
+				let parsed = parseClientMessage(String(raw));
+				if (!parsed.ok) throw new Error(parsed.message);
+				received.push(parsed.message);
+				if (parsed.message.type === "attach") {
+					ws.send(JSON.stringify({
+						type: "attached",
+						version: 1,
+						document: { id: "d", title: "T", repository: "o/r" },
+					}));
+				}
+				for (let wake of arrivals) wake();
+			},
+		},
+	});
+	stops.push(() => server.stop(true));
+	async function next<T extends ClientMessage["type"]>(
+		type: T,
+	): Promise<Extract<ClientMessage, { type: T }>> {
+		for (let deadline = Date.now() + 2_000; Date.now() < deadline;) {
+			let index = received.findIndex(message => message.type === type);
+			if (index >= 0) return received.splice(index, 1)[0] as Extract<ClientMessage, { type: T }>;
+			await new Promise<void>(resolve => {
+				let wake = () => {
+					arrivals.delete(wake);
+					resolve();
+				};
+				arrivals.add(wake);
+				setTimeout(wake, 50);
+			});
+		}
+		throw new Error(`no ${type} message arrived`);
+	}
+	return {
+		url: `http://127.0.0.1:${server.port}`,
+		received,
+		next,
+		send: (message: ServerMessage) => socket!.send(JSON.stringify(message)),
+		close: () => socket!.close(1000, "gone"),
+	};
+}
+
+async function connect(server: ReturnType<typeof fakeServer>, handlers: PlannerLinkHandlers) {
+	let client = await connectPlannerLink({ url: server.url, token: "t", document: "d", handlers });
+	stops.push(() => client.detach());
+	return client;
+}
+
+const turn = (id: string) => ({
+	type: "turn" as const,
+	session: "s",
+	turn: id,
+	prompt: "p",
+	tools: [{ name: "read_plan" }],
+});
+
+describe("Planner link client", () => {
+	it("settles a host call the server aborts or destroys instead of answering", async () => {
+		let server = fakeServer();
+		let results: HostToolResult[] = [];
+		await connect(server, {
+			async turn(context) {
+				results.push(await context.callHostTool("read_plan", {}));
+			},
+		});
+		server.send(turn("aborted"));
+		await server.next("host-tool-call");
+		server.send({ type: "abort", session: "s", turn: "aborted" });
+		expect(await server.next("turn-end")).toMatchObject({ turn: "aborted", status: "aborted" });
+		server.send(turn("destroyed"));
+		await server.next("host-tool-call");
+		server.send({ type: "destroy", session: "s" });
+		expect(await server.next("turn-end")).toMatchObject({ turn: "destroyed", status: "aborted" });
+		expect(results).toEqual([
+			{ output: { error: "The turn was aborted." }, isError: true },
+			{ output: { error: "The turn was aborted." }, isError: true },
+		]);
+	});
+
+	it("withdraws a question whose signal is already aborted without asking it", async () => {
+		let server = fakeServer();
+		let client = await connect(server, { turn() {} });
+		let controller = new AbortController();
+		controller.abort();
+		let asked = await client.ask("s", { method: "confirm", title: "Ship?", message: "Now." }, {
+			signal: controller.signal,
+		});
+		expect(asked).toMatchObject({ type: "input-result", status: "cancelled" });
+		client.reportRuns("s", { active: [], paused: [], cards: [] });
+		await server.next("runs");
+		expect(server.received.some(message => message.type === "input-request")).toBe(false);
+	});
+
+	it("cuts generated error text to the wire limit instead of breaking the link", async () => {
+		let server = fakeServer();
+		let long = "x".repeat(MAX_LINK_NOTE_LENGTH * 3);
+		let client = await connect(server, {
+			start() {
+				throw new Error(long);
+			},
+			turn(context) {
+				context.emit({ type: "error", error: long });
+				throw new Error(long);
+			},
+			control() {
+				throw new Error(long);
+			},
+		});
+		server.send({ type: "start", session: "s", mode: "planner" });
+		expect((await server.next("start-failed")).message).toHaveLength(MAX_LINK_NOTE_LENGTH);
+		server.send(turn("failing"));
+		let part = (await server.next("part")).part;
+		expect(part.type === "error" && part.error).toHaveLength(MAX_LINK_NOTE_LENGTH);
+		let ended = await server.next("turn-end");
+		expect(ended).toMatchObject({ status: "failed" });
+		expect(ended.message).toHaveLength(MAX_LINK_NOTE_LENGTH);
+		server.send({ type: "stop", request: "r", session: "s" });
+		expect((await server.next("control-result")).message).toHaveLength(MAX_LINK_NOTE_LENGTH);
+		expect(client.send({ type: "runs", session: "s", active: [], paused: [], cards: [] }))
+			.toBe(true);
+	});
+
+	it("settles requests made once the link has closed instead of leaving them pending", async () => {
+		let server = fakeServer();
+		let holding = Promise.withResolvers<TurnContext>();
+		let client = await connect(server, {
+			async turn(context) {
+				holding.resolve(context);
+				await new Promise(resolve => context.signal.addEventListener("abort", resolve));
+			},
+		});
+		server.send(turn("open"));
+		let held = await holding.promise;
+		server.close();
+		await client.closed;
+		expect(await client.ask("s", { method: "input", title: "Name?" })).toMatchObject({
+			status: "cancelled",
+			message: "The Planner link closed.",
+		});
+		expect(await held.callHostTool("read_plan", {})).toEqual({
+			output: { error: "The turn has ended." },
+			isError: true,
+		});
+		expect(client.send({ type: "detach" })).toBe(false);
+	});
+});

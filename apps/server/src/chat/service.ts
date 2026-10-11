@@ -1389,7 +1389,8 @@ function retain(
 		let stopWatching = opened.session.watchRuns?.(next => {
 			if (chat.retained?.session !== opened.session) return;
 			let planning = chat.busy && !chat.job && chat.agent === opened.session;
-			void publishRuns(context, opened.session, next, false, !planning);
+			let followUp = !planning && opened.session.followsUpRuns !== false;
+			void publishRuns(context, opened.session, next, false, followUp);
 			if (next.active.length || next.paused.length) return;
 			let releaseWhenIdle = async () => {
 				await publishing.get(chat);

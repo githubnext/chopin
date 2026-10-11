@@ -78,14 +78,20 @@ The server answers:
 `attach` succeeds when the bearer's GitHub account has pull access to the
 document's repository. After `refused` the server closes the link.
 
-| Refusal code           | Close code | Meaning                                                       |
-| ---------------------- | ---------- | ------------------------------------------------------------- |
-| `unsupported-version`  | 4426       | The server speaks another `version`                           |
-| `repository-forbidden` | 4403       | The account cannot read the document's repository             |
-| `document-unavailable` | 4404       | No document matches, or it is being deleted                   |
-| `document-archived`    | 4404       | The document is archived                                      |
-| `access-revoked`       | 4403       | Access was lost after attaching (checked before each session) |
-| `unavailable`          | 1011       | The server could not check the document                       |
+The server checks the account's admission and pull access again before every
+`start` and every `turn`, and every 5 minutes while the link is attached. Once
+either is lost it sends `refused` with `access-revoked` and closes the link with
+4403; the turn that triggered the check fails. A GitHub outage during a periodic
+check leaves the link open.
+
+| Refusal code           | Close code | Meaning                                           |
+| ---------------------- | ---------- | ------------------------------------------------- |
+| `unsupported-version`  | 4426       | The server speaks another `version`               |
+| `repository-forbidden` | 4403       | The account cannot read the document's repository |
+| `document-unavailable` | 4404       | No document matches, or it is being deleted       |
+| `document-archived`    | 4404       | The document is archived                          |
+| `access-revoked`       | 4403       | Access was lost after attaching (see below)       |
+| `unavailable`          | 1011       | The server could not check the document           |
 
 ## Server to client
 
@@ -112,14 +118,20 @@ document's repository. After `refused` the server closes the link.
   `{ "type": "json", "schema?": {}, "name?": "", "description?": "" }`; for
   `json`, the turn's text must be that JSON.
 - `abort` stops the turn. Answer with `turn-end`; after **10 seconds** the
-  server ends the turn anyway.
-- `host-tool-result` answers a `host-tool-call`. An error result is a string.
-  A result too large for one frame arrives as an error.
+  server ends the turn anyway. The server sends no `host-tool-result` for the
+  turn's calls after `abort`, so settle any call still waiting as failed.
+- `host-tool-result` answers a `host-tool-call`. `output` is the tool's result
+  as JSON. A failed call has `"isError": true` and `output`
+  `{ "error": "<message>" }`; that includes a tool that threw, invalid input, a
+  name outside the turn's `tools`, a call for a turn or session that has ended,
+  and a result too large for one frame. A call Chopin's permission policy
+  refuses has `output` `{ "type": "execution-denied", "reason?": "" }`.
 - `input-result` answers an `input-request` (see [Questions](#questions)).
 - `stop` and `resume` are **Stop Planner** and **Resume Planner**: pause or
   resume every workflow run of the session, or only `run`. Answer with
   `control-result` within **10 seconds**.
-- `destroy` ends the session; abandon its turn and questions.
+- `destroy` ends the session; abandon its turn, its waiting host calls, and its
+  questions.
 - `error` precedes a close for a protocol violation (see [Closing](#closing)).
 
 ## Client to server
@@ -138,24 +150,30 @@ document's repository. After `refused` the server closes the link.
 { "type": "detach" }
 ```
 
-- `started` or `start-failed` answers `start`.
+- `started` or `start-failed` answers `start`. Cut `message` here, in
+  `turn-end`, `control-result`, and an `error` part to 4000 characters: a longer
+  one is a malformed message and closes the link.
 - `tools` declares, before calling any of them, the client's own tools this turn
   may call (at most 256). A name may not repeat a host tool's name. An isolated
   session must declare none.
 - `part` streams the turn (see [Stream parts](#stream-parts)).
 - `host-tool-call` runs one of the turn's host tools in the server; `input` is
-  its arguments as a JSON string. `toolCallId` must be unique in the turn. A
-  name outside the turn's `tools` is answered with an error result.
+  its arguments as a JSON string. A `toolCallId` may be used once per turn,
+  including after its call has finished; reusing one fails the turn without
+  running the tool again. A name outside the turn's `tools` is answered with an
+  error result.
 - `turn-end` ends the turn: `finished`, `failed` (with `message` as the error
   shown), or `aborted`. Every turn needs exactly one.
 - `input-request` and `input-cancel` ask and withdraw questions.
 - `runs` reports the session's workflow runs whenever they change. Report them
-  before `turn-end` so the server keeps the session while runs are live.
+  before `turn-end` so the server keeps the session while runs are live. Reports
+  only change run cards and Chat notices; they never start a Planner turn.
 - `control-result` answers `stop` or `resume`.
 - `detach` closes the link with code 1000.
 
 Messages for a session or turn that has ended are ignored, except a
-`host-tool-call`, which gets an error result.
+`host-tool-call`, which gets an error result (`The turn has ended.` or
+`The session has ended.`).
 
 ### Stream parts
 
@@ -210,21 +228,54 @@ A questionnaire has 1 to 16 questions of up to 32 options; `preview` may be
 16,000 characters; `select` offers up to 32 choices. The document's own limits
 still apply. Text is shown verbatim.
 
-`input-result.status` is:
+`input-result` is `{ "type": "input-result", "request": "", "status": "", "value?": json, "message?": "" }`.
+`status` and `value` by method:
 
-- `answered`: a member answered. `value` is what Atomic's `HostInput` returns:
-  for `questionnaire`, `{ "answers": [...], "cancelled": false }` with Atomic's
-  `QuestionAnswer` objects (`questionIndex`, `question`, `kind` of `option`,
-  `custom`, `chat`, or `multi`, `answer`, and `selected` or `preview` where they
-  apply); for `confirm`, a boolean; for `select`, `input`, and `editor`, a
-  string or `null`.
+| `status`    | `questionnaire` `value`                                          | `confirm` | `select`         | `input`, `editor` | `message` |
+| ----------- | ---------------------------------------------------------------- | --------- | ---------------- | ----------------- | --------- |
+| `answered`  | `{ "answers": [answer for every question], "cancelled": false }` | boolean   | choice or `null` | text              | absent    |
+| `expired`   | `{ "answers": [], "cancelled": true }`                           | `false`   | `null`           | `null`            | absent    |
+| `cancelled` | `{ "answers": [answered questions only], "cancelled": true }`    | `false`   | `null`           | `null`            | absent    |
+| `failed`    | absent                                                           | absent    | absent           | absent            | why       |
+
+- `answered`: members answered every question. `confirm` is `true` only for
+  **Yes**. `select` is the chosen string from `choices`, or `null` when a member
+  wrote an answer instead. `input` and `editor` are the text a member wrote.
 - `expired`: nobody answered within 30 minutes. The cards stay in Decisions
-  marked expired, and `value` is what Atomic gets for no answer
-  (`{ "answers": [], "cancelled": true }`, `false`, or `null`).
-- `cancelled`: a member cancelled, or the client sent `input-cancel`, or the
-  session ended. Open cards are withdrawn.
-- `failed`: the request could not become Decisions (`message` says why), for
-  example in an isolated session or with 16 requests already open on the link.
+  marked expired and no partial answers are returned.
+- `cancelled`: a member cancelled a question, the client sent `input-cancel`,
+  the question was withdrawn before it was asked, the session ended, or the link
+  closed. Open cards are withdrawn. When a member cancelled one question of a
+  questionnaire after others were answered, `answers` keeps those others; it is
+  empty in every other case. The package client settles a question withdrawn
+  before it was sent, or one still open when the link closes, with a local
+  `cancelled` result that has a `message` and no `value`.
+- `failed`: the request could not become Decisions, for example in an isolated
+  session or with 16 requests already open on the link.
+
+A questionnaire `answers` array lists only answered questions, in question
+order; an unanswered question has no entry. Each entry is Atomic's
+`QuestionAnswer`:
+
+```text
+{ "questionIndex": 0, "question": "", "kind": "option", "answer": "", "preview?": "" }
+{ "questionIndex": 0, "question": "", "kind": "multi", "answer": null, "selected": [""] }
+{ "questionIndex": 0, "question": "", "kind": "custom", "answer": "" }
+{ "questionIndex": 0, "question": "", "kind": "chat", "answer": "" }
+```
+
+- `questionIndex` is the question's 0-based position and `question` its
+  verbatim text.
+- `option`: a single-select question answered with one offered option. `answer`
+  is its label; `preview` is that option's `preview`, present only when it had
+  one.
+- `multi`: a `multiSelect` question answered with offered options. `selected`
+  lists their labels; `answer` is `null`.
+- `custom`: a member wrote the answer to a single-select question whose options
+  have no `preview`. `answer` is the text, or the labels of the options members
+  added, joined by a comma and a space.
+- `chat`: the same written answer for a `multiSelect` question or one whose
+  options have a `preview`.
 
 A workflow-stage question names its `workflowRunId` and, when it differs, the
 `rootRunId` of the run that owns it. While the latest `runs` report lists that

@@ -4,6 +4,7 @@ import { plannerLinkUrl, WIRE } from "./client";
 import {
 	encodeMessage,
 	MAX_LINK_MESSAGE_BYTES,
+	MAX_LINK_NOTE_LENGTH,
 	parseClientMessage,
 	parseServerMessage,
 	PLANNER_LINK_PATH,
@@ -138,6 +139,7 @@ describe("Planner link messages", () => {
 			path: PLANNER_LINK_PATH,
 			version: PLANNER_LINK_VERSION,
 			maxMessageBytes: MAX_LINK_MESSAGE_BYTES,
+			maxNoteLength: MAX_LINK_NOTE_LENGTH,
 		});
 		let source = await Bun.file(new URL("./client.ts", import.meta.url)).text();
 		let imports = [...source.matchAll(/^import\s+(type\s+)?/gm)];

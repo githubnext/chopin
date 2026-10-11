@@ -21,9 +21,12 @@ export const LINK_CLOSE = {
 	unsupportedVersion: 4426,
 } as const;
 
+/** The longest `message`, error, title or question text, in UTF-16 code units. */
+export const MAX_LINK_NOTE_LENGTH = 4_000;
+
 const MAX_ID = 128;
 const MAX_NAME = 128;
-const MAX_NOTE = 4_000;
+const MAX_NOTE = MAX_LINK_NOTE_LENGTH;
 const MAX_TOOLS = 256;
 const MAX_RUNS = 64;
 const MAX_STAGES = 64;
