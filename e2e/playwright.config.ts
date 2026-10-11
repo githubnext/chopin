@@ -170,6 +170,7 @@ export default defineConfig({
 				"**/sidecar.e2e.ts",
 				"**/harness.e2e.ts",
 				"**/harness-comments.e2e.ts",
+				"**/harness-decisions-deck.e2e.ts",
 				"**/auth-lifecycle.e2e.ts",
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
@@ -195,7 +196,11 @@ export default defineConfig({
 		},
 		{
 			name: "harness",
-			testMatch: ["**/harness.e2e.ts", "**/harness-comments.e2e.ts"],
+			testMatch: [
+				"**/harness.e2e.ts",
+				"**/harness-comments.e2e.ts",
+				"**/harness-decisions-deck.e2e.ts",
+			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${HARNESS}` },
 		},
 		{

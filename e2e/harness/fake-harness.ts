@@ -23,6 +23,13 @@ const SLOW_PROMPT = "SLOW-LIVE";
 const COMMENT_THREAD = /using thread ([0-9A-HJKMNP-TV-Z]{26})/;
 /** A comment saying this is answered only in Chat, so the server's backstop posts it. */
 const BACKSTOP_PROMPT = "COMMENT-BACKSTOP";
+/** Makes the fake Planner ask three decisions, appended without linked prose. */
+const ASK_PROMPT = "ASK-DECISIONS";
+const ASKED = [
+	{ header: "Storage", question: "Where should room state live?" },
+	{ header: "Scope", question: "What belongs in the first cut?" },
+	{ header: "Rollout", question: "How should we deploy?" },
+];
 const STEP_MS = 2_500;
 
 function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
@@ -162,6 +169,34 @@ export function createFakeHarness(
 									delta: backstop ? "only." : "in the comment thread.",
 								});
 								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (prompt.includes(ASK_PROMPT)) {
+						void (async () => {
+							try {
+								if (!available.has("ask")) throw new Error("e2e-fake harness expected ask");
+								let plan = await callTool("read_plan");
+								let revision = (JSON.parse(String(plan.output)) as { revision: number }).revision;
+								// The turn stays open until people answer, as a real ask does.
+								await callTool("ask", crypto.randomUUID(), {
+									revision,
+									questions: ASKED.map(item => ({
+										...item,
+										multiple: false,
+										blocks: [],
+										options: [
+											{ label: "First option", description: "" },
+											{ label: "Second option", description: "" },
+										],
+									})),
+								});
 								finish();
 								settled.resolve();
 							} catch (err) {
