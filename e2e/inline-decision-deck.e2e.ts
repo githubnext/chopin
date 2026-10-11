@@ -395,3 +395,19 @@ test("a deck fits a 390px document without horizontal scroll", async ({ join, se
 	expect(box.x + box.width).toBeLessThanOrEqual(390);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+test("on a phone, adjacent decisions stay chips instead of a deck", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	for (let prompt of fixture.prompts) {
+		await expect(
+			content(page).getByRole("button", { name: `Decision: ${prompt}, answer in Decisions` }),
+		).toBeVisible();
+	}
+	await expect(deck(page)).toHaveCount(0);
+});
