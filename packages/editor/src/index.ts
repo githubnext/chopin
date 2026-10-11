@@ -14,6 +14,7 @@ export type { Cursor } from "./cursor";
 export {
 	advanceDecisionView,
 	countUnanswered,
+	decisionsDeck,
 	documentHasPlanningContent,
 	firstOpenDecision,
 	selectDecisionView,

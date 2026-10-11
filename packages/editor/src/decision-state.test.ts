@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	advanceDecisionView,
 	countUnanswered,
+	decisionsDeck,
 	documentHasPlanningContent,
 	firstOpenDecision,
 	selectDecisionView,
@@ -262,5 +263,27 @@ describe("Decisions opening target", () => {
 
 		expect(firstOpenDecision([])).toBeUndefined();
 		expect(firstOpenDecision([decided, discarded])).toBeUndefined();
+	});
+});
+
+describe("Decisions deck", () => {
+	it("stacks two or more open decisions", () => {
+		expect(decisionsDeck(["a", "b"], ["z"], new Set(["a", "b"])))
+			.toEqual({ deck: ["a", "b"], answered: [], history: ["z"] });
+	});
+
+	it("keeps decisions answered here at the back while one is still open", () => {
+		expect(decisionsDeck(["b"], ["a", "z"], new Set(["a", "b"])))
+			.toEqual({ deck: ["b", "a"], answered: ["a"], history: ["z"] });
+	});
+
+	it("dissolves once nothing is open", () => {
+		expect(decisionsDeck([], ["a", "b"], new Set(["a", "b"])))
+			.toEqual({ deck: [], answered: [], history: ["a", "b"] });
+	});
+
+	it("shows one reopened decision on its own", () => {
+		expect(decisionsDeck(["r"], ["z"], new Set(["r"])))
+			.toEqual({ deck: [], answered: [], history: ["z"] });
 	});
 });

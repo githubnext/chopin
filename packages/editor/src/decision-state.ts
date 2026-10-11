@@ -89,3 +89,21 @@ export function visibleDecisionView(
 	}
 	return state.preferred;
 }
+
+/** Which Decisions cards form a deck, and which stay in resolved history below it. */
+export function decisionsDeck(
+	pending: readonly string[],
+	settled: readonly string[],
+	seen: ReadonlySet<string>,
+): { deck: string[]; answered: string[]; history: string[] } {
+	let answered = pending.length > 0 ? settled.filter(id => seen.has(id)) : [];
+	if (pending.length + answered.length < 2) {
+		return { deck: [], answered: [], history: [...settled] };
+	}
+	let kept = new Set(answered);
+	return {
+		deck: [...pending, ...answered],
+		answered,
+		history: settled.filter(id => !kept.has(id)),
+	};
+}
