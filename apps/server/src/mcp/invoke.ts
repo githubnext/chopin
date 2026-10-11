@@ -32,6 +32,7 @@ export async function invokeRouted(
 	let target = await route.channels.get(input.channel.id);
 	if (!target || route.deleting(target.id)) return "document-unavailable";
 	let rootId = target.parentChannelId ?? target.id;
+	// A child call holds the root's transition; child tools recheck under the child's own.
 	return route.transition(rootId, async () => {
 		let root = await route.channels.get(rootId);
 		if (!root || route.deleting(rootId)) return "document-unavailable";
