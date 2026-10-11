@@ -71,7 +71,7 @@ async function seedReadyCard(
 async function sampleFrames(page: Page, ms: number) {
 	await page.evaluate(limit => {
 		let frames: Frame[] = [];
-		Object.assign(window, { __childFrames: frames });
+		Object.assign(window, { __childFrames: frames, __childDone: false });
 		let start = performance.now();
 		let sample = () => {
 			let card = document.querySelector<HTMLElement>(".anchored-child-card");
@@ -99,10 +99,14 @@ async function sampleFrames(page: Page, ms: number) {
 				});
 			}
 			if (performance.now() - start < limit) requestAnimationFrame(sample);
+			else Object.assign(window, { __childDone: true });
 		};
 		requestAnimationFrame(sample);
 	}, ms);
-	return () => page.evaluate(() => (window as unknown as { __childFrames: Frame[] }).__childFrames);
+	return async () => {
+		await page.waitForFunction(() => (window as unknown as { __childDone: boolean }).__childDone);
+		return page.evaluate(() => (window as unknown as { __childFrames: Frame[] }).__childFrames);
+	};
 }
 
 async function setup(page: Page, style: "lift" | "zoom" = "lift") {
@@ -119,6 +123,18 @@ let stackWidth = (page: Page) =>
 		element.getBoundingClientRect().width
 	);
 
+/** Waits until the open motion has fully landed: scrim dimmed, card unclipped, nothing running. */
+let openSettled = (page: Page) =>
+	page.waitForFunction(() => {
+		let card = document.querySelector<HTMLElement>(".anchored-child-card");
+		let scrim = document.querySelector<HTMLElement>(".workspace-child-scrim");
+		if (!card || !scrim) return false;
+		let layer = card.parentElement!;
+		return getComputedStyle(scrim).opacity === "0.45"
+			&& /^(none|inset\(0px 0px 0px 0px)/.test(getComputedStyle(card).clipPath)
+			&& layer.getAnimations({ subtree: true }).length === 0;
+	});
+
 let cards = (page: Page) => page.locator(".anchored-child-card");
 
 test("Lift grows from the research card and the dim trails the grow", async ({ baseURL, join, room, seed, page }) => {
@@ -132,7 +148,6 @@ test("Lift grows from the research card and the dim trails the grow", async ({ b
 	let read = await sampleFrames(opened, 900);
 	await opener.click();
 	await expect(cards(opened)).toHaveCount(1);
-	await opened.waitForTimeout(950);
 	let frames = await read();
 	expect(frames.length).toBeGreaterThan(10);
 	let first = frames[0]!;
@@ -156,7 +171,9 @@ test("Lift grows from the research card and the dim trails the grow", async ({ b
 		expect(1 - frame.scale).toBeLessThanOrEqual(0.03 * Math.max(0, progress(frame)) + 0.011);
 	}
 	// The dim, as a share of its final 0.45, never gets ahead of the grow's share.
-	for (let frame of frames) expect(frame.dim / 0.45).toBeLessThanOrEqual(progress(frame) + 0.02);
+	for (let frame of frames) {
+		expect(frame.dim / 0.45).toBeLessThanOrEqual(Math.max(0, progress(frame)) + 0.02);
+	}
 	// Open progress is monotonic within tolerance.
 	for (let index = 1; index < frames.length; index++) {
 		expect(frames[index]!.width).toBeGreaterThanOrEqual(frames[index - 1]!.width - 2);
@@ -178,13 +195,22 @@ test("closing mid-grow shrinks from the current frame", async ({ baseURL, join, 
 	await opened.keyboard.press("Escape");
 	await expect(cards(opened)).toHaveCount(0);
 	await expect(opener).toBeFocused();
-	await opened.waitForTimeout(300);
 	let frames = await read();
 	let width = await stackWidth(opened);
 	for (let index = 1; index < frames.length; index++) {
 		expect(Math.abs(frames[index]!.width - frames[index - 1]!.width)).toBeLessThan(width * 0.2);
 	}
 	expect(Math.max(...frames.map(frame => frame.width))).toBeLessThan(width * 0.98);
+	// Reversal starts from the current frame: after the peak the card only shrinks.
+	let widths = frames.map(frame => frame.width);
+	let peak = widths.indexOf(Math.max(...widths));
+	expect(peak).toBeGreaterThan(2);
+	expect(peak).toBeLessThan(widths.length - 3);
+	for (let index = peak + 1; index < widths.length; index++) {
+		expect(widths[index]!).toBeLessThanOrEqual(widths[index - 1]! + 2);
+	}
+	// At most the opener's frozen face exists mid-motion, never a stack of them.
+	for (let frame of frames) expect(frame.faces).toBeLessThanOrEqual(1);
 	await expect(opened.locator(".anchored-child-face")).toHaveCount(0);
 	await expect(opened.locator("[data-child-presentation=closing]")).toHaveCount(0);
 });
@@ -214,7 +240,7 @@ test("a settled close lands on the card's settled position", async ({ baseURL, j
 	await expect(opener).toBeVisible();
 	await opener.click();
 	await expect(cards(opened)).toHaveCount(1);
-	await opened.waitForTimeout(800);
+	await openSettled(opened);
 	let read = await sampleFrames(opened, 600);
 	await opened.keyboard.press("Escape");
 	await expect(cards(opened)).toHaveCount(0);
@@ -235,11 +261,20 @@ test("Back then Forward during a close finishes fully open", async ({ baseURL, j
 	await expect(opener).toBeVisible();
 	await opener.click();
 	await expect(cards(opened)).toHaveCount(1);
-	await opened.waitForTimeout(700);
+	await openSettled(opened);
+	let read = await sampleFrames(opened, 1200);
 	await opened.goBack();
 	await opened.waitForTimeout(60);
+	// The close is under way: the dim has started to fall from its settled value.
+	expect(Number(
+		await opened.locator(".workspace-child-scrim")
+			.evaluate(scrim => getComputedStyle(scrim).opacity),
+	)).toBeLessThan(0.45);
 	await opened.goForward();
-	await opened.waitForTimeout(700);
+	await openSettled(opened);
+	let frames = await read();
+	expect(frames.at(-1)!.faces).toBe(0);
+	for (let frame of frames) expect(frame.faces).toBeLessThanOrEqual(1);
 	await expect(cards(opened)).toHaveCount(1);
 	await expect(cards(opened)).toBeVisible();
 	await expect.poll(() => cards(opened).evaluate(card => getComputedStyle(card).clipPath))
@@ -261,7 +296,6 @@ test("a sidebar row rises from the lower centre and closes by fading", async ({ 
 	let read = await sampleFrames(opened, 900);
 	await row.click();
 	await expect(cards(opened)).toHaveCount(1);
-	await opened.waitForTimeout(950);
 	let frames = await read();
 	let first = frames[0]!;
 	let last = frames.at(-1)!;
@@ -289,31 +323,51 @@ test("reduced motion crossfades without transform animation", async ({ baseURL, 
 	let opened = await join("ana");
 	let opener = opened.getByRole("button", { name: `Open ${title}`, exact: true });
 	await expect(opener).toBeVisible();
-	await opener.click();
-	await expect(cards(opened)).toHaveCount(1);
-	let names = await opened.evaluate(() => {
-		let found = new Set<string>();
-		for (let animation of document.getAnimations()) {
-			let effect = animation.effect as KeyframeEffect | null;
-			let target = effect?.target;
-			if (!target?.closest(".anchored-child-layer, .workspace-document-stack")) continue;
-			let name = (animation as CSSAnimation).animationName;
-			if (name) found.add(name);
-			for (let keyframe of effect?.getKeyframes() ?? []) {
-				for (let key of ["transform", "clipPath", "scale"]) {
-					if (key in keyframe && keyframe[key] != null && keyframe[key] !== "none") {
-						found.add(`prop:${key}`);
+	let animated = () =>
+		opened.evaluate(() => {
+			let found = new Set<string>();
+			for (let animation of document.getAnimations()) {
+				let effect = animation.effect as KeyframeEffect | null;
+				let target = effect?.target;
+				if (!target?.closest(".anchored-child-layer, .workspace-document-stack")) continue;
+				let name = (animation as CSSAnimation).animationName;
+				if (name) found.add(name);
+				for (let keyframe of effect?.getKeyframes() ?? []) {
+					for (let key of ["transform", "clipPath", "scale"]) {
+						if (key in keyframe && keyframe[key] != null && keyframe[key] !== "none") {
+							found.add(`prop:${key}`);
+						}
 					}
 				}
 			}
-		}
-		return [...found];
-	});
-	expect(names.filter(name => name.startsWith("prop:"))).toEqual([]);
-	await opened.waitForTimeout(400);
+			return [...found];
+		});
+	let rootTransform = () =>
+		opened.locator(".workspace-document-stack > .workspace-document-panel")
+			.evaluate(root => getComputedStyle(root).transform);
+	let seen = new Set<string>();
+	let watch = async () => {
+		for (let name of await animated()) seen.add(name);
+		expect(await rootTransform()).toBe("none");
+	};
+	await opener.click();
+	await expect(cards(opened)).toHaveCount(1);
+	await watch();
+	await expect.poll(async () => (await animated()).includes("anchored-child-fade")).toBe(true)
+		.catch(async () => {
+			// The short fade may already be over; the sample above is the evidence.
+			expect(seen.has("anchored-child-fade")).toBe(true);
+		});
 	await expect.poll(() => cards(opened).evaluate(card => getComputedStyle(card).clipPath))
 		.toMatch(/^(none|inset\(0px 0px 0px 0px)/);
+	await watch();
 	await opened.keyboard.press("Escape");
+	await expect.poll(async () => {
+		await watch();
+		return seen.has("anchored-child-fade-out");
+	}).toBe(true);
 	await expect(cards(opened)).toHaveCount(0);
 	await expect(opener).toBeFocused();
+	expect(seen.has("anchored-child-fade")).toBe(true);
+	expect([...seen].filter(name => name.startsWith("prop:"))).toEqual([]);
 });
