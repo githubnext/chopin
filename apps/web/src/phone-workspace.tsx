@@ -71,7 +71,9 @@ export function PhoneTabBar(
 							aria-describedby={unavailable ? buildReason : undefined}
 							aria-disabled={unavailable || undefined}
 							aria-label={labels[destination]}
+							aria-pressed={current}
 							className="phone-tab"
+							data-press="small"
 							key={destination}
 							onClick={event => {
 								if (!unavailable) onSelect(destination, current, event.currentTarget);
@@ -113,33 +115,72 @@ export function phonePaneScroller(pane: Element | null | undefined): HTMLElement
 }
 
 /**
- * Hides the top bar while reading down the document or Decisions and brings it back on any
- * scroll up. Chat keeps its bar, because new messages scroll the transcript on their own.
+ * Hides the top bar while reading down the document, Decisions or Build and brings it back on
+ * any scroll up, or when focus moves into it. Chat keeps its bar, because new messages scroll
+ * the transcript on their own. The bar's small title waits until the document's own heading
+ * has scrolled under the bar; other destinations have no heading, so it always shows there.
  */
 export function usePhoneTopBar(
-	frame: RefObject<HTMLElement | null>,
+	root: RefObject<HTMLElement | null>,
 	enabled: boolean,
 	destination: WorkspaceDestination,
-): boolean {
+): { hidden: boolean; titleHidden: boolean } {
 	let [hidden, setHidden] = useState(false);
+	let [headingVisible, setHeadingVisible] = useState(true);
 	useEffect(() => setHidden(false), [destination, enabled]);
 	useEffect(() => {
-		let element = frame.current;
+		let element = root.current;
 		if (!enabled || !element) return;
 		let reduced = matchMedia("(prefers-reduced-motion: reduce)");
 		let last = new WeakMap<Element, number>();
+		let measure = () => {
+			let scroller = element.querySelector<HTMLElement>(
+				'[data-document-view="plan"] [data-plan-scroll]',
+			);
+			let heading = scroller?.querySelector(".plan-content h1");
+			let bar = element.querySelector<HTMLElement>(".phone-top-bar");
+			if (!scroller || !heading || !bar) return setHeadingVisible(false);
+			let barBottom = scroller.getBoundingClientRect().top + bar.offsetHeight;
+			setHeadingVisible(heading.getBoundingClientRect().bottom > barBottom);
+		};
 		let scroll = (event: Event) => {
 			let target = event.target;
 			if (!(target instanceof HTMLElement) || !target.matches(SCROLLERS)) return;
-			let y = target.scrollTop;
+			if (target.matches("[data-plan-scroll]")) measure();
+			// Rubber-banding past either end is not a reading direction.
+			let y = Math.min(
+				Math.max(0, target.scrollTop),
+				Math.max(0, target.scrollHeight - target.clientHeight),
+			);
 			let previous = last.get(target) ?? y;
 			last.set(target, y);
 			if (reduced.matches || target.matches("[data-chat-scroll]")) return;
 			if (y < TOP_BAR_REVEAL || previous - y > TOP_BAR_SLOP) setHidden(false);
 			else if (y - previous > TOP_BAR_SLOP) setHidden(true);
 		};
+		let focus = (event: FocusEvent) => {
+			if (event.target instanceof Element && event.target.closest(".phone-top-bar")) {
+				setHidden(false);
+			}
+		};
+		// The heading arrives with the document, after this effect first runs.
+		let content = new ResizeObserver(measure);
+		let observed = element.querySelector('[data-document-view="plan"]');
+		if (observed) content.observe(observed);
+		let mutations = new MutationObserver(measure);
+		if (observed) mutations.observe(observed, { childList: true, subtree: true });
+		measure();
 		element.addEventListener("scroll", scroll, { capture: true, passive: true });
-		return () => element.removeEventListener("scroll", scroll, { capture: true });
-	}, [enabled, frame]);
-	return enabled && hidden;
+		element.addEventListener("focusin", focus);
+		return () => {
+			content.disconnect();
+			mutations.disconnect();
+			element.removeEventListener("scroll", scroll, { capture: true });
+			element.removeEventListener("focusin", focus);
+		};
+	}, [enabled, root]);
+	return {
+		hidden: enabled && hidden,
+		titleHidden: enabled && destination === "plan" && headingVisible,
+	};
 }

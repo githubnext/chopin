@@ -841,7 +841,8 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 	);
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.emulateMedia({ reducedMotion: "reduce" });
-	await installPointerMedia(page, { coarse: true, primaryCoarse: true });
+	// A narrow touch-capable window with a fine primary pointer: the compact, non-phone chrome.
+	await installPointerMedia(page, { coarse: true, primaryCoarse: false });
 	await authenticate(page, "ana", baseURL!);
 	await page.goto(child.path);
 

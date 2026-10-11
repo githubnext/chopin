@@ -387,15 +387,17 @@ export function Workspace(
 		if (mode !== "split" || stranded) dismissChat();
 		else onDesktopChatOpen(false);
 	};
-	let topBarHidden = usePhoneTopBar(root, phone, destination);
+	let topBar = usePhoneTopBar(root, phone, destination);
 	let selectPhoneTab = (next: WorkspaceDestination, current: boolean, source: HTMLElement) => {
 		if (!current) return navigate(next, source);
 		let pane = root.current?.querySelector(
 			next === "chat" ? `#${CSS.escape(ids.pane.chat)}` : `[data-document-view="${next}"]`,
 		);
-		phonePaneScroller(pane)?.scrollTo({
+		let scroller = phonePaneScroller(pane);
+		// Chat returns to its newest message; every other pane returns to its top.
+		scroller?.scrollTo({
 			behavior: motionImmediately() ? "auto" : "smooth",
-			top: 0,
+			top: next === "chat" ? scroller.scrollHeight : 0,
 		});
 	};
 
@@ -410,11 +412,12 @@ export function Workspace(
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
 			data-document-expanded={presentation.documentExpanded || undefined}
 			data-header-hidden={headerHidden || undefined}
-			data-workspace-bar={topBarHidden ? "hidden" : undefined}
+			data-workspace-bar={topBar.hidden ? "hidden" : undefined}
 			data-workspace-mode={mode}
 			data-workspace-phone={phone || undefined}
 			data-workspace-room={identity}
 			data-workspace-surface={profile.surface}
+			data-workspace-title={topBar.titleHidden ? "hidden" : undefined}
 			data-workspace-travel={travel.back ? "back" : undefined}
 			ref={root}
 			style={mode === "split" ? { "--chat-width": `${chatWidth}px` } as CSSProperties : undefined}

@@ -37,7 +37,8 @@ export function PhoneHeader(
 ) {
 	let header = useRef<HTMLElement>(null);
 	let trigger = useContext(SidebarTrigger);
-	let hostsTrigger = presentation.type === "document" && trigger !== undefined;
+	// A child's own header is never shown: its parent's bar, with the way back, hosts the trigger.
+	let hostsTrigger = presentation.type !== "child" && trigger !== undefined;
 	let claim = trigger?.claim;
 	useLayoutEffect(() => hostsTrigger ? claim?.() : undefined, [claim, hostsTrigger]);
 
@@ -55,26 +56,21 @@ export function PhoneHeader(
 	return (
 		<header className="room-header phone-top-bar" ref={header}>
 			<div className="phone-top-bar-slot">
-				{presentation.type === "parent-with-child"
-					? (
-						<button
-							aria-label={`Return to ${label}`}
-							className="btn btn-icon btn-ghost"
-							onClick={presentation.onChildClose}
-							type="button"
-						>
-							<ArrowLeftIcon aria-hidden="true" size={18} />
-						</button>
-					)
-					: hostsTrigger && trigger && (
-						<ProjectSidebarExpandButton
-							buttonRef={trigger.buttonRef}
-							onExpand={trigger.onExpand}
-							shortcut={trigger.shortcut}
-						/>
-					)}
+				{hostsTrigger && trigger && (
+					<ProjectSidebarExpandButton buttonRef={trigger.buttonRef} onExpand={trigger.onExpand} />
+				)}
+				{presentation.type === "parent-with-child" && (
+					<button
+						aria-label={`Return to ${label}`}
+						className="btn btn-icon btn-ghost"
+						onClick={presentation.onChildClose}
+						type="button"
+					>
+						<ArrowLeftIcon aria-hidden="true" size={18} />
+					</button>
+				)}
 			</div>
-			<div aria-label={`Document: ${title}`} className="phone-top-bar-title">
+			<div className="phone-top-bar-title">
 				{editing && canManage && !archivedAt && presentation.type !== "parent-with-child"
 					? (
 						<DocumentRename

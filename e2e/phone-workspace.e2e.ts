@@ -18,7 +18,7 @@ test("a phone gets full-bleed panes under a top bar and a bottom tab bar", async
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", PHONE);
 	let root = page.locator(".workspace-root");
-	await expect(root).toHaveAttribute("data-workspace-phone", "");
+	await expect(root).toHaveAttribute("data-workspace-phone");
 	await expect(root).toHaveAttribute("data-workspace-mode", "compact");
 	await expect(page.locator(".phone-tab-row")).toBeVisible();
 
@@ -82,10 +82,22 @@ test("a landscape phone keeps the compact phone layout", async ({ join, seed }) 
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { ...PHONE, viewport: { width: 734, height: 343 } });
 	let root = page.locator(".workspace-root");
-	await expect(root).toHaveAttribute("data-workspace-phone", "");
+	await expect(root).toHaveAttribute("data-workspace-phone");
 	await expect(root).toHaveAttribute("data-workspace-mode", "compact");
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 	await expect(page.locator(".phone-tab-row")).toBeVisible();
+	// Landscape chrome stays low: a short top bar and a one-line tab bar.
+	let [bar, tabs] = await Promise.all([
+		topBar(page).boundingBox(),
+		page.getByRole("navigation", { name: "Workspace view" }).boundingBox(),
+	]);
+	expect(bar!.height + tabs!.height).toBeLessThanOrEqual(90);
+	for (
+		let tab of await page.getByRole("navigation", { name: "Workspace view" }).getByRole("button")
+			.all()
+	) {
+		expect((await tab.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	}
 });
 
 test("the top bar hides while reading down and returns on scroll up", async ({ join, seed }) => {
@@ -94,15 +106,26 @@ test("the top bar hides while reading down and returns on scroll up", async ({ j
 	let scroller = page.locator("[data-plan-scroll]");
 	await expect(topBar(page)).toBeVisible();
 	expect(await topOffset(page)).toBe(0);
+	// The small title waits for the document's own heading to scroll away.
+	let title = topBar(page).locator(".phone-top-bar-title");
+	await expect(title).toHaveCSS("opacity", "0");
 
 	await scroller.evaluate(element => element.scrollTo({ top: 200 }));
 	await scroller.evaluate(element => element.scrollTo({ top: 600 }));
 	await expect(page.locator(".workspace-root")).toHaveAttribute("data-workspace-bar", "hidden");
 	await expect.poll(() => topOffset(page)).toBeLessThan(-40);
+	await expect(title).toHaveCSS("opacity", "1");
 
 	await scroller.evaluate(element => element.scrollTo({ top: 500 }));
 	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
 	await expect.poll(() => topOffset(page)).toBe(0);
+
+	// Focus moving into a hidden bar brings it back.
+	await scroller.evaluate(element => element.scrollTo({ top: 900 }));
+	await expect(page.locator(".workspace-root")).toHaveAttribute("data-workspace-bar", "hidden");
+	await topBar(page).getByRole("button", { name: /^Actions for / }).focus();
+	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
+	await page.keyboard.press("Escape");
 
 	// Reduced motion never hides it.
 	await page.emulateMedia({ reducedMotion: "reduce" });
@@ -146,11 +169,11 @@ test("the software keyboard hides the bottom chrome", async ({ baseURL, browser,
 test("desktop and touch tablets keep their layouts", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let desktop = await join("ana", { viewport: { width: 1440, height: 900 } });
-	await expect(desktop.locator(".workspace-root")).not.toHaveAttribute("data-workspace-phone", "");
+	await expect(desktop.locator(".workspace-root")).not.toHaveAttribute("data-workspace-phone");
 	await expect(desktop.locator(".phone-tab-row")).toHaveCount(0);
 	await desktop.context().close();
 
 	let tablet = await join("ana", { hasTouch: true, viewport: { width: 820, height: 1180 } });
-	await expect(tablet.locator(".workspace-root")).not.toHaveAttribute("data-workspace-phone", "");
+	await expect(tablet.locator(".workspace-root")).not.toHaveAttribute("data-workspace-phone");
 	await expect(tablet.locator(".phone-tab-row")).toHaveCount(0);
 });

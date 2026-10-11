@@ -636,6 +636,13 @@ test("an open slash menu follows its caret while the editor scrolls", async ({ b
 	try {
 		let block = content(emulation.page).getByText("Paragraph 9.", { exact: true });
 		await block.scrollIntoViewIfNeeded();
+		// Start in the upper third, so the menu opens below the caret and has room to stay there:
+		// this test is about following a scroll, not about flipping to fit.
+		await block.evaluate(element => {
+			let scroller = element.closest<HTMLElement>("[data-plan-scroll]")!;
+			let offset = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+			scroller.scrollTop += offset - scroller.clientHeight / 3;
+		});
 		await block.selectText();
 		await emulation.page.keyboard.type("/");
 		let menu = emulation.page.getByRole("listbox", MENU);

@@ -21,12 +21,17 @@
 	--phone-bottom-chrome: 0px;
 }
 
+/* Margin comment markers keep their lane, so phones keep the compact 24px gutter. */
 .workspace-root[data-workspace-phone] :is(.plan, .plan-decisions) {
-	--plan-gutter: var(--document-gutter-phone);
+	--plan-gutter: var(--document-gutter-compact);
 }
 
 .workspace-root[data-workspace-phone] .build-view {
-	--build-gutter: var(--document-gutter-phone);
+	--build-gutter: var(--document-gutter-compact);
+}
+
+.workspace-root[data-workspace-phone] .plan-comment-orphans {
+	top: calc(var(--phone-top-chrome) + var(--spacing) * 2);
 }
 
 .workspace-root[data-workspace-phone] .workspace-frame {
@@ -58,7 +63,11 @@
 	inset-inline: 0;
 	top: 0;
 	display: grid;
-	grid-template-columns: var(--control-target-coarse) minmax(0, 1fr) var(--control-target-coarse);
+	grid-template-columns:
+		minmax(var(--control-target-coarse), auto) minmax(0, 1fr) minmax(
+			var(--control-target-coarse),
+			auto
+		);
 	align-items: center;
 	gap: var(--spacing);
 	height: var(--phone-top-chrome);
@@ -72,14 +81,37 @@
 	transition: transform var(--phone-bar-dur) var(--ease-out);
 }
 
-/* Only the bar tucks away; its safe-area band stays as the status bar's ground. */
+/* The whole bar tucks away; a glass strip stays under the status bar so prose never shows there. */
 .workspace-root[data-workspace-bar="hidden"] > .phone-top-bar {
-	transform: translateY(calc(-1 * var(--phone-bar-height)));
+	transform: translateY(-100%);
+}
+
+.workspace-root[data-workspace-phone]::before {
+	position: absolute;
+	z-index: 31;
+	inset-inline: 0;
+	top: 0;
+	height: env(safe-area-inset-top);
+	background: var(--color-glass);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
+	content: "";
+	pointer-events: none;
+}
+
+/* The small title waits until the document's own title has scrolled away. */
+.phone-top-bar-title {
+	transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.workspace-root[data-workspace-title="hidden"] .phone-top-bar-title {
+	opacity: 0;
 }
 
 .phone-top-bar-slot {
-	display: grid;
-	place-items: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .phone-top-bar-slot .btn-icon {
@@ -193,13 +225,7 @@
 	user-select: none;
 	-webkit-touch-callout: none;
 	-webkit-user-select: none;
-	transition:
-		color var(--duration-base) var(--ease-out),
-		transform var(--duration-fast) var(--ease-out);
-}
-
-.phone-tab:active {
-	transform: scale(0.94);
+	transition: color var(--duration-base) var(--ease-out);
 }
 
 .phone-tab[aria-current="page"] {
@@ -266,11 +292,43 @@
 	border-radius: var(--radius-full);
 	color: var(--color-text-primary);
 	touch-action: manipulation;
-	transition: transform var(--duration-fast) var(--ease-out);
 }
 
-.phone-tab-action:active {
-	transform: scale(0.96);
+/* Landscape: a short window keeps chrome low, with labels beside their icons. */
+@media (max-height: 500px) {
+	.workspace-root[data-workspace-phone] {
+		--phone-bar-height: calc(var(--spacing) * 9);
+		/* Tabs keep the full 44px target inside the bar's 2px inset. */
+		--phone-tab-bar-height: calc(var(--control-target-coarse) + var(--spacing));
+		--phone-tab-bar-gap: calc(var(--spacing) * 1.5);
+	}
+
+	.phone-tab-bar {
+		padding: calc(var(--spacing) / 2);
+	}
+
+	.phone-tab-indicator {
+		inset-block: calc(var(--spacing) / 2);
+		left: calc(var(--spacing) / 2);
+		width: calc((100% - var(--spacing)) / var(--phone-tab-count, 3));
+	}
+
+	.phone-tab {
+		flex-direction: row;
+		gap: calc(var(--spacing) * 1.5);
+	}
+
+	.phone-tab-icon [data-nucleo-icon] {
+		width: calc(var(--spacing) * 4.5);
+		height: calc(var(--spacing) * 4.5);
+	}
+
+	/* The label sits to the right now, so the count moves to the icon's leading corner. */
+	.phone-tab-badge {
+		top: calc(var(--spacing) * -2.5);
+		right: calc(100% - var(--spacing) * 2);
+		left: auto;
+	}
 }
 
 /* Destinations ---------------------------------------------------------- */

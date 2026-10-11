@@ -148,7 +148,9 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 	expect(navBox).not.toBeNull();
 	expect(
 		await page.evaluate(({ x, y }) => {
-			return !!document.elementFromPoint(x, y)?.closest("[data-plan-comment-sheet-backdrop]");
+			// The phone tab bar sits at the bottom, under the sheet or its backdrop.
+			return !!document.elementFromPoint(x, y)
+				?.closest("[data-plan-comment-sheet-backdrop], [data-plan-comment-sheet]");
 		}, {
 			x: navBox!.x + navBox!.width / 2,
 			y: navBox!.y + navBox!.height / 2,
