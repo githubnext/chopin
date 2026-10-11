@@ -644,6 +644,17 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				return found ? channel(found) : undefined;
 			}),
+		children: (parentId, limit) =>
+			this.#run("list child channels", async () => {
+				let rows = await this.#sql<ChannelRow[]>`
+					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE parent_channel_id = ${parentId} AND archived_at IS NULL
+					ORDER BY created_at, id
+					LIMIT ${limit}
+				`;
+				return rows.map(channel);
+			}),
 		resolve: (repositoryId, slug) =>
 			this.#run("resolve channel slug", async () => {
 				let [found] = await this.#sql<ChannelRow[]>`

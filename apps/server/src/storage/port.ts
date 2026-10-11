@@ -125,6 +125,8 @@ export interface ChannelStore {
 	/** Creates a top-level channel or one repository-local, non-recursive child. */
 	create(input: CreateChannel): Promise<ChannelRecord>;
 	get(id: string): Promise<ChannelRecord | undefined>;
+	/** Unarchived direct children of one channel, oldest first, at most `limit`. */
+	children(parentId: string, limit: number): Promise<ChannelRecord[]>;
 	resolve(repositoryId: string, slug: string): Promise<ChannelRecord | undefined>;
 	rename(channel: RenameChannel): Promise<RenameResult>;
 	archive(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;

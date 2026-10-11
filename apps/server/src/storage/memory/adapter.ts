@@ -281,6 +281,17 @@ export class MemoryStorage implements StorageAdapter {
 	readonly channels: ChannelStore = {
 		create: async input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
+		children: (parentId, limit) =>
+			Promise.resolve(
+				[...this.#channels.values()]
+					.filter(value => value.parentChannelId === parentId && !value.archivedAt)
+					.sort((left, right) =>
+						left.createdAt.getTime() - right.createdAt.getTime()
+						|| left.id.localeCompare(right.id)
+					)
+					.slice(0, limit)
+					.map(value => channel(value)),
+			),
 		resolve: (repositoryId, slug) => {
 			let id = this.#channelSlugs.get(repositoryId)?.get(slug);
 			let found = id ? this.#channels.get(id) : undefined;

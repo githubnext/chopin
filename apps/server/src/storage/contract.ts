@@ -1,4 +1,5 @@
 import { researchWorkspace } from "./research-inline-contract-fixtures";
+import { childChannelContract } from "./child-channel-contract";
 import { experimentContract } from "./experiment-contract";
 import { imageContract } from "./image-contract";
 import { plannerAttachmentContract } from "./planner-attachment-contract";
@@ -36,6 +37,7 @@ function attempt<T>(action: () => Promise<T>): Promise<T> {
 export function storageContract(name: string, factory: Factory): void {
 	experimentContract(name, factory);
 	imageContract(name, factory);
+	childChannelContract(name, factory);
 	plannerAttachmentContract(name, factory);
 	describe(`${name} storage`, () => {
 		it("supports expiring metadata-only sessions for local authentication", async () => {
