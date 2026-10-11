@@ -668,6 +668,11 @@ body {
 	border-radius: var(--radius-panel);
 	background: var(--color-page);
 	box-shadow: var(--shadow-raised);
+}
+
+/* A child surface is already paper, so its panel never takes the sheet hairline. */
+.workspace-root[data-workspace-mode="split"]
+	.workspace-document-panel:not(.anchored-child-surface *) {
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
 }
