@@ -7,9 +7,17 @@
  * so a collaborator's draft is never counted, cleared or saved from here.
  */
 
-import { createContext, useEffect, useRef, useSyncExternalStore } from "react";
+import {
+	createContext,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 
 import type { PendingAnswers } from "@chopin/question/react";
+import type { ReactNode } from "react";
 
 export class PendingAnswersStore {
 	#cards = new Map<string, PendingAnswers>();
@@ -192,6 +200,38 @@ export function SaveBar(
 						{submitting ? "Saving…" : failed.length > 0 ? "Try again" : "Save"}
 					</button>
 				)}
+		</div>
+	);
+}
+
+/**
+ * Decision cards answered in place, outside the Decisions pane, as a child document's are.
+ * On a phone they save from one bar at the foot of this surface, as the pane's cards do.
+ */
+export function DecisionSaveHost({ children, phone }: { children: ReactNode; phone: boolean }) {
+	let [store] = useState(() => new PendingAnswersStore());
+	let host = useRef<HTMLDivElement>(null);
+	let showCard = useCallback((card: string) => {
+		let target = host.current?.querySelector<HTMLElement>(
+			`[data-plan-sidecar-questionnaire="${CSS.escape(card)}"]`,
+		);
+		if (!target) return;
+		target.scrollIntoView({ block: "center" });
+		target.tabIndex = -1;
+		target.focus({ preventScroll: true });
+	}, []);
+	// The bar is leaving with focus inside it: hand focus to the surface that holds the cards.
+	let leave = useCallback(() => {
+		host.current?.parentElement?.closest<HTMLElement>("[tabindex]")?.focus({ preventScroll: true });
+	}, []);
+	return (
+		<div className="decision-save-host" data-phone={phone ? "" : undefined} ref={host}>
+			<PendingAnswersContext.Provider value={phone ? store : undefined}>
+				{children}
+			</PendingAnswersContext.Provider>
+			{phone && (
+				<SaveBar onFailed={showCard} onFocusLeave={leave} onIncomplete={showCard} store={store} />
+			)}
 		</div>
 	);
 }

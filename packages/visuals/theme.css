@@ -94,8 +94,9 @@
 	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
 	/* Phone chrome floats over content: a translucent page that blurs what scrolls beneath. */
 	--color-glass: color-mix(in oklch, var(--color-page) 72%, transparent);
-	/* Dims the page beneath a phone sheet. */
+	/* Dims the page beneath a phone sheet. Every sheet shares it, and one grabber. */
 	--color-scrim: oklch(var(--shadow-color) / 32%);
+	--color-grabber: var(--color-gray-300);
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -260,6 +261,11 @@
 	--sheet-gap: calc(var(--spacing) * 2);
 	--sheet-max-width: 35rem;
 	--action-sheet-row-height: calc(var(--spacing) * 14);
+	--sheet-grabber-width: calc(var(--spacing) * 9);
+	--sheet-grabber-height: var(--spacing);
+	--sheet-grabber-inset: calc(var(--spacing) * 1.5);
+	/* A sheet resting at its medium detent dims the page by this share of the scrim. */
+	--sheet-scrim-medium: 0.75;
 
 	/* Empty states share one illustration and copy rhythm. */
 	--empty-state-icon-frame-size: calc(var(--spacing) * 14);
@@ -377,6 +383,7 @@
 	/* Sheets rise on the same spring-like curve and leave faster than they arrive. */
 	--sheet-rise-dur: 420ms;
 	--sheet-fall-dur: 260ms;
+	--sheet-ease: var(--tab-slide-ease);
 	--sheet-page-dur: 350ms;
 	--route-swap-out-dur: 80ms;
 	--route-swap-in-dur: 150ms;

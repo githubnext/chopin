@@ -1250,11 +1250,11 @@ button.chat-tool-call-toggle {
 
 /*
  * Text fields on touch never drop below the 16px that stops iOS zooming in on focus.
- * Field classes outrank any element selector, so the small type steps are raised on
- * the field itself: whichever rule sizes it resolves to 16px and larger steps keep
- * their size. The document body is already 16px and keeps its smaller inline steps.
- * In the base layer so the floor never outranks a field's own larger size, and
- * specific enough to beat the preflight that makes fields inherit their container's.
+ * The small type steps are raised on the field itself, so a field sized by a token, and
+ * its placeholder, resolve to 16px. Important, because an unlayered `font: inherit` or
+ * `font-size: inherit` would otherwise beat any layered floor; `1em` is the size such a
+ * field inherits, so one set in larger type keeps it. The document body is already 16px
+ * and keeps its smaller inline steps.
  */
 @layer base {
 	@media (pointer: coarse) {
@@ -1263,7 +1263,7 @@ button.chat-tool-call-toggle {
 			--text-xs: var(--field-text-min);
 			--text-sm: var(--field-text-min);
 			--text-base: var(--field-text-min);
-			font-size: var(--field-text-min);
+			font-size: max(var(--field-text-min), 1em) !important;
 		}
 	}
 }

@@ -53,6 +53,7 @@ export {
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
 export { MAX_RESEARCH_BRIEF, ResearchLauncher } from "./research-launcher";
 export type { ResearchLaunchBlock, ResearchLaunchResult } from "./research-launcher";
+export { DecisionSaveHost } from "./save-bar";
 export { SendAction } from "./send-action";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";

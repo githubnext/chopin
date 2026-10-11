@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+	useCallback,
+	useContext,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { flushSync } from "react-dom";
 import { documentPath } from "@chopin/protocol/document-url";
 import { ArchiveIcon, CheckIcon, ChevronIcon, DocumentIcon, PencilIcon } from "@chopin/icons";
@@ -9,6 +18,7 @@ import {
 	countUnanswered,
 	cursor,
 	Decisions,
+	DecisionSaveHost,
 	documentEditMode,
 	documentHasPlanningContent,
 	Face,
@@ -30,6 +40,7 @@ import {
 
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
+import { ChildPhoneChromeContext, sameEditState } from "./child-phone-chrome";
 import { ChildProvenance } from "./child-provenance";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
 import type { ResearchDraftController } from "./chat/research-draft-controller";
@@ -506,7 +517,9 @@ export function RoomWorkspace(
 		[chatActive],
 	);
 	let planVisible = workspacePresentation.documentVisible && view === "plan";
-	let editorFocused = useEditorFocus(frame);
+	// A child is not inside a workspace frame of its own, so its own surface scopes its editor.
+	let childSurface = useRef<HTMLDivElement>(null);
+	let editorFocused = useEditorFocus(presentation.type === "child" ? childSurface : frame);
 	let latestPlanVisible = useRef(planVisible);
 	latestPlanVisible.current = planVisible;
 	let latestBusy = useRef(chatActivity.busy);
@@ -948,16 +961,52 @@ export function RoomWorkspace(
 		arrived.current = true;
 		if (opensEditing({ empty: planState.empty })) setEditing(true);
 	}, [planState.synced, planState.empty]);
+	// A child on a phone borrows its parent's tab bar (see child-phone-chrome.ts).
+	let childChrome = useContext(ChildPhoneChromeContext);
+	let childRoom = presentation.type === "child";
+	let childOpen = presentation.type === "parent-with-child";
+	let [childEdit, setChildEdit] = useState<{ docked: boolean; editing: boolean }>();
+	let childToggle = useRef<() => void>(undefined);
+	let reportChildEdit = useCallback(
+		(state?: { docked: boolean; editing: boolean }, toggle?: () => void) => {
+			childToggle.current = toggle;
+			setChildEdit(current => sameEditState(current, state) ? current : state);
+		},
+		[],
+	);
+	// What this room's own editor shows: a child is on screen only while its parent's Document is.
+	let shown = childRoom ? !!childChrome?.visible : planVisible && !childOpen;
 	// Only the document's own keyboard gets formatting: never Chat, a comment reply, or the title.
-	let docked = editMode === "editing" && keyboardOpen && planVisible && editorFocused;
+	let docked = editMode === "editing" && keyboardOpen && shown && editorFocused;
 	let toggleEditing = () => {
 		// Synchronous, so the editor takes focus inside the tap and iOS raises the keyboard.
 		flushSync(() => {
 			setEditing(!editing);
 			// Chat opens over the document without changing `view`, so ask what is on screen.
-			if (!editing && !planVisible) selectDestination("plan");
+			if (editing || shown) return;
+			if (childRoom) childChrome?.showDocument();
+			else selectDestination("plan");
 		});
 	};
+	let latestToggle = useRef(toggleEditing);
+	latestToggle.current = toggleEditing;
+	let reportEdit = childChrome?.report;
+	useLayoutEffect(() => {
+		reportEdit?.(
+			editMode ? { docked, editing: editMode === "editing" } : undefined,
+			() => latestToggle.current(),
+		);
+	}, [docked, editMode, reportEdit]);
+	useEffect(() => () => reportEdit?.(undefined), [reportEdit]);
+	let childChromeValue = useMemo(
+		() => ({
+			formatDock,
+			report: reportChildEdit,
+			showDocument: () => latestSelectDestination.current("plan"),
+			visible: planVisible,
+		}),
+		[formatDock, planVisible, reportChildEdit],
+	);
 	let actOnResearchOffer = (
 		offerId: string,
 		choice: "research" | "dismiss" | "resume",
@@ -1085,8 +1134,6 @@ export function RoomWorkspace(
 			/>
 		</>
 	);
-	// A child room renders its document alone, with no tab bar for the edit toggle.
-	let childRoom = presentation.type === "child";
 	let plan = (
 		<GitHubReferencesProvider value={githubReferences}>
 			<PlanEditor
@@ -1110,8 +1157,8 @@ export function RoomWorkspace(
 				connection={status === "deleted" ? "closed" : status}
 				key={workspaceArchivedAt ? "archived" : "active"}
 				disclosureMotion={motionContract("collapse")}
-				editMode={childRoom ? undefined : editMode}
-				formatDock={!childRoom && docked ? formatDock : undefined}
+				editMode={childRoom && !childChrome ? undefined : editMode}
+				formatDock={docked ? childRoom ? childChrome?.formatDock : formatDock : undefined}
 				motionImmediately={settleMotionImmediately}
 				onScrollTop={setPlanScrollTop}
 				onState={setPlanState}
@@ -1136,6 +1183,7 @@ export function RoomWorkspace(
 				className="child-document flex h-full min-h-0 flex-col bg-page"
 				data-workspace-room={room}
 				data-workspace-surface="child"
+				ref={childSurface}
 			>
 				<p aria-live="polite" className="sr-only" role="status">
 					<span key={announcement.sequence}>{announcement.text}</span>
@@ -1146,14 +1194,20 @@ export function RoomWorkspace(
 					className="child-document-scroll min-h-0 flex-1"
 					data-document-view="plan"
 				>
-					{plan}
+					{/* With no Decisions pane, a phone saves the child's cards from a bar of its own. */}
+					<DecisionSaveHost phone={phone}>{plan}</DecisionSaveHost>
 				</section>
 			</div>
 		);
 	}
 
+	// The tab bar's pencil edits the document on screen: an open child, or else this one.
+	let barEdit = childOpen
+		? childEdit && { ...childEdit, toggle: () => childToggle.current?.() }
+		: editMode && { docked, editing: editMode === "editing", toggle: toggleEditing };
+
 	return (
-		<>
+		<ChildPhoneChromeContext.Provider value={childChromeValue}>
 			<p aria-live="polite" className="sr-only" role="status">
 				<span key={announcement.sequence}>{announcement.text}</span>
 			</p>
@@ -1231,7 +1285,7 @@ export function RoomWorkspace(
 							archivedAt={workspaceArchivedAt}
 							canManage={effectiveCanManage}
 							editing={titleEdit}
-							editingDocument={editMode === "editing"}
+							editingDocument={!!barEdit?.editing}
 							label={metadata.title}
 							onAction={action => onDocumentAction(room, action)}
 							onEditingChange={setTitleEdit}
@@ -1268,12 +1322,12 @@ export function RoomWorkspace(
 				}
 				status={statusNotices}
 				ids={workspaceIds}
-				phoneAction={editMode && (
+				phoneAction={barEdit && (
 					<button
-						aria-label={editing ? "Done editing" : "Edit document"}
+						aria-label={barEdit.editing ? "Done editing" : "Edit document"}
 						className="phone-tab-action"
-						data-editing={editing || undefined}
-						onClick={toggleEditing}
+						data-editing={barEdit.editing || undefined}
+						onClick={barEdit.toggle}
 						type="button"
 					>
 						<PencilIcon aria-hidden="true" data-edit-icon="edit" size={24} />
@@ -1282,7 +1336,7 @@ export function RoomWorkspace(
 				)}
 				// Formatting rides above the keyboard while typing. With the keyboard down the tabs
 				// return, and a selection gets the ordinary bubble instead.
-				phoneToolbar={docked && <div className="h-full" ref={setFormatDock} />}
+				phoneToolbar={barEdit?.docked && <div className="h-full" ref={setFormatDock} />}
 				identity={room}
 				mode={mode}
 				presence={<RoomMembers members={members} ring="page" />}
@@ -1336,6 +1390,6 @@ export function RoomWorkspace(
 				unanswered={unanswered}
 				view={view}
 			/>
-		</>
+		</ChildPhoneChromeContext.Provider>
 	);
 }

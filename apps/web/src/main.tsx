@@ -26,9 +26,14 @@ if (!root) throw new Error("missing #root");
 function Root() {
 	useFocusInput();
 	useMotionInput();
-	usePointerCapabilities();
 	useVisualViewport();
 	return <App />;
+}
+
+/** Every route, development pages included, mirrors the phone class into CSS. */
+function PointerCapabilities() {
+	usePointerCapabilities();
+	return null;
 }
 
 let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
@@ -47,6 +52,7 @@ void Promise.all([content, import("./icon-tooltip"), agentation]).then(
 	([value, { IconTooltip }, feedback]) => {
 		createRoot(root).render(
 			<StrictMode>
+				<PointerCapabilities />
 				{value}
 				<IconTooltip />
 				{feedback}

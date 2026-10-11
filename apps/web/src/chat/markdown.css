@@ -95,14 +95,12 @@
 }
 
 /* Phones read Chat at the document's prose size, and a code block wraps rather than scrolling sideways. */
-@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
-	.chat-markdown {
-		font-size: var(--text-base);
-		line-height: var(--text-base--line-height);
-	}
+:root[data-phone] .chat-markdown {
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+}
 
-	.chat-markdown pre {
-		overflow-x: visible;
-		white-space: pre-wrap;
-	}
+:root[data-phone] .chat-markdown pre {
+	overflow-x: visible;
+	white-space: pre-wrap;
 }

@@ -9,7 +9,7 @@
 	z-index: 70;
 	background: var(--color-scrim);
 	opacity: calc(1 - var(--drawer-swipe-progress, 0));
-	transition: opacity var(--sheet-rise-dur) var(--tab-slide-ease);
+	transition: opacity var(--sheet-rise-dur) var(--sheet-ease);
 }
 
 .phone-sheet-backdrop[data-starting-style],
@@ -35,7 +35,7 @@
 	pointer-events: auto;
 	overscroll-behavior: contain;
 	transform: translateY(var(--drawer-swipe-movement-y, 0px));
-	transition: transform var(--sheet-rise-dur) var(--tab-slide-ease);
+	transition: transform var(--sheet-rise-dur) var(--sheet-ease);
 }
 
 :is(.documents-sheet, .action-sheet)[data-swiping] {
@@ -53,12 +53,12 @@
 
 .phone-sheet-grabber {
 	display: block;
-	width: calc(var(--spacing) * 9);
-	height: var(--spacing);
+	width: var(--sheet-grabber-width);
+	height: var(--sheet-grabber-height);
 	flex: none;
-	margin: calc(var(--spacing) * 1.5) auto 0;
+	margin: var(--sheet-grabber-inset) auto 0;
 	border-radius: var(--radius-full);
-	background: var(--color-gray-300);
+	background: var(--color-grabber);
 }
 
 /* A 44px target around the small filled circle iOS sheets close with. */
@@ -120,7 +120,7 @@
 	inset: 0;
 	background: var(--color-scrim);
 	opacity: 0;
-	transition: opacity var(--sheet-rise-dur) var(--tab-slide-ease);
+	transition: opacity var(--sheet-rise-dur) var(--sheet-ease);
 }
 
 .documents-sheet[data-nested-drawer-open]::after {

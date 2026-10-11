@@ -575,58 +575,58 @@
 }
 
 /*
- * Wide authored blocks on a phone: a coarse pointer on a small screen, and a
- * narrow document. The media query is the phone class, kept identical to
- * `isPhone` in pointer.ts, so it also holds where no shell sets
- * `:root[data-phone]`. Narrow desktop windows keep their scroll lanes untouched.
+ * Wide authored blocks on a phone (`:root[data-phone]`), in a narrow document. Narrow
+ * desktop windows keep their scroll lanes untouched.
  */
-@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
-	@container (max-width: 40rem) {
-		/* A wide table fades the side that still hides columns, as a drawn diagram does. */
-		.plan-content table {
-			--plan-table-fade: calc(var(--spacing) * 8);
-		}
+@container (max-width: 40rem) {
+	/* A wide table fades the side that still hides columns, as a drawn diagram does. */
+	:root[data-phone] .plan-content table {
+		--plan-table-fade: calc(var(--spacing) * 8);
+	}
 
-		.plan-content table[data-more="end"] {
-			mask-image: linear-gradient(to right, black calc(100% - var(--plan-table-fade)), transparent);
-		}
+	:root[data-phone] .plan-content table[data-more="end"] {
+		mask-image: linear-gradient(to right, black calc(100% - var(--plan-table-fade)), transparent);
+	}
 
-		.plan-content table[data-more="start"] {
-			mask-image: linear-gradient(to right, transparent, black var(--plan-table-fade));
-		}
+	:root[data-phone] .plan-content table[data-more="start"] {
+		mask-image: linear-gradient(to right, transparent, black var(--plan-table-fade));
+	}
 
-		.plan-content table[data-more="both"] {
-			mask-image: linear-gradient(
-				to right,
-				transparent,
-				black var(--plan-table-fade),
-				black calc(100% - var(--plan-table-fade)),
-				transparent
-			);
-		}
+	:root[data-phone] .plan-content table[data-more="both"] {
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			black var(--plan-table-fade),
+			black calc(100% - var(--plan-table-fade)),
+			transparent
+		);
+	}
 
-		/*
-		 * Code wraps rather than scrolling a few characters at a time. The
-		 * coloured copy is drawn in a shadow root, so it reads this switch
-		 * instead of the rule; a plain-text fence is laid out by hand and
-		 * keeps its lines.
-		 */
-		.plan-content .planCode:not([data-plan-text]) .plan-code-view {
-			--plan-code-overflow: wrap;
-		}
+	/*
+	 * Code wraps rather than scrolling a few characters at a time. The
+	 * coloured copy is drawn in a shadow root, so it reads this switch
+	 * instead of the rule; a plain-text fence is laid out by hand and
+	 * keeps its lines.
+	 */
+	:root[data-phone] .plan-content .planCode:not([data-plan-text]) .plan-code-view {
+		--plan-code-overflow: wrap;
+	}
 
-		.plan-content .planCode:not([data-plan-text]) .plan-code-view > diffs-container {
-			min-inline-size: 0;
-		}
+	:root[data-phone]
+		.plan-content
+		.planCode:not([data-plan-text])
+		.plan-code-view
+		> diffs-container {
+		min-inline-size: 0;
+	}
 
-		.plan-content .planCode:not([data-plan-text]) [data-plan-source] {
-			overflow-wrap: anywhere;
-		}
+	:root[data-phone] .plan-content .planCode:not([data-plan-text]) [data-plan-source] {
+		overflow-wrap: anywhere;
+	}
 
-		/* A diagram below its readability floor offers a full-screen reading. */
-		.plan-content .plan-diagram-actions {
-			display: flex;
-		}
+	/* A diagram below its readability floor offers a full-screen reading. */
+	:root[data-phone] .plan-content .plan-diagram-actions {
+		display: flex;
 	}
 }
 
@@ -1492,15 +1492,16 @@
 	right: 0;
 }
 
+/* The scrim every phone sheet shares, lighter while this sheet rests at its medium detent. */
 .plan-comment-sheet-backdrop {
-	--backdrop-opacity: 0.24;
-	--backdrop-opacity-large: 0.36;
+	--backdrop-opacity: var(--sheet-scrim-medium);
+	--backdrop-opacity-large: 1;
 	position: fixed;
 	inset: 0;
 	z-index: 70;
-	background: rgb(var(--shadow-color));
+	background: var(--color-scrim);
 	opacity: var(--backdrop-opacity);
-	transition: opacity var(--duration-base) var(--ease-out);
+	transition: opacity var(--sheet-rise-dur) var(--sheet-ease);
 }
 
 /* Pulled up to the large detent, the sheet sets the document further back. */
@@ -1563,16 +1564,16 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	overflow: hidden;
 	padding-right: env(safe-area-inset-right, 0px);
 	padding-left: env(safe-area-inset-left, 0px);
-	border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+	border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
 	background: var(--color-page);
-	box-shadow: 0 -1rem 3rem rgb(var(--shadow-color) / 22%);
+	box-shadow: var(--shadow-overlay);
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	transform: translateY(
 		calc(var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px))
 	);
-	transition: transform calc(var(--drawer-swipe-strength, 1) * var(--duration-base))
-		var(--ease-out);
+	transition: transform calc(var(--drawer-swipe-strength, 1) * var(--sheet-rise-dur))
+		var(--sheet-ease);
 }
 
 /* The finger owns the sheet while it drags; the spring takes over on release. */
@@ -1582,12 +1583,12 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 .plan-comment-sheet-grabber {
 	display: block;
-	width: 2.25rem;
-	height: 0.25rem;
+	width: var(--sheet-grabber-width);
+	height: var(--sheet-grabber-height);
 	flex: none;
-	margin: 0.5rem auto 0;
+	margin: var(--sheet-grabber-inset) auto 0;
 	border-radius: var(--radius-full);
-	background: var(--color-gray-300);
+	background: var(--color-grabber);
 }
 
 /* One row: what the sheet is about, and its close, with no title above it. */
@@ -1725,7 +1726,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	border-top: var(--edge-width) solid var(--color-edge);
 	background: var(--color-page);
 	transform: translateY(calc(-1 * var(--plan-comment-sheet-lift)));
-	transition: transform var(--duration-base) var(--ease-out);
+	transition: transform var(--sheet-rise-dur) var(--sheet-ease);
 }
 
 .plan-comment-sheet-popup[data-swiping] .plan-comment-thread-compose {
@@ -1826,6 +1827,12 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	opacity: 0;
 }
 
+/* Sheets leave faster than they arrive. */
+.plan-comment-sheet-popup[data-ending-style],
+.plan-comment-sheet-backdrop[data-ending-style] {
+	transition-duration: var(--sheet-fall-dur);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.plan-comment-card {
 		animation: none;
@@ -1841,6 +1848,8 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 	.plan-comment-sheet-backdrop,
 	.plan-comment-sheet-popup,
+	.plan-comment-sheet-popup[data-ending-style],
+	.plan-comment-sheet-backdrop[data-ending-style],
 	.plan-comment-sheet-content .plan-comment-thread-compose {
 		transition-duration: 0ms;
 	}
@@ -1893,8 +1902,18 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	padding-block-start: calc(var(--spacing) * 4);
 }
 
+/* Cards answered in place outside the pane, such as a child document's, save from the same bar. */
+.decision-save-host {
+	height: 100%;
+	min-height: 0;
+}
+
+.decision-save-host[data-phone] {
+	position: relative;
+}
+
 /* Save lives in the bar, so the card footer keeps only a quiet way out. */
-.plan-decisions[data-phone] .question-discard-quiet {
+:is(.plan-decisions, .decision-save-host)[data-phone] .question-discard-quiet {
 	margin-inline: calc(var(--spacing) * -2) auto;
 	color: var(--color-text-tertiary);
 	font-size: var(--text-xs);
@@ -1902,7 +1921,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 /* Leave the hint and the next row visible above the keyboard. */
-.plan-decisions[data-phone] .question-field {
+:is(.plan-decisions, .decision-save-host)[data-phone] .question-field {
 	scroll-margin-block-end: calc(var(--keyboard-inset, 0px) + var(--spacing) * 20);
 }
 
@@ -1911,7 +1930,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 /* `--phone-bottom-chrome` is the height of any bar below this one, above the safe area. */
-.plan-decisions[data-phone] .decision-save-bar {
+:is(.plan-decisions, .decision-save-host)[data-phone] .decision-save-bar {
 	position: absolute;
 	z-index: 2;
 	inset-inline: calc(var(--spacing) * 3);
@@ -1935,7 +1954,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 		opacity var(--save-bar-close-dur) var(--ease-out);
 }
 
-.plan-decisions[data-phone] .decision-save-bar[data-open] {
+:is(.plan-decisions, .decision-save-host)[data-phone] .decision-save-bar[data-open] {
 	opacity: 1;
 	pointer-events: auto;
 	transform: none;
@@ -1945,7 +1964,8 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 /* A text field has the keyboard up; the bar would only crowd it. */
-.plan-decisions[data-phone]:has(.question-field:focus) .decision-save-bar[data-open] {
+:is(.plan-decisions, .decision-save-host)[data-phone]:has(.question-field:focus)
+	.decision-save-bar[data-open] {
 	opacity: 0;
 	pointer-events: none;
 	transform: translateY(calc(100% + var(--spacing) * 6));
@@ -1963,7 +1983,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-danger-text);
 }
 
-.plan-decisions[data-phone] .decision-save-bar-button {
+:is(.plan-decisions, .decision-save-host)[data-phone] .decision-save-bar-button {
 	min-height: var(--control-target-coarse);
 	padding-inline: calc(var(--spacing) * 4);
 	font-size: var(--text-sm);
@@ -2071,9 +2091,10 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.plan-decisions[data-phone] .decision-save-bar,
-	.plan-decisions[data-phone] .decision-save-bar[data-open],
-	.plan-decisions[data-phone]:has(.question-field:focus) .decision-save-bar[data-open] {
+	:is(.plan-decisions, .decision-save-host)[data-phone] .decision-save-bar,
+	:is(.plan-decisions, .decision-save-host)[data-phone] .decision-save-bar[data-open],
+	:is(.plan-decisions, .decision-save-host)[data-phone]:has(.question-field:focus)
+		.decision-save-bar[data-open] {
 		transform: none;
 		transition: opacity var(--duration-fast) var(--ease-out);
 	}
