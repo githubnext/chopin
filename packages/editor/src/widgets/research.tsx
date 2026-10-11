@@ -320,11 +320,15 @@ export function ResearchPreview(
 				<span>{question}</span>
 			</p>
 			{shown.length > 0 && (
-				<ul aria-label="Research sources" className="plan-research-preview-sources">
-					{shown.map(source => {
+				<ul
+					aria-label="Research sources"
+					className="plan-research-preview-sources"
+					onMouseDown={event => event.preventDefault()}
+				>
+					{shown.map((source, index) => {
 						let href = safeSourceHref(source.url);
 						return (
-							<li key={source.url}>
+							<li key={`${index}-${source.url}`}>
 								{href
 									? <a href={href} rel="noreferrer" target="_blank">{source.title}</a>
 									: source.title}
@@ -431,6 +435,8 @@ export function ResearchCard(
 							aria-label={`Preview ${ready.title}`}
 							className="plan-research-preview-toggle btn btn-icon btn-ghost"
 							data-tooltip="Preview"
+							// Pressing must not pull focus, and with it the caret, out of the editor.
+							onMouseDown={event => event.preventDefault()}
 							unfold={preview}
 						/>
 					)}

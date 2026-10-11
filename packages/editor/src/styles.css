@@ -117,6 +117,13 @@
 	gap: 0.125rem;
 }
 
+.plan-research-preview-question > :last-child {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+}
+
 .plan-research-preview-sources {
 	display: grid;
 	gap: 0.25rem;
@@ -3502,7 +3509,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.plan * {
+	.plan *:not(.cv-unfold-content) {
 		transition: none !important;
 		animation: none !important;
 	}

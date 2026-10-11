@@ -352,6 +352,7 @@ describe("research preview", () => {
 		expect(markup).not.toContain("more source");
 	});
 });
+
 describe("active research deletion", () => {
 	it("blocks deletion while publication is still in progress", async () => {
 		let state = mutableStore({ ...BASE, stage: "publishing" });
