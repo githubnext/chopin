@@ -43,6 +43,12 @@
 	scroll-padding-block: calc(var(--phone-top-chrome) + var(--spacing) * 4) 30%;
 }
 
+/* Focus and find-in-page scrolling stop below the top bar, never under it. */
+.workspace-root[data-workspace-phone]
+	:is([data-plan-decisions-scroll], [data-build-view-scroll], [data-chat-scroll]) {
+	scroll-padding-top: calc(var(--phone-top-chrome) + var(--spacing) * 2);
+}
+
 .workspace-root[data-workspace-phone] .workspace-chat-panel {
 	padding-bottom: var(--phone-bottom-chrome);
 }

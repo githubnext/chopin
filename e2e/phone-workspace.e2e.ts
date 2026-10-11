@@ -2,12 +2,20 @@ import { expect, openIsolatedRoom, test } from "./room";
 import { expectNoHorizontalOverflow, RESPONSIVE_SOURCE } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
 
 function topBar(page: Page) {
 	return page.locator(".phone-top-bar");
+}
+
+/** Scroll a pane and let its scroll event land before the next step. */
+async function scrollPane(scroller: Locator, top: number): Promise<void> {
+	await scroller.evaluate(async (element, value) => {
+		element.scrollTo({ top: value });
+		await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+	}, top);
 }
 
 async function topOffset(page: Page): Promise<number> {
@@ -62,7 +70,7 @@ test("the phone tab bar switches destinations in one bar and returns a tab to it
 	}
 
 	let scroller = page.locator("[data-plan-scroll]");
-	await scroller.evaluate(element => element.scrollTo({ top: 700 }));
+	await scrollPane(scroller, 700);
 	await tabs.nth(0).click();
 	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(tabs.nth(0)).toHaveAttribute("aria-current", "page");
@@ -110,18 +118,18 @@ test("the top bar hides while reading down and returns on scroll up", async ({ j
 	let title = topBar(page).locator(".phone-top-bar-title");
 	await expect(title).toHaveCSS("opacity", "0");
 
-	await scroller.evaluate(element => element.scrollTo({ top: 200 }));
-	await scroller.evaluate(element => element.scrollTo({ top: 600 }));
+	await scrollPane(scroller, 200);
+	await scrollPane(scroller, 600);
 	await expect(page.locator(".workspace-root")).toHaveAttribute("data-workspace-bar", "hidden");
 	await expect.poll(() => topOffset(page)).toBeLessThan(-40);
 	await expect(title).toHaveCSS("opacity", "1");
 
-	await scroller.evaluate(element => element.scrollTo({ top: 500 }));
+	await scrollPane(scroller, 500);
 	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
 	await expect.poll(() => topOffset(page)).toBe(0);
 
 	// Focus moving into a hidden bar brings it back.
-	await scroller.evaluate(element => element.scrollTo({ top: 900 }));
+	await scrollPane(scroller, 900);
 	await expect(page.locator(".workspace-root")).toHaveAttribute("data-workspace-bar", "hidden");
 	await topBar(page).getByRole("button", { name: /^Actions for / }).focus();
 	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
@@ -129,8 +137,8 @@ test("the top bar hides while reading down and returns on scroll up", async ({ j
 
 	// Reduced motion never hides it.
 	await page.emulateMedia({ reducedMotion: "reduce" });
-	await scroller.evaluate(element => element.scrollTo({ top: 1200 }));
-	await scroller.evaluate(element => element.scrollTo({ top: 1600 }));
+	await scrollPane(scroller, 1200);
+	await scrollPane(scroller, 1600);
 	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
 });
 

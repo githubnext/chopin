@@ -152,7 +152,8 @@ export function usePhoneTopBar(
 				Math.max(0, target.scrollTop),
 				Math.max(0, target.scrollHeight - target.clientHeight),
 			);
-			let previous = last.get(target) ?? y;
+			// Panes open at their top, so a first scroll event already has a direction.
+			let previous = last.get(target) ?? 0;
 			last.set(target, y);
 			if (reduced.matches || target.matches("[data-chat-scroll]")) return;
 			if (y < TOP_BAR_REVEAL || previous - y > TOP_BAR_SLOP) setHidden(false);

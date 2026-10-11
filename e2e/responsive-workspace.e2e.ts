@@ -594,6 +594,10 @@ test("Chromium visual viewport emulation keeps Chat controls above the keyboard"
 		let nav = emulation.page.getByRole("navigation", { name: "Workspace view" });
 		await nav.getByRole("button", { name: /Chat/ }).click();
 		let chat = emulation.page.getByRole("complementary");
+		// Phone destinations slide in; measure once the pane has arrived.
+		await chat.evaluate(element =>
+			Promise.all(element.getAnimations().map(animation => animation.finished))
+		);
 		let textarea = chatInput(chat);
 		await textarea.focus();
 		await setVisualViewport(emulation.page, {
