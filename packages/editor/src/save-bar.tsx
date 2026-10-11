@@ -91,15 +91,14 @@ export function incompleteLabel(cards: number): string {
 	return cards === 1 ? "1 decision needs another answer" : `${cards} decisions need more answers`;
 }
 
-/** Cards that were saving and have come back with an error. */
+/** Cards showing an error that was not already reported. */
 export function newlyFailed(
-	before: ReadonlySet<string>,
+	reported: ReadonlySet<string>,
 	cards: ReadonlyMap<string, PendingAnswers>,
 ): string[] {
-	return [...before].filter(id => {
-		let card = cards.get(id);
-		return !!card && !card.submitting && !!card.error;
-	});
+	return [...cards]
+		.filter(([id, card]) => !reported.has(id) && !card.submitting && !!card.error)
+		.map(([id]) => id);
 }
 
 export function SaveBar(
@@ -116,7 +115,9 @@ export function SaveBar(
 	let summary = summarize(cards);
 	let open = summary.answered > 0 || summary.submitting;
 	let bar = useRef<HTMLDivElement>(null);
-	let saving = useRef<ReadonlySet<string>>(new Set());
+	// Errors already brought into view. A reply can land before this ever
+	// renders the card as saving, so a new error is what counts.
+	let reported = useRef<ReadonlySet<string>>(new Set());
 	// The bar leaves with the words it arrived with rather than emptying first.
 	let shown = useRef(summary);
 	if (open) shown.current = summary;
@@ -124,9 +125,9 @@ export function SaveBar(
 	let waiting = saveable === 0 && incomplete.length > 0 && !submitting;
 
 	useEffect(() => {
-		let failedNow = newlyFailed(saving.current, cards);
-		saving.current = new Set(
-			[...cards].filter(([, card]) => card.submitting).map(([id]) => id),
+		let failedNow = newlyFailed(reported.current, cards);
+		reported.current = new Set(
+			[...cards].filter(([, card]) => card.error && !card.submitting).map(([id]) => id),
 		);
 		if (failedNow[0]) onFailed(failedNow[0]);
 	}, [cards, onFailed]);

@@ -142,6 +142,48 @@ for (let leave of [false, true]) {
 	});
 }
 
+test("phone: a failed save is announced and its card stays in view after another card folds away", async ({ join, seed }) => {
+	await seed("Decisions on a phone.\n");
+	let page = await join("ana", PHONE);
+	let failing = "";
+	await page.context().routeWebSocket("**/ws?**", socket => {
+		let server = socket.connectToServer();
+		socket.onMessage(message => {
+			let frame = typeof message === "string" ? JSON.parse(message) : undefined;
+			if (frame?.kind === "question:submit" && frame.id === failing) {
+				socket.send(JSON.stringify({
+					kind: "question:submit",
+					rid: frame.rid,
+					ok: false,
+					message: "The server could not save this decision.",
+				}));
+				return;
+			}
+			server.send(message);
+		});
+	});
+	await page.reload();
+	await showDecisions(page);
+	let scope = decisionsCard(page, "Which of these belong in the first cut?");
+	failing = await scope.getAttribute("data-plan-sidecar-questionnaire") ?? "";
+	await decisionsCard(page).getByText("In SQLite", { exact: true }).click();
+	await scope.getByText("Anchors", { exact: true }).click();
+	await page.locator("[data-plan-decisions-scroll]").evaluate(element => {
+		element.scrollTop = element.scrollHeight;
+	});
+	let region = page.getByRole("region", { name: "Unsaved answers" });
+	await region.getByRole("button", { name: "Save", exact: true }).click();
+
+	await expect(region.getByRole("alert")).toHaveText("Couldn’t save 1 answer");
+	await expect(scope).toBeFocused();
+	// The saved card's confirmation folds away above the failed one.
+	await expect(page.locator("[data-decision-confirmed]")).toHaveCount(0, { timeout: 5_000 });
+	await expect(page.getByRole("button", { name: "1 resolved" })).toBeVisible();
+	await expect(scope.getByRole("heading", { name: "Which of these belong in the first cut?" }))
+		.toBeInViewport();
+	await expect(scope.getByText("The server could not save this decision.")).toBeInViewport();
+});
+
 test("phone: an open decision in the document is a chip that opens it in Decisions", async ({ join, seed }) => {
 	await seed("Decisions on a phone.\n");
 	let page = await join("ana", PHONE);

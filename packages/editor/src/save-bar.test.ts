@@ -39,8 +39,8 @@ test("a failed card is reported once it stops saving", () => {
 	let summary = summarize(cards);
 	expect(summary.failed).toEqual(["a"]);
 	expect(summary.failedAnswers).toBe(2);
-	expect(newlyFailed(new Set(["a", "b", "gone"]), cards)).toEqual(["a"]);
-	expect(newlyFailed(new Set(), cards)).toEqual([]);
+	expect(newlyFailed(new Set(), cards)).toEqual(["a"]);
+	expect(newlyFailed(new Set(["a"]), cards)).toEqual([]);
 });
 
 test("the bar's words read naturally", () => {

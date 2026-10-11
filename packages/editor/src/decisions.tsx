@@ -297,32 +297,41 @@ export function Decisions(
 		},
 		() => motionImmediately?.() ?? false,
 	);
-	let shown = useRef<HTMLElement | undefined>(undefined);
+	let following = useRef<() => void>(undefined);
+	useEffect(() => () => following.current?.(), []);
 	let showCard = useCallback((card: string) => {
-		let target = content.current?.querySelector<HTMLElement>(
+		let list = content.current;
+		let target = list?.querySelector<HTMLElement>(
 			`[data-plan-sidecar-questionnaire="${CSS.escape(card)}"]`,
 		);
-		if (!target) return;
+		if (!list || !target) return;
 		target.scrollIntoView({ block: "center" });
 		target.tabIndex = -1;
 		target.focus({ preventScroll: true });
-		shown.current = target;
+		// A card saved alongside it can fold away above it afterwards and pull it
+		// out of view. Follow it through layout changes while it still shows its
+		// error or keeps focus.
+		following.current?.();
+		let frame = 0;
+		let observer = new ResizeObserver(() => {
+			let attending = !!target.querySelector('[role="alert"]')
+				|| document.activeElement === target;
+			if (!target.isConnected || !attending) {
+				following.current?.();
+				return;
+			}
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(() => target.scrollIntoView({ block: "center" }));
+		});
+		for (let child of list.children) observer.observe(child);
+		let expiry = window.setTimeout(() => following.current?.(), 10_000);
+		following.current = () => {
+			observer.disconnect();
+			cancelAnimationFrame(frame);
+			window.clearTimeout(expiry);
+			following.current = undefined;
+		};
 	}, []);
-	// A card that saved alongside it may fold away above it afterwards, which
-	// would pull it out of view again. Follow it while it keeps focus.
-	useEffect(() => {
-		let target = shown.current;
-		if (!target) return;
-		if (!target.isConnected || document.activeElement !== target) {
-			shown.current = undefined;
-			return;
-		}
-		let timer = window.setTimeout(
-			() => target.scrollIntoView({ block: "center" }),
-			COLLAPSE_MS,
-		);
-		return () => window.clearTimeout(timer);
-	}, [closing]);
 	let leaveSaveBar = useCallback(() => {
 		let next = content.current?.querySelector<HTMLElement>(
 			"[data-plan-sidecar-questionnaire]",
