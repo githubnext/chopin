@@ -508,6 +508,56 @@ describe("Planner link protocol", () => {
 		expect(readPlanRuns).toBe(1);
 	});
 
+	it("fails a turn that reuses a refused host call id or its own finished tool call id", async () => {
+		let { server, channel } = await setup();
+		let harness = adapterFor(server, { channelId: channel.id, isolated: false });
+		async function reuse(
+			script: (
+				send: (message: object) => void,
+				raw: Awaited<ReturnType<typeof rawLink>>,
+			) => Promise<void>,
+		) {
+			let { raw, started } = await rawAttached(server, channel.id);
+			let driving = (async () => {
+				let session = await started;
+				let turn = (await raw.next("turn")).turn;
+				await script(message => raw.send({ session, turn, ...message }), raw);
+				raw.send({ type: "turn-end", session, turn, status: "finished" });
+				await raw.next("abort");
+			})();
+			let outcome = await streamTurn(harness, "reuse");
+			await driving;
+			return outcome.errors.join("\n");
+		}
+		readPlanRuns = 0;
+		let refused = await reuse(async (send, raw) => {
+			let call = { type: "host-tool-call", toolCallId: "refused", input: "{}" };
+			send({ ...call, toolName: "write_plan" });
+			expect(await raw.next("host-tool-result")).toMatchObject({
+				toolCallId: "refused",
+				output: { error: "write_plan is not available in this turn." },
+				isError: true,
+			});
+			send({ ...call, toolName: "read_plan" });
+		});
+		expect(refused).toContain("Tool call refused was repeated");
+		expect(readPlanRuns).toBe(0);
+		let own = await reuse(async send => {
+			let call = { toolCallId: "own", toolName: "bash" };
+			send({ type: "tools", names: ["bash"] });
+			send({
+				type: "part",
+				part: { type: "tool-call", ...call, input: "{}", providerExecuted: true },
+			});
+			send({ type: "part", part: { type: "tool-result", ...call, result: "done" } });
+			send({
+				type: "part",
+				part: { type: "tool-call", ...call, input: "{}", providerExecuted: true },
+			});
+		});
+		expect(own).toContain("Tool call own was repeated");
+	});
+
 	it("answers a host call for a session that has ended with an error result", async () => {
 		let { server, channel } = await setup();
 		let { raw, started } = await rawAttached(server, channel.id);
@@ -664,6 +714,64 @@ describe("Planner link questions", () => {
 			message: "Decisions are not available to this session.",
 		});
 		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+	});
+
+	it("closes the link when an answered input-request id is reused", async () => {
+		let f = await hostInputRoom();
+		cleanups.push(f.close);
+		let { server, channel } = await setup();
+		let { raw, started } = await rawAttached(server, channel.id);
+		let opened = await adapterFor(server, {
+			channelId: channel.id,
+			isolated: false,
+			humanInput: report => createHumanInput(f.room, undefined, undefined, report),
+		}).doStart({ sessionId: crypto.randomUUID(), sandboxSession, sessionWorkDir: "/tmp" });
+		cleanups.push(() => opened.doDestroy());
+		let request = {
+			type: "input-request",
+			request: "asked",
+			session: await started,
+			input: { method: "confirm", title: "Ship?", message: "" },
+		};
+		raw.send(request);
+		let [card] = await f.cards(1);
+		await f.answer(card!.id, [0]);
+		expect(await raw.next("input-result")).toMatchObject({ request: "asked", status: "answered" });
+		raw.send(request);
+		expect(await raw.next("error")).toMatchObject({
+			code: "protocol",
+			message: "Input request asked was repeated.",
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.malformed);
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+		expect(f.plan.records.size).toBe(1);
+	});
+
+	it("refuses a failed input-request id again until 1024 later ids have been used", async () => {
+		let { server, channel } = await setup();
+		let raw = await rawLink(server.url);
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let ask = (request: string) =>
+			raw.send({
+				type: "input-request",
+				request,
+				session: "none",
+				input: { method: "confirm", title: "Ship?", message: "" },
+			});
+		let ids = ["first", ...Array.from({ length: 1_024 }, (_, index) => `later-${index}`)];
+		for (let id of ids) ask(id);
+		for (let id of ids) {
+			expect(await raw.next("input-result")).toMatchObject({ request: id, status: "failed" });
+		}
+		ask("first");
+		expect(await raw.next("input-result")).toMatchObject({ request: "first", status: "failed" });
+		ask("later-1");
+		expect(await raw.next("error")).toMatchObject({
+			code: "protocol",
+			message: "Input request later-1 was repeated.",
+		});
+		expect((await raw.closed).code).toBe(LINK_CLOSE.malformed);
 	});
 
 	it("withdraws a question asked while a session starts when the start fails or times out", async () => {
