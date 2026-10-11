@@ -58,12 +58,20 @@ export function createRootChat(deps: RootChatDeps): Chat.RootChat {
 					done();
 				}
 			};
+			let backstop = () => {
+				if (!settled) void ended({ status: "stopped" });
+			};
 			try {
 				await Chat.instruct(context, handle, text, said, {
 					...about,
 					started: () => {
 						begun = true;
 						about.started?.();
+						// A Chat closed mid-turn never reports the turn's end, so the
+						// running promise, assigned once this returns, stands in for it.
+						queueMicrotask(() => {
+							void context.chat.running?.finally(backstop).catch(() => {});
+						});
 					},
 					ended,
 					threadChannel: child.id,

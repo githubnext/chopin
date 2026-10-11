@@ -723,6 +723,24 @@ describe("a comment sent to Chopin inside a child document", () => {
 		});
 	});
 
+	it("releases the rooms and says the turn stopped when the root closes mid-turn", async () => {
+		let { child, events, holds, rootChat, startChildComment, turns } = await rootAndChild();
+		let thread = await startChildComment("tighten this", { to: "planner" });
+		expect(rootChat.acting).toBe(thread);
+		expect(holds).toEqual({ opened: 2, released: 1 });
+
+		let closing = Chat.close(rootChat);
+		await turns.finish();
+		await closing;
+		await Bun.sleep(0);
+
+		expect(holds.released).toBe(2);
+		expect(events.findLast(event => event.frame.kind === "comment:working")).toEqual({
+			topic: Wire.topic(child.channel.id),
+			frame: expect.objectContaining({ id: thread, working: false, reason: "stopped" }),
+		});
+	});
+
 	it("releases the root at once when a note folds into a turn already waiting", async () => {
 		let { childContext, holds, rootChat } = await rootAndChild();
 		rootChat.busy = true;

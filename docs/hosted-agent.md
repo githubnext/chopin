@@ -132,7 +132,7 @@ child as the turn's focus; the root's transcript notice names the child. That
 turn alone may `reply_comment` in that child thread, and its `edit_child` writes
 are the thread's result. The note is saved in the child before the turn is
 queued, and the reply is saved in the child before the child's room sees it.
-Admission, the turn's start, and `reply_comment` each re-ask storage that the
+Admission, queueing the turn, and `reply_comment` each re-ask storage that the
 child still belongs to a live root in the same repository; admission refuses the
 note before saving it when it does not. The end-of-turn fallback reply is posted
 to the child room the note came from, which stays held until that turn ends,

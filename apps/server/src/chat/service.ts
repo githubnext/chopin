@@ -219,7 +219,8 @@ export function queuedFor(chat: Chat, thread: string, channel?: string): Waiting
 
 /** Whether a turn is running or waiting for a thread; `channel` as for `queuedFor`. */
 export function workingFor(chat: Chat | undefined, thread: string, channel?: string): boolean {
-	if (!chat) return false;
+	// A closed Chat runs nothing more, whatever its last turn left behind.
+	if (!chat || chat.closed) return false;
 	return chat.acting === thread && chat.actingChannel === channel
 		|| !!queuedFor(chat, thread, channel);
 }
