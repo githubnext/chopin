@@ -413,6 +413,20 @@
 		"sourceHash": "849f492e94d49ef2135dd7f00b7d9792c8d499b37bbdfbd2c4fc37b0f0207ad9"
 	},
 	{
+		"file": "packages/icons/src/list.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ListIcon > <LineIcon>",
+				1
+			]
+		],
+		"sourceHash": "4f7d0232af2d03d5d8df9a226b48388c6a8011473ee53c2138568d77b8945bc3"
+	},
+	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",
 		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
 		"cases": [
