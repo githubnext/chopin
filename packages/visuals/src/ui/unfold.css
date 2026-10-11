@@ -1,0 +1,88 @@
+/* Two speeds, both tokens: plain accordions, and card previews at the linger pace. */
+.cv-unfold,
+.cv-unfold-toggle {
+	--cv-unfold-duration: var(--acc-expand);
+}
+
+[data-unfold-speed="card"] {
+	--cv-unfold-duration: var(--duration-linger);
+}
+
+/* Height folds through the grid row; content fades and tips open from its top edge. */
+.cv-unfold {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows var(--cv-unfold-duration) var(--ease-out);
+}
+
+.cv-unfold[data-open] {
+	grid-template-rows: 1fr;
+}
+
+.cv-unfold-clip {
+	min-height: 0;
+	overflow: hidden;
+	perspective: 50rem;
+}
+
+/* Visibility flips only after the fold, so closed content leaves find-in-page and focus. */
+.cv-unfold-content {
+	opacity: 0;
+	transform: rotateX(-40deg);
+	transform-origin: top center;
+	visibility: hidden;
+	transition:
+		opacity var(--cv-unfold-duration) var(--ease-out),
+		transform var(--cv-unfold-duration) var(--ease-out),
+		visibility 0s var(--cv-unfold-duration);
+}
+
+.cv-unfold[data-open] > .cv-unfold-clip > .cv-unfold-content {
+	opacity: 1;
+	transform: none;
+	visibility: visible;
+	transition-delay: 0s;
+}
+
+:where(.cv-unfold-toggle) {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	cursor: pointer;
+	text-align: start;
+}
+
+.cv-unfold-chevron {
+	flex: none;
+	color: var(--color-text-tertiary);
+	transition: transform var(--cv-unfold-duration) var(--ease-out);
+}
+
+.cv-unfold-toggle[aria-expanded="true"] > .cv-unfold-chevron {
+	transform: rotate(90deg);
+}
+
+.cv-unfold-section-toggle {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-secondary);
+}
+
+.cv-unfold-section-body {
+	padding-block-start: calc(var(--spacing) * 2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cv-unfold {
+		transition: none;
+	}
+
+	.cv-unfold-content {
+		transform: none;
+		transition: opacity var(--duration-base) var(--ease-out), visibility 0s var(--duration-base);
+	}
+
+	.cv-unfold-chevron {
+		transition: none;
+	}
+}

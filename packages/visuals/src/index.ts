@@ -35,3 +35,11 @@ export type {
 	TableRowProps,
 	TableVariant,
 } from "./ui/table";
+export { UnfoldPanel, UnfoldSection, UnfoldToggle, useUnfold } from "./ui/unfold";
+export type {
+	Unfold,
+	UnfoldPanelProps,
+	UnfoldSectionProps,
+	UnfoldToggleProps,
+	UnfoldTriggerProps,
+} from "./ui/unfold";
