@@ -59,10 +59,3 @@
 	font-variant-numeric: tabular-nums;
 	color: var(--color-text-secondary);
 }
-
-@media (prefers-reduced-motion: reduce) {
-	.decision-deck-slot,
-	.decision-deck-stage {
-		transition: none;
-	}
-}

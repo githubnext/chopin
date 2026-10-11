@@ -66,6 +66,9 @@ test("adjacent decisions in a document form one deck", async ({ join, seed }) =>
 
 	await expect(deck(page)).toHaveCount(1);
 	await expect(deck(page)).toHaveAttribute("aria-roledescription", "carousel");
+	await expect(content(page).getByRole("group", { name: "3 decisions", exact: true }))
+		.toHaveCount(1);
+	await expect(content(page).getByRole("region", { name: /decisions/i })).toHaveCount(0);
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
 	await expect(deck(page).locator("[data-deck-slot]:not([data-deck-top])")).toHaveCount(2);
 	for (let slot of await deck(page).locator("[data-deck-slot]:not([data-deck-top])").all()) {
@@ -212,6 +215,32 @@ test("a collaborator's answer reorders without moving my top card", async ({ joi
 
 	await expect(deck(ana).getByText("1 decided")).toBeVisible();
 	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+});
+
+test("a collaborator's answer to my top card settles it and leaves my focus alone", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let ana = await join("ana");
+	let ben = await join("ben");
+	await expect(top(ana).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
+	await content(ana).getByText("Intro paragraph.").click();
+	await expect(content(ana)).toBeFocused();
+
+	await expect(top(ben).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
+	await top(ben).getByText("Option 1", { exact: true }).click();
+	await top(ben).getByRole("button", { name: "Save", exact: true }).click();
+
+	// Ana's top card was the one answered: it goes to the back and the next open card leads.
+	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+	await expect(deck(ana).getByText("1 of 3 · 1 decided")).toBeVisible();
+	await expect.poll(() => order(ana)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
+	await expect(ana.locator(`[data-deck-slot="${fixture.ids[0]}"]`)).toHaveAttribute(
+		"data-deck-settled",
+		"",
+	);
+	// Someone else's answer neither speaks nor takes Ana's caret.
+	await expect(deck(ana).getByRole("status")).toHaveText("");
+	await expect(content(ana)).toBeFocused();
 });
 
 test("answering every decision dissolves the deck", async ({ join, seed }) => {

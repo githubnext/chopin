@@ -682,9 +682,10 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let deck = useInlineDeck(value.id);
 	if (!deck) return <InlineCard value={value} />;
 	if (deck.layout.lead !== value.id) return <div data-deck-follower="" hidden />;
+	// Named by size, not "Decisions": a document can hold several decks beside the Decisions tab.
 	return (
 		<Deck
-			label="Decisions"
+			label={`${deck.members.length} decisions`}
 			onLeave={focusCard}
 			items={deck.members.map(member => ({
 				id: member.id,

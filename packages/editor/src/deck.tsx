@@ -44,7 +44,6 @@ export type DeckProps = {
 	label: string;
 	/** Whether to skip the shuffle. Defaults to the reduced-motion preference. */
 	reduced?: () => boolean;
-	className?: string;
 	/** After the deck unmounts while it held the reader's focus, with the card that was on top. */
 	onLeave?: (top: string) => void;
 };
@@ -142,7 +141,7 @@ function freeze(element: HTMLElement): Frozen {
 	return frozen;
 }
 
-export function Deck({ className, items, label, onLeave, reduced = prefersReduced }: DeckProps) {
+export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckProps) {
 	let [order, setOrder] = useState(() => settle(arrange([], items), items));
 	let current = arrange(order, items);
 	let [announcement, setAnnouncement] = useState("");
@@ -323,7 +322,6 @@ export function Deck({ className, items, label, onLeave, reduced = prefersReduce
 			touchedAt.current = performance.now();
 		};
 		let keydown = (event: KeyboardEvent) => {
-			touch();
 			let target = event.target as HTMLElement;
 			let kind: "control" | "slot" | "other" = target.closest("[data-deck-control]")
 				? "control"
@@ -338,6 +336,7 @@ export function Deck({ className, items, label, onLeave, reduced = prefersReduce
 				shift: event.shiftKey,
 			});
 			if (!direction) return;
+			touch();
 			event.preventDefault();
 			event.stopPropagation();
 			let next = cycle(arrange(orderRef.current, itemsRef.current), direction);
@@ -364,13 +363,16 @@ export function Deck({ className, items, label, onLeave, reduced = prefersReduce
 			let next = event.relatedTarget as Node | null;
 			if (next && !element.contains(next)) focusWithin.current = false;
 		};
+		// A click also covers a control activated from the keyboard; typing is not a touch.
 		element.addEventListener("pointerdown", touch);
+		element.addEventListener("click", touch);
 		element.addEventListener("focusin", focusin);
 		element.addEventListener("focusout", focusout);
 		element.addEventListener("keydown", keydown);
 		element.addEventListener(DECK_FRONT_EVENT, front);
 		return () => {
 			element.removeEventListener("pointerdown", touch);
+			element.removeEventListener("click", touch);
 			element.removeEventListener("focusin", focusin);
 			element.removeEventListener("focusout", focusout);
 			element.removeEventListener("keydown", keydown);
@@ -387,10 +389,10 @@ export function Deck({ className, items, label, onLeave, reduced = prefersReduce
 		<div
 			aria-label={label}
 			aria-roledescription="carousel"
-			className={`decision-deck${className ? ` ${className}` : ""}`}
+			className="decision-deck"
 			data-deck=""
 			ref={root}
-			role="region"
+			role="group"
 		>
 			<div
 				className="decision-deck-stage"

@@ -7,7 +7,7 @@ import { Deck, deckAnnouncement, deckKey, parseMs } from "./deck";
 
 function markup(settled: string[] = []) {
 	return renderToStaticMarkup(createElement(Deck, {
-		label: "Decisions",
+		label: "3 decisions",
 		reduced: () => true,
 		items: ["a", "b", "c"].map(id => ({
 			id,
@@ -19,10 +19,12 @@ function markup(settled: string[] = []) {
 }
 
 describe("deck semantics", () => {
-	it("names itself as a carousel of decisions", () => {
+	it("names itself as a carousel of decisions without adding a landmark", () => {
 		let html = markup();
 		expect(html).toContain('aria-roledescription="carousel"');
-		expect(html).toContain('aria-label="Decisions"');
+		expect(html).toContain('aria-label="3 decisions"');
+		expect(html).toContain('role="group"');
+		expect(html).not.toContain('role="region"');
 		expect(html).toContain('aria-roledescription="decision"');
 		expect(html).toContain('aria-label="1 of 3: Header a"');
 	});
