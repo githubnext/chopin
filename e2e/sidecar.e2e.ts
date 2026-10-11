@@ -13,7 +13,7 @@ import { chatInput, expectChatValue } from "./chat-input";
  */
 
 import { authenticate, content, edit, expect, ready, roomPath, test } from "./room";
-import { bringForward, deckSlot } from "./decision-deck-fixtures";
+import { bringForward, deckSeed, deckSlot } from "./decision-deck-fixtures";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { Locator, Page } from "@playwright/test";
@@ -302,6 +302,27 @@ test(
 		await expect(content(page).locator("[data-deck]")).toHaveCount(1);
 	},
 );
+
+test("the Decisions deck label counts only decisions still open", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Decisions for the rollout." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let deck = page.locator('[data-document-view="decisions"] [data-deck]');
+	let top = deck.locator("[data-deck-top]");
+	let answerTop = async () => {
+		await top.getByRole("radio").first().check();
+		await top.getByRole("button", { name: "Save", exact: true }).click();
+	};
+	await expect(deck).toHaveAttribute("aria-label", "3 open decisions");
+
+	// An answered card waits at the back of the deck but is no longer open.
+	await answerTop();
+	await expect(deck).toHaveAttribute("aria-label", "2 open decisions");
+	await answerTop();
+	await expect(deck).toHaveAttribute("aria-label", "1 open decision");
+	await expect(deck.locator("[data-deck-slot]")).toHaveCount(3);
+});
 
 test("questions leave the chat pane free of a waiting row", async ({ join, seed }) => {
 	await seed(PROSE);

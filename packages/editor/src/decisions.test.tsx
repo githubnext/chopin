@@ -83,7 +83,7 @@ test("an expired card is listed with the resolved cards and says nobody answered
 		},
 	};
 	let history = markup("true", [expired, RESOLVED]);
-	expect(history).toMatch(/<span class="tabular-nums">2<\/span><span>resolved<\/span>/);
+	expect(history).toContain('<span class="tabular-nums">2 resolved</span>');
 	expect(history).toContain('data-plan-sidecar-questionnaire="expired"');
 	expect(history).toContain("Ship the migration?");
 	expect(history).toContain(

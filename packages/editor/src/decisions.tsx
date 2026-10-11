@@ -383,7 +383,7 @@ export function Decisions(
 	let listed = settled.filter(entry => !answeredHere.has(entry.id));
 
 	let outstanding = pending.length;
-	// A folding card already counts as resolved, so this agrees with the tab's badge.
+	// Settled cards not waiting in the deck; a folding card already counts as resolved.
 	let resolved = listed.length + closing.size;
 	let empty = outstanding === 0 && resolved === 0 && !hasAdditional;
 
@@ -472,7 +472,7 @@ export function Decisions(
 					: arranged.deck.length > 0
 					? (
 						<Deck
-							label={`${arranged.deck.length} open decisions`}
+							label={`${pending.length} open ${pending.length === 1 ? "decision" : "decisions"}`}
 							onLeave={() => focusRemaining()}
 							items={arranged.deck.flatMap(id => {
 								let entry = byId.get(id);
@@ -521,8 +521,7 @@ export function Decisions(
 								open={history}
 								opened={<ChevronIcon className="rotate-90" size={14} />}
 							/>
-							<span className="tabular-nums">{resolved}</span>
-							<span>resolved</span>
+							<span className="tabular-nums">{`${resolved} resolved`}</span>
 						</button>
 						<MotionDisclosure
 							className="plan-decision-history-motion"
