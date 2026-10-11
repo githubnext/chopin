@@ -227,7 +227,7 @@
 				1
 			]
 		],
-		"sourceHash": "d8418a3c8293af8f7fb70bb4ec3210d8d442419301b84cd110e68de5c8b51726"
+		"sourceHash": "2d5faf85305b49b9e298aca9a1ade41909561175dc0d4d44fbda7471793ad4c3"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",
@@ -255,7 +255,7 @@
 				1
 			]
 		],
-		"sourceHash": "7a500f7e32a5c4f8db23dfd0a11f66cb164a0ce0676f5ce1b0ff4df2607a410d"
+		"sourceHash": "118bf3770755db660ca06af9f24cb03dabe49a901f453b5bdfcbccb12c90a1db"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -276,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "f271af3baeb3b11d21422e597dea3da8a51f7a5e445327bd06323d10a2c93af7"
+		"sourceHash": "4ec004501afae96a55f8f9c90b925bd00077b25c56a4cd3e0cedf45e70b9df4a"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
