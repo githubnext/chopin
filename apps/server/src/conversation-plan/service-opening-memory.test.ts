@@ -335,3 +335,16 @@ test.each([1, 2])("a %i-hop closing microtask cannot publish after close intent"
 	expect(opened.persistence.closing).toBe(true);
 	expect(destroyed).toBe(1);
 });
+
+test("a child document's legacy Planner ask gets no Conversation thread", async () => {
+	let context = await storedLegacy("Root");
+	let opened = await Service.open(context.channel.id, context.backend, context.server);
+	try {
+		expect(opened.parentChannelId).toBeDefined();
+		expect(await backfillPlannerAskThreads(opened)).toBe(0);
+		expect(opened.conversationPlan.threads).toEqual([]);
+		expect(opened.records.get(context.id)?.threadId).toBeUndefined();
+	} finally {
+		await Service.close(opened);
+	}
+});

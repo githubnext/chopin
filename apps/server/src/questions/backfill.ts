@@ -81,6 +81,8 @@ function eventsFor(
 
 /** Safe to retry: every surviving link is fixed by the card's persisted identity. */
 export function backfillPlannerAskThreads(plan: Plan): Promise<number> {
+	// A child has no Chat, so its decisions get no Conversation thread.
+	if (plan.parentChannelId) return Promise.resolve(0);
 	return Service.exclusive(plan, async () => {
 		let projections = room.questionnaireProjections(plan.document);
 		let records = new Map(plan.records);

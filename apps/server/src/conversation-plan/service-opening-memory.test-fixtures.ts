@@ -15,7 +15,7 @@ export function deferred<T = void>() {
 	return { promise, resolve, reject };
 }
 
-export async function storedLegacy() {
+export async function storedLegacy(parent?: string) {
 	let id = ulid();
 	let definition = Questions.identify({
 		questions: [{
@@ -44,6 +44,7 @@ export async function storedLegacy() {
 		document.doc.destroy();
 	}
 	let context = await openPlan(source, {
+		...(parent ? { parent } : {}),
 		questions: [{
 			id,
 			definition,

@@ -13,6 +13,7 @@ import { openPlan } from "../testing/plan";
 import type { Socket, SocketData } from "../wire";
 import { createProcessor, type Processor } from "./service";
 import * as Jobs from "./jobs";
+import { initialState } from "./domain";
 import {
 	greetJoinedPlan,
 	publishOpenedPlan,
@@ -128,6 +129,12 @@ describe("conversation-plan open and join ordering", () => {
 	test("a child document greets without any Chat frames", async () => {
 		let { plan } = await openPlan("# Child\n", { parent: "Root" });
 		expect(plan.parentChannelId).toBeDefined();
+		// A kept child still holds what its Chat derived; none of it is served.
+		plan.conversationPlan = {
+			...initialState(),
+			threads: [{ id: "t", question: "Quoted from Chat?" }] as never,
+		};
+		plan.conversationPlanJobs = [{ id: "j" }] as never;
 		let joiner = socket();
 		await greetJoinedPlan(
 			plan,
@@ -139,6 +146,8 @@ describe("conversation-plan open and join ordering", () => {
 		let kinds = joiner.frames.map(frame => frame.kind);
 		expect(kinds).toContain("plan:open");
 		expect(kinds.filter(kind => String(kind).startsWith("chat:"))).toEqual([]);
+		expect(joiner.frames.find(frame => frame.kind === "conversation-plan:snapshot"))
+			.toMatchObject({ state: initialState(), jobs: [] });
 		await Service.close(plan);
 	});
 

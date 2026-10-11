@@ -17,6 +17,10 @@ function sidecar(transcript: JsonValue[], questions: JsonValue[] = []): JsonValu
 	};
 }
 
+function entry(text: string): JsonValue {
+	return { id: crypto.randomUUID(), author: { kind: "member", handle: "ana" }, text, ts: 1 };
+}
+
 function transcript(value: JsonValue | undefined): JsonValue {
 	return (value as { transcript?: JsonValue } | undefined)?.transcript ?? null;
 }
@@ -187,6 +191,97 @@ export function childChannelContract(name: string, factory: StorageFactory) {
 				let stale = { ...lease, fencing: lease.fencing - 1 };
 				await expect(storage.collaboration.dropChildConversations(stale)).rejects
 					.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("clears diverged, archived and never-checkpointed children alike", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let child = (title: string, value?: JsonValue) =>
+					storage.channels.create({
+						repositoryId,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						createdBy: userId,
+						now,
+						id: crypto.randomUUID(),
+						title: `${title} ${id("c")}`,
+						parentChannelId: channelId,
+						...(value === undefined ? {} : {
+							initial: {
+								generation: id("generation"),
+								epoch: id("epoch"),
+								source: "# Child\n",
+								sourceHash: "sha256:child",
+								document: new Uint8Array([1, 2, 3]),
+								sidecar: value,
+							},
+						}),
+					});
+				let save = (target: string, value: JsonValue, allowArchived = false) =>
+					storage.collaboration.commit({
+						channelId: target,
+						lease,
+						expectedRevision: 0,
+						operationId: id("operation"),
+						epoch: id("epoch"),
+						sidecar: value,
+						events: [],
+						now,
+						allowArchived,
+					});
+
+				// The current sidecar moved on from its checkpoint, and each is cleared on its own.
+				let diverged = await child("Diverged", sidecar([entry("old")]));
+				let later = { ...sidecar([entry("old"), entry("new")]) as object, revision: 1 };
+				await save(diverged.id, later as JsonValue);
+				// Only the current sidecar cites Chat, so neither copy may change.
+				let citing = await child("Citing", sidecar([entry("old")]));
+				let cited = entry("cited");
+				await save(
+					citing.id,
+					sidecar([cited], [{
+						id: "q",
+						optionOrigins: {
+							o: { origin: "chat", source: { messageId: (cited as { id: string }).id } },
+						},
+					}]),
+				);
+				let archived = await child("Archived", sidecar([entry("archived")]));
+				await storage.channels.archive({ id: archived.id, now });
+				// Never checkpointed: no snapshot row, only the current sidecar.
+				let unsnapshotted = await child("Unsnapshotted");
+				await save(unsnapshotted.id, sidecar([entry("fresh")]));
+
+				let result = await storage.collaboration.dropChildConversations(lease);
+				expect(result.cleared).toEqual(
+					expect.arrayContaining([diverged.id, archived.id, unsnapshotted.id]),
+				);
+				expect(result.kept).toContain(citing.id);
+				expect(result.cleared).not.toContain(citing.id);
+
+				let reloaded = await storage.collaboration.load(diverged.id, now);
+				expect(reloaded?.sidecar).toEqual({ ...later, transcript: [] });
+				expect(reloaded?.snapshot?.sidecar).toEqual(sidecar([]));
+				let untouched = await storage.collaboration.load(citing.id, now);
+				expect(transcript(untouched?.sidecar)).toHaveLength(1);
+				expect(transcript(untouched?.snapshot?.sidecar)).toHaveLength(1);
+				let stored = await storage.collaboration.load(archived.id, now);
+				expect(stored?.channel.archivedAt).toBeDefined();
+				expect(stored?.sidecar).toEqual(sidecar([]));
+				expect(stored?.snapshot?.sidecar).toEqual(sidecar([]));
+				let bare = await storage.collaboration.load(unsnapshotted.id, now);
+				expect(bare?.snapshot).toBeUndefined();
+				expect(bare?.sidecar).toEqual(sidecar([]));
+
+				let again = await storage.collaboration.dropChildConversations(lease);
+				for (let cleared of [diverged.id, archived.id, unsnapshotted.id]) {
+					expect(again.cleared).not.toContain(cleared);
+				}
 			} finally {
 				await storage.close();
 			}

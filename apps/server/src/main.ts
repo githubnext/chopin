@@ -287,7 +287,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			channel = await storage.channels.get(room.id);
 			room.parentChannelId = channel?.parentChannelId;
 			if (room.closing) throw new Error("document is unavailable");
-			if (config.conversationPlan && !channel?.archivedAt) {
+			if (config.conversationPlan && !channel?.archivedAt && !channel?.parentChannelId) {
 				await backfillPlannerAskThreads(opened);
 			}
 		});
