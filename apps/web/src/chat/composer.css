@@ -408,8 +408,9 @@
 	/* Pickers become a list resting on the composer, as wide as it is. */
 	.chat-composer
 		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker]) {
-		left: 0;
-		right: 0;
+		/* Out to the pill's border, as the desktop dropdowns align. */
+		left: calc(-1 * var(--edge-width));
+		right: calc(-1 * var(--edge-width));
 		width: auto;
 		min-width: 0;
 		max-width: none;
