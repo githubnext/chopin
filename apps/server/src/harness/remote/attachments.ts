@@ -7,6 +7,8 @@
  * tools act with that login's GitHub App token, never with the link's bearer.
  * A dropped or detached link keeps its ownership for a grace period, so the
  * same account can reattach without losing it; then the ownership is cleared.
+ * Ending that login, resetting the document's Planner, or any other release of
+ * the stored ownership closes the link and frees the document at once.
  */
 
 import { GitHubError } from "../../github/client";
@@ -24,7 +26,7 @@ export type AttachmentAuth = {
 	storage: Pick<StorageAdapter, "channels">;
 	github: Pick<GitHub, "repositoryAccess">;
 	admission: Pick<Admission, "allowed">;
-	sessions: Pick<Sessions, "forUser" | "use">;
+	sessions: Pick<Sessions, "forUser" | "resolve" | "use">;
 	clock: () => Date;
 };
 
@@ -36,7 +38,7 @@ export type AttachRequest = {
 
 export type AttachRefusal = {
 	ok: false;
-	code: "planner-attached" | "sign-in-required" | "repository-forbidden";
+	code: "planner-attached" | "sign-in-required" | "repository-forbidden" | "access-revoked";
 	message: string;
 };
 
@@ -89,6 +91,55 @@ export class PlannerAttachments {
 	/** Makes `link` the document's Planner and its account the owner, or says why not. */
 	attach(request: AttachRequest, link: PlannerLink): Promise<AttachGrant | AttachRefusal> {
 		return this.#serialized(request.channelId, () => this.#attach(request, link));
+	}
+
+	/** The browser login ended: every document it owns through an attachment is released. */
+	async sessionRevoked(sessionId: string): Promise<void> {
+		let held = [...this.#holds.values()].filter(hold => hold.ownerSessionId === sessionId);
+		for (let hold of held) {
+			this.#invalidate(hold, signInEndedRefusal(this.#auth.config.origin, hold.login));
+		}
+		await Promise.all(held.map(hold => this.#release(hold)));
+	}
+
+	/** A repository writer reset the document's Planner, which already cleared its stored owner. */
+	ownerReset(channelId: string): void {
+		let hold = this.#holds.get(channelId);
+		if (!hold) return;
+		this.#invalidate(hold, {
+			ok: false,
+			code: "access-revoked",
+			message: `A repository writer reset this document's Planner, so ${hold.login} is no longer `
+				+ `attached. Attach again to resume.`,
+		});
+	}
+
+	/**
+	 * Whether `link` still holds the document: the stored owner is still its
+	 * attachment's login and generation, and that login is still live.
+	 * Otherwise the link closes and the document is free to attach.
+	 */
+	async verify(channelId: string, link: PlannerLink): Promise<boolean> {
+		let hold = this.#holds.get(channelId);
+		if (hold?.link !== link) return false;
+		let stored = await this.#auth.storage.channels.readAgent(channelId, this.#auth.clock());
+		if (this.#holds.get(channelId) !== hold || hold.link !== link) return false;
+		if (
+			stored?.agent?.ownerSessionId !== hold.ownerSessionId
+			|| stored.agent.generation !== hold.generation
+		) {
+			this.#invalidate(hold, {
+				ok: false,
+				code: "access-revoked",
+				message: `This document's Planner ownership was released, so ${hold.login} is no longer `
+					+ `attached. Attach again to resume.`,
+			});
+			return false;
+		}
+		if (await this.#auth.sessions.resolve(hold.ownerSessionId)) return true;
+		this.#invalidate(hold, signInEndedRefusal(this.#auth.config.origin, hold.login));
+		await this.#release(hold);
+		return false;
 	}
 
 	/** Stops every grace timer. Ownership stays in storage, which startup clears. */
@@ -191,17 +242,28 @@ export class PlannerAttachments {
 		return this.#serialized(hold.channelId, async () => {
 			if (this.#holds.get(hold.channelId) !== hold || hold.link) return;
 			this.#drop(hold);
-			try {
-				await this.#auth.storage.channels.clearAgentOwner(
-					hold.channelId,
-					hold.ownerSessionId,
-					hold.generation,
-					this.#auth.clock(),
-				);
-			} catch (error) {
-				console.error("[planner-link] releasing the Planner owner failed:", error);
-			}
+			await this.#release(hold);
 		});
+	}
+
+	/** Forgets the hold before its link closes, so closing starts no grace period. */
+	#invalidate(hold: Hold, refusal: AttachRefusal): void {
+		if (this.#holds.get(hold.channelId) !== hold) return;
+		this.#drop(hold);
+		hold.link?.revoke(refusal.code, refusal.message);
+	}
+
+	async #release(hold: Hold): Promise<void> {
+		try {
+			await this.#auth.storage.channels.clearAgentOwner(
+				hold.channelId,
+				hold.ownerSessionId,
+				hold.generation,
+				this.#auth.clock(),
+			);
+		} catch (error) {
+			console.error("[planner-link] releasing the Planner owner failed:", error);
+		}
 	}
 
 	#drop(hold: Hold): void {
@@ -236,5 +298,15 @@ function signInRefusal(origin: string, login: string): AttachRefusal {
 		code: "sign-in-required",
 		message: `Sign in to Chopin at ${origin} in a browser as ${login}, then attach again. `
 			+ `The Planner's repository tools act with that sign-in.`,
+	};
+}
+
+function signInEndedRefusal(origin: string, login: string): AttachRefusal {
+	return {
+		ok: false,
+		code: "sign-in-required",
+		message: `The Chopin browser sign-in that made ${login} this document's Planner ended, so the `
+			+ `Planner was released. Sign in to Chopin at ${origin} in a browser as ${login}, then `
+			+ `attach again.`,
 	};
 }

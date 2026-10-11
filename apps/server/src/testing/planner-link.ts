@@ -61,8 +61,15 @@ export async function linkAuth(channelId?: string) {
 	for (let account of Object.values(ACCOUNTS)) {
 		await storage.users.put({ id: account.id, login: account.login, avatarUrl: "", now });
 	}
-	let sessions = new Sessions(storage, false);
+	let clock = { skewMs: 0 };
+	let revocations = new Set<(sessionId: string) => Promise<void>>();
+	let sessions = new Sessions(storage, false, () => new Date(Date.now() + clock.skewMs), {
+		onRevoked: async id => {
+			for (let revoked of revocations) await revoked(id);
+		},
+	});
 	let logins = new Map<string, string>();
+	let cookies = new Map<string, string>();
 	for (let account of Object.values(ACCOUNTS)) {
 		if (!account.signedIn) continue;
 		let issued = await sessions.issue(account.id, {
@@ -72,6 +79,7 @@ export async function linkAuth(channelId?: string) {
 			refreshExpiresIn: 86_400,
 		});
 		logins.set(account.login, issued.id);
+		cookies.set(account.login, issued.cookie.split(";")[0]!);
 	}
 	let channel = await storage.channels.create({
 		id: channelId ?? crypto.randomUUID(),
@@ -117,6 +125,15 @@ export async function linkAuth(channelId?: string) {
 		sessions,
 		logins,
 		channel,
+		/** Moves the browser logins' clock, so they expire without the server's clock moving. */
+		clock,
+		/** Called with every browser login that ends, as `main.ts` wires `onSessionRevoked`. */
+		revocations,
+		/** Signs `login` out of the browser, as the logout route does. */
+		async signOut(login: string) {
+			let cookie = cookies.get(login)!;
+			return sessions.revoke(new Request("https://chopin.test/", { headers: { cookie } }));
+		},
 	};
 }
 

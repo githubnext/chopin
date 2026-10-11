@@ -52,10 +52,20 @@ call follows the same rules. Its instruction is posted as the caller's own
 message; the turn runs under the channel's current owner, whoever that is. A
 channel without one is claimed for the caller's live browser login, hosted or
 local, and without such a login the call is refused and nothing is posted.
-Under `HARNESS=remote` neither `invoke_planner`, `@chopin`, nor a research
-request claims ownership: a document without an attached Planner refuses them
-with `planner-not-attached`, and one with an attached Planner runs them under
-its owner.
+Under `HARNESS=remote` only attaching claims ownership. An `@chopin` message or
+`invoke_planner` call for a document without an attached Planner is refused with
+`planner-not-attached`, and with one it runs as a turn on that Planner under its
+owner. Other Planner requests, such as sending a comment to the Planner or a
+Build draft, claim nothing either: with a client attached they run on it, and
+without one they fail as any request without a usable owner does, not with
+`planner-not-attached`. Model-backed research is unavailable, because the remote
+Planner requires `BACKGROUND_JOBS=off`; a research request claims no ownership
+and is refused as not ready.
+
+An attachment lasts only as long as its owner. Signing that browser login out,
+its expiry, or a repository writer's reset of the document's Planner closes the
+attached link at once and frees the document for any eligible account to attach;
+see [Planner link ownership](planner-link.md#ownership).
 
 Planner ownership stores only the owner session ID, referring to a login loaded
 in this process. Hosted logins separately persist encrypted credentials in

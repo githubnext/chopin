@@ -643,6 +643,12 @@ export class PlannerLink {
 		this.#dispatch(message);
 	}
 
+	/** Tells the client why it is no longer the Planner, then closes the link. */
+	revoke(code: RefusalCode, message: string): void {
+		if (this.#state === "closed") return;
+		this.#refuse(code, message);
+	}
+
 	/** Ends the link from the server side. */
 	close(code: number, reason: string): void {
 		if (this.#state === "closed") return;
