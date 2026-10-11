@@ -32,5 +32,7 @@ export function deckLayout(
 ): { lead: string; members: string[] } | undefined {
 	let visible = members.filter(member => member.state !== "hidden");
 	if (visible.length < 2 || !visible.some(member => member.state === "open")) return undefined;
-	return { lead: visible[0]!.id, members: visible.map(member => member.id) };
+	// The run's first node hosts the deck even while hidden, so the deck never
+	// remounts elsewhere, losing its order, focus and drafts, as members come and go.
+	return { lead: members[0]!.id, members: visible.map(member => member.id) };
 }

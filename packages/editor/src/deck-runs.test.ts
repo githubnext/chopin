@@ -81,11 +81,11 @@ describe("deck layout", () => {
 			.toEqual({ lead: "a", members: ["a", "b"] });
 	});
 
-	it("leads with the first visible member", () => {
+	it("stays hosted by the run's first node while it is hidden", () => {
 		expect(deckLayout([
 			{ id: "a", state: "hidden" },
 			{ id: "b", state: "open" },
 			{ id: "c", state: "open" },
-		])).toEqual({ lead: "b", members: ["b", "c"] });
+		])).toEqual({ lead: "a", members: ["b", "c"] });
 	});
 });

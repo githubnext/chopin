@@ -37,7 +37,7 @@ describe("deck semantics", () => {
 		let html = markup(["a"]);
 		expect(html).toContain('aria-label="Previous decision"');
 		expect(html).toContain('aria-label="Next decision"');
-		expect(html.replace(/<[^>]*>|<!-- -->/g, "")).toContain("2 of 3 · 1 decided");
+		expect(html.replace(/<[^>]*>|<!-- -->/g, "")).toContain("1 of 3 · 1 decided");
 	});
 
 	it("starts with open cards in front", () => {

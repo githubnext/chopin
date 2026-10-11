@@ -49,8 +49,10 @@ export function bringForward(order: readonly string[], id: string): string[] {
 	return [id, ...order.filter(other => other !== id)];
 }
 
+/** A card's place in the resting stack: open cards in document order, then settled ones. */
 export function position(items: readonly DeckEntry[], id: string | undefined): number {
-	return id === undefined ? 0 : items.findIndex(item => item.id === id) + 1;
+	if (id === undefined) return 0;
+	return settle(items.map(item => item.id), items).indexOf(id) + 1;
 }
 
 export function slot(depth: number): { transform: string; zIndex: number; opacity: number } {

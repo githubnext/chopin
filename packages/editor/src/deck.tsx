@@ -10,7 +10,7 @@
  * the caret before a synthetic handler could stop it.
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { ArrowLeftIcon, ArrowRightIcon } from "@chopin/icons";
 
@@ -45,6 +45,8 @@ export type DeckProps = {
 	/** Whether to skip the shuffle. Defaults to the reduced-motion preference. */
 	reduced?: () => boolean;
 	className?: string;
+	/** After the deck unmounts while it held the reader's focus, with the card that was on top. */
+	onLeave?: (top: string) => void;
 };
 
 export const DECK_FRONT_EVENT = "chopin:deck-front";
@@ -134,7 +136,7 @@ function freeze(element: HTMLElement): Frozen {
 	return frozen;
 }
 
-export function Deck({ className, items, label, reduced = prefersReduced }: DeckProps) {
+export function Deck({ className, items, label, onLeave, reduced = prefersReduced }: DeckProps) {
 	let [order, setOrder] = useState(() => settle(arrange([], items), items));
 	let current = arrange(order, items);
 	let [announcement, setAnnouncement] = useState("");
@@ -147,9 +149,14 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 	let announcing = useRef<number | undefined>(undefined);
 	let touchedAt = useRef(-Infinity);
 	let stageId = useId();
+	let focusWithin = useRef(false);
+	let leaveRef = useRef(onLeave);
+	let topRef = useRef<string | undefined>(undefined);
 	orderRef.current = order;
 	itemsRef.current = items;
+	leaveRef.current = onLeave;
 	let top = current[0];
+	topRef.current = top;
 	let decided = items.filter(item => item.settled).length;
 
 	let announce = (kind: "cycle" | "settle", id: string) => {
@@ -289,6 +296,20 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 		window.clearTimeout(announcing.current);
 	}, []);
 
+	// A deck can dissolve under the reader, for instance when its last open card is
+	// answered. Its focused control goes with it, so hand focus on rather than drop it.
+	useLayoutEffect(() => () => {
+		let active = document.activeElement;
+		let inside = !!active && !!root.current?.contains(active);
+		let dropped = (active === null || active === document.body) && focusWithin.current
+			&& performance.now() - touchedAt.current < CAUSE_WINDOW;
+		let id = topRef.current;
+		let leave = leaveRef.current;
+		if ((inside || dropped) && id !== undefined && leave) {
+			requestAnimationFrame(() => leave(id));
+		}
+	}, []);
+
 	useEffect(() => {
 		let element = root.current;
 		if (!element) return;
@@ -329,11 +350,23 @@ export function Deck({ className, items, label, reduced = prefersReduced }: Deck
 			orderRef.current = next;
 			flushSync(() => setOrder(next));
 		};
+		let focusin = () => {
+			focusWithin.current = true;
+		};
+		// Removing the focused control reports no destination; keep the last answer then.
+		let focusout = (event: FocusEvent) => {
+			let next = event.relatedTarget as Node | null;
+			if (next && !element.contains(next)) focusWithin.current = false;
+		};
 		element.addEventListener("pointerdown", touch);
+		element.addEventListener("focusin", focusin);
+		element.addEventListener("focusout", focusout);
 		element.addEventListener("keydown", keydown);
 		element.addEventListener(DECK_FRONT_EVENT, front);
 		return () => {
 			element.removeEventListener("pointerdown", touch);
+			element.removeEventListener("focusin", focusin);
+			element.removeEventListener("focusout", focusout);
 			element.removeEventListener("keydown", keydown);
 			element.removeEventListener(DECK_FRONT_EVENT, front);
 		};

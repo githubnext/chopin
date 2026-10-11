@@ -54,8 +54,10 @@ describe("deck order", () => {
 		expect(bringForward(["a", "b"], "missing")).toEqual(["a", "b"]);
 	});
 
-	it("reports the top card's place in document order", () => {
+	it("counts places in the stack, open cards first", () => {
 		expect(position([open("a"), open("b"), open("c")], "c")).toBe(3);
+		expect(position([done("a"), done("b"), open("c"), open("d")], "c")).toBe(1);
+		expect(position([done("a"), done("b"), open("c"), open("d")], "a")).toBe(3);
 		expect(position([open("a")], undefined)).toBe(0);
 	});
 

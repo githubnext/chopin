@@ -662,8 +662,20 @@ function useInlineDeck(id: string) {
 		return [{ id: member, state, value }];
 	});
 	let layout = deckLayout(members);
-	if (!layout?.members.includes(id)) return undefined;
+	if (!layout || (layout.lead !== id && !layout.members.includes(id))) return undefined;
 	return { layout, members: members.filter(member => layout.members.includes(member.id)) };
+}
+
+/** Where focus goes when a deck dissolves under the reader: the card that was on top. */
+function focusCard(id: string) {
+	let active = document.activeElement;
+	if (active && active !== document.body) return;
+	let card = document.querySelector<HTMLElement>(
+		`[data-plan-questionnaire="${CSS.escape(id)}"] [data-plan-sidecar-questionnaire]:not([hidden])`,
+	);
+	if (!card) return;
+	if (card.tabIndex < 0 && !card.hasAttribute("tabindex")) card.tabIndex = -1;
+	card.focus({ preventScroll: true });
 }
 
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
@@ -673,6 +685,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	return (
 		<Deck
 			label="Decisions"
+			onLeave={focusCard}
 			items={deck.members.map(member => ({
 				id: member.id,
 				settled: member.state !== "open",

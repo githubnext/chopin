@@ -87,3 +87,46 @@ test("arrow keys inside a card's options do not cycle the deck", async ({ join, 
 	await page.keyboard.press("ArrowRight");
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
 });
+
+test("the deck keeps its top card, focus and draft when its first card leaves", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let ana = await join("ana");
+	let ben = await join("ben");
+
+	await deck(ana).getByRole("button", { name: "Next decision" }).click();
+	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+	await top(ana).getByRole("button", { name: "Add an option", exact: true }).click();
+	let draft = top(ana).getByRole("textbox", { name: "New option" });
+	await draft.fill("Keep it in Yjs");
+	await expect(draft).toBeFocused();
+
+	let first = top(ben);
+	await expect(first.getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
+	await first.getByRole("button", { name: "Discard", exact: true }).click();
+	await first.getByRole("button", { name: "Discard", exact: true }).click();
+
+	await expect(deck(ana).getByText("1 of 2")).toBeVisible();
+	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+	await expect(draft).toHaveValue("Keep it in Yjs");
+	await expect(draft).toBeFocused();
+});
+
+test("answering the last open card hands focus to its settled line", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 2);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+
+	await top(page).getByText("Option 1", { exact: true }).click();
+	await top(page).getByRole("button", { name: "Save", exact: true }).click();
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+	await expect(deck(page).getByText("1 of 2 · 1 decided")).toBeVisible();
+
+	await top(page).getByText("Option 2", { exact: true }).click();
+	await top(page).getByRole("button", { name: "Save", exact: true }).click();
+	await expect(deck(page)).toHaveCount(0);
+	let settled = content(page).locator(
+		`[data-plan-questionnaire="${fixture.ids[1]}"] [data-card-settled]`,
+	);
+	await expect(settled).toBeFocused();
+});
