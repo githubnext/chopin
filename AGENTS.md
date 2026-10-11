@@ -15,6 +15,7 @@ The most useful technical references are:
 - [Repository channels](docs/channels.md)
 - [Storage and persistence](docs/storage.md)
 - [Hosted agent (Planner)](docs/hosted-agent.md)
+- [Planner link wire format](docs/planner-link.md)
 - [Background jobs and workers](docs/background-jobs.md)
 - [Experimental implementation lifecycle](docs/implementation-lifecycle.md)
 - [Self-hosting](docs/self-hosting.md)
@@ -62,20 +63,21 @@ Before opening a PR or repairing CI, use the repository's
 
 ## Repository map
 
-| Area                  | Responsibility                                            | Internal workspace dependencies                                                |
-| --------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `packages/dialect`    | Restricted MDX, MDAST, and Lexical schema                 | none                                                                           |
-| `packages/protocol`   | WebSocket declarations and addressing helper              | none                                                                           |
-| `packages/question`   | Questionnaire definitions and shared drafts               | `protocol`                                                                     |
-| `packages/draft`      | Bounded collaborative plain-text drafts                   | none                                                                           |
-| `packages/viewport`   | Browser geometry and subscriptions                        | none                                                                           |
-| `packages/diagrams`   | Bounded diagram rendering and scoped React viewing        | `icons` (React peer)                                                           |
-| `packages/experiment` | Investigation result schemas, selections and native views | `diagrams` (React peer)                                                        |
-| `apps/connector`      | Local ACP client and run-scoped MCP bridge                | `experiment`, `protocol`                                                       |
-| `packages/editor`     | Collaborative editor, decisions, comments, and widgets    | `diagrams`, `dialect`, `experiment`, `question`, `protocol`, `viewport`        |
-| `apps/server`         | Auth, channels, rooms, storage, Planner, MCP, tasks       | `diagrams`, `dialect`, `draft`, `experiment`, `question`, `protocol`           |
-| `apps/web`            | Repository picker, navigation, conversation, workspace    | `dialect`, `diagrams`, `draft`, `editor`, `experiment`, `protocol`, `viewport` |
-| `e2e`                 | Browser and system integration harness                    | may import server internals as fixtures                                        |
+| Area                    | Responsibility                                            | Internal workspace dependencies                                                      |
+| ----------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `packages/dialect`      | Restricted MDX, MDAST, and Lexical schema                 | none                                                                                 |
+| `packages/protocol`     | WebSocket declarations and addressing helper              | none                                                                                 |
+| `packages/planner-link` | Remote Planner link messages, schemas and test client     | none                                                                                 |
+| `packages/question`     | Questionnaire definitions and shared drafts               | `protocol`                                                                           |
+| `packages/draft`        | Bounded collaborative plain-text drafts                   | none                                                                                 |
+| `packages/viewport`     | Browser geometry and subscriptions                        | none                                                                                 |
+| `packages/diagrams`     | Bounded diagram rendering and scoped React viewing        | `icons` (React peer)                                                                 |
+| `packages/experiment`   | Investigation result schemas, selections and native views | `diagrams` (React peer)                                                              |
+| `apps/connector`        | Local ACP client and run-scoped MCP bridge                | `experiment`, `protocol`                                                             |
+| `packages/editor`       | Collaborative editor, decisions, comments, and widgets    | `diagrams`, `dialect`, `experiment`, `question`, `protocol`, `viewport`              |
+| `apps/server`           | Auth, channels, rooms, storage, Planner, MCP, tasks       | `diagrams`, `dialect`, `draft`, `experiment`, `planner-link`, `question`, `protocol` |
+| `apps/web`              | Repository picker, navigation, conversation, workspace    | `dialect`, `diagrams`, `draft`, `editor`, `experiment`, `protocol`, `viewport`       |
+| `e2e`                   | Browser and system integration harness                    | may import server internals as fixtures                                              |
 
 Runtime workspace packages do not depend on an application. E2E and skill
 contract tests may deliberately import server internals; do not treat those test
@@ -135,6 +137,11 @@ collaborative state and external implementation runs are durable.
   remembered per channel in memory, or else an empty per-channel directory. Its
   summary and research workers stay isolated. There is no flag for this; the
   harness is the choice.
+- **`HARNESS=remote` moves the model, not the authority.** Turns run in a client
+  attached at `/planner-link` with a GitHub bearer and pull access; Chopin's
+  host tools, Decisions, and room writes still run in the server. The attached
+  client sees what a turn sees and steers its document writes. See
+  [Hosted agent](docs/hosted-agent.md#remote-planner).
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.
 - **Persistence should precede publication.** Do not acknowledge or broadcast a

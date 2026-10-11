@@ -45,6 +45,7 @@
         "@chopin/dialect": "workspace:*",
         "@chopin/draft": "workspace:*",
         "@chopin/experiment": "workspace:*",
+        "@chopin/planner-link": "workspace:*",
         "@chopin/protocol": "workspace:*",
         "@chopin/question": "workspace:*",
         "@earendil-works/pi-coding-agent": "catalog:harness",
@@ -230,6 +231,16 @@
       },
       "peerDependencies": {
         "react": "catalog:react",
+      },
+    },
+    "packages/planner-link": {
+      "name": "@chopin/planner-link",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "catalog:harness",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:bun",
       },
     },
     "packages/protocol": {
@@ -496,6 +507,8 @@
     "@chopin/experiment": ["@chopin/experiment@workspace:packages/experiment"],
 
     "@chopin/icons": ["@chopin/icons@workspace:packages/icons"],
+
+    "@chopin/planner-link": ["@chopin/planner-link@workspace:packages/planner-link"],
 
     "@chopin/protocol": ["@chopin/protocol@workspace:packages/protocol"],
 

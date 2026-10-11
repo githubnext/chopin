@@ -101,6 +101,19 @@ describe("configuration", () => {
 		});
 	});
 
+	it("accepts a remote Planner on a public bind with no MODEL, and only without background jobs", () => {
+		let remote = { HARNESS: "remote", SERVER_HOST: "0.0.0.0", BACKGROUND_JOBS: "off" };
+		let config = configured(remote);
+		expect(config).toMatchObject({ harness: "remote", host: "0.0.0.0", model: "" });
+		expect(description(config)).toContain("agent: chosen by the attached client");
+		expect(description(config)).toContain(
+			"Planner: attached client over /planner-link (model and client tools run on its machine)",
+		);
+		expect(configured({ ...remote, MODEL: "openai/gpt-6" }).model).toBe("openai/gpt-6");
+		expect(() => configured({ HARNESS: "remote" }))
+			.toThrow("HARNESS=remote requires BACKGROUND_JOBS=off");
+	});
+
 	it("chooses a full Atomic Planner by harness alone, in hosted and local configuration", () => {
 		let atomic = { HARNESS: "atomic", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" };
 		for (let mode of [{}, LOCAL]) {

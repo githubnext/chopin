@@ -60,7 +60,7 @@ export async function resumeOwnedRuns(workflows: SessionWorkflows): Promise<void
  * until the run resumes, keeping the paused run fully stopped.
  */
 export async function untilUnpaused(
-	planner: FullPlanner,
+	planner: Pick<FullPlanner, "runs" | "rootOf" | "waiters">,
 	runId: string,
 	signal: AbortSignal,
 ): Promise<void> {

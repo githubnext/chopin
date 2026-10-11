@@ -1672,7 +1672,7 @@ async function repositorySession(
 					workspace,
 					visualRouting(context),
 				),
-			model: context.config.model,
+			model: context.config.model || undefined,
 			harness: context.config.harness,
 		});
 		if (!result.ok) throw new Error(`Planner session unavailable (${result.error.kind})`);
