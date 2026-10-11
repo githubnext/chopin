@@ -953,6 +953,20 @@ test("a run that ends blocked during the Planner's own turn starts no follow-up 
 	expect(spoken(context, "plan-review ended blocked after 10 min.")).toBe(1);
 });
 
+test("a remote Planner's run that ends blocked between turns starts no turn nobody asked for", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let remote = Object.assign(planner.session, { followsUpRuns: false });
+	context.openPlannerSession = async () => ({ ok: true, value: remote });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	expect(context.chat.retained).toBeDefined();
+	planner.set({ active: [], paused: [], cards: [card("blocked")] });
+	while (!planner.calls.includes("destroy")) await tick();
+	expect(followUps(planner.calls)).toHaveLength(0);
+	expect(spoken(context, "plan-review ended blocked after 10 min.")).toBe(1);
+});
+
 test("the last job finishing while a reply is still being saved still lets the Planner go afterwards", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = runningSession();

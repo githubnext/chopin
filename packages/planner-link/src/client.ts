@@ -20,6 +20,7 @@ export const WIRE = {
 	path: "/planner-link",
 	version: 1,
 	maxMessageBytes: 2 * 1024 * 1024,
+	maxNoteLength: 4_000,
 } as const;
 
 export class PlannerLinkRefused extends Error {
@@ -42,10 +43,15 @@ export type TurnContext = {
 	emit(part: StreamPart): void;
 	/** The client's own tools this turn may call, declared before calling any. */
 	offerTools(names: string[]): void;
-	/** Runs one of Chopin's tools in the server, against the document. */
-	callHostTool(toolName: string, input: unknown): Promise<{ output: unknown; isError: boolean }>;
+	/**
+	 * Runs one of Chopin's tools in the server, against the document. Settles with an
+	 * error result once the turn is aborted, destroyed, or ended, or the link closes.
+	 */
+	callHostTool(toolName: string, input: unknown): Promise<HostToolResult>;
 	end(status: TurnEnd, message?: string): void;
 };
+
+export type HostToolResult = { output: unknown; isError: boolean };
 
 export type PlannerLinkHandlers = {
 	/** Throw to refuse the session. */
@@ -87,7 +93,8 @@ export type PlannerLinkClient = {
 		options?: InputOptions,
 	): Promise<ServerMessageOf<"input-result">>;
 	reportRuns(session: string, runs: { active: string[]; paused: string[]; cards: LinkRun[] }): void;
-	send(message: ClientMessage): void;
+	/** Sends one message; false when the link is no longer open. */
+	send(message: ClientMessage): boolean;
 	detach(): Promise<LinkClosed>;
 	readonly closed: Promise<LinkClosed>;
 };
@@ -128,36 +135,72 @@ export function linkSocket(url: URL, token: string): WebSocket {
 	});
 }
 
+const LINK_CLOSED = "The Planner link closed.";
+
+type TurnState = {
+	controller: AbortController;
+	ended: boolean;
+	calls: Map<string, (result: HostToolResult) => void>;
+};
+
+function hostFailure(message: string): HostToolResult {
+	return { output: { error: message }, isError: true };
+}
+
+/** Text cut to the wire's limit for `message` and error fields. */
+function note(text: string): string {
+	return text.length > WIRE.maxNoteLength ? text.slice(0, WIRE.maxNoteLength) : text;
+}
+
+function reason(error: unknown): string {
+	return note(error instanceof Error ? error.message : String(error));
+}
+
+function settleCalls(turn: TurnState, message: string): void {
+	for (let resolve of turn.calls.values()) resolve(hostFailure(message));
+	turn.calls.clear();
+}
+
 /** Attaches to one document as its Planner and serves the server's requests. */
 export function connectPlannerLink(options: PlannerLinkOptions): Promise<PlannerLinkClient> {
 	let socket = linkSocket(plannerLinkUrl(options.url), options.token);
-	let turns = new Map<string, { controller: AbortController; ended: boolean }>();
-	let hostCalls = new Map<string, (result: { output: unknown; isError: boolean }) => void>();
+	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, (message: ServerMessageOf<"input-result">) => void>();
 	let closing = Promise.withResolvers<LinkClosed>();
 	let attaching = Promise.withResolvers<PlannerLinkClient>();
 	let attached = false;
 
-	function send(message: ClientMessage): void {
+	function send(message: ClientMessage): boolean {
 		let encoded = JSON.stringify(message);
 		if (new TextEncoder().encode(encoded).byteLength > WIRE.maxMessageBytes) {
 			throw new Error("The message exceeds the Planner link's size limit.");
 		}
-		if (socket.readyState === WebSocket.OPEN) socket.send(encoded);
+		if (socket.readyState !== WebSocket.OPEN) return false;
+		socket.send(encoded);
+		return true;
 	}
 
 	function runTurn(message: ServerMessageOf<"turn">): void {
 		let key = `${message.session}/${message.turn}`;
-		let state = { controller: new AbortController(), ended: false };
+		let state: TurnState = { controller: new AbortController(), ended: false, calls: new Map() };
 		turns.set(key, state);
+		state.controller.signal.addEventListener(
+			"abort",
+			() => settleCalls(state, "The turn was aborted."),
+			{ once: true },
+		);
 		let calls = 0;
 		let context: TurnContext = {
 			message,
 			signal: state.controller.signal,
 			emit: part => {
-				if (!state.ended) {
-					send({ type: "part", session: message.session, turn: message.turn, part });
-				}
+				if (state.ended) return;
+				send({
+					type: "part",
+					session: message.session,
+					turn: message.turn,
+					part: part.type === "error" ? { ...part, error: note(part.error) } : part,
+				});
 			},
 			offerTools: names =>
 				send({
@@ -167,30 +210,43 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 					names,
 				}),
 			callHostTool: (toolName, input) => {
+				if (state.ended || state.controller.signal.aborted) {
+					return Promise.resolve(hostFailure("The turn has ended."));
+				}
 				let toolCallId = `host-${++calls}-${crypto.randomUUID()}`;
-				let result = new Promise<{ output: unknown; isError: boolean }>(resolve => {
-					hostCalls.set(`${key}/${toolCallId}`, resolve);
-				});
-				send({
-					type: "host-tool-call",
-					session: message.session,
-					turn: message.turn,
-					toolCallId,
-					toolName,
-					input: JSON.stringify(input ?? {}),
-				});
-				return result;
+				let result = Promise.withResolvers<HostToolResult>();
+				state.calls.set(toolCallId, result.resolve);
+				let sent: boolean;
+				try {
+					sent = send({
+						type: "host-tool-call",
+						session: message.session,
+						turn: message.turn,
+						toolCallId,
+						toolName,
+						input: JSON.stringify(input ?? {}),
+					});
+				} catch (error) {
+					state.calls.delete(toolCallId);
+					return Promise.reject(error);
+				}
+				if (!sent) {
+					state.calls.delete(toolCallId);
+					return Promise.resolve(hostFailure(LINK_CLOSED));
+				}
+				return result.promise;
 			},
 			end: (status, text) => {
 				if (state.ended) return;
 				state.ended = true;
 				turns.delete(key);
+				settleCalls(state, "The turn has ended.");
 				send({
 					type: "turn-end",
 					session: message.session,
 					turn: message.turn,
 					status,
-					...(text === undefined ? {} : { message: text }),
+					...(text === undefined ? {} : { message: note(text) }),
 				});
 			},
 		};
@@ -198,7 +254,7 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 			.then(() => options.handlers.turn(context))
 			.then(
 				() => context.end(state.controller.signal.aborted ? "aborted" : "finished"),
-				error => context.end("failed", error instanceof Error ? error.message : String(error)),
+				error => context.end("failed", reason(error)),
 			);
 	}
 
@@ -212,7 +268,7 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 					send({
 						type: "start-failed",
 						session: message.session,
-						message: error instanceof Error ? error.message : String(error),
+						message: reason(error),
 					});
 				}
 				return;
@@ -222,9 +278,12 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 				turns.get(`${message.session}/${message.turn}`)?.controller.abort();
 				return;
 			case "host-tool-result": {
-				let key = `${message.session}/${message.turn}/${message.toolCallId}`;
-				hostCalls.get(key)?.({ output: message.output, isError: message.isError ?? false });
-				hostCalls.delete(key);
+				let calls = turns.get(`${message.session}/${message.turn}`)?.calls;
+				calls?.get(message.toolCallId)?.({
+					output: message.output,
+					isError: message.isError ?? false,
+				});
+				calls?.delete(message.toolCallId);
 				return;
 			}
 			case "input-result":
@@ -242,7 +301,7 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 						type: "control-result",
 						request: message.request,
 						ok: false,
-						message: error instanceof Error ? error.message : String(error),
+						message: reason(error),
 					});
 				}
 				return;
@@ -267,13 +326,30 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 		ask(session, input, inputOptions = {}) {
 			let request = crypto.randomUUID();
 			let { signal, ...workflow } = inputOptions;
-			let answered = new Promise<ServerMessageOf<"input-result">>(resolve => {
-				asks.set(request, resolve);
-			});
+			let withdrawn = (text: string) =>
+				Promise.resolve<ServerMessageOf<"input-result">>({
+					type: "input-result",
+					request,
+					status: "cancelled",
+					message: text,
+				});
+			if (signal?.aborted) return withdrawn("The question was withdrawn before it was asked.");
+			let answered = Promise.withResolvers<ServerMessageOf<"input-result">>();
+			asks.set(request, answered.resolve);
+			let sent: boolean;
+			try {
+				sent = send({ type: "input-request", request, session, ...workflow, input });
+			} catch (error) {
+				asks.delete(request);
+				return Promise.reject(error);
+			}
+			if (!sent) {
+				asks.delete(request);
+				return withdrawn(LINK_CLOSED);
+			}
 			let cancel = () => send({ type: "input-cancel", request });
 			signal?.addEventListener("abort", cancel, { once: true });
-			send({ type: "input-request", request, session, ...workflow, input });
-			return answered.finally(() => signal?.removeEventListener("abort", cancel));
+			return answered.promise.finally(() => signal?.removeEventListener("abort", cancel));
 		},
 		reportRuns(session, runs) {
 			send({ type: "runs", session, ...runs });
@@ -312,14 +388,13 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 		void serve(message);
 	});
 	socket.addEventListener("close", event => {
-		for (let turn of turns.values()) turn.controller.abort();
-		turns.clear();
-		for (let resolve of hostCalls.values()) {
-			resolve({ output: "The Planner link closed.", isError: true });
+		for (let turn of turns.values()) {
+			settleCalls(turn, LINK_CLOSED);
+			turn.controller.abort();
 		}
-		hostCalls.clear();
+		turns.clear();
 		for (let [request, resolve] of asks) {
-			resolve({ type: "input-result", request, status: "cancelled", message: "link closed" });
+			resolve({ type: "input-result", request, status: "cancelled", message: LINK_CLOSED });
 		}
 		asks.clear();
 		attaching.reject(

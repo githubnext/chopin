@@ -291,7 +291,9 @@ the document's repository. An unsupported version, an unreadable repository, or
 a missing or archived document is refused with a `refused` message and close
 code 4426, 4403, or 4404. Neither attaching nor a refusal posts anything to the
 document. The account and repository access are checked again before every
-session the link starts; losing either refuses that session and closes the link.
+session and every turn the link starts, including turns of a session kept for
+its runs, and every 5 minutes while the link stays attached; losing either
+fails that session or turn and closes the link with `access-revoked`.
 
 **Turns and tools.** Chopin's host tools (document, repository, and job tools)
 still run in the server against the room, under the document's Planner owner and
@@ -317,7 +319,10 @@ process, with a status that tells an expiry from a cancellation.
 **Runs.** The client reports its workflow runs with `runs`; Chat shows those
 cards and keeps the session after its turn while any run is live or paused, as
 for an Atomic Planner. **Stop Planner** and **Resume Planner** send `stop` and
-`resume`, optionally for one run, and wait for `control-result`.
+`resume`, optionally for one run, and wait for `control-result`. Unlike an
+Atomic Planner's, a reported run that ends blocked or failed between turns gets
+only its Chat notice: the reports are the client's word, so they never start a
+Planner turn that no writer asked for.
 
 **Trust boundary.** The server never holds the client's model credentials and
 gains no shell or filesystem access from this harness. The client, in turn,

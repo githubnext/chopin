@@ -256,9 +256,11 @@ model. The route exists only with `AGENT` on and `HARNESS=remote`.
 
 The trust boundary moves to whoever attaches. A client authenticates with a
 GitHub token bearer, checked like hosted MCP, and needs pull access to the
-document's repository. It then receives what a Planner turn sees, including
-repository reads made with the document Planner owner's token, and decides what
-the Planner writes during turns writers start. The server never runs the client's
+document's repository, rechecked before every session and turn and every 5
+minutes while it stays attached. It then receives what a Planner turn sees,
+including repository reads made with the document Planner owner's token, and
+decides what the Planner writes during turns writers start; its run reports
+never start a turn. The server never runs the client's
 tools and gains no shell or filesystem access from this harness. Until one
 Planner per document is enforced, the most recently attached link serves new
 sessions. Without an attached client, a Planner turn fails as unavailable. See

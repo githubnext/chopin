@@ -56,20 +56,33 @@ const sandboxSession = {
 	async destroy() {},
 } as never;
 
+let readPlanRuns = 0;
+
 function agentFor(harness: ReturnType<typeof createRemoteAdapter>) {
 	return new HarnessAgent({
 		harness,
-		tools: { read_plan: tool({ inputSchema: z.object({}), execute: async () => "the plan" }) },
+		tools: {
+			read_plan: tool({
+				inputSchema: z.object({}),
+				execute: async () => {
+					readPlanRuns++;
+					return "the plan";
+				},
+			}),
+		},
 		activeTools: ["read_plan"],
 		permissionMode: "allow-reads",
 	});
 }
 
-/** Streams one turn to its end, returning its parts and any error it ended with. */
-async function streamTurn(harness: ReturnType<typeof createRemoteAdapter>, prompt: string) {
-	let agent = agentFor(harness);
-	let session = await agent.createSession({ sandboxSession });
-	cleanups.push(() => session.destroy());
+type Agent = ReturnType<typeof agentFor>;
+
+/** Streams one turn of an open session to its end, returning its parts and any error it ended with. */
+async function streamOn(
+	agent: Agent,
+	session: Awaited<ReturnType<Agent["createSession"]>>,
+	prompt: string,
+) {
 	let parts: { type: string; [key: string]: unknown }[] = [];
 	let failure: unknown;
 	try {
@@ -81,6 +94,26 @@ async function streamTurn(harness: ReturnType<typeof createRemoteAdapter>, promp
 	let errors = parts.filter(part => part.type === "error").map(part => String(part.error));
 	if (failure) errors.push(String(failure));
 	return { parts, errors, session };
+}
+
+/** Streams one turn of a new session to its end. */
+async function streamTurn(harness: ReturnType<typeof createRemoteAdapter>, prompt: string) {
+	let agent = agentFor(harness);
+	let session = await agent.createSession({ sandboxSession });
+	cleanups.push(() => session.destroy());
+	return streamOn(agent, session, prompt);
+}
+
+/** Attaches a raw link and answers the next `start`, returning the session it names. */
+async function rawAttached(server: ReturnType<typeof linkServer>, document: string) {
+	let raw = await rawLink(server.url);
+	raw.send({ type: "attach", version: 1, document });
+	await raw.next("attached");
+	let started = raw.next("start").then(start => {
+		raw.send({ type: "started", session: start.session });
+		return start.session as string;
+	});
+	return { raw, started };
 }
 
 function upgradeRequest(url: string, headers: Record<string, string> = {}) {
@@ -339,6 +372,92 @@ describe("Planner link protocol", () => {
 		await expect(harness.doStart({ sessionId: "second", sandboxSession, sessionWorkDir: "/tmp" }))
 			.rejects.toThrow("can no longer read this document");
 		expect(server.links).toEqual([]);
+	});
+
+	it("rechecks the caller's access before every turn of a kept session", async () => {
+		let { server, channel, auth } = await setup({});
+		let agent = agentFor(adapterFor(server, { channelId: channel.id, isolated: false }));
+		let session = await agent.createSession({ sandboxSession });
+		cleanups.push(() => session.destroy());
+		expect((await streamOn(agent, session, "first")).errors).toEqual([]);
+		auth.github.repository = async () => {
+			throw new GitHubError("Not Found", 404);
+		};
+		let revoked = await streamOn(agent, session, "second");
+		expect(revoked.errors.join("\n")).toContain("can no longer read this document");
+		expect(server.links).toEqual([]);
+	});
+
+	it("detaches a link whose access is lost while it stays attached", async () => {
+		let { auth, channel } = await linkAuth();
+		let server = linkServer(auth, 300, 20);
+		cleanups.push(server.stop);
+		let client = await attach(server.url, channel.id, scriptedPlanner().handlers);
+		await Bun.sleep(60);
+		expect(server.links).toHaveLength(1);
+		auth.github.repository = async () => {
+			throw new GitHubError("Not Found", 404);
+		};
+		expect(await client.closed).toEqual({ code: LINK_CLOSE.forbidden, reason: "access-revoked" });
+		expect(server.links).toEqual([]);
+	});
+
+	it("refuses a host call id the turn already used, even after that call finished", async () => {
+		let { server, channel } = await setup();
+		let { raw, started } = await rawAttached(server, channel.id);
+		let driving = (async () => {
+			let session = await started;
+			let turn = (await raw.next("turn")).turn;
+			let call = {
+				type: "host-tool-call",
+				session,
+				turn,
+				toolCallId: "same",
+				toolName: "read_plan",
+				input: "{}",
+			};
+			raw.send(call);
+			expect(await raw.next("host-tool-result")).toMatchObject({ output: "the plan" });
+			raw.send(call);
+			await raw.next("abort");
+		})();
+		readPlanRuns = 0;
+		let outcome = await streamTurn(
+			adapterFor(server, { channelId: channel.id, isolated: false }),
+			"repeat",
+		);
+		await driving;
+		expect(outcome.errors.join("\n")).toContain("Tool call same was repeated");
+		expect(readPlanRuns).toBe(1);
+	});
+
+	it("answers a host call for a session that has ended with an error result", async () => {
+		let { server, channel } = await setup();
+		let { raw, started } = await rawAttached(server, channel.id);
+		let opened = await adapterFor(server, { channelId: channel.id, isolated: false }).doStart({
+			sessionId: crypto.randomUUID(),
+			sandboxSession,
+			sessionWorkDir: "/tmp",
+		});
+		let session = await started;
+		await opened.doDestroy();
+		await raw.next("destroy");
+		raw.send({
+			type: "host-tool-call",
+			session,
+			turn: "gone",
+			toolCallId: "late",
+			toolName: "read_plan",
+			input: "{}",
+		});
+		expect(await raw.next("host-tool-result")).toEqual({
+			type: "host-tool-result",
+			session,
+			turn: "gone",
+			toolCallId: "late",
+			output: { error: "The session has ended." },
+			isError: true,
+		});
 	});
 });
 
