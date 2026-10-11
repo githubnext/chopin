@@ -9,13 +9,20 @@ import type { ActiveMemberRequest } from "../chat/service";
  */
 
 import * as Arguments from "./arguments";
+import {
+	answer,
+	applyAnchors,
+	applyBlockEdit,
+	documentView,
+	EDIT_OPERATIONS_SCHEMA,
+} from "./document-ops";
 import * as Comments from "../comments/service";
-import * as Store from "../comments/store";
 import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
 import { limits, ULID } from "@chopin/dialect";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
 import { documentIdentity, implementationActive } from "../plan/service";
+import { childTools } from "./child-tools";
 import { experimentTools } from "./experiment-tools";
 import type { InvestigationTools } from "./experiment-tools";
 
@@ -28,17 +35,6 @@ import type { Research } from "@chopin/protocol";
 import type { Plan } from "../plan/service";
 import type { JobService } from "../jobs/service";
 import type { SocketData } from "../wire";
-
-/** Every tool answers with a string; a failure is a value, not a throw. */
-async function answer(name: string, produce: () => unknown): Promise<string> {
-	try {
-		return JSON.stringify(await produce(), null, 2) ?? "null";
-	} catch (err) {
-		let message = err instanceof Error ? err.message : String(err);
-		console.error(`[agent/${name}]`, err);
-		return `Error: ${message}`;
-	}
-}
 
 function sameMemberRequest(
 	current: ActiveMemberRequest | undefined,
@@ -130,40 +126,7 @@ export const documentTools = {
 		// anybody needs to approve.
 		metadata: { skipPermission: true },
 		execute: (_raw, { context: { room: context } }) =>
-			answer("read_plan", async () => ({
-				document: await documentIdentity(context.plan),
-				revision: context.plan.revision,
-				source: edit.source(context.plan),
-				blocks: edit.outline(context.plan),
-				/*
-				 * Accepted threads only, which only the earlier lifecycle made.
-				 *
-				 * An open one is a conversation the room is still having, and a
-				 * resolved or dismissed one was closed without asking for a
-				 * revision, so neither reaches here.
-				 */
-				comments: [...context.plan.threads.values()]
-					.filter(thread => thread.status === "accepted")
-					.map(thread => ({
-						id: thread.id,
-						quote: thread.quote,
-						accepted_by: thread.resolver,
-						// False means this one still needs acting on and
-						// anchoring; it is the same list `anchors_pending` gives.
-						actioned: !!thread.result && !thread.result.pending,
-						comments: thread.notes.map(note => `@${Store.speaker(note)}: ${note.text}`),
-					})),
-				questions: [...context.plan.records.values()].map(record => ({
-					id: record.id,
-					status: record.status,
-					questions: record.definition.questions.map(question => question.question),
-					options: record.definition.questions.map(question =>
-						question.options.map(option => option.label)
-					),
-					...(record.answers ? { answers: record.answers } : {}),
-					...(record.resolver ? { answered_by: record.resolver } : {}),
-				})),
-			})),
+			answer("read_plan", () => documentView(context.plan)),
 	}),
 
 	read_reference: tool({
@@ -340,45 +303,7 @@ export const documentTools = {
 					minimum: 0,
 					description: "The revision returned by the `read_plan` you are editing from.",
 				},
-				operations: {
-					type: "array",
-					minItems: 1,
-					maxItems: 50,
-					items: {
-						type: "object",
-						properties: {
-							op: {
-								type: "string",
-								enum: [
-									"insert",
-									"insert_root",
-									"replace",
-									"replace_root",
-									"move",
-									"delete",
-									"detach_question",
-								],
-							},
-							index: {
-								type: "integer",
-								minimum: 0,
-								description: "Block to act on. Required except for insert_root and replace_root.",
-							},
-							to: { type: "integer", minimum: 0, description: "Destination, for move." },
-							source: {
-								type: "string",
-								maxLength: 100000,
-								description: "Plan MDX, for insert, insert_root, replace and replace_root.",
-							},
-							id: {
-								type: "string",
-								description: "Questionnaire id, for detach_question.",
-							},
-						},
-						required: ["op"],
-						additionalProperties: false,
-					},
-				},
+				operations: EDIT_OPERATIONS_SCHEMA,
 				visual_route: {
 					type: "string",
 					minLength: 1,
@@ -423,49 +348,12 @@ export const documentTools = {
 					} else if (args.visualRoute) {
 						return { ok: false, reason: "visual-routing-unavailable" };
 					}
-					let outcome = edit.apply(context.plan, args.revision, args.operations);
-					if (!outcome.ok) return outcome;
-					if (context.visual) context.visual.pending = undefined;
-
-					for (let id of outcome.detached) {
-						let record = context.plan.records.get(id);
-						if (record) context.plan.records.set(id, { ...record, status: "cancelled" });
-					}
-
-					// Prose moved, so every relationship has to be brought forward
-					// and anything answered has to be looked at again: the passage a
-					// decision produced is the most likely thing to have been
-					// rewritten.
-					Questions.rebase(context.plan);
-					Questions.invalidate(context.plan, "plan_changed");
-					Comments.rebase(context.plan);
-					Comments.invalidate(context.plan, "plan_changed");
-
-					// After invalidating, so it is not immediately undone. If
-					// this turn is acting on a comment thread, what it just
-					// wrote is what that thread produced — unless the agent
-					// says otherwise with `anchor_plan`, which wins.
-					let acting = context.plan.chat.acting;
-					if (acting) Comments.attribute(context.plan, acting, outcome.touched);
-
-					if (outcome.mutation) await context.publish(outcome.mutation);
-
-					// After the update that created them, never before it. Both
-					// go to the same topic in order, so by the time this arrives
-					// the browser already holds the blocks it names.
-					context.changes(outcome.changes);
-
-					context.anchors();
-
-					return {
-						ok: true,
-						revision: context.plan.revision,
-						blocks: outcome.blocks,
-						anchors_pending: [
-							...Questions.outstanding(context.plan),
-							...Comments.outstanding(context.plan),
-						],
-					};
+					return applyBlockEdit(context, args, {
+						acting: context.plan.chat.acting,
+						applied: () => {
+							if (context.visual) context.visual.pending = undefined;
+						},
+					});
 				});
 				return { ...result, document };
 			}),
@@ -686,48 +574,7 @@ export const documentTools = {
 			answer("anchor_plan", async () => {
 				if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 				let args = Arguments.anchorPlan(raw);
-
-				if (args.revision !== context.plan.revision) {
-					return {
-						ok: false,
-						reason: "stale",
-						revision: context.plan.revision,
-						message: "The plan changed. Read it again and re-anchor.",
-					};
-				}
-
-				let failures: string[] = [];
-				let placements: Questions.Placement[] = [];
-				for (let update of args.anchors) {
-					let failure = update.thread
-						? Comments.relate(context.plan, update.thread, update.blocks)
-						: update.widget && update.question
-						? Questions.relate(context.plan, update.widget, update.question, update.blocks)
-						: "give either `thread`, or both `widget` and `question`.";
-					if (failure) {
-						failures.push(failure);
-					} else if (update.widget !== undefined && update.question !== undefined) {
-						placements.push({
-							widget: update.widget,
-							blocks: update.blocks,
-						});
-					}
-				}
-				let mutation = Questions.place(context.plan, placements);
-				if (mutation) await context.publish(mutation);
-
-				await context.persist();
-				context.anchors();
-
-				return failures.length > 0
-					? { ok: false, reason: "invalid", errors: failures }
-					: {
-						ok: true,
-						anchors_pending: [
-							...Questions.outstanding(context.plan),
-							...Comments.outstanding(context.plan),
-						],
-					};
+				return applyAnchors(context, args);
 			}),
 	}),
 
@@ -763,4 +610,5 @@ export const documentTools = {
 				);
 			}),
 	}),
+	...childTools,
 };

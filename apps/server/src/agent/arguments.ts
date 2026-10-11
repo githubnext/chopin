@@ -10,6 +10,7 @@
  */
 
 import * as Question from "@chopin/question";
+import { isChannelId } from "../channels/id";
 
 import type { Operation } from "../plan/edit";
 import type { Operation as GraphOperation, Revision, Task } from "../tasks/graphs";
@@ -146,6 +147,19 @@ function operation(raw: unknown, position: number): Operation {
 }
 
 /** Validate `edit_plan`'s tool input into the shape `edit.apply` expects. */
+/** A child tool's `child`, split from the arguments its root counterpart validates. */
+export function childTarget(raw: unknown, name: string): {
+	child: string;
+	rest: Record<string, unknown>;
+} {
+	let args = record(raw, `${name} arguments`);
+	if (typeof args.child !== "string" || !isChannelId(args.child)) {
+		fail("`child` must be a child document id returned by `list_children`.");
+	}
+	let { child, ...rest } = args;
+	return { child: child as string, rest };
+}
+
 export function editPlan(raw: unknown): {
 	revision: number;
 	operations: Operation[];
