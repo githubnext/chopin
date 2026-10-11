@@ -1,28 +1,24 @@
-import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ContentSwapLayer } from "@chopin/editor/content-swap";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { parseChildDocumentPath, parseDocumentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import { childCloseAction, childFocusTransition, childHistoryState } from "./child-history";
 import { rememberOriginRect } from "./child-origin";
-import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
-import { motionContract } from "./motion-contract";
-import { motionImmediately } from "./motion-input";
 import { WorkspaceNotice } from "./workspace-notice";
-import { NavigationShell, useNavigationDocument } from "./navigation-shell";
+import { NavigationShell } from "./navigation-shell";
 
 import type { ReactNode } from "react";
 import type { ResearchOpener } from "@chopin/editor";
 import type { ChildFocusEvent, ChildFocusState, ChildFocusToken } from "./child-history";
-import type {
-	DocumentRouteIdentity,
-	DocumentRouteIdentitySource,
-	DocumentRouteSwap as DocumentRouteSwapState,
-} from "./document-route-swap";
+import type { ParentFocusTarget } from "./document-workspace-host";
+import type { DocumentRouteIdentitySource } from "./document-route-swap";
 import type { WorkspacePresentation } from "./workspace-model";
 
-let ChannelWorkspace = lazy(() => import("./channel-workspace"));
-let DocumentWorkspaceHost = lazy(() => import("./document-workspace-host"));
+// Document routes load their swap and host together, so neither waits on the other.
+let DocumentRouteSwap = lazy(() => {
+	void import("./document-workspace-host");
+	return import("./document-route-view");
+});
 // Only a failed load shows it, so it stays out of the first JavaScript a reader downloads.
 let Failure = lazy(() => import("./hosted-failure"));
 
@@ -60,48 +56,7 @@ export type HostedRoute =
 	| { page: "repository"; owner: string; repository: string }
 	| { page: "missing" };
 
-type DocumentRoute = DocumentRouteIdentitySource;
 export type ChannelSource = Extract<DocumentRouteIdentitySource, { page: "channel" }>;
-type DocumentSource = DocumentRoute;
-type DocumentRouteRequest = {
-	immediately: boolean;
-	key: DocumentRouteIdentity;
-	routeKey: DocumentRouteIdentity;
-	source: DocumentSource;
-};
-export type DocumentRouteResolution = {
-	canonicalPath: string;
-	channel: Api.Channel;
-	/** The route identity this resolution answered, which a canonical rename can change. */
-	requestKey: DocumentRouteIdentity;
-	routeKey: DocumentRouteIdentity;
-};
-type DocumentRouteLayer = DocumentRouteSwapState<
-	DocumentRouteRequest,
-	DocumentRouteResolution
->["current"];
-
-function keyedDocumentRoute(
-	route: DocumentRoute,
-	immediately: boolean,
-	alias?: DocumentRouteIdentity,
-): DocumentRouteRequest {
-	let routeKey = documentRouteIdentity(route);
-	let key = alias ?? (route.page === "child"
-		? documentRouteIdentity({
-			owner: route.owner,
-			page: "document",
-			repository: route.repository,
-			slug: route.parentSlug,
-		})
-		: documentRouteIdentity(route));
-	return {
-		immediately,
-		key,
-		routeKey,
-		source: route,
-	};
-}
 
 function decoded(value: string): string | undefined {
 	try {
@@ -151,155 +106,6 @@ function Loading({ label = "Loading" }: { label?: string }) {
 			role="status"
 		>
 			{label}
-		</div>
-	);
-}
-
-function DocumentRouteSwap(
-	{
-		agent,
-		childOrigin,
-		onCanonicalPath,
-		onChildClose,
-		onChildOpen,
-		onChildClosing,
-		onParentRestored,
-		route,
-		user,
-	}: {
-		agent: boolean;
-		childOrigin: () => Element | undefined;
-		onCanonicalPath: (pathname: string) => void;
-		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
-		onChildOpen: (path: string) => void;
-		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
-		onParentRestored: (token: ChildFocusToken) => void;
-		route: DocumentRoute;
-		user: Api.User;
-	},
-) {
-	let aliases = useRef(new Map<DocumentRouteIdentity, DocumentRouteIdentity>());
-	let routeKey = documentRouteIdentity(route);
-	let requested = keyedDocumentRoute(route, motionImmediately(), aliases.current.get(routeKey));
-	let [state, dispatch] = useReducer(
-		transitionDocumentRoute<DocumentRouteRequest, DocumentRouteResolution>,
-		{ current: requested },
-	);
-	let requestedRoute = useRef({ key: requested.key, routeKey: requested.routeKey });
-	requestedRoute.current = { key: requested.key, routeKey: requested.routeKey };
-	let presentedRequest = state.pending ?? state.current;
-	if (requested.key !== presentedRequest.key || requested.routeKey !== presentedRequest.routeKey) {
-		dispatch({ route: requested, type: "requested" });
-	}
-	let layers = [state.previous, state.current, state.pending].filter(
-		(layer): layer is DocumentRouteLayer => layer !== undefined,
-	);
-	let motion = motionContract("route-swap");
-	let { onDocumentLoaded, onDocumentRouteSettled } = useNavigationDocument();
-	let ready = useCallback((
-		key: DocumentRouteIdentity,
-		resolution?: DocumentRouteResolution,
-	) => {
-		if (resolution) aliases.current.set(resolution.routeKey, key);
-		dispatch({ key, resolution, type: "ready" });
-		if (requestedRoute.current.key === key) {
-			onDocumentRouteSettled(requestedRoute.current.routeKey);
-		}
-	}, [onDocumentRouteSettled]);
-	let channelResolved = useCallback((key: DocumentRouteIdentity, pathname: string) => {
-		if (requestedRoute.current.key === key) onCanonicalPath(pathname);
-	}, [onCanonicalPath]);
-	let metadataPath = useCallback((
-		key: DocumentRouteIdentity,
-		metadataRouteKey: DocumentRouteIdentity,
-		pathname: string,
-	) => {
-		let authority = requestedRoute.current;
-		if (key !== authority.key || metadataRouteKey !== authority.routeKey) return;
-		let canonicalRoute = hostedRoute(pathname);
-		if (canonicalRoute.page === "document" || canonicalRoute.page === "child") {
-			aliases.current.set(documentRouteIdentity(canonicalRoute), key);
-		}
-		onCanonicalPath(pathname);
-	}, [onCanonicalPath]);
-	let published = useRef<DocumentRouteResolution | undefined>(undefined);
-	useEffect(() => {
-		let resolution = state.current.resolution;
-		// An outgoing route that resolves after a newer request must not canonicalize over it. A
-		// parent and its child share a layer, so a child that resolves after a return to its
-		// parent arrives on the current layer and is told apart by the route it answered.
-		if (!resolution || state.pending || published.current === resolution) return;
-		if (resolution.requestKey !== state.current.routeKey) return;
-		published.current = resolution;
-		onCanonicalPath(resolution.canonicalPath);
-		void onDocumentLoaded(resolution.channel, resolution.routeKey);
-	}, [
-		onCanonicalPath,
-		onDocumentLoaded,
-		state.current.key,
-		state.current.resolution,
-		state.current.routeKey,
-		state.pending,
-	]);
-
-	return (
-		<div className="document-route-swap content-swap-stack h-full">
-			{layers.map(layer => {
-				let source = layer.source;
-				return (
-					<ContentSwapLayer
-						// The incoming route loads unseen and enters once the outgoing one has left.
-						// A newer request keeps the outgoing route on screen, so a route the user
-						// has already moved past never flashes in.
-						active={layer === state.current
-							? !state.previous
-							: layer === state.previous && !!state.pending}
-						className="document-route-layer h-full min-h-0"
-						immediately={state.current.immediately}
-						key={layer.key}
-						motion={motion}
-						onClosed={layer.key === state.previous?.key
-							? () => dispatch({ key: layer.key, type: "closed" })
-							: undefined}
-						staged={layer !== state.previous && (layer === state.pending || !!state.previous)}
-					>
-						{source.page === "document" || source.page === "child"
-							? (
-								<Suspense fallback={<Loading label="Opening document…" />}>
-									<DocumentWorkspaceHost
-										agent={agent}
-										childOrigin={childOrigin}
-										Failure={Failure}
-										layerKey={layer.key}
-										Loading={Loading}
-										onCanonicalPath={metadataPath}
-										onChildClose={onChildClose}
-										onChildOpen={onChildOpen}
-										onChildClosing={onChildClosing}
-										onParentRestored={onParentRestored}
-										onReady={ready}
-										retryable={retryableChannelFailure}
-										route={source}
-										user={user}
-									/>
-								</Suspense>
-							)
-							: (
-								<Suspense fallback={<Loading label="Opening document…" />}>
-									<ChannelWorkspace
-										Failure={Failure}
-										Loading={Loading}
-										onReady={ready}
-										onResolved={channelResolved}
-										retryable={retryableChannelFailure}
-										source={source}
-										user={user}
-									/>
-								</Suspense>
-							)}
-					</ContentSwapLayer>
-				);
-			})}
 		</div>
 	);
 }
@@ -415,7 +221,7 @@ export function HostedApp(
 	let childClosing = useCallback((parentId: string, parentPath: string): ChildFocusToken => {
 		return beginChildClosing(parentId, parentPath).token;
 	}, [beginChildClosing]);
-	let restoreParentFocus = useCallback((token: ChildFocusToken) => {
+	let restoreParentFocus = useCallback((token: ChildFocusToken, target: ParentFocusTarget) => {
 		let current = childFocus.current;
 		let next = childFocusTransition(current, { type: "restore", token });
 		if (next === current || next.attempt?.phase !== "deferred") return;
@@ -431,24 +237,9 @@ export function HostedApp(
 				|| latest.phase !== "deferred"
 				|| location.pathname !== attempt.parentPath
 			) return;
-			let parent = document.querySelector<HTMLElement>(
-				`[data-workspace-room="${CSS.escape(attempt.parentId)}"]`,
-			);
-			if (!parent?.isConnected || parent.closest("[inert]")) {
-				moveChildFocus({ type: "cancel" });
-				return;
-			}
-			let opener = attempt.opener?.current;
-			let target = opener;
-			if (!target?.isConnected || target.closest("[inert]")) {
-				target = parent.querySelector<HTMLElement>(`[data-document-view="plan"] h2`);
-			}
-			moveChildFocus({ type: "finish", token });
-			if (target?.isConnected && !target.closest("[inert]")) {
-				target.focus({ preventScroll: true });
-				// An opener the reader clicked is already in view; a provenance target may not be.
-				if (target === opener) target.scrollIntoView({ block: "nearest" });
-			}
+			let focus = target(attempt);
+			moveChildFocus(focus ? { type: "finish", token } : { type: "cancel" });
+			focus?.();
 		});
 	}, [cancelChildFocusFrame, moveChildFocus]);
 	let childOrigin = useCallback(
@@ -490,17 +281,19 @@ export function HostedApp(
 		case "child":
 		case "channel":
 			workspace = (
-				<DocumentRouteSwap
-					agent={agent}
-					childOrigin={childOrigin}
-					onCanonicalPath={canonicalPath}
-					onChildClose={closeChild}
-					onChildOpen={navigate}
-					onChildClosing={childClosing}
-					onParentRestored={restoreParentFocus}
-					route={route}
-					user={user}
-				/>
+				<Suspense fallback={<Loading label="Opening document…" />}>
+					<DocumentRouteSwap
+						agent={agent}
+						childOrigin={childOrigin}
+						onCanonicalPath={canonicalPath}
+						onChildClose={closeChild}
+						onChildOpen={navigate}
+						onChildClosing={childClosing}
+						onParentRestored={restoreParentFocus}
+						route={route}
+						user={user}
+					/>
+				</Suspense>
 			);
 			break;
 	}

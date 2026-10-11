@@ -19,6 +19,7 @@ import {
 import type { ComponentType } from "react";
 import type { ResearchOpener } from "@chopin/editor";
 import type { ChildFocusToken } from "./anchored-child-surface";
+import type { ChildFocusAttempt } from "./child-history";
 import type { DocumentWorkspaceAction } from "./document-workspace-state";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
@@ -82,6 +83,28 @@ function parentScroller(host: HTMLElement | null): HTMLElement | null {
 const REVEAL_LIMIT = 200;
 const CHILD_SYNC_LIMIT = 8000;
 
+/** Moves focus back into a parent once its child has closed, or nothing when it cannot. */
+export type ParentFocusTarget = (attempt: ChildFocusAttempt) => (() => void) | undefined;
+
+// Lives in this lazily loaded host rather than the shell, which only runs it after a close.
+function parentFocusTarget(attempt: ChildFocusAttempt): (() => void) | undefined {
+	let parent = document.querySelector<HTMLElement>(
+		`[data-workspace-room="${CSS.escape(attempt.parentId)}"]`,
+	);
+	if (!parent?.isConnected || parent.closest("[inert]")) return undefined;
+	let opener = attempt.opener?.current;
+	let target = opener;
+	if (!target?.isConnected || target.closest("[inert]")) {
+		target = parent.querySelector<HTMLElement>(`[data-document-view="plan"] h2`);
+	}
+	return () => {
+		if (!target?.isConnected || target.closest("[inert]")) return;
+		target.focus({ preventScroll: true });
+		// An opener the reader clicked is already in view; a provenance target may not be.
+		if (target === opener) target.scrollIntoView({ block: "nearest" });
+	};
+}
+
 /** Settles true once a child's editor has synced, or false if it never does. */
 function childSynced(channelId: string, current: () => boolean): Promise<boolean> {
 	let selector = `[data-workspace-room="${CSS.escape(channelId)}"] [data-plan-synced]`;
@@ -132,7 +155,7 @@ export default function DocumentWorkspaceHost(
 		onChildClose: (parentId: string, parentPath: string, opener?: ResearchOpener) => void;
 		onChildOpen: (path: string) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
-		onParentRestored: (token: ChildFocusToken) => void;
+		onParentRestored: (token: ChildFocusToken, target: ParentFocusTarget) => void;
 		onReady: (
 			key: DocumentRouteIdentity,
 			resolution?: {
@@ -281,7 +304,7 @@ export default function DocumentWorkspaceHost(
 			&& current.status === "ready"
 			&& current.loaded.parent.channel.id === token.parentId
 		) {
-			onParentRestored(token);
+			onParentRestored(token, parentFocusTarget);
 		}
 	}, [onParentRestored, presentation]);
 
