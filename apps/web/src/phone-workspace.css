@@ -186,6 +186,8 @@
 
 .phone-top-bar-title input {
 	width: 100%;
+	/* The title control inherits the bar's small type, which would let iOS zoom in on focus. */
+	font-size: var(--text-base);
 	text-align: center;
 }
 

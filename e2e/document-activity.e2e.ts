@@ -47,7 +47,8 @@ for (
 		await expect(content(page)).toContainText("Original paragraph.");
 		await showDecisions(page);
 
-		let documentTab = page.getByRole("button", { name: /^Document/ });
+		// Not the top bar's Documents button.
+		let documentTab = page.getByRole("button", { name: /^Document(?!s)/ });
 		await expect(documentTab).toHaveAccessibleName("Document");
 		await rewrite(baseURL!, room, "# Title\n\nRevised paragraph.\n");
 

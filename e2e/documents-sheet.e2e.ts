@@ -85,6 +85,8 @@ test("Recent lists the documents this person opened, not the one on screen", asy
 		await documentsButton(page).click();
 		await sheet(page).getByRole("region", { name: "Documents" })
 			.getByRole("link", { name: title(id) }).click();
+		// The outgoing document's bar stays mounted while the route swaps.
+		await expect(page.locator(".phone-top-bar")).toHaveCount(1);
 		await expect(page.locator(".phone-top-bar")).toContainText(title(id));
 	}
 	await documentsButton(page).click();
@@ -123,6 +125,10 @@ test("document menus open an action sheet on a phone", async ({ baseURL, join, r
 	await more.click();
 	let actions = page.getByRole("dialog", { name: `Actions for ${title(room)}` });
 	await expect(actions).toBeVisible();
+	// Measure once the sheet's entrance has settled.
+	await actions.evaluate(element =>
+		Promise.all(element.getAnimations({ subtree: true }).map(item => item.finished))
+	);
 	await expect(page.getByRole("menu")).toHaveCount(0);
 	for (let label of ["Copy link", "Rename", "Archive", "Cancel"]) {
 		let item = actions.getByRole("button", { name: label, exact: true });

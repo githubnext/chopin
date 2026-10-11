@@ -61,9 +61,9 @@ test("touch text fields stay at least 16px while desktop keeps its sizes", async
 		.toBeGreaterThanOrEqual(16);
 });
 
-test("the floating sidebar button clears the top safe area", async ({ join }) => {
+test("the phone top bar's Documents button clears the top safe area", async ({ join }) => {
 	let page = await join("ana", PHONE);
-	let button = page.getByRole("button", { name: "Show sidebar", exact: true });
+	let button = page.getByRole("button", { name: "Documents", exact: true });
 	await expect(button).toBeVisible();
 	let resting = (await button.boundingBox())!.y;
 	// Newer than Playwright's protocol types; Chromium reports env(safe-area-inset-*) from it.
