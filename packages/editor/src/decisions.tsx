@@ -12,7 +12,7 @@ import { CheckIcon, ChevronIcon, DecisionIcon } from "@chopin/icons";
 import { EmptyState } from "@chopin/visuals";
 
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
-import { usePhone } from "./widgets/phone";
+import { usePhone } from "./pointer";
 import { useQuestionnaires } from "./questionnaires";
 import { PendingAnswersContext, PendingAnswersStore, SaveBar } from "./save-bar";
 import { forget } from "./touched";

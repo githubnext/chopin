@@ -26,7 +26,7 @@ import { Deck } from "../deck";
 import { deckLayout } from "../deck-runs";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
-import { usePhone } from "./phone";
+import { usePhone } from "../pointer";
 import { PendingAnswersContext } from "../save-bar";
 import { forget, remember, selectionOf, stillMine, useSelections, withChange } from "../touched";
 import { useRelations } from "../questionnaires";

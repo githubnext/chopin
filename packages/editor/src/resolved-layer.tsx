@@ -42,7 +42,7 @@ import { useResolvedActions } from "./resolved-actions";
 import { decisionHostVisible } from "./decision-placement";
 import { when } from "./card";
 import { Note, stamp } from "./comments";
-import { CommentSheet, commentSheetHeading, usesCommentSheet } from "./comment-sheet";
+import { CommentSheet, commentSheetHeading } from "./comment-sheet";
 import { displayName } from "./display-name";
 import { Face } from "./face";
 import { $rangeOf, paintShared } from "./marks";
@@ -63,7 +63,7 @@ import {
 	verticalReach,
 } from "./resolved";
 import { useQuestionnaires, useRelations } from "./questionnaires";
-import { PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
+import { usePhone } from "./pointer";
 import { blockElement } from "./scroll";
 import { openCommentThread } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
@@ -430,17 +430,9 @@ export function ResolvedLayer(
 	let pressing = useRef(false);
 	let enterPopover = useRef(false);
 	let origin = useRef<HTMLElement | undefined>(undefined);
-	let [primaryCoarse, setPrimaryCoarse] = useState(false);
-	useEffect(() => {
-		let query = matchMedia(PRIMARY_COARSE_POINTER_QUERY);
-		let update = () => setPrimaryCoarse(query.matches);
-		update();
-		query.addEventListener("change", update);
-		return () => query.removeEventListener("change", update);
-	}, []);
 	// On a phone a pinned resolved comment opens in the comment sheet, not a popover over the prose.
-	let compact = options.commentPresentation === "sheet"
-		&& usesCommentSheet({ coarse: primaryCoarse, width: host?.clientWidth ?? Infinity });
+	let phone = usePhone();
+	let compact = options.commentPresentation === "sheet" && phone;
 	let compactRef = useRef(compact);
 	compactRef.current = compact;
 	// A modal sheet hides the document from assistive tech; that is not the document going away.

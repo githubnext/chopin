@@ -577,9 +577,8 @@
 /*
  * Wide authored blocks on a phone: a coarse pointer on a small screen, and a
  * narrow document. The media query is the phone class, kept identical to
- * `PHONE_QUERY` in widgets/phone.ts; when the shell publishes it as
- * `:root[data-phone]`, this one condition is what changes. Narrow desktop
- * windows keep their scroll lanes untouched.
+ * `isPhone` in pointer.ts, so it also holds where no shell sets
+ * `:root[data-phone]`. Narrow desktop windows keep their scroll lanes untouched.
  */
 @media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
 	@container (max-width: 40rem) {

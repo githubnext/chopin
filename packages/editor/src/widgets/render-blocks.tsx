@@ -58,7 +58,7 @@ import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } fro
 import { CodeView } from "./code-view";
 import { fitsLegibly } from "./diagram-fit";
 import { DiagramSheet, ExpandDiagram } from "./diagram-sheet";
-import { usePhone } from "./phone";
+import { usePhone } from "../pointer";
 import { LanguageMenu } from "./language-menu";
 import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";

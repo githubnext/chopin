@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { selectionOffer } from "../edit-mode";
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
-import { usePhone } from "../phone";
+import { usePhone } from "../pointer";
 import { SelectionBubble } from "./bubble";
 import { FormatDock } from "./dock";
 import { LinkSurface } from "./link";

@@ -671,13 +671,12 @@ test("an open slash menu follows its caret while the editor scrolls", async ({ b
 test("an open selection toolbar follows its range while the editor scrolls", async ({ baseURL, browser, room, seed }) => {
 	await seed(LONG_EDITOR);
 	// Wider than a phone, where a touch selection still gets the floating bubble.
-	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room, 600);
+	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room, 601);
 	try {
 		let block = content(emulation.page).getByText("Paragraph 9.", { exact: true });
 		await block.scrollIntoViewIfNeeded();
 		await block.selectText();
-		// A phone reader's selection: the bubble offers commenting only.
-		let bubble = emulation.page.getByRole("toolbar", { name: "Selection" });
+		let bubble = emulation.page.getByRole("toolbar", BUBBLE);
 		await expect(bubble).toBeVisible();
 
 		await expectSurfaceToFollowEditorScroll(emulation.page, bubble);

@@ -17,11 +17,11 @@ import {
 	popoverPoint,
 } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
-import { CommentSheet, commentSheetHeading, usesCommentSheet } from "./comment-sheet";
+import { CommentSheet, commentSheetHeading } from "./comment-sheet";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
-import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
+import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY, usePhone } from "./pointer";
 import { OPEN_COMMENT, useThreads } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
@@ -400,8 +400,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let focusOnOpen = useRef<string | undefined>(undefined);
 	let options = useCellValue(widgets$);
 	let canEdit = options.canEdit !== false;
-	let compact = options.commentPresentation === "sheet"
-		&& usesCommentSheet({ coarse: primaryCoarse, width: host?.clientWidth ?? Infinity });
+	let phone = usePhone();
+	// The comment sheet belongs to the phone class, portrait or landscape.
+	let compact = options.commentPresentation === "sheet" && phone;
 	let previousCompact = useRef(compact);
 	let immediately = options.motionImmediately?.() ?? false;
 	let draft = canEdit ? state.draft : undefined;

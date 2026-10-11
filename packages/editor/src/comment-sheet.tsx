@@ -3,19 +3,12 @@ import { Drawer } from "@base-ui/react/drawer";
 import { ChevronIcon, CloseIcon } from "@chopin/icons";
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 
-import { isPhone, PHONE_MAX_WIDTH } from "./phone";
-
 import type { ReactNode } from "react";
 
 /** The tallest the sheet grows, as a fraction of the space above the keyboard. */
 export const COMMENT_SHEET_LARGE = 0.92;
 /** Where the sheet opens, as a fraction of the space above the keyboard, so its passage shows above it. */
 export const COMMENT_SHEET_MEDIUM = 0.5;
-export const COMMENT_SHEET_MAX_WIDTH = PHONE_MAX_WIDTH;
-
-export function usesCommentSheet(device: { coarse: boolean; width: number }): boolean {
-	return isPhone(device);
-}
 
 /** How much of a sheet's scrolling notes the medium detent keeps in view beneath its header. */
 export const COMMENT_SHEET_PEEK = 64;

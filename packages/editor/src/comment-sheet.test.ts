@@ -7,7 +7,6 @@ import {
 	commentSheetHeight,
 	commentSheetMedium,
 	commentSheetTop,
-	usesCommentSheet,
 } from "./comment-sheet";
 
 describe("comment sheet size", () => {
@@ -47,14 +46,6 @@ describe("comment sheet size", () => {
 		expect(commentSheetMedium(361, 250)).toBe(250);
 		expect(commentSheetMedium(844, 250)).toBe(422);
 		expect(commentSheetMedium(361, 900)).toBeCloseTo(332);
-	});
-
-	it("reserves the drawer for phone-sized coarse pointers", () => {
-		expect(usesCommentSheet({ coarse: true, width: 390 })).toBe(true);
-		expect(usesCommentSheet({ coarse: true, width: 430 })).toBe(true);
-		expect(usesCommentSheet({ coarse: true, width: 431 })).toBe(false);
-		expect(usesCommentSheet({ coarse: true, width: 768 })).toBe(false);
-		expect(usesCommentSheet({ coarse: false, width: 390 })).toBe(false);
 	});
 });
 
