@@ -21,7 +21,7 @@ export function InvestigationCard({ store, summary, userId, canEdit, locked }: {
 	let item = store.get(summary.id);
 	let owned = store.connections.filter(connection => connection.owner === userId);
 	// Work that still needs a person opens; a finished result folds to its brief.
-	let body = useUnfold(summary.state !== "completed");
+	let body = useUnfold(summary.state !== "completed", "card");
 	let load = async () => {
 		setLoading(true);
 		await store.load(summary.id);
