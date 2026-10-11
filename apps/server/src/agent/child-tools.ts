@@ -21,9 +21,8 @@ import {
 	EDIT_OPERATIONS_SCHEMA,
 } from "./document-ops";
 import { implementationActive } from "../plan/service";
+import { type ChildDocuments, UnknownChild } from "../chat/children";
 
-import { UnknownChild } from "../chat/children";
-import type { ChildDocuments } from "../chat/children";
 import type { ActiveOwnerBinding } from "./active-owner";
 import type { DocumentRoom } from "./tools";
 

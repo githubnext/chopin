@@ -238,8 +238,12 @@ the request identity; observational reads must not restart terminal work.
 Successful reconciliation validates the complete report and atomically creates
 an initialized ordinary child channel plus the request link. Publication must be
 idempotent and persistence must precede the ready card or nested navigation row.
-A child owns ordinary document, Conversation, and Decisions state. V1 does not
-offer child research, Background Work, implementation/tasks, or grandchildren.
+A child owns ordinary document and Decisions state. It has no Chat: its root's
+Chat and Planner reach it through the child tools, and a root message carries the
+open child as `focus`. Startup clears any conversation a child stored earlier,
+except one its decision records still cite, which is kept and logged but never
+served. V1 does not offer child research, Background Work, implementation/tasks,
+or grandchildren.
 
 The server retains `research_workspaces`, turns, messages, and historical chat
 references as staging and compatibility internals. Do not present them as a
@@ -450,11 +454,11 @@ run `bun run ci` and validate relative links with exact casing.
 When a disposable Planner session is created, diagnostics report available tool
 names and the external GitHub MCP contribution. Counts vary with SDK and remote
 MCP versions. A healthy boundary includes Chopin's document tools (currently
-plan-named), child document tools, repository tools, and allowed pull-request tools, and excludes
-ambient capabilities such as `bash`, filesystem access, URL fetch, host Git,
-issues, and unrestricted search. The exception is an `atomic` Planner session,
-which deliberately adds Atomic's builtins and coding tools; its summary and
-research worker sessions must still show only their own tools.
+plan-named), child document tools, repository tools, and allowed pull-request
+tools, and excludes ambient capabilities such as `bash`, filesystem access, URL
+fetch, host Git, issues, and unrestricted search. The exception is an `atomic`
+Planner session, which deliberately adds Atomic's builtins and coding tools; its
+summary and research worker sessions must still show only their own tools.
 
 Treat a missing required tool or an unexpected ambient tool as a security or
 configuration failure even when the overall count looks plausible.

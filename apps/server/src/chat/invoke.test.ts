@@ -322,6 +322,14 @@ test("queued invocations post their durable message exactly once", async () => {
 	}
 });
 
+test("a child document's Planner cannot be invoked, so its Chat stays empty", async () => {
+	let { context, user } = await setup();
+	context.rootChannelId = crypto.randomUUID();
+	expect(await Chat.invoke(context, user, "Review")).toBe("planner-unavailable");
+	expect(context.chat.entries).toEqual([]);
+	expect(context.chat.busy).toBe(false);
+});
+
 test("failed persistence, an unavailable Planner and a full queue start no invoked turn", async () => {
 	let { context, events, user } = await setup();
 	context.config.agent = false;

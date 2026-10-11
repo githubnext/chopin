@@ -84,7 +84,8 @@ export function greetJoinedPlan(
 		Service.greet(opened, ws, frame);
 		Questions.greet(opened, ws);
 		Comments.greet(opened, ws);
-		Chat.greet(opened.chat, ws);
+		// A child's Chat is its root's; it has none of its own to show.
+		if (!opened.parentChannelId) Chat.greet(opened.chat, ws);
 		if (conversationPlan) {
 			tell(ws, {
 				kind: "conversation-plan:snapshot",

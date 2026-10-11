@@ -629,7 +629,9 @@ export async function invoke(
 	if (chat.pendingSends >= MAX_PENDING_SENDS) return "planner-queue-full";
 	chat.pendingSends++;
 	let post = async () => {
-		if (!context.config.agent || chat.closed) return "planner-unavailable" as const;
+		if (!context.config.agent || chat.closed || context.rootChannelId) {
+			return "planner-unavailable" as const;
+		}
 		if (await context.plannerNotAttached?.()) return "planner-not-attached" as const;
 		let verified: string | undefined;
 		if (checkout !== undefined && context.config.harness === "atomic") {
@@ -706,6 +708,9 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	let destination = msg.to;
 	if (destination !== "room" && destination !== "planner") {
 		return fail(ws, msg.rid, "invalid message destination");
+	}
+	if (context.rootChannelId) {
+		return fail(ws, msg.rid, "this document's Chat is on its root document");
 	}
 	if (typeof msg.text !== "string") return fail(ws, msg.rid, "invalid message text");
 	if (Buffer.byteLength(msg.text) > MAX_MESSAGE_BYTES) {
@@ -923,6 +928,8 @@ export function instruct(
 	about: Instruction = {},
 ): void | Promise<void> {
 	let { chat, config, room, server } = context;
+	// A child has no Chat to explain the turn in, and its root's Planner reaches it there.
+	if (context.rootChannelId) return report(about, { status: "skipped" });
 	let proceed = (): void | Promise<void> => {
 		if (chat.closed) return;
 		// `AGENT=off` runs the room without one. The decision that got here is

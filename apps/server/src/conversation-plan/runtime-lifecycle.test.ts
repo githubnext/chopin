@@ -177,3 +177,18 @@ test("overlapping stops and replacement attachment share the held real effect dr
 		await Plan.close(fixture.plan);
 	}
 });
+
+test("a child document gets no Conversation processor, jobs or card mirror", async () => {
+	let opened = await openPlan("# Child\n", { parent: "Root" });
+	let plan = opened.plan;
+	let room: Room = { id: plan.id, plan, members: new Map(), parentChannelId: plan.parentChannelId };
+	let runtime = createConversationRuntime({
+		config: { agent: true, conversationPlan: true },
+		server: () => opened.server,
+		unavailable: () => false,
+	});
+	await runtime.attach(room, plan, false, false);
+	expect(runtime.processor(plan)).toBeUndefined();
+	expect(runtime.jobs(plan)).toBeUndefined();
+	await Plan.close(plan);
+});

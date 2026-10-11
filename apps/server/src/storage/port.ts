@@ -172,6 +172,12 @@ export interface CollaborationStore {
 	commit(input: CommitChannel): Promise<CommitResult>;
 	replace(input: ReplaceChannel): Promise<CommitResult>;
 	checkpoint(input: SaveCheckpoint): Promise<void>;
+	/**
+	 * Clear stored conversation state from every child channel. Fenced by the writer
+	 * lease, run at startup before any room opens, and idempotent. A child whose
+	 * decision records cite its Chat is kept unchanged and reported.
+	 */
+	dropChildConversations(lease: Lease): Promise<{ cleared: string[]; kept: string[] }>;
 }
 
 export interface LeaseStore {

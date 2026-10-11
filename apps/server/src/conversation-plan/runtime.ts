@@ -88,6 +88,8 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 	): Promise<void> {
 		if (!deps.config.conversationPlan) return;
 		await stop(opened);
+		// A child has no Chat, so nothing here may analyse, mirror into, or post to one.
+		if (opened.parentChannelId) return;
 		let server = deps.server();
 		let active = () =>
 			room.plan === opened && !room.closing && !archived

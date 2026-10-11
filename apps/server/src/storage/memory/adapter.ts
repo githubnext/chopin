@@ -2,6 +2,7 @@ import { conflict, missing } from "../errors";
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { availableChannelTitle } from "../../channels/title";
 import { sidecarUnansweredDecisions } from "../../questions/unanswered";
+import { childSidecarWithoutConversation } from "../child-conversation";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
 import { MemoryImageStore } from "./images";
@@ -322,6 +323,7 @@ export class MemoryStorage implements StorageAdapter {
 		commit: input => this.#commit(input),
 		replace: input => this.#replace(input),
 		checkpoint: input => this.#checkpoint(input),
+		dropChildConversations: lease => this.#dropChildConversations(lease),
 	};
 
 	readonly #jobs = new MemoryBackgroundJobStore({
@@ -1005,6 +1007,34 @@ export class MemoryStorage implements StorageAdapter {
 		}
 		this.#leases.set(held.name, { ...existing, expiresAt: new Date(0) });
 		return Promise.resolve(true);
+	}
+
+	async #dropChildConversations(lease: Lease): Promise<{ cleared: string[]; kept: string[] }> {
+		this.#assertLease(lease);
+		let cleared: string[] = [];
+		let kept: string[] = [];
+		let children = [...this.#channels.values()]
+			.filter(channel => channel.parentChannelId)
+			.map(channel => channel.id)
+			.sort();
+		for (let channelId of children) {
+			let stored = this.#snapshots.get(channelId);
+			let current = childSidecarWithoutConversation(this.#sidecars.get(channelId) ?? null);
+			let checkpointed = childSidecarWithoutConversation(stored?.sidecar ?? null);
+			if (current === "kept" || checkpointed === "kept") {
+				kept.push(channelId);
+				continue;
+			}
+			if (current === "unchanged" && checkpointed === "unchanged") continue;
+			if (current !== "unchanged") this.#sidecars.set(channelId, json(current));
+			if (stored && checkpointed !== "unchanged") {
+				this.#snapshots.set(channelId, { ...stored, sidecar: json(checkpointed) });
+			}
+			let agent = this.#agents.get(channelId);
+			if (agent) this.#agents.set(channelId, { ...agent, summary: "", transcriptCursor: 0 });
+			cleared.push(channelId);
+		}
+		return { cleared, kept };
 	}
 
 	#assertLease(held: Lease): void {

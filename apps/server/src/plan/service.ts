@@ -171,6 +171,8 @@ type Captured = {
 export type Plan = {
 	builds: BuildRequest[];
 	id: string;
+	/** Set when this is a child document, which has no Chat of its own. */
+	readonly parentChannelId?: string;
 	/** Context retained for plans created through MCP. */
 	creation?: CreationMetadata;
 	/** Idempotent MCP rewrites retained so later edits do not change a replay. */
@@ -1337,6 +1339,9 @@ export async function open(
 
 	let plan: Plan = {
 		id,
+		...(loaded.channel.parentChannelId
+			? { parentChannelId: loaded.channel.parentChannelId }
+			: {}),
 		builds: sidecar.builds ?? [],
 		...(sidecar.creation ? { creation: sidecar.creation } : {}),
 		mcpUpdates: sidecar.mcpUpdates ?? [],

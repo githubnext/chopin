@@ -907,3 +907,31 @@ describe("focus on a child document", () => {
 		expect(frames.at(-1)?.message).toBe("chat request id was reused with different content");
 	});
 });
+
+describe("a child document's own Chat", () => {
+	it("refuses Planner and room messages and records nothing", async () => {
+		let { chat, context } = room();
+		context.rootChannelId = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+		let frames: Sent[] = [];
+		await Chat.send(context, sender("ana", "U_ana", frames), message("@chopin hi", "planner"));
+		await Chat.send(context, sender("ana", "U_ana", frames), message("hi", "room"));
+		expect(chat.entries).toHaveLength(0);
+		expect(chat.waiting).toHaveLength(0);
+		expect(frames.filter(frame => frame.message === "this document's Chat is on its root document"))
+			.toHaveLength(2);
+	});
+
+	it("skips an instruction instead of starting a turn", async () => {
+		let { chat, context } = room();
+		context.rootChannelId = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+		let ended: string[] = [];
+		await Chat.instruct(context, "chopin", "Apply it.", "Accepted.", {
+			ended: outcome => {
+				ended.push(outcome.status);
+			},
+		});
+		expect(chat.busy).toBe(false);
+		expect(chat.entries).toHaveLength(0);
+		expect(ended).toEqual(["skipped"]);
+	});
+});

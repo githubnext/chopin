@@ -3,6 +3,7 @@ import { SQL } from "bun";
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { availableChannelTitle } from "../../channels/title";
 import { sidecarUnansweredDecisions } from "../../questions/unanswered";
+import { childSidecarWithoutConversation } from "../child-conversation";
 import { conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
@@ -693,6 +694,7 @@ export class PostgresStorage implements StorageAdapter {
 		commit: input => this.#commit(input),
 		replace: input => this.#replace(input),
 		checkpoint: input => this.#checkpoint(input),
+		dropChildConversations: lease => this.#dropChildConversations(lease),
 	};
 
 	readonly leases: LeaseStore = {
@@ -1574,6 +1576,59 @@ export class PostgresStorage implements StorageAdapter {
 				DELETE FROM channel_updates
 				WHERE channel_id = ${input.channelId} AND sequence <= ${input.throughSequence}
 			`;
+			}));
+	}
+
+	#dropChildConversations(lease: Lease): Promise<{ cleared: string[]; kept: string[] }> {
+		return this.#run("drop child conversations", () =>
+			this.#sql.begin(async transaction => {
+				await this.#assertLease(transaction, lease);
+				let rows = await transaction<
+					{ channelId: string; current: unknown; checkpointed: unknown }[]
+				>`
+					SELECT
+						channel_state.channel_id AS "channelId",
+						channel_state.sidecar AS current,
+						channel_snapshots.sidecar AS checkpointed
+					FROM channel_state
+					JOIN channels ON channels.id = channel_state.channel_id
+					LEFT JOIN channel_snapshots
+						ON channel_snapshots.channel_id = channel_state.channel_id
+					WHERE channels.parent_channel_id IS NOT NULL
+					ORDER BY channel_state.channel_id
+					FOR UPDATE OF channel_state
+				`;
+				let cleared: string[] = [];
+				let kept: string[] = [];
+				for (let row of rows) {
+					let current = childSidecarWithoutConversation(row.current);
+					let checkpointed = childSidecarWithoutConversation(row.checkpointed);
+					if (current === "kept" || checkpointed === "kept") {
+						kept.push(row.channelId);
+						continue;
+					}
+					if (current === "unchanged" && checkpointed === "unchanged") continue;
+					if (current !== "unchanged") {
+						await transaction`
+							UPDATE channel_state
+							SET sidecar = ${JSON.stringify(current)}::jsonb
+							WHERE channel_id = ${row.channelId}
+						`;
+					}
+					if (checkpointed !== "unchanged") {
+						await transaction`
+							UPDATE channel_snapshots
+							SET sidecar = ${JSON.stringify(checkpointed)}::jsonb
+							WHERE channel_id = ${row.channelId}
+						`;
+					}
+					await transaction`
+						UPDATE agent_state SET summary = '', transcript_cursor = 0
+						WHERE channel_id = ${row.channelId}
+					`;
+					cleared.push(row.channelId);
+				}
+				return { cleared, kept };
 			}));
 	}
 

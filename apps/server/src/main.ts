@@ -678,20 +678,19 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "chat:abort":
-			if (room.plan) await Chat.abort(chat(room, ws), ws);
-			return;
-
 		case "chat:resume":
-			if (room.plan) await Chat.resume(chat(room, ws), ws);
-			return;
-
 		case "chat:pause-run":
 		case "chat:resume-run":
-			if (room.plan) await Chat.controlRun(chat(room, ws), ws, frame);
-			return;
-
 		case "chat:unqueue":
-			if (room.plan) Chat.unqueue(chat(room, ws), ws, frame);
+			if (!room.plan) return;
+			if (room.plan.parentChannelId) {
+				if (frame.rid) fail(ws, frame.rid, "this document's Chat is on its root document");
+				return;
+			}
+			if (frame.kind === "chat:abort") await Chat.abort(chat(room, ws), ws);
+			else if (frame.kind === "chat:resume") await Chat.resume(chat(room, ws), ws);
+			else if (frame.kind === "chat:unqueue") Chat.unqueue(chat(room, ws), ws, frame);
+			else await Chat.controlRun(chat(room, ws), ws, frame);
 			return;
 
 		case "conversation-plan:correct":
@@ -1980,6 +1979,18 @@ try {
 	if (!heldLease) throw new Error("another Chopin instance owns the database");
 	let reset = await storage.sessions.reset(new Date(), heldLease, LEASE_TTL_MS);
 	heldLease = reset.lease;
+	// Before any room opens, so no child Conversation is ever loaded or served.
+	let children = await storage.collaboration.dropChildConversations(heldLease);
+	if (children.cleared.length) {
+		console.info(`chopin: cleared ${children.cleared.length} child conversation(s)`);
+	}
+	if (children.kept.length) {
+		console.warn(
+			`chopin: kept ${children.kept.length} child conversation(s) cited by decisions: ${
+				children.kept.join(", ")
+			}`,
+		);
+	}
 } catch (err) {
 	await shutdownHarnesses();
 	if (heldLease) await storage.leases.release(heldLease).catch(() => {});

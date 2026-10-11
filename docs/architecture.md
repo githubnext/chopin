@@ -30,7 +30,8 @@ and [Self-hosting](self-hosting.md) for deployment.
   pending, it is represented by an inline card rather than a channel, document,
   Chat, decision set, navigation row, or browser route.
 - A **child document** is an ordinary channel attached to one top-level parent
-  for navigation and context. It owns its document, Chat, and Decisions.
+  for navigation and context. It owns its document and Decisions but has no
+  Chat: its root's Chat and Planner reach it through the child document tools.
   The V1 product surface offers neither child research nor grandchildren. The UI
   blocks starting research from a child; the API may accept the request, but
   publication validation rejects linking a grandchild.
@@ -305,9 +306,9 @@ read cannot publish a duplicate.
 The browser nests published children beneath their parent. Opening a ready card
 or nested row keeps the parent mounted but inert behind an anchored child
 surface. The child opens through its ordinary channel stack with its own
-Chat and Decisions; closing, Escape, and browser Back restore the
-parent's history, scroll, selection, and opener focus. Compact layouts occupy
-the viewport, and reduced motion uses a crossfade.
+Decisions; its root's Chat stays the only Chat. Closing, Escape, and browser
+Back restore the parent's history, scroll, selection, and opener focus. Compact
+layouts occupy the viewport, and reduced motion uses a crossfade.
 
 ## Collaborative document
 
