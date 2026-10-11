@@ -1841,8 +1841,10 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 /* Save lives in the bar, so the card footer keeps only a quiet way out. */
 .plan-decisions[data-phone] .question-discard-quiet {
-	margin-inline-end: auto;
+	margin-inline: calc(var(--spacing) * -2) auto;
 	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	font-weight: 400;
 }
 
 /* Leave the hint and the next row visible above the keyboard. */
@@ -1903,6 +1905,10 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	font-variant-numeric: tabular-nums;
 }
 
+.decision-save-bar-count[data-failed] {
+	color: var(--color-danger-text);
+}
+
 .plan-decisions[data-phone] .decision-save-bar-button {
 	min-height: var(--control-target-coarse);
 	padding-inline: calc(var(--spacing) * 4);
@@ -1940,6 +1946,21 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	border-radius: var(--radius-md);
 	background: var(--color-success-wash);
 	border: var(--edge-width) solid var(--color-success-outline-subtle);
+}
+
+/* Someone else's decision folds away without claiming the reader's attention. */
+.decision-confirmed-collapse:not([data-mine]) .decision-confirmed {
+	border-color: var(--color-edge);
+	background: var(--color-inset);
+	animation: none;
+}
+
+.decision-confirmed-collapse:not([data-mine]) .decision-confirmed-mark {
+	background: var(--color-text-tertiary);
+}
+
+.decision-confirmed-collapse:not([data-mine]) .decision-confirmed-label {
+	color: var(--color-text-tertiary);
 }
 
 .decision-confirmed-mark {
@@ -2035,24 +2056,15 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-brand-ink);
 }
 
-.decision-chip-kind {
-	flex: none;
-	font-weight: 500;
-	color: var(--color-text-primary);
-}
-
-.decision-chip-kind::after {
-	content: "·";
-	margin-inline-start: calc(var(--spacing) * 2);
-	color: var(--color-text-tertiary);
-}
-
 .decision-chip-question {
+	display: -webkit-box;
 	min-width: 0;
 	flex: 1;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	color: var(--color-text-primary);
 }
 
 .decision-chip-chevron {

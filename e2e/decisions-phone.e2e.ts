@@ -39,7 +39,7 @@ test("phone: the save bar appears only with unsaved answers, and Save confirms b
 	await card.getByText("In SQLite", { exact: true }).click();
 	await save.click();
 	let confirmed = page.locator("[data-decision-confirmed]");
-	await expect(confirmed.getByRole("status")).toContainText("Decided");
+	await expect(confirmed.getByRole("status")).toContainText("Decided · You");
 	await expect(confirmed).toContainText("In SQLite");
 	await expect(bar).not.toHaveAttribute("data-open");
 	await expect(confirmed).toHaveCount(0, { timeout: 5_000 });
@@ -47,10 +47,46 @@ test("phone: the save bar appears only with unsaved answers, and Save confirms b
 	await expect(decisionsCard(page)).toHaveCount(0);
 });
 
+test("phone: the bar counts, clears and saves only this person's answers", async ({ join, seed }) => {
+	await seed("Decisions on a phone.\n");
+	let octocat = await join("octocat", PHONE);
+	let hubot = await join("hubot", PHONE);
+	for (let page of [octocat, hubot]) await showDecisions(page);
+	let storage = (page: Page) => decisionsCard(page);
+	let scope = (page: Page) => decisionsCard(page, "Which of these belong in the first cut?");
+	let bar = (page: Page) => page.locator(".decision-save-bar");
+
+	await storage(octocat).getByText("In SQLite", { exact: true }).click();
+	await expect(bar(octocat)).toHaveAttribute("data-open", "");
+	await expect(storage(hubot).getByRole("radio", { name: /In SQLite/ })).toBeChecked();
+	await expect(bar(hubot)).not.toHaveAttribute("data-open");
+
+	await scope(hubot).getByText("Anchors", { exact: true }).click();
+	let region = hubot.getByRole("region", { name: "Unsaved answers" });
+	await expect(region.getByRole("status")).toHaveText("1 unsaved answer");
+	await region.getByRole("button", { name: "Clear", exact: true }).click();
+	await expect(bar(hubot)).not.toHaveAttribute("data-open");
+	await expect(scope(hubot).getByRole("checkbox", { name: /Anchors/ })).not.toBeChecked();
+	await expect(storage(octocat).getByRole("radio", { name: /In SQLite/ })).toBeChecked();
+	await expect(bar(octocat)).toHaveAttribute("data-open", "");
+
+	await scope(hubot).getByText("Anchors", { exact: true }).click();
+	await region.getByRole("button", { name: "Save", exact: true }).click();
+	await expect(scope(hubot)).toHaveCount(0);
+	await expect(scope(octocat)).toHaveCount(0);
+	// octocat's open answer was neither saved nor cleared by hubot.
+	await expect(storage(octocat).getByRole("radio", { name: /In SQLite/ })).toBeChecked();
+	await expect(storage(hubot)).toBeVisible();
+	await expect(octocat.getByRole("region", { name: "Unsaved answers" }).getByRole("status"))
+		.toHaveText("1 unsaved answer");
+	// Someone else's decision folds away without announcing itself.
+	await expect(octocat.locator("[data-decision-confirmed] [role=status]")).toHaveCount(0);
+});
+
 test("phone: an open decision in the document is a chip that opens it in Decisions", async ({ join, seed }) => {
 	await seed("Decisions on a phone.\n");
 	let page = await join("ana", PHONE);
-	let chip = page.getByRole("button", { name: `Decision: ${PROMPT}. Answer in Decisions` });
+	let chip = page.getByRole("button", { name: `Decision: ${PROMPT}, answer in Decisions` });
 	await expect(chip).toBeVisible();
 	await expect(
 		page.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]'),

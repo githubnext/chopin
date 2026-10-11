@@ -89,7 +89,8 @@ export const CONFIRM_MS = 1100;
 /** Matches `--decision-closure-dur` on `.decision-confirmed-collapse`. */
 export const COLLAPSE_MS = 320;
 
-type Closing = "confirmed" | "collapsing";
+/** A decision this client saved holds a confirmation; anyone else's just folds away. */
+type Closing = { phase: "confirmed" | "leaving" | "collapsing"; mine: boolean };
 
 /**
  * Cards that just left the open list because they were decided.
@@ -109,6 +110,7 @@ function useClosing(
 	enabled: boolean,
 	open: ReadonlySet<string>,
 	decided: (id: string) => boolean,
+	mine: (id: string) => boolean,
 	immediately: () => boolean,
 ) {
 	let [closing, setClosing] = useState<ReadonlyMap<string, Closing>>(new Map());
@@ -122,10 +124,10 @@ function useClosing(
 		if (!enabled || !previous) return;
 		let fresh = newlyDecided(previous, open, decided);
 		if (fresh.length === 0) return;
-		let update = (id: string, phase: Closing | undefined) =>
+		let update = (id: string, closing: Closing | undefined) =>
 			setClosing(current => {
 				let next = new Map(current);
-				if (phase) next.set(id, phase);
+				if (closing) next.set(id, closing);
 				else next.delete(id);
 				return next;
 			});
@@ -136,12 +138,21 @@ function useClosing(
 			}, delay);
 			timers.current.add(timer);
 		};
+		let still = immediately();
 		for (let id of fresh) {
-			update(id, "confirmed");
-			if (immediately()) later(CONFIRM_MS, () => update(id, undefined));
-			else {
-				later(CONFIRM_MS, () => update(id, "collapsing"));
-				later(CONFIRM_MS + COLLAPSE_MS, () => update(id, undefined));
+			let own = mine(id);
+			if (own) {
+				update(id, { phase: "confirmed", mine: true });
+				if (still) later(CONFIRM_MS, () => update(id, undefined));
+				else {
+					later(CONFIRM_MS, () => update(id, { phase: "collapsing", mine: true }));
+					later(CONFIRM_MS + COLLAPSE_MS, () => update(id, undefined));
+				}
+			} else if (!still) {
+				// Someone else's decision: no hold, only the fold, so the list does not jump.
+				update(id, { phase: "leaving", mine: false });
+				later(LEAVE_MS, () => update(id, { phase: "collapsing", mine: false }));
+				later(LEAVE_MS + COLLAPSE_MS, () => update(id, undefined));
 			}
 		}
 		// `key` stands for `open`, which is rebuilt every render.
@@ -154,21 +165,38 @@ function useClosing(
 	return closing;
 }
 
-function Confirmed({ entry, phase }: { entry: QuestionnaireEntry; phase: Closing }) {
+/** Long enough for the folding card to paint open before it collapses. */
+const LEAVE_MS = 50;
+
+/** "You" for this viewer, otherwise the resolver's handle; absent when unknown. */
+export function decidedBy(resolver: string | undefined, self: string | undefined) {
+	if (!resolver || resolver === "system") return undefined;
+	return resolver === self ? "You" : `@${resolver}`;
+}
+
+function Confirmed(
+	{ by, closing, entry }: { by?: string; closing: Closing; entry: QuestionnaireEntry },
+) {
 	let chosen = labels(entry.value);
 	let question = entry.value.questions.map(item => item.prompt).join(" · ");
 	return (
 		<div
-			className={`decision-confirmed-collapse${phase === "collapsing" ? " is-closing" : ""}`}
+			aria-hidden={closing.mine ? undefined : true}
+			className={`decision-confirmed-collapse${
+				closing.phase === "collapsing" ? " is-closing" : ""
+			}`}
 			data-decision-confirmed={entry.id}
+			data-mine={closing.mine ? "" : undefined}
 		>
 			<div className="min-h-0 overflow-hidden">
-				<div className="decision-confirmed" role="status">
+				<div className="decision-confirmed" role={closing.mine ? "status" : undefined}>
 					<span aria-hidden="true" className="decision-confirmed-mark">
 						<CheckIcon />
 					</span>
 					<span className="decision-confirmed-text">
-						<span className="decision-confirmed-label">Decided</span>
+						<span className="decision-confirmed-label">
+							{by ? `Decided · ${by}` : "Decided"}
+						</span>
 						<span className="decision-confirmed-question">{question}</span>
 						<span className="decision-confirmed-answer">
 							{chosen.length ? chosen.join(", ") : "Saved decision"}
@@ -262,8 +290,21 @@ export function Decisions(
 		phone,
 		open,
 		id => metadata.get(id)?.status === "decided",
+		id => {
+			let resolver = metadata.get(id)?.resolver;
+			return pendingAnswers.savedHere(id) && (!resolver || resolver === self);
+		},
 		() => motionImmediately?.() ?? false,
 	);
+	let showCard = useCallback((card: string) => {
+		let target = content.current?.querySelector<HTMLElement>(
+			`[data-plan-sidecar-questionnaire="${CSS.escape(card)}"]`,
+		);
+		if (!target) return;
+		target.scrollIntoView({ block: "center" });
+		target.tabIndex = -1;
+		target.focus({ preventScroll: true });
+	}, []);
 	let leaveSaveBar = useCallback(() => {
 		let next = content.current?.querySelector<HTMLElement>(
 			"[data-plan-sidecar-questionnaire]",
@@ -278,7 +319,8 @@ export function Decisions(
 	let settled = entries.filter(entry => !open.has(entry.id) && !closing.has(entry.id));
 
 	let outstanding = pending.length;
-	let resolved = settled.length;
+	// A folding card already counts as resolved, so this agrees with the tab's badge.
+	let resolved = settled.length + closing.size;
 	let empty = outstanding === 0 && resolved === 0 && !hasAdditional;
 
 	let question = (entry: QuestionnaireEntry) => (
@@ -368,7 +410,14 @@ export function Decisions(
 							{pending.map(entry => {
 								let phase = closing.get(entry.id);
 								return phase
-									? <Confirmed entry={entry} key={entry.id} phase={phase} />
+									? (
+										<Confirmed
+											by={decidedBy(metadata.get(entry.id)?.resolver, self)}
+											closing={phase}
+											entry={entry}
+											key={entry.id}
+										/>
+									)
 									: question(entry);
 							})}
 						</div>
@@ -408,7 +457,14 @@ export function Decisions(
 					</div>
 				)}
 			</div>
-			{phone && <SaveBar onFocusLeave={leaveSaveBar} store={pendingAnswers} />}
+			{phone && (
+				<SaveBar
+					onFailed={showCard}
+					onFocusLeave={leaveSaveBar}
+					onIncomplete={showCard}
+					store={pendingAnswers}
+				/>
+			)}
 		</div>
 	);
 	return (

@@ -357,7 +357,12 @@ function Undecided(
 				onDiscard={editable ? state.discard : undefined}
 				onChange={editable ? state.change : undefined}
 				onQuestionFocus={editable ? state.focusQuestion : undefined}
-				onSubmit={editable ? state.submit : undefined}
+				onSubmit={editable
+					? suggestion => {
+						pending?.submitted(value.id);
+						state.submit(suggestion);
+					}
+					: undefined}
 				renderPeople={people => (
 					<PresenceFaces
 						handles={withoutSelf(
@@ -641,7 +646,8 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
  * An open decision in the document, on a phone.
  *
  * Phones answer decisions in the Decisions pane only; the prose keeps a
- * one-line pointer so the card is not shown, and answered, twice.
+ * short pointer so the card is not shown, and answered, twice. The icon says
+ * what it is, leaving the width to the question.
  */
 function DecisionChip(
 	{ onShow, value }: { onShow: (questionnaireId: string) => void; value: Questionnaire },
@@ -649,7 +655,7 @@ function DecisionChip(
 	let question = value.questions.map(item => item.prompt).join(" · ");
 	return (
 		<button
-			aria-label={`Decision: ${question}. Answer in Decisions`}
+			aria-label={`Decision: ${question}, answer in Decisions`}
 			className="decision-chip"
 			data-plan-sidecar-questionnaire={value.id}
 			data-press="wide"
@@ -657,7 +663,6 @@ function DecisionChip(
 			type="button"
 		>
 			<DecisionIcon aria-hidden="true" className="decision-chip-icon" size={14} />
-			<span className="decision-chip-kind">Decision</span>
 			<span className="decision-chip-question">{question}</span>
 			<ChevronIcon aria-hidden="true" className="decision-chip-chevron" size={14} />
 		</button>

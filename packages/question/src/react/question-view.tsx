@@ -50,6 +50,8 @@ export type PendingAnswers = {
 	/** Every question has an answer, so Save can submit this card. */
 	complete: boolean;
 	submitting: boolean;
+	/** Why the last save or edit failed, shown on the card itself. */
+	error?: string;
 	save: () => void;
 	/** Deselect the unsaved answers in the shared draft. */
 	clear: () => void;
@@ -750,6 +752,9 @@ export function QuestionView(props: QuestionViewProps) {
 	let markHumanEdit = () => {
 		if (suggested) dispatchSuggestionEdit({ type: "answer-edited" });
 	};
+	// Which cards this person chose answers on, so a host's pane-wide Save
+	// never acts on a draft only a collaborator touched.
+	let [touched, setTouched] = useState(false);
 
 	let markComposerEdit = () => {
 		dispatchSuggestionEdit({ type: "composer-edited" });
@@ -796,14 +801,15 @@ export function QuestionView(props: QuestionViewProps) {
 		)
 		: { draft: drafts[current.id] };
 
+	// Only a draft this person chose counts. A visible suggestion is not an
+	// answer until someone accepts it on the card, and a collaborator's choice
+	// on a card this person never touched is theirs to save.
 	let answeredCount =
-		definition.questions.filter(question =>
-			answered(question, question.id === current.id ? projection.draft : drafts[question.id])
-		).length;
+		definition.questions.filter(question => answered(question, drafts[question.id])).length;
 	let complete = answeredCount === definition.questions.length;
-	let pendingEnabled = status === "open" && !disabled && !!onSubmit && !!onChange;
-	let latest = useRef({ onChange, onSubmit, projection, markHumanEdit, drafts, definition });
-	latest.current = { onChange, onSubmit, projection, markHumanEdit, drafts, definition };
+	let pendingEnabled = status === "open" && !disabled && !!onSubmit && !!onChange && touched;
+	let latest = useRef({ onChange, onSubmit, markHumanEdit, drafts, definition });
+	latest.current = { onChange, onSubmit, markHumanEdit, drafts, definition };
 	let reporting = useRef(onPending);
 	reporting.current = onPending;
 	useEffect(() => {
@@ -817,10 +823,12 @@ export function QuestionView(props: QuestionViewProps) {
 			answered: answeredCount,
 			complete,
 			submitting,
-			save: () => latest.current.onSubmit?.(latest.current.projection.suggestion),
+			error,
+			save: () => latest.current.onSubmit?.(),
 			clear: () => {
 				let { definition, drafts, markHumanEdit, onChange } = latest.current;
 				markHumanEdit();
+				setTouched(false);
 				for (let question of definition.questions) {
 					let draft = drafts[question.id];
 					if (!draft || !answered(question, draft)) continue;
@@ -838,7 +846,7 @@ export function QuestionView(props: QuestionViewProps) {
 				}
 			},
 		});
-	}, [answeredCount, complete, pendingEnabled, submitting]);
+	}, [answeredCount, complete, error, pendingEnabled, submitting]);
 	useEffect(() => () => reporting.current?.(undefined), []);
 
 	if (status === "discarded") {
@@ -923,6 +931,9 @@ export function QuestionView(props: QuestionViewProps) {
 	// Nothing chosen, nothing to save or move on with. Read-only hosts have no
 	// drafts to fill, so they keep free navigation.
 	let ready = answered(current, projection.draft);
+	// Accepting a suggestion stays a deliberate choice on its own card.
+	let suggestion = projection.suggestion;
+	let acceptSuggestion = () => onSubmit?.(suggestion);
 	let discard = onDiscard ?? onCancel;
 	let previousAnswer = previousFor(priorAnswers, current.id);
 	let step = (offset: number, from?: "primary") => {
@@ -1010,6 +1021,7 @@ export function QuestionView(props: QuestionViewProps) {
 								name={`${base}-${current.id}`}
 								onChange={change => {
 									markHumanEdit();
+									setTouched(true);
 									onChange?.(current.id, change);
 								}}
 								suggestedOptionId={projection.suggestion?.optionId}
@@ -1145,6 +1157,16 @@ export function QuestionView(props: QuestionViewProps) {
 										ref={primary}
 									>
 										{submitting ? "Saving…" : error ? "Try again" : "Save"}
+									</button>
+								)}
+								{deferSave && onSubmit && suggestion && (
+									<button
+										type="button"
+										onClick={acceptSuggestion}
+										disabled={disabled || submitting}
+										className="btn btn-sm btn-primary"
+									>
+										{submitting ? "Saving…" : "Accept suggestion"}
 									</button>
 								)}
 							</>
