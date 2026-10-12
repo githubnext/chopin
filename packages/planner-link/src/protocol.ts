@@ -106,16 +106,21 @@ export const streamPartSchema = z.discriminatedUnion("type", [
 	z.strictObject({ type: z.literal("error"), error: note }),
 ]);
 
+/** A plain identifier: no spaces, quotes, `:` or `=`, so it cannot hold an assignment. */
+const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
+
 /**
  * The structured error a failed `tool-result` may carry as its `result`, either
  * as this object or as its JSON text. `code` is a stable machine identifier,
- * `kind` an optional display name, and `message` human-readable text. Chopin
- * still accepts any JSON as a result; this is a recognised convention.
+ * `kind` an optional display name, and `message` human-readable text. `code`
+ * and `kind` are plain identifiers: an ASCII letter or digit, then up to 127
+ * letters, digits, `.`, `_` or `-`. Chopin still accepts any JSON as a result;
+ * this is a recognised convention.
  */
 export const toolErrorSchema = z.strictObject({
 	error: z.strictObject({
-		code: name,
-		kind: name.optional(),
+		code: identifier,
+		kind: identifier.optional(),
 		message: note.min(1),
 	}),
 });

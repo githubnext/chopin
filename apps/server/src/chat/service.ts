@@ -36,7 +36,7 @@ import { annotatedText, compose, focusContext, referenceCatalog, remember } from
 import { createNotices } from "./notices";
 import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
 import { translateJob } from "./job-translate";
-import { argsText, outputText } from "./activity";
+import { argsText, outputText, textOutput } from "./activity";
 import { toolErrorSchema } from "@chopin/planner-link";
 import { watchJobAbort } from "./job-fence";
 import { JOB_TOOLS } from "../agent/job-scope";
@@ -2398,7 +2398,9 @@ function conclude(
 		? success
 			? "Reference content was returned privately to the Planner."
 			: "The reference could not be read."
-		: outputText(failure ? failure.message : output);
+		: failure
+		? textOutput(failure.message)
+		: outputText(output);
 	publish(context, {
 		id,
 		name,
@@ -2407,8 +2409,8 @@ function conclude(
 		...(failure
 			? {
 				error: {
-					code: outputText(failure.code),
-					...(failure.kind === undefined ? {} : { kind: outputText(failure.kind) }),
+					code: failure.code,
+					...(failure.kind === undefined ? {} : { kind: failure.kind }),
 				},
 			}
 			: {}),
@@ -2417,7 +2419,11 @@ function conclude(
 	});
 }
 
-/** A failed tool's structured error, sent as the envelope or as its JSON text. */
+/**
+ * A failed tool's structured error, sent as the envelope or as its JSON text.
+ * Its code and kind are plain identifiers shown as written, so one that the
+ * redactor would change is not recognised and shows as the raw result.
+ */
 function toolError(output: unknown): ToolError["error"] | undefined {
 	if (typeof output === "string") {
 		try {
@@ -2426,7 +2432,10 @@ function toolError(output: unknown): ToolError["error"] | undefined {
 			return undefined;
 		}
 	}
-	return toolErrorSchema.safeParse(output).data?.error;
+	let error = toolErrorSchema.safeParse(output).data?.error;
+	if (!error) return undefined;
+	let shown = [error.code, error.kind ?? ""];
+	return shown.every(text => textOutput(text) === text) ? error : undefined;
 }
 
 /** Whether the session offers this tool; one it does not offer ends the turn. */

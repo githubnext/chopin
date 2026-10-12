@@ -159,6 +159,10 @@ describe("Planner link messages", () => {
 		expect(toolErrorSchema.parse(error)).toEqual(error);
 		let plain = { error: { code: "stale-revision", message: "The document moved on." } };
 		expect(toolErrorSchema.parse(plain)).toEqual(plain);
+		let dotted = {
+			error: { code: `E.clone_1-${"x".repeat(118)}`, kind: "Git.Timeout", message: "m" },
+		};
+		expect(toolErrorSchema.parse(dotted)).toEqual(dotted);
 	});
 
 	it("refuses a malformed tool error envelope but keeps any JSON as a tool result", () => {
@@ -173,6 +177,15 @@ describe("Planner link messages", () => {
 				{ error: { code: "c", kind: 3, message: "Numeric kind." } },
 				{ error: { code: "c", message: "Extra field.", stack: "at x" } },
 				{ error: { code: "c", message: "Extra sibling." }, details: {} },
+				{ error: { code: '{"token=abc":0}', message: "JSON code." } },
+				{ error: { code: "c", kind: '{"token=abc":0}', message: "JSON kind." } },
+				{ error: { code: "password: x", message: "Assignment code." } },
+				{ error: { code: "c", kind: "token=abc", message: "Assignment kind." } },
+				{ error: { code: "no credential", message: "Spaced code." } },
+				{ error: { code: "c", kind: "Bearer x", message: "Spaced kind." } },
+				{ error: { code: "-leading", message: "Leading punctuation." } },
+				{ error: { code: "__proto__", message: "Leading underscore." } },
+				{ error: { code: "line\u2028break", message: "Line separator." } },
 			]
 		) {
 			expect(toolErrorSchema.safeParse(malformed).success).toBe(false);

@@ -11,6 +11,7 @@ import {
 	sessionBootstrap,
 	translate,
 } from "./service";
+import { outputText } from "./activity";
 
 import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
 
@@ -36,6 +37,11 @@ function part(value: Record<string, unknown>): TextStreamPart<ToolSet> {
 
 function call(toolName: string, toolCallId = "t1", input: unknown = {}) {
 	return part({ type: "tool-call", toolCallId, toolName, input });
+}
+
+/** A structured tool error envelope as JSON text. */
+function envelope(code: string, message: string, kind?: string) {
+	return JSON.stringify({ error: { code, ...(kind === undefined ? {} : { kind }), message } });
 }
 
 describe("AI SDK stream projection", () => {
@@ -458,28 +464,164 @@ describe("AI SDK stream projection", () => {
 		},
 	);
 
-	it("scrubs every string of a structured error before publication and retention", () => {
+	it("shows a structured error whose code or kind is not a plain identifier as its raw result", () => {
+		let chat = create();
+		let { context } = room(chat);
+		let token = `ghp_${"A".repeat(30)}`;
+		let envelopes = [
+			{ error: { code: "password: synthetic-code-314", message: "Denied." } },
+			{ error: { code: "denied", kind: `Bearer ${"k".repeat(20)}`, message: "Denied." } },
+			{ error: { code: token, message: "Denied." } },
+			{ error: { code: "denied", kind: token, message: "Denied." } },
+		];
+		for (let [index, failure] of envelopes.entries()) {
+			translate(context, call("read_plan", `t${index}`));
+			finished(context, `t${index}`, failure, false);
+		}
+		let tools = chat.entries[0]!.tools!;
+		expect(tools.map(tool => tool.result)).toEqual([
+			'{"error":{"code":"password: [redacted]","message":"Denied."}}',
+			'{"error":{"code":"denied","kind":"Bearer [redacted]","message":"Denied."}}',
+			'{"error":{"code":"[redacted]","message":"Denied."}}',
+			'{"error":{"code":"denied","kind":"[redacted]","message":"Denied."}}',
+		]);
+		expect(tools.every(tool => tool.status === "failed" && tool.error === undefined)).toBe(true);
+	});
+
+	it("scrubs a structured error's message as plain text before publication and retention", () => {
 		let chat = create();
 		let { context, sent } = room(chat);
 		translate(context, call("read_plan"));
 		let token = `ghp_${"A".repeat(30)}`;
 		finished(context, "t1", {
 			error: {
-				code: "password: synthetic-code-314",
-				kind: `Bearer ${"k".repeat(20)}`,
+				code: "denied",
+				kind: "Denied",
 				message: `Failed with Bearer ${"m".repeat(20)}; password: synthetic-message-314 ${token}`,
 			},
 		}, false);
 		let expected = {
 			status: "failed",
-			error: { code: "password: [redacted]", kind: "Bearer [redacted]" },
+			error: { code: "denied", kind: "Denied" },
 			result: "Failed with Bearer [redacted]; password: [redacted]",
 		};
 		expect(sent.findLast(frame => frame.kind === "chat:tool")?.activity).toMatchObject(expected);
 		expect(chat.entries[0]?.tools?.[0]).toMatchObject(expected);
-		for (let secret of ["synthetic-code-314", "k".repeat(20), "m".repeat(20), token]) {
+		for (let secret of ["synthetic-message-314", "m".repeat(20), token]) {
 			expect(JSON.stringify(sent)).not.toContain(secret);
 			expect(JSON.stringify(chat.entries)).not.toContain(secret);
+		}
+	});
+
+	it("does not reveal a credential in a property name of JSON text in a code or message", () => {
+		let chat = create();
+		let { context, sent } = room(chat);
+		translate(context, call("read_plan", "code"));
+		finished(context, "code", '{"error":{"code":"{\\"token=abc\\":0}","message":"Denied"}}', false);
+		translate(context, call("read_plan", "message"));
+		finished(
+			context,
+			"message",
+			'{"error":{"code":"denied","message":"{\\"token=abc\\":0}"}}',
+			false,
+		);
+		let [code, message] = chat.entries[0]!.tools!;
+		expect(code).toMatchObject({
+			status: "failed",
+			result: '{"error":{"code":"{\\"token=[redacted]}","message":"Denied"}}',
+		});
+		expect(code?.error).toBeUndefined();
+		expect(message).toMatchObject({
+			status: "failed",
+			error: { code: "denied" },
+			result: '{"token=[redacted]}',
+		});
+		let broadcast = sent.filter(frame => frame.kind === "chat:tool").map(frame => frame.activity);
+		expect(JSON.stringify(broadcast)).not.toContain("abc");
+		expect(JSON.stringify(chat.entries)).not.toContain("abc");
+	});
+
+	it("hides every secret in a structured error that its raw result display hides", () => {
+		let token = `ghp_${"S".repeat(30)}`;
+		let corpus: Array<[string, string, string[]]> = [
+			["JSON in code", envelope('{"token=syn-c1":0}', "Denied"), ["syn-c1"]],
+			["JSON in kind", envelope("denied", "Denied", '{"password=syn-k1":0}'), ["syn-k1"]],
+			["assignment key in JSON message", envelope("denied", '{"token=syn-m1":0}'), ["syn-m1"]],
+			["secret key in JSON message", envelope("denied", '{"api_key":"syn-m2","n":1}'), ["syn-m2"]],
+			["spaced JSON message", envelope("denied", '{ "secret" : "syn-m3" }'), ["syn-m3"]],
+			["password in message", envelope("denied", "password: syn-p1"), ["syn-p1"]],
+			["password in code", envelope("password: syn-p2", "Denied"), ["syn-p2"]],
+			[
+				"authorization in message",
+				envelope("denied", "Authorization: Bearer syn-bearer-0123456789"),
+				["syn-bearer-0123456789"],
+			],
+			["bearer in kind", envelope("denied", "Denied", "Bearer syn-bearer-9876543210"), [
+				"syn-bearer-9876543210",
+			]],
+			["token assignment in message", envelope("denied", "token=syn-t1"), ["syn-t1"]],
+			["token assignment in code", envelope("token=syn-t2", "Denied"), ["syn-t2"]],
+			["token assignment in kind", envelope("denied", "Denied", "token=syn-t3"), ["syn-t3"]],
+			["GitHub token in message", envelope("denied", `cloned with ${token}`), [token]],
+			["GitHub token as code", envelope(token, "Denied"), [token]],
+			["GitHub token as kind", envelope("denied", "Denied", token), [token]],
+			["prefixed GitHub token in code", envelope(`E.${token}`, "Denied"), [token]],
+			["line separator in message", envelope("denied", "ok\u2028password: syn-ls1"), ["syn-ls1"]],
+			["paragraph separator in message", envelope("denied", "ok\u2029token=syn-ps1"), ["syn-ps1"]],
+			["line separator in code", envelope("c\u2028token=syn-ls2", "Denied"), ["syn-ls2"]],
+			[
+				"duplicate message, secret last",
+				'{"error":{"code":"denied","message":"ok","message":"token=syn-dup1"}}',
+				["syn-dup1"],
+			],
+			[
+				"duplicate code, secret last",
+				'{"error":{"code":"denied","code":"{\\"token=syn-dup2\\":0}","message":"Denied"}}',
+				["syn-dup2"],
+			],
+			[
+				"duplicate error, secret last",
+				'{"error":{"code":"denied","message":"ok"},"error":{"code":"denied","message":"password: syn-dup3"}}',
+				["syn-dup3"],
+			],
+			[
+				"__proto__ in error",
+				'{"error":{"code":"denied","message":"Denied","__proto__":{"token":"syn-proto1"}}}',
+				["syn-proto1"],
+			],
+			[
+				"__proto__ beside error",
+				'{"__proto__":{"password":"syn-proto2"},"error":{"code":"denied","message":"Denied"}}',
+				["syn-proto2"],
+			],
+			["__proto__ as code", envelope("__proto__", "token=syn-proto3"), ["syn-proto3"]],
+			["near-limit message", envelope("denied", `${"x".repeat(3_980)}password: syn-near1`), [
+				"syn-near1",
+			]],
+			["near-limit token", envelope("denied", `${"x".repeat(3_960)} ${token}`), [token]],
+			["over-limit message", envelope("denied", `${"x".repeat(3_990)} token=syn-near2`), [
+				"syn-near2",
+			]],
+		];
+		for (let [name, text, secrets] of corpus) {
+			for (let output of [text, JSON.parse(text) as unknown]) {
+				let old = outputText(output);
+				let hidden = secrets.filter(secret => !old.includes(secret));
+				expect({ name, hidden }).toEqual({ name, hidden: secrets });
+				let chat = create();
+				let { context, sent } = room(chat);
+				translate(context, call("read_plan"));
+				finished(context, "t1", output, false);
+				let broadcast = sent.findLast(frame => frame.kind === "chat:tool")
+					?.activity as Wire.Activity;
+				let stored = chat.entries[0]!.tools![0]!;
+				for (let activity of [broadcast, stored]) {
+					let shown = [activity.error?.code, activity.error?.kind, activity.result].join("\n");
+					for (let secret of hidden) {
+						expect({ name, leaked: shown.includes(secret) }).toEqual({ name, leaked: false });
+					}
+				}
+			}
 		}
 	});
 

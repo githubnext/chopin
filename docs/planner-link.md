@@ -330,10 +330,13 @@ JSON text:
 ```
 
 - `code` is a stable machine identifier, such as
-  `no-repository-credential`, of 1 to 128 characters.
-- `kind` is an optional display name, such as `NoRepositoryCredential`, of 1
-  to 128 characters.
+  `no-repository-credential`.
+- `kind` is an optional display name, such as `NoRepositoryCredential`.
 - `message` is human-readable text of 1 to 4000 characters.
+
+`code` and `kind` are plain identifiers of 1 to 128 characters: an ASCII
+letter or digit, then ASCII letters, digits, `.`, `_` or `-`. They cannot hold
+spaces, quotes, `:` or `=`.
 
 The envelope has exactly these fields. `@chopin/planner-link` exports it as
 `toolErrorSchema` and `ToolError`. It is a convention, not a new wire shape:
@@ -344,9 +347,11 @@ shown as it is.
 
 Work details then shows the call as **Failed** with `kind`, or `code` when
 there is no `kind`, and `message` as plain text instead of the JSON. Chopin
-masks credential assignments and token shapes in `code`, `kind` and `message`,
-as in any tool result, before it stores or shows them. That masking is not
-exhaustive; keep credentials out of the envelope.
+masks credential assignments and token shapes before it stores or shows them.
+It masks `message` as plain text, even when it holds JSON. It shows `code` and
+`kind` as written, and does not recognise an envelope whose `code` or `kind`
+looks like a token; that envelope is shown as an ordinary result. The masking
+is not exhaustive; keep credentials out of the envelope.
 
 This masking applies only to what Chat stores and shows. It does not change
 what crosses the link: `host-tool-result.output` reaches the client exactly as

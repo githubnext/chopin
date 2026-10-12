@@ -51,6 +51,11 @@ export function argsText(input: unknown): string {
 	return clip(JSON.stringify(mask(input), null, 2) ?? "");
 }
 
+/** Text shown as written, never parsed: assignments and token shapes masked, length bounded. */
+export function textOutput(text: string): string {
+	return clip(scrub(text));
+}
+
 export function outputText(output: unknown): string {
 	if (typeof output === "string") {
 		try {
