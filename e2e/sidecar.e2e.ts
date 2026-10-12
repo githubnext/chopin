@@ -1325,6 +1325,19 @@ test("a removed subject block moves its comment to document orphan chrome", asyn
 	await expect(page.getByRole("dialog", { name: "Orphaned comments" })).toContainText(QUOTED);
 });
 
+test("an open comment card hides the formatting toolbar of a lingering selection", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana");
+	await page.setViewportSize({ width: 1_280, height: 800 });
+	await content(page).locator("p").nth(1).selectText();
+	let toolbar = page.getByRole("toolbar", { name: "Text formatting" });
+	await expect(toolbar).toBeVisible();
+
+	let card = await thread(page);
+	await expect(card).toBeVisible();
+	await expect(toolbar).toBeHidden();
+});
+
 test("the orphaned comments popover shows its whole card beneath the pill", async ({ join, seed }) => {
 	await seed(TWO_BLOCKS);
 	let page = await join("ana");
@@ -1334,9 +1347,16 @@ test("the orphaned comments popover shows its whole card beneath the pill", asyn
 	await page.keyboard.press("Backspace");
 	await page.keyboard.press("Backspace");
 
+	// A selection's formatting toolbar would sit over the card it opens.
+	await content(page).locator("p").first().selectText();
+	let toolbar = page.getByRole("toolbar", { name: "Text formatting" });
+	await expect(toolbar).toBeVisible();
+
 	let opener = page.getByRole("button", { name: "1 orphaned comments" });
 	await opener.click();
 	let popover = page.getByRole("dialog", { name: "Orphaned comments" });
+	await expect(popover).toBeVisible();
+	await expect(toolbar).toBeHidden();
 	// The card sizes against the document, not the pill that holds it.
 	let reply = popover.getByRole("textbox", { name: "Reply", exact: true });
 	await expect(reply).toBeInViewport({ ratio: 1 });

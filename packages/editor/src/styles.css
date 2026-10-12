@@ -1489,10 +1489,11 @@
 }
 
 .plan-comment-orphan-card {
-	top: 2.5rem;
+	--orphan-card-offset: 2.5rem;
+	top: var(--orphan-card-offset);
 	right: 0;
 	width: min(20rem, calc(100cqi - 1rem));
-	max-height: calc(100% - 2.5rem);
+	max-height: calc(100% - var(--orphan-card-offset));
 }
 
 /* The scrim every phone sheet shares, lighter while this sheet rests at its medium detent. */
@@ -5439,6 +5440,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 .plan-formatting-toolbar {
 	animation: plan-bubble-enter var(--duration-fast) var(--ease-out);
+}
+
+/* An open comment card owns the reader's attention; a lingering selection's toolbar would cover it. */
+:root:has(.plan-comment-card.motion-comment-surface:not(.is-closing)) .plan-formatting-toolbar {
+	display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
