@@ -1075,7 +1075,7 @@ export type TaskDraftResult =
 		state: "queued" | "running" | "ended";
 		existing: boolean;
 	}
-	| { ok: false; reason: string };
+	| { ok: false; reason: string; code?: "planner-not-attached" };
 
 /**
  * Ask the Planner for implementation tasks without a member message.
@@ -1116,6 +1116,9 @@ async function postDraft(
 	let { chat, config, room, server } = context;
 	if (!config.agent) return { ok: false, reason: "the Planner is not running" };
 	if (chat.closed) return { ok: false, reason: "chat is closed" };
+	// Under HARNESS=remote a draft queued with no Planner attached would never run.
+	let unattached = await context.plannerNotAttached?.();
+	if (unattached) return { ok: false, reason: unattached, code: "planner-not-attached" };
 	let existing = liveDraft(chat);
 	if (existing) return { ok: true, draft: existing, state: existing.state, existing: true };
 	// The draft waits in the queue even when the Planner is idle, so it counts against it.

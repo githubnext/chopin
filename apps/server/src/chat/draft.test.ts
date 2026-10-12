@@ -208,6 +208,31 @@ test("a task draft is refused without a Planner or when the notice cannot be sav
 	expect(prompts).toEqual([]);
 });
 
+test("a task draft is refused while no remote Planner is attached, and runs once one is", async () => {
+	let { context, events, prompts, releases, saves, turnOpened } = await setup();
+	context.plannerNotAttached = async () => "No Planner is attached.";
+	expect(await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.")).toEqual({
+		ok: false,
+		reason: "No Planner is attached.",
+		code: "planner-not-attached",
+	});
+	expect(context.chat.draft).toBeUndefined();
+	expect(context.chat.waiting).toEqual([]);
+	expect(drafting(events)).toEqual([]);
+	expect(saves()).toBe(0);
+	expect(prompts).toEqual([]);
+
+	// Attached: this harness stands in for the attached Planner owning the turn.
+	context.plannerNotAttached = undefined;
+	let started = turnOpened();
+	expect(await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.")).toMatchObject({
+		ok: true,
+	});
+	await started;
+	expect(prompts).toHaveLength(1);
+	releases.forEach(release => release());
+});
+
 test("a task draft takes the same limits as a Chat message, even with the Planner idle", async () => {
 	let { context, prompts } = await setup();
 	context.chat.pendingSends = 20;
