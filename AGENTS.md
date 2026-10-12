@@ -271,6 +271,14 @@ plan can approve and dispatch a graph through the owner-paired ACP connector;
 its run-scoped bridge exposes the document and lifecycle reporting tools. The
 Planner cannot approve, lock, or start a graph. See docs/local-launcher.md.
 
+A person's press is the approval. **Build plan** approves and starts the
+drafted graph. Once a build has delivered, with or without `LIVE_BUILD`, a
+rebuild appends its tasks as an approved, completed graph version from the
+coding agent's report, with no separate review: without `LIVE_BUILD` that
+approval is the person pressing **Build** (or **Retry**) on the changes, which
+the server refuses while decisions or accepted comments are open; under
+`LIVE_BUILD` it is the Build plan press that made the document live.
+
 An approved graph binds one plan revision, graph version, and graph revision.
 `start_implementation` atomically claims those values and locks the graph. Task,
 pull-request, blocker, revision, and verification transitions persist before

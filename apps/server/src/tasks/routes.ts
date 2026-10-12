@@ -290,6 +290,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			);
 			if (result.kind === "busy") throw new GitHubError("implementation is already active", 409);
 			if (result.kind === "unchanged") throw new GitHubError("nothing to build", 409);
+			if (result.kind === "blocked") throw new GitHubError(result.blockers.join(", "), 409);
 			if (result.kind === "unavailable") throw new GitHubError("no-workspace", 409);
 			options.connections.wake(channel.repositoryId);
 			return json(result.build);

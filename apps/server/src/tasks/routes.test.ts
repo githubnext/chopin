@@ -1161,6 +1161,41 @@ test("without LIVE_BUILD a delivered build counts later edits and a person build
 		expect(context.plan.builds.at(-1)).toMatchObject({ kind: "rebuild", state: "queued" });
 		expect(context.plan.live?.target).toBeDefined();
 		expect((await context.call(rebuild, {})).status).toBe(409);
+
+		// The rest of the rebuild path runs without LIVE_BUILD too.
+		let id = context.plan.builds.at(-1)!.id;
+		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
+			id,
+			kind: "implementation",
+		});
+		let claimed = await tool(context, connection.token, "claim_implementation_build", { id });
+		expect(claimed.build.kind).toBe("rebuild");
+		await tool(context, connection.token, "report_implementation_build", {
+			id,
+			state: "running",
+			session: "rebuild-session",
+		});
+		let delta = await tool(context, claimed.runToken, "read_rebuild");
+		expect(delta.after).toContain("A paragraph added after the build.");
+		expect(delta.before).not.toContain("A paragraph added after the build.");
+		expect(
+			await tool(context, claimed.runToken, "report_rebuild", {
+				summary: "Added the paragraph.",
+				commits: [{ pullRequest, sha: "e".repeat(40), message: "Add the paragraph" }],
+				tasks: [],
+			}),
+		).toEqual({ state: "stopped" });
+		snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.live).toMatchObject({ outOfSync: false, changes: 0 });
+		expect(snapshot.live.commits).toHaveLength(1);
+
+		// Like Build plan, a pressed Build waits for open decisions and accepted comments.
+		expect((await edit(context.plan, "Another paragraph.")).ok).toBe(true);
+		context.plan.records.set("open-decision", { status: "open" } as never);
+		let blocked = await context.call(rebuild, {});
+		expect(blocked.status).toBe(409);
+		expect((await blocked.json()).error).toBe("unanswered questionnaires");
+		context.plan.records.delete("open-decision");
 	} finally {
 		await Plan.close(context.plan);
 	}

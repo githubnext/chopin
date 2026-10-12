@@ -6,7 +6,7 @@ import {
 	implementationGraphs,
 	reportImplementationLifecycle,
 } from "./plan-graphs";
-import { liveSnapshot, readRebuild, reportBuild, reportRebuild } from "./builds";
+import { liveSnapshot, readRebuild, reportBuild, reportRebuild, restoreLive } from "./builds";
 import { historyFor } from "./lifecycle";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { claimStored, close, implementationActive, open, source } from "../plan/service";
@@ -1056,6 +1056,51 @@ describe("living-document builds", () => {
 			blocker: "Pick Postgres or SQLite.",
 		}]);
 		await close(plan);
+	});
+
+	it("records a manual build's source once verified, and restores it only for a delivered run", async () => {
+		let { context, plan } = await builtPlan(false);
+		expect(plan.live).toBeUndefined();
+		expect(
+			await reportImplementationLifecycle(plan, {
+				kind: "report_verification",
+				runId: buildId,
+				passed: true,
+				summary: "Reviewed.",
+				reviewerMethod: "Ran the suite.",
+				evidence: [{ taskId: "model", evidence: ["Suite passed."] }],
+				tasksNeedingWork: [],
+				idempotencyKey: "verified",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		expect(plan.live).toMatchObject({ buildId, baseSource: source(plan) });
+		expect(plan.lifecycle.history.at(-1)?.live).toBeUndefined();
+		let record = structuredClone(plan.live);
+		await close(plan);
+		let reopened = await open(context.channel.id, context.backend, context.server);
+		expect(reopened.live).toEqual(record!);
+		await close(reopened);
+
+		// A manual run returned for changes never restores as built.
+		let returned = await builtPlan(false, "block");
+		expect(
+			await reportImplementationLifecycle(returned.plan, {
+				kind: "request_revision",
+				runId: buildId,
+				reason: "Pick storage first.",
+				idempotencyKey: "returned",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		expect(() =>
+			restoreLive(
+				record,
+				returned.plan.builds,
+				returned.plan.lifecycle,
+				returned.plan.graph,
+				returned.plan.revision,
+			)
+		).toThrow("invalid live build");
+		await close(returned.plan);
 	});
 
 	it("keeps the verified lifecycle when live builds are off", async () => {

@@ -289,6 +289,9 @@ export function BuildView(
 						</div>
 					</form>
 				)}
+				{build.rebuildError && (look.kind === "stale" || look.kind === "failed") && (
+					<p className="m-0 mt-2 text-sm text-destructive-ink">{build.rebuildError}</p>
+				)}
 				{actionError && (
 					<p className="m-0 mt-2 text-sm text-destructive-ink" role="alert">{actionError}</p>
 				)}

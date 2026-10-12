@@ -623,6 +623,30 @@ describe("build status", () => {
 		});
 	});
 
+	it("holds Build with its reason while decisions or comments are open, like Build plan", () => {
+		let blocked = live({ outOfSync: true, changes: 2 });
+		blocked.blockers = ["unanswered questionnaires"];
+		expect(look(blocked, { unanswered: 1 })).toMatchObject({
+			kind: "stale",
+			build: true,
+			blocked: "Answer 1 open decision first",
+		});
+		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
+		failed.blockers = ["accepted comments awaiting plan changes"];
+		expect(look(failed)).toMatchObject({
+			retry: true,
+			blocked: "Update the document for accepted comments first",
+		});
+	});
+
+	it("says building runs on your agent only to someone who can build", () => {
+		let theirs = { ...live({ outOfSync: true }), builtBy: "maggie" };
+		expect(look(theirs, { userId: "other", canEdit: false })).toMatchObject({
+			tip: "Edits since @maggie built it",
+			build: false,
+		});
+	});
+
 	it("reads a rebuild as building changes, and a failed one as failed", () => {
 		let running = look(live({ outOfSync: true, rebuild: rebuild("running") }));
 		expect(buildLabel(running)).toBe("Building changes…");

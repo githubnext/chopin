@@ -541,7 +541,7 @@ function restoredState(
 	}
 	let lifecycle = hasLifecycle ? restoredLifecycle : undefined;
 	let live = Object.hasOwn(item, "live")
-		? restoreLive(item.live, builds, lifecycle?.history ?? [], item.revision)
+		? restoreLive(item.live, builds, lifecycle, graph, item.revision)
 		: undefined;
 	let questions = objects(item.questions, "question record");
 	let records = questions.map(question => Questions.normalizeRecord(question));

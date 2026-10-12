@@ -413,9 +413,10 @@ export type BuildLook =
 	| { kind: "building"; done: number; total: number; tip?: string }
 	| { kind: "stopped"; tip: string; retry: boolean }
 	| { kind: "built"; pullRequests: number; tip: string }
-	| { kind: "stale"; changes: number; live: boolean; tip: string; build: boolean }
+	/** `blocked` is why Build is inert, like Build plan's reason. */
+	| { kind: "stale"; changes: number; live: boolean; tip: string; build: boolean; blocked?: string }
 	| { kind: "rebuilding"; tip: string }
-	| { kind: "failed"; tip: string; retry: boolean };
+	| { kind: "failed"; tip: string; retry: boolean; blocked?: string };
 
 export type BuildContext = {
 	state: FirstBuild;
@@ -439,6 +440,18 @@ function progressCount(snapshot: Snapshot): { done: number; total: number } {
 	let tasks = buildProgress(snapshot)?.tasks ?? [];
 	let total = Math.max(tasks.length, snapshot.graph?.definition.tasks.length ?? 0, 1);
 	return { done: tasks.filter(task => task.state === "completed").length, total };
+}
+
+/** The open decisions or accepted comments that hold any build, or nothing. */
+function blockerReason(snapshot: Snapshot, unanswered: number): string | undefined {
+	if (snapshot.blockers.includes("unanswered questionnaires")) {
+		return unanswered > 0
+			? `Answer ${plural(unanswered, "open decision", "open decisions")} first`
+			: "Answer the open decisions first";
+	}
+	if (snapshot.blockers.includes("accepted comments awaiting plan changes")) {
+		return "Update the document for accepted comments first";
+	}
 }
 
 /** Why Build plan cannot be pressed yet, or nothing when it can. */
@@ -499,9 +512,11 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 			};
 		}
 		let act = context.canEdit && context.connected;
+		let blocked = act ? blockerReason(snapshot, context.unanswered) : undefined;
 		if (sync.reason === "failed") {
-			return { kind: "failed", tip: "The last build didn’t finish", retry: act };
+			return { kind: "failed", tip: "The last build didn’t finish", retry: act, blocked };
 		}
+		let build = !context.live && act;
 		let changes = Math.max(snapshot.live!.changes ?? 1, 1);
 		let tip = context.live
 			? sync.reason === "waiting"
@@ -514,11 +529,11 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 				? `Builds on ${who}’s agent when editing settles`
 				: "Builds when editing settles"
 			: who
-			? `Edits since ${who} built it`
+			? `Edits since ${who} built it${build ? ". Building them runs on your agent." : ""}`
 			: who === ""
 			? "Edits since someone else’s build"
 			: "Edits since the last build";
-		return { kind: "stale", changes, live: context.live, tip, build: !context.live && act };
+		return { kind: "stale", changes, live: context.live, tip, build, blocked };
 	}
 	if (!snapshot) {
 		return step.view === "idle" ? { kind: "plan", blocked: "Chopin isn’t connected" } : {
