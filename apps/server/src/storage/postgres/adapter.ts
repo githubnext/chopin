@@ -1775,15 +1775,24 @@ export class PostgresStorage implements StorageAdapter {
 			});
 			try {
 				let [saved] = await Promise.race([
-					sql<LeaseRow[]>`
-						UPDATE storage_leases
-						SET expires_at = clock_timestamp() + (${ttlMs} * interval '1 millisecond')
-						WHERE name = ${held.name}
-							AND owner = ${held.owner}
-							AND fencing = ${held.fencing}
-							AND expires_at > clock_timestamp()
-						RETURNING ${sql.unsafe(LEASE_COLUMNS)}
-					`,
+					sql.begin(async transaction => {
+						// Lock first and check expiry afterwards. A single UPDATE that waited for the
+						// row would keep its pre-wait expiry check unless the blocker changed the row,
+						// so a takeover that only locked it could let an expired lease be extended.
+						// FOR NO KEY UPDATE still does not wait for fenced writes' FOR KEY SHARE.
+						await transaction`
+							SELECT name FROM storage_leases WHERE name = ${held.name} FOR NO KEY UPDATE
+						`;
+						return transaction<LeaseRow[]>`
+							UPDATE storage_leases
+							SET expires_at = clock_timestamp() + (${ttlMs} * interval '1 millisecond')
+							WHERE name = ${held.name}
+								AND owner = ${held.owner}
+								AND fencing = ${held.fencing}
+								AND expires_at > clock_timestamp()
+							RETURNING ${transaction.unsafe(LEASE_COLUMNS)}
+						`;
+					}),
 					deadline,
 				]);
 				return saved ? lease(saved) : undefined;

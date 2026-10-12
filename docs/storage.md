@@ -288,7 +288,11 @@ Adapter fencing prevents an expired holder from committing even before shutdown
 completes. Each fenced write holds the lease row `FOR KEY SHARE` and a
 per-lease advisory lock, so writes for one lease still run one at a time. A
 takeover takes the row `FOR UPDATE` and waits for any write in flight, while
-renewal only extends `expires_at` and never waits for a write.
+renewal only extends `expires_at` and never waits for a write. Renewal locks the
+row `FOR NO KEY UPDATE` before it checks the expiry, so a renewal that waited
+behind a takeover cannot extend a lease that expired meanwhile. Once the holder
+starts shutting down, a renewal still in flight neither re-arms the safety
+deadline nor schedules a retry.
 
 This lease is why the current deployment model cannot perform a rolling
 application replacement against one database. See

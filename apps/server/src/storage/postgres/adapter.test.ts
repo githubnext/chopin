@@ -455,6 +455,50 @@ if (url) {
 		}
 	}, 20_000);
 
+	it("does not renew a writer lease that expired while renewal waited for its row", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let release = Promise.withResolvers<void>();
+		let blocker: Promise<void> | undefined;
+		try {
+			await storage.migrate();
+			let name = contractId("expiring-renewal");
+			let held = await storage.leases.acquire(name, "old-writer", 1_000);
+			let locked = Promise.withResolvers<void>();
+			// A takeover that finds the lease still live locks the row but leaves it unchanged.
+			blocker = sql.begin(async transaction => {
+				await transaction`SELECT name FROM storage_leases WHERE name = ${name} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+			let renewal = storage.leases.renew(held!, 60_000);
+			await lockWaiters(sql, 1);
+			let deadline = Date.now() + 3_000;
+			while (Date.now() < deadline) {
+				let [expired] = await sql<{ name: string }[]>`
+					SELECT name FROM storage_leases
+					WHERE name = ${name} AND expires_at <= clock_timestamp()
+				`;
+				if (expired) break;
+				await Bun.sleep(20);
+			}
+			release.resolve();
+			await blocker;
+
+			expect(await renewal).toBeUndefined();
+			expect(await storage.leases.acquire(name, "new-writer", 60_000)).toMatchObject({
+				owner: "new-writer",
+				fencing: held!.fencing + 1,
+			});
+		} finally {
+			release.resolve();
+			await blocker;
+			await storage.close();
+			await sql.close();
+		}
+	});
+
 	it("makes a takeover wait for a fenced commit already in flight", async () => {
 		let storage = new PostgresStorage(url);
 		let sql = new SQL(url);

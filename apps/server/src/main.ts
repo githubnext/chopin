@@ -82,6 +82,7 @@ import {
 } from "./socket/decision-watch";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
+import { WriterLease } from "./storage/writer-lease";
 import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
 
 import { LINK_CLOSE, PLANNER_LINK_PATH } from "@chopin/planner-link";
@@ -91,7 +92,7 @@ import type { PlannerLinkSocketData } from "./harness/remote/endpoint";
 import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
-import type { ChannelRecord, Lease } from "./storage/model";
+import type { ChannelRecord } from "./storage/model";
 import type {
 	AuthorizationResult,
 	SidebarSocket,
@@ -124,17 +125,15 @@ const ACCESS_RECHECK_MS = 60_000;
 const RESEARCH_RECOVERY_RETRY_MS = 10_000;
 
 let server: Server<SocketData>;
-let heldLease: Lease | undefined;
+const writerLease = new WriterLease(storage.leases, {
+	ttlMs: LEASE_TTL_MS,
+	renewMs: LEASE_RENEW_MS,
+	safetyMs: LEASE_SAFETY_MS,
+	retryMs: LEASE_RETRY_MS,
+}, () => signal());
 let experiments: ExperimentRuntime | undefined;
 let implementations: ReturnType<typeof registerImplementationRoutes> | undefined;
 let experimentTimer: ReturnType<typeof setInterval> | undefined;
-let leaseRenewal: ReturnType<typeof setInterval> | undefined;
-let leaseWatchdog: ReturnType<typeof setTimeout> | undefined;
-let leaseRetry: ReturnType<typeof setTimeout> | undefined;
-let renewingLease: Promise<void> | undefined;
-let leaseRenewedAt = 0;
-let leaseRenewalStartedAt: number | undefined;
-let leaseRenewalError: unknown;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
@@ -218,8 +217,8 @@ function documentBackend(): Service.Backend {
 	return {
 		storage,
 		lease: () => {
-			if (!heldLease) throw new Error("storage writer lease is unavailable");
-			return heldLease;
+			if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+			return writerLease.held;
 		},
 		fatal: err => {
 			console.error("chopin: plan persistence failed -", err);
@@ -1365,14 +1364,8 @@ function drain(): Promise<void> {
 			if (result.status === "rejected") record(result.reason);
 		}
 		await attempt(() => shutdownHarnesses());
-		if (leaseRenewal) clearInterval(leaseRenewal);
-		leaseRenewal = undefined;
-		if (leaseRetry) clearTimeout(leaseRetry);
-		if (leaseWatchdog) clearTimeout(leaseWatchdog);
-		for (let result of await Promise.allSettled([renewingLease])) {
-			if (result.status === "rejected") record(result.reason);
-		}
-		let lease = heldLease;
+		await attempt(() => writerLease.stop());
+		let lease = writerLease.held;
 		if (lease) await attempt(() => storage.leases.release(lease));
 		await attempt(() => storage.close());
 		if (errors.length > 0) throw new AggregateError(errors, "Chopin shutdown failed.");
@@ -1387,61 +1380,6 @@ function signal(): void {
 			process.exit(1);
 		},
 	);
-}
-
-function renewLease(): void {
-	if (!heldLease || renewingLease) return;
-	if (leaseRetry) clearTimeout(leaseRetry);
-	let started = Date.now();
-	leaseRenewalStartedAt = started;
-	renewingLease = storage.leases.renew(heldLease, LEASE_TTL_MS).then(renewed => {
-		if (renewed) {
-			heldLease = renewed;
-			leaseRenewalError = undefined;
-			armLeaseWatchdog(started);
-		} else {
-			console.error("chopin: lost the storage writer lease");
-			heldLease = undefined;
-			signal();
-		}
-	}, err => {
-		// A failed attempt is retried until the watchdog's deadline. Storage still refuses
-		// every fenced write once the lease itself has expired or been taken over.
-		leaseRenewalError = err;
-		let retrying = heldLease !== undefined && leaseRenewal !== undefined;
-		console.warn(
-			`chopin: could not renew the storage writer lease after ${Date.now() - started} ms${
-				retrying ? "; retrying" : ""
-			} -`,
-			err,
-		);
-		if (retrying) leaseRetry = setTimeout(renewLease, LEASE_RETRY_MS);
-	}).finally(() => {
-		renewingLease = undefined;
-		leaseRenewalStartedAt = undefined;
-	});
-}
-
-/** Arms the deadline from when the renewing statement was sent, the earliest its expiry can start. */
-function armLeaseWatchdog(renewedAt: number): void {
-	if (leaseWatchdog) clearTimeout(leaseWatchdog);
-	leaseRenewedAt = renewedAt;
-	let deadline = renewedAt + LEASE_TTL_MS - LEASE_SAFETY_MS;
-	leaseWatchdog = setTimeout(() => {
-		let now = Date.now();
-		let inFlight = leaseRenewalStartedAt === undefined
-			? "none"
-			: `started ${now - leaseRenewalStartedAt} ms ago`;
-		console.error(
-			"chopin: storage writer lease was not renewed before its safety deadline"
-				+ ` (last renewal sent at ${new Date(leaseRenewedAt).toISOString()},`
-				+ ` ${now - leaseRenewedAt} ms ago; watchdog ran ${now - deadline} ms late;`
-				+ ` renewal in flight: ${inFlight}) - last renewal error:`,
-			leaseRenewalError ?? "none",
-		);
-		heldLease = undefined;
-		signal();
-	}, Math.max(0, deadline - Date.now()));
 }
 
 function cleanSessions(): void {
@@ -1794,8 +1732,8 @@ let hostedAuth = registerAuthRoutes(router, {
 experiments = registerExperimentRoutes(router, hostedAuth, {
 	implementations: () => implementations,
 	lease() {
-		if (!heldLease) throw new Error("storage writer lease is unavailable");
-		return heldLease;
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
 	},
 	context: currentDocumentTarget,
 	place: (id, experiment, view, decision, remove) =>
@@ -1856,8 +1794,8 @@ let jobService = new JobService({
 	storage,
 	registry: jobRegistry,
 	lease() {
-		if (!heldLease) throw new Error("storage writer lease is unavailable");
-		return heldLease;
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
 	},
 	onChange: job => {
 		jobRunner?.notify(job);
@@ -1877,8 +1815,8 @@ if (config.backgroundJobs) {
 	descriptionProjector = new DocumentDescriptionProjector({
 		storage,
 		lease() {
-			if (!heldLease) throw new Error("storage writer lease is unavailable");
-			return heldLease;
+			if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+			return writerLease.held;
 		},
 		publish: announceChannel,
 	});
@@ -1887,8 +1825,8 @@ researchService = new ResearchWorkspaceService({
 	storage,
 	jobs: jobService,
 	lease() {
-		if (!heldLease) throw new Error("storage writer lease is unavailable");
-		return heldLease;
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
 	},
 	current: currentDocumentTarget,
 	publish: announceResearchChanged,
@@ -1913,8 +1851,8 @@ jobRunner = new JobRunner({
 	service: jobService,
 	registry: jobRegistry,
 	lease() {
-		if (!heldLease) throw new Error("storage writer lease is unavailable");
-		return heldLease;
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
 	},
 	resolveActivePlanner: async job => {
 		let binding = await ownerBindings!.resolve(job.channelId);
@@ -1970,8 +1908,8 @@ jobRunner = new JobRunner({
 });
 registerMcpRoutes(router, hostedAuth, {
 	lease() {
-		if (!heldLease) throw new Error("storage writer lease is unavailable");
-		return heldLease;
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
 	},
 }, {
 	// A child's instruction runs on its root's Chat with the child as focus.
@@ -2052,17 +1990,17 @@ try {
 }
 
 try {
-	heldLease = await storage.leases.acquire(
+	let acquired = await storage.leases.acquire(
 		"chopin:writer",
 		crypto.randomUUID(),
 		LEASE_TTL_MS,
 	);
-	if (!heldLease) throw new Error("another Chopin instance owns the database");
-	leaseRenewedAt = Date.now();
-	let reset = await storage.sessions.reset(new Date(), heldLease, LEASE_TTL_MS);
-	heldLease = reset.lease;
+	if (!acquired) throw new Error("another Chopin instance owns the database");
+	writerLease.hold(acquired);
+	let reset = await storage.sessions.reset(new Date(), acquired, LEASE_TTL_MS);
+	writerLease.held = reset.lease;
 	// Before any room opens, so no child Conversation is ever loaded or served.
-	let children = await storage.collaboration.dropChildConversations(heldLease);
+	let children = await storage.collaboration.dropChildConversations(reset.lease);
 	if (children.cleared.length) {
 		console.info(`chopin: cleared ${children.cleared.length} child conversation(s)`);
 	}
@@ -2075,14 +2013,13 @@ try {
 	}
 } catch (err) {
 	await shutdownHarnesses();
-	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
+	if (writerLease.held) await storage.leases.release(writerLease.held).catch(() => {});
 	await storage.close().catch(() => {});
 	let reason = err instanceof Error ? err.message : String(err);
 	console.error(`chopin: storage writer lease could not start - ${reason}`);
 	process.exit(1);
 }
-armLeaseWatchdog(leaseRenewedAt);
-leaseRenewal = setInterval(renewLease, LEASE_RENEW_MS);
+writerLease.start();
 cleanSessions();
 sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 
@@ -2104,16 +2041,15 @@ try {
 	if (listening) await listening.stop(true).catch(() => {});
 	if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
 	if (sessionCleanup) clearInterval(sessionCleanup);
-	if (leaseRenewal) clearInterval(leaseRenewal);
-	if (leaseWatchdog) clearTimeout(leaseWatchdog);
+	let stoppingLease = writerLease.stop();
 	await cleaningSessions;
-	await renewingLease;
+	await stoppingLease;
 	summaryCoordinator?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});
 	await shutdownHarnesses();
-	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
+	if (writerLease.held) await storage.leases.release(writerLease.held).catch(() => {});
 	await storage.close().catch(() => {});
 	throw err;
 }
