@@ -280,6 +280,11 @@
 				"name": "overlay",
 				"value": "0 2px 3px oklch(var(--shadow-color) / 10%), 0 7px 6px oklch(var(--shadow-color) / 9%), 0 15px 8px oklch(var(--shadow-color) / 5%), 0 26px 10px oklch(var(--shadow-color) / 1%)",
 				"purpose": "Layer above the workspace."
+			},
+			{
+				"name": "stacked",
+				"value": "0 -1px 1px oklch(var(--shadow-color) / 5%), 0 -1px 4px -1px oklch(var(--shadow-color) / 7%), 0 1px 2px oklch(var(--shadow-color) / 6%), 0 3px 3px oklch(var(--shadow-color) / 5%), 0 8px 5px oklch(var(--shadow-color) / 3%), 0 14px 5px oklch(var(--shadow-color) / 1%)",
+				"purpose": "Raised, with an upward edge, for a card stacked on another."
 			}
 		],
 		"motion": [

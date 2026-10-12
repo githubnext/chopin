@@ -342,7 +342,7 @@
 	 * `--shadow-*: initial` clears the whole namespace, and `--shadow-color` is
 	 * in it. Declared above the reset it is wiped before it is ever emitted, so
 	 * every `oklch(var(--shadow-color) / n%)` below becomes an invalid
-	 * declaration and all four shadows compute to `none`. Nothing errors and
+	 * declaration and every shadow compute to `none`. Nothing errors and
 	 * nothing is undefined at the source — the file still reads correctly, and
 	 * `check-tokens.ts` now refuses this rather than reading the declaration
 	 * that is textually there.

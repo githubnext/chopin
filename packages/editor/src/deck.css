@@ -62,7 +62,7 @@
 }
 
 .decision-deck-slot[data-deck-depth="1"] {
-	--deck-tint: var(--color-gray-50);
+	--deck-tint: color-mix(in oklch, var(--color-page) 50%, var(--color-inset));
 }
 
 .decision-deck-slot[data-deck-depth="2"] {
@@ -83,10 +83,13 @@
 	}
 }
 
-/* A settled line has no card of its own; the slot gives it one. */
+/*
+ * A settled line has no card of its own; the slot gives it one. It is paper,
+ * like an open card, so on top it is never darker than the slivers behind it.
+ */
 .decision-deck-slot[data-deck-settled] {
 	padding: 0.625rem 0.75rem;
-	background: var(--color-inset);
+	background: var(--color-page);
 }
 
 .decision-deck-nav {

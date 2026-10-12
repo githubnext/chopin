@@ -37,7 +37,7 @@ let spacing: Record<string, number> = {
 	six: 6,
 	eight: 8,
 };
-let shadows = ["resting", "resting-strong", "raised", "overlay"];
+let shadows = ["resting", "resting-strong", "raised", "overlay", "stacked"];
 let motion: Record<string, string> = {
 	fast: "--duration-fast",
 	base: "--duration-base",

@@ -285,13 +285,14 @@ describe("edges and depth", () => {
 		expect(THEME).toMatch(/@media \(min-resolution: 2dppx\)[\s\S]+--edge-width:\s*0\.5px/);
 	});
 
-	it("provides exactly the four designed shadows", () => {
+	it("provides exactly the five designed shadows", () => {
 		let found = [...THEME.matchAll(/\n\s*(--shadow-(?!color)[\w-]+):/g)].map(match => match[1]);
 		expect(found).toEqual([
 			"--shadow-resting",
 			"--shadow-resting-strong",
 			"--shadow-raised",
 			"--shadow-overlay",
+			"--shadow-stacked",
 		]);
 		expect(declared("--shadow-color")).toBe("0.15908 0.00637 95");
 		expect(EDITOR_STYLES).toMatch(
