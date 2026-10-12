@@ -251,7 +251,8 @@
 	margin-inline: auto;
 	display: flex;
 	align-items: center;
-	gap: var(--phone-tab-bar-gap);
+	justify-content: space-between;
+	gap: var(--phone-tab-action-gap);
 	transition: transform var(--tab-slide-dur) var(--tab-slide-ease), visibility 0s;
 }
 
@@ -277,11 +278,62 @@
 .phone-tab-bar {
 	position: relative;
 	display: grid;
-	flex: 1;
+	flex: none;
 	grid-template-columns: repeat(var(--phone-tab-count, 3), minmax(0, 1fr));
+	width: 100%;
 	height: var(--phone-tab-bar-height);
-	padding: var(--spacing);
-	border-radius: var(--radius-full);
+	padding: var(--phone-tab-bar-inset);
+	overflow: hidden;
+	border-radius: var(--radius-phone-tab-bar);
+	transition:
+		width var(--tab-slide-dur) var(--tab-slide-ease),
+		height var(--tab-slide-dur) var(--tab-slide-ease),
+		border-radius var(--tab-slide-dur) var(--tab-slide-ease);
+}
+
+/* A width rather than flex growth, so minimising can animate it. */
+.phone-tab-row:has(> .phone-tab-action) > .phone-tab-bar {
+	width: calc(100% - var(--phone-tab-action-size) - var(--phone-tab-action-gap));
+}
+
+/*
+ * Reading down a pane minimises the bar to one circle that shows the current tab, as the top
+ * bar tucks away on the same scroll. Scrolling up, focus, or a tap on the circle restores it.
+ */
+.phone-tab-row[data-phone-tab-minimised] > .phone-tab-bar {
+	width: var(--phone-tab-bar-minimised);
+	height: var(--phone-tab-bar-minimised);
+	border-radius: var(--radius-phone-tab-minimised);
+}
+
+.phone-tab-row[data-phone-tab-minimised] > .phone-tab-action {
+	width: var(--phone-tab-bar-minimised);
+	height: var(--phone-tab-bar-minimised);
+}
+
+.phone-tab-row[data-phone-tab-minimised] :is(.phone-tab, .phone-tab-indicator) {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.phone-tab-mini {
+	position: absolute;
+	z-index: 2;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	color: var(--color-brand-ink);
+	opacity: 0;
+	pointer-events: none;
+	touch-action: manipulation;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.phone-tab-row[data-phone-tab-minimised] .phone-tab-mini {
+	opacity: 1;
+	pointer-events: auto;
+	/* The circle's icon arrives once the tabs have faded, not over them. */
+	transition-delay: var(--duration-fast);
 }
 
 .phone-tab-bar[hidden] {
@@ -352,13 +404,15 @@
 
 .phone-tab-indicator {
 	position: absolute;
-	inset-block: var(--spacing);
-	left: var(--spacing);
-	width: calc((100% - var(--spacing) * 2) / var(--phone-tab-count, 3));
-	border-radius: var(--radius-full);
+	inset-block: var(--phone-tab-bar-inset);
+	left: var(--phone-tab-bar-inset);
+	width: calc((100% - var(--phone-tab-bar-inset) * 2) / var(--phone-tab-count, 3));
+	border-radius: var(--radius-phone-tab-pill);
 	background: var(--color-selected);
 	transform: translateX(calc(var(--phone-tab-index, 0) * 100%));
-	transition: transform var(--tab-slide-dur) var(--tab-slide-ease);
+	transition:
+		transform var(--tab-slide-dur) var(--tab-slide-ease),
+		opacity var(--duration-fast) var(--ease-out);
 }
 
 .phone-tab {
@@ -369,16 +423,20 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: calc(var(--spacing) / 2);
-	border-radius: var(--radius-full);
-	color: var(--color-text-tertiary);
-	font-size: var(--text-2xs);
-	font-weight: var(--font-weight-medium);
+	gap: calc(var(--spacing) * 0.75);
+	border-radius: var(--radius-phone-tab-pill);
+	color: var(--color-text-secondary);
+	font-size: var(--phone-tab-label-size);
+	font-weight: var(--font-weight-semibold);
+	line-height: var(--phone-tab-label-line);
+	letter-spacing: 0.01em;
 	touch-action: manipulation;
 	user-select: none;
 	-webkit-touch-callout: none;
 	-webkit-user-select: none;
-	transition: color var(--duration-base) var(--ease-out);
+	transition:
+		color var(--duration-base) var(--ease-out),
+		opacity var(--duration-fast) var(--ease-out);
 }
 
 .phone-tab[aria-current="page"] {
@@ -389,15 +447,19 @@
 	opacity: var(--opacity-quiet);
 }
 
-/* The narrowest phones give up gaps and label tracking, never target size. */
+/* The narrowest phones give up gaps, label tracking and some of the action, never target size. */
 @media (max-width: 359px) {
+	.workspace-root[data-workspace-phone] {
+		--phone-tab-action-gap: calc(var(--spacing) * 1.5);
+		--phone-tab-action-size: calc(var(--spacing) * 12);
+	}
+
 	.phone-tab-row {
-		gap: calc(var(--spacing) * 1.5);
 		width: calc(100% - var(--spacing) * 4);
 	}
 
 	.phone-tab-label {
-		letter-spacing: -0.02em;
+		letter-spacing: normal;
 	}
 }
 
@@ -445,11 +507,14 @@
 	display: grid;
 	flex: none;
 	place-items: center;
-	width: var(--phone-tab-bar-height);
-	height: var(--phone-tab-bar-height);
+	width: var(--phone-tab-action-size);
+	height: var(--phone-tab-action-size);
 	border-radius: var(--radius-full);
 	color: var(--color-text-primary);
 	touch-action: manipulation;
+	transition:
+		width var(--tab-slide-dur) var(--tab-slide-ease),
+		height var(--tab-slide-dur) var(--tab-slide-ease);
 }
 
 /* Landscape: a short window keeps chrome low, with labels beside their icons. */
@@ -458,22 +523,23 @@
 		--phone-bar-height: calc(var(--spacing) * 9);
 		/* Tabs keep the full 44px target inside the bar's 2px inset. */
 		--phone-tab-bar-height: calc(var(--control-target-coarse) + var(--spacing));
+		--phone-tab-bar-inset: var(--phone-tab-bar-inset-compact);
 		--phone-tab-bar-gap: calc(var(--spacing) * 1.5);
+		--phone-tab-action-gap: calc(var(--spacing) * 1.5);
+		--phone-tab-action-size: var(--phone-tab-bar-height);
+		--phone-tab-bar-minimised: var(--phone-tab-bar-height);
 	}
 
-	.phone-tab-bar {
-		padding: calc(var(--spacing) / 2);
-	}
-
-	.phone-tab-indicator {
-		inset-block: calc(var(--spacing) / 2);
-		left: calc(var(--spacing) / 2);
-		width: calc((100% - var(--spacing)) / var(--phone-tab-count, 3));
+	/* The bar is a capsule at this height, and the pill stays concentric inside the narrower inset. */
+	:is(.phone-tab-indicator, .phone-tab) {
+		border-radius: var(--radius-phone-tab-pill-compact);
 	}
 
 	.phone-tab {
 		flex-direction: row;
 		gap: calc(var(--spacing) * 1.5);
+		font-size: var(--text-2xs);
+		letter-spacing: normal;
 	}
 
 	.phone-tab-icon [data-nucleo-icon] {
@@ -562,6 +628,8 @@
 	.workspace-root[data-workspace-phone] .workspace-stack-bar,
 	.phone-tab-indicator,
 	.phone-tab-row,
+	.phone-tab-bar,
+	.phone-tab-action,
 	.phone-tab-action > svg {
 		transition: none;
 	}

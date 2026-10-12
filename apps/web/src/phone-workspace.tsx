@@ -1,6 +1,6 @@
 /** Phone chrome: a floating bottom tab bar and a top bar that tucks away while reading. */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Count } from "@chopin/editor/count";
 import { DecisionIcon, DocumentIcon, MessageIcon, WrenchIcon } from "@chopin/icons";
 
@@ -31,6 +31,8 @@ export function PhoneTabBar(
 		destinations,
 		documentActivity,
 		labels,
+		minimised = false,
+		onRestore,
 		onSelect,
 		toolbar,
 		unanswered,
@@ -44,6 +46,9 @@ export function PhoneTabBar(
 		destinations: WorkspaceDestination[];
 		documentActivity?: DocumentActivity;
 		labels: Record<WorkspaceDestination, string>;
+		/** Shrinks the tabs to one circle showing the current tab while reading down a pane. */
+		minimised?: boolean;
+		onRestore?: () => void;
 		onSelect: (destination: WorkspaceDestination, current: boolean, source: HTMLElement) => void;
 		/** Takes the tabs' place while set, such as formatting while editing; stays above the keyboard. */
 		toolbar?: ReactNode;
@@ -51,9 +56,29 @@ export function PhoneTabBar(
 	},
 ) {
 	let index = destinations.indexOf(active);
+	let small = minimised && !toolbar;
+	let nav = useRef<HTMLElement>(null);
+	let restoring = useRef(false);
+	// Restoring from the circle hands focus to the current tab, since the circle itself goes inert.
+	useLayoutEffect(() => {
+		if (small || !restoring.current) return;
+		restoring.current = false;
+		nav.current?.querySelector<HTMLElement>('.phone-tab[aria-current="page"]')?.focus({
+			preventScroll: true,
+		});
+	}, [small]);
+	let restore = (focus: boolean) => {
+		restoring.current = focus;
+		onRestore?.();
+	};
+	let ActiveIcon = index < 0 ? undefined : ICONS[active];
+	// The circle shows one icon, so it marks unseen activity on any other tab with a dot.
+	let elsewhere = (active !== "decisions" && unanswered > 0)
+		|| (active !== "chat" && (chatActivity.busy || chatActivity.unread > 0));
 	return (
 		<div
 			className="phone-tab-row"
+			data-phone-tab-minimised={small ? "" : undefined}
 			data-phone-tab-row=""
 			data-phone-tab-toolbar={toolbar ? "" : undefined}
 		>
@@ -62,6 +87,7 @@ export function PhoneTabBar(
 				hidden={!!toolbar}
 				aria-label="Workspace view"
 				className="phone-tab-bar"
+				ref={nav}
 				style={{ "--phone-tab-count": destinations.length } as CSSProperties}
 			>
 				<span
@@ -82,6 +108,7 @@ export function PhoneTabBar(
 							aria-label={labels[destination]}
 							className="phone-tab"
 							data-press="small"
+							inert={small}
 							key={destination}
 							onClick={event => {
 								if (!unavailable) onSelect(destination, current, event.currentTarget);
@@ -116,6 +143,28 @@ export function PhoneTabBar(
 						</button>
 					);
 				})}
+				{ActiveIcon && (
+					<button
+						aria-hidden={small ? undefined : true}
+						aria-label={`Show tabs, ${labels[active]}`}
+						className="phone-tab-mini"
+						data-press="small"
+						inert={!small}
+						onClick={() => restore(true)}
+						onFocus={() => restore(true)}
+						type="button"
+					>
+						<span className="phone-tab-icon">
+							<ActiveIcon aria-hidden="true" size={24} />
+							{active === "decisions" && unanswered > 0 && (
+								<span aria-hidden="true" className="phone-tab-badge">
+									<Count ring>{unanswered}</Count>
+								</span>
+							)}
+							{elsewhere && <span aria-hidden="true" className="phone-tab-dot" />}
+						</span>
+					</button>
+				)}
 			</nav>
 			{action}
 		</div>
@@ -128,8 +177,8 @@ export function phonePaneScroller(pane: Element | null | undefined): HTMLElement
 }
 
 /**
- * Hides the top bar while reading down the document, Decisions or Build and brings it back on
- * any scroll up, or when focus moves into it. Chat keeps its bar, because new messages scroll
+ * Hides the top bar and minimises the tab bar while reading down the document, Decisions or Build,
+ * and brings both back on any scroll up, or when focus moves into either. Chat keeps its bar, because new messages scroll
  * the transcript on their own. The bar's small title waits until the document's own heading
  * has scrolled under the bar; other destinations have no heading, so it always shows there.
  */
@@ -137,7 +186,7 @@ export function usePhoneTopBar(
 	root: RefObject<HTMLElement | null>,
 	enabled: boolean,
 	destination: WorkspaceDestination,
-): { hidden: boolean; titleHidden: boolean } {
+): { hidden: boolean; show: () => void; titleHidden: boolean } {
 	let [hidden, setHidden] = useState(false);
 	let [headingVisible, setHeadingVisible] = useState(true);
 	useEffect(() => setHidden(false), [destination, enabled]);
@@ -181,7 +230,9 @@ export function usePhoneTopBar(
 			else if (y - previous > TOP_BAR_SLOP) setHidden(true);
 		};
 		let focus = (event: FocusEvent) => {
-			if (event.target instanceof Element && event.target.closest(".phone-top-bar")) {
+			if (
+				event.target instanceof Element && event.target.closest(".phone-top-bar, .phone-tab-row")
+			) {
 				setHidden(false);
 			}
 		};
@@ -202,8 +253,10 @@ export function usePhoneTopBar(
 			element.removeEventListener("focusin", focus);
 		};
 	}, [enabled, root]);
+	let show = useCallback(() => setHidden(false), []);
 	return {
 		hidden: enabled && hidden,
+		show,
 		titleHidden: enabled && destination === "plan" && headingVisible,
 	};
 }

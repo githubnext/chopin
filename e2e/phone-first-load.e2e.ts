@@ -48,38 +48,47 @@ async function open(
 	return { context, page };
 }
 
-test("a phone paints the workspace shape before its JavaScript and keeps the bars still", async ({ baseURL, browser, room, seed }) => {
-	await seed(RESPONSIVE_SOURCE);
-	let { context, page } = await open(browser, baseURL!, PHONE);
-	try {
-		let release = await holdScripts(context);
-		await page.goto(roomPath(room), { waitUntil: "commit" });
+for (
+	let [name, device] of [
+		["a phone", PHONE],
+		["the narrowest phone", { ...PHONE, viewport: { width: 320, height: 568 } }],
+	] as const
+) {
+	test(`${name} paints the workspace shape before its JavaScript and keeps the bars still`, async ({ baseURL, browser, room, seed }) => {
+		await seed(RESPONSIVE_SOURCE);
+		let { context, page } = await open(browser, baseURL!, device);
+		try {
+			let release = await holdScripts(context);
+			await page.goto(roomPath(room), { waitUntil: "commit" });
 
-		let skeleton = page.locator(".boot-skeleton .phone-skeleton");
-		await expect(skeleton).toBeVisible();
-		await expect(skeleton.locator(".phone-skeleton-heading")).toBeVisible();
-		await expect(skeleton.getByRole("status")).toHaveText("Opening document…");
-		let top = await box(skeleton.locator(".phone-skeleton-top"));
-		let bar = await box(skeleton.locator(".phone-skeleton-bar"));
-		let action = await box(skeleton.locator(".phone-skeleton-action"));
-		let trigger = await box(skeleton.locator(".phone-skeleton-slot").first());
-		expect(top.y).toBe(0);
-		expect(top.height).toBe(44);
+			let skeleton = page.locator(".boot-skeleton .phone-skeleton");
+			await expect(skeleton).toBeVisible();
+			await expect(skeleton.locator(".phone-skeleton-heading")).toBeVisible();
+			await expect(skeleton.getByRole("status")).toHaveText("Opening document…");
+			let top = await box(skeleton.locator(".phone-skeleton-top"));
+			let bar = await box(skeleton.locator(".phone-skeleton-bar"));
+			let action = await box(skeleton.locator(".phone-skeleton-action"));
+			let trigger = await box(skeleton.locator(".phone-skeleton-slot").first());
+			expect(top.y).toBe(0);
+			expect(top.height).toBe(44);
+			expect(bar.height).toBe(62);
+			expect(action.height).toBe(device.viewport.width < 360 ? 48 : 54);
 
-		release();
-		await ready(page);
-		await expect(page.locator(".phone-skeleton")).toHaveCount(0);
-		expectSameBox(await box(page.locator(".phone-top-bar")), top);
-		expectSameBox(await box(page.locator(".phone-tab-bar")), bar);
-		expectSameBox(await box(page.getByRole("button", { name: "Edit document" })), action);
-		expectSameBox(
-			await box(page.locator(".phone-top-bar").getByRole("button", { name: "Documents" })),
-			trigger,
-		);
-	} finally {
-		await context.close();
-	}
-});
+			release();
+			await ready(page);
+			await expect(page.locator(".phone-skeleton")).toHaveCount(0);
+			expectSameBox(await box(page.locator(".phone-top-bar")), top);
+			expectSameBox(await box(page.locator(".phone-tab-bar")), bar);
+			expectSameBox(await box(page.getByRole("button", { name: "Edit document" })), action);
+			expectSameBox(
+				await box(page.locator(".phone-top-bar").getByRole("button", { name: "Documents" })),
+				trigger,
+			);
+		} finally {
+			await context.close();
+		}
+	});
+}
 
 test("a phone keeps the skeleton in the document column until the document syncs", async ({ baseURL, browser, room, seed }) => {
 	await seed(RESPONSIVE_SOURCE);

@@ -262,8 +262,22 @@
 
 	/* Phone chrome: a collapsing top bar and a floating bottom tab bar in the thumb zone. */
 	--phone-bar-height: calc(var(--spacing) * 11);
-	--phone-tab-bar-height: calc(var(--spacing) * 15);
+	/*
+	 * The tab bar follows iOS 26 proportions: a 62px bar holding a selection pill inset by 5px,
+	 * a 54px action circle beside it, and a 52px circle when it minimises while reading. The
+	 * bar's edge offset (`--phone-tab-bar-gap`) is separate from the gap to its action.
+	 */
+	--phone-tab-bar-height: calc(var(--spacing) * 15.5);
+	--phone-tab-bar-inset: calc(var(--spacing) * 1.25);
+	/* Landscape's one-line bar keeps a full 44px tab inside a 2px inset. */
+	--phone-tab-bar-inset-compact: calc(var(--spacing) / 2);
 	--phone-tab-bar-gap: calc(var(--spacing) * 2.5);
+	--phone-tab-action-gap: calc(var(--spacing) * 2);
+	--phone-tab-action-size: calc(var(--spacing) * 13.5);
+	--phone-tab-bar-minimised: calc(var(--spacing) * 13);
+	/* Apple's 10pt semibold tab label; the type scale's smallest step is too wide for four tabs. */
+	--phone-tab-label-size: 0.625rem;
+	--phone-tab-label-line: calc(var(--spacing) * 3);
 	--phone-tab-row-max: 30rem;
 	/* Editing on a phone: formatting rides the keyboard as one bar, and its panels stand in for it. */
 	--phone-dock-height: calc(var(--control-target-coarse) + var(--spacing));
@@ -309,6 +323,17 @@
 	--scrollbar-end-margin: calc(var(--spacing) * 1.5);
 	--scrollbar-thumb-min: calc(var(--spacing) * 8);
 	--radius-composer-pill: calc(var(--spacing) * 5.5); /* 22px — half the phone composer at rest */
+	/*
+	 * Concentric corners: the selection pill's radius is the bar's radius less the inset between
+	 * them, so both curves stay parallel at the end tabs. The bar is a rounded rectangle rather
+	 * than a capsule because a capsule would force a near-capsule pill that crowds its label.
+	 */
+	--radius-phone-tab-bar: calc(var(--spacing) * 6); /* 24px */
+	--radius-phone-tab-pill: calc(var(--radius-phone-tab-bar) - var(--phone-tab-bar-inset));
+	--radius-phone-tab-pill-compact: calc(
+		var(--radius-phone-tab-bar) - var(--phone-tab-bar-inset-compact)
+	);
+	--radius-phone-tab-minimised: calc(var(--phone-tab-bar-minimised) / 2);
 
 	/*
 	 * Warm-tinted depth, copied from the settled Figma shadow table.

@@ -461,5 +461,18 @@
 				1
 			]
 		]
+	},
+	{
+		"file": "apps/web/src/phone-workspace.css",
+		"reason": "The phone tab bar uses Apple's 10pt semibold tab label so four labels fit their pills with clearance at 320px; the fluid scale's smallest step is too wide for that column.",
+		"cases": [
+			[
+				"typography",
+				"font-size",
+				"var(--phone-tab-label-size)",
+				"CSS > .phone-tab",
+				1
+			]
+		]
 	}
 ]

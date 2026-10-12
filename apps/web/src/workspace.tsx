@@ -788,6 +788,8 @@ export function Workspace(
 							destination === "plan" ? undefined : documentActivity,
 						),
 					}}
+					minimised={topBar.hidden}
+					onRestore={topBar.show}
 					onSelect={selectPhoneTab}
 					toolbar={phoneToolbar}
 					unanswered={unanswered}

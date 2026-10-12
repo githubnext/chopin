@@ -70,7 +70,10 @@ test("the phone tab bar switches destinations in one bar and returns a tab to it
 	}
 
 	let scroller = page.locator("[data-plan-scroll]");
+	await scrollPane(scroller, 300);
 	await scrollPane(scroller, 700);
+	// Reading down minimised the bar to the current tab; a tap brings the tabs back.
+	await nav.getByRole("button", { name: /^Show tabs/ }).click();
 	await tabs.nth(0).click();
 	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(tabs.nth(0)).toHaveAttribute("aria-current", "page");
@@ -140,6 +143,112 @@ test("the top bar hides while reading down and returns on scroll up", async ({ j
 	await scrollPane(scroller, 1200);
 	await scrollPane(scroller, 1600);
 	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
+});
+
+/** Space between the current tab's label and its pill's rounded edge, at the label's lower part. */
+async function labelClearance(page: Page): Promise<number> {
+	return page.locator(".phone-tab-bar").evaluate(bar => {
+		let pill = bar.querySelector(".phone-tab-indicator")!;
+		let bounds = pill.getBoundingClientRect();
+		let label = document.createRange();
+		label.selectNodeContents(
+			bar.querySelector('.phone-tab[aria-current="page"] .phone-tab-label')!,
+		);
+		let text = label.getBoundingClientRect();
+		let radius = Math.min(
+			bounds.height / 2,
+			parseFloat(getComputedStyle(pill).borderTopLeftRadius),
+		);
+		let rise = Math.max(0, text.bottom - text.height * 0.2 - (bounds.bottom - radius));
+		let curve = radius - Math.sqrt(Math.max(0, radius * radius - rise * rise));
+		return Math.min(text.left - bounds.left, bounds.right - text.right) - curve;
+	});
+}
+
+test("the tab bar's pill is concentric with the bar and clears its labels at 320", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { ...PHONE, viewport: { width: 320, height: 568 } });
+	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	await nav.getByRole("button", { name: /^Decisions/ }).click();
+	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
+	for (
+		let control of [
+			...await nav.getByRole("button").all(),
+			page.getByRole("button", { name: "Edit document" }),
+		]
+	) {
+		let box = (await control.boundingBox())!;
+		expect(box.width).toBeGreaterThanOrEqual(44);
+		expect(box.height).toBeGreaterThanOrEqual(44);
+	}
+	await expect.poll(() => labelClearance(page)).toBeGreaterThanOrEqual(3);
+	let corners = await page.locator(".phone-tab-bar").evaluate(bar => {
+		let pill = bar.querySelector(".phone-tab-indicator")!;
+		return {
+			bar: parseFloat(getComputedStyle(bar).borderTopLeftRadius),
+			inset: pill.getBoundingClientRect().top - bar.getBoundingClientRect().top,
+			pill: parseFloat(getComputedStyle(pill).borderTopLeftRadius),
+		};
+	});
+	expect(corners.pill).toBeCloseTo(corners.bar - corners.inset, 1);
+	await expectNoHorizontalOverflow(page);
+});
+
+test("the tab bar minimises while reading down and returns on scroll up, a tap or focus", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", PHONE);
+	let scroller = page.locator("[data-plan-scroll]");
+	let row = page.locator("[data-phone-tab-row]");
+	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	let show = nav.getByRole("button", { name: /^Show tabs/ });
+	let width = () => nav.evaluate(element => element.getBoundingClientRect().width);
+	await expect(show).toHaveCount(0);
+	let full = await width();
+
+	await scrollPane(scroller, 200);
+	await scrollPane(scroller, 600);
+	await expect(row).toHaveAttribute("data-phone-tab-minimised", "");
+	// The top bar tucks away on the same scroll.
+	await expect(page.locator(".workspace-root")).toHaveAttribute("data-workspace-bar", "hidden");
+	await expect(show).toHaveAccessibleName("Show tabs, Document");
+	await expect(nav.getByRole("button")).toHaveCount(1);
+	await expect.poll(width).toBeLessThan(60);
+	let circle = (await show.boundingBox())!;
+	expect(circle.width).toBeGreaterThanOrEqual(44);
+	expect(circle.height).toBeGreaterThanOrEqual(44);
+
+	await scrollPane(scroller, 500);
+	await expect(row).not.toHaveAttribute("data-phone-tab-minimised");
+	await expect.poll(width).toBeCloseTo(full, 0);
+
+	await scrollPane(scroller, 900);
+	await expect(row).toHaveAttribute("data-phone-tab-minimised", "");
+	await show.click();
+	await expect(row).not.toHaveAttribute("data-phone-tab-minimised");
+	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
+	await expect(nav.getByRole("button", { name: "Document" })).toBeFocused();
+
+	// Keyboard focus reaching the circle restores the tabs and lands on the current one.
+	await scrollPane(scroller, 1300);
+	await expect(row).toHaveAttribute("data-phone-tab-minimised", "");
+	await show.focus();
+	await expect(row).not.toHaveAttribute("data-phone-tab-minimised");
+	await expect(nav.getByRole("button", { name: "Document" })).toBeFocused();
+});
+
+test("reduced motion keeps the full tab bar while reading", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", PHONE);
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	let scroller = page.locator("[data-plan-scroll]");
+	await scrollPane(scroller, 200);
+	await scrollPane(scroller, 600);
+	await scrollPane(scroller, 1000);
+	await expect(page.locator("[data-phone-tab-row]")).not.toHaveAttribute(
+		"data-phone-tab-minimised",
+	);
+	await expect(page.getByRole("navigation", { name: "Workspace view" }).getByRole("button"))
+		.toHaveCount(4);
 });
 
 test("the software keyboard hides the bottom chrome", async ({ baseURL, browser, room, seed }) => {

@@ -121,13 +121,14 @@
 		var(--phone-tab-row-max)
 	);
 	margin-inline: auto;
-	gap: var(--phone-tab-bar-gap);
+	align-items: center;
+	gap: var(--phone-tab-action-gap);
 }
 
 .phone-skeleton-bar,
 .phone-skeleton-action {
 	height: var(--phone-tab-bar-height);
-	border-radius: var(--radius-full);
+	border-radius: var(--radius-phone-tab-bar);
 	background: var(--color-glass);
 	-webkit-backdrop-filter: var(--glass-filter);
 	backdrop-filter: var(--glass-filter);
@@ -140,7 +141,7 @@
 	display: grid;
 	flex: 1;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
-	padding: var(--spacing);
+	padding: var(--phone-tab-bar-inset);
 
 	/* Each tab: an icon-sized mark over a short label. */
 	& > span {
@@ -148,7 +149,7 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: calc(var(--spacing) * 1.5);
+		gap: calc(var(--spacing) * 0.75);
 	}
 
 	& > span::before,
@@ -167,18 +168,24 @@
 
 	& > span::after {
 		width: calc(var(--spacing) * 9);
-		height: calc(var(--spacing) * 2);
+		height: var(--phone-tab-label-line);
 	}
 }
 
 .phone-skeleton-action {
 	flex: none;
-	width: var(--phone-tab-bar-height);
+	width: var(--phone-tab-action-size);
+	height: var(--phone-tab-action-size);
+	border-radius: var(--radius-full);
 }
 
 @media (max-width: 359px) {
+	.phone-skeleton {
+		--phone-tab-action-gap: calc(var(--spacing) * 1.5);
+		--phone-tab-action-size: calc(var(--spacing) * 12);
+	}
+
 	.phone-skeleton-tabs {
-		gap: calc(var(--spacing) * 1.5);
 		width: calc(100% - var(--spacing) * 4);
 	}
 }
@@ -188,15 +195,15 @@
 	.phone-skeleton {
 		--phone-bar-height: calc(var(--spacing) * 9);
 		--phone-tab-bar-height: calc(var(--control-target-coarse) + var(--spacing));
+		--phone-tab-bar-inset: var(--phone-tab-bar-inset-compact);
 		--phone-tab-bar-gap: calc(var(--spacing) * 1.5);
+		--phone-tab-action-gap: calc(var(--spacing) * 1.5);
+		--phone-tab-action-size: var(--phone-tab-bar-height);
 	}
 
-	.phone-skeleton-bar {
-		padding: calc(var(--spacing) / 2);
-
-		& > span {
-			flex-direction: row;
-		}
+	.phone-skeleton-bar > span {
+		flex-direction: row;
+		gap: calc(var(--spacing) * 1.5);
 	}
 }
 
