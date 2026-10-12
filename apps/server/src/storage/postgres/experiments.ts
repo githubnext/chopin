@@ -31,7 +31,9 @@ export class PostgresExperimentStore implements ExperimentStore {
 	async published(childId: string) {
 		let [row] = await this.sql<
 			{ payload: unknown }[]
-		>`SELECT payload FROM experiments WHERE child_channel_id = ${childId}`;
+		>`SELECT experiments.payload FROM experiments
+			JOIN channels ON channels.id = experiments.channel_id
+			WHERE experiments.child_channel_id = ${childId}`;
 		return row ? decode(row.payload) : undefined;
 	}
 	async active() {
