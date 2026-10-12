@@ -530,7 +530,7 @@
 		--phone-tab-bar-minimised: var(--phone-tab-bar-height);
 	}
 
-	/* The bar is a capsule at this height, and the pill stays concentric inside the narrower inset. */
+	/* The bar is near a capsule at this height, and the pill stays concentric inside the narrower inset. */
 	:is(.phone-tab-indicator, .phone-tab) {
 		border-radius: var(--radius-phone-tab-pill-compact);
 	}

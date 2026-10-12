@@ -107,6 +107,7 @@ export function PhoneTabBar(
 							aria-disabled={unavailable || undefined}
 							aria-label={labels[destination]}
 							className="phone-tab"
+							aria-hidden={small || undefined}
 							data-press="small"
 							inert={small}
 							key={destination}

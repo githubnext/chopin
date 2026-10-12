@@ -328,7 +328,7 @@
 	 * them, so both curves stay parallel at the end tabs. The bar is a rounded rectangle rather
 	 * than a capsule because a capsule would force a near-capsule pill that crowds its label.
 	 */
-	--radius-phone-tab-bar: calc(var(--spacing) * 6); /* 24px */
+	--radius-phone-tab-bar: calc(var(--spacing) * 5.5); /* 22px */
 	--radius-phone-tab-pill: calc(var(--radius-phone-tab-bar) - var(--phone-tab-bar-inset));
 	--radius-phone-tab-pill-compact: calc(
 		var(--radius-phone-tab-bar) - var(--phone-tab-bar-inset-compact)

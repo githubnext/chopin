@@ -385,6 +385,12 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 			tracker;
 	});
 
+	// Reading down minimises the tab bar to the current tab; a tap brings the tabs back.
+	let showTabs = async () => {
+		let show = nav.getByRole("button", { name: /^Show tabs/ });
+		if (await show.isVisible()) await show.click();
+	};
+	await showTabs();
 	await nav.getByRole("button", { name: /Chat/ }).click();
 	await draft.fill("unfinished compact thought");
 
@@ -395,6 +401,7 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 		element.dispatchEvent(new Event("scroll"));
 	});
 	let decisionScroll = await decisionScroller.evaluate(element => element.scrollTop);
+	await showTabs();
 	await nav.getByRole("button", { name: "Document" }).click();
 
 	await expectChatValue(draft, "unfinished compact thought");
