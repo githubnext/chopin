@@ -2,12 +2,13 @@ import { GitHubClient, GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 import { Admission, AdmissionDenied } from "./admission";
 import { OAuthAttempts, Sessions } from "./session";
+import { Machines } from "./machines";
 import { DeviceAuthorization } from "./device";
 import { LocalAuth } from "./local";
 import { LocalCredentials } from "./local-store";
 
 import type { AuthConfig } from "./config";
-import type { GitHub, GitHubConditional } from "../github/client";
+import type { GitHub, GitHubConditional, GitHubTokenGrant } from "../github/client";
 import type { Router } from "../http/router";
 import type { StorageAdapter } from "../storage/port";
 
@@ -36,6 +37,14 @@ export type HostedAuth = {
 	github: GitHub;
 	admission: Admission;
 	sessions: Sessions;
+	machines: Machines;
+	/**
+	 * Finishes a connector pairing once GitHub authorized a token pair for that machine, returning
+	 * where the browser goes next. Set by the connector routes.
+	 */
+	pairings: {
+		complete?: (pairing: string, userId: string, grant: GitHubTokenGrant) => Promise<string>;
+	};
 	clock: Clock;
 };
 
@@ -203,9 +212,40 @@ export function registerAuthRoutes(
 			delay: dependencies.delay,
 		});
 	}
+	let refresh = (refreshToken: string) =>
+		github.refresh({
+			clientId: config.clientId,
+			...(config.clientSecret && !config.local ? { clientSecret: config.clientSecret } : {}),
+			refreshToken,
+		});
+	// AUTH_MODE=local has no client secret to mint a machine its own token pair.
+	let machines = new Machines(storage, clock, {
+		key: config.local ? undefined : config.encryptionKey,
+		origin: config.origin,
+		clientId: config.clientId,
+		refresh,
+		authorize: async (userId, token) => {
+			try {
+				return (await admission.user(token)).id === userId;
+			} catch (err) {
+				if (err instanceof AdmissionDenied) return false;
+				throw err;
+			}
+		},
+		invalidate: token => admission.invalidate(token),
+	});
 	let attempts = new OAuthAttempts(config.encryptionKey, secure, clock);
 	let redirectUri = `${config.origin}/auth/github/callback`;
-	let context: HostedAuth = { config, storage, github, admission, sessions, clock };
+	let context: HostedAuth = {
+		config,
+		storage,
+		github,
+		admission,
+		sessions,
+		machines,
+		pairings: {},
+		clock,
+	};
 	if (local) {
 		let flow = local;
 		let allowed = (request: Request) =>
@@ -274,6 +314,23 @@ export function registerAuthRoutes(
 			});
 			return redirected(location, 302, [issued.cookie]);
 		});
+		// GitHub refresh tokens are single-use, so a paired machine gets its own authorization
+		// rather than a copy of the browser login's. An App the person already authorized returns
+		// at once without asking again.
+		router.on("GET", "/auth/github/connector", async (_request, url) => {
+			let pairing = parameter(url, "pairing");
+			if (!pairing || !/^[0-9a-f-]{36}$/.test(pairing)) {
+				return json({ error: "pairing is missing or invalid" }, 400);
+			}
+			let issued = await attempts.issue(undefined, pairing);
+			let location = github.authorize({
+				clientId: config.clientId,
+				redirectUri,
+				state: issued.state,
+				challenge: issued.challenge,
+			});
+			return redirected(location, 302, [issued.cookie]);
+		});
 	}
 
 	router.on("GET", "/auth/github/install", () =>
@@ -314,6 +371,11 @@ export function registerAuthRoutes(
 				let profile = await admission.user(grant.accessToken);
 				let now = clock();
 				await storage.users.put({ ...profile, now });
+				if (stored.pairing) {
+					let complete = context.pairings.complete;
+					if (!complete) return json({ error: "pairing is unavailable" }, 404, clear);
+					return redirected(await complete(stored.pairing, profile.id, grant), 303, [clear]);
+				}
 				let session = await sessions.issue(profile.id, grant);
 				return redirected(stored.returnPath ?? "/", 303, [clear, session.cookie]);
 			} catch (err) {

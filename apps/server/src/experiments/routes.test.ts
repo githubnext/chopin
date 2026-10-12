@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { expect, test } from "bun:test";
 import { performance } from "@chopin/experiment/fixtures";
 import {
@@ -73,6 +74,11 @@ async function setup() {
 		config,
 		admission: new Admission(config, github),
 		clock: () => new Date(),
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	}, {
 		lease: () => lease,
 		changed: () => {},

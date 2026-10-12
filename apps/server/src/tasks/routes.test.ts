@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { expect, test } from "bun:test";
 import { Sessions } from "../auth/session";
 import { Admission } from "../auth/admission";
@@ -88,6 +89,11 @@ async function setup(
 		storage: context.storage,
 		admission: new Admission(config, github, () => context.now.getTime()),
 		clock: () => context.now,
+		machines: new Machines(context.storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let router = new Router();
 	let implementations: ReturnType<typeof registerImplementationRoutes>;

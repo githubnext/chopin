@@ -51,6 +51,8 @@ type StoredAttempt = {
 	verifier: string;
 	expiresAt: string;
 	returnPath?: string;
+	/** A connector pairing this authorization mints a machine's own GitHub token pair for. */
+	pairing?: string;
 };
 
 type MemorySession = {
@@ -145,11 +147,15 @@ function cleared(name: string, secure: boolean, path = "/"): string {
 	return serialized(name, "", new Date(0), secure, path, 0);
 }
 
-async function imported(value: Uint8Array): Promise<CryptoKey> {
+export async function imported(value: Uint8Array): Promise<CryptoKey> {
 	return crypto.subtle.importKey("raw", buffer(value), "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
-async function encrypted(key: CryptoKey, aad: string, plaintext: unknown): Promise<Uint8Array> {
+export async function encrypted(
+	key: CryptoKey,
+	aad: string,
+	plaintext: unknown,
+): Promise<Uint8Array> {
 	let nonce = random(NONCE_BYTES);
 	let content = encoder.encode(JSON.stringify(plaintext));
 	let ciphertext = await crypto.subtle.encrypt(
@@ -164,7 +170,11 @@ async function encrypted(key: CryptoKey, aad: string, plaintext: unknown): Promi
 	return envelope;
 }
 
-async function decrypted(key: CryptoKey, aad: string, envelope: Uint8Array): Promise<unknown> {
+export async function decrypted(
+	key: CryptoKey,
+	aad: string,
+	envelope: Uint8Array,
+): Promise<unknown> {
 	if (envelope.length <= 1 + NONCE_BYTES || envelope[0] !== CIPHER_VERSION) {
 		throw new Error("bad envelope");
 	}
@@ -187,6 +197,7 @@ function attempt(value: unknown): StoredAttempt | undefined {
 		|| typeof record.verifier !== "string"
 		|| typeof record.expiresAt !== "string"
 		|| (record.returnPath !== undefined && typeof record.returnPath !== "string")
+		|| (record.pairing !== undefined && typeof record.pairing !== "string")
 	) return undefined;
 	let stored: StoredAttempt = {
 		v: 1,
@@ -195,6 +206,7 @@ function attempt(value: unknown): StoredAttempt | undefined {
 		expiresAt: record.expiresAt,
 	};
 	if (typeof record.returnPath === "string") stored.returnPath = record.returnPath;
+	if (typeof record.pairing === "string") stored.pairing = record.pairing;
 	return stored;
 }
 
@@ -779,7 +791,7 @@ export class OAuthAttempts {
 		this.cookieName = secure ? "__Host-chopin_oauth_state" : "chopin_oauth_state";
 	}
 
-	async issue(returnPath?: string): Promise<OAuthAttempt> {
+	async issue(returnPath?: string, pairing?: string): Promise<OAuthAttempt> {
 		let state = base64(random(SECRET_BYTES));
 		let verifier = base64(random(SECRET_BYTES));
 		let digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(verifier)));
@@ -791,6 +803,7 @@ export class OAuthAttempts {
 			expiresAt: expiresAt.toISOString(),
 		};
 		if (returnPath !== undefined) stored.returnPath = returnPath;
+		if (pairing !== undefined) stored.pairing = pairing;
 		let envelope = await encrypted(
 			await this.#key,
 			"chopin:oauth-state:v1",

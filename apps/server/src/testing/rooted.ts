@@ -4,6 +4,7 @@
  * The root's Chat runs real turns over a harness stub that records each prompt
  * and holds the turn open until the test finishes it.
  */
+import { Machines } from "../auth/machines";
 import { ActiveOwnerBindings } from "../agent/active-owner";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
@@ -109,6 +110,11 @@ export async function rooted(sources: { root: string; child: string }) {
 		sessions,
 		clock: () => new Date(),
 		admission: new Admission(authConfig, github),
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let fields = {
 		repositoryId: repository.id,

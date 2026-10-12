@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
@@ -107,6 +108,11 @@ function setup(overrides: Partial<HostedAuth["config"]> = {}) {
 		admission: new Admission(config, github, () => now.getTime()),
 		sessions: new Sessions(storage, true, () => now),
 		clock: () => now,
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let router = new Router();
 	registerMcpRoutes(router, auth);

@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
@@ -114,6 +115,11 @@ describe("socket admission", () => {
 			admission: new Admission(config, github, () => now.getTime()),
 			sessions,
 			clock: () => now,
+			machines: new Machines(storage, () => new Date(), {
+				origin: "https://chopin.test",
+				clientId: "test",
+			}),
+			pairings: {},
 		};
 		let url = new URL(`https://chopin.test/ws?channel=${channel.id}`);
 		let wrongOrigin = await admit(

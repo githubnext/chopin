@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
@@ -197,6 +198,11 @@ async function setup(random?: () => number) {
 		admission: new Admission(config, github, () => now.getTime()),
 		sessions,
 		clock: () => now,
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let router = new Router();
 	let reset: string[] = [];

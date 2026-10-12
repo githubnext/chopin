@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { afterEach, expect, test } from "bun:test";
 
 import { ActiveOwnerBindings } from "../agent/active-owner";
@@ -52,6 +53,11 @@ async function setup() {
 		sessions,
 		clock: () => new Date(),
 		admission: new Admission(authConfig, github),
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let channel = await storage.channels.create({
 		id: crypto.randomUUID(),

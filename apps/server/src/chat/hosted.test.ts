@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
@@ -102,6 +103,11 @@ describe("hosted Copilot ownership", () => {
 			admission: new Admission(config, github, () => now.getTime()),
 			sessions,
 			clock: () => now,
+			machines: new Machines(storage, () => new Date(), {
+				origin: "https://chopin.test",
+				clientId: "test",
+			}),
+			pairings: {},
 		};
 		let repository = { id: "R_score", owner: "octo-org", name: "score", defaultBranch: "main" };
 

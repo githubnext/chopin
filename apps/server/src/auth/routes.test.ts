@@ -408,6 +408,33 @@ describe("hosted authentication routes", () => {
 			.toBe("/documents/octocat/score?view=plan#decision-1");
 	});
 
+	it("authorizes a pairing machine with its own token pair, without a new browser session", async () => {
+		let github = new FakeGitHub();
+		let router = new Router();
+		let auth = registerAuthRoutes(router, { config: CONFIG, storage: new MemoryStorage(), github });
+		let completed: Array<{ pairing: string; userId: string; accessToken: string }> = [];
+		auth.pairings.complete = async (pairing, userId, grant) => {
+			completed.push({ pairing, userId, accessToken: grant.accessToken });
+			return `/connect?pairing=${pairing}`;
+		};
+		let pairing = crypto.randomUUID();
+		let start = await router.handle(
+			new Request(`https://chopin.test/auth/github/connector?pairing=${pairing}`),
+		);
+		expect(start!.status).toBe(302);
+		expect(github.authorized?.redirectUri).toBe("https://chopin.test/auth/github/callback");
+		let response = await complete(router, start!);
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location")).toBe(`/connect?pairing=${pairing}`);
+		expect(completed).toEqual([{ pairing, userId: "U_octocat", accessToken: "ghu_route_secret" }]);
+		expect(cookies(response).some(value => value.includes("chopin_session="))).toBe(false);
+
+		let malformed = await router.handle(
+			new Request("https://chopin.test/auth/github/connector?pairing=nope"),
+		);
+		expect(malformed!.status).toBe(400);
+	});
+
 	it("falls back to the product root for unsafe, empty, or duplicate return paths", async () => {
 		let router = new Router();
 		registerAuthRoutes(router, {

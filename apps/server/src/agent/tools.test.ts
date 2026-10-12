@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
@@ -897,6 +898,11 @@ test("chat-started tools retain only the current member request provenance", asy
 		admission: new Admission(config, github, () => now.getTime()),
 		sessions,
 		clock: () => now,
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let ownership = await Chat.resolveOwner(auth, repository, channel.id, claimant.id);
 	let activeOwner = () =>

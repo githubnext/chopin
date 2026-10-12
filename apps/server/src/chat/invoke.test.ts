@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -75,6 +76,11 @@ async function setup(config: Config = { agent: true } as Config) {
 		sessions,
 		clock: () => new Date(),
 		admission: new Admission(authConfig, github),
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let channel = await storage.channels.create({
 		id: crypto.randomUUID(),

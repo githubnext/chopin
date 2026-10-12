@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { createHash } from "node:crypto";
 import { describe, expect, it, spyOn } from "bun:test";
 
@@ -102,6 +103,11 @@ async function setup() {
 		admission: new Admission(config, github, () => now.getTime()),
 		sessions,
 		clock: () => now,
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	let registry = new JobRegistry([
 		researchEvidenceDefinition({

@@ -1,3 +1,4 @@
+import { Machines } from "../auth/machines";
 import { describe, expect, it } from "bun:test";
 
 import { ulid } from "@chopin/dialect";
@@ -163,6 +164,11 @@ function setup() {
 		admission: new Admission(config, github, () => now.getTime()),
 		sessions: new Sessions(storage, true, () => now),
 		clock: () => now,
+		machines: new Machines(storage, () => new Date(), {
+			origin: "https://chopin.test",
+			clientId: "test",
+		}),
+		pairings: {},
 	};
 	return { auth, github, now, storage };
 }
