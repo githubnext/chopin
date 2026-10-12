@@ -5,7 +5,13 @@ import type { DocumentRoom } from "./tools";
 export type InvestigationTools = {
 	list(): Promise<unknown>;
 	read(id: string, dataset?: string, offset?: number): Promise<unknown>;
-	propose(input: { brief: string; key: string; userId: string; entryId: string }): Promise<unknown>;
+	propose(input: {
+		brief: string;
+		key: string;
+		userId: string;
+		entryId: string;
+		after?: { index: number; digest: string };
+	}): Promise<unknown>;
 };
 let contextSchema = z.object({ room: z.custom<DocumentRoom>() });
 
@@ -49,9 +55,15 @@ export const experimentTools = {
 		inputSchema: z.object({
 			brief: z.string().trim().min(1).max(8000),
 			key: z.string().min(1).max(128),
+			after: z.object({
+				index: z.number().int().min(0),
+				digest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+			}).strict().optional().describe(
+				"The block from your latest read_plan or edit_plan result that this investigation concerns. Its card goes directly after that block.",
+			),
 		}).strict(),
 		description:
-			"Propose a local investigation from the current member request. Explain the objective and required evidence. A person must select Run on its card, which runs it on their own local agent; this tool never executes code. Reuse key for retries.",
+			"Propose a local investigation from the current member request. Explain the objective and required evidence. Give `after` as the block the question concerns so the card sits beside it; when that block has changed or its digest repeats, the card goes at the end of the document and the result says so. A person must select Run on its card, which runs it on their own local agent; this tool never executes code. Reuse key for retries.",
 		execute: (input, { context: { room } }) =>
 			answer(async () => {
 				let request = room.currentMemberRequest?.();

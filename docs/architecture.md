@@ -171,9 +171,10 @@ connection of the person who starts it; only that owner can authorize or cancel
 execution. Connector grants remain process-local; their
 durable investigations, captured results, shared view state and evidence decisions
 live in PostgreSQL. An atomic `<Investigation id>` card, placed from the slash
-menu, and `<Experiment>` view embeds project these records without evaluating
-uploaded code. A completed investigation is published atomically as a child
-document, linked from the record, whose embeds read the parent's record. See
+menu or by the Planner after the block it concerns, and `<Experiment>` view
+embeds project these records without evaluating uploaded code. A completed
+investigation is published atomically as a child document, linked from the
+record, whose embeds read the parent's record. See
 [Local investigations](local-experiments.md).
 
 Local implementation builds share that connector, owner pairing and workspace

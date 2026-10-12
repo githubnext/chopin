@@ -58,9 +58,12 @@ the work runs on your own local agent, never on another person's. Chopin
 prefers the connection that last ran work for this document, then your most
 recently active one that is not busy. When all of yours are busy, the work
 queues behind one of them and starts when it is free. Without any, the card shows the connector command to start, and you select
-**Run** again once connected. A Planner can also propose an investigation; its
-card is appended to the end of the document and still needs someone to run it.
-Progress appears in that card automatically, without opening another tab or
+**Run** again once connected. A Planner can also propose an investigation. It
+names the block the investigation concerns by index and digest, and its card
+goes directly after that block. When the block has changed, or its digest now
+matches more than one block, the card goes at the end of the document instead
+of guessing, and the Planner is told. Either way it still needs someone to run
+it. Progress appears in that card automatically, without opening another tab or
 dialog. A completed investigation is published as a child document, like a
 research report, and its card becomes a compact link to it.
 

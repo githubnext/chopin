@@ -27,6 +27,12 @@ test("only current server-authenticated member identity attributes a proposal", 
 		userId: "actual-user",
 		entryId: "actual-message",
 	});
+	let after = { index: 2, digest: `sha256:${"a".repeat(64)}` };
+	await experimentTools.propose_investigation.execute!(
+		{ brief: "Measure startup", key: "first", after },
+		{ context: { room }, toolCallId: "test", messages: [] },
+	);
+	expect(received).toMatchObject({ after });
 	room.currentMemberRequest = () => undefined;
 	expect(await call()).toContain("current member request");
 	expect(refusal({ kind: "heading" } as never, "propose_investigation")).toContain("not available");
