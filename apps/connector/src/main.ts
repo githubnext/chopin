@@ -3,9 +3,10 @@ import { basename, resolve } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { requestSchema } from "@chopin/experiment";
 import { createBridge } from "./bridge";
-import { ConnectorError, remote } from "./mcp";
+import { serveWork } from "./connection";
+import { remote } from "./mcp";
 import { parseArgs } from "./args";
-import { connectorMessage, delay, machineToken, pair, register, SELF, unpair } from "./machine";
+import { connectorMessage, machineToken, pair, register, SELF, unpair } from "./machine";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { runWork } from "./run";
@@ -133,7 +134,6 @@ async function connect(args: string[]) {
 	};
 	process.once("SIGINT", stop);
 	process.once("SIGTERM", stop);
-	let api: Awaited<ReturnType<typeof remote>> | undefined;
 	let output = createOutput();
 	let permissions = permissionMemory();
 	try {
@@ -149,54 +149,34 @@ async function connect(args: string[]) {
 				checkout: source,
 			});
 		if (!machine) return;
-		let token = await register(
-			url,
-			machine,
-			{ ...source, label: basename(info.root) },
-			abort.signal,
-		);
-		api = await remote(url, token);
-		output.connected(info.repository);
-		while (!abort.signal.aborted) {
-			let offered = await api.call("wait_for_work", {}, abort.signal) as {
-				id?: string;
-				kind?: "experiment" | "implementation";
-			};
-			if (!offered.id || !offered.kind) continue;
-			let claim;
-			try {
-				claim = await api.call(
-					offered.kind === "implementation" ? "claim_implementation_build" : "claim_experiment",
-					{ id: offered.id },
-				);
-			} catch (error) {
-				if (
-					error instanceof ConnectorError
-					&& ["workspace-busy", "build-already-claimed", "invalid-state"].includes(error.code)
-				) {
-					await delay(1000, abort.signal);
-					continue;
-				}
-				throw error;
-			}
-			await runWork(api, offered.kind, claim, {
-				root: info.root,
-				directory,
-				command,
-				url,
-				signal: abort.signal,
-				output,
-				permissions,
-				interrupt: stop,
-			});
-		}
+		let checkout = { ...source, label: basename(info.root) };
+		let announced = false;
+		await serveWork({
+			// Every connection registers anew with the machine token: a connection token lasts only
+			// while the server runs, so after a restart Chopin refuses the old one for good.
+			connect: async () => {
+				let api = await remote(url, await register(url, machine, checkout));
+				if (!announced) output.connected(info.repository);
+				announced = true;
+				return api;
+			},
+			signal: abort.signal,
+			output,
+			run: (api, kind, claim) =>
+				runWork(api, kind, claim, {
+					root: info.root,
+					directory,
+					command,
+					url,
+					signal: abort.signal,
+					output,
+					permissions,
+					interrupt: stop,
+				}),
+		});
 	} catch (error) {
 		if (!abort.signal.aborted) throw error;
 	} finally {
-		if (api) {
-			await api.call("disconnect_workspace").catch(() => {});
-			await api.close();
-		}
 		process.removeListener("SIGINT", stop);
 		process.removeListener("SIGTERM", stop);
 		await release();

@@ -71,6 +71,19 @@ export function createOutput(
 				"",
 			);
 		},
+		/** `dropped` when a working connection failed, rather than the first attempt to connect. */
+		unreachable(cause: string, dropped: boolean) {
+			say(`${s.dim("…")} ${dropped ? "Lost the connection to" : "Can't reach"} Chopin (${cause}).`);
+		},
+		reconnecting(ms: number) {
+			say(s.dim(ms ? `  Reconnecting in ${Math.ceil(ms / 1000)}s.` : "  Reconnecting now."));
+		},
+		stillReconnecting() {
+			say(s.dim("  Still reconnecting, at most 5 minutes apart. Ctrl-C stops."));
+		},
+		reconnected() {
+			say(s.green("✓ Reconnected."), "");
+		},
 		job(kind: JobKind, title: string, path: string) {
 			say(`› ${VERBS[kind]} ${headline(title)}`, s.dim(`  ${path}`));
 		},

@@ -3,6 +3,7 @@ import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamable
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorError } from "./mcp";
 import { backoff, classifyConnectorError } from "./reconnect";
+import type { ErrorClass } from "./reconnect";
 
 /** How the MCP client reports a refused HTTP call: the status and the server's JSON body. */
 function http(status: number, code?: string) {
@@ -14,7 +15,7 @@ function http(status: number, code?: string) {
 
 test("transient failures retry, while revocation, upgrades and lost access stop", () => {
 	let refused = Object.assign(new TypeError("Unable to connect."), { code: "ConnectionRefused" });
-	let cases: Array<[unknown, string]> = [
+	let cases: Array<[unknown, ErrorClass]> = [
 		[refused, "retry"],
 		[Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }), "retry"],
 		[new DOMException("The operation timed out.", "TimeoutError"), "retry"],

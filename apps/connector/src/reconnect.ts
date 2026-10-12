@@ -20,7 +20,7 @@ export type Classify = (error: unknown) => ErrorClass;
 
 /** Codes a restarting or briefly overloaded server answers with. */
 const RETRY_CODES = new Set(["connection-unavailable", "unavailable", "owner-sign-in-required"]);
-const REVOKED_CODES = ["machine-revoked", "machine-reauthorize"];
+const REVOKED_CODES = new Set(["machine-revoked", "machine-reauthorize"]);
 
 /** The server's error code, from a tool's `code: message` text or a refused call's JSON body. */
 export function errorCode(error: unknown) {
@@ -31,7 +31,7 @@ export function errorCode(error: unknown) {
 
 export const classifyConnectorError: Classify = error => {
 	let code = errorCode(error);
-	if (code && REVOKED_CODES.includes(code)) return "revoked";
+	if (code && REVOKED_CODES.has(code)) return "revoked";
 	if (code === "connector-update-required") return "update-required";
 	if (code && RETRY_CODES.has(code)) return "retry";
 	// fetch rejects with a TypeError when the network or the server is unreachable, and with a
@@ -50,3 +50,20 @@ export const classifyConnectorError: Classify = error => {
 	if (status === -32001 || status === -32000) return "retry";
 	return status >= 500 || status === 429 || status === 408 ? "retry" : "fatal";
 };
+
+/** A connection up this long has recovered; its next failure starts the backoff over. */
+export const HEALTHY_MS = 60_000;
+
+/** Wait `ms`, or less when `signal` aborts first. */
+export function delay(ms: number, signal: AbortSignal) {
+	return new Promise<void>(resolve => {
+		let finish = () => {
+			clearTimeout(timer);
+			signal.removeEventListener("abort", finish);
+			resolve();
+		};
+		let timer = setTimeout(finish, ms);
+		signal.addEventListener("abort", finish, { once: true });
+		if (signal.aborted) finish();
+	});
+}
