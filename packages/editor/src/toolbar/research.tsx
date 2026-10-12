@@ -16,6 +16,7 @@ import {
 	$insertNodes,
 	$isElementNode,
 	$isRangeSelection,
+	$isRootNode,
 	$setSelection,
 	COMMAND_PRIORITY_LOW,
 	createCommand,
@@ -30,7 +31,7 @@ import { ResearchComposer } from "../widgets/research";
 import { $relativePosition } from "./position";
 
 import type { Binding } from "@lexical/yjs";
-import type { LexicalEditor } from "lexical";
+import type { LexicalEditor, LexicalNode } from "lexical";
 import type { ReactNode, Ref } from "react";
 import type { ResearchDraftStore } from "../research-draft";
 import type { ResearchStore } from "../widget-options";
@@ -88,7 +89,7 @@ export function insertResearchReference(
 			);
 			$setSelection(selection);
 			let reference = $createResearchNode(id);
-			$insertNodes([reference]);
+			$insertResearch(reference);
 			key = reference.getKey();
 		}, { discrete: true });
 	} catch {
@@ -141,21 +142,52 @@ export function retainDraftBlock<Block>(
 	return resolved ?? previous;
 }
 
+/** The top-level block holding a node, and whether the node sits deeper, in a list item or cell. */
+function $topLevel(node: LexicalNode): { block: LexicalNode; nested: boolean } | undefined {
+	// Not `getTopLevelElement`: a table cell is a shadow root, so it stops inside the table.
+	let block: LexicalNode = node;
+	for (
+		let parent = block.getParent();
+		parent && !$isRootNode(parent);
+		parent = parent.getParent()
+	) {
+		block = parent;
+	}
+	if (!$isRootNode(block.getParent())) return undefined;
+	let host: LexicalNode | null = node;
+	while (host && !($isElementNode(host) && !host.isInline())) host = host.getParent();
+	return { block, nested: host !== block };
+}
+
+/**
+ * Insert a reference at the selection. Like the slash menu, a point in a list
+ * item or table cell puts it after the whole list or table: a cell holds only
+ * inline text in the dialect, and a list item cannot hold the block.
+ */
+export function $insertResearch(reference: LexicalNode): void {
+	let selection = $getSelection();
+	if (!$isRangeSelection(selection)) return;
+	let target = $topLevel(selection.anchor.getNode());
+	if (target?.nested) target.block.insertAfter(reference);
+	else $insertNodes([reference]);
+}
+
 /**
  * Where the draft shows relative to the top-level block holding a saved point,
- * mirroring where `$insertNodes` will put the reference: before a block whose
- * start it is, otherwise after it. An empty paragraph is replaced by the
- * reference, so the draft follows it and CSS lets the draft take its line.
+ * matching `$insertResearch`: before a block whose start it is, otherwise after
+ * it. An empty block is replaced by the reference, so the draft follows it and
+ * CSS lets the draft take its line.
  */
 export function $draftAttachment(
 	key: string,
 	offset: number,
 ): { key: string; placement: Placement } | undefined {
 	let node = $getNodeByKey(key);
-	let block = node?.getTopLevelElement();
-	if (!node || !block) return undefined;
+	let target = node ? $topLevel(node) : undefined;
+	if (!node || !target) return undefined;
+	let { block, nested } = target;
 	let first = $isElementNode(block) ? block.getFirstDescendant() : null;
-	let atStart = offset === 0 && (node === block || first === node);
+	let atStart = !nested && offset === 0 && (node === block || first === node);
 	let empty = $isElementNode(block) && block.getTextContentSize() === 0;
 	return { key: block.getKey(), placement: atStart && !empty ? "before" : "after" };
 }

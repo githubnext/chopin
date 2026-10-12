@@ -2233,7 +2233,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 /* A research draft takes the empty line it was opened on; the reference replaces that line. */
-.plan .plan-content > p[data-research-draft-anchor]:has(> br:only-child) {
+.plan
+	.plan-content
+	> :is(p, h1, h2, h3, h4, h5, h6, blockquote)[data-research-draft-anchor]:has(> br:only-child) {
 	block-size: 0;
 	margin-block: 0;
 	overflow: visible;
@@ -2241,7 +2243,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 /* The draft is content in progress, so the empty-document prompt would only overlap it. */
 .plan
-	.mdxeditor-root-contenteditable:has(.plan-research-draft-host)
+	.mdxeditor-root-contenteditable:has(> .plan-content > .plan-research-draft-host)
 	> .plan-content:not([contenteditable]) {
 	display: none;
 }

@@ -1,22 +1,23 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { $createListItemNode, $createListNode, ListItemNode, ListNode } from "@lexical/list";
-import { $createHeadingNode, HeadingNode } from "@lexical/rich-text";
-import { $createResearchNode, ResearchNode } from "@chopin/dialect";
+import { $createHeadingNode, $createQuoteNode, HeadingNode, QuoteNode } from "@lexical/rich-text";
 import {
-	$createParagraphNode,
-	$createTextNode,
-	$getRoot,
-	$insertNodes,
-	$isTextNode,
-} from "lexical";
+	$createTableCellNode,
+	$createTableNode,
+	$createTableRowNode,
+	TableCellNode,
+	TableNode,
+	TableRowNode,
+} from "@lexical/table";
+import { $createResearchNode, ResearchNode } from "@chopin/dialect";
+import { $createParagraphNode, $createTextNode, $getRoot, $isTextNode } from "lexical";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { $draftAttachment } from "./research";
+import { $draftAttachment, $insertResearch } from "./research";
 
 import type { ElementNode, LexicalNode } from "lexical";
-
 import type { ComponentType, PropsWithChildren } from "react";
 
 type DraftLayerModule = {
@@ -61,24 +62,38 @@ describe("research draft layer", () => {
 	});
 
 	it("shows the draft where the reference will be inserted", () => {
-		// Heading, empty paragraph, paragraph, list of two items and an empty one.
-		let cases: [string, (blocks: ElementNode[]) => LexicalNode, number][] = [
+		// "split" marks a point inside a block: the reference splits it, the draft follows all of it.
+		let cases: [string, (blocks: ElementNode[]) => LexicalNode, number, "split"?][] = [
 			["empty paragraph", blocks => blocks[1]!, 0],
+			["empty heading", blocks => blocks[5]!, 0],
+			["empty quote", blocks => blocks[6]!, 0],
 			["start of a paragraph", blocks => blocks[2]!.getFirstDescendant()!, 0],
-			["middle of a paragraph", blocks => blocks[2]!.getFirstDescendant()!, 2],
+			["middle of a paragraph", blocks => blocks[2]!.getFirstDescendant()!, 2, "split"],
 			["start of the first list item", blocks => blocks[3]!.getFirstDescendant()!, 0],
 			["start of a later list item", blocks => blocks[3]!.getLastDescendant()!, 0],
+			["table cell", blocks => blocks[4]!.getLastDescendant()!, 1],
 		];
-		for (let [label, at, offset] of cases) {
+		for (let [label, at, offset, split] of cases) {
 			let editor = createHeadlessEditor({
-				nodes: [HeadingNode, ListNode, ListItemNode, ResearchNode],
+				nodes: [
+					HeadingNode,
+					QuoteNode,
+					ListNode,
+					ListItemNode,
+					TableNode,
+					TableRowNode,
+					TableCellNode,
+					ResearchNode,
+				],
 				onError: error => {
 					throw error;
 				},
 			});
-			let expected: string | undefined;
-			let actual: string | undefined;
+			let follows: string | undefined;
+			let inserted: { previous?: string; parent?: string } = {};
 			editor.update(() => {
+				let cell = (text: string) =>
+					$createTableCellNode().append($createParagraphNode().append($createTextNode(text)));
 				let blocks: ElementNode[] = [
 					$createHeadingNode("h1").append($createTextNode("Heading")),
 					$createParagraphNode(),
@@ -87,27 +102,39 @@ describe("research draft layer", () => {
 						$createListItemNode().append($createTextNode("one")),
 						$createListItemNode().append($createTextNode("two")),
 					),
+					$createTableNode().append($createTableRowNode().append(cell("A"), cell("B"))),
+					$createHeadingNode("h2"),
+					$createQuoteNode(),
 				];
 				$getRoot().append(...blocks);
 				let node = at(blocks);
 				let attachment = $draftAttachment(node.getKey(), offset)!;
-				let index = blocks.findIndex(block => block.getKey() === attachment.key);
+				let children = $getRoot().getChildren();
+				let index = children.findIndex(block => block.getKey() === attachment.key);
 				// The block the draft visibly follows. An empty anchor line collapses under the draft.
-				let after = attachment.placement === "before" || !blocks[index]!.getTextContentSize()
+				let after = attachment.placement === "before" || !children[index]!.getTextContentSize()
 					? index - 1
 					: index;
-				actual = blocks[after]?.getTextContent();
+				follows = children[after]?.getTextContent();
 				if ($isTextNode(node)) node.select(offset, offset);
 				else node.selectStart();
-				$insertNodes([$createResearchNode("r")]);
+				$insertResearch($createResearchNode("r"));
 			}, { discrete: true });
 			editor.read(() => {
-				let reference = $getRoot().getChildren().find(child => child.getType() === "plan-research");
-				let before = reference?.getPreviousSibling();
-				expected = before?.getTextContent();
+				let reference = [...editor.getEditorState()._nodeMap.values()]
+					.find(node => node.getType() === "plan-research");
+				inserted = {
+					previous: reference?.getPreviousSibling()?.getTextContent(),
+					parent: reference?.getParent()?.getType(),
+				};
 			});
-			// A split block stays whole in the DOM, so the draft follows all of it.
-			expect({ label, follows: actual?.startsWith(expected!) }).toEqual({ label, follows: true });
+			expect({ label, parent: inserted.parent }).toEqual({ label, parent: "root" });
+			if (split) {
+				expect({ label, follows: follows?.startsWith(inserted.previous!) })
+					.toEqual({ label, follows: true });
+			} else {
+				expect({ label, follows }).toEqual({ label, follows: inserted.previous });
+			}
 		}
 	});
 
