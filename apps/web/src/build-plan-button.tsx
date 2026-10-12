@@ -1,16 +1,15 @@
-import { CheckIcon, LoaderIcon } from "@chopin/icons";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon } from "@chopin/icons";
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import {
 	advanceFirstBuild,
+	buildLabel,
+	buildLook,
 	buildPhase,
+	buildTabReady,
 	draftRefusalCopy,
 	firstBuildStep,
-	startingLabel,
-	SYNC_LABEL,
-	syncHint,
-	syncStatus,
-	waitingLabel,
+	hasBuilt,
 } from "./build-model";
 import {
 	cancelBuildRequest,
@@ -19,8 +18,10 @@ import {
 	startBuild,
 } from "./build-start";
 
+import "./build-plan-button.css";
+
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
-import type { FirstBuild } from "./build-model";
+import type { BuildLook, FirstBuild } from "./build-model";
 import type { Wire } from "./wire";
 
 const RELOAD_ON = [
@@ -29,49 +30,100 @@ const RELOAD_ON = [
 	"implementation:readiness",
 	"experiment:changed",
 ];
+/** Edits only move a built document's change count, so they reload it at most this often. */
+const EDIT_RELOAD_MS = 1000;
+
+/** The document's build, shared by the header capsule, the Build tab and the Build view. */
+export type BuildPlan = {
+	snapshot?: ImplementationSnapshot;
+	loadError?: string;
+	look: BuildLook;
+	/** Build has something to show: a build, or a press under way. */
+	tabReady: boolean;
+	/** The last start found no local agent; Build says how to start one. */
+	needsAgent: boolean;
+	/** Build plan, or Retry after a first build stopped. */
+	press: () => void;
+	reload: () => void;
+};
 
 /**
- * The document's first build in one press: ask the Planner for tasks, then
- * start them on the viewer's local agent. The Build view owns every later build.
- * Once that build has delivered, the slot quietly reports whether the pull
- * requests still match the living document.
+ * Read the document's build and run Build plan's one press: ask the Planner for
+ * tasks, then start them on the viewer's local agent. Nothing else sends
+ * `implementation:draft`, so opening Build never spends a Planner turn.
  */
-export function BuildPlanButton(
-	{ onNeedsAgent, onShowBuild, onShowDecisions, room, userId, wire }: {
-		/** No local agent could take the build; the Build view explains how to start one. */
-		onNeedsAgent: () => void;
-		onShowBuild: () => void;
-		onShowDecisions: () => void;
+export function useBuildPlan(
+	{ canEdit, connected, enabled, hasContent, live, planner, room, unanswered, userId, wire }: {
+		canEdit: boolean;
+		connected: boolean;
+		/** A parent document; a child is never built. */
+		enabled: boolean;
+		hasContent: boolean;
+		live: boolean;
+		planner: boolean;
 		room: string;
+		unanswered: number;
 		userId?: string;
 		wire?: Wire;
 	},
-) {
+): BuildPlan {
 	let [snapshot, setSnapshot] = useState<ImplementationSnapshot>();
+	let [loadError, setLoadError] = useState<string>();
 	let [refresh, setRefresh] = useState(0);
 	let [state, dispatch] = useReducer(advanceFirstBuild, { stage: "idle" } as FirstBuild);
 	let draftId = useRef<string>(undefined);
 	let endpoint = implementationEndpoint(room);
+	let reload = () => setRefresh(value => value + 1);
 
 	let read = async (signal?: AbortSignal) => {
 		let value = await implementationResponse<ImplementationSnapshot>(
 			await fetch(endpoint, { signal, cache: "no-store" }),
 		);
+		if (signal?.aborted) return value;
 		setSnapshot(current => !current || value.revision >= current.revision ? value : current);
+		setLoadError(undefined);
 		return value;
 	};
 
 	useEffect(() => {
-		let controller = new AbortController();
-		read(controller.signal).catch(() => {});
-		return () => controller.abort();
-	}, [endpoint, refresh]);
+		setSnapshot(undefined);
+		dispatch({ type: "reset" });
+	}, [room]);
 
 	useEffect(() => {
-		let reload = () => setRefresh(value => value + 1);
+		if (!enabled) return;
+		let controller = new AbortController();
+		read(controller.signal).catch(error => {
+			if (!controller.signal.aborted) {
+				setLoadError(error instanceof Error ? error.message : "Connection failed");
+			}
+		});
+		return () => controller.abort();
+	}, [enabled, endpoint, refresh]);
+
+	useEffect(() => {
+		if (!enabled) return;
 		let off = RELOAD_ON.map(kind => wire?.on(kind, reload));
 		return () => off.forEach(remove => remove?.());
-	}, [wire]);
+	}, [enabled, wire]);
+
+	// A built document counts its edits since the build, so edits reload it, throttled.
+	let built = !!snapshot && hasBuilt(snapshot);
+	useEffect(() => {
+		if (!enabled || !built) return;
+		let timer: number | undefined;
+		let edited = () => {
+			timer ??= window.setTimeout(() => {
+				timer = undefined;
+				reload();
+			}, EDIT_RELOAD_MS);
+		};
+		let off = ["plan:update", "plan:ack"].map(kind => wire?.on(kind, edited));
+		return () => {
+			off.forEach(remove => remove?.());
+			window.clearTimeout(timer);
+		};
+	}, [enabled, built, wire]);
 
 	// Whether the draft turn left tasks to start is only known from a fresh read.
 	let drafted = async () => {
@@ -101,7 +153,7 @@ export function BuildPlanButton(
 
 	let step = firstBuildStep(snapshot, state, userId);
 	useEffect(() => {
-		if (!step.next) return;
+		if (!step.next || !canEdit) return;
 		if (step.next === "reset" || step.next === "resume" || step.next === "wait") {
 			dispatch({ type: step.next });
 			return;
@@ -130,11 +182,10 @@ export function BuildPlanButton(
 		startBuild(room, snapshot).then(result => {
 			if (result === "started") {
 				dispatch({ type: "started" });
-				setRefresh(value => value + 1);
+				reload();
 				return;
 			}
 			dispatch({ type: "start-refused", agent: true });
-			onNeedsAgent();
 		}, error => {
 			dispatch({
 				type: "start-refused",
@@ -144,92 +195,199 @@ export function BuildPlanButton(
 					: undefined,
 			});
 		});
-	}, [step.next, snapshot?.revision]);
+	}, [step.next, snapshot?.revision, canEdit]);
 
-	let sync = syncStatus(snapshot);
-	if (sync) {
-		let hint = syncHint(sync, snapshot, userId);
+	let look = enabled
+		? buildLook(snapshot, {
+			state,
+			userId,
+			live,
+			canEdit,
+			connected,
+			planner,
+			hasContent,
+			unanswered,
+		})
+		: { kind: "plan" as const, blocked: "A child document is never built" };
+	return {
+		snapshot,
+		loadError,
+		look,
+		tabReady: enabled && buildTabReady(snapshot, look),
+		needsAgent: state.stage === "failed" && !!state.agent,
+		press() {
+			// The press drafts or starts against the latest revision, never a stale read.
+			void read().catch(() => {}).finally(() => dispatch({ type: "press" }));
+		},
+		reload,
+	};
+}
+
+/**
+ * The build's one glyph, identical in the header capsule, on the Build tab and in
+ * Build's headline, so the three read as the same thing. Nothing before a build.
+ */
+export function BuildGlyph({ look }: { look: BuildLook }) {
+	let inner = look.kind === "tasks" || look.kind === "rebuilding"
+		? <LoaderIcon aria-hidden="true" className="build-glyph-spin" />
+		: look.kind === "building"
+		? <ProgressRingIcon progress={look.done / look.total} />
+		: look.kind === "built"
+		? <span className="build-glyph-dot" data-tone="success" />
+		: look.kind === "stale"
+		? look.live
+			? <ClockIcon aria-hidden="true" className="build-glyph-quiet" />
+			: <span className="build-glyph-dot" data-tone="warning" />
+		: look.kind === "stopped" || look.kind === "failed"
+		? <WarningIcon aria-hidden="true" className="build-glyph-warning" />
+		: undefined;
+	if (!inner) return null;
+	return <span aria-hidden="true" className="build-glyph" data-build-glyph="">{inner}</span>;
+}
+
+/** Read a duration token, so the hand-off keeps the design system's timing. */
+function duration(name: string, fallback: number): number {
+	let value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+	let ms = value.endsWith("ms") ? parseFloat(value) : parseFloat(value) * 1000;
+	return Number.isFinite(ms) && ms > 0 ? ms : fallback;
+}
+
+/**
+ * On the first press only, the glyph travels from the capsule to the Build tab as
+ * the tab turns on, teaching where the status lives. Transform and opacity only.
+ */
+function handOff(from: HTMLElement) {
+	if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+	let target = [...document.querySelectorAll<HTMLElement>("[data-build-tab-glyph]")]
+		.find(element => element.getClientRects().length > 0);
+	let start = from.getBoundingClientRect();
+	let end = target?.getBoundingClientRect();
+	if (!target || !end || start.width === 0) return;
+	let flyer = from.cloneNode(true) as HTMLElement;
+	flyer.classList.add("build-glyph-flyer");
+	document.body.append(flyer);
+	target.dataset.landing = "";
+	let dx = end.left - start.left;
+	let style = getComputedStyle(document.documentElement);
+	let motion = flyer.animate(
+		[
+			{ transform: `translate(${start.left}px, ${start.top}px) scale(1)` },
+			{
+				transform: `translate(${start.left + dx / 2}px, ${
+					Math.min(start.top, end.top) - 12
+				}px) scale(1.4)`,
+				offset: 0.45,
+			},
+			{ transform: `translate(${end.left}px, ${end.top}px) scale(1)` },
+		],
+		{
+			duration: duration("--duration-linger", 600) * 1.4,
+			easing: style.getPropertyValue("--motion-smooth-out").trim() || "ease-out",
+		},
+	);
+	let finish = () => {
+		flyer.remove();
+		delete target.dataset.landing;
+	};
+	motion.addEventListener("finish", finish);
+	motion.addEventListener("cancel", finish);
+}
+
+/**
+ * The header's build slot, beside the people here. Before the first build it is
+ * Build plan, always present and inert with its reason until it can run. After
+ * the press the same slot becomes a quiet capsule that names the build's state
+ * and opens Build. It never hides, including while Build is open.
+ */
+export function BuildPlanButton(
+	{ build, canEdit, compact, hot, onHover, onOpen }: {
+		build: BuildPlan;
+		canEdit: boolean;
+		/** Phone: the glyph alone; Build's headline carries the words. */
+		compact?: boolean;
+		/** The Build tab is hovered. */
+		hot?: boolean;
+		onHover: (on: boolean) => void;
+		onOpen: () => void;
+	},
+) {
+	let { look } = build;
+	let reason = useId();
+	let glyph = useRef<HTMLSpanElement>(null);
+	let pressed = useRef(false);
+	let handedOff = useRef(false);
+	let previous = useRef(look.kind);
+	useLayoutEffect(() => {
+		let was = previous.current;
+		previous.current = look.kind;
+		if (!pressed.current || was !== "plan" || look.kind === "plan" || handedOff.current) return;
+		pressed.current = false;
+		handedOff.current = true;
+		let from = glyph.current?.querySelector<HTMLElement>("[data-build-glyph]");
+		if (from) handOff(from);
+	}, [look.kind]);
+
+	if (look.kind === "plan") {
+		if (!canEdit) return null;
+		let blocked = look.blocked;
 		return (
-			<button
-				aria-busy={sync.kind === "building" || undefined}
-				aria-description={hint}
-				className="btn btn-compact btn-ghost shrink-0"
-				data-sync={sync.kind}
-				data-tooltip={hint}
-				data-tooltip-detail={hint ? "" : undefined}
-				data-tooltip-verbatim={hint ? "" : undefined}
-				onClick={onShowBuild}
-				type="button"
-			>
-				{sync.kind === "building" && <LoaderIcon aria-hidden="true" data-button-loader="" />}
-				{sync.kind === "in-sync" && <CheckIcon aria-hidden="true" className="text-text-tertiary" />}
-				{(sync.kind === "out-of-sync" || sync.kind === "needs-attention") && (
-					<span
-						aria-hidden="true"
-						className="build-task-dot"
-						data-state={sync.kind === "needs-attention" || sync.reason === "failed"
-							? "blocked"
-							: "queued"}
-					/>
-				)}
-				{SYNC_LABEL[sync.kind]}
-			</button>
+			<>
+				<button
+					aria-describedby={blocked ? reason : undefined}
+					aria-disabled={blocked ? true : undefined}
+					className="btn btn-compact btn-primary build-plan shrink-0"
+					data-tooltip={blocked}
+					data-tooltip-detail={blocked ? "" : undefined}
+					data-tooltip-verbatim={blocked ? "" : undefined}
+					onClick={() => {
+						if (blocked) return;
+						pressed.current = true;
+						build.press();
+					}}
+					type="button"
+				>
+					Build plan
+				</button>
+				{blocked && <span className="sr-only" id={reason}>{blocked}</span>}
+			</>
 		);
 	}
-	if (step.view === "hidden") return null;
-	if (step.view === "waiting") {
-		let { label, target } = waitingLabel(snapshot);
-		let hint = "Building starts once this is resolved";
-		return (
-			<button
-				aria-description={hint}
-				className="btn btn-compact btn-ghost shrink-0"
-				data-tooltip={hint}
-				data-tooltip-detail=""
-				data-tooltip-verbatim=""
-				onClick={target === "decisions" ? onShowDecisions : onShowBuild}
-				type="button"
-			>
-				<span aria-hidden="true" className="build-task-dot" data-state="queued" />
-				{label}
-			</button>
-		);
-	}
-	if (step.view === "working") {
-		let { hint, label, queued } = startingLabel(snapshot);
-		return (
-			<button
-				aria-busy="true"
-				aria-description={hint}
-				className="btn btn-compact btn-ghost shrink-0"
-				data-tooltip={hint}
-				data-tooltip-detail={hint ? "" : undefined}
-				data-tooltip-verbatim={hint ? "" : undefined}
-				onClick={onShowBuild}
-				type="button"
-			>
-				{queued
-					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
-					: <LoaderIcon aria-hidden="true" data-button-loader="" />}
-				{label}
-			</button>
-		);
-	}
-	let failure = state.stage === "failed" && !state.agent
-		? state.message ?? "Chopin couldn’t start the build."
+	let label = buildLabel(look);
+	let action = (look.kind === "stopped" || look.kind === "failed") && look.retry && canEdit
+		? "Retry"
 		: undefined;
 	return (
-		<>
+		<span className="build-capsule-row">
 			<button
-				className="btn btn-compact btn-outline shrink-0"
-				data-tooltip={failure}
-				data-tooltip-verbatim={failure ? "" : undefined}
-				onClick={() => dispatch({ type: "press" })}
+				aria-description={look.tip}
+				aria-label={compact ? label : undefined}
+				className="build-capsule"
+				data-compact={compact || undefined}
+				data-hot={hot || undefined}
+				data-tooltip={compact ? `${label} · ${look.tip}` : look.tip}
+				data-tooltip-detail=""
+				data-tooltip-verbatim=""
+				onBlur={() => onHover(false)}
+				onClick={onOpen}
+				onFocus={() => onHover(true)}
+				onPointerEnter={() => onHover(true)}
+				onPointerLeave={() => onHover(false)}
 				type="button"
 			>
-				Build plan
+				<span className="build-capsule-glyph" ref={glyph}>
+					<BuildGlyph look={look} />
+				</span>
+				{!compact && <span className="build-capsule-label" key={label}>{label}</span>}
 			</button>
-			{failure && <span className="sr-only" role="alert">{failure}</span>}
-		</>
+			{action && (
+				<button
+					className="btn btn-compact btn-outline build-capsule-action"
+					onClick={build.press}
+					type="button"
+				>
+					{action}
+				</button>
+			)}
+		</span>
 	);
 }

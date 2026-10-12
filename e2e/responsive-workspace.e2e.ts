@@ -110,11 +110,8 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(chatPane(page)).toBeHidden();
 	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
-	await nav.getByRole("button", { name: "Build", exact: true }).click();
-	await expect(page.getByRole("heading", { name: "Build", exact: true })).toBeFocused();
-	await expect(page.getByRole("region", { name: "Build", exact: true })).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeHidden();
-	await expect(chatPane(page)).toBeHidden();
+	// Build stays off until the plan is built; implementation-launcher covers it on a phone.
+	await expect(nav.getByRole("button", { name: "Build", exact: true })).toBeDisabled();
 	await expect(page.getByRole("dialog", { name: "Implementation", exact: true })).toHaveCount(0);
 	await nav.getByRole("button", { name: "Document", exact: true }).click();
 	await expect(content(page)).toBeVisible();

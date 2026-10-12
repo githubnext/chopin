@@ -170,14 +170,14 @@ describe("BuildReadiness", () => {
 		expect(clock.queue[0]!.cancelled).toBe(true);
 	});
 
-	test("skipped documents are never judged", async () => {
+	test("skipped documents are never judged and read as ready", async () => {
 		let asks: JevRequest[] = [];
 		let readiness = new BuildReadiness({
 			current: async () => target(long),
 			ask: jev(1, asks),
 			skip: () => true,
 		});
-		expect(readiness.ready("doc", 1)).toBe(false);
+		expect(readiness.ready("doc", 1)).toBe(true);
 		await Bun.sleep(0);
 		expect(asks.length).toBe(0);
 	});

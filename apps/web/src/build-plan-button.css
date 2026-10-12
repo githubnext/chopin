@@ -1,0 +1,156 @@
+/* Build plan, the build capsule that replaces it, and the glyph they share with the Build tab. */
+
+.build-plan[aria-disabled="true"] {
+	cursor: default;
+	opacity: 0.4;
+	box-shadow: none;
+}
+
+.build-capsule-row {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	animation: build-fade var(--duration-base) var(--ease-out);
+}
+
+.build-capsule {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing);
+	height: var(--control-height-compact);
+	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-full);
+	background: var(--color-inset);
+	font-size: var(--text-xs);
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	color: var(--color-text-secondary);
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.build-capsule:hover,
+.build-capsule[data-hot] {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+/* Phone: the glyph alone, without the pill, so it reads as status rather than a control. */
+.build-capsule[data-compact] {
+	justify-content: center;
+	width: var(--control-height-compact);
+	padding: 0;
+	background: transparent;
+}
+
+.build-capsule-glyph {
+	display: inline-grid;
+}
+
+.build-capsule-label,
+.build-capsule-action {
+	animation: build-fade var(--duration-base) var(--ease-out);
+}
+
+@keyframes build-fade {
+	from {
+		opacity: 0;
+	}
+}
+
+.build-glyph {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: calc(var(--spacing) * 3.5);
+	height: calc(var(--spacing) * 3.5);
+	animation: build-fade var(--duration-base) var(--ease-out);
+}
+
+.build-glyph-dot {
+	width: calc(var(--spacing) * 2.25);
+	height: calc(var(--spacing) * 2.25);
+	border-radius: var(--radius-full);
+	background: var(--color-neutral-graphic);
+}
+
+.build-glyph-dot[data-tone="success"] {
+	background: var(--color-success-graphic);
+}
+
+.build-glyph-dot[data-tone="warning"] {
+	background: var(--color-warning-graphic);
+}
+
+.build-glyph > svg {
+	width: 100%;
+	height: 100%;
+}
+
+.build-glyph [data-progress-track] {
+	stroke: var(--color-selected-strong);
+}
+
+.build-glyph [data-progress-arc] {
+	stroke: var(--color-brand);
+	transition: stroke-dasharray var(--duration-linger) var(--motion-smooth-out);
+}
+
+.build-glyph-spin {
+	width: 100%;
+	height: 100%;
+	color: var(--color-brand);
+	animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+}
+
+.build-glyph-warning {
+	width: 100%;
+	height: 100%;
+	color: var(--color-warning-icon);
+}
+
+.build-glyph-quiet {
+	width: 100%;
+	height: 100%;
+	color: var(--color-text-tertiary);
+}
+
+/* The Build tab's twin glyph. It hides while the hand-off glyph lands on it. */
+.build-tab-glyph {
+	display: inline-grid;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.build-tab-glyph[data-landing] {
+	opacity: 0;
+}
+
+/* Linked hover: the other end of the link lights up without taking the selection. */
+.build-tab[data-hot]:not([aria-pressed="true"]) {
+	background: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.build-glyph-flyer {
+	position: fixed;
+	inset: 0 auto auto 0;
+	z-index: 1000;
+	pointer-events: none;
+	will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.build-capsule-row,
+	.build-capsule-label,
+	.build-capsule-action,
+	.build-glyph {
+		animation: none;
+	}
+
+	.build-glyph [data-progress-arc] {
+		transition: none;
+	}
+}

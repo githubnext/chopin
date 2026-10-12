@@ -19,7 +19,7 @@ implementation, automatic restart and an installer remain future work.
 - The **hosted Planner** reads the current plan and drafts or revises tasks with
   `read_implementation_graph` and `edit_implementation_graph`.
 - A **person** is the only actor allowed by the domain model to approve a draft.
-  The browser's “Build on my laptop” action approves the exact reviewed
+  The header's **Build plan** press approves the exact drafted
   graph and queues it, with the clicker's own connection and checkout, in one
   durable commit.
 - The **local connector** creates an exact-commit worktree and ACP session, then
@@ -33,13 +33,20 @@ The [implementing-chopin-plans skill](../skills/implementing-chopin-plans/SKILL.
 adds provider-neutral local work practices. The MCP initialization instructions
 and current tool descriptions remain authoritative.
 
-## Drafting tasks from Build
+## Drafting tasks from Build plan
 
-Opening Build sends `implementation:draft` when the document has no tasks, its
-tasks were drafted for an earlier revision, or its last build was returned for
-changes. The browser asks at most once per visit, only for the need its first
-read saw, and never while the Planner is already in a turn; a later document
-change shows **Update tasks** instead.
+Only **Build plan** in the document header sends `implementation:draft`, and
+only when the document has no tasks for its current revision, or its last build
+was returned for changes. Opening the Build tab never drafts or starts anything;
+the tab stays off until the plan has been built or a press is under way. Build
+plan is always present for writers. While the document is empty, has open
+decisions or accepted comments, or is not yet judged ready, it is inert and its
+tooltip says why. After the press the same slot becomes a status capsule:
+**Breaking into tasks…**, **Building · 3 of 8**, **Built**, **N changes to
+build**, **Building changes…**, or **Build stopped**/**Build failed** with
+**Retry**. The Build tab carries the same glyph, and the change count is the
+number of top-level blocks added, removed or changed since the last built
+source.
 
 The server rechecks write access and the room exactly as for a Chat message to
 the Planner, refuses a child document, unresolved decisions or accepted
@@ -53,7 +60,7 @@ queue.
 At most one draft per document is live, whatever revision it was asked for,
 because its instruction reads the latest document. A request while a draft is
 queued or running returns that draft (`existing: true`), so collaborators
-opening Build together start one turn. Requests share Chat's send and queue
+pressing Build plan together start one turn. Requests share Chat's send and queue
 limits, even while the Planner is idle. A reply says `ended` when the turn
 finished before the request was answered. `implementation:drafting`
 broadcasts `queued`, `running` and `ended`; `ended` follows the turn's own

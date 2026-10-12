@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
 
+import type { ReactNode } from "react";
 import type { WorkspaceDocumentView } from "./workspace-model";
 import type { DocumentActivity } from "./document-activity";
 
@@ -30,20 +31,29 @@ export function unansweredDecisionsLabel(label: string, unanswered: number): str
 }
 
 /** Why Build cannot open yet, for its tooltip and accessible description. */
-export const BUILD_UNAVAILABLE = "Write the document before building it";
+export const BUILD_UNAVAILABLE = "Build the plan to see its tasks";
 
 export function DecisionViewControl(
 	{
 		attention,
 		buildEnabled,
+		buildGlyph,
+		buildHot,
 		documentActivity,
+		onBuildHover,
 		onView,
 		unanswered,
 		view,
 	}: {
 		attention?: boolean;
+		/** Build opens once the plan has been built; `undefined` for a document without Build. */
 		buildEnabled?: boolean;
+		/** The build's status glyph, the twin of the header capsule's. */
+		buildGlyph?: ReactNode;
+		/** The header capsule is hovered. */
+		buildHot?: boolean;
 		documentActivity?: DocumentActivity;
+		onBuildHover?: (on: boolean) => void;
 		onView: (view: WorkspaceDocumentView) => void;
 		unanswered: number;
 		view: WorkspaceDocumentView;
@@ -105,18 +115,29 @@ export function DecisionViewControl(
 				)}
 			</button>
 			{buildEnabled !== undefined && (
-				<BuildSegment ready={buildEnabled} selected={view === "build"} onView={onView} />
+				<BuildSegment
+					glyph={buildGlyph}
+					hot={buildHot}
+					onHover={onBuildHover}
+					onView={onView}
+					ready={buildEnabled}
+					selected={view === "build"}
+				/>
 			)}
 		</div>
 	);
 }
 
 /**
- * Build stays focusable while the document is empty, so its reason can be read;
- * `disabled` would hide both the tooltip and the description.
+ * Build stays focusable before the first build, so its reason can be read;
+ * `disabled` would hide both the tooltip and the description. Opening it never
+ * starts anything: only Build plan does.
  */
 function BuildSegment(
-	{ onView, ready, selected }: {
+	{ glyph, hot, onHover, onView, ready, selected }: {
+		glyph?: ReactNode;
+		hot?: boolean;
+		onHover?: (on: boolean) => void;
 		onView: (view: WorkspaceDocumentView) => void;
 		ready: boolean;
 		selected: boolean;
@@ -130,21 +151,27 @@ function BuildSegment(
 				aria-describedby={ready ? undefined : reason}
 				aria-disabled={ready ? undefined : true}
 				aria-pressed={selected}
-				className={`btn btn-sm transition-[background-color,box-shadow,color] ${
+				className={`build-tab btn btn-sm gap-1 transition-[background-color,box-shadow,color] ${
 					selected
 						? "bg-ground font-medium text-gray-800"
 						: ready
 						? "text-text-tertiary hover:bg-hover"
 						: "cursor-default text-text-tertiary opacity-40"
 				}`}
+				data-hot={ready && hot || undefined}
 				data-tooltip={ready ? undefined : BUILD_UNAVAILABLE}
 				data-tooltip-detail={ready ? undefined : ""}
+				onBlur={ready ? () => onHover?.(false) : undefined}
 				onClick={() => {
 					if (ready) onView("build");
 				}}
+				onFocus={ready ? () => onHover?.(true) : undefined}
+				onPointerEnter={ready ? () => onHover?.(true) : undefined}
+				onPointerLeave={ready ? () => onHover?.(false) : undefined}
 				type="button"
 			>
 				Build
+				{ready && glyph && <span className="build-tab-glyph" data-build-tab-glyph="">{glyph}</span>}
 			</button>
 			{!ready && <span className="sr-only" id={reason}>{BUILD_UNAVAILABLE}</span>}
 		</>

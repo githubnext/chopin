@@ -135,6 +135,11 @@ export type WorkspaceProps = {
 	decisions: ReactNode;
 	build?: ReactNode;
 	buildEnabled?: boolean;
+	/** The build's status glyph, shown on the compact Build destination. */
+	buildGlyph?: ReactNode;
+	/** The header's build capsule is hovered. */
+	buildHot?: boolean;
+	onBuildHover?: (on: boolean) => void;
 	controls: ReactNode;
 	/** Connection and document status, right-aligned in the document title bar. */
 	status?: ReactNode;
@@ -241,6 +246,8 @@ export function Workspace(
 		available = 950,
 		build,
 		buildEnabled = true,
+		buildGlyph,
+		buildHot,
 		frame,
 		chat,
 		controls,
@@ -251,6 +258,7 @@ export function Workspace(
 		header,
 		identity,
 		mode,
+		onBuildHover,
 		onChatOpen,
 		onDesktopChatOpen,
 		onDestination,
@@ -447,6 +455,7 @@ export function Workspace(
 							active ? undefined : documentActivity,
 						);
 						let unavailable = destination === "build" && !buildEnabled;
+						let linked = destination === "build" && !unavailable;
 						return (
 							<button
 								aria-current={active ? "page" : undefined}
@@ -456,11 +465,14 @@ export function Workspace(
 								aria-pressed={active}
 								className={`btn btn-md btn-ghost min-h-11 min-w-0 ${
 									unavailable ? "cursor-default opacity-40" : ""
-								}`}
+								} ${destination === "build" ? "build-tab gap-1" : ""}`}
+								data-hot={linked && buildHot || undefined}
 								key={destination}
 								onClick={event => {
 									if (!unavailable) navigate(destination, event.currentTarget);
 								}}
+								onPointerEnter={linked ? () => onBuildHover?.(true) : undefined}
+								onPointerLeave={linked ? () => onBuildHover?.(false) : undefined}
 								type="button"
 							>
 								{destination === "chat"
@@ -472,6 +484,9 @@ export function Workspace(
 									: "Document"}
 								{destination === "plan" && !active && (
 									<DocumentActivityDot activity={documentActivity} />
+								)}
+								{linked && buildGlyph && (
+									<span className="build-tab-glyph" data-build-tab-glyph="">{buildGlyph}</span>
 								)}
 								{destination === "decisions" && unanswered > 0 && (
 									<span aria-hidden="true" className="ml-1" data-plan-decision-count>
