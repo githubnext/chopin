@@ -132,22 +132,22 @@ export function implementationConnector(
 	let pending = async (connection: Connection) => {
 		// Bounded by the queue: each pass releases one document.
 		for (let pass = 0; pass <= 100; pass++) {
-		let documentId = connections.assigned(connection.id);
-		if (!documentId) return undefined;
-		try {
-			let build = await documentExists(documentId)
-				? await withPlan(documentId, async plan => {
-					let build = plan.builds.at(-1);
-					return build?.connectionId === connection.id && build.user === connection.owner
-						? build
-						: undefined;
-				})
-				: undefined;
+			let documentId = connections.assigned(connection.id);
+			if (!documentId) return undefined;
+			try {
+				let build = await documentExists(documentId)
+					? await withPlan(documentId, async plan => {
+						let build = plan.builds.at(-1);
+						return build?.connectionId === connection.id && build.user === connection.owner
+							? build
+							: undefined;
+					})
+					: undefined;
 				if (build && ["queued", "starting", "running"].includes(build.state)) return build;
 				connections.release(connection.id, documentId);
-		} catch {
-			return undefined;
-		}
+			} catch {
+				return undefined;
+			}
 		}
 	};
 	let api = {
