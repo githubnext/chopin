@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { capabilities, ExperimentError, limits, sourceSchema } from "@chopin/experiment";
 import { publicInvestigation } from "@chopin/experiment/records";
+import type { Investigation, InvestigationProvenance } from "@chopin/experiment/records";
 import type { HostedAuth } from "../auth/routes";
 import type { AuthenticatedSession } from "../auth/session";
 import type { Router } from "../http/router";
@@ -11,6 +12,7 @@ import { Connections } from "./connections";
 import type { Connection } from "./connections";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
+import { investigationSummary } from "./document";
 import { implementationSchemas } from "../tasks/connector";
 import type { ImplementationConnector } from "../tasks/connector";
 import { connectorSchemas } from "./mcp-schema";
@@ -110,6 +112,30 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	async function mutationAllowed(id: string) {
 		if (options.canMutate && !await options.canMutate(id)) fail("document-locked");
 	}
+	/** A published investigation's views and decisions are also reachable from its child. */
+	async function owned(id: string, documentId: string) {
+		let value = await service.store.get(id);
+		if (!value || value.documentId !== documentId && value.childId !== documentId) {
+			fail("not-found");
+		}
+		return value;
+	}
+	async function published(value: Investigation) {
+		let child = value.childId ? await auth.storage.channels.get(value.childId) : undefined;
+		return {
+			...publicInvestigation(value),
+			...(child && value.result
+				? {
+					child: {
+						id: child.id,
+						title: child.title,
+						slug: child.slug,
+						summary: investigationSummary(value.brief, value.result),
+					},
+				}
+				: {}),
+		};
+	}
 	function route(
 		method: string,
 		path: string,
@@ -178,8 +204,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	route("GET", "/api/documents/:id/experiments", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
+		let source = await service.store.published(params.id);
 		return json({
-			experiments: (await service.store.list(params.id)).map(value => ({
+			experiments: [
+				...(await service.store.list(params.id)),
+				...(source ? [source] : []),
+			].map(value => ({
 				id: value.id,
 				brief: value.brief,
 				state: value.state,
@@ -207,9 +237,22 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	route("GET", "/api/documents/:id/experiments/:experiment", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
-		let value = await service.store.get(params.experiment);
-		if (!value || value.documentId !== params.id) fail("not-found");
-		return json(publicInvestigation(value));
+		return json(await published(await owned(params.experiment, params.id)));
+	});
+	route("GET", "/api/documents/:id/investigation-provenance", async (request, params) => {
+		await access(await auth.sessions.authenticate(request), params.id, false);
+		let value = await service.store.published(params.id);
+		if (!value) fail("not-found");
+		let user = await auth.storage.users.get(value.requester);
+		return json(
+			{
+				investigationId: value.id,
+				parentChannelId: value.documentId,
+				brief: value.brief,
+				viewCount: value.result?.views.length ?? 0,
+				...(user ? { startedBy: user.login } : {}),
+			} satisfies InvestigationProvenance,
+		);
 	});
 	route("POST", "/api/documents/:id/experiments/:experiment/run", async (request, params) => {
 		let { session, channel } = await access(
@@ -290,9 +333,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		"/api/documents/:id/experiments/:experiment/export/:dataset",
 		async (request, params) => {
 			await access(await auth.sessions.authenticate(request), params.id, false);
-			let value = await service.store.get(params.experiment);
-			let dataset = value?.result?.datasets.find(item => item.key === params.dataset);
-			if (!value || value.documentId !== params.id || !dataset) fail("not-found");
+			let value = await owned(params.experiment, params.id);
+			let dataset = value.result?.datasets.find(item => item.key === params.dataset);
+			if (!dataset) fail("not-found");
 			let csv = new URL(request.url).searchParams.get("format") === "csv";
 			return new Response(csv ? datasetCsv(dataset) : JSON.stringify(dataset, null, 2), {
 				headers: {
@@ -307,11 +350,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/documents/:id/experiments/:experiment/decision", async (request, params) => {
 		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
 		await mutationAllowed(params.id);
-		let value = await service.store.get(params.experiment);
-		if (!value || value.documentId !== params.id) fail("not-found");
-		return json(
-			publicInvestigation(await service.decide(value.id, session.user, await body(request))),
-		);
+		let value = await owned(params.experiment, params.id);
+		return json(await published(await service.decide(value.id, session.user, await body(request))));
 	});
 	route("POST", "/api/documents/:id/experiments/:experiment/placement", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, true);
@@ -321,11 +361,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			decision: z.string().uuid().optional(),
 			remove: z.boolean().optional(),
 		}).strict().parse(await body(request));
-		let value = await service.store.get(params.experiment);
-		if (
-			!value || value.documentId !== params.id
-			|| !value.result?.views.some(view => view.key === input.view)
-		) fail("not-found");
+		let value = await owned(params.experiment, params.id);
+		if (!value.result?.views.some(view => view.key === input.view)) fail("not-found");
 		if (
 			input.decision
 			&& !value.decisions.some(decision =>
@@ -340,17 +377,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			input.decision ?? "",
 			input.remove ?? false,
 		);
-		return json(publicInvestigation(value));
+		return json(await published(value));
 	});
 	route("POST", "/api/documents/:id/experiments/:experiment/state", async (request, params) => {
 		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
-		let value = await service.store.get(params.experiment);
-		if (!value || value.documentId !== params.id) fail("not-found");
+		let value = await owned(params.experiment, params.id);
 		let input = z.object({ view: z.string().max(64), patch: z.unknown() }).strict().parse(
 			await body(request),
 		);
 		return json(
-			publicInvestigation(await service.select(value.id, session.user.id, input.view, input.patch)),
+			await published(await service.select(value.id, session.user.id, input.view, input.patch)),
 		);
 	});
 	route("GET", "/connector/mcp", async () => new Response(null, { status: 405 }));
@@ -534,7 +570,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						}
 						if (
 							JSON.stringify(parse(source.source)).match(
-								/"name":"(Questionnaire|Question|Decision|Research|Experiment)"/,
+								/"name":"(Questionnaire|Question|Decision|Research|Investigation|Experiment)"/,
 							)
 						) fail("protected-report");
 						value = await service.candidate(id, connection.id, generation, {

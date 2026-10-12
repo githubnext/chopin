@@ -1,4 +1,8 @@
-import type { InvestigationSummary, PublishedInvestigation } from "@chopin/experiment/records";
+import type {
+	InvestigationChild,
+	InvestigationSummary,
+	PublishedInvestigation,
+} from "@chopin/experiment/records";
 import { experimentRequest } from "./api";
 import type { Wire } from "../wire";
 import type { SelectionPatch } from "@chopin/experiment";
@@ -12,7 +16,11 @@ export class ExperimentStore {
 	items: InvestigationSummary[] = [];
 	values = new Map<string, PublishedInvestigation>();
 	error = "";
-	constructor(readonly documentId: string) {}
+	#published = new Set<string>();
+	constructor(
+		readonly documentId: string,
+		private onPublished: (child: InvestigationChild) => void = () => {},
+	) {}
 	readonly snapshot = () => this.#version;
 	readonly subscribe = (listener: () => void) => {
 		this.#listeners.add(listener);
@@ -68,9 +76,7 @@ export class ExperimentStore {
 				this.#controller.signal,
 			);
 			if (this.#details.get(id) !== sequence) return;
-			let current = this.values.get(id);
-			if (!current || value.revision >= current.revision) this.values.set(id, value);
-			this.changed();
+			this.#accept(value);
 		} catch (error) {
 			if (controller === this.#controller && !controller.signal.aborted) {
 				this.error = String((error as Error).message);
@@ -85,11 +91,20 @@ export class ExperimentStore {
 			}`,
 			body,
 		);
-		let current = this.values.get(value.id);
-		if (!current || value.revision >= current.revision) this.values.set(value.id, value);
-		this.changed();
+		this.#accept(value);
 		void this.refresh();
 		return value;
+	}
+	#accept(value: PublishedInvestigation) {
+		let current = this.values.get(value.id);
+		if (current && value.revision < current.revision) return this.changed();
+		this.values.set(value.id, value);
+		// Navigation learns of a child only when this session watched it arrive.
+		if (current && !current.child && value.child && !this.#published.has(value.id)) {
+			this.#published.add(value.id);
+			this.onPublished(value.child);
+		}
+		this.changed();
 	}
 	connect(wire?: Wire) {
 		this.#controller = new AbortController();

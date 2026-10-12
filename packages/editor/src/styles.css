@@ -77,6 +77,12 @@
 	background: transparent;
 }
 
+/* Host detail on a ready card stays interactive above the card-wide open control. */
+.plan-research-detail {
+	position: relative;
+	z-index: 2;
+}
+
 /* Composer, progress and result share the document's prose column. */
 .plan-research-composer,
 .plan-research-tracked {

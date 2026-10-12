@@ -1,10 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { InvestigationCard, SidecarCard } from "@chopin/editor";
-import { ExperimentView } from "@chopin/experiment/react";
-import { StaticPlanEditor } from "@chopin/editor/static";
 import type { ExperimentStore } from "./store";
-import { EvidenceActions, ItemDecisions } from "./evidence";
-import type { InvestigationState, PublishedInvestigation } from "@chopin/experiment/records";
+import { ItemDecisions } from "./evidence";
+import type { InvestigationChild, InvestigationState } from "@chopin/experiment/records";
 
 const ACTIVE: InvestigationState[] = ["queued", "running", "publishing"];
 const SETTLED: InvestigationState[] = ["failed", "cancelled", "interrupted"];
@@ -19,7 +17,7 @@ function latest(store: ExperimentStore, id: string) {
 
 /**
  * Whether a document may drop this investigation's card. Only stopped or failed work can go:
- * a ready card is withdrawn first, and a completed one stays as the result's place in the
+ * a ready card is withdrawn first, and a completed one stays as the link to its child
  * document. The server applies the same rule.
  */
 export function removableInvestigation(store: ExperimentStore, id: string): boolean {
@@ -28,13 +26,15 @@ export function removableInvestigation(store: ExperimentStore, id: string): bool
 }
 
 /** The inline card for one investigation, placed in the document by its id. */
-export function InvestigationReference({ store, id, userId, canEdit, locked, onRemove }: {
+export function InvestigationReference({ store, id, userId, canEdit, locked, onRemove, onOpen }: {
 	store: ExperimentStore;
 	id: string;
 	userId: string;
 	canEdit: boolean;
 	locked: boolean;
 	onRemove: () => void;
+	/** Open the child document a completed investigation was published as. */
+	onOpen?: (child: InvestigationChild, opener: HTMLElement) => void;
 }) {
 	useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
 	let [needsAgent, setNeedsAgent] = useState(false);
@@ -75,13 +75,16 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 		);
 	}
 	let stoppable = ACTIVE.includes(state) && item?.input?.authorizer === userId;
+	let child = state === "completed" ? item?.child : undefined;
 	return (
 		<InvestigationCard
 			brief={brief}
 			busy={busy}
 			canEdit={canEdit && (stoppable || !locked)}
 			error={error}
+			id={id}
 			notice={needsAgent && <AgentHint />}
+			onOpen={child && onOpen ? opener => onOpen(child, opener) : undefined}
 			onRemove={canEdit && state === "requested"
 				? () =>
 					void act(async () => {
@@ -102,11 +105,14 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 				? () => void act(() => store.action(id, "cancel", {}))
 				: undefined}
 			progress={current?.progress}
+			ready={child && {
+				title: child.title,
+				summary: child.summary,
+				views: item?.result?.views.length ?? 0,
+			}}
 			state={state}
 		>
-			{item?.result && (
-				<Result item={item} store={store} busy={busy} canEdit={canEdit} locked={locked} act={act} />
-			)}
+			{child && item && <ItemDecisions store={store} item={item} canEdit={canEdit && !locked} />}
 		</InvestigationCard>
 	);
 }
@@ -119,83 +125,6 @@ function AgentHint() {
 				{`CHOPIN_URL=${location.origin} bun run connector connect /path/to/project -- copilot --acp`}
 			</code>
 			<p className="m-0">Open the link it prints, then press Run again.</p>
-		</div>
-	);
-}
-
-function Result({ item, store, busy, canEdit, locked, act }: {
-	item: PublishedInvestigation;
-	store: ExperimentStore;
-	busy: boolean;
-	canEdit: boolean;
-	locked: boolean;
-	act: (action: () => Promise<unknown>) => Promise<void>;
-}) {
-	let result = item.result!;
-	return (
-		<div className="flex min-w-0 flex-col gap-3">
-			<details>
-				<summary className="cursor-pointer text-sm text-text-secondary hover:text-text-primary">
-					Report
-				</summary>
-				<div className="pt-2">
-					<StaticPlanEditor source={result.report} />
-				</div>
-			</details>
-			{result.views.map(view => (
-				<div key={view.key} className="flex flex-col gap-3">
-					<ExperimentView
-						result={result}
-						view={view}
-						state={item.views[view.key]}
-						disabled={busy || !canEdit}
-						onChange={(field, values) =>
-							void act(async () => {
-								try {
-									await store.action(item.id, "state", {
-										view: view.key,
-										patch: {
-											mutationId: crypto.randomUUID(),
-											expected: { [field]: item.views[view.key].fields[field].revision },
-											set: { [field]: values },
-										},
-									});
-								} finally {
-									await store.load(item.id);
-								}
-							})}
-					/>
-					<EvidenceActions
-						store={store}
-						item={item}
-						view={view}
-						disabled={busy || !canEdit || locked}
-					/>
-					<div className="flex gap-3 text-sm">
-						<a
-							href={`/api/documents/${store.documentId}/experiments/${item.id}/export/${view.datasetKey}`}
-						>
-							Download JSON
-						</a>
-						<a
-							href={`/api/documents/${store.documentId}/experiments/${item.id}/export/${view.datasetKey}?format=csv`}
-						>
-							Download CSV
-						</a>
-					</div>
-				</div>
-			))}
-			<p className="m-0 text-xs text-text-secondary">{result.provenance.environment}</p>
-			{result.provenance.limitations.map((value, index) => (
-				<p key={index} className="m-0 text-sm">{value}</p>
-			))}
-			<ItemDecisions store={store} item={item} canEdit={canEdit && !locked} />
-			{result.evidence.map(value => (
-				<details key={value.key}>
-					<summary className="text-sm">{value.title}</summary>
-					<pre className="max-h-64 overflow-auto text-xs">{value.text}</pre>
-				</details>
-			))}
 		</div>
 	);
 }
