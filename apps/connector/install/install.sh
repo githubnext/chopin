@@ -9,6 +9,8 @@
 # CHOPIN_RELEASE_BASE_URL     where cli-v<version>/ assets are downloaded from
 # CHOPIN_RELEASES_API_URL     the GitHub API list of releases used to find the newest version
 #
+# Both URLs must be https://, except on 127.0.0.1, localhost or [::1]; redirects must be https.
+#
 # chopin goes to ~/.local/bin. Nothing here needs, or asks for, administrator rights.
 set -eu
 
@@ -21,11 +23,43 @@ fail() {
 	exit 1
 }
 
+# Plain http is accepted only from a server on this machine, as the tests use.
+allowed_url() {
+	case "$1" in
+	https://*) return 0 ;;
+	http://*) ;;
+	*) return 1 ;;
+	esac
+	authority="${1#http://}"
+	authority="${authority%%[/?#]*}"
+	case "$authority" in
+	*@*) return 1 ;;
+	127.0.0.1 | 127.0.0.1:* | localhost | localhost:* | '[::1]' | '[::1]':*) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+for setting in "CHOPIN_RELEASE_BASE_URL=$BASE_URL" "CHOPIN_RELEASES_API_URL=$RELEASES_API_URL"; do
+	allowed_url "${setting#*=}" \
+		|| fail "${setting%%=*} must be an https:// URL (or http:// on 127.0.0.1, localhost or [::1]), not ${setting#*=}."
+done
+
+# Redirects are followed only to https.
 download() {
+	case "$1" in
+	https://*) protocols='=https' ;;
+	*) protocols='=http,https' ;;
+	esac
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL --retry 3 -o "$2" "$1"
+		curl -fsSL --proto "$protocols" --proto-redir '=https' --retry 3 -o "$2" "$1"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -q --tries=3 -O "$2" "$1"
+		# wget follows a redirect to plain http whatever its options (--https-only applies only to
+		# recursive downloads), so the redirects it followed are read from its response headers.
+		wget -q -S --tries=3 -O "$2" "$1" 2>"$2.headers" || return 1
+		if grep -Ei '^[[:space:]]*location:[[:space:]]*[a-z][a-z0-9+.-]*:' "$2.headers" \
+			| grep -Eqiv 'location:[[:space:]]*https://'; then
+			rm -f "$2"
+			fail "$1 was redirected to a URL that is not HTTPS. Refusing to use it."
+		fi
 	else
 		fail "curl or wget is required to download chopin."
 	fi

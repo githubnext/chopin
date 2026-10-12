@@ -1,5 +1,15 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	stat,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,17 +21,19 @@ let scratch = await mkdtemp(join(tmpdir(), "chopin-install-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 type Content = string | Uint8Array<ArrayBuffer>;
+/** An asset, or a redirect to another path on the same plain-HTTP server. */
+type Served = Content | { redirect: string };
 
 function sha256(content: Content) {
 	return new Bun.CryptoHasher("sha256").update(content).digest("hex");
 }
 
-function fakeRelease(releases: Record<string, Record<string, Content>>) {
+function fakeRelease(releases: Record<string, Record<string, Served>>) {
 	let requests: string[] = [];
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
-		fetch(request) {
+		fetch(request): Response {
 			let path = new URL(request.url).pathname;
 			requests.push(path);
 			if (path === "/api/releases") {
@@ -39,9 +51,11 @@ function fakeRelease(releases: Record<string, Record<string, Content>>) {
 			}
 			let [, tag, name] = path.split("/");
 			let content = releases[tag.replace(/^cli-v/, "")]?.[name];
-			return content === undefined
-				? new Response("Not Found", { status: 404 })
-				: new Response(content);
+			if (content === undefined) return new Response("Not Found", { status: 404 });
+			if (typeof content === "object" && "redirect" in content) {
+				return Response.redirect(`${origin}${content.redirect}`, 302);
+			}
+			return new Response(content);
 		},
 	});
 	let origin = `http://127.0.0.1:${server.port}`;
@@ -71,8 +85,13 @@ function assets(name: string, binary: Content, checksum = sha256(binary)) {
 describe.skipIf(process.platform === "win32")("install.sh", () => {
 	let script = join(import.meta.dir, "install.sh");
 
-	/** A fresh HOME, and shims for uname, gh and sudo that record how they were called. */
-	async function machine(options: { os?: string; arch?: string; gh?: number } = {}) {
+	/**
+	 * A fresh HOME, and shims for uname, gh and sudo that record how they were called. With
+	 * `downloader: "wget"`, PATH has only the tools install.sh uses, with wget and without curl.
+	 */
+	async function machine(
+		options: { os?: string; arch?: string; gh?: number; downloader?: "curl" | "wget" } = {},
+	) {
 		let home = await mkdtemp(join(scratch, "home-"));
 		let shims = join(home, "shims");
 		await mkdir(shims);
@@ -89,9 +108,23 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		);
 		await shim("gh", `echo "gh $*" >> "${log}"\nexit ${options.gh ?? 0}`);
 		await shim("sudo", `echo "sudo $*" >> "${log}"\nexit 1`);
+		let path = `${shims}:${process.env.PATH}`;
+		if (options.downloader === "wget") {
+			let tools = join(home, "tools");
+			await mkdir(tools);
+			for (
+				let tool of ["sh", "wget", "mktemp", "rm", "tr", "grep", "head", "sed", "awk", "cut"]
+					.concat(["sha256sum", "chmod", "mkdir", "cp", "mv", "cat"])
+			) {
+				let found = Bun.which(tool);
+				if (!found) throw new Error(`${tool} is needed to test install.sh with wget.`);
+				await symlink(found, join(tools, tool));
+			}
+			path = `${shims}:${tools}`;
+		}
 		let calls = async () =>
 			(await Bun.file(log).exists()) ? (await readFile(log, "utf8")).trim() : "";
-		return { home, shims, calls, chopin: join(home, ".local/bin/chopin") };
+		return { home, shims, path, calls, chopin: join(home, ".local/bin/chopin") };
 	}
 
 	async function install(
@@ -109,7 +142,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 	) {
 		// Asynchronous: the fake release is served from this process.
 		let child = Bun.spawn(command, {
-			env: { HOME: at.home, PATH: `${at.shims}:${process.env.PATH}`, ...env },
+			env: { HOME: at.home, PATH: at.path, ...env },
 			stdout: "pipe",
 			stderr: "pipe",
 		});
@@ -219,6 +252,62 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		expect((await readdir(bin)).filter(name => name !== "chopin")).toHaveLength(1);
 	});
 
+	test("downloads only over HTTPS, refusing a redirect to plain HTTP", async () => {
+		let binary = fakeChopin("0.2.0");
+		using release = fakeRelease({
+			"0.2.0": {
+				...assets("chopin-linux-x64", binary),
+				"chopin-linux-x64": { redirect: "/cli-v0.2.1/chopin-linux-x64" },
+			},
+			"0.2.1": { "chopin-linux-x64": binary },
+		});
+		let curl = await machine();
+		let refused = await install(curl, release.env, "0.2.0");
+		expect(refused.code).not.toBe(0);
+		expect(refused.stderr).toContain("could not download");
+		expect(await Bun.file(curl.chopin).exists()).toBe(false);
+		// curl does not even request the plain HTTP URL.
+		expect(release.requests).not.toContain("/cli-v0.2.1/chopin-linux-x64");
+
+		// wget cannot refuse to follow it, but what it downloads is not used.
+		let wget = await machine({ downloader: "wget" });
+		let result = await install(wget, release.env, "0.2.0");
+		expect(result.code).not.toBe(0);
+		expect(result.stderr).toContain("redirected to a URL that is not HTTPS");
+		expect(await Bun.file(wget.chopin).exists()).toBe(false);
+	});
+
+	test("refuses a plain HTTP URL for releases unless it is on this machine", async () => {
+		let at = await machine();
+		for (
+			let [env, args] of [
+				[{ CHOPIN_RELEASE_BASE_URL: "http://example.invalid/releases" }, ["0.2.0"]],
+				[{ CHOPIN_RELEASE_BASE_URL: "http://127.0.0.1@example.invalid/releases" }, ["0.2.0"]],
+				[{ CHOPIN_RELEASE_BASE_URL: "ftp://127.0.0.1/releases" }, ["0.2.0"]],
+				[{ CHOPIN_RELEASES_API_URL: "http://example.invalid/api/releases" }, []],
+			] as [Record<string, string>, string[]][]
+		) {
+			let result = await install(at, env, ...args);
+			expect(result.code).not.toBe(0);
+			expect(result.stderr).toContain("must be an https:// URL");
+		}
+
+		// The tests' own server is plain HTTP on 127.0.0.1; localhost works too.
+		for (let downloader of ["curl", "wget"] as const) {
+			using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")) });
+			let local = await machine({ downloader });
+			let result = await install(local, {
+				CHOPIN_RELEASE_BASE_URL: release.env.CHOPIN_RELEASE_BASE_URL.replace(
+					"127.0.0.1",
+					"localhost",
+				),
+				CHOPIN_RELEASES_API_URL: release.env.CHOPIN_RELEASES_API_URL,
+			});
+			expect(result.stderr).toBe("");
+			expect(result.code).toBe(0);
+		}
+	});
+
 	test("refuses a binary whose provenance attestation does not verify", async () => {
 		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")) });
 		let at = await machine({ gh: 1 });
@@ -304,6 +393,47 @@ describe("install.ps1", () => {
 		expect(result.output).toContain("install.ps1 installs chopin on Windows");
 		expect(release.requests).toEqual([]);
 	});
+
+	test.skipIf(!pwsh)(
+		"refuses a plain HTTP URL for releases unless it is on this machine",
+		async () => {
+			for (
+				let [env, args] of [
+					[{ CHOPIN_RELEASE_BASE_URL: "http://example.invalid/releases" }, ["0.2.0"]],
+					[{ CHOPIN_RELEASE_BASE_URL: "http://127.0.0.1@example.invalid/releases" }, ["0.2.0"]],
+					[{ CHOPIN_RELEASE_BASE_URL: "ftp://127.0.0.1/releases" }, ["0.2.0"]],
+					[{ CHOPIN_RELEASES_API_URL: "http://example.invalid/api/releases" }, []],
+				] as [Record<string, string>, string[]][]
+			) {
+				let result = await install({ ...env, LOCALAPPDATA: scratch }, ...args);
+				expect(result.code).not.toBe(0);
+				expect(result.output).toContain("must be an https:// URL");
+			}
+		},
+	);
+
+	test.skipIf(!pwsh || process.platform !== "win32")(
+		"refuses a download redirected to plain HTTP",
+		async () => {
+			let binary = new Uint8Array(await Bun.file(process.execPath).arrayBuffer());
+			using release = fakeRelease({
+				"0.2.0": {
+					...assets("chopin-windows-x64.exe", binary),
+					"chopin-windows-x64.exe": { redirect: "/cli-v0.2.1/chopin-windows-x64.exe" },
+				},
+				"0.2.1": { "chopin-windows-x64.exe": binary },
+			});
+			let local = await mkdtemp(join(scratch, "localappdata-"));
+			let result = await install(
+				{ ...release.env, LOCALAPPDATA: local, CHOPIN_VERIFY_ATTESTATION: "0" },
+				"0.2.0",
+			);
+			expect(result.code).not.toBe(0);
+			expect(result.output).toContain("which is not HTTPS");
+			expect(await Bun.file(join(local, "chopin", "bin", "chopin.exe")).exists()).toBe(false);
+		},
+		120_000,
+	);
 
 	// On Windows the fake chopin.exe is Bun itself: a real executable that answers --version.
 	test.skipIf(!pwsh || process.platform !== "win32")(

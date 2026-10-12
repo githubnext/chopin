@@ -8,6 +8,8 @@
 # CHOPIN_RELEASE_BASE_URL     where cli-v<version>/ assets are downloaded from
 # CHOPIN_RELEASES_API_URL     the GitHub API list of releases used to find the newest version
 #
+# Both URLs must be https://, except on 127.0.0.1, localhost or [::1]; redirects must be https.
+#
 # chopin.exe goes to %LOCALAPPDATA%\chopin\bin, which is added to your user PATH. Nothing here
 # needs administrator rights.
 param([string]$Version = $env:CHOPIN_VERSION)
@@ -24,8 +26,35 @@ function Stop-Install([string]$Message) {
 	throw [System.OperationCanceledException]::new("chopin install: $Message")
 }
 
+# Plain http is accepted only from a server on this machine, as the tests use.
+function Test-AllowedUrl([string]$Url) {
+	$Uri = $null
+	if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$Uri)) { return $false }
+	if ($Uri.Scheme -eq 'https') { return $true }
+	return $Uri.Scheme -eq 'http' -and -not $Uri.UserInfo -and $Uri.Host -in @('127.0.0.1', 'localhost', '[::1]')
+}
+
+# Invoke-WebRequest, refusing a response that a redirect brought from anything but https.
+function Invoke-Https([string]$Url, [string]$OutFile) {
+	$Arguments = @{ UseBasicParsing = $true; Uri = $Url }
+	if ($OutFile) { $Arguments.OutFile = $OutFile; $Arguments.PassThru = $true }
+	$Response = Invoke-WebRequest @Arguments
+	# PowerShell 7 answers with an HttpResponseMessage, Windows PowerShell 5.1 an HttpWebResponse.
+	$Base = $Response.BaseResponse
+	$Final = if ($Base.RequestMessage) { $Base.RequestMessage.RequestUri } else { $Base.ResponseUri }
+	if (-not $Final -or ($Final.Scheme -ne 'https' -and $Final.AbsoluteUri -ne ([Uri]$Url).AbsoluteUri)) {
+		Stop-Install "$Url was redirected to $Final, which is not HTTPS. Refusing to use it."
+	}
+	$Response
+}
+
 function Install-Chopin([string]$Version) {
 
+	foreach ($Setting in @(@('CHOPIN_RELEASE_BASE_URL', $BaseUrl), @('CHOPIN_RELEASES_API_URL', $ReleasesApiUrl))) {
+		if (-not (Test-AllowedUrl $Setting[1])) {
+			Stop-Install "$($Setting[0]) must be an https:// URL (or http:// on 127.0.0.1, localhost or [::1]), not $($Setting[1])."
+		}
+	}
 	# Windows PowerShell 5.1 has no $IsWindows and only runs on Windows.
 	if ($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
 		Stop-Install 'install.ps1 installs chopin on Windows. On Linux or macOS, use install.sh.'
@@ -56,7 +85,9 @@ function Install-Chopin([string]$Version) {
 	try {
 		if (-not $Version) {
 			try {
-				$Releases = Invoke-RestMethod -UseBasicParsing -Uri "${ReleasesApiUrl}?per_page=100"
+				$Releases = (Invoke-Https "${ReleasesApiUrl}?per_page=100").Content | ConvertFrom-Json
+			} catch [System.OperationCanceledException] {
+				throw
 			} catch {
 				Stop-Install "could not list releases from ${ReleasesApiUrl}: $_"
 			}
@@ -75,7 +106,9 @@ function Install-Chopin([string]$Version) {
 		$Checksums = Join-Path $Scratch 'checksums.txt'
 		foreach ($File in @(@($Asset, $Download), @('checksums.txt', $Checksums))) {
 			try {
-				Invoke-WebRequest -UseBasicParsing -Uri "$Release/$($File[0])" -OutFile $File[1]
+				Invoke-Https "$Release/$($File[0])" $File[1] | Out-Null
+			} catch [System.OperationCanceledException] {
+				throw
 			} catch {
 				Stop-Install "could not download $Release/$($File[0]): $_"
 			}
