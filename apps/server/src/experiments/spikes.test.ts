@@ -66,6 +66,8 @@ test("a submitted spike renders as a titled callout with findings and screenshot
 	expect(source).toContain(`title="Drag handles work on touch with a 44px target"`);
 	expect(source).toContain("- Pointer events fire on iOS Safari.");
 	expect(source).toContain("**Recommendation:** Keep drag handles");
+	// The recommendation leads; the findings that support it follow.
+	expect(source.indexOf("**Recommendation:**")).toBeLessThan(source.indexOf("- Pointer events"));
 	expect(source).toContain(`![Prototype screenshot 1](${IMAGE})`);
 	room.validate(source);
 	let node = parse(source).children[0];
@@ -75,7 +77,7 @@ test("a submitted spike renders as a titled callout with findings and screenshot
 test("running and stopped spikes render their own callouts without naming a machine", () => {
 	let running = serialize({ type: "root", children: [spikeCallout(spike("running"))] });
 	expect(running).toContain(`title="Prototyping…"`);
-	expect(running).toContain("maggie's coding agent");
+	expect(running).toContain("@maggie’s coding agent");
 	room.validate(running);
 	let stopped = spike("failed");
 	stopped.progress = "Agent stopped: cancelled";
@@ -86,7 +88,7 @@ test("running and stopped spikes render their own callouts without naming a mach
 	expect(renderKey(spike("requested"))).toBe("queued");
 	expect(renderKey(spike("queued"))).toBe("queued");
 	let queued = serialize({ type: "root", children: [spikeCallout(spike("queued"))] });
-	expect(queued).toContain(`title="Queued"`);
+	expect(queued).toContain(`title="Prototype queued"`);
 	expect(queued).not.toContain("Prototyping");
 	room.validate(queued);
 	expect(renderKey(spike("interrupted"))).toBe("stopped");

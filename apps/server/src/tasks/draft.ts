@@ -28,7 +28,7 @@ export function draftInstruction(
 	build = false,
 ): { text: string; said: string } {
 	let close = build
-		? "Do not approve or start implementation yourself: Chopin approves and starts these tasks automatically once they are saved, so do not describe them as unapproved or unstarted."
+		? "Do not approve or start implementation yourself: Chopin approves and starts these tasks automatically once they are saved, so do not describe them as unapproved or unstarted. A note Callout titled “Prototyping…” marks a passage a prototype is already testing, and its result lands in the document before these tasks start: do not add a task that prototypes that passage again; have the task that implements it follow the prototype's result."
 		: "Do not approve or start implementation.";
 	let graph = plan.graph?.versions.at(-1);
 	if (!graph) {

@@ -11,7 +11,8 @@
 	font-size: var(--text-xs);
 	font-weight: 500;
 	line-height: 1.35;
-	text-align: center;
+	/* A one-line tooltip fits its text, so this only shows once one wraps. */
+	text-align: start;
 	pointer-events: none;
 	opacity: 0;
 	visibility: hidden;
