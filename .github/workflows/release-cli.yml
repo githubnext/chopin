@@ -1,0 +1,269 @@
+# Releases the `chopin` CLI. Pushing a cli-v<version> tag builds the five binaries, scans the
+# Windows one with Microsoft Defender, and then waits for a person to approve the
+# chopin-cli-release environment before attesting and publishing them. Running it by hand
+# builds and scans a version without publishing anything. See docs/releasing-cli.md.
+name: release-cli
+
+on:
+  push:
+    tags: ["cli-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build and scan without publishing; it must match apps/connector/package.json (for example 0.2.0)
+        required: true
+        type: string
+
+# Never cancel a release half-way; a second run for the same tag waits instead.
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  BUN_VERSION: 1.4.2
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check the version against apps/connector/package.json
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            version="${GITHUB_REF_NAME#cli-v}"
+          else
+            version="${INPUT_VERSION#cli-}"
+            version="${version#v}"
+          fi
+          package="$(jq -r .version apps/connector/package.json)"
+          if [ "$version" != "$package" ]; then
+            echo "::error::The release is $version, but apps/connector/package.json says $package."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run --cwd apps/connector build:binaries
+
+      - name: Check the linux-x64 binary reports the release version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          reported="$(apps/connector/dist/chopin-linux-x64 --version)"
+          echo "$reported"
+          case "$reported" in
+            "chopin $VERSION "*) ;;
+            *) echo "::error::Expected chopin $VERSION."; exit 1 ;;
+          esac
+
+      - name: Collect the release assets and write checksums.txt
+        run: |
+          mkdir release
+          cp apps/connector/dist/chopin-* apps/connector/install/install.sh apps/connector/install/install.ps1 release/
+          cd release
+          sha256sum -- * > checksums.txt
+          cat checksums.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chopin-cli-release
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  defender:
+    name: Microsoft Defender scan
+    needs: build
+    runs-on: windows-latest
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: chopin-cli-release
+          path: release
+
+      - name: Verify and scan the Windows binaries
+        shell: pwsh
+        run: |
+          $binaries = @(Get-ChildItem -Path release -Filter '*.exe' -File)
+          if ($binaries.Count -eq 0) { Write-Host '::error::No Windows binaries were built.'; exit 1 }
+
+          $expected = @{}
+          foreach ($line in Get-Content -LiteralPath release/checksums.txt) {
+            if ($line -match '^([0-9a-fA-F]{64})\s+\*?(\S+)\s*$') { $expected[$Matches[2]] = $Matches[1].ToLowerInvariant() }
+          }
+          foreach ($binary in $binaries) {
+            $actual = (Get-FileHash -LiteralPath $binary.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($expected[$binary.Name] -ne $actual) {
+              Write-Host "::error::$($binary.Name) is $actual, but checksums.txt says '$($expected[$binary.Name])'."
+              exit 1
+            }
+            Write-Host "Verified $($binary.Name): $actual"
+          }
+
+          $mpCmdRun = Join-Path $env:ProgramFiles 'Windows Defender\MpCmdRun.exe'
+          if (-not (Test-Path -LiteralPath $mpCmdRun)) { Write-Host "::error::Microsoft Defender is not installed ($mpCmdRun)."; exit 1 }
+
+          # The runner image's signatures can be weeks old, and the update endpoint is sometimes slow.
+          $updated = $false
+          for ($attempt = 1; $attempt -le 3 -and -not $updated; $attempt++) {
+            Write-Host "Updating Microsoft Defender signatures (attempt $attempt of 3)"
+            & $mpCmdRun -SignatureUpdate
+            $updated = $LASTEXITCODE -eq 0
+            if (-not $updated -and $attempt -lt 3) { Start-Sleep -Seconds 15 }
+          }
+          if (-not $updated) { Write-Host '::error::Could not update Microsoft Defender signatures.'; exit 1 }
+          $status = Get-MpComputerStatus -ErrorAction SilentlyContinue
+          if ($status) { Write-Host "Signatures $($status.AntivirusSignatureVersion), updated $($status.AntivirusSignatureLastUpdated); engine $($status.AMEngineVersion)" }
+
+          # Scan a copy outside the workspace, so a workspace exclusion cannot skip it.
+          $scanDirectory = Join-Path $env:RUNNER_TEMP 'defender-scan'
+          New-Item -ItemType Directory -Path $scanDirectory -Force | Out-Null
+          $failed = $false
+          foreach ($binary in $binaries) {
+            $copy = Join-Path $scanDirectory $binary.Name
+            Copy-Item -LiteralPath $binary.FullName -Destination $copy -Force
+            if ((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected[$binary.Name]) {
+              Write-Host "::error::The copy of $($binary.Name) does not match checksums.txt."
+              $failed = $true
+              continue
+            }
+            # The service sometimes reports 0x800106ba while it restarts; that is retried.
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              $output = @(& $mpCmdRun -Scan -ScanType 3 -File $copy -DisableRemediation 2>&1 | ForEach-Object { "$_" })
+              $code = $LASTEXITCODE
+              if ($code -eq 0 -or ($output -join "`n") -notmatch '0x800106ba' -or $attempt -eq 3) { break }
+              Start-Sleep -Seconds 15
+            }
+            $output | ForEach-Object { Write-Host $_ }
+            $text = $output -join "`n"
+            if ($code -ne 0) {
+              Write-Host "::error::Microsoft Defender flagged or failed to scan $($binary.Name) (exit code $code)."
+              $failed = $true
+            } elseif ($text -match '(?i)was skipped|cannot be scanned|not performed|excluded') {
+              Write-Host "::error::Microsoft Defender did not scan $($binary.Name)."
+              $failed = $true
+            } elseif ($text -match '\bThreat\b') {
+              Write-Host "::error::Microsoft Defender reported a threat in $($binary.Name)."
+              $failed = $true
+            } elseif ($text -notmatch 'Scan starting' -or $text -notmatch 'Scan finished') {
+              Write-Host "::error::Could not confirm Microsoft Defender finished scanning $($binary.Name)."
+              $failed = $true
+            } else {
+              Write-Host "Microsoft Defender found nothing in $($binary.Name)."
+            }
+          }
+          if ($failed) { exit 1 }
+
+  publish:
+    name: publish
+    needs: [build, defender]
+    # A manual run is a dry run: it builds and scans, and publishes nothing.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # Required reviewers on this environment are the release's human approval.
+    environment: chopin-cli-release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      # The tagged source, for the SBOMs; nothing from it is built or run here.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: chopin-cli-release
+          path: release
+
+      - name: Verify the assets against checksums.txt
+        working-directory: release
+        run: sha256sum --check --strict checksums.txt
+
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |-
+            release/chopin-linux-x64
+            release/chopin-linux-arm64
+            release/chopin-darwin-x64
+            release/chopin-darwin-arm64
+            release/chopin-windows-x64.exe
+
+      # SBOMs of the workspace lockfile the binaries were built from, kept as workflow artifacts.
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: sbom.spdx.json
+          upload-release-assets: false
+
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          artifact-name: sbom.cdx.json
+          upload-release-assets: false
+
+      - name: Audit the SBOMs for secrets
+        run: |
+          pattern='GITHUB_TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE KEY|PRIVATE_KEY|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}'
+          if grep -nE "$pattern" sbom.spdx.json sbom.cdx.json; then
+            echo "::error::An SBOM contains what looks like a secret."
+            exit 1
+          fi
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Install this version of the chopin CLI on Linux or macOS:
+
+          \`\`\`sh
+          curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/cli-v$VERSION/install.sh | sh -s -- $VERSION
+          \`\`\`
+
+          or on Windows:
+
+          \`\`\`powershell
+          \$env:CHOPIN_VERSION = '$VERSION'; irm https://github.com/$GITHUB_REPOSITORY/releases/download/cli-v$VERSION/install.ps1 | iex
+          \`\`\`
+
+          Every binary has a build provenance attestation: \`gh attestation verify <file> -R $GITHUB_REPOSITORY\`."
+          gh release create "cli-v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --latest \
+            --title "chopin CLI $VERSION" \
+            --notes "$notes" \
+            release/chopin-linux-x64 \
+            release/chopin-linux-arm64 \
+            release/chopin-darwin-x64 \
+            release/chopin-darwin-arm64 \
+            release/chopin-windows-x64.exe \
+            release/checksums.txt \
+            release/install.sh \
+            release/install.ps1
