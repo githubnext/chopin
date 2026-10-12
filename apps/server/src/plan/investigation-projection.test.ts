@@ -81,7 +81,74 @@ describe("Investigation references", () => {
 		);
 		expect(room.project(restored)).toBe(source);
 		let inserted = room.insertInvestigation(restored, crypto.randomUUID());
-		expect(inserted).toBeDefined();
-		expect(room.insertInvestigation(restored, ID)).toBeUndefined();
+		expect(inserted.mutation).toBeDefined();
+		expect(room.insertInvestigation(restored, ID)).toEqual({
+			mutation: undefined,
+			placement: "present",
+		});
+	});
+});
+
+describe("Planner investigation placement", () => {
+	const OTHER = "9c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e5f";
+
+	function at(document: room.Document, index: number) {
+		return { index, digest: room.digests(document)[index]! };
+	}
+
+	it("puts the card directly after the addressed block", async () => {
+		let document = await room.create("# Title\n\nCold start is slow.\n\nNext steps.\n");
+		let placed = room.insertInvestigation(document, ID, at(document, 1));
+		expect(placed.placement).toBe("anchored");
+		expect(room.project(document)).toBe(
+			`# Title\n\nCold start is slow.\n\n<Investigation id="${ID}" />\n\nNext steps.\n`,
+		);
+	});
+
+	it("keeps earlier cards on the same block in order", async () => {
+		let document = await room.create("# Title\n\nCold start is slow.\n\nNext steps.\n");
+		let target = at(document, 1);
+		room.insertInvestigation(document, ID, target);
+		expect(room.insertInvestigation(document, OTHER, target).placement).toBe("anchored");
+		expect(room.project(document)).toBe(
+			`# Title\n\nCold start is slow.\n\n<Investigation id="${ID}" />\n\n`
+				+ `<Investigation id="${OTHER}" />\n\nNext steps.\n`,
+		);
+	});
+
+	it("follows a block that moved to a new index by its unique digest", async () => {
+		let document = await room.create("# Title\n\nCold start is slow.\n");
+		let target = at(document, 1);
+		let moved = await room.create("# Title\n\nA new opening.\n\nCold start is slow.\n");
+		expect(room.resolveBlock(moved, target)).toBe(2);
+		expect(room.insertInvestigation(moved, ID, target).placement).toBe("anchored");
+		expect(room.project(moved)).toBe(
+			`# Title\n\nA new opening.\n\nCold start is slow.\n\n<Investigation id="${ID}" />\n`,
+		);
+	});
+
+	it("appends rather than guess when the block is gone or repeated", async () => {
+		let document = await room.create("# Title\n\nCold start is slow.\n\nEnd.\n");
+		let target = at(document, 1);
+		let changed = await room.create("# Title\n\nCold start is fast.\n\nEnd.\n");
+		expect(room.resolveBlock(changed, target)).toBeUndefined();
+		expect(room.insertInvestigation(changed, ID, target).placement).toBe("appended");
+		expect(room.project(changed)).toBe(
+			`# Title\n\nCold start is fast.\n\nEnd.\n\n<Investigation id="${ID}" />\n`,
+		);
+
+		let repeated = await room.create(
+			"# Title\n\nA new opening.\n\nCold start is slow.\n\nCold start is slow.\n",
+		);
+		expect(room.resolveBlock(repeated, target)).toBeUndefined();
+		expect(room.insertInvestigation(repeated, ID, target).placement).toBe("appended");
+	});
+
+	it("appends when no block is given", async () => {
+		let document = await room.create("# Title\n\nCold start is slow.\n");
+		expect(room.insertInvestigation(document, ID).placement).toBe("appended");
+		expect(room.project(document)).toBe(
+			`# Title\n\nCold start is slow.\n\n<Investigation id="${ID}" />\n`,
+		);
 	});
 });

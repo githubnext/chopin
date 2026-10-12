@@ -1271,12 +1271,55 @@ export function insertResearch(target: Document, id: string): Mutation | undefin
 	});
 }
 
-export function insertInvestigation(target: Document, id: string): Mutation | undefined {
-	return mutate(target, () => {
+/**
+ * The block an investigation card should follow: the addressed one when its digest still
+ * matches, else the one block that now carries that digest. A missing or repeated digest
+ * resolves to nothing rather than a guess.
+ */
+export function resolveBlock(
+	target: Document,
+	at: { index: number; digest: string },
+): number | undefined {
+	let hashes = digests(target);
+	if (hashes[at.index] === at.digest) return at.index;
+	let matches = hashes.flatMap((hash, index) => hash === at.digest ? [index] : []);
+	return matches.length === 1 ? matches[0] : undefined;
+}
+
+/** Where an investigation card went; `present` means an earlier call already placed it. */
+export type InvestigationPlacement = "anchored" | "appended" | "present";
+
+/**
+ * Put an investigation card after the block it concerns, or at the end when that block
+ * cannot be identified. Cards already following the block keep their order.
+ */
+export function insertInvestigation(
+	target: Document,
+	id: string,
+	after?: { index: number; digest: string },
+): { mutation: Mutation | undefined; placement: InvestigationPlacement } {
+	let index = after && resolveBlock(target, after);
+	let placement: InvestigationPlacement = "present";
+	let mutation = mutate(target, () => {
 		if ($nodesOfType(InvestigationNode).some(node => node.getId() === id)) return false;
-		$getRoot().append($createInvestigationNode(id));
+		let card = $createInvestigationNode(id);
+		let block = index === undefined ? undefined : addressable()[index];
+		if (!block) {
+			$getRoot().append(card);
+			placement = "appended";
+			return true;
+		}
+		let previous = block;
+		for (
+			let next = previous.getNextSibling();
+			next instanceof InvestigationNode;
+			next = previous.getNextSibling()
+		) previous = next;
+		previous.insertAfter(card);
+		placement = "anchored";
 		return true;
 	});
+	return { mutation, placement };
 }
 
 export function placeExperiment(

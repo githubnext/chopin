@@ -106,6 +106,7 @@ import type { PlannerLinkSocketData } from "./harness/remote/endpoint";
 import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
+import type { InvestigationPlacement } from "./plan/room";
 import type { ChannelRecord } from "./storage/model";
 import type {
 	AuthorizationResult,
@@ -365,13 +366,16 @@ function placeResearchReference(
  * Put a Planner-proposed investigation's card in its open document. Closing waits for Chat
  * while holding the document lock, so a host tool skips placement rather than wait behind it.
  */
-async function placeInvestigationReference(channelId: string, id: string): Promise<boolean> {
-	if (Rooms.get(channelId)?.closing) return false;
+async function placeInvestigationReference(
+	channelId: string,
+	id: string,
+	after?: { index: number; digest: string },
+): Promise<InvestigationPlacement | "closing"> {
+	if (Rooms.get(channelId)?.closing) return "closing";
 	return withDocumentLock(channelId, async () => {
 		let active = Rooms.get(channelId)?.plan;
-		if (!active || Rooms.get(channelId)?.closing || active.persistence.closing) return false;
-		await Service.placeInvestigationReference(active, id);
-		return true;
+		if (!active || Rooms.get(channelId)?.closing || active.persistence.closing) return "closing";
+		return Service.placeInvestigationReference(active, id, after);
 	});
 }
 
@@ -577,18 +581,25 @@ function conversation(
 						hash.slice(17, 20)
 					}-${hash.slice(20, 32)}`;
 					let value = await experiments!.service.create(room.id, request.userId, request.brief, id);
-					let placed: boolean | "locked";
+					let placed: InvestigationPlacement | "closing" | "locked";
 					try {
-						placed = await placeInvestigationReference(room.id, value.id);
+						placed = await placeInvestigationReference(room.id, value.id, request.after);
 					} catch (error) {
 						if (!(error instanceof Service.ImplementationActiveError)) throw error;
 						placed = "locked";
 					}
-					if (placed === true) {
+					if (placed !== "closing" && placed !== "locked") {
 						return {
 							id: value.id,
 							state: value.state,
-							message: "Its card is now in the document. A person selects Run on it to execute.",
+							placement: placed,
+							message: placed === "present"
+								? "Its card is already in the document. A person selects Run on it to execute."
+								: placed === "anchored"
+								? "Its card is now under the related block. A person selects Run on it to execute."
+								: `Its card is at the end of the document${
+									request.after ? " because the related block changed or repeats" : ""
+								}. A person selects Run on it to execute.`,
 						};
 					}
 					// A record without a card has nowhere to run from, so withdraw it.
@@ -600,6 +611,7 @@ function conversation(
 					return {
 						id: value.id,
 						state: withdrawn.state,
+						placement: placed,
 						message: placed === "locked"
 							? "A build locked the document before its card was placed, so the proposal was withdrawn. Propose it again after the build."
 							: "The document was not open to place its card, so the proposal was withdrawn. Propose it again while the document is open.",

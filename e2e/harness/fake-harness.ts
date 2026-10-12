@@ -36,6 +36,9 @@ const CHILD_TOOLS = ["list_children", "read_child", "edit_child"] as const;
 /** The focus line `focusContext()` writes ahead of the member's words. */
 const CHILD_FOCUS = /child id ([0-9a-f-]{36})/;
 const STEP_MS = 2_500;
+/** Proposes an investigation after the block that mentions this phrase. */
+const INVESTIGATE_PROMPT = "INVESTIGATE-ANCHOR";
+const INVESTIGATE_TARGET = "Cold start";
 
 function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
 	if (typeof prompt === "string") return prompt;
@@ -255,6 +258,40 @@ export function createFakeHarness(
 								turn.emit({ type: "text-start", id });
 								turn.emit({ type: "text-delta", id, delta: "I edited " });
 								turn.emit({ type: "text-delta", id, delta: "the open child." });
+								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (prompt.includes(INVESTIGATE_PROMPT)) {
+						void (async () => {
+							try {
+								let plan = await callTool("read_plan");
+								if (plan.isError) throw new Error(`read_plan failed: ${String(plan.output)}`);
+								let { blocks } = JSON.parse(String(plan.output)) as {
+									blocks: { index: number; preview: string; digest: string }[];
+								};
+								let block = blocks.find(item => item.preview.includes(INVESTIGATE_TARGET));
+								if (!block) throw new Error("read_plan has no block to investigate");
+								let proposed = await callTool("propose_investigation", undefined, {
+									brief: "Measure cold start time on a local checkout.",
+									key: "anchor",
+									after: { index: block.index, digest: block.digest },
+								});
+								let output = String(proposed.output);
+								if (proposed.isError || output.startsWith("Error")) {
+									throw new Error(`propose_investigation failed: ${output}`);
+								}
+								let placement = (JSON.parse(output) as { placement?: string }).placement;
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({ type: "text-delta", id, delta: "Proposed an investigation, " });
+								turn.emit({ type: "text-delta", id, delta: `${placement}.` });
 								turn.emit({ type: "text-end", id });
 								finish();
 								settled.resolve();

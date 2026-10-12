@@ -2193,8 +2193,15 @@ export function placeResearchReference(plan: Plan, id: string): Promise<"placed"
 	});
 }
 
-/** Append an investigation's card to the document; a later edit can move it. */
-export function placeInvestigationReference(plan: Plan, id: string): Promise<void> {
+/**
+ * Put an investigation's card after the block it concerns, or at the end when that block
+ * can no longer be identified.
+ */
+export function placeInvestigationReference(
+	plan: Plan,
+	id: string,
+	after?: { index: number; digest: string },
+): Promise<room.InvestigationPlacement> {
 	return exclusive(plan, async () => {
 		if (implementationActive(plan)) throw new ImplementationActiveError();
 		let document = await room.restore(
@@ -2205,10 +2212,11 @@ export function placeInvestigationReference(plan: Plan, id: string): Promise<voi
 		);
 		document.seq = plan.document.seq;
 		try {
-			let mutation = room.insertInvestigation(document, id);
+			let { mutation, placement } = room.insertInvestigation(document, id, after);
 			if (mutation) {
 				await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation);
 			}
+			return placement;
 		} finally {
 			document.doc.destroy();
 		}
