@@ -12,6 +12,12 @@ export type Connection = {
 	label: string;
 	source: Source;
 	expiresAt: number;
+	/**
+	 * The owner let Chopin start work on this laptop by itself (rebuilds and prototypes), when
+	 * pairing it. Without it only work a person presses Build or Run for reaches the connection.
+	 * Kept in memory with the connection; a new pairing asks again.
+	 */
+	autoRun?: boolean;
 };
 type Pending = {
 	id: string;
@@ -69,6 +75,7 @@ export class Connections {
 		id: string,
 		owner: { id: string; login: string; sessionId: string },
 		repositoryId: string,
+		autoRun = false,
 	) {
 		let value = this.pending(id);
 		if (value.connection) {
@@ -88,6 +95,7 @@ export class Connections {
 			label,
 			source: { ...source, repositoryId },
 			expiresAt: this.now() + 90_000,
+			autoRun,
 		};
 		value.connection = connection;
 		value.token = randomBytes(32).toString("base64url");

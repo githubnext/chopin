@@ -192,7 +192,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ input: pending.input, owner: session.user.login, code: pending.code });
 	});
 	route("POST", "/api/connector/pairings/:id/approve", async (request, params) => {
-		z.object({}).strict().parse(await body(request));
+		// Automatic work is opt-in, once, as the laptop is paired; it is off unless asked for.
+		let { autoRun } = z.object({ autoRun: z.boolean().optional() }).strict().parse(
+			await body(request),
+		);
 		let session = await auth.sessions.authenticate(request);
 		let pending = connections.pending(params.id);
 		let repository = await repositoryWrite(session, pending.input.repository);
@@ -200,6 +203,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			params.id,
 			{ id: session!.user.id, login: session!.user.login, sessionId: session!.session.id },
 			repository.id,
+			autoRun ?? false,
 		);
 		connections.wake(repository.id);
 		options.connected?.(repository.id, session!.user.id);

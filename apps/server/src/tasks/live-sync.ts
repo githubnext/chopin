@@ -144,7 +144,7 @@ export class LiveSyncCoordinator {
 			return;
 		}
 		let result = await this.#options.withPlan(channelId, async plan => {
-			let queued = await queueRebuild(plan, this.#options.connections);
+			let queued = await queueRebuild(plan, this.#options.connections, { automatic: true });
 			// Under the lock, so a build that stops right after still finds this check waiting.
 			if (queued.kind === "busy") this.#waiting.add(channelId);
 			return queued;

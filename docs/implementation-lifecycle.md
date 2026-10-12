@@ -198,6 +198,37 @@ This authorization is independent of the browser's GitHub App installation.
 See [Local agent MCP](local-agent-mcp.md) and
 [Authentication](authentication.md) for the two trust boundaries.
 
+## Living documents (`LIVE_BUILD`)
+
+With `LIVE_BUILD=on`, a delivered build makes its document live: later edits are
+rebuilt onto the same pull requests by the builder's local agent. This is an
+experimental prototype, and it runs a coding agent on someone's laptop without a
+press, so its trust model is narrow on purpose.
+
+- **Consent at pairing.** An automatic rebuild is dispatched only to a
+  connection of the live build's own user, for the live build's repository,
+  whose owner ticked **Let Chopin build and prototype automatically on this
+  laptop** when pairing it. The consent is held in memory with the connection.
+  Without it the document stays out of sync until someone presses Build.
+- **Writers trigger.** Only edits that persist through a path requiring push or
+  administration access schedule a rebuild check: browser edits (every
+  document-changing socket message requires write access), MCP
+  `update_document`, and Planner or server work started by a writer. Viewers
+  and pull-only MCP callers cannot cause one.
+- **Document text is data.** The rebuild prompt presents the before and after
+  sources as the change to implement, not as instructions to the agent.
+- **Interrupted first builds never resume by themselves.** A first build goes
+  live when its agent reports `stopped` with tasks outstanding. A failure,
+  including the server's sweep of an expired or disconnected build, needs a
+  person's Retry, because a task may have stopped mid-change.
+- **Privacy.** Only the builder's snapshot names their checkout, the
+  connection that ran a rebuild, and whether their agent is online.
+
+A rebuild's run token reaches only `read_rebuild` and `report_rebuild`; a
+build's run token cannot report a rebuild. A report repeated after the rebuild
+landed returns the same success. The build history keeps 100 entries; ended
+rebuilds give way oldest first so a long-lived document keeps rebuilding.
+
 ## Main implementation points
 
 - Graph model and transitions: `apps/server/src/tasks/graphs.ts`

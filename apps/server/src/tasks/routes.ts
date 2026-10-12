@@ -126,7 +126,11 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			let current = await options.withPlan(id, plan =>
 				exclusive(plan, async () => {
 					let ready = implementationReadiness(plan, plan.revision);
-					let live = liveSnapshot(plan, options.connections.list(channel.repositoryId));
+					let live = liveSnapshot(
+						plan,
+						options.connections.list(channel.repositoryId),
+						session.user.id,
+					);
 					let snapshot: ImplementationSnapshot = {
 						revision: plan.persistence.revision,
 						planRevision: plan.revision,

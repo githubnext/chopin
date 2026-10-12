@@ -16,7 +16,12 @@ import type { Plan } from "../plan/service";
 import type { Connection } from "../experiments/connections";
 import type { Lifecycle, ProgressEvent } from "./lifecycle";
 import type { Graph, Run } from "./graphs";
-import type { BuildRequest, CheckoutContext, LiveSnapshot } from "@chopin/protocol/implementation";
+import type {
+	BuildRequest,
+	CheckoutContext,
+	LiveRebuild,
+	LiveSnapshot,
+} from "@chopin/protocol/implementation";
 
 export let checkoutSchema = z.object({
 	repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
@@ -250,6 +255,8 @@ export function buildActive(plan: Plan): boolean {
 export async function queueRebuild(
 	plan: Plan,
 	connections: RebuildConnections,
+	/** An automatic rebuild runs only on a connection whose owner opted in when pairing it. */
+	options: { automatic?: boolean } = {},
 ): Promise<RebuildResult> {
 	await drain(plan);
 	return exclusive(plan, async () => {
@@ -262,6 +269,7 @@ export async function queueRebuild(
 			let assigned = connection && connections.assigned(connection.id);
 			return !!connection && connection.owner === live.user
 				&& connection.source.repositoryId === live.repositoryId
+				&& (!options.automatic || connection.autoRun === true)
 				&& (assigned === undefined || assigned === plan.id);
 		};
 		let connection = original && connections.get(original.connectionId);
@@ -269,7 +277,21 @@ export async function queueRebuild(
 			connection = connections.list(live.repositoryId, live.user).find(usable);
 		}
 		if (!original || !connection) return { kind: "unavailable" };
-		if (plan.builds.length >= 100) {
+		// The history keeps at most 100 builds. Rebuilds that already ended give way, oldest first, so
+		// a long-lived document never stops rebuilding; the first build and active ones stay.
+		let history = plan.builds;
+		let excess = history.length - 99;
+		if (excess > 0) {
+			history = history.filter(item => {
+				if (
+					excess <= 0 || item.kind !== "rebuild" || item.id === live.buildId
+					|| item.state !== "stopped" && item.state !== "failed"
+				) return true;
+				excess--;
+				return false;
+			});
+		}
+		if (history.length >= 100) {
 			console.warn(`chopin: living document ${plan.id} cannot rebuild - build history is full`);
 			return { kind: "unavailable" };
 		}
@@ -294,7 +316,7 @@ export async function queueRebuild(
 			state: "queued",
 		});
 		let previous = { builds: plan.builds, live };
-		plan.builds = [...previous.builds, build];
+		plan.builds = [...history, build];
 		plan.live = {
 			...live,
 			target: { buildId: build.id, revision: plan.revision, source: source(plan) },
@@ -416,9 +438,9 @@ export function reportBuild(
 			live: plan.live,
 		};
 		plan.builds = [...previous.builds.slice(0, -1), next];
-		if (current.state !== next.state && (next.state === "stopped" || next.state === "failed")) {
-			liveFromStopped(plan, next);
-		}
+		// Only the agent's own stop goes live. A failure (a sweep, an expiry, a lost connection or the
+		// agent's error) may have cut a task short mid-change, so it waits for a person's Retry.
+		if (current.state !== next.state && next.state === "stopped") liveFromStopped(plan, next);
 		try {
 			await persistExclusive(plan, true);
 		} catch (error) {
@@ -594,7 +616,8 @@ export let rebuildReportSchema = z.object({
 	commits: z.array(
 		z.object({
 			pullRequest: z.string().url(),
-			sha: z.string().regex(/^[a-f0-9]{7,40}$/),
+			/** A full or abbreviated hexadecimal commit SHA; stored lowercase. */
+			sha: z.string().regex(/^[a-f0-9]{7,40}$/i),
 			message: z.string().trim().min(1).max(500),
 		}).strict(),
 	).max(50),
@@ -693,21 +716,26 @@ export function reportRebuild(
 		let opened = [
 			...new Set(
 				[...report.commits, ...report.tasks, ...report.outstanding ?? []].flatMap(item =>
-					"pullRequest" in item && item.pullRequest && !live.pullRequests.includes(item.pullRequest)
+					"pullRequest" in item && item.pullRequest
+						&& !live.pullRequests.some(url => sameUrl(url, item.pullRequest!))
 						? [item.pullRequest]
 						: []
 				),
 			),
 		];
-		let prefix = `https://github.com/${live.checkout.repository}/pull/`;
+		// GitHub owner and repository names are case-insensitive.
+		let prefix = `https://github.com/${live.checkout.repository}/pull/`.toLowerCase();
 		if (
 			opened.length > openings
-			|| opened.some(url => !url.startsWith(prefix) || !/^\d+$/.test(url.slice(prefix.length)))
+			|| opened.some(url =>
+				!url.toLowerCase().startsWith(prefix) || !/^\d+$/.test(url.slice(prefix.length))
+			)
 		) return { kind: "refused", reason: "pull-request" };
 		let at = new Date().toISOString();
 		let graph = plan.graph && structuredClone(plan.graph);
 		let resumed = graph && resumeOutstanding(graph, plan.lifecycle, live, build.id, report);
-		let lifecycle = resumed?.lifecycle ?? structuredClone(plan.lifecycle);
+		// Never the live lifecycle: it is mutated below and must survive a failed commit untouched.
+		let lifecycle = structuredClone(resumed?.lifecycle ?? plan.lifecycle);
 		let latest = graph?.versions.at(-1);
 		// A draft the Planner started since the build keeps its place; only the commits are recorded.
 		if (graph && latest && report.tasks.length > 0 && latest.state === "approved") {
@@ -730,10 +758,11 @@ export function reportRebuild(
 			latest.state = "superseded";
 			// LIVE_BUILD prototype: a rebuild's tasks are approved and completed by the coding agent's
 			// report alone. This deliberately bypasses the human-only graph approval.
+			// The version describes the sealed target it built, not edits made while it ran.
 			graph.versions.push({
 				number,
 				revision: 1,
-				planRevision: plan.revision,
+				planRevision: target.revision,
 				state: "approved",
 				definition: checked.value,
 			});
@@ -742,7 +771,7 @@ export function reportRebuild(
 				user: build.user,
 				client: { name: "chopin-acp", version: "0.1.0" },
 				session: build.session ?? build.id,
-				planRevision: plan.revision,
+				planRevision: target.revision,
 				graphVersion: number,
 				graphRevision: 1,
 				repository: live.checkout.repository,
@@ -789,7 +818,12 @@ export function reportRebuild(
 			...(outstanding.length ? { outstanding } : {}),
 			commits: [
 				...(live.commits ?? []),
-				...report.commits.map(commit => ({ ...commit, revision: target.revision, at })),
+				...report.commits.map(commit => ({
+					...commit,
+					sha: commit.sha.toLowerCase(),
+					revision: target.revision,
+					at,
+				})),
 			].slice(-200),
 			...(report.commits.length === 0 && report.tasks.length === 0
 					&& !report.outstanding?.some(item => item.outcome !== "dropped")
@@ -822,11 +856,18 @@ export function reportRebuild(
 }
 
 /** What the browser needs to show whether a living document matches its pull requests. */
-export function liveSnapshot(plan: Plan, connections: Connection[]): LiveSnapshot | undefined {
+export function liveSnapshot(
+	plan: Plan,
+	connections: Connection[],
+	/** Only the builder sees their checkout, connection and whether their agent is online. */
+	viewer: string,
+): LiveSnapshot | undefined {
 	let live = plan.live;
 	if (!live) return;
-	let { baseSource, target: _target, commits, ...rest } = live;
-	let rebuild = plan.builds.findLast(build => build.kind === "rebuild");
+	let { baseSource, target: _target, commits, checkout, ...rest } = live;
+	let builder = viewer === live.user;
+	let latest = plan.builds.findLast(build => build.kind === "rebuild");
+	let rebuild = latest && (builder ? structuredClone(latest) : withoutConnection(latest));
 	let unfinished = outstandingTasks(plan).map(({ id, title, state, blocker }) => ({
 		id,
 		title,
@@ -837,10 +878,25 @@ export function liveSnapshot(plan: Plan, connections: Connection[]): LiveSnapsho
 		...structuredClone(rest),
 		commits: structuredClone(commits ?? []),
 		...(unfinished.length ? { outstandingTasks: unfinished } : {}),
-		...(rebuild ? { rebuild: structuredClone(rebuild) } : {}),
+		...(rebuild ? { rebuild } : {}),
 		outOfSync: source(plan) !== baseSource,
-		builderConnected: connections.some(connection =>
-			connection.owner === live.user && connection.source.repositoryId === live.repositoryId
-		),
+		...(builder
+			? {
+				checkout: structuredClone(checkout),
+				builderConnected: connections.some(connection =>
+					connection.owner === live.user && connection.source.repositoryId === live.repositoryId
+				),
+			}
+			: {}),
 	};
+}
+
+/** A rebuild as other people see it: not which of the builder's connections or checkout ran it. */
+function withoutConnection(build: BuildRequest): LiveRebuild {
+	let { connectionId: _connection, checkout: _checkout, session: _session, ...rest } = build;
+	return structuredClone(rest);
+}
+
+function sameUrl(left: string, right: string): boolean {
+	return left.toLowerCase() === right.toLowerCase();
 }

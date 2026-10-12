@@ -845,7 +845,7 @@ describe("living-document builds", () => {
 		let restored = await open(context.channel.id, context.backend, context.server);
 		expect(restored.live?.outstanding).toEqual(["model"]);
 		// In sync, yet the blocked task still needs an edit to retry it.
-		expect(liveSnapshot(restored, [])).toMatchObject({
+		expect(liveSnapshot(restored, [], restored.live!.user)).toMatchObject({
 			outOfSync: false,
 			outstandingTasks: [{
 				id: "model",
@@ -901,9 +901,9 @@ describe("living-document builds", () => {
 			}),
 		).toEqual({ kind: "accepted" });
 		expect(restored.live?.outstanding).toBeUndefined();
-		expect(liveSnapshot(restored, [])?.outstandingTasks).toBeUndefined();
+		expect(liveSnapshot(restored, [], restored.live!.user)?.outstandingTasks).toBeUndefined();
 		// The first build's own task is done, so the Build view shows it completed.
-		expect(liveSnapshot(restored, [])?.noChange).toBeUndefined();
+		expect(liveSnapshot(restored, [], restored.live!.user)?.noChange).toBeUndefined();
 		let first = historyFor(restored.graph!, restored.lifecycle)[0]!;
 		expect(first.outcome.kind).toBe("implemented");
 		expect(first.progress.tasks[0]).toMatchObject({
@@ -914,9 +914,24 @@ describe("living-document builds", () => {
 		await close(restored);
 	});
 
+	it("never takes a first build live from a failure, which needs a person's Retry", async () => {
+		for (
+			let report of [
+				{ state: "failed" as const, error: "Workspace disconnected or agent stopped responding." },
+				{ state: "failed" as const },
+			]
+		) {
+			let { plan } = await builtPlan(true, "block");
+			await reportBuild(plan, "octocat", "connection-1", buildId, report);
+			expect(plan.live).toBeUndefined();
+			expect(plan.builds.at(-1)?.state).toBe("failed");
+			await close(plan);
+		}
+	});
+
 	it("lets an outstanding task without a pull request open one during a rebuild", async () => {
 		let { plan } = await builtPlan(true, "block");
-		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "failed" });
+		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
 		expect(plan.live?.outstanding).toEqual(["model"]);
 		// As if the blocked task had never reported its pull request.
 		let archived = plan.lifecycle.history.at(-1)!;
@@ -963,7 +978,7 @@ describe("living-document builds", () => {
 		await reportBuild(plan, "octocat", "connection-1", buildId, { state: "stopped" });
 		expect(plan.execution).toBeUndefined();
 		expect(plan.live).toMatchObject({ pullRequests: [], outstanding: ["model"] });
-		expect(liveSnapshot(plan, [])?.outstandingTasks).toEqual([{
+		expect(liveSnapshot(plan, [], plan.live!.user)?.outstandingTasks).toEqual([{
 			id: "model",
 			title: "Model graphs",
 			state: "blocked",
@@ -1034,7 +1049,7 @@ describe("living-document builds", () => {
 			}),
 		).toEqual({ kind: "accepted" });
 		expect(plan.live?.outstanding).toEqual(["model"]);
-		expect(liveSnapshot(plan, [])?.outstandingTasks).toEqual([{
+		expect(liveSnapshot(plan, [], plan.live!.user)?.outstandingTasks).toEqual([{
 			id: "model",
 			title: "Model graphs",
 			state: "blocked",

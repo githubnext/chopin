@@ -14,6 +14,8 @@ export default function PairingPage() {
 	let [error, setError] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [url, setUrl] = useState("");
+	// Off by default: without it, work reaches this laptop only when a person presses Build or Run.
+	let [autoRun, setAutoRun] = useState(false);
 	useEffect(() => {
 		let abort = new AbortController();
 		if (!id) {
@@ -36,7 +38,7 @@ export default function PairingPage() {
 		try {
 			let result = await experimentRequest<{ url: string }>(
 				`/api/connector/pairings/${encodeURIComponent(id!)}/approve`,
-				{},
+				{ autoRun },
 			);
 			setUrl(result.url);
 		} catch (error) {
@@ -68,6 +70,16 @@ export default function PairingPage() {
 									Check that your terminal shows{" "}
 									<code className="font-mono text-text-primary">{pairing.code}</code>
 								</p>
+								<label className="flex items-start gap-2">
+									<input
+										checked={autoRun}
+										className="choice-control mt-0.5 size-4 shrink-0"
+										disabled={busy}
+										onChange={event => setAutoRun(event.target.checked)}
+										type="checkbox"
+									/>
+									<span>Let Chopin build and prototype automatically on this laptop</span>
+								</label>
 								<button
 									className="btn btn-md btn-primary"
 									disabled={busy}

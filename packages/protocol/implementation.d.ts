@@ -29,7 +29,8 @@ export type LiveSnapshot = {
 	buildId: string;
 	user: string;
 	repositoryId: string;
-	checkout: CheckoutContext;
+	/** The builder's checkout; sent only to the builder. */
+	checkout?: CheckoutContext;
 	baseRevision: number;
 	pullRequests: string[];
 	/** Tasks the first build stopped short of; the next rebuild finishes them. */
@@ -54,13 +55,21 @@ export type LiveSnapshot = {
 		revision: number;
 		at: string;
 	}>;
-	/** The latest rebuild; its state distinguishes building from failed. */
-	rebuild?: BuildRequest;
+	/**
+	 * The latest rebuild; its state distinguishes building from failed. Only the builder sees
+	 * which connection, checkout and session ran it.
+	 */
+	rebuild?: BuildRequest | LiveRebuild;
 	/** The current document differs from the source last built onto the pull requests. */
 	outOfSync: boolean;
-	/** A workspace of the live build's user is connected for this document. */
-	builderConnected: boolean;
+	/**
+	 * A workspace of the live build's user is connected for this document. Sent only to the
+	 * builder, so others never learn when someone's laptop is online.
+	 */
+	builderConnected?: boolean;
 };
+/** A rebuild as people other than its builder see it. */
+export type LiveRebuild = Omit<BuildRequest, "connectionId" | "checkout" | "session">;
 export type ImplementationSnapshot = {
 	revision: number;
 	planRevision: number;

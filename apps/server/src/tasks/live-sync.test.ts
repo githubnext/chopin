@@ -15,8 +15,9 @@ import type { SocketData } from "../wire";
 const now = new Date("2026-10-10T12:00:00.000Z");
 const buildId = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
 
-function connection(id: string, owner = "octocat"): Connection {
+function connection(id: string, owner = "octocat", autoRun = true): Connection {
 	return {
+		autoRun,
 		id,
 		owner,
 		login: owner,
@@ -211,7 +212,7 @@ describe("living-document sync", () => {
 		expect(plan.live?.baseSource).toBe(source(plan));
 		expect(plan.live?.baseRevision).toBe(plan.revision);
 		expect(plan.live?.noChange).toEqual([expect.objectContaining({ revision: plan.revision })]);
-		expect(liveSnapshot(plan, [])?.outOfSync).toBe(false);
+		expect(liveSnapshot(plan, [], plan.live!.user)?.outOfSync).toBe(false);
 		await close(plan);
 	});
 
@@ -386,6 +387,41 @@ describe("living-document sync", () => {
 			warn.mockRestore();
 			await close(plan);
 		}
+	});
+
+	it("never rebuilds automatically on a laptop paired without consent", async () => {
+		let { plan, queued, available, edit, advance } = await harness();
+		available.splice(0, available.length, connection("laptop", "octocat", false));
+		edit();
+		await advance(45_000);
+		expect(queued).toEqual([]);
+		expect(plan.builds).toHaveLength(1);
+		await close(plan);
+	});
+
+	it("drops the oldest ended rebuilds so a full history never stops rebuilding", async () => {
+		let { plan, queued, edit, advance } = await harness();
+		let first = plan.builds[0]!;
+		plan.builds = [
+			first,
+			...Array.from({ length: 99 }, (_, index) => ({
+				...first,
+				id: crypto.randomUUID(),
+				kind: "rebuild" as const,
+				baseRevision: 0,
+				targetRevision: 0,
+				state: index % 2 ? "stopped" as const : "failed" as const,
+			})),
+		];
+		let oldest = plan.builds[1]!.id;
+		edit();
+		await advance(45_000);
+		expect(queued).toHaveLength(1);
+		expect(plan.builds).toHaveLength(100);
+		expect(plan.builds[0]!.id).toBe(first.id);
+		expect(plan.builds.some(build => build.id === oldest)).toBe(false);
+		expect(plan.builds.at(-1)).toMatchObject({ kind: "rebuild", state: "queued" });
+		await close(plan);
 	});
 
 	it("does nothing when live builds are off", async () => {
