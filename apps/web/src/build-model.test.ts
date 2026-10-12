@@ -704,6 +704,18 @@ describe("build status", () => {
 			lifecycle: { execution: { state: "idle" }, history: [run({ kind: "implemented" }, 2)] },
 		});
 		expect(look(done)).toMatchObject({ kind: "built", pullRequests: 2 });
+		// A pull request reported before its task completes is still building, not built.
+		let reported = run({ kind: "implemented" }, 1);
+		reported.progress.tasks = [{
+			id: "a",
+			state: "in_progress",
+			pullRequest: { url: "https://github.com/o/r/pull/1", state: "open" },
+		}] as never;
+		let early = look(
+			snapshot({ lifecycle: { execution: { state: "idle" }, history: [reported] } }),
+		);
+		expect(early).toEqual({ kind: "building", done: 0, total: 1, tip: "0 of 1 tasks built" });
+		expect(buildLabel(early)).toBe("Building · 0 of 1");
 		let failed = look(snapshot({ build: build("failed") }));
 		expect(failed).toMatchObject({ kind: "stopped", retry: true });
 		expect(buildLabel(failed)).toBe("Build stopped");

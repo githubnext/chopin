@@ -40,6 +40,18 @@ test("an icon tooltip remains visible while its button is focused", async ({ joi
 	await expect(tooltip).toBeVisible();
 });
 
+test("a visible tooltip follows its trigger's changing label", async ({ join, page }) => {
+	await join("ana");
+	let addProject = page.getByRole("button", { exact: true, name: "Add project" });
+	let tooltip = page.locator("[data-icon-tooltip]");
+	await addProject.hover();
+	await expect(tooltip).toHaveText("Add project");
+	// A status such as the Build capsule changes its words while the pointer rests on it.
+	await addProject.evaluate(button => button.setAttribute("data-tooltip", "Every task is built"));
+	await expect(tooltip).toBeVisible();
+	await expect(tooltip).toHaveText("Every task is built");
+});
+
 test("an icon tooltip stays hidden after its button is pressed until the pointer returns", async ({ join, page }) => {
 	await join("ana");
 	let mention = page.getByRole("button", { exact: true, name: "Mention docs" });

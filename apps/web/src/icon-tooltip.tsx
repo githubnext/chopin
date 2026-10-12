@@ -98,6 +98,8 @@ export function IconTooltip() {
 		// A pressed trigger stays quiet until the pointer leaves it.
 		let pressed: HTMLElement | null = null;
 		let warmUntil = 0;
+		// Shows the active trigger's tooltip; called again when its label changes while visible.
+		let shown: ((instant: boolean) => void) | null = null;
 
 		function hide(instant = false) {
 			clearTimeout(timer);
@@ -111,6 +113,7 @@ export function IconTooltip() {
 			}
 			active = null;
 			originalTitle = null;
+			shown = null;
 		}
 
 		function enter(button: HTMLElement | null) {
@@ -175,6 +178,7 @@ export function IconTooltip() {
 				}px`;
 				tooltip.setAttribute("data-visible", "");
 			};
+			shown = show;
 			if (performance.now() < warmUntil) show(true);
 			else timer = setTimeout(() => show(false), DELAY);
 		}
@@ -195,12 +199,18 @@ export function IconTooltip() {
 			hide(true);
 		}
 
-		function expandedChange(records: MutationRecord[]) {
+		function attributeChange(records: MutationRecord[]) {
 			for (let record of records) {
 				let target = record.target as HTMLElement;
-				if (target === active && openPopup(target)) {
+				if (target !== active) continue;
+				if (record.attributeName === "aria-expanded" && openPopup(target)) {
 					if (target === hovered) pressed = target;
 					hide(true);
+				} else if (
+					record.attributeName === "data-tooltip" && tooltip.hasAttribute("data-visible")
+				) {
+					// A status whose words change while hovered, like the Build capsule, never goes stale.
+					shown?.(true);
 				}
 			}
 		}
@@ -251,10 +261,10 @@ export function IconTooltip() {
 		document.addEventListener("focusin", focusIn, true);
 		document.addEventListener("focusout", focusOut, true);
 		document.addEventListener("pointerdown", pointerDown, true);
-		let observer = new MutationObserver(expandedChange);
+		let observer = new MutationObserver(attributeChange);
 		observer.observe(document.body, {
 			attributes: true,
-			attributeFilter: ["aria-expanded"],
+			attributeFilter: ["aria-expanded", "data-tooltip"],
 			subtree: true,
 		});
 		document.addEventListener("scroll", scroll, true);

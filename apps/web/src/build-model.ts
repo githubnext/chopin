@@ -667,8 +667,8 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 		};
 	}
 	let phase = buildPhase(snapshot);
+	let { done, total } = progressCount(snapshot);
 	if (phase.kind === "building") {
-		let { done, total } = progressCount(snapshot);
 		let tip = startingHint(snapshot);
 		return {
 			kind: "building",
@@ -676,6 +676,10 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 			total,
 			tip: tip ?? `${done} of ${total} tasks built`,
 		};
+	}
+	// Built only once every task is complete, never between a pull request and its completion.
+	if (phase.kind === "done" && done < total) {
+		return { kind: "building", done, total, tip: `${done} of ${total} tasks built` };
 	}
 	if (phase.kind === "done") {
 		return {
