@@ -439,9 +439,9 @@ test("Build queues behind a running prototype and starts once it finishes (LIVE_
 	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
 	let response = await context.call(context.path, {
-			planRevision: 0,
-			graphVersion: 1,
-			graphRevision: 1,
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
 	});
 	expect(response.status).toBe(200);
 	let build = await response.json();
@@ -1198,5 +1198,144 @@ test("without LIVE_BUILD a delivered build counts later edits and a person build
 		context.plan.records.delete("open-decision");
 	} finally {
 		await Plan.close(context.plan);
+	}
+});
+
+/** Deliver a build without LIVE_BUILD, then edit, so the document has changes to build. */
+async function delivered() {
+	let context = await setup();
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	let claim = await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	await tool(context, connection.token, "report_implementation_build", {
+		id: built.id,
+		state: "running",
+		session: "session",
+	});
+	for (
+		let [name, args] of [
+			["start_task", { taskId: "first", idempotencyKey: "start" }],
+			["report_pr", { taskId: "first", idempotencyKey: "pr", url: pullRequest, state: "open" }],
+			["complete_task", { taskId: "first", idempotencyKey: "done", summary: "Launched" }],
+			["report_verification", {
+				idempotencyKey: "verified",
+				passed: true,
+				summary: "Reviewed.",
+				reviewerMethod: "Ran the suite.",
+				evidence: [{ taskId: "first", evidence: ["Suite passed."] }],
+				tasksNeedingWork: [],
+			}],
+		] as const
+	) await tool(context, claim.runToken, name, args);
+	await tool(context, connection.token, "report_implementation_build", {
+		id: built.id,
+		state: "stopped",
+	});
+	expect((await edit(context.plan, "A paragraph added after the build.")).ok).toBe(true);
+	return { context, connection, rebuild: `${context.path}/rebuild` };
+}
+
+test("a pressed Build refuses pull-only callers, archived documents and children", async () => {
+	let { context, rebuild } = await delivered();
+	try {
+		let readonly = await context.auth.sessions.issue("U_test", {
+			accessToken: "readonly",
+			accessExpiresIn: 28_800,
+			refreshToken: "refresh",
+			refreshExpiresIn: 15_897_600,
+		});
+		let pullOnly = await context.call(rebuild, {}, undefined, undefined, readonly.cookie);
+		expect(pullOnly.status).toBe(403);
+		let child = crypto.randomUUID();
+		await context.storage.channels.create({
+			id: child,
+			repositoryId: "R_test",
+			repositoryOwner: "owner",
+			repositoryName: "repository",
+			parentChannelId: context.plan.id,
+			title: "Child",
+			createdBy: "U_test",
+			now: context.now,
+		});
+		expect((await context.call(`/api/channels/${child}/implementation/rebuild`, {})).status)
+			.toBe(404);
+		await context.storage.channels.archive({ id: context.plan.id, now: context.now });
+		expect((await context.call(rebuild, {})).status).toBe(403);
+		let cancel = await context.router.handle(
+			new Request(`https://chopin.test${context.path}/request`, {
+				method: "DELETE",
+				headers: { origin: "https://chopin.test", cookie: context.cookie.split(";")[0] },
+			}),
+		);
+		expect(cancel?.status).toBe(403);
+		expect(context.plan.builds.at(-1)?.kind).toBeUndefined();
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a collaborator's Build runs on their own agent, and a busy agent says so", async () => {
+	let { context, rebuild } = await delivered();
+	let second = await openSiblingPlan(context, "# Second plan\n");
+	try {
+		// The builder's own agent, busy with another document's build, is refused as busy.
+		await prepare(second);
+		context.plans.set(second.id, second);
+		let other = await context.call(`/api/channels/${second.id}/implementation`, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		});
+		expect(other.status).toBe(200);
+		let busy = await context.call(rebuild, {});
+		expect(busy.status).toBe(409);
+		expect((await busy.json()).error).toBe("agent-busy");
+
+		// A collaborator's press runs on the collaborator's own agent.
+		let theirs = await paired(context, context.otherCookie);
+		let pressed = await context.call(rebuild, {}, undefined, undefined, context.otherCookie);
+		expect(pressed.status).toBe(200);
+		expect(await pressed.json()).toMatchObject({
+			kind: "rebuild",
+			user: "U_other",
+			connectionId: theirs.connection.id,
+		});
+	} finally {
+		await Plan.close(second);
+		await Plan.close(context.plan);
+	}
+});
+
+test("a manually rebuilt document reopens with its rebuild and commits intact", async () => {
+	let { context, connection, rebuild } = await delivered();
+	let closed = false;
+	try {
+		expect((await context.call(rebuild, {})).status).toBe(200);
+		let id = context.plan.builds.at(-1)!.id;
+		let claimed = await tool(context, connection.token, "claim_implementation_build", { id });
+		await tool(context, connection.token, "report_implementation_build", {
+			id,
+			state: "running",
+			session: "rebuild-session",
+		});
+		await tool(context, claimed.runToken, "report_rebuild", {
+			summary: "Added the paragraph.",
+			commits: [{ pullRequest, sha: "e".repeat(40), message: "Add the paragraph" }],
+			tasks: [],
+		});
+		let live = structuredClone(context.plan.live);
+		let builds = structuredClone(context.plan.builds);
+		await Plan.close(context.plan);
+		closed = true;
+		let restored = await Plan.open(context.plan.id, context.backend, context.server);
+		expect(restored.live).toEqual(live);
+		expect(restored.builds).toEqual(builds);
+		await Plan.close(restored);
+	} finally {
+		if (!closed) await Plan.close(context.plan);
 	}
 });

@@ -265,7 +265,7 @@ export function useBuildPlan(
 					error instanceof ApiError && error.message === "no-workspace"
 						? "Start your local agent, then build"
 						: error instanceof Error
-						? error.message.replace(/^[a-z]/, letter => letter.toUpperCase())
+						? buildRefusalCopy(error.message)
 						: "Chopin couldn’t start the build",
 				);
 				reload();
