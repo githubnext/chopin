@@ -20,10 +20,16 @@
 	background: var(--color-page);
 }
 
-.agent-command code {
+/* Doubled class: inside a document card, the editor's inline-code style must not apply. */
+.agent-note.agent-note .agent-command code {
 	flex: 1;
 	min-width: 0;
-	padding-block: calc(var(--spacing) * 1);
+	margin: 0;
+	padding: calc(var(--spacing) * 1) 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	line-height: var(--text-xs--line-height);
 	color: var(--color-text-primary);
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
