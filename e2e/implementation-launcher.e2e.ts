@@ -7,6 +7,7 @@ import { seedChildChannel } from "./database";
 import { ROOT } from "./servers";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 import type { Graph } from "../apps/server/src/tasks/graphs";
+import type { SeedState } from "../apps/server/src/testing/plan";
 
 function preparedGraph(): Graph {
 	return {
@@ -340,7 +341,8 @@ test("Build without a running local agent says how to start one", async ({ seed,
 	await expect(view.getByRole("button", { name: "Build on my laptop", exact: true })).toBeEnabled();
 });
 
-test("Build names unanswered decisions as a way to Decisions", async ({ seed, join: enter }) => {
+/** A document with one open decision, so Build is blocked on it. */
+async function seedOpenDecision(seed: (source: string, state?: SeedState) => Promise<void>) {
 	let widget = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 	let question = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 	let option = "01K0N4W3B7P27CBAEC7A8C8WEA";
@@ -380,6 +382,10 @@ test("Build names unanswered decisions as a way to Decisions", async ({ seed, jo
 			}],
 		},
 	);
+}
+
+test("Build names unanswered decisions as a way to Decisions", async ({ seed, join: enter }) => {
+	await seedOpenDecision(seed);
 	let page = await enter("ana");
 	await openBuildView(page);
 	let view = buildView(page);
@@ -392,6 +398,31 @@ test("Build names unanswered decisions as a way to Decisions", async ({ seed, jo
 		page.getByRole("group", { name: "Document view" })
 			.getByRole("button", { name: /^Decisions/ }),
 	).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a phone's blocked Build is an empty state that leads to Decisions", async ({ seed, join: enter }) => {
+	await seedOpenDecision(seed);
+	let page = await enter("ana", {
+		viewport: { width: 375, height: 667 },
+		hasTouch: true,
+		isMobile: true,
+	});
+	let navigation = page.getByRole("navigation", { name: "Workspace view" });
+	await navigation.getByRole("button", { name: "Build", exact: true }).tap();
+	let view = buildView(page);
+	await expect(view.getByRole("heading", { name: "Build unlocks after decisions" })).toBeVisible();
+	await expect(view.getByText("1 decision is still open.", { exact: true })).toBeVisible();
+	let go = view.getByRole("button", { name: "Go to Decisions", exact: true });
+	await expect(go).toBeInViewport({ ratio: 1 });
+	let box = (await go.boundingBox())!;
+	expect(box.height).toBeGreaterThanOrEqual(44);
+	// Centred in the space between the bars, not left at the top of the pane.
+	expect(Math.abs(box.x + box.width / 2 - 375 / 2)).toBeLessThanOrEqual(2);
+	expect(box.y).toBeGreaterThan(667 * 0.3);
+	await go.tap();
+	await expect(view).toBeHidden();
+	await expect(navigation.getByRole("button", { name: /^Decisions/ }))
+		.toHaveAttribute("aria-current", "page");
 });
 
 test("a child document has no Build view", async ({ seed, join: enter, room, baseURL }) => {

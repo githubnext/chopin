@@ -10,14 +10,16 @@
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import {
+	ChopinMark,
 	CONNECTION_GRACE,
 	MAX_RESEARCH_BRIEF,
 	SendAction,
 	useConnectionNotice,
 	usePopoverDismissal,
 } from "@chopin/editor";
+import { usePhone } from "@chopin/editor/pointer";
 import { MENTION } from "@chopin/protocol/address";
-import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
 import { ModeSwitch } from "./mode-switch";
@@ -240,6 +242,7 @@ export function Chat(
 	let textarea = useRef<DraftInputHandle>(null);
 	let composerRoot = useRef<HTMLDivElement>(null);
 	let [mode, setMode] = useState(false);
+	let phone = usePhone();
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
@@ -798,6 +801,23 @@ export function Chat(
 						)
 						: (
 							<>
+								{/* A phone's switch shows only an icon; the chip says where the message goes. */}
+								{phone && effectiveMode && (
+									<span className="composer-chopin-row">
+										<button
+											aria-label="Remove Chopin"
+											className="composer-chopin-chip"
+											data-press="none"
+											disabled={!draftable || sending}
+											onClick={toggleMode}
+											type="button"
+										>
+											<ChopinMark />
+											<span aria-hidden="true">Chopin</span>
+											<CloseIcon aria-hidden="true" size={12} />
+										</button>
+									</span>
+								)}
 								<DraftInput
 									aria-label="Message"
 									aria-activedescendant={commandOpen

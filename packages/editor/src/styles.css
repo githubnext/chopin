@@ -1036,6 +1036,20 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.plan-comment-group-quote {
+	display: -webkit-box;
+	overflow: hidden;
+	padding-left: 0.5rem;
+	border-left-width: calc(var(--edge-width) * 2);
+	border-left-style: solid;
+	border-left-color: var(--color-comment-underline);
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 1;
+	overflow-wrap: anywhere;
+}
+
 .plan-comment-group-note {
 	display: -webkit-box;
 	overflow: hidden;
@@ -1628,6 +1642,14 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	width: var(--control-target-coarse);
 	height: var(--control-target-coarse);
 	color: var(--color-text-secondary);
+}
+
+.plan-comment-sheet-pager .plan-comment-sheet-count {
+	min-height: var(--control-target-coarse);
+	padding-inline: 0.25rem;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	color: inherit;
 }
 
 .plan-comment-sheet-quote {

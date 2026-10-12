@@ -32,6 +32,7 @@ import {
 	Face,
 	firstOpenDecision,
 	GitHubReferencesProvider,
+	openCommentList,
 	opensEditing,
 	PlanEditor,
 	PlanStatus,
@@ -1196,6 +1197,11 @@ export function RoomWorkspace(
 	}
 	let acceptedComments =
 		threadState.threads.filter(item => item.thread.status === "accepted" && !item.applied).length;
+	// The threads a phone's list of comments can show: open, with a passage left to stand on.
+	let openComments =
+		threadState.threads.filter(item =>
+			item.thread.status === "open" && !item.orphaned && !item.drifted
+		).length;
 
 	let statusNotices = (
 		<>
@@ -1479,10 +1485,16 @@ export function RoomWorkspace(
 							<PhoneHeader
 								archivedAt={workspaceArchivedAt}
 								canManage={effectiveCanManage}
+								comments={openComments}
 								editing={titleEdit}
 								editingDocument={!!barEdit?.editing}
 								label={metadata.title}
 								onAction={action => onDocumentAction(room, action)}
+								onComments={() => {
+									// The list stands over the document, so it opens from any tab onto it.
+									selectDestination("plan");
+									openCommentList(room);
+								}}
 								onEditingChange={setTitleEdit}
 								onRenamed={updateMetadata}
 								presentation={presentation}

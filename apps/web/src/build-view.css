@@ -179,6 +179,10 @@
 	gap: calc(var(--spacing) * 2);
 }
 
+.build-blocked-actions .btn {
+	min-height: var(--control-target-coarse);
+}
+
 .build-task-toggle {
 	display: flex;
 	min-width: 0;
@@ -315,4 +319,24 @@
 	.build-task-fold {
 		transition: none;
 	}
+}
+
+/* A phone's blocked Build tab: one empty state, centred in the space between the bars. */
+.build-blocked {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	/* Centred between a phone's bars, with no trailing space to scroll past. */
+	padding-block: var(--phone-top-chrome, 0px) var(--phone-bottom-chrome, 0px);
+}
+
+.build-blocked-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.build-blocked-actions .btn {
+	min-height: var(--control-target-coarse);
 }

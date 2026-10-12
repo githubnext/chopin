@@ -22,7 +22,14 @@ import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY, usePhone } from "./pointer";
-import { handlesOpenComment, OPEN_COMMENT, openOutcome, openRequest, useThreads } from "./threads";
+import {
+	handlesOpenComment,
+	OPEN_COMMENT,
+	OPEN_COMMENTS,
+	openOutcome,
+	openRequest,
+	useThreads,
+} from "./threads";
 import type { OpenRequest } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
@@ -72,6 +79,8 @@ type MeasuredThread = {
 
 /** A pinned list of one line's threads, as opposed to a pinned thread id. */
 const LIST = "list:";
+/** A phone sheet listing every open thread in the document, asked for from outside it. */
+const ALL = "all";
 
 /** How long a resolve can be undone from its toast, while nobody is pointing at it. */
 const UNDO_WINDOW = 6_000;
@@ -377,6 +386,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [previewMeasurement, setPreviewMeasurement] = useState<PreviewMeasurement>();
 	let [pinned, setPinned] = useState<string>();
 	let [returnTo, setReturnTo] = useState<string>();
+	/** The thread shown was chosen from the list of every thread, so its header leads back there. */
+	let [fromAll, setFromAll] = useState(false);
 	let [notice, setNotice] = useState<Notice>();
 	let [noticeHeld, setNoticeHeld] = useState(false);
 	let [linked, setLinked] = useState<string | undefined>(() =>
@@ -410,6 +421,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	// The comment sheet belongs to the phone class, portrait or landscape.
 	let compact = options.commentPresentation === "sheet" && phone;
 	let previousCompact = useRef(compact);
+	let compactRef = useRef(compact);
+	compactRef.current = compact;
 	let immediately = options.motionImmediately?.() ?? false;
 	let draft = canEdit ? state.draft : undefined;
 	let measurePreview = useCallback((request: PreviewRequest, height: number) => {
@@ -460,6 +473,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		let dialog = document.getElementById(dialogId(pinned));
 		dialog?.querySelector<HTMLElement>("[data-plan-comment-close], button")?.focus();
 	}, [compact, pinned]);
+
+	useEffect(() => {
+		if (!pinned || pinned === ALL || pinned === "orphans" || pinned.startsWith(LIST)) {
+			setFromAll(false);
+		}
+	}, [pinned]);
 
 	// A preview belongs to the thread it was raised for; another pinned thread clears it.
 	useEffect(() => {
@@ -623,7 +642,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let openIds = pinned?.startsWith(LIST)
 		? markers.find(marker => `${LIST}${marker.key}` === pinned)?.views.map(view => view.thread.id)
 			?? []
-		: pinned && pinned !== "orphans"
+		: pinned && pinned !== "orphans" && pinned !== ALL
 		? [pinned]
 		: [];
 	let openKey = openIds.join(" ");
@@ -846,11 +865,23 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			waiting.current = undefined;
 			settle(pending.request, true);
 		});
+		// Only a phone's sheet has a list of every thread; elsewhere each thread keeps its margin.
+		let list = (event: Event) => {
+			let detail = (event as CustomEvent<{ channel?: string } | undefined>).detail;
+			if (!compactRef.current || !handlesOpenComment(store.channel, detail?.channel)) return;
+			let active = document.activeElement;
+			origin.current = active instanceof HTMLElement ? active : undefined;
+			setReturnTo(undefined);
+			setPreview(undefined);
+			setPinned(ALL);
+		};
 		addEventListener("hashchange", follow);
 		addEventListener(OPEN_COMMENT, open);
+		addEventListener(OPEN_COMMENTS, list);
 		return () => {
 			removeEventListener("hashchange", follow);
 			removeEventListener(OPEN_COMMENT, open);
+			removeEventListener(OPEN_COMMENTS, list);
 			arrived();
 			clearTimeout(waiting.current?.timer);
 			waiting.current = undefined;
@@ -879,6 +910,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		if (!pinned) return;
 		let available = pinned === "orphans"
 			? state.threads.some(view => view.thread.status === "open" && view.orphaned)
+			: pinned === ALL
+			? state.threads.some(view => view.thread.status === "open" && !view.orphaned)
 			: pinned.startsWith(LIST)
 			? markersRef.current.some(marker => `${LIST}${marker.key}` === pinned)
 			: state.threads.some(view =>
@@ -917,7 +950,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			?.focus();
 	}, [pinned]);
 
-	let sheetId = compact && pinned !== "orphans" ? pinned : undefined;
+	let sheetId = compact && pinned !== "orphans" && pinned !== ALL ? pinned : undefined;
 	let sheetPassages = useMemo(() => {
 		if (!sheetId) return undefined;
 		let list = sheetId.startsWith(LIST) ? sheetId.slice(LIST.length) : undefined;
@@ -979,7 +1012,26 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		selected.current = id;
 		setPinned(id);
 	};
+	// The document's open threads in reading order, for the list of them all and to step through.
+	let order = [
+		...new Set(
+			[...placed].sort((a, b) => passageTop(a) - passageTop(b)).map(entry => entry.view.thread.id),
+		),
+	];
+	let allViews = order.flatMap(id => {
+		let view = placed.find(entry => entry.view.thread.id === id)?.view;
+		return view ? [view] : [];
+	});
 	let backTo = (view: ThreadView) => {
+		if (fromAll && allViews.length > 1) {
+			return {
+				count: allViews.length,
+				go: () => {
+					setReturnTo(view.thread.id);
+					setPinned(ALL);
+				},
+			};
+		}
 		let group = markerOf(view.thread.id);
 		let back = group && group.views.length > 1 ? group : undefined;
 		return back
@@ -1092,8 +1144,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		});
 		compactClose = dismiss;
 		compactContent = orphaned.map(view => card(view));
-	} else if (compact && pinned && (pinnedView || pinnedList)) {
-		// One sheet serves a line's list and every thread, so moving between them does not reopen it.
+	} else if (
+		compact && pinned && (pinnedView || pinnedList || (pinned === ALL && allViews.length > 0))
+	) {
+		// One sheet serves the lists and every thread, so moving between them does not reopen it.
 		compactKey = "pinned";
 		compactId = dialogId(pinned);
 		compactLabel = pinnedView ? "Comment thread" : "Comments";
@@ -1104,13 +1158,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				quote: pinnedView.quote,
 				siblings: back?.count ?? 1,
 			})
-			: commentSheetHeading({ kind: "list", count: pinnedList!.views.length });
+			: commentSheetHeading({
+				kind: "list",
+				count: pinnedList ? pinnedList.views.length : allViews.length,
+			});
 		compactBack = back?.go;
 		compactClose = dismiss;
-		// The document's open threads in reading order, so the sheet can step through them.
-		let order = [...placed]
-			.sort((a, b) => passageTop(a) - passageTop(b))
-			.map(entry => entry.view.thread.id);
 		let at = pinnedView ? order.indexOf(pinnedView.thread.id) : -1;
 		// Paging moves the way back too: closing returns focus to the marker of the thread shown.
 		let step = (by: number) => {
@@ -1128,6 +1181,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			? {
 				count: order.length,
 				index: at,
+				onList: () => {
+					setReturnTo(pinnedView!.thread.id);
+					setPinned(ALL);
+				},
 				onNext: at < order.length - 1 ? () => step(1) : undefined,
 				onPrevious: at > 0 ? () => step(-1) : undefined,
 			}
@@ -1136,9 +1193,13 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			<ThreadList
 				autoFocus={false}
 				heading={false}
-				onSelect={selectThread}
+				onSelect={id => {
+					setFromAll(!pinnedList);
+					selectThread(id);
+				}}
+				quotes={!pinnedList}
 				returnTo={returnTo}
-				views={pinnedList!.views}
+				views={pinnedList ? pinnedList.views : allViews}
 			/>
 		);
 	}

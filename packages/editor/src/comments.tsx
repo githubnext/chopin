@@ -630,12 +630,14 @@ export type ThreadListProps = {
 	autoFocus?: boolean;
 	/** The thread just left with Back; its item takes focus, even in a sheet. */
 	returnTo?: string;
+	/** Threads from across the document say which passage each one is about. */
+	quotes?: boolean;
 	onSelect: (id: string) => void;
 };
 
 /** Several threads on one block, as one stop that opens into each of them. */
 export function ThreadList(
-	{ autoFocus = true, heading = true, onSelect, returnTo, views }: ThreadListProps,
+	{ autoFocus = true, heading = true, onSelect, quotes, returnTo, views }: ThreadListProps,
 ) {
 	let list = useRef<HTMLUListElement>(null);
 
@@ -700,6 +702,9 @@ export function ThreadList(
 										</span>
 									)}
 								</span>
+								{quotes && view.quote.trim() && (
+									<span className="plan-comment-group-quote">{view.quote}</span>
+								)}
 								<span className="plan-comment-group-note">{opening?.text}</span>
 							</button>
 						</li>

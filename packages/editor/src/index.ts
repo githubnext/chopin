@@ -59,6 +59,7 @@ export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
 export {
 	handlesOpenComment,
+	openCommentList,
 	openCommentThread,
 	openOutcome,
 	openRequest,

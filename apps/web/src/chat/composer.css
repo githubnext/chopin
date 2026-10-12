@@ -410,6 +410,42 @@
 		outline-color: var(--color-inset);
 		opacity: 1;
 	}
+	/* Addressing Chopin is a removable chip on a row of its own above the draft. */
+	.chat-composer .composer-chopin-row {
+		/* Above the draft, so the chip's touch target may reach into the draft's top padding. */
+		position: relative;
+		z-index: 1;
+		display: flex;
+		order: 0;
+		flex-basis: 100%;
+		padding: 0.25rem;
+	}
+	/* Coarse pointers would otherwise grow every control in the pill to a full target. */
+	&[data-plan-coarse-pointer] .chat-composer .composer-surface button.composer-chopin-chip,
+	.chat-composer .composer-surface .composer-chopin-chip {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		min-width: 0;
+		min-height: 0;
+		height: var(--control-height-compact);
+		padding-inline: 0.5rem 0.375rem;
+		border-radius: var(--radius-full);
+		background: var(--color-brand-wash);
+		color: var(--color-brand-ink);
+		font-size: var(--text-xs);
+		font-weight: var(--font-weight-medium);
+	}
+	/* A full touch target around a chip drawn smaller than one. */
+	.chat-composer .composer-chopin-chip::after {
+		position: absolute;
+		inset: calc((100% - var(--control-target-coarse)) / 2) -0.25rem;
+		content: "";
+	}
+	.chat-composer .composer-chopin-chip:active:not(:disabled) {
+		color: var(--color-brand-active);
+	}
 	/* Connection state becomes a slim first row inside the pill. */
 	.chat-composer .composer-connection-group:has(.composer-connection-label) {
 		display: flex;

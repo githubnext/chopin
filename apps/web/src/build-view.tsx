@@ -1,4 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { usePhone } from "@chopin/editor/pointer";
+import { WrenchIcon } from "@chopin/icons";
+import { EmptyState } from "@chopin/visuals";
 
 import { ApiError } from "./api";
 import {
@@ -85,6 +88,7 @@ export function BuildView(
 	let [returning, setReturning] = useState(false);
 	let [reason, setReason] = useState("");
 	let [open, setOpen] = useState<Record<string, boolean>>({});
+	let phone = usePhone();
 	let [linked, setLinked] = useState<string>();
 	let [now, setNow] = useState(() => Date.now());
 	let [request, setRequestState] = useState(() => requests.get(room));
@@ -431,6 +435,55 @@ export function BuildView(
 		}
 	} else {
 		status = `Built · ${plural(phase.pullRequests, "pull request", "pull requests")}`;
+	}
+
+	// A phone's Build tab is otherwise empty while blocked; say why and lead to what unblocks it.
+	if (phone && phase.kind === "blocked" && (phase.decisions || phase.comments)) {
+		let decisions = unanswered > 0
+			? `${plural(unanswered, "decision", "decisions")} ${
+				unanswered === 1 ? "is" : "are"
+			} still open.`
+			: "Some decisions are still open.";
+		let accepted = comments > 0
+			? `${plural(comments, "accepted comment", "accepted comments")} still ${
+				comments === 1 ? "needs" : "need"
+			} to reach the document.`
+			: "Accepted comments still need to reach the document.";
+		return (
+			<div className="build-view">
+				<div className="build-view-content build-blocked" data-build-view-scroll="">
+					<EmptyState
+						action={
+							<div className="build-blocked-actions">
+								<button
+									className="btn btn-md btn-primary"
+									onClick={phase.decisions ? onShowDecisions : onShowDocument}
+									type="button"
+								>
+									{phase.decisions ? "Go to Decisions" : "Go to Document"}
+								</button>
+								{phase.decisions && phase.comments && (
+									<button className="btn btn-md btn-ghost" onClick={onShowDocument} type="button">
+										Go to Document
+									</button>
+								)}
+							</div>
+						}
+						density="compact"
+						description={phase.decisions && phase.comments
+							? `${decisions} ${accepted}`
+							: phase.decisions
+							? decisions
+							: accepted}
+						icon={WrenchIcon}
+						measure="short"
+						title={phase.decisions
+							? "Build unlocks after decisions"
+							: "Build unlocks after comments"}
+					/>
+				</div>
+			</div>
+		);
 	}
 
 	return (

@@ -569,3 +569,28 @@
 		animation: none;
 	}
 }
+
+/* Comments join the actions on the right; the left slot matches it so the title stays centred. */
+.phone-top-bar-slot:first-child {
+	justify-content: flex-start;
+}
+
+.phone-top-bar-slot:last-child {
+	justify-content: flex-end;
+}
+
+.phone-top-bar:has(.phone-top-bar-comments) .phone-top-bar-slot {
+	min-width: calc(var(--control-target-coarse) * 2);
+}
+
+.phone-top-bar-slot .phone-top-bar-comments {
+	min-width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	gap: var(--spacing);
+	padding-inline: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-full);
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-medium);
+	font-variant-numeric: tabular-nums;
+}

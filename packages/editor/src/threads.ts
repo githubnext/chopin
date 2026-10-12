@@ -775,6 +775,14 @@ export function openCommentThread(
 	);
 }
 
+/** The event that asks the open document to list all of its open threads. */
+export const OPEN_COMMENTS = "chopin:open-comments";
+
+/** Ask a document's phone comment sheet to list its open threads; `channel` names the document. */
+export function openCommentList(channel?: string): void {
+	dispatchEvent(new CustomEvent<{ channel?: string }>(OPEN_COMMENTS, { detail: { channel } }));
+}
+
 /** Mounted inside the editor, so resolution re-runs as the document changes. */
 export function ThreadObserver({ store }: { store: ThreadStore }) {
 	let [editor] = useLexicalComposerContext();

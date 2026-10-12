@@ -119,6 +119,8 @@ export type CommentSheetPager = {
 	/** Absent at the first thread: the pager stops at its ends rather than wrapping. */
 	onPrevious?: () => void;
 	onNext?: () => void;
+	/** Show every open thread as a list, from the count between the steps. */
+	onList?: () => void;
 };
 
 export function CommentSheet(
@@ -235,7 +237,21 @@ export function CommentSheet(
 										>
 											<ChevronIcon aria-hidden="true" className="rotate-180" size={16} />
 										</button>
-										<span aria-live="polite">{pager.index + 1} of {pager.count}</span>
+										{pager.onList
+											? (
+												<button
+													aria-label={`${pager.index + 1} of ${pager.count}, show all comments`}
+													className="plan-comment-sheet-count btn btn-sm btn-ghost"
+													data-plan-comment-pager-list=""
+													onClick={pager.onList}
+													type="button"
+												>
+													<span aria-live="polite">
+														{pager.index + 1} of {pager.count}
+													</span>
+												</button>
+											)
+											: <span aria-live="polite">{pager.index + 1} of {pager.count}</span>}
 										<button
 											aria-label="Next comment"
 											className="plan-comment-sheet-step btn btn-icon btn-ghost"
