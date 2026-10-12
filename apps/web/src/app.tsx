@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import * as Api from "./api";
-import { HostedApp, HostedFailure, HostedLoading } from "./hosted";
+import { HostedApp, HostedFailure, HostedLoading, hostedRoute } from "./hosted";
 import { clearRepositoryCache } from "./repository-cache";
 
 let loadHostedLogin = () => import("./hosted-login");
@@ -56,7 +56,12 @@ export function App() {
 			</Suspense>
 		);
 	}
-	if (!session || !repositoryCacheReady) return <HostedLoading />;
+	if (!session || !repositoryCacheReady) {
+		let page = hostedRoute(location.pathname).page;
+		return (
+			<HostedLoading document={page === "document" || page === "child" || page === "channel"} />
+		);
+	}
 	if (!session.user) {
 		return (
 			<Suspense fallback={<HostedLoading />}>

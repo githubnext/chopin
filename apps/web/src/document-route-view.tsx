@@ -179,7 +179,7 @@ export default function DocumentRouteSwap(
 					>
 						{source.page === "document" || source.page === "child"
 							? (
-								<Suspense fallback={<Loading label="Opening document…" />}>
+								<Suspense fallback={<Loading document label="Opening document…" />}>
 									<DocumentWorkspaceHost
 										agent={agent}
 										childOrigin={childOrigin}
@@ -199,7 +199,7 @@ export default function DocumentRouteSwap(
 								</Suspense>
 							)
 							: (
-								<Suspense fallback={<Loading label="Opening document…" />}>
+								<Suspense fallback={<Loading document label="Opening document…" />}>
 									<ChannelWorkspace
 										Failure={Failure}
 										Loading={Loading}
