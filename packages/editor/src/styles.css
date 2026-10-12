@@ -2232,6 +2232,20 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	margin-block-start: 0;
 }
 
+/* A research draft takes the empty line it was opened on; the reference replaces that line. */
+.plan .plan-content > p[data-research-draft-anchor]:has(> br:only-child) {
+	block-size: 0;
+	margin-block: 0;
+	overflow: visible;
+}
+
+/* The draft is content in progress, so the empty-document prompt would only overlap it. */
+.plan
+	.mdxeditor-root-contenteditable:has(.plan-research-draft-host)
+	> .plan-content:not([contenteditable]) {
+	display: none;
+}
+
 /* Settled lines read as a tight list; the line's own paragraph margin is dropped. */
 .plan .plan-content :is([data-plan-questionnaire], [data-plan-decision]):has([data-card-settled]) {
 	margin-block: 0.5rem;

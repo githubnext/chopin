@@ -36,7 +36,8 @@ import type { ResearchDraftStore } from "../research-draft";
 import type { ResearchStore } from "../widget-options";
 import type { DOMRectLike } from "./placement";
 
-type Attachment = { block: HTMLElement };
+type Placement = "before" | "after";
+type Attachment = { block: HTMLElement; placement: Placement };
 
 export type OpenResearch = {
 	anchor: DOMRectLike;
@@ -120,9 +121,14 @@ export function beginResearchDraft(
 }
 
 /** The private surface participates in flow without becoming collaborative content. */
-export function attachDraft(block: HTMLElement, host: HTMLElement): () => void {
+export function attachDraft(
+	block: HTMLElement,
+	host: HTMLElement,
+	placement: Placement = "after",
+): () => void {
 	block.dataset.researchDraftAnchor = "";
-	block.after(host);
+	if (placement === "before") block.before(host);
+	else block.after(host);
 	return () => {
 		delete block.dataset.researchDraftAnchor;
 	};
@@ -135,12 +141,23 @@ export function retainDraftBlock<Block>(
 	return resolved ?? previous;
 }
 
-export function attachmentBlock<Block>(
-	resolved: Block,
+/**
+ * Where the draft shows relative to the top-level block holding a saved point,
+ * mirroring where `$insertNodes` will put the reference: before a block whose
+ * start it is, otherwise after it. An empty paragraph is replaced by the
+ * reference, so the draft follows it and CSS lets the draft take its line.
+ */
+export function $draftAttachment(
+	key: string,
 	offset: number,
-	previous: Block | undefined,
-): Block {
-	return offset === 0 && previous ? previous : resolved;
+): { key: string; placement: Placement } | undefined {
+	let node = $getNodeByKey(key);
+	let block = node?.getTopLevelElement();
+	if (!node || !block) return undefined;
+	let first = $isElementNode(block) ? block.getFirstDescendant() : null;
+	let atStart = offset === 0 && (node === block || first === node);
+	let empty = $isElementNode(block) && block.getTextContentSize() === 0;
+	return { key: block.getKey(), placement: atStart && !empty ? "before" : "after" };
 }
 
 export const UNRESOLVED_DRAFT = "This research draft cannot yet be placed at its saved position.";
@@ -175,8 +192,7 @@ function resolveAttachment(
 	binding: Binding,
 	position: Y.RelativePosition,
 ): Attachment | undefined {
-	let key: string | undefined;
-	let offset = 0;
+	let target: ReturnType<typeof $draftAttachment>;
 	try {
 		editor.getEditorState().read(() => {
 			let resolved = $getAnchorAndFocusForUserState(binding, {
@@ -187,26 +203,14 @@ function resolveAttachment(
 				name: "",
 				awarenessData: {},
 			});
-			key = resolved.anchorKey || undefined;
-			offset = resolved.anchorOffset;
+			if (resolved.anchorKey) target = $draftAttachment(resolved.anchorKey, resolved.anchorOffset);
 		});
 	} catch {
 		return undefined;
 	}
-	if (!key) return undefined;
-	let resolved = blockElement(editor, key);
-	let previous = resolved?.previousElementSibling as HTMLElement | null;
-	if (previous?.classList.contains("plan-research-draft-host")) {
-		previous = previous.previousElementSibling as HTMLElement | null;
-	}
-	let block = resolved
-		? attachmentBlock(
-			resolved,
-			offset,
-			previous ?? undefined,
-		)
-		: undefined;
-	return block ? { block } : undefined;
+	if (!target) return undefined;
+	let block = blockElement(editor, target.key);
+	return block ? { block, placement: target.placement } : undefined;
 }
 
 function currentPosition(
@@ -236,7 +240,7 @@ export function ResearchComposerSurface(
 	let read = useCallback(() => drafts.get(), [drafts]);
 	let draft = useSyncExternalStore(subscribe, read, read);
 	let surface = useRef<HTMLDivElement>(null);
-	let attached = useRef<{ block: HTMLElement; detach: () => void } | undefined>(undefined);
+	let attached = useRef<Attachment & { detach: () => void } | undefined>(undefined);
 	let slot = useRef<HTMLDivElement | undefined>(undefined);
 	let [host, setHost] = useState<HTMLDivElement>();
 	let [unresolved, setUnresolved] = useState(false);
@@ -271,17 +275,22 @@ export function ResearchComposerSurface(
 		let resolved = binding && draft.position
 			? resolveAttachment(editor, binding, draft.position)
 			: undefined;
-		let previous = attached.current?.block;
-		if (previous && !previous.isConnected) previous = undefined;
-		let block = retainDraftBlock(resolved?.block, previous);
+		let previous = attached.current;
+		if (previous && !previous.block.isConnected) previous = undefined;
+		let next = retainDraftBlock(resolved, previous);
 		setUnresolved(!!binding && !!draft.position && !resolved);
-		if (!block) {
+		if (!next) {
 			if (host.parentElement !== root) root.append(host);
 			return;
 		}
-		if (attached.current?.block === block && block.nextElementSibling === host) return;
+		let { block, placement } = next;
+		let sibling = placement === "before" ? block.previousElementSibling : block.nextElementSibling;
+		if (
+			attached.current?.block === block && attached.current.placement === placement
+			&& sibling === host
+		) return;
 		detach();
-		attached.current = { block, detach: attachDraft(block, host) };
+		attached.current = { block, placement, detach: attachDraft(block, host, placement) };
 	}, [binding, draft, editor, detach]);
 
 	useLayoutEffect(() => {

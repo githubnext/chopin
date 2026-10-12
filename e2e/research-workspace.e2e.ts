@@ -279,3 +279,98 @@ test("the inline research draft scrolls with its anchor and stays inside the pro
 	);
 	await expect(editor).toBeVisible();
 });
+
+/** Draft geometry against the visible blocks around it and the empty-document prompt. */
+async function draftFlow(page: Page) {
+	return await page.evaluate(() => {
+		let draft = document.querySelector<HTMLElement>(".plan-research-draft")!
+			.getBoundingClientRect();
+		let editor = document.querySelector<HTMLElement>(
+			'[role="textbox"][aria-label="editable markdown"]',
+		)!;
+		let prompt = editor.parentElement!.querySelector<HTMLElement>(
+			":scope > .plan-content:not([contenteditable])",
+		);
+		let overlaps = [...editor.children]
+			.filter(block => !block.classList.contains("plan-research-draft-host"))
+			.map(block => ({ text: block.textContent ?? "", box: block.getBoundingClientRect() }))
+			.filter(({ box }) =>
+				box.height > 0 && box.top < draft.bottom - 1 && box.bottom > draft.top + 1
+			)
+			.map(({ text }) => text);
+		let host = document.querySelector(".plan-research-draft-host")!;
+		let previous = host.previousElementSibling;
+		while (previous && previous.getBoundingClientRect().height === 0) {
+			previous = previous.previousElementSibling;
+		}
+		let next = host.nextElementSibling;
+		while (next && next.getBoundingClientRect().height === 0) next = next.nextElementSibling;
+		return {
+			overlaps,
+			promptVisible: !!prompt && prompt.getClientRects().length > 0,
+			follows: previous?.textContent ?? null,
+			precedes: next?.textContent ?? null,
+		};
+	});
+}
+
+test("the research draft takes its line in document flow without overlapping anything", async ({ join }) => {
+	let page = await join("ana");
+	let editor = content(page);
+	let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+	await expect(prompt).toBeVisible();
+	let composer = page.getByRole("region", { name: "Research question", exact: true });
+
+	await editor.click();
+	await page.keyboard.type("/research");
+	await page.keyboard.press("Enter");
+	await expect(composer.getByRole("textbox", { name: "Research question", exact: true }))
+		.toBeFocused();
+	// The empty-document prompt sat on top of the draft's own placeholder.
+	await expect(prompt).toBeHidden();
+	expect(await draftFlow(page)).toEqual({
+		overlaps: [],
+		promptVisible: false,
+		follows: null,
+		precedes: null,
+	});
+	await page.keyboard.press("Escape");
+	await expect(composer).toHaveCount(0);
+	await expect(prompt).toBeVisible();
+
+	await page.keyboard.type("Title");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("Opening paragraph.");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("- one");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("two");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/research");
+	await page.keyboard.press("Enter");
+	await expect(composer).toBeVisible();
+	// From an empty list item the draft follows the list, not the block before it.
+	await expect.poll(() => draftFlow(page)).toEqual({
+		overlaps: [],
+		promptVisible: false,
+		follows: "onetwo",
+		precedes: null,
+	});
+	await page.keyboard.press("Escape");
+	await expect(composer).toHaveCount(0);
+
+	let opening = page.getByText("Opening paragraph.", { exact: true });
+	let box = (await opening.boundingBox())!;
+	await opening.click({ position: { x: box.width - 1, y: box.height / 2 } });
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/research");
+	await page.keyboard.press("Enter");
+	await expect(composer).toBeVisible();
+	// The empty line it was opened on collapses under it rather than trailing as a blank line.
+	await expect.poll(() => draftFlow(page)).toEqual({
+		overlaps: [],
+		promptVisible: false,
+		follows: "Opening paragraph.",
+		precedes: "onetwo",
+	});
+});
