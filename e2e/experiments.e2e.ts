@@ -10,6 +10,7 @@ function person() {
 }
 
 const PASSAGE = "Compare measured startup time.";
+const FOLLOW_UP = "Then check memory use.";
 
 /** The investigation card whose brief this is. */
 function card(page: Page, brief: string) {
@@ -21,10 +22,11 @@ function card(page: Page, brief: string) {
 /** Open the child document a completed investigation published, from its inline card. */
 async function openChild(page: Page, room: string) {
 	await card(page, "Startup comparison")
-		.getByRole("button", { name: "Open Startup comparison", exact: true })
+		// Other tests publish the same fixture into this repository, so its title may be numbered.
+		.getByRole("button", { name: /^Open Startup comparison/ })
 		// Recorded decisions sit above the card-wide control, so open from its status row.
 		.click({ position: { x: 16, y: 16 } });
-	let child = page.getByRole("region", { name: "Child document: Startup comparison" });
+	let child = page.getByRole("region", { name: /^Child document: Startup comparison/ });
 	let provenance = child.locator("[data-child-provenance]");
 	await expect(provenance).toContainText(`Investigation from Test ${room.slice(0, 8)}`);
 	await expect(provenance).toContainText("1 view");
@@ -59,7 +61,9 @@ async function investigate(page: Page, room: string, brief: string, after: strin
 }
 
 test("the clicker's own agent runs work and publishes evidence that survives disconnect", async ({ baseURL, join, room, seed }) => {
-	await seed(`# Investigation\n\n${PASSAGE}\n`);
+	// Two people open the published child document as well as running the work.
+	test.slow();
+	await seed(`# Investigation\n\n${PASSAGE}\n\n${FOLLOW_UP}\n`);
 	let page = await join(person());
 	let pairing = await (await fetch(`${baseURL}/api/connector/pairings`, {
 		method: "POST",
@@ -163,7 +167,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	);
 	await expect(table).toContainText("410");
 	await page.goto(testChannelPath(room));
-	let second = await investigate(page, room, "Check memory use", PASSAGE);
+	let second = await investigate(page, room, "Check memory use", FOLLOW_UP);
 	let queued = card(page, "Check memory use");
 	await queued.getByRole("button", { name: "Run", exact: true }).click();
 	await expect(queued.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
