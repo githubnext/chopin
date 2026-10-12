@@ -80,6 +80,7 @@ import {
 	watchDecisions,
 	watchRequest,
 } from "./socket/decision-watch";
+import { SessionSockets } from "./socket/session-sockets";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
@@ -139,6 +140,8 @@ let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let plannerAttachments: PlannerAttachments | undefined;
+/** Browser sockets by login, so a login that ends closes them before another broadcast. */
+let sessionSockets = new SessionSockets();
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
 let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1301,7 +1304,10 @@ function listen(): Server<SocketData> {
 						attachments: plannerAttachments,
 						unavailable: channelId => deletingChannels.has(channelId),
 					});
-				} else if (isSidebarSocket(ws)) scheduleSidebarRecheck(ws);
+					return;
+				}
+				sessionSockets.opened(ws as Socket | SidebarSocket);
+				if (isSidebarSocket(ws)) scheduleSidebarRecheck(ws);
 				else openRoomSocket(ws as Socket);
 			},
 
@@ -1315,8 +1321,9 @@ function listen(): Server<SocketData> {
 			},
 
 			close(ws: AnySocket) {
-				if (isPlannerLinkSocket(ws)) ws.data.link?.disconnected();
-				else if (isSidebarSocket(ws)) closeSidebarSocket(ws);
+				if (isPlannerLinkSocket(ws)) return ws.data.link?.disconnected();
+				sessionSockets.closed(ws as Socket | SidebarSocket);
+				if (isSidebarSocket(ws)) closeSidebarSocket(ws);
 				else closeRoomSocket(ws as Socket);
 			},
 		},
@@ -1756,6 +1763,8 @@ async function commitCurrentSummary(
 }
 
 async function sessionRevoked(sessionId: string): Promise<void> {
+	// First, so nothing the rest of the revocation announces reaches the ended login.
+	sessionSockets.revoke(sessionId);
 	experiments?.connections.revokeSession(sessionId);
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);

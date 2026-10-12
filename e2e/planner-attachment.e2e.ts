@@ -70,6 +70,9 @@ async function migrate(database: string): Promise<void> {
 
 let processes: ReturnType<typeof spawn>[] = [];
 
+// The remote-Planner tests share one disposable database and application port.
+test.describe.configure({ mode: "default" });
+
 async function remoteServer(database: string) {
 	let child = spawn(process.execPath, ["--preload", "./e2e/github.ts", "apps/server/src/main.ts"], {
 		cwd: ROOT,
@@ -168,6 +171,88 @@ test("Chat says live who holds the document's remote Planner", async ({ page }) 
 		timeout: GRACE_MS + 5_000,
 	});
 	await expect(status).toHaveAttribute("data-planner-state", "none");
+});
+
+type Probe = { frames: string[]; closed?: { code: number; at: number } };
+
+/** Open a bare socket from the page, so its cookie and origin are the browser's own. */
+async function openProbe(page: Page, name: string, path: string): Promise<void> {
+	await page.evaluate(async ({ name, url }) => {
+		let probe: Probe = { frames: [] };
+		((window as unknown as { probes?: Record<string, Probe> }).probes ??= {})[name] = probe;
+		let socket = new WebSocket(url);
+		socket.addEventListener("message", event => probe.frames.push(String(event.data)));
+		socket.addEventListener("close", event => {
+			probe.closed = { code: event.code, at: performance.now() };
+		});
+		await new Promise<void>((resolve, reject) => {
+			socket.addEventListener("open", () => resolve(), { once: true });
+			socket.addEventListener("close", () => reject(new Error(`${name} was refused`)), {
+				once: true,
+			});
+		});
+	}, { name, url: `ws://${HOST}:${PORT}${path}` });
+}
+
+function probe(page: Page, name: string): Promise<Probe> {
+	return page.evaluate(
+		name => (window as unknown as { probes: Record<string, Probe> }).probes[name]!,
+		name,
+	);
+}
+
+test("signing out closes that login's sockets at once, and the Planner is never announced to them", async ({ browser }) => {
+	test.setTimeout(90_000);
+	let database = await freshDatabase();
+	await migrate(database);
+	await remoteServer(database);
+	registerTestDatabase(PORT, database);
+	let room = crypto.randomUUID();
+	await createChannel(PORT, room);
+
+	// Another login in the same room, whose socket must outlive the sign-out.
+	let other = await browser.newContext();
+	let reader = await other.newPage();
+	await authenticate(reader, "review-b", ORIGIN);
+	await reader.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(reader);
+	let status = plannerStatus(reader);
+	await expect(status).toHaveAttribute("data-planner-state", "none");
+
+	let leaving = await browser.newContext();
+	let page = await leaving.newPage();
+	await authenticate(page, "review-a", ORIGIN);
+	await page.goto(`${ORIGIN}/api/session`);
+	await openProbe(page, "room", `/ws?channel=${room}`);
+	await openProbe(page, "sidebar", "/ws/sidebar");
+	await expect.poll(async () => (await probe(page, "room")).frames.length).toBeGreaterThan(0);
+
+	let signedOut = await page.evaluate(async () => {
+		let at = performance.now();
+		let response = await fetch("/auth/logout", { method: "POST" });
+		return { status: response.status, at };
+	});
+	expect(signedOut.status).toBe(204);
+	for (let name of ["room", "sidebar"]) {
+		await expect.poll(async () => (await probe(page, name)).closed, { timeout: 1_000 })
+			.toBeDefined();
+		let closed = (await probe(page, name)).closed!;
+		expect(closed.code).toBe(4401);
+		expect(closed.at - signedOut.at).toBeLessThan(1_000);
+	}
+	let heard = (await probe(page, "room")).frames.length;
+
+	let client = await connectPlannerLink({
+		url: ORIGIN,
+		token: "ghu_e2e_review-b_1",
+		document: room,
+		handlers: { turn() {} },
+	});
+	await expect(status).toHaveText("Planner: review-b attached");
+	expect((await probe(page, "room")).frames.slice(heard)).toEqual([]);
+	await client.detach();
+	await other.close();
+	await leaving.close();
 });
 
 test("Chat says nothing about attachments where the Planner runs on the server", async ({ page }) => {
