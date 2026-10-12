@@ -77,16 +77,21 @@ or with `gh api`:
 4. The workflow builds `chopin-linux-x64`, `chopin-linux-arm64`,
    `chopin-darwin-x64`, `chopin-darwin-arm64` and `chopin-windows-x64.exe`,
    writes `checksums.txt`, and scans the Windows binary with Microsoft Defender
-   on updated signatures. A detection fails the release.
+   on updated signatures. A detection fails the release. A read-only `sbom`
+   job generates SPDX and CycloneDX SBOMs of the source and the binaries,
+   checks them for secrets, and keeps them as the `chopin-cli-sbom` workflow
+   artifact.
 5. A `preflight` job checks the `chopin-cli-release` environment as described
    in [One-time setup](#one-time-setup), and the publish job then waits for
    approval of that environment. A required reviewer approves it from the
    workflow run.
-6. Once approved, it attests every binary's build provenance, generates SPDX
-   and CycloneDX SBOMs (kept as workflow artifacts and checked for secrets),
-   and creates the `cli-v0.2.0` release with the binaries, `checksums.txt`,
-   `install.sh` and `install.ps1`, marked as the latest release so the
-   `releases/latest/download/` install commands use it.
+6. Once approved, publish verifies the assets against `checksums.txt`, attests
+   every binary's build provenance, and creates the `cli-v0.2.0` release with
+   the binaries, `checksums.txt`, `install.sh` and `install.ps1`, marked as the
+   latest release so the `releases/latest/download/` install commands use it.
+   It is the only job that can write, and it runs only actions from GitHub's
+   `actions` organization. Every action in the workflow is pinned to a full
+   commit SHA.
 
 To check a published binary, download it and run
 `gh attestation verify chopin-linux-x64 -R githubnext/chopin`.

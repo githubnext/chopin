@@ -34,7 +34,7 @@ type Workflow = {
 
 let source = await Bun.file(path).text();
 let workflow = Bun.YAML.parse(source) as Workflow;
-let { build, defender, preflight, publish } = workflow.jobs;
+let { build, defender, sbom, preflight, publish } = workflow.jobs;
 let script = (job: Job) => job.steps.map(step => step.run ?? "").join("\n");
 let uses = (job: Job, action: string) =>
 	job.steps.filter(step => step.uses?.startsWith(`${action}@`));
@@ -52,21 +52,45 @@ describe("the CLI release workflow", () => {
 		expect(workflow.on.workflow_dispatch?.inputs?.version?.required).toBe(true);
 	});
 
-	test("pins every action to a version tag", () => {
+	test("pins every action to a full commit SHA, with its version in a comment", () => {
 		let all = Object.values(workflow.jobs).flatMap(job => job.steps).filter(step => step.uses);
 		expect(all.length).toBeGreaterThan(0);
-		for (let step of all) expect(step.uses).toMatch(/^[\w.-]+\/[\w./-]+@v\d+(\.\d+){0,2}$/);
+		for (let step of all) expect(step.uses).toMatch(/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/);
+		// The parsed YAML drops comments, so the version comments are read from the source.
+		let lines = source.split("\n").filter(line => /^\s*(- )?uses:/.test(line));
+		expect(lines).toHaveLength(all.length);
+		for (let line of lines) {
+			expect(line).toMatch(/^\s*(- )?uses: [\w.-]+\/[\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/);
+		}
 	});
 
 	test("grants write access only to the publish job", () => {
 		expect(workflow.permissions).toEqual({});
 		expect(build.permissions).toEqual({ contents: "read" });
 		expect(defender.permissions).toEqual({});
+		expect(sbom.permissions).toEqual({ contents: "read" });
+		expect(preflight.permissions).toEqual({ actions: "read" });
 		expect(publish.permissions).toEqual({
 			contents: "write",
 			"id-token": "write",
 			attestations: "write",
 		});
+	});
+
+	test("runs no third-party action in a job that can write", () => {
+		let writers = Object.values(workflow.jobs).filter(job =>
+			Object.values(job.permissions ?? {}).includes("write")
+		);
+		expect(writers).toEqual([publish]);
+		for (let job of writers) {
+			for (let step of job.steps.filter(step => step.uses)) {
+				expect(step.uses).toStartWith("actions/");
+			}
+		}
+		expect(publish.steps.map(step => step.uses?.split("@")[0]).filter(Boolean)).toEqual([
+			"actions/download-artifact",
+			"actions/attest-build-provenance",
+		]);
 	});
 
 	test("builds every binary from a tag that matches the package version", () => {
@@ -87,8 +111,8 @@ describe("the CLI release workflow", () => {
 		expect(scan).toContain("-Scan -ScanType 3 -File");
 	});
 
-	test("publishes only from a tag, after the scan, the preflight and a person's approval", () => {
-		expect(publish.needs).toEqual(["build", "defender", "preflight"]);
+	test("publishes only from a tag, after the scan, the SBOMs, the preflight and a person's approval", () => {
+		expect(publish.needs).toEqual(["build", "defender", "sbom", "preflight"]);
 		expect(publish.if).toBe("github.event_name == 'push'");
 		expect(publish.environment).toBe("chopin-cli-release");
 	});
@@ -100,19 +124,45 @@ describe("the CLI release workflow", () => {
 		expect(preflight.steps.every(step => !step.uses)).toBe(true);
 	});
 
-	test("attests every binary, and keeps audited SBOMs as workflow artifacts", () => {
+	test("verifies the assets, then attests every binary before the release", () => {
 		let [attest] = uses(publish, "actions/attest-build-provenance");
 		expect(attest?.with?.["subject-path"]).toBe(
 			TARGETS.map(target => `release/${binaryName(target)}`).join("\n"),
 		);
-		let formats = uses(publish, "anchore/sbom-action").map(step => step.with?.format);
-		expect(formats).toEqual(["spdx-json", "cyclonedx-json"]);
 		let steps = publish.steps.map(step => step.uses ?? step.run ?? "");
-		let audit = steps.findIndex(step => step.includes("PRIVATE KEY"));
+		let verify = steps.findIndex(step => step.includes("sha256sum --check"));
 		let release = steps.findIndex(step => step.includes("gh release create"));
-		expect(audit).toBeGreaterThan(steps.findLastIndex(step => step.startsWith("anchore/")));
-		expect(release).toBeGreaterThan(audit);
+		expect(verify).toBeGreaterThan(-1);
+		expect(steps.findIndex(step => step.startsWith("actions/attest"))).toBeGreaterThan(verify);
 		expect(release).toBeGreaterThan(steps.findIndex(step => step.startsWith("actions/attest")));
+	});
+
+	test("keeps SBOMs of the build, audited for secrets, from a read-only job", () => {
+		expect(sbom.needs).toBe("build");
+		expect(sbom.if).toBeUndefined();
+		let steps = sbom.steps.map(step => step.uses ?? step.run ?? "");
+		let download = steps.findIndex(step => step.startsWith("actions/download-artifact@"));
+		let verify = steps.findIndex(step => step.includes("sha256sum --check"));
+		let generate = sbom.steps.flatMap((step, index) =>
+			step.uses?.startsWith("anchore/sbom-action@") ? [index] : []
+		);
+		let audit = steps.findIndex(step => step.includes("PRIVATE KEY"));
+		let upload = steps.findIndex(step => step.startsWith("actions/upload-artifact@"));
+		expect(download).toBeGreaterThan(-1);
+		expect(verify).toBeGreaterThan(download);
+		expect(generate.map(index => sbom.steps[index].with?.format)).toEqual([
+			"spdx-json",
+			"cyclonedx-json",
+		]);
+		expect(Math.min(...generate)).toBeGreaterThan(verify);
+		// The SBOMs are uploaded only once the audit has passed.
+		for (let index of generate) {
+			expect(sbom.steps[index].with?.["upload-artifact"]).toBe(false);
+			expect(sbom.steps[index].with?.["upload-release-assets"]).toBe(false);
+		}
+		expect(audit).toBeGreaterThan(Math.max(...generate));
+		expect(upload).toBeGreaterThan(audit);
+		expect(sbom.steps[upload].with?.path).toBe("sbom.spdx.json\nsbom.cdx.json");
 	});
 
 	test("releases the five binaries, checksums.txt and both install scripts", () => {
