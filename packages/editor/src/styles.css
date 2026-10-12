@@ -496,6 +496,7 @@
 	 * does.
 	 */
 	--plan-measure: var(--document-prose-measure);
+	--plan-table-measure: var(--document-table-measure);
 	/*
 	 * Document body text, one step down from the old 17px so prose sits
 	 * closer to chrome and chat sizes. Resolved out here because MDXEditor
@@ -3054,13 +3055,14 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 /*
  * A compact table shrink-wraps around its columns from the prose's start edge,
  * like every other block. One wider than the prose grows evenly about the
- * column's centre, like a diagram, up to the document gutters, then scrolls.
+ * column's centre, up to the table measure or the document gutters, then
+ * scrolls.
  * Its own width is only known to a percentage of `translate`, so the shift is
  * paint-only; the row and column rails measure cell rectangles and follow it.
  */
 .plan-content > table {
 	inline-size: max-content;
-	max-inline-size: var(--plan-wide-inline-size);
+	max-inline-size: min(var(--plan-wide-inline-size), var(--plan-table-measure));
 	translate: min(0px, var(--plan-prose-inline-size) / 2 - 50%);
 }
 

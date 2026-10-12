@@ -241,6 +241,8 @@
 
 	/* Authored documents keep prose measure separate from wide content. */
 	--document-prose-measure: 40.625rem;
+	/* A table wider than the prose stops here, so sentence-length cells stay readable. */
+	--document-table-measure: calc(var(--document-prose-measure) * 1.5);
 	--document-top-inset: calc(var(--spacing) * 15);
 	--document-decisions-top-inset: calc(var(--spacing) * 12);
 	--document-gutter: calc(var(--spacing) * 14);
