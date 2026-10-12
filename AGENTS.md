@@ -55,8 +55,10 @@ on 8797) alongside them, then runs Chromium. The local-auth test starts its own
 application on port 8791 against the fourth database. Set `E2E_SKIP_BUILD=1`
 only when the existing client build is known to match the checkout.
 
-CI has three independent jobs: validation, browser integration, and a Docker
-image build. A documentation-only change should still pass `bun run ci`.
+CI has four independent jobs: validation, browser integration, a Docker image
+build, and the `chopin` CLI binary build with its bridge smoke test (whose
+Windows binary is then started once on Windows). A documentation-only change
+should still pass `bun run ci`.
 
 Before opening a PR or repairing CI, use the repository's
 [PR readiness skill](.agents/skills/chopin-pr-readiness/SKILL.md).

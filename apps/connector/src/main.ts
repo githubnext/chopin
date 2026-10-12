@@ -7,6 +7,7 @@ import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
+import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { lockWorkspace, stateDirectory, workspace } from "./workspace";
 
 function origin(value: string) {
@@ -125,7 +126,6 @@ async function connect(args: string[]) {
 				directory,
 				command,
 				url,
-				script: resolve(process.argv[1]),
 				signal: abort.signal,
 				output,
 				permissions,
@@ -158,15 +158,33 @@ function delay(ms: number, signal: AbortSignal) {
 	});
 }
 
-const USAGE = "Usage: CHOPIN_URL=https://your-instance bun connector.js connect [checkout] -- "
+/** How people run this connector: the installed `chopin` binary, or the downloaded script. */
+const SELF = Bun.isStandaloneExecutable ? "chopin" : "bun connector.js";
+
+const USAGE = `Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] -- `
 	+ "agent [ACP arguments]";
+
+const HELP = [
+	`Usage: ${SELF} <command>`,
+	"",
+	"Commands:",
+	"  connect [checkout] -- <agent> [ACP arguments]",
+	"      Pair a checkout with Chopin and run the work you start there with a local ACP agent.",
+	"  version    Print the CLI version and the connector protocol it speaks.",
+	"  help       Show this help.",
+	"",
+	"CHOPIN_URL names your Chopin instance (default https://chopin.githubnext.com).",
+].join("\n");
 
 if (import.meta.main) {
 	let [mode, ...args] = process.argv.slice(2);
 	try {
 		if (mode === "bridge") await bridge();
 		else if (mode === "connect") await connect(args);
-		else throw new Error(USAGE);
+		else if (mode === "version" || mode === "--version" || mode === "-v") {
+			console.log(`chopin ${VERSION} (connector protocol ${CONNECTOR_PROTOCOL})`);
+		} else if (mode === "help" || mode === "--help" || mode === "-h") console.log(HELP);
+		else throw new Error(mode ? `Unknown command: ${mode}\n\n${HELP}` : HELP);
 	} catch (error) {
 		if (!(error instanceof Error && error.name === "AbortError")) {
 			createOutput().error(error instanceof Error ? error.message : "Connector failed");

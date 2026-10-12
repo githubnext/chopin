@@ -161,6 +161,49 @@ jobs:
             e2e/test-results
           retention-days: 7
 
+  # The `chopin` CLI is the connector compiled into one binary that runs without Bun. The smoke
+  # test runs a fake investigation through it, so the agent starts the binary's own stdio bridge.
+  cli:
+    name: chopin CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run --cwd apps/connector build:binaries bun-linux-x64 bun-windows-x64
+
+      - run: ./dist/chopin-linux-x64 --version
+        working-directory: apps/connector
+
+      - name: Bridge smoke test from the compiled binary
+        run: bun test apps/connector/src/binary.test.ts
+        env:
+          CHOPIN_BINARY: apps/connector/dist/chopin-linux-x64
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chopin-windows-x64
+          path: apps/connector/dist/chopin-windows-x64.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  # Cross-compiled above; this only checks that the .exe starts on Windows.
+  cli-windows:
+    name: chopin CLI (Windows)
+    needs: cli
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: chopin-windows-x64
+
+      - run: ./chopin-windows-x64.exe --version
+
   container:
     name: container
     runs-on: ubuntu-latest

@@ -52,7 +52,6 @@ async function run(
 				...flags,
 			],
 			url: "http://127.0.0.1:1",
-			script: "unused",
 			signal,
 			heartbeatMs: 20,
 		});
@@ -169,7 +168,6 @@ test("a spike run serves connector-local tools to an HTTP agent over an authenti
 				"--spike",
 			],
 			url: `http://127.0.0.1:${chopin.port}`,
-			script: "unused",
 			signal: new AbortController().signal,
 		});
 		expect(calls.filter(name => name !== "renew_experiment")).toEqual(["complete_experiment"]);

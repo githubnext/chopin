@@ -1,6 +1,19 @@
+import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { capabilities, parseResult, resultSchema } from "@chopin/experiment";
 import type { Result, RunInput } from "@chopin/experiment";
+
+/**
+ * How an agent starts this connector's stdio bridge. A compiled `chopin` binary is its own entry
+ * point: its argv[1] is a virtual `/$bunfs/` path inside the binary that no other process can run.
+ */
+export function bridgeCommand(
+	compiled = Bun.isStandaloneExecutable,
+	execPath = process.execPath,
+	script = process.argv[1]!,
+) {
+	return { command: execPath, args: compiled ? ["bridge"] : [resolve(script), "bridge"] };
+}
 
 export function createBridge(input: RunInput, submit: (result: Result) => Promise<void>) {
 	let server = new McpServer({ name: "chopin-investigation", version: "0.1.0" });

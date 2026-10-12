@@ -1,6 +1,7 @@
 import { requestSchema } from "@chopin/experiment";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
+import { bridgeCommand } from "./bridge";
 import { runAgent } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
 import { createOutput } from "./output";
@@ -20,7 +21,6 @@ type Options = {
 	directory: string;
 	command: string[];
 	url: string;
-	script: string;
 	signal: AbortSignal;
 	heartbeatMs?: number;
 	output?: Output;
@@ -150,8 +150,7 @@ export async function runWork(
 				}
 				return [{
 					name,
-					command: process.execPath,
-					args: [options.script, "bridge"],
+					...bridgeCommand(),
 					env: [
 						{ name: "CHOPIN_BRIDGE_ORIGIN", value: options.url },
 						{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
