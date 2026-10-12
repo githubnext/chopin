@@ -54,9 +54,13 @@ function $openBlock() {
 	}
 }
 
+/** Kinds of list belong with the other text styles, not with the blocks. */
+const STYLED = new Set(["tasks"]);
+
 /** The slash menu's blocks, and Research where the host offers it. */
 export function insertChoices(research: boolean): PanelChoice[] {
 	return availableCommands("")
+		.filter(command => !STYLED.has(command.id))
 		.filter(command => command.kind === "insert" || research)
 		.map(command => ({
 			id: command.id,

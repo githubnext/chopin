@@ -37,7 +37,7 @@ import {
 	registry,
 } from "@chopin/dialect";
 
-import { registerPlanHistory, rehearse, typing } from "./history";
+import { listenToHistory, registerPlanHistory, rehearse, typing } from "./history";
 
 import type { PlanHistory, Refusal } from "./history";
 import type { Binding, Provider } from "@lexical/yjs";
@@ -611,4 +611,28 @@ describe("plan history under random editing", () => {
 			expect(quick).toBeGreaterThan(0);
 		});
 	}
+});
+
+describe("history steps", () => {
+	it("reports nothing to step to until the history registers, then follows its stacks", async () => {
+		let doc = new Y.Doc();
+		let me = bound(doc);
+		importPlan(me.editor, "Start here.\n", { registry: REGISTRY });
+		let heard: Array<{ undo: boolean; redo: boolean }> = [];
+		let stop = listenToHistory(me.editor, steps => heard.push(steps));
+		expect(heard.at(-1)).toEqual({ undo: false, redo: false });
+
+		let history = registerPlanHistory(me.editor, me.binding, { captureTimeout: 0 });
+		type(me.editor, " Mine.");
+		await settle();
+		expect(heard.at(-1)).toEqual({ undo: true, redo: false });
+
+		undo(me.editor);
+		await settle();
+		expect(heard.at(-1)).toEqual({ undo: false, redo: true });
+
+		history.dispose();
+		expect(heard.at(-1)).toEqual({ undo: false, redo: false });
+		stop();
+	});
 });

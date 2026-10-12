@@ -17,6 +17,8 @@ test("Insert offers the slash menu's blocks, and Research only where the host ha
 	let plain = insertChoices(false).map(choice => choice.id);
 	expect(plain).toContain("table");
 	expect(plain).not.toContain("research");
+	// Task list is a text style, offered there instead.
+	expect(plain).not.toContain("tasks");
 	expect(insertChoices(true).map(choice => choice.id).at(-1)).toBe("research");
 });
 

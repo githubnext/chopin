@@ -336,10 +336,19 @@ test("Insert stands in for the keyboard and gives the caret back", async ({ base
 		await setVisualViewport(page, { event: "resize", height: 500 });
 		let dock = page.getByRole("toolbar", { name: "Formatting" });
 		let insert = dock.getByRole("button", { name: "Insert block" });
+		let row = page.locator("[data-phone-tab-row]");
+		await row.evaluate(element =>
+			Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished))
+		);
+		let resting = (await row.boundingBox())!;
+		expect(Math.round(resting.y + resting.height)).toBe(500);
 		await insert.tap();
 		let panel = page.getByRole("group", { name: "Insert block" });
 		await expect(panel).toBeFocused();
 		await expect(insert).toHaveAttribute("aria-expanded", "true");
+		// Until the keyboard has gone, the panel takes no space: the bar stays on the keyboard
+		// rather than growing up the screen over the document.
+		expect(await row.boundingBox()).toEqual(resting);
 		// Focus left the editor, so the keyboard goes; the panel takes its place at its height.
 		await setVisualViewport(page, { event: "resize", height: 844 });
 		await expect(dock).toBeVisible();
@@ -363,6 +372,11 @@ test("Insert stands in for the keyboard and gives the caret back", async ({ base
 		await setVisualViewport(page, { event: "resize", height: 500 });
 		await expect(panel).toHaveCount(0);
 		await expect(dock).toBeVisible();
+		// The table's own actions sit above the bar, so Undo stays in reach.
+		let actions = page.getByRole("toolbar", { name: "Table actions" });
+		await expect(actions).toBeVisible();
+		let [actionsBox, barBox] = await Promise.all([actions.boundingBox(), dock.boundingBox()]);
+		expect(actionsBox!.y + actionsBox!.height).toBeLessThanOrEqual(barBox!.y);
 	} finally {
 		await close();
 	}
@@ -392,6 +406,18 @@ test("Text style turns the caret's block into a heading", async ({ baseURL, brow
 		await expect(content(page).locator("h2")).toHaveText("Second paragraph for the caret.");
 		await page.keyboard.type("!");
 		await expect(content(page).locator("h2")).toContainText("!");
+
+		// A tap in the prose takes the caret there and the keyboard back, with no tab bar between.
+		await dock.getByRole("button", { name: "Text style" }).tap();
+		await setVisualViewport(page, { event: "resize", height: 844 });
+		await expect(panel).toBeVisible();
+		await content(page).getByText("Members lose").tap();
+		await expect(content(page)).toBeFocused();
+		await expect(dock).toBeVisible();
+		await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeHidden();
+		await setVisualViewport(page, { event: "resize", height: 500 });
+		await expect(panel).toHaveCount(0);
+		await expect(dock).toBeVisible();
 
 		// Leaving the panel for anywhere else closes it and the dock with it.
 		await dock.getByRole("button", { name: "Insert block" }).tap();

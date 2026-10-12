@@ -5564,10 +5564,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	display: flex;
 	flex: 1;
 	align-items: center;
-	justify-content: space-between;
+	/* An even rhythm from the start, as native keyboard bars have, at any width. */
+	gap: calc(var(--spacing) / 2);
 	min-width: 0;
-	/* A wide landscape bar keeps its commands together at the start rather than strewn across it. */
-	max-width: var(--phone-tab-row-max);
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
 	scrollbar-width: none;
@@ -5650,6 +5649,14 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	background: var(--color-ground);
 	-webkit-user-select: none;
 	user-select: none;
+}
+
+/* Out of the layout until the keyboard has gone, so the bar never rises over it. */
+.plan-format-panel[data-phase="opening"] {
+	height: 0;
+	padding-block: 0;
+	border-top-width: 0;
+	overflow: hidden;
 }
 
 .plan-format-panel-grid {

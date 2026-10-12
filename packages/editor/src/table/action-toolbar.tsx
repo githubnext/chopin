@@ -10,6 +10,7 @@ import {
 import { $getSelection, $isRangeSelection } from "lexical";
 
 import { planScroller } from "../scroll";
+import { aboveDock } from "../toolbar/dock-clearance";
 import { placeSurface } from "../toolbar/placement";
 import { editorSurfaceViewport, listenToEditorGeometry } from "../toolbar/surface";
 import {
@@ -81,7 +82,8 @@ export function TableActionToolbar(
 		let element = surface.current;
 		let cell = selected && editor.getElementByKey(selected.cell);
 		if (!element || !cell) return;
-		let viewport = editorSurfaceViewport(editor);
+		// Above a phone's docked formatting, so the sheet never covers Undo after a table goes in.
+		let viewport = aboveDock(editorSurfaceViewport(editor));
 		let width = Math.max(0, viewport.width - 16);
 		let bottom = viewport.top + viewport.height;
 		// The previous group's maxHeight can constrain a newly expanded action panel.

@@ -66,8 +66,8 @@ const IDLE: DockState = {
 	inLink: false,
 };
 
-/** Gives up a choice's hold on the keyboard's space if the keyboard never comes back. */
-const RETURN_TIMEOUT = 800;
+/** Gives up waiting for the keyboard to go down or come back if the viewport never says so. */
+const KEYBOARD_TIMEOUT = 1000;
 
 /** Space kept between the caret's block and the top of an open panel. */
 const CARET_CLEARANCE = 12;
@@ -83,12 +83,18 @@ export function FormatDock(
 ) {
 	let [editor] = useLexicalComposerContext();
 	let [state, setState] = useState<DockState>(IDLE);
-	let [history, setHistory] = useState({ undo: true, redo: true });
+	let [history, setHistory] = useState({ undo: false, redo: false });
 	let scroller = useRef<HTMLDivElement>(null);
 	/** Which edges of the row have buttons scrolled past them; those edges fade. */
 	let [edges, setEdges] = useState({ start: false, end: false });
-	/** `returning` keeps the panel's space while the keyboard comes back over it. */
-	let [panel, setPanel] = useState<{ kind: DockPanel; block: Block; returning?: boolean }>();
+	/**
+	 * `opening` keeps the panel out of the layout until the keyboard has gone, or the bar would
+	 * grow up the screen over the keyboard. `returning` keeps its space while the keyboard comes
+	 * back over it.
+	 */
+	let [panel, setPanel] = useState<
+		{ kind: DockPanel; block: Block; phase: "opening" | "open" | "returning" }
+	>();
 	let [panelHeight, setPanelHeight] = useState<number>();
 	let panelElement = useRef<HTMLDivElement>(null);
 	let toolbar = useRef<HTMLDivElement>(null);
@@ -123,27 +129,32 @@ export function FormatDock(
 	}, [onPanel, open]);
 	useEffect(() => () => onPanel?.(false), [onPanel]);
 
-	// A choice hands the caret back; the panel keeps its space until the keyboard is up again.
-	let returning = !!panel?.returning;
+	// The panel waits for the keyboard on both sides: to go before it takes its space, and to come
+	// back before it gives the space up.
+	let phase = panel?.phase;
 	useEffect(() => {
-		if (!returning) return;
-		let release = () => setPanel(undefined);
+		if (phase !== "opening" && phase !== "returning") return;
+		let settle = () =>
+			phase === "opening"
+				? setPanel(current => current && { ...current, phase: "open" })
+				: setPanel(undefined);
 		let check = () => {
-			if (keyboardCover(innerHeight, currentViewport())) release();
+			let up = !!keyboardCover(innerHeight, currentViewport());
+			if (up === (phase === "returning")) settle();
 		};
-		let timer = setTimeout(release, RETURN_TIMEOUT);
+		let timer = setTimeout(settle, KEYBOARD_TIMEOUT);
 		let stop = listenToViewportChanges(check);
-		// A keyboard that never went down, such as one the browser kept up, has nothing to wait for.
 		check();
 		return () => {
 			clearTimeout(timer);
 			stop();
 		};
-	}, [returning]);
+	}, [phase]);
 
 	// The caret's block stays above the panel, as it would above the keyboard.
+	let shown = phase === "open";
 	useLayoutEffect(() => {
-		if (!open) return;
+		if (!shown) return;
 		// Measured where the bar will rest once the keyboard has gone, not where it is now.
 		let bar = toolbar.current?.offsetHeight;
 		let height = panelElement.current?.offsetHeight;
@@ -154,7 +165,7 @@ export function FormatDock(
 		if (top === undefined || !block || !scroll) return;
 		let overlap = block.getBoundingClientRect().bottom + CARET_CLEARANCE - top;
 		if (overlap > 0) scroll.scrollTop += overlap;
-	}, [editor, open]);
+	}, [editor, shown]);
 
 	let commentable = !!onComment && state.selected;
 	useLayoutEffect(() => {
@@ -178,9 +189,10 @@ export function FormatDock(
 	}, [commentable, state.selected]);
 
 	let openPanel = (kind: DockPanel) => {
-		if (panel?.kind === kind && !panel.returning) return returnToEditor();
+		if (panel?.kind === kind && panel.phase !== "returning") return returnToEditor();
 		let keyboard = keyboardCover(innerHeight, currentViewport());
 		if (keyboard) setPanelHeight(keyboard);
+		let next = keyboard ? "opening" as const : "open" as const;
 		if (!panel) {
 			saved.current = editor.getEditorState().read(() => {
 				let selection = $getSelection();
@@ -189,7 +201,13 @@ export function FormatDock(
 		}
 		// The editor may let go of its selection once it loses focus; keep what the caret was in.
 		let block = panel?.block ?? state.block;
-		flushSync(() => setPanel({ kind, block }));
+		flushSync(() =>
+			setPanel(current =>
+				current && current.phase !== "returning"
+					? { ...current, kind }
+					: { kind, block, phase: next }
+			)
+		);
 		// Focus leaves the editor, so iOS lowers the keyboard and the panel shows in its place.
 		panelElement.current?.focus({ preventScroll: true });
 	};
@@ -198,7 +216,7 @@ export function FormatDock(
 	let returnToEditor = (choice?: PanelChoice) => {
 		let root = editor.getRootElement();
 		let selection = saved.current;
-		flushSync(() => setPanel(current => current && { ...current, returning: true }));
+		flushSync(() => setPanel(current => current && { ...current, phase: "returning" }));
 		root?.focus({ preventScroll: true });
 		editor.update(() => {
 			if (
@@ -247,6 +265,15 @@ export function FormatDock(
 					{state.selected
 						? (
 							<>
+								{/* First, so the narrowest phone never scrolls it out of reach. */}
+								{commentable && (
+									<DockButton
+										label="Comment on this passage"
+										onPress={() => onComment?.()}
+									>
+										<MessagePlusIcon size={18} />
+									</DockButton>
+								)}
 								<DockButton
 									disabled={disabled}
 									label="Bold"
@@ -286,14 +313,6 @@ export function FormatDock(
 								>
 									<LinkIcon size={18} />
 								</DockButton>
-								{commentable && (
-									<DockButton
-										label="Comment on this passage"
-										onPress={() => onComment?.()}
-									>
-										<MessagePlusIcon size={18} />
-									</DockButton>
-								)}
 							</>
 						)
 						: (
@@ -301,7 +320,7 @@ export function FormatDock(
 								<DockButton
 									controls="plan-format-panel"
 									disabled={disabled}
-									expanded={panel?.kind === "insert" && !panel.returning}
+									expanded={panel?.kind === "insert" && panel.phase !== "returning"}
 									label="Insert block"
 									onPress={() => openPanel("insert")}
 								>
@@ -310,7 +329,7 @@ export function FormatDock(
 								<DockButton
 									controls="plan-format-panel"
 									disabled={disabled}
-									expanded={panel?.kind === "style" && !panel.returning}
+									expanded={panel?.kind === "style" && panel.phase !== "returning"}
 									label="Text style"
 									onPress={() => openPanel("style")}
 								>
@@ -349,20 +368,27 @@ export function FormatDock(
 			</div>
 			{panel && (
 				<div
-					aria-hidden={panel.returning || undefined}
+					aria-hidden={panel.phase === "returning" || undefined}
 					aria-label={panelLabel}
 					className="plan-format-panel"
 					contentEditable={false}
 					data-focus-boundary=""
 					id="plan-format-panel"
-					inert={panel.returning || undefined}
+					data-phase={panel.phase}
+					inert={panel.phase === "returning" || undefined}
 					onBlur={event => {
 						// Leaving for anywhere but the dock, such as a tap on the page, closes it.
 						let next = event.relatedTarget;
-						if (panel.returning) return;
+						if (panel.phase === "returning") return;
 						if (next instanceof Node && event.currentTarget.parentElement?.contains(next)) return;
-						setPanel(undefined);
 						saved.current = null;
+						// A tap in the prose brings the keyboard back: hold the space until it arrives.
+						let root = editor.getRootElement();
+						if (next instanceof Node && root?.contains(next)) {
+							setPanel(current => current && { ...current, phase: "returning" });
+						} else {
+							setPanel(undefined);
+						}
 					}}
 					onKeyDown={event => {
 						if (event.key !== "Escape") return;
@@ -372,7 +398,7 @@ export function FormatDock(
 					onMouseDown={event => event.preventDefault()}
 					ref={panelElement}
 					role="group"
-					style={panelHeight ? { height: panelHeight } : undefined}
+					style={panelHeight && panel.phase !== "opening" ? { height: panelHeight } : undefined}
 					tabIndex={-1}
 				>
 					<div className="plan-format-panel-grid">
