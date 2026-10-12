@@ -136,6 +136,63 @@ test("a wide table scrolls without losing its measured column rail", async ({ jo
 	await expectNoHorizontalOverflow(page);
 });
 
+test("a table wider than the prose grows evenly about the column's centre", async ({ join, seed }) => {
+	let five = [
+		"| Surface | Runs where | Who triggers | Credential used | Notes on the boundary |",
+		"| --- | --- | --- | --- | --- |",
+		"| Planner | Hosted server process | Any admitted writer | GitHub App token | Repository-fixed tools only |",
+		"",
+	].join("\n");
+	await seed(`Prose sets the measure.\n\n${TABLE}\n${five}\n${WIDE_TABLE}`);
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	await page.getByRole("button", { name: "Expand document" }).click();
+	await expect.poll(() =>
+		page.locator(".plan-document").evaluate(element => element.getBoundingClientRect().width)
+	).toBeGreaterThan(1000);
+	let tables = content(page).locator(":scope > table");
+	await expect(tables).toHaveCount(3);
+
+	let margins = async () =>
+		await content(page).evaluate(root => {
+			let prose = root.querySelector(":scope > p")!.getBoundingClientRect();
+			let scroller = root.closest("[data-plan-scroll]")!.getBoundingClientRect();
+			return {
+				gutter: prose.left - scroller.left,
+				tables: [...root.querySelectorAll(":scope > table")].map(table => {
+					let box = table.getBoundingClientRect();
+					return { start: prose.left - box.left, end: box.right - prose.right };
+				}),
+			};
+		});
+	let [compact, wide, widest] = (await margins()).tables;
+
+	// A table within the measure stays on the prose's start edge.
+	expect(Math.abs(compact!.start)).toBeLessThanOrEqual(1);
+	// A wider one breaks out by the same amount on both sides.
+	expect(wide!.start).toBeGreaterThan(8);
+	expect(Math.abs(wide!.start - wide!.end)).toBeLessThanOrEqual(1);
+	// One wider than the document is bounded by its gutters and scrolls between them.
+	expect(await tables.nth(2).evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	expect(Math.abs(widest!.start - widest!.end)).toBeLessThanOrEqual(1);
+	expect(widest!.start).toBeGreaterThan(wide!.start);
+
+	// The fixed rails follow the shifted cells.
+	let table = tables.nth(1);
+	await table.locator("td").first().hover();
+	let row = page.locator('[data-plan-rail="row"]');
+	let column = page.locator('[data-plan-rail="column"]');
+	await expect(row).toBeVisible();
+	let tableBox = (await table.boundingBox())!;
+	let rowBox = (await row.boundingBox())!;
+	expect(Math.abs(rowBox.x + rowBox.width - tableBox.x)).toBeLessThan(2);
+	for (let index of [1, 5]) {
+		let cell = (await table.locator("th").nth(index - 1).boundingBox())!;
+		let gripBox = (await grip(column, "column", index).boundingBox())!;
+		expect(Math.abs(cell.x + cell.width / 2 - (gripBox.x + gripBox.width / 2))).toBeLessThan(2);
+	}
+	await expectNoHorizontalOverflow(page);
+});
+
 test("the header row has no grip", async ({ join, seed }) => {
 	await seed(TABLE);
 	let page = await join("ana");

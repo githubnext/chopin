@@ -2444,6 +2444,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	--plan-leading-gutter: var(--plan-gutter);
 	--plan-wide-inline-size: calc(100cqi - var(--plan-leading-gutter) - var(--plan-gutter));
 	--plan-wide-inline-offset: calc((100% - var(--plan-wide-inline-size)) / 2);
+	/* The prose column's own width, for blocks that cannot read it as a percentage. */
+	--plan-prose-inline-size: min(
+		var(--plan-measure) + var(--plan-gutter) - var(--plan-leading-gutter),
+		var(--plan-wide-inline-size)
+	);
 	/*
 	 * The trailing space is deliberate and large: the caret should never sit
 	 * against the bottom of the pane, and a plan is usually appended to.
@@ -3048,13 +3053,15 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 /*
  * A compact table shrink-wraps around its columns from the prose's start edge,
- * like every other block; a wide one grows to the trailing document gutter
- * before scrolling. The row and column rails are fixed overlays and sit in
- * the gutter outside it.
+ * like every other block. One wider than the prose grows evenly about the
+ * column's centre, like a diagram, up to the document gutters, then scrolls.
+ * Its own width is only known to a percentage of `translate`, so the shift is
+ * paint-only; the row and column rails measure cell rectangles and follow it.
  */
 .plan-content > table {
 	inline-size: max-content;
-	max-inline-size: calc((100% + var(--plan-wide-inline-size)) / 2);
+	max-inline-size: var(--plan-wide-inline-size);
+	translate: min(0px, var(--plan-prose-inline-size) / 2 - 50%);
 }
 
 /* Name an empty header for what it holds. Counted per header cell, out of flow. */
