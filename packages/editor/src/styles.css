@@ -547,12 +547,15 @@
 	}
 
 	/* Wide authored surfaces keep their own visible, keyboard-operable lane. */
+	/* Chromium paints these lanes only while the standard scrollbar properties are unset. */
 	.plan-content :is(pre, table, .plan-code-view, [role="tablist"]) {
 		overscroll-behavior-inline: contain;
+		scrollbar-width: auto;
+		scrollbar-color: initial;
 	}
 
 	.plan-content :is(pre, table, .plan-code-view, [role="tablist"])::-webkit-scrollbar {
-		block-size: 8px;
+		block-size: var(--scrollbar-size);
 	}
 
 	.plan-content :is(pre, table, .plan-code-view, [role="tablist"])::-webkit-scrollbar-track {
@@ -560,9 +563,14 @@
 	}
 
 	.plan-content :is(pre, table, .plan-code-view, [role="tablist"])::-webkit-scrollbar-thumb {
-		border: 2px solid var(--color-inset);
-		border-radius: var(--radius-lg);
-		background: var(--color-text-quaternary);
+		border: solid var(--color-inset);
+		border-width: var(--scrollbar-inset);
+		border-radius: var(--radius-full);
+		background: var(--color-scrollbar-thumb);
+	}
+
+	.plan-content :is(pre, table, .plan-code-view, [role="tablist"])::-webkit-scrollbar-thumb:hover {
+		background: var(--color-scrollbar-thumb-hover);
 	}
 }
 

@@ -47,6 +47,67 @@
 	}
 }
 
+/*
+ * Quiet scrollbars. The standard properties keep each engine's own behaviour,
+ * including macOS overlay scrollbars that hide at rest. Where the system shows
+ * classic scrollbars instead (`data-scrollbars`, measured by scrollbars.ts),
+ * WebKit and Chromium paint an inset, rounded thumb that darkens under the
+ * pointer. Chromium ignores `::-webkit-scrollbar` while either standard
+ * property is set, so that branch resets both. It names `html`, not `:root`:
+ * both engines drop scrollbar `:hover` under a `:root` selector. Forced colours
+ * keep the system's.
+ */
+@layer base {
+	@media not (forced-colors: active) {
+		:root {
+			scrollbar-color: var(--color-scrollbar-thumb) transparent;
+		}
+
+		* {
+			scrollbar-width: thin;
+		}
+
+		@supports selector(::-webkit-scrollbar) {
+			html[data-scrollbars="classic"] :where(*) {
+				scrollbar-width: auto;
+				scrollbar-color: initial;
+			}
+
+			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar {
+				width: var(--scrollbar-size);
+				height: var(--scrollbar-size);
+				background: transparent;
+			}
+
+			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-track {
+				margin: var(--scrollbar-end-margin);
+				background: transparent;
+			}
+
+			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-thumb {
+				min-width: var(--scrollbar-thumb-min);
+				min-height: var(--scrollbar-thumb-min);
+				border: solid transparent;
+				border-width: var(--scrollbar-inset);
+				border-radius: var(--radius-full);
+				background: var(--color-scrollbar-thumb) padding-box;
+			}
+
+			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-thumb:hover {
+				background-color: var(--color-scrollbar-thumb-hover);
+			}
+
+			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-thumb:active {
+				background-color: var(--color-scrollbar-thumb-active);
+			}
+
+			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-corner {
+				background: transparent;
+			}
+		}
+	}
+}
+
 /* Beside text that may wrap: centre on the first line instead of the whole block. */
 @utility icon-first-line {
 	align-self: flex-start;

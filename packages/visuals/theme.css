@@ -97,6 +97,10 @@
 	/* Dims the page beneath a phone sheet. Every sheet shares it, and one grabber. */
 	--color-scrim: oklch(var(--shadow-color) / 32%);
 	--color-grabber: var(--color-gray-300);
+	/* Translucent ink, so a thumb stays faint on page, ground and inset alike. Hover meets 3:1. */
+	--color-scrollbar-thumb: oklch(var(--shadow-color) / 16%);
+	--color-scrollbar-thumb-hover: oklch(var(--shadow-color) / 45%);
+	--color-scrollbar-thumb-active: oklch(var(--shadow-color) / 55%);
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -293,6 +297,11 @@
 	--radius-xl: 0.625rem; /* 10px — the document page */
 	--radius-sheet: 0.875rem; /* 14px — phone sheets and action sheet groups */
 	--radius-full: 9999px; /* saturated pill rounding */
+	/* Classic scrollbars: a 6px thumb inset in a 10px lane that stops short of each end. */
+	--scrollbar-size: 10px;
+	--scrollbar-inset: 2px;
+	--scrollbar-end-margin: calc(var(--spacing) * 1.5);
+	--scrollbar-thumb-min: calc(var(--spacing) * 8);
 	--radius-composer-pill: calc(var(--spacing) * 5.5); /* 22px — half the phone composer at rest */
 
 	/*
