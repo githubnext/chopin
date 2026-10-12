@@ -44,15 +44,24 @@ paths involved, and are declined when no interactive terminal is available.
 The agent retains its normal tools, project instructions and configured
 services.
 
-### Install the chopin CLI (preview)
+### Install the chopin CLI
 
-The connector also builds as `chopin`, one executable that needs no Bun. With
-`CHOPIN_URL` set as above, `chopin connect . -- copilot --acp --allow-all`
-behaves exactly like that command, and `chopin --version` prints the CLI
-version and the connector protocol it speaks. Releases do not publish it yet,
-so the `curl` and `bun` command above remains the way to connect; see
-[Install the chopin CLI](local-experiments.md#install-the-chopin-cli-preview)
-to build it from a Chopin checkout.
+The connector is also released as `chopin`, one executable that needs no Bun.
+Install it, then connect from the checkout's folder:
+
+```sh
+curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
+CHOPIN_URL=https://your-chopin-instance.example \
+  chopin connect . -- copilot --acp --allow-all
+```
+
+On Windows, install it in PowerShell with
+`irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | iex`.
+`chopin connect` behaves exactly like the `bun` command above. Until the first
+`cli-v*` release is published, the installers have nothing to download, and the
+`curl` and `bun` command above remains the way to connect. See
+[Install the chopin CLI](local-experiments.md#install-the-chopin-cli) for where
+it installs, version pins and how the download is verified.
 
 ## Build a settled plan
 

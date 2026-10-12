@@ -51,17 +51,19 @@ appears only on an interactive terminal and is off under `NO_COLOR`. The agent's
 own log output is hidden unless `CHOPIN_DEBUG=1`; its last lines are shown when a
 job fails.
 
-### Install the chopin CLI (preview)
+### Install the chopin CLI
 
-The connector also builds as `chopin`, one executable for Linux, macOS or
-Windows that runs without Bun. Releases do not publish it yet, so the
-`curl … connector.js` command above remains the way to connect. To try it,
-build it from a Chopin checkout and put it on your `PATH`:
+The connector is also released as `chopin`, one executable for Linux, macOS
+(x64 or arm64) and Windows (x64) that runs without Bun. Install it with:
 
 ```sh
-bun run --cwd apps/connector build:binaries --host
-cp apps/connector/dist/chopin-linux-x64 ~/.local/bin/chopin  # chopin-<os>-<arch> for this machine
-chopin --version
+curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | iex
 ```
 
 Then, from your project folder:
@@ -71,11 +73,33 @@ CHOPIN_URL=https://your-chopin-instance.example \
   chopin connect . -- copilot --acp --allow-all
 ```
 
-`chopin connect` pairs and runs work exactly as the `connector.js` command above does.
+Until the first `cli-v*` release is published, those install commands have
+nothing to download, and the `curl … connector.js` and `bun` command above
+remains the way to connect.
+
+`chopin connect` pairs and runs work exactly as `bun connector.js connect` does,
+and `chopin` uses `https://chopin.githubnext.com` when `CHOPIN_URL` is unset.
 `chopin --version` prints the CLI version and the connector protocol it speaks,
-and `chopin help` lists the commands. `build:binaries` without `--host` writes
-every target to `apps/connector/dist`: `chopin-linux-x64`, `chopin-linux-arm64`,
-`chopin-darwin-x64`, `chopin-darwin-arm64` and `chopin-windows-x64.exe`.
+and `chopin help` lists the commands. The binary ignores any `.env` or
+`bunfig.toml` in the folder it runs in.
+
+The installer puts `chopin` in `~/.local/bin` (on Windows,
+`%LOCALAPPDATA%\chopin\bin`, which it adds to your user PATH) and never needs
+administrator rights. It installs the newest release unless you name a version,
+either as an argument (`… | sh -s -- 0.2.0`) or with `CHOPIN_VERSION`. Before
+installing, it checks the download against the release's `checksums.txt`, and,
+when the [GitHub CLI](https://cli.github.com) is installed, runs
+`gh attestation verify <file> -R githubnext/chopin` to confirm the release
+workflow built it; `CHOPIN_VERIFY_ATTESTATION=0` skips that second check. When
+`~/.local/bin` is not on your `PATH`, the installer prints the line to add to
+your shell profile. Running the installer again updates `chopin`.
+
+To build the binaries from a Chopin checkout instead, run
+`bun run --cwd apps/connector build:binaries --host` for this machine, or
+without `--host` for every target. They are written to `apps/connector/dist`:
+`chopin-linux-x64`, `chopin-linux-arm64`, `chopin-darwin-x64`,
+`chopin-darwin-arm64` and `chopin-windows-x64.exe`. See
+[Releasing the chopin CLI](releasing-cli.md) for how releases are made.
 
 ## Run and inspect work
 
