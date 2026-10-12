@@ -427,6 +427,20 @@
 		"sourceHash": "4f7d0232af2d03d5d8df9a226b48388c6a8011473ee53c2138568d77b8945bc3"
 	},
 	{
+		"file": "packages/icons/src/comment.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CommentIcon > <LineIcon>",
+				1
+			]
+		],
+		"sourceHash": "c39ae437a205dcaaad06e7f58b7c112c074e10341ecec8e21e7ff27ccb4130e4"
+	},
+	{
 		"file": "packages/icons/src/undo.tsx",
 		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
 		"cases": [
