@@ -947,7 +947,21 @@ body {
 	flex: none;
 	block-size: var(--scroll-edge-fade-size);
 	margin-block-end: calc(-1 * var(--scroll-edge-fade-size));
-	background: linear-gradient(var(--scroll-edge-surface), transparent);
+	/* An eased (scrim) curve, so the fade has no visible band edge. */
+	background: linear-gradient(
+		color-mix(in srgb, var(--scroll-edge-surface) 100%, transparent) 0%,
+		color-mix(in srgb, var(--scroll-edge-surface) 73.8%, transparent) 19%,
+		color-mix(in srgb, var(--scroll-edge-surface) 54.1%, transparent) 34%,
+		color-mix(in srgb, var(--scroll-edge-surface) 38.2%, transparent) 47%,
+		color-mix(in srgb, var(--scroll-edge-surface) 27.8%, transparent) 56.5%,
+		color-mix(in srgb, var(--scroll-edge-surface) 19.4%, transparent) 65%,
+		color-mix(in srgb, var(--scroll-edge-surface) 12.5%, transparent) 73%,
+		color-mix(in srgb, var(--scroll-edge-surface) 7.6%, transparent) 80.2%,
+		color-mix(in srgb, var(--scroll-edge-surface) 4.2%, transparent) 86.1%,
+		color-mix(in srgb, var(--scroll-edge-surface) 2.1%, transparent) 91%,
+		color-mix(in srgb, var(--scroll-edge-surface) 0.8%, transparent) 95.2%,
+		color-mix(in srgb, var(--scroll-edge-surface) 0%, transparent) 100%
+	);
 	opacity: 0;
 	pointer-events: none;
 }

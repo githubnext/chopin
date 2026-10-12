@@ -126,7 +126,7 @@ test("the document and Chat dissolve under their top edges only once scrolled", 
 
 	await document.evaluate(element => element.scrollTo({ top: 0 }));
 	expect(await edgeFade(document)).toEqual({
-		height: "24px",
+		height: "56px",
 		opacity: "0",
 		pointerEvents: "none",
 		position: "sticky",

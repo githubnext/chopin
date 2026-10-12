@@ -246,7 +246,7 @@
 	--panel-toolbar-padding-inline: calc(var(--spacing) * 2);
 	--panel-header-gap: calc(var(--spacing) / 2);
 	--panel-header-control-offset: calc(var(--icon-button-padding) - var(--panel-header-gap));
-	--scroll-edge-fade-size: calc(var(--spacing) * 6);
+	--scroll-edge-fade-size: calc(var(--spacing) * 14);
 
 	/* Authored documents keep prose measure separate from wide content. */
 	--document-prose-measure: 40.625rem;
