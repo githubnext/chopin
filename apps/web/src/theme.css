@@ -67,23 +67,34 @@
 			scrollbar-width: thin;
 		}
 
+		/* Firefox has no thumb hover, so its classic scrollbars rest one step stronger. */
+		@supports (-moz-appearance: none) {
+			:root {
+				scrollbar-color: var(--color-scrollbar-thumb-static) transparent;
+			}
+		}
+
 		@supports selector(::-webkit-scrollbar) {
+			html[data-scrollbars="classic"],
 			html[data-scrollbars="classic"] :where(*) {
 				scrollbar-width: auto;
 				scrollbar-color: initial;
 			}
 
+			html[data-scrollbars="classic"]::-webkit-scrollbar,
 			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar {
 				width: var(--scrollbar-size);
 				height: var(--scrollbar-size);
 				background: transparent;
 			}
 
+			html[data-scrollbars="classic"]::-webkit-scrollbar-track,
 			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-track {
 				margin: var(--scrollbar-end-margin);
 				background: transparent;
 			}
 
+			html[data-scrollbars="classic"]::-webkit-scrollbar-thumb,
 			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-thumb {
 				min-width: var(--scrollbar-thumb-min);
 				min-height: var(--scrollbar-thumb-min);
@@ -93,14 +104,17 @@
 				background: var(--color-scrollbar-thumb) padding-box;
 			}
 
+			html[data-scrollbars="classic"]::-webkit-scrollbar-thumb:hover,
 			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-thumb:hover {
 				background-color: var(--color-scrollbar-thumb-hover);
 			}
 
+			html[data-scrollbars="classic"]::-webkit-scrollbar-thumb:active,
 			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-thumb:active {
 				background-color: var(--color-scrollbar-thumb-active);
 			}
 
+			html[data-scrollbars="classic"]::-webkit-scrollbar-corner,
 			html[data-scrollbars="classic"] :not([data-scrollbar-probe])::-webkit-scrollbar-corner {
 				background: transparent;
 			}

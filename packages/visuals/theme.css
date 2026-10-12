@@ -99,6 +99,7 @@
 	--color-grabber: var(--color-gray-300);
 	/* Translucent ink, so a thumb stays faint on page, ground and inset alike. Hover meets 3:1. */
 	--color-scrollbar-thumb: oklch(var(--shadow-color) / 16%);
+	--color-scrollbar-thumb-static: oklch(var(--shadow-color) / 28%);
 	--color-scrollbar-thumb-hover: oklch(var(--shadow-color) / 45%);
 	--color-scrollbar-thumb-active: oklch(var(--shadow-color) / 55%);
 
