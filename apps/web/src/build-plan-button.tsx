@@ -1,4 +1,4 @@
-import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon } from "@chopin/icons";
+import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon, WrenchIcon } from "@chopin/icons";
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import {
@@ -6,6 +6,7 @@ import {
 	buildLabel,
 	buildLook,
 	buildPhase,
+	buildRefusalCopy,
 	buildTabReady,
 	draftRefusalCopy,
 	firstBuildStep,
@@ -42,6 +43,8 @@ export type BuildPlan = {
 	tabReady: boolean;
 	/** The last start found no local agent; Build says how to start one. */
 	needsAgent: boolean;
+	/** A press is drafting or starting the build, so another press would do nothing. */
+	busy: boolean;
 	/** Build plan, or Retry after a first build stopped. */
 	press: () => void;
 	reload: () => void;
@@ -53,7 +56,19 @@ export type BuildPlan = {
  * `implementation:draft`, so opening Build never spends a Planner turn.
  */
 export function useBuildPlan(
-	{ canEdit, connected, enabled, hasContent, live, planner, room, unanswered, userId, wire }: {
+	{
+		canEdit,
+		connected,
+		enabled,
+		hasContent,
+		live,
+		planner,
+		plannerDetached,
+		room,
+		unanswered,
+		userId,
+		wire,
+	}: {
 		canEdit: boolean;
 		connected: boolean;
 		/** A parent document; a child is never built. */
@@ -61,6 +76,8 @@ export function useBuildPlan(
 		hasContent: boolean;
 		live: boolean;
 		planner: boolean;
+		/** `session:planner` reports no Planner client attached (remote harness only). */
+		plannerDetached?: boolean;
 		room: string;
 		unanswered: number;
 		userId?: string;
@@ -130,7 +147,12 @@ export function useBuildPlan(
 		draftId.current = undefined;
 		try {
 			let fresh = await read();
-			dispatch({ type: "draft-ended", drafted: buildPhase(fresh).kind !== "drafting" });
+			let phase = buildPhase(fresh);
+			dispatch({
+				type: "draft-ended",
+				drafted: phase.kind !== "drafting",
+				changed: phase.kind === "drafting" && phase.draft === "revise",
+			});
 		} catch {
 			dispatch({ type: "draft-ended", drafted: false });
 		}
@@ -172,7 +194,9 @@ export function useBuildPlan(
 				draftId.current = answer.id;
 				if (answer.state === "ended") void drafted();
 			}, error => {
-				let copy = error instanceof Error ? draftRefusalCopy(error.message) : undefined;
+				let copy = error instanceof Error
+					? draftRefusalCopy(error.message, (error as { code?: string }).code)
+					: undefined;
 				dispatch({ type: "draft-refused", message: copy });
 			});
 			return;
@@ -190,9 +214,7 @@ export function useBuildPlan(
 			dispatch({
 				type: "start-refused",
 				agent: false,
-				message: error instanceof Error
-					? error.message.replace(/^[a-z]/, letter => letter.toUpperCase())
-					: undefined,
+				message: error instanceof Error ? buildRefusalCopy(error.message) : undefined,
 			});
 		});
 	}, [step.next, snapshot?.revision, canEdit]);
@@ -205,6 +227,7 @@ export function useBuildPlan(
 			canEdit,
 			connected,
 			planner,
+			plannerDetached,
 			hasContent,
 			unanswered,
 		})
@@ -215,6 +238,7 @@ export function useBuildPlan(
 		look,
 		tabReady: enabled && buildTabReady(snapshot, look),
 		needsAgent: state.stage === "failed" && !!state.agent,
+		busy: state.stage === "drafting" || state.stage === "starting",
 		press() {
 			// The press drafts or starts against the latest revision, never a stale read.
 			void read().catch(() => {}).finally(() => dispatch({ type: "press" }));
@@ -300,7 +324,7 @@ function handOff(from: HTMLElement) {
  * and opens Build. It never hides, including while Build is open.
  */
 export function BuildPlanButton(
-	{ build, canEdit, compact, hot, onHover, onOpen }: {
+	{ build, canEdit, compact, hot, onExplain, onHover, onOpen, phone, tabReady = true }: {
 		build: BuildPlan;
 		canEdit: boolean;
 		/** Phone: the glyph alone; Build's headline carries the words. */
@@ -309,10 +333,34 @@ export function BuildPlanButton(
 		hot?: boolean;
 		onHover: (on: boolean) => void;
 		onOpen: () => void;
+		/** Phone: touch has no tooltip, so a tap that cannot act shows this reason instead. */
+		onExplain?: (reason: string) => void;
+		/** A phone's top bar: Build plan shows as its glyph. */
+		phone?: boolean;
+		/** Build can open; until then a phone tap on the glyph explains instead. */
+		tabReady?: boolean;
 	},
 ) {
 	let { look } = build;
 	let reason = useId();
+	// Announce a change of state politely, once, not every tip or count that follows it.
+	let [announcement, setAnnouncement] = useState("");
+	let announced = useRef(look.kind);
+	useEffect(() => {
+		if (announced.current === look.kind) return;
+		announced.current = look.kind;
+		setAnnouncement(
+			look.kind === "plan"
+				? ""
+				: `${buildLabel(look)}. ${"tip" in look && look.tip ? look.tip : ""}`,
+		);
+	}, [look]);
+	let live = (
+		// A polite live region without the status role: the header holds no status of its own.
+		<span aria-atomic="true" aria-live="polite" className="sr-only" key="live">
+			{announcement}
+		</span>
+	);
 	let glyph = useRef<HTMLSpanElement>(null);
 	let pressed = useRef(false);
 	let handedOff = useRef(false);
@@ -335,20 +383,28 @@ export function BuildPlanButton(
 				<button
 					aria-describedby={blocked ? reason : undefined}
 					aria-disabled={blocked ? true : undefined}
-					className="btn btn-compact btn-primary build-plan shrink-0"
+					aria-label={phone ? "Build plan" : undefined}
+					className={phone
+						? "btn btn-icon btn-primary build-plan shrink-0"
+						: "btn btn-compact btn-primary build-plan shrink-0"}
 					data-tooltip={blocked}
 					data-tooltip-detail={blocked ? "" : undefined}
 					data-tooltip-verbatim={blocked ? "" : undefined}
 					onClick={() => {
-						if (blocked) return;
+						if (blocked) {
+							onExplain?.(blocked);
+							return;
+						}
 						pressed.current = true;
 						build.press();
 					}}
 					type="button"
 				>
-					Build plan
+					{/* A phone's top bar keeps the title centred, so Build plan is its glyph there. */}
+					{phone ? <WrenchIcon aria-hidden="true" size={18} /> : "Build plan"}
 				</button>
 				{blocked && <span className="sr-only" id={reason}>{blocked}</span>}
+				{live}
 			</>
 		);
 	}
@@ -357,37 +413,49 @@ export function BuildPlanButton(
 		? "Retry"
 		: undefined;
 	return (
-		<span className="build-capsule-row">
-			<button
-				aria-description={look.tip}
-				aria-label={compact ? label : undefined}
-				className="build-capsule"
-				data-compact={compact || undefined}
-				data-hot={hot || undefined}
-				data-tooltip={compact ? `${label} · ${look.tip}` : look.tip}
-				data-tooltip-detail=""
-				data-tooltip-verbatim=""
-				onBlur={() => onHover(false)}
-				onClick={onOpen}
-				onFocus={() => onHover(true)}
-				onPointerEnter={() => onHover(true)}
-				onPointerLeave={() => onHover(false)}
-				type="button"
-			>
-				<span className="build-capsule-glyph" ref={glyph}>
-					<BuildGlyph look={look} />
-				</span>
-				{!compact && <span className="build-capsule-label" key={label}>{label}</span>}
-			</button>
-			{action && (
+		<>
+			<span className="build-capsule-row" key="capsule">
 				<button
-					className="btn btn-compact btn-outline build-capsule-action"
-					onClick={build.press}
+					aria-describedby={look.tip ? reason : undefined}
+					aria-label={compact ? label : undefined}
+					className="build-capsule"
+					data-compact={compact || undefined}
+					data-hot={hot || undefined}
+					data-tooltip={compact ? `${label} · ${look.tip}` : look.tip}
+					data-tooltip-detail=""
+					data-tooltip-verbatim=""
+					onBlur={() => onHover(false)}
+					onClick={() => {
+						if (!tabReady && onExplain) onExplain(look.tip ?? label);
+						else onOpen();
+					}}
+					onFocus={() => onHover(true)}
+					onPointerEnter={() => onHover(true)}
+					onPointerLeave={() => onHover(false)}
 					type="button"
 				>
-					{action}
+					<span className="build-capsule-glyph" ref={glyph}>
+						<BuildGlyph look={look} />
+					</span>
+					{!compact && <span className="build-capsule-label" key={label}>{label}</span>}
 				</button>
-			)}
-		</span>
+				{look.tip && <span className="sr-only" id={reason}>{look.tip}</span>}
+				{action && (
+					// Stays focusable while a press is under way; aria-busy says why it does nothing.
+					<button
+						aria-busy={build.busy || undefined}
+						aria-disabled={build.busy || undefined}
+						className="btn btn-compact btn-outline build-capsule-action"
+						onClick={() => {
+							if (!build.busy) build.press();
+						}}
+						type="button"
+					>
+						{action}
+					</button>
+				)}
+			</span>
+			{live}
+		</>
 	);
 }

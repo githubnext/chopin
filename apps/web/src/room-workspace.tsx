@@ -66,7 +66,11 @@ import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
-import { DecisionViewControl, useDecisionAttention } from "./decision-view-control";
+import {
+	BUILD_UNAVAILABLE,
+	DecisionViewControl,
+	useDecisionAttention,
+} from "./decision-view-control";
 import {
 	advanceDocumentActivity,
 	ANSWER_FOLLOW_MS,
@@ -401,7 +405,7 @@ export function Header(
 			{(props.build || members) && (
 				<div className="ml-auto flex shrink-0 items-center gap-3 pl-2">
 					{props.build}
-			{members && <RoomMembers members={members} ring="ground" />}
+					{members && <RoomMembers members={members} ring="ground" />}
 				</div>
 			)}
 		</header>
@@ -629,11 +633,24 @@ export function RoomWorkspace(
 		hasContent: hasPlanContent,
 		live: liveBuild,
 		planner: agent,
+		plannerDetached: plannerAttachment.wire === wire && !!plannerAttachment.planner
+			&& plannerAttachment.planner.state !== "attached",
 		room,
 		unanswered,
 		userId,
 		wire,
 	});
+	// Touch has no tooltips, so a phone tap on Build, or on the build slot, says why it can't open.
+	let buildUnavailable = build.look.kind === "plan" && build.look.blocked
+		? build.look.blocked
+		: BUILD_UNAVAILABLE;
+	let [buildHint, setBuildHint] = useState<{ text: string; at: number }>();
+	useEffect(() => {
+		if (!buildHint) return;
+		let timer = window.setTimeout(() => setBuildHint(undefined), 4000);
+		return () => window.clearTimeout(timer);
+	}, [buildHint]);
+	let explainBuild = (text = buildUnavailable) => setBuildHint({ text, at: Date.now() });
 	// Build opens once there is a build; a reload may restore it before the first read.
 	// A child someone opened is what they came to read, so a blank root's routing to Decisions
 	// waits until it closes; an explicit choice of view still applies.
@@ -1473,8 +1490,11 @@ export function RoomWorkspace(
 			canEdit={!!workspaceCanEdit && status === "connected"}
 			compact={mode !== "split"}
 			hot={buildHover === "tab"}
+			onExplain={phone ? explainBuild : undefined}
+			phone={phone}
 			onHover={on => setBuildHover(on ? "capsule" : undefined)}
 			onOpen={() => selectDestination("build")}
+			tabReady={build.tabReady}
 		/>
 	);
 
@@ -1491,10 +1511,13 @@ export function RoomWorkspace(
 				</p>
 				<Workspace
 					available={available}
-				buildEnabled={build.tabReady}
-				buildGlyph={<BuildGlyph look={build.look} />}
-				buildHot={buildHover === "capsule"}
-				onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
+					buildEnabled={build.tabReady}
+					buildGlyph={<BuildGlyph look={build.look} />}
+					buildHot={buildHover === "capsule"}
+					buildUnavailable={buildUnavailable}
+					onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
+					onBuildUnavailable={() => explainBuild()}
+					phoneHint={buildHint?.text}
 					frame={frame}
 					chat={
 						<Chat
@@ -1583,7 +1606,7 @@ export function RoomWorkspace(
 								onRenamed={updateMetadata}
 								presentation={presentation}
 								room={room}
-							build={buildSlot}
+								build={buildSlot}
 							/>
 						)
 						: <Header {...titleProps} build={buildSlot} members={members} />}
@@ -1597,10 +1620,10 @@ export function RoomWorkspace(
 						<>
 							<DecisionViewControl
 								attention={attention}
-							buildEnabled={profile.implementation ? build.tabReady : undefined}
-							buildGlyph={<BuildGlyph look={build.look} />}
-							buildHot={buildHover === "capsule"}
-							onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
+								buildEnabled={profile.implementation ? build.tabReady : undefined}
+								buildGlyph={<BuildGlyph look={build.look} />}
+								buildHot={buildHover === "capsule"}
+								onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
 								documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 								onView={selectDestination}
 								unanswered={unanswered}
@@ -1627,12 +1650,12 @@ export function RoomWorkspace(
 					phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
 					identity={room}
 					mode={mode}
-				presence={
-					<>
-						{mode === "split" && buildSlot}
-						<RoomMembers members={members} ring="page" />
-					</>
-				}
+					presence={
+						<>
+							{mode === "split" && buildSlot}
+							<RoomMembers members={members} ring="page" />
+						</>
+					}
 					phone={phone}
 					onDesktopChatOpen={setDesktopChatOpen}
 					onChatOpen={open => dispatch({ type: "set-chat", open })}
@@ -1640,7 +1663,7 @@ export function RoomWorkspace(
 					build={profile.implementation && (
 						<BuildView
 							active={workspacePresentation.documentVisible && view === "build"}
-						build={build}
+							build={build}
 							canEdit={!!workspaceCanEdit && status === "connected"}
 							comments={acceptedComments}
 							onShowDecisions={() => selectDestination("decisions")}

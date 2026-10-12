@@ -7,6 +7,7 @@ import {
 	buildLabel,
 	buildLook,
 	buildPhase,
+	buildRefusalCopy,
 	buildTabReady,
 	draftRefusalCopy,
 	elapsed,
@@ -250,6 +251,51 @@ describe("first build", () => {
 	it("starts existing tasks for this revision at once", () => {
 		let state = advanceFirstBuild(idle, { type: "press" });
 		expect(firstBuildStep(snapshot(), state).next).toBe("start");
+	});
+
+	it("drafts once more when edits made the first draft stale, then says the document changed", () => {
+		let sent = advanceFirstBuild(advanceFirstBuild(idle, { type: "press" }), {
+			type: "draft-sent",
+		});
+		let again = advanceFirstBuild(sent, { type: "draft-ended", drafted: false, changed: true });
+		expect(again).toEqual({ stage: "drafting", sent: false, redrafted: true });
+		let resent = advanceFirstBuild(again, { type: "draft-sent" });
+		expect(resent).toEqual({ stage: "drafting", sent: true, redrafted: true });
+		expect(advanceFirstBuild(resent, { type: "draft-ended", drafted: false, changed: true }))
+			.toEqual({
+				stage: "failed",
+				message: "The document changed while Chopin was breaking it into tasks.",
+			});
+	});
+
+	it("keeps Build plan inert while no Planner is attached to draft its tasks", () => {
+		let context = {
+			state: idle,
+			live: false,
+			canEdit: true,
+			connected: true,
+			planner: true,
+			hasContent: true,
+			unanswered: 0,
+		};
+		expect(buildLook(fresh, { ...context, plannerDetached: true })).toEqual({
+			kind: "plan",
+			blocked: "Connect a Planner to this document to build",
+		});
+		expect(buildLook(fresh, context)).not.toMatchObject({
+			blocked: "Connect a Planner to this document to build",
+		});
+	});
+
+	it("maps refused starts and rebuilds to plain copy", () => {
+		expect(buildRefusalCopy("no-workspace")).toBe("Start your local agent, then retry");
+		expect(buildRefusalCopy("reviewed graph has changed")).toBe("The tasks changed. Try again");
+		expect(buildRefusalCopy("unanswered questionnaires")).toBe("Answer the open decisions first");
+		expect(buildRefusalCopy("something internal")).toBe("The build couldn’t start. Try again");
+		expect(draftRefusalCopy("No Planner is attached to this document. To attach one, …"))
+			.toBe("Connect a Planner to this document to build.");
+		expect(draftRefusalCopy("anything", "planner-not-attached"))
+			.toBe("Connect a Planner to this document to build.");
 	});
 
 	it("returns to the button when drafting or starting fails", () => {

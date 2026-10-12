@@ -681,3 +681,28 @@
 	font-weight: var(--font-weight-medium);
 	font-variant-numeric: tabular-nums;
 }
+
+/* Why Build cannot open yet, shown briefly above the bar after a tap. */
+.phone-tab-hint {
+	position: absolute;
+	right: 0;
+	bottom: calc(100% + var(--spacing) * 2);
+	left: 0;
+	margin: 0 auto;
+	width: fit-content;
+	max-width: 100%;
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	color: var(--color-text-primary);
+	font-size: var(--text-sm);
+	text-align: center;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.phone-tab-hint[data-shown] {
+	opacity: 1;
+}

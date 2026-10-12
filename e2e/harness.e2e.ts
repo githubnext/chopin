@@ -269,18 +269,18 @@ test("only Build plan asks the Planner for tasks, once, without a Chat message, 
 	let view = opened.getByRole("region", { name: "Build", exact: true });
 	await expect(tab).toBeDisabled();
 	await tab.click({ force: true });
-	await opened.waitForTimeout(500);
-	expect(drafts).toHaveLength(0);
 
 	await opened.getByRole("button", { name: "Build plan", exact: true }).click();
-	await expect.poll(() => drafts.length).toBe(1);
+	// Frames arrive in order, so a draft from the tab would land before Build plan's.
+	await expect.poll(() => drafts.length).toBeGreaterThan(0);
+	expect(drafts).toHaveLength(1);
+	expect(drafts[0]!.build).toBe(true);
 	expect(drafts[0]!.planRevision).toBeGreaterThanOrEqual(0);
 	await expect(tab).toBeEnabled();
 	// The scripted Planner answers without tasks, so the press stops with a way to retry.
 	let stopped = opened.getByRole("button", { name: "Build stopped", exact: true });
 	await expect(stopped).toBeVisible();
-	await expect(stopped).toHaveAttribute(
-		"aria-description",
+	await expect(stopped).toHaveAccessibleDescription(
 		"Chopin couldn’t break the plan into tasks.",
 	);
 	expect(sends).toHaveLength(0);
@@ -293,10 +293,11 @@ test("only Build plan asks the Planner for tasks, once, without a Chat message, 
 	await expect(view).toBeVisible();
 	await control.getByRole("button", { name: "Document", exact: true }).click();
 	await tab.click();
-	await opened.waitForTimeout(500);
-	expect(drafts).toHaveLength(1);
 	await opened.getByRole("button", { name: "Retry", exact: true }).click();
-	await expect.poll(() => drafts.length).toBe(2);
+	// Opening Build sent nothing: the next draft is Retry's own.
+	await expect.poll(() => drafts.length).toBeGreaterThan(1);
+	expect(drafts).toHaveLength(2);
+	expect(drafts[1]!.build).toBe(true);
 	expect(drafts[1]!.planRevision).toBe(drafts[0]!.planRevision);
 	expect(sends).toHaveLength(0);
 });

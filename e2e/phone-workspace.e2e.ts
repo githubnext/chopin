@@ -79,8 +79,10 @@ test("the phone tab bar switches destinations in one bar and returns a tab to it
 	await expect(tabs.nth(0)).toHaveAttribute("aria-current", "page");
 	await tabs.nth(2).click();
 	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
-	await tabs.nth(3).click();
-	await expect(page.getByRole("region", { name: "Build", exact: true })).toBeVisible();
+	// Build stays off until the document is built; a tap explains instead of opening it.
+	await expect(tabs.nth(3)).toHaveAttribute("aria-disabled", "true");
+	await tabs.nth(3).click({ force: true });
+	await expect(page.getByRole("region", { name: "Build", exact: true })).toBeHidden();
 	await tabs.nth(1).click();
 	await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
 	// Each pane keeps its place, and tapping the current tab again goes back to the top.

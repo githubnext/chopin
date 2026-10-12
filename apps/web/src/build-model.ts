@@ -216,7 +216,10 @@ export function startedBy(snapshot: Snapshot | undefined, userId: string): strin
  * Plain copy for a refusal the server explains, or `undefined` for one it does
  * not, which reads as Chopin failing to draft.
  */
-export function draftRefusalCopy(message: string): string | undefined {
+export function draftRefusalCopy(message: string, code?: string): string | undefined {
+	if (code === "planner-not-attached" || /No Planner is attached/.test(message)) {
+		return "Connect a Planner to this document to build.";
+	}
 	if (/unanswered questionnaires/.test(message)) return "Answer the open decisions first.";
 	if (/accepted comments/.test(message)) {
 		return "Update the document for accepted comments first.";
@@ -232,6 +235,33 @@ export function draftRefusalCopy(message: string): string | undefined {
 	if (/cannot be built/.test(message)) return "This document can’t be built.";
 }
 
+/**
+ * Plain copy for a refused build start or rebuild. The server answers with terse
+ * internal reasons; a person sees what happened and what to do. Anything unknown
+ * reads as a generic failure rather than the raw reason.
+ */
+export function buildRefusalCopy(message: string): string {
+	let draft = draftRefusalCopy(message);
+	if (draft) return draft.replace(/\.$/, "");
+	if (/^no-workspace$/.test(message)) return "Start your local agent, then retry";
+	if (/offline or busy/.test(message)) return "Your local agent is offline or busy with other work";
+	if (/busy/i.test(message)) return "Your local agent is busy with another document";
+	if (/reviewed graph has changed|reviewed build has changed|stale/.test(message)) {
+		return "The tasks changed. Try again";
+	}
+	if (/review the existing build/.test(message)) {
+		return "The last build needs attention in Build first";
+	}
+	if (/build history is full/.test(message)) return "This document has built too many times";
+	if (/archived/.test(message)) return "This document is archived";
+	if (/origin is not allowed|authentication required/.test(message)) {
+		return "Sign in again to build";
+	}
+	if (/not found/.test(message)) return "This document is no longer available";
+	if (/no tasks/i.test(message)) return "There are no tasks to build yet";
+	return "The build couldn’t start. Try again";
+}
+
 /** Whether this document has ever been handed to a coding agent. */
 export function hasBuilt(snapshot: Snapshot): boolean {
 	return !!snapshot.build || snapshot.lifecycle.execution.state === "active"
@@ -245,7 +275,8 @@ export function hasBuilt(snapshot: Snapshot): boolean {
  */
 export type FirstBuild =
 	| { stage: "idle" }
-	| { stage: "drafting"; sent: boolean }
+	/** `redrafted` once an edit during the first draft made it stale and it was asked again. */
+	| { stage: "drafting"; sent: boolean; redrafted?: boolean }
 	/** The draft raised a blocker, or a reload found the request: continue once it clears. */
 	| { stage: "waiting" }
 	| { stage: "starting" }
@@ -259,8 +290,11 @@ export type FirstBuildEvent =
 	/** The draft left the document blocked; keep the intent until the blockers clear. */
 	| { type: "wait" }
 	| { type: "draft-sent" }
-	/** The draft turn ended; `drafted` when a fresh read then had tasks to start. */
-	| { type: "draft-ended"; drafted: boolean }
+	/**
+	 * The draft turn ended; `drafted` when a fresh read then had tasks to start, `changed` when
+	 * it had tasks for an older revision because the document was edited while they were drafted.
+	 */
+	| { type: "draft-ended"; drafted: boolean; changed?: boolean }
 	| { type: "draft-refused"; message?: string }
 	| { type: "start" }
 	| { type: "started" }
@@ -279,12 +313,24 @@ export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): Fi
 			return state.stage === "drafting" ? { stage: "waiting" } : state;
 		case "draft-sent":
 			return state.stage === "drafting" || state.stage === "waiting"
-				? { stage: "drafting", sent: true }
+				? {
+					stage: "drafting",
+					sent: true,
+					...(state.stage === "drafting" && state.redrafted ? { redrafted: true } : {}),
+				}
 				: state;
 		case "draft-ended":
-			return state.stage === "drafting" && state.sent && !event.drafted
-				? { stage: "failed", message: "Chopin couldn’t break the plan into tasks." }
-				: state;
+			if (state.stage !== "drafting" || !state.sent || event.drafted) return state;
+			// Edits made while the tasks were drafted left them stale: draft once more, then say so.
+			if (event.changed && !state.redrafted) {
+				return { stage: "drafting", sent: false, redrafted: true };
+			}
+			return {
+				stage: "failed",
+				message: event.changed
+					? "The document changed while Chopin was breaking it into tasks."
+					: "Chopin couldn’t break the plan into tasks.",
+			};
 		case "draft-refused":
 			return state.stage === "drafting" ? { stage: "failed", message: event.message } : state;
 		case "start":
@@ -379,6 +425,11 @@ export type BuildContext = {
 	canEdit: boolean;
 	connected: boolean;
 	planner: boolean;
+	/**
+	 * Under the remote Planner harness, no Planner client is attached to draft tasks. Only
+	 * drafting needs one: starting drafted tasks, Retry and rebuilds do not.
+	 */
+	plannerDetached?: boolean;
 	hasContent: boolean;
 	unanswered: number;
 };
@@ -406,6 +457,9 @@ function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): str
 	if (phase.kind === "blocked") return "This document can’t be built yet";
 	if (phase.kind === "drafting" && !context.planner) {
 		return "Chopin isn’t running for this document";
+	}
+	if (phase.kind === "drafting" && context.plannerDetached) {
+		return "Connect a Planner to this document to build";
 	}
 	if (!snapshot.buildReady) return "Add more detail before building";
 }
