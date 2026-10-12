@@ -1613,6 +1613,7 @@ export function RoomWorkspace(
 					title={
 						<DocumentTitle
 							{...titleProps}
+							icon
 							path={zoomChild}
 						/>
 					}
