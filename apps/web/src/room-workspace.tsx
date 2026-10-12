@@ -529,13 +529,14 @@ export function RoomWorkspace(
 	let [implementation, setImplementation] = useState<Plan.ImplementationStatus>({
 		revision: -1,
 		locked: false,
+		hasGraph: false,
 	});
 	let [showImplementation, setShowImplementation] = useState(false);
 	/** Which end of the capsule-to-Build-tab link is hovered, so the other lights up. */
 	let [buildHover, setBuildHover] = useState<"capsule" | "tab">();
 	let liveBuild = useLiveBuild();
 	useEffect(() => {
-		setImplementation({ revision: -1, locked: false });
+		setImplementation({ revision: -1, locked: false, hasGraph: false });
 		let update = (value: Plan.ImplementationStatus) => {
 			setImplementation(current => value.revision >= current.revision ? value : current);
 		};
