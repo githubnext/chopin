@@ -74,6 +74,8 @@ export type InvestigationProvenance = {
 };
 export type PublishedInvestigation = Omit<Investigation, "candidate" | "receipts"> & {
 	child?: InvestigationChild;
+	/** The owning document is locked by a build, so its record refuses decisions and placement. */
+	locked?: boolean;
 };
 export type InvestigationSummary =
 	& { decisionCount: number }

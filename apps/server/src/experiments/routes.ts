@@ -120,10 +120,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		return value;
 	}
+	/** A child's evidence decisions belong to the parent's record, so its build lock applies too. */
+	async function parentAllowed(value: Investigation, documentId: string) {
+		if (value.documentId !== documentId) await mutationAllowed(value.documentId);
+	}
 	async function published(value: Investigation) {
 		let child = value.childId ? await auth.storage.channels.get(value.childId) : undefined;
+		let locked = !!options.canMutate && !await options.canMutate(value.documentId);
 		return {
 			...publicInvestigation(value),
+			...(locked ? { locked } : {}),
 			...(child && value.result
 				? {
 					child: {
@@ -351,6 +357,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
 		await mutationAllowed(params.id);
 		let value = await owned(params.experiment, params.id);
+		await parentAllowed(value, params.id);
 		return json(await published(await service.decide(value.id, session.user, await body(request))));
 	});
 	route("POST", "/api/documents/:id/experiments/:experiment/placement", async (request, params) => {
@@ -362,6 +369,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			remove: z.boolean().optional(),
 		}).strict().parse(await body(request));
 		let value = await owned(params.experiment, params.id);
+		await parentAllowed(value, params.id);
 		if (!value.result?.views.some(view => view.key === input.view)) fail("not-found");
 		if (
 			input.decision
