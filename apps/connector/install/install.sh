@@ -32,6 +32,10 @@ download() {
 }
 
 [ -n "${HOME:-}" ] || fail "HOME is not set, so there is no ~/.local/bin to install into."
+directory="$HOME/.local/bin"
+target="$directory/chopin"
+# mv would move the new chopin into a directory there instead of replacing it.
+[ ! -d "$target" ] || fail "$target is a directory, so chopin cannot be installed there. Move it out of the way and run this again."
 
 case "$(uname -s)" in
 Linux) os=linux ;;
@@ -59,7 +63,8 @@ else
 fi
 
 scratch="$(mktemp -d 2>/dev/null || mktemp -d -t chopin-install)"
-trap 'rm -rf "$scratch"' EXIT
+staged=""
+trap 'rm -rf "$scratch"; [ -z "$staged" ] || rm -f "$staged"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -102,13 +107,16 @@ chmod 755 "$scratch/$asset"
 reported="$("$scratch/$asset" --version 2>&1)" \
 	|| fail "the downloaded chopin does not run on this machine: $reported"
 
-directory="$HOME/.local/bin"
 mkdir -p "$directory"
-# Copy beside the destination first, so the rename that replaces an older chopin is atomic.
-cp "$scratch/$asset" "$directory/.chopin.$$"
-mv -f "$directory/.chopin.$$" "$directory/chopin"
+# Copy beside the destination first, into a new file of its own, so the rename that replaces an
+# older chopin is atomic and nothing already at a predictable name is written through.
+staged="$(mktemp "$directory/.chopin.XXXXXX")" || fail "could not create a file in $directory."
+cp "$scratch/$asset" "$staged"
+chmod 755 "$staged"
+mv -f "$staged" "$target"
+staged=""
 
-printf 'Installed %s at %s\n' "$reported" "$directory/chopin"
+printf 'Installed %s at %s\n' "$reported" "$target"
 case ":${PATH:-}:" in
 *":$directory:"*) ;;
 *)

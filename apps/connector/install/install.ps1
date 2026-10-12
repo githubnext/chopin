@@ -41,6 +41,12 @@ function Install-Chopin([string]$Version) {
 	if (-not $env:LOCALAPPDATA) {
 		Stop-Install 'LOCALAPPDATA is not set, so there is no per-user directory to install into.'
 	}
+	$Directory = Join-Path $env:LOCALAPPDATA 'chopin\bin'
+	$Chopin = Join-Path $Directory 'chopin.exe'
+	# Move-Item would move the new chopin.exe into a directory there instead of replacing it.
+	if (Test-Path -LiteralPath $Chopin -PathType Container) {
+		Stop-Install "$Chopin is a directory, so chopin cannot be installed there. Move it out of the way and run this again."
+	}
 
 	# Windows PowerShell 5.1 can default to TLS 1.0, which GitHub refuses.
 	[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -97,8 +103,6 @@ function Install-Chopin([string]$Version) {
 			Write-Host 'Verified the build provenance attestation.'
 		}
 
-		$Directory = Join-Path $env:LOCALAPPDATA 'chopin\bin'
-		$Chopin = Join-Path $Directory 'chopin.exe'
 		$Reported = (& $Download --version 2>&1 | Out-String).Trim()
 		if ($LASTEXITCODE -ne 0) { Stop-Install "the downloaded chopin does not run on this machine: $Reported" }
 		New-Item -ItemType Directory -Path $Directory -Force | Out-Null

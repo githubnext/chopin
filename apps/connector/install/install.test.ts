@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -99,8 +99,16 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		env: Record<string, string>,
 		...args: string[]
 	) {
+		return run(at, env, ["sh", script, ...args]);
+	}
+
+	async function run(
+		at: Awaited<ReturnType<typeof machine>>,
+		env: Record<string, string>,
+		command: string[],
+	) {
 		// Asynchronous: the fake release is served from this process.
-		let child = Bun.spawn(["sh", script, ...args], {
+		let child = Bun.spawn(command, {
 			env: { HOME: at.home, PATH: `${at.shims}:${process.env.PATH}`, ...env },
 			stdout: "pipe",
 			stderr: "pipe",
@@ -175,6 +183,40 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		expect(result.stderr).toBe("");
 		expect(result.code).toBe(0);
 		expect(await readFile(at.chopin, "utf8")).toBe(binary);
+	});
+
+	test("refuses to install over a directory at ~/.local/bin/chopin", async () => {
+		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")) });
+		let at = await machine();
+		await mkdir(at.chopin, { recursive: true });
+		let result = await install(at, release.env);
+		expect(result.code).not.toBe(0);
+		expect(result.stderr).toContain(`${at.chopin} is a directory`);
+		expect(await readdir(at.chopin)).toEqual([]);
+		expect(await readdir(join(at.home, ".local/bin"))).toEqual(["chopin"]);
+	});
+
+	test("stages the new chopin in a file of its own beside the old one", async () => {
+		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")) });
+		let at = await machine();
+		let bin = join(at.home, ".local/bin");
+		await mkdir(bin, { recursive: true });
+		let victim = join(at.home, "victim");
+		await writeFile(victim, "untouched\n");
+		// exec keeps the process, so install.sh's $$ is the pid that named this link.
+		let result = await run(at, release.env, [
+			"sh",
+			"-c",
+			`ln -s "${victim}" "${bin}/.chopin.$$" && exec sh "$0"`,
+			script,
+		]);
+		expect(result.stderr).toBe("");
+		expect(result.code).toBe(0);
+		expect(await readFile(victim, "utf8")).toBe("untouched\n");
+		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("0.2.0"));
+		expect((await stat(at.chopin)).mode & 0o777).toBe(0o755);
+		// Only the planted link is left beside chopin; nothing is staged there afterwards.
+		expect((await readdir(bin)).filter(name => name !== "chopin")).toHaveLength(1);
 	});
 
 	test("refuses a binary whose provenance attestation does not verify", async () => {
@@ -300,6 +342,25 @@ describe("install.ps1", () => {
 					}', 'User')`,
 				]);
 			}
+		},
+		120_000,
+	);
+
+	test.skipIf(!pwsh || process.platform !== "win32")(
+		"refuses to install over a directory at chopin.exe",
+		async () => {
+			let binary = new Uint8Array(await Bun.file(process.execPath).arrayBuffer());
+			using release = fakeRelease({ "0.2.0": assets("chopin-windows-x64.exe", binary) });
+			let local = await mkdtemp(join(scratch, "localappdata-"));
+			let chopin = join(local, "chopin", "bin", "chopin.exe");
+			await mkdir(chopin, { recursive: true });
+			let result = await install(
+				{ ...release.env, LOCALAPPDATA: local, CHOPIN_VERIFY_ATTESTATION: "0" },
+				"0.2.0",
+			);
+			expect(result.code).not.toBe(0);
+			expect(result.output).toContain(`${chopin} is a directory`);
+			expect(await readdir(chopin)).toEqual([]);
 		},
 		120_000,
 	);
