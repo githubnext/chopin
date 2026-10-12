@@ -68,6 +68,12 @@ export function experimentContract(name: string, factory: StorageFactory) {
 						lease,
 					),
 				).toEqual(stored!);
+				await storage.channels.archive({ id: first.childId!, now: new Date() });
+				await expect(storage.channels.delete(first.childId!)).rejects.toMatchObject({
+					failure: "conflict",
+					message: expect.stringContaining("published by an investigation"),
+				});
+				expect(await storage.channels.get(first.childId!)).toBeDefined();
 			} finally {
 				await storage.close();
 			}
