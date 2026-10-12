@@ -97,8 +97,11 @@
 	/* Dims the page beneath a phone sheet. Every sheet shares it, and one grabber. */
 	--color-scrim: oklch(var(--shadow-color) / 32%);
 	--color-grabber: var(--color-gray-300);
-	/* Translucent ink, so a thumb stays faint on page, ground and inset alike. Hover meets 3:1. */
-	--color-scrollbar-thumb: oklch(var(--shadow-color) / 16%);
+	/*
+	 * A resting thumb is solid, so it reads equally light on page, ground and menus.
+	 * Interaction states are ink, so hover meets 3:1 on any of them.
+	 */
+	--color-scrollbar-thumb: var(--color-gray-300);
 	--color-scrollbar-thumb-static: oklch(var(--shadow-color) / 28%);
 	--color-scrollbar-thumb-hover: oklch(var(--shadow-color) / 45%);
 	--color-scrollbar-thumb-active: oklch(var(--shadow-color) / 55%);
