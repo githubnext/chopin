@@ -1941,10 +1941,6 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	--plan-gutter: calc(var(--spacing) * 4);
 }
 
-.plan-decisions[data-phone] .plan-decisions-content {
-	padding-block-start: calc(var(--spacing) * 4);
-}
-
 /* Cards answered in place outside the pane, such as a child document's, save from the same bar. */
 .decision-save-host {
 	height: 100%;

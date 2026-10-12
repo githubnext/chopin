@@ -12,8 +12,11 @@
 	--phone-bottom-chrome: calc(
 		var(--phone-tab-bar-height) + var(--phone-tab-bar-offset) + var(--spacing) * 3
 	);
-	--document-top-inset: calc(var(--phone-top-chrome) + var(--spacing) * 4);
-	--document-decisions-top-inset: var(--document-top-inset);
+	/* Every pane scroller starts below the top bar and can end above the bottom bar. */
+	--phone-pane-top: calc(var(--phone-top-chrome) + var(--spacing) * 4);
+	--phone-pane-bottom: calc(var(--phone-bottom-chrome) + var(--spacing) * 4);
+	--document-top-inset: var(--phone-pane-top);
+	--document-decisions-top-inset: var(--phone-pane-top);
 	position: relative;
 }
 
@@ -66,14 +69,18 @@
 .workspace-root[data-workspace-phone][data-workspace-mode]
 	.workspace-document-stack
 	.anchored-child-card {
-	--document-top-inset: calc(
-		var(--phone-top-chrome) + var(--child-bar-height) + var(--spacing) * 4
-	);
+	--document-top-inset: calc(var(--phone-pane-top) + var(--child-bar-height));
 	inset: 0;
 }
 
+/* Focus, find-in-page and `scrollIntoView` stop between the bars, never under them. */
+.workspace-root[data-workspace-phone]
+	:is([data-plan-scroll], [data-plan-decisions-scroll], [data-build-view-scroll], [data-chat-scroll]) {
+	scroll-padding-block: var(--phone-pane-top) var(--phone-pane-bottom);
+}
+
 .workspace-root[data-workspace-phone] .plan [data-plan-scroll] {
-	scroll-padding-block: calc(var(--phone-top-chrome) + var(--spacing) * 4) 30%;
+	scroll-padding-block: var(--document-top-inset) 30%;
 }
 
 /*
@@ -84,12 +91,6 @@
 	.plan
 	[data-plan-scroll] {
 	scroll-padding-bottom: calc(var(--phone-dock-height) + var(--spacing) * 3);
-}
-
-/* Focus and find-in-page scrolling stop below the top bar, never under it. */
-.workspace-root[data-workspace-phone]
-	:is([data-plan-decisions-scroll], [data-build-view-scroll], [data-chat-scroll]) {
-	scroll-padding-top: calc(var(--phone-top-chrome) + var(--spacing) * 2);
 }
 
 /*
@@ -104,8 +105,10 @@
 	padding-bottom: var(--phone-bottom-chrome);
 }
 
+/* The Chat panel already stops above the tab bar, so its composer is the only bar below. */
 .workspace-root[data-workspace-phone] [data-chat-scroll] {
-	padding-top: calc(var(--phone-top-chrome) + var(--spacing) * 3);
+	padding-top: var(--phone-pane-top);
+	scroll-padding-bottom: calc(var(--spacing) * 4);
 }
 
 .workspace-root[data-workspace-phone] .workspace-status-row {
