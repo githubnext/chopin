@@ -9,6 +9,8 @@ function person() {
 	return `ana-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+const PASSAGE = "Compare measured startup time.";
+
 /** The investigation card whose brief this is. */
 function card(page: Page, brief: string) {
 	return page.getByRole("article", { name: "Investigation", exact: true }).filter({
@@ -16,10 +18,13 @@ function card(page: Page, brief: string) {
 	});
 }
 
-/** Type `/investigate` on a new last line, write the brief, and return the created record. */
-async function investigate(page: Page, room: string, brief: string) {
-	await content(page).click();
-	await page.keyboard.press("ControlOrMeta+End");
+/**
+ * Type `/investigate` on a new line after a prose passage, write the brief, and return the
+ * created record. The passage keeps the caret in text, clear of cards and embedded evidence.
+ */
+async function investigate(page: Page, room: string, brief: string, after: string) {
+	await content(page).getByText(after, { exact: true }).click();
+	await page.keyboard.press("End");
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/investigate");
 	await page.getByRole("listbox", { name: "Insert block" })
@@ -39,7 +44,7 @@ async function investigate(page: Page, room: string, brief: string) {
 }
 
 test("the clicker's own agent runs work and publishes evidence that survives disconnect", async ({ baseURL, join, room, seed }) => {
-	await seed("# Investigation\n\nCompare measured startup time.\n");
+	await seed(`# Investigation\n\n${PASSAGE}\n`);
 	let page = await join(person());
 	let pairing = await (await fetch(`${baseURL}/api/connector/pairings`, {
 		method: "POST",
@@ -72,7 +77,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	await expect(page.getByRole("button", { name: "Investigations", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("dialog", { name: "Investigations", exact: true })).toHaveCount(0);
 	await expect(page.getByText("Propose investigation", { exact: true })).toHaveCount(0);
-	let experiment = await investigate(page, room, "Compare startup approaches");
+	let experiment = await investigate(page, room, "Compare startup approaches", PASSAGE);
 	await expect(content(page).locator(`[data-plan-investigation="${experiment.id}"]`))
 		.toHaveCount(1);
 	let peer = await join("leo");
@@ -142,7 +147,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	await expect(saved).toContainText("Use cached startup");
 	await expect(saved.getByRole("table")).toContainText("183");
 	await expect(saved.getByRole("table")).not.toContainText("410");
-	let second = await investigate(page, room, "Check memory use");
+	let second = await investigate(page, room, "Check memory use", PASSAGE);
 	let queued = card(page, "Check memory use");
 	await queued.getByRole("button", { name: "Run", exact: true }).click();
 	await expect(queued.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
@@ -175,7 +180,12 @@ test("a proposal typed from the slash menu appears inline on a phone", async ({ 
 		isMobile: true,
 		hasTouch: true,
 	});
-	let created = await investigate(page, room, "Measure startup before choosing a cache");
+	let created = await investigate(
+		page,
+		room,
+		"Measure startup before choosing a cache",
+		"Check before choosing an approach.",
+	);
 	let proposal = card(page, "Measure startup before choosing a cache");
 	await expect(proposal).toContainText("Ready to run");
 	await expect(proposal.getByRole("combobox")).toHaveCount(0);
