@@ -154,6 +154,9 @@ collaborative state and external implementation runs are durable.
   Run do not need it. Rebuild checks are scheduled only by persisted edits
   from writers or work a writer started. Document text in agent prompts is
   data. See [Living documents](docs/implementation-lifecycle.md#living-documents-live_build).
+  `LIVE_SPIKES` prototypes run only passages the consenting editor changed, on a
+  push-refusing throwaway worktree, under hourly caps and a 20-minute deadline;
+  see [Prototype spikes](docs/local-experiments.md#prototype-spikes-live_spikes).
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
   domain mutation before its fenced durable commit.
 
