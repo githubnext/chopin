@@ -162,6 +162,21 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		expect(await at.calls()).toBe("");
 	});
 
+	test("reads a checksums.txt with Windows line endings", async () => {
+		let binary = fakeChopin("0.2.0");
+		using release = fakeRelease({
+			"0.2.0": {
+				"chopin-linux-x64": binary,
+				"checksums.txt": `${"0".repeat(64)}  other-file\r\n${sha256(binary)}  chopin-linux-x64\r\n`,
+			},
+		});
+		let at = await machine();
+		let result = await install(at, release.env);
+		expect(result.stderr).toBe("");
+		expect(result.code).toBe(0);
+		expect(await readFile(at.chopin, "utf8")).toBe(binary);
+	});
+
 	test("refuses a binary whose provenance attestation does not verify", async () => {
 		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")) });
 		let at = await machine({ gh: 1 });

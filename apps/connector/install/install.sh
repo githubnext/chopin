@@ -83,7 +83,8 @@ download "$release/$asset" "$scratch/$asset" || fail "could not download $releas
 download "$release/checksums.txt" "$scratch/checksums.txt" \
 	|| fail "could not download $release/checksums.txt."
 
-expected="$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1; exit }' "$scratch/checksums.txt")"
+# A checksums.txt saved with Windows line endings ends each name with \r.
+expected="$(awk -v name="$asset" '{ sub(/\r$/, "") } $2 == name || $2 == "*" name { print $1; exit }' "$scratch/checksums.txt")"
 [ -n "$expected" ] || fail "checksums.txt has no entry for $asset."
 actual="$(sha256 "$scratch/$asset")"
 if [ "$actual" != "$expected" ]; then
