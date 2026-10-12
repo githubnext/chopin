@@ -45,8 +45,8 @@ export function ExperimentView(
 		};
 	return (
 		<section aria-label={view.title} className="flex min-w-0 flex-col gap-3">
-			<h3 className="text-base font-semibold">{view.title}</h3>
-			<p className="text-xs text-text-secondary">
+			<h3 className="m-0 text-sm font-semibold">{view.title}</h3>
+			<p className="m-0 text-xs text-text-secondary">
 				{dataset.basis} · {rows.length} observations · {dataset.method}
 			</p>
 			<div className="flex flex-wrap gap-3">
@@ -55,11 +55,11 @@ export function ExperimentView(
 					let choices = [...new Set(dataset.rows.map(row => JSON.stringify(row.values[key])))];
 					let chosen = state.fields[`filter:${key}`]?.values[0];
 					return (
-						<label key={key} className="flex flex-col gap-1 text-sm">
+						<label key={key} className="flex flex-col gap-1 text-xs text-text-secondary">
 							{column.label}
 							<select
 								aria-label={`Filter ${column.label}`}
-								className="rounded-md border p-2"
+								className="min-w-0 field px-2 py-1 text-sm font-normal text-text-primary"
 								disabled={disabled || !onChange}
 								value={chosen === undefined ? "all" : JSON.stringify(chosen)}
 								onChange={event =>
@@ -85,7 +85,7 @@ export function ExperimentView(
 					Chart shows the first 40 numeric observations. The table contains all matching rows.
 				</p>
 			)}
-			<div className="max-h-96 overflow-auto">
+			<div className="max-h-96 max-w-full overflow-auto">
 				<table className="w-full text-left text-sm">
 					<caption className="sr-only">{dataset.title}</caption>
 					<thead>

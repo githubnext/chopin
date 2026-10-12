@@ -47,7 +47,7 @@ function Reference(
 	return (
 		<article
 			aria-label={decision ? "Saved investigation evidence" : "Investigation evidence"}
-			className="my-4 flex flex-col gap-3 rounded-md border p-4"
+			className="plan-evidence my-4 flex min-w-0 flex-col gap-3 rounded-md border border-edge p-4"
 			contentEditable={false}
 		>
 			{decision && (
@@ -72,17 +72,19 @@ function Reference(
 						})
 					)}
 			/>
-			{!decision && store.actions?.(experiment, viewKey)}
-			{canEdit && connected && (
-				<button
-					className="btn btn-sm btn-ghost"
-					disabled={busy}
-					onClick={() =>
-						void act(() => store.place(experiment, viewKey, decisionId || undefined, true))}
-				>
-					Remove evidence from document
-				</button>
-			)}
+			<div className="flex flex-wrap items-start gap-2">
+				{!decision && store.actions?.(experiment, viewKey)}
+				{canEdit && connected && (
+					<button
+						className="btn btn-sm btn-ghost"
+						disabled={busy}
+						onClick={() =>
+							void act(() => store.place(experiment, viewKey, decisionId || undefined, true))}
+					>
+						Remove evidence from document
+					</button>
+				)}
+			</div>
 		</article>
 	);
 }

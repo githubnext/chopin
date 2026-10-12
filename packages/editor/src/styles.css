@@ -77,6 +77,19 @@
 	background: transparent;
 }
 
+/* Investigation views and recorded decisions are interface inside the document, not its prose. */
+.plan-content .plan-evidence :is(h3, h4) {
+	margin: 0;
+	font-family: var(--font-sans);
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-semibold);
+	line-height: var(--text-sm--line-height);
+}
+
+.plan-content .plan-evidence p {
+	margin: 0;
+}
+
 /* Host detail on a ready card stays interactive above the card-wide open control. */
 .plan-research-detail {
 	position: relative;
