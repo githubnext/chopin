@@ -745,6 +745,14 @@ export function buildLabel(look: BuildLook): string {
 	}
 }
 
+/**
+ * The capsule's Retry, when it has one. A build that still holds its tasks has none, only
+ * Return to planning, so nothing should tell a person to press Retry.
+ */
+export function retryAction(look: BuildLook): "Retry" | undefined {
+	return (look.kind === "stopped" || look.kind === "agent") && look.retry ? "Retry" : undefined;
+}
+
 /** Build opens once there is a build, or a press under way, to show. */
 export function buildTabReady(snapshot: Snapshot | undefined, look: BuildLook): boolean {
 	return look.kind !== "plan" || !!snapshot && hasBuilt(snapshot);

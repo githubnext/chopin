@@ -17,6 +17,7 @@ import {
 	plural,
 	pullRequestCommits,
 	pullRequestNumber,
+	retryAction,
 	startedBy,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
@@ -313,7 +314,7 @@ export function BuildView(
 				</div>
 				{(build.needsAgent || snapshot?.localAgent === false && look.kind === "stopped") && (
 					<div className="mt-3">
-						<LocalAgentNote action="Retry" />
+						<LocalAgentNote action={retryAction(look)} />
 					</div>
 				)}
 				{phase.kind === "stopped" && returning && (

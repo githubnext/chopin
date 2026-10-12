@@ -20,6 +20,7 @@ import {
 	liveTaskState,
 	pullRequestCommits,
 	pullRequestNumber,
+	retryAction,
 	shortUrl,
 	startedBy,
 	startingHint,
@@ -717,6 +718,15 @@ describe("build status", () => {
 		});
 		expect(buildLabel(noAgent)).toBe("Start your local agent");
 		expect(buildTabReady(snapshot(), noAgent)).toBe(true);
+		expect(retryAction(noAgent)).toBe("Retry");
+		expect(retryAction(failed)).toBe("Retry");
+		// A Ctrl-C'd build still holds its tasks: only Return to planning, so no Retry to name.
+		let held = look(snapshot({
+			build: { ...build("stopped"), error: "Stopped from the connector terminal." },
+			lifecycle: { execution: { state: "active" }, history: [] },
+		}));
+		expect(held).toMatchObject({ kind: "stopped", retry: false });
+		expect(retryAction(held)).toBeUndefined();
 		let refused = look(snapshot(), { state: { stage: "failed", message: "Answer first." } });
 		expect(refused).toMatchObject({ kind: "stopped", tip: "Answer first." });
 	});

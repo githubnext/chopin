@@ -14,11 +14,18 @@ export function connectorCommand(origin: string): string {
 		+ " ~/.chopin/connector.js connect . -- copilot --acp --allow-all";
 }
 
+/** What the note asks for; it names `action` only when that button is there to press. */
+export function localAgentNoteText(action?: string): string {
+	return action
+		? `Your local agent isn’t connected. Run this in your project folder, then press ${action} again.`
+		: "Your local agent isn’t connected. Run this in your project folder to connect it.";
+}
+
 /**
  * The answer to a `no-workspace` refusal: how to start a local agent, then press `action` again.
  * It stays until the person presses again, so a refused press never silently resets.
  */
-export function LocalAgentNote({ action }: { action: string }) {
+export function LocalAgentNote({ action }: { action?: string }) {
 	let command = connectorCommand(location.origin);
 	let [copied, setCopied] = useState<"copied" | "failed">();
 	useEffect(() => {
@@ -28,10 +35,7 @@ export function LocalAgentNote({ action }: { action: string }) {
 	}, [copied]);
 	return (
 		<div className="agent-note">
-			<p className="m-0">
-				Your local agent isn’t connected. Run this in your project folder, then press {action}{" "}
-				again.
-			</p>
+			<p className="m-0">{localAgentNoteText(action)}</p>
 			<div className="agent-command">
 				<code>{command}</code>
 				<button
