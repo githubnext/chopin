@@ -26,37 +26,21 @@ export type ServerInstructionDeps = {
 
 /**
  * Start a Planner turn nobody typed, and say whether Chat accepted it (started or queued).
- * `claimant` is a user whose open, writable socket in the room may claim an unowned Planner;
- * without one, only an existing owner will do, and a room evicted since is reopened for it.
+ * It runs only under the document's existing Planner owner and never claims one: nobody asked
+ * for this turn, so nobody's credentials are taken for it. A room evicted since is reopened.
  */
 export async function serverInstruction(
 	deps: ServerInstructionDeps,
 	channelId: string,
 	compose: (plan: Service.Plan) => Instruction | undefined,
-	claimant?: string,
 ): Promise<boolean> {
 	if (!deps.agent || deps.unavailable(channelId)) return false;
 	let opened = Rooms.get(channelId)?.plan;
 	if (opened && !compose(opened)) return false;
-	let socket = claimant
-		? [...(Rooms.get(channelId)?.members.values() ?? [])].find(ws =>
-			ws.data.principalId === claimant && ws.data.canEdit && !ws.data.closed
-		)
-		: undefined;
-	let repository: Chat.Room["repository"] | undefined;
-	if (socket) {
-		repository = {
-			id: socket.data.repositoryId,
-			owner: socket.data.repositoryOwner,
-			name: socket.data.repositoryName,
-			defaultBranch: socket.data.repositoryDefaultBranch,
-		};
-	} else {
-		let binding = await deps.owner(channelId);
-		if (!binding) return false;
-		repository = binding.repository;
-		binding.release();
-	}
+	let binding = await deps.owner(channelId);
+	if (!binding) return false;
+	let repository = binding.repository;
+	binding.release();
 	return deps.transition(channelId, async () => {
 		await Rooms.get(channelId)?.closing;
 		let held = Rooms.hold(channelId);
@@ -69,7 +53,7 @@ export async function serverInstruction(
 			let current = await deps.open(held.room);
 			let instruction = compose(current);
 			if (!instruction) return false;
-			let context = deps.conversation(held.room, socket?.data.sessionId, repository);
+			let context = deps.conversation(held.room, undefined, repository);
 			let before = context.chat.running;
 			let waiting = context.chat.waiting.length;
 			await deps.instruct(context, instruction);

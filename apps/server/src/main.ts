@@ -25,7 +25,7 @@ import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
 import { registerImageRoutes } from "./images/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
-import type { Instruction } from "./chat/server-instruction";
+import type { Instruction, ServerInstructionDeps } from "./chat/server-instruction";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
 import { createChildDocuments } from "./chat/children";
@@ -64,7 +64,7 @@ import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { heuristicJudge, jevJudge, SpikeScout } from "./experiments/spike-scout";
 import { spikeHost } from "./experiments/spike-host";
-import { spikeSettler } from "./experiments/spike-settle";
+import { spikeSettler, startSettle } from "./experiments/spike-settle";
 import { resolveInstruction } from "./experiments/spikes";
 import { askJev } from "./conversation-plan/jev";
 import { locksEditing, requestBuild } from "./tasks/builds";
@@ -265,6 +265,8 @@ function documentBackend(): Service.Backend {
  * Never claims ownership: without an owner the cards stay pending until the next Planner turn.
  */
 async function relinkDecisions(channelId: string): Promise<void> {
+	// Under the remote harness only an attached Planner can take the turn.
+	if (plannerAttachments && !await plannerAttachments.confirmed(channelId)) return;
 	await serverInstruction(channelId, current => {
 		let pending = pendingLinks(current);
 		if (pending.length === 0) return;
@@ -277,21 +279,33 @@ async function relinkDecisions(channelId: string): Promise<void> {
 }
 
 /**
- * A spike's result landed: have the Planner settle the passage it answered. Runs under the
- * existing Planner owner, or claims one for the person whose edit started the spike while they
- * have the document open. A build that has since locked the document skips it. Until Chat
- * accepts the turn, `spike.settle` stays set and the room opening or an owner arriving retries.
+ * A spike's result landed: have the Planner settle the passage it answered. Runs only under the
+ * existing Planner owner, and under the remote harness only while a Planner is attached; it never
+ * claims ownership, since nobody asked for this turn. A build that has since locked the document
+ * skips it. Until Chat accepts the turn, `spike.settle` stays set, and an owner appearing or a
+ * Planner attaching retries it. A child document's settle is dropped. Under `HARNESS=atomic` the
+ * turn is a full Atomic session reading the callout, whose text is collaborators' data.
  */
 const spikeSettlement = spikeSettler({
 	get: id => experiments!.service.store.get(id),
 	list: id => experiments!.service.store.list(id),
 	mutate: (id, action) => experiments!.service.mutate(id, action),
 	start: (channelId, value) =>
-		serverInstruction(channelId, current => {
-		if (Service.implementationActive(current)) return;
-		let { text, said } = resolveInstruction(value);
-		return { handle: value.spike!.login, text, said };
-		}, value.requester),
+		startSettle(
+			{
+				instruction: serverInstructionDeps(),
+				channel: id => storage.channels.get(id),
+				attached: plannerAttachments
+					? id => plannerAttachments!.confirmed(id)
+					: undefined,
+			},
+			channelId,
+			current => {
+				if (Service.implementationActive(current)) return;
+				let { text, said } = resolveInstruction(value);
+				return { handle: value.spike!.login, text, said };
+			},
+		),
 });
 
 function settlePendingSpikes(channelId: string): void {
@@ -307,31 +321,25 @@ function ownerAvailable(channelId: string): Promise<void> {
 	return jobRunner?.ownerAvailable(channelId) ?? Promise.resolve();
 }
 
-/**
- * Start a Planner turn nobody typed; true once Chat accepted it. `claimant` is a user whose
- * open, writable socket in the room may claim an unowned Planner; without one, only an
- * existing owner will do.
- */
+function serverInstructionDeps(): ServerInstructionDeps {
+	return {
+		agent: !!config.agent,
+		unavailable: id => deletingChannels.has(id),
+		owner: async id => await ownerBindings?.resolve(id),
+		transition: withDocumentTransition,
+		open: room => plan(room, server),
+		conversation,
+		instruct: (context, { handle, text, said }) => Chat.instruct(context, handle, text, said),
+		evict,
+	};
+}
+
+/** Start a Planner turn nobody typed, under the existing owner only; true once Chat accepted it. */
 function serverInstruction(
 	channelId: string,
 	compose: (plan: Service.Plan) => Instruction | undefined,
-	claimant?: string,
 ): Promise<boolean> {
-	return runServerInstruction(
-		{
-			agent: !!config.agent,
-			unavailable: id => deletingChannels.has(id),
-			owner: async id => await ownerBindings?.resolve(id),
-			transition: withDocumentTransition,
-			open: room => plan(room, server),
-			conversation,
-			instruct: (context, { handle, text, said }) => Chat.instruct(context, handle, text, said),
-			evict,
-		},
-		channelId,
-		compose,
-		claimant,
-	);
+	return runServerInstruction(serverInstructionDeps(), channelId, compose);
 }
 
 function placeResearchReference(
@@ -1977,6 +1985,13 @@ if (config.agent && config.harness === "remote") {
 	plannerAttachments.onChange((channelId, planner) => {
 		if (server && !draining) {
 			broadcast(server, channelId, { kind: "session:planner", ts: 0, planner });
+		}
+		// Settlements that waited for a Planner can run now.
+		if (planner.state === "attached") {
+			settlePendingSpikes(channelId);
+			void relinkDecisions(channelId).catch(err =>
+				console.error("chopin: could not re-link decisions after a Planner attached -", err)
+			);
 		}
 	});
 }

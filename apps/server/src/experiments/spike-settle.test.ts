@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
 
-import { serverInstruction } from "../chat/server-instruction";
 import * as Rooms from "../rooms";
-import { spikeSettler } from "./spike-settle";
+import { spikeSettler, startSettle } from "./spike-settle";
 
 import type { ServerInstructionDeps } from "../chat/server-instruction";
 import type * as Chat from "../chat/service";
@@ -13,7 +12,9 @@ import type { Investigation } from "@chopin/experiment/records";
 const REPOSITORY = { id: "R_1", owner: "acme", name: "app", defaultBranch: "main" };
 
 /** The settle path exactly as main.ts wires it, over real Rooms and fake Planner plumbing. */
-function harness(options: { agent?: boolean; owner?: boolean } = {}) {
+function harness(
+	options: { agent?: boolean; owner?: boolean; child?: boolean; attached?: boolean } = {},
+) {
 	let channelId = crypto.randomUUID();
 	let record = {
 		id: crypto.randomUUID(),
@@ -51,20 +52,33 @@ function harness(options: { agent?: boolean; owner?: boolean } = {}) {
 		list: async () => [record],
 		mutate: async (_id, action) => action(record),
 		start: (id, value) =>
-			serverInstruction(deps, id, () => ({
-				handle: value.spike!.login,
-				text: "Settle the passage",
-				said: "Settling",
-			}), value.requester),
+			startSettle(
+				{
+					instruction: deps,
+					channel: async () => options.child ? { parentChannelId: "parent" } : {},
+					attached: options.attached === undefined ? undefined : async () => attachment.attached,
+				},
+				id,
+				() => ({
+					handle: value.spike!.login,
+					text: "Settle the passage",
+					said: "Settling",
+				}),
+			),
 	});
+	let attachment = { attached: options.attached ?? false };
 	let cleanup = () => {
 		let room = Rooms.get(channelId);
 		if (room) Rooms.forget(room);
 	};
-	return { channelId, record, opened, turns, settler, cleanup };
+	return { channelId, record, opened, turns, settler, cleanup, attachment, deps };
 }
 
-function socket(channelId: string, principalId: string): Socket {
+function socket(
+	channelId: string,
+	principalId: string,
+	state: { canEdit?: boolean; closed?: boolean } = {},
+): Socket {
 	return {
 		data: {
 			room: channelId,
@@ -72,7 +86,8 @@ function socket(channelId: string, principalId: string): Socket {
 			handle: "requester",
 			principalId,
 			sessionId: "S_requester",
-			canEdit: true,
+			canEdit: state.canEdit ?? true,
+			closed: state.closed ?? false,
 			repositoryId: REPOSITORY.id,
 			repositoryOwner: REPOSITORY.owner,
 			repositoryName: REPOSITORY.name,
@@ -81,22 +96,29 @@ function socket(channelId: string, principalId: string): Socket {
 	} as unknown as Socket;
 }
 
-test("a requester with an open writable socket claims the Planner and the settle clears", async () => {
-	let context = harness();
-	try {
-		let room = Rooms.join(socket(context.channelId, "U_requester"));
-		room.plan = {} as Service.Plan;
-		await context.settler.settle(context.channelId, context.record.id);
-		expect(context.turns).toEqual([
-			{ sessionId: "S_requester", repository: REPOSITORY, handle: "maggie" },
-		]);
-		expect(context.record.spike?.settle).toBeUndefined();
-	} finally {
-		context.cleanup();
+test("no socket ever claims the Planner for a settle: the requester's, a viewer's, a closed one or another person's", async () => {
+	for (
+		let state of [
+			{ principalId: "U_requester" },
+			{ principalId: "U_requester", canEdit: false },
+			{ principalId: "U_requester", closed: true },
+			{ principalId: "U_other" },
+		]
+	) {
+		let context = harness();
+		try {
+			let room = Rooms.join(socket(context.channelId, state.principalId, state));
+			room.plan = {} as Service.Plan;
+			await context.settler.settle(context.channelId, context.record.id);
+			expect(context.turns).toEqual([]);
+			expect(context.record.spike?.settle).toBe(true);
+		} finally {
+			context.cleanup();
+		}
 	}
 });
 
-test("without the requester, an existing owner settles it in a reopened room", async () => {
+test("an existing owner settles it in a reopened room", async () => {
 	let context = harness({ owner: true });
 	try {
 		expect(Rooms.get(context.channelId)).toBeUndefined();
@@ -111,7 +133,7 @@ test("without the requester, an existing owner settles it in a reopened room", a
 	}
 });
 
-test("without the requester or an owner, nothing is claimed and the settle stays pending", async () => {
+test("without an owner, nothing is claimed and the settle stays pending", async () => {
 	let context = harness();
 	try {
 		// Someone else's socket never claims for the requester.
@@ -131,6 +153,36 @@ test("with the agent off, no turn starts and the settle stays pending", async ()
 		await context.settler.pending(context.channelId);
 		expect(context.turns).toEqual([]);
 		expect(context.record.spike?.settle).toBe(true);
+	} finally {
+		context.cleanup();
+	}
+});
+
+test("under the remote harness a settle waits for an attached Planner, and attaching wakes it", async () => {
+	let context = harness({ owner: true, attached: false });
+	try {
+		await context.settler.pending(context.channelId);
+		expect(context.turns).toEqual([]);
+		expect(context.opened).toEqual([]);
+		expect(context.record.spike?.settle).toBe(true);
+		// What main.ts does when the attachment changes to attached.
+		context.attachment.attached = true;
+		await context.settler.pending(context.channelId);
+		expect(context.turns).toEqual([
+			{ sessionId: undefined, repository: REPOSITORY, handle: "maggie" },
+		]);
+		expect(context.record.spike?.settle).toBeUndefined();
+	} finally {
+		context.cleanup();
+	}
+});
+
+test("a child document's settle is dropped rather than retried forever", async () => {
+	let context = harness({ owner: true, child: true });
+	try {
+		await context.settler.pending(context.channelId);
+		expect(context.turns).toEqual([]);
+		expect(context.record.spike?.settle).toBeUndefined();
 	} finally {
 		context.cleanup();
 	}

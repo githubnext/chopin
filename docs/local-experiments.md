@@ -171,6 +171,16 @@ The trust model is deliberately narrow:
   including a first build that is only queued: the approved tasks stay bound to
   the revision people approved, and the finding lands after the build ends.
 
+When a result lands, Chopin asks the Planner to settle the passage the spike
+answered. Nobody typed that turn, so it never claims a Planner owner: it runs
+only under the document's existing owner and, under `HARNESS=remote`, only
+while a Planner is attached. Until then the settle stays pending, and an owner
+appearing or a Planner attaching runs it; a child document's settle is
+dropped. Under `HARNESS=atomic` the turn is a full Atomic session with the
+operator's shell and filesystem tools, reading the callout's report, which the
+spike's agent wrote from collaborators' text; the instruction treats it as data,
+but operators should weigh that exposure before enabling `LIVE_SPIKES` there.
+
 A spike run's MCP tools are `read_investigation`, `upload_investigation_image`
 (at most three distinct images, each at most 1 MiB) and `submit_spike_result`
 (a headline, three to six findings, a recommendation and the uploaded image

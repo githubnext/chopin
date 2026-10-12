@@ -126,7 +126,9 @@ collaborative state and external implementation runs are durable.
   data for callers with push or administration access.
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot
-  entitlement. The database stores only a token-free owner reference and durable
+  entitlement. Server-authored turns nobody typed (re-linking decisions after a
+  build, settling a prototyped passage) never claim an owner; under
+  `HARNESS=remote` they also wait for an attached Planner. The database stores only a token-free owner reference and durable
   context.
 - **Planner tools are repository-fixed under `copilot-sdk` and `pi`.** Those
   Planners have no shell, checkout, host filesystem, skills, plugins, or arbitrary
