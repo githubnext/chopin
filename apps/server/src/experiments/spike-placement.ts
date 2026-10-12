@@ -8,8 +8,6 @@ import * as Comments from "../comments/service";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Questions from "../questions/service";
-import { carryQueued, queuedOnly } from "../tasks/builds";
-import { announceImplementation } from "../tasks/notifications";
 
 import type { RootContent } from "mdast";
 
@@ -35,9 +33,21 @@ export function calloutId(node: RootContent): string | undefined {
 	return typeof id?.value === "string" ? id.value : undefined;
 }
 
-/** Callout ids present at the top level of a source. */
+/** Callout ids anywhere in a tree: a callout moved into a list or quote is still present. */
+export function calloutIds(nodes: RootContent[]): Set<string> {
+	let found = new Set<string>();
+	let visit = (node: RootContent) => {
+		let id = calloutId(node);
+		if (id) found.add(id);
+		if ("children" in node) { for (let child of node.children as RootContent[]) visit(child); }
+	};
+	nodes.forEach(visit);
+	return found;
+}
+
+/** Callout ids present anywhere in a source. */
 export function callouts(source: string): Set<string> {
-	return new Set(parse(source).children.flatMap(node => calloutId(node) ?? []));
+	return calloutIds(parse(source).children);
 }
 
 function blockSource(node: RootContent): string {
@@ -114,18 +124,16 @@ function digestOf(source: string, callout: string): string | undefined {
 }
 
 /**
- * Place or update a spike's callout. With `queued`, an update may also land under a first build
- * that is only queued, so the build starts with the spike's findings: the callout-only revision
- * carries the build and its approved graph in the same commit. Any other lock defers it.
+ * Place or update a spike's callout. Any build lock, including a first build that is only queued,
+ * defers it: an approved graph is never moved to a revision holding text its people never saw,
+ * so a build starts from what was approved and a late finding lands after it ends.
  */
 export function placeSpikeCallout(
 	plan: Service.Plan,
 	input: CalloutInput,
-	options: { queued?: boolean } = {},
 ): Promise<CalloutPlacement> {
 	return Service.exclusive(plan, async (): Promise<CalloutPlacement> => {
-		let queued = Service.implementationActive(plan) && !!options.queued && !!queuedOnly(plan);
-		if (Service.implementationActive(plan) && !queued) return { status: "deferred" };
+		if (Service.implementationActive(plan)) return { status: "deferred" };
 		let document = await room.restore(
 			plan.document.epoch,
 			Y.encodeStateAsUpdate(plan.document.doc),
@@ -155,23 +163,9 @@ export function placeSpikeCallout(
 			Comments.rebase(candidate);
 			let digest = digestOf(room.project(document), placed.callout);
 			if (!digest) throw new Error("callout did not land");
-			let carried = queued
-				? carryQueued(
-					plan,
-					room.project(document) === plan.persistence.committedSource
-						? plan.revision
-						: plan.revision + 1,
-				)
-				: undefined;
-			if (carried) Object.assign(candidate, carried);
 			await Service.publishStaged(plan, plan.server, plan.id, candidate, placed.mutation, {
 				agent: true,
-				queuedBuild: queued,
 			});
-			if (carried) {
-				Object.assign(plan, carried);
-				announceImplementation(plan);
-			}
 			return { status: "placed", callout: placed.callout, digest };
 		} finally {
 			document.doc.destroy();

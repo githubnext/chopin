@@ -60,7 +60,7 @@ import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { invokeRouted } from "./mcp/invoke";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
-import { jevJudge, SpikeScout } from "./experiments/spike-scout";
+import { heuristicJudge, jevJudge, SpikeScout } from "./experiments/spike-scout";
 import { spikeHost } from "./experiments/spike-host";
 import { askJev } from "./conversation-plan/jev";
 import { locksEditing, requestBuild } from "./tasks/builds";
@@ -132,7 +132,6 @@ const LEASE_RETRY_MS = 1_000;
 const SESSION_CLEANUP_MS = 5 * 60_000;
 const ACCESS_RECHECK_MS = 60_000;
 const RESEARCH_RECOVERY_RETRY_MS = 10_000;
-const SPIKE_SETTLE_MS = 30_000;
 
 let server: Server<SocketData>;
 const writerLease = new WriterLease(storage.leases, {
@@ -1915,15 +1914,6 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 				}
 			});
 		}),
-	async settleSpikes(documentId) {
-		if (!spikeScout) return;
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		// Bounded: a stuck placement must not hold a build forever.
-		await Promise.race([
-			spikeScout.settle(documentId),
-			new Promise<void>(resolve => timer = setTimeout(resolve, SPIKE_SETTLE_MS)),
-		]).finally(() => clearTimeout(timer));
-	},
 	changed(documentId) {
 		if (server && !draining) {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
@@ -2165,8 +2155,11 @@ if (config.liveSpikes) {
 			connections: experiments.connections,
 			withPlan: withImplementationPlan,
 		}),
+		// Without Jev nothing is spiked unless the operator opts into the regex judge.
 		judge: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
 			? jevJudge(request => askJev(request, { model: jev, timeoutMs }))
+			: config.liveSpikesRegexJudge
+			? heuristicJudge
 			: undefined,
 		error: err => console.error("chopin: living-document spike failed -", err),
 	});

@@ -4,7 +4,7 @@ import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
 import { runAgent } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
-import { git, prepareWorkspace } from "./workspace";
+import { discardWorkspace, git, noPushEnvironment, prepareWorkspace } from "./workspace";
 import {
 	implementationPrompt,
 	liveImplementationPrompt,
@@ -64,6 +64,8 @@ export async function runWork(
 		}).catch(() => abort.abort()).finally(() => renewing = false);
 	}, options.heartbeatMs ?? 10_000);
 	let local: ReturnType<typeof serveLocalBridge> | undefined;
+	/** A spike's throwaway worktree and branch, removed when the run ends. */
+	let spikeWork: { path: string; branch: string } | undefined;
 	let bridgeApi: Promise<Awaited<ReturnType<typeof remote>>> | undefined;
 	try {
 		let prepared = await prepareWorkspace(options.root, options.directory, input);
@@ -71,11 +73,15 @@ export async function runWork(
 		if (implementation && !rebuild) {
 			git(prepared.path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
 		}
-		if (claim.spike) git(prepared.path, "checkout", "-b", `chopin/spike-${input.id.slice(0, 8)}`);
+		if (claim.spike) {
+			spikeWork = { path: prepared.path, branch: `chopin/spike-${input.id.slice(0, 8)}` };
+			git(prepared.path, "checkout", "-b", spikeWork.branch);
+		}
 		console.error(`Running ${input.id} in ${prepared.path}`);
 		let stop = await runAgent({
 			command: options.command,
 			cwd: prepared.path,
+			...(claim.spike ? { env: noPushEnvironment() } : {}),
 			prompt: rebuild
 				? rebuildPrompt
 				: implementation
@@ -168,7 +174,11 @@ export async function runWork(
 			...identity,
 			...(implementation ? { state: "stopped" } : {}),
 		});
-		console.error(`Finished ${input.id}. Workspace retained at ${prepared.path}`);
+		console.error(
+			claim.spike
+				? `Finished ${input.id}. Its throwaway worktree is removed.`
+				: `Finished ${input.id}. Workspace retained at ${prepared.path}`,
+		);
 	} catch (error) {
 		let message = error instanceof Error ? error.message : "Local work failed";
 		console.error(message);
@@ -182,6 +192,9 @@ export async function runWork(
 	} finally {
 		local?.close();
 		await bridgeApi?.then(api => api.close()).catch(() => {});
+		if (spikeWork) {
+			await discardWorkspace(options.root, spikeWork.path, spikeWork.branch).catch(() => {});
+		}
 		clearInterval(heartbeat);
 		options.signal.removeEventListener("abort", cancel);
 	}

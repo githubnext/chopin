@@ -515,9 +515,16 @@ test("a spike runs with an image upload and a structured report, and stays out o
 		undefined,
 		claim.runToken,
 	)).json();
-	expect(tools.result.tools.map((item: { name: string }) => item.name)).toContain(
-		"submit_spike_result",
-	);
+	let names = tools.result.tools.map((item: { name: string }) => item.name);
+	expect(names).toContain("submit_spike_result");
+	// A spike reports only its short structured result, never a full investigation result.
+	expect(names).not.toContain("submit_investigation_result");
+	expect(names).not.toContain("submit_experiment_result");
+	for (let name of ["submit_investigation_result", "submit_experiment_result"]) {
+		expect(error(await tool(claim.runToken, name, { result: { report: "# Hi\n" } })))
+			.toContain("tool-forbidden");
+	}
+	expect((await runtime.service.store.get(id))?.spike?.startedAt).toBeNumber();
 	let png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 	let uploaded = text(
 		await tool(claim.runToken, "upload_investigation_image", {
@@ -645,4 +652,36 @@ test("a spike uploads at most three images and cites only its own", async () => 
 		});
 	expect(error(await submit([`/images/${foreign}.png`]))).toContain("missing-image");
 	expect(error(await submit(paths))).toBe("");
+});
+
+test("a spike still running 20 minutes after its claim is interrupted", async () => {
+	let { alice, documentId, tool, pair, runtime } = await setup();
+	let paired = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await runtime.service.create(documentId, "alice", "Spike brief", id, {
+		digest: "sha256:y",
+		passage: "Unsure whether this works.",
+		callout: "01JBBBBBBBBBBBBBBBBBBBBBBB",
+		login: "alice",
+		placed: true,
+	});
+	await runtime.service.authorize(id, paired.connection.id, {
+		id,
+		documentId,
+		requester: "alice",
+		authorizer: "alice",
+		brief: "Spike brief",
+		source: paired.connection.source,
+		context: "# Context",
+	});
+	text(await tool(paired.token, "claim_experiment", { id }));
+	await runtime.sweep();
+	expect((await runtime.service.store.get(id))?.state).toBe("running");
+	await runtime.service.mutate(id, value => {
+		value.spike!.startedAt = Date.now() - 21 * 60_000;
+	});
+	await runtime.sweep();
+	let value = await runtime.service.store.get(id);
+	expect(value?.state).toBe("interrupted");
+	expect(value?.progress).toContain("20-minute limit");
 });

@@ -5,7 +5,7 @@ import { ulid } from "@chopin/dialect/ulid";
 
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
-import { calloutDigest, calloutId, placeSpikeCallout } from "./spike-placement";
+import { calloutDigest, calloutId, calloutIds, placeSpikeCallout } from "./spike-placement";
 import { eligible, renderKey, spikeBrief, spikeCallout, text } from "./spikes";
 
 import type { Connections } from "./connections";
@@ -17,6 +17,15 @@ type Options = {
 	connections: Connections;
 	withPlan: <T>(channelId: string, action: (plan: Service.Plan) => Promise<T>) => Promise<T>;
 };
+
+/** Digests of a source's eligible passages, as the scout's snapshot computes them. */
+export function blockDigests(source: string): Set<string> {
+	return new Set(
+		parse(source).children.flatMap(node =>
+			eligible(node) ? [room.digest(serialize({ type: "root", children: [node] }))] : []
+		),
+	);
+}
 
 /** Spike records live with investigations; their callouts are projections placed after commit. */
 export function spikeHost({ service, connections, withPlan }: Options): SpikeHost {
@@ -46,14 +55,17 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 							...(after ? { calloutAfter: after } : {}),
 						}];
 					}),
-					callouts: new Set(children.flatMap(node => calloutId(node) ?? [])),
+					callouts: calloutIds(children),
 				};
 			}),
 		spikes,
 		async connection(repositoryId, owner, channelId) {
-			let found = connections.candidates(repositoryId, owner, channelId)[0];
+			// Only a laptop whose owner allowed automatic work when pairing it takes a spike.
+			let found = connections.candidates(repositoryId, owner, channelId)
+				.find(item => item.autoRun === true);
 			return found && { id: found.id, login: found.login };
 		},
+		digests: source => blockDigests(source),
 		async start(channelId, { owner, connection, block }) {
 			let id = crypto.randomUUID();
 			let callout = ulid();
@@ -70,10 +82,17 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 			let value = await service.mutate(id, item => {
 				item.spike!.calloutDigest = calloutDigest(node);
 			});
-			let placed = await withPlan(
-				channelId,
-				plan => placeSpikeCallout(plan, { callout, node, after: block.digest }),
-			);
+			let placed;
+			try {
+				placed = await withPlan(
+					channelId,
+					plan => placeSpikeCallout(plan, { callout, node, after: block.digest }),
+				);
+			} catch (error) {
+				// A record with no callout would hold a spike slot forever; give it back.
+				await dismiss(channelId, id).catch(() => {});
+				throw error;
+			}
 			if (placed.status !== "placed") {
 				await dismiss(channelId, id);
 				return;
@@ -123,7 +142,7 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 							callout: spike.callout,
 							node: spikeCallout(value),
 							rendered: spike.calloutDigest,
-						}, { queued: true }),
+						}),
 				);
 				if (placed.status === "missing") await dismiss(channelId, value.id);
 				else if (placed.status !== "deferred") {

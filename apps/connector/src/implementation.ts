@@ -45,33 +45,33 @@ export async function relay(
 		}
 		: listed;
 	return () => {
-	let server = new Server({ name: "chopin-implementation", version: "0.1.0" }, {
-		capabilities: { tools: {} },
-	});
-	server.setRequestHandler(ListToolsRequestSchema, () => tools);
-	server.setRequestHandler(CallToolRequestSchema, async request => {
-		let args = request.params.arguments ?? {};
-		if (local && request.params.name === "upload_image_file") {
-			try {
-				if (typeof args.path !== "string" || !args.path) throw new Error("Give an image path.");
-				return await api.invoke(
-					"upload_investigation_image",
-					await imageFileArguments(root!, args.path),
-				);
-			} catch (error) {
-				let text = error instanceof Error ? error.message : "Image upload failed.";
-				return { isError: true, content: [{ type: "text", text }] };
+		let server = new Server({ name: "chopin-implementation", version: "0.1.0" }, {
+			capabilities: { tools: {} },
+		});
+		server.setRequestHandler(ListToolsRequestSchema, () => tools);
+		server.setRequestHandler(CallToolRequestSchema, async request => {
+			let args = request.params.arguments ?? {};
+			if (local && request.params.name === "upload_image_file") {
+				try {
+					if (typeof args.path !== "string" || !args.path) throw new Error("Give an image path.");
+					return await api.invoke(
+						"upload_investigation_image",
+						await imageFileArguments(root!, args.path),
+					);
+				} catch (error) {
+					let text = error instanceof Error ? error.message : "Image upload failed.";
+					return { isError: true, content: [{ type: "text", text }] };
+				}
 			}
-		}
-		if (!names.has(request.params.name)) {
+			if (!names.has(request.params.name)) {
 				return {
 					isError: true,
 					content: [{ type: "text", text: "Tool unavailable for this run." }],
 				};
-		}
-		return api.invoke(request.params.name, args);
-	});
-	return server;
+			}
+			return api.invoke(request.params.name, args);
+		});
+		return server;
 	};
 }
 

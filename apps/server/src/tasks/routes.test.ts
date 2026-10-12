@@ -32,7 +32,7 @@ async function prepare(plan: Plan.Plan) {
 }
 
 async function setup(
-	options: { liveBuild?: boolean; settleSpikes?: (documentId: string) => Promise<void> } = {},
+	options: { liveBuild?: boolean } = {},
 ) {
 	let context = await openPlan("# Launcher plan\n");
 	let github = {
@@ -96,7 +96,6 @@ async function setup(
 		changed: () => {},
 		context: async () => ({ source: "# Launcher plan", revision: 0 }),
 		implementations: () => implementations,
-		settleSpikes: options.settleSpikes,
 	});
 	implementations = registerImplementationRoutes(router, auth, {
 		liveBuild: options.liveBuild ?? false,
@@ -182,26 +181,6 @@ async function tool(
 	let result = (await response.json()).result;
 	return result.isError ? result : JSON.parse(result.content[0].text);
 }
-
-test("a build claim waits for the document's spike results to land", async () => {
-	let seen: string[] = [];
-	let context: Awaited<ReturnType<typeof setup>> = await setup({
-		settleSpikes: async documentId => {
-			await new Promise(resolve => setTimeout(resolve, 10));
-			seen.push(`${documentId}:${context.plan.builds.at(-1)?.state}`);
-		},
-	});
-	let connection = await paired(context);
-	let built = await (await context.call(context.path, {
-		planRevision: 0,
-		graphVersion: 1,
-		graphRevision: 1,
-	})).json();
-	let claim = await tool(context, connection.token, "claim_implementation_build", { id: built.id });
-	expect(claim.build.id).toBe(built.id);
-	expect(seen).toEqual([`${context.plan.id}:queued`]);
-	await Plan.close(context.plan);
-});
 
 test("a paired workspace claims a browser build once and reports through run-scoped MCP", async () => {
 	let context = await setup();

@@ -62,6 +62,11 @@ export type Config = {
 	/** Let the editor's local agent prototype uncertain passages before the first build. */
 	liveSpikes?: boolean;
 	/**
+	 * LIVE_SPIKES_REGEX_JUDGE=on: without Jev, judge passages by explicit uncertainty words.
+	 * Off by default, so a deployment without Jev starts no spikes.
+	 */
+	liveSpikesRegexJudge?: boolean;
+	/**
 	 * Origin of a running Vite, when developing.
 	 *
 	 * Set, and everything that is not the socket is forwarded there; unset, and
@@ -157,6 +162,7 @@ export function load(): Config {
 	let plannerVisuals = process.env.PLANNER_VISUALS === "on" && agent;
 	let liveBuild = process.env.LIVE_BUILD === "on";
 	let liveSpikes = process.env.LIVE_SPIKES === "on";
+	let liveSpikesRegexJudge = liveSpikes && process.env.LIVE_SPIKES_REGEX_JUDGE === "on";
 	let conversationPlanModel = process.env.JEV_MODEL || "jev-latest";
 	let timeoutRaw = process.env.JEV_TIMEOUT_MS;
 	let conversationPlanTimeoutMs = timeoutRaw === undefined ? 30_000 : Number(timeoutRaw);
@@ -225,6 +231,7 @@ export function load(): Config {
 		plannerVisuals,
 		liveBuild,
 		liveSpikes,
+		liveSpikesRegexJudge,
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
 		auth: loadAuth(serverPort, selection.host),

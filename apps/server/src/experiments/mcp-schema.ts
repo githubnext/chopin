@@ -11,8 +11,11 @@ export function connectorSchemas(
 		return {
 			read_experiment: z.object({}).strict(),
 			read_investigation: z.object({}).strict(),
-			submit_experiment_result: z.object({ result: resultSchema }).strict(),
-			submit_investigation_result: z.object({ result: resultSchema }).strict(),
+			// A spike reports only through submit_spike_result, never as an investigation.
+			...(spike ? {} : {
+				submit_experiment_result: z.object({ result: resultSchema }).strict(),
+				submit_investigation_result: z.object({ result: resultSchema }).strict(),
+			}),
 			...(spike
 				? {
 					upload_investigation_image: z.object({

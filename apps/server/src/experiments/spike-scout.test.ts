@@ -47,8 +47,12 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 			dismissed.push(id);
 		},
 		refresh: async () => {},
+		// Test sources are comma-separated digests.
+		digests: source => new Set(source.split(",").filter(Boolean)),
 	};
+	let clock = { now: 0 };
 	let scout = new SpikeScout({
+		now: () => clock.now,
 		host,
 		judge: async blocks => {
 			judged.push(blocks.map(item => item.digest));
@@ -60,8 +64,17 @@ function harness(snapshot: Partial<SpikeSnapshot> = {}, verdict?: SpikeJudge) {
 			return () => {};
 		},
 	});
+	// Unless a test says otherwise, each edit changed every passage now in the document.
+	let schedule = scout.schedule.bind(scout);
+	scout.schedule = target =>
+		schedule({
+			previousSource: "",
+			source: state.blocks.map(item => item.digest).join(","),
+			...target,
+		});
 	return {
 		scout,
+		clock,
 		state,
 		started,
 		dismissed,
@@ -280,4 +293,62 @@ test("passages waiting at the active-spike cap are judged when a spike frees cap
 	await h.scout.refresh("D");
 	expect(h.started).toEqual(["a", "b", "c", "d", "e"]);
 	expect(asked).toHaveLength(3);
+});
+
+test("a scan judges only the passages the scheduling editor changed", async () => {
+	let h = harness({ blocks: [block("a"), block("b"), block("c")] });
+	// Ana wrote a and b earlier; Ben then changes c alone.
+	h.scout.schedule({ channelId: "D", editor: "U_ana", previousSource: "", source: "a,b" });
+	h.scout.schedule({ channelId: "D", editor: "U_ben", previousSource: "a,b", source: "a,b,c" });
+	h.timers.at(-1)!();
+	await h.scout.check("D");
+	// Ben's laptop runs only Ben's passage; Ana's wait for Ana's next edit.
+	expect(h.judged).toEqual([["c"]]);
+	expect(h.started).toEqual(["c"]);
+	h.scout.schedule({ channelId: "D", editor: "U_ana", previousSource: "a,b,c", source: "a,b,c" });
+	await h.scout.check("D");
+	expect(h.judged).toEqual([["c"], ["a", "b"]]);
+});
+
+test("spikes pause once a document or an editor reaches its hourly cap", async () => {
+	let digests = Array.from({ length: 9 }, (_, index) => `p${index}`);
+	let h = harness({ blocks: digests.map(digest => block(digest)) });
+	for (let round = 0; round < 3; round++) {
+		h.records.splice(0, h.records.length);
+		h.scout.schedule({ channelId: "D", editor: "U_1" });
+		await h.scout.check("D");
+	}
+	expect(h.started).toHaveLength(6);
+	// An hour later the document may spike again.
+	h.clock.now = 60 * 60_000 + 1;
+	h.records.splice(0, h.records.length);
+	h.scout.schedule({ channelId: "D", editor: "U_1" });
+	await h.scout.check("D");
+	expect(h.started.length).toBeGreaterThan(6);
+});
+
+test("without a judge nothing is spiked", async () => {
+	let started: string[] = [];
+	let scout = new SpikeScout({
+		host: {
+			snapshot: async () => ({
+				repositoryId: "R_1",
+				live: false,
+				blocks: [block("a")],
+				callouts: new Set<string>(),
+			}),
+			spikes: async () => [],
+			connection: async () => ({ id: "C_1", login: "maggie" }),
+			start: async (_id, input) => {
+				started.push(input.block.digest);
+			},
+			dismiss: async () => {},
+			refresh: async () => {},
+			digests: source => new Set(source.split(",").filter(Boolean)),
+		},
+		after: () => () => {},
+	});
+	scout.schedule({ channelId: "D", editor: "U_1", previousSource: "", source: "a" });
+	await scout.check("D");
+	expect(started).toEqual([]);
 });

@@ -47,6 +47,8 @@ export const spikeSchema = z.object({
 	/** Digest of the callout block as last rendered; a different block holds human edits. */
 	calloutDigest: z.string().max(100).optional(),
 	dismissed: z.boolean().optional(),
+	/** When the local agent claimed it; a spike running 20 minutes past this is interrupted. */
+	startedAt: z.number().int().nonnegative().optional(),
 }).strict();
 export type Spike = z.infer<typeof spikeSchema>;
 

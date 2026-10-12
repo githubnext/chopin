@@ -6,14 +6,14 @@ import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import { cardWithProse } from "../questions/prose.test-fixtures";
 import * as Questions from "../questions/service";
-import { pickBuild, queueBuild } from "../tasks/builds";
+import { queueBuild, reportBuild } from "../tasks/builds";
 import { announceImplementation } from "../tasks/notifications";
-import { claimImplementation, implementationGraphs } from "../tasks/plan-graphs";
+import { implementationGraphs } from "../tasks/plan-graphs";
 import { openPlan } from "../testing/plan";
 import { Connections } from "./connections";
 import { Experiments } from "./service";
 import { spikeHost } from "./spike-host";
-import { calloutDigest, callouts, placeSpikeCallout } from "./spike-placement";
+import { calloutDigest, calloutIds, callouts, placeSpikeCallout } from "./spike-placement";
 import { SpikeScout } from "./spike-scout";
 import { spikeCallout } from "./spikes";
 
@@ -195,7 +195,7 @@ test("a spike result deferred by a first build's lock lands once the lock releas
 	}
 });
 
-test("a spike that finishes while a first build is queued lands before the build claims", async () => {
+test("a spike that finishes while a first build is queued waits for the build, never moving its graph", async () => {
 	let errors = spyOn(console, "error").mockImplementation(() => {});
 	let context = await hosted();
 	let scout = new SpikeScout({ host: context.host });
@@ -246,47 +246,96 @@ test("a spike that finishes while a first build is queued lands before the build
 				provenance: { environment: "test", checks: [], limitations: [] },
 			};
 		});
-		// What the build claim waits for.
-		await scout.settle(plan.id);
-		expect(room.project(plan.document)).toContain('type="tip"');
+		let revision = plan.revision;
+		await scout.refresh(plan.id);
+		// The approved graph stays bound to what people approved; the finding waits.
+		expect(room.project(plan.document)).not.toContain("Two columns read better");
+		expect(plan.revision).toBe(revision);
+		expect(plan.graph?.versions.at(-1)?.planRevision).toBe(revision);
+		expect(plan.builds.at(-1)?.planRevision).toBe(revision);
+		expect(queued.state).toBe("queued");
+
+		// Once the build ends, the result lands.
+		await reportBuild(plan, "U_test", "laptop", queued.id, { state: "failed" });
+		await scout.refresh(plan.id);
 		expect(room.project(plan.document)).toContain("Two columns read better");
-		expect((await context.service.store.get(value.id))?.spike?.rendered).toBe("completed");
-		expect(plan.builds.at(-1)?.planRevision).toBe(plan.revision);
-		expect(plan.graph?.versions.at(-1)?.planRevision).toBe(plan.revision);
-
-		let picked = await pickBuild(plan, "U_test", "laptop");
-		expect(picked?.planRevision).toBe(plan.revision);
-		let claim = await claimImplementation(plan, {
-			planRevision: picked!.planRevision,
-			graphRevision: picked!.graphRevision,
-			run: {
-				id: queued.id,
-				user: "U_test",
-				client: { name: "chopin-acp", version: "0.1.0" },
-				session: "session",
-				graphVersion: picked!.graphVersion,
-				graphRevision: picked!.graphRevision,
-				planRevision: picked!.planRevision,
-				repository: checkout.repository,
-				branch: `chopin/implement-${queued.id.slice(0, 8)}`,
-				commit: checkout.commit,
-				startedAt: new Date().toISOString(),
-			},
-		});
-		expect(claim.kind).toBe("started");
-
-		// Once the build runs, results wait for the lock to release again.
-		await context.service.mutate(value.id, item => {
-			item.result!.report = "Changed after the build started.\n";
-		});
-		await context.service.mutate(value.id, item => {
-			item.state = "failed";
-		});
-		await scout.settle(plan.id);
-		expect(room.project(plan.document)).not.toContain('type="warning"');
 	} finally {
 		scout.close();
 		errors.mockRestore();
 		await Service.close(plan);
+	}
+});
+
+test("a spike's callout moved inside a list still counts as present", () => {
+	let callout = {
+		type: "mdxJsxFlowElement",
+		name: "Callout",
+		attributes: [{ type: "mdxJsxAttribute", name: "id", value: "01J0000000000000000000NEST" }],
+		children: [],
+	};
+	let tree = [{
+		type: "list",
+		ordered: false,
+		spread: false,
+		children: [{ type: "listItem", spread: false, children: [callout] }],
+	}] as never;
+	expect(calloutIds(tree)).toEqual(new Set(["01J0000000000000000000NEST"]));
+});
+
+test("a callout placement that throws gives its spike slot back", async () => {
+	let context = await openPlan(`# Plan\n\n${PASSAGE}\n`);
+	let service = new Experiments(context.storage.experiments, () => context.lease);
+	let host = spikeHost({
+		service,
+		connections: new Connections(),
+		withPlan: async () => {
+			throw new Error("document closing");
+		},
+	});
+	try {
+		await expect(host.start(context.plan.id, {
+			owner: "U_test",
+			connection: { id: "gone", login: "maggie" },
+			block: { digest: room.digests(context.plan.document)[1], text: PASSAGE },
+		})).rejects.toThrow("document closing");
+		let [value] = await service.store.list(context.plan.id);
+		expect(value.state).toBe("cancelled");
+		expect(value.spike?.dismissed).toBe(true);
+	} finally {
+		await Service.close(context.plan);
+	}
+});
+
+test("a spike runs only on a laptop whose owner allowed automatic work at pairing", async () => {
+	let connections = new Connections();
+	let pair = (autoRun: boolean) => {
+		let pending = connections.create({
+			repository: "owner/repository",
+			commit: "a".repeat(40),
+			label: autoRun ? "Allowed" : "Asked",
+		});
+		return connections.approve(
+			pending.id,
+			{ id: "U_test", login: "maggie", sessionId: "session" },
+			"R_test",
+			autoRun,
+		);
+	};
+	let context = await openPlan("# Plan\n");
+	let host = spikeHost({
+		service: new Experiments(context.storage.experiments, () => context.lease),
+		connections,
+		withPlan: (_id, action) => action(context.plan),
+	});
+	try {
+		pair(false);
+		expect(await host.connection("R_test", "U_test", context.plan.id)).toBeUndefined();
+		let allowed = pair(true);
+		expect(await host.connection("R_test", "U_test", context.plan.id)).toEqual({
+			id: allowed.id,
+			login: "maggie",
+		});
+	} finally {
+		await Service.close(context.plan);
 	}
 });

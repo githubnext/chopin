@@ -1,4 +1,4 @@
-import { locksEditing, queuedOnly, restoreBuilds, restoreLive } from "../tasks/builds";
+import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
 import { announceImplementation, implementationStatus } from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
@@ -129,6 +129,8 @@ export type DocumentTarget = {
 	sourceHash: string;
 	/** The person whose update this was, when one person's edit caused it. */
 	editor?: string;
+	/** With `editor`: the source before this update, so a reader can tell what they changed. */
+	previousSource?: string;
 };
 
 /** Durable MCP context for a document created through the hosted surface. */
@@ -894,7 +896,8 @@ async function commitHosted(
 		return;
 	}
 	try {
-		let sourceChanged = captured.source !== durable.committedSource;
+		let previousSource = durable.committedSource;
+		let sourceChanged = captured.source !== previousSource;
 		let wasInSync = durable.committedSource === plan.live?.baseSource;
 		let result = await durable.storage.collaboration.commit({
 			channelId: durable.channelId,
@@ -948,7 +951,7 @@ async function commitHosted(
 					revision: captured.revision,
 					source: captured.source,
 					sourceHash: captured.sourceHash,
-					...(durable.editor ? { editor: durable.editor } : {}),
+					...(durable.editor ? { editor: durable.editor, previousSource } : {}),
 				});
 			} catch (err) {
 				console.warn(`[plan] could not schedule derived work for ${durable.channelId}:`, err);
@@ -1748,16 +1751,9 @@ export async function publishStaged(
 	roomId: string,
 	candidate: Plan,
 	mutation?: room.Mutation,
-	options?: {
-		notifyDocumentPersisted?: boolean;
-		agent?: boolean;
-		/** A callout-only edit the caller carries a queued first build across. */
-		queuedBuild?: boolean;
-	},
+	options?: { notifyDocumentPersisted?: boolean; agent?: boolean },
 ): Promise<void> {
-	if (implementationActive(plan) && !(options?.queuedBuild && queuedOnly(plan))) {
-		throw new ImplementationActiveError();
-	}
+	if (implementationActive(plan)) throw new ImplementationActiveError();
 	let source = room.project(candidate.document);
 	if (!mutation && source !== room.project(plan.document)) {
 		throw new Error("staged document changed without a mutation");

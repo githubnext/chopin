@@ -1,5 +1,5 @@
-import { readFile, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 /** Chopin hosts images of at most 1 MiB. */
 export const MAX_IMAGE_FILE_BYTES = 1024 * 1024;
@@ -30,8 +30,16 @@ export async function imageFileArguments(
 		throw new Error(`No file at ${path} in this worktree.`);
 	}
 	let inside = relative(base, target);
-	if (!inside || inside.startsWith("..") || isAbsolute(inside)) {
+	// `..` as a whole first segment leaves the worktree; a name such as `..shot.png` does not.
+	if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
 		throw new Error("Upload only image files inside this run's worktree.");
+	}
+	// Check the size before reading, so a huge file is never loaded into memory.
+	let info = await stat(target);
+	if (!info.isFile()) throw new Error(`${path} is not a file.`);
+	if (info.size > MAX_IMAGE_FILE_BYTES) {
+		let size = Math.ceil(info.size / 1024);
+		throw new Error(`${path} is ${size} KiB; images are limited to 1 MiB. ${TOO_LARGE}`);
 	}
 	let bytes = new Uint8Array(await readFile(target));
 	let type = mimeType(bytes);
