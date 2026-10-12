@@ -3,16 +3,28 @@ import { InvestigationCard, SidecarCard } from "@chopin/editor";
 import { ExperimentView } from "@chopin/experiment/react";
 import { StaticPlanEditor } from "@chopin/editor/static";
 import type { ExperimentStore } from "./store";
-import { EvidenceActions } from "./evidence";
+import { EvidenceActions, ItemDecisions } from "./evidence";
 import type { InvestigationState, PublishedInvestigation } from "@chopin/experiment/records";
 
 const ACTIVE: InvestigationState[] = ["queued", "running", "publishing"];
 const SETTLED: InvestigationState[] = ["failed", "cancelled", "interrupted"];
 
-/** Whether a document may drop this investigation's card: only once its work is not in flight. */
+/** The freshest state this browser knows, from the list or a loaded record. */
+function latest(store: ExperimentStore, id: string) {
+	let summary = store.items.find(item => item.id === id);
+	let value = store.get(id);
+	if (!summary) return value;
+	return value && value.revision > summary.revision ? value : summary;
+}
+
+/**
+ * Whether a document may drop this investigation's card. Only stopped or failed work can go:
+ * a ready card is withdrawn first, and a completed one stays as the result's place in the
+ * document. The server applies the same rule.
+ */
 export function removableInvestigation(store: ExperimentStore, id: string): boolean {
-	let state = store.items.find(item => item.id === id)?.state ?? store.get(id)?.state;
-	return !!state && !ACTIVE.includes(state);
+	let state = latest(store, id)?.state;
+	return !!state && SETTLED.includes(state);
 }
 
 /** The inline card for one investigation, placed in the document by its id. */
@@ -30,6 +42,7 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 	let [error, setError] = useState("");
 	let summary = store.items.find(item => item.id === id);
 	let item = store.get(id);
+	let current = latest(store, id);
 	let revision = summary?.revision;
 	useEffect(() => {
 		if (!store.get(id) || revision !== undefined && store.get(id)!.revision < revision) {
@@ -50,8 +63,8 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 			setBusy(false);
 		}
 	}
-	let state = summary?.state ?? item?.state;
-	let brief = summary?.brief ?? item?.brief;
+	let state = current?.state;
+	let brief = current?.brief;
 	if (!state || !brief) {
 		return (
 			<SidecarCard label="Investigation">
@@ -69,7 +82,16 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 			canEdit={canEdit && (stoppable || !locked)}
 			error={error}
 			notice={needsAgent && <AgentHint />}
-			onRemove={canEdit && !ACTIVE.includes(state) ? onRemove : undefined}
+			onRemove={canEdit && state === "requested"
+				? () =>
+					void act(async () => {
+						// Withdraw the record before its card leaves, so nothing is left unplaced.
+						await store.action(id, "cancel", {});
+						onRemove();
+					})
+				: canEdit && SETTLED.includes(state)
+				? onRemove
+				: undefined}
 			onRetry={canEdit && SETTLED.includes(state)
 				? () => void act(() => store.action(id, "retry", {}))
 				: undefined}
@@ -79,7 +101,7 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 			onStop={canEdit && stoppable
 				? () => void act(() => store.action(id, "cancel", {}))
 				: undefined}
-			progress={summary?.progress ?? item?.progress}
+			progress={current?.progress}
 			state={state}
 		>
 			{item?.result && (
@@ -113,8 +135,12 @@ function Result({ item, store, busy, canEdit, locked, act }: {
 	return (
 		<div className="flex min-w-0 flex-col gap-3">
 			<details>
-				<summary className="text-sm">Report</summary>
-				<StaticPlanEditor source={result.report} />
+				<summary className="cursor-pointer text-sm text-text-secondary hover:text-text-primary">
+					Report
+				</summary>
+				<div className="pt-2">
+					<StaticPlanEditor source={result.report} />
+				</div>
 			</details>
 			{result.views.map(view => (
 				<div key={view.key} className="flex flex-col gap-3">
@@ -163,6 +189,7 @@ function Result({ item, store, busy, canEdit, locked, act }: {
 			{result.provenance.limitations.map((value, index) => (
 				<p key={index} className="m-0 text-sm">{value}</p>
 			))}
+			<ItemDecisions store={store} item={item} canEdit={canEdit && !locked} />
 			{result.evidence.map(value => (
 				<details key={value.key}>
 					<summary className="text-sm">{value.title}</summary>

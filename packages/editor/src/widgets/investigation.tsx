@@ -98,13 +98,6 @@ export function InvestigationCard(
 		run?.();
 		card?.focus({ preventScroll: true });
 	};
-	let action = footer === "run"
-		? { label: "Run", run: onRun, tone: "btn-primary" }
-		: footer === "retry"
-		? { label: "Retry", run: onRetry, tone: "btn-outline" }
-		: footer === "stop"
-		? { label: "Stop", run: onStop, tone: "btn-outline" }
-		: undefined;
 	return (
 		<div className="plan-research-tracked">
 			<SidecarCard
@@ -157,17 +150,37 @@ export function InvestigationCard(
 				</Fold>
 				<Fold open={!!notice}>{notice}</Fold>
 				{children}
-				<Fold open={!!action}>
+				<Fold open={!!footer}>
 					<div className="plan-research-footer">
 						<Swap id={footer ?? "none"}>
-							{action && (
+							{footer === "run" && (
 								<button
-									className={`btn btn-sm ${action.tone}`}
+									className="btn btn-sm btn-primary"
 									disabled={busy || !canEdit}
-									onClick={event => settle(event, action.run)}
+									onClick={event => settle(event, onRun)}
 									type="button"
 								>
-									{action.label}
+									Run
+								</button>
+							)}
+							{footer === "retry" && (
+								<button
+									className="btn btn-sm btn-outline"
+									disabled={busy || !canEdit}
+									onClick={event => settle(event, onRetry)}
+									type="button"
+								>
+									Retry
+								</button>
+							)}
+							{footer === "stop" && (
+								<button
+									className="btn btn-sm btn-outline"
+									disabled={busy || !canEdit}
+									onClick={event => settle(event, onStop)}
+									type="button"
+								>
+									Stop
 								</button>
 							)}
 						</Swap>

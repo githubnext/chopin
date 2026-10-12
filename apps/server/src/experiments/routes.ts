@@ -249,9 +249,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
 		let value = await service.store.get(params.experiment);
 		if (!value || value.documentId !== params.id) fail("not-found");
-		if ((value.input?.authorizer ?? value.requester) !== session.user.id) {
-			fail("connection-forbidden");
-		}
+		// Withdrawing a ready card runs nothing, so any writer may; running work is its runner's.
+		if (
+			value.state !== "requested"
+			&& (value.input?.authorizer ?? value.requester) !== session.user.id
+		) fail("connection-forbidden");
 		return json(
 			publicInvestigation(await service.stop(value.id, "cancelled", "Cancelled by owner.")),
 		);
