@@ -1411,3 +1411,19 @@ test("a first build queued but not yet claimed still lists its tasks", async () 
 		await Plan.close(context.plan);
 	}
 });
+
+test("a connector that disconnects fails its running rebuild at once, without going live again", async () => {
+	let { context, connection } = await rebuilding();
+	try {
+		let live = structuredClone(context.plan.live);
+		await tool(context, connection.token, "disconnect_workspace", {});
+		expect(context.plan.builds.at(-1)).toMatchObject({
+			kind: "rebuild",
+			state: "failed",
+			error: "Your local agent disconnected.",
+		});
+		expect(context.plan.live?.baseRevision).toBe(live?.baseRevision);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});

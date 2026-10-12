@@ -632,7 +632,12 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 		let act = context.canEdit && context.connected;
 		let blocked = act ? blockerReason(snapshot, context.unanswered) : undefined;
 		if (sync.reason === "failed") {
-			return { kind: "failed", tip: "The last build didn’t finish", retry: act, blocked };
+			return {
+				kind: "failed",
+				tip: endedReason(snapshot.live?.rebuild) ?? "The last build didn’t finish",
+				retry: act,
+				blocked,
+			};
 		}
 		let build = !context.live && act;
 		let changes = Math.max(snapshot.live!.changes ?? 1, 1);
@@ -680,7 +685,8 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 	if (phase.kind === "stopped") {
 		return {
 			kind: "stopped",
-			tip: "A task is blocked. Open Build to return it for changes.",
+			tip: endedReason(snapshot.build)
+				?? "A task is blocked. Open Build to return it for changes.",
 			retry: false,
 		};
 	}
@@ -699,7 +705,11 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 		};
 	}
 	if (phase.kind === "failed") {
-		return { kind: "stopped", tip: "The build stopped. Your agent may not be running.", retry };
+		return {
+			kind: "stopped",
+			tip: endedReason(snapshot.build) ?? "The build stopped. Your agent may not be running.",
+			retry,
+		};
 	}
 	return { kind: "plan", blocked: planBlocker(snapshot, context) };
 }

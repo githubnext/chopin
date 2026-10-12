@@ -53,6 +53,8 @@ export type BuildPlan = {
 	rebuild: () => void;
 	/** Why the last Build or Retry of changes was refused. */
 	rebuildError?: string;
+	/** The last Build or Retry of changes found no local agent; Build says how to start one. */
+	rebuildNeedsAgent: boolean;
 	rebuilding: boolean;
 	reload: () => void;
 };
@@ -97,6 +99,7 @@ export function useBuildPlan(
 	let [state, dispatch] = useReducer(advanceFirstBuild, { stage: "idle" } as FirstBuild);
 	let [rebuilding, setRebuilding] = useState(false);
 	let [rebuildError, setRebuildError] = useState<string>();
+	let [rebuildNeedsAgent, setRebuildNeedsAgent] = useState(false);
 	let draftId = useRef<string>(undefined);
 	let endpoint = implementationEndpoint(room);
 	let reload = () => setRefresh(value => value + 1);
@@ -243,7 +246,10 @@ export function useBuildPlan(
 		: { kind: "plan" as const, blocked: "A child document is never built" };
 	// A refusal stands until the next press, or until a build of the changes is under way or done.
 	useEffect(() => {
-		if (look.kind === "rebuilding" || look.kind === "built") setRebuildError(undefined);
+		if (look.kind === "rebuilding" || look.kind === "built") {
+			setRebuildError(undefined);
+			setRebuildNeedsAgent(false);
+		}
 	}, [look.kind]);
 	return {
 		snapshot,
@@ -260,7 +266,9 @@ export function useBuildPlan(
 			if (rebuilding) return;
 			setRebuilding(true);
 			setRebuildError(undefined);
+			setRebuildNeedsAgent(false);
 			rebuildChanges(room).then(reload, error => {
+				setRebuildNeedsAgent(error instanceof ApiError && error.message === "no-workspace");
 				setRebuildError(
 					error instanceof ApiError && error.message === "no-workspace"
 						? "Start your local agent, then build"
@@ -272,6 +280,7 @@ export function useBuildPlan(
 			}).finally(() => setRebuilding(false));
 		},
 		rebuildError,
+		rebuildNeedsAgent,
 		rebuilding,
 		reload,
 	};
@@ -485,22 +494,22 @@ export function BuildPlanButton(
 				{action && (
 					<>
 						{/* Stays focusable while blocked or busy; aria-disabled and aria-busy say why. */}
-						<button
+					<button
 							aria-busy={busy || undefined}
 							aria-describedby={blocked ? actionReason : undefined}
 							aria-disabled={blocked || busy ? true : undefined}
-							className="btn btn-compact btn-outline build-capsule-action"
+						className="btn btn-compact btn-outline build-capsule-action"
 							data-tooltip={blocked}
 							data-tooltip-detail={blocked ? "" : undefined}
 							data-tooltip-verbatim={blocked ? "" : undefined}
-							onClick={() => {
+						onClick={() => {
 								if (blocked) onExplain?.(blocked);
 								else if (!busy) action.run();
-							}}
-							type="button"
-						>
-							{action.name}
-						</button>
+						}}
+						type="button"
+					>
+					{action.name}
+					</button>
 						{blocked && <span className="sr-only" id={actionReason}>{blocked}</span>}
 					</>
 				)}

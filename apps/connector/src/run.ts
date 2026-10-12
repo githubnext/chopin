@@ -179,22 +179,22 @@ export async function runWork(
 				if (remembered) return remembered;
 				latestProgress = "Waiting for permission in the owner's terminal";
 				if (!process.stdin.isTTY) return undefined;
-					let [heading, ...detail] = describePermission(request);
-					output.say(
-						"",
-						`  ${output.style.bold(`Allow ${heading}?`)}`,
-						...detail.map(line => `    ${line}`),
-						...request.options.map((option, index) => `  ${index + 1}. ${option.name}`),
-					);
+				let [heading, ...detail] = describePermission(request);
+				output.say(
+					"",
+					`  ${output.style.bold(`Allow ${heading}?`)}`,
+					...detail.map(line => `    ${line}`),
+					...request.options.map((option, index) => `  ${index + 1}. ${option.name}`),
+				);
 				let answer = await ask("  Select option (blank cancels): ", {
 					input: process.stdin,
 					output: process.stdout,
-						signal: abort.signal,
+					signal: abort.signal,
 					interrupt: options.interrupt ?? (() => abort.abort()),
-					});
-					let chosen = request.options[Number(answer) - 1]?.optionId;
-					permissions.chose(request, chosen);
-					return chosen;
+				});
+				let chosen = request.options[Number(answer) - 1]?.optionId;
+				permissions.chose(request, chosen);
+				return chosen;
 			},
 			stderr(text) {
 				agentTail = [...agentTail, ...text.split("\n").filter(Boolean)].slice(-10);

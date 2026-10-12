@@ -352,7 +352,13 @@ export function BuildView(
 					</form>
 				)}
 				{build.rebuildError && (look.kind === "stale" || look.kind === "failed") && (
-					<p className="m-0 mt-2 text-sm text-destructive-ink">{build.rebuildError}</p>
+					build.rebuildNeedsAgent
+						? (
+							<div className="mt-3">
+								<LocalAgentNote action={look.kind === "failed" ? "Retry" : "Build"} />
+							</div>
+						)
+						: <p className="m-0 mt-2 text-sm text-destructive-ink">{build.rebuildError}</p>
 				)}
 				{actionError && (
 					<p className="m-0 mt-2 text-sm text-destructive-ink" role="alert">{actionError}</p>
