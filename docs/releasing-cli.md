@@ -9,11 +9,56 @@ user side.
 
 ## One-time setup
 
-A repository administrator must create the `chopin-cli-release` environment in
-**Settings → Environments**, add the people who may approve a release as
-**Required reviewers**, and preferably limit its deployment tags to `cli-v*`.
-Without that environment and its reviewers, nothing stops a pushed tag from
-publishing on its own.
+The publish job uses the `chopin-cli-release` environment, and its required
+reviewers are the release's human approval. GitHub creates an environment that a
+job names but that does not exist, with no protection, so the workflow's
+`preflight` job checks the environment before publish runs and fails the release
+unless:
+
+- the environment exists;
+- it has a **Required reviewers** rule with at least one reviewer; and
+- its **Deployment branches and tags** are limited to **Selected branches and
+  tags**, and the only rule is the tag pattern `cli-v*`.
+
+The preflight reads these settings with the workflow's own `GITHUB_TOKEN`; the
+job needs only `actions: read`, so no extra secret is involved.
+
+A repository administrator sets the environment up once, in
+**Settings → Environments** (`https://github.com/githubnext/chopin/settings/environments`)
+or with `gh api`:
+
+1. Look up the numeric id of each reviewer, a user or a team:
+
+   ```sh
+   gh api users/<login> --jq .id
+   gh api orgs/githubnext/teams/<team-slug> --jq .id
+   ```
+2. Create the environment with its reviewers (up to six; `"type": "Team"` for a
+   team), limited to selected branches and tags:
+
+   ```sh
+   gh api --method PUT repos/githubnext/chopin/environments/chopin-cli-release --input - <<'EOF'
+   {
+     "reviewers": [{ "type": "User", "id": <reviewer-id> }],
+     "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true }
+   }
+   EOF
+   ```
+3. Allow only `cli-v*` tags to deploy to it:
+
+   ```sh
+   gh api --method POST repos/githubnext/chopin/environments/chopin-cli-release/deployment-branch-policies \
+     -f name='cli-v*' -f type=tag
+   ```
+4. Check the result. The environment should list a `required_reviewers` rule,
+   and the policies only `cli-v*` of type `tag`:
+
+   ```sh
+   gh api repos/githubnext/chopin/environments/chopin-cli-release \
+     --jq '{protection_rules: [.protection_rules[] | {type, reviewers: [.reviewers[]?.reviewer.login]}], deployment_branch_policy}'
+   gh api repos/githubnext/chopin/environments/chopin-cli-release/deployment-branch-policies \
+     --jq '[.branch_policies[] | {name, type}]'
+   ```
 
 ## Cut a release
 
@@ -33,8 +78,10 @@ publishing on its own.
    `chopin-darwin-x64`, `chopin-darwin-arm64` and `chopin-windows-x64.exe`,
    writes `checksums.txt`, and scans the Windows binary with Microsoft Defender
    on updated signatures. A detection fails the release.
-5. The publish job then waits for approval of the `chopin-cli-release`
-   environment. A required reviewer approves it from the workflow run.
+5. A `preflight` job checks the `chopin-cli-release` environment as described
+   in [One-time setup](#one-time-setup), and the publish job then waits for
+   approval of that environment. A required reviewer approves it from the
+   workflow run.
 6. Once approved, it attests every binary's build provenance, generates SPDX
    and CycloneDX SBOMs (kept as workflow artifacts and checked for secrets),
    and creates the `cli-v0.2.0` release with the binaries, `checksums.txt`,

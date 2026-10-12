@@ -8,7 +8,13 @@ import { binaryName, TARGETS } from "./build-binaries";
  */
 let path = join(import.meta.dir, "../../../.github/workflows/release-cli.yml");
 
-type Step = { name?: string; uses?: string; run?: string; with?: Record<string, unknown> };
+type Step = {
+	name?: string;
+	uses?: string;
+	run?: string;
+	with?: Record<string, unknown>;
+	env?: Record<string, string>;
+};
 type Job = {
 	needs?: string | string[];
 	if?: string;
@@ -28,7 +34,7 @@ type Workflow = {
 
 let source = await Bun.file(path).text();
 let workflow = Bun.YAML.parse(source) as Workflow;
-let { build, defender, publish } = workflow.jobs;
+let { build, defender, preflight, publish } = workflow.jobs;
 let script = (job: Job) => job.steps.map(step => step.run ?? "").join("\n");
 let uses = (job: Job, action: string) =>
 	job.steps.filter(step => step.uses?.startsWith(`${action}@`));
@@ -81,10 +87,17 @@ describe("the CLI release workflow", () => {
 		expect(scan).toContain("-Scan -ScanType 3 -File");
 	});
 
-	test("publishes only from a tag, after the scan and a person's approval", () => {
-		expect(publish.needs).toEqual(["build", "defender"]);
+	test("publishes only from a tag, after the scan, the preflight and a person's approval", () => {
+		expect(publish.needs).toEqual(["build", "defender", "preflight"]);
 		expect(publish.if).toBe("github.event_name == 'push'");
 		expect(publish.environment).toBe("chopin-cli-release");
+	});
+
+	test("checks the approval environment before publishing, with read access only", () => {
+		expect(preflight.if).toBe("github.event_name == 'push'");
+		expect(preflight.needs).toBeUndefined();
+		expect(preflight.permissions).toEqual({ actions: "read" });
+		expect(preflight.steps.every(step => !step.uses)).toBe(true);
 	});
 
 	test("attests every binary, and keeps audited SBOMs as workflow artifacts", () => {
@@ -108,6 +121,142 @@ describe("the CLI release workflow", () => {
 		for (let target of TARGETS) expect(create).toContain(`release/${binaryName(target)}`);
 		for (let file of ["checksums.txt", "install.sh", "install.ps1"]) {
 			expect(create).toContain(`release/${file}`);
+		}
+	});
+});
+
+/**
+ * GitHub creates an environment that a job names but that does not exist, with no protection, so
+ * the preflight job must refuse a missing or unprotected chopin-cli-release. Its script runs here
+ * against a fake API that answers as GitHub does for the environment as it is configured.
+ */
+describe("the release preflight", () => {
+	let environment = {
+		name: "chopin-cli-release",
+		can_admins_bypass: true,
+		deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
+		protection_rules: [
+			{
+				type: "required_reviewers",
+				prevent_self_review: false,
+				reviewers: [{ type: "User", reviewer: { login: "lavaman131", id: 57336517 } }],
+			},
+			{ type: "branch_policy" },
+		],
+	};
+	let tagPolicy = { total_count: 1, branch_policies: [{ name: "cli-v*", type: "tag" }] };
+	let settings = "https://github.com/githubnext/chopin/settings/environments";
+
+	/** Runs the preflight step against an API that serves these responses, or 404 for undefined. */
+	async function check(responses: { environment?: unknown; policies?: unknown; status?: number }) {
+		let base = "/repos/githubnext/chopin/environments/chopin-cli-release";
+		let server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(request) {
+				if (request.headers.get("authorization") !== "Bearer job-token") {
+					return Response.json({ message: "Bad credentials" }, { status: 401 });
+				}
+				if (responses.status) return Response.json({}, { status: responses.status });
+				let path = new URL(request.url).pathname;
+				let body = path === base
+					? responses.environment
+					: path === `${base}/deployment-branch-policies`
+					? responses.policies
+					: undefined;
+				return body === undefined
+					? Response.json({ message: "Not Found" }, { status: 404 })
+					: Response.json(body);
+			},
+		});
+		try {
+			let [step] = preflight.steps;
+			let child = Bun.spawn(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", step.run!], {
+				env: {
+					PATH: process.env.PATH,
+					...step.env,
+					GH_TOKEN: "job-token",
+					GITHUB_API_URL: `http://127.0.0.1:${server.port}`,
+					GITHUB_SERVER_URL: "https://github.com",
+					GITHUB_REPOSITORY: "githubnext/chopin",
+				},
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			let [stdout, stderr, code] = await Promise.all([
+				new Response(child.stdout).text(),
+				new Response(child.stderr).text(),
+				child.exited,
+			]);
+			return { code, output: stdout + stderr };
+		} finally {
+			server.stop(true);
+		}
+	}
+
+	test("passes when reviewers are required and only cli-v* tags may deploy", async () => {
+		let result = await check({ environment, policies: tagPolicy });
+		expect(result.output).not.toContain("::error::");
+		expect(result.code).toBe(0);
+	});
+
+	test("fails when the environment does not exist", async () => {
+		let result = await check({});
+		expect(result.code).not.toBe(0);
+		expect(result.output).toContain("::error::The chopin-cli-release environment does not exist");
+		expect(result.output).toContain(settings);
+	});
+
+	test("fails when the environment cannot be read", async () => {
+		let result = await check({ status: 403 });
+		expect(result.code).not.toBe(0);
+		expect(result.output).toContain("::error::Could not read the chopin-cli-release environment");
+	});
+
+	test("fails without a required reviewer", async () => {
+		for (
+			let rules of [
+				[{ type: "branch_policy" }],
+				[{ type: "required_reviewers", reviewers: [] }, { type: "branch_policy" }],
+			]
+		) {
+			let result = await check({
+				environment: { ...environment, protection_rules: rules },
+				policies: tagPolicy,
+			});
+			expect(result.code).not.toBe(0);
+			expect(result.output).toContain("has no required reviewers");
+			expect(result.output).toContain(settings);
+		}
+	});
+
+	test("fails unless deployments are limited to the cli-v* tag", async () => {
+		for (
+			let [branchPolicy, policies] of [
+				[null, tagPolicy],
+				[{ protected_branches: true, custom_branch_policies: false }, tagPolicy],
+				[environment.deployment_branch_policy, { total_count: 0, branch_policies: [] }],
+				[environment.deployment_branch_policy, {
+					total_count: 1,
+					branch_policies: [{ name: "cli-v*", type: "branch" }],
+				}],
+				[environment.deployment_branch_policy, {
+					total_count: 2,
+					branch_policies: [{ name: "cli-v*", type: "tag" }, { name: "main", type: "branch" }],
+				}],
+				[environment.deployment_branch_policy, {
+					total_count: 1,
+					branch_policies: [{ name: "*", type: "tag" }],
+				}],
+			] as const
+		) {
+			let result = await check({
+				environment: { ...environment, deployment_branch_policy: branchPolicy },
+				policies,
+			});
+			expect(result.code).not.toBe(0);
+			expect(result.output).toContain("cli-v*");
+			expect(result.output).toContain(settings);
 		}
 	});
 });

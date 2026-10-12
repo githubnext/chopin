@@ -1,7 +1,8 @@
 # Releases the `chopin` CLI. Pushing a cli-v<version> tag builds the five binaries, scans the
-# Windows one with Microsoft Defender, and then waits for a person to approve the
-# chopin-cli-release environment before attesting and publishing them. Running it by hand
-# builds and scans a version without publishing anything. See docs/releasing-cli.md.
+# Windows one with Microsoft Defender, checks that the chopin-cli-release environment is
+# protected, and then waits for a person to approve that environment before attesting and
+# publishing them. Running it by hand builds and scans a version without publishing anything.
+# See docs/releasing-cli.md.
 name: release-cli
 
 on:
@@ -173,9 +174,57 @@ jobs:
           }
           if ($failed) { exit 1 }
 
+  # GitHub creates an environment that a job names but that does not exist, without any
+  # protection, so publish waits for this check that chopin-cli-release requires a reviewer
+  # and only lets cli-v* tags deploy. It fails closed on anything else.
+  preflight:
+    name: Check the chopin-cli-release environment
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # Reading an environment and its deployment branch policies needs actions: read.
+    permissions:
+      actions: read
+    steps:
+      - name: Require a reviewer and only cli-v* tags on chopin-cli-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT: chopin-cli-release
+        run: |
+          settings="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/settings/environments"
+          fail() {
+            echo "::error::$1 A repository administrator must set it up in $settings as docs/releasing-cli.md describes. Nothing was published."
+            exit 1
+          }
+          scratch="$(mktemp -d)"
+          get() {
+            curl -sS --retry 3 -o "$scratch/$2" -w '%{http_code}' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/environments/$ENVIRONMENT$1"
+          }
+
+          status="$(get '' environment.json)" || status=unreachable
+          case "$status" in
+            200) ;;
+            404) fail "The $ENVIRONMENT environment does not exist, and GitHub would create it without required reviewers or a cli-v* tag policy." ;;
+            *) fail "Could not read the $ENVIRONMENT environment (HTTP $status)." ;;
+          esac
+          jq -e '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length > 0' \
+            "$scratch/environment.json" >/dev/null \
+            || fail "The $ENVIRONMENT environment has no required reviewers, so nobody would approve the release."
+          jq -e '.deployment_branch_policy.custom_branch_policies == true' "$scratch/environment.json" >/dev/null \
+            || fail "The $ENVIRONMENT environment does not limit deployments to selected tags; only the cli-v* tag may deploy."
+
+          status="$(get '/deployment-branch-policies?per_page=100' policies.json)" || status=unreachable
+          [ "$status" = 200 ] || fail "Could not read the deployment policies of the $ENVIRONMENT environment (HTTP $status); only the cli-v* tag may deploy."
+          jq -e '.branch_policies | length > 0 and all(.type == "tag" and .name == "cli-v*")' \
+            "$scratch/policies.json" >/dev/null \
+            || fail "Only the cli-v* tag may deploy to the $ENVIRONMENT environment, but its deployment policies are $(jq -c '[.branch_policies[]? | {name, type}]' "$scratch/policies.json")."
+          echo "$ENVIRONMENT requires a reviewer, and only cli-v* tags may deploy to it."
+
   publish:
     name: publish
-    needs: [build, defender]
+    needs: [build, defender, preflight]
     # A manual run is a dry run: it builds and scans, and publishes nothing.
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
