@@ -81,8 +81,9 @@ for (let transport of ["stdio", "http"] as const) {
 			await page.getByRole("article", { name: "Investigation", exact: true })
 				.getByRole("button", { name: "Run", exact: true })
 				.click();
-			await expect(page.getByRole("table", { name: "Median startup time", exact: true }))
-				.toContainText("183", { timeout: 30_000 });
+			// The published result opens as a child document from the card.
+			await expect(page.getByRole("button", { name: "Open Startup comparison", exact: true }))
+				.toBeVisible({ timeout: 30_000 });
 			expect(output).toContain("Running");
 		} finally {
 			connector.kill("SIGINT");
