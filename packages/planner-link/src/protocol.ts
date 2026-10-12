@@ -12,6 +12,8 @@ export const MAX_LINK_MESSAGE_BYTES = 2 * 1024 * 1024;
 /** WebSocket close codes a Chopin server uses to end a link. */
 export const LINK_CLOSE = {
 	detached: 1000,
+	/** The client answered no protocol ping for the server's timeout. */
+	unresponsive: 1001,
 	malformed: 1008,
 	tooLarge: 1009,
 	failed: 1011,

@@ -126,6 +126,24 @@ describe("configuration", () => {
 		}
 	});
 
+	it("pings a remote Planner link every 15 seconds and drops it after 45 silent seconds unless configured", () => {
+		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
+		expect(configured(remote)).toMatchObject({
+			plannerLinkPingMs: 15_000,
+			plannerLinkTimeoutMs: 45_000,
+		});
+		expect(configured({ ...remote, PLANNER_LINK_PING_MS: "1000", PLANNER_LINK_TIMEOUT_MS: "1001" }))
+			.toMatchObject({ plannerLinkPingMs: 1_000, plannerLinkTimeoutMs: 1_001 });
+		for (let value of ["", "999", "1.5", "600001", "soon"]) {
+			expect(() => configured({ ...remote, PLANNER_LINK_PING_MS: value }))
+				.toThrow("PLANNER_LINK_PING_MS must be an integer between 1000 and 600000 milliseconds");
+			expect(() => configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: value }))
+				.toThrow("PLANNER_LINK_TIMEOUT_MS must be an integer between 1000 and 600000 milliseconds");
+		}
+		expect(() => configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: "15000" }))
+			.toThrow("PLANNER_LINK_TIMEOUT_MS must be longer than PLANNER_LINK_PING_MS");
+	});
+
 	it("chooses a full Atomic Planner by harness alone, in hosted and local configuration", () => {
 		let atomic = { HARNESS: "atomic", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" };
 		for (let mode of [{}, LOCAL]) {

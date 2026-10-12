@@ -7,9 +7,12 @@
  * Planner owner. Nothing is posted to the document by attaching or refusing.
  */
 
+import { LINK_CLOSE } from "@chopin/planner-link";
+
 import { AdmissionDenied } from "../../auth/admission";
 import { documentUrl } from "../../channels/document-url";
 import { GitHubError } from "../../github/client";
+import { DEFAULT_LINK_PING_MS, DEFAULT_LINK_TIMEOUT_MS } from "../../config";
 import { locateDocument } from "../../mcp/hosted";
 import { forbiddenMessage } from "./attachments";
 import { PlannerLink } from "./link";
@@ -31,6 +34,8 @@ export type PlannerLinkSocketData = {
 	sidebar?: undefined;
 	caller: HostedCaller;
 	link?: PlannerLink;
+	/** The link's liveness: any frame from the client is `heard`; `stop` ends its pings. */
+	alive?: { heard(): void; stop(): void };
 };
 
 export type PlannerLinkHooks = {
@@ -42,6 +47,10 @@ export type PlannerLinkHooks = {
 	register?: LinkOptions["register"];
 	timeoutMs?: number;
 	revalidateEveryMs?: number;
+	/** How often the link is sent a protocol ping. */
+	pingEveryMs?: number;
+	/** How long the link may send nothing, not even a pong, before it is closed as dropped. */
+	pongTimeoutMs?: number;
 };
 
 const BEARER = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/i;
@@ -170,13 +179,33 @@ export function isPlannerLinkSocket(
 	return (ws.data as { plannerLink?: unknown } | undefined)?.plannerLink === true;
 }
 
+/**
+ * Opens the link and starts its protocol pings. The socket's `message` and
+ * `pong` handlers call `alive.heard()`, and its `close` handler `alive.stop()`.
+ */
 export function openPlannerLinkSocket(
 	ws: ServerWebSocket<PlannerLinkSocketData>,
 	auth: PlannerLinkAuth,
 	hooks: PlannerLinkHooks,
 ): void {
-	ws.data.link = plannerLink(ws.data.caller, auth, {
+	let link = plannerLink(ws.data.caller, auth, {
 		send: text => void ws.send(text),
 		close: (code, reason) => ws.close(code, reason),
 	}, hooks);
+	ws.data.link = link;
+	// A network that silently goes away sends no FIN or RST. Bun's server-wide
+	// idle timeout is two minutes and every send resets it, so a link the server
+	// keeps writing to would stay attached and its document's turns go nowhere.
+	let pinging = setInterval(() => ws.ping(), hooks.pingEveryMs ?? DEFAULT_LINK_PING_MS);
+	let deadline = setTimeout(
+		() => link.close(LINK_CLOSE.unresponsive, "unresponsive"),
+		hooks.pongTimeoutMs ?? DEFAULT_LINK_TIMEOUT_MS,
+	);
+	ws.data.alive = {
+		heard: () => void deadline.refresh(),
+		stop() {
+			clearInterval(pinging);
+			clearTimeout(deadline);
+		},
+	};
 }

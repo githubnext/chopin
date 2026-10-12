@@ -137,12 +137,16 @@ export async function linkAuth(channelId?: string) {
 	};
 }
 
-/** A Bun server that serves only the Planner link, as the Chopin server does under HARNESS=remote. */
+/**
+ * A Bun server that serves only the Planner link, as the Chopin server does under HARNESS=remote.
+ * `liveness` shortens how often the server pings the link and how long it waits to hear back.
+ */
 export function linkServer(
 	auth: PlannerLinkAuth & AttachmentAuth,
 	timeoutMs = 2_000,
 	revalidateEveryMs?: number,
 	graceMs = 2_000,
+	liveness?: { pingEveryMs: number; pongTimeoutMs: number },
 ) {
 	let links: PlannerLink[] = [];
 	let attachments = new PlannerAttachments(auth, graceMs);
@@ -162,6 +166,7 @@ export function linkServer(
 					attachments,
 					timeoutMs,
 					revalidateEveryMs,
+					...liveness,
 					register(_channelId, link) {
 						links.push(link);
 						return () => {
@@ -171,9 +176,14 @@ export function linkServer(
 				});
 			},
 			message(ws, raw) {
+				ws.data.alive?.heard();
 				ws.data.link?.receive(raw);
 			},
+			pong(ws) {
+				ws.data.alive?.heard();
+			},
 			close(ws) {
+				ws.data.alive?.stop();
 				ws.data.link?.disconnected();
 			},
 		},
@@ -235,6 +245,102 @@ export async function rawLink(url: string, token = MEMBER_TOKEN) {
 		send: (message: unknown) =>
 			socket.send(typeof message === "string" ? message : JSON.stringify(message)),
 		closed: closed.promise,
+	};
+}
+
+/**
+ * A member's link over a bare TCP socket that sends frames but never answers the
+ * server's protocol pings, as a client whose network silently went away. Its
+ * `closed` is the server's close frame, or 1006 when the socket ends without one.
+ */
+export async function silentLink(url: string, token = MEMBER_TOKEN) {
+	let target = plannerLinkUrl(url);
+	let messages: any[] = [];
+	let pings = 0;
+	let pending = Buffer.alloc(0);
+	let upgraded = Promise.withResolvers<void>();
+	let closed = Promise.withResolvers<{ code: number; reason: string }>();
+	let handshaken = false;
+	function frames() {
+		while (pending.length >= 2) {
+			let opcode = pending[0]! & 0x0f;
+			let length = pending[1]! & 0x7f;
+			let offset = 2;
+			if (length === 126) [length, offset] = [pending.readUInt16BE(2), 4];
+			else if (length === 127) [length, offset] = [Number(pending.readBigUInt64BE(2)), 10];
+			if (pending.length < offset + length) return;
+			let payload = pending.subarray(offset, offset + length);
+			pending = pending.subarray(offset + length);
+			if (opcode === 0x1) messages.push(JSON.parse(payload.toString("utf8")));
+			if (opcode === 0x9) pings++;
+			if (opcode === 0x8) {
+				closed.resolve({
+					code: payload.length >= 2 ? payload.readUInt16BE(0) : 1005,
+					reason: payload.subarray(2).toString("utf8"),
+				});
+			}
+		}
+	}
+	let socket = await Bun.connect({
+		hostname: target.hostname,
+		port: Number(target.port),
+		socket: {
+			data(_socket, chunk) {
+				pending = Buffer.concat([pending, chunk]);
+				if (!handshaken) {
+					let end = pending.indexOf("\r\n\r\n");
+					if (end < 0) return;
+					let status = pending.subarray(0, end).toString("latin1").split("\r\n")[0]!;
+					if (!status.includes(" 101 ")) upgraded.reject(new Error(status));
+					pending = pending.subarray(end + 4);
+					handshaken = true;
+					upgraded.resolve();
+				}
+				frames();
+			},
+			close() {
+				upgraded.reject(new Error("silent link closed before upgrading"));
+				closed.resolve({ code: 1006, reason: "" });
+			},
+		},
+	});
+	socket.write([
+		`GET ${target.pathname} HTTP/1.1`,
+		`Host: ${target.host}`,
+		"Upgrade: websocket",
+		"Connection: Upgrade",
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+		"Sec-WebSocket-Version: 13",
+		`Authorization: Bearer ${token}`,
+		"",
+		"",
+	].join("\r\n"));
+	await upgraded.promise;
+	async function next(type: string): Promise<any> {
+		for (let deadline = Date.now() + 4_000; Date.now() < deadline; await Bun.sleep(10)) {
+			let found = messages.findIndex(message => message.type === type);
+			if (found >= 0) return messages.splice(found, 1)[0];
+		}
+		throw new Error(`no ${type} message arrived`);
+	}
+	return {
+		next,
+		/** How many protocol pings the server has sent, none of them answered. */
+		get pings() {
+			return pings;
+		},
+		/** Sends one masked text frame, as a client must. */
+		send(message: unknown) {
+			let payload = Buffer.from(JSON.stringify(message));
+			let header = payload.length < 126
+				? Buffer.from([0x81, 0x80 | payload.length])
+				: Buffer.from([0x81, 0x80 | 126, payload.length >> 8, payload.length & 0xff]);
+			let mask = crypto.getRandomValues(Buffer.alloc(4));
+			let masked = payload.map((byte, index) => byte ^ mask[index % 4]!);
+			socket.write(Buffer.concat([header, mask, masked]));
+		},
+		closed: closed.promise,
+		end: () => socket.end(),
 	};
 }
 

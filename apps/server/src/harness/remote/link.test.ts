@@ -24,6 +24,7 @@ import {
 	rawLink,
 	RIVAL_TOKEN,
 	scriptedPlanner,
+	silentLink,
 	VIEWER_TOKEN,
 } from "../../testing/planner-link";
 import { createRemoteAdapter } from "./adapter";
@@ -574,6 +575,89 @@ describe("Planner link ownership", () => {
 		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
 		expect(server.attachments.attached(channel.id)).toBe(false);
 		await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+	});
+
+	describe("liveness", () => {
+		const liveness = { pingEveryMs: 50, pongTimeoutMs: 300 };
+
+		it("closes a link that stops answering pings within the timeout, ending its turn as a drop does", async () => {
+			let { auth, channel } = await linkAuth();
+			let server = linkServer(auth, 2_000, undefined, 2_000, liveness);
+			cleanups.push(server.stop);
+			let silent = await silentLink(server.url);
+			cleanups.push(silent.end);
+			silent.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+			await silent.next("attached");
+			expect(server.attachments.attached(channel.id)).toBe(true);
+			let started = silent.next("start").then(start => {
+				silent.send({ type: "started", session: start.session });
+				return silent.next("turn");
+			});
+			let outcome = streamTurn(
+				adapterFor(server, { channelId: channel.id, isolated: false }),
+				"hang",
+			);
+			let turn = await started;
+			let quiet = Date.now();
+			expect(turn).toMatchObject({ type: "turn", prompt: "hang" });
+			expect(await silent.closed).toEqual({
+				code: LINK_CLOSE.unresponsive,
+				reason: "unresponsive",
+			});
+			let elapsed = Date.now() - quiet;
+			expect(elapsed).toBeGreaterThan(liveness.pongTimeoutMs - 100);
+			expect(elapsed).toBeLessThan(liveness.pongTimeoutMs + 500);
+			expect(silent.pings).toBeGreaterThanOrEqual(3);
+			let { errors, session } = await outcome;
+			expect(errors.join("\n")).toContain("disconnected during the turn");
+			expect(session.hasUnfinishedTurn()).toBe(false);
+			expect(server.links).toEqual([]);
+			expect(server.attachments.attached(channel.id)).toBe(false);
+		});
+
+		it("holds a silent link's ownership through the grace period, then releases it", async () => {
+			let { auth, storage, channel, logins } = await linkAuth();
+			let server = linkServer(auth, 2_000, undefined, 400, liveness);
+			cleanups.push(server.stop);
+			let silent = await silentLink(server.url);
+			cleanups.push(silent.end);
+			silent.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+			await silent.next("attached");
+			expect((await silent.closed).code).toBe(LINK_CLOSE.unresponsive);
+			expect(server.attachments.attached(channel.id)).toBe(false);
+			expect(await owner(storage, channel.id))
+				.toMatchObject({ ownerSessionId: logins.get("member"), generation: 1 });
+			let refusal = await refused(server.url, channel.id, RIVAL_TOKEN);
+			expect(refusal).toMatchObject({ code: "planner-attached", close: LINK_CLOSE.attached });
+			expect(refusal.message).toStartWith(
+				"member detached from this document's Planner and holds it until ",
+			);
+			for (let deadline = Date.now() + 3_000; Date.now() < deadline;) {
+				if (!(await owner(storage, channel.id))?.ownerSessionId) break;
+				await Bun.sleep(25);
+			}
+			expect(await owner(storage, channel.id))
+				.toMatchObject({ ownerSessionId: undefined, generation: 1, status: "unavailable" });
+			await rivalAttaches(server.url, channel.id, storage, logins.get("rival")!);
+		});
+
+		it("keeps a client that answers pings attached across several timeouts", async () => {
+			let { auth, channel } = await linkAuth();
+			let server = linkServer(auth, 2_000, undefined, 2_000, liveness);
+			cleanups.push(server.stop);
+			let script = scriptedPlanner();
+			let client = await attach(server.url, channel.id, script.handlers);
+			cleanups.push(() => client.detach());
+			await Bun.sleep(liveness.pongTimeoutMs * 4);
+			expect(server.links).toHaveLength(1);
+			expect(server.attachments.attached(channel.id)).toBe(true);
+			let { errors } = await streamTurn(
+				adapterFor(server, { channelId: channel.id, isolated: false }),
+				"turn",
+			);
+			expect(errors).toEqual([]);
+			expect(script.turns).toHaveLength(1);
+		});
 	});
 });
 

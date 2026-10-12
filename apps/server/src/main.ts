@@ -1302,6 +1302,8 @@ function listen(): Server<SocketData> {
 					openPlannerLinkSocket(ws, hostedAuth, {
 						attachments: plannerAttachments,
 						unavailable: channelId => deletingChannels.has(channelId),
+						pingEveryMs: config.plannerLinkPingMs,
+						pongTimeoutMs: config.plannerLinkTimeoutMs,
 					});
 					return;
 				}
@@ -1312,7 +1314,10 @@ function listen(): Server<SocketData> {
 			},
 
 			message(ws: AnySocket, raw) {
-				if (isPlannerLinkSocket(ws)) return ws.data.link?.receive(raw);
+				if (isPlannerLinkSocket(ws)) {
+					ws.data.alive?.heard();
+					return ws.data.link?.receive(raw);
+				}
 				if (typeof raw !== "string") return;
 				let received = isSidebarSocket(ws) ? receiveSidebar(ws, raw) : receive(ws as Socket, raw);
 				void received.catch(err => {
@@ -1320,8 +1325,16 @@ function listen(): Server<SocketData> {
 				});
 			},
 
+			// Only Planner links are pinged by the server itself; see openPlannerLinkSocket.
+			pong(ws: AnySocket) {
+				if (isPlannerLinkSocket(ws)) ws.data.alive?.heard();
+			},
+
 			close(ws: AnySocket) {
-				if (isPlannerLinkSocket(ws)) return ws.data.link?.disconnected();
+				if (isPlannerLinkSocket(ws)) {
+					ws.data.alive?.stop();
+					return ws.data.link?.disconnected();
+				}
 				sessionSockets.closed(ws as Socket | SidebarSocket);
 				if (isSidebarSocket(ws)) closeSidebarSocket(ws);
 				else closeRoomSocket(ws as Socket);

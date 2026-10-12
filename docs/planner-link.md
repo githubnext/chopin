@@ -38,6 +38,23 @@ so nothing is opened:
 | 503    | GitHub is unavailable or rate limiting; retry later         |
 | 500    | Any other admission failure                                 |
 
+### Pings
+
+The server sends the link a WebSocket ping control frame (RFC 6455) every
+**15 seconds** from the moment it opens. The client must answer each with a
+pong. Standard clients do this on their own, including Bun's and Node.js's
+built-in `WebSocket` and the `ws` package; pings are control frames, not
+messages, and carry no JSON. Any frame from the client, a pong or a message,
+shows the link is alive.
+
+A link the server hears nothing from for **45 seconds** is treated as dropped,
+such as one whose network silently went away. The server closes it with 1001
+and reason `unresponsive`, without an `error` or `refused` message, and releases
+it exactly as any dropped link (see [Closing](#closing)): its account keeps the
+document's Planner for the grace period in [Ownership](#ownership). The operator
+sets the interval and timeout with `PLANNER_LINK_PING_MS` and
+`PLANNER_LINK_TIMEOUT_MS`.
+
 ## Frames
 
 Every message is one JSON object in one text frame, with a string `type`. A
@@ -445,17 +462,18 @@ ids. When the link closes, the server shows the reported live runs as stopped.
 
 ## Closing
 
-| Close code | Sent after                                     | Meaning                                       |
-| ---------- | ---------------------------------------------- | --------------------------------------------- |
-| 1000       | `detach`                                       | The client detached                           |
-| 1008       | `error` with `malformed-message` or `protocol` | Unparseable, invalid, or out-of-order message |
-| 1009       | `error` with `message-too-large`               | A frame over 2 MiB                            |
-| 1011       | `refused` with `unavailable`                   | The server could not check the document       |
-| 4401       | `refused`                                      | `sign-in-required`                            |
-| 4403       | `refused`                                      | `repository-forbidden` or `access-revoked`    |
-| 4404       | `refused`                                      | `document-unavailable` or `document-archived` |
-| 4409       | `refused`                                      | `planner-attached`                            |
-| 4426       | `refused`                                      | `unsupported-version`                         |
+| Close code | Sent after                                     | Meaning                                         |
+| ---------- | ---------------------------------------------- | ----------------------------------------------- |
+| 1000       | `detach`                                       | The client detached                             |
+| 1001       | nothing                                        | No pong or message within the [timeout](#pings) |
+| 1008       | `error` with `malformed-message` or `protocol` | Unparseable, invalid, or out-of-order message   |
+| 1009       | `error` with `message-too-large`               | A frame over 2 MiB                              |
+| 1011       | `refused` with `unavailable`                   | The server could not check the document         |
+| 4401       | `refused`                                      | `sign-in-required`                              |
+| 4403       | `refused`                                      | `repository-forbidden` or `access-revoked`      |
+| 4404       | `refused`                                      | `document-unavailable` or `document-archived`   |
+| 4409       | `refused`                                      | `planner-attached`                              |
+| 4426       | `refused`                                      | `unsupported-version`                           |
 
 `protocol` covers a message before `attach` is answered, a second `attach`, and
 a repeated `input-request` id the server remembers. When the link closes for
