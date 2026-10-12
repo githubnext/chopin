@@ -62,6 +62,19 @@ or with `gh api`:
 
 ## Cut a release
 
+When a change to the connector breaks compatibility with servers that are
+already deployed, raise `CONNECTOR_PROTOCOL` in `apps/connector/src/version.ts`,
+and the range a server accepts in `CONNECTOR_PROTOCOLS` in
+`apps/server/src/experiments/routes.ts`. A server refuses a connector outside
+its range and tells the person to run `chopin update <version>`.
+
+A server recommends the version in its own `apps/connector/package.json`
+unless `CONNECTOR_VERSION` names another, and `chopin update` with no version
+installs that release. Publish a release before deploying a server whose
+`package.json` names it, or set `CONNECTOR_VERSION` to a published release
+meanwhile; until then, `chopin update` against that server cannot download
+what it recommends.
+
 1. Set `version` in `apps/connector/package.json` to the new version, for
    example `0.2.0`, and merge that change. A release whose tag differs from
    this version fails before anything is built.

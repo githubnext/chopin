@@ -43,6 +43,8 @@ type Options = {
 		decision: string,
 		remove: boolean,
 	) => Promise<void>;
+	/** The chopin release this server recommends, which `chopin update` installs by default. */
+	connectorVersion?: string;
 };
 const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
 	label: z.string().trim().min(1).max(100),
@@ -60,7 +62,7 @@ export const CONNECTOR_PROTOCOLS = { min: 1, max: 1 } as const;
  * Refuse a connector speaking a protocol outside CONNECTOR_PROTOCOLS, naming what fixes it. One
  * without the header is a `/connector.js` from before the check, which speaks protocol 1.
  */
-function compatible(request: Request, origin: string) {
+function compatible(request: Request, origin: string, recommended: string | undefined) {
 	let header = request.headers.get(CONNECTOR_PROTOCOL_HEADER);
 	if (header === null) return;
 	if (!/^\d{1,9}$/.test(header)) fail("invalid-request");
@@ -73,6 +75,8 @@ function compatible(request: Request, origin: string) {
 	let fix = !release
 		? "Download the connector again: mkdir -p ~/.chopin && curl -fsSL "
 			+ `${origin}/connector.js -o ~/.chopin/connector.js`
+		: recommended
+		? `Run \`chopin update ${recommended}\`, then connect again.`
 		: protocol < min
 		? "Run `chopin update` to install the newest chopin, then connect again."
 		: "Install an older chopin with `chopin update <version>`, or ask whoever runs this Chopin "
@@ -221,6 +225,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						...(error instanceof ExperimentError && error.message !== code
 							? { message: error.message }
 							: {}),
+						...(code === CONNECTOR_UPDATE_REQUIRED ? versions : {}),
 					},
 					code === "authentication-required"
 						? 401
@@ -235,8 +240,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			}
 		});
 	}
+	/** What a connector should run: the protocols spoken here and the recommended release. */
+	let versions = { protocol: CONNECTOR_PROTOCOLS, version: options.connectorVersion ?? null };
+	route("GET", "/api/connector/version", async () => json(versions));
 	route("POST", "/api/connector/pairings", async request => {
-		compatible(request, auth.config.origin);
+		compatible(request, auth.config.origin, options.connectorVersion);
 		let created = connections.create(pairingSchema.parse(await body(request)));
 		return json({ ...created, url: `${auth.config.origin}/connect?pairing=${created.id}` });
 	});
@@ -266,7 +274,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ id: connection.id, url: documentsPath(repository.owner, repository.name) });
 	});
 	route("POST", "/api/connector/pairings/:id/claim", async (request, params) => {
-		compatible(request, auth.config.origin);
+		compatible(request, auth.config.origin, options.connectorVersion);
 		let { secret } = z.object({ secret: z.string().min(32).max(100) }).strict().parse(
 			await body(request),
 		);
@@ -477,7 +485,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	route("GET", "/connector/mcp", async () => new Response(null, { status: 405 }));
 	route("DELETE", "/connector/mcp", async request => {
-		compatible(request, auth.config.origin);
+		compatible(request, auth.config.origin, options.connectorVersion);
 		let { connection, grant } = await connector(
 			(request.headers.get("authorization") ?? "").replace(/^Bearer /, ""),
 		);
@@ -485,7 +493,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return new Response(null, { status: 204 });
 	});
 	route("POST", "/connector/mcp", async request => {
-		compatible(request, auth.config.origin);
+		compatible(request, auth.config.origin, options.connectorVersion);
 		let token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
 		let { connection, grant, session } = await connector(token);
 		let implementation = options.implementations?.();

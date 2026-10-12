@@ -35,6 +35,17 @@ describe("configuration", () => {
 		).toBe(false);
 	});
 
+	it("recommends the bundled connector's release unless CONNECTOR_VERSION names one", async () => {
+		let { version } = await Bun.file(
+			new URL("../../connector/package.json", import.meta.url),
+		).json() as { version: string };
+		expect(configured().connectorVersion).toBe(version);
+		expect(configured({ CONNECTOR_VERSION: "0.1.3" }).connectorVersion).toBe("0.1.3");
+		expect(configured({ CONNECTOR_VERSION: "cli-v0.1.3" }).connectorVersion).toBe("0.1.3");
+		expect(() => configured({ CONNECTOR_VERSION: "latest" }))
+			.toThrow("CONNECTOR_VERSION must be a chopin release version like 0.2.0");
+	});
+
 	it("keeps living-document builds opt-in", () => {
 		expect(configured().liveBuild).toBe(false);
 		expect(configured({ LIVE_BUILD: "yes" }).liveBuild).toBe(false);

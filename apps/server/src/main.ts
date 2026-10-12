@@ -1953,6 +1953,7 @@ let hostedAuth = registerAuthRoutes(router, {
 });
 experiments = registerExperimentRoutes(router, hostedAuth, {
 	implementations: () => implementations,
+	connectorVersion: config.connectorVersion,
 	lease() {
 		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
 		return writerLease.held;

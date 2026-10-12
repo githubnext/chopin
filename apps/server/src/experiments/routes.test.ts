@@ -78,6 +78,7 @@ async function setup() {
 		changed: () => {},
 		context: async () => ({ source: "# Context", revision: 0 }),
 		canMutate: async id => !lock.locked && !lock.documents.has(id),
+		connectorVersion: "0.1.3",
 	});
 	async function request(
 		path: string,
@@ -735,8 +736,9 @@ test("a connector outside the supported protocol range is refused with the comma
 	// Too old or too new: each connector route refuses, even with a valid token, and says why.
 	for (
 		let [version, protocol, fix] of [
-			["0.0.1", min - 1, "Run `chopin update` to install the newest chopin"],
-			["9.0.0", max + 1, "`chopin update <version>`"],
+			// Both directions name the exact release this server recommends, a downgrade if need be.
+			["0.0.1", min - 1, "Run `chopin update 0.1.3`"],
+			["9.0.0", max + 1, "Run `chopin update 0.1.3`"],
 			// A script without a release version is fixed by downloading this server's connector again.
 			["dev", min - 1, "curl -fsSL https://chopin.test/connector.js -o ~/.chopin/connector.js"],
 		] as const
@@ -761,7 +763,11 @@ test("a connector outside the supported protocol range is refused with the comma
 		for (let response of refused) {
 			expect(response.status).toBe(409);
 			let body = await response.json();
-			expect(body.error).toBe(CONNECTOR_UPDATE_REQUIRED);
+			expect(body).toMatchObject({
+				error: CONNECTOR_UPDATE_REQUIRED,
+				protocol: { min, max },
+				version: "0.1.3",
+			});
 			expect(body.message).toContain(`connector protocol ${protocol}`);
 			expect(body.message).toContain(`protocol ${min === max ? min : `${min} to ${max}`}`);
 			expect(body.message).toContain(fix);
@@ -769,4 +775,11 @@ test("a connector outside the supported protocol range is refused with the comma
 	}
 	// The refusals left the paired connection alone.
 	expect((await mcp(token, current)).status).toBe(200);
+});
+
+test("the connector versions this server wants are public", async () => {
+	let { request } = await setup();
+	let response = await request("/api/connector/version");
+	expect(response.status).toBe(200);
+	expect(await response.json()).toEqual({ protocol: CONNECTOR_PROTOCOLS, version: "0.1.3" });
 });
