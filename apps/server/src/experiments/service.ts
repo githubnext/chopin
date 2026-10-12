@@ -35,7 +35,6 @@ export class Experiments {
 		requester: string,
 		brief: string,
 		id: string = crypto.randomUUID(),
-		parentId?: string,
 	) {
 		let existing = await this.store.get(id);
 		if (existing) {
@@ -53,7 +52,6 @@ export class Experiments {
 			documentId,
 			requester,
 			brief,
-			parentId,
 			revision: 0,
 			state: "requested",
 			generation: 0,
@@ -178,9 +176,12 @@ export class Experiments {
 		id: string,
 		state: Extract<InvestigationState, "failed" | "cancelled" | "interrupted">,
 		progress = "",
+		/** Checked against the current record inside the write, so a stale read cannot stop work. */
+		allowed?: (value: Investigation) => void,
 	) {
 		return this.mutate(id, value => {
 			if (["completed", "cancelled", "failed", "interrupted"].includes(value.state)) return;
+			allowed?.(value);
 			value.state = state;
 			value.progress = progress.slice(0, 2000);
 			value.expiresAt = 0;

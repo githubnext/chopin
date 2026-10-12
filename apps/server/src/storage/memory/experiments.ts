@@ -72,6 +72,8 @@ export class MemoryExperimentStore implements ExperimentStore {
 		if (current.childId) return structuredClone(current);
 		if (current.revision !== expected) return false;
 		if (channel.archivedAt) throw conflict("experiment document archived");
+		// A child document never holds investigations, so it never publishes one either.
+		if (channel.parentChannelId) throw conflict("experiment document is a child");
 		let saved = investigationSchema.parse({
 			...value,
 			childId: deterministicChannelId(channel.repositoryId, `investigation:${value.id}`),

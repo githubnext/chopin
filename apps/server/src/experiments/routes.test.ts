@@ -399,3 +399,55 @@ test("expired pairing and connections cannot be revived by replay", () => {
 	now = 301_000;
 	expect(() => connections.claim(pending.id, pending.secret)).toThrow("pairing-expired");
 });
+
+test("a child document refuses new investigations", async () => {
+	let { storage, documentId, request, alice } = await setup();
+	let child = crypto.randomUUID();
+	await storage.channels.create({
+		id: child,
+		repositoryId: "repo",
+		repositoryOwner: "org",
+		repositoryName: "repo",
+		parentChannelId: documentId,
+		title: "Child",
+		createdBy: "alice",
+		now: new Date(),
+	});
+	let refused = await request(
+		`/api/documents/${child}/experiments`,
+		{ id: crypto.randomUUID(), brief: "Measure startup" },
+		alice.cookie,
+	);
+	expect(refused.status).toBe(409);
+	expect((await refused.json()).error).toBe("child-document");
+});
+
+test("a stale Ready to run cannot cancel another person's queued run", async () => {
+	let { documentId, request, alice, bob, pair, runtime } = await setup();
+	await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	let ready = await runtime.service.store.get(id);
+	expect(
+		(await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie))
+			.status,
+	).toBe(200);
+	// Bob's request reads the record before Alice's Run lands, then writes after it.
+	let get = runtime.service.store.get.bind(runtime.service.store);
+	let stale = true;
+	runtime.service.store.get = async (value: string) => {
+		if (stale && value === id) {
+			stale = false;
+			return structuredClone(ready);
+		}
+		return get(value);
+	};
+	let refused = await request(
+		`/api/documents/${documentId}/experiments/${id}/cancel`,
+		{},
+		bob.cookie,
+	);
+	expect(refused.status).toBe(403);
+	expect((await refused.json()).error).toBe("connection-forbidden");
+	expect((await get(id))?.state).toBe("queued");
+});

@@ -106,7 +106,13 @@ completion returns the same child. The child is titled by the report's top
 heading, or else the brief, and holds the report, an `<Experiment>` embed for each
 view, the method and limitations, and as much raw evidence as fits the document
 size limit. Its provenance line names the parent document, who started the
-investigation and the brief. A child has no investigations or Build of its own.
+investigation and the brief. A child has no investigations or Build of its own:
+the server refuses to create, place or publish one there.
+
+As with Research, publication makes both documents permanent while the record
+links them. The parent cannot be deleted while it has the child, and the child
+cannot be deleted while the investigation record names it; either can still be
+archived.
 
 The child's embeds read the parent's investigation record by its id, so shared
 filters and row selections stay one collaborative state wherever they appear.
