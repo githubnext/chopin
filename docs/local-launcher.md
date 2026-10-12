@@ -16,7 +16,12 @@ CHOPIN_URL=https://your-chopin-instance.example \
 ```
 
 Open the printed pairing link, sign into Chopin, check that the page shows the
-confirmation code printed in your terminal, and select **Connect**. This is
+confirmation code printed in your terminal, and select **Connect**. Leave
+**Let Chopin build and prototype automatically on this laptop** unticked unless
+you want Chopin to start work there by itself: rebuilds of a living document
+(`LIVE_BUILD`) and, where enabled, prototypes. Without it, only work a person
+presses Build or Run for reaches the laptop. The choice lives with the
+connection in server memory, so pairing again asks again. This is
 the existing investigation pairing flow; one connection serves every document in
 the checkout's repository. No GitHub bearer
 needs to be configured in a second companion. The connector credential is held

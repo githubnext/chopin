@@ -188,6 +188,30 @@ export function implementationConnector(
 			if (!documentId) fail("build-forbidden");
 			tracked.add(documentId);
 			return withPlan(documentId, async plan => {
+				// Only a landed report stops a rebuild, so a retried report after that is the same
+				// success, even once a newer rebuild has queued behind it.
+				if (grant.run?.kind === "rebuild" && name === "report_rebuild") {
+					let own = plan.builds.find(item => item.id === grant.run!.id);
+					if (
+						own?.kind === "rebuild" && own.state === "stopped" && grant.run.generation === 1
+						&& own.connectionId === connection.id && own.user === connection.owner
+					) {
+						let report = rebuildReportSchema.safeParse(args);
+						if (!report.success) fail("invalid-request");
+						// The same report: its tasks landed as a live run, or its commits are recorded.
+						let commits = plan.live?.commits ?? [];
+						if (
+							plan.lifecycle.history.some(item => item.run.id === own.id)
+							|| report.data.commits.every(commit =>
+								commits.some(item =>
+									item.sha === commit.sha.toLowerCase()
+									&& item.pullRequest.toLowerCase() === commit.pullRequest.toLowerCase()
+								)
+							)
+						) return { state: "stopped" };
+						fail("build-inactive");
+					}
+				}
 				let build = plan.builds.at(-1);
 				if (
 					!build || build.connectionId !== connection.id || build.user !== connection.owner
@@ -196,23 +220,6 @@ export function implementationConnector(
 				) fail("build-forbidden");
 				if (grant.run) {
 					let rebuild = build.kind === "rebuild";
-					// A retried report of a rebuild that already landed returns the same result.
-					if (
-						rebuild && name === "report_rebuild" && build.state === "stopped"
-						&& grant.run.kind === "rebuild" && grant.run.generation === 1
-					) {
-						let report = rebuildReportSchema.safeParse(args);
-						if (!report.success) fail("invalid-request");
-						let commits = plan.live?.commits ?? [];
-						if (
-							plan.lifecycle.history.some(item => item.run.id === build.id)
-							|| report.data.commits.every(commit =>
-								commits.some(item =>
-									item.sha === commit.sha && item.pullRequest === commit.pullRequest
-								)
-							)
-						) return { state: "stopped" };
-					}
 					if (
 						grant.run.kind !== (rebuild ? "rebuild" : "implementation")
 						|| grant.run.generation !== 1

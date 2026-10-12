@@ -144,12 +144,16 @@ async function setup() {
 	};
 }
 
-async function paired(context: Awaited<ReturnType<typeof setup>>, cookie?: string) {
+async function paired(
+	context: Awaited<ReturnType<typeof setup>>,
+	cookie?: string,
+	autoRun?: boolean,
+) {
 	let pairing =
 		await (await context.call("/api/connector/pairings", { ...checkout, label: "Laptop" })).json();
 	await context.call(
 		`/api/connector/pairings/${pairing.id}/approve`,
-		{},
+		autoRun === undefined ? {} : { autoRun },
 		undefined,
 		undefined,
 		cookie,
@@ -629,7 +633,7 @@ async function rebuilding() {
 		state: "running",
 		session: "rebuild-session",
 	});
-	return { context, connection, built, rebuild, builtSource, target, stopped };
+	return { context, connection, built, claim, rebuild, builtSource, target, stopped };
 }
 
 test("a running rebuild leaves editing open and reads its sealed delta", async () => {
@@ -690,7 +694,9 @@ test("report_rebuild appends a completed version, records commits and advances t
 			[1, "superseded"],
 			[2, "approved"],
 		]);
-		expect(plan.graph!.versions[1]).toMatchObject({ planRevision: plan.revision });
+		// The version records the sealed target it built, not the edit made while it ran.
+		expect(plan.revision).toBeGreaterThan(1);
+		expect(plan.graph!.versions[1]).toMatchObject({ planRevision: 1 });
 		expect(plan.lifecycle.history.at(-1)).toMatchObject({ live: true, run: { graphVersion: 2 } });
 		expect(plan.live).toMatchObject({
 			baseRevision: 1,
@@ -820,6 +826,178 @@ test("a rebuild that ends without a report fails and leaves the live base alone"
 		).toBe(true);
 		let again = await queueRebuild(context.plan, context.experiments.connections);
 		expect(again.kind).toBe("queued");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("run tokens stay in their lane: a rebuild cannot run lifecycle tools, nor a build report_rebuild", async () => {
+	let { context, claim, rebuild } = await rebuilding();
+	try {
+		for (
+			let [name, args] of [
+				["start_task", { taskId: "first", idempotencyKey: "rebuild-start" }],
+				["read_implementation", {}],
+				["complete_task", { taskId: "first", idempotencyKey: "rebuild-done", summary: "No" }],
+			] as const
+		) {
+			expect((await tool(context, rebuild.runToken, name, args)).isError).toBe(true);
+		}
+		let report = { summary: "Not mine", commits: [], tasks: [] };
+		expect((await tool(context, claim.runToken, "report_rebuild", report)).isError).toBe(true);
+		expect(context.plan.builds.at(-1)).toMatchObject({ kind: "rebuild", state: "running" });
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a rebuild report whose commit fails to persist leaves the document's build state untouched", async () => {
+	let { context, rebuild } = await rebuilding();
+	try {
+		let before = structuredClone({
+			graph: context.plan.graph,
+			lifecycle: context.plan.lifecycle,
+			live: context.plan.live,
+			builds: context.plan.builds,
+		});
+		let commit = context.storage.collaboration.commit;
+		context.storage.collaboration.commit = async () => {
+			throw new Error("offline");
+		};
+		let report = {
+			summary: "Rendered the rebuilt paragraph.",
+			commits: [{ pullRequest, sha: "c".repeat(40), message: "Add the rebuilt paragraph" }],
+			tasks: [{ title: "Rebuilt paragraph", goal: "Render it", pullRequest }],
+		};
+		expect((await tool(context, rebuild.runToken, "report_rebuild", report)).isError).toBe(true);
+		context.storage.collaboration.commit = commit;
+		expect({
+			graph: context.plan.graph,
+			lifecycle: context.plan.lifecycle,
+			live: context.plan.live,
+			builds: context.plan.builds,
+		}).toEqual(before);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a retried report lands once even after a newer rebuild queued, and names compare loosely", async () => {
+	let { context, connection, rebuild } = await rebuilding();
+	try {
+		let report = {
+			summary: "Rendered the rebuilt paragraph.",
+			// GitHub names are case-insensitive, and an agent may print the SHA in capitals.
+			commits: [{
+				pullRequest: "https://github.com/Owner/Repository/pull/7",
+				sha: "C".repeat(40),
+				message: "Add the rebuilt paragraph",
+			}],
+			tasks: [],
+		};
+		expect(await tool(context, rebuild.runToken, "report_rebuild", report)).toEqual({
+			state: "stopped",
+		});
+		expect(context.plan.live!.commits!.at(-1)!.sha).toBe("c".repeat(40));
+		expect((await edit(context.plan, "Another edit.")).ok).toBe(true);
+		let next = await queueRebuild(context.plan, context.experiments.connections);
+		expect(next.kind).toBe("queued");
+		expect(await tool(context, rebuild.runToken, "report_rebuild", report)).toEqual({
+			state: "stopped",
+		});
+		expect(context.plan.builds.at(-1)).toMatchObject({ kind: "rebuild", state: "queued" });
+		void connection;
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("only the builder's own opted-in connection takes an automatic rebuild", async () => {
+	let { context, rebuild } = await rebuilding();
+	try {
+		await tool(context, rebuild.runToken, "report_rebuild", {
+			summary: "No change needed.",
+			commits: [],
+			tasks: [],
+		});
+		expect((await edit(context.plan, "A later edit.")).ok).toBe(true);
+		let own = context.plan.builds.at(-1)!.connectionId;
+		let real = context.experiments.connections;
+		let base = real.get(own)!;
+		let only = (connection: typeof base) => ({
+			get: () => undefined,
+			list: (repositoryId: string, owner?: string) =>
+				[connection].filter(item =>
+					item.source.repositoryId === repositoryId && (!owner || item.owner === owner)
+				),
+			assign: () => {},
+			assigned: () => undefined,
+		});
+		// Another person's laptop, or the builder's laptop for another repository, never runs it.
+		expect(
+			(await queueRebuild(context.plan, only({ ...base, owner: "U_other" }), {
+				automatic: true,
+			})).kind,
+		).toBe("unavailable");
+		expect(
+			(await queueRebuild(
+				context.plan,
+				only({
+					...base,
+					source: { ...base.source, repositoryId: "R_elsewhere" },
+				}),
+				{ automatic: true },
+			)).kind,
+		).toBe("unavailable");
+		// The builder's laptop paired without consent takes no automatic rebuild, only a pressed one.
+		expect(
+			(await queueRebuild(context.plan, only({ ...base, autoRun: false }), {
+				automatic: true,
+			})).kind,
+		).toBe("unavailable");
+		expect(
+			(await queueRebuild(context.plan, only({ ...base, autoRun: true }), {
+				automatic: true,
+			})).kind,
+		).toBe("queued");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("pairing records automatic-work consent, off unless asked for", async () => {
+	let context = await setup();
+	try {
+		let off = await paired(context);
+		let on = await paired(context, undefined, true);
+		expect(context.experiments.connections.get(off.connection.id)?.autoRun).toBe(false);
+		expect(context.experiments.connections.get(on.connection.id)?.autoRun).toBe(true);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("only the builder sees their checkout, connection and whether their agent is online", async () => {
+	let { context, rebuild } = await rebuilding();
+	try {
+		let own = await (await context.call(context.path)).json();
+		expect(own.live.checkout).toEqual(checkout);
+		expect(own.live.builderConnected).toBe(true);
+		expect(own.live.rebuild.connectionId).toBe(rebuild.build.connectionId);
+		let other = await (await context.call(
+			context.path,
+			undefined,
+			undefined,
+			undefined,
+			context.otherCookie,
+		)).json();
+		expect(other.live.checkout).toBeUndefined();
+		expect(other.live.builderConnected).toBeUndefined();
+		expect(other.live.rebuild.state).toBe("running");
+		expect(other.live.rebuild.connectionId).toBeUndefined();
+		expect(other.live.rebuild.checkout).toBeUndefined();
+		expect(other.live.rebuild.session).toBeUndefined();
+		expect(other.localAgent).toBe(false);
 	} finally {
 		await Plan.close(context.plan);
 	}

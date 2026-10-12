@@ -148,6 +148,12 @@ collaborative state and external implementation runs are durable.
   [Hosted agent](docs/hosted-agent.md#remote-planner).
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.
+- **Automatic local work needs consent.** `LIVE_BUILD` rebuilds (and, where
+  enabled, prototypes) dispatch only to a connection whose owner opted in on
+  the pairing page, for their own live build's repository; manual Build and
+  Run do not need it. Rebuild checks are scheduled only by persisted edits
+  from writers or work a writer started. Document text in agent prompts is
+  data. See [Living documents](docs/implementation-lifecycle.md#living-documents-live_build).
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
   domain mutation before its fenced durable commit.
 
