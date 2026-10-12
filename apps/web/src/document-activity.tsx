@@ -71,8 +71,8 @@ export function documentActivityLabel(activity: DocumentActivity): string {
 }
 
 /**
- * A quiet petrol mark: a breathing ring while the Planner writes, a filled dot
- * once changes wait. `corner` sits in the button's padding so nothing shifts.
+ * A solid petrol dot, the same mark as Chat's unread badge, while the Planner writes or once
+ * changes wait. `inline` follows a label; `corner` sits on an icon, knocked out of its surface.
  */
 export function DocumentActivityDot(
 	{ activity, placement = "inline" }: {
@@ -84,9 +84,9 @@ export function DocumentActivityDot(
 	return (
 		<span
 			aria-hidden="true"
-			className={`document-activity-dot shrink-0 rounded-full ${
-				activity === "writing" ? "size-2 border-2 border-brand" : "size-1.5 bg-brand"
-			} ${placement === "corner" ? "absolute right-0 top-1" : "ml-1"}`}
+			className={`document-activity-dot activity-dot ${
+				placement === "corner" ? "activity-badge" : ""
+			}`}
 			data-document-activity={activity}
 		/>
 	);

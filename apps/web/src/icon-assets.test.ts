@@ -25,7 +25,7 @@ test("the sidebar owns the panel-close asset and the workspace uses line icons",
 	expect(sidebar).toContain("assets/icons/panel-close.svg");
 	expect(workspace).not.toContain("assets/icons/panel-close.svg");
 	expect(workspace).toContain("ExpandIcon");
-	expect(workspace).toContain("CollapseIcon");
+	expect(workspace).toContain("MessageIcon");
 	expect(existsSync(join(root, "assets/figma/navigation/collapse.svg"))).toBe(false);
 	expect(existsSync(join(root, "assets/icons/chat-close.svg"))).toBe(false);
 });

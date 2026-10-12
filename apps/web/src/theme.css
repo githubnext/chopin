@@ -763,6 +763,24 @@ body {
 	align-items: center;
 }
 
+/* After the Chat toggle's rule, the project sits as far in as the toggle's glyph sits from the edge. */
+.workspace-surface-toggle-slot + .document-title-slot {
+	padding-inline-start: var(--control-padding-inline);
+}
+
+/* Both bars read at one size: the views' control text. */
+.document-title-bar
+	:is(.document-project-prefix, .document-project-separator, .document-title-crumb, .title-control) {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+/* The repository glyph sits as far from the project as the Chat toggle's glyph from its label. */
+.document-title-bar .document-title > [data-nucleo-icon] {
+	margin-inline-end: calc(var(--spacing) / 2);
+	color: var(--color-text-tertiary);
+}
+
 .document-title-trailing {
 	display: flex;
 	align-self: stretch;
@@ -994,6 +1012,37 @@ body {
 		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
 		background: linear-gradient(var(--scroll-edge-surface) 50%, transparent);
 	}
+}
+
+/* Unread and new-change marks: one solid petrol dot, still so it never competes with reading. */
+.activity-dot {
+	display: block;
+	flex: none;
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 2);
+	border-radius: var(--radius-full);
+	background: var(--color-brand);
+}
+
+/* On an icon's corner, a ring in the surface colour cuts the dot out of the glyph beneath. */
+.activity-badge {
+	position: absolute;
+	top: calc(var(--spacing) * -0.75);
+	right: calc(var(--spacing) * -0.75);
+	outline-style: solid;
+	outline-width: calc(var(--edge-width) * 2);
+	outline-color: var(--activity-badge-ring, var(--color-page));
+}
+
+/* The ring follows the ghost button's own fill so the knockout never shows as a halo. */
+@media (hover: hover) {
+	.btn-ghost:hover:not(:disabled) {
+		--activity-badge-ring: var(--color-gray-200);
+	}
+}
+
+.btn-ghost:active:not(:disabled) {
+	--activity-badge-ring: var(--color-gray-300);
 }
 
 /* On the ground a white composer is the brightest thing in the column. */
@@ -2057,11 +2106,6 @@ button.question-add:disabled {
 	border-radius: var(--radius-full);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-	.document-activity-dot[data-document-activity="writing"] {
-		animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
-	}
-}
 @media (prefers-reduced-motion: reduce) {
 	.chat-work-lattice > span,
 	.chat-work-headline-motion,

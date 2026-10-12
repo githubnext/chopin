@@ -70,7 +70,7 @@ export function DecisionViewControl(
 				aria-current={view === "plan" ? "page" : undefined}
 				aria-label={view === "plan" ? undefined : documentActivityLabel(documentActivity)}
 				aria-pressed={view === "plan"}
-				className={`btn btn-sm relative transition-[background-color,box-shadow,color] ${
+				className={`btn btn-sm gap-1.5 transition-[background-color,box-shadow,color] ${
 					view === "plan"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"
@@ -79,7 +79,7 @@ export function DecisionViewControl(
 				type="button"
 			>
 				Document
-				{view !== "plan" && <DocumentActivityDot activity={documentActivity} placement="corner" />}
+				{view !== "plan" && <DocumentActivityDot activity={documentActivity} />}
 			</button>
 			<button
 				aria-current={view === "decisions" ? "page" : undefined}

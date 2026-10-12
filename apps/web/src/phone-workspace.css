@@ -504,15 +504,19 @@
 	left: calc(100% - var(--spacing) * 2);
 }
 
-.phone-tab-dot {
+/* The phone's Chat and Document marks: the shared activity badge, placed for a 24px glyph. */
+.phone-tab-dot,
+.phone-tab-icon > .activity-badge {
 	position: absolute;
 	top: 0;
 	right: calc(var(--spacing) * -0.5);
 	width: calc(var(--spacing) * 2);
 	height: calc(var(--spacing) * 2);
-	border: 2px solid var(--color-page);
 	border-radius: var(--radius-full);
 	background: var(--color-brand);
+	outline-style: solid;
+	outline-width: calc(var(--edge-width) * 2);
+	outline-color: var(--color-page);
 }
 
 /* A single circular control at the end of the bar (`phoneAction`); slices add its contents. */
