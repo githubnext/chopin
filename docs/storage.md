@@ -14,7 +14,8 @@ slug aliases, collaboration recovery state, domain sidecars, token-free ownershi
 references, parent-scoped research request staging, durable background jobs,
 ordinary child channels, and the writer lease.
 Hosted sessions store browser-secret hashes and authenticated ciphertext for
-GitHub credentials. The encryption key stays outside PostgreSQL. Plaintext
+GitHub credentials; paired machines store a token hash and their own GitHub
+credentials the same way. The encryption key stays outside PostgreSQL. Plaintext
 GitHub tokens, raw browser-cookie secrets, open rooms, Awareness presence, and
 Copilot SDK sessions never cross the storage boundary. See
 [Session boundary](authentication.md#session-boundary) for encryption and restoration.
@@ -53,6 +54,8 @@ Every adapter must provide:
 - repository-scoped canonical and historical slug resolution without rebinding
   aliases;
 - expiring session rows with optional opaque encrypted credentials;
+- paired machines found by token hash, with revision-checked credential rotation,
+  re-authorization and owner-only revocation that discards credentials;
 - revision-checked credential rotation that cannot recreate a deleted session;
 - startup removal of expired and metadata-only sessions and every Planner owner reference;
 - startup clearing of child channel conversations, fenced by the writer lease
@@ -128,6 +131,7 @@ applied migration. The application schema contains:
 | `research_turns`           | Internal initial attempt and compatibility turns with evidence and answer job links.                                                                       |
 | `research_messages`        | Compatibility transcript rows retained for historical workspace references; not a current product thread.                                                  |
 | `plan_images`              | Images uploaded to a document through MCP `upload_image`: SHA-256, type, bytes, size, uploader, and time, keyed by channel and hash.                       |
+| `machines`                 | Paired local agents: owner, label, repositories, auto-run choice, token hash, encrypted GitHub credentials, contact and revocation times.                  |
 
 `channel_state.unanswered_decisions` is maintained in JavaScript rather than a
 generated column. Sidecar text may contain an escaped NUL or an unpaired UTF-16

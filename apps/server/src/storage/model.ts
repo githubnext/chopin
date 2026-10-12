@@ -90,6 +90,40 @@ export type SessionCredentials = {
 export type StoredWebSession = WebSession & { credentials?: SessionCredentials };
 export type CreateWebSession = StoredWebSession;
 
+/** One checkout a paired machine serves. */
+export type MachineRepository = {
+	repositoryId: string;
+	repository: string;
+	commit: string;
+	branch?: string;
+};
+
+/** Opaque authenticated ciphertext of a machine's own GitHub App user token pair. */
+export type MachineCredentials = {
+	ciphertext: Uint8Array;
+	revision: number;
+};
+
+/**
+ * A local agent paired once by its owner. Storage holds a hash of its bearer token, never the
+ * token, and its GitHub credentials only as ciphertext.
+ */
+export type StoredMachine = {
+	id: string;
+	userId: string;
+	label: string;
+	repositories: MachineRepository[];
+	autoRun: boolean;
+	tokenHash: Uint8Array;
+	credentials?: MachineCredentials;
+	createdAt: Date;
+	lastSeenAt: Date;
+	/** GitHub refused its stored authorization; the owner must pair it again. */
+	reauthorizeAt?: Date;
+	revokedAt?: Date;
+};
+export type CreateMachine = Omit<StoredMachine, "reauthorizeAt" | "revokedAt">;
+
 export type ChannelDescription = {
 	value: string;
 	revision: number;

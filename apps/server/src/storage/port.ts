@@ -27,6 +27,7 @@ import type {
 	ConfirmResearchWorkspace,
 	ConfirmResearchWorkspaceResult,
 	CreateChannel,
+	CreateMachine,
 	CreateResearchWorkspace,
 	CreateResearchWorkspaceResult,
 	CreateWebSession,
@@ -35,6 +36,7 @@ import type {
 	Lease,
 	LinkResearchTurnJob,
 	LinkResearchTurnJobResult,
+	MachineCredentials,
 	PauseBackgroundJob,
 	PublishChannelDescription,
 	PublishChannelDescriptionResult,
@@ -64,6 +66,7 @@ import type {
 	StartResearchWorkspaceResult,
 	StoredChannel,
 	StoredImage,
+	StoredMachine,
 	StoredWebSession,
 	SupersedeBackgroundJob,
 	UpdateAgentContext,
@@ -91,6 +94,22 @@ export interface SessionStore {
 		lease: Lease,
 		leaseTtlMs: number,
 	): Promise<{ deleted: number; lease: Lease }>;
+}
+
+/** Paired local agents. Credentials rotate by revision and never outlive revocation. */
+export interface MachineStore {
+	create(machine: CreateMachine): Promise<void>;
+	get(id: string): Promise<StoredMachine | undefined>;
+	/** Revoked machines are returned too, so callers can tell revocation apart. */
+	byToken(tokenHash: Uint8Array): Promise<StoredMachine | undefined>;
+	/** An owner's unrevoked machines, most recently paired first. */
+	list(userId: string): Promise<StoredMachine[]>;
+	seen(id: string, now: Date): Promise<void>;
+	rotate(id: string, expectedRevision: number, credentials: MachineCredentials): Promise<boolean>;
+	/** Drop credentials GitHub refused at `expectedRevision`; the owner must pair again. */
+	reauthorize(id: string, expectedRevision: number, now: Date): Promise<boolean>;
+	/** True only for the call that revoked the owner's live machine. */
+	revoke(id: string, userId: string, now: Date): Promise<boolean>;
 }
 
 export interface ImageStore {
@@ -273,6 +292,7 @@ export interface StorageAdapter {
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 	readonly images: ImageStore;
+	readonly machines: MachineStore;
 
 	migrate(): Promise<void>;
 	health(): Promise<void>;

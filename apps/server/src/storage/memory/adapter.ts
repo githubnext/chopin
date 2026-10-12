@@ -6,6 +6,7 @@ import { childSidecarWithoutConversation } from "../child-conversation";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
 import { MemoryImageStore } from "./images";
+import { MemoryMachineStore } from "./machines";
 import { MemoryResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -49,6 +50,7 @@ import type {
 	CollaborationStore,
 	ImageStore,
 	LeaseStore,
+	MachineStore,
 	NavigationStore,
 	ResearchWorkspaceStore,
 	SessionStore,
@@ -164,6 +166,7 @@ export class MemoryStorage implements StorageAdapter {
 		userExists: id => this.#users.has(id),
 	});
 	readonly images: ImageStore = this.#images;
+	readonly machines: MachineStore = new MemoryMachineStore(id => this.#users.has(id));
 
 	readonly users: UserStore = {
 		put: input => {

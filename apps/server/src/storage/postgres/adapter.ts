@@ -10,6 +10,7 @@ import { PostgresNavigationStore } from "./navigation";
 import { PostgresBackgroundJobStore } from "./jobs";
 import { PostgresExperimentStore } from "./experiments";
 import { PostgresImageStore } from "./images";
+import { PostgresMachineStore } from "./machines";
 import { PostgresResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -533,6 +534,10 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
 		);
+		this.machines = new PostgresMachineStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
 		this.jobs = new PostgresBackgroundJobStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -677,6 +682,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 	readonly images: PostgresImageStore;
+	readonly machines: PostgresMachineStore;
 
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),
