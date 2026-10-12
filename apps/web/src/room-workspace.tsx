@@ -66,7 +66,7 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
 import { PhoneHeader } from "./phone-header";
-import { PhoneSkeletonPage } from "./phone-skeleton";
+import { DocumentSkeleton } from "./phone-skeleton";
 import { useEditorFocus, useKeyboardOpen } from "./keyboard-open";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -962,6 +962,8 @@ export function RoomWorkspace(
 		setArrived(true);
 		if (opensEditing({ empty: planState.empty })) setEditing(true);
 	}, [arrived, planState.synced, planState.empty]);
+	// A failed open says so instead; the lines would otherwise pulse beside it indefinitely.
+	let loading = phone && !arrived && !planState.failed;
 	// A child on a phone borrows its parent's tab bar (see child-phone-chrome.ts).
 	let childChrome = useContext(ChildPhoneChromeContext);
 	let childRoom = presentation.type === "child";
@@ -1167,12 +1169,17 @@ export function RoomWorkspace(
 				motionImmediately={settleMotionImmediately}
 				onScrollTop={setPlanScrollTop}
 				onState={setPlanState}
-				preface={presentation.type === "child" && presentation.parent
-					? <ChildProvenance channelId={room} parent={presentation.parent} />
-					// Continues the loading skeleton's lines until the document first arrives; a later
-					// reconnection keeps the document it already shows.
-					: phone && !arrived
-					? <PhoneSkeletonPage />
+				// The skeleton's lines continue in the column until the document first arrives; a
+				// later reconnection keeps the document it already shows.
+				preface={presentation.type === "child" && presentation.parent || loading
+					? (
+						<>
+							{presentation.type === "child" && presentation.parent && (
+								<ChildProvenance channelId={room} parent={presentation.parent} />
+							)}
+							{loading && <DocumentSkeleton />}
+						</>
+					)
 					: undefined}
 				questionMotion={QUESTION_MOTION}
 				questions={questions}

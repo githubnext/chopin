@@ -17,18 +17,27 @@
 		<title>chopin</title>
 		<!-- Lets a phone opening a document paint its skeleton before the app's JavaScript runs. -->
 		<script>
-		var documentRoute =
-			/^\/(documents(\/[^/]+){3}(\/children\/[^/]+)?|channels\/[0-9a-f-]{36})\/?$/i;
-		if (documentRoute.test(location.pathname)) {
-			document.documentElement.dataset.boot = "document";
-		}
+		(function() {
+			var documentRoute =
+				/^\/(documents(\/[^/]+){3}(\/children\/[^/]+)?|channels\/[0-9a-f-]{36})\/?$/i;
+			if (documentRoute.test(location.pathname)) {
+				document.documentElement.dataset.boot = "document";
+			}
+		})();
 		</script>
+		<!-- Hidden until the app's stylesheet (phone-skeleton.css) reveals it, never unstyled. -->
+		<style>
+		.boot-skeleton {
+			display: none;
+		}
+		</style>
 	</head>
 	<body>
 		<div id="root">
 			<!-- A static copy of PhoneSkeleton (src/phone-skeleton.tsx); React replaces it on mount. -->
 			<div class="boot-skeleton">
-				<div aria-label="Opening document" class="phone-skeleton" role="status">
+				<div class="phone-skeleton">
+					<p class="sr-only" role="status">Opening document…</p>
 					<div class="phone-skeleton-top">
 						<span class="phone-skeleton-slot">
 							<span aria-hidden="true" class="phone-skeleton-icon">

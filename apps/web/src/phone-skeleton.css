@@ -5,11 +5,10 @@
  * static copy in index.html paints before any JavaScript runs.
  */
 
-/* Only a phone opening a document shows the static copy; React replaces it as it mounts. */
-.boot-skeleton {
-	display: none;
-}
-
+/*
+ * Only a phone opening a document shows the static copy; React replaces it as it mounts. An
+ * inline style in index.html hides it until this stylesheet has loaded.
+ */
 @media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
 	:root[data-boot="document"] .boot-skeleton {
 		display: contents;
