@@ -57,7 +57,7 @@ export function spikeHost({ service, connections, withPlan }: Options): SpikeHos
 		async start(channelId, { owner, connection, block }) {
 			let id = crypto.randomUUID();
 			let callout = ulid();
-			let created = await service.create(channelId, owner, spikeBrief(block.text), id, undefined, {
+			let created = await service.create(channelId, owner, spikeBrief(block.text), id, {
 				digest: block.digest,
 				passage: block.text,
 				callout,

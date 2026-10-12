@@ -487,7 +487,7 @@ test("a spike runs with an image upload and a structured report, and stays out o
 	let { alice, documentId, request, tool, pair, runtime } = await setup();
 	let paired = await pair(alice.cookie);
 	let id = crypto.randomUUID();
-	await runtime.service.create(documentId, "alice", "Spike brief", id, undefined, {
+	await runtime.service.create(documentId, "alice", "Spike brief", id, {
 		digest: "sha256:x",
 		passage: "Unsure whether this works.",
 		callout: "01JAAAAAAAAAAAAAAAAAAAAAAA",
@@ -597,7 +597,7 @@ test("a spike uploads at most three images and cites only its own", async () => 
 	let { alice, documentId, tool, pair, runtime, storage } = await setup();
 	let paired = await pair(alice.cookie);
 	let id = crypto.randomUUID();
-	await runtime.service.create(documentId, "alice", "Spike brief", id, undefined, {
+	await runtime.service.create(documentId, "alice", "Spike brief", id, {
 		digest: "sha256:x",
 		passage: "Unsure whether this works.",
 		callout: "01JAAAAAAAAAAAAAAAAAAAAAAA",
