@@ -213,7 +213,7 @@ test("a proposal typed from the slash menu appears inline on a phone", async ({ 
 		"Your local agent isn’t connected. Run this in your project folder, then press Run again.",
 	);
 	await expect(proposal.locator("code")).toHaveText(
-		/curl -fsSL http:\/\/\S+\/connector\.js .* bun ~\/\.chopin\/connector\.js connect \. /,
+		/curl -fsSL http:\/\/\S+\/connector\.js .* bun --no-env-file --config=\/dev\/null ~\/\.chopin\/connector\.js connect \. /,
 	);
 	await expect(proposal.getByRole("link", { name: "Trouble connecting?", exact: true }))
 		.toBeVisible();
