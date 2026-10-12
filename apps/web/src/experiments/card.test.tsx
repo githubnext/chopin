@@ -116,3 +116,11 @@ test("a completed investigation is a compact card that opens its child document"
 	expect(markup).toContain("Insert decision evidence in document");
 	expect(render(store, "ana", true)).not.toContain("Insert decision evidence in document");
 });
+
+test("a completed investigation whose child is gone says so", () => {
+	let { store, item } = setup("completed");
+	item.result = performance;
+	let markup = render(store);
+	expect(markup).toContain("Its published document is no longer available.");
+	expect(markup).not.toContain("Open ");
+});
