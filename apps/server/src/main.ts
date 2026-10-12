@@ -1211,6 +1211,9 @@ function openRoomSocket(ws: Socket): void {
 		webResearch: config.webResearch,
 		...CHAT_CAPABILITIES,
 	});
+	if (plannerAttachments) {
+		tell(ws, { kind: "session:planner", ts: 0, planner: plannerAttachments.status(room.id) });
+	}
 	relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
 	scheduleAuthorization(ws);
 	void validateOpenedSocket(ws).catch(err => {
@@ -1834,6 +1837,11 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
 if (config.agent && config.harness === "remote") {
 	plannerAttachments = new PlannerAttachments(hostedAuth, config.plannerAttachGraceMs);
+	plannerAttachments.onChange((channelId, planner) => {
+		if (server && !draining) {
+			broadcast(server, channelId, { kind: "session:planner", ts: 0, planner });
+		}
+	});
 }
 let definitions: JobDefinition[] = [];
 if (config.backgroundJobs) {

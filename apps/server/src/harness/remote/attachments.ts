@@ -14,6 +14,7 @@
 import { GitHubError } from "../../github/client";
 import { attachLink } from "./registry";
 
+import type { Session } from "@chopin/protocol";
 import type { Admission } from "../../auth/admission";
 import type { AuthConfig } from "../../auth/config";
 import type { AuthenticatedSession, Sessions } from "../../auth/session";
@@ -43,6 +44,11 @@ export type AttachRefusal = {
 };
 
 export type AttachGrant = { ok: true; detach: () => void };
+
+/** What a document's members are told about its Planner: only the holder's login and state. */
+export type PlannerAttachment = Session.PlannerAttachment;
+
+type AttachmentListener = (channelId: string, planner: PlannerAttachment) => void;
 
 type Hold = {
 	channelId: string;
@@ -80,6 +86,7 @@ export class PlannerAttachments {
 	#holds = new Map<string, Hold>();
 	#pending = new Map<string, PendingAttach>();
 	#queues = new Map<string, Promise<void>>();
+	#listeners = new Set<AttachmentListener>();
 
 	constructor(auth: AttachmentAuth, graceMs: number) {
 		this.#auth = auth;
@@ -104,6 +111,23 @@ export class PlannerAttachments {
 	/** The GitHub login holding the document's Planner, attached or within its grace period. */
 	holder(channelId: string): string | undefined {
 		return this.#holds.get(channelId)?.login;
+	}
+
+	/** Whether the document's Planner is attached, held through a grace period, or free, and by whom. */
+	status(channelId: string): PlannerAttachment {
+		let hold = this.#holds.get(channelId);
+		if (!hold) return { state: "none" };
+		if (hold.link || !hold.releaseAt) return { state: "attached", login: hold.login };
+		return { state: "held", login: hold.login, until: hold.releaseAt.toISOString() };
+	}
+
+	/**
+	 * Calls `listener` with the new status whenever a document's changes: an attach,
+	 * a detach into the grace period, and every release. Returns the unsubscribe.
+	 */
+	onChange(listener: AttachmentListener): () => void {
+		this.#listeners.add(listener);
+		return () => this.#listeners.delete(listener);
 	}
 
 	/** Makes `link` the document's Planner and its account the owner, or says why not. */
@@ -300,6 +324,7 @@ export class PlannerAttachments {
 		hold.releaseAt = undefined;
 		hold.link = link;
 		hold.forget = attachLink(hold.channelId, link);
+		this.#changed(hold.channelId);
 		return { ok: true, detach: () => this.#detached(hold, link) };
 	}
 
@@ -312,6 +337,7 @@ export class PlannerAttachments {
 		hold.releaseAt = new Date(this.#auth.clock().getTime() + this.#graceMs);
 		hold.timer = setTimeout(() => void this.#expire(hold), this.#graceMs);
 		hold.timer.unref?.();
+		this.#changed(hold.channelId);
 	}
 
 	#expire(hold: Hold): Promise<void> {
@@ -345,7 +371,20 @@ export class PlannerAttachments {
 	#drop(hold: Hold): void {
 		clearTimeout(hold.timer);
 		hold.timer = undefined;
-		if (this.#holds.get(hold.channelId) === hold) this.#holds.delete(hold.channelId);
+		if (this.#holds.get(hold.channelId) !== hold) return;
+		this.#holds.delete(hold.channelId);
+		this.#changed(hold.channelId);
+	}
+
+	#changed(channelId: string): void {
+		let planner = this.status(channelId);
+		for (let listener of this.#listeners) {
+			try {
+				listener(channelId, planner);
+			} catch (error) {
+				console.error("[planner-link] reporting the Planner attachment failed:", error);
+			}
+		}
 	}
 
 	#serialized<T>(channelId: string, action: () => Promise<T>): Promise<T> {

@@ -18,7 +18,16 @@ export function testChannelPath(id: string): string {
 	return `/documents/octo-org/score/${testChannelSlug(id)}`;
 }
 
+let ownDatabases = new Map<number, string>();
+
+/** Points the helpers here at the database of a server a test file starts itself. */
+export function registerTestDatabase(port: number, databaseUrl: string): void {
+	ownDatabases.set(port, databaseUrl);
+}
+
 function url(port: number): string {
+	let own = ownDatabases.get(port);
+	if (own) return own;
 	let index = port === 8792 ? 2 : port === 8789 ? 1 : 0;
 	return process.env[`E2E_DATABASE_URL_${index}`] || DEFAULT_DATABASES[port]!;
 }

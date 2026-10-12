@@ -354,6 +354,14 @@ it is about to claim with; otherwise it is refused like an attached link would
 be closed. Attachments live in the server process; startup already clears
 every owner reference, which releases every attachment.
 
+**Who is attached.** Each room socket hears `session:planner` after
+`session:hello`, and the whole room hears it again whenever an attachment
+changes: an attach, a detach into the grace period with the time it ends, the
+grace period ending, a sign-out, a Planner reset, or the server closing a link
+whose ownership was released. It names only the holder's GitHub login and
+state, never a machine, checkout, or token. Chat shows it as one line under the
+composer. Other harnesses never send it, and Chat then shows nothing.
+
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period,

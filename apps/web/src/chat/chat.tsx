@@ -21,6 +21,7 @@ import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/
 import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
 import { ModeSwitch } from "./mode-switch";
+import { PlannerAttachment } from "./planner-attachment";
 import "./composer.css";
 
 import { CommandPicker } from "./command-picker";
@@ -77,7 +78,7 @@ import type { ResearchOfferControls } from "./research-offer";
 import plannerStop from "../assets/icons/planner-stop.svg";
 import plannerResume from "../assets/icons/planner-resume.svg";
 
-import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
+import type { Chat as Wire, ConversationPlan, Session } from "@chopin/protocol";
 import type { Repository } from "../api";
 import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
 import type { ChatCommand } from "./commands";
@@ -132,6 +133,8 @@ export type ChatProps = {
 	notice?: string;
 	/** One calm line shown while the transcript has loaded and is still empty. */
 	emptyNotice?: string;
+	/** Who holds the document's remote Planner; absent under every other harness. */
+	planner?: Session.PlannerAttachment;
 };
 
 /** How many runs are still live, and how many are paused and resumable. */
@@ -204,6 +207,7 @@ export function Chat(
 		people = [],
 		notice,
 		emptyNotice,
+		planner,
 		onShowDecisions,
 		onResearch,
 		onShowResearch,
@@ -670,6 +674,7 @@ export function Chat(
 				{transcriptView}
 				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
+					<PlannerAttachment planner={planner} />
 				</div>
 			</div>
 		);
@@ -1057,6 +1062,7 @@ export function Chat(
 							</>
 						)}
 				</div>
+				<PlannerAttachment planner={planner} />
 			</div>
 		</div>
 	);
