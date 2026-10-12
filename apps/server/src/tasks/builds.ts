@@ -881,6 +881,17 @@ export function reportRebuild(
 	});
 }
 
+/** The last change count per open document, so repeated reads between edits parse nothing. */
+let counted = new WeakMap<Plan, { revision: number; base: string; changes: number }>();
+
+function changeCount(plan: Plan, base: string, current: string): number {
+	let cached = counted.get(plan);
+	if (cached?.revision === plan.revision && cached.base === base) return cached.changes;
+	let changes = changedBlocks(base, current);
+	counted.set(plan, { revision: plan.revision, base, changes });
+	return changes;
+}
+
 /** What the browser needs to show whether a living document matches its pull requests. */
 export function liveSnapshot(
 	plan: Plan,
@@ -920,7 +931,7 @@ export function liveSnapshot(
 		...(unfinished.length ? { outstandingTasks: unfinished } : {}),
 		...(rebuild ? { rebuild } : {}),
 		outOfSync: current !== baseSource,
-		changes: changedBlocks(baseSource, current),
+		changes: current === baseSource ? 0 : changeCount(plan, baseSource, current),
 		...(builder
 			? {
 				checkout: structuredClone(checkout),

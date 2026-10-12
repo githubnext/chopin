@@ -22,7 +22,7 @@ describe("changedBlocks", () => {
 		expect(changedBlocks(BASE, `${after}\nA day.\n`)).toBe(3);
 	});
 
-	test("counts a moved block as unchanged but any difference as at least one", () => {
+	test("counts a reorder of any size only through the floor of one change", () => {
 		let moved = "# Snooze\n\nAn hour.\n\nFive minutes.\n\nFifteen minutes.\n";
 		expect(changedBlocks(BASE, moved)).toBe(1);
 		expect(changedBlocks(BASE, `${BASE}\n`)).toBe(1);

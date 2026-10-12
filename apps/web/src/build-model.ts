@@ -410,9 +410,10 @@ function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): str
 	if (!snapshot.buildReady) return "Add more detail before building";
 }
 
+/** Who else built a living document: their login, `""` when it is unknown, or nothing for you. */
 function builder(snapshot: Snapshot, userId: string | undefined): string | undefined {
 	if (!snapshot.live || snapshot.live.user === userId) return;
-	return snapshot.builtBy ? `@${snapshot.builtBy}` : "the builder";
+	return snapshot.builtBy ? `@${snapshot.builtBy}` : "";
 }
 
 export function buildLook(snapshot: Snapshot | undefined, context: BuildContext): BuildLook {
@@ -453,12 +454,18 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 		let changes = Math.max(snapshot.live!.changes ?? 1, 1);
 		let tip = context.live
 			? sync.reason === "waiting"
-				? who ? `Waiting for ${who}’s agent` : "Waiting for your agent"
+				? who
+					? `Waiting for ${who}’s agent`
+					: who === ""
+					? "Waiting for the agent that built it"
+					: "Waiting for your agent"
 				: who
 				? `Builds on ${who}’s agent when editing settles`
 				: "Builds when editing settles"
 			: who
 			? `Edits since ${who} built it`
+			: who === ""
+			? "Edits since someone else’s build"
 			: "Edits since the last build";
 		return { kind: "stale", changes, live: context.live, tip, build: false };
 	}
