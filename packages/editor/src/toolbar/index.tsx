@@ -127,7 +127,7 @@ export function Toolbar() {
 					disabled={disabled}
 					onComment={comment}
 					onPanel={options.onFormatPanel}
-					research={!!options.research && !!options.researchDrafts}
+					actions={actions}
 				/>,
 				dock,
 			)}

@@ -72,11 +72,11 @@ function $openBlock() {
 /** Kinds of list belong with the other text styles, not with the blocks. */
 const STYLED = new Set(["tasks"]);
 
-/** The slash menu's blocks, and Research where the host offers it. */
-export function insertChoices(research: boolean): PanelChoice[] {
+/** The slash menu's blocks, and the actions (Research, Investigate) the host offers. */
+export function insertChoices(actions: ReadonlySet<string>): PanelChoice[] {
 	return availableCommands("")
 		.filter(command => !STYLED.has(command.id))
-		.filter(command => command.kind === "insert" || research)
+		.filter(command => command.kind === "insert" || actions.has(command.id))
 		.map(command => ({
 			id: command.id,
 			label: command.label,

@@ -72,13 +72,16 @@ const KEYBOARD_TIMEOUT = 1000;
 /** Space kept between the caret's block and the top of an open panel. */
 const CARET_CLEARANCE = 12;
 
+const NO_ACTIONS: ReadonlySet<string> = new Set();
+
 export function FormatDock(
-	{ disabled, onComment, onPanel, research = false }: {
+	{ disabled, onComment, onPanel, actions = NO_ACTIONS }: {
 		disabled?: boolean;
 		onComment?: () => void;
 		/** Told while a panel holds the keyboard's place, so the host keeps the dock up. */
 		onPanel?: (open: boolean) => void;
-		research?: boolean;
+		/** Slash-menu actions the host offers, such as research and investigate. */
+		actions?: ReadonlySet<string>;
 	},
 ) {
 	let [editor] = useLexicalComposerContext();
@@ -250,7 +253,7 @@ export function FormatDock(
 	};
 
 	let choices = panel?.kind === "insert"
-		? insertChoices(research)
+		? insertChoices(actions)
 		: panel?.kind === "style"
 		? styleChoices(panel.block)
 		: [];
