@@ -43,8 +43,13 @@ let app = new AgentApp()
 			) throw new Error("Live instruction missing");
 			return { stopReason: "end_turn" as const };
 		}
+		let rebuilding = process.argv.includes("--complete")
+			&& params.prompt.some(part => part.type === "text" && part.text.includes("read_rebuild"));
 		if (
-			!params.prompt.some(part => part.type === "text" && part.text.includes("MUST use sub-agents"))
+			!rebuilding
+			&& !params.prompt.some(part =>
+				part.type === "text" && part.text.includes("MUST use sub-agents")
+			)
 		) {
 			throw new Error("Orchestration instruction missing");
 		}
@@ -71,6 +76,23 @@ let app = new AgentApp()
 			if (result.isError) throw new Error(JSON.stringify(result.content));
 			return result;
 		};
+		// A completing fixture lands a rebuild with one commit on the first pull request.
+		if (rebuilding) {
+			try {
+				let read = await call("read_rebuild");
+				let delta = JSON.parse((read.content as Array<{ text: string }>)[0].text);
+				let pullRequest = delta.pullRequests[0]?.url;
+				if (!pullRequest) throw new Error("Rebuild has no pull request");
+				await call("report_rebuild", {
+					summary: "Protocol fixture rebuilt the change",
+					commits: [{ pullRequest, sha: "f".repeat(40), message: "Apply the document change" }],
+					tasks: [],
+				});
+			} finally {
+				await client.close();
+			}
+			return { stopReason: "end_turn" as const };
+		}
 		try {
 			let read = await call("read_implementation");
 			let context = JSON.parse((read.content as Array<{ text: string }>)[0].text);
