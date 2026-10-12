@@ -370,11 +370,12 @@ async function placeInvestigationReference(
 	channelId: string,
 	id: string,
 	after?: { index: number; digest: string },
-): Promise<InvestigationPlacement | "closing"> {
+): Promise<InvestigationPlacement | "closing" | "unopened"> {
 	if (Rooms.get(channelId)?.closing) return "closing";
 	return withDocumentLock(channelId, async () => {
 		let active = Rooms.get(channelId)?.plan;
-		if (!active || Rooms.get(channelId)?.closing || active.persistence.closing) return "closing";
+		if (Rooms.get(channelId)?.closing || active?.persistence.closing) return "closing";
+		if (!active) return "unopened";
 		return Service.placeInvestigationReference(active, id, after);
 	});
 }
@@ -581,14 +582,14 @@ function conversation(
 						hash.slice(17, 20)
 					}-${hash.slice(20, 32)}`;
 					let value = await experiments!.service.create(room.id, request.userId, request.brief, id);
-					let placed: InvestigationPlacement | "closing" | "locked";
+					let placed: InvestigationPlacement | "closing" | "unopened" | "locked";
 					try {
 						placed = await placeInvestigationReference(room.id, value.id, request.after);
 					} catch (error) {
 						if (!(error instanceof Service.ImplementationActiveError)) throw error;
 						placed = "locked";
 					}
-					if (placed !== "closing" && placed !== "locked") {
+					if (placed !== "closing" && placed !== "unopened" && placed !== "locked") {
 						return {
 							id: value.id,
 							state: value.state,
@@ -614,6 +615,8 @@ function conversation(
 						placement: placed,
 						message: placed === "locked"
 							? "A build locked the document before its card was placed, so the proposal was withdrawn. Propose it again after the build."
+							: placed === "closing"
+							? "The document is closing, so its card was not placed and the proposal was withdrawn. Propose it again once the document is open."
 							: "The document was not open to place its card, so the proposal was withdrawn. Propose it again while the document is open.",
 					};
 				},

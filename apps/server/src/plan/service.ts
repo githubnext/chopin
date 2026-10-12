@@ -2213,8 +2213,22 @@ export function placeInvestigationReference(
 		document.seq = plan.document.seq;
 		try {
 			let { mutation, placement } = room.insertInvestigation(document, id, after);
-			if (mutation) {
-				await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation);
+			if (!mutation) return placement;
+			await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation, {
+				agent: true,
+			});
+			// Marked only once the update that created the card has been relayed.
+			let index = parse(room.project(plan.document)).children.findIndex(node =>
+				node.type === "mdxJsxFlowElement" && node.name === "Investigation"
+				&& node.attributes.some(item => "name" in item && item.name === "id" && item.value === id)
+			);
+			if (index >= 0) {
+				changes(plan, plan.server, plan.id, [{
+					kind: "added",
+					index,
+					type: "Investigation",
+					preview: "",
+				}]);
 			}
 			return placement;
 		} finally {
