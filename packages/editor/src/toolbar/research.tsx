@@ -68,7 +68,13 @@ const KINDS = {
 		unresolved: "This research draft cannot yet be placed at its saved position.",
 		cancel: "Cancel research",
 		place: "Place research",
-		composer: { submitLabel: undefined },
+		composer: {
+			label: "Research question",
+			placeholder: "What should Chopin research?",
+			submitLabel: "Start research",
+			discard: "Discard research",
+			discardLabel: "Discard research question",
+		},
 	},
 	investigation: {
 		command: OPEN_INVESTIGATION_COMMAND,
@@ -470,17 +476,20 @@ export function ResearchComposerSurface(
 			surfaceRef={surface}
 		>
 			<ResearchComposer
-				{...copy.composer}
 				blocked={disabled ? copy.blocked : binding ? undefined : copy.offline}
 				cancelDisabled={!!current.created && !!disabled}
 				cancelLabel={current.created ? copy.cancel : undefined}
+				discard={copy.composer.discard}
+				discardLabel={copy.composer.discardLabel}
 				dismissible={dismissible}
 				error={current.error}
+				label={copy.composer.label}
 				notice={draft && !busy && unresolved ? copy.unresolved : undefined}
 				onCancel={cancel}
 				onChange={question => drafts.change(question)}
 				onEscape={dismiss}
 				onSubmit={submit}
+				placeholder={copy.composer.placeholder}
 				question={current.question}
 				questionLocked={!!current.created}
 				submitLabel={current.created ? copy.place : copy.composer.submitLabel}
