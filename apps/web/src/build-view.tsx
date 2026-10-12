@@ -250,7 +250,7 @@ export function BuildView(
 	let listed = new Set<string>();
 	// A built document lists the tasks its later rebuilds added under their own heading.
 	let groups = phase.kind === "live" ? liveTaskGroups(tasks) : { first: tasks, since: [] };
-	let noChange = phase.kind === "live" ? [...(snapshot?.live?.noChange ?? [])].reverse() : [];
+	let noChange = phase.kind === "live" ? [...(snapshot?.live?.noChange ?? [])].toReversed() : [];
 	let outstanding = new Set(snapshot?.live?.outstandingTasks?.map(task => task.id));
 	let rebuilding = phase.kind === "live" && phase.sync.kind === "building";
 	let renderTask = (task: (typeof tasks)[number]) => {
