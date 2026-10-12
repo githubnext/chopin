@@ -40,14 +40,15 @@ function render(store: ExperimentStore, userId = "ana", locked = false) {
 	}));
 }
 
-test("a requested investigation offers Run and can be removed", () => {
+test("a requested investigation offers Run and can be withdrawn", () => {
 	let { store } = setup("requested");
 	let markup = render(store);
 	expect(markup).toContain('aria-label="Investigation"');
 	expect(markup).toContain("Ready to run");
 	expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>Run<\/button>/);
 	expect(markup).toContain('aria-label="Remove investigation"');
-	expect(removableInvestigation(store, "investigation")).toBe(true);
+	// Its card goes only after the record is withdrawn.
+	expect(removableInvestigation(store, "investigation")).toBe(false);
 	expect(render(store, "ana", true)).toMatch(/<button[^>]*disabled=""[^>]*>Run<\/button>/);
 });
 
@@ -73,6 +74,8 @@ test("settled work offers Retry", () => {
 	for (let state of ["failed", "cancelled", "interrupted"] as const) {
 		let { store } = setup(state);
 		expect(render(store)).toMatch(/<button(?![^>]*disabled)[^>]*>Retry<\/button>/);
+		expect(render(store)).toContain("Remove investigation");
+		expect(removableInvestigation(store, "investigation")).toBe(true);
 	}
 });
 
@@ -80,7 +83,23 @@ test("a build lock preserves shared result selections while blocking document mu
 	let { store, item } = setup("completed");
 	item.result = performance;
 	item.views = Object.fromEntries(performance.views.map(view => [view.key, initialState(view)]));
-	let markup = render(store, "ana", true);
+	item.decisions = [{
+		id: crypto.randomUUID(),
+		view: performance.views[0]!.key,
+		state: item.views[performance.views[0]!.key]!,
+		conclusion: "Use cached startup",
+		rationale: "Lower median",
+		by: "leo",
+		userId: "leo",
+		at: 1,
+	}];
+	let markup = render(store, "ana", false);
+	expect(markup).not.toContain("Remove investigation");
+	expect(removableInvestigation(store, "investigation")).toBe(false);
+	expect(markup).toContain("Use cached startup");
+	expect(markup).toContain("Insert decision evidence in document");
+	markup = render(store, "ana", true);
+	expect(markup).not.toContain("Insert decision evidence in document");
 	expect(markup.match(/<select[^>]*aria-label="Filter Workload"[^>]*>/)?.[0])
 		.not.toContain("disabled");
 	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Record decision<\/button>/);
