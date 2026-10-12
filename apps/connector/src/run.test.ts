@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runWork, STOPPED } from "./run";
 import { git } from "./workspace";
+import { ConnectorError } from "./mcp";
 import type { remote } from "./mcp";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -13,8 +14,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 async function run(
 	build: { kind?: "rebuild"; live?: boolean },
 	flags: string[],
-	respond: (name: string) => unknown = () => ({}),
+	respond: (name: string, args: Record<string, unknown>) => unknown = () => ({}),
 	signal = new AbortController().signal,
+	options: Partial<Parameters<typeof runWork>[3]> = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-rebuild-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-rebuild-state-"));
@@ -30,7 +32,7 @@ async function run(
 		let api = {
 			call: async (name: string, args: Record<string, unknown> = {}) => {
 				calls.push([name, args]);
-				return respond(name);
+				return respond(name, args);
 			},
 		} as unknown as Awaited<ReturnType<typeof remote>>;
 		let id = crypto.randomUUID();
@@ -54,6 +56,7 @@ async function run(
 			url: "http://127.0.0.1:1",
 			signal,
 			heartbeatMs: 20,
+			...options,
 		});
 		return { id, calls, branches: git(root, "branch", "--list", "chopin/*") };
 	} finally {
@@ -212,4 +215,71 @@ test("servers the agent left running in its worktree end with the run", async ()
 		delete process.env.CHOPIN_TEST_ORPHAN_PID;
 		await rm(dirname(file), { recursive: true, force: true });
 	}
+});
+
+/** What fetch rejects with when Chopin cannot be reached. */
+function unreachable() {
+	return Object.assign(new TypeError("Unable to connect."), { code: "ConnectionRefused" });
+}
+
+test("a network drop mid-run keeps the agent running and delivers its completion once back", async () => {
+	let renewals = 0;
+	let reports = 0;
+	let { id, calls } = await run(
+		{ kind: "rebuild" },
+		["--rebuild", "--slow"],
+		(name, args) => {
+			// Chopin is unreachable for the first three heartbeats and the first completion report.
+			if (name === "renew_implementation_build" && ++renewals <= 3) throw unreachable();
+			if (name === "report_implementation_build" && args.state === "stopped" && ++reports <= 1) {
+				throw unreachable();
+			}
+			return {};
+		},
+		undefined,
+		{ random: () => 0.01 },
+	);
+	expect(renewals).toBeGreaterThan(3);
+	expect(calls.filter(([name]) => name === "report_implementation_build")).toEqual([
+		["report_implementation_build", {
+			id,
+			state: "running",
+			session: "implementation-acp-session",
+		}],
+		["report_implementation_build", { id, state: "stopped" }],
+		["report_implementation_build", { id, state: "stopped" }],
+	]);
+});
+
+test("a run out of reach for its whole grace period stops its agent", async () => {
+	let { id, calls } = await run(
+		{},
+		["--hang"],
+		name => {
+			if (name === "renew_implementation_build") throw unreachable();
+			return {};
+		},
+		undefined,
+		{ random: () => 0.01, graceMs: 150 },
+	);
+	expect(calls.at(-1)).toEqual(["report_implementation_build", {
+		id,
+		state: "failed",
+		error: "Chopin was out of reach for 0 seconds.",
+	}]);
+});
+
+test("a run Chopin has ended stops its agent at once", async () => {
+	let { id, calls } = await run({}, ["--hang"], name => {
+		if (name === "renew_implementation_build") {
+			throw new ConnectorError("build-inactive", "build-inactive: build-inactive");
+		}
+		return {};
+	});
+	expect(calls.filter(([name]) => name === "renew_implementation_build")).toHaveLength(1);
+	expect(calls.at(-1)).toEqual(["report_implementation_build", {
+		id,
+		state: "failed",
+		error: "Chopin ended this run (build-inactive).",
+	}]);
 });

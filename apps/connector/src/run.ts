@@ -1,6 +1,7 @@
 import { requestSchema } from "@chopin/experiment";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
+import { backoff, delay, errorCode, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
 import { runAgent } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
@@ -28,11 +29,22 @@ type Options = {
 	interrupt?: () => void;
 	/** Shared across jobs so an "always allow" lasts for the connector's run. */
 	permissions?: ReturnType<typeof permissionMemory>;
+	/** How long the agent keeps running while Chopin is out of reach; ten minutes by default. */
+	graceMs?: number;
+	/** The jitter source for retries, for tests. */
+	random?: () => number;
 };
 export const STOPPED = "Stopped from the connector terminal.";
 
+function minutes(ms: number) {
+	let value = Math.round(ms / 60_000);
+	return value >= 1
+		? `${value} minute${value === 1 ? "" : "s"}`
+		: `${Math.round(ms / 1000)} seconds`;
+}
+
 export async function runWork(
-	api: Awaited<ReturnType<typeof remote>>,
+	api: Pick<Awaited<ReturnType<typeof remote>>, "call">,
 	kind: "experiment" | "implementation",
 	raw: unknown,
 	options: Options,
@@ -67,18 +79,47 @@ export async function runWork(
 	options.signal.addEventListener("abort", cancel, { once: true });
 	if (options.signal.aborted) abort.abort();
 	let latestProgress = "Preparing checkout";
-	let renewing = false;
-	let heartbeat = setInterval(() => {
-		if (renewing) return;
-		renewing = true;
-		void api.call(implementation ? "renew_implementation_build" : "renew_experiment", {
-			...identity,
-			...(!implementation ? { progress: latestProgress } : {}),
-		}).then(result => {
-			// A rebuild stops once its report lands; the agent may still be finishing its turn.
-			if ((result as { state?: string } | undefined)?.state === "stopped") clearInterval(heartbeat);
-		}).catch(() => abort.abort()).finally(() => renewing = false);
-	}, options.heartbeatMs ?? 10_000);
+	/** Why the connector stopped the agent itself, when Chopin ended the run or stayed out of reach. */
+	let ended: string | undefined;
+	let reports = runReports(api, {
+		stop: options.signal,
+		graceMs: options.graceMs,
+		random: options.random,
+		lost: () => output.offline(),
+		back: () => output.online(),
+	});
+	// A heartbeat that fails while Chopin is out of reach retries on the reconnect backoff and
+	// leaves the agent running; only Chopin ending the run, or the grace period, stops it.
+	let beating = new AbortController();
+	let heartbeat = (async () => {
+		let failures = 0;
+		while (!beating.signal.aborted) {
+			await delay(
+				failures ? backoff(failures - 1, options.random) : options.heartbeatMs ?? 10_000,
+				beating.signal,
+			);
+			if (beating.signal.aborted) return;
+			try {
+				let result = await reports.attempt(
+					implementation ? "renew_implementation_build" : "renew_experiment",
+					{ ...identity, ...(!implementation ? { progress: latestProgress } : {}) },
+				);
+				failures = 0;
+				// A rebuild stops once its report lands; the agent may still be finishing its turn.
+				if ((result as { state?: string } | undefined)?.state === "stopped") return;
+			} catch (error) {
+				if (reports.retryable(error)) {
+					failures++;
+					continue;
+				}
+				ended = reports.expired()
+					? `Chopin was out of reach for ${minutes(options.graceMs ?? RUN_GRACE_MS)}.`
+					: `Chopin ended this run (${errorCode(error) ?? "refused"}).`;
+				abort.abort();
+				return;
+			}
+		}
+	})();
 	let local: ReturnType<typeof serveLocalBridge> | undefined;
 	/** A spike's throwaway worktree and branch, removed when the run ends. */
 	let spikeWork: { path: string; branch: string } | undefined;
@@ -162,7 +203,7 @@ export async function runWork(
 			signal: abort.signal,
 			onSession: implementation
 				? session =>
-					api.call("report_implementation_build", {
+					reports.deliver("report_implementation_build", {
 						...identity,
 						state: "running",
 						session,
@@ -201,7 +242,7 @@ export async function runWork(
 			},
 		});
 		if (stop !== "end_turn" || abort.signal.aborted) throw new Error(`Agent stopped: ${stop}`);
-		await api.call(implementation ? "report_implementation_build" : "complete_experiment", {
+		await reports.deliver(implementation ? "report_implementation_build" : "complete_experiment", {
 			...identity,
 			...(implementation ? { state: "stopped" } : {}),
 		});
@@ -211,15 +252,17 @@ export async function runWork(
 		let stopped = options.signal.aborted;
 		let message = stopped
 			? STOPPED
+			: ended
+			? ended
 			: error instanceof Error
 			? error.message
 			: "Local work failed";
 		if (stopped) output.stopped();
 		else output.failed(message, agentTail);
-		await api.call(implementation ? "report_implementation_build" : "fail_experiment", {
+		await reports.deliver(implementation ? "report_implementation_build" : "fail_experiment", {
 			...identity,
 			...(implementation ? { state: "failed" } : {}),
-			error: stopped || !implementation
+			error: stopped || ended || !implementation
 				? message.slice(0, 2000)
 				: "Local implementation failed. Inspect the connector terminal.",
 		}).catch(() => {});
@@ -231,7 +274,8 @@ export async function runWork(
 		if (spikeWork) {
 			await discardWorkspace(options.root, spikeWork.path, spikeWork.branch).catch(() => {});
 		}
-		clearInterval(heartbeat);
+		beating.abort();
+		await heartbeat;
 		options.signal.removeEventListener("abort", cancel);
 	}
 }

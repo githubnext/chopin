@@ -87,6 +87,17 @@ export function createOutput(
 		job(kind: JobKind, title: string, path: string) {
 			say(`› ${VERBS[kind]} ${headline(title)}`, s.dim(`  ${path}`));
 		},
+		/** A run lost contact with Chopin; its agent keeps working. */
+		offline() {
+			say(
+				s.dim(
+					"  … Lost contact with Chopin. The agent keeps working; reports wait until it is back.",
+				),
+			);
+		},
+		online() {
+			say(s.dim("  ✓ Back in contact with Chopin."));
+		},
 		finished() {
 			say(`  ${s.green("✓")} Finished`, "");
 		},

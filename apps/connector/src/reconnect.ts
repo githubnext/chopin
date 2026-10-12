@@ -67,3 +67,77 @@ export function delay(ms: number, signal: AbortSignal) {
 		if (signal.aborted) finish();
 	});
 }
+
+/** How long a run keeps going without reaching Chopin before the connector stops its agent. */
+export const RUN_GRACE_MS = 600_000;
+/** Reports a run may hold back while Chopin is out of reach. */
+export const MAX_PENDING_REPORTS = 16;
+
+type Caller = {
+	call(name: string, args?: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+};
+
+/**
+ * A run's reports to Chopin, which outlive a dropped connection. `attempt` makes one call;
+ * `deliver` queues a report that must not be lost and retries it in order, on the reconnect
+ * backoff, until it lands, Chopin refuses it, `stop` aborts, or the run has been out of contact
+ * for its grace period.
+ */
+export function runReports(api: Caller, options: {
+	stop: AbortSignal;
+	graceMs?: number;
+	random?: () => number;
+	classify?: Classify;
+	now?: () => number;
+	/** Called once when Chopin stops answering, and once when it answers again. */
+	lost?: () => void;
+	back?: () => void;
+}) {
+	let classify = options.classify ?? classifyConnectorError;
+	let now = options.now ?? Date.now;
+	let graceMs = options.graceMs ?? RUN_GRACE_MS;
+	let lostAt: number | undefined;
+	let pending = 0;
+	let queue: Promise<unknown> = Promise.resolve();
+	let reports = {
+		/** Out of contact for longer than the grace period. */
+		expired: () => lostAt !== undefined && now() - lostAt >= graceMs,
+		/** Whether a failed call may succeed later, so the run should carry on. */
+		retryable: (error: unknown) => classify(error) === "retry" && !reports.expired(),
+		async attempt(name: string, args: Record<string, unknown>) {
+			try {
+				let value = await api.call(name, args);
+				if (lostAt !== undefined) {
+					lostAt = undefined;
+					options.back?.();
+				}
+				return value;
+			} catch (error) {
+				if (classify(error) === "retry" && lostAt === undefined) {
+					lostAt = now();
+					options.lost?.();
+				}
+				throw error;
+			}
+		},
+		deliver(name: string, args: Record<string, unknown>) {
+			if (pending >= MAX_PENDING_REPORTS) {
+				return Promise.reject(new Error("Too many reports are waiting for Chopin."));
+			}
+			pending++;
+			let result = queue.then(async () => {
+				for (let retry = 0;; retry++) {
+					try {
+						return await reports.attempt(name, args);
+					} catch (error) {
+						if (!reports.retryable(error) || options.stop.aborted) throw error;
+						await delay(backoff(retry, options.random), options.stop);
+					}
+				}
+			}).finally(() => pending--);
+			queue = result.catch(() => {});
+			return result;
+		},
+	};
+	return reports;
+}
