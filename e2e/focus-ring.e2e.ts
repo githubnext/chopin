@@ -71,22 +71,29 @@ function composer(page: Page) {
 	return page.locator(".chat-composer .composer-surface");
 }
 
-test("a click into the Chat composer shows no ring, even while typing", async ({ join }) => {
+/** The ring stands off the frame; the quieter pointer edge sits on it. */
+function outlineOffset(target: Locator) {
+	return target.evaluate(element => getComputedStyle(element).outlineOffset);
+}
+
+test("a click into the Chat composer shows only its edge, even while typing", async ({ join }) => {
 	let page = await join("ana");
-	let input = composer(page).getByRole("textbox");
+	let input = composer(page).getByRole("combobox", { name: "Message" });
 	await input.click();
 	await expect(input).toBeFocused();
 	await page.keyboard.type("hello");
 	expect(await modality(page)).toBe("keyboard");
-	expect(await outlineStyle(composer(page))).toBe("none");
+	expect(await outlineStyle(composer(page))).toBe("solid");
+	expect(await outlineOffset(composer(page))).toBe("0px");
 });
 
 test("Tab into the Chat composer shows its whole ring", async ({ join }) => {
 	let page = await join("ana");
 	await handle(page).click();
 	await page.keyboard.press("Tab");
-	await expect(composer(page).getByRole("textbox")).toBeFocused();
+	await expect(composer(page).getByRole("combobox", { name: "Message" })).toBeFocused();
 	expect(await outlineStyle(composer(page))).toBe("solid");
+	expect(await outlineOffset(composer(page))).toBe("2px");
 	// No ancestor that clips vertically may cut the ring off below the composer.
 	let clipped = await composer(page).evaluate(element => {
 		let style = getComputedStyle(element);

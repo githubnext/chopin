@@ -1181,14 +1181,13 @@ button.chat-tool-call-toggle {
 	box-shadow: var(--shadow-resting);
 }
 
-.chat-composer .field:focus-within {
+/*
+ * The ring answers keyboard arrival. A clicked composer is already found, so it
+ * keeps only the quieter brand edge from `.composer-surface:focus-within`.
+ */
+:root:not([data-focus-origin="pointer"]) .chat-composer .field:focus-within {
 	outline: 2px solid var(--color-brand);
 	outline-offset: 2px;
-}
-
-/* The ring answers keyboard arrival; a clicked composer is already found, and its caret shows. */
-:root[data-focus-origin="pointer"] .chat-composer .field:focus-within {
-	outline: none;
 }
 
 .chat-composer textarea:focus {
