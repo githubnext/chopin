@@ -2243,7 +2243,8 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 /* The draft is content in progress, so the empty-document prompt would only overlap it. */
 .plan
-	.mdxeditor-root-contenteditable:has(> .plan-content > .plan-research-draft-host)
+	.mdxeditor-root-contenteditable:has(.plan-content[contenteditable="true"]
+		> .plan-research-draft-host)
 	> .plan-content:not([contenteditable]) {
 	display: none;
 }
