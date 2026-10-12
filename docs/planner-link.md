@@ -57,18 +57,29 @@ silent.
 
 A link the server hears nothing from for **120 seconds** is treated as dropped,
 such as one whose network silently went away. However much of its queue drains
-meanwhile, a link that sends nothing at all, not even a pong, for **240
-seconds** is dropped too. The server closes it with 1001 and reason
+meanwhile, a link that sends nothing at all, not even a pong, for **15
+minutes** is dropped too. The server closes it with 1001 and reason
 `unresponsive`, without an `error` or `refused` message, and releases it exactly
 as any dropped link (see [Closing](#closing)): its account keeps the document's
 Planner for the grace period in [Ownership](#ownership). The operator sets the
 interval, the timeout and the longest silence with `PLANNER_LINK_PING_MS`,
-`PLANNER_LINK_TIMEOUT_MS` and `PLANNER_LINK_MAX_SILENCE_MS`, which defaults to
-twice the timeout.
+`PLANNER_LINK_TIMEOUT_MS` and `PLANNER_LINK_MAX_SILENCE_MS`.
 
 So a client working through a large backlog must still send something within
 the longest silence. A client that answers pings needs nothing more: once it has
-read the queue to the end, the server pings it again and its pong counts.
+read the queue to the end, the server pings it again and its pong counts. The
+server may queue up to about **16 MiB** for a client, so the longest silence is
+a trade-off:
+
+- A client that reads at about **19 KiB/s** or faster can always drain a full
+  16 MiB queue and answer the next ping within the default 15 minutes.
+- A client that has stopped reading behind a proxy that keeps accepting bytes is
+  released after 15 minutes at the latest, and usually much sooner: once the
+  proxy's and the kernel's buffers fill, the queue stops shrinking and the
+  120-second timeout applies.
+- An operator can lower `PLANNER_LINK_MAX_SILENCE_MS` to release such a client
+  sooner, at the cost of closing slower readers, or raise it, up to an hour, for
+  slower links.
 
 The server cannot see a frame until it has arrived whole, and a client's pongs
 wait behind a frame it is still sending. So every frame must arrive within the

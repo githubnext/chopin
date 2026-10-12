@@ -144,21 +144,21 @@ describe("configuration", () => {
 			.toThrow("PLANNER_LINK_TIMEOUT_MS must be longer than PLANNER_LINK_PING_MS");
 	});
 
-	it("caps a remote Planner link's silence at twice its timeout, however its queue drains, unless configured", () => {
+	it("caps a remote Planner link's silence at 15 minutes, however its queue drains, unless configured", () => {
 		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
-		expect(configured(remote).plannerLinkMaxSilenceMs).toBe(240_000);
+		expect(configured(remote).plannerLinkMaxSilenceMs).toBe(900_000);
 		expect(configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: "600000" }).plannerLinkMaxSilenceMs)
-			.toBe(1_200_000);
+			.toBe(900_000);
 		expect(configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "120000" }).plannerLinkMaxSilenceMs)
 			.toBe(120_000);
 		expect(
-			configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "1200000" }).plannerLinkMaxSilenceMs,
+			configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "3600000" }).plannerLinkMaxSilenceMs,
 		)
-			.toBe(1_200_000);
-		for (let value of ["", "999", "1.5", "1200001", "soon"]) {
+			.toBe(3_600_000);
+		for (let value of ["", "999", "1.5", "3600001", "soon"]) {
 			expect(() => configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: value }))
 				.toThrow(
-					"PLANNER_LINK_MAX_SILENCE_MS must be an integer between 1000 and 1200000 milliseconds",
+					"PLANNER_LINK_MAX_SILENCE_MS must be an integer between 1000 and 3600000 milliseconds",
 				);
 		}
 		expect(() => configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "119999" }))

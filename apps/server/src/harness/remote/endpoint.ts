@@ -12,7 +12,11 @@ import { LINK_CLOSE } from "@chopin/planner-link";
 import { AdmissionDenied } from "../../auth/admission";
 import { documentUrl } from "../../channels/document-url";
 import { GitHubError } from "../../github/client";
-import { DEFAULT_LINK_PING_MS, DEFAULT_LINK_TIMEOUT_MS } from "../../config";
+import {
+	DEFAULT_LINK_MAX_SILENCE_MS,
+	DEFAULT_LINK_PING_MS,
+	DEFAULT_LINK_TIMEOUT_MS,
+} from "../../config";
 import { locateDocument } from "../../mcp/hosted";
 import { forbiddenMessage } from "./attachments";
 import { PlannerLink } from "./link";
@@ -56,7 +60,7 @@ export type PlannerLinkHooks = {
 	pongTimeoutMs?: number;
 	/**
 	 * How long the link may send nothing at all, however much of the server's
-	 * queue drains meanwhile, before it is closed as dropped. Twice the timeout by default.
+	 * queue drains meanwhile, before it is closed as dropped. 15 minutes by default.
 	 */
 	maxSilenceMs?: number;
 };
@@ -216,7 +220,7 @@ export function openPlannerLinkSocket(
 	// past `maxSilenceMs` after the client last sent anything; a client reading a
 	// long backlog must send something, such as the pongs that follow it, by then.
 	let timeoutMs = hooks.pongTimeoutMs ?? DEFAULT_LINK_TIMEOUT_MS;
-	let maxSilenceMs = hooks.maxSilenceMs ?? 2 * timeoutMs;
+	let maxSilenceMs = hooks.maxSilenceMs ?? DEFAULT_LINK_MAX_SILENCE_MS;
 	let heard = Date.now();
 	let progressed = heard;
 	let backlog = 0;

@@ -76,6 +76,11 @@ const DEFAULT_PORT = 8787;
 const DEFAULT_ATTACH_GRACE_MS = 120_000;
 export const DEFAULT_LINK_PING_MS = 15_000;
 export const DEFAULT_LINK_TIMEOUT_MS = 120_000;
+/**
+ * Long enough for a client reading at about 19 KiB/s to drain the 16 MiB Bun lets the
+ * server queue toward it and answer the next ping.
+ */
+export const DEFAULT_LINK_MAX_SILENCE_MS = 900_000;
 const DEFAULT_MODEL = "gpt-6-luna";
 
 /** The default is a Copilot model ID. Pi and Atomic resolve IDs against their
@@ -184,8 +189,8 @@ export function load(): Config {
 	}
 	let plannerLinkMaxSilenceMs = milliseconds(
 		"PLANNER_LINK_MAX_SILENCE_MS",
-		2 * plannerLinkTimeoutMs,
-		1_200_000,
+		DEFAULT_LINK_MAX_SILENCE_MS,
+		3_600_000,
 	);
 	if (plannerLinkMaxSilenceMs < plannerLinkTimeoutMs) {
 		throw new Error("PLANNER_LINK_MAX_SILENCE_MS must be at least PLANNER_LINK_TIMEOUT_MS");
