@@ -208,7 +208,7 @@
 }
 
 /* Until a document first arrives, its column shows the same lines in place of the empty editor. */
-[data-plan-scroll]:has(> .plan-preface > .phone-skeleton-page) > :is(.mdxeditor, .plan-afterword) {
+[data-plan-scroll]:has(> .plan-preface > .phone-skeleton-page) > .mdxeditor {
 	visibility: hidden;
 }
 

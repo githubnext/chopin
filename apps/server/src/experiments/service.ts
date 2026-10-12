@@ -162,6 +162,19 @@ export class Experiments {
 			delete value.candidate;
 		});
 	}
+	/** Return settled, unfinished work to its card under the same identity; Run starts it again. */
+	retry(id: string) {
+		return this.mutate(id, value => {
+			if (value.state === "requested") return;
+			if (!["failed", "cancelled", "interrupted"].includes(value.state)) fail("invalid-state");
+			value.state = "requested";
+			value.progress = "";
+			value.expiresAt = 0;
+			delete value.connectionId;
+			delete value.input;
+			delete value.candidate;
+		});
+	}
 	async recover(all = false) {
 		for (let value of await this.store.active()) {
 			if (all || value.state !== "queued" && value.expiresAt <= this.now()) {

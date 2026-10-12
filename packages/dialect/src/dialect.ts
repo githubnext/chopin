@@ -252,6 +252,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 			"Tab",
 			"Callout",
 			"Research",
+			"Investigation",
 			"Columns",
 			"Column",
 		],
@@ -288,6 +289,16 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 	/** A reference to authoritative Research Workspace state. */
 	Research: plain({
 		name: "Research",
+		kind: "flow",
+		content: { type: "empty" },
+		attributes: {
+			id: { type: "reference", required: true, max: 96 },
+		},
+	}),
+
+	/** A reference to an authoritative local investigation record. */
+	Investigation: plain({
+		name: "Investigation",
 		kind: "flow",
 		content: { type: "empty" },
 		attributes: {

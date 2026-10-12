@@ -22,7 +22,12 @@ import {
 	createCommand,
 	setDOMUnmanaged,
 } from "lexical";
-import { $createResearchNode, $isResearchNode } from "@chopin/dialect";
+import {
+	$createInvestigationNode,
+	$createResearchNode,
+	$isInvestigationNode,
+	$isResearchNode,
+} from "@chopin/dialect";
 import * as Y from "yjs";
 
 import { blockElement } from "../scroll";
@@ -34,7 +39,6 @@ import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
 import type { ReactNode, Ref } from "react";
 import type { ResearchDraftStore } from "../research-draft";
-import type { ResearchStore } from "../widget-options";
 import type { DOMRectLike } from "./placement";
 
 type Placement = "before" | "after";
@@ -46,6 +50,45 @@ export type OpenResearch = {
 };
 
 export const OPEN_RESEARCH_COMMAND = createCommand<OpenResearch>("OPEN_RESEARCH_COMMAND");
+export const OPEN_INVESTIGATION_COMMAND = createCommand<OpenResearch>(
+	"OPEN_INVESTIGATION_COMMAND",
+);
+
+/** The two kinds of brief that open a private composer at the caret and place an atomic card. */
+export type DraftKind = "research" | "investigation";
+
+const KINDS = {
+	research: {
+		command: OPEN_RESEARCH_COMMAND,
+		create: $createResearchNode,
+		is: $isResearchNode,
+		region: "Research question",
+		blocked: "Wait until the document is editable before placing research.",
+		offline: "Connect to the document before starting research.",
+		unresolved: "This research draft cannot yet be placed at its saved position.",
+		cancel: "Cancel research",
+		place: "Place research",
+		composer: { submitLabel: undefined },
+	},
+	investigation: {
+		command: OPEN_INVESTIGATION_COMMAND,
+		create: $createInvestigationNode,
+		is: $isInvestigationNode,
+		region: "Investigation brief",
+		blocked: "Wait until the document is editable before placing an investigation.",
+		offline: "Connect to the document before proposing an investigation.",
+		unresolved: "This investigation draft cannot yet be placed at its saved position.",
+		cancel: "Cancel investigation",
+		place: "Place investigation",
+		composer: {
+			label: "Investigation brief",
+			placeholder: "What should your local agent investigate?",
+			submitLabel: "Propose investigation",
+			discard: "Discard investigation",
+			discardLabel: "Discard investigation brief",
+		},
+	},
+} as const;
 
 /** Capture a document-safe insertion point before an asynchronous request begins. */
 export function captureResearchPosition(binding: Binding): Y.RelativePosition | undefined {
@@ -60,7 +103,9 @@ export function insertResearchReference(
 	binding: Binding,
 	position: Y.RelativePosition,
 	id: string,
+	kind: DraftKind = "research",
 ): boolean {
+	let { create, is } = KINDS[kind];
 	let key: string | undefined;
 	try {
 		editor.update(() => {
@@ -88,7 +133,7 @@ export function insertResearchReference(
 				$isElementNode(focus) ? "element" : "text",
 			);
 			$setSelection(selection);
-			let reference = $createResearchNode(id);
+			let reference = create(id);
 			$insertResearch(reference);
 			key = reference.getKey();
 		}, { discrete: true });
@@ -99,7 +144,7 @@ export function insertResearchReference(
 	let inserted = false;
 	editor.getEditorState().read(() => {
 		let reference = $getNodeByKey(key!);
-		inserted = $isResearchNode(reference) && reference.getId() === id && reference.isAttached();
+		inserted = is(reference) && reference.getId() === id && reference.isAttached();
 	});
 	return inserted;
 }
@@ -192,12 +237,13 @@ export function $draftAttachment(
 	return { key: block.getKey(), placement: atStart && !empty ? "before" : "after" };
 }
 
-export const UNRESOLVED_DRAFT = "This research draft cannot yet be placed at its saved position.";
+export const UNRESOLVED_DRAFT = KINDS.research.unresolved;
 
 export function ResearchDraftShell(
-	{ children, inert, motion, surfaceRef }: {
+	{ children, inert, label = KINDS.research.region, motion, surfaceRef }: {
 		children?: ReactNode;
 		inert?: boolean;
+		label?: string;
 		motion?: string;
 		surfaceRef?: Ref<HTMLDivElement>;
 	},
@@ -206,7 +252,7 @@ export function ResearchDraftShell(
 		<div
 			ref={surfaceRef}
 			aria-hidden={inert ? "true" : undefined}
-			aria-label="Research question"
+			aria-label={label}
 			role="region"
 			data-focus-boundary=""
 			contentEditable={false}
@@ -261,12 +307,16 @@ export type ResearchComposerSurfaceProps = {
 	binding?: Binding;
 	disabled?: boolean;
 	drafts: ResearchDraftStore;
-	research: ResearchStore;
+	kind?: DraftKind;
+	create: (brief: string, requestId: string) => Promise<{ id: string }>;
+	cancel: (id: string) => Promise<unknown>;
 };
 
 export function ResearchComposerSurface(
-	{ binding, disabled, drafts, research }: ResearchComposerSurfaceProps,
+	{ binding, disabled, drafts, kind = "research", create, cancel: cancelCreated }:
+		ResearchComposerSurfaceProps,
 ) {
+	let copy = KINDS[kind];
 	let [editor] = useLexicalComposerContext();
 	let subscribe = useCallback((listener: () => void) => drafts.subscribe(listener), [drafts]);
 	let read = useCallback(() => drafts.get(), [drafts]);
@@ -282,7 +332,7 @@ export function ResearchComposerSurface(
 
 	useEffect(() =>
 		editor.registerCommand(
-			OPEN_RESEARCH_COMMAND,
+			copy.command,
 			({ anchor, consume }) => {
 				if (disabled) return false;
 				return beginResearchDraft(drafts, () => {
@@ -294,7 +344,7 @@ export function ResearchComposerSurface(
 				});
 			},
 			COMMAND_PRIORITY_LOW,
-		), [binding, disabled, drafts, editor]);
+		), [binding, copy, disabled, drafts, editor]);
 
 	let detach = useCallback(() => {
 		attached.current?.detach();
@@ -385,9 +435,9 @@ export function ResearchComposerSurface(
 	useLayoutEffect(() => {
 		if (!binding || disabled) return;
 		return drafts.attachPlacement((saved, id) =>
-			insertResearchReference(editor, binding, saved, id)
+			insertResearchReference(editor, binding, saved, id, kind)
 		);
-	}, [binding, disabled, drafts, editor]);
+	}, [binding, disabled, drafts, editor, kind]);
 
 	if (!shown || !host) return null;
 	let current = draft ?? shown;
@@ -400,16 +450,13 @@ export function ResearchComposerSurface(
 			if (position) drafts.place(position, !disabled);
 			return;
 		}
-		void drafts.start(
-			(question, requestId) => research.create(question, requestId),
-			position,
-		);
+		void drafts.start(create, position);
 	};
 	let cancel = () => {
 		if (!draft) return;
 		if (!draft.created) return dismiss();
 		if (disabled) return;
-		void drafts.cancelCreated(id => research.cancel(id), !disabled).then(cancelled => {
+		void drafts.cancelCreated(cancelCreated, !disabled).then(cancelled => {
 			if (cancelled) editor.focus();
 		});
 	};
@@ -417,28 +464,26 @@ export function ResearchComposerSurface(
 	let dismissible = !busy && !current.created;
 	return createPortal(
 		<ResearchDraftShell
+			label={copy.region}
 			motion={presence.className}
 			inert={!draft}
 			surfaceRef={surface}
 		>
 			<ResearchComposer
-				blocked={disabled
-					? "Wait until the document is editable before placing research."
-					: binding
-					? undefined
-					: "Connect to the document before starting research."}
+				{...copy.composer}
+				blocked={disabled ? copy.blocked : binding ? undefined : copy.offline}
 				cancelDisabled={!!current.created && !!disabled}
-				cancelLabel={current.created ? "Cancel research" : undefined}
+				cancelLabel={current.created ? copy.cancel : undefined}
 				dismissible={dismissible}
 				error={current.error}
-				notice={draft && !busy && unresolved ? UNRESOLVED_DRAFT : undefined}
+				notice={draft && !busy && unresolved ? copy.unresolved : undefined}
 				onCancel={cancel}
 				onChange={question => drafts.change(question)}
 				onEscape={dismiss}
 				onSubmit={submit}
 				question={current.question}
 				questionLocked={!!current.created}
-				submitLabel={current.created ? "Place research" : undefined}
+				submitLabel={current.created ? copy.place : copy.composer.submitLabel}
 				submitting={busy}
 			/>
 		</ResearchDraftShell>,

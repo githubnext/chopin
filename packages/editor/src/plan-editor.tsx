@@ -72,6 +72,8 @@ function resume(provider: PlanProvider): void {
 
 export type PlanEditorProps = {
 	experiments?: import("./widget-options").ExperimentResources;
+	/** Local investigations, offered from the slash menu when present. */
+	investigations?: import("./widget-options").InvestigationResources;
 	wire: Transport | undefined;
 	connection?: Connection;
 	/** How comment threads are presented by the surrounding workspace. */
@@ -127,8 +129,6 @@ export type PlanEditorProps = {
 	onState?: (state: PlanState) => void;
 	/** Host-owned context shown above the document, in the prose column. */
 	preface?: ReactNode;
-	/** Host-owned work cards following the authored document in its scroll lane. */
-	afterword?: ReactNode;
 	className?: string;
 };
 
@@ -158,9 +158,9 @@ const UNDO_NOTICE = 3000;
 
 export function PlanEditor(
 	{
-		afterword,
 		busy,
 		experiments,
+		investigations,
 		className,
 		commentPresentation = "popover",
 		connection,
@@ -204,6 +204,7 @@ export function PlanEditor(
 	let [changes] = useState(() => new ChangeStore());
 	// This survives the keyed MDXEditor remount used for collaboration epoch rotation.
 	let [researchDrafts] = useState(() => new ResearchDraftStore());
+	let [investigationDrafts] = useState(() => new ResearchDraftStore("investigation"));
 
 	// A rotated epoch invalidates the whole local document, so the editor is
 	// rebuilt rather than reconciled — that is what "reset" means. The marks
@@ -489,6 +490,8 @@ export function PlanEditor(
 						research,
 						researchDrafts,
 						researchLauncher,
+						investigations,
+						investigationDrafts,
 						threads,
 						changes,
 						wire,
@@ -525,6 +528,8 @@ export function PlanEditor(
 			research,
 			researchDrafts,
 			researchLauncher,
+			investigations,
+			investigationDrafts,
 			commentPresentation,
 			disclosureMotion,
 			motionImmediately,
@@ -563,7 +568,6 @@ export function PlanEditor(
 	return (
 		<div
 			className={`plan flex h-full w-full flex-col ${className ?? ""}`}
-			data-plan-afterword={!!afterword || undefined}
 			data-plan-offline={offline || undefined}
 			data-plan-reading={editMode === "reading" || undefined}
 		>
@@ -597,7 +601,6 @@ export function PlanEditor(
 							// its HTML visitors and quietly admits `html` nodes.
 							suppressHtmlProcessing
 						/>
-						{afterword && <div className="plan-afterword">{afterword}</div>}
 					</div>
 					{/* In the document column, so they track the prose, not the pane. */}
 					<PlanChanges motionImmediately={motionImmediately} store={changes} />

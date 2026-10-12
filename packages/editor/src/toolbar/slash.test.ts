@@ -445,11 +445,16 @@ describe("slash menu commands", () => {
 });
 
 describe("slash menu order", () => {
-	it("lists ordinary blocks first and Research last, so a bare slash never preselects it", () => {
+	it("lists ordinary blocks first and Research actions last, so a bare slash never preselects one", () => {
 		let ids = availableCommands("").map(command => command.id);
-		expect(ids.at(-1)).toBe("research");
+		expect(ids.slice(-2)).toEqual(["research", "investigate"]);
 		expect(ids[0]).not.toBe("research");
 		expect(ids.filter(id => id === "research")).toHaveLength(1);
+	});
+
+	it("finds Investigate by its own words", () => {
+		expect(availableCommands("inv").map(command => command.id)).toEqual(["investigate"]);
+		expect(availableCommands("spike")[0]?.id).toBe("investigate");
 	});
 
 	it("puts Research first only when the query narrows to it", () => {

@@ -4,10 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { initialState } from "@chopin/experiment";
 import { performance } from "../../../../packages/experiment/src/fixtures";
 import type { PublishedInvestigation } from "@chopin/experiment/records";
-import { InvestigationCard } from "./card";
+import { InvestigationReference, removableInvestigation } from "./card";
 import { ExperimentStore } from "./store";
 
-test("a build lock preserves shared result selections while blocking document mutations", () => {
+function setup(state: PublishedInvestigation["state"]) {
 	let store = new ExperimentStore("document");
 	let item: PublishedInvestigation = {
 		id: "investigation",
@@ -15,29 +15,44 @@ test("a build lock preserves shared result selections while blocking document mu
 		revision: 1,
 		brief: "Compare startup approaches",
 		requester: "ana",
-		state: "completed",
+		state,
 		generation: 1,
 		expiresAt: 0,
 		createdAt: 0,
 		updatedAt: 0,
 		progress: "",
-		result: performance,
-		views: Object.fromEntries(performance.views.map(view => [view.key, initialState(view)])),
+		views: {},
 		decisions: [],
 	};
 	store.values.set(item.id, item);
-	let markup = renderToStaticMarkup(createElement(InvestigationCard, {
+	store.items = [{ ...item, decisionCount: 0 }];
+	return { store, item };
+}
+
+function render(store: ExperimentStore, userId = "ana", locked = false) {
+	return renderToStaticMarkup(createElement(InvestigationReference, {
 		store,
-		summary: { ...item, decisionCount: 0 },
-		userId: "ana",
+		id: "investigation",
+		userId,
 		canEdit: true,
-		locked: true,
+		locked,
+		onRemove() {},
 	}));
-	expect(markup.match(/<select[^>]*aria-label="Filter Workload"[^>]*>/)?.[0])
-		.not.toContain("disabled");
-	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Record decision<\/button>/);
-	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Insert view in document<\/button>/);
-	item.state = "running";
+}
+
+test("a requested investigation offers Run and can be removed", () => {
+	let { store } = setup("requested");
+	let markup = render(store);
+	expect(markup).toContain('aria-label="Investigation"');
+	expect(markup).toContain("Ready to run");
+	expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>Run<\/button>/);
+	expect(markup).toContain('aria-label="Remove investigation"');
+	expect(removableInvestigation(store, "investigation")).toBe(true);
+	expect(render(store, "ana", true)).toMatch(/<button[^>]*disabled=""[^>]*>Run<\/button>/);
+});
+
+test("only the person who ran it can stop running work, even under a build lock", () => {
+	let { store, item } = setup("running");
 	item.input = {
 		id: item.id,
 		documentId: item.documentId,
@@ -47,22 +62,29 @@ test("a build lock preserves shared result selections while blocking document mu
 		authorizer: "ana",
 		source: { repositoryId: "R_score", repository: "octo-org/score", commit: "a".repeat(40) },
 	};
-	markup = renderToStaticMarkup(createElement(InvestigationCard, {
-		store,
-		summary: { ...item, decisionCount: 0 },
-		userId: "ana",
-		canEdit: true,
-		locked: true,
-	}));
-	expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>Cancel investigation<\/button>/);
-	let peer = renderToStaticMarkup(createElement(InvestigationCard, {
-		store,
-		summary: { ...item, decisionCount: 0 },
-		userId: "leo",
-		canEdit: true,
-		locked: true,
-	}));
-	expect(peer).not.toContain("Cancel investigation");
+	expect(render(store, "ana", true)).toMatch(/<button(?![^>]*disabled)[^>]*>Stop<\/button>/);
+	let peer = render(store, "leo", true);
+	expect(peer).not.toContain(">Stop<");
+	expect(peer).not.toContain("Remove investigation");
+	expect(removableInvestigation(store, "investigation")).toBe(false);
+});
+
+test("settled work offers Retry", () => {
+	for (let state of ["failed", "cancelled", "interrupted"] as const) {
+		let { store } = setup(state);
+		expect(render(store)).toMatch(/<button(?![^>]*disabled)[^>]*>Retry<\/button>/);
+	}
+});
+
+test("a build lock preserves shared result selections while blocking document mutations", () => {
+	let { store, item } = setup("completed");
+	item.result = performance;
+	item.views = Object.fromEntries(performance.views.map(view => [view.key, initialState(view)]));
+	let markup = render(store, "ana", true);
+	expect(markup.match(/<select[^>]*aria-label="Filter Workload"[^>]*>/)?.[0])
+		.not.toContain("disabled");
+	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Record decision<\/button>/);
+	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Insert view in document<\/button>/);
 });
 
 function investigation(state: PublishedInvestigation["state"]): PublishedInvestigation {

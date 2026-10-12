@@ -40,6 +40,18 @@ export type ResearchStore = {
 	open(child: Research.ReadyChild, opener: ResearchOpener): void;
 };
 
+/**
+ * App-owned local investigations. The editor places an id-only reference and
+ * leaves the card, its record, and its actions to the host.
+ */
+export type InvestigationResources = {
+	create(brief: string, requestId: string): Promise<{ id: string }>;
+	cancel(id: string): Promise<unknown>;
+	/** False while the record still needs its card: unknown, queued, running or publishing. */
+	removable(id: string): boolean;
+	render(id: string, remove: () => void): ReactNode;
+};
+
 /** A GitHub reference's summary as the host last saw it, or that one is on its way. */
 export type GitHubReferenceEntry = { status: "loading" } | GitHubReferenceResult;
 
@@ -76,6 +88,8 @@ export type WidgetOptions = {
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;
+	investigations?: InvestigationResources;
+	investigationDrafts?: ResearchDraftStore;
 	researchLauncher?: ResearchLauncher;
 	threads?: ThreadStore;
 	changes?: ChangeStore;

@@ -237,6 +237,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		connections.use(params.id, connection.id);
 		return json(publicInvestigation(result));
 	});
+	route("POST", "/api/documents/:id/experiments/:experiment/retry", async (request, params) => {
+		await access(await auth.sessions.authenticate(request), params.id, true);
+		await mutationAllowed(params.id);
+		z.object({}).strict().parse(await body(request));
+		let value = await service.store.get(params.experiment);
+		if (!value || value.documentId !== params.id) fail("not-found");
+		return json(publicInvestigation(await service.retry(value.id)));
+	});
 	route("POST", "/api/documents/:id/experiments/:experiment/cancel", async (request, params) => {
 		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
 		let value = await service.store.get(params.experiment);

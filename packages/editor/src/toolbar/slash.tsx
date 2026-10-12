@@ -60,11 +60,12 @@ import {
 	MagnifierIcon,
 	TableIcon,
 	TabsIcon,
+	WrenchIcon,
 } from "@chopin/icons";
 
 import { askForUrl } from "./url";
 import { placeSurface } from "./placement";
-import { OPEN_RESEARCH_COMMAND } from "./research";
+import { OPEN_INVESTIGATION_COMMAND, OPEN_RESEARCH_COMMAND } from "./research";
 import {
 	DIVIDER,
 	editorSurfaceViewport,
@@ -311,6 +312,16 @@ const COMMANDS: SlashCommand[] = [
 		keywords: ["research", "web search"],
 		kind: "action",
 		run: (editor, action) => editor.dispatchCommand(OPEN_RESEARCH_COMMAND, action),
+	},
+	{
+		id: "investigate",
+		label: "Investigate",
+		hint: "Ask your local agent to try it in code",
+		icon: WrenchIcon,
+		group: "Research",
+		keywords: ["investigate", "investigation", "experiment", "spike"],
+		kind: "action",
+		run: (editor, action) => editor.dispatchCommand(OPEN_INVESTIGATION_COMMAND, action),
 	},
 ];
 

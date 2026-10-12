@@ -5,6 +5,11 @@ description: Execute an owner-authorized Chopin investigation using the run-scop
 
 # Local investigations
 
+A person proposes an investigation by typing `/` on a document line and choosing
+**Investigate**; its card sits at that place in the document. Someone selects
+**Run** on the card, which starts this run on their own local agent. A failed or
+stopped card's **Retry** reuses the same investigation id.
+
 1. Read `read_investigation` before acting. Its sealed brief, source context and
    capability schema are authoritative for this run.
 2. Use your normal repository instructions and configured tools. Keep the work

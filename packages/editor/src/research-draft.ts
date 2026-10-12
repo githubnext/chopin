@@ -1,4 +1,3 @@
-import type { Research } from "@chopin/protocol";
 import type { RelativePosition } from "yjs";
 import type { DOMRectLike } from "./toolbar/placement";
 
@@ -10,6 +9,9 @@ type ResearchDraftBase = {
 };
 
 type Submission = { question: string; requestId: string };
+
+/** What the draft keeps of a created request: only its identity. */
+type Created = { id: string };
 
 export type ResearchDraft =
 	& ResearchDraftBase
@@ -30,14 +32,14 @@ export type ResearchDraft =
 		}
 		| {
 			phase: "placement";
-			created: Research.RequestView;
+			created: Created;
 			submitted: Submission;
 			submitting?: false;
 			cancelling?: false;
 		}
 		| {
 			phase: "cancelling";
-			created: Research.RequestView;
+			created: Created;
 			submitted: Submission;
 			submitting?: false;
 			cancelling: true;
@@ -52,8 +54,14 @@ type Placement = (position: RelativePosition, id: string) => boolean;
  */
 export class ResearchDraftStore {
 	#draft: ResearchDraft | undefined;
+	#noun: string;
 	#listeners = new Set<() => void>();
 	#placement: Placement | undefined;
+
+	/** `noun` names the work in messages: "research" or "investigation". */
+	constructor(noun = "research") {
+		this.#noun = noun;
+	}
 
 	subscribe(listener: () => void): () => void {
 		this.#listeners.add(listener);
@@ -86,7 +94,7 @@ export class ResearchDraftStore {
 	}
 
 	async start(
-		create: (question: string, requestId: string) => Promise<Research.RequestView>,
+		create: (question: string, requestId: string) => Promise<Created>,
 		fallbackPosition?: RelativePosition,
 	): Promise<void> {
 		let draft = this.#draft;
@@ -95,7 +103,7 @@ export class ResearchDraftStore {
 		if (!position) {
 			this.#set({
 				...draft,
-				error: "Choose an insertion point in the document before starting research.",
+				error: `Choose an insertion point in the document before starting ${this.#noun}.`,
 			});
 			return;
 		}
@@ -105,7 +113,7 @@ export class ResearchDraftStore {
 			: { question: draft.question, requestId: crypto.randomUUID() };
 		this.#set({ ...draft, phase: "starting", submitted, submitting: true, error: undefined });
 
-		let request: Research.RequestView;
+		let request: Created;
 		try {
 			request = await create(submitted.question, submitted.requestId);
 		} catch {
@@ -115,7 +123,7 @@ export class ResearchDraftStore {
 					...current,
 					phase: "editing",
 					submitting: undefined,
-					error: "Research could not be started.",
+					error: `${this.#capital()} could not be started.`,
 				});
 			}
 			return;
@@ -132,8 +140,8 @@ export class ResearchDraftStore {
 			phase: "placement",
 			created: request,
 			submitting: undefined,
-			error:
-				"Research started, but its reference could not be placed. Choose a new insertion point in the document.",
+			error: `${this.#capital()} started, but its reference could not be placed. `
+				+ "Choose a new insertion point in the document.",
 		});
 	}
 
@@ -162,7 +170,7 @@ export class ResearchDraftStore {
 		this.#set({
 			...draft,
 			position,
-			error: "Choose a new insertion point in the document, then place the research again.",
+			error: `Choose a new insertion point in the document, then place the ${this.#noun} again.`,
 		});
 		return false;
 	}
@@ -176,7 +184,7 @@ export class ResearchDraftStore {
 	}
 
 	async cancelCreated(
-		cancel: (id: string) => Promise<Research.RequestView>,
+		cancel: (id: string) => Promise<unknown>,
 		writable = true,
 	): Promise<boolean> {
 		let draft = this.#draft;
@@ -192,7 +200,7 @@ export class ResearchDraftStore {
 					...current,
 					phase: "placement",
 					cancelling: undefined,
-					error: "Research could not be cancelled.",
+					error: `${this.#capital()} could not be cancelled.`,
 				});
 			}
 			return false;
@@ -200,6 +208,10 @@ export class ResearchDraftStore {
 		if (this.#draft?.phase !== "cancelling" || this.#draft.created.id !== id) return false;
 		this.#set(undefined);
 		return true;
+	}
+
+	#capital(): string {
+		return this.#noun[0]!.toUpperCase() + this.#noun.slice(1);
 	}
 
 	#current(requestId: string): Extract<ResearchDraft, { phase: "starting" }> | undefined {
