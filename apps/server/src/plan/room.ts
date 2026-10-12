@@ -20,6 +20,7 @@ import * as Y from "yjs";
 import {
 	$createDecisionNode,
 	$createExperimentNode,
+	$createInvestigationNode,
 	$createPlanNodes,
 	$createResearchNode,
 	$exportPlanTree,
@@ -28,6 +29,7 @@ import {
 	assertIntroducedUrls,
 	ExperimentNode,
 	exportPlan,
+	InvestigationNode,
 	limits,
 	parse,
 	PlanParseError,
@@ -58,6 +60,7 @@ import {
 	$nodesOfType,
 } from "lexical";
 
+import type { Reference } from "./projections";
 import type { ResearchProjectionChange } from "../storage/model";
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
@@ -356,7 +359,11 @@ export type Applied =
 export async function apply(
 	target: Document,
 	updates: Uint8Array[],
-	authorizeResearch?: (id: string, action: "add" | "remove") => Promise<boolean>,
+	authorizeResearch?: (
+		id: string,
+		action: "add" | "remove",
+		type: Reference,
+	) => Promise<boolean>,
 	open = 0,
 ): Promise<Applied> {
 	if (updates.length === 0) return { ok: true, seq: target.seq, researchProjections: [] };
@@ -376,22 +383,24 @@ export async function apply(
 		assertIntroducedUrls(before, after);
 		let added = new Set<string>();
 		let removed = new Set<string>();
-		for (
-			let [action, ids, allowed] of [
-				["add", newResearchProjections(before, after), added],
-				["remove", removedResearchProjections(before, after), removed],
-			] as const
-		) {
-			for (let id of ids) {
-				let authorized = false;
-				try {
-					authorized = !!authorizeResearch && await authorizeResearch(id, action);
-				} catch {
-					return { ok: false, issues: ["research-reference-unverified"] };
+		for (let type of ["Research", "Investigation"] as const) {
+			for (
+				let [action, ids, allowed] of [
+					["add", newResearchProjections(before, after, type), added],
+					["remove", removedResearchProjections(before, after, type), removed],
+				] as const
+			) {
+				for (let id of ids) {
+					let authorized = false;
+					try {
+						authorized = !!authorizeResearch && await authorizeResearch(id, action, type);
+					} catch {
+						return { ok: false, issues: ["research-reference-unverified"] };
+					}
+					if (!authorized) return { ok: false, issues: ["protected-projection"] };
+					allowed.add(id);
+					if (type === "Research") researchProjections.push({ id, action });
 				}
-				if (!authorized) return { ok: false, issues: ["protected-projection"] };
-				allowed.add(id);
-				researchProjections.push({ id, action });
 			}
 		}
 		if (protectProjections(before, after, added, removed)) {
@@ -1258,6 +1267,14 @@ export function insertResearch(target: Document, id: string): Mutation | undefin
 	return mutate(target, () => {
 		if ($nodesOfType(ResearchNode).some(node => node.getId() === id)) return false;
 		$getRoot().append($createResearchNode(id));
+		return true;
+	});
+}
+
+export function insertInvestigation(target: Document, id: string): Mutation | undefined {
+	return mutate(target, () => {
+		if ($nodesOfType(InvestigationNode).some(node => node.getId() === id)) return false;
+		$getRoot().append($createInvestigationNode(id));
 		return true;
 	});
 }

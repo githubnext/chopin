@@ -57,7 +57,7 @@ import { ResearchRequestStore } from "./research-requests";
 import { GitHubReferenceCache } from "./github-references";
 import { Wire } from "./wire";
 import { ExperimentStore } from "./experiments/store";
-import { InlineInvestigations } from "./experiments/inline";
+import { InvestigationReference, removableInvestigation } from "./experiments/card";
 import { EvidenceDecisions } from "./experiments/evidence";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
@@ -66,6 +66,7 @@ import type { ConversationPlan, Plan, Question, Research, Session } from "@chopi
 import type {
 	DecisionView,
 	DecisionViewState,
+	InvestigationResources,
 	PlanState,
 	Refusal,
 	ResearchLaunchResult,
@@ -893,6 +894,22 @@ export function RoomWorkspace(
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
+	let investigationsEditable = !!workspaceCanEdit && status === "connected";
+	let investigations = useMemo<InvestigationResources>(() => ({
+		create: (brief, requestId) => experiments.action("", "", { id: requestId, brief }),
+		cancel: id => experiments.action(id, "cancel", {}),
+		removable: id => removableInvestigation(experiments, id),
+		render: (id, remove) => (
+			<InvestigationReference
+				store={experiments}
+				id={id}
+				userId={userId}
+				canEdit={investigationsEditable}
+				locked={implementation.locked}
+				onRemove={remove}
+			/>
+		),
+	}), [experiments, userId, investigationsEditable, implementation.locked]);
 	let actOnResearchOffer = (
 		offerId: string,
 		choice: "research" | "dismiss" | "resume",
@@ -1171,14 +1188,7 @@ export function RoomWorkspace(
 					<GitHubReferencesProvider value={githubReferences}>
 						<PlanEditor
 							experiments={experiments}
-							afterword={
-								<InlineInvestigations
-									store={experiments}
-									userId={userId}
-									canEdit={!!workspaceCanEdit && status === "connected"}
-									locked={implementation.locked}
-								/>
-							}
+							investigations={investigations}
 							cardMeta={cardMeta}
 							evidence={showEvidence}
 							onCardSource={showCardSource}

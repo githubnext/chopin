@@ -83,3 +83,43 @@ test("claims expire, stale workers cannot publish and completion replays atomica
 	expect((await storage.experiments.get(another.id))?.state).toBe("interrupted");
 	expect(published).not.toContain(channelId);
 });
+
+test("retry returns settled work to its card under the same identity and fences the old claim", async () => {
+	let storage = new MemoryStorage();
+	let { userId, lease } = await userAndChannel(storage);
+	let documentId = crypto.randomUUID();
+	await storage.channels.create({
+		id: documentId,
+		repositoryId: "repo",
+		repositoryOwner: "org",
+		repositoryName: "repo",
+		title: "Experiment",
+		createdBy: userId,
+		now: new Date(),
+	});
+	let service = new Experiments(storage.experiments, () => lease);
+	let draft = await service.create(documentId, userId, "Measure startup");
+	await expect(service.retry(draft.id)).resolves.toMatchObject({ state: "requested" });
+	let input = {
+		id: draft.id,
+		documentId,
+		requester: userId,
+		authorizer: userId,
+		brief: draft.brief,
+		context: "",
+		source: { repositoryId: "repo", repository: "org/repo", commit: "a".repeat(40) },
+	};
+	await service.authorize(draft.id, "connection", input);
+	let claimed = await service.claim(draft.id, "connection");
+	await expect(service.retry(draft.id)).rejects.toThrow("invalid-state");
+	await service.stop(draft.id, "failed", "Agent crashed.");
+	let retried = await service.retry(draft.id);
+	expect(retried).toMatchObject({ id: draft.id, state: "requested", progress: "" });
+	expect(retried.input).toBeUndefined();
+	expect(retried.connectionId).toBeUndefined();
+	await expect(service.renew(draft.id, "connection", claimed.generation)).rejects.toThrow(
+		"stale-claim",
+	);
+	await service.authorize(draft.id, "connection", input);
+	expect((await service.claim(draft.id, "connection")).generation).toBe(claimed.generation + 1);
+});
