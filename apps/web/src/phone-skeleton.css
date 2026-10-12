@@ -1,0 +1,221 @@
+/*
+ * The phone's loading shape (phone-skeleton.tsx). Its bars repeat the geometry of
+ * `.phone-top-bar` and `.phone-tab-row` in phone-workspace.css, which loads later, so the loaded
+ * chrome lands exactly where the skeleton drew it. This file is in the first stylesheet: the
+ * static copy in index.html paints before any JavaScript runs.
+ */
+
+/* Only a phone opening a document shows the static copy; React replaces it as it mounts. */
+.boot-skeleton {
+	display: none;
+}
+
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
+	:root[data-boot="document"] .boot-skeleton {
+		display: contents;
+	}
+}
+
+.phone-skeleton {
+	--phone-top-chrome: calc(var(--phone-bar-height) + env(safe-area-inset-top));
+	--phone-tab-bar-offset: max(
+		calc(env(safe-area-inset-bottom) - var(--spacing) * 3),
+		var(--phone-tab-bar-gap)
+	);
+	position: relative;
+	height: 100%;
+	overflow: hidden;
+	background: var(--color-page);
+}
+
+.phone-skeleton-top {
+	position: absolute;
+	z-index: 1;
+	inset-inline: 0;
+	top: 0;
+	display: grid;
+	grid-template-columns:
+		minmax(var(--control-target-coarse), auto) minmax(0, 1fr) minmax(
+			var(--control-target-coarse),
+			auto
+		);
+	align-items: center;
+	gap: var(--spacing);
+	height: var(--phone-top-chrome);
+	padding: env(safe-area-inset-top) calc(var(--spacing) + env(safe-area-inset-right)) 0
+		calc(var(--spacing) + env(safe-area-inset-left));
+	background: var(--color-glass);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
+	border-bottom: var(--edge-width) solid var(--color-edge);
+}
+
+.phone-skeleton-slot,
+.phone-skeleton-icon {
+	display: grid;
+	place-items: center;
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	color: var(--color-text-secondary);
+}
+
+.phone-skeleton-slot .btn-icon {
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	margin: 0;
+	border-radius: var(--radius-full);
+	color: var(--color-text-secondary);
+}
+
+/* A title and a paragraph in the document column, on the prose rhythm. */
+.phone-skeleton-page {
+	display: grid;
+	row-gap: calc(var(--spacing) * 3.5);
+	align-content: start;
+
+	& > span {
+		display: block;
+		height: calc(var(--spacing) * 3);
+		border-radius: var(--radius-sm);
+		background: var(--color-selected);
+		animation: phone-skeleton-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
+			alternate;
+	}
+
+	& > .phone-skeleton-heading {
+		width: 64%;
+		height: calc(var(--spacing) * 6);
+		margin-block: calc(var(--spacing) * 1.5) calc(var(--spacing) * 4);
+	}
+
+	& > span:nth-child(3n+2) {
+		width: 96%;
+	}
+
+	& > span:nth-child(3n+3) {
+		width: 100%;
+	}
+
+	& > span:nth-child(3n+4) {
+		width: 88%;
+	}
+
+	& > span:last-child {
+		width: 56%;
+	}
+}
+
+.phone-skeleton > .phone-skeleton-page {
+	padding: calc(var(--phone-top-chrome) + var(--spacing) * 4)
+		calc(var(--document-gutter-compact) + env(safe-area-inset-right)) 0
+		calc(var(--document-gutter-compact) + env(safe-area-inset-left));
+}
+
+.phone-skeleton-tabs {
+	position: absolute;
+	right: 0;
+	bottom: var(--phone-tab-bar-offset);
+	left: 0;
+	display: flex;
+	width: min(
+		calc(100% - var(--spacing) * 8 - env(safe-area-inset-left) - env(safe-area-inset-right)),
+		var(--phone-tab-row-max)
+	);
+	margin-inline: auto;
+	gap: var(--phone-tab-bar-gap);
+}
+
+.phone-skeleton-bar,
+.phone-skeleton-action {
+	height: var(--phone-tab-bar-height);
+	border-radius: var(--radius-full);
+	background: var(--color-glass);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-overlay);
+}
+
+.phone-skeleton-bar {
+	display: grid;
+	flex: 1;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	padding: var(--spacing);
+
+	/* Each tab: an icon-sized mark over a short label. */
+	& > span {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: calc(var(--spacing) * 1.5);
+	}
+
+	& > span::before,
+	& > span::after {
+		border-radius: var(--radius-sm);
+		background: var(--color-selected);
+		content: "";
+		animation: phone-skeleton-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
+			alternate;
+	}
+
+	& > span::before {
+		width: calc(var(--spacing) * 6);
+		height: calc(var(--spacing) * 6);
+	}
+
+	& > span::after {
+		width: calc(var(--spacing) * 9);
+		height: calc(var(--spacing) * 2);
+	}
+}
+
+.phone-skeleton-action {
+	flex: none;
+	width: var(--phone-tab-bar-height);
+}
+
+@media (max-width: 359px) {
+	.phone-skeleton-tabs {
+		gap: calc(var(--spacing) * 1.5);
+		width: calc(100% - var(--spacing) * 4);
+	}
+}
+
+/* Landscape keeps the loaded chrome's lower bars, with labels beside their icons. */
+@media (max-height: 500px) {
+	.phone-skeleton {
+		--phone-bar-height: calc(var(--spacing) * 9);
+		--phone-tab-bar-height: calc(var(--control-target-coarse) + var(--spacing));
+		--phone-tab-bar-gap: calc(var(--spacing) * 1.5);
+	}
+
+	.phone-skeleton-bar {
+		padding: calc(var(--spacing) / 2);
+
+		& > span {
+			flex-direction: row;
+		}
+	}
+}
+
+/* Until a document first arrives, its column shows the same lines in place of the empty editor. */
+[data-plan-scroll]:has(> .plan-preface > .phone-skeleton-page) > :is(.mdxeditor, .plan-afterword) {
+	visibility: hidden;
+}
+
+@keyframes phone-skeleton-pulse {
+	to {
+		opacity: var(--opacity-quiet);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.phone-skeleton-page > span,
+	.phone-skeleton-bar > span::before,
+	.phone-skeleton-bar > span::after {
+		animation: none;
+	}
+}

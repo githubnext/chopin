@@ -146,7 +146,7 @@ export default function DocumentWorkspaceHost(
 			repository?: Pick<Api.Repository, "owner" | "name" | "fullName">;
 		}>;
 		layerKey: DocumentRouteIdentity;
-		Loading: ComponentType<{ label?: string }>;
+		Loading: ComponentType<{ document?: boolean; label?: string }>;
 		onCanonicalPath: (
 			key: DocumentRouteIdentity,
 			routeKey: DocumentRouteIdentity,
@@ -434,7 +434,7 @@ export default function DocumentWorkspaceHost(
 		);
 	}
 	if (!loaded) {
-		return <Loading label={"Opening document…"} />;
+		return <Loading document label="Opening document…" />;
 	}
 
 	let parentPath = anchoredChildPaths(
@@ -540,7 +540,7 @@ export default function DocumentWorkspaceHost(
 			key={loaded.parent.channel.id}
 			ref={parentSurface}
 		>
-			<Suspense fallback={<Loading label="Opening document…" />}>
+			<Suspense fallback={<Loading document label="Opening document…" />}>
 				<RoomWorkspace
 					{...workspaceProps(
 						loaded.parent,

@@ -16,6 +16,7 @@ import "@fontsource/lora/latin-400.css";
 import "./theme.css";
 import "@chopin/visuals/styles.css";
 import "./navigation.css";
+import "./phone-skeleton.css";
 import "./icon-tooltip.css";
 import "./local-login.css";
 import "./chat/run-card.css";

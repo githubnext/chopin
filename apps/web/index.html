@@ -15,9 +15,64 @@
 		<link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
 		<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 		<title>chopin</title>
+		<!-- Lets a phone opening a document paint its skeleton before the app's JavaScript runs. -->
+		<script>
+		var documentRoute =
+			/^\/(documents(\/[^/]+){3}(\/children\/[^/]+)?|channels\/[0-9a-f-]{36})\/?$/i;
+		if (documentRoute.test(location.pathname)) {
+			document.documentElement.dataset.boot = "document";
+		}
+		</script>
 	</head>
 	<body>
-		<div id="root"></div>
+		<div id="root">
+			<!-- A static copy of PhoneSkeleton (src/phone-skeleton.tsx); React replaces it on mount. -->
+			<div class="boot-skeleton">
+				<div aria-label="Opening document" class="phone-skeleton" role="status">
+					<div class="phone-skeleton-top">
+						<span class="phone-skeleton-slot">
+							<span aria-hidden="true" class="phone-skeleton-icon">
+								<svg
+									aria-hidden="true"
+									data-nucleo-icon=""
+									height="18"
+									viewBox="0 0 18 18"
+									width="18"
+								>
+									<g
+										fill="none"
+										stroke="currentColor"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="1.5"
+									>
+										<rect x="3.25" y="4.75" width="9" height="11.5" rx="1.75"></rect>
+										<path d="M6.25 2.25h6.5c1.105 0 2 .895 2 2v8.5"></path>
+										<line x1="5.75" x2="9.75" y1="8.75" y2="8.75"></line>
+										<line x1="5.75" x2="9.75" y1="11.75" y2="11.75"></line>
+									</g>
+								</svg>
+							</span>
+						</span>
+					</div>
+					<div aria-hidden="true" class="phone-skeleton-page">
+						<span class="phone-skeleton-heading"></span>
+						<span></span>
+						<span></span>
+						<span></span>
+						<span></span>
+						<span></span>
+						<span></span>
+					</div>
+					<div aria-hidden="true" class="phone-skeleton-tabs">
+						<span
+							class="phone-skeleton-bar"
+						><span></span><span></span><span></span><span></span></span>
+						<span class="phone-skeleton-action"></span>
+					</div>
+				</div>
+			</div>
+		</div>
 		<script type="module" src="/src/main.tsx"></script>
 	</body>
 </html>

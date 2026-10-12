@@ -158,6 +158,8 @@ export function usePhoneTopBar(
 			);
 			let heading = scroller?.querySelector(".plan-content h1");
 			let bar = element.querySelector<HTMLElement>(".phone-top-bar");
+			// Until the document arrives its skeleton stands in for the heading, so the title waits.
+			if (scroller?.querySelector(".phone-skeleton-page")) return setHeadingVisible(true);
 			if (!scroller || !heading || !bar) return setHeadingVisible(false);
 			let barBottom = scroller.getBoundingClientRect().top + bar.offsetHeight;
 			setHeadingVisible(heading.getBoundingClientRect().bottom > barBottom);

@@ -63,5 +63,5 @@ export default function ChannelWorkspace(
 			/>
 		);
 	}
-	return <Loading label="Opening document…" />;
+	return <Loading document label="Opening document…" />;
 }
