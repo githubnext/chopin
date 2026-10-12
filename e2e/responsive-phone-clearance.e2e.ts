@@ -1,3 +1,5 @@
+import { failedBuild } from "./build-seed";
+import type { Graph } from "../apps/server/src/tasks/graphs";
 import { expect, test } from "./room";
 import { RESPONSIVE_SOURCE } from "./responsive";
 
@@ -130,7 +132,26 @@ for (let phone of PHONES) {
 		});
 
 		test("Build", async ({ join, seed }) => {
-			await seed(RESPONSIVE_SOURCE);
+			// Build opens once there is a build to show.
+			let graph: Graph = {
+				versions: [{
+					number: 1,
+					revision: 1,
+					planRevision: 0,
+					state: "draft",
+					definition: {
+						tasks: [{
+							id: "clear",
+							title: "Keep content clear of the bars",
+							context: "Phone chrome.",
+							goal: "Every pane's text clears the top and bottom bars.",
+							acceptance: ["The first line clears the top.", "The last line clears the bottom."],
+							dependsOn: [],
+						}],
+					},
+				}],
+			};
+			await seed(RESPONSIVE_SOURCE, { graph, builds: [failedBuild(graph)] });
 			let page = await join("ana", options);
 			await show(page, /^Build/);
 			await expect(page.getByRole("region", { name: "Build", exact: true })).toBeVisible();

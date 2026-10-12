@@ -118,7 +118,13 @@
 	width: 100%;
 	height: 100%;
 	color: var(--color-brand);
-	animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+}
+
+/* Reduced motion keeps the still loader glyph; its words say it is working. */
+@media (prefers-reduced-motion: no-preference) {
+	.build-glyph-spin {
+		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+	}
 }
 
 .build-glyph-warning {

@@ -140,6 +140,12 @@ export type WorkspaceProps = {
 	/** The header's build capsule is hovered. */
 	buildHot?: boolean;
 	onBuildHover?: (on: boolean) => void;
+	/** Why Build cannot open yet; defaults to the general reason. */
+	buildUnavailable?: string;
+	/** A brief phone note above the tab bar, such as why Build cannot open yet. */
+	phoneHint?: string;
+	/** A phone tapped Build while it cannot open. */
+	onBuildUnavailable?: () => void;
 	controls: ReactNode;
 	/** Connection and document status, right-aligned in the document title bar. */
 	status?: ReactNode;
@@ -248,6 +254,9 @@ export function Workspace(
 		buildEnabled = true,
 		buildGlyph,
 		buildHot,
+		buildUnavailable = BUILD_UNAVAILABLE,
+		onBuildUnavailable,
+		phoneHint,
 		frame,
 		chat,
 		controls,
@@ -505,7 +514,7 @@ export function Workspace(
 						);
 					})}
 					{profile.implementation && !buildEnabled && (
-						<span className="sr-only" id={buildReason}>{BUILD_UNAVAILABLE}</span>
+						<span className="sr-only" id={buildReason}>{buildUnavailable}</span>
 					)}
 				</nav>
 			)}
@@ -782,13 +791,15 @@ export function Workspace(
 				)}
 			</div>
 			{phone && profile.implementation && !buildEnabled && (
-				<span className="sr-only" id={buildReason}>{BUILD_UNAVAILABLE}</span>
+				<span className="sr-only" id={buildReason}>{buildUnavailable}</span>
 			)}
 			{phone && (
 				<PhoneTabBar
 					action={phoneAction}
 					active={destination}
 					buildReason={buildEnabled ? undefined : buildReason}
+					hint={phoneHint}
+					onUnavailable={onBuildUnavailable}
 					chatActivity={chatActivity}
 					destinations={destinations}
 					documentActivity={documentActivity}

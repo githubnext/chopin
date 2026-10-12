@@ -107,9 +107,13 @@ test("opening the Build tab never asks for tasks", async ({ seed, join: enter, p
 	await build.click({ force: true });
 	await build.focus();
 	await opened.keyboard.press("Enter");
-	await opened.waitForTimeout(500);
 	await expect(opened.getByRole("region", { name: "Build", exact: true })).toBeHidden();
-	expect(sent.length).toBeGreaterThan(0);
+	// An edit's frame follows any the tab sent, so once it arrives the absence is settled.
+	let before = sent.length;
+	await content(opened).click();
+	await opened.keyboard.press("End");
+	await opened.keyboard.type(" Edited.");
+	await expect.poll(() => sent.slice(before).includes("plan:update")).toBe(true);
 	expect(sent).not.toContain("implementation:draft");
 });
 
@@ -371,7 +375,7 @@ test("Build without a running local agent says how to start one", async ({ seed,
 	let page = await enter(person());
 	await page.getByRole("button", { name: "Build plan", exact: true }).click();
 	let stopped = page.getByRole("button", { name: /^Build stopped/ });
-	await expect(stopped).toHaveAttribute("aria-description", "Start your local agent, then retry");
+	await expect(stopped).toHaveAccessibleDescription("Start your local agent, then retry");
 	await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
 	await stopped.click();
 	let view = buildView(page);
@@ -488,5 +492,33 @@ test("a build in progress shows who started it and offers no action", async ({ s
 		expect(["queued", "starting", "running"]).toContain(snapshot.build.state);
 	} finally {
 		await local.close();
+	}
+});
+
+test("on a phone, tapping Build or an inert Build plan says why, briefly", async ({ seed, join: enter }) => {
+	await seed("# Phone build\n\nNot built yet.\n");
+	let page = await enter("ana", {
+		viewport: { width: 390, height: 844 },
+		isMobile: true,
+		hasTouch: true,
+	});
+	let tab = page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Build/ });
+	// aria-disabled, not disabled, so it stays tappable: touch has no tooltip; the tap explains.
+	await expect(tab).toHaveAttribute("aria-disabled", "true");
+	await expect(tab).not.toHaveAttribute("disabled");
+	let reason = await tab.evaluate(element =>
+		document.getElementById(element.getAttribute("aria-describedby")!)!.textContent!
+	);
+	expect(reason.length).toBeGreaterThan(0);
+	let hint = page.getByRole("status").filter({ hasText: reason });
+	await tab.tap({ force: true });
+	await expect(hint).toBeVisible();
+	await expect(page.getByRole("region", { name: "Build", exact: true })).toBeHidden();
+	await expect(hint).toHaveCount(0, { timeout: 6_000 });
+	let plan = page.getByRole("button", { name: "Build plan", exact: true });
+	if (await plan.getAttribute("aria-disabled") === "true") {
+		await plan.tap({ force: true });
+		await expect(hint).toBeVisible();
 	}
 });

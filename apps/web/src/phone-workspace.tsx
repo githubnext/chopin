@@ -27,6 +27,8 @@ export function PhoneTabBar(
 		action,
 		active,
 		buildReason,
+		hint,
+		onUnavailable,
 		chatActivity,
 		destinations,
 		documentActivity,
@@ -40,6 +42,10 @@ export function PhoneTabBar(
 		active: WorkspaceDestination;
 		/** Set while Build cannot open yet: the id of the text that says why. */
 		buildReason?: string;
+		/** A brief note above the bar, such as why Build cannot open yet; announced politely. */
+		hint?: string;
+		/** Build was tapped while it cannot open; touch has no tooltip, so the host says why. */
+		onUnavailable?: () => void;
 		chatActivity: { unread: number; busy: boolean };
 		destinations: WorkspaceDestination[];
 		documentActivity?: DocumentActivity;
@@ -58,6 +64,14 @@ export function PhoneTabBar(
 			data-phone-tab-toolbar={toolbar ? "" : undefined}
 		>
 			{toolbar && <div className="phone-tab-toolbar">{toolbar}</div>}
+			<p
+				aria-live="polite"
+				className="phone-tab-hint"
+				data-shown={hint ? "" : undefined}
+				role="status"
+			>
+				{hint}
+			</p>
 			<nav
 				hidden={!!toolbar}
 				aria-label="Workspace view"
@@ -84,7 +98,8 @@ export function PhoneTabBar(
 							data-press="small"
 							key={destination}
 							onClick={event => {
-								if (!unavailable) onSelect(destination, current, event.currentTarget);
+								if (unavailable) onUnavailable?.();
+								else onSelect(destination, current, event.currentTarget);
 							}}
 							type="button"
 						>
