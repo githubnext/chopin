@@ -136,7 +136,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				: free;
 			if (here) list.unshift(connection);
 			else list.push(connection);
-			}
+		}
 		return [...free, ...prototyping, ...building];
 	}
 	router.on(

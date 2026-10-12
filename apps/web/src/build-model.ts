@@ -34,7 +34,7 @@ export type SyncStatus =
 	| { kind: "needs-attention"; outstanding: number }
 	| { kind: "out-of-sync"; reason: "pending" | "waiting" | "failed"; outstanding: number };
 
-const RUNNING = ["queued", "starting", "running"];
+const RUNNING = new Set(["queued", "starting", "running"]);
 
 /**
  * The living document's sync status, or `undefined` before its first build has delivered.
@@ -45,8 +45,8 @@ export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefin
 	let live = snapshot?.live;
 	if (!snapshot || !live) return;
 	if (
-		live.rebuild && RUNNING.includes(live.rebuild.state)
-		|| snapshot.build && RUNNING.includes(snapshot.build.state)
+		live.rebuild && RUNNING.has(live.rebuild.state)
+		|| snapshot.build && RUNNING.has(snapshot.build.state)
 		|| snapshot.lifecycle.execution.state === "active"
 	) return { kind: "building" };
 	let outstanding = live.outstandingTasks?.length ?? 0;

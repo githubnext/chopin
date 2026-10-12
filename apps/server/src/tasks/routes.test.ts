@@ -439,9 +439,9 @@ test("Build queues behind a running prototype and starts once it finishes (LIVE_
 	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
 	let response = await context.call(context.path, {
-			planRevision: 0,
-			graphVersion: 1,
-			graphRevision: 1,
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
 	});
 	expect(response.status).toBe(200);
 	let build = await response.json();
