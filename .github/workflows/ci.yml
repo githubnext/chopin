@@ -192,17 +192,28 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Cross-compiled above; this only checks that the .exe starts on Windows.
+  # Cross-compiled above; this checks that the .exe starts on Windows, and runs install.ps1
+  # against a local fake release (the Linux job only sees it refuse to run outside Windows).
   cli-windows:
     name: chopin CLI (Windows)
     needs: cli
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
       - uses: actions/download-artifact@v8
         with:
           name: chopin-windows-x64
+          path: dist
 
-      - run: ./chopin-windows-x64.exe --version
+      - run: ./dist/chopin-windows-x64.exe --version
+
+      - name: install.ps1 against a fake release
+        run: bun test apps/connector/install/install.test.ts
 
   container:
     name: container

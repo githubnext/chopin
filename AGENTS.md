@@ -57,8 +57,8 @@ only when the existing client build is known to match the checkout.
 
 CI has four independent jobs: validation, browser integration, a Docker image
 build, and the `chopin` CLI binary build with its bridge smoke test (whose
-Windows binary is then started once on Windows). A documentation-only change
-should still pass `bun run ci`.
+Windows binary is then started once on Windows, where `install.ps1` is also
+tested). A documentation-only change should still pass `bun run ci`.
 
 Before opening a PR or repairing CI, use the repository's
 [PR readiness skill](.agents/skills/chopin-pr-readiness/SKILL.md).
