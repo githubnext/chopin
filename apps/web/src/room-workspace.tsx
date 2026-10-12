@@ -184,7 +184,19 @@ type TitleProps = {
 };
 
 /** An open Zoom child: this title becomes a crumb back, and the child's title follows it. */
-type TitlePath = { onReturn: () => void; slot: (element: HTMLElement | null) => void };
+type TitlePath = {
+	child: string;
+	onReturn: () => void;
+	/** Set while the root shows another view: the child crumb then brings Document back. */
+	onShowChild?: () => void;
+	slot: (element: HTMLElement | null) => void;
+};
+
+/**
+ * Titles renamed from their own field. A child's card is keyed by its slug, so a rename remounts
+ * it; the new title takes the caret back on mount.
+ */
+let renamedFromField = new Map<string, number>();
 
 /** The document's project, title, rename and actions menu, wherever its chrome puts them. */
 export function DocumentTitle(
@@ -211,6 +223,13 @@ export function DocumentTitle(
 		// Hand the caret back only when the field took it with it, not after a blur commit.
 		if (!editing && previous && document.activeElement === document.body) title.current?.focus();
 	}, [editing]);
+	useEffect(() => {
+		let renamed = renamedFromField.get(room);
+		renamedFromField.delete(room);
+		if (renamed === undefined || performance.now() - renamed > 2000) return;
+		let active = document.activeElement;
+		if (!active || active === document.body) title.current?.focus();
+	}, [room]);
 	// Also runs as a save starts, not after it: keys typed while the rename travels would
 	// otherwise land in a field that is about to close.
 	let handOff = () => {
@@ -225,10 +244,12 @@ export function DocumentTitle(
 		handOff();
 		onEditingChange();
 	};
-	return (
+	let identity = (
 		<div
 			aria-label={`Document: ${label}`}
-			className="document-title flex min-w-0 flex-1 items-center gap-0.5"
+			className={`document-title flex min-w-0 items-center gap-0.5 ${
+				path ? "flex-initial" : "flex-1"
+			}`}
 			ref={group}
 			role="group"
 		>
@@ -242,17 +263,14 @@ export function DocumentTitle(
 				</>
 			)}
 			{path && (
-				<>
-					<button
-						className="document-title-crumb btn btn-compact btn-ghost min-w-0"
-						onClick={path.onReturn}
-						type="button"
-					>
-						<span className="truncate">{label}</span>
-					</button>
-					<ChevronIcon aria-hidden="true" className="document-title-crumb-chevron" size={12} />
-					<div className="document-child-title-slot" ref={path.slot} />
-				</>
+				<button
+					aria-label={`Back to ${label}`}
+					className="document-title-crumb btn btn-compact btn-ghost min-w-0"
+					onClick={path.onReturn}
+					type="button"
+				>
+					<span className="truncate">{label}</span>
+				</button>
 			)}
 			<div className="title-control min-w-0 text-xs font-medium" hidden={!!path}>
 				{editing && canManage && !archivedAt
@@ -266,7 +284,13 @@ export function DocumentTitle(
 								error !== undefined
 								&& group.current?.querySelector<HTMLInputElement>(".document-title-input")
 									?.focus()}
-							onSavingChange={saving => saving && handOff()}
+							onSavingChange={saving => {
+								if (!saving) return;
+								if (editing !== "new" && group.current?.contains(document.activeElement)) {
+									renamedFromField.set(room, performance.now());
+								}
+								handOff();
+							}}
 							replay={editing === "new"}
 							onRenamed={detail => {
 								onRenamed(detail.channel);
@@ -323,6 +347,25 @@ export function DocumentTitle(
 				</span>
 			)}
 		</div>
+	);
+	if (!path) return identity;
+	// The child's title is its own Document group, beside the root's rather than inside it.
+	return (
+		<>
+			{identity}
+			<ChevronIcon aria-hidden="true" className="document-title-crumb-chevron" size={12} />
+			{path.onShowChild && (
+				<button
+					aria-current="page"
+					className="document-title-crumb document-title-child-crumb btn btn-compact btn-ghost min-w-0"
+					onClick={path.onShowChild}
+					type="button"
+				>
+					<span className="truncate">{path.child}</span>
+				</button>
+			)}
+			<div className="document-child-title-slot" hidden={!!path.onShowChild} ref={path.slot} />
+		</>
 	);
 }
 
@@ -1322,10 +1365,24 @@ export function RoomWorkspace(
 	}
 
 	// Only the split workspace has title bars; compact and phones keep the stack bar.
-	let zoomChild = presentation.type === "parent-with-child" && presentation.motion === "zoom"
-			&& mode === "split"
-		? presentation.onChildClose
-		: undefined;
+	let zoomChild: TitlePath | undefined =
+		presentation.type === "parent-with-child" && presentation.motion === "zoom" && mode === "split"
+			? {
+				child: presentation.path.at(-1)!.label,
+				onReturn: presentation.onChildClose,
+				// Off Document the child is out of sight, so its crumb leads back to it rather than
+				// offering a rename that would act on a document the pane isn't showing.
+				onShowChild: view === "plan" ? undefined : () => {
+					selectDestination("plan");
+					requestAnimationFrame(() => {
+						document.querySelector<HTMLElement>(
+							`[data-workspace-room="${room}"] .anchored-child-card:last-of-type`,
+						)?.focus({ preventScroll: true });
+					});
+				},
+				slot: setChildTitleSlot,
+			}
+			: undefined;
 	let childTitleValue = presentation.type === "parent-with-child" && mode === "split"
 		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
 		: undefined;
@@ -1432,7 +1489,7 @@ export function RoomWorkspace(
 					title={
 						<DocumentTitle
 							{...titleProps}
-							path={zoomChild ? { onReturn: zoomChild, slot: setChildTitleSlot } : undefined}
+							path={zoomChild}
 						/>
 					}
 					controls={

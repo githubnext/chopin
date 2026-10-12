@@ -559,11 +559,14 @@ export function Workspace(
 									)}
 									<div className="document-title-slot" inert={liftCovered || undefined}>
 										{zoom && (
+											// A pointer target only: the root crumb beside it is the one Back control for
+											// the keyboard and assistive technology.
 											<button
-												aria-label={`Back to ${nested!.path.at(-2)!.label}`}
-												className="btn btn-icon btn-ghost shrink-0"
+												aria-hidden="true"
+												className="document-title-back btn btn-icon btn-ghost shrink-0"
 												data-tooltip={`Back to ${nested!.path.at(-2)!.label}`}
 												onClick={nested!.onChildClose}
+												tabIndex={-1}
 												type="button"
 											>
 												<ArrowLeftIcon aria-hidden="true" size={14} />

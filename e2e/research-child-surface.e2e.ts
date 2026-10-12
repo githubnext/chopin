@@ -282,7 +282,7 @@ test("the root's Chat stays live while a child is open, across every close path"
 		await expect(surface).toBeVisible();
 	}
 
-	// 1. The title bar's Back, pressed twice in one task: only one close happens.
+	// 1. The title bar's root crumb, pressed twice in one task: only one close happens.
 	await sheet.locator("[data-document-title-bar]")
 		.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).evaluate(button => {
 			(button as HTMLButtonElement).click();
@@ -300,12 +300,9 @@ test("the root's Chat stays live while a child is open, across every close path"
 	await page.goBack();
 	await expectClosed();
 
-	// 4. The root's crumb in the title bar's path.
+	// 4. The title bar's arrow, a pointer target beside the crumb.
 	await reopen();
-	await sheet.locator("[data-document-title-bar]").getByRole("button", {
-		name: `Test ${room.slice(0, 8)}`,
-		exact: true,
-	}).click();
+	await sheet.locator("[data-document-title-bar] .document-title-back").click();
 	await expectClosed();
 	await reopen();
 	await expect(chatSends().filter(send => send.channelId === child.id)).toHaveLength(0);
@@ -955,6 +952,59 @@ test("Escape in a child editor dismisses the innermost thing before the sheet", 
 	await page.keyboard.press("Escape");
 	await expect(surface).toHaveCount(0);
 	await expect(page).toHaveURL(url => url.pathname.endsWith(`/test-${room.slice(0, 8)}`));
+});
+
+test("split Zoom renames the child from the title bar and keeps the caret on its title", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let childTitle = `Zoom rename ${room.slice(0, 8)}`;
+	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await join("ana");
+	await page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: childTitle, exact: true }).click();
+	let bar = titleBar(page, room);
+	let root = bar.getByRole("group", { name: `Document: Test ${room.slice(0, 8)}`, exact: true });
+	let child = bar.getByRole("group", { name: `Document: ${childTitle}`, exact: true });
+	await expect(child).toBeVisible();
+	// The child's title sits beside the root's, not inside it.
+	await expect(root.getByRole("group")).toHaveCount(0);
+	// One Back stop for the keyboard: the root crumb, named for where it goes.
+	await expect(bar.getByRole("button", { name: /^Back to / })).toHaveCount(1);
+	await expect(bar.locator(".document-title-back")).toHaveAttribute("tabindex", "-1");
+
+	let renamed = `Renamed ${room.slice(0, 8)}`;
+	await child.getByRole("button", { name: `Rename ${childTitle}` }).click();
+	let field = page.getByRole("textbox", { name: "Document title" });
+	await expect(field).toBeFocused();
+	await field.fill(renamed);
+	await field.press("Enter");
+	await expect(field).toHaveCount(0);
+	// The rename rekeys the child's card; the remounted title takes the caret back.
+	await expect(bar.getByRole("button", { name: `Rename ${renamed}` })).toBeFocused();
+});
+
+test("split Zoom off Document makes the child a crumb back to it, not a rename", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let childTitle = `Zoom off Document ${room.slice(0, 8)}`;
+	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await join("ana");
+	let sheet = rootSheet(page, room);
+	await sheet.locator("[data-document-toolbar]").getByRole("button", { name: /^Decisions/ })
+		.click();
+	await page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: childTitle, exact: true }).click();
+	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
+	await expect(sheet.locator('[data-document-view="decisions"]')).toBeVisible();
+	await expect(surface).toBeHidden();
+	let bar = titleBar(page, room);
+	await expect(bar.getByRole("button", { name: `Rename ${childTitle}` })).toHaveCount(0);
+	let crumb = bar.getByRole("button", { name: childTitle, exact: true });
+	await expect(crumb).toHaveAttribute("aria-current", "page");
+	await crumb.click();
+	await expect(surface).toBeVisible();
+	await expect(surface).toBeFocused();
+	await expect(bar.getByRole("button", { name: `Rename ${childTitle}` })).toBeVisible();
 });
 
 test("compact Zoom keeps an open child across root view switches without remounting it", async ({ baseURL, join, page, room, seed }) => {

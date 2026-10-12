@@ -383,7 +383,11 @@ describe("anchored child lifecycle", () => {
 		let views = document.match(/<div[^>]*data-document-toolbar[^>]*>/)?.[0];
 
 		expect(document).not.toContain('aria-label="Document stack"');
-		expect(toolbarOf(document).indexOf('aria-label="Back to Root"'))
+		// The arrow is a pointer target only; the root crumb in the title is the keyboard's Back.
+		let back = toolbarOf(document).match(/<button[^>]*document-title-back[^>]*>/)?.[0];
+		expect(back).toContain('aria-hidden="true"');
+		expect(back).toContain('tabindex="-1"');
+		expect(toolbarOf(document).indexOf("document-title-back"))
 			.toBeLessThan(toolbarOf(document).indexOf("Room title"));
 		expect(views).toContain("data-folded");
 		expect(views).toContain('inert=""');

@@ -715,6 +715,11 @@ body {
 	color: var(--color-text-primary);
 }
 
+/* A covered Lift root's title dims with the rest of its bar. */
+.workspace-document-panel[data-child-covered] .document-title-bar .title-control {
+	color: inherit;
+}
+
 /* The project keeps its name while the title truncates first. */
 .document-title-bar .document-project-prefix {
 	flex-shrink: 0;
@@ -740,6 +745,12 @@ body {
 	flex: 0 1 auto;
 	max-width: var(--label-measure-compact);
 	color: var(--color-text-tertiary);
+}
+
+/* Off Document, the hidden child is a crumb back to it, still marked as where the path ends. */
+.document-title-child-crumb {
+	max-width: none;
+	color: var(--color-text-primary);
 }
 
 .document-title-crumb-chevron {
