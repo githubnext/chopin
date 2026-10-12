@@ -494,22 +494,22 @@ export function BuildPlanButton(
 				{action && (
 					<>
 						{/* Stays focusable while blocked or busy; aria-disabled and aria-busy say why. */}
-					<button
+						<button
 							aria-busy={busy || undefined}
 							aria-describedby={blocked ? actionReason : undefined}
 							aria-disabled={blocked || busy ? true : undefined}
-						className="btn btn-compact btn-outline build-capsule-action"
+							className="btn btn-compact btn-outline build-capsule-action"
 							data-tooltip={blocked}
 							data-tooltip-detail={blocked ? "" : undefined}
 							data-tooltip-verbatim={blocked ? "" : undefined}
-						onClick={() => {
+							onClick={() => {
 								if (blocked) onExplain?.(blocked);
 								else if (!busy) action.run();
-						}}
-						type="button"
-					>
-					{action.name}
-					</button>
+							}}
+							type="button"
+						>
+							{action.name}
+						</button>
 						{blocked && <span className="sr-only" id={actionReason}>{blocked}</span>}
 					</>
 				)}
