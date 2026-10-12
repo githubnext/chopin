@@ -868,7 +868,7 @@ test("builds queued behind a connection's build take its place in the order they
 });
 
 test("a spike runs with an image upload and a structured report, and stays out of the list", async () => {
-	let { alice, documentId, request, tool, pair, runtime } = await setup();
+	let { alice, documentId, request, tool, pair, runtime, storage } = await setup();
 	let paired = await pair(alice.cookie);
 	let id = crypto.randomUUID();
 	await runtime.service.create(documentId, "alice", "Spike brief", id, {
@@ -943,6 +943,9 @@ test("a spike runs with an image upload and a structured report, and stays out o
 	expect(value?.state).toBe("completed");
 	expect(value?.result?.report).toContain("**It works**");
 	expect(value?.result?.report).toContain(uploaded.path);
+	// A spike lands only as its callout: completing it never publishes a child document.
+	expect(value?.childId).toBeUndefined();
+	expect(await storage.channels.children(documentId, 10)).toEqual([]);
 });
 
 test("an ordinary run cannot upload images or send an image-sized body", async () => {

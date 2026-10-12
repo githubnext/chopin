@@ -140,7 +140,7 @@ export class Experiments {
 	}
 	/**
 	 * Promote the candidate and publish it as a child document in the same commit, so a ready card
-	 * never links a child that is not there yet.
+	 * never links a child that is not there yet. A spike is promoted without a child.
 	 */
 	async complete(id: string, connectionId: string, generation: number) {
 		for (let attempt = 0; attempt < 5; attempt++) {
@@ -161,6 +161,12 @@ export class Experiments {
 			value.expiresAt = 0;
 			value.revision++;
 			value.updatedAt = this.now();
+			// A spike lands only as its inline callout; it never becomes a child document.
+			if (value.spike) {
+				if (!await this.store.save(value, current.revision, this.lease())) continue;
+				this.changed(value.documentId);
+				return value;
+			}
 			let document = investigationDocument(value.id, value.brief, result);
 			let saved = await this.store.publish(value, current.revision, {
 				title: document.title,

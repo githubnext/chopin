@@ -18,7 +18,8 @@ export interface ExperimentStore {
 	save(value: Investigation, expected: number | undefined, lease: Lease): Promise<boolean>;
 	/**
 	 * Save a completed investigation and create its child document in one fenced commit. A record
-	 * that already links a child is returned unchanged; false means the revision changed.
+	 * that already links a child is returned unchanged; false means the revision changed. A spike
+	 * lands only as its callout and is refused.
 	 */
 	publish(
 		value: Investigation,

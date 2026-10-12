@@ -78,6 +78,51 @@ export function experimentContract(name: string, factory: StorageFactory) {
 				await storage.close();
 			}
 		});
+		test("completes a spike without publishing a child document", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, userId, lease } = await userAndChannel(storage);
+				let service = new Experiments(storage.experiments, () => lease);
+				let created = await service.create(channelId, userId, "Spike: prove it", undefined, {
+					digest: "digest",
+					passage: "Caching should halve startup.",
+					callout: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+					login: "octo",
+					placed: true,
+				});
+				expect(
+					await storage.experiments.save(
+						{
+							...created,
+							revision: 1,
+							state: "publishing",
+							connectionId: "connection",
+							generation: 1,
+							expiresAt: Date.now() + 60_000,
+							candidate: performance,
+						},
+						0,
+						lease,
+					),
+				).toBe(true);
+				let completed = await service.complete(created.id, "connection", 1);
+				expect(completed).toMatchObject({ state: "completed", result: performance });
+				expect(completed.childId).toBeUndefined();
+				expect(await service.complete(created.id, "connection", 1)).toEqual(completed);
+				expect(await storage.channels.children(channelId, 10)).toEqual([]);
+				await expect(
+					storage.experiments.publish(
+						{ ...completed, revision: completed.revision + 1 },
+						completed.revision,
+						{ title: "Spike", initial: undefined as never, now: new Date() },
+						lease,
+					),
+				).rejects.toMatchObject({ failure: "conflict" });
+				expect(await storage.channels.children(channelId, 10)).toEqual([]);
+			} finally {
+				await storage.close();
+			}
+		});
 		test("refuses to publish an investigation held by a child document", async () => {
 			let storage = await openedStorage(factory);
 			try {
