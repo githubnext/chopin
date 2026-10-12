@@ -112,7 +112,9 @@ export function ViewDecision({ store, id, view, disabled }: {
 	let item = store.get(id);
 	let found = item?.result?.views.find(candidate => candidate.key === view);
 	if (!item || !found) return null;
-	return <EvidenceActions store={store} item={item} view={found} disabled={disabled} />;
+	return (
+		<EvidenceActions store={store} item={item} view={found} disabled={disabled || !!item.locked} />
+	);
 }
 
 /** One recorded decision with its fixed evidence and the action that embeds it. */
@@ -125,10 +127,10 @@ function DecisionRecord({ store, item, decision, canEdit, onError }: {
 }) {
 	let view = item.result?.views.find(view => view.key === decision.view);
 	return (
-		<article className="flex flex-col gap-2 rounded-md border p-3 text-sm">
-			<h4 className="font-semibold">{decision.conclusion}</h4>
-			<p>{decision.rationale}</p>
-			<p className="text-xs text-text-secondary">
+		<article className="plan-evidence flex min-w-0 flex-col gap-1 rounded-md bg-inset p-3 text-sm">
+			<h4 className="m-0 font-semibold">{decision.conclusion}</h4>
+			{decision.rationale && <p className="m-0 text-text-secondary">{decision.rationale}</p>}
+			<p className="m-0 text-xs text-text-tertiary">
 				Recorded by {decision.by} · Fixed evidence
 			</p>
 			{view && item.result && (
@@ -138,7 +140,7 @@ function DecisionRecord({ store, item, decision, canEdit, onError }: {
 			)}
 			{canEdit && (
 				<button
-					className="btn btn-md btn-outline"
+					className="btn btn-sm btn-ghost self-start"
 					onClick={() => {
 						onError("");
 						void store.place(item.id, decision.view, decision.id).catch(error =>
