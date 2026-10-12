@@ -4,6 +4,8 @@ import {
 	advanceFirstBuild,
 	ago,
 	attentionHint,
+	blockerLabelled,
+	blockerText,
 	buildLabel,
 	buildLook,
 	buildPhase,
@@ -12,13 +14,18 @@ import {
 	draftRefusalCopy,
 	elapsed,
 	firstBuildStep,
+	linkParts,
+	liveTaskGroups,
+	liveTaskState,
 	pullRequestCommits,
 	pullRequestNumber,
+	shortUrl,
 	startedBy,
 	startingHint,
 	syncHint,
 	syncStatus,
 	taskStartsOpen,
+	unfinishedReason,
 } from "./build-model";
 
 import type {
@@ -446,7 +453,7 @@ describe("living document sync", () => {
 		expect(syncStatus(stuck)).toEqual({ kind: "needs-attention", outstanding: 2 });
 		expect(syncHint(syncStatus(stuck), stuck, "me"))
 			.toBe(
-				"“Store graphs” is blocked: Which database? (and 1 other). Edit the document to retry.",
+				"“Store graphs” is blocked: Which database? (and 1 other). Edit the document to retry them.",
 			);
 		let edited = live({ outstandingTasks, outOfSync: true });
 		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
@@ -463,10 +470,10 @@ describe("living document sync", () => {
 				outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker }],
 			}));
 		expect(hint("I can't decide this myself.")).toBe(
-			"“Ship” is blocked: I can't decide this myself. Edit the document to retry.",
+			"“Ship” is blocked: I can't decide this myself. Edit the document to retry it.",
 		);
 		expect(hint("Which database?")).toBe(
-			"“Ship” is blocked: Which database? Edit the document to retry.",
+			"“Ship” is blocked: Which database? Edit the document to retry it.",
 		);
 	});
 
@@ -480,8 +487,104 @@ describe("living document sync", () => {
 			sync: { kind: "needs-attention", outstanding: 1 },
 		});
 		expect(attentionHint(stopped)).toBe(
-			"“Ship” is blocked: Pick a host. Edit the document to retry.",
+			"“Ship” is blocked: Pick a host. Edit the document to retry it.",
 		);
+	});
+
+	it("caps a long blocker in the tooltip at a word boundary", () => {
+		let blocker = `The repository has no app.${" Should I scaffold one?".repeat(10)}`;
+		let hint = attentionHint(live({
+			outstandingTasks: [{ id: "a", title: "Ship", state: "blocked", blocker }],
+		}))!;
+		expect(hint).toMatch(/^“Ship” is blocked: The repository has no app\. Should I .*…/);
+		expect(hint.endsWith("… Edit the document to retry it.")).toBe(true);
+		expect(hint.length).toBeLessThan(180);
+	});
+
+	it("says why an unfinished task stopped: its last report, else where the agent stopped", () => {
+		expect(unfinishedReason(undefined)).toBe("Your agent stopped before opening a pull request");
+		expect(unfinishedReason({ pullRequest: { url: PR, state: "open" } }))
+			.toBe("Your agent stopped before finishing this task");
+		expect(unfinishedReason({ summary: "  Tests still fail on CI. " }))
+			.toBe("Tests still fail on CI.");
+		let task = (progress: object) => ({
+			id: "a",
+			title: "Ship",
+			context: "",
+			goal: "",
+			acceptance: [],
+			dependsOn: [],
+			progress: { id: "a", state: "queued" as const, ...progress },
+		});
+		let quiet = live({
+			outstandingTasks: [{ id: "a", title: "Ship", state: "queued" }],
+			tasks: [task({})],
+		});
+		expect(attentionHint(quiet)).toBe(
+			"“Ship” didn’t finish: your agent stopped before opening a pull request. Edit the document to retry it.",
+		);
+		let reported = live({
+			outstandingTasks: [{ id: "a", title: "Ship", state: "queued" }],
+			tasks: [task({ summary: "Waiting on a review of https://github.com/o/r/pull/7." })],
+		});
+		expect(attentionHint(reported)).toBe(
+			"“Ship” didn’t finish: Waiting on a review of o/r#7. Edit the document to retry it.",
+		);
+	});
+
+	it("drops an agent's stacked Blocked: labels and keeps its own", () => {
+		expect(blockerText("Blocked: Blocker - Which database?")).toBe("Which database?");
+		expect(blockerText("Blocked by CI")).toBe("Blocked by CI");
+		expect(blockerLabelled("Awaiting human confirmation: Jev must confirm")).toBe(true);
+		expect(blockerLabelled("Which database? Postgres: or SQLite")).toBe(false);
+		expect(blockerLabelled("https://github.com/o/r/pull/1 fails")).toBe(false);
+		let hint = attentionHint(live({
+			outstandingTasks: [{
+				id: "a",
+				title: "Ship",
+				state: "blocked",
+				blocker: "Blocked: Awaiting review: see https://github.com/o/r/pull/28#issuecomment-339.",
+			}],
+		}));
+		expect(hint).toBe(
+			"“Ship” is blocked: Awaiting review: see o/r#28 comment. Edit the document to retry it.",
+		);
+	});
+
+	it("shortens GitHub links and leaves other links whole", () => {
+		expect(shortUrl("https://github.com/o/r/pull/28")).toBe("o/r#28");
+		expect(shortUrl("https://github.com/o/r/issues/3#issuecomment-12")).toBe("o/r#3 comment");
+		expect(shortUrl("https://github.com/o/r/pull/28/files")).toBe("o/r#28");
+		expect(shortUrl("https://example.com/o/r/pull/28")).toBeUndefined();
+		expect(
+			linkParts("on PR #28 (https://github.com/o/r/pull/28#issuecomment-9). See https://x.dev/a."),
+		).toEqual([
+			{ text: "on PR #28 (" },
+			{ text: "o/r#28 comment", href: "https://github.com/o/r/pull/28#issuecomment-9" },
+			{ text: "). See " },
+			{ text: "https://x.dev/a", href: "https://x.dev/a" },
+			{ text: "." },
+		]);
+		expect(linkParts("no links")).toEqual([{ text: "no links" }]);
+	});
+
+	it("shows a task the first build left unfinished as blocked until a rebuild runs", () => {
+		expect(liveTaskState("queued", true, false)).toBe("blocked");
+		expect(liveTaskState("queued", true, true)).toBe("queued");
+		expect(liveTaskState("queued", false, false)).toBe("queued");
+		expect(liveTaskState("in_progress", true, false)).toBe("in_progress");
+		expect(liveTaskState("completed", true, false)).toBe("completed");
+	});
+
+	it("splits the first build's tasks from those later rebuilds added", () => {
+		let tasks = [{ id: "workspace" }, { id: "rebuild-2-1" }, { id: "notes" }, {
+			id: "rebuild-3-1",
+		}];
+		expect(liveTaskGroups(tasks)).toEqual({
+			first: [{ id: "workspace" }, { id: "notes" }],
+			since: [{ id: "rebuild-2-1" }, { id: "rebuild-3-1" }],
+		});
+		expect(liveTaskGroups([{ id: "workspace" }]).since).toEqual([]);
 	});
 
 	it("does not call a failed rebuild out of sync once later edits match", () => {

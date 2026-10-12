@@ -82,17 +82,110 @@ export function syncHint(
 		: `Waiting for the builder’s agent${retry}`;
 }
 
+/** The longest blocker a tooltip quotes; the Build view's task row shows all of it. */
+const BLOCKER_CHARS = 120;
+
+/** Labels an agent puts before its reason, which the row already says: "Blocked: …". */
+const BLOCKER_LABEL = /^\s*(?:blocked|blocker)\s*[:–—-]\s*/i;
+const LINK = /https?:\/\/[^\s<>()"“”]+[^\s<>()"“”.,;:!?'’]/g;
+
+/** An agent's blocker without the "Blocked:" labels it stacked in front. */
+export function blockerText(raw: string): string {
+	let text = raw.trim();
+	while (BLOCKER_LABEL.test(text)) text = text.replace(BLOCKER_LABEL, "");
+	return text;
+}
+
+/** Whether a reason opens with its own short label, such as "Awaiting review: …". */
+export function blockerLabelled(text: string): boolean {
+	return /^[^\s:][^:.?!]{0,40}:\s/.test(text) && !/^https?:/.test(text);
+}
+
+/** A GitHub pull request or issue link as `owner/repo#N`, noting a link to one comment. */
+export function shortUrl(url: string): string | undefined {
+	let match = url.match(
+		/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(?:pull|issues)\/(\d+)(?:[/?#](\S*))?$/,
+	);
+	if (!match) return;
+	let comment = /(?:^|[#&])(?:issuecomment|discussion_r|pullrequestreview)-?\d/.test(
+		match[3] ?? "",
+	);
+	return `${match[1]}#${match[2]}${comment ? " comment" : ""}`;
+}
+
+/** Prose with its links split out, each labelled for reading. */
+export function linkParts(text: string): Array<{ text: string; href?: string }> {
+	let parts: Array<{ text: string; href?: string }> = [];
+	let last = 0;
+	for (let match of text.matchAll(LINK)) {
+		if (match.index > last) parts.push({ text: text.slice(last, match.index) });
+		parts.push({ text: shortUrl(match[0]) ?? match[0], href: match[0] });
+		last = match.index + match[0].length;
+	}
+	if (last < text.length) parts.push({ text: text.slice(last) });
+	return parts;
+}
+
+/** One line of an agent's text for a tooltip: links shortened, capped at a word boundary. */
+function quote(raw: string): string {
+	let text = linkParts(blockerText(raw)).map(part => part.text).join("")
+		.replace(/\s+/g, " ").replace(/\.+$/, "");
+	return text.length > BLOCKER_CHARS
+		? `${text.slice(0, BLOCKER_CHARS).replace(/\s+\S*$/, "")}…`
+		: text;
+}
+
+/**
+ * Why a task the build left unfinished stopped: the agent's last report, or where it
+ * stopped when it said nothing.
+ */
+export function unfinishedReason(
+	progress: { summary?: string; pullRequest?: unknown } | undefined,
+): string {
+	let summary = progress?.summary?.trim();
+	if (summary) return summary;
+	return progress?.pullRequest
+		? "Your agent stopped before finishing this task"
+		: "Your agent stopped before opening a pull request";
+}
+
 /** What an unfinished task is stuck on, and that an edit retries it. */
 export function attentionHint(snapshot: Snapshot | undefined): string | undefined {
 	let tasks = snapshot?.live?.outstandingTasks ?? [];
 	if (!tasks.length) return;
 	let first = tasks.find(task => task.blocker) ?? tasks[0]!;
+	let progress = snapshot?.live?.tasks.find(task => task.id === first.id)?.progress;
 	let reason = first.blocker
-		? `“${first.title}” is blocked: ${first.blocker.trim().replace(/\.+$/, "")}`
-		: `“${first.title}” didn’t finish`;
+		? `“${first.title}” is blocked: ${quote(first.blocker)}`
+		: `“${first.title}” didn’t finish: ${
+			quote(unfinishedReason(progress)).replace(/^Your agent/, "your agent")
+		}`;
 	let more = tasks.length > 1 ? ` (and ${plural(tasks.length - 1, "other", "others")})` : "";
 	let said = `${reason}${more}`;
-	return `${said}${/[?!…]$/.test(said) ? "" : "."} Edit the document to retry.`;
+	return `${said}${/[?!…]$/.test(said) ? "" : "."} Edit the document to retry ${
+		tasks.length > 1 ? "them" : "it"
+	}.`;
+}
+
+/**
+ * How a living document's task row reads: a task the first build left unfinished shows
+ * as needing attention, not as queued, until a rebuild picks it up again.
+ */
+export function liveTaskState(
+	state: TaskState,
+	outstanding: boolean,
+	rebuilding: boolean,
+): TaskState {
+	return outstanding && !rebuilding && state === "queued" ? "blocked" : state;
+}
+
+/**
+ * A built document's tasks split at its first build: the tasks it started with, then the
+ * ones each later rebuild added. The server names a rebuild's tasks `rebuild-<version>-<n>`.
+ */
+export function liveTaskGroups<T extends { id: string }>(tasks: T[]): { first: T[]; since: T[] } {
+	let since = tasks.filter(task => task.id.startsWith("rebuild-"));
+	return { first: tasks.filter(task => !since.includes(task)), since };
 }
 
 /** Why a first build has not started yet, when the viewer's agent is finishing a prototype. */
