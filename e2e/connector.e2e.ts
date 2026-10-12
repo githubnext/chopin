@@ -81,8 +81,8 @@ for (let transport of ["stdio", "http"] as const) {
 			await page.getByRole("article", { name: "Investigation", exact: true })
 				.getByRole("button", { name: "Run", exact: true })
 				.click();
-			// The published result opens as a child document from the card.
-			await expect(page.getByRole("button", { name: "Open Startup comparison", exact: true }))
+			// The published result opens as a child document; repeated runs number its title.
+			await expect(page.getByRole("button", { name: /^Open Startup comparison/ }))
 				.toBeVisible({ timeout: 30_000 });
 			expect(output).toContain("Running");
 		} finally {
