@@ -181,8 +181,9 @@ test("a child's formatting docks above the keyboard in the parent's bar", async 
 		let dock = page.getByRole("toolbar", { name: "Formatting" });
 		await expect(dock).toBeVisible();
 		await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeHidden();
-		await dock.getByRole("button", { name: "Bold" }).tap();
 		await page.keyboard.type("loud");
+		for (let step = 0; step < 4; step++) await page.keyboard.press("Shift+ArrowLeft");
+		await dock.getByRole("button", { name: "Bold" }).tap();
 		await expect(childText(surface).locator("strong, b").filter({ hasText: "loud" }))
 			.toHaveCount(1);
 		await expect(childText(surface)).toBeFocused();

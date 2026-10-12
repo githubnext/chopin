@@ -255,6 +255,9 @@
 	--phone-tab-bar-height: calc(var(--spacing) * 15);
 	--phone-tab-bar-gap: calc(var(--spacing) * 2.5);
 	--phone-tab-row-max: 30rem;
+	/* Editing on a phone: formatting rides the keyboard as one bar, and its panels stand in for it. */
+	--phone-dock-height: calc(var(--control-target-coarse) + var(--spacing));
+	--phone-format-panel-height: calc(var(--spacing) * 72);
 	--glass-filter: blur(20px) saturate(180%);
 	/* Phone sheets: documents stand at a large detent; menus become grouped action sheets. */
 	--sheet-large-detent: 0.92;

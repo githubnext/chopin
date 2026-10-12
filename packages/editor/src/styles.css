@@ -5553,10 +5553,8 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 .plan-format-dock {
 	display: flex;
 	align-items: center;
-	gap: calc(var(--spacing) / 2);
 	min-width: 0;
-	height: 100%;
-	padding-inline: var(--spacing);
+	height: var(--phone-dock-height);
 	-webkit-user-select: none;
 	user-select: none;
 }
@@ -5567,8 +5565,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	flex: 1;
 	align-items: center;
 	justify-content: space-between;
-	gap: calc(var(--spacing) / 2);
 	min-width: 0;
+	/* A wide landscape bar keeps its commands together at the start rather than strewn across it. */
+	max-width: var(--phone-tab-row-max);
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
 	scrollbar-width: none;
@@ -5624,6 +5623,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 		color var(--duration-fast) var(--ease-out);
 }
 
+/* Hide keyboard sits at the trailing end, beside Done, however wide the bar. */
+.plan-format-dock > .plan-format-dock-button {
+	margin-inline-start: auto;
+}
+
 .plan-format-dock-button:active:not(:disabled),
 .plan-format-dock-button[aria-pressed="true"] {
 	background: var(--color-selected);
@@ -5632,4 +5636,70 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 .plan-format-dock-button:disabled {
 	opacity: var(--opacity-quiet);
+}
+
+/* Insert and Text style: the choices stand where the keyboard was, at its height. */
+.plan-format-panel {
+	box-sizing: border-box;
+	height: var(--phone-format-panel-height);
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3)
+		calc(var(--spacing) * 3 + env(safe-area-inset-bottom));
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	border-top: var(--edge-width) solid var(--color-edge);
+	background: var(--color-ground);
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.plan-format-panel-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: calc(var(--spacing) * 2);
+}
+
+.plan-format-panel-choice {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	min-width: 0;
+	min-height: calc(var(--control-target-coarse) + var(--spacing));
+	padding-inline: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	color: var(--color-text-primary);
+	font-size: var(--text-sm);
+	text-align: left;
+	touch-action: manipulation;
+	-webkit-touch-callout: none;
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.plan-format-panel-choice:active:not(:disabled) {
+	background: var(--color-selected);
+}
+
+.plan-format-panel-choice[aria-pressed="true"] {
+	background: var(--color-brand-wash);
+	color: var(--color-brand-ink);
+}
+
+.plan-format-panel-choice:disabled {
+	opacity: var(--opacity-quiet);
+}
+
+.plan-format-panel-glyph {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: calc(var(--spacing) * 6);
+	color: var(--color-text-secondary);
+	font-size: var(--text-base);
+	line-height: 1;
+}
+
+.plan-format-panel-choice[aria-pressed="true"] .plan-format-panel-glyph {
+	color: inherit;
 }

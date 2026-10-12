@@ -143,23 +143,65 @@ test("formatting docks above the keyboard while editing", async ({ baseURL, brow
 		await expect(dock).toBeVisible();
 		await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeHidden();
 		await expect(done(page)).toBeVisible();
-		// Layout size, not the box: the dock rises in with a brief scale.
-		for (let control of await dock.getByRole("button").all()) {
+		// One bar across the top of the keyboard, edge to edge, with Done at its trailing end.
+		let row = page.locator("[data-phone-tab-row]");
+		await row.evaluate(element =>
+			Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished))
+		);
+		let bar = (await row.boundingBox())!;
+		expect(bar.x).toBe(0);
+		expect(bar.width).toBe(390);
+		expect(Math.round(bar.y + bar.height)).toBe(500);
+		let doneBox = (await done(page).boundingBox())!;
+		expect(doneBox.x + doneBox.width).toBeGreaterThan(390 - 12);
+		expect(doneBox.y).toBeGreaterThanOrEqual(bar.y);
+		// Layout size, not the box.
+		for (let control of await row.getByRole("button").all()) {
 			let size = await control.evaluate(element => {
 				let html = element as HTMLElement;
 				return Math.min(html.offsetWidth, html.offsetHeight);
 			});
 			expect(size).toBeGreaterThanOrEqual(44);
 		}
-		let bottom = await dock.evaluate(element => element.getBoundingClientRect().bottom);
-		expect(bottom).toBeLessThanOrEqual(500);
 
+		// A caret gets blocks, styles and history.
+		for (let name of ["Insert block", "Text style", "Undo", "Redo", "Hide keyboard"]) {
+			await expect(dock.getByRole("button", { name, exact: true })).toBeVisible();
+		}
+		await expect(dock.getByRole("button", { name: "Bold" })).toHaveCount(0);
+
+		await page.keyboard.type("loud ");
+		await page.keyboard.press("ArrowLeft");
+		for (let step = 0; step < 4; step++) await page.keyboard.press("Shift+ArrowLeft");
+		// A selection gets marks, a link and a comment instead.
+		for (
+			let name of [
+				"Bold",
+				"Italic",
+				"Strikethrough",
+				"Inline code",
+				"Link",
+				"Comment on this passage",
+				"Hide keyboard",
+			]
+		) {
+			await expect(dock.getByRole("button", { name, exact: true })).toBeVisible();
+		}
+		await expect(dock.getByRole("button", { name: "Undo" })).toHaveCount(0);
 		await dock.getByRole("button", { name: "Bold" }).tap();
-		await page.keyboard.type("loud");
-		await expect(content(page).locator("strong, b").filter({ hasText: "loud" })).toHaveCount(1);
+		let loud = content(page).locator("strong, b").filter({ hasText: "loud" });
+		await expect(loud).toHaveCount(1);
 		await expect(content(page)).toBeFocused();
 		// One formatting surface at a time.
 		await expect(page.getByRole("toolbar", { name: "Text formatting" })).toHaveCount(0);
+
+		// Undo and redo act on this writer's edits without taking the keyboard down.
+		await page.keyboard.press("ArrowRight");
+		await dock.getByRole("button", { name: "Undo" }).tap();
+		await expect(loud).toHaveCount(0);
+		await expect(content(page)).toBeFocused();
+		await dock.getByRole("button", { name: "Redo" }).tap();
+		await expect(loud).toHaveCount(1);
 
 		// The way out is pinned, never scrolled off the row.
 		let hide = dock.getByRole("button", { name: "Hide keyboard" });
@@ -169,20 +211,6 @@ test("formatting docks above the keyboard while editing", async ({ baseURL, brow
 			return box.left >= row.left && box.right <= row.right && box.right <= innerWidth;
 		});
 		expect(pinned).toBe(true);
-
-		// A writer can comment while the keyboard is up.
-		await content(page).getByText("Members lose").evaluate(element => {
-			let text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!;
-			let range = document.createRange();
-			range.setStart(text, 0);
-			range.setEnd(text, 7);
-			getSelection()!.removeAllRanges();
-			getSelection()!.addRange(range);
-		});
-		await expect(dock.getByRole("button", { name: "Comment on this passage" })).toBeVisible();
-		// Collapse the selection; the typing above may have split the second paragraph's words.
-		await page.keyboard.press("ArrowRight");
-		await expect(dock.getByRole("button", { name: "Comment on this passage" })).toHaveCount(0);
 
 		await hide.tap();
 		await expect(content(page)).not.toBeFocused();
@@ -299,7 +327,7 @@ test("only the document's own keyboard gets the formatting dock", async ({ baseU
 	}
 });
 
-test("Insert block starts a new paragraph and keeps its menu above the dock", async ({ baseURL, browser, room, seed }) => {
+test("Insert stands in for the keyboard and gives the caret back", async ({ baseURL, browser, room, seed }) => {
 	await seed(SOURCE);
 	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE, fakeKeyboard);
 	try {
@@ -307,15 +335,69 @@ test("Insert block starts a new paragraph and keeps its menu above the dock", as
 		await pencil(page).tap();
 		await setVisualViewport(page, { event: "resize", height: 500 });
 		let dock = page.getByRole("toolbar", { name: "Formatting" });
-		await dock.getByRole("button", { name: "Insert block" }).tap();
+		let insert = dock.getByRole("button", { name: "Insert block" });
+		await insert.tap();
+		let panel = page.getByRole("group", { name: "Insert block" });
+		await expect(panel).toBeFocused();
+		await expect(insert).toHaveAttribute("aria-expanded", "true");
+		// Focus left the editor, so the keyboard goes; the panel takes its place at its height.
+		await setVisualViewport(page, { event: "resize", height: 844 });
+		await expect(dock).toBeVisible();
+		await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeHidden();
+		let [panelBox, dockBox] = await Promise.all([panel.boundingBox(), dock.boundingBox()]);
+		expect(Math.round(panelBox!.y + panelBox!.height)).toBe(844);
+		expect(Math.round(panelBox!.height)).toBe(344);
+		expect(Math.round(dockBox!.y + dockBox!.height)).toBeLessThanOrEqual(Math.round(panelBox!.y));
+		for (let choice of await panel.getByRole("button").all()) {
+			expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+		}
+		// The caret's paragraph stays in sight above the panel.
+		let paragraph = content(page).locator("p").filter({ hasText: "Second paragraph" });
+		expect((await paragraph.boundingBox())!.y + 12).toBeLessThanOrEqual(dockBox!.y);
+
+		await panel.getByRole("button", { name: "Table" }).tap();
+		await expect(content(page)).toBeFocused();
+		await expect(content(page).locator("table")).toHaveCount(1);
+		// The paragraph keeps its words: the table goes after it, not into it.
 		await expect(content(page)).toContainText("Second paragraph for the caret.");
-		let menu = page.getByRole("listbox", { name: "Insert block" });
-		await expect(menu).toBeVisible();
-		let [menuBottom, dockTop] = await Promise.all([
-			menu.evaluate(element => element.getBoundingClientRect().bottom),
-			dock.evaluate(element => element.getBoundingClientRect().top),
-		]);
-		expect(menuBottom).toBeLessThanOrEqual(dockTop);
+		await setVisualViewport(page, { event: "resize", height: 500 });
+		await expect(panel).toHaveCount(0);
+		await expect(dock).toBeVisible();
+	} finally {
+		await close();
+	}
+});
+
+test("Text style turns the caret's block into a heading", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE, fakeKeyboard);
+	try {
+		await page.getByText("Second paragraph").tap();
+		await pencil(page).tap();
+		await setVisualViewport(page, { event: "resize", height: 500 });
+		let dock = page.getByRole("toolbar", { name: "Formatting" });
+		await dock.getByRole("button", { name: "Text style" }).tap();
+		let panel = page.getByRole("group", { name: "Text style" });
+		await expect(panel.getByRole("button", { name: "Text", exact: true }))
+			.toHaveAttribute("aria-pressed", "true");
+		// Escape, or the same button again, returns to the keyboard unchanged.
+		await page.keyboard.press("Escape");
+		await expect(content(page)).toBeFocused();
+		await expect(panel).toHaveCount(0);
+
+		await dock.getByRole("button", { name: "Text style" }).tap();
+		await setVisualViewport(page, { event: "resize", height: 844 });
+		await panel.getByRole("button", { name: "Heading 2" }).tap();
+		await expect(content(page)).toBeFocused();
+		await expect(content(page).locator("h2")).toHaveText("Second paragraph for the caret.");
+		await page.keyboard.type("!");
+		await expect(content(page).locator("h2")).toContainText("!");
+
+		// Leaving the panel for anywhere else closes it and the dock with it.
+		await dock.getByRole("button", { name: "Insert block" }).tap();
+		await dock.getByRole("button", { name: "Hide keyboard" }).tap();
+		await expect(dock).toHaveCount(0);
+		await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeVisible();
 	} finally {
 		await close();
 	}

@@ -89,6 +89,8 @@ export type WidgetOptions = {
 	blocked?: boolean;
 	/** Where the host docks formatting while editing on a phone, replacing the selection bubble. */
 	formatDock?: HTMLElement | null;
+	/** Told while the dock's Insert or Text style panel holds the keyboard's place. */
+	onFormatPanel?: (open: boolean) => void;
 	/** The viewer's own handle. */
 	self?: string;
 };

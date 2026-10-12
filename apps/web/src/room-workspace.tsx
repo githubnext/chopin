@@ -358,6 +358,8 @@ export function RoomWorkspace(
 	// survives tab changes and reconnects, and the next document opens reading again.
 	let [editing, setEditing] = useState(() => opensEditing({ renaming: titleEdit === "new" }));
 	let [formatDock, setFormatDock] = useState<HTMLElement | null>(null);
+	// The dock's Insert or Text style panel stands where the keyboard was.
+	let [formatPanel, setFormatPanel] = useState(false);
 	let keyboardOpen = useKeyboardOpen();
 	useEffect(() => {
 		let listen = (event: Event) => {
@@ -992,7 +994,9 @@ export function RoomWorkspace(
 	// What this room's own editor shows: a child is on screen only while its parent's Document is.
 	let shown = childRoom ? !!childChrome?.visible : planVisible && !childOpen;
 	// Only the document's own keyboard gets formatting: never Chat, a comment reply, or the title.
-	let docked = editMode === "editing" && keyboardOpen && shown && editorFocused;
+	// A panel lets the keyboard go on purpose, so it keeps the dock up in the keyboard's place.
+	let docked = editMode === "editing" && shown
+		&& (formatPanel || (keyboardOpen && editorFocused));
 	let toggleEditing = () => {
 		// Synchronous, so the editor takes focus inside the tap and iOS raises the keyboard.
 		flushSync(() => {
@@ -1174,6 +1178,7 @@ export function RoomWorkspace(
 				disclosureMotion={motionContract("collapse")}
 				editMode={editMode}
 				formatDock={docked ? childRoom ? childChrome?.formatDock : formatDock : undefined}
+				onFormatPanel={setFormatPanel}
 				motionImmediately={settleMotionImmediately}
 				onScrollTop={setPlanScrollTop}
 				onState={setPlanState}
@@ -1361,7 +1366,7 @@ export function RoomWorkspace(
 				)}
 				// Formatting rides above the keyboard while typing. With the keyboard down the tabs
 				// return, and a selection gets the ordinary bubble instead.
-				phoneToolbar={barEdit?.docked && <div className="h-full" ref={setFormatDock} />}
+				phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
 				identity={room}
 				mode={mode}
 				presence={<RoomMembers members={members} ring="page" />}

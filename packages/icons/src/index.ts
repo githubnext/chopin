@@ -61,4 +61,6 @@ export {
 } from "./line";
 export { ListIcon } from "./list";
 export { ArchiveIcon, DocumentIcon, LoaderIcon, SearchIcon } from "./system";
+export { TextStyleIcon } from "./text-style";
+export { RedoIcon, UndoIcon } from "./undo";
 export { WarningIcon } from "./warning";

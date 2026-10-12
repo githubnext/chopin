@@ -78,14 +78,12 @@
 
 /*
  * While formatting docks above the keyboard, the caret's block stops short of the dock. The
- * workspace already ends at the keyboard (`--app-height`), so only the dock's row is added.
+ * workspace already ends at the keyboard (`--app-height`), so only the dock's bar is added.
  */
 .workspace-root[data-workspace-phone]:has(.phone-tab-row[data-phone-tab-toolbar])
 	.plan
 	[data-plan-scroll] {
-	scroll-padding-bottom: calc(
-		var(--phone-tab-bar-height) + var(--phone-tab-bar-offset) + var(--spacing) * 3
-	);
+	scroll-padding-bottom: calc(var(--phone-dock-height) + var(--spacing) * 3);
 }
 
 /* Focus and find-in-page scrolling stop below the top bar, never under it. */
@@ -266,7 +264,6 @@
 }
 
 .phone-tab-bar,
-.phone-tab-toolbar,
 .phone-tab-action {
 	background: var(--color-glass);
 	-webkit-backdrop-filter: var(--glass-filter);
@@ -290,25 +287,65 @@
 	display: none;
 }
 
-/* Editing on a phone: formatting takes the tabs' place and rides above the keyboard. */
+/*
+ * Editing on a phone: formatting takes the tabs' place as one bar across the top of the
+ * keyboard, edge to edge like a native keyboard accessory, with Done at its trailing end. An
+ * Insert or Text style panel stands below the bar where the keyboard was.
+ */
 :root[data-keyboard-open] .phone-tab-row[data-phone-tab-toolbar] {
 	visibility: visible;
 	transform: none;
 }
 
-.phone-tab-toolbar {
-	flex: 1;
-	min-width: 0;
-	height: var(--phone-tab-bar-height);
-	border-radius: var(--radius-full);
-	overflow: hidden;
+.phone-tab-row[data-phone-tab-toolbar] {
+	bottom: 0;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	width: 100%;
+	gap: 0;
+	padding-inline: env(safe-area-inset-left) calc(var(--spacing) + env(safe-area-inset-right));
+	/* Opaque, as a keyboard's own bar is: prose sliding under the icons would read as clutter. */
+	background: var(--color-page);
+	border-top: var(--edge-width) solid var(--color-edge);
 	animation: phone-tab-toolbar-in var(--tab-slide-dur) var(--tab-slide-ease);
+}
+
+/* The host and the editor's portal add no boxes: the bar, its panel and Done share one grid. */
+.phone-tab-toolbar {
+	display: contents;
+}
+
+.phone-tab-row[data-phone-tab-toolbar] .plan-format-panel {
+	grid-row: 2;
+	grid-column: 1 / -1;
+	margin-inline: calc(-1 * env(safe-area-inset-left))
+		calc(-1 * (var(--spacing) + env(safe-area-inset-right)));
+}
+
+/* A filled check inside a full-size target: the same Done as the bar's round button. */
+.phone-tab-row[data-phone-tab-toolbar] > .phone-tab-action {
+	grid-row: 1;
+	grid-column: 2;
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+	padding: var(--spacing);
+	background-clip: content-box;
+	/* The bar's edge hugs the smaller fill, where its brand colour disappears into it. */
+	outline-offset: calc(-1 * (var(--spacing) + var(--edge-width)));
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+	box-shadow: none;
+}
+
+.phone-tab-row[data-phone-tab-toolbar] > .phone-tab-action > svg {
+	width: calc(var(--spacing) * 5);
+	height: calc(var(--spacing) * 5);
 }
 
 @keyframes phone-tab-toolbar-in {
 	from {
-		opacity: 0;
-		transform: translateY(calc(var(--spacing) * 3)) scale(0.98);
+		transform: translateY(100%);
 	}
 }
 
@@ -528,7 +565,7 @@
 		transition: none;
 	}
 
-	.phone-tab-toolbar {
+	.phone-tab-row[data-phone-tab-toolbar] {
 		animation: none;
 	}
 }

@@ -94,6 +94,8 @@ export type PlanEditorProps = {
 	editMode?: EditMode;
 	/** Host element for the docked formatting toolbar while editing on a phone. */
 	formatDock?: HTMLElement | null;
+	/** Told while the docked formatting's panel holds the keyboard's place; keep the dock up. */
+	onFormatPanel?: (open: boolean) => void;
 	/**
 	 * Where the plan's questionnaires are published.
 	 *
@@ -165,6 +167,7 @@ export function PlanEditor(
 		disclosureMotion,
 		editMode,
 		formatDock,
+		onFormatPanel,
 		motionImmediately,
 		onScrollTop,
 		onState,
@@ -494,6 +497,7 @@ export function PlanEditor(
 						editMode,
 						blocked,
 						formatDock,
+						onFormatPanel,
 						self: user.name,
 						synced: state.synced,
 					}),
@@ -532,6 +536,7 @@ export function PlanEditor(
 			editMode,
 			blocked,
 			formatDock,
+			onFormatPanel,
 			state.synced,
 		],
 	);

@@ -290,6 +290,35 @@ export function rehearse(
 	}
 }
 
+/** Each editor's history, so a control outside the binding can show what it can step to. */
+const histories = new WeakMap<
+	LexicalEditor,
+	{ manager: Y.UndoManager; changed: Set<() => void> }
+>();
+
+export type HistorySteps = { undo: boolean; redo: boolean };
+
+/**
+ * Follow whether undo and redo have a step to take. An editor without a shared history yet
+ * reports both as available; the commands themselves are harmless when there is nothing.
+ */
+export function listenToHistory(
+	editor: LexicalEditor,
+	listener: (steps: HistorySteps) => void,
+): () => void {
+	let history = histories.get(editor);
+	if (!history) {
+		listener({ undo: true, redo: true });
+		return () => {};
+	}
+	let { changed, manager } = history;
+	let report = () =>
+		listener({ undo: manager.undoStack.length > 0, redo: manager.redoStack.length > 0 });
+	report();
+	changed.add(report);
+	return () => changed.delete(report);
+}
+
 /** Why an undo did not happen, as the person is told. */
 export type Refusal = "others" | "change";
 
@@ -316,6 +345,14 @@ export function registerPlanHistory(
 		trackedOrigins: new Set([binding]),
 		captureTimeout,
 	});
+	let changed = new Set<() => void>();
+	let notify = () => {
+		for (let listener of changed) listener();
+	};
+	manager.on("stack-item-added", notify);
+	manager.on("stack-item-popped", notify);
+	manager.on("stack-cleared", notify);
+	histories.set(editor, { manager, changed });
 
 	let step = (direction: "undo" | "redo") => {
 		if (!editor.isEditable()) return false;
@@ -328,6 +365,7 @@ export function registerPlanHistory(
 			// Only the refused step goes. Older ones still reverse cleanly or are
 			// refused in turn, since each is rehearsed against the room as it is.
 			stack.splice(-verdict.steps);
+			notify();
 			onRefused?.(verdict.reason === "others" ? "others" : "change");
 		}
 		return true;
@@ -359,6 +397,7 @@ export function registerPlanHistory(
 		dispose() {
 			stopUndo();
 			stopRedo();
+			if (histories.get(editor)?.manager === manager) histories.delete(editor);
 			manager.destroy();
 		},
 	};
