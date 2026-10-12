@@ -716,25 +716,26 @@ body {
 	outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
+/* The divider spans the bar's full height, so the slot stretches rather than centring. */
 .workspace-surface-toggle-slot {
+	align-self: stretch;
 	padding-inline-end: var(--spacing);
 	margin-inline-end: var(--spacing);
 	border-inline-end: var(--edge-width) solid var(--color-divider);
 }
 
-/* The restore state carries a label, so it trades the square icon size for padding. */
-.surface-toggle-restore {
-	width: auto;
-	gap: calc(var(--spacing) * 1.5);
-	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
-	border: var(--edge-width) solid var(--color-edge);
-	background: var(--color-inset);
-	color: var(--color-text-secondary);
+/* Compact, to match the tabs' height and keep an equal inset inside the bar. */
+.workspace-surface-toggle-slot .chat-toggle {
+	width: var(--icon-button-size-compact);
+	height: var(--icon-button-size-compact);
+	padding: calc((var(--icon-button-size-compact) - var(--icon-size-default)) / 2);
 }
 
-.surface-toggle-restore:hover {
-	background: var(--color-selected);
-	color: var(--color-text-primary);
+/* The restore state carries a label, so it trades the square icon size for padding. */
+.workspace-surface-toggle-slot .surface-toggle-restore {
+	width: auto;
+	gap: calc(var(--spacing) * 1.5);
+	padding-inline: var(--control-padding-inline);
 }
 
 /* On the ground a white composer is the brightest thing in the column. */
