@@ -1,6 +1,7 @@
 /** Phone chrome: a floating bottom tab bar and a top bar that tucks away while reading. */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Count } from "@chopin/editor/count";
 import { DecisionIcon, DocumentIcon, MessageIcon, WrenchIcon } from "@chopin/icons";
 
@@ -58,18 +59,12 @@ export function PhoneTabBar(
 	let index = destinations.indexOf(active);
 	let small = minimised && !toolbar;
 	let nav = useRef<HTMLElement>(null);
-	let restoring = useRef(false);
 	// Restoring from the circle hands focus to the current tab, since the circle itself goes inert.
-	useLayoutEffect(() => {
-		if (small || !restoring.current) return;
-		restoring.current = false;
+	let restore = () => {
+		flushSync(() => onRestore?.());
 		nav.current?.querySelector<HTMLElement>('.phone-tab[aria-current="page"]')?.focus({
 			preventScroll: true,
 		});
-	}, [small]);
-	let restore = (focus: boolean) => {
-		restoring.current = focus;
-		onRestore?.();
 	};
 	let ActiveIcon = index < 0 ? undefined : ICONS[active];
 	// The circle shows one icon, so it marks unseen activity on any other tab with a dot.
@@ -151,8 +146,8 @@ export function PhoneTabBar(
 						className="phone-tab-mini"
 						data-press="small"
 						inert={!small}
-						onClick={() => restore(true)}
-						onFocus={() => restore(true)}
+						onClick={restore}
+						onFocus={restore}
 						type="button"
 					>
 						<span className="phone-tab-icon">
