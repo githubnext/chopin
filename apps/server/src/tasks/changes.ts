@@ -12,7 +12,9 @@ function blocks(source: string): string[] {
 
 /**
  * How many top-level blocks an edit added, removed or changed. A changed block is one removal and
- * one addition, so the larger side counts. Any difference counts as at least one change.
+ * one addition, so the larger side counts. Blocks compare as a multiset, so a reorder of any size
+ * adds and removes nothing; the floor of one change is what counts it, as for any other difference
+ * that serializes the same.
  */
 export function changedBlocks(before: string, after: string): number {
 	if (before === after) return 0;

@@ -38,6 +38,21 @@
 	color: var(--color-text-primary);
 }
 
+/* A coarse pointer gets the shared invisible 44px target around the small capsule. */
+:root[data-plan-coarse-pointer] .build-capsule {
+	position: relative;
+}
+
+:root[data-plan-coarse-pointer] .build-capsule::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, var(--control-target-coarse));
+	height: max(100%, var(--control-target-coarse));
+	transform: translate(-50%, -50%);
+}
+
 /* Phone: the glyph alone, without the pill, so it reads as status rather than a control. */
 .build-capsule[data-compact] {
 	justify-content: center;

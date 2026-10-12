@@ -581,6 +581,11 @@ describe("build status", () => {
 		expect(buildLabel(look(live()))).toBe("Built");
 		expect(look({ ...live(), builtBy: "maggie" }, { userId: "other" }))
 			.toMatchObject({ tip: "Every pull request matches the document · built by @maggie" });
+		// An unknown builder is left unnamed rather than called “the builder”.
+		expect(look(live(), { userId: "other" }))
+			.toMatchObject({ tip: "Every pull request matches the document" });
+		expect(look(live({ outOfSync: true }), { userId: "other" }))
+			.toMatchObject({ tip: "Edits since someone else’s build" });
 	});
 
 	it("opens Build only once there is a build or a press under way", () => {
