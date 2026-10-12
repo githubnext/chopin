@@ -13,7 +13,7 @@
 		"docker:down": "docker compose -f compose.yaml -f compose.local.yaml down",
 		"test:postgres": "TEST_DATABASE_URL=postgresql://chopin:chopin@127.0.0.1:5432/chopin?sslmode=disable bun test apps/server/src/storage/postgres",
 		"migrate": "bun apps/server/src/storage/migrate.ts",
-		"build": "bun run --filter '@chopin/web' build",
+		"build": "bun run --filter '@chopin/web' build && bun run --filter '@chopin/connector' build",
 		"start": "bun run --filter '@chopin/server' start",
 		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts && bun scripts/check-design-contract.ts && bun scripts/check-design-record.ts && bun run design:check",
 		"design:check": "node scripts/check-design.mjs",

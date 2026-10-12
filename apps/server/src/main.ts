@@ -50,6 +50,7 @@ import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
 import { GitHubReferences } from "./github/references";
+import { registerConnectorScript } from "./http/connector-script";
 import { Router } from "./http/router";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
@@ -2254,6 +2255,10 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
 registerImageRoutes(router, hostedAuth);
+registerConnectorScript(router, {
+	bundle: join(import.meta.dir, "../../connector/dist/connector.js"),
+	source: join(import.meta.dir, "../../connector/src/main.ts"),
+});
 
 try {
 	await storage.health();
