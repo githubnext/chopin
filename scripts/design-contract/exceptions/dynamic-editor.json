@@ -102,7 +102,7 @@
 				1
 			]
 		],
-		"sourceHash": "558cd35df361433eb32e0bdb9adf3bebfadae003d0dc48e014aec8498927b0cb"
+		"sourceHash": "d7739589f2e114e09f5bef3359ed3454eefa9119bbda2144c00c236150115427"
 	},
 	{
 		"file": "packages/editor/src/toolbar/bubble.tsx",
@@ -361,7 +361,7 @@
 				2
 			]
 		],
-		"sourceHash": "c73c56e66e1a75de4f82609d9347fa876effe2c499b58af96a921f566ccb0127"
+		"sourceHash": "392f49b0877410dedfe62917dd2bd8c5043311abb3a3a95ba2a6636d4d693dc1"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
