@@ -1,6 +1,6 @@
 # Local implementation tracer
 
-“Build on my laptop” launches an implementation through the same
+**Build plan** launches an implementation through the same
 [ACP connector used for investigations](local-experiments.md). Chopin displays
 tasks, dependencies, blockers and per-task PR links. The connector claims the
 approved graph before prompting the coding agent; a completed ACP turn is
@@ -37,20 +37,22 @@ project instructions and configured services.
 ## Build a settled plan
 
 1. Resolve planning questions and accepted comments awaiting document updates.
-   Build lists them as links until they are done.
-2. Open **Build** beside Document and Decisions. When the tasks are missing or
-   older than the document, opening Build asks the hosted Planner to draft them
-   without posting a Chat message, once per visit; it waits if the Planner is
-   already working. See
-   [drafting tasks from Build](implementation-lifecycle.md#drafting-tasks-from-build).
-3. Review task goals, acceptance criteria and dependencies. To change them, ask
-   Chopin in Chat.
-4. Select **Build on my laptop**. The build runs on your own local agent: the
-   server picks your idle connection for the repository, preferring the one that
-   last ran work for this document, and derives the checkout from it. Without one, Build shows the
-   connector command to start, and you select it again once connected. Approval
-   persists the reviewed document and graph counters, checkout commit,
-   connection and the person who started it, then freezes planning edits.
+   Until then **Build plan** in the document header is inert and its tooltip
+   says what is left.
+2. Select **Build plan**. When the tasks are missing or older than the
+   document, it asks the hosted Planner to draft them without posting a Chat
+   message, then starts them without a separate review. See
+   [drafting tasks from Build plan](implementation-lifecycle.md#drafting-tasks-from-build-plan).
+3. The build runs on your own local agent: the server picks your idle
+   connection for the repository, preferring the one that last ran work for this
+   document, and derives the checkout from it. Without one, the header reads
+   **Build stopped**, Build shows the connector command to start, and **Retry**
+   tries again once connected. Approval persists the document and graph
+   counters, checkout commit, connection and the person who started it, then
+   freezes planning edits.
+4. The **Build** tab turns on with the press. It shows the status and the
+   tasks with their goals, acceptance criteria and dependencies; opening it
+   never starts anything.
 5. The connector creates an isolated worktree at that exact commit and an
    implementation branch, preserving existing local edits. It creates an ACP
    session and claims the graph before prompting the orchestrator.
@@ -93,14 +95,14 @@ browser PR-creation action remain future work. Multiple reported PRs already
 appear beside their tasks; Chopin never merges them automatically.
 
 Inspect failures in the connector terminal and retained worktree. If startup
-failed before the graph was claimed, **Try again** creates a
-new attempt after another explicit review. Repeating that retry request returns
+failed before the graph was claimed, **Retry** in the header creates a
+new attempt. Repeating that retry request returns
 the same attempt; it does not start duplicate work.
 
 If a claimed run stops or fails, its graph remains locked. After inspecting the
 retained checkout, choose **Return to planning**, enter a reason and confirm to
-record a revision request and release the editing lock. Opening Build then asks
-the Planner to revise the tasks; review the replacement before building again.
+record a revision request and release the editing lock. **Build plan** then asks
+the Planner to revise the tasks and builds the replacement.
 This action is unavailable while the agent is still running; stop the connector
 in its terminal first. An admitted
 repository writer can also continue the existing lifecycle through ordinary

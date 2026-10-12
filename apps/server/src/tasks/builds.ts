@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { changedBlocks } from "./changes";
 import { approveGraph, validate } from "./graphs";
 import { implementationReadiness } from "./plan-graphs";
 import {
@@ -893,6 +894,7 @@ export function liveSnapshot(
 	let builder = viewer === live.user;
 	let latest = plan.builds.findLast(build => build.kind === "rebuild");
 	let rebuild = latest && (builder ? structuredClone(latest) : withoutConnection(latest));
+	let current = source(plan);
 	// The first build's tasks, then each rebuild's appended version, with their last reported state.
 	let first = plan.builds.find(build => build.id === live.buildId)?.graphVersion;
 	let history = plan.graph ? historyFor(plan.graph, plan.lifecycle) : [];
@@ -917,7 +919,8 @@ export function liveSnapshot(
 		tasks,
 		...(unfinished.length ? { outstandingTasks: unfinished } : {}),
 		...(rebuild ? { rebuild } : {}),
-		outOfSync: source(plan) !== baseSource,
+		outOfSync: current !== baseSource,
+		changes: changedBlocks(baseSource, current),
 		...(builder
 			? {
 				checkout: structuredClone(checkout),

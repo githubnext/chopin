@@ -61,6 +61,7 @@ export {
 	WrenchIcon,
 } from "./line";
 export { ListIcon } from "./list";
+export { ProgressRingIcon } from "./progress";
 export { ArchiveIcon, DocumentIcon, LoaderIcon, SearchIcon } from "./system";
 export { TextStyleIcon } from "./text-style";
 export { RedoIcon, UndoIcon } from "./undo";

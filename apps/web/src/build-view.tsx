@@ -1,22 +1,16 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
+import { BuildGlyph } from "./build-plan-button";
 import {
-	advanceDraft,
 	ago,
+	buildLabel,
 	buildPhase,
 	buildProgress,
-	draftInFlight,
-	draftKey,
-	draftRefusalCopy,
 	elapsed,
 	plural,
 	pullRequestCommits,
 	pullRequestNumber,
-	shouldAutoDraft,
 	startedBy,
-	startingLabel,
-	SYNC_LABEL,
-	syncHint,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
 } from "./build-model";
@@ -24,203 +18,56 @@ import {
 	cancelBuildRequest,
 	implementationEndpoint,
 	implementationResponse as response,
-	startBuild,
 } from "./build-start";
 
-import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { ReactNode } from "react";
-import type { DraftEvent, DraftRequest, TaskState } from "./build-model";
-import type { Wire } from "./wire";
-
-/** Automatic Planner requests already sent from this page, by `draftKey`. */
-const drafted = new Set<string>();
-/** The latest Planner request for tasks, by document; it outlives leaving Build. */
-const requests = new Map<string, DraftRequest>();
-/** How long a request may wait for the server's answer before it counts as failed. */
-const ANSWER_WINDOW_MS = 10_000;
+import type { BuildPlan } from "./build-plan-button";
+import type { TaskState } from "./build-model";
 
 function sentence(text: string): string {
 	return text.replace(/^[a-z]/, letter => letter.toUpperCase());
 }
 
+/**
+ * The build's status and its tasks. Build only reads: the header's Build plan
+ * and capsule start and retry builds, so opening this view never starts one.
+ * It keeps the recoveries that need its context, such as Return to planning.
+ */
 export function BuildView(
 	{
 		active,
+		build,
 		canEdit,
-		chatLoaded,
 		comments,
-		needsAgentSignal = 0,
 		onShowDecisions,
 		onShowDocument,
-		planner,
-		plannerBusy,
 		room,
 		unanswered,
 		userId,
-		wire,
 	}: {
 		active: boolean;
+		build: BuildPlan;
 		canEdit: boolean;
-		/** The Chat transcript has arrived, so `plannerBusy` is the room's real state. */
-		chatLoaded: boolean;
 		/** Accepted comments the document has not yet taken in. */
 		comments: number;
-		/** Increments when the header's Build plan found no local agent, to show how to start one. */
-		needsAgentSignal?: number;
 		onShowDecisions: () => void;
 		onShowDocument: () => void;
-		planner: boolean;
-		plannerBusy: boolean;
 		room: string;
 		unanswered: number;
 		userId: string;
-		wire?: Wire;
 	},
 ) {
-	let [snapshot, setSnapshot] = useState<ImplementationSnapshot>();
-	let [loadError, setLoadError] = useState<string>();
+	let { look, snapshot, loadError } = build;
 	let [actionError, setActionError] = useState<string>();
 	let [busy, setBusy] = useState(false);
-	let [refresh, setRefresh] = useState(0);
-	let [needsAgent, setNeedsAgent] = useState(false);
 	let [returning, setReturning] = useState(false);
 	let [reason, setReason] = useState("");
 	let [open, setOpen] = useState<Record<string, boolean>>({});
 	let [linked, setLinked] = useState<string>();
 	let [now, setNow] = useState(() => Date.now());
-	let [request, setRequestState] = useState(() => requests.get(room));
-	let setRequest = (next: DraftRequest | undefined) => {
-		if (next) requests.set(room, next);
-		else requests.delete(room);
-		setRequestState(next);
-	};
-	let advance = (event: DraftEvent) => {
-		let next = advanceDraft(requests.get(room), event);
-		if (!next) return;
-		setRequest(next);
-		if (next.state === "ended") setRefresh(value => value + 1);
-	};
-	/**
-	 * One entry into Build. Only its first read decides whether to draft, and it
-	 * drafts at most once, so edits made while the view stays open never do.
-	 */
-	let activation = useRef({ id: 0, decided: false, eligible: undefined as string | undefined });
-	let [autoSent, setAutoSent] = useState(0);
 	let endpoint = implementationEndpoint(room);
 	let phase = buildPhase(snapshot);
 	let progress = buildProgress(snapshot);
-	let draft = phase.kind === "drafting" ? phase.draft : undefined;
-	let key = snapshot && draft ? draftKey(room, snapshot.planRevision, draft) : undefined;
-	let canDraft = canEdit && planner;
-
-	useEffect(() => {
-		if (!active) return;
-		activation.current = { id: activation.current.id + 1, decided: false, eligible: undefined };
-	}, [active]);
-
-	useEffect(() => {
-		if (!active) return;
-		let controller = new AbortController();
-		let entered = activation.current.id;
-		void (async () => {
-			try {
-				let value = await response<ImplementationSnapshot>(
-					await fetch(endpoint, { signal: controller.signal, cache: "no-store" }),
-				);
-				if (controller.signal.aborted) return;
-				setSnapshot(current => !current || value.revision >= current.revision ? value : current);
-				setLoadError(undefined);
-				let next = buildPhase(value);
-				let nextKey = next.kind === "drafting"
-					? draftKey(room, value.planRevision, next.draft)
-					: undefined;
-				let current = activation.current;
-				if (current.id === entered && !current.decided) {
-					current.decided = true;
-					current.eligible = nextKey;
-				}
-				// A turn that ended and left nothing to review failed, as far as Build can tell.
-				let latest = requests.get(room);
-				if (latest?.state === "ended") {
-					setRequest(nextKey === latest.key ? { ...latest, state: "failed" } : undefined);
-				}
-			} catch (error) {
-				if (controller.signal.aborted) return;
-				setLoadError(error instanceof Error ? error.message : "Connection failed");
-			}
-		})();
-		return () => controller.abort();
-	}, [active, endpoint, refresh]);
-
-	useEffect(() => {
-		if (!active) return;
-		let reload = () => setRefresh(value => value + 1);
-		let off = ["plan:implementation", "plan:open", "plan:update", "experiment:changed"]
-			.map(kind => wire?.on(kind, reload));
-		return () => off.forEach(remove => remove?.());
-	}, [active, wire]);
-
-	// The server answers with the document's live request, which may be a collaborator's.
-	let sendDraft = async () => {
-		if (!snapshot || !key || !wire?.connected || draftInFlight(request)) return;
-		setRequest({ key, state: "sending" });
-		setActionError(undefined);
-		try {
-			let answer = await wire.ask<Implementation.Drafted>("implementation:draft", {
-				requestId: crypto.randomUUID(),
-				planRevision: snapshot.planRevision,
-			});
-			advance({ type: "reply", id: answer.id, state: answer.state });
-		} catch (error) {
-			// A refusal the server explains is shown as such; anything else reads as a failed draft.
-			let copy = error instanceof Error ? draftRefusalCopy(error.message) : undefined;
-			if (!copy) {
-				advance({ type: "refused" });
-				return;
-			}
-			if (requests.get(room)?.state === "sending") setRequest(undefined);
-			setActionError(copy);
-			setRefresh(value => value + 1);
-		}
-	};
-
-	useEffect(
-		() =>
-			wire?.on<Implementation.Drafting>(
-				"implementation:drafting",
-				frame => advance({ type: "drafting", id: frame.id, state: frame.state }),
-			),
-		[wire, room],
-	);
-
-	// Opening Build drafts the tasks, once, and never while the Planner is in a turn.
-	useEffect(() => {
-		let ready = shouldAutoDraft({
-			active,
-			canDraft,
-			chatLoaded,
-			plannerBusy,
-			connected: !!wire?.connected,
-			key,
-			eligible: activation.current.eligible,
-			autoSent: autoSent === activation.current.id,
-			alreadyDrafted: !!key && drafted.has(key),
-			request,
-		});
-		if (!ready || !key) return;
-		drafted.add(key);
-		setAutoSent(activation.current.id);
-		void sendDraft();
-	});
-
-	useEffect(() => advance({ type: "busy", busy: plannerBusy }), [plannerBusy, request?.state]);
-
-	// A request the server never answers stops holding the way for another.
-	useEffect(() => {
-		if (request?.state !== "sending") return;
-		let timer = window.setTimeout(() => advance({ type: "refused" }), ANSWER_WINDOW_MS);
-		return () => window.clearTimeout(timer);
-	}, [request?.state, request?.key]);
 
 	let pending = phase.kind === "building" || phase.kind === "live";
 	useEffect(() => {
@@ -229,12 +76,6 @@ export function BuildView(
 		let timer = window.setInterval(() => setNow(Date.now()), 30_000);
 		return () => window.clearInterval(timer);
 	}, [pending, active]);
-
-	// The local-agent note answers one press of one button; a new phase clears it.
-	useEffect(() => setNeedsAgent(false), [phase.kind]);
-	useEffect(() => {
-		if (needsAgentSignal > 0) setNeedsAgent(true);
-	}, [needsAgentSignal]);
 
 	useEffect(() => {
 		let follow = () => {
@@ -256,21 +97,6 @@ export function BuildView(
 		});
 	}, [active, linked, graphNumber]);
 
-	let start = async () => {
-		if (!snapshot?.graph || busy) return;
-		setActionError(undefined);
-		setNeedsAgent(false);
-		setBusy(true);
-		try {
-			if (await startBuild(room, snapshot) === "needs-agent") setNeedsAgent(true);
-			else setRefresh(value => value + 1);
-		} catch (error) {
-			setActionError(sentence(error instanceof Error ? error.message : "Build failed"));
-		} finally {
-			setBusy(false);
-		}
-	};
-
 	let returnToPlanning = async () => {
 		if (!snapshot?.build || busy) return;
 		setBusy(true);
@@ -285,7 +111,7 @@ export function BuildView(
 			);
 			setReason("");
 			setReturning(false);
-			setRefresh(value => value + 1);
+			build.reload();
 		} catch (error) {
 			setActionError(sentence(error instanceof Error ? error.message : "Return failed"));
 		} finally {
@@ -297,42 +123,11 @@ export function BuildView(
 	let tasks = phase.kind === "live"
 		? snapshot?.live?.tasks ?? []
 		: snapshot?.graph?.definition.tasks ?? [];
-	// Drafting: our turn is under way, or Build is about to ask, or it failed, or a person decides.
-	let awaitingAuto = !!key && key === activation.current.eligible
-		&& autoSent !== activation.current.id && !drafted.has(key);
-	let drafting = draft && canDraft
-		? draftInFlight(request) || request?.state === "ended" || awaitingAuto
-			? "working"
-			: request?.key === key && request?.state === "failed"
-			? "failed"
-			: "manual"
-		: undefined;
 	let staleTasks = phase.kind === "drafting" && tasks.length > 0;
-	let showTasks = tasks.length > 0 && phase.kind !== "loading"
+	let breaking = look.kind === "tasks" && phase.kind !== "review";
+	let showTasks = tasks.length > 0 && phase.kind !== "loading" && !breaking
 		&& !(phase.kind === "blocked" && phase.stale)
 		&& !(phase.kind === "drafting" && !staleTasks);
-	let primaryLabel = phase.kind === "failed" ? "Try again" : "Build on my laptop";
-	let primary = (
-		<button
-			aria-busy={busy || undefined}
-			className="btn btn-md btn-primary shrink-0"
-			disabled={busy}
-			onClick={() => void start()}
-			type="button"
-		>
-			{busy ? "Starting…" : primaryLabel}
-		</button>
-	);
-	let manual = (label: string) => (
-		<button
-			className="btn btn-md btn-outline shrink-0"
-			disabled={draftInFlight(request) || !wire?.connected}
-			onClick={() => void sendDraft()}
-			type="button"
-		>
-			{label}
-		</button>
-	);
 
 	let status: ReactNode;
 	let action: ReactNode;
@@ -341,124 +136,94 @@ export function BuildView(
 		status = loadError
 			? <span className="text-destructive-ink">{sentence(loadError)}</span>
 			: <span className="sr-only">Loading tasks</span>;
-	} else if (phase.kind === "drafting") {
-		if (!drafting) {
-			status = "No tasks yet.";
-		} else if (drafting === "working") {
-			status = (
-				<>
-					<span aria-hidden="true" className="build-pulse" />
-					Breaking the plan into tasks…
-				</>
-			);
-		} else if (drafting === "failed") {
-			status = "Chopin couldn’t break the plan into tasks.";
-			action = manual("Try again");
-		} else if (phase.draft === "revise") {
-			status = "The document changed since these tasks were drafted.";
-			action = manual("Update tasks");
-		} else if (phase.draft === "returned") {
-			status = "The build was returned for changes.";
-			action = manual("Update tasks");
+	} else if (look.kind === "plan") {
+		// Built before, now back in planning: Build plan in the header builds it again.
+		if (phase.kind === "blocked") {
+			status = phase.decisions || phase.comments
+				? (
+					<span className="build-blockers">
+						{phase.decisions && (
+							<button className="build-link" onClick={onShowDecisions} type="button">
+								{unanswered > 0
+									? `Answer ${plural(unanswered, "decision", "decisions")} first`
+									: "Answer the open decisions first"}
+							</button>
+						)}
+						{phase.comments && (
+							<button className="build-link" onClick={onShowDocument} type="button">
+								{comments > 0
+									? `Update the document for ${
+										plural(comments, "accepted comment", "accepted comments")
+									} first`
+									: "Update the document for accepted comments first"}
+							</button>
+						)}
+					</span>
+				)
+				: "This document can’t be built yet.";
+		} else if (phase.kind === "drafting" && phase.draft === "returned") {
+			status = "Returned for changes. Build plan builds it again.";
+		} else if (phase.kind === "review") {
+			status = plural(tasks.length, "task", "tasks");
 		} else {
-			status = "No tasks yet.";
-			action = manual("Break into tasks");
+			status = "Not built yet.";
 		}
-	} else if (phase.kind === "blocked") {
-		status = phase.decisions || phase.comments
-			? (
-				<span className="build-blockers">
-					{phase.decisions && (
-						<button className="build-link" onClick={onShowDecisions} type="button">
-							{unanswered > 0
-								? `Answer ${plural(unanswered, "decision", "decisions")} first`
-								: "Answer the open decisions first"}
-						</button>
-					)}
-					{phase.comments && (
-						<button className="build-link" onClick={onShowDocument} type="button">
-							{comments > 0
-								? `Update the document for ${
-									plural(comments, "accepted comment", "accepted comments")
-								} first`
-								: "Update the document for accepted comments first"}
-						</button>
-					)}
-				</span>
-			)
-			: "This document can’t be built yet.";
-		// A one-click Build plan waits here and starts once the blockers clear.
-		if (canEdit && userId && snapshot?.buildRequested?.by === userId) {
-			action = (
-				<button
-					className="btn btn-md btn-outline shrink-0"
-					onClick={() => {
-						setActionError(undefined);
-						cancelBuildRequest(room).then(
-							() => setRefresh(value => value + 1),
-							error =>
-								setActionError(sentence(error instanceof Error ? error.message : "Cancel failed")),
-						);
-					}}
-					type="button"
-				>
-					Cancel build
-				</button>
-			);
-		}
-	} else if (phase.kind === "review") {
-		status = plural(tasks.length, "task", "tasks");
-		if (canEdit) action = primary;
-	} else if (phase.kind === "building") {
-		since = snapshot?.build && elapsed(snapshot.build.createdAt, now);
-		let who = startedBy(snapshot, userId);
-		let { hint, queued } = startingLabel(snapshot);
-		status = (
-			<>
-				{queued
-					? <span aria-hidden="true" className="build-task-dot" data-state="queued" />
-					: <span aria-hidden="true" className="build-pulse" />}
-				<span className="min-w-0 flex-1">
-					{queued ? "Queued" : "Building"}
-					{hint
-						? <span className="text-text-tertiary">{` · ${hint}`}</span>
-						: who && ` · started by ${who === "you" ? who : `@${who}`}`}
-				</span>
-			</>
-		);
-	} else if (phase.kind === "failed") {
-		status = "The build stopped before it started.";
-		if (canEdit) action = primary;
-	} else if (phase.kind === "stopped") {
-		status = "The build stopped.";
-		if (canEdit && !returning) {
-			action = (
-				<button
-					className="btn btn-md btn-outline shrink-0"
-					onClick={() => setReturning(true)}
-					type="button"
-				>
-					Return to planning
-				</button>
-			);
-		}
-	} else if (phase.kind === "live") {
-		let commits = snapshot?.live?.commits.length ?? 0;
-		let hint = syncHint(phase.sync, snapshot, userId);
-		status = (
-			<>
-				{phase.sync.kind === "building" && <span aria-hidden="true" className="build-pulse" />}
-				<span className="min-w-0 flex-1">
-					Living document ·{" "}
-					{phase.sync.kind === "building" ? "Building" : SYNC_LABEL[phase.sync.kind]}
-					{phase.sync.kind === "in-sync"
-						&& ` · ${plural(commits, "commit", "commits")} since first build`}
-					{hint && <span className="text-text-tertiary">{` · ${hint}`}</span>}
-				</span>
-			</>
-		);
 	} else {
-		status = `Built · ${plural(phase.pullRequests, "pull request", "pull requests")}`;
+		let label = buildLabel(look);
+		let detail: string | undefined;
+		if (look.kind === "tasks") {
+			label = "Breaking the document into tasks…";
+			detail = look.tip === "Breaking the document into tasks" ? undefined : look.tip;
+		} else if (look.kind === "building") {
+			since = snapshot?.build && elapsed(snapshot.build.createdAt, now);
+			let who = startedBy(snapshot, userId);
+			detail = snapshot?.waitingForDocument || snapshot?.waitingForPrototype
+				? look.tip
+				: who && `started by ${who === "you" ? who : `@${who}`}`;
+		} else if (look.kind === "built") {
+			label = `Built · ${plural(look.pullRequests, "pull request", "pull requests")}`;
+		} else {
+			detail = look.tip;
+		}
+		status = (
+			<>
+				<BuildGlyph look={look} />
+				<span className="min-w-0 flex-1">
+					{label}
+					{detail && <span className="text-text-tertiary">{` · ${detail}`}</span>}
+				</span>
+			</>
+		);
+	}
+	if (phase.kind === "stopped" && canEdit && !returning) {
+		action = (
+			<button
+				className="btn btn-md btn-outline shrink-0"
+				onClick={() => setReturning(true)}
+				type="button"
+			>
+				Return to planning
+			</button>
+		);
+	}
+	// A one-click Build plan waiting on a blocker can be given up here.
+	if (phase.kind === "blocked" && canEdit && userId && snapshot?.buildRequested?.by === userId) {
+		action = (
+			<button
+				className="btn btn-md btn-outline shrink-0"
+				onClick={() => {
+					setActionError(undefined);
+					cancelBuildRequest(room).then(
+						() => build.reload(),
+						error =>
+							setActionError(sentence(error instanceof Error ? error.message : "Cancel failed")),
+					);
+				}}
+				type="button"
+			>
+				Cancel build
+			</button>
+		);
 	}
 	// A pull request shared by several tasks lists its commits under the first of them.
 	let listed = new Set<string>();
@@ -477,14 +242,13 @@ export function BuildView(
 					{since && <span className="build-elapsed">{since}</span>}
 					{action}
 				</div>
-				{(needsAgent || snapshot?.localAgent === false)
-					&& (phase.kind === "review" || phase.kind === "failed") && (
+				{(build.needsAgent || snapshot?.localAgent === false && look.kind === "stopped") && (
 					<div className="build-note">
 						<p className="m-0">Start your local agent to build:</p>
 						<code className="build-command">
 							{`CHOPIN_URL=${location.origin} bun run connector connect /path/to/project -- copilot --acp`}
 						</code>
-						<p className="m-0">Open the link it prints, then press {primaryLabel}.</p>
+						<p className="m-0">Open the link it prints, then press Retry.</p>
 					</div>
 				)}
 				{phase.kind === "stopped" && returning && (
@@ -528,8 +292,7 @@ export function BuildView(
 				{actionError && (
 					<p className="m-0 mt-2 text-sm text-destructive-ink" role="alert">{actionError}</p>
 				)}
-				{(phase.kind === "loading" && !loadError
-					|| drafting === "working" && !staleTasks) && (
+				{(phase.kind === "loading" && !loadError || breaking && !staleTasks) && (
 					<div aria-hidden="true" className="build-skeleton">
 						{[0, 1, 2, 3, 4].map(index => <span key={index} />)}
 					</div>
@@ -571,9 +334,6 @@ export function BuildView(
 							);
 						})}
 					</ol>
-				)}
-				{phase.kind === "review" && canEdit && planner && (
-					<p className="build-hint">To change tasks, ask Chopin in Chat.</p>
 				)}
 			</div>
 		</div>

@@ -108,7 +108,8 @@ export class BuildReadiness {
 	 * its successor arrives, so a small edit does not hide a ready document.
 	 */
 	ready(channelId: string, revision: number): boolean {
-		if (this.#options.skip?.(channelId)) return false;
+		// A document past readiness was already judged buildable.
+		if (this.#options.skip?.(channelId)) return true;
 		let judged = this.#judged.get(channelId);
 		if (judged) {
 			this.#judged.delete(channelId);

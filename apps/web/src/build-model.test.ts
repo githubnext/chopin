@@ -1,25 +1,23 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-	advanceDraft,
 	advanceFirstBuild,
 	ago,
 	attentionHint,
+	buildLabel,
+	buildLook,
 	buildPhase,
-	draftKey,
+	buildTabReady,
 	draftRefusalCopy,
 	elapsed,
 	firstBuildStep,
 	pullRequestCommits,
 	pullRequestNumber,
-	shouldAutoDraft,
 	startedBy,
 	startingHint,
-	startingLabel,
 	syncHint,
 	syncStatus,
 	taskStartsOpen,
-	waitingLabel,
 } from "./build-model";
 
 import type {
@@ -166,13 +164,6 @@ describe("buildPhase", () => {
 	});
 });
 
-describe("drafting", () => {
-	it("keys one automatic request per document, revision and reason", () => {
-		expect(draftKey("room", 4, "prepare")).toBe("room:4:prepare");
-		expect(draftKey("room", 4, "revise")).not.toBe(draftKey("room", 5, "revise"));
-	});
-});
-
 describe("presentation", () => {
 	it("reads pull request numbers from their URLs", () => {
 		expect(pullRequestNumber("https://github.com/o/r/pull/412")).toBe(412);
@@ -195,77 +186,6 @@ describe("presentation", () => {
 		expect(taskStartsOpen("blocked", false)).toBe(true);
 		expect(taskStartsOpen("queued", false)).toBe(false);
 		expect(taskStartsOpen("completed", true)).toBe(true);
-	});
-});
-
-describe("automatic drafting", () => {
-	let ready = {
-		active: true,
-		canDraft: true,
-		chatLoaded: true,
-		plannerBusy: false,
-		connected: true,
-		key: "room:4:prepare",
-		eligible: "room:4:prepare",
-		autoSent: false,
-		alreadyDrafted: false,
-		request: undefined,
-	};
-
-	it("drafts once for the need the first read of this visit saw", () => {
-		expect(shouldAutoDraft(ready)).toBe(true);
-		expect(shouldAutoDraft({ ...ready, autoSent: true })).toBe(false);
-		expect(shouldAutoDraft({ ...ready, alreadyDrafted: true })).toBe(false);
-		// A collaborator's edit while Build stays open changes the need, not the decision.
-		expect(shouldAutoDraft({ ...ready, key: "room:5:revise" })).toBe(false);
-		expect(shouldAutoDraft({ ...ready, eligible: undefined })).toBe(false);
-	});
-
-	it("waits for Chat, the socket and an idle Planner, and for any request in flight", () => {
-		expect(shouldAutoDraft({ ...ready, chatLoaded: false })).toBe(false);
-		expect(shouldAutoDraft({ ...ready, connected: false })).toBe(false);
-		expect(shouldAutoDraft({ ...ready, plannerBusy: true })).toBe(false);
-		expect(shouldAutoDraft({ ...ready, request: { key: "room:4:prepare", state: "queued" } }))
-			.toBe(false);
-		expect(shouldAutoDraft({ ...ready, request: { key: "room:4:prepare", state: "failed" } }))
-			.toBe(true);
-	});
-
-	it("follows only its own request from answer to end", () => {
-		let sending = { key: "k", state: "sending" as const };
-		let queued = advanceDraft(sending, { type: "reply", id: "d1", state: "queued" })!;
-		expect(queued).toEqual({ key: "k", id: "d1", state: "queued" });
-		// Another request's turn says nothing about this one.
-		expect(advanceDraft(queued, { type: "drafting", id: "d2", state: "ended" })).toBeUndefined();
-		let running = advanceDraft(queued, { type: "drafting", id: "d1", state: "running" })!;
-		expect(running.state).toBe("running");
-		expect(advanceDraft(running, { type: "drafting", id: "d1", state: "ended" })?.state)
-			.toBe("ended");
-		expect(advanceDraft(undefined, { type: "busy", busy: false })).toBeUndefined();
-	});
-
-	it("ends an acknowledged running request on an idle Planner, busy or not", () => {
-		let running = { key: "k", id: "d1", state: "running" as const };
-		expect(advanceDraft(running, { type: "busy", busy: false })?.state).toBe("ended");
-		// Not before the server has answered: the request might not have started.
-		expect(advanceDraft({ key: "k", state: "sending" }, { type: "busy", busy: false }))
-			.toBeUndefined();
-		let sending = { key: "k", state: "sending" as const };
-		expect(advanceDraft(sending, { type: "reply", id: "d1", state: "ended" })?.state)
-			.toBe("ended");
-	});
-
-	it("fails a refused request, and ends a queued one on an idle Planner after seeing it busy", () => {
-		let sending = { key: "k", state: "sending" as const };
-		expect(advanceDraft(sending, { type: "refused" })?.state).toBe("failed");
-		let queued = { key: "k", id: "d1", state: "queued" as const };
-		expect(advanceDraft(queued, { type: "busy", busy: false })).toBeUndefined();
-		let seen = advanceDraft(queued, { type: "busy", busy: true })!;
-		expect(seen.busySeen).toBe(true);
-		expect(advanceDraft(seen, { type: "busy", busy: false })?.state).toBe("ended");
-		// A late answer cannot move a request that has already finished.
-		expect(advanceDraft({ ...seen, state: "ended" }, { type: "reply", id: "d1", state: "queued" }))
-			.toBeUndefined();
 	});
 });
 
@@ -296,16 +216,17 @@ describe("first build", () => {
 	let idle = { stage: "idle" } as const;
 	let fresh = snapshot({ graph: undefined });
 
-	it("offers the button only for a ready document that was never built", () => {
-		expect(firstBuildStep(fresh, idle)).toEqual({ view: "ready" });
-		expect(firstBuildStep(snapshot(), idle)).toEqual({ view: "ready" });
-		expect(firstBuildStep(undefined, idle)).toEqual({ view: "hidden" });
-		expect(firstBuildStep(snapshot({ graph: undefined, buildReady: false }), idle).view)
-			.toBe("hidden");
-		expect(firstBuildStep(snapshot({ blockers: ["unanswered questionnaires"] }), idle).view)
-			.toBe("hidden");
-		expect(firstBuildStep(snapshot({ build: build("failed") }), idle).view).toBe("hidden");
+	it("stays idle until pressed, and reads a running build as working", () => {
+		expect(firstBuildStep(fresh, idle)).toEqual({ view: "idle" });
+		expect(firstBuildStep(snapshot(), idle)).toEqual({ view: "idle" });
+		expect(firstBuildStep(undefined, idle)).toEqual({ view: "idle" });
+		expect(firstBuildStep(snapshot({ build: build("failed") }), idle).view).toBe("idle");
 		expect(firstBuildStep(snapshot({ build: build("running") }), idle).view).toBe("working");
+	});
+
+	it("retries a build that failed before it claimed its tasks from the same tasks", () => {
+		let state = advanceFirstBuild(idle, { type: "press" });
+		expect(firstBuildStep(snapshot({ build: build("failed") }), state).next).toBe("start");
 	});
 
 	it("drafts, then starts the drafted tasks without a review step", () => {
@@ -338,7 +259,7 @@ describe("first build", () => {
 		expect(advanceFirstBuild(sent, { type: "draft-ended", drafted: true })).toBe(sent);
 		let failed = advanceFirstBuild(sent, { type: "draft-ended", drafted: false });
 		expect(failed.stage).toBe("failed");
-		expect(firstBuildStep(fresh, failed)).toEqual({ view: "ready" });
+		expect(firstBuildStep(fresh, failed)).toEqual({ view: "idle" });
 		expect(advanceFirstBuild(failed, { type: "press" })).toEqual({
 			stage: "drafting",
 			sent: false,
@@ -347,7 +268,7 @@ describe("first build", () => {
 		let starting = advanceFirstBuild(sent, { type: "start" });
 		let noAgent = advanceFirstBuild(starting, { type: "start-refused", agent: true });
 		expect(noAgent).toEqual({ stage: "failed", agent: true, message: undefined });
-		expect(firstBuildStep(snapshot(), noAgent)).toEqual({ view: "ready" });
+		expect(firstBuildStep(snapshot(), noAgent)).toEqual({ view: "idle" });
 	});
 
 	it("waits through a decision the draft raised, then redrafts and starts", () => {
@@ -362,7 +283,6 @@ describe("first build", () => {
 		// The draft turn ending while blocked is not a failure.
 		expect(advanceFirstBuild(state, { type: "draft-ended", drafted: false })).toBe(state);
 		expect(firstBuildStep(blocked, state, "me")).toEqual({ view: "waiting" });
-		expect(waitingLabel(blocked)).toEqual({ label: "Waiting on a decision", target: "decisions" });
 		// Answering moved the document on, so the tasks are stale: draft them again.
 		let answered = snapshot({ planRevision: 5, ...requested });
 		expect(firstBuildStep(answered, state, "me")).toEqual({ view: "working", next: "draft" });
@@ -379,7 +299,7 @@ describe("first build", () => {
 		expect(firstBuildStep(snapshot(requested), idle, "me"))
 			.toEqual({ view: "working", next: "resume" });
 		// Someone else's request, or one for a document since built, is not this viewer's to resume.
-		expect(firstBuildStep(blocked, idle, "you").view).toBe("hidden");
+		expect(firstBuildStep(blocked, idle, "you").view).toBe("idle");
 		expect(
 			firstBuildStep(
 				{
@@ -395,7 +315,7 @@ describe("first build", () => {
 		expect(firstBuildStep(snapshot(requested), state, "me").next).toBe("start");
 		// Cancelled: the request is gone, so the wait ends.
 		expect(firstBuildStep(snapshot({ blockers: ["unanswered questionnaires"] }), state, "me"))
-			.toEqual({ view: "hidden", next: "reset" });
+			.toEqual({ view: "idle", next: "reset" });
 	});
 });
 
@@ -444,11 +364,7 @@ describe("living document sync", () => {
 
 	it("explains a first build queued behind another document's build", () => {
 		let queued = snapshot({ build: build("queued"), waitingForDocument: { title: "Docs site" } });
-		expect(startingLabel(queued)).toEqual({
-			label: "Queued",
-			queued: true,
-			hint: "Starts when your agent finishes “Docs site”",
-		});
+		expect(startingHint(queued)).toBe("Starts when your agent finishes “Docs site”");
 		expect(startingHint(snapshot({ build: build("queued"), waitingForDocument: {} })))
 			.toBe("Starts when your agent finishes another document");
 	});
@@ -457,14 +373,6 @@ describe("living document sync", () => {
 		let queued = snapshot({ build: build("queued"), waitingForPrototype: true });
 		expect(firstBuildStep(queued, { stage: "idle" }).view).toBe("working");
 		expect(startingHint(queued)).toBe("Starts when the current prototype finishes");
-		expect(startingLabel(queued)).toEqual({
-			label: "Queued",
-			queued: true,
-			hint: "Starts when the current prototype finishes",
-		});
-		expect(startingLabel(snapshot({ build: build("queued") })))
-			.toEqual({ label: "Building…", queued: false });
-		expect(startingLabel(undefined)).toEqual({ label: "Building…", queued: false });
 		expect(startingHint(snapshot({ build: build("queued") }))).toBeUndefined();
 		expect(startingHint(snapshot({ build: build("running"), waitingForPrototype: true })))
 			.toBeUndefined();
@@ -565,5 +473,128 @@ describe("living document commits", () => {
 		expect(ago("2026-10-10T09:00:00.000Z", now)).toBe("3h ago");
 		expect(ago("2026-10-08T12:00:00.000Z", now)).toBe("2d ago");
 		expect(ago("nonsense", now)).toBeUndefined();
+	});
+});
+
+describe("build status", () => {
+	let context = {
+		state: { stage: "idle" } as const,
+		userId: "u",
+		live: false,
+		canEdit: true,
+		connected: true,
+		planner: true,
+		hasContent: true,
+		unanswered: 0,
+	};
+	let look = (value: ImplementationSnapshot | undefined, change = {}) =>
+		buildLook(value, { ...context, ...change });
+
+	it("offers Build plan before the first build, inert with its reason", () => {
+		expect(look(snapshot())).toEqual({ kind: "plan", blocked: undefined });
+		expect(look(snapshot(), { hasContent: false })).toEqual({
+			kind: "plan",
+			blocked: "Write the document first",
+		});
+		expect(look(snapshot({ blockers: ["unanswered questionnaires"] }), { unanswered: 2 }))
+			.toEqual({ kind: "plan", blocked: "Answer 2 open decisions first" });
+		expect(look(snapshot({ blockers: ["accepted comments awaiting plan changes"] })).kind)
+			.toBe("plan");
+		expect(look(snapshot({ buildReady: false }))).toEqual({
+			kind: "plan",
+			blocked: "Add more detail before building",
+		});
+		expect(look(snapshot({ graph: undefined }), { planner: false })).toEqual({
+			kind: "plan",
+			blocked: "Chopin isn’t running for this document",
+		});
+		expect(look(undefined)).toEqual({ kind: "plan", blocked: "Chopin isn’t connected" });
+	});
+
+	it("breaks into tasks once pressed, then counts tasks with pull requests", () => {
+		let pressed = { stage: "drafting", sent: true } as const;
+		expect(look(snapshot({ graph: undefined }), { state: pressed }).kind).toBe("tasks");
+		let running = snapshot({
+			build: build("running"),
+			lifecycle: {
+				execution: { state: "active" } as ImplementationSnapshot["lifecycle"]["execution"],
+				history: [],
+				activity: {
+					tasks: [
+						{ id: "a", state: "completed", pullRequest: { url: PR, state: "open" } },
+						{ id: "b", state: "in_progress" },
+						{ id: "c", state: "queued" },
+					],
+					events: [],
+				} as unknown as ImplementationSnapshot["lifecycle"]["activity"],
+			},
+		});
+		let building = look(running);
+		expect(building).toMatchObject({ kind: "building", done: 1, total: 3 });
+		expect(buildLabel(building)).toBe("Building · 1 of 3");
+	});
+
+	it("reads a delivered build as built, and a stopped first build as stopped with Retry", () => {
+		let done = snapshot({
+			build: build("stopped"),
+			lifecycle: { execution: { state: "idle" }, history: [run({ kind: "implemented" }, 2)] },
+		});
+		expect(look(done)).toMatchObject({ kind: "built", pullRequests: 2 });
+		let failed = look(snapshot({ build: build("failed") }));
+		expect(failed).toMatchObject({ kind: "stopped", retry: true });
+		expect(buildLabel(failed)).toBe("Build stopped");
+		expect(look(snapshot({ build: build("failed") }), { canEdit: false }))
+			.toMatchObject({ retry: false });
+		let noAgent = look(snapshot(), { state: { stage: "failed", agent: true } });
+		expect(noAgent).toEqual({
+			kind: "stopped",
+			tip: "Start your local agent, then retry",
+			retry: true,
+		});
+	});
+
+	it("counts changes to build since the last build, and waits for edits to settle when live", () => {
+		let stale = live({ outOfSync: true, changes: 3, rebuild: rebuild("stopped") });
+		let manual = look(stale);
+		expect(manual).toMatchObject({ kind: "stale", changes: 3, live: false });
+		expect(buildLabel(manual)).toBe("3 changes to build");
+		expect(manual).toMatchObject({ tip: "Edits since the last build" });
+		expect(buildLabel(look(live({ outOfSync: true, changes: 1 })))).toBe("1 change to build");
+		expect(look(stale, { live: true })).toMatchObject({
+			kind: "stale",
+			live: true,
+			tip: "Builds when editing settles",
+		});
+		let theirs = { ...stale, builtBy: "maggie" };
+		expect(look(theirs, { userId: "other", live: true }))
+			.toMatchObject({ tip: "Builds on @maggie’s agent when editing settles" });
+		expect(look(theirs, { userId: "other" })).toMatchObject({
+			tip: "Edits since @maggie built it",
+		});
+	});
+
+	it("reads a rebuild as building changes, and a failed one as failed", () => {
+		let running = look(live({ outOfSync: true, rebuild: rebuild("running") }));
+		expect(buildLabel(running)).toBe("Building changes…");
+		let failed = look(live({ outOfSync: true, rebuild: rebuild("failed") }));
+		expect(buildLabel(failed)).toBe("Build failed");
+		expect(buildLabel(look(live()))).toBe("Built");
+		expect(look({ ...live(), builtBy: "maggie" }, { userId: "other" }))
+			.toMatchObject({ tip: "Every pull request matches the document · built by @maggie" });
+	});
+
+	it("opens Build only once there is a build or a press under way", () => {
+		expect(buildTabReady(snapshot(), look(snapshot()))).toBe(false);
+		let pressed = { stage: "drafting", sent: false } as const;
+		expect(buildTabReady(snapshot(), look(snapshot(), { state: pressed }))).toBe(true);
+		let returned = snapshot({
+			build: build("stopped"),
+			lifecycle: {
+				execution: { state: "idle" },
+				history: [run({ kind: "revision_requested", reason: "Change it" })],
+			},
+		});
+		expect(look(returned).kind).toBe("plan");
+		expect(buildTabReady(returned, look(returned))).toBe(true);
 	});
 });

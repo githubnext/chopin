@@ -5,6 +5,7 @@
 
 import { useContext, useEffect, useLayoutEffect, useRef } from "react";
 import { CommentIcon, DocumentsIcon, EllipsisIcon } from "@chopin/icons";
+import type { ReactNode } from "react";
 
 import { DocumentActionsMenu, loadActionSheet } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
@@ -36,6 +37,7 @@ export function PhoneHeader(
 		onRenamed,
 		presentation,
 		room,
+		build,
 	}: {
 		archivedAt?: string;
 		canManage: boolean;
@@ -51,6 +53,8 @@ export function PhoneHeader(
 		onRenamed: (channel: DocumentMetadata) => void;
 		presentation: WorkspacePresentation;
 		room: string;
+		/** The build capsule's glyph, beside the document's actions. */
+		build?: ReactNode;
 	},
 ) {
 	let header = useRef<HTMLElement>(null);
@@ -131,6 +135,7 @@ export function PhoneHeader(
 				)}
 			</div>
 			<div className="phone-top-bar-slot">
+				{build}
 				{comments > 0 && onComments && (
 					<button
 						aria-haspopup="dialog"

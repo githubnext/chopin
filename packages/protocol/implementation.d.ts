@@ -68,6 +68,8 @@ export type LiveSnapshot = {
 	rebuild?: BuildRequest | LiveRebuild;
 	/** The current document differs from the source last built onto the pull requests. */
 	outOfSync: boolean;
+	/** Top-level blocks added, removed or changed since that source; at least 1 when out of sync. */
+	changes?: number;
 	/**
 	 * A workspace of the live build's user is connected for this document. Sent only to the
 	 * builder, so others never learn when someone's laptop is online.

@@ -47,7 +47,7 @@ import {
 	visibleDecisionView,
 } from "@chopin/editor";
 
-import { BuildPlanButton } from "./build-plan-button";
+import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
@@ -108,6 +108,7 @@ import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { TitleEdit } from "./title-edit";
 import type { HostedWorkspaceProps } from "./hosted";
+import type { ReactNode } from "react";
 import type { Status } from "./wire";
 import type { ChatDestination } from "./conversation-plan/source";
 import type { SourceDestination } from "./conversation-plan/card-parts";
@@ -375,7 +376,13 @@ export function DocumentTitle(
 }
 
 /** The ground-level header of the compact workspace, which has no sheet to carry the title. */
-export function Header(props: TitleProps & { members?: Session.Member[] }) {
+export function Header(
+	props: TitleProps & {
+		members?: Session.Member[];
+		/** Build plan or the build capsule, left of the people here. */
+		build?: ReactNode;
+	},
+) {
 	let members = props.members;
 	return (
 		<header className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0">
@@ -391,7 +398,12 @@ export function Header(props: TitleProps & { members?: Session.Member[] }) {
 				project={props.project}
 				room={props.room}
 			/>
+			{(props.build || members) && (
+				<div className="ml-auto flex shrink-0 items-center gap-3 pl-2">
+					{props.build}
 			{members && <RoomMembers members={members} ring="ground" />}
+				</div>
+			)}
 		</header>
 	);
 }
@@ -515,7 +527,8 @@ export function RoomWorkspace(
 		locked: false,
 	});
 	let [showImplementation, setShowImplementation] = useState(false);
-	let [needsAgent, setNeedsAgent] = useState(0);
+	/** Which end of the capsule-to-Build-tab link is hovered, so the other lights up. */
+	let [buildHover, setBuildHover] = useState<"capsule" | "tab">();
 	let liveBuild = useLiveBuild();
 	useEffect(() => {
 		setImplementation({ revision: -1, locked: false });
@@ -609,9 +622,23 @@ export function RoomWorkspace(
 		};
 	});
 	let typing = useDocumentEditing(room);
+	let build = useBuildPlan({
+		canEdit: effectiveCanEdit && !(archivedAt ?? metadata.archivedAt) && status === "connected",
+		connected: status === "connected",
+		enabled: profile.implementation,
+		hasContent: hasPlanContent,
+		live: liveBuild,
+		planner: agent,
+		room,
+		unanswered,
+		userId,
+		wire,
+	});
+	// Build opens once there is a build; a reload may restore it before the first read.
 	// A child someone opened is what they came to read, so a blank root's routing to Decisions
 	// waits until it closes; an explicit choice of view still applies.
 	let view: WorkspaceDocumentView = showImplementation && profile.implementation
+			&& (build.tabReady || !build.snapshot)
 		? "build"
 		: presentation.type === "parent-with-child" && decisionView.phase !== "complete"
 		? "plan"
@@ -1310,20 +1337,6 @@ export function RoomWorkspace(
 					: undefined}
 				synced={planState.synced}
 			/>
-			{profile.implementation && liveBuild && workspaceCanEdit
-				&& status === "connected" && (
-				<BuildPlanButton
-					onNeedsAgent={() => {
-						setNeedsAgent(count => count + 1);
-						selectDestination("build");
-					}}
-					onShowBuild={() => selectDestination("build")}
-					onShowDecisions={() => selectDestination("decisions")}
-					room={room}
-					userId={userId}
-					wire={wire}
-				/>
-			)}
 		</>
 	);
 	let plan = (
@@ -1452,6 +1465,18 @@ export function RoomWorkspace(
 	let childTitleValue = presentation.type === "parent-with-child" && mode === "split"
 		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
 		: undefined;
+	// Build plan or the build capsule sits beside the people here; a child open beside its parent
+	// has no build of its own.
+	let buildSlot = profile.implementation && presentation.type !== "parent-with-child" && (
+		<BuildPlanButton
+			build={build}
+			canEdit={!!workspaceCanEdit && status === "connected"}
+			compact={mode !== "split"}
+			hot={buildHover === "tab"}
+			onHover={on => setBuildHover(on ? "capsule" : undefined)}
+			onOpen={() => selectDestination("build")}
+		/>
+	);
 
 	// The tab bar's pencil edits the document on screen: an open child, or else this one.
 	let barEdit = childOpen
@@ -1466,7 +1491,10 @@ export function RoomWorkspace(
 				</p>
 				<Workspace
 					available={available}
-					buildEnabled={hasPlanContent}
+				buildEnabled={build.tabReady}
+				buildGlyph={<BuildGlyph look={build.look} />}
+				buildHot={buildHover === "capsule"}
+				onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
 					frame={frame}
 					chat={
 						<Chat
@@ -1555,9 +1583,10 @@ export function RoomWorkspace(
 								onRenamed={updateMetadata}
 								presentation={presentation}
 								room={room}
+							build={buildSlot}
 							/>
 						)
-						: <Header {...titleProps} members={members} />}
+						: <Header {...titleProps} build={buildSlot} members={members} />}
 					title={
 						<DocumentTitle
 							{...titleProps}
@@ -1568,7 +1597,10 @@ export function RoomWorkspace(
 						<>
 							<DecisionViewControl
 								attention={attention}
-								buildEnabled={profile.implementation ? hasPlanContent : undefined}
+							buildEnabled={profile.implementation ? build.tabReady : undefined}
+							buildGlyph={<BuildGlyph look={build.look} />}
+							buildHot={buildHover === "capsule"}
+							onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
 								documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 								onView={selectDestination}
 								unanswered={unanswered}
@@ -1595,7 +1627,12 @@ export function RoomWorkspace(
 					phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
 					identity={room}
 					mode={mode}
-					presence={<RoomMembers members={members} ring="page" />}
+				presence={
+					<>
+						{mode === "split" && buildSlot}
+						<RoomMembers members={members} ring="page" />
+					</>
+				}
 					phone={phone}
 					onDesktopChatOpen={setDesktopChatOpen}
 					onChatOpen={open => dispatch({ type: "set-chat", open })}
@@ -1603,18 +1640,14 @@ export function RoomWorkspace(
 					build={profile.implementation && (
 						<BuildView
 							active={workspacePresentation.documentVisible && view === "build"}
+						build={build}
 							canEdit={!!workspaceCanEdit && status === "connected"}
-							chatLoaded={chatActivity.loaded}
 							comments={acceptedComments}
-							needsAgentSignal={needsAgent}
 							onShowDecisions={() => selectDestination("decisions")}
 							onShowDocument={() => selectDestination("plan")}
-							planner={agent}
-							plannerBusy={chatActivity.busy}
 							room={room}
 							unanswered={unanswered}
 							userId={userId}
-							wire={wire}
 						/>
 					)}
 					decisions={

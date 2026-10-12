@@ -63,13 +63,6 @@ export function syncStatus(snapshot: Snapshot | undefined): SyncStatus | undefin
 	};
 }
 
-export const SYNC_LABEL: Record<SyncStatus["kind"], string> = {
-	building: "Building…",
-	"in-sync": "In sync",
-	"needs-attention": "Needs attention",
-	"out-of-sync": "Out of sync",
-};
-
 /** Why the pull requests lag the document, naming the builder whose agent must run them. */
 export function syncHint(
 	status: SyncStatus | undefined,
@@ -112,17 +105,6 @@ export function startingHint(snapshot: Snapshot | undefined): string | undefined
 		}`;
 	}
 	return snapshot.waitingForPrototype ? "Starts when the current prototype finishes" : undefined;
-}
-
-/**
- * The header slot while a first build is under way: `queued` while it waits for
- * the agent's prototype, so the wait reads without hovering for the hint.
- */
-export function startingLabel(
-	snapshot: Snapshot | undefined,
-): { label: string; queued: boolean; hint?: string } {
-	let hint = startingHint(snapshot);
-	return hint ? { label: "Queued", queued: true, hint } : { label: "Building…", queued: false };
 }
 
 /** One pull request's living-document commits, newest first. */
@@ -191,15 +173,6 @@ export function buildPhase(snapshot: Snapshot | undefined): BuildPhase {
 	return { kind: "review" };
 }
 
-/** One automatic Planner request per document, revision and reason in this page. */
-export function draftKey(
-	channel: string,
-	planRevision: number,
-	draft: "prepare" | "revise" | "returned",
-): string {
-	return `${channel}:${planRevision}:${draft}`;
-}
-
 export function pullRequestNumber(url: string): number | undefined {
 	let match = url.match(/\/pull\/(\d+)(?:[/?#]|$)/);
 	return match ? Number(match[1]) : undefined;
@@ -237,82 +210,6 @@ export function startedBy(snapshot: Snapshot | undefined, userId: string): strin
 	if (!snapshot?.build) return;
 	if (snapshot.build.user === userId) return "you";
 	return snapshot.startedBy;
-}
-
-/** A Planner request for tasks, from sending until its turn has ended. */
-export type DraftRequest = {
-	key: string;
-	/** The server's id for the request, once it answers. */
-	id?: string;
-	state: "sending" | "queued" | "running" | "ended" | "failed";
-	/** Chat was seen busy while this request was live. */
-	busySeen?: boolean;
-};
-
-export function draftInFlight(request: DraftRequest | undefined): boolean {
-	return request?.state === "sending" || request?.state === "queued"
-		|| request?.state === "running";
-}
-
-export type DraftEvent =
-	| { type: "reply"; id: string; state: "queued" | "running" | "ended" }
-	| { type: "drafting"; id: string; state: "queued" | "running" | "ended" }
-	| { type: "busy"; busy: boolean }
-	| { type: "refused" };
-
-/**
- * Follow one request through its own turn; `undefined` when nothing changes.
- *
- * Only events naming this request's id move it, so another turn ending never
- * reads as this one failing. Chat going idle is a fallback for an `ended`
- * broadcast missed across a reconnect: at once for a running request the
- * server has acknowledged, and for a queued one only after it was seen busy.
- */
-export function advanceDraft(
-	request: DraftRequest | undefined,
-	event: DraftEvent,
-): DraftRequest | undefined {
-	if (!request) return;
-	if (event.type === "refused") {
-		return request.state === "sending" ? { ...request, state: "failed" } : undefined;
-	}
-	if (event.type === "reply") {
-		if (request.state !== "sending") return;
-		return { ...request, id: event.id, state: event.state };
-	}
-	if (event.type === "drafting") {
-		if (!request.id || event.id !== request.id || !draftInFlight(request)) return;
-		return event.state === request.state ? undefined : { ...request, state: event.state };
-	}
-	if (request.state !== "queued" && request.state !== "running") return;
-	if (event.busy) return request.busySeen ? undefined : { ...request, busySeen: true };
-	return request.busySeen || request.state === "running"
-		? { ...request, state: "ended" }
-		: undefined;
-}
-
-/**
- * Whether opening Build should ask for tasks now.
- *
- * Only the drafting need seen by the first read after entering Build counts, so
- * a collaborator's edit while the view stays open never starts another turn.
- */
-export function shouldAutoDraft(input: {
-	active: boolean;
-	canDraft: boolean;
-	chatLoaded: boolean;
-	plannerBusy: boolean;
-	connected: boolean;
-	key: string | undefined;
-	/** The key the first read of this activation needed, if it needed one. */
-	eligible: string | undefined;
-	autoSent: boolean;
-	alreadyDrafted: boolean;
-	request: DraftRequest | undefined;
-}): boolean {
-	return input.active && input.canDraft && input.chatLoaded && !input.plannerBusy
-		&& input.connected && !!input.key && input.key === input.eligible && !input.autoSent
-		&& !input.alreadyDrafted && !draftInFlight(input.request);
 }
 
 /**
@@ -406,25 +303,27 @@ export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): Fi
 }
 
 /**
- * What the header shows for a snapshot and the first build's stage, and the
- * one step the browser should take next, if any.
+ * Whether Build plan's press is still under way, and the one step the browser
+ * should take next, if any.
  *
- * The button appears only for a document judged ready that has never been
- * built. Once pressed it reads as working until the build runs or the attempt
- * ends; `reset` hands any later state back to the Build view. A draft that
- * raises a decision does not drop the press: the slot reads `waiting` until the
- * blockers clear, then drafts again if the tasks are stale and starts them. The
- * server keeps the press (`buildRequested`), so a reload `resume`s it.
+ * Once pressed it reads as `working` until the build runs or the attempt ends;
+ * `reset` hands any later state back to the snapshot. A draft that raises a
+ * decision does not drop the press: it reads `waiting` until the blockers
+ * clear, then drafts again if the tasks are stale and starts them. The server
+ * keeps the press (`buildRequested`), so a reload `resume`s it. A build that
+ * failed before it claimed its tasks starts again from the same tasks.
  */
 export function firstBuildStep(
 	snapshot: Snapshot | undefined,
 	state: FirstBuild,
 	userId?: string,
 ): {
-	view: "hidden" | "ready" | "working" | "waiting";
+	view: "idle" | "working" | "waiting";
 	next?: "draft" | "start" | "reset" | "resume" | "wait";
 } {
-	if (!snapshot) return { view: state.stage === "idle" ? "hidden" : "working" };
+	if (!snapshot) {
+		return { view: state.stage === "idle" || state.stage === "failed" ? "idle" : "working" };
+	}
 	let phase = buildPhase(snapshot);
 	if (phase.kind === "building") {
 		return { view: "working", ...(state.stage === "idle" ? {} : { next: "reset" as const }) };
@@ -434,40 +333,209 @@ export function firstBuildStep(
 	if (state.stage === "idle" && requested && pending) {
 		return { view: phase.kind === "blocked" ? "waiting" : "working", next: "resume" };
 	}
-	if (state.stage === "idle" || state.stage === "failed") {
-		let open = phase.kind === "drafting" || phase.kind === "review";
-		return { view: snapshot.buildReady && open && !hasBuilt(snapshot) ? "ready" : "hidden" };
-	}
+	if (state.stage === "idle" || state.stage === "failed") return { view: "idle" };
 	if (state.stage === "starting") return { view: "working" };
 	if (state.stage === "started") {
-		return phase.kind === "review" ? { view: "working" } : { view: "hidden", next: "reset" };
+		return phase.kind === "review" ? { view: "working" } : { view: "idle", next: "reset" };
 	}
 	if (state.stage === "waiting") {
 		// Cancelled, or someone else built it: nothing is left to continue.
-		if (!requested) return { view: "hidden", next: "reset" };
+		if (!requested) return { view: "idle", next: "reset" };
 		if (phase.kind === "blocked") return { view: "waiting" };
 		if (phase.kind === "drafting") return { view: "working", next: "draft" };
 		if (phase.kind === "review") return { view: "working", next: "start" };
-		return { view: "hidden", next: "reset" };
+		return { view: "idle", next: "reset" };
 	}
-	if (phase.kind === "review") return { view: "working", next: "start" };
+	if (phase.kind === "review" || phase.kind === "failed") return { view: "working", next: "start" };
 	if (phase.kind === "drafting") {
 		return { view: "working", ...(state.sent ? {} : { next: "draft" }) };
 	}
 	if (phase.kind === "blocked") return { view: "waiting", next: "wait" };
-	return { view: "hidden", next: "reset" };
+	return { view: "idle", next: "reset" };
 }
 
-/** The header's wait for a blocked one-click build, and where pressing it leads. */
-export function waitingLabel(
-	snapshot: Snapshot | undefined,
-): { label: string; target: "decisions" | "build" } {
-	let phase = snapshot && buildPhase(snapshot);
-	if (phase?.kind === "blocked" && phase.decisions) {
-		return { label: "Waiting on a decision", target: "decisions" };
+/**
+ * What the header's build slot, the Build tab's glyph and Build's headline show.
+ *
+ * `plan` is the Build plan button, inert with `blocked` as its reason. Every
+ * other kind is the status capsule that replaces it after the first press.
+ * `retry` and `build` say whether this viewer can act from the capsule.
+ */
+export type BuildLook =
+	| { kind: "plan"; blocked?: string }
+	| { kind: "tasks"; tip: string }
+	| { kind: "building"; done: number; total: number; tip?: string }
+	| { kind: "stopped"; tip: string; retry: boolean }
+	| { kind: "built"; pullRequests: number; tip: string }
+	| { kind: "stale"; changes: number; live: boolean; tip: string; build: boolean }
+	| { kind: "rebuilding"; tip: string }
+	| { kind: "failed"; tip: string; retry: boolean };
+
+export type BuildContext = {
+	state: FirstBuild;
+	userId?: string;
+	/** LIVE_BUILD: edits build themselves once editing settles. */
+	live: boolean;
+	canEdit: boolean;
+	connected: boolean;
+	planner: boolean;
+	hasContent: boolean;
+	unanswered: number;
+};
+
+/** Tasks of the current build that have a pull request, out of all of them. */
+function progressCount(snapshot: Snapshot): { done: number; total: number } {
+	let tasks = buildProgress(snapshot)?.tasks ?? [];
+	let total = Math.max(tasks.length, snapshot.graph?.definition.tasks.length ?? 0, 1);
+	return { done: tasks.filter(task => task.state === "completed").length, total };
+}
+
+/** Why Build plan cannot be pressed yet, or nothing when it can. */
+function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): string | undefined {
+	if (!context.hasContent) return "Write the document first";
+	if (!context.connected || !snapshot) return "Chopin isn’t connected";
+	let phase = buildPhase(snapshot);
+	if (phase.kind === "blocked" && phase.decisions) {
+		return context.unanswered > 0
+			? `Answer ${plural(context.unanswered, "open decision", "open decisions")} first`
+			: "Answer the open decisions first";
 	}
-	if (phase?.kind === "blocked" && phase.comments) {
-		return { label: "Waiting on comments", target: "build" };
+	if (phase.kind === "blocked" && phase.comments) {
+		return "Update the document for accepted comments first";
 	}
-	return { label: "Waiting to build", target: "build" };
+	if (phase.kind === "blocked") return "This document can’t be built yet";
+	if (phase.kind === "drafting" && !context.planner) {
+		return "Chopin isn’t running for this document";
+	}
+	if (!snapshot.buildReady) return "Add more detail before building";
+}
+
+function builder(snapshot: Snapshot, userId: string | undefined): string | undefined {
+	if (!snapshot.live || snapshot.live.user === userId) return;
+	return snapshot.builtBy ? `@${snapshot.builtBy}` : "the builder";
+}
+
+export function buildLook(snapshot: Snapshot | undefined, context: BuildContext): BuildLook {
+	let step = firstBuildStep(snapshot, context.state, context.userId);
+	let sync = syncStatus(snapshot);
+	if (snapshot && sync) {
+		let who = builder(snapshot, context.userId);
+		let rebuilding = !!snapshot.live?.rebuild
+			&& ["queued", "starting", "running"].includes(snapshot.live.rebuild.state);
+		if (sync.kind === "building" && rebuilding) {
+			return { kind: "rebuilding", tip: "Committing the edits to the existing pull requests" };
+		}
+		if (sync.kind === "building") {
+			let { done, total } = progressCount(snapshot);
+			return { kind: "building", done, total, tip: `${done} of ${total} tasks built` };
+		}
+		if (sync.kind === "in-sync") {
+			return {
+				kind: "built",
+				pullRequests: snapshot.live!.pullRequests.length,
+				tip: `Every pull request matches the document${who ? ` · built by ${who}` : ""}`,
+			};
+		}
+		if (sync.kind === "needs-attention") {
+			return {
+				kind: "failed",
+				tip: attentionHint(snapshot) ?? "The last build didn’t finish",
+				retry: false,
+			};
+		}
+		if (sync.reason === "failed") {
+			return {
+				kind: "failed",
+				tip: "The last build didn’t finish. Edit the document to retry.",
+				retry: false,
+			};
+		}
+		let changes = Math.max(snapshot.live!.changes ?? 1, 1);
+		let tip = context.live
+			? sync.reason === "waiting"
+				? who ? `Waiting for ${who}’s agent` : "Waiting for your agent"
+				: who
+				? `Builds on ${who}’s agent when editing settles`
+				: "Builds when editing settles"
+			: who
+			? `Edits since ${who} built it`
+			: "Edits since the last build";
+		return { kind: "stale", changes, live: context.live, tip, build: false };
+	}
+	if (!snapshot) {
+		return step.view === "idle" ? { kind: "plan", blocked: "Chopin isn’t connected" } : {
+			kind: "tasks",
+			tip: "Breaking the document into tasks",
+		};
+	}
+	let phase = buildPhase(snapshot);
+	if (phase.kind === "building") {
+		let { done, total } = progressCount(snapshot);
+		let tip = startingHint(snapshot);
+		return {
+			kind: "building",
+			done,
+			total,
+			tip: tip ?? `${done} of ${total} tasks built`,
+		};
+	}
+	if (phase.kind === "done") {
+		return {
+			kind: "built",
+			pullRequests: phase.pullRequests,
+			tip: "Every task has a pull request",
+		};
+	}
+	if (phase.kind === "stopped") {
+		return {
+			kind: "stopped",
+			tip: "A task is blocked. Open Build to return it for changes.",
+			retry: false,
+		};
+	}
+	if (step.view === "working") return { kind: "tasks", tip: "Breaking the document into tasks" };
+	if (step.view === "waiting") {
+		return { kind: "tasks", tip: "Continues once the open decisions are answered" };
+	}
+	let retry = context.canEdit && context.connected;
+	if (context.state.stage === "failed") {
+		return {
+			kind: "stopped",
+			tip: context.state.agent
+				? "Start your local agent, then retry"
+				: context.state.message ?? "The build stopped before it started",
+			retry,
+		};
+	}
+	if (phase.kind === "failed") {
+		return { kind: "stopped", tip: "The build stopped. Your agent may not be running.", retry };
+	}
+	return { kind: "plan", blocked: planBlocker(snapshot, context) };
+}
+
+/** The capsule's words; Build plan has none of its own. */
+export function buildLabel(look: BuildLook): string {
+	switch (look.kind) {
+		case "plan":
+			return "Build plan";
+		case "tasks":
+			return "Breaking into tasks…";
+		case "building":
+			return `Building · ${look.done} of ${look.total}`;
+		case "stopped":
+			return "Build stopped";
+		case "built":
+			return "Built";
+		case "stale":
+			return `${plural(look.changes, "change", "changes")} to build`;
+		case "rebuilding":
+			return "Building changes…";
+		case "failed":
+			return "Build failed";
+	}
+}
+
+/** Build opens once there is a build, or a press under way, to show. */
+export function buildTabReady(snapshot: Snapshot | undefined, look: BuildLook): boolean {
+	return look.kind !== "plan" || !!snapshot && hasBuilt(snapshot);
 }

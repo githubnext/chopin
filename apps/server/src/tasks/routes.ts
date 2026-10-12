@@ -18,7 +18,10 @@ type Options = {
 	connections: Connections;
 	/** Whether an investigation is executing on a connection, in any document. */
 	busy?: (connectionId: string) => Promise<boolean>;
-	/** Whether the document reads as ready to build, apart from its blockers. */
+	/**
+	 * Whether the document reads as ready to build, apart from its blockers. Without a judge, a
+	 * document with no blockers is ready.
+	 */
 	buildable?: (id: string, planRevision: number) => boolean;
 	/** LIVE_BUILD: builds may queue behind a prototype or another document's build. */
 	liveBuild?: boolean;
@@ -136,7 +139,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				: free;
 			if (here) list.unshift(connection);
 			else list.push(connection);
-		}
+			}
 		return [...free, ...prototyping, ...building];
 	}
 	router.on(
@@ -177,7 +180,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						}),
 						blockers: ready.ok ? [] : ready.blockers,
 						localAgent,
-						buildReady: ready.ok && (options.buildable?.(id, plan.revision) ?? false),
+						buildReady: ready.ok && (options.buildable?.(id, plan.revision) ?? true),
 						...(waiting ? { waitingForPrototype: true as const } : {}),
 						...(ahead ? { waitingForDocument: aheadTitle ? { title: aheadTitle } : {} } : {}),
 						...(plan.buildRequested ? { buildRequested: { ...plan.buildRequested } } : {}),

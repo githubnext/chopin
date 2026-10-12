@@ -2000,19 +2000,19 @@ function pastReadiness(channelId: string): boolean {
 }
 if (config.liveBuild) {
 	buildReadiness = new BuildReadiness({
-		current: currentDocumentTarget,
+	current: currentDocumentTarget,
 		skip: pastReadiness,
-		ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
-			? request => askJev(request)
-			: undefined,
-		changed: (channelId, planRevision, ready) =>
+	ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+		? request => askJev(request)
+		: undefined,
+	changed: (channelId, planRevision, ready) =>
 			broadcast(server, channelId, {
 				kind: "implementation:readiness",
 				ts: 0,
 				planRevision,
 				ready,
 			}),
-		error: err => console.error("chopin: build readiness failed -", err),
+	error: err => console.error("chopin: build readiness failed -", err),
 	});
 }
 if (config.agent && config.backgroundJobs) {
@@ -2110,7 +2110,7 @@ registerMcpRoutes(router, hostedAuth, {
 		withDocumentTransition(channelId, () => withDocumentLock(channelId, action)),
 });
 implementations = registerImplementationRoutes(router, hostedAuth, {
-	buildable: (id, planRevision) => buildReadiness?.ready(id, planRevision) ?? false,
+	buildable: buildReadiness && buildReadiness.ready.bind(buildReadiness),
 	liveBuild: !!config.liveBuild,
 	connections: experiments.connections,
 	busy: async connectionId =>
