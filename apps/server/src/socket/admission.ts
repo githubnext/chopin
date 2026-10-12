@@ -77,7 +77,10 @@ export async function admit(
 			return { status: 404, reason: "channel not found" };
 		}
 		let credential = auth.sessions.credential(request);
-		if (!credential) return { status: 401, reason: "authentication required" };
+		// The login can end while repository access is checked; never upgrade for an ended one.
+		if (!credential || !auth.sessions.isLive(session.session.id)) {
+			return { status: 401, reason: "authentication required" };
+		}
 		let canManage = repository.permissions.push || repository.permissions.admin;
 		return {
 			data: {

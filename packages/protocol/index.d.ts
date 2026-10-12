@@ -47,6 +47,7 @@ export declare namespace Session {
 		| Access
 		| Channel
 		| Deleted
+		| Planner
 		| Failure
 		| Ping;
 
@@ -101,6 +102,24 @@ export declare namespace Session {
 	export type Deleted = KIND<"session:deleted"> & {
 		channelId: string;
 	};
+
+	/**
+	 * Who holds this document's remote Planner. `held` is a client that detached or
+	 * dropped and keeps the document until `until` (ISO 8601) unless it reattaches.
+	 * Only the holder's GitHub login is named, never its machine or checkout.
+	 */
+	export type PlannerAttachment =
+		| { state: "attached"; login: string }
+		| { state: "held"; login: string; until: string }
+		| { state: "none" };
+
+	/**
+	 * Sent only under `HARNESS=remote`: once after `Hello`, then to the whole room
+	 * whenever a client attaches, detaches, its grace period ends, or its ownership
+	 * is released by a sign-out, a Planner reset or the server closing its link.
+	 * Other harnesses never send it.
+	 */
+	export type Planner = KIND<"session:planner"> & { planner: PlannerAttachment };
 
 	/** Broadcast whenever the membership of the room changes. */
 	export type Presence = KIND<"session:presence"> & {

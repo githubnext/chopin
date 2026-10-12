@@ -383,6 +383,11 @@ export function RoomWorkspace(
 	let [chatReferences, setChatReferences] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
 	});
+	// Reported only under the remote Planner harness; scoped to the socket that reported it.
+	let [plannerAttachment, setPlannerAttachment] = useState<{
+		wire?: Wire;
+		planner?: Session.PlannerAttachment;
+	}>({});
 	let [chatSendAcks, setChatSendAcks] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
 	});
@@ -913,6 +918,9 @@ export function RoomWorkspace(
 				if (accessChanged) onRepositoryAccessChanged();
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
+			socket.on<Session.Planner>("session:planner", frame => {
+				setPlannerAttachment({ wire: socket, planner: frame.planner });
+			}),
 			socket.on<ManagedAccess>("session:access", frame => {
 				latestCanEdit.current = frame.canEdit;
 				latestCanManage.current = frame.canManage;
@@ -1290,6 +1298,7 @@ export function RoomWorkspace(
 						repository={repository}
 						room={room}
 						sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
+						planner={plannerAttachment.wire === wire ? plannerAttachment.planner : undefined}
 						wire={wire}
 					/>
 				}

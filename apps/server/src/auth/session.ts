@@ -377,6 +377,13 @@ export class Sessions {
 		return undefined;
 	}
 
+	/** Whether the login is still signed in, without yielding: false once it has begun to end. */
+	isLive(id: string): boolean {
+		if (this.#pendingDeletes.has(id) || this.#revocations.has(id)) return false;
+		let current = this.#sessions.get(id);
+		return !!current && current.session.expiresAt > this.#clock();
+	}
+
 	/** Read current credentials without triggering rotation from inside an active agent callback. */
 	async inspect(id: string): Promise<AuthenticatedSession | undefined> {
 		if (this.#refreshes.has(id) || this.#revocations.has(id)) return undefined;
