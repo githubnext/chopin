@@ -908,6 +908,73 @@ body {
 	padding-inline: var(--control-padding-inline);
 }
 
+/*
+ * Scroll edge: content dissolves into the surface as it passes under the top chrome, instead of
+ * being cut by the scroller's edge. A sticky first child of each pane's scroller, folded out of
+ * flow by its negative margin. It fades in over the first few pixels of scroll, so nothing is
+ * veiled at rest; without scroll-driven animations it stays hidden. Phones already scroll under
+ * a translucent bar.
+ */
+.workspace-root {
+	--scroll-edge-surface: var(--color-page);
+}
+
+.workspace-chat-panel {
+	--scroll-edge-surface: var(--color-chat-pane);
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	--scroll-edge-surface: var(--color-ground);
+}
+
+/* Each scroller's own top padding, which the sticky edge must reach past. */
+:is([data-plan-decisions-scroll], [data-build-view-scroll]) {
+	--scroll-edge-inset: var(--document-decisions-top-inset);
+}
+
+[data-chat-scroll] {
+	--scroll-edge-inset: calc(var(--spacing) * 3);
+}
+
+.workspace-root:not([data-workspace-phone])
+	:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
+	content: "";
+	position: sticky;
+	z-index: 3;
+	/* Sticky offsets start inside the scroller's padding, so this reaches back to its edge. */
+	top: calc(-1 * var(--scroll-edge-inset, 0px));
+	display: block;
+	flex: none;
+	block-size: var(--scroll-edge-fade-size);
+	margin-block-end: calc(-1 * var(--scroll-edge-fade-size));
+	background: linear-gradient(var(--scroll-edge-surface), transparent);
+	opacity: 0;
+	pointer-events: none;
+}
+
+@supports (animation-timeline: scroll()) {
+	.workspace-root:not([data-workspace-phone])
+		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
+		animation: scroll-edge-reveal linear both;
+		animation-timeline: scroll();
+		animation-range: 0 var(--scroll-edge-fade-size);
+	}
+}
+
+@keyframes scroll-edge-reveal {
+	to {
+		opacity: 1;
+	}
+}
+
+/* Less see-through: the surface holds solid for half the edge before it fades. */
+@media (prefers-reduced-transparency: reduce) {
+	.workspace-root:not([data-workspace-phone])
+		:is([data-plan-scroll], [data-plan-decisions-scroll], [data-build-view-scroll], [data-chat-scroll])::before {
+		background: linear-gradient(var(--scroll-edge-surface) 50%, transparent);
+	}
+}
+
 /* On the ground a white composer is the brightest thing in the column. */
 .workspace-root .chat-composer .field {
 	background: var(--color-inset);
