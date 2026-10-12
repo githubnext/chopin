@@ -2421,6 +2421,9 @@ function conclude(
 
 /**
  * A failed tool's structured error, sent as the envelope or as its JSON text.
+ * Only a plain object holding a plain `error` object is an envelope, read from
+ * its own enumerable properties: an Error or other class instance at either
+ * level shows as the raw result, which never shows its hidden properties.
  * Its code and kind are plain identifiers shown as written, so one that the
  * redactor would change is not recognised and shows as the raw result.
  */
@@ -2432,10 +2435,18 @@ function toolError(output: unknown): ToolError["error"] | undefined {
 			return undefined;
 		}
 	}
-	let error = toolErrorSchema.safeParse(output).data?.error;
+	if (!plain(output) || !plain(output.error)) return undefined;
+	let error = toolErrorSchema.safeParse({ ...output, error: { ...output.error } }).data?.error;
 	if (!error) return undefined;
 	let shown = [error.code, error.kind ?? ""];
 	return shown.every(text => textOutput(text) === text) ? error : undefined;
+}
+
+/** Whether a value is an object literal or a null-prototype object. */
+function plain(value: unknown): value is Record<string, unknown> {
+	if (typeof value !== "object" || value === null) return false;
+	let prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
 }
 
 /** Whether the session offers this tool; one it does not offer ends the turn. */

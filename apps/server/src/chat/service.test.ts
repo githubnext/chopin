@@ -464,6 +464,33 @@ describe("AI SDK stream projection", () => {
 		},
 	);
 
+	it.each(["stream", "host"])(
+		"shows a %s failure whose error is a class instance as its raw result",
+		mode => {
+			let chat = create();
+			let { context, sent } = room(chat);
+			translate(context, call("read_plan"));
+			let output = {
+				error: Object.assign(new Error("Recovery code 1234-5678"), { code: "denied" }),
+			};
+			if (mode === "host") finished(context, "t1", output, false);
+			else {
+				translate(
+					context,
+					part({ type: "tool-error", toolCallId: "t1", toolName: "read_plan", error: output }),
+				);
+			}
+			let broadcast = sent.findLast(frame => frame.kind === "chat:tool")?.activity as Wire.Activity;
+			let stored = chat.entries[0]!.tools![0]!;
+			for (let activity of [broadcast, stored]) {
+				expect(activity).toMatchObject({ status: "failed", result: '{"error":{"code":"denied"}}' });
+				expect(activity.error).toBeUndefined();
+			}
+			expect(JSON.stringify(sent)).not.toContain("1234-5678");
+			expect(JSON.stringify(chat.entries)).not.toContain("1234-5678");
+		},
+	);
+
 	it("shows a structured error whose code or kind is not a plain identifier as its raw result", () => {
 		let chat = create();
 		let { context } = room(chat);
