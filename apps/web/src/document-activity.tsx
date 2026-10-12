@@ -84,9 +84,7 @@ export function DocumentActivityDot(
 	return (
 		<span
 			aria-hidden="true"
-			className={`document-activity-dot activity-dot ${
-				placement === "corner" ? "activity-badge" : ""
-			}`}
+			className={`activity-dot ${placement === "corner" ? "activity-badge" : ""}`}
 			data-document-activity={activity}
 		/>
 	);

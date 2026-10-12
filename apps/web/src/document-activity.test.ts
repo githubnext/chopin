@@ -66,5 +66,6 @@ test("labels name the activity for assistive technology", () => {
 
 test("the document mark stays still while the Planner writes", () => {
 	let css = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
-	expect(css).not.toMatch(/\.document-activity-dot[^{]*\{[^}]*animation:/);
+	expect(css).not.toMatch(/\[data-document-activity[^{]*\{[^}]*animation:/);
+	expect(css).not.toMatch(/\.activity-dot[^{]*\{[^}]*animation:/);
 });

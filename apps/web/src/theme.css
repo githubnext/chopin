@@ -1030,7 +1030,7 @@ body {
 	top: calc(var(--spacing) * -0.75);
 	right: calc(var(--spacing) * -0.75);
 	outline-style: solid;
-	outline-width: calc(var(--edge-width) * 2);
+	outline-width: calc(var(--spacing) / 2);
 	outline-color: var(--activity-badge-ring, var(--color-page));
 }
 

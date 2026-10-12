@@ -515,7 +515,7 @@
 	border-radius: var(--radius-full);
 	background: var(--color-brand);
 	outline-style: solid;
-	outline-width: calc(var(--edge-width) * 2);
+	outline-width: calc(var(--spacing) / 2);
 	outline-color: var(--color-page);
 }
 
