@@ -295,6 +295,9 @@ test("the draft instruction comes from the plan and refuses an unsettled one", a
 	expect(built.text).toContain("Chopin approves and starts these tasks automatically");
 	expect(built.text).toContain("do not describe them as unapproved or unstarted");
 	expect(built.text).toContain("do not add a task that prototypes that passage again");
+	for (let title of ["“Prototype queued”", "“Prototyping…”", "“Prototype paused”"]) {
+		expect(built.text).toContain(title);
+	}
 	expect(prepare.text).not.toContain("Prototyping");
 	expect(built.text).not.toContain("Do not approve or start implementation.");
 	expect(built.said).toBe(prepare.said);

@@ -1351,3 +1351,26 @@ test("a manually rebuilt document reopens with its rebuild and commits intact", 
 		if (!closed) await Plan.close(context.plan);
 	}
 });
+
+test("a first build queued but not yet claimed still lists its tasks", async () => {
+	let context = await setup({ liveBuild: true });
+	context.plan.persistence.liveBuild = true;
+	try {
+		await paired(context);
+		let queued = await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		});
+		expect((await queued.json()).state).toBe("queued");
+		let snapshot = await (await context.call(context.path)).json();
+		// Not live yet, so Build reads the approved graph, not the live run's filtered versions.
+		expect(snapshot.live).toBeUndefined();
+		expect(snapshot.build.state).toBe("queued");
+		expect(snapshot.graph.definition.tasks.map((task: { id: string }) => task.id)).toEqual([
+			"first",
+		]);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
