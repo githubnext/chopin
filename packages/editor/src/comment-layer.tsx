@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { CheckIcon, MessageIcon } from "@chopin/icons";
+import { CheckIcon, CommentIcon, MessageIcon } from "@chopin/icons";
 import { useCellValue } from "@mdxeditor/gurx";
 import { $getNodeByKey } from "lexical";
 
@@ -911,7 +911,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		let available = pinned === "orphans"
 			? state.threads.some(view => view.thread.status === "open" && view.orphaned)
 			: pinned === ALL
-			? state.threads.some(view => view.thread.status === "open" && !view.orphaned)
+			? state.threads.some(view => view.thread.status === "open" && !view.orphaned && !view.drifted)
 			: pinned.startsWith(LIST)
 			? markersRef.current.some(marker => `${LIST}${marker.key}` === pinned)
 			: state.threads.some(view =>
@@ -1358,7 +1358,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							style={{ left: button.left - left, top: (height - CHIP) / 2, width: button.width }}
 						>
 							{(single || !button.slim || coarse) && (
-								<MessageIcon aria-hidden="true" size={button.slim ? 10 : 14} />
+								// A phone's chips match its top bar's comments button, apart from Chat's bubble.
+								compact
+									? <CommentIcon aria-hidden="true" size={button.slim ? 10 : 14} />
+									: <MessageIcon aria-hidden="true" size={button.slim ? 10 : 14} />
 							)}
 							{(!single || !button.slim || coarse) && (
 								<span className="plan-comment-count">{views.length}</span>

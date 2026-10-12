@@ -604,6 +604,8 @@ test("the phone top bar lists every open thread, leads into each one and back", 
 	]);
 	expect(documents.x).toBeLessThan(commentsBox.x);
 	expect(commentsBox.x + commentsBox.width).toBeLessThanOrEqual(actions.x + 1);
+	let title = await size(page.locator(".phone-top-bar-center"));
+	expect(Math.abs(title.x + title.width / 2 - 390 / 2)).toBeLessThanOrEqual(1);
 
 	await comments.tap();
 	let list = page.getByRole("dialog", { name: "Comments" });
@@ -625,6 +627,8 @@ test("the phone top bar lists every open thread, leads into each one and back", 
 	await expect(thread).toContainText("Is two weeks enough?");
 	let back = thread.getByRole("button", { name: "All 2 comments" });
 	await expect(back).toBeFocused();
+	// The passage stays in view beneath the back row.
+	await expect(thread.locator("[data-plan-comment-sheet-quote]")).toHaveText("review the pilot");
 	await back.click();
 	let again = page.getByRole("dialog", { name: "Comments" });
 	await expect(again.getByRole("button", { name: /Is two weeks enough\?/ })).toBeFocused();

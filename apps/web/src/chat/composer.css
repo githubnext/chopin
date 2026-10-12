@@ -437,6 +437,10 @@
 		font-size: var(--text-xs);
 		font-weight: var(--font-weight-medium);
 	}
+	/* The chip is the way back to Chat while it shows, so the switch steps aside. */
+	.chat-composer .composer-surface:has(.composer-chopin-row) .composer-mode-trigger {
+		display: none;
+	}
 	/* A full touch target around a chip drawn smaller than one. */
 	.chat-composer .composer-chopin-chip::after {
 		position: absolute;

@@ -239,6 +239,8 @@ test("a phone composer shows a removable Chopin chip while a message addresses C
 	await page.keyboard.type("@chopin what is left? ");
 	await expect(chip).toBeVisible();
 	await expect(mode).toHaveAttribute("aria-pressed", "true");
+	// The chip stands in for the switch while it shows.
+	await expect(mode).toBeHidden();
 	let [chipBox, draftBox, pill] = await Promise.all([
 		chip.boundingBox(),
 		draft.boundingBox(),
@@ -261,9 +263,11 @@ test("a phone composer shows a removable Chopin chip while a message addresses C
 	await chip.tap();
 	await expect(chip).toHaveCount(0);
 	await expect(mode).toHaveAttribute("aria-pressed", "false");
-	expect(await draft.textContent()).not.toContain("@chopin");
+	// No leading space is left where the mention was.
+	expect(await draft.textContent()).toBe("what is left? ");
 
 	// The switch turns it back on without a mention.
+	await expect(mode).toBeVisible();
 	await mode.tap();
 	await expect(chip).toBeVisible();
 	await chip.tap();

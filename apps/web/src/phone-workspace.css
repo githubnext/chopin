@@ -120,11 +120,8 @@
 	inset-inline: 0;
 	top: 0;
 	display: grid;
-	grid-template-columns:
-		minmax(var(--control-target-coarse), auto) minmax(0, 1fr) minmax(
-			var(--control-target-coarse),
-			auto
-		);
+	/* Equal sides keep the title on the bar's centre line whatever each side holds. */
+	grid-template-columns: minmax(max-content, 1fr) minmax(0, max-content) minmax(max-content, 1fr);
 	align-items: center;
 	gap: var(--spacing);
 	height: var(--phone-top-chrome);
@@ -194,6 +191,7 @@
 
 .phone-top-bar-slot {
 	display: flex;
+	min-width: var(--control-target-coarse);
 	align-items: center;
 	justify-content: center;
 }
@@ -570,17 +568,13 @@
 	}
 }
 
-/* Comments join the actions on the right; the left slot matches it so the title stays centred. */
+/* Comments join the actions on the right; each side keeps to its outer edge. */
 .phone-top-bar-slot:first-child {
 	justify-content: flex-start;
 }
 
 .phone-top-bar-slot:last-child {
 	justify-content: flex-end;
-}
-
-.phone-top-bar:has(.phone-top-bar-comments) .phone-top-bar-slot {
-	min-width: calc(var(--control-target-coarse) * 2);
 }
 
 .phone-top-bar-slot .phone-top-bar-comments {

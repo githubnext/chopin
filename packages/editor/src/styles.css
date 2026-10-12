@@ -1622,8 +1622,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	cursor: grab;
 }
 
-/* With a pager the passage takes its own row beneath it. */
-.plan-comment-sheet-head:has(.plan-comment-sheet-pager) .plan-comment-sheet-quote {
+/* With a pager or a back row the passage takes its own row beneath it. */
+.plan-comment-sheet-head:has(.plan-comment-sheet-pager, .plan-comment-sheet-back)
+	.plan-comment-sheet-quote {
 	flex-basis: 100%;
 	order: 1;
 	margin: 0 0.75rem 0.5rem 0;
@@ -1644,12 +1645,25 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-text-secondary);
 }
 
+/* A quiet pill says the position opens the list of every thread. */
 .plan-comment-sheet-pager .plan-comment-sheet-count {
 	min-height: var(--control-target-coarse);
 	padding-inline: 0.25rem;
+	background: transparent;
 	font: inherit;
 	font-variant-numeric: tabular-nums;
-	color: inherit;
+	color: var(--color-text-secondary);
+
+	> span {
+		padding: 0.125rem 0.5rem;
+		border-radius: var(--radius-full);
+		background: var(--color-inset);
+	}
+}
+
+.plan-comment-sheet-pager .plan-comment-sheet-count:active > span {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
 }
 
 .plan-comment-sheet-quote {

@@ -4,7 +4,7 @@
  */
 
 import { useContext, useEffect, useLayoutEffect, useRef } from "react";
-import { DocumentsIcon, EllipsisIcon, MessageIcon } from "@chopin/icons";
+import { CommentIcon, DocumentsIcon, EllipsisIcon } from "@chopin/icons";
 
 import { DocumentActionsMenu, loadActionSheet } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
@@ -140,7 +140,7 @@ export function PhoneHeader(
 						onClick={onComments}
 						type="button"
 					>
-						<MessageIcon aria-hidden="true" size={18} />
+						<CommentIcon aria-hidden="true" size={18} />
 						<span aria-hidden="true">{comments}</span>
 					</button>
 				)}

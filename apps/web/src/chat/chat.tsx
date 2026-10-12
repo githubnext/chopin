@@ -565,10 +565,15 @@ export function Chat(
 		let end = selection.end;
 		if (effectiveMode) {
 			let removals = [...current.text.matchAll(/(^|[^\w@])@chopin\b/gi)]
-				.map(match => ({
-					start: match.index + match[1]!.length,
-					end: match.index + match[0].length,
-				}))
+				.map(match => {
+					let start = match.index + match[1]!.length;
+					let end = match.index + match[0].length;
+					// Take one following space too where the mention began the text or followed one,
+					// so removing it leaves no doubled or leading space.
+					let before = current.text[start - 1];
+					if (current.text[end] === " " && (start === 0 || before === " ")) end += 1;
+					return { start, end };
+				})
 				.filter(edit =>
 					!current.references.some(reference =>
 						edit.start < reference.end && edit.end > reference.start

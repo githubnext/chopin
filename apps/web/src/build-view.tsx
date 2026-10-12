@@ -445,10 +445,10 @@ export function BuildView(
 			} still open.`
 			: "Some decisions are still open.";
 		let accepted = comments > 0
-			? `${plural(comments, "accepted comment", "accepted comments")} still ${
-				comments === 1 ? "needs" : "need"
-			} to reach the document.`
-			: "Accepted comments still need to reach the document.";
+			? `${plural(comments, "accepted comment", "accepted comments")} ${
+				comments === 1 ? "is" : "are"
+			} waiting to be applied.`
+			: "Accepted comments are waiting to be applied.";
 		return (
 			<div className="build-view">
 				<div className="build-view-content build-blocked" data-build-view-scroll="">
@@ -479,7 +479,7 @@ export function BuildView(
 						measure="short"
 						title={phase.decisions
 							? "Build unlocks after decisions"
-							: "Build unlocks after comments"}
+							: "Build unlocks once accepted comments are applied"}
 					/>
 				</div>
 			</div>

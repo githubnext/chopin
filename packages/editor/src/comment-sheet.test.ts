@@ -61,6 +61,11 @@ describe("comment sheet heading", () => {
 		expect(commentSheetHeading({ kind: "thread", quote: "replay it", siblings: 3 })).toEqual({
 			kind: "back",
 			count: 3,
+			quote: "replay it",
+		});
+		expect(commentSheetHeading({ kind: "thread", quote: " ", siblings: 3 })).toEqual({
+			kind: "back",
+			count: 3,
 		});
 	});
 

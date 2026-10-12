@@ -66,7 +66,7 @@ export function commentSheetTop(
 export type CommentSheetHeading =
 	| { kind: "quote"; quote: string }
 	| { kind: "count"; count: number }
-	| { kind: "back"; count: number }
+	| { kind: "back"; count: number; quote?: string }
 	| { kind: "title"; title: string };
 
 export function commentSheetHeading(
@@ -82,7 +82,12 @@ export function commentSheetHeading(
 				? { kind: "quote", quote: input.quote }
 				: { kind: "title", title: "New comment" };
 		case "thread":
-			if (input.siblings > 1) return { kind: "back", count: input.siblings };
+			if (input.siblings > 1) {
+				// The back row takes the header; the passage stays beneath it for context.
+				return input.quote.trim()
+					? { kind: "back", count: input.siblings, quote: input.quote }
+					: { kind: "back", count: input.siblings };
+			}
 			return input.quote.trim()
 				? { kind: "quote", quote: input.quote }
 				: { kind: "title", title: "Comment" };
@@ -284,6 +289,11 @@ export function CommentSheet(
 										<ChevronIcon aria-hidden="true" className="rotate-180" size={16} />
 										All {heading.count} comments
 									</button>
+								)}
+								{heading.kind === "back" && heading.quote && (
+									<blockquote className="plan-comment-sheet-quote" data-plan-comment-sheet-quote>
+										{heading.quote}
+									</blockquote>
 								)}
 								<Drawer.Close
 									aria-label="Close comment"

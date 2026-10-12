@@ -179,10 +179,6 @@
 	gap: calc(var(--spacing) * 2);
 }
 
-.build-blocked-actions .btn {
-	min-height: var(--control-target-coarse);
-}
-
 .build-task-toggle {
 	display: flex;
 	min-width: 0;
