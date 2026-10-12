@@ -111,6 +111,7 @@ export class Experiments {
 			value.generation++;
 			value.expiresAt = this.now() + CLAIM_MS;
 			value.state = "running";
+			if (value.spike) value.spike.startedAt = this.now();
 		});
 	}
 	assertClaim(value: Investigation, connectionId: string, generation: number) {

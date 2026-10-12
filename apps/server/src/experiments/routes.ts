@@ -38,14 +38,14 @@ type Options = {
 		decision: string,
 		remove: boolean,
 	) => Promise<void>;
-	/** Land a document's finished spike results before a first build claims it. */
-	settleSpikes?: (documentId: string) => Promise<void>;
 };
 const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
 	label: z.string().trim().min(1).max(100),
 }).strict();
 
 const MAX_BODY_BYTES = limits.resultBytes + 64 * 1024;
+/** A spike is a quick prototype; one still running this long after its claim is interrupted. */
+export const SPIKE_DEADLINE_MS = 20 * 60_000;
 /** Screenshots a spike run may upload; distinct images, so a retried upload is free. */
 export const MAX_SPIKE_IMAGES = 3;
 
@@ -530,8 +530,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
 				if (documentId) await target(session, connection, documentId);
 				if (name === "claim_implementation_build") {
-					// A build queued behind a spike on this connection must start with its findings.
-					if (documentId) await options.settleSpikes?.(documentId);
 					value = await connections.locked(connection.id, async () => {
 						if ((await work(connection, ["running", "publishing"])).length) {
 							fail("workspace-busy");
@@ -596,6 +594,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					|| grant.run && current.documentId !== grant.run.documentId
 				) fail("connection-forbidden");
 				if (!grant.run) await target(session, connection, current.documentId);
+				// A spike's result is only ever its own short report, through submit_spike_result.
+				if (
+					current.spike
+					&& ["submit_experiment_result", "submit_investigation_result"].includes(name)
+				) fail("tool-forbidden");
 				if (name === "complete_experiment") {
 					value = await service.complete(id, connection.id, generation);
 				} else {
@@ -627,14 +630,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						}
 						uploaded.add(sha256);
 						try {
-						await auth.storage.images.put({
-							channelId: current.documentId,
-							sha256,
-							mimeType,
-							bytes,
-							uploadedBy: session.user.id,
-							now: new Date(),
-						});
+							await auth.storage.images.put({
+								channelId: current.documentId,
+								sha256,
+								mimeType,
+								bytes,
+								uploadedBy: session.user.id,
+								now: new Date(),
+							});
 						} catch (err) {
 							if (reserved) uploaded.delete(sha256);
 							throw err;
@@ -719,6 +722,18 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (!active.some(value => value.id === id)) uploads.delete(id);
 		}
 		for (let value of active) {
+			let started = value.spike?.startedAt;
+			if (
+				started !== undefined && ["running", "publishing"].includes(value.state)
+				&& Date.now() - started > SPIKE_DEADLINE_MS
+			) {
+				await service.stop(
+					value.id,
+					"interrupted",
+					"The prototype ran past its 20-minute limit, so Chopin stopped it.",
+				);
+				continue;
+			}
 			if (value.connectionId && !connections.get(value.connectionId)) {
 				await service.stop(
 					value.id,

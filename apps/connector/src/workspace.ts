@@ -82,6 +82,34 @@ async function staleLock(path: string): Promise<boolean> {
 	}
 }
 
+/**
+ * Git configuration, through the environment, under which every push from the agent's process
+ * tree fails: each remote URL is rewritten to a scheme Git cannot push to. A spike runs under it,
+ * so its throwaway branch never leaves the laptop even if the agent tries.
+ */
+export function noPushEnvironment(): Record<string, string> {
+	let prefixes = ["https://", "http://", "ssh://", "git@", "git://", "file://", "/", "."];
+	let env: Record<string, string> = { GIT_CONFIG_COUNT: String(prefixes.length) };
+	prefixes.forEach((prefix, index) => {
+		env[`GIT_CONFIG_KEY_${index}`] = "url.chopin-spike-never-pushes://.pushInsteadOf";
+		env[`GIT_CONFIG_VALUE_${index}`] = prefix;
+	});
+	return env;
+}
+
+/** Remove a finished spike's worktree and throwaway branch; its screenshots were uploaded. */
+export async function discardWorkspace(root: string, path: string, branch: string) {
+	try {
+		await promisify(execFile)("git", ["-C", root, "worktree", "remove", "--force", path], {
+			timeout: 60_000,
+		});
+	} catch {
+		await rm(path, { recursive: true, force: true });
+		await promisify(execFile)("git", ["-C", root, "worktree", "prune"]).catch(() => {});
+	}
+	await promisify(execFile)("git", ["-C", root, "branch", "-D", branch]).catch(() => {});
+}
+
 export async function prepareWorkspace(
 	root: string,
 	directory: string,

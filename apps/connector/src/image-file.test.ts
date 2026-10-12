@@ -32,6 +32,17 @@ test("reads an image inside the worktree as upload arguments", async () => {
 	);
 });
 
+test("a file whose name starts with two dots is still inside the worktree", async () => {
+	await writeFile(join(root, "..shot.png"), PNG);
+	expect((await imageFileArguments(root, "..shot.png")).mimeType).toBe("image/png");
+});
+
+test("refuses an oversized file by its size, before reading it", async () => {
+	await writeFile(join(root, "huge.png"), new Uint8Array(MAX_IMAGE_FILE_BYTES + 1));
+	await expect(imageFileArguments(root, "huge.png")).rejects.toThrow("limited to 1 MiB");
+	await expect(imageFileArguments(root, "shots")).rejects.toThrow("is not a file");
+});
+
 test("refuses paths outside the worktree, including through a symlink", async () => {
 	await writeFile(join(base, "outside.png"), PNG);
 	await symlink(join(base, "outside.png"), join(root, "link.png"));
