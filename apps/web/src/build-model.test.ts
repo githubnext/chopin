@@ -602,20 +602,24 @@ describe("build status", () => {
 	it("counts changes to build since the last build, and waits for edits to settle when live", () => {
 		let stale = live({ outOfSync: true, changes: 3, rebuild: rebuild("stopped") });
 		let manual = look(stale);
-		expect(manual).toMatchObject({ kind: "stale", changes: 3, live: false });
+		expect(manual).toMatchObject({ kind: "stale", changes: 3, live: false, build: true });
 		expect(buildLabel(manual)).toBe("3 changes to build");
 		expect(manual).toMatchObject({ tip: "Edits since the last build" });
 		expect(buildLabel(look(live({ outOfSync: true, changes: 1 })))).toBe("1 change to build");
+		expect(look(stale, { canEdit: false })).toMatchObject({ build: false });
+		// Under LIVE_BUILD the edits build themselves, so there is nothing to press.
 		expect(look(stale, { live: true })).toMatchObject({
 			kind: "stale",
 			live: true,
 			tip: "Builds when editing settles",
+			build: false,
 		});
 		let theirs = { ...stale, builtBy: "maggie" };
 		expect(look(theirs, { userId: "other", live: true }))
 			.toMatchObject({ tip: "Builds on @maggie’s agent when editing settles" });
 		expect(look(theirs, { userId: "other" })).toMatchObject({
-			tip: "Edits since @maggie built it",
+			tip: "Edits since @maggie built it. Building them runs on your agent.",
+			build: true,
 		});
 	});
 
@@ -624,6 +628,7 @@ describe("build status", () => {
 		expect(buildLabel(running)).toBe("Building changes…");
 		let failed = look(live({ outOfSync: true, rebuild: rebuild("failed") }));
 		expect(buildLabel(failed)).toBe("Build failed");
+		expect(failed).toMatchObject({ retry: true });
 		expect(buildLabel(look(live()))).toBe("Built");
 		expect(look({ ...live(), builtBy: "maggie" }, { userId: "other" }))
 			.toMatchObject({ tip: "Every pull request matches the document · built by @maggie" });

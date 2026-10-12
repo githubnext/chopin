@@ -439,9 +439,9 @@ test("Build queues behind a running prototype and starts once it finishes (LIVE_
 	await context.call(`/api/documents/${context.plan.id}/experiments/${investigation.id}/run`, {});
 	await tool(context, connection.token, "claim_experiment", { id: investigation.id });
 	let response = await context.call(context.path, {
-		planRevision: 0,
-		graphVersion: 1,
-		graphRevision: 1,
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
 	});
 	expect(response.status).toBe(200);
 	let build = await response.json();
@@ -1101,6 +1101,66 @@ test("only the builder sees their checkout, connection and whether their agent i
 		expect(other.live.rebuild.checkout).toBeUndefined();
 		expect(other.live.rebuild.session).toBeUndefined();
 		expect(other.localAgent).toBe(false);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("without LIVE_BUILD a delivered build counts later edits and a person builds them", async () => {
+	let context = await setup();
+	try {
+		let connection = await paired(context);
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		let claim = await tool(context, connection.token, "claim_implementation_build", {
+			id: built.id,
+		});
+		expect(claim.live).toBe(false);
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "running",
+			session: "session",
+		});
+		for (
+			let [name, args] of [
+				["start_task", { taskId: "first", idempotencyKey: "start" }],
+				["report_pr", { taskId: "first", idempotencyKey: "pr", url: pullRequest, state: "open" }],
+				["complete_task", { taskId: "first", idempotencyKey: "done", summary: "Launched" }],
+				["report_verification", {
+					idempotencyKey: "verified",
+					passed: true,
+					summary: "Reviewed.",
+					reviewerMethod: "Ran the suite.",
+					evidence: [{ taskId: "first", evidence: ["Suite passed."] }],
+					tasksNeedingWork: [],
+				}],
+			] as const
+		) expect((await tool(context, claim.runToken, name, args)).isError).toBeUndefined();
+		// Verification, not the last task, delivers a manual build; then its source is recorded.
+		expect(context.plan.live).toMatchObject({ buildId: built.id, pullRequests: [pullRequest] });
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "stopped",
+		});
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.live).toMatchObject({ outOfSync: false, changes: 0 });
+
+		expect((await edit(context.plan, "A paragraph added after the build.")).ok).toBe(true);
+		snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.live).toMatchObject({ outOfSync: true, changes: 1 });
+
+		let rebuild = `${context.path}/rebuild`;
+		expect((await context.call(rebuild, {}, undefined, "https://untrusted.test")).status).toBe(403);
+		let queued = await context.call(rebuild, {});
+		expect(queued.status).toBe(200);
+		expect(await queued.json()).toMatchObject({ kind: "rebuild", user: "U_test", state: "queued" });
+		// Persisted before it was answered, and only one at a time.
+		expect(context.plan.builds.at(-1)).toMatchObject({ kind: "rebuild", state: "queued" });
+		expect(context.plan.live?.target).toBeDefined();
+		expect((await context.call(rebuild, {})).status).toBe(409);
 	} finally {
 		await Plan.close(context.plan);
 	}

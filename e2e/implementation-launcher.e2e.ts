@@ -522,3 +522,48 @@ test("on a phone, tapping Build or an inert Build plan says why, briefly", async
 		await expect(hint).toBeVisible();
 	}
 });
+
+test("edits after a build read as changes to build, and Build sends them to the agent", async ({ seed, join: enter, room, baseURL }) => {
+	test.setTimeout(60_000);
+	await seed("# Built tracer\n\nValidate the local agent connection.\n", {
+		graph: preparedGraph(),
+	});
+	let local = await connector(baseURL!, [
+		"bun",
+		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
+		"--complete",
+		"--http",
+	]);
+	try {
+		let page = await enter(person());
+		await page.goto(await local.pairing);
+		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await expect(page.getByRole("status")).toContainText("Connected.");
+		await page.goto(testChannelPath(room));
+		await page.getByRole("button", { name: "Build plan", exact: true }).click();
+		let built = page.getByRole("button", { name: "Built", exact: true });
+		await expect(built).toBeVisible({ timeout: 30_000 });
+		let capsule = page.locator(".build-capsule-row");
+		await expect(capsule.getByRole("button", { name: "Build", exact: true })).toHaveCount(0);
+
+		await content(page).getByText("Validate the local agent connection.").click();
+		await page.keyboard.press("End");
+		await page.keyboard.type(" Then report back.");
+		let stale = page.getByRole("button", { name: "1 change to build", exact: true });
+		await expect(stale).toBeVisible();
+		await expect(stale).toHaveAttribute("aria-description", "Edits since the last build");
+		let tab = page.getByRole("group", { name: "Document view" })
+			.getByRole("button", { name: "Build", exact: true });
+		await expect(tab).toBeEnabled();
+		// The capsule's own Build, not the tab, sends the changes.
+		await capsule.getByRole("button", { name: "Build", exact: true }).click();
+		await expect.poll(async () => {
+			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+			return snapshot.live?.rebuild?.kind;
+		}).toBe("rebuild");
+		await expect(page.getByRole("button", { name: /^(Building changes…|Build failed)$/ }))
+			.toBeVisible();
+	} finally {
+		await local.close();
+	}
+});

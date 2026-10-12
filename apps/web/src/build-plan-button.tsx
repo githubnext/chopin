@@ -12,10 +12,12 @@ import {
 	firstBuildStep,
 	hasBuilt,
 } from "./build-model";
+import { ApiError } from "./api";
 import {
 	cancelBuildRequest,
 	implementationEndpoint,
 	implementationResponse,
+	rebuildChanges,
 	startBuild,
 } from "./build-start";
 
@@ -47,6 +49,11 @@ export type BuildPlan = {
 	busy: boolean;
 	/** Build plan, or Retry after a first build stopped. */
 	press: () => void;
+	/** Build the changes since the last build, or retry a failed one. */
+	rebuild: () => void;
+	/** Why the last Build or Retry of changes was refused. */
+	rebuildError?: string;
+	rebuilding: boolean;
 	reload: () => void;
 };
 
@@ -88,6 +95,8 @@ export function useBuildPlan(
 	let [loadError, setLoadError] = useState<string>();
 	let [refresh, setRefresh] = useState(0);
 	let [state, dispatch] = useReducer(advanceFirstBuild, { stage: "idle" } as FirstBuild);
+	let [rebuilding, setRebuilding] = useState(false);
+	let [rebuildError, setRebuildError] = useState<string>();
 	let draftId = useRef<string>(undefined);
 	let endpoint = implementationEndpoint(room);
 	let reload = () => setRefresh(value => value + 1);
@@ -243,6 +252,23 @@ export function useBuildPlan(
 			// The press drafts or starts against the latest revision, never a stale read.
 			void read().catch(() => {}).finally(() => dispatch({ type: "press" }));
 		},
+		rebuild() {
+			if (rebuilding) return;
+			setRebuilding(true);
+			setRebuildError(undefined);
+			rebuildChanges(room).then(reload, error => {
+				setRebuildError(
+					error instanceof ApiError && error.message === "no-workspace"
+						? "Start your local agent, then build"
+						: error instanceof Error
+						? error.message.replace(/^[a-z]/, letter => letter.toUpperCase())
+						: "Chopin couldn’t start the build",
+				);
+				reload();
+			}).finally(() => setRebuilding(false));
+		},
+		rebuildError,
+		rebuilding,
 		reload,
 	};
 }
@@ -409,24 +435,29 @@ export function BuildPlanButton(
 		);
 	}
 	let label = buildLabel(look);
-	let action = (look.kind === "stopped" || look.kind === "failed") && look.retry && canEdit
-		? "Retry"
+	let action = look.kind === "stopped" && look.retry && canEdit
+		? { name: "Retry", run: build.press }
+		: look.kind === "failed" && look.retry && canEdit
+		? { name: "Retry", run: build.rebuild }
+		: look.kind === "stale" && look.build && canEdit
+		? { name: "Build", run: build.rebuild }
 		: undefined;
+	let tip = build.rebuildError && action?.run === build.rebuild ? build.rebuildError : look.tip;
 	return (
 		<>
 			<span className="build-capsule-row" key="capsule">
 				<button
-					aria-describedby={look.tip ? reason : undefined}
+					aria-describedby={tip ? reason : undefined}
 					aria-label={compact ? label : undefined}
 					className="build-capsule"
 					data-compact={compact || undefined}
 					data-hot={hot || undefined}
-					data-tooltip={compact ? `${label} · ${look.tip}` : look.tip}
+				data-tooltip={compact ? `${label} · ${tip}` : tip}
 					data-tooltip-detail=""
 					data-tooltip-verbatim=""
 					onBlur={() => onHover(false)}
 					onClick={() => {
-						if (!tabReady && onExplain) onExplain(look.tip ?? label);
+						if (!tabReady && onExplain) onExplain(tip ?? label);
 						else onOpen();
 					}}
 					onFocus={() => onHover(true)}
@@ -439,19 +470,19 @@ export function BuildPlanButton(
 					</span>
 					{!compact && <span className="build-capsule-label" key={label}>{label}</span>}
 				</button>
-				{look.tip && <span className="sr-only" id={reason}>{look.tip}</span>}
+				{tip && <span className="sr-only" id={reason}>{tip}</span>}
 				{action && (
 					// Stays focusable while a press is under way; aria-busy says why it does nothing.
 					<button
-						aria-busy={build.busy || undefined}
-						aria-disabled={build.busy || undefined}
+						aria-busy={build.busy || build.rebuilding || undefined}
+						aria-disabled={build.busy || build.rebuilding || undefined}
 						className="btn btn-compact btn-outline build-capsule-action"
 						onClick={() => {
-							if (!build.busy) build.press();
+							if (!build.busy && !build.rebuilding) action.run();
 						}}
 						type="button"
 					>
-						{action}
+					{action.name}
 					</button>
 				)}
 			</span>

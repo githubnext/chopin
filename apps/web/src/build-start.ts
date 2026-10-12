@@ -59,3 +59,14 @@ export async function cancelBuildRequest(room: string): Promise<void> {
 		await fetch(`${implementationEndpoint(room)}/request`, { method: "DELETE" }),
 	);
 }
+
+/** Build the edits since the last build onto its pull requests, on the viewer's own agent. */
+export async function rebuildChanges(room: string): Promise<void> {
+	await implementationResponse(
+		await fetch(`${implementationEndpoint(room)}/rebuild`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "{}",
+		}),
+	);
+}

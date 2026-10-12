@@ -48,6 +48,15 @@ build**, **Building changes…**, or **Build stopped**/**Build failed** with
 number of top-level blocks added, removed or changed since the last built
 source.
 
+A browser build that delivers records its built source even without
+`LIVE_BUILD`. Later edits then read as **N changes to build**, and the
+capsule's **Build** sends them to `POST /api/channels/:id/implementation/rebuild`.
+That route queues one rebuild of the edits onto the existing pull requests, on
+the presser's own connected agent, and persists it before answering. Under
+`LIVE_BUILD` the same rebuild starts by itself once editing settles, so the
+capsule shows a clock instead of **Build**. **Retry** on a failed rebuild uses
+the same route.
+
 The server rechecks write access and the room exactly as for a Chat message to
 the Planner, refuses a child document, unresolved decisions or accepted
 comments, and an active implementation, then writes the instruction itself from
