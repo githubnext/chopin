@@ -36,18 +36,16 @@ async function hosted(source = `# Plan\n\n${PASSAGE}\n\nAnother paragraph.\n`) {
 
 /** Pair a local agent for the plan's repository, allowing automatic work, as the pairing page can. */
 function pair(context: Awaited<ReturnType<typeof hosted>>) {
-	let pending = context.connections.create({
-		repository: "org/repo",
-		commit: "a".repeat(40),
-		label: "laptop",
-	});
-	return context.connections.approve(
-		pending.id,
-		{ id: "U_test", login: "maggie", sessionId: "S_1" },
-		context.plan.persistence.repositoryId,
-		// Spikes run only on a laptop paired with consent to automatic work.
-		true,
-	);
+	// Spikes run only on a laptop paired with consent to automatic work.
+	return context.connections.open(
+		{ id: "M_1", owner: "U_test", login: "maggie", autoRun: true },
+		"laptop",
+		{
+			repository: "org/repo",
+			repositoryId: context.plan.persistence.repositoryId,
+			commit: "a".repeat(40),
+		},
+	).connection;
 }
 
 test("a spike its connection lost waits, then runs on reconnect a bounded number of times", async () => {
@@ -397,17 +395,11 @@ test("a callout placement that throws gives its spike slot back", async () => {
 test("a spike runs only on a laptop whose owner allowed automatic work at pairing", async () => {
 	let connections = new Connections();
 	let pair = (autoRun: boolean) => {
-		let pending = connections.create({
-			repository: "owner/repository",
-			commit: "a".repeat(40),
-			label: autoRun ? "Allowed" : "Asked",
-		});
-		return connections.approve(
-			pending.id,
-			{ id: "U_test", login: "maggie", sessionId: "session" },
-			"R_test",
-			autoRun,
-		);
+		return connections.open(
+			{ id: crypto.randomUUID(), owner: "U_test", login: "maggie", autoRun },
+			autoRun ? "Allowed" : "Asked",
+			{ repository: "owner/repository", repositoryId: "R_test", commit: "a".repeat(40) },
+		).connection;
 	};
 	let context = await openPlan("# Plan\n");
 	let host = spikeHost({

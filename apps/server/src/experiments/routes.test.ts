@@ -1,4 +1,3 @@
-import { Machines } from "../auth/machines";
 import { expect, test } from "bun:test";
 import { performance } from "@chopin/experiment/fixtures";
 import {
@@ -7,7 +6,9 @@ import {
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
 import { Admission } from "../auth/admission";
+import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
+import { GitHubTokenError } from "../github/client";
 import type { GitHub } from "../github/client";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
@@ -22,8 +23,8 @@ function error(value: { result: { isError?: boolean; content: Array<{ text: stri
 	return value.result.isError ? value.result.content[0].text : "";
 }
 
-async function setup() {
-	let storage = new MemoryStorage();
+async function setup(shared?: { storage: MemoryStorage; lease: unknown }) {
+	let storage = shared?.storage ?? new MemoryStorage();
 	let now = new Date();
 	for (let id of ["alice", "bob"]) await storage.users.put({ id, login: id, avatarUrl: "", now });
 	async function document(repository = "repo") {
@@ -40,7 +41,8 @@ async function setup() {
 		return id;
 	}
 	let documentId = await document();
-	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
+	let lease = (shared?.lease as Awaited<ReturnType<typeof storage.leases.acquire>>)
+		?? (await storage.leases.acquire("writer", "test", 60_000))!;
 	let sessions = new Sessions(storage, true);
 	let grant = {
 		accessToken: "token",
@@ -50,36 +52,55 @@ async function setup() {
 	};
 	let alice = await sessions.issue("alice", grant);
 	let bob = await sessions.issue("bob", grant);
+	/** The GitHub tokens repository checks were made with, most recent last. */
+	let checked: string[] = [];
 	let github = {
-		repositoryAccess: async (_token: string, owner: string, name: string) => ({
-			id: name,
-			owner,
-			name,
-			permissions: { pull: true, push: true, admin: false },
-		}),
+		repositoryAccess: async (token: string, owner: string, name: string) => {
+			checked.push(token);
+			return { id: name, owner, name, permissions: { pull: true, push: true, admin: false } };
+		},
 	} as unknown as GitHub;
 	let config = {
 		origin: "https://chopin.test",
 		appSlug: "test",
 		clientId: "test",
 		clientSecret: "secret",
-		encryptionKey: new Uint8Array(32),
+		encryptionKey: new Uint8Array(32).fill(3),
 	};
+	let refresh = { refuse: false, count: 0 };
+	let clock = { offset: 0 };
+	let machines = new Machines(storage, () => new Date(Date.now() + clock.offset), {
+		key: config.encryptionKey,
+		origin: config.origin,
+		clientId: config.clientId,
+		refresh: async () => {
+			if (refresh.refuse) {
+				throw new GitHubTokenError("GitHub rejected the token refresh", 401, true);
+			}
+			refresh.count++;
+			return {
+				accessToken: `ghu_machine_${refresh.count + 1}`,
+				accessExpiresIn: 28_800,
+				refreshToken: `ghr_machine_${refresh.count + 1}`,
+				refreshExpiresIn: 15_897_600,
+			};
+		},
+	});
 	let router = new Router();
 	let lock = { locked: false, documents: new Set<string>() };
-	let runtime = registerExperimentRoutes(router, {
+	let auth = {
 		storage,
 		sessions,
 		github,
 		config,
 		admission: new Admission(config, github),
 		clock: () => new Date(),
-		machines: new Machines(storage, () => new Date(), {
-			origin: "https://chopin.test",
-			clientId: "test",
-		}),
-		pairings: {},
-	}, {
+		machines,
+		pairings: {} as {
+			complete?: (pairing: string, userId: string, grant: never) => Promise<string>;
+		},
+	};
+	let runtime = registerExperimentRoutes(router, auth as never, {
 		lease: () => lease,
 		changed: () => {},
 		context: async () => ({ source: "# Context", revision: 0 }),
@@ -115,22 +136,49 @@ async function setup() {
 			token,
 		)).json();
 	}
-	async function pair(cookie: string, repository = "org/repo") {
+	/** GitHub authorizes the machine's own token pair, as the OAuth callback does. */
+	function authorized(pairing: string, userId: string) {
+		return auth.pairings.complete!(pairing, userId, {
+			accessToken: "ghu_machine_1",
+			accessExpiresIn: 28_800,
+			refreshToken: "ghr_machine_1",
+			refreshExpiresIn: 15_897_600,
+		} as never);
+	}
+	/** Register a checkout with a paired machine's token, as `chopin connect` does. */
+	async function open(machineToken: string, repository = "org/repo") {
+		return request(
+			"/api/connector/connections",
+			{
+				repository,
+				commit: "a".repeat(40),
+				label: "Laptop",
+			},
+			undefined,
+			machineToken,
+		);
+	}
+	async function pair(
+		cookie: string,
+		repository = "org/repo",
+		user = cookie === bob.cookie ? "bob" : "alice",
+	) {
 		let pending = await (await request("/api/connector/pairings", {
 			repository,
 			commit: "a".repeat(40),
 			label: "Laptop",
 		})).json();
 		await request(`/api/connector/pairings/${pending.id}/approve`, {}, cookie);
-		return {
-			...pending,
-			...await (await request(`/api/connector/pairings/${pending.id}/claim`, {
-				secret: pending.secret,
-			})).json(),
-		};
+		await authorized(pending.id, user);
+		let claimed = await (await request(`/api/connector/pairings/${pending.id}/claim`, {
+			secret: pending.secret,
+		})).json();
+		let opened = await (await open(claimed.token, repository)).json();
+		return { ...pending, machineToken: claimed.token as string, ...opened };
 	}
 	return {
 		storage,
+		lease,
 		sessions,
 		config,
 		alice,
@@ -140,13 +188,18 @@ async function setup() {
 		request,
 		tool,
 		pair,
+		open,
+		authorized,
+		checked,
+		refresh,
+		clock,
 		lock,
 		runtime,
 	};
 }
 
 test("work runs on the clicker's own connection; scoped claims publish", async () => {
-	let { sessions, config, alice, bob, documentId, request, lock } = await setup();
+	let { alice, bob, documentId, request, lock, authorized, open } = await setup();
 	let pair = await (await request("/api/connector/pairings", {
 		repository: "org/repo",
 		commit: "a".repeat(40),
@@ -157,10 +210,20 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 	).toBe(403);
 	let approved = await request(`/api/connector/pairings/${pair.id}/approve`, {}, alice.cookie);
 	expect(approved.status).toBe(200);
-	expect((await approved.json()).url).toBe("/documents/org/repo");
-	let paired =
+	expect((await approved.json()).authorize).toBe(`/auth/github/connector?pairing=${pair.id}`);
+	expect(
+		await (await request(`/api/connector/pairings/${pair.id}/claim`, { secret: pair.secret }))
+			.json(),
+	).toEqual({ waiting: true });
+	expect(await authorized(pair.id, "alice")).toBe(`/connect?pairing=${pair.id}`);
+	let shown = await (await request(`/api/connector/pairings/${pair.id}`, undefined, alice.cookie))
+		.json();
+	expect(shown.connected).toBe("/documents/org/repo");
+	let machine =
 		await (await request(`/api/connector/pairings/${pair.id}/claim`, { secret: pair.secret }))
 			.json();
+	expect(machine.token).toMatch(/^chopin_m_/);
+	let paired = await (await open(machine.token)).json();
 	let id = crypto.randomUUID();
 	await request(
 		`/api/documents/${documentId}/experiments`,
@@ -263,17 +326,6 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 		(await (await request(`/api/documents/${documentId}/experiments/${id}`, undefined, bob.cookie))
 			.json()).child.id,
 	).toBe(child);
-	await sessions.revoke(
-		new Request(config.origin, { headers: { cookie: alice.cookie.split(";")[0] } }),
-	);
-	expect(
-		(await request(
-			"/connector/mcp",
-			{ jsonrpc: "2.0", id: 2, method: "ping" },
-			undefined,
-			paired.token,
-		)).status,
-	).toBe(401);
 });
 
 test("one connection serves every document in its repository and no other", async () => {
@@ -362,29 +414,142 @@ test("a claim refuses a document in another repository and interrupts archived o
 	expect((await runtime.service.store.get(archived))?.state).toBe("interrupted");
 });
 
-test("logging out revokes a run already in progress", async () => {
-	let { alice, documentId, request, tool, pair, sessions, config } = await setup();
+test("signing out of the browser leaves a paired machine and its run connected", async () => {
+	let { alice, documentId, request, tool, pair, sessions, config, checked } = await setup();
 	let connection = await pair(alice.cookie);
 	let id = crypto.randomUUID();
 	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
 	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
 	let claim = text(await tool(connection.token, "claim_experiment", { id }));
-	expect(text(await tool(claim.runToken, "read_experiment", {})).input.id).toBe(id);
 	await sessions.revoke(
 		new Request(config.origin, { headers: { cookie: alice.cookie.split(";")[0] } }),
 	);
+	checked.length = 0;
+	expect(text(await tool(claim.runToken, "read_experiment", {})).input.id).toBe(id);
+	let ping = await request(
+		"/connector/mcp",
+		{ jsonrpc: "2.0", id: 2, method: "ping" },
+		undefined,
+		connection.token,
+	);
+	expect(ping.status).toBe(200);
+	// Repository access is rechecked with the machine's own GitHub token, not the browser login's.
+	expect(checked.length).toBeGreaterThan(0);
+	expect(new Set(checked)).toEqual(new Set(["ghu_machine_1"]));
+});
+
+test("a paired machine connects again after a server restart without pairing", async () => {
+	let first = await setup();
+	let paired = await first.pair(first.alice.cookie);
+	// A new process: new routes, memory and credential cache over the same storage.
+	let restarted = await setup({ storage: first.storage, lease: first.lease });
+	let stale = await restarted.request(
+		"/connector/mcp",
+		{ jsonrpc: "2.0", id: 1, method: "ping" },
+		undefined,
+		paired.token,
+	);
+	expect((await stale.json()).error).toBe("connection-unavailable");
+	let opened = await restarted.open(paired.machineToken);
+	expect(opened.status).toBe(200);
+	let { token } = await opened.json();
+	let ping = await restarted.request(
+		"/connector/mcp",
+		{ jsonrpc: "2.0", id: 1, method: "ping" },
+		undefined,
+		token,
+	);
+	expect(ping.status).toBe(200);
+	expect(restarted.checked.at(-1)).toBe("ghu_machine_1");
+});
+
+test("disconnecting a machine in the browser ends it with machine-revoked", async () => {
+	let { alice, bob, request, pair, open } = await setup();
+	let paired = await pair(alice.cookie);
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toEqual([expect.objectContaining({
+		id: paired.machine,
+		label: "Laptop",
+		repositories: ["org/repo"],
+		autoRun: false,
+		connected: true,
+	})]);
+	expect(JSON.stringify(listed)).not.toContain(paired.machineToken);
+	expect((await (await request("/api/connector/machines", undefined, bob.cookie)).json()).machines)
+		.toEqual([]);
+	let foreign = await request(`/api/connector/machines/${paired.machine}/revoke`, {}, bob.cookie);
+	expect(foreign.status).toBe(404);
+	let revoked = await request(`/api/connector/machines/${paired.machine}/revoke`, {}, alice.cookie);
+	expect(revoked.status).toBe(200);
 	let refused = await request(
 		"/connector/mcp",
-		{
-			jsonrpc: "2.0",
-			id: 1,
-			method: "tools/call",
-			params: { name: "read_experiment", arguments: {} },
-		},
+		{ jsonrpc: "2.0", id: 1, method: "ping" },
 		undefined,
-		claim.runToken,
+		paired.token,
 	);
 	expect(refused.status).toBe(401);
+	let reopened = await open(paired.machineToken);
+	expect(reopened.status).toBe(401);
+	expect((await reopened.json()).error).toBe("machine-revoked");
+	expect(
+		(await (await request("/api/connector/machines", undefined, alice.cookie)).json()).machines,
+	)
+		.toEqual([]);
+});
+
+test("unpairing with the machine's own token revokes it", async () => {
+	let { alice, request, pair, open } = await setup();
+	let paired = await pair(alice.cookie);
+	let unpaired = await request("/api/connector/machine/revoke", {}, undefined, paired.machineToken);
+	expect(unpaired.status).toBe(200);
+	let reopened = await open(paired.machineToken);
+	expect((await reopened.json()).error).toBe("machine-revoked");
+	let again = await request("/api/connector/machine/revoke", {}, undefined, paired.machineToken);
+	expect(again.status).toBe(401);
+	expect((await again.json()).error).toBe("machine-revoked");
+});
+
+test("GitHub refusing a machine's authorization asks for pairing again", async () => {
+	let { alice, request, pair, open, refresh, clock } = await setup();
+	let paired = await pair(alice.cookie);
+	refresh.refuse = true;
+	clock.offset = 8 * 60 * 60 * 1000;
+	let refused = await request(
+		"/connector/mcp",
+		{ jsonrpc: "2.0", id: 1, method: "ping" },
+		undefined,
+		paired.token,
+	);
+	expect(refused.status).toBe(401);
+	expect((await refused.json()).error).toBe("machine-reauthorize");
+	expect((await (await open(paired.machineToken)).json()).error).toBe("machine-reauthorize");
+	let again = await request(
+		"/connector/mcp",
+		{ jsonrpc: "2.0", id: 2, method: "ping" },
+		undefined,
+		paired.token,
+	);
+	expect((await again.json()).error).toBe("machine-reauthorize");
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toEqual([
+		expect.objectContaining({ id: paired.machine, reauthorize: true, connected: false }),
+	]);
+});
+
+test("a pairing completes only for the GitHub account that approved it", async () => {
+	let { alice, request, authorized } = await setup();
+	let pending = await (await request("/api/connector/pairings", {
+		repository: "org/repo",
+		commit: "a".repeat(40),
+		label: "Laptop",
+	})).json();
+	await request(`/api/connector/pairings/${pending.id}/approve`, {}, alice.cookie);
+	expect(await authorized(pending.id, "bob").catch(err => err.code)).toBe("pairing-forbidden");
+	expect(
+		await (await request(`/api/connector/pairings/${pending.id}/claim`, {
+			secret: pending.secret,
+		})).json(),
+	).toEqual({ waiting: true });
 });
 
 test("a pairing carries a confirmation code the page can show", async () => {
@@ -411,11 +576,13 @@ test("expired pairing and connections cannot be revived by replay", () => {
 		commit: "a".repeat(40),
 		label: "Laptop",
 	});
-	connections.approve(pending.id, { id: "alice", login: "alice", sessionId: "s" }, "repo");
-	let result = connections.claim(pending.id, pending.secret);
-	if (!("token" in result)) throw new Error("missing token");
+	let result = connections.open(
+		{ id: "machine", owner: "alice", login: "alice", autoRun: false },
+		"Laptop",
+		{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) },
+	);
 	now = 91_000;
-	expect(() => connections.lookup(result.token!)).toThrow("connection-unavailable");
+	expect(() => connections.lookup(result.token)).toThrow("connection-unavailable");
 	now = 301_000;
 	expect(() => connections.claim(pending.id, pending.secret)).toThrow("pairing-expired");
 });
@@ -474,16 +641,11 @@ test("a stale Ready to run cannot cancel another person's queued run", async () 
 
 test("builds queued behind a connection's build take its place in the order they queued", () => {
 	let connections = new Connections(() => 0);
-	let pending = connections.create({
-		repository: "org/repo",
-		commit: "a".repeat(40),
-		label: "Laptop",
-	});
-	let { id } = connections.approve(
-		pending.id,
-		{ id: "alice", login: "alice", sessionId: "s" },
-		"repo",
-	);
+	let { id } = connections.open(
+		{ id: "machine", owner: "alice", login: "alice", autoRun: false },
+		"Laptop",
+		{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) },
+	).connection;
 	connections.assign(id, "one");
 	connections.enqueue(id, "two");
 	connections.enqueue(id, "three");
@@ -707,7 +869,7 @@ test("a spike still running 20 minutes after its claim is interrupted", async ()
 });
 
 test("a connector outside the supported protocol range is refused with the command that fixes it", async () => {
-	let { alice, request, pair } = await setup();
+	let { alice, request, pair, authorized } = await setup();
 	let { min, max } = CONNECTOR_PROTOCOLS;
 	let headers = (version: string, protocol: number) => ({
 		[CONNECTOR_VERSION_HEADER]: version,
@@ -728,6 +890,7 @@ test("a connector outside the supported protocol range is refused with the comma
 	expect(created.status).toBe(200);
 	let pending = await created.json();
 	await request(`/api/connector/pairings/${pending.id}/approve`, {}, alice.cookie);
+	await authorized(pending.id, "alice");
 	let claimed = await request(
 		`/api/connector/pairings/${pending.id}/claim`,
 		{ secret: pending.secret },
@@ -736,7 +899,10 @@ test("a connector outside the supported protocol range is refused with the comma
 		current,
 	);
 	expect(claimed.status).toBe(200);
-	let { token } = await claimed.json();
+	let machine = (await claimed.json()).token;
+	let opened = await request("/api/connector/connections", source, undefined, machine, current);
+	expect(opened.status).toBe(200);
+	let { token } = await opened.json();
 	expect((await mcp(token, current)).status).toBe(200);
 
 	// Too old or too new: each connector route refuses, even with a valid token, and says why.
@@ -764,6 +930,20 @@ test("a connector outside the supported protocol range is refused with the comma
 				undefined,
 				headers(version, protocol),
 			),
+			await request(
+				"/api/connector/connections",
+				source,
+				undefined,
+				machine,
+				headers(version, protocol),
+			),
+			await request(
+				"/api/connector/machine/revoke",
+				{},
+				undefined,
+				machine,
+				headers(version, protocol),
+			),
 			await mcp(token, headers(version, protocol)),
 		];
 		for (let response of refused) {
@@ -779,7 +959,7 @@ test("a connector outside the supported protocol range is refused with the comma
 			expect(body.message).toContain(fix);
 		}
 	}
-	// The refusals left the paired connection alone.
+	// The refusals left the paired machine and its connection alone.
 	expect((await mcp(token, current)).status).toBe(200);
 });
 

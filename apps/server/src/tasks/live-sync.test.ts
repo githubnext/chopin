@@ -21,7 +21,7 @@ function connection(id: string, owner = "octocat", autoRun = true): Connection {
 		id,
 		owner,
 		login: owner,
-		sessionId: "session",
+		machineId: "machine",
 		label: "Laptop",
 		source: {
 			repositoryId: "R_score",

@@ -3,6 +3,9 @@ import { capabilities, ExperimentError, limits, sourceSchema } from "@chopin/exp
 import { publicInvestigation } from "@chopin/experiment/records";
 import type { Investigation, InvestigationProvenance } from "@chopin/experiment/records";
 import type { HostedAuth } from "../auth/routes";
+import { MachineError } from "../auth/machines";
+import type { GitHubTokenGrant } from "../github/client";
+import type { StoredMachine } from "../storage/model";
 import type { AuthenticatedSession } from "../auth/session";
 import type { Router } from "../http/router";
 import { canonical as canonicalReport } from "../mcp/create";
@@ -34,7 +37,7 @@ type Options = {
 	context: (id: string) => Promise<{ source: string; revision: number } | undefined>;
 	changed: (id: string) => void;
 	canMutate?: (id: string) => Promise<boolean>;
-	/** A local agent was paired to a repository for one of its owner's sessions. */
+	/** One of an owner's paired machines connected a checkout of a repository. */
 	connected?: (repositoryId: string, owner: string) => void;
 	place?: (
 		documentId: string,
@@ -46,9 +49,25 @@ type Options = {
 	/** The chopin release this server recommends, which `chopin update` installs by default. */
 	connectorVersion?: string;
 };
-const pairingSchema = sourceSchema.omit({ repositoryId: true }).extend({
-	label: z.string().trim().min(1).max(100),
-}).strict();
+const label = z.string().trim().min(1).max(100);
+/** `chopin pair` names a checkout only when it runs inside one. */
+const pairingSchema = z.object({
+	label,
+	repository: sourceSchema.shape.repository.optional(),
+	commit: sourceSchema.shape.commit.optional(),
+	branch: sourceSchema.shape.branch,
+}).strict().refine(value => !value.repository === !value.commit, "invalid checkout");
+const checkoutSchema = sourceSchema.omit({ repositoryId: true }).extend({ label }).strict();
+
+/** Whoever a GitHub repository check runs for: a browser login or a paired machine. */
+type Caller = {
+	userId: string;
+	use: <T>(operation: (token: string) => Promise<T>) => Promise<T>;
+};
+
+function bearer(request: Request) {
+	return (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
+}
 
 const MAX_BODY_BYTES = limits.resultBytes + 64 * 1024;
 /** A spike is a quick prototype; one still running this long after its claim is interrupted. */
@@ -121,12 +140,43 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	let service = new Experiments(auth.storage.experiments, options.lease, changed);
 	/** Image hashes each spike run uploaded; a run may only cite its own screenshots. */
 	let uploads = new Map<string, Set<string>>();
+	function browser(session: AuthenticatedSession): Caller {
+		return {
+			userId: session.user.id,
+			use: async operation => (await auth.sessions.use(session, operation)).value,
+		};
+	}
+	/**
+	 * A paired machine checks repositories with its own GitHub authorization. Under
+	 * AUTH_MODE=local machines hold none, so they borrow the owner's live login.
+	 */
+	async function machineCaller(machine: StoredMachine): Promise<Caller> {
+		if (auth.machines.durable) {
+			return {
+				userId: machine.userId,
+				use: operation => machineRefusal(() => auth.machines.use(machine, operation)),
+			};
+		}
+		let session = await auth.sessions.forUser(machine.userId);
+		if (!session) fail("owner-sign-in-required");
+		return browser(session);
+	}
+	async function machineRefusal<T>(action: () => Promise<T>): Promise<T> {
+		try {
+			return await action();
+		} catch (error) {
+			if (error instanceof MachineError) fail(error.code);
+			throw error;
+		}
+	}
 	async function access(session: AuthenticatedSession | undefined, id: string, write: boolean) {
 		if (!session) fail("authentication-required");
+		return { ...await documentAccess(browser(session), id, write), session };
+	}
+	async function documentAccess(caller: Caller, id: string, write: boolean) {
 		let channel = await auth.storage.channels.get(id);
 		if (!channel) fail("not-found");
-		let { value: repository } = await auth.sessions.use(
-			session,
+		let repository = await caller.use(
 			token => auth.github.repositoryAccess(token, channel.repositoryOwner, channel.repositoryName),
 		);
 		if (
@@ -134,16 +184,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			|| write && !(repository.permissions.push || repository.permissions.admin)
 		) fail("repository-forbidden");
 		if (write && channel.archivedAt) fail("document-archived");
-		return { channel, repository, session };
+		return { channel, repository };
 	}
-	/** Push or admin on a repository named by a checkout, resolved through the session. */
-	async function repositoryWrite(session: AuthenticatedSession | undefined, fullName: string) {
-		if (!session) fail("authentication-required");
+	/** Push or admin on a repository named by a checkout. */
+	async function repositoryWrite(caller: Caller, fullName: string) {
 		let [owner, name] = fullName.split("/");
-		let { value: repository } = await auth.sessions.use(
-			session,
-			token => auth.github.repositoryAccess(token, owner, name),
-		);
+		let repository = await caller.use(token => auth.github.repositoryAccess(token, owner, name));
 		if (!repository || !(repository.permissions.push || repository.permissions.admin)) {
 			fail("repository-forbidden");
 		}
@@ -227,7 +273,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 							: {}),
 						...(code === CONNECTOR_UPDATE_REQUIRED ? versions : {}),
 					},
-					code === "authentication-required"
+					code === "authentication-required" || code.startsWith("machine-")
 						? 401
 						: code.includes("forbidden")
 						? 403
@@ -248,30 +294,73 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let created = connections.create(pairingSchema.parse(await body(request)));
 		return json({ ...created, url: `${auth.config.origin}/connect?pairing=${created.id}` });
 	});
+	/** Where the pairing page sends the person once the machine is paired. */
+	function landing(input: { repository?: string }) {
+		let [owner, name] = input.repository?.split("/") ?? [];
+		return owner && name ? documentsPath(owner, name) : "/";
+	}
 	route("GET", "/api/connector/pairings/:id", async (request, params) => {
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		let pending = connections.pending(params.id);
-		await repositoryWrite(session, pending.input.repository);
-		return json({ input: pending.input, owner: session.user.login, code: pending.code });
+		if (pending.input.repository) await repositoryWrite(browser(session), pending.input.repository);
+		return json({
+			input: pending.input,
+			owner: session.user.login,
+			code: pending.code,
+			...(pending.machineId && pending.approval?.owner === session.user.id
+				? { connected: landing(pending.input) }
+				: {}),
+		});
 	});
+	/** Pair a machine for the account that approved it, with that machine's own GitHub grant. */
+	async function complete(id: string, userId: string, grant?: GitHubTokenGrant) {
+		let pending = connections.pending(id);
+		let approval = pending.approval;
+		if (!approval || approval.owner !== userId) fail("pairing-forbidden");
+		if (!pending.machineId) {
+			let { machine, token } = await auth.machines.pair({
+				userId,
+				label: pending.input.label,
+				repositories: approval.repositoryId && pending.input.repository && pending.input.commit
+					? [{
+						repositoryId: approval.repositoryId,
+						repository: pending.input.repository,
+						commit: pending.input.commit,
+						...(pending.input.branch ? { branch: pending.input.branch } : {}),
+					}]
+					: [],
+				autoRun: approval.autoRun,
+				...(grant ? { grant } : {}),
+			});
+			connections.paired(id, machine.id, token);
+		}
+		return `/connect?pairing=${id}`;
+	}
+	auth.pairings.complete = complete;
 	route("POST", "/api/connector/pairings/:id/approve", async (request, params) => {
-		// Automatic work is opt-in, once, as the laptop is paired; it is off unless asked for.
+		// Automatic work is opt-in, once, as the machine is paired; it is off unless asked for.
 		let { autoRun } = z.object({ autoRun: z.boolean().optional() }).strict().parse(
 			await body(request),
 		);
 		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
 		let pending = connections.pending(params.id);
-		let repository = await repositoryWrite(session, pending.input.repository);
-		let connection = connections.approve(
-			params.id,
-			{ id: session!.user.id, login: session!.user.login, sessionId: session!.session.id },
-			repository.id,
-			autoRun ?? false,
-		);
-		connections.wake(repository.id);
-		options.connected?.(repository.id, session!.user.id);
-		return json({ id: connection.id, url: documentsPath(repository.owner, repository.name) });
+		let repository = pending.input.repository
+			? await repositoryWrite(browser(session), pending.input.repository)
+			: undefined;
+		connections.approve(params.id, {
+			owner: session.user.id,
+			login: session.user.login,
+			autoRun: autoRun ?? false,
+			...(repository ? { repositoryId: repository.id } : {}),
+		});
+		// GitHub refresh tokens are single-use, so the machine needs its own authorization.
+		if (auth.machines.durable) {
+			return json({ authorize: `/auth/github/connector?pairing=${params.id}` });
+		}
+		await complete(params.id, session.user.id);
+		return json({ url: landing(pending.input) });
 	});
 	route("POST", "/api/connector/pairings/:id/claim", async (request, params) => {
 		compatible(request, auth.config.origin, options.connectorVersion);
@@ -279,6 +368,75 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			await body(request),
 		);
 		return json(connections.claim(params.id, secret));
+	});
+	/** A paired machine connects one checkout; the connection's token lives only in memory. */
+	route("POST", "/api/connector/connections", async request => {
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		let input = checkoutSchema.parse(await body(request));
+		let caller = await machineCaller(machine);
+		let repository = await repositoryWrite(caller, input.repository);
+		let user = await auth.storage.users.get(machine.userId);
+		let { label, ...checkout } = input;
+		let { connection, token } = connections.open(
+			{
+				id: machine.id,
+				owner: machine.userId,
+				login: user?.login ?? machine.userId,
+				autoRun: machine.autoRun,
+			},
+			label,
+			{ ...checkout, repositoryId: repository.id },
+		);
+		await auth.machines.seen(machine);
+		connections.wake(repository.id);
+		options.connected?.(repository.id, machine.userId);
+		return json({
+			token,
+			connection: { id: connection.id, source: connection.source },
+			machine: machine.id,
+		});
+	});
+	/** `chopin unpair`: the machine revokes itself with its own token. */
+	route("POST", "/api/connector/machine/revoke", async request => {
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await auth.storage.machines.byToken(
+			new Uint8Array(createHash("sha256").update(bearer(request)).digest()),
+		);
+		if (!machine || machine.revokedAt) fail("machine-revoked");
+		await auth.machines.revoke(machine.id, machine.userId);
+		await disconnectMachine(machine.id);
+		return json({ revoked: true });
+	});
+	route("GET", "/api/connector/machines", async request => {
+		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
+		let machines = await auth.machines.list(session.user.id);
+		return json({
+			machines: machines.map(machine => ({
+				id: machine.id,
+				label: machine.label,
+				repositories: [
+					...new Set([
+						...machine.repositories.map(value => value.repository),
+						...connections.machine(machine.id).map(value => value.source.repository),
+					]),
+				],
+				autoRun: machine.autoRun,
+				createdAt: machine.createdAt.getTime(),
+				lastSeenAt: machine.lastSeenAt.getTime(),
+				connected: connections.machine(machine.id).length > 0,
+				reauthorize: !!machine.reauthorizeAt,
+			})),
+		});
+	});
+	route("POST", "/api/connector/machines/:id/revoke", async (request, params) => {
+		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
+		z.object({}).strict().parse(await body(request));
+		if (!await auth.machines.revoke(params.id, session.user.id)) fail("not-found");
+		await disconnectMachine(params.id);
+		return json({ revoked: true });
 	});
 	route("GET", "/api/documents/:id/experiments", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
@@ -387,29 +545,60 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json(publicInvestigation(stopped));
 	});
 
-	/** Re-authorize the connection's owner for its repository, and for a run's document. */
+	/** End a revoked machine's live connections, as a connector disconnecting does. */
+	async function disconnectMachine(machineId: string, code?: string) {
+		let live = connections.machine(machineId);
+		connections.revokeMachine(machineId, code);
+		for (let connection of live) await interrupt(connection);
+	}
+	async function disconnect(connection: Connection) {
+		connections.revoke(connection.id);
+		await interrupt(connection);
+	}
+	async function interrupt(connection: Connection) {
+		for (let active of await work(connection, ["queued", "running", "publishing"])) {
+			await service.stop(active.id, "interrupted", "Workspace disconnected.");
+		}
+		await options.implementations?.()?.disconnected(connection.id);
+	}
+	/**
+	 * Re-authorize a connection's machine and its owner for its repository, and for a run's
+	 * document, with the machine's own GitHub authorization rather than a browser login.
+	 */
 	async function connector(token: string) {
 		let found = connections.lookup(token);
-		let session = await auth.sessions.resolve(found.connection.sessionId);
-		let repository = await repositoryWrite(session, found.connection.source.repository);
+		let machine: StoredMachine;
+		try {
+			machine = await auth.machines.current(found.connection.machineId);
+		} catch (error) {
+			if (error instanceof MachineError) {
+				await disconnectMachine(found.connection.machineId, error.code);
+			}
+			throw error;
+		}
+		let caller = await machineCaller(machine);
+		let repository = await repositoryWrite(caller, found.connection.source.repository)
+			.catch(async error => {
+				if (error instanceof ExperimentError && error.code.startsWith("machine-")) {
+					await disconnectMachine(machine.id, error.code);
+				}
+				throw error;
+			});
 		if (repository.id !== found.connection.source.repositoryId) fail("repository-forbidden");
-		if (found.grant.run) await target(session, found.connection, found.grant.run.documentId);
+		if (found.grant.run) await target(caller, found.connection, found.grant.run.documentId);
 		if (!connections.get(found.connection.id)) fail("connection-unavailable");
+		await auth.machines.seen(machine);
 		let stale = !connections.fresh(found.connection);
 		connections.touch(found.connection);
 		// Work held back from a silent connection can go to it again now it is heard from.
 		if (stale) {
 			options.connected?.(found.connection.source.repositoryId, found.connection.owner);
 		}
-		return { ...found, session: session! };
+		return { ...found, caller };
 	}
 	/** Write access to a run's document, which must belong to the connection's repository. */
-	async function target(
-		session: AuthenticatedSession | undefined,
-		connection: Connection,
-		documentId: string,
-	) {
-		let { channel } = await access(session, documentId, true);
+	async function target(caller: Caller, connection: Connection, documentId: string) {
+		let { channel } = await documentAccess(caller, documentId, true);
 		if (channel.repositoryId !== connection.source.repositoryId) fail("repository-forbidden");
 		return channel;
 	}
@@ -486,16 +675,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("GET", "/connector/mcp", async () => new Response(null, { status: 405 }));
 	route("DELETE", "/connector/mcp", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);
-		let { connection, grant } = await connector(
-			(request.headers.get("authorization") ?? "").replace(/^Bearer /, ""),
-		);
+		let { connection, grant } = await connector(bearer(request));
 		if (!grant.run) connections.revoke(connection.id);
 		return new Response(null, { status: 204 });
 	});
 	route("POST", "/connector/mcp", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);
-		let token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
-		let { connection, grant, session } = await connector(token);
+		let token = bearer(request);
+		let { connection, grant, caller } = await connector(token);
 		let implementation = options.implementations?.();
 		let implementationRun = grant.run?.kind === "implementation" || grant.run?.kind === "rebuild";
 		let spikeRun = !!grant.run && !implementationRun
@@ -553,11 +740,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (name === "submit_investigation_result") name = "submit_experiment_result";
 			let value: unknown;
 			if (name === "disconnect_workspace") {
-				connections.revoke(connection.id);
-				for (let active of await work(connection, ["queued", "running", "publishing"])) {
-					await service.stop(active.id, "interrupted", "Workspace disconnected.");
-				}
-				await implementation?.disconnected(connection.id);
+				// The connection ends; the paired machine stays paired.
+				await disconnect(connection);
 				value = { disconnected: true };
 			} else if (name === "wait_for_work") {
 				// A build in an archived document cannot be claimed; its expiry fails it in the sweep.
@@ -587,7 +771,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			} else if (implementationRun || Object.hasOwn(implementationSchemas(false), name)) {
 				if (!implementation) fail("tool-forbidden");
 				let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
-				let channel = documentId ? await target(session, connection, documentId) : undefined;
+				let channel = documentId ? await target(caller, connection, documentId) : undefined;
 				if (name === "claim_implementation_build") {
 					value = await connections.locked(connection.id, async () => {
 						if ((await work(connection, ["running", "publishing"])).length) {
@@ -618,7 +802,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					if (!offered || offered.connectionId !== connection.id) fail("connection-forbidden");
 					let channel;
 					try {
-						channel = await target(session, connection, offered.documentId);
+						channel = await target(caller, connection, offered.documentId);
 						await mutationAllowed(offered.documentId);
 					} catch (error) {
 						// One archived or building document must not stall the repository's connector.
@@ -656,7 +840,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					!current || current.connectionId !== connection.id
 					|| grant.run && current.documentId !== grant.run.documentId
 				) fail("connection-forbidden");
-				if (!grant.run) await target(session, connection, current.documentId);
+				if (!grant.run) await target(caller, connection, current.documentId);
 				// A spike's result is only ever its own short report, through submit_spike_result.
 				if (
 					current.spike
@@ -698,7 +882,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 								sha256,
 								mimeType,
 								bytes,
-								uploadedBy: session.user.id,
+								uploadedBy: connection.owner,
 								now: new Date(),
 							});
 						} catch (err) {

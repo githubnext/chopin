@@ -2,22 +2,31 @@ import { randomBytes } from "node:crypto";
 import type { Source } from "@chopin/experiment";
 import { fail, fingerprint } from "./service";
 
-export type PairingInput = Omit<Source, "repositoryId"> & { label: string };
+/** What a connector says about itself when it asks to pair; a checkout is optional. */
+export type PairingInput = Partial<Omit<Source, "repositoryId">> & { label: string };
 /** One owner's checkout of one repository; it serves every document in that repository. */
 export type Connection = {
 	id: string;
 	owner: string;
 	login: string;
-	sessionId: string;
+	/** The paired machine this checkout connected through; revoking it ends the connection. */
+	machineId: string;
 	label: string;
 	source: Source;
 	expiresAt: number;
 	/**
 	 * The owner let Chopin start work on this laptop by itself (rebuilds and prototypes), when
 	 * pairing it. Without it only work a person presses Build or Run for reaches the connection.
-	 * Kept in memory with the connection; a new pairing asks again.
+	 * Stored with the machine, so a reconnect keeps it.
 	 */
 	autoRun?: boolean;
+};
+/** The browser's approval of a pairing, waiting for GitHub to authorize the machine. */
+export type Approval = {
+	owner: string;
+	login: string;
+	autoRun: boolean;
+	repositoryId?: string;
 };
 type Pending = {
 	id: string;
@@ -26,7 +35,9 @@ type Pending = {
 	/** Shown by both the connector and the pairing page so a person can cross-check them. */
 	code: string;
 	expiresAt: number;
-	connection?: Connection;
+	approval?: Approval;
+	machineId?: string;
+	/** The machine token, handed once to the connector that holds the pairing secret. */
 	token?: string;
 };
 export type Grant = {
@@ -50,6 +61,8 @@ export class Connections {
 	#pending = new Map<string, Pending>();
 	#connections = new Map<string, Connection>();
 	#tokens = new Map<string, Grant>();
+	/** Tokens of revoked machines' connections, so they keep saying why instead of vanishing. */
+	#revoked = new Map<string, string>();
 	#runTokens = new Map<string, string>();
 	#waiters = new Map<string, Set<() => void>>();
 	#builds = new Map<string, string>();
@@ -78,44 +91,56 @@ export class Connections {
 		if (!value || value.expiresAt <= this.now()) fail("pairing-expired");
 		return value;
 	}
-	approve(
-		id: string,
-		owner: { id: string; login: string; sessionId: string },
-		repositoryId: string,
-		autoRun = false,
-	) {
+	/** Record who approved a pairing in the browser; another account cannot take it over. */
+	approve(id: string, approval: Approval) {
 		let value = this.pending(id);
-		if (value.connection) {
-			if (
-				value.connection.owner !== owner.id
-				|| value.connection.source.repositoryId !== repositoryId
-			) fail("already-paired");
-			return value.connection;
-		}
-		if (this.list(repositoryId, owner.id).length >= 8) fail("connection-limit");
-		let { label, ...source } = value.input;
-		let connection: Connection = {
-			id: crypto.randomUUID(),
-			owner: owner.id,
-			login: owner.login,
-			sessionId: owner.sessionId,
-			label,
-			source: { ...source, repositoryId },
-			expiresAt: this.now() + CONNECTION_MS,
-			autoRun,
-		};
-		value.connection = connection;
-		value.token = randomBytes(32).toString("base64url");
-		this.#connections.set(connection.id, connection);
-		this.#tokens.set(fingerprint(value.token), { connectionId: connection.id });
-		return connection;
+		if (value.approval && value.approval.owner !== approval.owner) fail("already-paired");
+		if (!value.machineId) value.approval = approval;
+		return value;
+	}
+	/** The machine GitHub authorized for an approved pairing, and its token for the connector. */
+	paired(id: string, machineId: string, token: string) {
+		let value = this.pending(id);
+		value.machineId = machineId;
+		value.token = token;
 	}
 	claim(id: string, secret: string) {
 		let value = this.pending(id);
 		if (value.proof !== fingerprint(secret)) fail("pairing-forbidden");
-		return value.token ? { token: value.token, connection: value.connection } : { waiting: true };
+		return value.token ? { token: value.token } : { waiting: true as const };
+	}
+	/** A paired machine's checkout comes online; its token lives only in this process. */
+	open(
+		machine: { id: string; owner: string; login: string; autoRun: boolean },
+		label: string,
+		source: Source,
+	) {
+		this.sweep();
+		if (this.list(source.repositoryId, machine.owner).length >= 8) fail("connection-limit");
+		let connection: Connection = {
+			id: crypto.randomUUID(),
+			owner: machine.owner,
+			login: machine.login,
+			machineId: machine.id,
+			label,
+			source,
+			expiresAt: this.now() + CONNECTION_MS,
+			autoRun: machine.autoRun,
+		};
+		let token = randomBytes(32).toString("base64url");
+		this.#connections.set(connection.id, connection);
+		this.#tokens.set(fingerprint(token), { connectionId: connection.id });
+		return { connection, token };
+	}
+	/** Live connections of one paired machine. */
+	machine(machineId: string) {
+		return [...this.#connections.values()].filter(value =>
+			value.machineId === machineId && value.expiresAt > this.now()
+		);
 	}
 	lookup(token: string) {
+		let refused = this.#revoked.get(fingerprint(token));
+		if (refused) fail(refused);
 		let grant = this.#tokens.get(fingerprint(token));
 		let connection = grant && this.get(grant.connectionId);
 		if (!grant || !connection) fail("connection-unavailable");
@@ -225,9 +250,13 @@ export class Connections {
 		for (let [key, grant] of this.#tokens) if (grant.connectionId === id) this.#tokens.delete(key);
 		if (connection) this.wake(connection.source.repositoryId);
 	}
-	revokeSession(sessionId: string) {
+	revokeMachine(machineId: string, code = "machine-revoked") {
 		for (let connection of this.#connections.values()) {
-			if (connection.sessionId === sessionId) this.revoke(connection.id);
+			if (connection.machineId !== machineId) continue;
+			for (let [key, grant] of this.#tokens) {
+				if (grant.connectionId === connection.id) this.#revoked.set(key, code);
+			}
+			this.revoke(connection.id);
 		}
 	}
 	sweep() {

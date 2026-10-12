@@ -1912,7 +1912,6 @@ async function commitCurrentSummary(
 async function sessionRevoked(sessionId: string): Promise<void> {
 	// First, so nothing the rest of the revocation announces reaches the ended login.
 	sessionSockets.revoke(sessionId);
-	experiments?.connections.revokeSession(sessionId);
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);
 	await Promise.all([

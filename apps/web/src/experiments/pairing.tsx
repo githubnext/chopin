@@ -3,9 +3,11 @@ import { experimentRequest } from "./api";
 import { LocalLoginShell } from "../local-login-shell";
 
 type Pairing = {
-	input: { repository: string };
+	input: { repository?: string; label: string };
 	owner: string;
 	code: string;
+	/** Where to go once this pairing has its machine, after GitHub authorized it. */
+	connected?: string;
 };
 
 export default function PairingPage() {
@@ -27,7 +29,10 @@ export default function PairingPage() {
 			undefined,
 			abort.signal,
 		)
-			.then(setPairing).catch(error => {
+			.then(value => {
+				setPairing(value);
+				if (value.connected) setUrl(value.connected);
+			}).catch(error => {
 				if (!abort.signal.aborted) setError(String(error.message));
 			});
 		return () => abort.abort();
@@ -36,11 +41,16 @@ export default function PairingPage() {
 		setBusy(true);
 		setError("");
 		try {
-			let result = await experimentRequest<{ url: string }>(
+			let result = await experimentRequest<{ url?: string; authorize?: string }>(
 				`/api/connector/pairings/${encodeURIComponent(id!)}/approve`,
 				{ autoRun },
 			);
-			setUrl(result.url);
+			// GitHub authorizes the machine on its own, then returns to this page.
+			if (result.authorize) {
+				location.assign(result.authorize);
+				return;
+			}
+			setUrl(result.url ?? "/");
 		} catch (error) {
 			setError(error instanceof Error ? error.message : "Connection failed");
 		} finally {
@@ -57,14 +67,17 @@ export default function PairingPage() {
 						? (
 							<>
 								<p className="m-0" role="status">Connected.</p>
-								<a className="btn btn-md btn-primary" href={url}>Open {repository}</a>
+								<a className="btn btn-md btn-primary" href={url}>
+									{repository ? `Open ${repository}` : "Open Chopin"}
+								</a>
 							</>
 						)
 						: (
 							<>
 								<p className="m-0">
-									Connect this checkout of {repository}{" "}
-									so Chopin can run work for you in any of its documents.
+									{repository
+										? `Connect this checkout of ${repository} so Chopin can run work for you in any of its documents.`
+										: `Connect ${pairing.input.label} so Chopin can run work for you on it.`}
 								</p>
 								<p className="m-0 text-text-secondary">
 									Check that your terminal shows{" "}

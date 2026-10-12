@@ -168,9 +168,17 @@ async function paired(
 		undefined,
 		cookie,
 	);
-	return (await context.call(`/api/connector/pairings/${pairing.id}/claim`, {
+	let machine = await (await context.call(`/api/connector/pairings/${pairing.id}/claim`, {
 		secret: pairing.secret,
 	})).json();
+	// `chopin connect` registers the checkout with the machine token.
+	return (await context.call(
+		"/api/connector/connections",
+		{ ...checkout, label: "Laptop" },
+		machine.token,
+		undefined,
+		cookie,
+	)).json();
 }
 async function tool(
 	context: Awaited<ReturnType<typeof setup>>,
