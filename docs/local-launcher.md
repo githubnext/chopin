@@ -8,11 +8,14 @@ separate from passing implementation verification.
 
 ## Connect a workspace
 
-Authenticate an ACP-compatible coding agent normally, then connect a checkout:
+Authenticate an ACP-compatible coding agent normally, then connect a checkout
+from its folder. [Bun](https://bun.sh) is required:
 
 ```sh
-CHOPIN_URL=https://your-chopin-instance.example \
-  bun run connector connect /absolute/path/to/project -- copilot --acp
+mkdir -p ~/.chopin \
+  && curl -fsSL https://your-chopin-instance.example/connector.js -o ~/.chopin/connector.js \
+  && CHOPIN_URL=https://your-chopin-instance.example \
+    bun ~/.chopin/connector.js connect . -- copilot --acp --allow-all
 ```
 
 Open the printed pairing link, sign into Chopin, check that the page shows the
@@ -26,13 +29,15 @@ the existing investigation pairing flow; one connection serves every document in
 the checkout's repository. No GitHub bearer
 needs to be configured in a second companion. The connector credential is held
 in memory and tied to the owner's browser login. Reconnect after a server
-restart or logout.
+restart or logout. See [Trouble connecting](local-experiments.md#trouble-connecting)
+for pairing problems, refusals and stale locks.
 
 Keep the connector running. Each browser Build action starts an agent process;
 automatically installing or starting the connector itself remains future work.
-Standard ACP permission requests appear in its terminal and are declined when
-no interactive terminal is available. The agent retains its normal tools,
-project instructions and configured services.
+Standard ACP permission requests appear in its terminal with the command or
+paths involved, and are declined when no interactive terminal is available.
+The agent retains its normal tools, project instructions and configured
+services.
 
 ## Build a settled plan
 
@@ -46,8 +51,9 @@ project instructions and configured services.
 3. The build runs on your own local agent: the server picks your idle
    connection for the repository, preferring the one that last ran work for this
    document, and derives the checkout from it. Without one, the header reads
-   **Build stopped**, Build shows the connector command to start, and **Retry**
-   tries again once connected. Approval persists the document and graph
+   **Build stopped**, and Build says your local agent isn't connected and shows
+   the connector command to run in your project folder; **Retry** tries again
+   once connected. Approval persists the document and graph
    counters, checkout commit, connection and the person who started it, then
    freezes planning edits.
 4. The **Build** tab turns on with the press. It shows the status and the

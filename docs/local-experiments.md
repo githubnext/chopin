@@ -7,16 +7,26 @@ tables and charts, shares selections, and records decisions against fixed eviden
 
 ## Connect a checkout
 
-Install the Chopin workspace with `bun install`. From its root, run:
+From your project folder, download the connector this Chopin server serves and
+connect the checkout:
 
 ```sh
-CHOPIN_URL=https://your-chopin-instance.example \
-  bun run connector connect /absolute/path/to/project -- copilot --acp
+mkdir -p ~/.chopin \
+  && curl -fsSL https://your-chopin-instance.example/connector.js -o ~/.chopin/connector.js \
+  && CHOPIN_URL=https://your-chopin-instance.example \
+    bun ~/.chopin/connector.js connect . -- copilot --acp --allow-all
 ```
+
+The Build view and an investigation card show this command with your server's
+origin filled in when no local agent is connected. `GET /connector.js` serves one
+bundled file with no sign-in; `bun run build` and the Docker image produce it, and
+a development server bundles it from source. Chopin contributors can still run
+`bun run connector connect /path/to/project -- copilot --acp` from a Chopin
+checkout.
 
 The command after `--` is your agent's ACP launch command. Chopin uses one ACP
 client implementation; it does not invoke a vendor-specific SDK. The connector
-requires Bun 1.4.2 and Git. The agent must support local stdio ACP sessions and
+requires [Bun](https://bun.sh) 1.4.2 and Git. The agent must support local stdio ACP sessions and
 MCP tools through either advertised HTTP support or the default stdio transport. Authenticate the agent normally before connecting it.
 
 Open the printed pairing link, sign into Chopin with push access to the
@@ -29,6 +39,12 @@ access your filesystem.
 The connector credential is held in memory and tied to your browser login.
 Connector grants are deliberately process-bound even though hosted browser
 sessions can survive releases. Reconnect after a server restart or logout.
+
+The terminal prints the pairing link and confirmation code, then
+**✓ Connected.** and a line for each job it starts, finishes or fails. Styling
+appears only on an interactive terminal and is off under `NO_COLOR`. The agent's
+own log output is hidden unless `CHOPIN_DEBUG=1`; its last lines are shown when a
+job fails.
 
 ## Run and inspect work
 
@@ -76,8 +92,10 @@ Remove an unwanted worktree with Git's normal `worktree remove` command.
 
 Local execution uses the agent's ordinary OS permissions, skills and configured
 services. A worktree organizes edits; it is not a sandbox. Standard ACP permission
-requests appear in the connector terminal and are declined when no interactive
-terminal is available. The connector does not advertise client-hosted filesystem
+requests appear in the connector terminal with the tool kind and the command,
+paths or input involved, and are declined when no interactive terminal is
+available. Choosing an "always allow" option skips later prompts for that tool
+kind until the connector exits. The connector does not advertise client-hosted filesystem
 or terminal tools; supported agents execute their own local tools.
 
 The connector chooses HTTP MCP when the ACP agent advertises it and otherwise
@@ -127,6 +145,47 @@ someone then selects **Run** again. The old claim stays fenced by its generation
 managed agent processes. After a connector crash, its local lock remains to prevent
 uncertain duplicate execution; confirm no connector is running before removing the
 lock identified by the error message.
+
+## Trouble connecting
+
+**How pairing works.** The connector registers the checkout's repository, commit
+and branch, then prints a link and an eight-character code. Signing in at the
+link with push access and choosing **Connect** after checking the code hands the
+connector a credential. One connector process serves one checkout, and its
+connection serves every document in that repository. The server forgets a
+connection 90 seconds after it last heard from it; a running connector renews it
+continuously. Connections live only in the server's memory, so reconnect after a
+server restart, a deploy or signing out.
+
+**`script not found: connector`.** `bun run connector` only works inside a Chopin
+checkout. Use the `curl … connector.js` command above from your project folder.
+
+**"Your local agent isn't connected" (HTTP 409 `no-workspace`).** No connector of
+yours is connected for this document's repository. Start the command shown, open
+its link, choose **Connect**, then press **Run** or **Build on my laptop** again.
+Another person's connector never runs your work.
+
+**Wrong repository, not a Git checkout, or a missing commit.** Run the command
+inside a checkout whose `origin` remote is the document's github.com repository.
+The connector refuses a checkout without a github.com origin, and a run whose
+repository differs from the authorized one. If a run's recorded commit is not in
+your checkout, the connector fetches it from `origin`; push or fetch the commit
+if that fails.
+
+**Connector version mismatch after a deploy.** Rerun the whole command. It
+downloads the connector again, so it matches the server.
+
+**Stale lock after a crash.** Each checkout has a lock in the connector's state
+directory, `$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`
+(or `CHOPIN_CONNECTOR_STATE_DIR`). A lock whose process has exited is replaced
+automatically. If the connector still reports _Workspace already locked_, confirm
+no connector is running for that checkout and delete the `.lock` file the error
+names.
+
+**Permission prompts.** Each prompt names the tool kind and what it will run or
+touch. Choose an "always allow" option to stop prompts for that kind during this
+run, or pass the agent's own auto-approval flag after `--`, such as Copilot's
+`--allow-all`.
 
 ## Development verification
 
