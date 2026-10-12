@@ -24,8 +24,10 @@ afterEach(async () => {
 async function socketServer() {
 	let linked = await linkAuth();
 	let auth = linked.auth as unknown as HostedAuth;
-	let sockets = new SessionSockets();
+	let sockets = new SessionSockets(id => linked.sessions.isLive(id));
 	linked.revocations.add(async id => sockets.revoke(id));
+	/** Released before a socket whose admission succeeded is upgraded; immediate unless paused. */
+	let upgrading: Promise<void> = Promise.resolve();
 	let server = Bun.serve<SocketData | SidebarSocketData>({
 		hostname: "127.0.0.1",
 		port: 0,
@@ -35,13 +37,14 @@ async function socketServer() {
 				? await admitSidebar(request, auth)
 				: await admit(request, url, auth);
 			if ("status" in outcome) return new Response(outcome.reason, { status: outcome.status });
+			await upgrading;
 			return self.upgrade(request, { data: outcome.data })
 				? undefined
 				: new Response("upgrade failed", { status: 400 });
 		},
 		websocket: {
 			open(ws) {
-				sockets.opened(ws);
+				if (!sockets.opened(ws)) return;
 				ws.subscribe(ROOM);
 			},
 			message() {},
@@ -63,23 +66,54 @@ async function socketServer() {
 		return issued.cookie.split(";")[0]!;
 	}
 
-	async function open(cookie: string, path: string) {
+	/** Start connecting; `opened` says whether the server upgraded the socket. */
+	function connect(cookie: string, path: string) {
 		let socket = new (WebSocket as unknown as HeaderWebSocket)(
 			`ws://127.0.0.1:${server.port}${path}`,
 			{ headers: { cookie, origin: ORIGIN } },
 		);
 		let frames: string[] = [];
 		let closed = Promise.withResolvers<{ code: number; at: number }>();
+		let opened = Promise.withResolvers<boolean>();
 		socket.addEventListener("message", event => frames.push(String(event.data)));
-		socket.addEventListener("close", event => closed.resolve({ code: event.code, at: Date.now() }));
-		cleanups.push(() => socket.close());
-		await new Promise<void>((resolve, reject) => {
-			socket.addEventListener("open", () => resolve(), { once: true });
-			socket.addEventListener("close", () => reject(new Error(`${path} was refused`)), {
-				once: true,
-			});
+		socket.addEventListener("open", () => opened.resolve(true), { once: true });
+		socket.addEventListener("close", event => {
+			opened.resolve(false);
+			closed.resolve({ code: event.code, at: Date.now() });
 		});
-		return { socket, frames, closed: closed.promise };
+		cleanups.push(() => socket.close());
+		return { socket, frames, closed: closed.promise, opened: opened.promise };
+	}
+
+	async function open(cookie: string, path: string) {
+		let connecting = connect(cookie, path);
+		if (!await connecting.opened) throw new Error(`${path} was refused`);
+		return connecting;
+	}
+
+	/** Hold the next room admission inside its repository authorization until released. */
+	function pauseAuthorization() {
+		let github = auth.github as { repositoryAccess: (...args: any[]) => Promise<unknown> };
+		let authorize = github.repositoryAccess;
+		let reached = Promise.withResolvers<void>();
+		let released = Promise.withResolvers<void>();
+		github.repositoryAccess = async (...args) => {
+			github.repositoryAccess = authorize;
+			reached.resolve();
+			await released.promise;
+			return authorize(...args);
+		};
+		return { reached: reached.promise, release: () => released.resolve() };
+	}
+
+	/** Hold every admitted socket short of its upgrade until released. */
+	function pauseUpgrades() {
+		let released = Promise.withResolvers<void>();
+		upgrading = released.promise;
+		return () => {
+			upgrading = Promise.resolve();
+			released.resolve();
+		};
 	}
 
 	return {
@@ -87,6 +121,10 @@ async function socketServer() {
 		signIn,
 		room: (cookie: string) => open(cookie, `/ws?channel=${linked.channel.id}`),
 		sidebar: (cookie: string) => open(cookie, "/ws/sidebar"),
+		connectRoom: (cookie: string) => connect(cookie, `/ws?channel=${linked.channel.id}`),
+		connectSidebar: (cookie: string) => connect(cookie, "/ws/sidebar"),
+		pauseAuthorization,
+		pauseUpgrades,
 		broadcast: (text: string) => server.publish(ROOM, text),
 	};
 }
@@ -140,4 +178,55 @@ test("a login the expiry sweep removes closes its sockets and leaves a live logi
 	expect((closed as { code: number }).code).toBe(SESSION_ENDED);
 	await expect(within(other.closed, 200)).resolves.toBe("timed out");
 	expect(other.socket.readyState).toBe(WebSocket.OPEN);
+});
+
+/** The ended login's socket never stays open and never hears the room. */
+async function expectShut(
+	server: Awaited<ReturnType<typeof socketServer>>,
+	socket: ReturnType<Awaited<ReturnType<typeof socketServer>>["connectRoom"]>,
+	other: Awaited<ReturnType<Awaited<ReturnType<typeof socketServer>>["room"]>>,
+) {
+	let closed = await within(socket.closed, 1_000);
+	expect(closed).not.toBe("timed out");
+	if (await socket.opened) expect((closed as { code: number }).code).toBe(SESSION_ENDED);
+	server.broadcast("session:planner");
+	await Bun.sleep(50);
+	expect(other.frames).toContain("session:planner");
+	expect(socket.frames).toEqual([]);
+	expect(socket.socket.readyState).toBe(WebSocket.CLOSED);
+}
+
+test("a login that ends while its room socket's repository authorization is pending is never upgraded", async () => {
+	let server = await socketServer();
+	let member = await server.signIn("U_member", "member");
+	let rival = await server.signIn("U_rival", "rival");
+	let other = await server.room(rival);
+
+	let paused = server.pauseAuthorization();
+	let room = server.connectRoom(member);
+	await paused.reached;
+	await server.linked.sessions.revoke(new Request(`${ORIGIN}/`, { headers: { cookie: member } }));
+	paused.release();
+
+	expect(await within(room.opened, 1_000)).toBe(false);
+	await expectShut(server, room, other);
+});
+
+test("a login that ends after its sockets are admitted but before they open closes them before they hear the room", async () => {
+	let server = await socketServer();
+	let member = await server.signIn("U_member", "member");
+	let rival = await server.signIn("U_rival", "rival");
+	let other = await server.room(rival);
+
+	let release = server.pauseUpgrades();
+	let room = server.connectRoom(member);
+	let sidebar = server.connectSidebar(member);
+	await Bun.sleep(100);
+	await server.linked.sessions.revoke(new Request(`${ORIGIN}/`, { headers: { cookie: member } }));
+	release();
+
+	for (let socket of [room, sidebar]) {
+		expect(await socket.opened).toBe(true);
+		await expectShut(server, socket, other);
+	}
 });

@@ -141,7 +141,7 @@ let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let plannerAttachments: PlannerAttachments | undefined;
 /** Browser sockets by login, so a login that ends closes them before another broadcast. */
-let sessionSockets = new SessionSockets();
+let sessionSockets = new SessionSockets(sessionId => hostedAuth.sessions.isLive(sessionId));
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
 let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1306,7 +1306,8 @@ function listen(): Server<SocketData> {
 					});
 					return;
 				}
-				sessionSockets.opened(ws as Socket | SidebarSocket);
+				// Before any subscription or frame: a login that ended since admission gets 4401.
+				if (!sessionSockets.opened(ws as Socket | SidebarSocket)) return;
 				if (isSidebarSocket(ws)) scheduleSidebarRecheck(ws);
 				else openRoomSocket(ws as Socket);
 			},
