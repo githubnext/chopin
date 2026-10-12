@@ -472,13 +472,32 @@ const LEASE_COLUMNS = `
 	expires_at AS "expiresAt"
 `;
 
+/** Longest a lease renewal statement may run before PostgreSQL cancels it. */
+const LEASE_RENEW_TIMEOUT_MS = 5_000;
+/** Abandon a renewal connection that has not answered shortly after its statement timeout. */
+const LEASE_RENEW_STALL_MS = LEASE_RENEW_TIMEOUT_MS + 1_000;
+
+function leaseConnection(url: string): SQL {
+	return new SQL(url, {
+		connectionTimeout: 5,
+		idleTimeout: 30,
+		max: 1,
+		connection: { statement_timeout: LEASE_RENEW_TIMEOUT_MS },
+	});
+}
+
 /** PostgreSQL is the reference implementation, not part of the storage contract. */
 export class PostgresStorage implements StorageAdapter {
 	readonly driver = "postgres";
 	readonly #sql: SQL;
+	readonly #url: string;
+	// Renewal has its own connection so a busy pool cannot delay it past the lease.
+	#leaseSql: SQL;
 
 	constructor(url: string) {
+		this.#url = url;
 		this.#sql = new SQL(url, { connectionTimeout: 10, idleTimeout: 30, max: 10 });
+		this.#leaseSql = leaseConnection(url);
 		this.experiments = new PostgresExperimentStore(
 			this.#sql,
 			(sql, lease) => this.#assertLease(sql, lease),
@@ -718,7 +737,7 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async close(): Promise<void> {
-		await this.#sql.close({ timeout: 5 });
+		await Promise.all([this.#sql.close({ timeout: 5 }), this.#leaseSql.close({ timeout: 5 })]);
 	}
 
 	async #run<T>(action: string, execute: () => Promise<T>): Promise<T> {
@@ -1711,42 +1730,72 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	#acquire(name: string, owner: string, ttlMs: number): Promise<Lease | undefined> {
-		return this.#run("acquire storage lease", async () => {
-			let [saved] = await this.#sql<LeaseRow[]>`
-				INSERT INTO storage_leases (name, owner, fencing, expires_at)
-				VALUES (
-					${name}, ${owner}, 1,
-					clock_timestamp() + (${ttlMs} * interval '1 millisecond')
-				)
-				ON CONFLICT (name) DO UPDATE SET
-					owner = EXCLUDED.owner,
-					fencing = CASE
-						WHEN storage_leases.owner = EXCLUDED.owner
-							AND storage_leases.expires_at > clock_timestamp()
-						THEN storage_leases.fencing
-						ELSE storage_leases.fencing + 1
-					END,
-					expires_at = EXCLUDED.expires_at
-				WHERE storage_leases.expires_at <= clock_timestamp()
-					OR storage_leases.owner = EXCLUDED.owner
-				RETURNING ${this.#sql.unsafe(LEASE_COLUMNS)}
-			`;
-			return saved ? lease(saved) : undefined;
-		});
+		return this.#run("acquire storage lease", () =>
+			this.#sql.begin(async transaction => {
+				let [created] = await transaction<LeaseRow[]>`
+					INSERT INTO storage_leases (name, owner, fencing, expires_at)
+					VALUES (
+						${name}, ${owner}, 1,
+						clock_timestamp() + (${ttlMs} * interval '1 millisecond')
+					)
+					ON CONFLICT (name) DO NOTHING
+					RETURNING ${transaction.unsafe(LEASE_COLUMNS)}
+				`;
+				if (created) return lease(created);
+				// Fenced writes hold FOR KEY SHARE on this row, which an UPDATE alone would
+				// not wait for. FOR UPDATE keeps a takeover behind every write in flight.
+				await transaction`SELECT name FROM storage_leases WHERE name = ${name} FOR UPDATE`;
+				let [saved] = await transaction<LeaseRow[]>`
+					UPDATE storage_leases
+					SET
+						owner = ${owner},
+						fencing = CASE
+							WHEN owner = ${owner} AND expires_at > clock_timestamp() THEN fencing
+							ELSE fencing + 1
+						END,
+						expires_at = clock_timestamp() + (${ttlMs} * interval '1 millisecond')
+					WHERE name = ${name}
+						AND (expires_at <= clock_timestamp() OR owner = ${owner})
+					RETURNING ${transaction.unsafe(LEASE_COLUMNS)}
+				`;
+				return saved ? lease(saved) : undefined;
+			}));
 	}
 
 	#renew(held: Lease, ttlMs: number): Promise<Lease | undefined> {
 		return this.#run("renew storage lease", async () => {
-			let [saved] = await this.#sql<LeaseRow[]>`
-				UPDATE storage_leases
-				SET expires_at = clock_timestamp() + (${ttlMs} * interval '1 millisecond')
-				WHERE name = ${held.name}
-					AND owner = ${held.owner}
-					AND fencing = ${held.fencing}
-					AND expires_at > clock_timestamp()
-				RETURNING ${this.#sql.unsafe(LEASE_COLUMNS)}
-			`;
-			return saved ? lease(saved) : undefined;
+			let sql = this.#leaseSql;
+			let stalled = false;
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			let deadline = new Promise<never>((_, reject) => {
+				timer = setTimeout(() => {
+					stalled = true;
+					reject(new Error(`no reply within ${LEASE_RENEW_STALL_MS} ms`));
+				}, LEASE_RENEW_STALL_MS);
+			});
+			try {
+				let [saved] = await Promise.race([
+					sql<LeaseRow[]>`
+						UPDATE storage_leases
+						SET expires_at = clock_timestamp() + (${ttlMs} * interval '1 millisecond')
+						WHERE name = ${held.name}
+							AND owner = ${held.owner}
+							AND fencing = ${held.fencing}
+							AND expires_at > clock_timestamp()
+						RETURNING ${sql.unsafe(LEASE_COLUMNS)}
+					`,
+					deadline,
+				]);
+				return saved ? lease(saved) : undefined;
+			} finally {
+				clearTimeout(timer);
+				if (stalled && this.#leaseSql === sql) {
+					// The server's statement timeout did not answer, so the connection is
+					// presumed dead. The next attempt reconnects instead of queueing behind it.
+					this.#leaseSql = leaseConnection(this.#url);
+					void sql.close({ timeout: 0 }).catch(() => {});
+				}
+			}
 		});
 	}
 
@@ -1763,11 +1812,16 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async #assertLease(transaction: TransactionSQL, held: Lease): Promise<void> {
+		// Fenced writes for one lease run one at a time, as they did when each took the
+		// lease row FOR UPDATE. The row itself is only FOR KEY SHARE: that conflicts with a
+		// takeover's FOR UPDATE, so no new holder can commit while this write is in flight,
+		// but not with renewal's UPDATE of expires_at, which must never wait for a write.
+		await transaction`SELECT pg_advisory_xact_lock(2043237433, hashtext(${held.name}))`;
 		let [locked] = await transaction<{ name: string }[]>`
 			SELECT name
 			FROM storage_leases
 			WHERE name = ${held.name}
-			FOR UPDATE
+			FOR KEY SHARE
 		`;
 		if (!locked) throw conflict(`storage lease ${held.name} is no longer held`);
 		let [active] = await transaction<{ name: string }[]>`

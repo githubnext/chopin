@@ -20,6 +20,25 @@ function digest(source: string): string {
 	return new Bun.CryptoHasher("sha256").update(source).digest("hex");
 }
 
+/** Waits until `expected` sessions in the test database are waiting for a lock. */
+async function lockWaiters(sql: SQL, expected: number): Promise<void> {
+	let deadline = Date.now() + 3_000;
+	while (Date.now() < deadline) {
+		let [row] = await sql<{ count: number }[]>`
+			SELECT count(*)::int AS count
+			FROM pg_stat_activity
+			WHERE datname = current_database() AND cardinality(pg_blocking_pids(pid)) > 0
+		`;
+		if (row!.count >= expected) return;
+		await Bun.sleep(10);
+	}
+	throw new Error(`expected ${expected} sessions waiting for a lock`);
+}
+
+function within<T>(promise: Promise<T>, ms: number): Promise<T | "still waiting"> {
+	return Promise.race([promise, Bun.sleep(ms).then(() => "still waiting" as const)]);
+}
+
 if (url) {
 	storageContract("postgres", () => new PostgresStorage(url));
 	it("stores only a verifier hash and opaque ciphertext for persistent credentials", async () => {
@@ -318,6 +337,163 @@ if (url) {
 			expect((await storage.jobs.list(channelId, 10))!.jobs).toEqual([]);
 		} finally {
 			release.resolve();
+			await storage.close();
+			await sql.close();
+		}
+	});
+
+	it("renews the writer lease while a fenced commit waits for its channel", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let release = Promise.withResolvers<void>();
+		let blocker: Promise<void> | undefined;
+		try {
+			await storage.migrate();
+			let { channelId, lease } = await userAndChannel(storage);
+			let locked = Promise.withResolvers<void>();
+			blocker = sql.begin(async transaction => {
+				await transaction`SELECT id FROM channels WHERE id = ${channelId} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+			let commit = storage.collaboration.commit({
+				channelId,
+				lease,
+				expectedRevision: 0,
+				operationId: contractId("slow-commit"),
+				epoch: "epoch-1",
+				update: new Uint8Array([1]),
+				events: [],
+				now: new Date(),
+			});
+			await lockWaiters(sql, 1);
+
+			let renewed = await within(storage.leases.renew(lease, 60_000), 2_000);
+			expect(renewed).toEqual(
+				expect.objectContaining({ name: lease.name, fencing: lease.fencing }),
+			);
+			release.resolve();
+			await blocker;
+			expect(await commit).toMatchObject({ revision: 1, repeated: false });
+		} finally {
+			release.resolve();
+			await blocker;
+			await storage.close();
+			await sql.close();
+		}
+	});
+
+	it("renews the writer lease while every pooled connection is waiting", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let release = Promise.withResolvers<void>();
+		let blocker: Promise<void> | undefined;
+		let renames: Promise<unknown>[] = [];
+		try {
+			await storage.migrate();
+			let { channelId, lease } = await userAndChannel(storage);
+			let locked = Promise.withResolvers<void>();
+			blocker = sql.begin(async transaction => {
+				await transaction`SELECT id FROM channels WHERE id = ${channelId} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+			// The adapter's pool holds ten connections.
+			for (let index = 0; index < 10; index++) {
+				renames.push(storage.channels.rename({
+					id: channelId,
+					title: `Busy ${index}`,
+					now: new Date(),
+				}));
+			}
+			await lockWaiters(sql, 10);
+
+			let renewed = await within(storage.leases.renew(lease, 60_000), 2_000);
+			expect(renewed).toEqual(
+				expect.objectContaining({ name: lease.name, fencing: lease.fencing }),
+			);
+		} finally {
+			release.resolve();
+			await blocker;
+			await Promise.allSettled(renames);
+			await storage.close();
+			await sql.close();
+		}
+	});
+
+	it("ends a renewal attempt that cannot reach the lease row", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let release = Promise.withResolvers<void>();
+		let blocker: Promise<void> | undefined;
+		try {
+			await storage.migrate();
+			let { lease } = await userAndChannel(storage);
+			let locked = Promise.withResolvers<void>();
+			blocker = sql.begin(async transaction => {
+				await transaction`SELECT name FROM storage_leases WHERE name = ${lease.name} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+
+			let attempt = storage.leases.renew(lease, 60_000).then(() => "renewed", error => error);
+			expect(await within(attempt, 10_000)).toMatchObject({ failure: "unavailable" });
+			release.resolve();
+			await blocker;
+			expect(await storage.leases.renew(lease, 60_000)).toMatchObject({
+				name: lease.name,
+				fencing: lease.fencing,
+			});
+		} finally {
+			release.resolve();
+			await blocker;
+			await storage.close();
+			await sql.close();
+		}
+	}, 20_000);
+
+	it("makes a takeover wait for a fenced commit already in flight", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let release = Promise.withResolvers<void>();
+		let blocker: Promise<void> | undefined;
+		try {
+			await storage.migrate();
+			let { channelId } = await userAndChannel(storage);
+			let name = contractId("expiring-writer");
+			let old = await storage.leases.acquire(name, "old-writer", 500);
+			let locked = Promise.withResolvers<void>();
+			blocker = sql.begin(async transaction => {
+				await transaction`SELECT id FROM channels WHERE id = ${channelId} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+			let commit = storage.collaboration.commit({
+				channelId,
+				lease: old!,
+				expectedRevision: 0,
+				operationId: contractId("in-flight-commit"),
+				epoch: "epoch-1",
+				update: new Uint8Array([1]),
+				events: [],
+				now: new Date(),
+			});
+			await lockWaiters(sql, 1);
+			await Bun.sleep(600);
+
+			let takeover = storage.leases.acquire(name, "new-writer", 60_000);
+			expect(await within(takeover, 500)).toBe("still waiting");
+			release.resolve();
+			await blocker;
+			expect(await commit).toMatchObject({ revision: 1, repeated: false });
+			expect(await takeover).toMatchObject({ owner: "new-writer", fencing: old!.fencing + 1 });
+		} finally {
+			release.resolve();
+			await blocker;
 			await storage.close();
 			await sql.close();
 		}

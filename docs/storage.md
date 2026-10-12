@@ -277,9 +277,18 @@ identity, progress, and history remain durable across application restart.
 ## Writer lease
 
 One database-wide `chopin:writer` lease permits one active application process.
-A second process refuses startup. The holder renews the lease while serving and
-drains and stops if renewal fails or its safety deadline passes. Adapter fencing
-prevents an expired holder from committing even before shutdown completes.
+A second process refuses startup. The holder renews the lease every 10 seconds
+on its own connection, outside the shared pool. A renewal attempt that takes
+more than about five seconds fails and is retried until the safety deadline,
+25 seconds after the last successful renewal was sent. The holder drains and
+stops if the lease is lost or the deadline passes, and logs when it last renewed
+and the last renewal error.
+
+Adapter fencing prevents an expired holder from committing even before shutdown
+completes. Each fenced write holds the lease row `FOR KEY SHARE` and a
+per-lease advisory lock, so writes for one lease still run one at a time. A
+takeover takes the row `FOR UPDATE` and waits for any write in flight, while
+renewal only extends `expires_at` and never waits for a write.
 
 This lease is why the current deployment model cannot perform a rolling
 application replacement against one database. See

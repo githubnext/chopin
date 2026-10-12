@@ -118,6 +118,7 @@ const EVICT_MS = 30_000;
 const LEASE_TTL_MS = 30_000;
 const LEASE_RENEW_MS = 10_000;
 const LEASE_SAFETY_MS = 5_000;
+const LEASE_RETRY_MS = 1_000;
 const SESSION_CLEANUP_MS = 5 * 60_000;
 const ACCESS_RECHECK_MS = 60_000;
 const RESEARCH_RECOVERY_RETRY_MS = 10_000;
@@ -129,7 +130,11 @@ let implementations: ReturnType<typeof registerImplementationRoutes> | undefined
 let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let leaseRenewal: ReturnType<typeof setInterval> | undefined;
 let leaseWatchdog: ReturnType<typeof setTimeout> | undefined;
+let leaseRetry: ReturnType<typeof setTimeout> | undefined;
 let renewingLease: Promise<void> | undefined;
+let leaseRenewedAt = 0;
+let leaseRenewalStartedAt: number | undefined;
+let leaseRenewalError: unknown;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
@@ -1361,6 +1366,8 @@ function drain(): Promise<void> {
 		}
 		await attempt(() => shutdownHarnesses());
 		if (leaseRenewal) clearInterval(leaseRenewal);
+		leaseRenewal = undefined;
+		if (leaseRetry) clearTimeout(leaseRetry);
 		if (leaseWatchdog) clearTimeout(leaseWatchdog);
 		for (let result of await Promise.allSettled([renewingLease])) {
 			if (result.status === "rejected") record(result.reason);
@@ -1384,31 +1391,57 @@ function signal(): void {
 
 function renewLease(): void {
 	if (!heldLease || renewingLease) return;
+	if (leaseRetry) clearTimeout(leaseRetry);
+	let started = Date.now();
+	leaseRenewalStartedAt = started;
 	renewingLease = storage.leases.renew(heldLease, LEASE_TTL_MS).then(renewed => {
 		if (renewed) {
 			heldLease = renewed;
-			armLeaseWatchdog();
+			leaseRenewalError = undefined;
+			armLeaseWatchdog(started);
 		} else {
 			console.error("chopin: lost the storage writer lease");
 			heldLease = undefined;
 			signal();
 		}
 	}, err => {
-		console.error("chopin: could not renew the storage writer lease -", err);
-		heldLease = undefined;
-		signal();
+		// A failed attempt is retried until the watchdog's deadline. Storage still refuses
+		// every fenced write once the lease itself has expired or been taken over.
+		leaseRenewalError = err;
+		let retrying = heldLease !== undefined && leaseRenewal !== undefined;
+		console.warn(
+			`chopin: could not renew the storage writer lease after ${Date.now() - started} ms${
+				retrying ? "; retrying" : ""
+			} -`,
+			err,
+		);
+		if (retrying) leaseRetry = setTimeout(renewLease, LEASE_RETRY_MS);
 	}).finally(() => {
 		renewingLease = undefined;
+		leaseRenewalStartedAt = undefined;
 	});
 }
 
-function armLeaseWatchdog(): void {
+/** Arms the deadline from when the renewing statement was sent, the earliest its expiry can start. */
+function armLeaseWatchdog(renewedAt: number): void {
 	if (leaseWatchdog) clearTimeout(leaseWatchdog);
+	leaseRenewedAt = renewedAt;
+	let deadline = renewedAt + LEASE_TTL_MS - LEASE_SAFETY_MS;
 	leaseWatchdog = setTimeout(() => {
-		console.error("chopin: storage writer lease was not renewed before its safety deadline");
+		let now = Date.now();
+		let inFlight = leaseRenewalStartedAt === undefined
+			? "none"
+			: `started ${now - leaseRenewalStartedAt} ms ago`;
+		console.error(
+			"chopin: storage writer lease was not renewed before its safety deadline"
+				+ ` (last renewal sent at ${new Date(leaseRenewedAt).toISOString()},`
+				+ ` ${now - leaseRenewedAt} ms ago; watchdog ran ${now - deadline} ms late;`
+				+ ` renewal in flight: ${inFlight}) - last renewal error:`,
+			leaseRenewalError ?? "none",
+		);
 		heldLease = undefined;
 		signal();
-	}, LEASE_TTL_MS - LEASE_SAFETY_MS);
+	}, Math.max(0, deadline - Date.now()));
 }
 
 function cleanSessions(): void {
@@ -2025,6 +2058,7 @@ try {
 		LEASE_TTL_MS,
 	);
 	if (!heldLease) throw new Error("another Chopin instance owns the database");
+	leaseRenewedAt = Date.now();
 	let reset = await storage.sessions.reset(new Date(), heldLease, LEASE_TTL_MS);
 	heldLease = reset.lease;
 	// Before any room opens, so no child Conversation is ever loaded or served.
@@ -2047,7 +2081,7 @@ try {
 	console.error(`chopin: storage writer lease could not start - ${reason}`);
 	process.exit(1);
 }
-armLeaseWatchdog();
+armLeaseWatchdog(leaseRenewedAt);
 leaseRenewal = setInterval(renewLease, LEASE_RENEW_MS);
 cleanSessions();
 sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
