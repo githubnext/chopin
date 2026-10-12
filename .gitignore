@@ -38,6 +38,8 @@ e2e/blob-report/
 # Generated
 **/dist/**
 *.tsbuildinfo
+# `bun build --compile` staging files left by an interrupted build.
+*.bun-build
 vite.config.ts.timestamp-*
 
 # Temporary local design jigs.

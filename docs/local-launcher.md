@@ -15,8 +15,13 @@ from its folder. [Bun](https://bun.sh) is required:
 mkdir -p ~/.chopin \
   && curl -fsSL https://your-chopin-instance.example/connector.js -o ~/.chopin/connector.js \
   && CHOPIN_URL=https://your-chopin-instance.example \
-    bun ~/.chopin/connector.js connect . -- copilot --acp --allow-all
+    bun --no-env-file --config=/dev/null \
+      ~/.chopin/connector.js connect . -- copilot --acp --allow-all
 ```
+
+`--no-env-file` and `--config=/dev/null` stop Bun from loading the project folder's
+`.env` and `bunfig.toml`: a checkout must not choose which server the connector pairs
+with or run code through a `preload`. The `chopin` binary below ignores both by itself.
 
 Open the printed pairing link, sign into Chopin, check that the page shows the
 confirmation code printed in your terminal, and select **Connect**. Leave

@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -30,6 +31,19 @@ let { version } = await Bun.file(join(import.meta.dir, "../package.json")).json(
 
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
+/** A committed checkout whose origin is github.com/octo-org/score. */
+async function checkout() {
+	let root = await mkdtemp(join(scratch, "checkout-"));
+	git(root, "init");
+	git(root, "config", "user.name", "Fixture");
+	git(root, "config", "user.email", "fixture@example.test");
+	git(root, "remote", "add", "origin", "https://github.com/octo-org/score.git");
+	await writeFile(join(root, "sample.txt"), "sample");
+	git(root, "add", ".");
+	git(root, "commit", "-m", "fixture");
+	return root;
+}
+
 test.skipIf(!binary)("the compiled binary prints its version and connector protocol", () => {
 	for (let flag of ["--version", "version"]) {
 		let result = Bun.spawnSync([binary!, flag], { stdout: "pipe", stderr: "pipe" });
@@ -45,15 +59,8 @@ test.skipIf(!binary)("the compiled binary prints its version and connector proto
 test.skipIf(!binary)(
 	"the compiled binary runs an investigation through its own stdio bridge",
 	async () => {
-		let root = await mkdtemp(join(scratch, "checkout-"));
+		let root = await checkout();
 		let state = await mkdtemp(join(scratch, "state-"));
-		git(root, "init");
-		git(root, "config", "user.name", "Fixture");
-		git(root, "config", "user.email", "fixture@example.test");
-		git(root, "remote", "add", "origin", "https://github.com/octo-org/score.git");
-		await writeFile(join(root, "sample.txt"), "sample");
-		git(root, "add", ".");
-		git(root, "commit", "-m", "fixture");
 		let input = {
 			id: crypto.randomUUID(),
 			documentId: crypto.randomUUID(),
@@ -156,6 +163,70 @@ test.skipIf(!binary)(
 		} finally {
 			connector.kill("SIGKILL");
 			await chopin.stop(true);
+		}
+	},
+	60_000,
+);
+
+test.skipIf(!binary)(
+	"the compiled binary ignores the .env and bunfig.toml of the checkout it runs in",
+	async () => {
+		let root = await checkout();
+		// Where the checkout's .env would send the pairing request.
+		let captured: string[] = [];
+		let capture = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(request) {
+				captured.push(`${request.method} ${new URL(request.url).pathname}`);
+				return new Response(null, { status: 500 });
+			},
+		});
+		// With CHOPIN_URL unset the binary uses its default origin; this proxy keeps that request
+		// on the machine and records where it was going.
+		let proxied: string[] = [];
+		let proxy = Bun.listen({
+			hostname: "127.0.0.1",
+			port: 0,
+			socket: {
+				data(socket, data) {
+					proxied.push(data.toString().split("\r\n")[0]!);
+					socket.end();
+				},
+			},
+		});
+		let marker = join(scratch, `preloaded-${crypto.randomUUID()}`);
+		await writeFile(join(root, ".env"), `CHOPIN_URL=http://127.0.0.1:${capture.port}\n`);
+		await writeFile(join(root, "bunfig.toml"), `preload = ["./preload.js"]\n`);
+		await writeFile(
+			join(root, "preload.js"),
+			`require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`,
+		);
+		let env: Record<string, string | undefined> = {
+			...process.env,
+			CHOPIN_CONNECTOR_STATE_DIR: await mkdtemp(join(scratch, "state-")),
+			HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`,
+		};
+		let proxies = ["HTTP_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"];
+		for (let name of ["CHOPIN_URL", "NO_PROXY", "no_proxy", ...proxies]) delete env[name];
+		let connector = Bun.spawn([binary!, "connect", ".", "--", "agent"], {
+			cwd: root,
+			env,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		try {
+			let code = await Promise.race([connector.exited, Bun.sleep(30_000).then(() => "timed out")]);
+			let output = await new Response(connector.stdout).text()
+				+ await new Response(connector.stderr).text();
+			expect(code, output).toBe(1);
+			expect(captured).toEqual([]);
+			expect(proxied).toEqual(["CONNECT chopin.githubnext.com:443 HTTP/1.1"]);
+			expect(existsSync(marker)).toBe(false);
+		} finally {
+			connector.kill("SIGKILL");
+			await capture.stop(true);
+			proxy.stop(true);
 		}
 	},
 	60_000,

@@ -158,8 +158,13 @@ function delay(ms: number, signal: AbortSignal) {
 	});
 }
 
-/** How people run this connector: the installed `chopin` binary, or the downloaded script. */
-const SELF = Bun.isStandaloneExecutable ? "chopin" : "bun connector.js";
+/**
+ * How people run this connector: the installed `chopin` binary, or the downloaded script, which
+ * keeps Bun from loading the .env and bunfig.toml of the folder it runs in.
+ */
+const SELF = Bun.isStandaloneExecutable
+	? "chopin"
+	: "bun --no-env-file --config=/dev/null connector.js";
 
 const USAGE = `Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] -- `
 	+ "agent [ACP arguments]";

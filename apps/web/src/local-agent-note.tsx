@@ -4,10 +4,14 @@ import { useEffect, useState } from "react";
 const TROUBLESHOOTING =
 	"https://github.com/githubnext/chopin/blob/main/docs/local-experiments.md#trouble-connecting";
 
-/** Download the connector this server serves and connect the current folder's checkout. */
+/**
+ * Download the connector this server serves and connect the current folder's checkout. Bun must
+ * not load that folder's .env (it could redirect pairing) or bunfig.toml (it could run code).
+ */
 export function connectorCommand(origin: string): string {
 	return `mkdir -p ~/.chopin && curl -fsSL ${origin}/connector.js -o ~/.chopin/connector.js`
-		+ ` && CHOPIN_URL=${origin} bun ~/.chopin/connector.js connect . -- copilot --acp --allow-all`;
+		+ ` && CHOPIN_URL=${origin} bun --no-env-file --config=/dev/null`
+		+ " ~/.chopin/connector.js connect . -- copilot --acp --allow-all";
 }
 
 /**

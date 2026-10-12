@@ -14,8 +14,13 @@ connect the checkout:
 mkdir -p ~/.chopin \
   && curl -fsSL https://your-chopin-instance.example/connector.js -o ~/.chopin/connector.js \
   && CHOPIN_URL=https://your-chopin-instance.example \
-    bun ~/.chopin/connector.js connect . -- copilot --acp --allow-all
+    bun --no-env-file --config=/dev/null \
+      ~/.chopin/connector.js connect . -- copilot --acp --allow-all
 ```
+
+`--no-env-file` and `--config=/dev/null` stop Bun from loading the project folder's
+`.env` and `bunfig.toml`: a checkout must not choose which server the connector pairs
+with or run code through a `preload`. The `chopin` binary below ignores both by itself.
 
 The Build view and an investigation card show this command with your server's
 origin filled in when no local agent is connected. `GET /connector.js` serves one
@@ -66,7 +71,7 @@ CHOPIN_URL=https://your-chopin-instance.example \
   chopin connect . -- copilot --acp --allow-all
 ```
 
-`chopin connect` pairs and runs work exactly as `bun connector.js connect` does.
+`chopin connect` pairs and runs work exactly as the `connector.js` command above does.
 `chopin --version` prints the CLI version and the connector protocol it speaks,
 and `chopin help` lists the commands. `build:binaries` without `--host` writes
 every target to `apps/connector/dist`: `chopin-linux-x64`, `chopin-linux-arm64`,

@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 
 /**
  * Compile the connector into standalone `chopin` executables that run without Bun installed.
@@ -35,27 +36,40 @@ export async function buildBinaries(
 ) {
 	let { version } = await Bun.file(join(PACKAGE, "package.json")).json() as { version: string };
 	let built: string[] = [];
-	for (let target of targets) {
-		let outfile = join(outdir, binaryName(target));
-		let result = Bun.spawnSync([
-			process.execPath,
-			"build",
-			join(PACKAGE, "src/main.ts"),
-			"--compile",
-			"--minify",
-			"--sourcemap",
-			`--target=${target}`,
-			"--define",
-			`CHOPIN_CLI_VERSION=${JSON.stringify(version)}`,
-			"--outfile",
-			outfile,
-		], { stdout: "pipe", stderr: "pipe" });
-		if (!result.success) {
-			throw new Error(`bun build --compile failed for ${target}:\n${result.stderr}`);
+	// `bun build --compile` stages each executable as `.<hash>.bun-build` in its working directory
+	// and leaves it there if interrupted, so it works in a scratch directory removed afterwards.
+	let scratch = await mkdtemp(join(tmpdir(), "chopin-build-"));
+	try {
+		for (let target of targets) {
+			let outfile = resolve(outdir, binaryName(target));
+			let result = Bun.spawnSync([
+				process.execPath,
+				"build",
+				join(PACKAGE, "src/main.ts"),
+				"--compile",
+				// An installed binary runs inside people's checkouts. Their .env must not choose its
+				// server, and their bunfig.toml (a `preload`, say) must not run code in it.
+				"--no-compile-autoload-dotenv",
+				"--no-compile-autoload-bunfig",
+				"--no-compile-autoload-tsconfig",
+				"--no-compile-autoload-package-json",
+				"--minify",
+				"--sourcemap",
+				`--target=${target}`,
+				"--define",
+				`CHOPIN_CLI_VERSION=${JSON.stringify(version)}`,
+				"--outfile",
+				outfile,
+			], { cwd: scratch, stdout: "pipe", stderr: "pipe" });
+			if (!result.success) {
+				throw new Error(`bun build --compile failed for ${target}:\n${result.stderr}`);
+			}
+			// The binary embeds its own source map; the copy beside it would only be shipped by mistake.
+			await rm(`${outfile}.map`, { force: true });
+			built.push(outfile);
 		}
-		// The binary embeds its own source map; the copy beside it would only be shipped by mistake.
-		await rm(`${outfile}.map`, { force: true });
-		built.push(outfile);
+	} finally {
+		await rm(scratch, { recursive: true, force: true });
 	}
 	return built;
 }
