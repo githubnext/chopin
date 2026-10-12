@@ -18,6 +18,7 @@ import {
 	arrange,
 	bringForward,
 	cycle,
+	lift,
 	movingCard,
 	PEEKS,
 	position,
@@ -112,32 +113,22 @@ type Frozen = {
 	zIndex: number;
 	/** Whether the card was mid-move, so its layer and opacity are not its slot's. */
 	moving: boolean;
-	background: string;
 };
 
-/** Cards repaint between paper and inset as they leave or reach the top. */
-const PAINT = "deck-paint";
 /** A move that holds the card on a layer outside its slot's. */
 const SHUFFLE = "deck-shuffle";
-
-function paint(element: HTMLElement): Animation[] {
-	let card = element.firstElementChild;
-	return card ? card.getAnimations().filter(animation => animation.id === PAINT) : [];
-}
 
 /** Freeze a card where it is so a new move starts from this frame, not its end. */
 function freeze(element: HTMLElement): Frozen {
 	let style = getComputedStyle(element);
-	let card = element.firstElementChild;
 	let animations = element.getAnimations();
 	let frozen = {
 		transform: style.transform,
 		opacity: Number(style.opacity),
 		zIndex: Number(style.zIndex) || 0,
 		moving: animations.some(animation => animation.id === SHUFFLE),
-		background: card ? getComputedStyle(card).backgroundColor : "",
 	};
-	for (let animation of [...animations, ...paint(element)]) animation.cancel();
+	for (let animation of animations) animation.cancel();
 	return frozen;
 }
 
@@ -186,9 +177,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 		let height: number | undefined;
 		for (let [id, element] of slots.current) {
 			if (still) {
-				for (let animation of [...element.getAnimations(), ...paint(element)]) {
-					animation.cancel();
-				}
+				for (let animation of element.getAnimations()) animation.cancel();
 			} else frozen.set(id, freeze(element));
 		}
 		let stageElement = stage.current;
@@ -229,17 +218,6 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 				],
 				{ id: from.moving ? SHUFFLE : "", duration: linger, easing },
 			);
-		}
-		for (let [id, element] of slots.current) {
-			let card = element.firstElementChild;
-			let was = frozen.get(id)?.background;
-			let now = card ? getComputedStyle(card).backgroundColor : "";
-			if (!card || !was || was === now) continue;
-			card.animate([{ backgroundColor: was }, { backgroundColor: now }], {
-				id: PAINT,
-				duration: linger,
-				easing,
-			});
 		}
 		// The top card sets the stage's height; ease between the two so prose
 		// below does not jump mid-shuffle.
@@ -346,9 +324,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 		let front = (event: Event) => {
 			let id = (event as CustomEvent<string>).detail;
 			for (let slotElement of slots.current.values()) {
-				for (let animation of [...slotElement.getAnimations(), ...paint(slotElement)]) {
-					animation.cancel();
-				}
+				for (let animation of slotElement.getAnimations()) animation.cancel();
 			}
 			for (let animation of stage.current?.getAnimations() ?? []) animation.cancel();
 			let next = bringForward(arrange(orderRef.current, itemsRef.current), id);
@@ -384,7 +360,6 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 		reorder(cycle(arrange(orderRef.current, itemsRef.current), direction), "cycle", direction);
 	};
 
-	let depth = Math.min(current.length - 1, PEEKS);
 	return (
 		<div
 			aria-label={label}
@@ -398,7 +373,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 				className="decision-deck-stage"
 				id={stageId}
 				ref={stage}
-				style={{ "--deck-depth": depth } as CSSProperties}
+				style={{ "--deck-lift": lift(current.length) } as CSSProperties}
 			>
 				{items.map(item => {
 					let at = current.indexOf(item.id);
@@ -410,6 +385,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 							aria-label={`${position(items, item.id)} of ${items.length}: ${item.label}`}
 							aria-roledescription="decision"
 							className="decision-deck-slot"
+							data-deck-depth={isTop ? undefined : Math.min(at, PEEKS)}
 							data-deck-settled={item.settled ? "" : undefined}
 							data-deck-slot={item.id}
 							data-deck-top={isTop ? "" : undefined}

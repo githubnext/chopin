@@ -368,6 +368,11 @@
 		0 7px 6px oklch(var(--shadow-color) / 9%),
 		0 15px 8px oklch(var(--shadow-color) / 5%),
 		0 26px 10px oklch(var(--shadow-color) / 1%);
+	/* Raised, plus an upward edge so a card stacked on another separates from it. */
+	--shadow-stacked:
+		0 -1px 1px oklch(var(--shadow-color) / 5%),
+		0 -1px 4px -1px oklch(var(--shadow-color) / 7%),
+		var(--shadow-raised);
 
 	/*
 	 * Leaves immediately and settles slowly, so a change reads as a response to

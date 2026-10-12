@@ -1,10 +1,10 @@
 /* packages/editor/src/deck.css */
 /*
  * A decision deck. The top card sits in flow and sets the height; the cards
- * behind are pinned to its box and lifted so only their header edges show.
+ * behind are pinned to its box and lifted so only a sliver of each shows, the
+ * nearest most.
  */
 .decision-deck {
-	--deck-peek: 1.875rem;
 	display: grid;
 	gap: 0.625rem;
 }
@@ -16,11 +16,13 @@
 	/* Slot z-indexes order cards; keep them from outranking editor overlays. */
 	isolation: isolate;
 	display: grid;
-	padding-block-start: calc(var(--deck-peek) * var(--deck-depth, 0));
+	padding-block-start: var(--deck-lift, 0);
 }
 
 .decision-deck-slot {
+	--deck-tint: var(--color-page);
 	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-stacked);
 	transform-origin: top center;
 }
 
@@ -30,21 +32,61 @@
 
 .decision-deck-slot:not([data-deck-top]) {
 	position: absolute;
-	inset: calc(var(--deck-peek) * var(--deck-depth, 0)) 0 0;
+	inset: var(--deck-lift, 0) 0 0;
 	overflow: hidden;
 	pointer-events: none;
 }
 
-/* Back cards read as paper behind the live one. */
-.decision-deck-slot:not([data-deck-top]) > * {
-	background: var(--color-inset);
+/*
+ * Cards behind are blank, opaque paper that mutes with depth. The cover fades
+ * the card's own content, never the card, so no card shows through another.
+ */
+.decision-deck-slot::after {
+	content: "";
+	position: absolute;
+	z-index: 2;
+	inset: 0;
+	border-radius: inherit;
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	background: var(--deck-tint);
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity var(--duration-linger) var(--ease-out),
+		background-color var(--duration-linger) var(--ease-out);
+}
+
+.decision-deck-slot:not([data-deck-top])::after {
+	opacity: 1;
+}
+
+.decision-deck-slot[data-deck-depth="1"] {
+	--deck-tint: var(--color-gray-50);
+}
+
+.decision-deck-slot[data-deck-depth="2"] {
+	--deck-tint: var(--color-inset);
+}
+
+.decision-deck-slot[data-deck-depth="3"] {
+	--deck-tint: color-mix(in oklch, var(--color-inset) 50%, var(--color-ground));
+}
+
+.decision-deck-slot[data-deck-depth="4"] {
+	--deck-tint: var(--color-ground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.decision-deck-slot::after {
+		transition: none;
+	}
 }
 
 /* A settled line has no card of its own; the slot gives it one. */
 .decision-deck-slot[data-deck-settled] {
 	padding: 0.625rem 0.75rem;
 	background: var(--color-inset);
-	box-shadow: var(--shadow-resting);
 }
 
 .decision-deck-nav {

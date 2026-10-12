@@ -4,6 +4,7 @@ import {
 	arrange,
 	bringForward,
 	cycle,
+	lift,
 	movingCard,
 	position,
 	settle,
@@ -61,14 +62,22 @@ describe("deck order", () => {
 		expect(position([open("a")], undefined)).toBe(0);
 	});
 
-	it("peeks two cards and hides deeper ones", () => {
+	it("peeks four cards, each showing less, and hides deeper ones", () => {
 		expect(slot(0)).toEqual({ transform: "translateY(0rem) scale(1)", zIndex: 100, opacity: 1 });
-		expect(slot(2).transform).toBe("translateY(-3.75rem) scale(0.92)");
-		expect(slot(3)).toEqual({
-			transform: "translateY(-3.75rem) scale(0.92)",
-			zIndex: 97,
+		expect(slot(1).transform).toBe("translateY(-0.625rem) scale(0.97)");
+		expect(slot(2).transform).toBe("translateY(-1rem) scale(0.945)");
+		expect(slot(4).transform).toBe("translateY(-1.4375rem) scale(0.91)");
+		expect(slot(5)).toEqual({
+			transform: "translateY(-1.4375rem) scale(0.91)",
+			zIndex: 95,
 			opacity: 0,
 		});
+	});
+
+	it("lifts the stage by the deepest card shown", () => {
+		expect(lift(1)).toBe("0rem");
+		expect(lift(2)).toBe("0.625rem");
+		expect(lift(9)).toBe("1.4375rem");
 	});
 });
 
@@ -76,7 +85,7 @@ describe("shuffle frames", () => {
 	it("swaps stacking at the midpoint so the card passes behind the deck", () => {
 		let frames = shuffleFrames(
 			"translateY(0rem) scale(1)",
-			"translateY(-3.75rem) scale(0.92)",
+			"translateY(-1rem) scale(0.945)",
 			"back",
 			3,
 			false,
@@ -85,7 +94,7 @@ describe("shuffle frames", () => {
 		expect(frames[1]!.zIndex).toBe(104);
 		expect(frames[2]!.zIndex).toBe(0);
 		expect(frames[1]!.transform).toBe("translate(4%, 72%) rotate(2.5deg) scale(0.97)");
-		expect(frames[3]!.transform).toBe("translateY(-3.75rem) scale(0.92)");
+		expect(frames[3]!.transform).toBe("translateY(-1rem) scale(0.945)");
 	});
 
 	it("brings a card from the back over the deck", () => {

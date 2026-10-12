@@ -7,10 +7,16 @@
 
 export type DeckEntry = { id: string; settled: boolean };
 
-/** How many cards behind the top show a header edge. */
-export const PEEKS = 2;
-const PEEK_REM = 1.875;
-const SHRINK = 0.04;
+/** How many cards behind the top show an edge. */
+export const PEEKS = 4;
+/** How far each place sits above the top card's edge, in rem: 10, 6, 4 then 3px more. */
+const LIFTS = [0, 0.625, 1, 1.25, 1.4375];
+const SCALES = [1, 0.97, 0.945, 0.925, 0.91];
+
+/** How far the deepest card shown sits above the top card, for a deck of `count`. */
+export function lift(count: number): string {
+	return `${LIFTS[Math.max(0, Math.min(count - 1, PEEKS))]}rem`;
+}
 
 /** Reconcile a reader's order with the current members, moving nothing that survived. */
 export function arrange(previous: readonly string[], items: readonly DeckEntry[]): string[] {
@@ -57,9 +63,8 @@ export function position(items: readonly DeckEntry[], id: string | undefined): n
 
 export function slot(depth: number): { transform: string; zIndex: number; opacity: number } {
 	let shown = Math.min(depth, PEEKS);
-	let scale = Math.round((1 - shown * SHRINK) * 100) / 100;
 	return {
-		transform: `translateY(${-shown * PEEK_REM}rem) scale(${scale})`,
+		transform: `translateY(${-LIFTS[shown]!}rem) scale(${SCALES[shown]})`,
 		zIndex: 100 - depth,
 		opacity: depth > PEEKS ? 0 : 1,
 	};
