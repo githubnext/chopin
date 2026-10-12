@@ -2,6 +2,7 @@
 @import "@chopin/visuals/theme.css";
 @import "./conversation-plan/source.css";
 @import "./build-view.css";
+@import "./local-agent-note.css";
 
 /*
  * Sibling packages that build on these utilities.

@@ -106,7 +106,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	// Another person's Run never borrows Ana's agent.
 	let peerProposal = card(peer, "Compare startup approaches");
 	await peerProposal.getByRole("button", { name: "Run", exact: true }).click();
-	await expect(peerProposal).toContainText("Start your local agent to run this:");
+	await expect(peerProposal).toContainText("Your local agent isn’t connected.");
 	await expect(proposal).toContainText("Ready to run");
 	await proposal.getByRole("button", { name: "Run", exact: true }).click();
 	await expect(proposal).toContainText("Waiting for your local agent");
@@ -209,7 +209,14 @@ test("a proposal typed from the slash menu appears inline on a phone", async ({ 
 	await expect(proposal).toContainText("Ready to run");
 	await expect(proposal.getByRole("combobox")).toHaveCount(0);
 	await proposal.getByRole("button", { name: "Run", exact: true }).click();
-	await expect(proposal).toContainText("Start your local agent to run this:");
+	await expect(proposal).toContainText(
+		"Your local agent isn’t connected. Run this in your project folder, then press Run again.",
+	);
+	await expect(proposal.locator("code")).toHaveText(
+		/curl -fsSL http:\/\/\S+\/connector\.js .* bun ~\/\.chopin\/connector\.js connect \. /,
+	);
+	await expect(proposal.getByRole("link", { name: "Trouble connecting?", exact: true }))
+		.toBeVisible();
 	await expect(page.getByRole("alert")).toHaveCount(0);
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 	await page.reload();

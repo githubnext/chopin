@@ -27,6 +27,7 @@ import {
 	implementationEndpoint,
 	implementationResponse as response,
 } from "./build-start";
+import { LocalAgentNote } from "./local-agent-note";
 
 import type { ReactNode } from "react";
 import type { BuildPlan } from "./build-plan-button";
@@ -308,12 +309,8 @@ export function BuildView(
 					{action}
 				</div>
 				{(build.needsAgent || snapshot?.localAgent === false && look.kind === "stopped") && (
-					<div className="build-note">
-						<p className="m-0">Start your local agent to build:</p>
-						<code className="build-command">
-							{`CHOPIN_URL=${location.origin} bun run connector connect /path/to/project -- copilot --acp`}
-						</code>
-						<p className="m-0">Open the link it prints, then press Retry.</p>
+					<div className="mt-3">
+						<LocalAgentNote action="Retry" />
 					</div>
 				)}
 				{phase.kind === "stopped" && returning && (

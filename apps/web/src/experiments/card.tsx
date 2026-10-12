@@ -2,10 +2,23 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { InvestigationCard, SidecarCard } from "@chopin/editor";
 import type { ExperimentStore } from "./store";
 import { ItemDecisions } from "./evidence";
+import { LocalAgentNote } from "../local-agent-note";
 import type { InvestigationChild, InvestigationState } from "@chopin/experiment/records";
 
 const ACTIVE: ReadonlySet<InvestigationState> = new Set(["queued", "running", "publishing"]);
 const SETTLED: ReadonlySet<InvestigationState> = new Set(["failed", "cancelled", "interrupted"]);
+
+/** Plain copy for a refused card action; unknown refusals keep the server's words. */
+const REFUSALS: Record<string, string> = {
+	"document-archived": "This document is archived.",
+	"document-locked": "This document is locked while it builds.",
+	"repository-forbidden": "You need push access to this repository.",
+	"invalid-state": "This investigation has already started or ended.",
+	"connection-forbidden": "That local agent isn’t yours to use.",
+	"connection-unavailable": "That local agent disconnected. Start it again, then retry.",
+	"workspace-busy": "Your local agent is busy. Try again when it finishes.",
+	"child-document": "Investigations start only in a top-level document.",
+};
 
 /** The freshest state this browser knows, from the list or a loaded record. */
 function latest(store: ExperimentStore, id: string) {
@@ -58,7 +71,7 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 		} catch (error) {
 			let message = String((error as Error).message);
 			if (message === "no-workspace") setNeedsAgent(true);
-			else setError(message);
+			else setError(REFUSALS[message] ?? message);
 		} finally {
 			setBusy(false);
 		}
@@ -126,13 +139,5 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 }
 
 function AgentHint() {
-	return (
-		<div className="grid gap-2 rounded-md bg-inset p-3 text-sm text-text-secondary">
-			<p className="m-0">Start your local agent to run this:</p>
-			<code className="block overflow-x-auto rounded-sm border border-edge bg-page p-2 font-mono text-xs text-text-primary">
-				{`CHOPIN_URL=${location.origin} bun run connector connect /path/to/project -- copilot --acp`}
-			</code>
-			<p className="m-0">Open the link it prints, then press Run again.</p>
-		</div>
-	);
+	return <LocalAgentNote action="Run" />;
 }

@@ -382,8 +382,18 @@ test("Build without a running local agent says how to start one", async ({ seed,
 	await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
 	await stopped.click();
 	let view = buildView(page);
-	await expect(view.getByText("Start your local agent to build:", { exact: true })).toBeVisible();
-	await expect(view.locator("code")).toContainText("bun run connector connect");
+	let note = view.getByText(
+		"Your local agent isn’t connected. Run this in your project folder, then press Retry again.",
+		{ exact: true },
+	);
+	await expect(note).toBeVisible();
+	await expect(view.locator("code")).toContainText(
+		"/connector.js -o ~/.chopin/connector.js && CHOPIN_URL=",
+	);
+	await view.getByRole("button", { name: "Copy", exact: true }).click();
+	await expect(view.getByRole("button", { name: /^(Copied|Select to copy)$/ })).toBeVisible();
+	await expect(view.getByRole("link", { name: "Trouble connecting?", exact: true }))
+		.toHaveAttribute("href", /docs\/local-experiments\.md#trouble-connecting$/);
 	await expect(view.getByRole("alert")).toHaveCount(0);
 });
 
