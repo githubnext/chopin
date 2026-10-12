@@ -76,6 +76,8 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 	}
 	let stoppable = ACTIVE.includes(state) && item?.input?.authorizer === userId;
 	let child = state === "completed" ? item?.child : undefined;
+	// A completed record loaded without a child has lost its document; say so plainly.
+	let orphaned = state === "completed" && !!item && item.revision >= (revision ?? 0) && !child;
 	return (
 		<InvestigationCard
 			brief={brief}
@@ -83,7 +85,13 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 			canEdit={canEdit && (stoppable || !locked)}
 			error={error}
 			id={id}
-			notice={needsAgent && <AgentHint />}
+			notice={needsAgent
+				? <AgentHint />
+				: orphaned && (
+					<p className="m-0 text-sm text-text-secondary">
+						Its published document is no longer available.
+					</p>
+				)}
 			onOpen={child && onOpen ? opener => onOpen(child, opener) : undefined}
 			onRemove={canEdit && state === "requested"
 				? () =>
