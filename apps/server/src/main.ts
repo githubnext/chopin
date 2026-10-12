@@ -446,6 +446,10 @@ function conversation(
 					};
 				},
 				async propose(request) {
+					// Like Research, investigations start only in a top-level document.
+					if (room.parentChannelId) {
+						throw new Error("Investigations start only in a top-level document, not a child.");
+					}
 					await experiments!.access(
 						await hostedAuth.sessions.forUser(request.userId),
 						room.id,
@@ -457,13 +461,32 @@ function conversation(
 						hash.slice(17, 20)
 					}-${hash.slice(20, 32)}`;
 					let value = await experiments!.service.create(room.id, request.userId, request.brief, id);
-					let placed = await placeInvestigationReference(room.id, value.id);
+					let placed: boolean | "locked";
+					try {
+						placed = await placeInvestigationReference(room.id, value.id);
+					} catch (error) {
+						if (!(error instanceof Service.ImplementationActiveError)) throw error;
+						placed = "locked";
+					}
+					if (placed === true) {
+						return {
+							id: value.id,
+							state: value.state,
+							message: "Its card is now in the document. A person selects Run on it to execute.",
+						};
+					}
+					// A record without a card has nowhere to run from, so withdraw it.
+					let withdrawn = await experiments!.service.stop(
+						value.id,
+						"cancelled",
+						"Its card could not be placed.",
+					).catch(() => value);
 					return {
 						id: value.id,
-						state: value.state,
-						message: placed
-							? "Its card is now in the document. A person selects Run on it to execute."
-							: "The document is closing, so its card was not placed.",
+						state: withdrawn.state,
+						message: placed === "locked"
+							? "A build locked the document before its card was placed, so the proposal was withdrawn. Propose it again after the build."
+							: "The document was not open to place its card, so the proposal was withdrawn. Propose it again while the document is open.",
 					};
 				},
 			}

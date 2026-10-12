@@ -164,8 +164,8 @@ browser does not use that listing as a product surface.
 Archive and restore lock and update the channel row and are no-ops when it is
 already in the requested state. Deletion also locks the row and refuses an
 active channel. A parent cannot be deleted while it still has a child, and a
-published child cannot be deleted while its research request retains that
-link. Deleting an eligible archived channel is one transaction: foreign
+published child cannot be deleted while its research request or investigation
+record retains that link. Deleting an eligible archived channel is one transaction: foreign
 keys cascade every channel-owned sidecar, snapshot, journal, event, operation,
 Planner state, implementation state, slug, background job and artifact, and
 research staging record. A saved navigation reference is set to null.

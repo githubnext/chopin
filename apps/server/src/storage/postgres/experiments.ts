@@ -98,6 +98,8 @@ export class PostgresExperimentStore implements ExperimentStore {
 			if (current.childId) return current;
 			if (Number(row.revision) !== expected) return false;
 			if (channel.archivedAt) throw conflict("experiment document archived");
+			// A child document never holds investigations, so it never publishes one either.
+			if (channel.parentChannelId) throw conflict("experiment document is a child");
 			let childId = deterministicChannelId(channel.repositoryId, `investigation:${value.id}`);
 			await this.createChannel(sql, {
 				id: childId,

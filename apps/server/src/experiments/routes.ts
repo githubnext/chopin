@@ -228,16 +228,21 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		});
 	});
 	route("POST", "/api/documents/:id/experiments", async (request, params) => {
-		let { session } = await access(await auth.sessions.authenticate(request), params.id, true);
+		let { session, channel } = await access(
+			await auth.sessions.authenticate(request),
+			params.id,
+			true,
+		);
+		// Like Research, investigations start only in a top-level document.
+		if (channel.parentChannelId) fail("child-document");
 		await mutationAllowed(params.id);
 		let input = z.object({
 			id: z.string().uuid(),
 			brief: z.string().min(1).max(limits.brief),
-			parentId: z.string().uuid().optional(),
 		}).strict().parse(await body(request));
 		return json(
 			publicInvestigation(
-				await service.create(params.id, session.user.id, input.brief, input.id, input.parentId),
+				await service.create(params.id, session.user.id, input.brief, input.id),
 			),
 		);
 	});
@@ -299,13 +304,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let value = await service.store.get(params.experiment);
 		if (!value || value.documentId !== params.id) fail("not-found");
 		// Withdrawing a ready card runs nothing, so any writer may; running work is its runner's.
-		if (
-			value.state !== "requested"
-			&& (value.input?.authorizer ?? value.requester) !== session.user.id
-		) fail("connection-forbidden");
-		return json(
-			publicInvestigation(await service.stop(value.id, "cancelled", "Cancelled by owner.")),
-		);
+		// Checked on the record being written: a stale "Ready to run" must not stop someone's run.
+		let stopped = await service.stop(value.id, "cancelled", "Cancelled by owner.", current => {
+			if (
+				current.state !== "requested"
+				&& (current.input?.authorizer ?? current.requester) !== session.user.id
+			) fail("connection-forbidden");
+		});
+		return json(publicInvestigation(stopped));
 	});
 
 	/** Re-authorize the connection's owner for its repository, and for a run's document. */

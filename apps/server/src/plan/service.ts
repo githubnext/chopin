@@ -1586,7 +1586,8 @@ async function commit(plan: Plan): Promise<void> {
 			if (type === "Investigation") {
 				let value = await plan.persistence.storage.experiments.get(id);
 				if (value && value.documentId !== plan.id) return false;
-				if (action === "add") return !!value;
+				// A child document holds no investigations of its own.
+				if (action === "add") return !!value && !plan.parentChannelId;
 				// Only stopped or failed work leaves the document: a ready card is withdrawn first,
 				// and running or completed work keeps its card.
 				return !value || ["failed", "cancelled", "interrupted"].includes(value.state);
@@ -1702,7 +1703,7 @@ export async function publish(
 	}
 }
 
-class ImplementationActiveError extends Error {
+export class ImplementationActiveError extends Error {
 	constructor() {
 		super("implementation is active");
 	}

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { performance } from "@chopin/experiment/fixtures";
 import { Experiments } from "../experiments/service";
-import { openedStorage, userAndChannel } from "./contract-support";
+import { contractId, openedStorage, userAndChannel } from "./contract-support";
 import type { StorageFactory } from "./contract-support";
 
 export function experimentContract(name: string, factory: StorageFactory) {
@@ -74,6 +74,42 @@ export function experimentContract(name: string, factory: StorageFactory) {
 					message: expect.stringContaining("published by an investigation"),
 				});
 				expect(await storage.channels.get(first.childId!)).toBeDefined();
+			} finally {
+				await storage.close();
+			}
+		});
+		test("refuses to publish an investigation held by a child document", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, repositoryId, userId, lease } = await userAndChannel(storage);
+				let childId = contractId("channel");
+				await storage.channels.create({
+					id: childId,
+					repositoryId,
+					repositoryOwner: "octo",
+					repositoryName: "repo",
+					parentChannelId: channelId,
+					title: "Child",
+					createdBy: userId,
+					now: new Date("2026-01-02T03:04:05.000Z"),
+				});
+				let service = new Experiments(storage.experiments, () => lease);
+				let created = await service.create(childId, userId, "Does caching help startup?");
+				let completed = {
+					...created,
+					revision: 1,
+					state: "completed" as const,
+					result: performance,
+				};
+				await expect(
+					storage.experiments.publish(
+						completed,
+						0,
+						{ title: "Nested", initial: undefined as never, now: new Date() },
+						lease,
+					),
+				).rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.experiments.get(created.id))?.childId).toBeUndefined();
 			} finally {
 				await storage.close();
 			}
