@@ -65,7 +65,7 @@ test("recovery finds a published callout in place and never inserts another", as
 		let id = crypto.randomUUID();
 		let callout = ulid();
 		let digest = room.digests(context.plan.document)[1];
-		let value = await context.service.create(context.plan.id, "U_test", "brief", id, undefined, {
+		let value = await context.service.create(context.plan.id, "U_test", "brief", id, {
 			digest,
 			passage: PASSAGE,
 			callout,
@@ -89,7 +89,7 @@ test("recovery finds a published callout in place and never inserts another", as
 
 		// A placing spike whose callout never landed is dismissed rather than inserted.
 		let lost = crypto.randomUUID();
-		await context.service.create(context.plan.id, "U_test", "brief", lost, undefined, {
+		await context.service.create(context.plan.id, "U_test", "brief", lost, {
 			digest,
 			passage: PASSAGE,
 			callout: ulid(),
