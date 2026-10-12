@@ -26,7 +26,7 @@ async function checkout() {
 }
 
 const MESSAGE = "chopin 0.0.1 speaks connector protocol 0, but this server needs protocol 1. "
-	+ "Run `chopin update` to install the newest chopin, then connect again.";
+	+ "Run `chopin update 0.1.3`, then connect again.";
 
 /**
  * `connect` against a fake Chopin that refuses the connector's version at `refuse`: the pairing

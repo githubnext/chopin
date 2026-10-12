@@ -92,7 +92,32 @@ when the [GitHub CLI](https://cli.github.com) is installed, runs
 `gh attestation verify <file> -R githubnext/chopin` to confirm the release
 workflow built it; `CHOPIN_VERIFY_ATTESTATION=0` skips that second check. When
 `~/.local/bin` is not on your `PATH`, the installer prints the line to add to
-your shell profile. Running the installer again updates `chopin`.
+your shell profile.
+
+`chopin update` replaces the installed `chopin` with the release your Chopin
+server recommends, which it reads from `CHOPIN_URL`'s
+`/api/connector/version`. When the server cannot be reached, it says so and
+installs the newest release instead. `chopin update 0.2.0` installs that
+release. It verifies the download as the installer does, with `checksums.txt`
+and, when `gh` is installed, `gh attestation verify`, then swaps the binary in
+place and prints the old and new versions. On Windows the running `chopin.exe`
+is renamed to `chopin.exe.old`, which the next `chopin` deletes. Updating to the
+version already installed does nothing.
+
+Moving to an older release than the installed one, whether named or
+recommended, needs `--allow-downgrade`; without it `chopin update` prints the
+command with the flag and changes nothing. On a terminal, `chopin update` asks
+before replacing itself unless you pass `--yes`. Without a terminal, as in a
+script, it goes ahead without asking: an upgrade needs no confirmation, and a
+downgrade has already been confirmed by `--allow-downgrade`. Running the
+installer again also updates `chopin`.
+
+The connector sends its version and connector protocol when it pairs and on
+every request. A server that does not speak that protocol refuses it with
+`connector-update-required` and says what to run: `chopin update <version>`
+with the release the server recommends, or downloading `connector.js` again for
+the script. The connector prints that message and exits instead of retrying. A
+`connector.js` from before this check sends no version and is still accepted.
 
 To build the binaries from a Chopin checkout instead, run
 `bun run --cwd apps/connector build:binaries --host` for this machine, or

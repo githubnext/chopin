@@ -112,7 +112,54 @@ export async function removeReplaced() {
 	}
 }
 
-export async function update(requested: string | undefined, log = console.log) {
+/** The newest CLI release that is neither a draft nor a prerelease. */
+async function newest(api: string) {
+	let releases = await (await download(`${api}?per_page=100`)).json().catch(() => []) as Array<
+		{ tag_name?: unknown; draft?: unknown; prerelease?: unknown }
+	>;
+	let latest = Array.isArray(releases)
+		? releases.find(item =>
+			typeof item.tag_name === "string" && item.tag_name.startsWith("cli-v") && !item.draft
+			&& !item.prerelease
+		)
+		: undefined;
+	if (!latest) fail("no chopin CLI release (a cli-v* tag) was found.");
+	return releaseVersion(latest.tag_name as string);
+}
+
+/** The release a Chopin server recommends to its connectors, if it can be asked. */
+async function recommended(server: string) {
+	try {
+		let body = await (await download(`${server}/api/connector/version`)).json() as {
+			version?: unknown;
+		};
+		if (typeof body.version !== "string") return { reason: "it recommends none" };
+		return { version: releaseVersion(body.version) };
+	} catch (error) {
+		return {
+			reason: (error instanceof Error ? error.message : String(error)).replace(
+				/^chopin update: /,
+				"",
+			),
+		};
+	}
+}
+
+async function confirm(question: string) {
+	process.stdout.write(`${question} [y/N] `);
+	for await (let line of console) return /^y(es)?$/i.test(line.trim());
+	return false;
+}
+
+/**
+ * Install `options.version`, or else the release the Chopin server at `server` recommends, or
+ * else the newest. An older release needs `allowDowngrade`; on a terminal, it asks first unless
+ * `yes`. Without a terminal it goes ahead, since only an upgrade or an allowed downgrade gets here.
+ */
+export async function update(
+	options: { version?: string; allowDowngrade?: boolean; yes?: boolean; server: string },
+	log = console.log,
+) {
 	if (!Bun.isStandaloneExecutable) {
 		fail(
 			"this connector is running as a script, not an installed chopin. "
@@ -132,24 +179,32 @@ export async function update(requested: string | undefined, log = console.log) {
 	}
 	let target = process.execPath;
 	let asset = assetName();
-	let version = requested === undefined ? undefined : releaseVersion(requested);
+	let version = options.version === undefined ? undefined : releaseVersion(options.version);
 	if (!version) {
-		let releases = await (await download(`${api}?per_page=100`)).json().catch(() => []) as Array<
-			{ tag_name?: unknown; draft?: unknown; prerelease?: unknown }
-		>;
-		let latest = Array.isArray(releases)
-			? releases.find(item =>
-				typeof item.tag_name === "string" && item.tag_name.startsWith("cli-v") && !item.draft
-				&& !item.prerelease
-			)
-			: undefined;
-		if (!latest) fail("no chopin CLI release (a cli-v* tag) was found.");
-		version = releaseVersion(latest.tag_name as string);
+		let wanted = await recommended(options.server);
+		version = wanted.version;
+		if (!version) {
+			version = await newest(api);
+			log(
+				`Could not ask ${options.server} which chopin to install (${wanted.reason}), `
+					+ `so installing the newest release, ${version}, instead.`,
+			);
+		}
 	}
 	if (version === VERSION) {
 		log(`chopin ${VERSION} is already installed at ${target}.`);
 		return;
 	}
+	if (Bun.semver.order(version, VERSION) < 0 && !options.allowDowngrade) {
+		fail(
+			`${version} is older than the installed chopin ${VERSION}. To install it anyway, run: `
+				+ `chopin update ${version} --allow-downgrade`,
+		);
+	}
+	if (
+		process.stdin.isTTY && !options.yes
+		&& !await confirm(`Update chopin from ${VERSION} to ${version}?`)
+	) fail("not updated.");
 
 	let release = `${base}/cli-v${version}`;
 	log(`Downloading chopin ${version} (${asset}) from ${release}`);

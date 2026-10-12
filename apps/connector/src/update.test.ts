@@ -48,9 +48,11 @@ async function installed() {
 		untouched: async () =>
 			sha256(await Bun.file(chopin).bytes()) === original
 			&& (await readdir(bin)).join() === "chopin",
+		/** Without a terminal: stdin is not a TTY. */
 		async update(env: Record<string, string>, ...args: string[]) {
 			let child = Bun.spawn([chopin, "update", ...args], {
 				env: { HOME: home, PATH: `${shims}:${process.env.PATH}`, ...env },
+				stdin: "ignore",
 				stdout: "pipe",
 				stderr: "pipe",
 			});
@@ -61,66 +63,150 @@ async function installed() {
 			]);
 			return { code, stdout, stderr };
 		},
+		/** On a terminal, answering a confirmation prompt with `answer` if one is shown. */
+		async interactive(env: Record<string, string>, answer: string, ...args: string[]) {
+			let output = "";
+			let prompted = Promise.withResolvers<void>();
+			let child = Bun.spawn([chopin, "update", ...args], {
+				env: { HOME: home, PATH: `${shims}:${process.env.PATH}`, ...env },
+				terminal: {
+					cols: 200,
+					rows: 24,
+					data(_terminal, data) {
+						output += new TextDecoder().decode(data);
+						if (output.includes("[y/N]")) prompted.resolve();
+					},
+				},
+			});
+			await Promise.race([prompted.promise, child.exited]);
+			child.terminal!.write(`${answer}\r`);
+			let code = await child.exited;
+			child.terminal!.close();
+			return { code, output };
+		},
 	};
 }
 
+/** A Chopin server that recommends `version` to connectors. */
+function chopinServer(recommended: string | null) {
+	let requests: string[] = [];
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request) {
+			requests.push(new URL(request.url).pathname);
+			return Response.json({ protocol: { min: 1, max: 1 }, version: recommended });
+		},
+	});
+	return {
+		requests,
+		url: `http://127.0.0.1:${server.port}`,
+		[Symbol.dispose]: () => void server.stop(true),
+	};
+}
+
+/** Releases 0.0.1, 98.0.0 and 99.0.0, the newest, on either side of the running version. */
+function releases() {
+	return fakeRelease({
+		"0.0.1": assets(asset, fakeChopin("0.0.1")),
+		"98.0.0": assets(asset, fakeChopin("98.0.0")),
+		"99.0.0": assets(asset, fakeChopin("99.0.0")),
+	});
+}
+
 describe.skipIf(!binary)("chopin update", () => {
-	test("replaces itself with the newest release after verifying it", async () => {
-		using release = fakeRelease({
-			"0.0.1": assets(asset, fakeChopin("0.0.1")),
-			"99.0.0": assets(asset, fakeChopin("99.0.0")),
-		});
+	test("installs the release the Chopin server recommends after verifying it", async () => {
+		using release = releases();
+		using chopin = chopinServer("98.0.0");
 		let at = await installed();
-		let result = await at.update(release.env);
+		// Without a terminal, an upgrade needs no --yes.
+		let result = await at.update({ ...release.env, CHOPIN_URL: chopin.url });
 		expect(result.stderr).toBe("");
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain(`Updated chopin from ${version} to 99.0.0 at ${at.chopin}`);
-		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("99.0.0"));
+		expect(result.stdout).toContain(`Updated chopin from ${version} to 98.0.0 at ${at.chopin}`);
+		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("98.0.0"));
 		expect(await readdir(at.bin)).toEqual(["chopin"]);
+		expect(chopin.requests).toEqual(["/api/connector/version"]);
+		expect(release.requests).not.toContain("/api/releases");
 		expect(await at.calls()).toMatch(
 			new RegExp(`^gh attestation verify \\S+/${asset} -R githubnext/chopin$`),
 		);
+	});
+
+	test("installs the newest release when the Chopin server cannot be reached", async () => {
+		using release = releases();
+		let closed = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
+		let url = `http://127.0.0.1:${closed.port}`;
+		await closed.stop(true);
+		let at = await installed();
+		let result = await at.update({ ...release.env, CHOPIN_URL: url });
+		expect(result.stderr).toBe("");
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain(`Could not ask ${url} which chopin to install`);
+		expect(result.stdout).toContain("installing the newest release, 99.0.0, instead");
+		expect(result.stdout).toContain(`Updated chopin from ${version} to 99.0.0`);
+		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("99.0.0"));
+	});
+
+	test("moves to an older release only with --allow-downgrade", async () => {
+		using release = releases();
+		using chopin = chopinServer("0.0.1");
+		let env = { ...release.env, CHOPIN_URL: chopin.url, CHOPIN_VERIFY_ATTESTATION: "0" };
+		let at = await installed();
+		// Recommended by the server or named, the refusal gives the command that goes ahead.
+		for (let args of [[], ["cli-v0.0.1"]]) {
+			let refused = await at.update(env, ...args);
+			expect(refused.code).toBe(1);
+			expect(refused.stderr).toContain(
+				`0.0.1 is older than the installed chopin ${version}. To install it anyway, run: `
+					+ "chopin update 0.0.1 --allow-downgrade",
+			);
+			expect(await at.untouched()).toBe(true);
+		}
+		expect(release.requests).toEqual([]);
+
+		let result = await at.update(env, "--allow-downgrade");
+		expect(result.stderr).toBe("");
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain(`Updated chopin from ${version} to 0.0.1`);
+		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("0.0.1"));
+	});
+
+	test("installs a named release over the server's recommendation", async () => {
+		using release = releases();
+		using chopin = chopinServer("98.0.0");
+		let at = await installed();
+		let result = await at.update({ ...release.env, CHOPIN_URL: chopin.url }, "99.0.0");
+		expect(result.code).toBe(0);
+		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("99.0.0"));
+		expect(chopin.requests).toEqual([]);
 	});
 
 	test("refuses a release whose checksum does not match, leaving itself untouched", async () => {
 		using release = fakeRelease({
 			"99.0.0": assets(asset, fakeChopin("99.0.0"), sha256("something else")),
 		});
+		using chopin = chopinServer("99.0.0");
 		let at = await installed();
-		let result = await at.update(release.env);
+		let result = await at.update({ ...release.env, CHOPIN_URL: chopin.url });
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("Refusing to install it.");
 		expect(await at.untouched()).toBe(true);
 		expect(await at.calls()).toBe("");
 	});
 
-	test("installs an older release when it is named", async () => {
-		using release = fakeRelease({
-			"0.0.1": assets(asset, fakeChopin("0.0.1")),
-			"99.0.0": assets(asset, fakeChopin("99.0.0")),
-		});
-		let at = await installed();
-		let result = await at.update({ ...release.env, CHOPIN_VERIFY_ATTESTATION: "0" }, "cli-v0.0.1");
-		expect(result.stderr).toBe("");
-		expect(result.code).toBe(0);
-		expect(result.stdout).toContain(`Updated chopin from ${version} to 0.0.1`);
-		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("0.0.1"));
-		expect(release.requests).not.toContain("/api/releases");
-		expect(await at.calls()).toBe("");
-	});
-
 	test("does nothing when the release is the version already running", async () => {
 		using release = fakeRelease({ [version]: assets(asset, fakeChopin(version)) });
+		using chopin = chopinServer(version);
 		let at = await installed();
 		for (let args of [[version], []]) {
-			let result = await at.update(release.env, ...args);
+			let result = await at.update({ ...release.env, CHOPIN_URL: chopin.url }, ...args);
 			expect(result.stderr).toBe("");
 			expect(result.code).toBe(0);
 			expect(result.stdout).toContain(`chopin ${version} is already installed`);
 		}
 		expect(await at.untouched()).toBe(true);
-		// Only the list of releases was read; nothing was downloaded.
-		expect(release.requests).toEqual(["/api/releases"]);
+		expect(release.requests).toEqual([]);
 	});
 
 	test("refuses a download redirected to plain HTTP", async () => {
@@ -129,11 +215,34 @@ describe.skipIf(!binary)("chopin update", () => {
 			"99.0.0": { ...assets(asset, binary), [asset]: { redirect: "/cli-v99.0.1/" + asset } },
 			"99.0.1": { [asset]: binary },
 		});
+		using chopin = chopinServer("99.0.0");
 		let at = await installed();
-		let result = await at.update(release.env, "99.0.0");
+		let result = await at.update({ ...release.env, CHOPIN_URL: chopin.url });
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("which is not HTTPS");
 		expect(release.requests).not.toContain(`/cli-v99.0.1/${asset}`);
 		expect(await at.untouched()).toBe(true);
+	});
+
+	test("asks before replacing itself on a terminal, unless given --yes", async () => {
+		using release = releases();
+		using chopin = chopinServer("99.0.0");
+		let env = { ...release.env, CHOPIN_URL: chopin.url, CHOPIN_VERIFY_ATTESTATION: "0" };
+		let at = await installed();
+		let declined = await at.interactive(env, "n");
+		expect(declined.output).toContain(`Update chopin from ${version} to 99.0.0? [y/N]`);
+		expect(declined.code).toBe(1);
+		expect(await at.untouched()).toBe(true);
+		expect(release.requests).toEqual([]);
+
+		let accepted = await at.interactive(env, "y");
+		expect(accepted.code).toBe(0);
+		expect(accepted.output).toContain(`Updated chopin from ${version} to 99.0.0`);
+
+		let fresh = await installed();
+		let yes = await fresh.interactive(env, "", "--yes");
+		expect(yes.output).not.toContain("[y/N]");
+		expect(yes.code).toBe(0);
+		expect(await readFile(fresh.chopin, "utf8")).toBe(fakeChopin("99.0.0"));
 	});
 });

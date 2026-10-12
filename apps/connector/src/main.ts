@@ -8,8 +8,11 @@ import { permissionMemory } from "./permission";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
 import { removeReplaced, update } from "./update";
+import { parseArgs } from "./args";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { lockWorkspace, stateDirectory, workspace } from "./workspace";
+
+const DEFAULT_URL = "https://chopin.githubnext.com";
 
 function origin(value: string) {
 	let url = new URL(value);
@@ -58,7 +61,7 @@ async function connect(args: string[]) {
 	) {
 		throw new Error(USAGE);
 	}
-	let url = origin(process.env.CHOPIN_URL ?? "https://chopin.githubnext.com");
+	let url = origin(process.env.CHOPIN_URL ?? DEFAULT_URL);
 	let info = await workspace(resolve(args[0] && args[0] !== "--" ? args[0] : "."));
 	let directory = stateDirectory();
 	let release = await lockWorkspace(info.root, directory);
@@ -178,12 +181,14 @@ const HELP = [
 	"Commands:",
 	"  connect [checkout] -- <agent> [ACP arguments]",
 	"      Pair a checkout with Chopin and run the work you start there with a local ACP agent.",
-	"  update [version]",
-	"      Replace this chopin with a release, by default the newest, after verifying it.",
+	"  update [version] [--allow-downgrade] [--yes]",
+	"      Replace this chopin with a verified release: by default the one your Chopin instance",
+	"      recommends, or else the newest. An older release needs --allow-downgrade; --yes skips",
+	"      the question asked on a terminal.",
 	"  version    Print the CLI version and the connector protocol it speaks.",
 	"  help       Show this help.",
 	"",
-	"CHOPIN_URL names your Chopin instance (default https://chopin.githubnext.com).",
+	`CHOPIN_URL names your Chopin instance (default ${DEFAULT_URL}).`,
 ].join("\n");
 
 if (import.meta.main) {
@@ -192,8 +197,16 @@ if (import.meta.main) {
 	try {
 		if (mode === "bridge") await bridge();
 		else if (mode === "update") {
-			if (args.length > 1) throw new Error(`Usage: ${SELF} update [version]`);
-			await update(args[0]);
+			let parsed = parseArgs(args, { flags: ["allow-downgrade", "yes"] });
+			if (parsed.positional.length > 1 || parsed.rest) {
+				throw new Error(`Usage: ${SELF} update [version] [--allow-downgrade] [--yes]`);
+			}
+			await update({
+				version: parsed.positional[0],
+				allowDowngrade: parsed.flags.has("allow-downgrade"),
+				yes: parsed.flags.has("yes"),
+				server: origin(process.env.CHOPIN_URL ?? DEFAULT_URL),
+			});
 		} else if (mode === "connect") await connect(args);
 		else if (mode === "version" || mode === "--version" || mode === "-v") {
 			console.log(`chopin ${VERSION} (connector protocol ${CONNECTOR_PROTOCOL})`);
