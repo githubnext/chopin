@@ -264,6 +264,22 @@ lock remains to prevent
 uncertain duplicate execution; confirm no connector is running before removing the
 lock identified by the error message.
 
+A network drop or a server restart does not end the connector. It reconnects
+at once when a working connection fails, then retries after a random delay
+below 1, 2, 4 … seconds, at most 5 minutes apart, and starts that ladder over
+once a connection has stayed up for a minute. The terminal says when the
+connection is lost, announces the first few retries, and says **Reconnected.**
+when it is back. It stops instead of retrying when Chopin refuses the machine,
+requires a newer connector, or the owner has lost push access to the repository.
+
+A running agent keeps working through a drop. Its heartbeat retries on the same
+backoff, and its session and completion reports wait in memory, in order, until
+Chopin answers. The connector stops the agent only when Chopin says the run is
+over, or after 10 minutes without reaching Chopin. Chopin itself still ends a
+run whose heartbeat it has not heard for about a minute, so after a longer drop
+the agent stops as soon as the connector is back in contact. Permission prompts
+are only ever answered in the connector terminal; a drop never answers one.
+
 ## Trouble connecting
 
 **How pairing works.** An unpaired connector prints a link and an
@@ -274,8 +290,9 @@ checkout's repository, commit and branch with that token. One connector process
 serves one checkout, and its connection serves every document in that
 repository. The server forgets a connection 90 seconds after it last heard from
 it; a running connector renews it continuously. Connections live in the server's
-memory, but the machine does not: after a server restart or a deploy, start
-`connect` again and it reconnects without pairing.
+memory, but the machine does not: after a server restart or a deploy, a running
+connector registers its checkout again with the machine token and carries on
+without pairing, and a stopped one does the same when you start `connect` again.
 
 **"This machine is no longer paired" (`machine-revoked`) or "GitHub no longer
 accepts this machine's authorization" (`machine-reauthorize`).** The machine was
