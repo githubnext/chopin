@@ -13,7 +13,8 @@ import { renderImage } from "./image";
 import { renderQuestionnaire } from "./questionnaire";
 import { renderResearch } from "./research";
 import { renderExperiment } from "./experiment";
-import type { ExperimentNode } from "@chopin/dialect";
+import { renderInvestigation } from "./investigation";
+import type { ExperimentNode, InvestigationNode } from "@chopin/dialect";
 
 import type { DecisionNode, ImageNode, QuestionnaireNode, ResearchNode } from "@chopin/dialect";
 
@@ -29,6 +30,7 @@ export function register(): void {
 	setRenderer<DecisionNode>("plan-decision", renderDecision);
 	setRenderer<ResearchNode>("plan-research", renderResearch);
 	setRenderer<ExperimentNode>("plan-experiment", renderExperiment);
+	setRenderer<InvestigationNode>("plan-investigation", renderInvestigation);
 }
 
 export { CalloutPlugin } from "./callout";
@@ -38,6 +40,8 @@ export { DecisionDeletionPlugin } from "./decision-deletion";
 export { DecoratorSelectionPlugin } from "./decorator-selection";
 export { DiscardedNavigationPlugin } from "./discarded-navigation";
 export { EnterPlugin } from "./enter";
+export { InvestigationCard } from "./investigation";
+export type { InvestigationCardProps } from "./investigation";
 export { QuestionnaireCard } from "./questionnaire";
 export type { QuestionnaireCardProps } from "./questionnaire";
 export { PreviewPlugin } from "./render-blocks";

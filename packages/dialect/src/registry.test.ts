@@ -146,6 +146,8 @@ Right side.
 
 <Research id="8f4d193b-2018-4977-b404-0092bb911676" />
 
+<Investigation id="2b7e0c4a-5f1d-4e2a-9c3b-7d8e9f0a1b2c" />
+
 <Experiment id="01K0N4W3B7P27CBAEC7A8C8WEH" experiment="investigation-one" view="table" />
 
 <Questionnaire id="01K0N4W3B7P27CBAEC7A8C8WEE">
@@ -189,6 +191,7 @@ describe("markdown extensions", () => {
 		let output = exportPlan(editor, { registry: reg });
 		expect(output).toContain("<Columns");
 		expect(output).toContain("<Questionnaire");
+		expect(output).toContain('<Investigation id="2b7e0c4a-5f1d-4e2a-9c3b-7d8e9f0a1b2c" />');
 		expect(validate(parse(output))).toEqual({ ok: true });
 		expect(errors).toEqual([]);
 	});

@@ -9,7 +9,7 @@ import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection } from "lexical";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
@@ -19,8 +19,6 @@ import { ResearchComposerSurface } from "./research";
 import { ResearchLaunchRegistration } from "./research-launch";
 import { SlashMenu } from "./slash";
 import { registerTaskRule } from "./task-rule";
-
-const RESEARCH_ACTIONS = new Set(["research"]);
 
 /**
  * Reads what it needs from the realm so the surfaces below it stay ordinary
@@ -37,6 +35,12 @@ export function Toolbar() {
 	useEffect(() => (disabled ? undefined : registerTaskRule(editor)), [editor, disabled]);
 
 	let threads = options.threads;
+	let research = !!(options.research && options.researchDrafts);
+	let investigations = !!(options.investigations && options.investigationDrafts);
+	let actions = useMemo(
+		() => new Set([...(research ? ["research"] : []), ...(investigations ? ["investigate"] : [])]),
+		[research, investigations],
+	);
 
 	// Commenting is offered only when there is somewhere for the comment to
 	// go, so the button cannot appear on a surface with no sidecar.
@@ -90,16 +94,24 @@ export function Toolbar() {
 		<>
 			<SelectionBubble disabled={disabled} hidden={linking} onComment={comment} />
 			<LinkSurface binding={options.binding} disabled={disabled} onEditing={setLinking} />
-			<SlashMenu
-				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}
-				disabled={disabled}
-			/>
+			<SlashMenu actions={actions} disabled={disabled} />
 			{options.research && options.researchDrafts && (
 				<ResearchComposerSurface
 					binding={options.binding}
+					cancel={id => options.research!.cancel(id)}
+					create={(brief, id) => options.research!.create(brief, id)}
 					disabled={disabled}
 					drafts={options.researchDrafts}
-					research={options.research}
+				/>
+			)}
+			{options.investigations && options.investigationDrafts && (
+				<ResearchComposerSurface
+					binding={options.binding}
+					cancel={id => options.investigations!.cancel(id)}
+					create={(brief, id) => options.investigations!.create(brief, id)}
+					disabled={disabled}
+					drafts={options.investigationDrafts}
+					kind="investigation"
 				/>
 			)}
 			{options.research && options.researchDrafts && options.researchLauncher && (

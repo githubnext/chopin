@@ -239,7 +239,7 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 	};
 }
 
-const PROTECTED_PROJECTIONS = new Set(["Questionnaire", "Decision", "Research"]);
+const PROTECTED_PROJECTIONS = new Set(["Questionnaire", "Decision", "Research", "Investigation"]);
 
 export function replace(plan: Plan, revision: number, nextSource: string): Result {
 	if (revision !== plan.revision) {
@@ -725,6 +725,7 @@ const RESERVED_COMPONENTS = new Set([
 	"Decision",
 	"Note",
 	"Research",
+	"Investigation",
 ]);
 
 /** Parse an operation's source as a run of top-level blocks. */
@@ -764,6 +765,8 @@ function identify(root: Root): string | undefined {
 				if (RESERVED_COMPONENTS.has(spec.name)) {
 					refused = spec.name === "Research"
 						? "`Research` is created by starting inline research, not by editing the plan."
+						: spec.name === "Investigation"
+						? "`Investigation` is created by proposing an investigation, not by editing the plan."
 						: spec.name === "Decision" || spec.name === "Note"
 						? `\`${spec.name}\` is written when the room accepts a comment, not by editing the plan.`
 						: `\`${spec.name}\` is created by asking a question, not by editing the plan.`;
@@ -817,7 +820,7 @@ function protects(index: number): string {
 }
 
 function protectsResearch(index: number): string {
-	return `block ${index} is inline research owned by its request record; `
+	return `block ${index} is inline research or an investigation owned by its record; `
 		+ "it cannot be edited, moved, or removed.";
 }
 
@@ -844,7 +847,9 @@ function decision(node: RootContent): boolean {
 }
 
 function research(node: Nodes): boolean {
-	if (node.type === "mdxJsxFlowElement" && node.name === "Research") return true;
+	if (
+		node.type === "mdxJsxFlowElement" && (node.name === "Research" || node.name === "Investigation")
+	) return true;
 	return "children" in node && node.children.some(child => research(child as Nodes));
 }
 

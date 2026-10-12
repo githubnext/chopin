@@ -47,6 +47,11 @@ import {
 } from "./nodes/questionnaire";
 import { ResearchNode } from "./nodes/research";
 import {
+	InvestigationNode,
+	LexicalInvestigationVisitor,
+	MdastInvestigationVisitor,
+} from "./nodes/investigation";
+import {
 	ExperimentNode,
 	LexicalExperimentVisitor,
 	MdastExperimentVisitor,
@@ -185,6 +190,17 @@ export const researchPlugin = realmPlugin({
 	},
 });
 
+/** Atomic reference to a local investigation's record. */
+export const investigationPlugin = realmPlugin({
+	init(realm) {
+		realm.pubIn({
+			[addLexicalNode$]: [InvestigationNode],
+			[addImportVisitor$]: MdastInvestigationVisitor,
+			[addExportVisitor$]: LexicalInvestigationVisitor,
+		});
+	},
+});
+
 export const experimentPlugin = realmPlugin({
 	init(realm) {
 		realm.pubIn({
@@ -280,6 +296,7 @@ export function plugins({ core: withCore = true } = {}): RealmPlugin[] {
 		questionnairePlugin(),
 		decisionPlugin(),
 		researchPlugin(),
+		investigationPlugin(),
 		experimentPlugin(),
 		underlinePlugin(),
 		markdownPlugin(),
