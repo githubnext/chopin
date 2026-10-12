@@ -967,6 +967,10 @@ export class PostgresStorage implements StorageAdapter {
 				if (publication) {
 					throw conflict(`channel ${id} is still published by a research workspace`);
 				}
+				let [investigation] = await transaction<{ id: string }[]>`
+					SELECT id FROM experiments WHERE child_channel_id = ${id} LIMIT 1
+				`;
+				if (investigation) throw conflict(`channel ${id} is still published by an investigation`);
 				let deleted = await transaction<{ id: string }[]>`
 					DELETE FROM channels WHERE id = ${id} RETURNING id
 				`;

@@ -29,6 +29,9 @@ export class MemoryExperimentStore implements ExperimentStore {
 		let value = [...this.#records.values()].find(item => item.childId === childId);
 		return value && this.options.exists(value.documentId) ? structuredClone(value) : undefined;
 	}
+	referencesChannel(channelId: string): boolean {
+		return [...this.#records.values()].some(value => value.childId === channelId);
+	}
 	async active() {
 		return [...this.#records.values()].filter(value =>
 			this.options.exists(value.documentId)

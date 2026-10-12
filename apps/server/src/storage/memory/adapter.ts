@@ -560,6 +560,9 @@ export class MemoryStorage implements StorageAdapter {
 		if (this.#research.referencesChannel(id)) {
 			throw conflict(`channel ${id} is still published by a research workspace`);
 		}
+		if (this.experiments.referencesChannel(id)) {
+			throw conflict(`channel ${id} is still published by an investigation`);
+		}
 
 		this.#channels.delete(id);
 		await this.#research.deleteChannel(id);
