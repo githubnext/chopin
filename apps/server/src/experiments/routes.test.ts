@@ -60,7 +60,7 @@ async function setup() {
 		encryptionKey: new Uint8Array(32),
 	};
 	let router = new Router();
-	let lock = { locked: false };
+	let lock = { locked: false, documents: new Set<string>() };
 	let runtime = registerExperimentRoutes(router, {
 		storage,
 		sessions,
@@ -72,7 +72,7 @@ async function setup() {
 		lease: () => lease,
 		changed: () => {},
 		context: async () => ({ source: "# Context", revision: 0 }),
-		canMutate: async () => !lock.locked,
+		canMutate: async id => !lock.locked && !lock.documents.has(id),
 	});
 	async function request(path: string, body?: unknown, cookie?: string, token?: string) {
 		return (await router.handle(
@@ -127,7 +127,7 @@ async function setup() {
 }
 
 test("work runs on the clicker's own connection; scoped claims publish", async () => {
-	let { sessions, config, alice, bob, documentId, request } = await setup();
+	let { sessions, config, alice, bob, documentId, request, lock } = await setup();
 	let pair = await (await request("/api/connector/pairings", {
 		repository: "org/repo",
 		commit: "a".repeat(40),
@@ -210,6 +210,33 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 		(await request(`/api/documents/${documentId}/investigation-provenance`, undefined, bob.cookie))
 			.status,
 	).toBe(404);
+	// The child's evidence belongs to the parent's record, so the parent's build lock applies.
+	lock.documents.add(documentId);
+	for (
+		let [action, input] of [
+			["decision", {
+				id: crypto.randomUUID(),
+				view: "comparison",
+				revision: 0,
+				conclusion: "Use cached startup",
+				rationale: "",
+			}],
+			["placement", { view: "comparison" }],
+		] as const
+	) {
+		let refused = await request(
+			`/api/documents/${child}/experiments/${id}/${action}`,
+			input,
+			bob.cookie,
+		);
+		expect(refused.status).toBe(409);
+		expect((await refused.json()).error).toBe("document-locked");
+	}
+	expect(
+		(await (await request(`/api/documents/${child}/experiments/${id}`, undefined, bob.cookie))
+			.json()).locked,
+	).toBe(true);
+	lock.documents.delete(documentId);
 	expect((await tool("complete_experiment", { id, generation: claim.generation })).result.isError)
 		.not.toBe(true);
 	expect(
