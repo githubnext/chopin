@@ -52,7 +52,11 @@ A browser build that delivers records its built source even without
 `LIVE_BUILD`. Later edits then read as **N changes to build**, and the
 capsule's **Build** sends them to `POST /api/channels/:id/implementation/rebuild`.
 That route queues one rebuild of the edits onto the existing pull requests, on
-the presser's own connected agent, and persists it before answering. Under
+the presser's own connected agent, and persists it before answering. Like
+Build plan, it is refused while decisions or accepted comments are open, and
+the capsule's Build is inert with that reason. The press is the approval: the
+rebuild's tasks join the graph as an approved, completed version from the
+coding agent's report, without a separate review. Under
 `LIVE_BUILD` the same rebuild starts by itself once editing settles, so the
 capsule shows a clock instead of **Build**. **Retry** on a failed rebuild uses
 the same route.

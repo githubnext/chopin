@@ -117,22 +117,31 @@ let liveSchema = z.object({
 /** The built source a living document compares later edits against. */
 export type LiveBuild = z.infer<typeof liveSchema>;
 
-/** Restore a live record only when it names a finished build of this document. */
+/**
+ * Restore a live record only when it names a finished build of this document: a live run, or a
+ * manual run that delivered (its verification passed), never one returned for changes.
+ */
 export function restoreLive(
 	value: unknown,
 	builds: BuildRequest[],
-	history: Array<{ run: { id: string }; live?: true }>,
+	lifecycle: Lifecycle | undefined,
+	graph: Graph | undefined,
 	revision: number,
 ): LiveBuild {
 	let live = liveSchema.parse(value);
 	let build = builds.find(item => item.id === live.buildId);
+	let history = lifecycle?.history ?? [];
+	let delivered = () => {
+		if (!graph || !lifecycle) return false;
+		let outcome = historyFor(graph, lifecycle).find(item => item.run.id === live.buildId)?.outcome;
+		return outcome?.kind === "implemented" || outcome?.kind === "delivered";
+	};
 	if (
 		!build || build.user !== live.user || build.repositoryId !== live.repositoryId
 		|| build.checkout.repository !== live.checkout.repository
 		|| build.checkout.branch !== live.checkout.branch
 		|| build.checkout.commit !== live.checkout.commit
-		// A live run, or a verified one when the build was manual.
-		|| !history.some(item => item.run.id === live.buildId)
+		|| !history.some(item => item.run.id === live.buildId && item.live) && !delivered()
 		|| live.baseRevision > revision
 		|| new Set(live.pullRequests).size !== live.pullRequests.length
 		|| live.commits?.some(commit => !live.pullRequests.includes(commit.pullRequest))
@@ -240,7 +249,9 @@ export type RebuildResult =
 	| { kind: "queued"; build: BuildRequest }
 	| { kind: "busy" }
 	| { kind: "unchanged" }
-	| { kind: "unavailable" };
+	| { kind: "unavailable" }
+	/** A person's Build waits, like Build plan, for open decisions and accepted comments. */
+	| { kind: "blocked"; blockers: string[] };
 
 /** Whether any build or claim is in flight, including rebuilds that leave editing open. */
 export function buildActive(plan: Plan): boolean {
@@ -272,6 +283,10 @@ export async function queueRebuild(
 		if (!live) return { kind: "unavailable" };
 		if (buildActive(plan)) return { kind: "busy" };
 		if (source(plan) === live.baseSource) return { kind: "unchanged" };
+		if (options.by) {
+			let ready = implementationReadiness(plan, plan.revision);
+			if (!ready.ok) return { kind: "blocked", blockers: ready.blockers };
+		}
 		let owner = options.by ?? live.user;
 		let original = plan.builds.find(build => build.id === live.buildId);
 		let usable = (connection: Connection | undefined) => {
@@ -789,8 +804,10 @@ export function reportRebuild(
 			});
 			if (!checked.ok) return { kind: "refused", reason: checked.reason };
 			latest.state = "superseded";
-			// LIVE_BUILD prototype: a rebuild's tasks are approved and completed by the coding agent's
-			// report alone. This deliberately bypasses the human-only graph approval.
+			// A rebuild's tasks are approved and completed by the coding agent's report alone, with no
+			// separate graph review. The approval is the person's: pressing Build (or Retry) on a built
+			// document without LIVE_BUILD, or, under LIVE_BUILD, the press of Build plan that made the
+			// document live and so asked for its later edits to build when editing settles.
 			// The version describes the sealed target it built, not edits made while it ran.
 			graph.versions.push({
 				number,

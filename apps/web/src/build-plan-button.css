@@ -65,8 +65,18 @@
 	display: inline-grid;
 }
 
+.build-capsule-refusal {
+	max-width: calc(var(--spacing) * 60);
+	overflow: hidden;
+	font-size: var(--text-xs);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--color-destructive-ink);
+}
+
 .build-capsule-label,
-.build-capsule-action {
+.build-capsule-action,
+.build-capsule-refusal {
 	animation: build-fade var(--duration-base) var(--ease-out);
 }
 

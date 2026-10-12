@@ -228,7 +228,7 @@ export function useBuildPlan(
 		});
 	}, [step.next, snapshot?.revision, canEdit]);
 
-	let look = enabled
+	let look: BuildLook = enabled
 		? buildLook(snapshot, {
 			state,
 			userId,
@@ -241,6 +241,10 @@ export function useBuildPlan(
 			unanswered,
 		})
 		: { kind: "plan" as const, blocked: "A child document is never built" };
+	// A refusal stands until the next press, or until a build of the changes is under way or done.
+	useEffect(() => {
+		if (look.kind === "rebuilding" || look.kind === "built") setRebuildError(undefined);
+	}, [look.kind]);
 	return {
 		snapshot,
 		loadError,
@@ -369,6 +373,7 @@ export function BuildPlanButton(
 ) {
 	let { look } = build;
 	let reason = useId();
+	let actionReason = useId();
 	// Announce a change of state politely, once, not every tip or count that follows it.
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef(look.kind);
@@ -391,6 +396,9 @@ export function BuildPlanButton(
 	let pressed = useRef(false);
 	let handedOff = useRef(false);
 	let previous = useRef(look.kind);
+	useEffect(() => {
+		if (compact && build.rebuildError) onOpen();
+	}, [build.rebuildError]);
 	useLayoutEffect(() => {
 		let was = previous.current;
 		previous.current = look.kind;
@@ -435,29 +443,32 @@ export function BuildPlanButton(
 		);
 	}
 	let label = buildLabel(look);
+	let blocked = look.kind === "stale" || look.kind === "failed" ? look.blocked : undefined;
 	let action = look.kind === "stopped" && look.retry && canEdit
 		? { name: "Retry", run: build.press }
 		: look.kind === "failed" && look.retry && canEdit
 		? { name: "Retry", run: build.rebuild }
 		: look.kind === "stale" && look.build && canEdit
-		? { name: "Build", run: build.rebuild }
+		// On a phone the Build tab sits just below, so the action names what it builds.
+		? { name: compact ? "Build changes" : "Build", run: build.rebuild }
 		: undefined;
-	let tip = build.rebuildError && action?.run === build.rebuild ? build.rebuildError : look.tip;
+	let refused = action?.run === build.rebuild ? build.rebuildError : undefined;
+	let busy = build.busy || build.rebuilding;
 	return (
 		<>
 			<span className="build-capsule-row" key="capsule">
 				<button
-					aria-describedby={tip ? reason : undefined}
+					aria-describedby={look.tip ? reason : undefined}
 					aria-label={compact ? label : undefined}
 					className="build-capsule"
 					data-compact={compact || undefined}
 					data-hot={hot || undefined}
-				data-tooltip={compact ? `${label} · ${tip}` : tip}
+					data-tooltip={compact ? `${label} · ${look.tip}` : look.tip}
 					data-tooltip-detail=""
 					data-tooltip-verbatim=""
 					onBlur={() => onHover(false)}
 					onClick={() => {
-						if (!tabReady && onExplain) onExplain(tip ?? label);
+						if (!tabReady && onExplain) onExplain(look.tip ?? label);
 						else onOpen();
 					}}
 					onFocus={() => onHover(true)}
@@ -470,20 +481,34 @@ export function BuildPlanButton(
 					</span>
 					{!compact && <span className="build-capsule-label" key={label}>{label}</span>}
 				</button>
-				{tip && <span className="sr-only" id={reason}>{tip}</span>}
+				{look.tip && <span className="sr-only" id={reason}>{look.tip}</span>}
 				{action && (
-					// Stays focusable while a press is under way; aria-busy says why it does nothing.
+					<>
+						{/* Stays focusable while blocked or busy; aria-disabled and aria-busy say why. */}
 					<button
-						aria-busy={build.busy || build.rebuilding || undefined}
-						aria-disabled={build.busy || build.rebuilding || undefined}
+							aria-busy={busy || undefined}
+							aria-describedby={blocked ? actionReason : undefined}
+							aria-disabled={blocked || busy ? true : undefined}
 						className="btn btn-compact btn-outline build-capsule-action"
+							data-tooltip={blocked}
+							data-tooltip-detail={blocked ? "" : undefined}
+							data-tooltip-verbatim={blocked ? "" : undefined}
 						onClick={() => {
-							if (!build.busy && !build.rebuilding) action.run();
+								if (blocked) onExplain?.(blocked);
+								else if (!busy) action.run();
 						}}
 						type="button"
 					>
 					{action.name}
 					</button>
+						{blocked && <span className="sr-only" id={actionReason}>{blocked}</span>}
+					</>
+				)}
+				{/* On a phone the refusal is read in Build's headline, which opens with it. */}
+				{refused && (
+					<span className={compact ? "sr-only" : "build-capsule-refusal"} role="alert">
+						{refused}
+					</span>
 				)}
 			</span>
 			{live}
