@@ -414,10 +414,13 @@ test("a phone's blocked Build is an empty state that leads to Decisions", async 
 	await expect(view.getByText("1 decision is still open.", { exact: true })).toBeVisible();
 	let go = view.getByRole("button", { name: "Go to Decisions", exact: true });
 	await expect(go).toBeInViewport({ ratio: 1 });
+	// Centred in the space between the bars once the pane has slid in, not left at the top.
+	await expect.poll(async () => {
+		let box = (await go.boundingBox())!;
+		return Math.abs(box.x + box.width / 2 - 375 / 2) <= 2;
+	}).toBe(true);
 	let box = (await go.boundingBox())!;
 	expect(box.height).toBeGreaterThanOrEqual(44);
-	// Centred in the space between the bars, not left at the top of the pane.
-	expect(Math.abs(box.x + box.width / 2 - 375 / 2)).toBeLessThanOrEqual(2);
 	expect(box.y).toBeGreaterThan(667 * 0.3);
 	await go.tap();
 	await expect(view).toBeHidden();
