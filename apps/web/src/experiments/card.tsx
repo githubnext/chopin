@@ -4,8 +4,8 @@ import type { ExperimentStore } from "./store";
 import { ItemDecisions } from "./evidence";
 import type { InvestigationChild, InvestigationState } from "@chopin/experiment/records";
 
-const ACTIVE: InvestigationState[] = ["queued", "running", "publishing"];
-const SETTLED: InvestigationState[] = ["failed", "cancelled", "interrupted"];
+const ACTIVE: ReadonlySet<InvestigationState> = new Set(["queued", "running", "publishing"]);
+const SETTLED: ReadonlySet<InvestigationState> = new Set(["failed", "cancelled", "interrupted"]);
 
 /** The freshest state this browser knows, from the list or a loaded record. */
 function latest(store: ExperimentStore, id: string) {
@@ -22,7 +22,7 @@ function latest(store: ExperimentStore, id: string) {
  */
 export function removableInvestigation(store: ExperimentStore, id: string): boolean {
 	let state = latest(store, id)?.state;
-	return !!state && SETTLED.includes(state);
+	return !!state && SETTLED.has(state);
 }
 
 /** The inline card for one investigation, placed in the document by its id. */
@@ -74,7 +74,7 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 			</SidecarCard>
 		);
 	}
-	let stoppable = ACTIVE.includes(state) && item?.input?.authorizer === userId;
+	let stoppable = ACTIVE.has(state) && item?.input?.authorizer === userId;
 	let child = state === "completed" ? item?.child : undefined;
 	// A completed record loaded without a child has lost its document; say so plainly.
 	let orphaned = state === "completed" && !!item && item.revision >= (revision ?? 0) && !child;
@@ -100,10 +100,10 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 						await store.action(id, "cancel", {});
 						onRemove();
 					})
-				: canEdit && SETTLED.includes(state)
+				: canEdit && SETTLED.has(state)
 				? onRemove
 				: undefined}
-			onRetry={canEdit && SETTLED.includes(state)
+			onRetry={canEdit && SETTLED.has(state)
 				? () => void act(() => store.action(id, "retry", {}))
 				: undefined}
 			onRun={canEdit && state === "requested"

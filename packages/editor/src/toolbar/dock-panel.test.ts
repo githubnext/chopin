@@ -13,13 +13,20 @@ test("browser toolbars and missing viewports are not a keyboard", () => {
 	expect(keyboardCover(844, undefined)).toBeUndefined();
 });
 
-test("Insert offers the slash menu's blocks, and Research only where the host has it", () => {
-	let plain = insertChoices(false).map(choice => choice.id);
+test("Insert offers the slash menu's blocks, and actions only where the host has them", () => {
+	let plain = insertChoices(new Set()).map(choice => choice.id);
 	expect(plain).toContain("table");
 	expect(plain).not.toContain("research");
 	// Task list is a text style, offered there instead.
 	expect(plain).not.toContain("tasks");
-	expect(insertChoices(true).map(choice => choice.id).at(-1)).toBe("research");
+	expect(plain).not.toContain("investigate");
+	expect(insertChoices(new Set(["research"])).map(choice => choice.id)).toContain("research");
+	expect(insertChoices(new Set(["research"])).map(choice => choice.id)).not.toContain(
+		"investigate",
+	);
+	expect(insertChoices(new Set(["investigate"])).map(choice => choice.id)).toContain(
+		"investigate",
+	);
 });
 
 test("Text style marks the caret's current block", () => {
