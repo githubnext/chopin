@@ -3,6 +3,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { requestSchema } from "@chopin/experiment";
 import { createBridge } from "./bridge";
 import { ConnectorError, remote } from "./mcp";
+import { createOutput } from "./output";
+import { permissionMemory } from "./permission";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
 import { lockWorkspace, stateDirectory, workspace } from "./workspace";
@@ -52,9 +54,7 @@ async function connect(args: string[]) {
 		!Array.isArray(command) || !command.length
 		|| command.some(item => typeof item !== "string" || !item)
 	) {
-		throw new Error(
-			"Usage: CHOPIN_URL=https://your-instance chopin connect [checkout] -- agent acp-arguments",
-		);
+		throw new Error(USAGE);
 	}
 	let url = origin(process.env.CHOPIN_URL ?? "https://chopin.githubnext.com");
 	let info = await workspace(resolve(args[0] && args[0] !== "--" ? args[0] : "."));
@@ -76,11 +76,12 @@ async function connect(args: string[]) {
 		return value;
 	}
 	let api: Awaited<ReturnType<typeof remote>> | undefined;
+	let output = createOutput();
+	let permissions = permissionMemory();
 	try {
 		let { root: _root, ...source } = info;
 		let pairing = await post("/api/connector/pairings", { ...source, label: basename(info.root) });
-		console.error(`Connect this checkout of ${info.repository} in Chopin: ${pairing.url}`);
-		console.error(`Confirm code ${pairing.code} in Chopin.`);
+		output.pairing(info.repository, pairing.url, pairing.code);
 		let token: string | undefined;
 		while (!abort.signal.aborted && !token) {
 			let claim = await post(`/api/connector/pairings/${pairing.id}/claim`, {
@@ -91,9 +92,7 @@ async function connect(args: string[]) {
 		}
 		if (!token) return;
 		api = await remote(url, token);
-		console.error(
-			`Connected. Work you start in any ${info.repository} document runs here. Ctrl-C disconnects.`,
-		);
+		output.connected(info.repository);
 		while (!abort.signal.aborted) {
 			let offered = await api.call("wait_for_work", {}, abort.signal) as {
 				id?: string;
@@ -123,6 +122,8 @@ async function connect(args: string[]) {
 				url,
 				script: resolve(process.argv[1]),
 				signal: abort.signal,
+				output,
+				permissions,
 			});
 		}
 	} catch (error) {
@@ -151,15 +152,18 @@ function delay(ms: number, signal: AbortSignal) {
 	});
 }
 
+const USAGE = "Usage: CHOPIN_URL=https://your-instance bun connector.js connect [checkout] -- "
+	+ "agent [ACP arguments]";
+
 if (import.meta.main) {
 	let [mode, ...args] = process.argv.slice(2);
 	try {
 		if (mode === "bridge") await bridge();
 		else if (mode === "connect") await connect(args);
-		else throw new Error("Usage: chopin connect [checkout] -- agent [ACP arguments]");
+		else throw new Error(USAGE);
 	} catch (error) {
 		if (!(error instanceof Error && error.name === "AbortError")) {
-			console.error(error instanceof Error ? error.message : "Connector failed");
+			createOutput().error(error instanceof Error ? error.message : "Connector failed");
 			process.exitCode = 1;
 		}
 	}

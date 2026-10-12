@@ -4,6 +4,9 @@ import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
 import { runAgent } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
+import { createOutput } from "./output";
+import type { Output } from "./output";
+import { describePermission, permissionMemory } from "./permission";
 import { discardWorkspace, git, noPushEnvironment, prepareWorkspace } from "./workspace";
 import {
 	implementationPrompt,
@@ -20,6 +23,9 @@ type Options = {
 	script: string;
 	signal: AbortSignal;
 	heartbeatMs?: number;
+	output?: Output;
+	/** Shared across jobs so an "always allow" lasts for the connector's run. */
+	permissions?: ReturnType<typeof permissionMemory>;
 };
 export async function runWork(
 	api: Awaited<ReturnType<typeof remote>>,
@@ -34,6 +40,8 @@ export async function runWork(
 		live?: boolean;
 		/** An unprompted prototype under a passage, run on a throwaway branch. */
 		spike?: boolean;
+		/** The document's title, for the terminal. */
+		title?: string;
 		input: unknown;
 		generation: number;
 		runToken: string;
@@ -45,6 +53,10 @@ export async function runWork(
 			source: { ...claim.build.checkout, repositoryId: claim.build.repositoryId },
 		}
 		: requestSchema.parse(claim.input);
+	let output = options.output ?? createOutput();
+	let permissions = options.permissions ?? permissionMemory();
+	// Kept so a failed start can show why without echoing every agent log line.
+	let agentTail: string[] = [];
 	let identity = implementation ? { id: input.id } : { id: input.id, generation: claim.generation };
 	let abort = new AbortController();
 	let cancel = () => abort.abort();
@@ -77,7 +89,11 @@ export async function runWork(
 			spikeWork = { path: prepared.path, branch: `chopin/spike-${input.id.slice(0, 8)}` };
 			git(prepared.path, "checkout", "-b", spikeWork.branch);
 		}
-		console.error(`Running ${input.id} in ${prepared.path}`);
+		output.job(
+			implementation ? "build" : claim.spike ? "spike" : "investigation",
+			implementation ? claim.title ?? input.id : (input as { brief: string }).brief,
+			prepared.path,
+		);
 		let stop = await runAgent({
 			command: options.command,
 			cwd: prepared.path,
@@ -153,35 +169,43 @@ export async function runWork(
 				}
 			},
 			async permission(request) {
+				let remembered = permissions.remembered(request);
+				if (remembered) return remembered;
 				latestProgress = "Waiting for permission in the owner's terminal";
 				if (!process.stdin.isTTY) return undefined;
-				let terminal = createInterface({ input: process.stdin, output: process.stderr });
+				let terminal = createInterface({ input: process.stdin, output: process.stdout });
 				try {
-					console.error(request.toolCall.title ?? "Agent permission request");
-					request.options.forEach((option, index) => console.error(`${index + 1}. ${option.name}`));
-					let answer = await terminal.question("Select option (blank cancels): ", {
+					let [heading, ...detail] = describePermission(request);
+					output.say(
+						"",
+						`  ${output.style.bold(`Allow ${heading}?`)}`,
+						...detail.map(line => `    ${line}`),
+						...request.options.map((option, index) => `  ${index + 1}. ${option.name}`),
+					);
+					let answer = await terminal.question("  Select option (blank cancels): ", {
 						signal: abort.signal,
 					});
-					return request.options[Number(answer) - 1]?.optionId;
+					let chosen = request.options[Number(answer) - 1]?.optionId;
+					permissions.chose(request, chosen);
+					return chosen;
 				} finally {
 					terminal.close();
 				}
 			},
-			stderr: text => process.stderr.write(text),
+			stderr(text) {
+				agentTail = [...agentTail, ...text.split("\n").filter(Boolean)].slice(-10);
+				output.agent(text);
+			},
 		});
 		if (stop !== "end_turn" || abort.signal.aborted) throw new Error(`Agent stopped: ${stop}`);
 		await api.call(implementation ? "report_implementation_build" : "complete_experiment", {
 			...identity,
 			...(implementation ? { state: "stopped" } : {}),
 		});
-		console.error(
-			claim.spike
-				? `Finished ${input.id}. Its throwaway worktree is removed.`
-				: `Finished ${input.id}. Workspace retained at ${prepared.path}`,
-		);
+		output.finished();
 	} catch (error) {
 		let message = error instanceof Error ? error.message : "Local work failed";
-		console.error(message);
+		output.failed(message, agentTail);
 		await api.call(implementation ? "report_implementation_build" : "fail_experiment", {
 			...identity,
 			...(implementation ? { state: "failed" } : {}),

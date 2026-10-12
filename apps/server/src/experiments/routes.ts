@@ -361,6 +361,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	) {
 		let { channel } = await access(session, documentId, true);
 		if (channel.repositoryId !== connection.source.repositoryId) fail("repository-forbidden");
+		return channel;
 	}
 	/** The connection's queued, running, or publishing investigations across its repository. */
 	/** A connection's work in creation order, so queued runs are dispatched first come first served. */
@@ -533,7 +534,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			} else if (implementationRun || Object.hasOwn(implementationSchemas(false), name)) {
 				if (!implementation) fail("tool-forbidden");
 				let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
-				if (documentId) await target(session, connection, documentId);
+				let channel = documentId ? await target(session, connection, documentId) : undefined;
 				if (name === "claim_implementation_build") {
 					value = await connections.locked(connection.id, async () => {
 						if ((await work(connection, ["running", "publishing"])).length) {
@@ -541,6 +542,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						}
 						return implementation.call(connection, grant, name, args);
 					});
+					// The connector names the document in its terminal.
+					if (channel?.title) value = { ...value as object, title: channel.title };
 				} else value = await implementation.call(connection, grant, name, args);
 			} else if (name === "wait_for_experiment") {
 				let queued = async () => (await work(connection, ["queued"]))[0];
@@ -560,8 +563,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					}
 					let offered = await service.store.get(id);
 					if (!offered || offered.connectionId !== connection.id) fail("connection-forbidden");
+					let channel;
 					try {
-						await target(session, connection, offered.documentId);
+						channel = await target(session, connection, offered.documentId);
 						await mutationAllowed(offered.documentId);
 					} catch (error) {
 						// One archived or building document must not stall the repository's connector.
@@ -581,6 +585,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						input: claimed.input,
 						generation: claimed.generation,
 						...(claimed.spike ? { spike: true } : {}),
+						...(channel.title ? { title: channel.title } : {}),
 						runToken: connections.runToken(
 							connection.id,
 							claimed.documentId,

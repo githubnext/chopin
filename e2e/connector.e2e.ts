@@ -24,16 +24,25 @@ for (let transport of ["stdio", "http"] as const) {
 		await writeFile(join(root, "sample.txt"), "sample");
 		git("add", ".");
 		git("commit", "-m", "fixture");
+		// The stdio run uses the bundle people download, run from the checkout like the UI command;
+		// its MCP bridge re-executes that file. The HTTP run keeps the contributor source path.
+		let script = join(ROOT, "apps/connector/src/main.ts");
+		if (transport === "stdio") {
+			let download = await fetch(new URL("/connector.js", baseURL));
+			expect(download.headers.get("content-type")).toContain("text/javascript");
+			script = join(state, "connector.js");
+			await writeFile(script, await download.text());
+		}
 		let connector = spawn("bun", [
-			join(ROOT, "apps/connector/src/main.ts"),
+			script,
 			"connect",
-			root,
+			transport === "stdio" ? "." : root,
 			"--",
 			"bun",
 			join(ROOT, "apps/connector/src/testing/fake-agent.ts"),
 			...(transport === "http" ? ["--http"] : []),
 		], {
-			cwd: ROOT,
+			cwd: transport === "stdio" ? root : ROOT,
 			env: { ...process.env, CHOPIN_URL: baseURL, CHOPIN_CONNECTOR_STATE_DIR: state },
 			stdio: ["ignore", "pipe", "pipe"],
 		});
@@ -43,14 +52,17 @@ for (let transport of ["stdio", "http"] as const) {
 				() => reject(new Error(`Connector did not offer pairing: ${output}`)),
 				15_000,
 			);
-			connector.stderr.on("data", chunk => {
+			let read = (chunk: Buffer) => {
 				output += String(chunk);
 				let match = output.match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/);
 				if (match) {
 					clearTimeout(timeout);
 					resolve(match[0]);
 				}
-			});
+			};
+			// Pairing instructions are on stdout; failures and agent output on stderr.
+			connector.stdout.on("data", read);
+			connector.stderr.on("data", read);
 			connector.once("error", reject);
 			connector.once("exit", code => {
 				clearTimeout(timeout);
@@ -60,7 +72,7 @@ for (let transport of ["stdio", "http"] as const) {
 		try {
 			let page = await enter(person());
 			await page.goto(await pairing);
-			let printed = () => output.match(/Confirm code ([A-Z2-9]{4}-[A-Z2-9]{4}) in Chopin/)?.[1];
+			let printed = () => output.match(/Check the page shows:\s+([A-Z2-9]{4}-[A-Z2-9]{4})/)?.[1];
 			await expect.poll(printed).toBeTruthy();
 			let code = printed();
 			await expect(page.getByText(code!, { exact: true })).toBeVisible();
@@ -84,7 +96,7 @@ for (let transport of ["stdio", "http"] as const) {
 			// The published result opens as a child document; repeated runs number its title.
 			await expect(page.getByRole("button", { name: /^Open Startup comparison/ }))
 				.toBeVisible({ timeout: 30_000 });
-			expect(output).toContain("Running");
+			expect(output).toContain("› Investigating Produce the captured startup fixture");
 		} finally {
 			connector.kill("SIGINT");
 			await new Promise<void>(resolve => {

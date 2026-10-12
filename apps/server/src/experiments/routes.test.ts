@@ -166,6 +166,7 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 	let claim = JSON.parse((await tool("claim_experiment", { id })).result.content[0].text);
 	expect(claim.input.requester).toBe("bob");
 	expect(claim.input.authorizer).toBe("alice");
+	expect(claim.title).toBe(`Investigate ${documentId}`);
 	expect((await tool("claim_experiment", { id }, claim.runToken)).result.isError).toBe(true);
 	let smuggled = await tool("submit_investigation_result", {
 		result: { ...performance, report: `# Report\n\n<Investigation id="${id}" />\n` },

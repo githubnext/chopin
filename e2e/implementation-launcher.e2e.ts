@@ -173,14 +173,17 @@ async function connector(baseURL: string, command: string[]) {
 	let output = "";
 	let pairing = new Promise<string>((resolve, reject) => {
 		let timer = setTimeout(() => reject(new Error(`Pairing timed out: ${output}`)), 15_000);
-		child.stderr.on("data", chunk => {
+		let read = (chunk: Buffer) => {
 			output += String(chunk);
 			let match = output.match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/);
 			if (match) {
 				clearTimeout(timer);
 				resolve(match[0]);
 			}
-		});
+		};
+		// Pairing instructions are on stdout; failures and agent output on stderr.
+		child.stdout.on("data", read);
+		child.stderr.on("data", read);
 		child.once("error", reject);
 		child.once("exit", code => {
 			clearTimeout(timer);
