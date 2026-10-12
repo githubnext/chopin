@@ -121,7 +121,7 @@
 		var(--phone-tab-row-max)
 	);
 	margin-inline: auto;
-	align-items: center;
+	align-items: flex-end;
 	gap: var(--phone-tab-action-gap);
 }
 
@@ -182,7 +182,7 @@
 @media (max-width: 359px) {
 	.phone-skeleton {
 		--phone-tab-action-gap: calc(var(--spacing) * 1.5);
-		--phone-tab-action-size: calc(var(--spacing) * 12);
+		--phone-tab-action-size: var(--control-target-coarse);
 	}
 
 	.phone-skeleton-tabs {

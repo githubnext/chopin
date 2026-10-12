@@ -250,7 +250,8 @@
 	);
 	margin-inline: auto;
 	display: flex;
-	align-items: center;
+	/* Bottom edges stay level while the bar and its action shrink toward the minimised circle. */
+	align-items: flex-end;
 	justify-content: space-between;
 	gap: var(--phone-tab-action-gap);
 	transition: transform var(--tab-slide-dur) var(--tab-slide-ease), visibility 0s;
@@ -283,7 +284,6 @@
 	width: 100%;
 	height: var(--phone-tab-bar-height);
 	padding: var(--phone-tab-bar-inset);
-	overflow: hidden;
 	border-radius: var(--radius-phone-tab-bar);
 	transition:
 		width var(--tab-slide-dur) var(--tab-slide-ease),
@@ -327,6 +327,18 @@
 	pointer-events: none;
 	touch-action: manipulation;
 	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.phone-tab-mini > .phone-tab-badge {
+	top: calc(var(--spacing) * -1);
+	right: calc(var(--spacing) * -1);
+	left: auto;
+}
+
+/* Inset far enough that the dot sits inside the circle's curve, not on its edge. */
+.phone-tab-mini > .phone-tab-dot {
+	top: calc(var(--spacing) * 2);
+	right: calc(var(--spacing) * 2);
 }
 
 .phone-tab-row[data-phone-tab-minimised] .phone-tab-mini {
@@ -451,7 +463,7 @@
 @media (max-width: 359px) {
 	.workspace-root[data-workspace-phone] {
 		--phone-tab-action-gap: calc(var(--spacing) * 1.5);
-		--phone-tab-action-size: calc(var(--spacing) * 12);
+		--phone-tab-action-size: var(--control-target-coarse);
 	}
 
 	.phone-tab-row {
@@ -459,11 +471,12 @@
 	}
 
 	.phone-tab-label {
-		letter-spacing: normal;
+		letter-spacing: -0.01em;
 	}
 }
 
 .phone-tab [data-nucleo-icon],
+.phone-tab-mini [data-nucleo-icon],
 .phone-tab-action [data-nucleo-icon] {
 	color: inherit;
 }
@@ -550,6 +563,15 @@
 	/* The label sits beside the icon, so the count follows the label inside the tab. */
 	.phone-tab-badge {
 		display: none;
+	}
+
+	.phone-tab-mini > .phone-tab-badge {
+		display: block;
+	}
+
+	/* The wide bar shrinks toward its action, so the circle and the action stay together. */
+	.phone-tab-row:has(> .phone-tab-action) > .phone-tab-bar {
+		margin-inline-start: auto;
 	}
 
 	.phone-tab-badge-inline {

@@ -14,7 +14,7 @@ import type { WorkspaceDestination } from "./workspace-model";
 
 /** Scrolled less than this from the top, the top bar always shows. */
 const TOP_BAR_REVEAL = 60;
-/** Ignore scroll jitter smaller than this before hiding or showing the top bar. */
+/** Travel in one direction needed before the bars hide or show, so jitter never toggles them. */
 const TOP_BAR_SLOP = 6;
 
 const SCROLLERS =
@@ -150,15 +150,14 @@ export function PhoneTabBar(
 						onFocus={restore}
 						type="button"
 					>
-						<span className="phone-tab-icon">
-							<ActiveIcon aria-hidden="true" size={24} />
-							{active === "decisions" && unanswered > 0 && (
-								<span aria-hidden="true" className="phone-tab-badge">
-									<Count ring>{unanswered}</Count>
-								</span>
-							)}
-							{elsewhere && <span aria-hidden="true" className="phone-tab-dot" />}
-						</span>
+						<ActiveIcon aria-hidden="true" size={24} />
+						{/* Pinned to the circle's corner rather than the icon, so neither covers the icon. */}
+						{active === "decisions" && unanswered > 0 && (
+							<span aria-hidden="true" className="phone-tab-badge">
+								<Count ring>{unanswered}</Count>
+							</span>
+						)}
+						{elsewhere && <span aria-hidden="true" className="phone-tab-dot" />}
 					</button>
 				)}
 			</nav>
@@ -190,7 +189,9 @@ export function usePhoneTopBar(
 		let element = root.current;
 		if (!enabled || !element) return;
 		let reduced = matchMedia("(prefers-reduced-motion: reduce)");
-		let last = new WeakMap<Element, number>();
+		// Each pane's last position, direction and distance travelled since that direction began,
+		// so a slow drag of a few pixels a frame still adds up to a reading direction.
+		let last = new WeakMap<Element, { direction: number; travel: number; y: number }>();
 		let frame = 0;
 		// Collaborative edits mutate the document often; measure at most once a frame.
 		let measure = () => {
@@ -219,11 +220,14 @@ export function usePhoneTopBar(
 				Math.max(0, target.scrollHeight - target.clientHeight),
 			);
 			// Panes open at their top, so a first scroll event already has a direction.
-			let previous = last.get(target) ?? 0;
-			last.set(target, y);
+			let previous = last.get(target) ?? { direction: 0, travel: 0, y: 0 };
+			let delta = y - previous.y;
+			let direction = Math.sign(delta) || previous.direction;
+			let travel = (direction === previous.direction ? previous.travel : 0) + Math.abs(delta);
+			last.set(target, { direction, travel, y });
 			if (reduced.matches || target.matches("[data-chat-scroll]")) return;
-			if (y < TOP_BAR_REVEAL || previous - y > TOP_BAR_SLOP) setHidden(false);
-			else if (y - previous > TOP_BAR_SLOP) setHidden(true);
+			if (y < TOP_BAR_REVEAL || (direction < 0 && travel > TOP_BAR_SLOP)) setHidden(false);
+			else if (direction > 0 && travel > TOP_BAR_SLOP) setHidden(true);
 		};
 		let focus = (event: FocusEvent) => {
 			if (

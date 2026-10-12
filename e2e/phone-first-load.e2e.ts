@@ -72,7 +72,7 @@ for (
 			expect(top.y).toBe(0);
 			expect(top.height).toBe(44);
 			expect(bar.height).toBe(62);
-			expect(action.height).toBe(device.viewport.width < 360 ? 48 : 54);
+			expect(action.height).toBe(device.viewport.width < 360 ? 44 : 54);
 
 			release();
 			await ready(page);

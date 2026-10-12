@@ -165,10 +165,16 @@ async function labelClearance(page: Page): Promise<number> {
 	});
 }
 
-test("the tab bar's pill is concentric with the bar and clears its labels at 320", async ({ join, seed }) => {
+test("the tab bar's pill is concentric with the bar and clears even its widest label at 320", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { ...PHONE, viewport: { width: 320, height: 568 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	// Document has the widest label, so it is the tightest fit.
+	await expect(nav.getByRole("button", { name: "Document" })).toHaveAttribute(
+		"aria-current",
+		"page",
+	);
+	await expect.poll(() => labelClearance(page)).toBeGreaterThanOrEqual(3);
 	await nav.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
 	for (
@@ -227,6 +233,14 @@ test("the tab bar minimises while reading down and returns on scroll up, a tap o
 	await expect(row).not.toHaveAttribute("data-phone-tab-minimised");
 	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
 	await expect(nav.getByRole("button", { name: "Document" })).toBeFocused();
+
+	// A slow drag of a few pixels a frame still adds up to a reading direction, both ways.
+	for (let top = 903; top <= 960; top += 3) await scrollPane(scroller, top);
+	await expect(row).toHaveAttribute("data-phone-tab-minimised", "");
+	await expect(page.locator(".workspace-root")).toHaveAttribute("data-workspace-bar", "hidden");
+	for (let top = 957; top >= 900; top -= 3) await scrollPane(scroller, top);
+	await expect(row).not.toHaveAttribute("data-phone-tab-minimised");
+	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
 
 	// Keyboard focus reaching the circle restores the tabs and lands on the current one.
 	await scrollPane(scroller, 1300);
