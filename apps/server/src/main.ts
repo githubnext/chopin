@@ -833,7 +833,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					said,
 				);
 				if (!result.ok) {
-					fail(ws, frame.rid, result.reason);
+					fail(ws, frame.rid, result.reason, result.code);
 					return;
 				}
 				if (frame.build) requestBuild(opened, ws.data.principalId);
@@ -2000,19 +2000,19 @@ function pastReadiness(channelId: string): boolean {
 }
 if (config.liveBuild) {
 	buildReadiness = new BuildReadiness({
-	current: currentDocumentTarget,
+		current: currentDocumentTarget,
 		skip: pastReadiness,
-	ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
-		? request => askJev(request)
-		: undefined,
-	changed: (channelId, planRevision, ready) =>
+		ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+			? request => askJev(request)
+			: undefined,
+		changed: (channelId, planRevision, ready) =>
 			broadcast(server, channelId, {
 				kind: "implementation:readiness",
 				ts: 0,
 				planRevision,
 				ready,
 			}),
-	error: err => console.error("chopin: build readiness failed -", err),
+		error: err => console.error("chopin: build readiness failed -", err),
 	});
 }
 if (config.agent && config.backgroundJobs) {
