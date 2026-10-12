@@ -249,6 +249,20 @@ function placeResearchReference(
 	});
 }
 
+/**
+ * Put a Planner-proposed investigation's card in its open document. Closing waits for Chat
+ * while holding the document lock, so a host tool skips placement rather than wait behind it.
+ */
+async function placeInvestigationReference(channelId: string, id: string): Promise<boolean> {
+	if (Rooms.get(channelId)?.closing) return false;
+	return withDocumentLock(channelId, async () => {
+		let active = Rooms.get(channelId)?.plan;
+		if (!active || Rooms.get(channelId)?.closing || active.persistence.closing) return false;
+		await Service.placeInvestigationReference(active, id);
+		return true;
+	});
+}
+
 function scheduleResearchRecovery(deferred: number): void {
 	if (deferred === 0 || researchRecoveryTimer || draining) return;
 	researchRecoveryTimer = setTimeout(() => {
@@ -443,10 +457,13 @@ function conversation(
 						hash.slice(17, 20)
 					}-${hash.slice(20, 32)}`;
 					let value = await experiments!.service.create(room.id, request.userId, request.brief, id);
+					let placed = await placeInvestigationReference(room.id, value.id);
 					return {
 						id: value.id,
 						state: value.state,
-						message: "Open Investigations and authorize Run on my workspace to execute.",
+						message: placed
+							? "Its card is now in the document. A person selects Run on it to execute."
+							: "The document is closing, so its card was not placed.",
 					};
 				},
 			}

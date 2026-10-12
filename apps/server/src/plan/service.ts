@@ -1582,7 +1582,14 @@ async function commit(plan: Plan): Promise<void> {
 	let outcome = await room.apply(
 		plan.document,
 		batch.map(item => item.update),
-		async (id, action) => {
+		async (id, action, type) => {
+			if (type === "Investigation") {
+				let value = await plan.persistence.storage.experiments.get(id);
+				if (value && value.documentId !== plan.id) return false;
+				if (action === "add") return !!value;
+				// A reference to running work stays until it settles, so its card remains reachable.
+				return !value || !["queued", "running", "publishing"].includes(value.state);
+			}
 			let request = await plan.persistence.storage.research.get(plan.id, id);
 			let initial = request?.turns.find(turn => turn.kind === "initial");
 			let jobId = initial?.answerJobId ?? initial?.evidenceJobId;
@@ -2143,6 +2150,28 @@ export function placeResearchReference(plan: Plan, id: string): Promise<"placed"
 				throw err;
 			}
 			return "placed";
+		} finally {
+			document.doc.destroy();
+		}
+	});
+}
+
+/** Append an investigation's card to the document; a later edit can move it. */
+export function placeInvestigationReference(plan: Plan, id: string): Promise<void> {
+	return exclusive(plan, async () => {
+		if (implementationActive(plan)) throw new ImplementationActiveError();
+		let document = await room.restore(
+			plan.document.epoch,
+			Y.encodeStateAsUpdate(plan.document.doc),
+			room.project(plan.document),
+			[],
+		);
+		document.seq = plan.document.seq;
+		try {
+			let mutation = room.insertInvestigation(document, id);
+			if (mutation) {
+				await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation);
+			}
 		} finally {
 			document.doc.destroy();
 		}

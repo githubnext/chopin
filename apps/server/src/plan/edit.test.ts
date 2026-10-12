@@ -413,6 +413,27 @@ describe("refusing a batch", () => {
 		expect(room.project(held.document)).toContain("Context.");
 	});
 
+	it("refuses to author, move, or remove an investigation card", async () => {
+		let card = '<Investigation id="2b7e0c4a-5f1d-4e2a-9c3b-7d8e9f0a1b2c" />';
+		let authored = edit.apply(subject, 1, [{ op: "insert", index: 0, source: `${card}\n` }]);
+		expect(authored).toMatchObject({ ok: false, reason: "invalid" });
+		if (!authored.ok && authored.reason === "invalid") {
+			expect(authored.message).toContain("proposing an investigation");
+		}
+
+		let held = await plan(`# Title\n\n${card}\n\nAfter.\n`);
+		for (
+			let operations of [
+				[{ op: "delete", index: 1 }],
+				[{ op: "move", index: 1, to: 0 }],
+				[{ op: "replace_root", source: "# Replacement\n" }],
+			] as edit.Operation[][]
+		) {
+			expect(edit.apply(held, 1, operations)).toMatchObject({ ok: false, reason: "invalid" });
+		}
+		expect(room.project(held.document)).toContain(card);
+	});
+
 	it("protects inline research nested inside another Planner block", async () => {
 		let held = await plan(
 			'<Callout id="01K0N4TR8K7JGM4R1J7PW4R8YK" type="note">\n'

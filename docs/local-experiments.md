@@ -32,15 +32,26 @@ sessions can survive releases. Reconnect after a server restart or logout.
 
 ## Run and inspect work
 
-At the end of the document, choose **Propose investigation** and enter a brief.
-The request appears as an inline card marked **Ready to run**. Select **Run**:
+On any open line of the document, type `/` and choose **Investigate**, next to
+**Research**. Write a brief in the composer that opens at the caret and choose
+**Propose investigation**. Chopin creates the investigation and places an
+`<Investigation id="…" />` card where the caret was, marked **Ready to run**. The
+document holds only that id; the investigation record owns the brief, state and
+result. Select **Run**:
 the work runs on your own local agent, never on another person's. Chopin
 prefers the connection that last ran work for this document, then your most
 recently active one that is not busy. When all of yours are busy, the work
 queues behind one of them and starts when it is free. Without any, the card shows the connector command to start, and you select
 **Run** again once connected. A Planner can also propose an investigation; its
-card still needs someone to run it. Progress and published results appear in
-that card automatically, without opening another tab or dialog.
+card is appended to the end of the document and still needs someone to run it.
+Progress and published results appear in that card automatically, without
+opening another tab or dialog.
+
+The card is atomic, like a research card. It can move with the prose around it,
+but neither a browser nor the Planner can author or alter its markup: the server
+accepts a new card only for an existing investigation in the same document, and
+removal only once its work is not queued, running or publishing. Remove a card
+with its close control.
 
 Several people can connect checkouts of the same repository. Only a
 connection's owner can start or cancel work on it. The server rechecks the
@@ -89,8 +100,9 @@ and rationale. **Insert decision evidence in document** embeds that immutable vi
 **Insert view in document** embeds the current collaborative selections. Evidence
 decisions also appear in the document's Decisions surface.
 
-An interrupted run is not automatically repeated. **Propose retry** creates a new
-request requiring owner authorization. Ctrl-C withdraws the connection and stops
+An interrupted run is not automatically repeated. **Retry** on a failed,
+stopped or interrupted card returns the same investigation to **Ready to run**;
+someone then selects **Run** again. The old claim stays fenced by its generation. Ctrl-C withdraws the connection and stops
 managed agent processes. After a connector crash, its local lock remains to prevent
 uncertain duplicate execution; confirm no connector is running before removing the
 lock identified by the error message.

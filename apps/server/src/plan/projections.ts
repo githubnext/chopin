@@ -2,7 +2,11 @@ import { serialize } from "@chopin/dialect/serialize";
 
 import type { RootContent } from "mdast";
 
-const PROTECTED = new Set(["Questionnaire", "Decision", "Research", "Experiment"]);
+const PROTECTED = new Set(["Questionnaire", "Decision", "Research", "Investigation", "Experiment"]);
+
+/** Record-backed references a browser may add or remove once their record authorizes it. */
+export type Reference = "Research" | "Investigation";
+const REFERENCES = new Set<string>(["Research", "Investigation"]);
 
 function collect(nodes: RootContent[]): Map<string, { type: string; source: string }> | string {
 	let found = new Map<string, { type: string; source: string }>();
@@ -40,22 +44,30 @@ function collect(nodes: RootContent[]): Map<string, { type: string; source: stri
 }
 
 /** IDs of new atomic references whose records must be checked before accepting a browser batch. */
-export function newResearchProjections(base: RootContent[], next: RootContent[]): string[] {
+export function newResearchProjections(
+	base: RootContent[],
+	next: RootContent[],
+	type: Reference = "Research",
+): string[] {
 	let current = collect(base);
 	let proposed = collect(next);
 	if (typeof current === "string" || typeof proposed === "string") return [];
 	return [...proposed].flatMap(([id, value]) =>
-		value.type === "Research" && !current.has(id) ? [id] : []
+		value.type === type && !current.has(id) ? [id] : []
 	);
 }
 
 /** Existing research references removed from a browser batch need terminal request authority. */
-export function removedResearchProjections(base: RootContent[], next: RootContent[]): string[] {
+export function removedResearchProjections(
+	base: RootContent[],
+	next: RootContent[],
+	type: Reference = "Research",
+): string[] {
 	let current = collect(base);
 	let proposed = collect(next);
 	if (typeof current === "string" || typeof proposed === "string") return [];
 	return [...current].flatMap(([id, value]) =>
-		value.type === "Research" && !proposed.has(id) ? [id] : []
+		value.type === type && !proposed.has(id) ? [id] : []
 	);
 }
 
@@ -73,7 +85,7 @@ export function protectProjections(
 	for (let [id, value] of current) {
 		let replacement = proposed.get(id);
 		if (!replacement) {
-			if (value.type === "Research" && removableResearch.has(id)) continue;
+			if (REFERENCES.has(value.type) && removableResearch.has(id)) continue;
 			return "Existing Questionnaire, Decision, and Research projections cannot be dropped.";
 		}
 		if (replacement.type !== value.type || replacement.source !== value.source) {
@@ -82,7 +94,7 @@ export function protectProjections(
 	}
 	for (let id of proposed.keys()) {
 		if (!current.has(id)) {
-			if (proposed.get(id)?.type === "Research" && allowedResearch.has(id)) continue;
+			if (REFERENCES.has(proposed.get(id)!.type) && allowedResearch.has(id)) continue;
 			return "Questionnaire, Decision, and Research projections cannot be authored by rewriting the plan.";
 		}
 	}

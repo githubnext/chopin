@@ -2,9 +2,40 @@ import { performance } from "../packages/experiment/src/fixtures";
 import { testChannelPath } from "./database";
 import { content, expect, test } from "./room";
 
+import type { Page } from "@playwright/test";
+
 /** A connection serves every document in its repository, so each pairing test is its own person. */
 function person() {
 	return `ana-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+/** The investigation card whose brief this is. */
+function card(page: Page, brief: string) {
+	return page.getByRole("article", { name: "Investigation", exact: true }).filter({
+		hasText: brief,
+	});
+}
+
+/** Type `/investigate` on a new last line, write the brief, and return the created record. */
+async function investigate(page: Page, room: string, brief: string) {
+	await content(page).click();
+	await page.keyboard.press("ControlOrMeta+End");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/investigate");
+	await page.getByRole("listbox", { name: "Insert block" })
+		.getByRole("option", { name: "Investigate", exact: true })
+		.click();
+	let composer = page.getByRole("region", { name: "Investigation brief", exact: true });
+	await composer.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(brief);
+	let [created] = await Promise.all([
+		page.waitForResponse(response =>
+			response.request().method() === "POST"
+			&& response.url().endsWith(`/documents/${room}/experiments`)
+		),
+		composer.getByRole("button", { name: "Propose investigation", exact: true }).click(),
+	]);
+	await expect(composer).toHaveCount(0);
+	return await created.json() as { id: string };
 }
 
 test("the clicker's own agent runs work and publishes evidence that survives disconnect", async ({ baseURL, join, room, seed }) => {
@@ -40,64 +71,21 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 
 	await expect(page.getByRole("button", { name: "Investigations", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("dialog", { name: "Investigations", exact: true })).toHaveCount(0);
-	let proposeToggle = page.getByRole("button", {
-		name: "Propose investigation",
-		exact: true,
-		expanded: false,
-	});
-	await proposeToggle.click();
-	let proposal = page.getByRole("form", { name: "New investigation", exact: true });
-	// A plain accordion folds at the accordion pace, not the card-preview pace.
-	expect(
-		await proposal.evaluate(form =>
-			getComputedStyle(form.closest("[data-slot='unfold']")!).transitionDuration
-		),
-	).toBe("0.25s");
-	let brief = proposal.getByRole("textbox", { name: "Investigation brief", exact: true });
-	await brief.focus();
-	await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished)));
-	// The clip must leave room for the focus ring outside a full-width control.
-	expect(
-		await brief.evaluate(control => {
-			// Outside a focus boundary the ring sits outside the control; that is the case at risk.
-			control.closest("[data-focus-boundary]")?.removeAttribute("data-focus-boundary");
-			let clipElement = control.closest<HTMLElement>(".cv-unfold-clip")!;
-			let clip = clipElement.getBoundingClientRect();
-			let box = control.getBoundingClientRect();
-			let style = getComputedStyle(control);
-			let reach = Math.max(parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset), 0);
-			let room = parseFloat(getComputedStyle(clipElement).paddingInlineStart);
-			return {
-				visible: style.outlineStyle !== "none",
-				outside: reach > 0,
-				roomed: room >= reach,
-				clipped: box.left - reach < clip.left || box.right + reach > clip.right,
-			};
-		}),
-	).toEqual({ visible: true, outside: true, roomed: true, clipped: false });
-	await brief.fill("Compare startup approaches");
-	let [created] = await Promise.all([
-		page.waitForResponse(response =>
-			response.request().method() === "POST"
-			&& response.url().endsWith(`/documents/${room}/experiments`)
-		),
-		proposal.getByRole("button", { name: "Propose investigation", exact: true }).click(),
-	]);
-	// The submit button disables while busy; closing the fold returns focus to its toggle.
-	await expect(proposeToggle).toBeFocused();
-	await expect(proposal).toBeHidden();
-	let experiment = await created.json();
+	await expect(page.getByText("Propose investigation", { exact: true })).toHaveCount(0);
+	let experiment = await investigate(page, room, "Compare startup approaches");
+	await expect(content(page).locator(`[data-plan-investigation="${experiment.id}"]`))
+		.toHaveCount(1);
 	let peer = await join("leo");
-	let proposal = page.getByRole("article", { name: "Compare startup approaches", exact: true });
-	await expect(proposal.getByRole("status")).toHaveText("Ready to run");
+	let proposal = card(page, "Compare startup approaches");
+	await expect(proposal).toContainText("Ready to run");
 	await expect(proposal.getByRole("combobox")).toHaveCount(0);
 	// Another person's Run never borrows Ana's agent.
-	let peerProposal = peer.getByRole("article", { name: "Compare startup approaches", exact: true });
+	let peerProposal = card(peer, "Compare startup approaches");
 	await peerProposal.getByRole("button", { name: "Run", exact: true }).click();
 	await expect(peerProposal).toContainText("Start your local agent to run this:");
-	await expect(proposal.getByRole("status")).toHaveText("Ready to run");
+	await expect(proposal).toContainText("Ready to run");
 	await proposal.getByRole("button", { name: "Run", exact: true }).click();
-	await expect(proposal.getByRole("status")).toHaveText("Waiting for your local agent");
+	await expect(proposal).toContainText("Waiting for your local agent");
 	async function tool(name: string, args: unknown, token = paired.token) {
 		let response = await fetch(`${baseURL}/connector/mcp`, {
 			method: "POST",
@@ -154,68 +142,48 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	await expect(saved).toContainText("Use cached startup");
 	await expect(saved.getByRole("table")).toContainText("183");
 	await expect(saved.getByRole("table")).not.toContainText("410");
-	let queuedId = crypto.randomUUID();
-	let proposed = await page.request.post(`/api/documents/${room}/experiments`, {
-		headers: { origin: new URL(page.url()).origin },
-		data: { id: queuedId, brief: "Check memory use" },
-	});
-	expect(proposed.ok(), await proposed.text()).toBe(true);
-	let queued = page.getByRole("article", { name: "Check memory use", exact: true });
+	let second = await investigate(page, room, "Check memory use");
+	let queued = card(page, "Check memory use");
 	await queued.getByRole("button", { name: "Run", exact: true }).click();
-	await expect(queued.getByRole("button", { name: "Cancel investigation", exact: true }))
-		.toBeVisible();
-	await expect(peer.getByRole("button", { name: "Cancel investigation", exact: true })).toHaveCount(
-		0,
-	);
-	await queued.getByRole("button", { name: "Cancel investigation", exact: true }).click();
-	await expect(queued.getByRole("status")).toHaveText("Cancelled");
-	await queued.getByRole("button", { name: "Propose retry", exact: true }).click();
-	await expect(queued).toHaveCount(2);
+	await expect(queued.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+	await expect(card(peer, "Check memory use").getByRole("button", { name: "Stop", exact: true }))
+		.toHaveCount(0);
+	await queued.getByRole("button", { name: "Stop", exact: true }).click();
+	await expect(queued).toContainText("Stopped");
+	await queued.getByRole("button", { name: "Retry", exact: true }).click();
+	// Retry keeps the same investigation and its one card.
+	await expect(queued).toHaveCount(1);
+	await expect(content(page).locator(`[data-plan-investigation="${second.id}"]`)).toHaveCount(1);
 	await expect(queued.getByRole("button", { name: "Run", exact: true })).toBeVisible();
+	await queued.getByRole("button", { name: "Remove investigation", exact: true }).click();
+	await expect(queued).toHaveCount(0);
 	await tool("disconnect_workspace", {});
 	await page.reload();
 
-	let completed = page.getByRole("article", { name: "Compare startup approaches", exact: true });
-	let completedToggle = completed.getByRole("button", {
-		name: "Compare startup approaches",
-		exact: true,
-	});
-	await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
-	await expect(completed.getByRole("table", { name: "Median startup time", exact: true }))
-		.toBeHidden();
-	await completedToggle.click();
-	await expect(completed.getByRole("table", { name: "Median startup time", exact: true }))
-		.toContainText("410");
+	await expect(
+		card(page, "Compare startup approaches").getByRole("table", {
+			name: "Median startup time",
+			exact: true,
+		}),
+	).toContainText("410");
 });
 
-test("an incoming proposal appears inline and recovers from a failed detail load", async ({ join, seed, room }) => {
+test("a proposal typed from the slash menu appears inline on a phone", async ({ join, seed, room }) => {
 	await seed("# Investigation\n\nCheck before choosing an approach.\n");
 	let page = await join(person(), {
 		viewport: { width: 390, height: 844 },
 		isMobile: true,
 		hasTouch: true,
 	});
-	let id = crypto.randomUUID();
-	await page.route(`**/api/documents/${room}/experiments/${id}`, async route => {
-		await route.fulfill({ status: 503, json: { error: "Investigation temporarily unavailable" } });
-	}, { times: 1 });
-	let response = await page.request.post(`/api/documents/${room}/experiments`, {
-		headers: { origin: new URL(page.url()).origin },
-		data: { id, brief: "Measure startup before choosing a cache" },
-	});
-	expect(response.ok(), await response.text()).toBe(true);
-	let card = page.getByRole("article", {
-		name: "Measure startup before choosing a cache",
-		exact: true,
-	});
-	await expect(card.getByRole("button", { name: "Retry loading", exact: true })).toBeVisible();
-	await card.getByRole("button", { name: "Retry loading", exact: true }).click();
-	await expect(card.getByRole("status")).toHaveText("Ready to run");
-	await expect(card.getByRole("combobox")).toHaveCount(0);
-	await card.getByRole("button", { name: "Run", exact: true }).click();
-	await expect(card).toContainText("Start your local agent to run this:");
+	let created = await investigate(page, room, "Measure startup before choosing a cache");
+	let proposal = card(page, "Measure startup before choosing a cache");
+	await expect(proposal).toContainText("Ready to run");
+	await expect(proposal.getByRole("combobox")).toHaveCount(0);
+	await proposal.getByRole("button", { name: "Run", exact: true }).click();
+	await expect(proposal).toContainText("Start your local agent to run this:");
 	await expect(page.getByRole("alert")).toHaveCount(0);
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 	await page.reload();
-	await expect(card.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+	await expect(content(page).locator(`[data-plan-investigation="${created.id}"]`)).toHaveCount(1);
+	await expect(proposal.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
 });

@@ -78,3 +78,15 @@ test("Research additions and removals require the exact IDs in the correct autho
 	expect(protectProjections(before, after, new Set(["new"]), new Set(["old"])))
 		.toBeUndefined();
 });
+
+test("Investigation references follow the same authority sets, by kind", () => {
+	let before = nodes('<Investigation id="old" />\n\n<Research id="kept" />');
+	let after = nodes('<Research id="kept" />\n\n<Investigation id="new" />');
+	expect(newResearchProjections(before, after)).toEqual([]);
+	expect(newResearchProjections(before, after, "Investigation")).toEqual(["new"]);
+	expect(removedResearchProjections(before, after, "Investigation")).toEqual(["old"]);
+	expect(protectProjections(before, after)).toContain("cannot be dropped");
+	expect(protectProjections(before, after, new Set(["new"]), new Set(["old"]))).toBeUndefined();
+	expect(protectProjections(nodes('<Investigation id="a" />'), nodes('<Research id="a" />')))
+		.toContain("cannot be altered");
+});

@@ -473,6 +473,21 @@ describe("columns", () => {
 		expect(codes(COLUMNS.replace("First.", experiment))).toContain("bad-nesting");
 	});
 
+	it("allows an Investigation reference at document root but not inside a column", () => {
+		let investigation = '<Investigation id="2b7e0c4a-5f1d-4e2a-9c3b-7d8e9f0a1b2c" />';
+		accepts(investigation);
+		expect(codes(COLUMNS.replace("First.", investigation))).toContain("bad-nesting");
+		expect(codes("<Investigation />")).not.toEqual([]);
+		expect(codes('<Investigation id="2b7e0c4a-5f1d-4e2a-9c3b-7d8e9f0a1b2c" brief="x" />'))
+			.toContain("unknown-attribute");
+		expect(
+			codes(
+				'<Investigation id="2b7e0c4a-5f1d-4e2a-9c3b-7d8e9f0a1b2c">\n\nText.\n\n</Investigation>',
+			),
+		)
+			.not.toEqual([]);
+	});
+
 	it("rejects unsupported attributes and record-owned children", () => {
 		expect(codes(COLUMNS.replace("<Columns id=", '<Columns variant="gallery" id=')))
 			.toContain("unknown-attribute");

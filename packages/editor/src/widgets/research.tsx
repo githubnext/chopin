@@ -25,7 +25,7 @@ import { SidecarCard } from "../card";
 import { SendAction } from "../send-action";
 import { Fold, Swap, useLast } from "./research-motion";
 import { widgets$ } from "../widget-options";
-import { $isResearchNode } from "@chopin/dialect";
+import { $isInvestigationNode, $isResearchNode } from "@chopin/dialect";
 import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
 
@@ -33,7 +33,7 @@ import type { FormEvent, MouseEvent, ReactNode } from "react";
 import type { Research } from "@chopin/protocol";
 import type { ResearchNode } from "@chopin/dialect";
 import type { LexicalEditor, LexicalNode, RangeSelection } from "lexical";
-import type { ResearchStore } from "../widget-options";
+import type { InvestigationResources, ResearchStore } from "../widget-options";
 
 const WORDS: Record<Research.RequestStage, string> = {
 	queued: "Waiting to start",
@@ -58,6 +58,12 @@ const REMOVABLE_STAGES = new Set<Research.RequestStage>(["failed", "cancelled", 
 
 export type ResearchComposerProps = {
 	blocked?: string;
+	/** The textarea's accessible name. */
+	label?: string;
+	placeholder?: string;
+	/** The discard control's tooltip and, with `discardLabel`, its accessible name. */
+	discard?: string;
+	discardLabel?: string;
 	cancelDisabled?: boolean;
 	cancelLabel?: string;
 	dismissible?: boolean;
@@ -145,7 +151,11 @@ export function ResearchComposer(
 		blocked,
 		cancelDisabled,
 		cancelLabel,
+		discard = "Discard research",
+		discardLabel = "Discard research question",
 		dismissible = true,
+		label = "Research question",
+		placeholder = "What should Chopin research?",
 		error,
 		notice,
 		onCancel,
@@ -166,7 +176,7 @@ export function ResearchComposer(
 	return (
 		<form className="plan-research-composer" onSubmit={submit}>
 			<textarea
-				aria-label="Research question"
+				aria-label={label}
 				autoFocus
 				disabled={submitting}
 				maxLength={4096}
@@ -178,16 +188,16 @@ export function ResearchComposer(
 						onDismiss: onEscape ?? onCancel,
 						onSubmit,
 					})}
-				placeholder="What should Chopin research?"
+				placeholder={placeholder}
 				readOnly={questionLocked}
 				rows={3}
 				value={question}
 			/>
 			{dismissible && !submitting && (
 				<button
-					aria-label="Discard research question"
+					aria-label={discardLabel}
 					className="plan-research-dismiss btn btn-icon btn-ghost"
-					data-tooltip="Discard research"
+					data-tooltip={discard}
 					onClick={onCancel}
 					type="button"
 				>
@@ -538,8 +548,16 @@ export function researchActions(
 	return NONE;
 }
 
-function protectedResearch(node: LexicalNode, store: ResearchStore): boolean {
-	if (!$isResearchNode(node)) return false;
+type Guarded = { research?: ResearchStore; investigations?: InvestigationResources };
+
+function protectedResearch(
+	node: LexicalNode,
+	{ research: store, investigations }: Guarded,
+): boolean {
+	if ($isInvestigationNode(node)) {
+		return !!investigations && !investigations.removable(node.getId());
+	}
+	if (!$isResearchNode(node) || !store) return false;
 	if (store.mutating(node.getId())) return true;
 	let request = store.get(node.getId());
 	return request === undefined || !REMOVABLE_STAGES.has(request.stage);
@@ -574,7 +592,7 @@ function adjacentNode(selection: RangeSelection, backward: boolean): LexicalNode
 	return null;
 }
 
-function protectsActiveResearch(store: ResearchStore, backward?: boolean): boolean {
+function protectsActiveResearch(store: Guarded, backward?: boolean): boolean {
 	let selection = $getSelection();
 	if ($isNodeSelection(selection)) {
 		return selection.getNodes().some(node => protectedResearch(node, store));
@@ -588,7 +606,12 @@ function protectsActiveResearch(store: ResearchStore, backward?: boolean): boole
 	return adjacent !== null && protectedResearch(adjacent, store);
 }
 
-export function registerResearchDeletion(editor: LexicalEditor, store: ResearchStore): () => void {
+export function registerResearchDeletion(
+	editor: LexicalEditor,
+	research: ResearchStore | undefined,
+	investigations?: InvestigationResources,
+): () => void {
+	let store = { research, investigations };
 	return mergeRegister(
 		editor.registerCommand(
 			DELETE_CHARACTER_COMMAND,
@@ -615,8 +638,14 @@ export function registerResearchDeletion(editor: LexicalEditor, store: ResearchS
 
 export function ResearchDeletionPlugin() {
 	let [editor] = useLexicalComposerContext();
-	let store = useCellValue(widgets$).research;
-	useEffect(() => store ? registerResearchDeletion(editor, store) : undefined, [editor, store]);
+	let { research, investigations } = useCellValue(widgets$);
+	useEffect(
+		() =>
+			research || investigations
+				? registerResearchDeletion(editor, research, investigations)
+				: undefined,
+		[editor, research, investigations],
+	);
 	return null;
 }
 

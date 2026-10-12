@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "./room";
+import { content, expect, test } from "./room";
 import { ROOT } from "./servers";
 import { testChannelPath } from "./database";
 
@@ -67,17 +67,20 @@ for (let transport of ["stdio", "http"] as const) {
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
 			await expect(page.getByRole("status")).toHaveText("Connected.");
 			await page.goto(testChannelPath(room));
-			await page.getByRole("button", {
-				name: "Propose investigation",
-				exact: true,
-				expanded: false,
-			}).click();
-			let proposal = page.getByRole("form", { name: "New investigation", exact: true });
-			await proposal.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
+			await content(page).click();
+			await page.keyboard.press("ControlOrMeta+End");
+			await page.keyboard.press("Enter");
+			await page.keyboard.type("/investigate");
+			await page.getByRole("listbox", { name: "Insert block" })
+				.getByRole("option", { name: "Investigate", exact: true })
+				.click();
+			await page.getByRole("textbox", { name: "Investigation brief", exact: true }).fill(
 				"Produce the captured startup fixture",
 			);
-			await proposal.getByRole("button", { name: "Propose investigation", exact: true }).click();
-			await page.getByRole("button", { name: "Run", exact: true }).click();
+			await page.getByRole("button", { name: "Propose investigation", exact: true }).click();
+			await page.getByRole("article", { name: "Investigation", exact: true })
+				.getByRole("button", { name: "Run", exact: true })
+				.click();
 			await expect(page.getByRole("table", { name: "Median startup time", exact: true }))
 				.toContainText("183", { timeout: 30_000 });
 			expect(output).toContain("Running");
