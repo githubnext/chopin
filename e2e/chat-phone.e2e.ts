@@ -231,7 +231,8 @@ test("a phone composer shows a removable Chopin chip while a message addresses C
 	let chat = chatPane(page);
 	let draft = chatInput(chat);
 	let chip = chat.getByRole("button", { name: "Remove Chopin", exact: true });
-	let mode = chat.getByRole("button", { name: "Talk to Chopin", exact: true });
+	// Hidden while the chip shows, but its pressed state still says where the message goes.
+	let mode = chat.getByRole("button", { includeHidden: true, name: "Talk to Chopin", exact: true });
 	await expect(chip).toHaveCount(0);
 
 	// A mention addresses Chopin; the chip says so above the draft, inside the pill.
