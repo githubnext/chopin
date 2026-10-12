@@ -197,6 +197,8 @@ test("a proposal typed from the slash menu appears inline on a phone", async ({ 
 		isMobile: true,
 		hasTouch: true,
 	});
+	// A phone opens the document for reading; writing starts from the edit toggle.
+	await page.getByRole("button", { name: "Edit document", exact: true }).tap();
 	let created = await investigate(
 		page,
 		room,
