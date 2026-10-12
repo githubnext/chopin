@@ -131,7 +131,8 @@ export function restoreLive(
 		|| build.checkout.repository !== live.checkout.repository
 		|| build.checkout.branch !== live.checkout.branch
 		|| build.checkout.commit !== live.checkout.commit
-		|| !history.some(item => item.run.id === live.buildId && item.live)
+		// A live run, or a verified one when the build was manual.
+		|| !history.some(item => item.run.id === live.buildId)
 		|| live.baseRevision > revision
 		|| new Set(live.pullRequests).size !== live.pullRequests.length
 		|| live.commits?.some(commit => !live.pullRequests.includes(commit.pullRequest))
@@ -248,35 +249,41 @@ export function buildActive(plan: Plan): boolean {
 }
 
 /**
- * Queue a rebuild of a live document's edits onto its pull requests.
+ * Queue a rebuild of a built document's edits onto its pull requests.
  *
- * The live build's user keeps ownership; its original connection is preferred, and another of the
- * same user's connections for this repository stands in once that one has gone. A connection
+ * Under LIVE_BUILD the live build's user keeps ownership; its original connection is preferred,
+ * and another of the same user's connections for this repository stands in once that one has gone.
+ * A person who presses Build instead (`by`) builds the edits on their own connection. A connection
  * already holding another document's build is skipped so the rebuild cannot strand that build.
  */
 export async function queueRebuild(
 	plan: Plan,
 	connections: RebuildConnections,
-	/** An automatic rebuild runs only on a connection whose owner opted in when pairing it. */
-	options: { automatic?: boolean } = {},
+	options: {
+		/** An automatic rebuild runs only on a connection whose owner opted in when pairing it. */
+		automatic?: boolean;
+		/** Who pressed Build; a pressed rebuild runs on their own agent. */
+		by?: string;
+	} = {},
 ): Promise<RebuildResult> {
 	await drain(plan);
 	return exclusive(plan, async () => {
 		let live = plan.live;
-		if (!plan.persistence.liveBuild || !live) return { kind: "unavailable" };
+		if (!live) return { kind: "unavailable" };
 		if (buildActive(plan)) return { kind: "busy" };
 		if (source(plan) === live.baseSource) return { kind: "unchanged" };
+		let owner = options.by ?? live.user;
 		let original = plan.builds.find(build => build.id === live.buildId);
 		let usable = (connection: Connection | undefined) => {
 			let assigned = connection && connections.assigned(connection.id);
-			return !!connection && connection.owner === live.user
+			return !!connection && connection.owner === owner
 				&& connection.source.repositoryId === live.repositoryId
 				&& (!options.automatic || connection.autoRun === true)
 				&& (assigned === undefined || assigned === plan.id);
 		};
 		let connection = original && connections.get(original.connectionId);
 		if (!usable(connection)) {
-			connection = connections.list(live.repositoryId, live.user).find(usable);
+			connection = connections.list(live.repositoryId, owner).find(usable);
 		}
 		if (!original || !connection) return { kind: "unavailable" };
 		// The history keeps at most 100 builds. Rebuilds that already ended give way, oldest first, so
@@ -300,7 +307,7 @@ export async function queueRebuild(
 		let build: BuildRequest = buildSchema.parse({
 			id: crypto.randomUUID(),
 			kind: "rebuild",
-			user: live.user,
+			user: owner,
 			connectionId: connection.id,
 			repositoryId: live.repositoryId,
 			checkout: {

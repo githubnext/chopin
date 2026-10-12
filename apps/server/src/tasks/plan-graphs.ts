@@ -107,6 +107,32 @@ export function reportImplementationLifecycle(
 		plan.execution = result.state.execution;
 		plan.lifecycle = result.state.lifecycle;
 		let archived = result.state.lifecycle.history.at(-1);
+		// Without LIVE_BUILD a browser build that delivered still records its built source, so the
+		// document can count later edits and a person can build them onto the same pull requests.
+		let manual = !plan.persistence.liveBuild && !plan.live && !result.state.execution
+				&& archived?.run.id === previous.execution?.id
+			? plan.builds.find(item => item.id === archived?.run.id && item.kind !== "rebuild")
+			: undefined;
+		if (manual) {
+			let finished = historyFor(result.state.graph, result.state.lifecycle).at(-1);
+			if (finished?.outcome.kind === "implemented" || finished?.outcome.kind === "delivered") {
+				plan.live = {
+					buildId: manual.id,
+					user: manual.user,
+					repositoryId: manual.repositoryId,
+					checkout: structuredClone(manual.checkout),
+					baseRevision: plan.revision,
+					baseSource: source(plan),
+					pullRequests: [
+						...new Set(
+							finished.progress.tasks.flatMap(task =>
+								task.state === "completed" ? [task.pullRequest.url] : []
+							),
+						),
+					],
+				};
+			}
+		}
 		if (build && !result.state.execution && archived?.run.id === build.id && archived.live) {
 			let delivered = historyFor(result.state.graph, result.state.lifecycle).at(-1)!;
 			plan.live = {

@@ -1,6 +1,6 @@
 import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
-import { liveSnapshot, queueBuild, requestBuild } from "./builds";
+import { liveSnapshot, queueBuild, queueRebuild, requestBuild } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 import { implementationReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
@@ -139,7 +139,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				: free;
 			if (here) list.unshift(connection);
 			else list.push(connection);
-		}
+			}
 		return [...free, ...prototyping, ...building];
 	}
 	router.on(
@@ -266,6 +266,33 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 					}
 				});
 			});
+		}),
+	);
+	// Build the edits since the last build onto its pull requests, on the presser's own agent.
+	router.on(
+		"POST",
+		"/api/channels/:id/implementation/rebuild",
+		safe(async (request, _url, { id }) => {
+			if (request.headers.get("origin") !== auth.config.origin) {
+				throw new GitHubError("origin is not allowed", 403);
+			}
+			let { session, channel, repository } = await browser(request, id);
+			if (!repository.permissions.push && !repository.permissions.admin || channel.archivedAt) {
+				throw new GitHubError("repository write access is required", 403);
+			}
+			if (!options.connections.list(channel.repositoryId, session.user.id).length) {
+				throw new GitHubError("no-workspace", 409);
+			}
+			connector.track(id);
+			let result = await options.withPlan(
+				id,
+				plan => queueRebuild(plan, options.connections, { by: session.user.id }),
+			);
+			if (result.kind === "busy") throw new GitHubError("implementation is already active", 409);
+			if (result.kind === "unchanged") throw new GitHubError("nothing to build", 409);
+			if (result.kind === "unavailable") throw new GitHubError("no-workspace", 409);
+			options.connections.wake(channel.repositoryId);
+			return json(result.build);
 		}),
 	);
 	router.on(

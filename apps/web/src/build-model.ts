@@ -498,12 +498,9 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 				retry: false,
 			};
 		}
+		let act = context.canEdit && context.connected;
 		if (sync.reason === "failed") {
-			return {
-				kind: "failed",
-				tip: "The last build didn’t finish. Edit the document to retry.",
-				retry: false,
-			};
+			return { kind: "failed", tip: "The last build didn’t finish", retry: act };
 		}
 		let changes = Math.max(snapshot.live!.changes ?? 1, 1);
 		let tip = context.live
@@ -521,7 +518,7 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 			: who === ""
 			? "Edits since someone else’s build"
 			: "Edits since the last build";
-		return { kind: "stale", changes, live: context.live, tip, build: false };
+		return { kind: "stale", changes, live: context.live, tip, build: !context.live && act };
 	}
 	if (!snapshot) {
 		return step.view === "idle" ? { kind: "plan", blocked: "Chopin isn’t connected" } : {
