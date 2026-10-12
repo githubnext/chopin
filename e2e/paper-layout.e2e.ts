@@ -23,7 +23,11 @@ function sheet(page: Page) {
 }
 
 function toolbar(page: Page) {
-	return root(page).locator("[data-document-toolbar]");
+	return root(page).locator("[data-document-title-bar]");
+}
+
+function title(page: Page) {
+	return toolbar(page).getByRole("group", { name: /^Document: / });
 }
 
 function resolved(page: Page, token: string) {
@@ -37,12 +41,12 @@ function resolved(page: Page, token: string) {
 	}, token);
 }
 
-test("split Chat sits on the ground without a header beside a raised sheet", async ({ join, page }) => {
+test("split Chat sits on the ground beside a raised sheet that carries the title", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
 	let pane = chatPane(page);
-	let header = page.getByRole("banner");
 
+	await expect(page.getByRole("banner")).toHaveCount(0);
 	await expect(pane.locator("[data-chat-header]")).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Hide chat" })).toHaveCount(0);
 	await expect(page.getByRole("heading", { name: "Chat" })).toHaveClass(/sr-only/);
@@ -51,21 +55,25 @@ test("split Chat sits on the ground without a header beside a raised sheet", asy
 	await expect(field).toHaveCSS("box-shadow", "none");
 	await expect(field).toHaveCSS("background-color", await resolved(page, "--color-inset"));
 
-	let [rootBox, headerBox, paneBox, sheetBox] = await Promise.all([
+	let [rootBox, titleBox, barBox, viewsBox, paneBox, sheetBox] = await Promise.all([
 		box(root(page)),
-		box(header),
+		box(title(page)),
+		box(toolbar(page)),
+		box(root(page).locator("[data-document-toolbar]")),
 		box(pane),
 		box(sheet(page)),
 	]);
 	expect(Math.round(sheetBox.y - rootBox.y)).toBe(12);
-	expect(sheetBox.y).toBeLessThan(headerBox.y + headerBox.height);
-	expect(headerBox.x + headerBox.width).toBeLessThanOrEqual(sheetBox.x + 1);
+	expect(titleBox.x).toBeGreaterThan(sheetBox.x);
+	expect(Math.round(barBox.height)).toBe(40);
+	expect(Math.round(viewsBox.height)).toBe(40);
+	expect(Math.round(viewsBox.y)).toBe(Math.round(barBox.y + barBox.height));
 	expect(Math.round(paneBox.y)).toBe(Math.round(rootBox.y));
 	expect(Math.round(paneBox.x + paneBox.width)).toBe(Math.round(sheetBox.x));
 	await expect(sheet(page)).not.toHaveCSS("box-shadow", "none");
 });
 
-test("presence sits at the right end of the document tab row", async ({ join, page }) => {
+test("presence sits at the right end of the document title bar, above the views", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
 	let people = toolbar(page).getByRole("group", { name: /People here: ana/ });
@@ -78,7 +86,7 @@ test("presence sits at the right end of the document tab row", async ({ join, pa
 		box(toolbar(page)),
 		box(page.getByRole("group", { name: "Document view" })),
 	]);
-	expect(peopleBox.x).toBeGreaterThan(viewsBox.x + viewsBox.width);
+	expect(peopleBox.y + peopleBox.height).toBeLessThanOrEqual(viewsBox.y);
 	expect(barBox.x + barBox.width - (peopleBox.x + peopleBox.width)).toBeLessThan(24);
 });
 
@@ -93,7 +101,7 @@ test("the document expands and restores Chat from the keyboard and remembers it"
 	await draft.fill("unfinished thought");
 
 	let [expandBox, viewsBox] = await Promise.all([box(expand), box(views)]);
-	expect(expandBox.x + expandBox.width).toBeLessThanOrEqual(viewsBox.x);
+	expect(expandBox.y + expandBox.height).toBeLessThanOrEqual(viewsBox.y);
 	await expect(expand).toHaveAttribute("aria-controls", paneId!);
 	await expand.focus();
 	await page.keyboard.press("Enter");
@@ -104,18 +112,17 @@ test("the document expands and restores Chat from the keyboard and remembers it"
 	await expect(restore).toHaveText("Chat");
 	expect(await restore.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 	await expect(restore).toHaveAttribute("aria-expanded", "false");
-	await expect(page.locator(".room-header")).toBeHidden();
+	// Expanding is width only: the title stays on the sheet.
+	await expect(title(page)).toBeVisible();
 	let frame = root(page).locator(".workspace-frame");
 	await expect.poll(async () => Math.round((await box(sheet(page))).width))
 		.toBe(Math.round((await box(frame)).width));
-	await page.keyboard.press("Shift+Tab");
-	await expect(page.locator(".room-header :focus")).toHaveCount(0);
 
 	await restore.focus();
 	await page.keyboard.press("Enter");
 	await expect(pane).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Chat" })).toBeFocused();
-	await expect(page.locator(".room-header")).toBeVisible();
+	await expect(title(page)).toBeVisible();
 	await expectChatValue(draft, "unfinished thought");
 
 	await toolbar(page).getByRole("button", { name: "Expand document" }).click();
@@ -125,23 +132,14 @@ test("the document expands and restores Chat from the keyboard and remembers it"
 	await expect(toolbar(page).getByRole("button", { name: "Show chat" })).toBeVisible();
 });
 
-test("the Chat shortcut from the top bar moves focus to the Show chat button", async ({ join, page }) => {
+test("the Chat shortcut from the title keeps focus on the title", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
-	await page.locator(".room-header").getByRole("button").first().focus();
-	await expect(page.locator(".room-header :focus")).toHaveCount(1);
+	let rename = title(page).getByRole("button", { name: /^Rename / });
+	await rename.focus();
 	await page.keyboard.press("ControlOrMeta+.");
 	await expect(chatPane(page)).toBeHidden();
-	await expect(toolbar(page).getByRole("button", { name: "Show chat" })).toBeFocused();
-});
-
-test("reduced motion swaps Chat and the top bar without transitions", async ({ join, page }) => {
-	await page.emulateMedia({ reducedMotion: "reduce" });
-	await page.setViewportSize({ width: 1440, height: 900 });
-	await join("ana");
-	await toolbar(page).getByRole("button", { name: "Expand document" }).click();
-	await expect(chatPane(page)).toBeHidden();
-	await expect(root(page).locator(".workspace-header-slot")).toHaveCSS("transition-duration", "0s");
+	await expect(rename).toBeFocused();
 });
 
 test("the expanded sheet clears a collapsed Projects sidebar trigger", async ({ join, page }) => {

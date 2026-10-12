@@ -20,7 +20,9 @@ test("Projects does not reclaim focus after it intentionally leaves the open dra
 		expect(loadingControl!.height).toBe(24);
 
 		// Simulate a host moving focus outside the drawer, then returning it to body.
-		await page.getByRole("banner").getByRole("button", { name: /^Actions for / })
+		await page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+			name: /^Actions for /,
+		})
 			.evaluate(element => {
 				let button = element as HTMLButtonElement;
 				button.focus();

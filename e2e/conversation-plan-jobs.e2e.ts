@@ -91,7 +91,9 @@ async function expectPopoverInChat(page: Page) {
 }
 
 async function headerAction(page: Page, action: "Archive" | "Restore") {
-	await page.getByRole("banner").getByRole("button", { name: /^Actions for / }).click();
+	await page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+		name: /^Actions for /,
+	}).click();
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
 }
 

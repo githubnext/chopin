@@ -1,5 +1,4 @@
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
-import { MagnifierIcon } from "@chopin/icons";
 import { Fragment, useLayoutEffect, useRef } from "react";
 
 import { closeChild, openChild, rememberOpener } from "./child-motion-driver";
@@ -129,12 +128,6 @@ export function AnchoredChildSurface(
 						tabIndex={-1}
 					>
 						<div className="anchored-child-content">
-							{motion === "lift" && (
-								<div className="anchored-child-title">
-									<MagnifierIcon aria-hidden="true" size={14} />
-									<span>{entry.label}</span>
-								</div>
-							)}
 							{entry.node}
 						</div>
 					</section>

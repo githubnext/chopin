@@ -113,7 +113,9 @@ test("touch tablet: every text field is at least 16px", async ({ join, seed }) =
 	await views.getByRole("button", { name: "Document", exact: true }).click();
 
 	// The desktop header's inline rename, which is smaller type than a field may be on touch.
-	await page.getByRole("banner").getByRole("button", { name: /^Actions for / }).click();
+	await page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+		name: /^Actions for /,
+	}).click();
 	await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
 	let title = page.getByRole("textbox", { name: "Document title" });
 	await expect(title).toBeFocused();
@@ -128,7 +130,9 @@ test("touch tablet: every text field is at least 16px", async ({ join, seed }) =
 test("desktop keeps the header rename at its own small size", async ({ join, seed }) => {
 	await seed(SOURCE);
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
-	await page.getByRole("banner").getByRole("button", { name: /^Actions for / }).click();
+	await page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+		name: /^Actions for /,
+	}).click();
 	await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
 	let title = page.getByRole("textbox", { name: "Document title" });
 	await expect(title).toBeFocused();

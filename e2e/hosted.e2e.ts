@@ -138,7 +138,7 @@ test("a signed-out document link returns to the document after OAuth", async ({ 
 	expect(destination).toBe(path);
 	await page.goto(destination);
 	await expect(page).toHaveURL(path);
-	await expect(page.getByRole("banner")).toBeVisible();
+	await expect(page.getByRole("group", { name: /^Document: / })).toBeVisible();
 });
 
 test("a stale outgoing route cannot canonicalize or publish over the active document", async ({ baseURL, page, room }) => {
@@ -316,7 +316,9 @@ test("superseded WebSocket metadata cannot canonicalize a requested document", a
 	let active = page.locator(
 		".document-route-swap > [data-content-swap-state]:not([hidden]):not([inert])",
 	);
-	await expect(active.getByRole("banner")).toContainText(`Test ${room.slice(0, 8)}`);
+	await expect(active.getByRole("group", { name: /^Document: / })).toContainText(
+		`Test ${room.slice(0, 8)}`,
+	);
 	await expect(page).toHaveURL(activePath);
 });
 
@@ -345,7 +347,7 @@ test("a known deleted channel keeps its context and routes back without retry", 
 				}),
 	);
 	await showKnownChannel(page);
-	await expect(page.getByRole("banner").getByLabel(`Document: ${recoveryChannel.title}`))
+	await expect(page.getByLabel(`Document: ${recoveryChannel.title}`))
 		.toBeVisible();
 	deleted = true;
 	await page.reload();
@@ -382,7 +384,7 @@ test("a transient channel failure retries the safe read", async ({ baseURL, page
 
 	await expect(page.getByRole("heading", { name: "Couldn't open this document" })).toBeVisible();
 	await page.getByRole("button", { name: "Try again" }).click();
-	await expect(page.getByRole("banner").getByLabel(`Document: ${recoveryChannel.title}`))
+	await expect(page.getByLabel(`Document: ${recoveryChannel.title}`))
 		.toBeVisible();
 	expect(attempts).toBe(2);
 });

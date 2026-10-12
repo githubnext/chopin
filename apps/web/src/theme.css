@@ -636,43 +636,15 @@ body {
 	min-width: 9rem;
 }
 
-/*
- * Split: Chat and its top bar sit on the ground; the document is the only sheet.
- * The frame spans both rows so the sheet rises to the top margin beside the bar.
- */
-.workspace-root[data-workspace-mode="split"] {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr);
-	grid-template-rows: var(--document-shell-header-height) minmax(0, 1fr);
-}
-
-.workspace-root[data-workspace-mode="split"] > .workspace-header-slot {
-	z-index: 1;
-	grid-area: 1 / 1;
-	width: var(--chat-width, 0px);
-	min-width: 0;
-	transition: opacity var(--panel-open-dur) var(--motion-smooth-out);
-}
-
-.workspace-root[data-workspace-mode="split"][data-header-hidden] > .workspace-header-slot {
-	opacity: 0;
-	visibility: hidden;
-	transition:
-		opacity var(--panel-close-dur) var(--motion-smooth-out),
-		visibility 0s linear var(--panel-close-dur);
-}
-
-.workspace-root[data-workspace-mode="split"] > .workspace-frame {
-	grid-area: 1 / 1 / 3 / 2;
-}
-
-/* A visible header while expanded (a child is open) keeps the sheet below its row. */
-.workspace-root[data-workspace-mode="split"][data-document-expanded]:not([data-header-hidden])
-	> .workspace-frame {
-	grid-area: 2 / 1;
-}
-
+/* Split: Chat sits on the ground and the document is the only sheet, rising to the top margin. */
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	padding-top: calc(var(--spacing) * 3);
+}
+
+/* The floating Show sidebar trigger sits over Chat's top corner, so Chat starts below it. */
+.navigation-content[data-project-sidebar-trigger]
+	.workspace-root[data-workspace-mode="split"]
+	.workspace-chat-panel {
 	padding-top: var(--document-shell-header-height);
 }
 
@@ -699,18 +671,125 @@ body {
 }
 
 /*
- * A covered Lift sheet's tab row is one Back control. The button fills the row beneath its
- * controls, so a click between tabs and keyboard focus both reach it.
+ * The sheet's title bar: Chat toggle | project / title ... status | people. Fixed height, no
+ * vertical padding, so its dividers run the bar's full height.
  */
-[data-document-toolbar]:has(> .workspace-tab-row-return) {
+.document-title-bar {
+	position: relative;
+	gap: calc(var(--spacing) * 2);
+	container: document-title-bar / inline-size;
+}
+
+.document-title-slot {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+}
+
+.document-title-trailing {
+	display: flex;
+	align-self: stretch;
+	flex-shrink: 0;
+	align-items: center;
+}
+
+/* Status keeps its live regions mounted, so the rule before the faces follows visible notices. */
+.document-title-status {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.document-title-status:has(> :not(.sr-only, [data-level="hidden"])) {
+	padding-inline-end: calc(var(--spacing) * 2);
+}
+
+.document-title-status:has(> :not(.sr-only, [data-level="hidden"])) + .room-members {
+	align-self: stretch;
+	padding-inline-start: calc(var(--spacing) * 2);
+	border-inline-start: var(--edge-width) solid var(--color-divider);
+}
+
+.document-title-bar .title-control {
+	color: var(--color-text-primary);
+}
+
+/* The project keeps its name while the title truncates first. */
+.document-title-bar .document-project-prefix {
+	flex-shrink: 0;
+}
+
+/* Bar 2 holds the views and sits directly on the paper, so it has no rule beneath it. */
+.document-views-bar {
+	gap: calc(var(--spacing) * 1.5);
+	transition:
+		block-size var(--child-close-dur) var(--child-ease),
+		opacity var(--child-close-dur) var(--child-ease);
+}
+
+/* A Zoom child has no views of its own, so the root's fold away while it is open. */
+.document-views-bar[data-folded] {
+	block-size: 0;
+	opacity: 0;
+	transition-duration: var(--child-open-dur);
+}
+
+/* Zoom's path: the root is a quiet crumb back, and the child's own title control follows. */
+.document-title-crumb {
+	flex: 0 1 auto;
+	max-width: var(--label-measure-compact);
+	color: var(--color-text-tertiary);
+}
+
+.document-title-crumb-chevron {
+	flex: none;
+	color: var(--color-text-quaternary);
+}
+
+.document-child-title-slot {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+}
+
+.child-title-icon {
+	display: grid;
+	align-self: stretch;
+	flex: none;
+	place-items: center;
+	padding-inline: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3.5);
+	border-inline-end: var(--edge-width) solid var(--color-divider);
+	color: var(--color-text-tertiary);
+}
+
+/* The title truncates first; then status labels fold to their glyphs; then one face remains. */
+@container document-title-bar (max-width: 40rem) {
+	.document-title-status [data-status-label] {
+		display: none;
+	}
+}
+
+@container document-title-bar (max-width: 32rem) {
+	.document-title-bar .room-member-face:nth-child(n+2),
+	.document-title-bar .room-member-overflow {
+		display: none;
+	}
+
+	.document-title-bar .room-member-overflow-narrow {
+		display: inline;
+	}
+}
+
+/*
+ * A covered Lift sheet's title bar is one Back control. The button fills the bar beneath its
+ * controls, so a click on the title and keyboard focus both reach it.
+ */
+[data-document-title-bar] > :not(.workspace-tab-row-return) {
 	position: relative;
 }
 
-[data-document-toolbar]:has(> .workspace-tab-row-return) > * {
-	position: relative;
-}
-
-[data-document-toolbar] > .workspace-tab-row-return {
+[data-document-title-bar] > .workspace-tab-row-return {
 	position: absolute;
 	inset: 0;
 	cursor: pointer;
@@ -724,8 +803,7 @@ body {
 /* The divider spans the bar's full height, so the slot stretches rather than centring. */
 .workspace-surface-toggle-slot {
 	align-self: stretch;
-	padding-inline-end: var(--spacing);
-	margin-inline-end: var(--spacing);
+	padding-inline-end: calc(var(--spacing) * 2);
 	border-inline-end: var(--edge-width) solid var(--color-divider);
 }
 
@@ -1832,11 +1910,6 @@ button.question-add:disabled {
 	}
 
 	.workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-pane-moving] {
-		transition: none;
-	}
-
-	.workspace-root[data-workspace-mode="split"] > .workspace-header-slot,
-	.workspace-root[data-workspace-mode="split"][data-header-hidden] > .workspace-header-slot {
 		transition: none;
 	}
 

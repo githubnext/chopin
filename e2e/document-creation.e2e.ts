@@ -334,7 +334,7 @@ test("overlapping creations keep separate guards and open the latest requested p
 	await expect(second).toBeDisabled();
 	releaseSecond.resolve();
 	await expect(page).toHaveURL(`/documents/octo-org/archive-1/${secondDocument.channel.slug}`);
-	await expect(page.getByRole("banner").locator('[aria-label^="Document:"]'))
+	await expect(page.getByRole("group", { name: /^Document: / }))
 		.toHaveAccessibleName(`Document: ${secondDocument.channel.title}`);
 	await expect(second).toBeEnabled();
 	expect(posts).toEqual([
@@ -420,7 +420,7 @@ test("leaving a pending opening releases its guard without letting stale readine
 		.toBeVisible();
 	releaseSecond.resolve();
 	await expect(createButton(page)).toBeEnabled();
-	await expect(page.getByRole("banner").locator('[aria-label^="Document:"]'))
+	await expect(page.getByRole("group", { name: /^Document: / }))
 		.not.toHaveAccessibleName(`Document: ${originalTitle}`);
 });
 
@@ -444,11 +444,11 @@ for (let returnToOrigin of [false, true]) {
 		let created = await posted.promise;
 		let target = `Test ${destination.slice(0, 8)}`;
 		await sidebar(page).getByRole("link", { name: target, exact: true }).click();
-		await expect(page.getByRole("banner").locator('[aria-label^="Document:"]'))
+		await expect(page.getByRole("group", { name: /^Document: / }))
 			.toHaveAccessibleName(`Document: ${target}`);
 		if (returnToOrigin) {
 			await sidebar(page).getByRole("link", { name: originalTitle, exact: true }).click();
-			await expect(page.getByRole("banner").locator('[aria-label^="Document:"]'))
+			await expect(page.getByRole("group", { name: /^Document: / }))
 				.toHaveAccessibleName(`Document: ${originalTitle}`);
 		}
 		let path = page.url();

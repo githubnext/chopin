@@ -124,7 +124,10 @@ export function useWorkspaceState(
 }
 
 export type WorkspaceProps = {
+	/** Ground-level header for compact and phone layouts; split puts `title` on the sheet instead. */
 	header: ReactNode;
+	/** The document's own title, path and actions, at the start of the sheet's title bar. */
+	title?: ReactNode;
 	available?: number;
 	frame?: RefObject<HTMLDivElement | null>;
 	chat?: ReactNode;
@@ -133,9 +136,9 @@ export type WorkspaceProps = {
 	build?: ReactNode;
 	buildEnabled?: boolean;
 	controls: ReactNode;
-	/** Connection and document status, right-aligned in the document header. */
+	/** Connection and document status, right-aligned in the document title bar. */
 	status?: ReactNode;
-	/** People present in the room, shown after the status in the document tab row. */
+	/** People present in the room, at the end of the document title bar. */
 	presence?: ReactNode;
 	ids: WorkspaceIds;
 	mode: WorkspaceMode;
@@ -259,6 +262,7 @@ export function Workspace(
 		presentation: workspacePresentation,
 		state,
 		status,
+		title,
 		unanswered,
 		view,
 	}: WorkspaceProps,
@@ -279,16 +283,16 @@ export function Workspace(
 	let nested = workspacePresentation.type === "parent-with-child"
 		? workspacePresentation
 		: undefined;
-	let childOpen = !!nested;
-	// The top bar stays while a child is open, so the root's title and actions remain over Chat.
-	let headerHidden = presentation.documentExpanded && !childOpen;
 	let lift = nested?.motion === "lift" && mode === "split";
 	let childClosing = nested?.childState === "closing";
 	let liftCovered = lift && !childClosing;
-	// Compact has no in-sheet tab row to peek, so it always uses the stack bar. It stays on every
-	// view, so a child left open under Decisions or Build is still in sight and one click away.
-	let stackBar = !!nested && !lift;
-	let planCovered = stackBar && view === "plan";
+	// Split Zoom puts the child at the end of the title bar's path and folds the views away, since
+	// a child has none. Compact has no title bar, so it keeps the stack bar, on every view, so a
+	// child left open under Decisions or Build is still in sight and one click away.
+	let zoom = !!nested && !lift;
+	let stackBar = zoom && mode !== "split";
+	let planCovered = zoom && view === "plan";
+	let viewsFolded = zoom && mode === "split" && view === "plan" && !childClosing;
 	// Phones crossfade rather than cut under reduced motion, so only keyboard input is immediate.
 	let immediately = phone ? motionImmediately(undefined, false) : motionImmediately();
 	let contentSwapMotion = phone ? motionContract("tab-slide") : motionContract("content-swap");
@@ -383,11 +387,7 @@ export function Workspace(
 		}
 		let pane = root.current?.querySelector(`#${CSS.escape(ids.pane.chat)}`);
 		// Keep focus where it was unless closing the pane would strand it.
-		let active = document.activeElement;
-		// Hiding Chat also hides the top bar while expanded, so focus there would be stranded too.
-		let stranded = pane?.contains(active)
-			|| root.current?.querySelector(".workspace-header-slot")?.contains(active);
-		if (mode !== "split" || stranded) dismissChat();
+		if (mode !== "split" || pane?.contains(document.activeElement)) dismissChat();
 		else onDesktopChatOpen(false);
 	};
 	let topBar = usePhoneTopBar(root, phone, destination);
@@ -414,7 +414,6 @@ export function Workspace(
 		<div
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
 			data-document-expanded={presentation.documentExpanded || undefined}
-			data-header-hidden={headerHidden || undefined}
 			data-workspace-bar={topBar.hidden ? "hidden" : undefined}
 			data-workspace-mode={mode}
 			data-workspace-phone={phone || undefined}
@@ -425,16 +424,10 @@ export function Workspace(
 			ref={root}
 			style={mode === "split" ? { "--chat-width": `${chatWidth}px` } as CSSProperties : undefined}
 		>
-			{/* The phone top bar is positioned against the workspace root, so it is not slotted. */}
-			{phone ? header : (
-				<div
-					aria-hidden={headerHidden || undefined}
-					className="workspace-header-slot shrink-0"
-					inert={headerHidden}
-				>
-					{header}
-				</div>
-			)}
+			{/* Split has no ground header: the title lives on the sheet, so expanding never hides it. */}
+			{phone
+				? header
+				: mode !== "split" && <div className="workspace-header-slot shrink-0">{header}</div>}
 
 			{mode !== "split" && !phone && (
 				<nav
@@ -537,23 +530,13 @@ export function Workspace(
 						<div className="relative flex h-full flex-col overflow-hidden">
 							{mode === "split" && (
 								<div
-									className="panel-header flex shrink-0 items-center overflow-x-auto overflow-y-hidden px-(--panel-toolbar-padding-inline) hairline-b"
-									data-document-toolbar
-									onFocusCapture={event => {
-										if (!(event.target instanceof HTMLElement)) return;
-										let control = event.target.getBoundingClientRect();
-										let toolbar = event.currentTarget.getBoundingClientRect();
-										if (control.left < toolbar.left) {
-											event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
-										} else if (control.right > toolbar.right) {
-											event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
-										}
-									}}
+									className="document-title-bar panel-header flex shrink-0 items-center px-(--panel-toolbar-padding-inline) hairline-b"
+									data-document-title-bar
 								>
 									{lift && (
-										// The covered row is one control: a click anywhere on it, or on a tab, returns
-										// through `<main>`'s capture handler, so this button needs no handler of its own.
-										// It stays mounted and focusable while closing so focus never falls to the body
+										// The covered title bar is one control: a click anywhere on it returns through
+										// `<main>`'s capture handler, so this button needs no handler of its own. It
+										// stays mounted and focusable while closing so focus never falls to the body
 										// before it returns to the opener; `inert` would blur it just the same.
 										<button
 											aria-disabled={childClosing || undefined}
@@ -574,14 +557,44 @@ export function Workspace(
 											/>
 										</span>
 									)}
-									{controls}
-									<div
-										className="ml-auto flex shrink-0 items-center gap-2 pl-2"
-										data-toolbar-trailing
-									>
-										{status}
+									<div className="document-title-slot" inert={liftCovered || undefined}>
+										{zoom && (
+											<button
+												aria-label={`Back to ${nested!.path.at(-2)!.label}`}
+												className="btn btn-icon btn-ghost shrink-0"
+												data-tooltip={`Back to ${nested!.path.at(-2)!.label}`}
+												onClick={nested!.onChildClose}
+												type="button"
+											>
+												<ArrowLeftIcon aria-hidden="true" size={14} />
+											</button>
+										)}
+										{title}
+									</div>
+									<div className="document-title-trailing" data-toolbar-trailing>
+										<div className="document-title-status">{status}</div>
 										{presence}
 									</div>
+								</div>
+							)}
+							{mode === "split" && (
+								<div
+									className="document-views-bar panel-header flex shrink-0 items-center overflow-x-auto overflow-y-hidden px-(--panel-toolbar-padding-inline)"
+									data-document-toolbar
+									data-folded={viewsFolded || undefined}
+									inert={liftCovered || viewsFolded || undefined}
+									onFocusCapture={event => {
+										if (!(event.target instanceof HTMLElement)) return;
+										let control = event.target.getBoundingClientRect();
+										let toolbar = event.currentTarget.getBoundingClientRect();
+										if (control.left < toolbar.left) {
+											event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
+										} else if (control.right > toolbar.right) {
+											event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
+										}
+									}}
+								>
+									{controls}
 								</div>
 							)}
 							{stackBar && (

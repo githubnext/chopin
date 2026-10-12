@@ -68,7 +68,7 @@ function detail(
 
 let toolbarOf = (markup: string) =>
 	markup.slice(
-		markup.indexOf('data-document-toolbar="true"'),
+		markup.indexOf('data-document-title-bar="true"'),
 		markup.indexOf('data-document-view="plan"'),
 	);
 
@@ -287,9 +287,8 @@ describe("anchored child lifecycle", () => {
 		expect(lift).toContain('class="anchored-child-layer" data-child-motion="lift"');
 		expect(lift).toContain('style="--level:1;--depth:1"');
 		expect(lift).toContain('aria-label="Child document: Source review"');
-		expect(lift).toContain('<div class="anchored-child-title">');
-		expect(lift).toContain(">Source review</span>");
-		expect(zoom).not.toContain("anchored-child-title");
+		// The child room draws its own title bar, so the surface adds none.
+		expect(lift).not.toContain("anchored-child-title");
 		expect(zoom).not.toContain("anchored-child-shadow");
 		expect(zoom).toContain('data-workspace-room="child-room"');
 	});
@@ -301,6 +300,7 @@ describe("anchored child lifecycle", () => {
 		decisions: createElement("div", null, "Decisions"),
 		header: createElement("header", null, "Room header"),
 		identity: "room",
+		title: createElement("div", null, "Room title"),
 		ids: workspaceIds,
 		mode: "split" as const,
 		onChatOpen() {},
@@ -333,17 +333,20 @@ describe("anchored child lifecycle", () => {
 			view,
 		}));
 
-	it("Lift covers the root sheet below its tab row and leaves Chat and the top bar live", () => {
+	it("Lift covers the root sheet below its title bar and leaves Chat and the title bar live", () => {
 		let markup = withChild("lift");
 		let main = markup.match(/<main[^>]*>/)?.[0];
 		let swap = markup.match(/<div[^>]*data-workspace-document-swap[^>]*>/)?.[0];
-		let toolbar = markup.match(/<div[^>]*data-document-toolbar[^>]*>/)?.[0];
+		let titleBar = markup.match(/<div[^>]*data-document-title-bar[^>]*>/)?.[0];
+		let views = markup.match(/<div[^>]*data-document-toolbar[^>]*>/)?.[0];
 		let stack = markup.slice(markup.indexOf("workspace-document-stack"), markup.indexOf("<aside"));
 
 		expect(markup).toContain('data-child-motion="lift"');
 		expect(main).toContain('data-child-covered="true"');
 		expect(swap).toContain('inert=""');
-		expect(toolbar).not.toContain("inert");
+		expect(titleBar).not.toContain("inert");
+		expect(views).toContain('inert=""');
+		expect(markup.match(/<div[^>]*document-title-slot[^>]*>/)?.[0]).toContain('inert=""');
 		expect(toolbarOf(markup)).toContain("People here: ana");
 		expect(stack).toContain("workspace-child-scrim");
 		expect(stack.indexOf("</main>")).toBeLessThan(stack.indexOf("Child layer"));
@@ -353,44 +356,75 @@ describe("anchored child lifecycle", () => {
 		expect(markup).not.toContain("data-paper-obscured");
 	});
 
-	it("Lift makes the peeking tab row itself a keyboard control back to the root", () => {
+	it("Lift makes the peeking title bar itself a keyboard control back to the root", () => {
 		let toolbar = toolbarOf(withChild("lift"));
 		let back = toolbar.match(/<button[^>]*aria-label="Back to Root"[^>]*>/)?.[0];
 
 		expect(back).toBeDefined();
 		expect(back).toContain("workspace-tab-row-return");
 		expect(back).not.toContain("tabindex");
-		expect(toolbar.indexOf("Back to Root")).toBeLessThan(toolbar.indexOf(">Decisions<"));
+		expect(toolbar.indexOf("Back to Root")).toBeLessThan(toolbar.indexOf("Room title"));
+		expect(toolbar.indexOf("Room title")).toBeLessThan(toolbar.indexOf(">Decisions<"));
 		expect(toolbarOf(withChild("zoom"))).not.toContain("workspace-tab-row-return");
 	});
 
-	it("keeps the top bar visible over an expanded root while a child is open", () => {
+	it("keeps the root's title on the sheet over an expanded root while a child is open", () => {
 		let markup = withChild("lift", "plan", true);
-		let slot = markup.match(/<div[^>]*class="workspace-header-slot[^"]*"[^>]*>/)?.[0];
 
 		expect(markup).toContain('data-document-expanded="true"');
-		expect(markup).not.toContain("data-header-hidden");
-		expect(slot).not.toContain("inert");
+		expect(markup).not.toContain("workspace-header-slot");
+		expect(toolbarOf(markup)).toContain("Room title");
 	});
 
-	it("Zoom keeps the root tabs and stack bar live and hides the child off Document", () => {
+	it("split Zoom puts the path in the title bar and folds the views away on Document", () => {
 		let document = withChild("zoom");
 		let decisions = withChild("zoom", "decisions");
 		let plan = document.match(/<section[^>]*data-document-view="plan"[^>]*>/)?.[0];
+		let views = document.match(/<div[^>]*data-document-toolbar[^>]*>/)?.[0];
 
-		expect(document).toContain('aria-label="Document stack"');
-		expect(document).toContain('aria-label="Back to Root"');
-		expect(document).toContain('aria-current="page">Source review<');
+		expect(document).not.toContain('aria-label="Document stack"');
+		expect(toolbarOf(document).indexOf('aria-label="Back to Root"'))
+			.toBeLessThan(toolbarOf(document).indexOf("Room title"));
+		expect(views).toContain("data-folded");
+		expect(views).toContain('inert=""');
 		expect(plan).toContain("data-child-recede");
 		expect(plan).toContain('inert=""');
 		expect(document.match(/<main[^>]*>/)?.[0]).not.toContain("data-child-covered");
 		expect(decisions.match(/<div[^>]*workspace-child-slot[^>]*>/)?.[0]).toContain("hidden");
-		// Off Document the bar stays, and its child crumb becomes a button back to Document.
+		// Off Document the views return so the root's other views stay reachable.
+		expect(decisions.match(/<div[^>]*data-document-toolbar[^>]*>/)?.[0]).not.toContain(
+			"data-folded",
+		);
+	});
+
+	it("compact Zoom keeps the stack bar on every view", () => {
+		let compact = (view: "plan" | "decisions") =>
+			renderToStaticMarkup(createElement(Workspace, {
+				...splitProps,
+				mode: "compact",
+				presentation: {
+					child: createElement("div", null, "Child layer"),
+					childState: "open",
+					motion: "zoom",
+					onChildClose() {},
+					path: [{ id: "room", label: "Root" }, { id: "child-room", label: "Source review" }],
+					type: "parent-with-child",
+				},
+				state: { chatOpen: false, desktopChatOpen: true },
+				view,
+			}));
+		let document = compact("plan");
+		let decisions = compact("decisions");
+
+		expect(document).toContain('aria-label="Document stack"');
+		expect(document).toContain('aria-label="Back to Root"');
+		expect(document).toContain('aria-current="page">Source review<');
+		expect(document).not.toContain("data-document-title-bar");
 		expect(decisions).toContain('aria-label="Document stack"');
 		expect(decisions).toMatch(/<button aria-current="page"[^>]*><span[^>]*>Source review</);
 	});
 
-	it("orders the tab row expand, tabs, presence, with no Chat header", () => {
+	it("orders the title bar expand, title, presence, then the views, with no ground header", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
 			...splitProps,
 			state: { chatOpen: false, desktopChatOpen: true },
@@ -402,25 +436,25 @@ describe("anchored child lifecycle", () => {
 		expect(markup).not.toContain('aria-label="Hide chat"');
 		expect(markup).toMatch(/<h2 class="sr-only" id="[^"]+" tabindex="-1">Chat<\/h2>/);
 		expect(toolbar).toContain('aria-label="Expand document"');
-		expect(toolbar.indexOf("Expand document")).toBeLessThan(toolbar.indexOf("Document controls"));
-		expect(toolbar.indexOf("Document controls")).toBeLessThan(toolbar.indexOf("People here: ana"));
+		expect(toolbar.indexOf("Expand document")).toBeLessThan(toolbar.indexOf("Room title"));
+		expect(toolbar.indexOf("Room title")).toBeLessThan(toolbar.indexOf("People here: ana"));
+		expect(toolbar.indexOf("People here: ana")).toBeLessThan(toolbar.indexOf("Document controls"));
 		expect(markup).toContain('aria-label="Resize chat"');
-		expect(markup.indexOf("Room header")).toBeLessThan(markup.indexOf("workspace-frame"));
+		expect(markup).not.toContain("Room header");
 		expect(markup).not.toContain("data-document-expanded");
 		expect(markup).toMatch(/class="workspace-root[^"]*"[^>]*style="--chat-width:\d+px"/);
 	});
 
-	it("trades Chat and its top bar for a Chat button when expanded", () => {
+	it("trades Chat for a Chat button when expanded and keeps the title", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
 			...splitProps,
 			state: { chatOpen: false, desktopChatOpen: false },
 		}));
 		let toolbar = toolbarOf(markup);
-		let slot = markup.match(/<div[^>]*class="workspace-header-slot[^"]*"[^>]*>/)?.[0];
 
 		expect(markup).toContain('data-document-expanded="true"');
-		expect(slot).toContain('inert=""');
-		expect(slot).toContain('aria-hidden="true"');
+		expect(toolbar).toContain("Room title");
+		expect(markup.match(/<div[^>]*document-title-slot[^>]*>/)?.[0]).not.toContain("inert");
 		expect(toolbar).toContain('aria-label="Show chat, Planner working"');
 		expect(toolbar).toContain(">Chat</span>");
 		expect(toolbar).not.toContain("Expand document");

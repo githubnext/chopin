@@ -434,7 +434,7 @@ test("landscape split controls respect inline safe areas", async ({ join, page, 
 	await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: safeArea });
 	page = await join("ana");
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
-	let header = page.getByRole("banner");
+	let header = page.getByRole("group", { name: /^Document: / });
 	let headerControls = header.getByRole("button");
 	let chatToggle = page.getByRole("button", { name: "Expand document" });
 	let viewControls = page.getByRole("group", { name: "Document view" }).getByRole("button");

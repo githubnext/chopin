@@ -7,8 +7,9 @@ export const CHILD_MOTION_STORAGE_KEY = "chopin:dev:child-motion";
 /** Each covered card shrinks this much more than the one above it. */
 const RECEDE_STEP = 0.03;
 
+/** Zoom is the default; Lift stays available behind the development toggle. */
 export function childMotionStyle(enabled: boolean, stored: string | null): ChildMotionStyle {
-	return enabled && stored === "zoom" ? "zoom" : "lift";
+	return enabled && stored === "lift" ? "lift" : "zoom";
 }
 
 function px(value: number): string {

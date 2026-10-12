@@ -50,7 +50,9 @@ for (let width of [1280, 390]) {
 	test(`delete confirmation contains an unbroken title at ${width}px`, async ({ join, page, room }) => {
 		await page.setViewportSize({ width, height: 844 });
 		await join("ana");
-		let actions = page.getByRole("banner").getByRole("button", { name: /^Actions for / });
+		let actions = page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+			name: /^Actions for /,
+		});
 		await actions.click();
 		await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
 		let rename = page.getByRole("textbox", { name: "Document title" });
@@ -59,7 +61,7 @@ for (let width of [1280, 390]) {
 		await rename.press("Enter");
 		await expect(rename).toBeHidden();
 		await expect.poll(() =>
-			page.getByRole("banner").locator("svg").evaluateAll(icons =>
+			page.getByRole("group", { name: /^Document: / }).locator("svg").evaluateAll(icons =>
 				Math.min(...icons.map(icon => icon.getBoundingClientRect().width))
 			)
 		).toBeGreaterThanOrEqual(12);
@@ -154,7 +156,9 @@ test("queued messages retain their state label and withdrawal control", async ({
 
 test("destructive confirmation retains its reviewed color states", async ({ join, page }) => {
 	await join("ana");
-	let actions = page.getByRole("banner").getByRole("button", { name: /^Actions for / });
+	let actions = page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+		name: /^Actions for /,
+	});
 	await actions.click();
 	await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
 	await actions.click();
@@ -187,7 +191,9 @@ test("delete keeps keyboard focus inside the dialog while pending and after fail
 	});
 	try {
 		await join("ana");
-		let actions = page.getByRole("banner").getByRole("button", { name: /^Actions for / });
+		let actions = page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+			name: /^Actions for /,
+		});
 		await actions.click();
 		await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
 		await actions.click();

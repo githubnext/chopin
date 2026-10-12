@@ -58,7 +58,9 @@ test("a chord counts as keyboard navigation, a bare modifier does not", async ({
 
 test("a text field keeps its focus ring after a click", async ({ join }) => {
 	let page = await join("ana");
-	await page.getByRole("banner").getByRole("button", { name: /^Actions for / }).click();
+	await page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+		name: /^Actions for /,
+	}).click();
 	await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
 	let field = page.getByRole("textbox", { name: "Document title" });
 	await field.click();

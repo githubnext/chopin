@@ -17,7 +17,7 @@ export function readChildMotionStyle() {
 	try {
 		stored = localStorage.getItem(CHILD_MOTION_STORAGE_KEY);
 	} catch {
-		// Storage can be unavailable; Lift is the default.
+		// Storage can be unavailable; Zoom is the default.
 	}
 	return childMotionStyle(toggleEnabled, stored);
 }

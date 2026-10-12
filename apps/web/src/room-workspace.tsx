@@ -8,9 +8,17 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { documentPath } from "@chopin/protocol/document-url";
-import { ArchiveIcon, CheckIcon, ChevronIcon, DocumentIcon, PencilIcon } from "@chopin/icons";
+import {
+	ArchiveIcon,
+	CheckIcon,
+	ChevronIcon,
+	CloseIcon,
+	DocumentIcon,
+	MagnifierIcon,
+	PencilIcon,
+} from "@chopin/icons";
 import { Badge } from "@chopin/visuals";
 import {
 	advanceDecisionView,
@@ -42,6 +50,7 @@ import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
 import { ChildPhoneChromeContext, sameEditState } from "./child-phone-chrome";
 import { ChildProvenance } from "./child-provenance";
+import { ChildTitleContext } from "./child-title";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
 import type { ResearchDraftController } from "./chat/research-draft-controller";
 import { useDocumentEditing } from "./document-editing";
@@ -149,36 +158,50 @@ export function RoomMembers(
 					+{people.length - 3}
 				</span>
 			)}
+			{/* A narrow title bar keeps one face and counts the rest. */}
+			{people.length > 1 && (
+				<span
+					aria-hidden="true"
+					className="room-member-overflow-narrow ml-1 hidden text-xs text-text-tertiary"
+				>
+					+{people.length - 1}
+				</span>
+			)}
 		</div>
 	);
 }
 
-export function Header(
+type TitleProps = {
+	archivedAt?: string;
+	canManage: boolean;
+	editing?: TitleEdit;
+	label: string;
+	onAction: (action: DocumentAction) => void;
+	onEditingChange: (editing?: TitleEdit) => void;
+	onRenamed: (channel: DocumentMetadata) => void;
+	project?: { id: string; name: string };
+	room: string;
+};
+
+/** An open Zoom child: this title becomes a crumb back, and the child's title follows it. */
+type TitlePath = { onReturn: () => void; slot: (element: HTMLElement | null) => void };
+
+/** The document's project, title, rename and actions menu, wherever its chrome puts them. */
+export function DocumentTitle(
 	{
 		archivedAt,
 		canManage,
 		editing,
-		members,
 		label,
 		onAction,
 		onEditingChange,
 		onRenamed,
+		path,
 		project,
 		room,
-	}: {
-		archivedAt?: string;
-		canManage: boolean;
-		editing?: TitleEdit;
-		members?: Session.Member[];
-		label: string;
-		onAction: (action: DocumentAction) => void;
-		onEditingChange: (editing?: TitleEdit) => void;
-		onRenamed: (channel: DocumentMetadata) => void;
-		project?: { id: string; name: string };
-		room: string;
-	},
+	}: TitleProps & { path?: TitlePath },
 ) {
-	let header = useRef<HTMLElement>(null);
+	let group = useRef<HTMLDivElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
 	let previousEdit = useRef(editing);
 	useEffect(() => {
@@ -191,8 +214,8 @@ export function Header(
 	// otherwise land in a field that is about to close.
 	let handOff = () => {
 		// Naming a new document leads into writing it, unless the user already clicked elsewhere.
-		if (editing === "new" && header.current?.contains(document.activeElement)) {
-			header.current.closest(".workspace-root")
+		if (editing === "new" && group.current?.contains(document.activeElement)) {
+			group.current.closest(".workspace-root")
 				?.querySelector<HTMLElement>(".plan-content[contenteditable='true']")
 				?.focus();
 		}
@@ -202,93 +225,122 @@ export function Header(
 		onEditingChange();
 	};
 	return (
-		<header
-			className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0"
-			ref={header}
+		<div
+			aria-label={`Document: ${label}`}
+			className="document-title flex min-w-0 flex-1 items-center gap-0.5"
+			ref={group}
+			role="group"
 		>
-			<div
-				aria-label={`Document: ${label}`}
-				className="flex min-w-0 flex-1 items-center gap-0.5"
-			>
-				<DocumentIcon className="shrink-0" />
-				{project && (
-					<>
-						<span className="document-project-prefix truncate text-xs font-medium">
-							{project.name}
-						</span>
-						<span aria-hidden="true" className="document-project-separator text-xs">/</span>
-					</>
-				)}
-				<div className="title-control min-w-0 text-xs font-medium">
-					{editing && canManage && !archivedAt
-						? (
-							<DocumentRename
-								channel={{ id: room, title: label }}
-								inline
-								onCancel={finishEdit}
-								// The body took focus as the save started; a refusal needs the field back.
-								onErrorChange={error =>
-									error !== undefined
-									&& header.current?.querySelector<HTMLInputElement>(".document-title-input")
-										?.focus()}
-								onSavingChange={saving => saving && handOff()}
-								replay={editing === "new"}
-								onRenamed={detail => {
-									onRenamed(detail.channel);
-									finishEdit();
-								}}
-							/>
-						)
-						: canManage && !archivedAt
-						? (
-							<button
-								aria-label={`Rename ${label}`}
-								className="title-control-label document-title-trigger"
-								onClick={() => onEditingChange("rename")}
-								onKeyDown={event => {
-									if (event.key !== "F2") return;
-									event.preventDefault();
-									onEditingChange("rename");
-								}}
-								ref={title}
-								type="button"
-							>
-								<span className="truncate">{label}</span>
-							</button>
-						)
-						: <span className="title-control-label truncate">{label}</span>}
-					{canManage && (
-						<DocumentActionsMenu
-							align="start"
-							channel={{ archivedAt, title: label }}
-							className="title-control-action"
-							onAction={action =>
-								action === "rename" ? onEditingChange("rename") : onAction(action)}
-							trigger={
-								<ChevronIcon
-									aria-hidden="true"
-									className="rotate-90"
-									size={12}
-								/>
-							}
-						/>
-					)}
-				</div>
-				{archivedAt && (
-					<span className="document-archived-status">
-						<Badge icon={ArchiveIcon} label="Archived" size="sm" textSize="2xs" tone="warning" />
-						{canManage && (
-							<button
-								className="btn btn-compact btn-outline"
-								onClick={() => onAction("restore")}
-								type="button"
-							>
-								Restore
-							</button>
-						)}
+			{project && (
+				<>
+					<span className="document-project-prefix truncate text-xs font-medium">
+						{project.name}
 					</span>
+					<span aria-hidden="true" className="document-project-separator text-xs">/</span>
+				</>
+			)}
+			{path && (
+				<>
+					<button
+						className="document-title-crumb btn btn-compact btn-ghost min-w-0"
+						onClick={path.onReturn}
+						type="button"
+					>
+						<span className="truncate">{label}</span>
+					</button>
+					<ChevronIcon aria-hidden="true" className="document-title-crumb-chevron" size={12} />
+					<div className="document-child-title-slot" ref={path.slot} />
+				</>
+			)}
+			<div className="title-control min-w-0 text-xs font-medium" hidden={!!path}>
+				{editing && canManage && !archivedAt
+					? (
+						<DocumentRename
+							channel={{ id: room, title: label }}
+							inline
+							onCancel={finishEdit}
+							// The body took focus as the save started; a refusal needs the field back.
+							onErrorChange={error =>
+								error !== undefined
+								&& group.current?.querySelector<HTMLInputElement>(".document-title-input")
+									?.focus()}
+							onSavingChange={saving => saving && handOff()}
+							replay={editing === "new"}
+							onRenamed={detail => {
+								onRenamed(detail.channel);
+								finishEdit();
+							}}
+						/>
+					)
+					: canManage && !archivedAt
+					? (
+						<button
+							aria-label={`Rename ${label}`}
+							className="title-control-label document-title-trigger"
+							onClick={() => onEditingChange("rename")}
+							onKeyDown={event => {
+								if (event.key !== "F2") return;
+								event.preventDefault();
+								onEditingChange("rename");
+							}}
+							ref={title}
+							type="button"
+						>
+							<span className="truncate">{label}</span>
+						</button>
+					)
+					: <span className="title-control-label truncate">{label}</span>}
+				{canManage && (
+					<DocumentActionsMenu
+						align="start"
+						channel={{ archivedAt, title: label }}
+						className="title-control-action"
+						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
+						trigger={
+							<ChevronIcon
+								aria-hidden="true"
+								className="rotate-90"
+								size={12}
+							/>
+						}
+					/>
 				)}
 			</div>
+			{archivedAt && (
+				<span className="document-archived-status">
+					<Badge icon={ArchiveIcon} label="Archived" size="sm" textSize="2xs" tone="warning" />
+					{canManage && (
+						<button
+							className="btn btn-compact btn-outline"
+							onClick={() => onAction("restore")}
+							type="button"
+						>
+							Restore
+						</button>
+					)}
+				</span>
+			)}
+		</div>
+	);
+}
+
+/** The ground-level header of the compact workspace, which has no sheet to carry the title. */
+export function Header(props: TitleProps & { members?: Session.Member[] }) {
+	let members = props.members;
+	return (
+		<header className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0">
+			<DocumentIcon className="shrink-0" />
+			<DocumentTitle
+				archivedAt={props.archivedAt}
+				canManage={props.canManage}
+				editing={props.editing}
+				label={props.label}
+				onAction={props.onAction}
+				onEditingChange={props.onEditingChange}
+				onRenamed={props.onRenamed}
+				project={props.project}
+				room={props.room}
+			/>
 			{members && <RoomMembers members={members} ring="ground" />}
 		</header>
 	);
@@ -976,6 +1028,9 @@ export function RoomWorkspace(
 	let loading = phone && !arrived && !planState.failed;
 	// A child on a phone borrows its parent's tab bar (see child-phone-chrome.ts).
 	let childChrome = useContext(ChildPhoneChromeContext);
+	// Where this room's title goes when it is an open child, and where its own child's goes.
+	let childTitle = useContext(ChildTitleContext);
+	let [childTitleSlot, setChildTitleSlot] = useState<HTMLElement | null>(null);
 	let childRoom = presentation.type === "child";
 	let childOpen = presentation.type === "parent-with-child";
 	// A child opening over this document takes the pencil, so this one goes back to reading.
@@ -1206,7 +1261,20 @@ export function RoomWorkspace(
 			/>
 		</GitHubReferencesProvider>
 	);
+	let titleProps: TitleProps = {
+		archivedAt: workspaceArchivedAt,
+		canManage: effectiveCanManage,
+		editing: titleEdit,
+		label: metadata.title,
+		onAction: action => onDocumentAction(room, action),
+		onEditingChange: setTitleEdit,
+		onRenamed: updateMetadata,
+		project: { id: repository.id, name: repository.name },
+		room,
+	};
+
 	if (presentation.type === "child") {
+		let childTitleControl = <DocumentTitle {...titleProps} project={undefined} />;
 		return (
 			<div
 				className="child-document flex h-full min-h-0 flex-col bg-page"
@@ -1217,6 +1285,27 @@ export function RoomWorkspace(
 				<p aria-live="polite" className="sr-only" role="status">
 					<span key={announcement.sequence}>{announcement.text}</span>
 				</p>
+				{childTitle?.slot && createPortal(childTitleControl, childTitle.slot)}
+				{childTitle?.motion === "lift" && (
+					<div
+						className="document-title-bar panel-header flex shrink-0 items-center px-(--panel-toolbar-padding-inline) hairline-b"
+						data-child-title-bar
+					>
+						<span className="child-title-icon">
+							<MagnifierIcon aria-hidden="true" size={14} />
+						</span>
+						<div className="document-title-slot">{childTitleControl}</div>
+						<button
+							aria-label={`Back to ${presentation.parent?.label ?? "parent document"}`}
+							className="btn btn-icon btn-ghost shrink-0"
+							data-tooltip={`Back to ${presentation.parent?.label ?? "parent document"}`}
+							onClick={presentation.onClose}
+							type="button"
+						>
+							<CloseIcon aria-hidden="true" size={14} />
+						</button>
+					</div>
+				)}
 				<div className="child-document-status">{statusNotices}</div>
 				<section
 					aria-label="Document"
@@ -1230,6 +1319,15 @@ export function RoomWorkspace(
 		);
 	}
 
+	// Only the split workspace has title bars; compact and phones keep the stack bar.
+	let zoomChild = presentation.type === "parent-with-child" && presentation.motion === "zoom"
+			&& mode === "split"
+		? presentation.onChildClose
+		: undefined;
+	let childTitleValue = presentation.type === "parent-with-child" && mode === "split"
+		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
+		: undefined;
+
 	// The tab bar's pencil edits the document on screen: an open child, or else this one.
 	let barEdit = childOpen
 		? childEdit && { ...childEdit, toggle: () => childToggle.current?.() }
@@ -1237,189 +1335,189 @@ export function RoomWorkspace(
 
 	return (
 		<ChildPhoneChromeContext.Provider value={childChromeValue}>
-			<p aria-live="polite" className="sr-only" role="status">
-				<span key={announcement.sequence}>{announcement.text}</span>
-			</p>
-			<Workspace
-				available={available}
-				buildEnabled={hasPlanContent}
-				frame={frame}
-				chat={
-					<Chat
-						active={chatActive}
-						agent={agent}
-						focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
-						onOpenChild={presentation.onChildOpen}
-						connected={status === "connected"}
-						readonly={!workspaceCanEdit}
-						archived={!!workspaceArchivedAt}
-						handle={handle}
-						onActivity={onChatActivity}
-						notice={workspaceArchivedAt
-							? effectiveCanManage
-								? "Archived. Restore it to keep chatting."
-								: "This document is archived."
-							: !workspaceCanEdit
-							? "You have read-only access to this document."
-							: undefined}
-						onShowDecisions={() => selectDestination("decisions")}
-						onResearch={researchEnabled ? startResearch : undefined}
-						onShowResearch={showResearchDraft}
-						people={peopleHere(members)}
-						conversationPlan={conversation.state}
-						conversationPlanJobs={conversation.jobs}
-						onCardLink={showCard}
-						onAddExcerpt={addExcerpt}
-						onRetryAnalysis={retryAnalysis}
-						onRetryJob={retryJob}
-						sourceDestination={sourceDestination}
-						researchOffers={researchEnabled && conversation.enabled
-							? {
-								links: researchLinks.links,
-								busy: researchBusy,
-								errors: researchErrors,
-								canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
-								canCheckLink: status === "connected" && !!wire?.connected,
-								canExecute: researchExecution,
+			<ChildTitleContext.Provider value={childTitleValue}>
+				<p aria-live="polite" className="sr-only" role="status">
+					<span key={announcement.sequence}>{announcement.text}</span>
+				</p>
+				<Workspace
+					available={available}
+					buildEnabled={hasPlanContent}
+					frame={frame}
+					chat={
+						<Chat
+							active={chatActive}
+							agent={agent}
+							focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
+							onOpenChild={presentation.onChildOpen}
+							connected={status === "connected"}
+							readonly={!workspaceCanEdit}
+							archived={!!workspaceArchivedAt}
+							handle={handle}
+							onActivity={onChatActivity}
+							notice={workspaceArchivedAt
+								? effectiveCanManage
+									? "Archived. Restore it to keep chatting."
+									: "This document is archived."
+								: !workspaceCanEdit
+								? "You have read-only access to this document."
+								: undefined}
+							onShowDecisions={() => selectDestination("decisions")}
+							onResearch={researchEnabled ? startResearch : undefined}
+							onShowResearch={showResearchDraft}
+							people={peopleHere(members)}
+							conversationPlan={conversation.state}
+							conversationPlanJobs={conversation.jobs}
+							onCardLink={showCard}
+							onAddExcerpt={addExcerpt}
+							onRetryAnalysis={retryAnalysis}
+							onRetryJob={retryJob}
+							sourceDestination={sourceDestination}
+							researchOffers={researchEnabled && conversation.enabled
+								? {
+									links: researchLinks.links,
+									busy: researchBusy,
+									errors: researchErrors,
+									canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
+									canCheckLink: status === "connected" && !!wire?.connected,
+									canExecute: researchExecution,
+									wire,
+									controllers: researchDrafts,
+									handle,
+									onSource: source =>
+										showSource({
+											source: { ...source, role: "support" },
+											itemId: source.messageId,
+										}),
+									store: research,
+									onAction: actOnResearchOffer,
+									onRetryLink: offerId => researchLinks.refresh(offerId, true),
+								}
+								: undefined}
+							decisions={{
+								questions,
+								meta: cardMeta,
 								wire,
-								controllers: researchDrafts,
-								handle,
-								onSource: source =>
-									showSource({ source: { ...source, role: "support" }, itemId: source.messageId }),
-								store: research,
-								onAction: actOnResearchOffer,
-								onRetryLink: offerId => researchLinks.refresh(offerId, true),
-							}
-							: undefined}
-						decisions={{
-							questions,
-							meta: cardMeta,
-							wire,
-							connected: treatAsConnected,
-							canEdit: workspaceCanEdit,
-							onOpenCard: showDecisionCard,
-						}}
-						referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
-						repository={repository}
-						room={room}
-						sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
-						planner={plannerAttachment.wire === wire ? plannerAttachment.planner : undefined}
-						wire={wire}
-					/>
-				}
-				chatActivity={chatActivity}
-				documentActivity={documentActivity(documentWatch, chatActivity.busy)}
-				header={phone
-					? (
-						<PhoneHeader
-							archivedAt={workspaceArchivedAt}
-							canManage={effectiveCanManage}
-							editing={titleEdit}
-							editingDocument={!!barEdit?.editing}
-							label={metadata.title}
-							onAction={action => onDocumentAction(room, action)}
-							onEditingChange={setTitleEdit}
-							onRenamed={updateMetadata}
-							presentation={presentation}
+								connected: treatAsConnected,
+								canEdit: workspaceCanEdit,
+								onOpenCard: showDecisionCard,
+							}}
+							referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
+							repository={repository}
 							room={room}
+							sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
+							planner={plannerAttachment.wire === wire ? plannerAttachment.planner : undefined}
+							wire={wire}
 						/>
-					)
-					: (
-						<Header
-							archivedAt={workspaceArchivedAt}
-							canManage={effectiveCanManage}
-							editing={titleEdit}
-							members={mode === "split" ? undefined : members}
-							label={metadata.title}
-							onAction={action => onDocumentAction(room, action)}
-							onEditingChange={setTitleEdit}
-							onRenamed={updateMetadata}
-							project={{ id: repository.id, name: repository.name }}
+					}
+					chatActivity={chatActivity}
+					documentActivity={documentActivity(documentWatch, chatActivity.busy)}
+					header={phone
+						? (
+							<PhoneHeader
+								archivedAt={workspaceArchivedAt}
+								canManage={effectiveCanManage}
+								editing={titleEdit}
+								editingDocument={!!barEdit?.editing}
+								label={metadata.title}
+								onAction={action => onDocumentAction(room, action)}
+								onEditingChange={setTitleEdit}
+								onRenamed={updateMetadata}
+								presentation={presentation}
+								room={room}
+							/>
+						)
+						: <Header {...titleProps} members={members} />}
+					title={
+						<DocumentTitle
+							{...titleProps}
+							path={zoomChild ? { onReturn: zoomChild, slot: setChildTitleSlot } : undefined}
+						/>
+					}
+					controls={
+						<>
+							<DecisionViewControl
+								attention={attention}
+								buildEnabled={profile.implementation ? hasPlanContent : undefined}
+								documentActivity={documentActivity(documentWatch, chatActivity.busy)}
+								onView={selectDestination}
+								unanswered={unanswered}
+								view={view}
+							/>
+						</>
+					}
+					status={statusNotices}
+					ids={workspaceIds}
+					phoneAction={barEdit && (
+						<button
+							aria-label={barEdit.editing ? "Done editing" : "Edit document"}
+							className="phone-tab-action"
+							data-editing={barEdit.editing || undefined}
+							onClick={barEdit.toggle}
+							type="button"
+						>
+							<PencilIcon aria-hidden="true" data-edit-icon="edit" size={24} />
+							<CheckIcon aria-hidden="true" data-edit-icon="done" size={24} />
+						</button>
+					)}
+					// Formatting rides above the keyboard while typing. With the keyboard down the tabs
+					// return, and a selection gets the ordinary bubble instead.
+					phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
+					identity={room}
+					mode={mode}
+					presence={<RoomMembers members={members} ring="page" />}
+					phone={phone}
+					onDesktopChatOpen={setDesktopChatOpen}
+					onChatOpen={open => dispatch({ type: "set-chat", open })}
+					onDestination={selectDestination}
+					build={profile.implementation && (
+						<BuildView
+							active={workspacePresentation.documentVisible && view === "build"}
+							canEdit={!!workspaceCanEdit && status === "connected"}
+							chatLoaded={chatActivity.loaded}
+							comments={acceptedComments}
+							onShowDecisions={() => selectDestination("decisions")}
+							onShowDocument={() => selectDestination("plan")}
+							planner={agent}
+							plannerBusy={chatActivity.busy}
 							room={room}
+							unanswered={unanswered}
+							userId={userId}
+							wire={wire}
 						/>
 					)}
-				controls={
-					<>
-						<DecisionViewControl
-							attention={attention}
-							buildEnabled={profile.implementation ? hasPlanContent : undefined}
-							documentActivity={documentActivity(documentWatch, chatActivity.busy)}
-							onView={selectDestination}
-							unanswered={unanswered}
-							view={view}
+					decisions={
+						<Decisions
+							additional={
+								<EvidenceDecisions
+									store={experiments}
+									canEdit={!!workspaceCanEdit && status === "connected"}
+								/>
+							}
+							hasAdditional={[...experiments.values.values()].some(item =>
+								item.decisions.length > 0
+							)}
+							cardMeta={cardMeta}
+							canEdit={workspaceCanEdit}
+							connected={treatAsConnected && workspaceCanEdit}
+							headingId={workspaceIds.heading.decisions}
+							motion={motionContract("collapse")}
+							motionImmediately={settleMotionImmediately}
+							onShowPlan={showPlan}
+							planner={agent}
+							questionMotion={QUESTION_MOTION}
+							reveal={reveal}
+							self={handle}
+							store={questions}
+							wire={wire}
 						/>
-					</>
-				}
-				status={statusNotices}
-				ids={workspaceIds}
-				phoneAction={barEdit && (
-					<button
-						aria-label={barEdit.editing ? "Done editing" : "Edit document"}
-						className="phone-tab-action"
-						data-editing={barEdit.editing || undefined}
-						onClick={barEdit.toggle}
-						type="button"
-					>
-						<PencilIcon aria-hidden="true" data-edit-icon="edit" size={24} />
-						<CheckIcon aria-hidden="true" data-edit-icon="done" size={24} />
-					</button>
-				)}
-				// Formatting rides above the keyboard while typing. With the keyboard down the tabs
-				// return, and a selection gets the ordinary bubble instead.
-				phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
-				identity={room}
-				mode={mode}
-				presence={<RoomMembers members={members} ring="page" />}
-				phone={phone}
-				onDesktopChatOpen={setDesktopChatOpen}
-				onChatOpen={open => dispatch({ type: "set-chat", open })}
-				onDestination={selectDestination}
-				build={profile.implementation && (
-					<BuildView
-						active={workspacePresentation.documentVisible && view === "build"}
-						canEdit={!!workspaceCanEdit && status === "connected"}
-						chatLoaded={chatActivity.loaded}
-						comments={acceptedComments}
-						onShowDecisions={() => selectDestination("decisions")}
-						onShowDocument={() => selectDestination("plan")}
-						planner={agent}
-						plannerBusy={chatActivity.busy}
-						room={room}
-						unanswered={unanswered}
-						userId={userId}
-						wire={wire}
-					/>
-				)}
-				decisions={
-					<Decisions
-						additional={
-							<EvidenceDecisions
-								store={experiments}
-								canEdit={!!workspaceCanEdit && status === "connected"}
-							/>
-						}
-						hasAdditional={[...experiments.values.values()].some(item => item.decisions.length > 0)}
-						cardMeta={cardMeta}
-						canEdit={workspaceCanEdit}
-						connected={treatAsConnected && workspaceCanEdit}
-						headingId={workspaceIds.heading.decisions}
-						motion={motionContract("collapse")}
-						motionImmediately={settleMotionImmediately}
-						onShowPlan={showPlan}
-						planner={agent}
-						questionMotion={QUESTION_MOTION}
-						reveal={reveal}
-						self={handle}
-						store={questions}
-						wire={wire}
-					/>
-				}
-				plan={plan}
-				state={workspace}
-				presentation={presentation}
-				unanswered={unanswered}
-				view={view}
-			/>
+					}
+					plan={plan}
+					state={workspace}
+					presentation={presentation}
+					unanswered={unanswered}
+					view={view}
+				/>
+			</ChildTitleContext.Provider>
 		</ChildPhoneChromeContext.Provider>
 	);
 }

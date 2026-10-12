@@ -170,7 +170,9 @@ test("desktop keeps the Projects sidebar and popover menus", async ({ join, room
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	await expect(page.getByRole("complementary", { name: "Projects" })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Documents", exact: true })).toHaveCount(0);
-	await page.getByRole("banner").getByRole("button", { name: `Actions for ${title(room)}` })
+	await page.getByRole("group", { name: /^Document: / }).getByRole("button", {
+		name: `Actions for ${title(room)}`,
+	})
 		.click();
 	await expect(page.getByRole("menu", { name: `Actions for ${title(room)}` })).toBeVisible();
 	await expect(page.getByRole("dialog", { name: /^Actions for / })).toHaveCount(0);

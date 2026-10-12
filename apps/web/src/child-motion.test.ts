@@ -70,11 +70,11 @@ describe("child motion geometry", () => {
 });
 
 describe("child motion style", () => {
-	it("honours Zoom only where the toggle is enabled", () => {
+	it("defaults to Zoom and honours Lift only where the toggle is enabled", () => {
 		expect(childMotionStyle(true, "zoom")).toBe("zoom");
 		expect(childMotionStyle(true, "lift")).toBe("lift");
-		expect(childMotionStyle(false, "zoom")).toBe("lift");
-		expect(childMotionStyle(true, null)).toBe("lift");
-		expect(childMotionStyle(true, "wobble")).toBe("lift");
+		expect(childMotionStyle(false, "lift")).toBe("zoom");
+		expect(childMotionStyle(true, null)).toBe("zoom");
+		expect(childMotionStyle(true, "wobble")).toBe("zoom");
 	});
 });
