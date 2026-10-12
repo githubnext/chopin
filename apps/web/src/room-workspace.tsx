@@ -1606,7 +1606,7 @@ export function RoomWorkspace(
 							canEdit={!!workspaceCanEdit && status === "connected"}
 							chatLoaded={chatActivity.loaded}
 							comments={acceptedComments}
-						needsAgentSignal={needsAgent}
+							needsAgentSignal={needsAgent}
 							onShowDecisions={() => selectDestination("decisions")}
 							onShowDocument={() => selectDestination("plan")}
 							planner={agent}
