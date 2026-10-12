@@ -1474,11 +1474,12 @@
 	transition-duration: var(--drawer-close-dur);
 }
 
+/* Full height so the card's percentages resolve against the document, not the pill. */
 .plan-comment-orphans {
-	pointer-events: auto;
 	position: absolute;
 	top: 0.5rem;
 	right: 0.5rem;
+	bottom: 0.5rem;
 }
 
 .plan-comment-orphan-button {
@@ -1490,6 +1491,8 @@
 .plan-comment-orphan-card {
 	top: 2.5rem;
 	right: 0;
+	width: min(20rem, calc(100cqi - 1rem));
+	max-height: calc(100% - 2.5rem);
 }
 
 /* The scrim every phone sheet shares, lighter while this sheet rests at its medium detent. */

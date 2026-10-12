@@ -1325,6 +1325,35 @@ test("a removed subject block moves its comment to document orphan chrome", asyn
 	await expect(page.getByRole("dialog", { name: "Orphaned comments" })).toContainText(QUOTED);
 });
 
+test("the orphaned comments popover shows its whole card beneath the pill", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana");
+	await page.setViewportSize({ width: 1_280, height: 800 });
+	let first = content(page).locator("p").first();
+	await first.selectText();
+	await page.keyboard.press("Backspace");
+	await page.keyboard.press("Backspace");
+
+	let opener = page.getByRole("button", { name: "1 orphaned comments" });
+	await opener.click();
+	let popover = page.getByRole("dialog", { name: "Orphaned comments" });
+	// The card sizes against the document, not the pill that holds it.
+	let reply = popover.getByRole("textbox", { name: "Reply", exact: true });
+	await expect(reply).toBeInViewport({ ratio: 1 });
+	await expect(popover.getByText(QUOTED, { exact: true })).toBeInViewport({ ratio: 1 });
+	await expect.poll(() => popover.evaluate(element => element.scrollHeight - element.clientHeight))
+		.toBeLessThanOrEqual(1);
+	let card = await popover.boundingBox();
+	let pill = await opener.boundingBox();
+	expect(card!.width).toBeGreaterThanOrEqual(280);
+	expect(card!.y).toBeGreaterThanOrEqual(pill!.y + pill!.height);
+	expect(Math.abs(card!.x + card!.width - (pill!.x + pill!.width))).toBeLessThanOrEqual(1);
+
+	await page.keyboard.press("Escape");
+	await expect(popover).toHaveCount(0);
+	await expect(opener).toBeFocused();
+});
+
 test("a compact orphan sheet owns focus and restores its opener", async ({ join, seed }) => {
 	await seed(TWO_BLOCKS);
 	let page = await join("ana", {
