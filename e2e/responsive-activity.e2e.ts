@@ -133,6 +133,10 @@ test("a closed desktop Chat tab keeps unread activity visible", async ({ join, p
 	let toggle = page.getByRole("button", { name: "Show chat, 1 unread" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
+	// The badge sits on the Chat glyph's corner, clear of the label.
+	let badge = (await toggle.locator('span[aria-hidden="true"]').boundingBox())!;
+	let label = (await toggle.getByText("Chat", { exact: true }).boundingBox())!;
+	expect(badge.x + badge.width).toBeLessThanOrEqual(label.x);
 	let count = toggle.locator('[data-motion-feedback="count"]');
 	expect(
 		await count.evaluate(element =>

@@ -54,6 +54,15 @@ for (
 
 		await expect(documentTab).toHaveAccessibleName("Document, new changes");
 		await expect(documentTab.locator("[data-document-activity='unseen']")).toBeVisible();
+		if (name === "desktop") {
+			// A still dot after the label, inside the tab and centred on its text.
+			let dot = documentTab.locator("[data-document-activity='unseen']");
+			await expect(dot).toHaveCSS("animation-name", "none");
+			let mark = (await dot.boundingBox())!;
+			let tab = (await documentTab.boundingBox())!;
+			expect(mark.x + mark.width).toBeLessThanOrEqual(tab.x + tab.width);
+			expect(Math.abs(mark.y + mark.height / 2 - (tab.y + tab.height / 2))).toBeLessThanOrEqual(1);
+		}
 
 		await documentTab.click();
 		await expect(content(page)).toContainText("Revised paragraph.");

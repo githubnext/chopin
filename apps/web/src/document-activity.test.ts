@@ -64,12 +64,8 @@ test("labels name the activity for assistive technology", () => {
 	expect(documentActivityLabel(undefined)).toBe("Document");
 });
 
-test("the writing pulse only runs when motion is allowed", () => {
+test("the document mark stays still while the Planner writes", () => {
 	let css = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
-	let rule = /\.document-activity-dot\[data-document-activity="writing"\]\s*\{[^}]*animation:/;
-	let allowed = css.match(
-		/@media \(prefers-reduced-motion: no-preference\) \{\s*\.document-activity-dot[^]*?\n\}/,
-	);
-	expect(allowed?.[0]).toMatch(rule);
-	expect(css.replace(allowed![0], "")).not.toMatch(rule);
+	expect(css).not.toMatch(/\[data-document-activity[^{]*\{[^}]*animation:/);
+	expect(css).not.toMatch(/\.activity-dot[^{]*\{[^}]*animation:/);
 });

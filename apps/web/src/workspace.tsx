@@ -4,7 +4,7 @@ import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from 
 import { Count } from "@chopin/editor/count";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { ArrowLeftIcon, ChevronIcon, CollapseIcon, ExpandIcon } from "@chopin/icons";
+import { ArrowLeftIcon, ChevronIcon, ExpandIcon, MessageIcon } from "@chopin/icons";
 import { usePhone } from "@chopin/editor/pointer";
 
 import {
@@ -204,22 +204,20 @@ export function SurfaceToggle(
 			type="button"
 		>
 			<span
-				className={`${feedback} grid size-(--icon-size-default)`}
+				className={`${feedback} relative grid size-(--icon-size-default)`}
 				data-motion-feedback="icon"
 				key={expanded ? "restore" : "expand"}
 			>
-				{expanded ? <CollapseIcon size={14} /> : <ExpandIcon size={14} />}
+				{expanded ? <MessageIcon size={14} /> : <ExpandIcon size={14} />}
+				{expanded && status && (
+					<span
+						aria-hidden="true"
+						className={`activity-dot activity-badge ${unread ? feedback : ""}`}
+						data-motion-feedback={unread ? "count" : undefined}
+					/>
+				)}
 			</span>
 			{expanded && <span>Chat</span>}
-			{expanded && status && (
-				<span
-					aria-hidden="true"
-					className={`absolute right-1 top-1 size-1.5 rounded-full bg-brand ${
-						unread ? feedback : ""
-					}`}
-					data-motion-feedback={unread ? "count" : undefined}
-				/>
-			)}
 		</button>
 	);
 }

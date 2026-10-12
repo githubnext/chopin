@@ -1,9 +1,11 @@
 /** Browser coverage for the paper layout: Chat on the ground, the document as a sheet. */
 
 import { chatInput, expectChatValue } from "./chat-input";
+import { deckSeed } from "./decision-deck-fixtures";
 import { expect, ready, test } from "./room";
 import { expectNoHorizontalOverflow } from "./responsive";
 
+import type { Chat } from "../packages/protocol/index";
 import type { Locator, Page } from "@playwright/test";
 
 function box(target: Locator) {
@@ -71,6 +73,106 @@ test("split Chat sits on the ground beside a raised sheet that carries the title
 	expect(Math.round(paneBox.y)).toBe(Math.round(rootBox.y));
 	expect(Math.round(paneBox.x + paneBox.width)).toBe(Math.round(sheetBox.x));
 	await expect(sheet(page)).not.toHaveCSS("box-shadow", "none");
+});
+
+function edgeFade(scroller: Locator) {
+	return scroller.evaluate(element => {
+		let style = getComputedStyle(element, "::before");
+		return {
+			height: style.height,
+			opacity: style.opacity,
+			pointerEvents: style.pointerEvents,
+			position: style.position,
+		};
+	});
+}
+
+function layout(scroller: Locator) {
+	return scroller.evaluate(element => ({
+		content: element.firstElementChild!.getBoundingClientRect().top,
+		height: element.scrollHeight,
+	}));
+}
+
+test("the document and Chat dissolve under their top edges only once scrolled", async ({ join, page, seed }) => {
+	let paragraphs = Array.from(
+		{ length: 40 },
+		(_, index) => `Paragraph ${index} of a long document.`,
+	);
+	let transcript: Chat.Entry[] = Array.from({ length: 30 }, (_, index) => ({
+		id: `message-${index}`,
+		author: { kind: "member" as const, handle: "ben" },
+		text: `Message ${index} about the rollout plan and what it still needs.`,
+		ts: 1_700_000_000 + index,
+	}));
+	await seed(`# Edges\n\n${paragraphs.join("\n\n")}\n`, { transcript });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await join("ana");
+	let document = root(page).locator('[data-document-view="plan"] [data-plan-scroll]');
+	let chat = chatPane(page).locator("[data-chat-scroll]");
+	await expect(document.getByText("Paragraph 39 of a long document.")).toBeAttached();
+	await expect(chat.getByText("Message 29", { exact: false })).toBeVisible();
+
+	// The fade sits on the views bar's lower edge, folded out of flow.
+	let [views, scroller] = await Promise.all([
+		box(root(page).locator("[data-document-toolbar]")),
+		box(document),
+	]);
+	expect(Math.round(scroller.y)).toBe(Math.round(views.y + views.height));
+	let before = await layout(document);
+	await document.evaluate(element => element.classList.add("edge-fade-probe"));
+	await page.addStyleTag({ content: ".edge-fade-probe::before { display: none !important; }" });
+	expect(await layout(document)).toEqual(before);
+	await document.evaluate(element => element.classList.remove("edge-fade-probe"));
+
+	await document.evaluate(element => element.scrollTo({ top: 0 }));
+	await expect.poll(async () => (await edgeFade(document)).opacity).toBe("0");
+	expect(await edgeFade(document)).toMatchObject({
+		height: "56px",
+		pointerEvents: "none",
+		position: "sticky",
+	});
+	await document.evaluate(element => element.scrollTo({ top: 240 }));
+	await expect.poll(async () => (await edgeFade(document)).opacity).toBe("1");
+	// The edge follows scroll state, not a scroll timeline, so motion still settles.
+	await page.waitForFunction(() =>
+		window.document.getAnimations().every(animation => animation.playState !== "running")
+	);
+
+	await chat.evaluate(element => element.scrollTo({ top: element.scrollHeight }));
+	await expect.poll(async () => (await edgeFade(chat)).opacity).toBe("1");
+	await chat.evaluate(element => element.scrollTo({ top: 0 }));
+	await expect.poll(async () => (await edgeFade(chat)).opacity).toBe("0");
+});
+
+test("reduced transparency holds the scroll edge solid before it fades", async ({ join, page, seed }) => {
+	let deck = deckSeed({ before: "Intro." }, 2);
+	await seed(deck.source, deck.state);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	let cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setEmulatedMedia", {
+		features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+	});
+	await join("ana");
+	let fade = (selector: string) =>
+		root(page).locator(selector).evaluate(element => {
+			let style = getComputedStyle(element, "::before");
+			return {
+				image: style.backgroundImage,
+				padding: getComputedStyle(element).paddingTop,
+				top: style.top,
+			};
+		});
+	expect((await fade('[data-document-view="plan"] [data-plan-scroll]')).image).toMatch(/ 50%, /);
+
+	await page.getByRole("group", { name: "Document view" }).getByRole("button", {
+		name: /^Decisions/,
+	})
+		.click();
+	let decisions = await fade("[data-plan-decisions-scroll]");
+	expect(decisions.image).toMatch(/ 50%, /);
+	// Sticky offsets start inside the padding, so the fade reaches back to the clip edge.
+	expect(Number.parseFloat(decisions.top)).toBe(-Number.parseFloat(decisions.padding));
 });
 
 test("presence sits at the right end of the document title bar, above the views", async ({ join, page }) => {
