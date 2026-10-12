@@ -271,7 +271,7 @@ jobs:
 
           status="$(get '/deployment-branch-policies?per_page=100' policies.json)" || status=unreachable
           [ "$status" = 200 ] || fail "Could not read the deployment policies of the $ENVIRONMENT environment (HTTP $status); only the cli-v* tag may deploy."
-          jq -e '.branch_policies | length > 0 and all(.type == "tag" and .name == "cli-v*")' \
+          jq -e '(.branch_policies | length) == .total_count and (.branch_policies | length > 0 and all(.type == "tag" and .name == "cli-v*"))' \
             "$scratch/policies.json" >/dev/null \
             || fail "Only the cli-v* tag may deploy to the $ENVIRONMENT environment, but its deployment policies are $(jq -c '[.branch_policies[]? | {name, type}]' "$scratch/policies.json")."
           echo "$ENVIRONMENT requires a reviewer, and only cli-v* tags may deploy to it."

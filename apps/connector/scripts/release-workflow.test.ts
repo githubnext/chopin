@@ -298,6 +298,10 @@ describe("the release preflight", () => {
 					total_count: 1,
 					branch_policies: [{ name: "*", type: "tag" }],
 				}],
+				[environment.deployment_branch_policy, {
+					total_count: 2,
+					branch_policies: [{ name: "cli-v*", type: "tag" }],
+				}],
 			] as const
 		) {
 			let result = await check({
