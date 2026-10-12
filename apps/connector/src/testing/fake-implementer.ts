@@ -34,6 +34,8 @@ let app = new AgentApp()
 			await writeFile(process.env.CHOPIN_TEST_ORPHAN_PID!, String(server.pid));
 			return { stopReason: "end_turn" as const };
 		}
+		// The agent's own turn interrupted, as when Ctrl-C reaches it with the connector.
+		if (process.argv.includes("--self-cancel")) return { stopReason: "cancelled" as const };
 		if (process.argv.includes("--hang")) {
 			await new Promise<void>(resolve => cancelled = resolve);
 			return { stopReason: "cancelled" as const };

@@ -893,6 +893,8 @@ test("a spike runs with an image upload and a structured report, and stays out o
 	expect(listed.experiments).toEqual([]);
 	let claim = text(await tool(paired.token, "claim_experiment", { id }));
 	expect(claim.spike).toBe(true);
+	// The connector names the run by its passage rather than the internal spike brief.
+	expect(claim.passage).toBe("Unsure whether this works.");
 	let tools = await (await request(
 		"/connector/mcp",
 		{ jsonrpc: "2.0", id: 1, method: "tools/list" },

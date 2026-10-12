@@ -51,6 +51,7 @@ async function run(
 				checkout: { repository: "org/repo", commit: git(root, "rev-parse", "HEAD") },
 			},
 			live: build.live,
+			title: "Margin landing page",
 			runToken: "token",
 		}, {
 			root,
@@ -107,6 +108,7 @@ test("a spike run serves connector-local tools to an HTTP agent over an authenti
 	let root = await mkdtemp(join(tmpdir(), "chopin-spike-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-spike-state-"));
 	let received: Array<[string, Record<string, unknown>]> = [];
+	let terminal = captured();
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
@@ -153,6 +155,7 @@ test("a spike run serves connector-local tools to an HTTP agent over an authenti
 		let id = crypto.randomUUID();
 		await runWork(api, "experiment", {
 			spike: true,
+			passage: "We are not sure a CSS-only fade-in on the heading works without JavaScript.",
 			generation: 1,
 			runToken: "run-token",
 			input: {
@@ -179,7 +182,11 @@ test("a spike run serves connector-local tools to an HTTP agent over an authenti
 			],
 			url: `http://127.0.0.1:${chopin.port}`,
 			signal: new AbortController().signal,
+			output: terminal.output,
 		});
+		expect(terminal.out()).toContain(
+			"› Prototyping We are not sure a CSS-only fade-in on the heading works without JavaScript.\n",
+		);
 		expect(calls.filter(name => name !== "renew_experiment")).toEqual(["complete_experiment"]);
 		expect(received.map(([name]) => name)).toEqual([
 			"upload_investigation_image",
@@ -313,6 +320,52 @@ test("Ctrl-C waits at most five seconds for its stop report to reach Chopin", as
 	expect(performance.now() - interrupted).toBeGreaterThanOrEqual(4900);
 	expect(performance.now() - interrupted).toBeLessThan(6500);
 }, 10_000);
+
+function captured() {
+	let out = "";
+	let err = "";
+	let output = createOutput({ write: text => out += text }, { write: text => err += text }, {});
+	return { output, out: () => out, err: () => err };
+}
+
+test("a rebuild's job line says it builds changes for the document", async () => {
+	let terminal = captured();
+	await run({ kind: "rebuild" }, ["--rebuild"], () => ({}), undefined, { output: terminal.output });
+	expect(terminal.out()).toContain("› Building changes for Margin landing page\n");
+});
+
+test("Ctrl-C prints that the run stopped from the connector terminal, not a failure", async () => {
+	let controller = new AbortController();
+	let terminal = captured();
+	await run(
+		{},
+		["--hang"],
+		name => {
+			if (name === "report_implementation_build" && !controller.signal.aborted) {
+				setTimeout(() => controller.abort(), 50);
+			}
+			return {};
+		},
+		controller.signal,
+		{ output: terminal.output },
+	);
+	expect(terminal.out()).toContain("› Building Margin landing page\n");
+	expect(terminal.out()).toContain("✗ Stopped from the connector terminal.");
+	expect(terminal.err()).toBe("");
+});
+
+test("an agent that cancelled its own turn reads as stopped, not as a failure", async () => {
+	let terminal = captured();
+	let { id, calls } = await run({}, ["--self-cancel"], () => ({}), undefined, {
+		output: terminal.output,
+	});
+	expect(calls.filter(([name]) => name !== "renew_implementation_build").at(-1)).toEqual([
+		"report_implementation_build",
+		{ id, state: "failed", error: STOPPED },
+	]);
+	expect(terminal.out()).toContain("✗ Stopped from the connector terminal.");
+	expect(terminal.err()).not.toContain("Agent stopped: cancelled");
+});
 
 test("servers the agent left running in its worktree end with the run", async () => {
 	let file = join(await mkdtemp(join(tmpdir(), "chopin-orphan-")), "pid");

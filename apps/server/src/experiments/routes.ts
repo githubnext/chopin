@@ -862,7 +862,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					return {
 						input: claimed.input,
 						generation: claimed.generation,
-						...(claimed.spike ? { spike: true } : {}),
+						...(claimed.spike ? { spike: true, passage: claimed.spike.passage } : {}),
 						...(channel.title ? { title: channel.title } : {}),
 						runToken: connections.runToken(
 							connection.id,
