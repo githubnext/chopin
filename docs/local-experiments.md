@@ -46,6 +46,32 @@ appears only on an interactive terminal and is off under `NO_COLOR`. The agent's
 own log output is hidden unless `CHOPIN_DEBUG=1`; its last lines are shown when a
 job fails.
 
+### Install the chopin CLI (preview)
+
+The connector also builds as `chopin`, one executable for Linux, macOS or
+Windows that runs without Bun. Releases do not publish it yet, so the
+`curl … connector.js` command above remains the way to connect. To try it,
+build it from a Chopin checkout and put it on your `PATH`:
+
+```sh
+bun run --cwd apps/connector build:binaries --host
+cp apps/connector/dist/chopin-linux-x64 ~/.local/bin/chopin  # chopin-<os>-<arch> for this machine
+chopin --version
+```
+
+Then, from your project folder:
+
+```sh
+CHOPIN_URL=https://your-chopin-instance.example \
+  chopin connect . -- copilot --acp --allow-all
+```
+
+`chopin connect` pairs and runs work exactly as `bun connector.js connect` does.
+`chopin --version` prints the CLI version and the connector protocol it speaks,
+and `chopin help` lists the commands. `build:binaries` without `--host` writes
+every target to `apps/connector/dist`: `chopin-linux-x64`, `chopin-linux-arm64`,
+`chopin-darwin-x64`, `chopin-darwin-arm64` and `chopin-windows-x64.exe`.
+
 ## Run and inspect work
 
 On any open line of the document, type `/` and choose **Investigate**, next to

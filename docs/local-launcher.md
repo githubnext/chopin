@@ -39,6 +39,16 @@ paths involved, and are declined when no interactive terminal is available.
 The agent retains its normal tools, project instructions and configured
 services.
 
+### Install the chopin CLI (preview)
+
+The connector also builds as `chopin`, one executable that needs no Bun. With
+`CHOPIN_URL` set as above, `chopin connect . -- copilot --acp --allow-all`
+behaves exactly like that command, and `chopin --version` prints the CLI
+version and the connector protocol it speaks. Releases do not publish it yet,
+so the `curl` and `bun` command above remains the way to connect; see
+[Install the chopin CLI](local-experiments.md#install-the-chopin-cli-preview)
+to build it from a Chopin checkout.
+
 ## Build a settled plan
 
 1. Resolve planning questions and accepted comments awaiting document updates.
