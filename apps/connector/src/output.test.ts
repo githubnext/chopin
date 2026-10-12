@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createOutput } from "./output";
-import { describePermission, permissionMemory } from "./permission";
+import { ask, describePermission, permissionMemory } from "./permission";
+import { PassThrough } from "node:stream";
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 
 function capture(tty: boolean, env: Record<string, string | undefined> = {}) {
@@ -112,4 +113,35 @@ test("always allow is remembered for that tool kind only", () => {
 	memory.chose(run, "always");
 	expect(memory.remembered(request({ kind: "execute", title: "Another command" }))).toBe("always");
 	expect(memory.remembered(request({ kind: "edit", title: "Edit file" }))).toBeUndefined();
+});
+
+test("Ctrl-C at a permission prompt interrupts the connector instead of pausing readline", async () => {
+	let input = new PassThrough();
+	let controller = new AbortController();
+	let interrupted = 0;
+	let answer = ask("Select option: ", {
+		input,
+		output: new PassThrough(),
+		terminal: true,
+		signal: controller.signal,
+		interrupt: () => {
+			interrupted++;
+			controller.abort();
+		},
+	});
+	input.write("\x03");
+	expect(await answer).toBeUndefined();
+	expect(interrupted).toBe(1);
+});
+
+test("a permission prompt returns the typed answer", async () => {
+	let input = new PassThrough();
+	let answer = ask("Select option: ", {
+		input,
+		output: new PassThrough(),
+		signal: new AbortController().signal,
+		interrupt: () => {},
+	});
+	input.write("2\n");
+	expect(await answer).toBe("2");
 });

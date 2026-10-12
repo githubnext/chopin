@@ -13,6 +13,7 @@ import {
 	buildTabReady,
 	draftRefusalCopy,
 	elapsed,
+	endedReason,
 	firstBuildStep,
 	linkParts,
 	liveTaskGroups,
@@ -792,5 +793,23 @@ describe("build status", () => {
 		});
 		expect(look(returned).kind).toBe("plan");
 		expect(buildTabReady(returned, look(returned))).toBe(true);
+	});
+});
+
+describe("endedReason", () => {
+	it("names a build stopped from the connector or by its agent disconnecting", () => {
+		expect(endedReason({ error: "Stopped from the connector terminal." }))
+			.toBe("Build stopped from the connector terminal.");
+		expect(endedReason({ error: "Your local agent disconnected." }))
+			.toBe("Build stopped — your local agent disconnected.");
+		expect(endedReason({
+			error: "Workspace disconnected or agent stopped responding. No automatic replay.",
+		})).toBe("Build stopped — your local agent disconnected.");
+	});
+
+	it("leaves other failures to the phase's own words", () => {
+		expect(endedReason({ error: "Local implementation failed. Inspect the connector terminal." }))
+			.toBeUndefined();
+		expect(endedReason(undefined)).toBeUndefined();
 	});
 });

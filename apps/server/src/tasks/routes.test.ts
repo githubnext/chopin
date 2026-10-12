@@ -408,10 +408,47 @@ test("disconnect reconciles a pending build without automatic replay", async () 
 		graphRevision: 1,
 	});
 	await tool(context, connection.token, "disconnect_workspace");
+	expect(context.plan.builds[0].state).toBe("failed");
 	await context.implementations.sweep();
 	expect(context.plan.builds[0].state).toBe("failed");
 	expect(Plan.implementationActive(context.plan)).toBe(false);
 	expect(context.plan.execution).toBeUndefined();
+	await Plan.close(context.plan);
+});
+
+test("disconnecting fails a running build at once and announces it after persisting", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	await tool(context, connection.token, "report_implementation_build", {
+		id: built.id,
+		state: "running",
+		session: "acp-session",
+	});
+	let publish = context.server.publish.bind(context.server);
+	let stored: Array<Promise<unknown>> = [];
+	context.server.publish = ((topic: string, data: string) => {
+		let frame = JSON.parse(data);
+		if (frame.kind === "plan:implementation") {
+			stored.push(context.storage.collaboration.load(context.plan.id, context.now));
+		}
+		return publish(topic, data);
+	}) as typeof context.server.publish;
+	await tool(context, connection.token, "disconnect_workspace");
+	// No sweep: the connector said it was leaving.
+	expect(context.plan.builds.at(-1)).toMatchObject({
+		id: built.id,
+		state: "failed",
+		error: "Your local agent disconnected.",
+	});
+	expect(stored.length).toBeGreaterThan(0);
+	expect(((await stored[0]) as { sidecar: { builds: unknown[] } }).sidecar.builds.at(-1))
+		.toMatchObject({ id: built.id, state: "failed" });
 	await Plan.close(context.plan);
 });
 

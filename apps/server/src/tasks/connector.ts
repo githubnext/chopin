@@ -348,6 +348,28 @@ export function implementationConnector(
 				return { accepted: true };
 			});
 		},
+		/**
+		 * A connector that says it is leaving ends its builds now, persisted before they are announced.
+		 * The sweep still catches a connector that was killed without saying so.
+		 */
+		async disconnected(connectionId: string) {
+			for (let id of tracked) {
+				if (!await documentExists(id)) continue;
+				await withPlan(id, async plan => {
+					let build = plan.builds.at(-1);
+					if (
+						build?.connectionId !== connectionId
+						|| !["queued", "starting", "running"].includes(build.state)
+					) return;
+					await reportBuild(plan, build.user, connectionId, build.id, {
+						state: "failed",
+						error: "Your local agent disconnected.",
+					});
+					connections.release(connectionId, id);
+					tracked.delete(id);
+				});
+			}
+		},
 		async sweep() {
 			for (let id of tracked) {
 				if (!await documentExists(id)) {

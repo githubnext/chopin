@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { runWork } from "./run";
+import { dirname, join } from "node:path";
+import { runWork, STOPPED } from "./run";
 import { git } from "./workspace";
 import type { remote } from "./mcp";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -14,6 +14,7 @@ async function run(
 	build: { kind?: "rebuild"; live?: boolean },
 	flags: string[],
 	respond: (name: string) => unknown = () => ({}),
+	signal = new AbortController().signal,
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-rebuild-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-rebuild-state-"));
@@ -52,7 +53,7 @@ async function run(
 			],
 			url: "http://127.0.0.1:1",
 			script: "unused",
-			signal: new AbortController().signal,
+			signal,
 			heartbeatMs: 20,
 		});
 		return { id, calls, branches: git(root, "branch", "--list", "chopin/*") };
@@ -183,5 +184,34 @@ test("a spike run serves connector-local tools to an HTTP agent over an authenti
 		await chopin.stop(true);
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
+	}
+});
+
+test("Ctrl-C reports the build stopped from the terminal before the run ends", async () => {
+	let controller = new AbortController();
+	let { id, calls } = await run({}, ["--hang"], name => {
+		// Abort once the agent session is reported running, as Ctrl-C mid-turn does.
+		if (name === "report_implementation_build" && !controller.signal.aborted) {
+			setTimeout(() => controller.abort(), 50);
+		}
+		return {};
+	}, controller.signal);
+	expect(calls.filter(([name]) => name !== "renew_implementation_build").at(-1)).toEqual([
+		"report_implementation_build",
+		{ id, state: "failed", error: STOPPED },
+	]);
+});
+
+test("servers the agent left running in its worktree end with the run", async () => {
+	let file = join(await mkdtemp(join(tmpdir(), "chopin-orphan-")), "pid");
+	process.env.CHOPIN_TEST_ORPHAN_PID = file;
+	try {
+		await run({}, ["--orphan"]);
+		let pid = Number(await readFile(file, "utf8"));
+		expect(pid).toBeGreaterThan(0);
+		expect(() => process.kill(pid, 0)).toThrow();
+	} finally {
+		delete process.env.CHOPIN_TEST_ORPHAN_PID;
+		await rm(dirname(file), { recursive: true, force: true });
 	}
 });

@@ -1,4 +1,3 @@
-import { createInterface } from "node:readline/promises";
 import { requestSchema } from "@chopin/experiment";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
@@ -6,7 +5,8 @@ import { runAgent } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
 import { createOutput } from "./output";
 import type { Output } from "./output";
-import { describePermission, permissionMemory } from "./permission";
+import { ask, describePermission, permissionMemory } from "./permission";
+import { stopProcessesIn } from "./processes";
 import { discardWorkspace, git, noPushEnvironment, prepareWorkspace } from "./workspace";
 import {
 	implementationPrompt,
@@ -24,9 +24,13 @@ type Options = {
 	signal: AbortSignal;
 	heartbeatMs?: number;
 	output?: Output;
+	/** Ctrl-C at a permission prompt; it stops the connector as Ctrl-C anywhere else does. */
+	interrupt?: () => void;
 	/** Shared across jobs so an "always allow" lasts for the connector's run. */
 	permissions?: ReturnType<typeof permissionMemory>;
 };
+export const STOPPED = "Stopped from the connector terminal.";
+
 export async function runWork(
 	api: Awaited<ReturnType<typeof remote>>,
 	kind: "experiment" | "implementation",
@@ -79,24 +83,26 @@ export async function runWork(
 	/** A spike's throwaway worktree and branch, removed when the run ends. */
 	let spikeWork: { path: string; branch: string } | undefined;
 	let bridgeApi: Promise<Awaited<ReturnType<typeof remote>>> | undefined;
+	let prepared: Awaited<ReturnType<typeof prepareWorkspace>> | undefined;
 	try {
-		let prepared = await prepareWorkspace(options.root, options.directory, input);
+		prepared = await prepareWorkspace(options.root, options.directory, input);
+		let path = prepared.path;
 		// A rebuild commits onto the existing pull request branches the agent checks out itself.
 		if (implementation && !rebuild) {
-			git(prepared.path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
+			git(path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
 		}
 		if (claim.spike) {
-			spikeWork = { path: prepared.path, branch: `chopin/spike-${input.id.slice(0, 8)}` };
-			git(prepared.path, "checkout", "-b", spikeWork.branch);
+			spikeWork = { path, branch: `chopin/spike-${input.id.slice(0, 8)}` };
+			git(path, "checkout", "-b", spikeWork.branch);
 		}
 		output.job(
 			implementation ? "build" : claim.spike ? "spike" : "investigation",
 			implementation ? claim.title ?? input.id : (input as { brief: string }).brief,
-			prepared.path,
+			path,
 		);
 		let stop = await runAgent({
 			command: options.command,
-			cwd: prepared.path,
+			cwd: path,
 			...(claim.spike ? { env: noPushEnvironment() } : {}),
 			prompt: rebuild
 				? rebuildPrompt
@@ -120,7 +126,7 @@ export async function runWork(
 					let tools: ReturnType<typeof relay> | undefined;
 					local = serveLocalBridge(() => {
 						tools ??= (bridgeApi ??= remote(options.url, claim.runToken))
-							.then(api => relay(api, prepared.path))
+							.then(api => relay(api, path))
 							.catch(error => {
 								tools = bridgeApi = undefined;
 								throw error;
@@ -150,7 +156,7 @@ export async function runWork(
 						{ name: "CHOPIN_BRIDGE_ORIGIN", value: options.url },
 						{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
 						{ name: "CHOPIN_BRIDGE_KIND", value: claim.spike ? "spike" : kind },
-						...(claim.spike ? [{ name: "CHOPIN_BRIDGE_ROOT", value: prepared.path }] : []),
+						...(claim.spike ? [{ name: "CHOPIN_BRIDGE_ROOT", value: path }] : []),
 					],
 				}];
 			},
@@ -173,8 +179,6 @@ export async function runWork(
 				if (remembered) return remembered;
 				latestProgress = "Waiting for permission in the owner's terminal";
 				if (!process.stdin.isTTY) return undefined;
-				let terminal = createInterface({ input: process.stdin, output: process.stdout });
-				try {
 					let [heading, ...detail] = describePermission(request);
 					output.say(
 						"",
@@ -182,15 +186,15 @@ export async function runWork(
 						...detail.map(line => `    ${line}`),
 						...request.options.map((option, index) => `  ${index + 1}. ${option.name}`),
 					);
-					let answer = await terminal.question("  Select option (blank cancels): ", {
+				let answer = await ask("  Select option (blank cancels): ", {
+					input: process.stdin,
+					output: process.stdout,
 						signal: abort.signal,
+					interrupt: options.interrupt ?? (() => abort.abort()),
 					});
 					let chosen = request.options[Number(answer) - 1]?.optionId;
 					permissions.chose(request, chosen);
 					return chosen;
-				} finally {
-					terminal.close();
-				}
 			},
 			stderr(text) {
 				agentTail = [...agentTail, ...text.split("\n").filter(Boolean)].slice(-10);
@@ -204,16 +208,25 @@ export async function runWork(
 		});
 		output.finished();
 	} catch (error) {
-		let message = error instanceof Error ? error.message : "Local work failed";
-		output.failed(message, agentTail);
+		// Ctrl-C reports why before the connector disconnects, so Chopin knows at once.
+		let stopped = options.signal.aborted;
+		let message = stopped
+			? STOPPED
+			: error instanceof Error
+			? error.message
+			: "Local work failed";
+		if (stopped) output.stopped();
+		else output.failed(message, agentTail);
 		await api.call(implementation ? "report_implementation_build" : "fail_experiment", {
 			...identity,
 			...(implementation ? { state: "failed" } : {}),
-			error: implementation
-				? "Local implementation failed. Inspect the connector terminal."
-				: message.slice(0, 2000),
+			error: stopped || !implementation
+				? message.slice(0, 2000)
+				: "Local implementation failed. Inspect the connector terminal.",
 		}).catch(() => {});
 	} finally {
+		// Servers the agent started (often in their own process group) end with its run.
+		if (prepared) await stopProcessesIn(prepared.path).catch(() => {});
 		local?.close();
 		await bridgeApi?.then(api => api.close()).catch(() => {});
 		if (spikeWork) {

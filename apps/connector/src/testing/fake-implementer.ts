@@ -1,6 +1,7 @@
 import { AgentApp, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { McpServer } from "@agentclientprotocol/sdk";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import { Readable, Writable } from "node:stream";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -10,6 +11,7 @@ if (process.argv.includes("--fail-start")) process.exit(1);
 
 let servers: McpServer[] = [];
 let cwd = "";
+let cancelled = () => {};
 let app = new AgentApp()
 	.onRequest(
 		"initialize",
@@ -23,7 +25,19 @@ let app = new AgentApp()
 		cwd = params.cwd;
 		return { sessionId: "implementation-acp-session" };
 	})
+	.onNotification("session/cancel", () => cancelled())
 	.onRequest("session/prompt", async ({ params }) => {
+		if (process.argv.includes("--orphan")) {
+			// A dev server in its own process group, as `vite &` from an agent's shell tool is.
+			let server = spawn("sleep", ["600"], { cwd, detached: true, stdio: "ignore" });
+			server.unref();
+			await writeFile(process.env.CHOPIN_TEST_ORPHAN_PID!, String(server.pid));
+			return { stopReason: "end_turn" as const };
+		}
+		if (process.argv.includes("--hang")) {
+			await new Promise<void>(resolve => cancelled = resolve);
+			return { stopReason: "cancelled" as const };
+		}
 		if (process.argv.includes("--rebuild")) {
 			let text = params.prompt.map(part => part.type === "text" ? part.text : "").join("\n");
 			if (!text.includes("read_rebuild") || text.includes("MUST use sub-agents")) {

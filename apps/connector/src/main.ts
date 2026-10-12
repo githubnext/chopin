@@ -61,7 +61,12 @@ async function connect(args: string[]) {
 	let directory = stateDirectory();
 	let release = await lockWorkspace(info.root, directory);
 	let abort = new AbortController();
-	let stop = () => abort.abort();
+	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
+	let stop = () => {
+		if (abort.signal.aborted) process.exit(130);
+		abort.abort();
+		process.once("SIGINT", () => process.exit(130));
+	};
 	process.once("SIGINT", stop);
 	process.once("SIGTERM", stop);
 	async function post(path: string, body: unknown) {
@@ -124,6 +129,7 @@ async function connect(args: string[]) {
 				signal: abort.signal,
 				output,
 				permissions,
+				interrupt: stop,
 			});
 		}
 	} catch (error) {

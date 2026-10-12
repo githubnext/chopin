@@ -505,6 +505,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				for (let active of await work(connection, ["queued", "running", "publishing"])) {
 					await service.stop(active.id, "interrupted", "Workspace disconnected.");
 				}
+				await implementation?.disconnected(connection.id);
 				value = { disconnected: true };
 			} else if (name === "wait_for_work") {
 				// A build in an archived document cannot be claimed; its expiry fails it in the sweep.

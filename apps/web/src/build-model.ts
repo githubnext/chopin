@@ -136,6 +136,20 @@ function quote(raw: string): string {
 }
 
 /**
+ * Why an ended build stopped, when its local agent said so: Ctrl-C in the connector terminal, or
+ * the connector disconnecting or going quiet. Other failures keep the phase's own words.
+ */
+export function endedReason(build: { error?: string } | undefined): string | undefined {
+	let error = build?.error;
+	if (error === "Stopped from the connector terminal.") {
+		return "Build stopped from the connector terminal.";
+	}
+	if (error === "Your local agent disconnected." || error?.startsWith("Workspace disconnected")) {
+		return "Build stopped — your local agent disconnected.";
+	}
+}
+
+/**
  * Why a task the build left unfinished stopped: the agent's last report, or where it
  * stopped when it said nothing.
  */

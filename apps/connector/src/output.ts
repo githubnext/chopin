@@ -77,6 +77,9 @@ export function createOutput(
 		finished() {
 			say(`  ${s.green("✓")} Finished`, "");
 		},
+		stopped() {
+			say(`  ${s.dim("■ Stopped from this terminal")}`, "");
+		},
 		/** `agent` is the agent's last stderr lines, shown when debugging didn't already show them. */
 		failed(message: string, agent: string[] = []) {
 			let tail = env.CHOPIN_DEBUG === "1" ? [] : agent.map(line => e.dim(`  agent │ ${line}`));

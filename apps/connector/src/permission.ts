@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline/promises";
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 
 /**
@@ -43,4 +44,32 @@ export function permissionMemory() {
 			if (option?.kind === "allow_always") allowed.add(key(request));
 		},
 	};
+}
+
+/**
+ * Ask one question in the terminal. readline puts a TTY in raw mode, so Ctrl-C arrives as a
+ * keypress; without this listener readline only pauses and the connector never stops.
+ * Returns undefined when interrupted or aborted.
+ */
+export async function ask(question: string, options: {
+	input: NodeJS.ReadableStream;
+	output: NodeJS.WritableStream;
+	terminal?: boolean;
+	signal: AbortSignal;
+	interrupt: () => void;
+}): Promise<string | undefined> {
+	let terminal = createInterface({
+		input: options.input,
+		output: options.output,
+		...(options.terminal === undefined ? {} : { terminal: options.terminal }),
+	});
+	terminal.on("SIGINT", options.interrupt);
+	try {
+		return await terminal.question(question, { signal: options.signal });
+	} catch (error) {
+		if (options.signal.aborted) return undefined;
+		throw error;
+	} finally {
+		terminal.close();
+	}
 }

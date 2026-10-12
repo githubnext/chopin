@@ -141,8 +141,16 @@ surface, where **Insert decision evidence in document** embeds that immutable vi
 
 An interrupted run is not automatically repeated. **Retry** on a failed,
 stopped or interrupted card returns the same investigation to **Ready to run**;
-someone then selects **Run** again. The old claim stays fenced by its generation. Ctrl-C withdraws the connection and stops
-managed agent processes. After a connector crash, its local lock remains to prevent
+someone then selects **Run** again. The old claim stays fenced by its generation.
+Ctrl-C, including at a permission prompt, reports running work as stopped from
+the connector terminal, then withdraws the connection; a second Ctrl-C exits at
+once. When the connector disconnects, Chopin fails its builds and rebuilds and
+interrupts its investigations immediately; a connector killed without warning
+is noticed within about 90 seconds. When a job ends for any reason, the
+connector stops the agent's process group and any background process still
+running in the job's worktree, such as a dev server the agent started. Terminal
+shells opened in the worktree are left alone. After a connector crash, its local
+lock remains to prevent
 uncertain duplicate execution; confirm no connector is running before removing the
 lock identified by the error message.
 
