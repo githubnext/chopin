@@ -280,9 +280,13 @@ One database-wide `chopin:writer` lease permits one active application process.
 A second process refuses startup. The holder renews the lease every 10 seconds
 on its own connection, outside the shared pool. A renewal attempt that takes
 more than about five seconds fails and is retried until the safety deadline,
-25 seconds after the last successful renewal was sent. The holder drains and
-stops if the lease is lost or the deadline passes, and logs when it last renewed
-and the last renewal error.
+25 seconds after the last successful renewal was sent. A renewal that gets no
+reply at all is abandoned after six seconds: its connection is closed, its
+server session is terminated from the shared pool, and the next attempt opens a
+new connection. PostgreSQL also ends a renewal transaction that sits idle for
+two seconds, so a session whose client vanished cannot keep the lease row
+locked. The holder drains and stops if the lease is lost or the deadline passes,
+and logs when it last renewed and the last renewal error.
 
 Adapter fencing prevents an expired holder from committing even before shutdown
 completes. Each fenced write holds the lease row `FOR KEY SHARE` and a

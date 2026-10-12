@@ -1,5 +1,6 @@
 import { SQL } from "bun";
 import { describe, expect, it } from "bun:test";
+import { type AddressInfo, connect, createServer, type Socket } from "node:net";
 import { join } from "node:path";
 
 import { documentSlug } from "../../channels/slug";
@@ -37,6 +38,56 @@ async function lockWaiters(sql: SQL, expected: number): Promise<void> {
 
 function within<T>(promise: Promise<T>, ms: number): Promise<T | "still waiting"> {
 	return Promise.race([promise, Bun.sleep(ms).then(() => "still waiting" as const)]);
+}
+
+/**
+ * A TCP proxy to PostgreSQL that can partition one connection the moment the server
+ * replies with `tag`: from then on nothing crosses in either direction, not even a close.
+ */
+async function partitionProxy(target: string) {
+	let destination = new URL(target);
+	let armed: string | undefined;
+	let partitioned = Promise.withResolvers<void>();
+	let sockets = new Set<Socket>();
+	let server = createServer(client => {
+		let upstream = connect(Number(destination.port || 5432), destination.hostname);
+		let cut = false;
+		sockets.add(client).add(upstream);
+		client.on("error", () => {});
+		upstream.on("error", () => {});
+		client.on("data", chunk => {
+			if (!cut) upstream.write(chunk);
+		});
+		upstream.on("data", chunk => {
+			if (!cut && armed !== undefined && chunk.includes(armed)) {
+				cut = true;
+				armed = undefined;
+				partitioned.resolve();
+			}
+			if (!cut) client.write(chunk);
+		});
+		client.on("close", () => {
+			if (!cut) upstream.destroy();
+		});
+		upstream.on("close", () => {
+			if (!cut) client.destroy();
+		});
+	});
+	await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+	let proxied = new URL(target);
+	proxied.hostname = "127.0.0.1";
+	proxied.port = String((server.address() as AddressInfo).port);
+	return {
+		url: proxied.toString(),
+		cutAfter(tag: string): Promise<void> {
+			armed = tag;
+			return partitioned.promise;
+		},
+		close(): void {
+			for (let socket of sockets) socket.destroy();
+			server.close();
+		},
+	};
 }
 
 if (url) {
@@ -498,6 +549,45 @@ if (url) {
 			await sql.close();
 		}
 	});
+
+	it("frees the lease row when the network drops a renewal's reply", async () => {
+		let proxy = await partitionProxy(url);
+		let storage = new PostgresStorage(proxy.url);
+		let sql = new SQL(url);
+		try {
+			await storage.migrate();
+			let name = contractId("partitioned-renewal");
+			let held = await storage.leases.acquire(name, "writer", 60_000);
+			let cut = proxy.cutAfter("UPDATE 1");
+			let attempt = storage.leases.renew(held!, 60_000).then(() => "renewed", error => error);
+			await cut;
+			let partitionedAt = Date.now();
+
+			// The abandoned renewal session must not keep the row past a few seconds.
+			let freedAfter: number | undefined;
+			while (Date.now() - partitionedAt < 4_000) {
+				let locked = await sql.begin(async transaction => {
+					await transaction`SELECT name FROM storage_leases WHERE name = ${name} FOR UPDATE NOWAIT`;
+				}).then(() => true, () => false);
+				if (locked) {
+					freedAfter = Date.now() - partitionedAt;
+					break;
+				}
+				await Bun.sleep(50);
+			}
+			expect(freedAfter ?? Infinity).toBeLessThan(3_000);
+
+			expect(await within(attempt, 10_000)).toMatchObject({ failure: "unavailable" });
+			expect(await within(storage.leases.renew(held!, 60_000), 2_000)).toMatchObject({
+				name,
+				fencing: held!.fencing,
+			});
+		} finally {
+			await storage.close();
+			await sql.close();
+			proxy.close();
+		}
+	}, 30_000);
 
 	it("makes a takeover wait for a fenced commit already in flight", async () => {
 		let storage = new PostgresStorage(url);

@@ -474,16 +474,38 @@ const LEASE_COLUMNS = `
 
 /** Longest a lease renewal statement may run before PostgreSQL cancels it. */
 const LEASE_RENEW_TIMEOUT_MS = 5_000;
+/** Longest renewal waits for the lease row, so a lock wait ends before the statement timeout. */
+const LEASE_RENEW_LOCK_TIMEOUT_MS = 4_000;
+/**
+ * Longest PostgreSQL keeps a renewal transaction that has gone quiet. A renewal whose
+ * client lost the network mid-transaction would otherwise hold the lease row indefinitely.
+ */
+const LEASE_RENEW_IDLE_MS = 2_000;
 /** Abandon a renewal connection that has not answered shortly after its statement timeout. */
 const LEASE_RENEW_STALL_MS = LEASE_RENEW_TIMEOUT_MS + 1_000;
+/**
+ * Bun closes gracefully when `timeout` is 0, waiting for pending queries, so a stalled
+ * connection is closed with the smallest positive timeout, which drops its socket.
+ */
+const FORCE_CLOSE = { timeout: 0.001 };
 
-function leaseConnection(url: string): SQL {
-	return new SQL(url, {
+type LeaseConnection = { sql: SQL; name: string };
+
+function leaseConnection(url: string): LeaseConnection {
+	// A name unique to this connection lets the main pool find and end its session.
+	let name = `chopin-lease-renewal-${crypto.randomUUID()}`;
+	let sql = new SQL(url, {
 		connectionTimeout: 5,
 		idleTimeout: 30,
 		max: 1,
-		connection: { statement_timeout: LEASE_RENEW_TIMEOUT_MS },
+		connection: {
+			application_name: name,
+			statement_timeout: LEASE_RENEW_TIMEOUT_MS,
+			lock_timeout: LEASE_RENEW_LOCK_TIMEOUT_MS,
+			idle_in_transaction_session_timeout: LEASE_RENEW_IDLE_MS,
+		},
 	});
+	return { sql, name };
 }
 
 /** PostgreSQL is the reference implementation, not part of the storage contract. */
@@ -492,12 +514,12 @@ export class PostgresStorage implements StorageAdapter {
 	readonly #sql: SQL;
 	readonly #url: string;
 	// Renewal has its own connection so a busy pool cannot delay it past the lease.
-	#leaseSql: SQL;
+	#renewal: LeaseConnection;
 
 	constructor(url: string) {
 		this.#url = url;
 		this.#sql = new SQL(url, { connectionTimeout: 10, idleTimeout: 30, max: 10 });
-		this.#leaseSql = leaseConnection(url);
+		this.#renewal = leaseConnection(url);
 		this.experiments = new PostgresExperimentStore(
 			this.#sql,
 			(sql, lease) => this.#assertLease(sql, lease),
@@ -737,7 +759,7 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async close(): Promise<void> {
-		await Promise.all([this.#sql.close({ timeout: 5 }), this.#leaseSql.close({ timeout: 5 })]);
+		await Promise.all([this.#sql.close({ timeout: 5 }), this.#renewal.sql.close({ timeout: 5 })]);
 	}
 
 	async #run<T>(action: string, execute: () => Promise<T>): Promise<T> {
@@ -1764,7 +1786,8 @@ export class PostgresStorage implements StorageAdapter {
 
 	#renew(held: Lease, ttlMs: number): Promise<Lease | undefined> {
 		return this.#run("renew storage lease", async () => {
-			let sql = this.#leaseSql;
+			let renewal = this.#renewal;
+			let sql = renewal.sql;
 			let stalled = false;
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			let deadline = new Promise<never>((_, reject) => {
@@ -1783,6 +1806,9 @@ export class PostgresStorage implements StorageAdapter {
 						await transaction`
 							SELECT name FROM storage_leases WHERE name = ${held.name} FOR NO KEY UPDATE
 						`;
+						// The columns are spelled out: Bun registers a `transaction.unsafe` fragment as
+						// a pending query that nothing awaits, so closing the stalled connection
+						// would reject it as an unhandled rejection.
 						return transaction<LeaseRow[]>`
 							UPDATE storage_leases
 							SET expires_at = clock_timestamp() + (${ttlMs} * interval '1 millisecond')
@@ -1790,7 +1816,7 @@ export class PostgresStorage implements StorageAdapter {
 								AND owner = ${held.owner}
 								AND fencing = ${held.fencing}
 								AND expires_at > clock_timestamp()
-							RETURNING ${transaction.unsafe(LEASE_COLUMNS)}
+							RETURNING name, owner, fencing, expires_at AS "expiresAt"
 						`;
 					}),
 					deadline,
@@ -1798,11 +1824,18 @@ export class PostgresStorage implements StorageAdapter {
 				return saved ? lease(saved) : undefined;
 			} finally {
 				clearTimeout(timer);
-				if (stalled && this.#leaseSql === sql) {
+				if (stalled && this.#renewal === renewal) {
 					// The server's statement timeout did not answer, so the connection is
 					// presumed dead. The next attempt reconnects instead of queueing behind it.
-					this.#leaseSql = leaseConnection(this.#url);
-					void sql.close({ timeout: 0 }).catch(() => {});
+					this.#renewal = leaseConnection(this.#url);
+					void sql.close(FORCE_CLOSE).catch(() => {});
+					// The server may never see that close. Its idle-in-transaction timeout should
+					// already have ended an abandoned transaction; terminating it is a backstop.
+					void this.#sql`
+						SELECT pg_terminate_backend(pid)
+						FROM pg_stat_activity
+						WHERE application_name = ${renewal.name}
+					`.catch(() => {});
 				}
 			}
 		});
