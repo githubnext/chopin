@@ -6,6 +6,7 @@ import type {
 	RequestPermissionRequest,
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
+import { VERSION } from "./version";
 
 export type AgentOptions = {
 	command: string[];
@@ -73,7 +74,7 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 	try {
 		let initialized = await connection.agent.request("initialize", {
 			protocolVersion: PROTOCOL_VERSION,
-			clientInfo: { name: "chopin", version: "0.1.0" },
+			clientInfo: { name: "chopin", version: VERSION },
 			clientCapabilities: {},
 		});
 		if (initialized.protocolVersion !== PROTOCOL_VERSION) {

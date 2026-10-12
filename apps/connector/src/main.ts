@@ -2,7 +2,7 @@ import { basename, resolve } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { requestSchema } from "@chopin/experiment";
 import { createBridge } from "./bridge";
-import { ConnectorError, remote } from "./mcp";
+import { CONNECTOR_HEADERS, ConnectorError, refusal, remote } from "./mcp";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { runWork } from "./run";
@@ -73,10 +73,12 @@ async function connect(args: string[]) {
 	async function post(path: string, body: unknown) {
 		let response = await fetch(url + path, {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "content-type": "application/json", ...CONNECTOR_HEADERS },
 			body: JSON.stringify(body),
 			signal: abort.signal,
 		});
+		let refused = await refusal(response);
+		if (refused) throw refused;
 		let value = await response.json();
 		if (!response.ok) throw new Error(value.error ?? "Connector request failed");
 		return value;

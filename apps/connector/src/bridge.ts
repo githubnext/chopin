@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { capabilities, parseResult, resultSchema } from "@chopin/experiment";
 import type { Result, RunInput } from "@chopin/experiment";
+import { VERSION } from "./version";
 
 /**
  * How an agent starts this connector's stdio bridge. A compiled `chopin` binary is its own entry
@@ -23,7 +24,7 @@ export function bridgeCommand(
 }
 
 export function createBridge(input: RunInput, submit: (result: Result) => Promise<void>) {
-	let server = new McpServer({ name: "chopin-investigation", version: "0.1.0" });
+	let server = new McpServer({ name: "chopin-investigation", version: VERSION });
 	server.registerTool("read_investigation", {
 		description: "Read the sealed investigation, source context and accepted result format.",
 		inputSchema: {},

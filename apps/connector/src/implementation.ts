@@ -2,6 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { imageFileArguments } from "./image-file";
 import type { remote } from "./mcp";
+import { VERSION } from "./version";
 
 /**
  * Relay a run's server tools. With a worktree `root`, a run that may upload images also gets the
@@ -45,7 +46,7 @@ export async function relay(
 		}
 		: listed;
 	return () => {
-		let server = new Server({ name: "chopin-implementation", version: "0.1.0" }, {
+		let server = new Server({ name: "chopin-implementation", version: VERSION }, {
 			capabilities: { tools: {} },
 		});
 		server.setRequestHandler(ListToolsRequestSchema, () => tools);
