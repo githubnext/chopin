@@ -122,6 +122,26 @@ it("preserves prefixed-token and Bearer masking", () => {
 	);
 });
 
+function envelope(message: string) {
+	return { error: { code: "no-repository-credential", kind: "NoRepositoryCredential", message } };
+}
+
+it("retains a benign structured error and still scrubs credentials in its message", () => {
+	let benign = envelope("No credential can read octo-org/score.");
+	expect(outputText(benign)).toBe(JSON.stringify(benign));
+	expect(outputText(JSON.stringify(benign))).toBe(JSON.stringify(benign));
+	for (
+		let [message, shown] of [
+			["password: hunter2", "password: [redacted]"],
+			[`Failed with Bearer ${"s".repeat(16)}`, "Failed with Bearer [redacted]"],
+		]
+	) {
+		let expected = JSON.stringify(envelope(shown!));
+		expect(outputText(envelope(message!))).toBe(expected);
+		expect(outputText(JSON.stringify(envelope(message!)))).toBe(expected);
+	}
+});
+
 it.each([3_999, 4_000, 4_001, 100_000])("bounds benign output of %i characters", length => {
 	let output = "x".repeat(length);
 	expect(outputText(output)).toBe(length > 4_000 ? `${"x".repeat(3_999)}…` : output);

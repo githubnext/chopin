@@ -64,8 +64,16 @@ export declare namespace Chat {
 		status: ToolStatus;
 		/** Truncated and redacted; the arguments the model supplied, once its input finished. */
 		args?: string;
-		/** Truncated and redacted; partial output while running, final output once finished. */
+		/**
+		 * Truncated and redacted; partial output while running, final output once finished.
+		 * With `error`, the failed tool's human-readable message.
+		 */
 		result?: string;
+		/**
+		 * Redacted; present, with status "failed", when the tool failed with a structured
+		 * error. `code` is stable; `kind`, when present, is the name to show.
+		 */
+		error?: { code: string; kind?: string };
 		/** Milliseconds since the epoch, set by the server when the tool's input began. */
 		startedAt?: number;
 		/** Present, with status "failed", when the Planner was refused permission to run the tool. */

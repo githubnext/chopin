@@ -38,7 +38,7 @@ function ToolCall(
 ) {
 	let [open, setOpen] = useState(false);
 	let contentId = useId();
-	let hasDetails = tool.args !== undefined || tool.result !== undefined;
+	let hasDetails = tool.args !== undefined || tool.result !== undefined || tool.error !== undefined;
 	let status = tool.status === "running"
 		? disconnected ? "Last seen running" : active ? "Running" : "Interrupted"
 		: tool.status === "failed"
@@ -96,10 +96,19 @@ function ToolCall(
 								<pre>{tool.args}</pre>
 							</div>
 						)}
-						{tool.result !== undefined && (
+						{(tool.result !== undefined || tool.error !== undefined) && (
 							<div>
 								<div className="chat-tool-data-label">Result</div>
-								<pre>{tool.result}</pre>
+								{tool.error
+									? (
+										<pre>
+											<span className="block font-semibold text-destructive-ink">
+												{tool.error.kind ?? tool.error.code}
+											</span>
+											{tool.result}
+										</pre>
+									)
+									: <pre>{tool.result}</pre>}
 							</div>
 						)}
 					</div>

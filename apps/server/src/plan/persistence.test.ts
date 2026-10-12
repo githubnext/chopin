@@ -170,6 +170,32 @@ describe("hosted plan persistence", () => {
 		await Service.close(restored);
 	});
 
+	it("restores a failed tool's structured error with its transcript entry", async () => {
+		let context = await hosted();
+		let plan = await Service.open(context.channel.id, context.backend, context.server);
+		let activity: ChatWire.Activity = {
+			id: "tool-1",
+			name: "read_plan",
+			status: "failed",
+			error: { code: "no-repository-credential", kind: "NoRepositoryCredential" },
+			result: "No credential can read octo-org/score.",
+			took: 12,
+		};
+		plan.chat.entries.push({
+			id: ulid(),
+			author: { kind: "agent" },
+			text: "",
+			ts: 1,
+			tools: [activity],
+		});
+		await Service.persist(plan);
+		await Service.close(plan);
+
+		let restored = await Service.open(context.channel.id, context.backend, context.server);
+		expect(restored.chat.entries[0]?.tools).toEqual([activity]);
+		await Service.close(restored);
+	});
+
 	it("restores workflow run cards, with runs still live then stopped", async () => {
 		let context = await hosted();
 		let plan = await Service.open(context.channel.id, context.backend, context.server);

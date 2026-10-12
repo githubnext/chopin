@@ -734,6 +734,55 @@ describe("Planner link protocol", () => {
 		expect(JSON.stringify(outcome.parts)).toContain(failure.error);
 	});
 
+	it("reports an own tool's structured error as a failure and returns host results unredacted", async () => {
+		let secret = `token=ghp_${"A".repeat(30)}\npassword: hunter2`;
+		let envelope = {
+			error: { code: "no-repository-credential", kind: "NoRepositoryCredential", message: "Nope." },
+		};
+		let seen: unknown[] = [];
+		let reports: unknown[] = [];
+		let { server, channel } = await setup({
+			async turn(context) {
+				seen.push(await context.callHostTool("read_plan", {}));
+				context.offerTools(["fetch_repository"]);
+				context.emit({
+					type: "tool-call",
+					toolCallId: "own-1",
+					toolName: "fetch_repository",
+					input: "{}",
+					providerExecuted: true,
+				});
+				context.emit({
+					type: "tool-result",
+					toolCallId: "own-1",
+					toolName: "fetch_repository",
+					result: envelope,
+					isError: true,
+				});
+				finishTurn(context);
+			},
+		});
+		let agent = new HarnessAgent({
+			harness: adapterFor(server, {
+				channelId: channel.id,
+				isolated: false,
+				toolReport: (...report) => reports.push(report),
+			}),
+			tools: { read_plan: tool({ inputSchema: z.object({}), execute: async () => secret }) },
+			activeTools: ["read_plan"],
+			permissionMode: "allow-reads",
+		});
+		let session = await agent.createSession({ sandboxSession });
+		cleanups.push(() => session.destroy());
+		let outcome = await streamOn(agent, session, "structured");
+		expect(outcome.errors).toEqual([]);
+		expect(seen).toEqual([{ output: secret, isError: false }]);
+		expect(reports).toEqual([["own-1", envelope, "failed"]]);
+		expect(outcome.parts.filter(part => part.type === "tool-error")).toMatchObject([
+			{ toolCallId: "own-1", error: envelope },
+		]);
+	});
+
 	it("fails a session the client refuses or never starts, and tells it to let go", async () => {
 		let destroyed: string[] = [];
 		let { server, channel } = await setup({

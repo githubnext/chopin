@@ -37,6 +37,7 @@ import { createNotices } from "./notices";
 import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
 import { translateJob } from "./job-translate";
 import { argsText, outputText } from "./activity";
+import { toolErrorSchema } from "@chopin/planner-link";
 import { watchJobAbort } from "./job-fence";
 import { JOB_TOOLS } from "../agent/job-scope";
 import type { JobOutcome } from "../conversation-plan/jobs";
@@ -56,6 +57,7 @@ import type { Plan } from "../plan/service";
 import type { Focus, Said } from "./address";
 import type { ReferenceService } from "./references";
 import type { Socket, SocketData } from "../wire";
+import type { ToolError } from "@chopin/planner-link";
 
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
@@ -2389,19 +2391,42 @@ function conclude(
 	if (existing && existing.status !== "running") return;
 	let started = chat.timings.get(id);
 	if (status !== "running") chat.timings.delete(id);
+	let failure = status === "failed" && !refused && name !== "read_reference"
+		? toolError(output)
+		: undefined;
 	let detail = name === "read_reference"
 		? success
 			? "Reference content was returned privately to the Planner."
 			: "The reference could not be read."
-		: outputText(output);
+		: outputText(failure ? failure.message : output);
 	publish(context, {
 		id,
 		name,
 		status,
 		...(refused ? { refused: true as const } : {}),
+		...(failure
+			? {
+				error: {
+					code: outputText(failure.code),
+					...(failure.kind === undefined ? {} : { kind: outputText(failure.kind) }),
+				},
+			}
+			: {}),
 		...(started && status !== "running" ? { took: Date.now() - started } : {}),
 		...(detail ? { result: detail } : {}),
 	});
+}
+
+/** A failed tool's structured error, sent as the envelope or as its JSON text. */
+function toolError(output: unknown): ToolError["error"] | undefined {
+	if (typeof output === "string") {
+		try {
+			output = JSON.parse(output);
+		} catch {
+			return undefined;
+		}
+	}
+	return toolErrorSchema.safeParse(output).data?.error;
 }
 
 /** Whether the session offers this tool; one it does not offer ends the turn. */

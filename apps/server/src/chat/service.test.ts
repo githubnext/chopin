@@ -422,6 +422,106 @@ describe("AI SDK stream projection", () => {
 		},
 	);
 
+	let structured = {
+		error: {
+			code: "no-repository-credential",
+			kind: "NoRepositoryCredential",
+			message: "No credential can read octo-org/score.",
+		},
+	};
+
+	it.each([
+		["a streamed object", "stream", structured],
+		["a streamed serialization", "stream", JSON.stringify(structured)],
+		["a host object", "host", structured],
+		["a host serialization", "host", JSON.stringify(structured)],
+	])(
+		"shows a failed tool's structured error from %s as its label and message",
+		(_name, mode, output) => {
+			let chat = create();
+			let { context, sent } = room(chat);
+			translate(context, call("read_plan"));
+			if (mode === "host") finished(context, "t1", output, false);
+			else {
+				translate(
+					context,
+					part({ type: "tool-error", toolCallId: "t1", toolName: "read_plan", error: output }),
+				);
+			}
+			let expected = {
+				status: "failed",
+				error: { code: "no-repository-credential", kind: "NoRepositoryCredential" },
+				result: "No credential can read octo-org/score.",
+			};
+			expect(sent.findLast(frame => frame.kind === "chat:tool")?.activity).toMatchObject(expected);
+			expect(chat.entries[0]?.tools?.[0]).toMatchObject(expected);
+		},
+	);
+
+	it("scrubs every string of a structured error before publication and retention", () => {
+		let chat = create();
+		let { context, sent } = room(chat);
+		translate(context, call("read_plan"));
+		let token = `ghp_${"A".repeat(30)}`;
+		finished(context, "t1", {
+			error: {
+				code: "password: synthetic-code-314",
+				kind: `Bearer ${"k".repeat(20)}`,
+				message: `Failed with Bearer ${"m".repeat(20)}; password: synthetic-message-314 ${token}`,
+			},
+		}, false);
+		let expected = {
+			status: "failed",
+			error: { code: "password: [redacted]", kind: "Bearer [redacted]" },
+			result: "Failed with Bearer [redacted]; password: [redacted]",
+		};
+		expect(sent.findLast(frame => frame.kind === "chat:tool")?.activity).toMatchObject(expected);
+		expect(chat.entries[0]?.tools?.[0]).toMatchObject(expected);
+		for (let secret of ["synthetic-code-314", "k".repeat(20), "m".repeat(20), token]) {
+			expect(JSON.stringify(sent)).not.toContain(secret);
+			expect(JSON.stringify(chat.entries)).not.toContain(secret);
+		}
+	});
+
+	it("recognises a structured error only while its message is within the result bound", () => {
+		let chat = create();
+		let { context } = room(chat);
+		translate(context, call("read_plan", "bounded"));
+		finished(context, "bounded", { error: { code: "huge", message: "x".repeat(4_000) } }, false);
+		translate(context, call("read_plan", "over"));
+		finished(context, "over", { error: { code: "huge", message: "x".repeat(4_001) } }, false);
+		let [bounded, over] = chat.entries[0]!.tools!;
+		expect(bounded).toMatchObject({ error: { code: "huge" }, result: "x".repeat(4_000) });
+		expect(over?.error).toBeUndefined();
+		expect(over?.result).toHaveLength(4_000);
+		expect(over?.result?.startsWith('{"error":')).toBe(true);
+	});
+
+	it("treats an error envelope as an ordinary result unless the tool failed", () => {
+		let chat = create();
+		let { context } = room(chat);
+		let raw = JSON.stringify(structured);
+		translate(context, call("read_plan", "done"));
+		translate(
+			context,
+			part({ type: "tool-result", toolCallId: "done", toolName: "read_plan", output: structured }),
+		);
+		translate(context, call("read_plan", "running"));
+		progressed(context, "running", structured);
+		translate(context, call("read_reference", "private"));
+		finished(context, "private", structured, false);
+		translate(context, call("read_plan", "malformed"));
+		finished(context, "malformed", { error: { code: "c", message: "m", stack: "at x" } }, false);
+		let tools = chat.entries[0]!.tools!;
+		expect(tools.map(tool => [tool.id, tool.status, tool.result])).toEqual([
+			["done", "done", raw],
+			["running", "running", raw],
+			["private", "failed", "The reference could not be read."],
+			["malformed", "failed", '{"error":{"code":"c","message":"m","stack":"at x"}}'],
+		]);
+		expect(tools.every(tool => tool.error === undefined)).toBe(true);
+	});
+
 	it("accepts the tools of a full session's active set and rejects the rest", () => {
 		let chat = create();
 		chat.agent = {

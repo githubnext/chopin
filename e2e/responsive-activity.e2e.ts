@@ -207,6 +207,59 @@ test("completed tool names wrap in compact Chat", async ({ join, seed }) => {
 	await expectNoHorizontalOverflow(page);
 });
 
+test("a failed tool's structured error reads as its label and message", async ({ join, seed }) => {
+	let message = "No credential can read <b>octo-org/score</b>.";
+	await seed(RESPONSIVE_SOURCE, {
+		transcript: [{
+			id: "error-entry",
+			author: { kind: "agent" },
+			text: "Could not read the repository.",
+			ts: 1_700_000_000,
+			tools: [
+				{
+					id: "kind-tool",
+					name: "fetch_repository",
+					status: "failed",
+					error: { code: "no-repository-credential", kind: "NoRepositoryCredential" },
+					result: message,
+					took: 38,
+				},
+				{
+					id: "code-tool",
+					name: "clone_repository",
+					status: "failed",
+					error: { code: "clone-timeout" },
+					result: "The clone took too long.",
+					took: 12,
+				},
+			],
+		}],
+	});
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /Chat/ }).click();
+	await page.getByRole("button", { name: /Work details.*2 actions/ }).click();
+	let tools = page.getByRole("list", { name: "Tool calls" });
+
+	let kinded = tools.getByRole("button", { name: /Fetch repository/ });
+	await expect(kinded).toContainText("Failed");
+	await kinded.click();
+	let details = page.locator(`[id="${await kinded.getAttribute("aria-controls")}"]`);
+	await expect(details.getByText("NoRepositoryCredential", { exact: true })).toBeVisible();
+	await expect(details).toContainText(message);
+	await expect(details.locator("b")).toHaveCount(0);
+	await expect(details).not.toContainText('{"error"');
+	await expect(details).not.toContainText("no-repository-credential");
+
+	let coded = tools.getByRole("button", { name: /Clone repository/ });
+	await expect(coded).toContainText("Failed");
+	await coded.click();
+	details = page.locator(`[id="${await coded.getAttribute("aria-controls")}"]`);
+	await expect(details.getByText("clone-timeout", { exact: true })).toBeVisible();
+	await expect(details).toContainText("The clone took too long.");
+	await expectNoHorizontalOverflow(page);
+});
+
 test("chat activity appears while closed and clears when opened", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE, {
 		transcript: [{

@@ -106,6 +106,20 @@ export const streamPartSchema = z.discriminatedUnion("type", [
 	z.strictObject({ type: z.literal("error"), error: note }),
 ]);
 
+/**
+ * The structured error a failed `tool-result` may carry as its `result`, either
+ * as this object or as its JSON text. `code` is a stable machine identifier,
+ * `kind` an optional display name, and `message` human-readable text. Chopin
+ * still accepts any JSON as a result; this is a recognised convention.
+ */
+export const toolErrorSchema = z.strictObject({
+	error: z.strictObject({
+		code: name,
+		kind: name.optional(),
+		message: note.min(1),
+	}),
+});
+
 const option = z.strictObject({
 	label: z.string().max(MAX_NOTE),
 	description: z.string().max(MAX_NOTE),
@@ -315,6 +329,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 export type StreamPart = z.infer<typeof streamPartSchema>;
+export type ToolError = z.infer<typeof toolErrorSchema>;
 export type InputCall = z.infer<typeof inputSchema>;
 export type InputMethod = InputCall["method"];
 export type LinkRun = z.infer<typeof runSchema>;

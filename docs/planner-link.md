@@ -311,11 +311,47 @@ fields:
   emits their call and result parts itself.
 - `tool-input-start` may name a host tool (its input streams before the
   `host-tool-call`) or a declared own tool.
+- A failed own tool's `tool-result` may carry a
+  [structured tool error](#structured-tool-errors) as its `result`.
 - `finishReason.unified` is one of `stop`, `length`, `content-filter`,
   `tool-calls`, `error`, `other`. `usage` and `totalUsage` are
   `{ "inputTokens": { "total?", "noCache?", "cacheRead?", "cacheWrite?" }, "outputTokens": { "total?", "text?", "reasoning?" } }`
   with non-negative integers.
 - `error` fails the turn with that text.
+
+### Structured tool errors
+
+An own tool that fails may say why in a form Chat can show. Send its
+`tool-result` with `"isError": true` and, as `result`, this envelope or its
+JSON text:
+
+```text
+{ "error": { "code": "", "kind?": "", "message": "" } }
+```
+
+- `code` is a stable machine identifier, such as
+  `no-repository-credential`, of 1 to 128 characters.
+- `kind` is an optional display name, such as `NoRepositoryCredential`, of 1
+  to 128 characters.
+- `message` is human-readable text of 1 to 4000 characters.
+
+The envelope has exactly these fields. `@chopin/planner-link` exports it as
+`toolErrorSchema` and `ToolError`. It is a convention, not a new wire shape:
+`result` remains any JSON, and an envelope that does not match is shown as an
+ordinary result. Chopin recognises the envelope only on a failed, final
+result; a successful or `preliminary` result that contains `error` is
+shown as it is.
+
+Work details then shows the call as **Failed** with `kind`, or `code` when
+there is no `kind`, and `message` as plain text instead of the JSON. Chopin
+masks credential assignments and token shapes in `code`, `kind` and `message`,
+as in any tool result, before it stores or shows them. That masking is not
+exhaustive; keep credentials out of the envelope.
+
+This masking applies only to what Chat stores and shows. It does not change
+what crosses the link: `host-tool-result.output` reaches the client exactly as
+the host tool returned it, and a failed host call keeps its
+`{ "error": "<message>" }` output.
 
 ## Questions
 
