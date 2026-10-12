@@ -47,11 +47,14 @@ card is appended to the end of the document and still needs someone to run it.
 Progress and published results appear in that card automatically, without
 opening another tab or dialog.
 
-The card is atomic, like a research card. It can move with the prose around it,
-but neither a browser nor the Planner can author or alter its markup: the server
-accepts a new card only for an existing investigation in the same document, and
-removal only once its work is not queued, running or publishing. Remove a card
-with its close control.
+The card is atomic, like a research card: it can move with the prose around it,
+but its markup only ever names the record. When a browser adds a card, the server
+accepts it only if that id belongs to an existing investigation in the same
+document; a card naming any other id is refused. The Planner's document edits
+cannot add, move or remove one. Removing a **Ready to run** card withdraws the
+investigation first, so no record is left without its card. A failed, stopped or
+interrupted card can be removed directly. Running and completed investigations
+keep their card.
 
 Several people can connect checkouts of the same repository. Only a
 connection's owner can start or cancel work on it. The server rechecks the
@@ -97,8 +100,8 @@ uploaded UI code or live application endpoint is accepted.
 Shared filters and row selections are revision-checked. A stale edit reports a
 conflict. **Record decision** saves the exact acknowledged selections, conclusion
 and rationale. **Insert decision evidence in document** embeds that immutable view;
-**Insert view in document** embeds the current collaborative selections. Evidence
-decisions also appear in the document's Decisions surface.
+**Insert view in document** embeds the current collaborative selections. Recorded
+decisions appear on the investigation's card and in the document's Decisions surface.
 
 An interrupted run is not automatically repeated. **Retry** on a failed,
 stopped or interrupted card returns the same investigation to **Ready to run**;
