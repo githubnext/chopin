@@ -139,7 +139,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				: free;
 			if (here) list.unshift(connection);
 			else list.push(connection);
-			}
+		}
 		return [...free, ...prototyping, ...building];
 	}
 	router.on(
@@ -283,10 +283,33 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			if (!options.connections.list(channel.repositoryId, session.user.id).length) {
 				throw new GitHubError("no-workspace", 409);
 			}
+			// Like Build: a connection running a prototype or another document's build is busy.
+			let free: Connection[] = [];
+			for (
+				let connection of options.connections.candidates(channel.repositoryId, session.user.id, id)
+			) {
+				let here = options.connections.assigned(connection.id) === id;
+				if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
+					continue;
+				}
+				free.push(connection);
+			}
+			if (!free.length) throw new GitHubError("agent-busy", 409);
+			let idle = new Set(free.map(connection => connection.id));
 			connector.track(id);
 			let result = await options.withPlan(
 				id,
-				plan => queueRebuild(plan, options.connections, { by: session.user.id }),
+				plan =>
+					queueRebuild(plan, {
+						...options.connections,
+						get: connectionId =>
+							idle.has(connectionId) ? options.connections.get(connectionId) : undefined,
+						list: (repositoryId, owner) =>
+							options.connections.list(repositoryId, owner).filter(item => idle.has(item.id)),
+						assign: (connectionId, documentId) =>
+							options.connections.assign(connectionId, documentId),
+						assigned: connectionId => options.connections.assigned(connectionId),
+					}, { by: session.user.id }),
 			);
 			if (result.kind === "busy") throw new GitHubError("implementation is already active", 409);
 			if (result.kind === "unchanged") throw new GitHubError("nothing to build", 409);
@@ -303,8 +326,8 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			if (request.headers.get("origin") !== auth.config.origin) {
 				throw new GitHubError("origin is not allowed", 403);
 			}
-			let { repository } = await browser(request, id);
-			if (!repository.permissions.push && !repository.permissions.admin) {
+			let { channel, repository } = await browser(request, id);
+			if (!repository.permissions.push && !repository.permissions.admin || channel.archivedAt) {
 				throw new GitHubError("repository write access is required", 403);
 			}
 			await options.withPlan(id, async plan => requestBuild(plan, undefined));
