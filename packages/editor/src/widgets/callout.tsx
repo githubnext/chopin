@@ -354,11 +354,24 @@ function disclosureHost(editor: LexicalEditor, key: string): HTMLElement | null 
 	return host;
 }
 
+/** The id a folded callout carries, so its disclosure can say what it controls. */
+function foldTarget(key: string): string {
+	return `plan-callout-${key}`;
+}
+
 /** Opens or closes the blocks a callout folds; a reader's own view, never the document. */
-function FoldToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+function FoldToggle(
+	{ controls, open, onToggle }: { controls: string; open: boolean; onToggle: () => void },
+) {
 	return (
 		<div contentEditable={false} className="plan-callout-fold">
-			<button aria-expanded={open} className="plan-research-more" onClick={onToggle} type="button">
+			<button
+				aria-controls={controls}
+				aria-expanded={open}
+				className="plan-research-more"
+				onClick={onToggle}
+				type="button"
+			>
 				{open ? "Show less" : "Show more"}
 			</button>
 		</div>
@@ -390,7 +403,31 @@ export function CalloutPlugin() {
 				if (lead) element.dataset.foldLead = lead;
 				else delete element.dataset.foldLead;
 			}
+			let id = fold === "none" ? undefined : foldTarget(callout.key);
+			if (id && element.id !== id) element.id = id;
+			else if (!id && element.id === foldTarget(callout.key)) element.removeAttribute("id");
 		}
+	});
+
+	// Disclosure hosts are DOM the editor does not own, so they are made and removed here, after
+	// render, never during it; a callout that stops folding leaves no empty host behind.
+	let [foldHosts, setFoldHosts] = useState<ReadonlyMap<string, HTMLElement>>(() => new Map());
+	useLayoutEffect(() => {
+		let next = new Map<string, HTMLElement>();
+		for (let callout of callouts) {
+			let element = editor.getElementByKey(callout.key);
+			if ((folds.get(callout.key) ?? "none") === "none") {
+				element?.querySelector(":scope > [data-plan-chrome='callout-fold']")?.remove();
+				continue;
+			}
+			let host = disclosureHost(editor, callout.key);
+			if (host) next.set(callout.key, host);
+		}
+		setFoldHosts(current =>
+			current.size === next.size && [...next].every(([key, host]) => current.get(key) === host)
+				? current
+				: next
+		);
 	});
 
 	let toggle = (key: string) =>
@@ -416,7 +453,7 @@ export function CalloutPlugin() {
 					?.querySelector<HTMLElement>("[data-plan-chrome='callout']");
 				if (!host) return null;
 				let fold = folds.get(callout.key);
-				let foldHost = fold === "none" ? null : disclosureHost(editor, callout.key);
+				let foldHost = fold === "none" ? undefined : foldHosts.get(callout.key);
 				return [
 					createPortal(
 						<Heading callout={callout} editor={editor} disabled={disabled} />,
@@ -424,7 +461,11 @@ export function CalloutPlugin() {
 						callout.key,
 					),
 					foldHost && createPortal(
-						<FoldToggle open={fold === "open"} onToggle={() => toggle(callout.key)} />,
+						<FoldToggle
+							controls={foldTarget(callout.key)}
+							open={fold === "open"}
+							onToggle={() => toggle(callout.key)}
+						/>,
 						foldHost,
 						`${callout.key}-fold`,
 					),
