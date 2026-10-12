@@ -7,6 +7,11 @@ import type { AuthenticatedSession } from "../auth/session";
 import type { Router } from "../http/router";
 import { canonical as canonicalReport } from "../mcp/create";
 import { parse } from "@chopin/dialect";
+import {
+	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_UPDATE_REQUIRED,
+	CONNECTOR_VERSION_HEADER,
+} from "@chopin/protocol/connector";
 import { documentsPath } from "@chopin/protocol/document-url";
 import { Connections } from "./connections";
 import type { Connection } from "./connections";
@@ -48,6 +53,36 @@ const MAX_BODY_BYTES = limits.resultBytes + 64 * 1024;
 export const SPIKE_DEADLINE_MS = 20 * 60_000;
 /** Screenshots a spike run may upload; distinct images, so a retried upload is free. */
 export const MAX_SPIKE_IMAGES = 3;
+/** The connector protocols this server speaks; a connector outside them must update first. */
+export const CONNECTOR_PROTOCOLS = { min: 1, max: 1 } as const;
+
+/**
+ * Refuse a connector speaking a protocol outside CONNECTOR_PROTOCOLS, naming what fixes it. One
+ * without the header is a `/connector.js` from before the check, which speaks protocol 1.
+ */
+function compatible(request: Request, origin: string) {
+	let header = request.headers.get(CONNECTOR_PROTOCOL_HEADER);
+	if (header === null) return;
+	if (!/^\d{1,9}$/.test(header)) fail("invalid-request");
+	let protocol = Number(header);
+	let { min, max } = CONNECTOR_PROTOCOLS;
+	if (protocol >= min && protocol <= max) return;
+	// Only a release version is echoed; a script or source run has none.
+	let version = request.headers.get(CONNECTOR_VERSION_HEADER) ?? "";
+	let release = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/.test(version);
+	let fix = !release
+		? "Download the connector again: mkdir -p ~/.chopin && curl -fsSL "
+			+ `${origin}/connector.js -o ~/.chopin/connector.js`
+		: protocol < min
+		? "Run `chopin update` to install the newest chopin, then connect again."
+		: "Install an older chopin with `chopin update <version>`, or ask whoever runs this Chopin "
+			+ "server to update it.";
+	fail(
+		CONNECTOR_UPDATE_REQUIRED,
+		`${release ? `chopin ${version}` : "This connector"} speaks connector protocol ${protocol}, `
+			+ `but ${origin} needs protocol ${min === max ? min : `${min} to ${max}`}. ${fix}`,
+	);
+}
 
 async function raw(request: Request, max: number) {
 	let size = 0;
@@ -181,7 +216,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					? "invalid-request"
 					: "unavailable";
 				return json(
-					{ error: code },
+					{
+						error: code,
+						...(error instanceof ExperimentError && error.message !== code
+							? { message: error.message }
+							: {}),
+					},
 					code === "authentication-required"
 						? 401
 						: code.includes("forbidden")
@@ -196,6 +236,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		});
 	}
 	route("POST", "/api/connector/pairings", async request => {
+		compatible(request, auth.config.origin);
 		let created = connections.create(pairingSchema.parse(await body(request)));
 		return json({ ...created, url: `${auth.config.origin}/connect?pairing=${created.id}` });
 	});
@@ -225,6 +266,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ id: connection.id, url: documentsPath(repository.owner, repository.name) });
 	});
 	route("POST", "/api/connector/pairings/:id/claim", async (request, params) => {
+		compatible(request, auth.config.origin);
 		let { secret } = z.object({ secret: z.string().min(32).max(100) }).strict().parse(
 			await body(request),
 		);
@@ -435,6 +477,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	route("GET", "/connector/mcp", async () => new Response(null, { status: 405 }));
 	route("DELETE", "/connector/mcp", async request => {
+		compatible(request, auth.config.origin);
 		let { connection, grant } = await connector(
 			(request.headers.get("authorization") ?? "").replace(/^Bearer /, ""),
 		);
@@ -442,6 +485,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return new Response(null, { status: 204 });
 	});
 	route("POST", "/connector/mcp", async request => {
+		compatible(request, auth.config.origin);
 		let token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
 		let { connection, grant, session } = await connector(token);
 		let implementation = options.implementations?.();

@@ -15,6 +15,10 @@
 			"types": "./address.ts",
 			"default": "./address.ts"
 		},
+		"./connector": {
+			"types": "./connector.ts",
+			"default": "./connector.ts"
+		},
 		"./document-url": {
 			"types": "./document-url.ts",
 			"default": "./document-url.ts"

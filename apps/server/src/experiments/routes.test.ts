@@ -1,11 +1,16 @@
 import { expect, test } from "bun:test";
 import { performance } from "@chopin/experiment/fixtures";
+import {
+	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_UPDATE_REQUIRED,
+	CONNECTOR_VERSION_HEADER,
+} from "@chopin/protocol/connector";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import type { GitHub } from "../github/client";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { registerExperimentRoutes } from "./routes";
+import { CONNECTOR_PROTOCOLS, registerExperimentRoutes } from "./routes";
 import { Connections } from "./connections";
 
 function text(value: { result: { content: Array<{ text: string }> } }) {
@@ -74,7 +79,13 @@ async function setup() {
 		context: async () => ({ source: "# Context", revision: 0 }),
 		canMutate: async id => !lock.locked && !lock.documents.has(id),
 	});
-	async function request(path: string, body?: unknown, cookie?: string, token?: string) {
+	async function request(
+		path: string,
+		body?: unknown,
+		cookie?: string,
+		token?: string,
+		extra: Record<string, string> = {},
+	) {
 		return (await router.handle(
 			new Request(`https://chopin.test${path}`, {
 				method: body === undefined ? "GET" : "POST",
@@ -83,6 +94,7 @@ async function setup() {
 					origin: config.origin,
 					...(cookie ? { cookie: cookie.split(";")[0] } : {}),
 					...(token ? { authorization: `Bearer ${token}` } : {}),
+					...extra,
 				},
 				body: body === undefined ? undefined : JSON.stringify(body),
 			}),
@@ -685,4 +697,76 @@ test("a spike still running 20 minutes after its claim is interrupted", async ()
 	let value = await runtime.service.store.get(id);
 	expect(value?.state).toBe("interrupted");
 	expect(value?.progress).toContain("20-minute limit");
+});
+
+test("a connector outside the supported protocol range is refused with the command that fixes it", async () => {
+	let { alice, request, pair } = await setup();
+	let { min, max } = CONNECTOR_PROTOCOLS;
+	let headers = (version: string, protocol: number) => ({
+		[CONNECTOR_VERSION_HEADER]: version,
+		[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
+	});
+	let source = { repository: "org/repo", commit: "a".repeat(40), label: "Laptop" };
+	// A legacy /connector.js sends neither header, and is still served.
+	let legacy = await pair(alice.cookie);
+	expect(legacy.token).toBeString();
+	let initialize = { jsonrpc: "2.0", id: 1, method: "initialize", params: {} };
+	let mcp = (token: string, extra: Record<string, string>) =>
+		request("/connector/mcp", initialize, undefined, token, extra);
+	expect((await mcp(legacy.token, {})).status).toBe(200);
+
+	// In range: pairing, claiming and connector calls all go through.
+	let current = headers("0.2.0", max);
+	let created = await request("/api/connector/pairings", source, undefined, undefined, current);
+	expect(created.status).toBe(200);
+	let pending = await created.json();
+	await request(`/api/connector/pairings/${pending.id}/approve`, {}, alice.cookie);
+	let claimed = await request(
+		`/api/connector/pairings/${pending.id}/claim`,
+		{ secret: pending.secret },
+		undefined,
+		undefined,
+		current,
+	);
+	expect(claimed.status).toBe(200);
+	let { token } = await claimed.json();
+	expect((await mcp(token, current)).status).toBe(200);
+
+	// Too old or too new: each connector route refuses, even with a valid token, and says why.
+	for (
+		let [version, protocol, fix] of [
+			["0.0.1", min - 1, "Run `chopin update` to install the newest chopin"],
+			["9.0.0", max + 1, "`chopin update <version>`"],
+			// A script without a release version is fixed by downloading this server's connector again.
+			["dev", min - 1, "curl -fsSL https://chopin.test/connector.js -o ~/.chopin/connector.js"],
+		] as const
+	) {
+		let refused = [
+			await request(
+				"/api/connector/pairings",
+				source,
+				undefined,
+				undefined,
+				headers(version, protocol),
+			),
+			await request(
+				`/api/connector/pairings/${pending.id}/claim`,
+				{ secret: pending.secret },
+				undefined,
+				undefined,
+				headers(version, protocol),
+			),
+			await mcp(token, headers(version, protocol)),
+		];
+		for (let response of refused) {
+			expect(response.status).toBe(409);
+			let body = await response.json();
+			expect(body.error).toBe(CONNECTOR_UPDATE_REQUIRED);
+			expect(body.message).toContain(`connector protocol ${protocol}`);
+			expect(body.message).toContain(`protocol ${min === max ? min : `${min} to ${max}`}`);
+			expect(body.message).toContain(fix);
+		}
+	}
+	// The refusals left the paired connection alone.
+	expect((await mcp(token, current)).status).toBe(200);
 });
