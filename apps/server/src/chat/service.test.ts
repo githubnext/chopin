@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { ulid } from "@chopin/dialect";
+import { MAX_LINK_NOTE_LENGTH } from "@chopin/planner-link";
 
 import {
 	consumeBootstrapBackscroll,
@@ -12,6 +13,7 @@ import {
 	translate,
 } from "./service";
 import { outputText } from "./activity";
+import { URL_CREDENTIAL_LEAKS } from "./activity.test-fixtures";
 
 import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
 
@@ -539,6 +541,46 @@ describe("AI SDK stream projection", () => {
 			expect(JSON.stringify(chat.entries)).not.toContain(secret);
 		}
 	});
+
+	it("masks a URL password in a structured error's message before publication and retention", () => {
+		let chat = create();
+		let { context, sent } = room(chat);
+		translate(context, call("read_plan"));
+		let message = "Could not clone https://alice:synthetic-url-314@github.com/octo-org/score.git";
+		finished(context, "t1", envelope("clone-failed", message, "CloneFailed"), false);
+		let expected = {
+			status: "failed",
+			error: { code: "clone-failed", kind: "CloneFailed" },
+			result: "Could not clone https://[redacted]@github.com/octo-org/score.git",
+		};
+		expect(sent.findLast(frame => frame.kind === "chat:tool")?.activity).toMatchObject(expected);
+		expect(chat.entries[0]?.tools?.[0]).toMatchObject(expected);
+		expect(JSON.stringify(sent)).not.toContain("synthetic-url-314");
+		expect(JSON.stringify(chat.entries)).not.toContain("synthetic-url-314");
+	});
+
+	it.each(URL_CREDENTIAL_LEAKS)(
+		"never publishes or retains a URL credential with %s in a structured error or result",
+		(_name, input, secrets) => {
+			let chat = create();
+			let { context, sent } = room(chat);
+			translate(context, call("read_plan", "error"));
+			finished(context, "error", envelope("clone-failed", input, "CloneFailed"), false);
+			translate(context, call("read_plan", "result"));
+			finished(context, "result", input, false);
+			let [error, result] = chat.entries[0]!.tools!;
+			// A message longer than a link note is no envelope and shows as the raw result.
+			let envelopeCode = input.length > MAX_LINK_NOTE_LENGTH ? undefined : "clone-failed";
+			expect(error?.status).toBe("failed");
+			expect(error?.error?.code).toBe(envelopeCode);
+			expect(result?.status).toBe("failed");
+			let broadcast = sent.filter(frame => frame.kind === "chat:tool").map(frame => frame.activity);
+			let shown = [JSON.stringify(broadcast), JSON.stringify(chat.entries)];
+			for (let text of shown) {
+				for (let secret of secrets) expect(text).not.toContain(secret);
+			}
+		},
+	);
 
 	it("does not reveal a credential in a property name of JSON text in a code or message", () => {
 		let chat = create();

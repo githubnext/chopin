@@ -347,11 +347,35 @@ shown as it is.
 
 Work details then shows the call as **Failed** with `kind`, or `code` when
 there is no `kind`, and `message` as plain text instead of the JSON. Chopin
-masks credential assignments and token shapes before it stores or shows them.
-It masks `message` as plain text, even when it holds JSON. It shows `code` and
-`kind` as written, and does not recognise an envelope whose `code` or `kind`
-looks like a token; that envelope is shown as an ordinary result. The masking
-is not exhaustive; keep credentials out of the envelope.
+masks credential assignments, including every proxy setting such as
+`http_proxy` or `HTTPS_PROXY`, token shapes such as `ghp_…` and Slack `xox…-`
+tokens, and URL credentials before it stores or shows them. The URL rule is
+deliberately broad, so it masks too much rather than too little. After any
+`://`, whatever comes before it, and after a protocol-relative `//` that starts
+the text or follows whitespace, a quote, `(`, `<`, `=`, `[`, a comma or a colon
+(so not a `//` inside a path), it finds the last at-sign within 8,192
+characters and masks everything between them, user name included:
+`https://alice:hunter2@host` shows as `https://[redacted]@host`. It reads the
+colon, slashes and at-sign in any spelling a URL parser or a later decoding
+step would accept: JSON, JavaScript (`\u{40}`, `%u0040`), Python and C
+(`\U00000040`, `\x40`, `\100`) escapes behind any run of backslashes,
+percent-encoding at any depth (`%40`, `%2540`, …), and HTML entities with or
+without their semicolon. As URL parsers do, it reads a backslash as a slash and
+lets tabs and line breaks come before each slash, as in
+`https:\\alice:hunter2@host`. Only that
+window bounds the scan: spaces, quotes, slashes, line breaks and later schemes
+do not end it, so a password holding `://` is masked whole, and text that
+merely contains a later `@`, even another URL, can be masked too. Only a short
+plain user name with no password, such as `git` in `ssh://git@github.com`,
+stays visible. It masks `message` as plain text, even when it holds JSON. It
+shows `code` and `kind` as written, and does not recognise an envelope whose
+`code` or `kind` the masking would change; that envelope is shown as an
+ordinary result. The masking is not exhaustive; keep credentials out of the
+envelope. Known limits: it does not recognise a fullwidth at-sign (`＠`), a
+separator split by zero-width or soft-hyphen characters, which no URL parser
+accepts, a tab or line break written as an escape or entity rather than as
+the character itself, a Python named escape such as `\N{COMMERCIAL AT}`, or
+percent-encoding of an escape's own characters, such as `%25%34%30` for `%40`.
 
 This masking applies only to what Chat stores and shows. It does not change
 what crosses the link: `host-tool-result.output` reaches the client exactly as
