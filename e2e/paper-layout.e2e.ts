@@ -1,6 +1,7 @@
 /** Browser coverage for the paper layout: Chat on the ground, the document as a sheet. */
 
 import { chatInput, expectChatValue } from "./chat-input";
+import { deckSeed } from "./decision-deck-fixtures";
 import { expect, ready, test } from "./room";
 import { expectNoHorizontalOverflow } from "./responsive";
 
@@ -142,6 +143,36 @@ test("the document and Chat dissolve under their top edges only once scrolled", 
 	await expect.poll(async () => (await edgeFade(chat)).opacity).toBe("1");
 	await chat.evaluate(element => element.scrollTo({ top: 0 }));
 	await expect.poll(async () => (await edgeFade(chat)).opacity).toBe("0");
+});
+
+test("reduced transparency holds the scroll edge solid before it fades", async ({ join, page, seed }) => {
+	let deck = deckSeed({ before: "Intro." }, 2);
+	await seed(deck.source, deck.state);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	let cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setEmulatedMedia", {
+		features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+	});
+	await join("ana");
+	let fade = (selector: string) =>
+		root(page).locator(selector).evaluate(element => {
+			let style = getComputedStyle(element, "::before");
+			return {
+				image: style.backgroundImage,
+				padding: getComputedStyle(element).paddingTop,
+				top: style.top,
+			};
+		});
+	expect((await fade('[data-document-view="plan"] [data-plan-scroll]')).image).toMatch(/ 50%, /);
+
+	await page.getByRole("group", { name: "Document view" }).getByRole("button", {
+		name: /^Decisions/,
+	})
+		.click();
+	let decisions = await fade("[data-plan-decisions-scroll]");
+	expect(decisions.image).toMatch(/ 50%, /);
+	// Sticky offsets start inside the padding, so the fade reaches back to the clip edge.
+	expect(Number.parseFloat(decisions.top)).toBe(-Number.parseFloat(decisions.padding));
 });
 
 test("presence sits at the right end of the document title bar, above the views", async ({ join, page }) => {

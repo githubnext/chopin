@@ -991,7 +991,7 @@ body {
 /* Less see-through: the surface holds solid for half the edge before it fades. */
 @media (prefers-reduced-transparency: reduce) {
 	.workspace-root:not([data-workspace-phone])
-		:is([data-plan-scroll], [data-plan-decisions-scroll], [data-build-view-scroll], [data-chat-scroll])::before {
+		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
 		background: linear-gradient(var(--scroll-edge-surface) 50%, transparent);
 	}
 }
