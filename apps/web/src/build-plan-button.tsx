@@ -13,13 +13,8 @@ import {
 	hasBuilt,
 } from "./build-model";
 import { ApiError } from "./api";
-import {
-	cancelBuildRequest,
-	implementationEndpoint,
-	implementationResponse,
-	rebuildChanges,
-	startBuild,
-} from "./build-start";
+import { cancelBuildRequest, rebuildChanges, startBuild } from "./build-start";
+import { useImplementationSnapshot } from "./implementation-snapshot";
 
 import "./build-plan-button.css";
 
@@ -93,48 +88,21 @@ export function useBuildPlan(
 		wire?: Wire;
 	},
 ): BuildPlan {
-	let [snapshot, setSnapshot] = useState<ImplementationSnapshot>();
-	let [loadError, setLoadError] = useState<string>();
-	let [refresh, setRefresh] = useState(0);
+	let { snapshot, loadError, refresh: reload, read } = useImplementationSnapshot({
+		active: enabled,
+		room,
+		wire,
+		reloadOn: RELOAD_ON,
+	});
 	let [state, dispatch] = useReducer(advanceFirstBuild, { stage: "idle" } as FirstBuild);
 	let [rebuilding, setRebuilding] = useState(false);
 	let [rebuildError, setRebuildError] = useState<string>();
 	let [rebuildNeedsAgent, setRebuildNeedsAgent] = useState(false);
 	let draftId = useRef<string>(undefined);
-	let endpoint = implementationEndpoint(room);
-	let reload = () => setRefresh(value => value + 1);
-
-	let read = async (signal?: AbortSignal) => {
-		let value = await implementationResponse<ImplementationSnapshot>(
-			await fetch(endpoint, { signal, cache: "no-store" }),
-		);
-		if (signal?.aborted) return value;
-		setSnapshot(current => !current || value.revision >= current.revision ? value : current);
-		setLoadError(undefined);
-		return value;
-	};
 
 	useEffect(() => {
-		setSnapshot(undefined);
 		dispatch({ type: "reset" });
 	}, [room]);
-
-	useEffect(() => {
-		if (!enabled) return;
-		let controller = new AbortController();
-		read(controller.signal).catch(error => {
-			if (!controller.signal.aborted) {
-				setLoadError(error instanceof Error ? error.message : "Connection failed");
-			}
-		});
-		return () => controller.abort();
-	}, [enabled, endpoint, refresh]);
-
-	useEffect(() => {
-		if (!enabled) return;
-		let off = RELOAD_ON.map(kind => wire?.on(kind, reload));
-		return () => off.forEach(remove => remove?.());
-	}, [enabled, wire]);
 
 	// A built document counts its edits since the build, so edits reload it, throttled.
 	let built = !!snapshot && hasBuilt(snapshot);
