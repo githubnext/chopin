@@ -150,7 +150,7 @@ export function linkServer(
 	timeoutMs = 2_000,
 	revalidateEveryMs?: number,
 	graceMs = 2_000,
-	liveness?: { pingEveryMs: number; pongTimeoutMs: number },
+	liveness?: { pingEveryMs: number; pongTimeoutMs: number; maxSilenceMs?: number },
 ) {
 	let links: PlannerLink[] = [];
 	let sockets = new Set<ServerWebSocket<PlannerLinkSocketData>>();
@@ -390,6 +390,55 @@ export async function slowUplink(url: string, bytes: number, everyMs: number) {
 		url: `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`,
 		get uploaded() {
 			return uploaded;
+		},
+		stop: () => {
+			for (let timer of timers) clearInterval(timer);
+			for (let socket of sockets) socket.destroy();
+			return new Promise<void>(resolve => proxy.close(() => resolve()));
+		},
+	};
+}
+
+/**
+ * A TCP proxy to `url` that forwards both ways until `hold()`, then keeps reading
+ * what the server sends, one read every `everyMs`, and forwards none of it, as a
+ * buffering proxy in front of a client that went quiet. The server's queue keeps
+ * shrinking although the client reads and answers nothing.
+ */
+export async function holdingProxy(url: string, everyMs: number) {
+	let target = new URL(url);
+	let sockets: Socket[] = [];
+	let timers: ReturnType<typeof setInterval>[] = [];
+	let held = false;
+	let swallowed = 0;
+	let proxy = createServer(client => {
+		let upstream = createConnection(Number(target.port), target.hostname);
+		sockets.push(client, upstream);
+		client.on("data", chunk => upstream.write(chunk));
+		upstream.on("data", (chunk: Buffer) => {
+			if (!held) return void client.write(chunk);
+			swallowed += chunk.length;
+			upstream.pause();
+		});
+		for (let [from, to] of [[client, upstream], [upstream, client]] as const) {
+			from.on("error", () => {});
+			from.on("close", () => to.destroy());
+		}
+		timers.push(setInterval(() => {
+			if (held) upstream.resume();
+		}, everyMs));
+	});
+	await new Promise<void>(resolve => proxy.listen(0, "127.0.0.1", resolve));
+	return {
+		url: `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`,
+		/** From now on the server's bytes are read slowly and dropped. */
+		hold() {
+			held = true;
+			for (let socket of sockets) socket.pause();
+		},
+		/** Server bytes read and dropped since `hold()`. */
+		get swallowed() {
+			return swallowed;
 		},
 		stop: () => {
 			for (let timer of timers) clearInterval(timer);

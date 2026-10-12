@@ -49,17 +49,26 @@ shows the link is alive.
 
 A client that is slow to read leaves the server's frames to it queued. While
 anything is queued the server sends no ping, since a ping can be dropped from a
-full queue, and counts the queue getting shorter as hearing from the client. A
-client that has stopped reading entirely keeps a queue that never shrinks, and
-counts as silent.
+full queue. A queue getting shorter puts off the close by another timeout, but
+it does not count as hearing from the client: the kernel's buffers or a proxy in
+front of the client can drain it while the client reads nothing. A client that
+has stopped reading entirely keeps a queue that never shrinks, and counts as
+silent.
 
 A link the server hears nothing from for **120 seconds** is treated as dropped,
-such as one whose network silently went away. The server closes it with 1001
-and reason `unresponsive`, without an `error` or `refused` message, and releases
-it exactly as any dropped link (see [Closing](#closing)): its account keeps the
-document's Planner for the grace period in [Ownership](#ownership). The operator
-sets the interval and timeout with `PLANNER_LINK_PING_MS` and
-`PLANNER_LINK_TIMEOUT_MS`.
+such as one whose network silently went away. However much of its queue drains
+meanwhile, a link that sends nothing at all, not even a pong, for **240
+seconds** is dropped too. The server closes it with 1001 and reason
+`unresponsive`, without an `error` or `refused` message, and releases it exactly
+as any dropped link (see [Closing](#closing)): its account keeps the document's
+Planner for the grace period in [Ownership](#ownership). The operator sets the
+interval, the timeout and the longest silence with `PLANNER_LINK_PING_MS`,
+`PLANNER_LINK_TIMEOUT_MS` and `PLANNER_LINK_MAX_SILENCE_MS`, which defaults to
+twice the timeout.
+
+So a client working through a large backlog must still send something within
+the longest silence. A client that answers pings needs nothing more: once it has
+read the queue to the end, the server pings it again and its pong counts.
 
 The server cannot see a frame until it has arrived whole, and a client's pongs
 wait behind a frame it is still sending. So every frame must arrive within the

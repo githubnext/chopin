@@ -17,6 +17,7 @@ import {
 	DENIED_TOKEN,
 	finishTurn,
 	GUEST_TOKEN,
+	holdingProxy,
 	linkAuth,
 	linkServer,
 	MEMBER_TOKEN,
@@ -734,6 +735,40 @@ describe("Planner link ownership", () => {
 				expect(server.links).toEqual([]);
 				expect(elapsed).toBeGreaterThan(backlogged.pongTimeoutMs - 100);
 				expect(elapsed).toBeLessThan(backlogged.pongTimeoutMs + 500);
+			},
+			10_000,
+		);
+
+		it(
+			"closes a silent client by about the silence cap although a proxy keeps draining its queue",
+			async () => {
+				// Bun hands the proxy its queue in steps about half a second apart at this pace.
+				let capped = { pingEveryMs: 100, pongTimeoutMs: 800, maxSilenceMs: 1_600 };
+				let { auth, channel } = await linkAuth();
+				let server = linkServer(auth, 2_000, undefined, 2_000, capped);
+				cleanups.push(server.stop);
+				let proxy = await holdingProxy(server.url, 100);
+				cleanups.push(proxy.stop);
+				let raw = await rawLink(proxy.url);
+				cleanups.push(() => (raw.socket as Readable).terminate());
+				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				await raw.next("attached");
+				let quiet = Date.now();
+				proxy.hold();
+				let socket = flood(server);
+				let queued = socket.getBufferedAmount();
+				let drainedPastTimeout = false;
+				setTimeout(() => {
+					drainedPastTimeout = socket.getBufferedAmount() < queued;
+				}, capped.pongTimeoutMs + 300);
+				await until(() => !server.attachments.attached(channel.id), 6_000);
+				let elapsed = Date.now() - quiet;
+				expect(server.attachments.attached(channel.id)).toBe(false);
+				expect(server.links).toEqual([]);
+				expect(elapsed).toBeGreaterThan(capped.maxSilenceMs - 100);
+				expect(elapsed).toBeLessThan(capped.maxSilenceMs + 500);
+				// The queue was still draining past the timeout, which defers the close only up to the cap.
+				expect(drainedPastTimeout).toBe(true);
 			},
 			10_000,
 		);

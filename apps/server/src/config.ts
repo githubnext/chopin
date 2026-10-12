@@ -35,6 +35,11 @@ export type Config = {
 	/** How long a Planner link may go without a pong or message before it counts as dropped. */
 	plannerLinkTimeoutMs: number;
 	/**
+	 * How long a Planner link may send nothing at all, however much of what the
+	 * server queued for it drains meanwhile, before it counts as dropped.
+	 */
+	plannerLinkMaxSilenceMs: number;
+	/**
 	 * Whether to run the agent at all.
 	 *
 	 * Off is a deliberate choice, not a fallback: the server still refuses to
@@ -108,13 +113,13 @@ function port(): number {
 	return value;
 }
 
-/** A Planner link liveness setting, in whole milliseconds from 1 second to 10 minutes. */
-function milliseconds(name: string, fallback: number): number {
+/** A Planner link liveness setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
+function milliseconds(name: string, fallback: number, max = 600_000): number {
 	let raw = process.env[name];
 	if (raw === undefined) return fallback;
 	let value = Number(raw);
-	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 1_000 || value > 600_000) {
-		throw new Error(`${name} must be an integer between 1000 and 600000 milliseconds`);
+	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 1_000 || value > max) {
+		throw new Error(`${name} must be an integer between 1000 and ${max} milliseconds`);
 	}
 	return value;
 }
@@ -177,6 +182,14 @@ export function load(): Config {
 	if (plannerLinkTimeoutMs <= plannerLinkPingMs) {
 		throw new Error("PLANNER_LINK_TIMEOUT_MS must be longer than PLANNER_LINK_PING_MS");
 	}
+	let plannerLinkMaxSilenceMs = milliseconds(
+		"PLANNER_LINK_MAX_SILENCE_MS",
+		2 * plannerLinkTimeoutMs,
+		1_200_000,
+	);
+	if (plannerLinkMaxSilenceMs < plannerLinkTimeoutMs) {
+		throw new Error("PLANNER_LINK_MAX_SILENCE_MS must be at least PLANNER_LINK_TIMEOUT_MS");
+	}
 	let selection = harnessSelection();
 	if (selection.harness === "remote" && backgroundJobs) {
 		throw new Error(
@@ -191,6 +204,7 @@ export function load(): Config {
 		plannerAttachGraceMs,
 		plannerLinkPingMs,
 		plannerLinkTimeoutMs,
+		plannerLinkMaxSilenceMs,
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",

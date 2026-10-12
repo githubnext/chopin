@@ -1304,6 +1304,7 @@ function listen(): Server<SocketData> {
 						unavailable: channelId => deletingChannels.has(channelId),
 						pingEveryMs: config.plannerLinkPingMs,
 						pongTimeoutMs: config.plannerLinkTimeoutMs,
+						maxSilenceMs: config.plannerLinkMaxSilenceMs,
 					});
 					return;
 				}

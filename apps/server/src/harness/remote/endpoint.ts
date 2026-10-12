@@ -54,6 +54,11 @@ export type PlannerLinkHooks = {
 	 * server queued for it, before it is closed as dropped.
 	 */
 	pongTimeoutMs?: number;
+	/**
+	 * How long the link may send nothing at all, however much of the server's
+	 * queue drains meanwhile, before it is closed as dropped. Twice the timeout by default.
+	 */
+	maxSilenceMs?: number;
 };
 
 const BEARER = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/i;
@@ -204,23 +209,39 @@ export function openPlannerLinkSocket(
 	// control frames, pings included, while that queue is over its limit; an
 	// empty ping returns the same whether it was sent or dropped. So a ping goes
 	// out only once the queue is empty, and a queue that shrank since it was last
-	// looked at shows the client is reading, which counts as hearing from it.
+	// looked at defers the close by another timeout.
+	//
+	// A shrinking queue does not prove the client reads it: the kernel's buffers
+	// or a proxy in front of it may be what drains it. So that deferral never runs
+	// past `maxSilenceMs` after the client last sent anything; a client reading a
+	// long backlog must send something, such as the pongs that follow it, by then.
+	let timeoutMs = hooks.pongTimeoutMs ?? DEFAULT_LINK_TIMEOUT_MS;
+	let maxSilenceMs = hooks.maxSilenceMs ?? 2 * timeoutMs;
+	let heard = Date.now();
+	let progressed = heard;
 	let backlog = 0;
-	function reading(): boolean {
+	function reading(): void {
 		let previous = backlog;
 		backlog = ws.getBufferedAmount();
-		return backlog < previous;
+		if (backlog < previous) progressed = Date.now();
 	}
 	let pinging = setInterval(() => {
-		if (reading()) deadline.refresh();
+		reading();
 		if (backlog === 0) ws.ping();
 	}, hooks.pingEveryMs ?? DEFAULT_LINK_PING_MS);
-	let deadline = setTimeout(() => {
-		if (reading()) deadline.refresh();
+	let deadline: ReturnType<typeof setTimeout>;
+	function expire(): void {
+		reading();
+		let due = Math.min(progressed + timeoutMs, heard + maxSilenceMs);
+		let left = due - Date.now();
+		if (left > 0) deadline = setTimeout(expire, left);
 		else link.close(LINK_CLOSE.unresponsive, "unresponsive");
-	}, hooks.pongTimeoutMs ?? DEFAULT_LINK_TIMEOUT_MS);
+	}
+	deadline = setTimeout(expire, Math.min(timeoutMs, maxSilenceMs));
 	ws.data.alive = {
-		heard: () => void deadline.refresh(),
+		heard() {
+			heard = progressed = Date.now();
+		},
 		stop() {
 			clearInterval(pinging);
 			clearTimeout(deadline);

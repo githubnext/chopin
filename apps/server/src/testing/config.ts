@@ -32,6 +32,7 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		PLANNER_ATTACH_GRACE_MS: undefined,
 		PLANNER_LINK_PING_MS: undefined,
 		PLANNER_LINK_TIMEOUT_MS: undefined,
+		PLANNER_LINK_MAX_SILENCE_MS: undefined,
 		TYPESAFE_API_KEY: undefined,
 		HARNESS: undefined,
 		HARNESS_AUTH: undefined,
