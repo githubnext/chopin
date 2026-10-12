@@ -17,6 +17,9 @@ export function focusInputForKey(event: { key: string }): FocusInput | undefined
  *
  * Separate from the motion input, which also counts a pointer merely passing
  * over the page: a keyboard user whose mouse drifts must keep their focus ring.
+ *
+ * `focusOrigin` keeps the input that moved focus to the current element, so a
+ * field clicked and then typed into still reads as reached by pointer.
  */
 export function useFocusInput(): void {
 	useEffect(() => {
@@ -25,14 +28,24 @@ export function useFocusInput(): void {
 			let input = focusInputForKey(event);
 			if (input) root.dataset.focusInput = input;
 		};
-		let pointer = () => {
+		let pointer = (event: PointerEvent) => {
 			root.dataset.focusInput = "pointer";
+			// A click inside the focused element moves no focus, but still answers the ring.
+			if (event.target instanceof Node && document.activeElement?.contains(event.target)) {
+				root.dataset.focusOrigin = "pointer";
+			}
+		};
+		let focus = () => {
+			let input = root.dataset.focusInput;
+			if (input) root.dataset.focusOrigin = input;
 		};
 		window.addEventListener("keydown", keyboard, true);
 		window.addEventListener("pointerdown", pointer, true);
+		window.addEventListener("focusin", focus, true);
 		return () => {
 			window.removeEventListener("keydown", keyboard, true);
 			window.removeEventListener("pointerdown", pointer, true);
+			window.removeEventListener("focusin", focus, true);
 		};
 	}, []);
 }

@@ -66,3 +66,38 @@ test("a text field keeps its focus ring after a click", async ({ join }) => {
 	expect(await modality(page)).toBe("pointer");
 	expect(await outlineStyle(field)).toBe("solid");
 });
+
+function composer(page: Page) {
+	return page.locator(".chat-composer .composer-surface");
+}
+
+test("a click into the Chat composer shows no ring, even while typing", async ({ join }) => {
+	let page = await join("ana");
+	let input = composer(page).getByRole("textbox");
+	await input.click();
+	await expect(input).toBeFocused();
+	await page.keyboard.type("hello");
+	expect(await modality(page)).toBe("keyboard");
+	expect(await outlineStyle(composer(page))).toBe("none");
+});
+
+test("Tab into the Chat composer shows its whole ring", async ({ join }) => {
+	let page = await join("ana");
+	await handle(page).click();
+	await page.keyboard.press("Tab");
+	await expect(composer(page).getByRole("textbox")).toBeFocused();
+	expect(await outlineStyle(composer(page))).toBe("solid");
+	// No ancestor that clips vertically may cut the ring off below the composer.
+	let clipped = await composer(page).evaluate(element => {
+		let style = getComputedStyle(element);
+		let reach = element.getBoundingClientRect().bottom + parseFloat(style.outlineWidth)
+			+ parseFloat(style.outlineOffset);
+		let clips = [];
+		for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+			if (getComputedStyle(parent).overflowY === "visible") continue;
+			if (parent.getBoundingClientRect().bottom < reach) clips.push(parent.className);
+		}
+		return clips;
+	});
+	expect(clipped).toEqual([]);
+});

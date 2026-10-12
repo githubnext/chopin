@@ -769,8 +769,12 @@ body {
 	transition-duration: var(--panel-close-dur);
 }
 
-/* Split Chat is a track: its width moves the document, and Chat slides under its clip. */
+/*
+ * Split Chat is a track: its width moves the document, and Chat slides under its clip.
+ * Only the width clips, so the composer's focus ring can pass the panel's bottom edge.
+ */
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	overflow: clip visible;
 	width: 0;
 	order: -1;
 	--panel-direction: -1;
@@ -1180,6 +1184,11 @@ button.chat-tool-call-toggle {
 .chat-composer .field:focus-within {
 	outline: 2px solid var(--color-brand);
 	outline-offset: 2px;
+}
+
+/* The ring answers keyboard arrival; a clicked composer is already found, and its caret shows. */
+:root[data-focus-origin="pointer"] .chat-composer .field:focus-within {
+	outline: none;
 }
 
 .chat-composer textarea:focus {
