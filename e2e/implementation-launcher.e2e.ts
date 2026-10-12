@@ -543,26 +543,33 @@ test("edits after a build read as changes to build, and Build sends them to the 
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
 		let built = page.getByRole("button", { name: "Built", exact: true });
 		await expect(built).toBeVisible({ timeout: 30_000 });
-		let capsule = page.locator(".build-capsule-row");
-		await expect(capsule.getByRole("button", { name: "Build", exact: true })).toHaveCount(0);
+		// Beside a built document's capsule there is no Build; only the tab has that name.
+		await expect(page.getByRole("button", { name: "Build", exact: true })).toHaveCount(1);
 
 		await content(page).getByText("Validate the local agent connection.").click();
 		await page.keyboard.press("End");
 		await page.keyboard.type(" Then report back.");
 		let stale = page.getByRole("button", { name: "1 change to build", exact: true });
 		await expect(stale).toBeVisible();
-		await expect(stale).toHaveAttribute("aria-description", "Edits since the last build");
+		await expect(stale).toHaveAccessibleDescription("Edits since the last build");
 		let tab = page.getByRole("group", { name: "Document view" })
 			.getByRole("button", { name: "Build", exact: true });
 		await expect(tab).toBeEnabled();
 		// The capsule's own Build, not the tab, sends the changes.
-		await capsule.getByRole("button", { name: "Build", exact: true }).click();
+		await page.getByRole("button", { name: "Build", exact: true })
+			.and(page.locator(":not([role='group'] *)"))
+			.click();
 		await expect.poll(async () => {
 			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
 			return snapshot.live?.rebuild?.kind;
 		}).toBe("rebuild");
-		await expect(page.getByRole("button", { name: /^(Building changes…|Build failed)$/ }))
-			.toBeVisible();
+		// The fixture lands the rebuild, so it reaches Built, never Build failed.
+		await expect(built).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByRole("button", { name: "Build failed", exact: true })).toHaveCount(0);
+		await expect.poll(async () => {
+			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+			return [snapshot.live?.rebuild?.state, snapshot.live?.commits?.length];
+		}).toEqual(["stopped", 1]);
 	} finally {
 		await local.close();
 	}
