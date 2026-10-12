@@ -34,7 +34,7 @@ async function hosted(source = `# Plan\n\n${PASSAGE}\n\nAnother paragraph.\n`) {
 	return { ...context, service, host, landed, connections, clock };
 }
 
-/** Pair a local agent for the plan's repository, as the connector and pairing page do. */
+/** Pair a local agent for the plan's repository, allowing automatic work, as the pairing page can. */
 function pair(context: Awaited<ReturnType<typeof hosted>>) {
 	let pending = context.connections.create({
 		repository: "org/repo",
@@ -45,6 +45,8 @@ function pair(context: Awaited<ReturnType<typeof hosted>>) {
 		pending.id,
 		{ id: "U_test", login: "maggie", sessionId: "S_1" },
 		context.plan.persistence.repositoryId,
+		// Spikes run only on a laptop paired with consent to automatic work.
+		true,
 	);
 }
 

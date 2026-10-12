@@ -353,6 +353,7 @@ test("without a judge nothing is spiked", async () => {
 			},
 			dismiss: async () => {},
 			refresh: async () => {},
+			retry: async () => {},
 			digests: source => new Set(source.split(",").filter(Boolean)),
 		},
 		after: () => () => {},

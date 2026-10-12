@@ -260,7 +260,7 @@ export class SpikeScout {
 		let retried = 0;
 		let active = () =>
 			retried
-			+ spikes.filter(value => ACTIVE.includes(value.state) && !value.spike!.dismissed).length;
+			+ spikes.filter(value => ACTIVE.has(value.state) && !value.spike!.dismissed).length;
 		// A spike its connection lost goes back to its owner's local agent once one is heard from.
 		for (let value of spikes.filter(retryable)) {
 			if (this.#closed) return;
