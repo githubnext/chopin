@@ -277,6 +277,25 @@ test("a run's parallel lifecycle batch lands in order and refusals say what to d
 	expect(refused.content[0].text).toContain(
 		"task-state: The task is already in progress or completed",
 	);
+	// Completing a completed task again is not order-dependent, so it answers at once.
+	let started = Date.now();
+	let again = await tool(context, claim.runToken, "complete_task", {
+		taskId: "first",
+		summary: "Done again.",
+		idempotencyKey: "complete-again",
+	});
+	expect(again.isError).toBe(true);
+	expect(again.content[0].text).toContain("already-complete: The task is already complete.");
+	expect(Date.now() - started).toBeLessThan(200);
+	// A refusal with no advice for the agent passes through unchanged.
+	let foreign = await tool(context, claim.runToken, "report_pr", {
+		taskId: "first",
+		url: "https://github.com/someone/else/pull/1",
+		state: "open",
+		idempotencyKey: "pr-foreign",
+	});
+	expect(foreign.isError).toBe(true);
+	expect(foreign.content[0].text).toBe("repository: repository");
 	await Plan.close(context.plan);
 });
 

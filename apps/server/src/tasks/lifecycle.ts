@@ -340,6 +340,8 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent): Reduction {
 			break;
 		}
 		case "complete":
+			// A repeated complete_task under a new key is not order-dependent; say so plainly.
+			if (item.state === "completed") return refused("already-complete");
 			if (item.state !== "in_progress") return refused("task-state");
 			if (!item.pullRequest) return refused("pull-request");
 			if (!text(stored.summary)) return refused("summary");

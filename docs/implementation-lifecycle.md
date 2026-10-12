@@ -138,6 +138,13 @@ Every post-claim lifecycle report carries a caller-generated idempotency key.
 `start_implementation` does not; the service creates a fresh run ID when it
 accepts the claim. Accepted transitions persist before publication.
 
+`block_task` on a queued task starts and blocks it in one step and skips the
+dependency check `start_task` applies, so a blocker found before work began is
+never lost even while the task's dependencies are unfinished. `complete_task`
+on a task that is already complete is refused with `already-complete`; the
+local connector answers it at once instead of retrying it as an out-of-order
+call.
+
 The readable URL is a locator for `read_implementation`; it is not a lifecycle
 identity. `read_implementation` returns the stable UUID as `document.id`, and
 `start_implementation` plus every task, pull-request, blocker, revision, and
