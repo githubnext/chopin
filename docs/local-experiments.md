@@ -140,3 +140,41 @@ CHOPIN_TEST_ACP_COMMAND='["copilot","--acp","--no-auto-update"]' \
 The opt-in final command makes a real model request using the agent's existing
 authentication. Normal tests use a scripted ACP process. See the optional
 [investigation skill](../skills/local-investigations/SKILL.md) for output guidance.
+
+## Prototype spikes (`LIVE_SPIKES`)
+
+With `LIVE_SPIKES=on`, a document that has no living build yet can prototype an
+uncertain passage on its own. After an editor's edits settle, the server asks
+Jev whether a quick prototype would inform each passage that editor changed;
+with a yes it starts a spike on that editor's local agent and places a
+`<Callout>` under the passage that tracks it ("Prototype queued",
+"Prototyping…", then the result or "Prototype stopped"). Deleting the callout
+stops the spike, and that passage is not spiked again.
+
+The trust model is deliberately narrow:
+
+- **Consent.** A spike runs only on a laptop whose owner ticked **Let Chopin
+  build and prototype automatically on this laptop** when pairing it, and only
+  for passages that person changed. Another editor's text never runs on
+  someone else's agent.
+- **Judge.** Without Jev nothing is spiked. `LIVE_SPIKES_REGEX_JUDGE=on` opts
+  into matching explicit uncertainty words instead.
+- **Limits.** At most three spikes run per document at once, six start per
+  document and ten per editor in an hour, and a spike still running 20 minutes
+  after its claim is interrupted.
+- **Text is data.** The brief, the passage and the document context are framed
+  as untrusted text describing what to prototype, not as instructions.
+- **Throwaway work.** The connector runs a spike in a fresh worktree on a
+  `chopin/spike-*` branch under Git configuration that refuses every push, and
+  removes the worktree and branch when the run ends.
+- **Locks.** A spike's callout never lands while a build holds the document,
+  including a first build that is only queued: the approved tasks stay bound to
+  the revision people approved, and the finding lands after the build ends.
+
+A spike run's MCP tools are `read_investigation`, `upload_investigation_image`
+(at most three distinct images, each at most 1 MiB) and `submit_spike_result`
+(a headline, three to six findings, a recommendation and the uploaded image
+paths, which the server turns into the report). It cannot submit an
+investigation or experiment result. The connector adds a local
+`upload_image_file({path})` tool that reads an image inside the spike's worktree
+and forwards it, so the agent passes a path rather than the image's bytes.
