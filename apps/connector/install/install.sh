@@ -113,8 +113,13 @@ if [ -z "$version" ]; then
 fi
 version="${version#cli-}"
 version="${version#v}"
+# grep matches line by line, so a version with a newline, or any byte but these, is refused first.
+not_a_version="\"$version\" is not a version like 0.2.0."
+case "$version" in
+*[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.+-]*) fail "$not_a_version" ;;
+esac
 printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' \
-	|| fail "\"$version\" is not a version like 0.2.0."
+	|| fail "$not_a_version"
 
 release="$BASE_URL/cli-v$version"
 printf 'Installing chopin %s (%s) from %s\n' "$version" "$asset" "$release"

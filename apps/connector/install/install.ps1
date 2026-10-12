@@ -48,6 +48,16 @@ function Invoke-Https([string]$Url, [string]$OutFile) {
 	$Response
 }
 
+# 0.2.0 from 0.2.0, v0.2.0 or cli-v0.2.0. The match is case-sensitive, so [A-Za-z] is ASCII only,
+# and \z, unlike $, does not match before a final newline.
+function Get-ReleaseVersion([string]$Tag) {
+	$Version = $Tag -replace '^cli-', '' -replace '^v', ''
+	if ($Version -cnotmatch '\A[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?\z') {
+		Stop-Install "`"$Version`" is not a version like 0.2.0."
+	}
+	$Version
+}
+
 function Install-Chopin([string]$Version) {
 
 	foreach ($Setting in @(@('CHOPIN_RELEASE_BASE_URL', $BaseUrl), @('CHOPIN_RELEASES_API_URL', $ReleasesApiUrl))) {
@@ -55,6 +65,7 @@ function Install-Chopin([string]$Version) {
 			Stop-Install "$($Setting[0]) must be an https:// URL (or http:// on 127.0.0.1, localhost or [::1]), not $($Setting[1])."
 		}
 	}
+	if ($Version) { $Version = Get-ReleaseVersion $Version }
 	# Windows PowerShell 5.1 has no $IsWindows and only runs on Windows.
 	if ($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
 		Stop-Install 'install.ps1 installs chopin on Windows. On Linux or macOS, use install.sh.'
@@ -93,11 +104,7 @@ function Install-Chopin([string]$Version) {
 			}
 			$Latest = @($Releases | Where-Object { $_.tag_name -like 'cli-v*' -and -not $_.draft -and -not $_.prerelease })[0]
 			if (-not $Latest) { Stop-Install 'no chopin CLI release (a cli-v* tag) was found.' }
-			$Version = $Latest.tag_name
-		}
-		$Version = $Version -replace '^cli-', '' -replace '^v', ''
-		if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$') {
-			Stop-Install "`"$Version`" is not a version like 0.2.0."
+			$Version = Get-ReleaseVersion $Latest.tag_name
 		}
 
 		$Release = "$BaseUrl/cli-v$Version"

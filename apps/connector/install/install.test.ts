@@ -308,6 +308,20 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		}
 	});
 
+	test("refuses a version with anything but digits, letters, dots, plus and minus", async () => {
+		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")) });
+		let at = await machine();
+		for (let version of ["0.2.0\nevil", "0.2.0\n", "0.2.0-rc.1/../x", "0.2.0+é"]) {
+			let pinned = await install(at, release.env, version);
+			expect(pinned.code).not.toBe(0);
+			expect(pinned.stderr).toContain("is not a version like 0.2.0");
+			let environment = await install(at, { ...release.env, CHOPIN_VERSION: version });
+			expect(environment.stderr).toContain("is not a version like 0.2.0");
+		}
+		expect(release.requests).toEqual([]);
+		expect(await Bun.file(at.chopin).exists()).toBe(false);
+	});
+
 	test("refuses a binary whose provenance attestation does not verify", async () => {
 		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")) });
 		let at = await machine({ gh: 1 });
@@ -410,6 +424,26 @@ describe("install.ps1", () => {
 				expect(result.output).toContain("must be an https:// URL");
 			}
 		},
+		// Each case starts PowerShell, which is slow to start on Windows.
+		60_000,
+	);
+
+	test.skipIf(!pwsh)(
+		"refuses a version with anything but digits, letters, dots, plus and minus",
+		async () => {
+			using release = fakeRelease({});
+			for (let version of ["0.2.0\n", "0.2.0\nevil", "0.2.0-rc.1/../x", "0.2.0-\u212Aelvin"]) {
+				let result = await install({
+					...release.env,
+					CHOPIN_VERSION: version,
+					LOCALAPPDATA: scratch,
+				});
+				expect(result.code).not.toBe(0);
+				expect(result.output).toContain("is not a version like 0.2.0");
+			}
+			expect(release.requests).toEqual([]);
+		},
+		60_000,
 	);
 
 	test.skipIf(!pwsh || process.platform !== "win32")(
