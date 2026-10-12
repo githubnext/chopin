@@ -23,14 +23,29 @@ export type DockPanel = "insert" | "style";
 /** Taller than any browser toolbar, shorter than any software keyboard. */
 const KEYBOARD_MIN = 120;
 
+/** How much of the layout viewport the keyboard covers right now, however little. */
+export function covered(
+	innerHeight: number,
+	visual: { top: number; height: number } | undefined,
+): number {
+	return visual ? Math.max(0, Math.round(innerHeight - visual.top - visual.height)) : 0;
+}
+
 /** How much of the layout viewport the software keyboard covers, if it is up. */
 export function keyboardCover(
 	innerHeight: number,
 	visual: { top: number; height: number } | undefined,
 ): number | undefined {
-	if (!visual) return undefined;
-	let covered = Math.round(innerHeight - visual.top - visual.height);
-	return covered >= KEYBOARD_MIN ? covered : undefined;
+	let cover = covered(innerHeight, visual);
+	return cover >= KEYBOARD_MIN ? cover : undefined;
+}
+
+/**
+ * The panel's height while the keyboard moves: only the space the keyboard has uncovered, so
+ * the bar above them stays where it rests however the browser reports the keyboard's travel.
+ */
+export function uncovered(panel: number, cover: number): number {
+	return Math.min(panel, Math.max(0, panel - cover));
 }
 
 export type PanelChoice = {

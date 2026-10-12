@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { insertChoices, keyboardCover, styleChoices } from "./dock-panel";
+import { covered, insertChoices, keyboardCover, styleChoices, uncovered } from "./dock-panel";
 
 test("a panel takes the height the software keyboard covered", () => {
 	expect(keyboardCover(844, { top: 0, height: 500 })).toBe(344);
@@ -37,4 +37,14 @@ test("Text style marks the caret's current block", () => {
 		"Numbered list",
 		"Task list",
 	]);
+});
+
+test("the panel fills only what the keyboard has uncovered, frame by frame", () => {
+	expect(covered(844, { top: 0, height: 500 })).toBe(344);
+	expect(covered(844, { top: 0, height: 900 })).toBe(0);
+	expect(uncovered(344, 344)).toBe(0);
+	expect(uncovered(344, 232)).toBe(112);
+	expect(uncovered(344, 0)).toBe(344);
+	// A taller keyboard than the panel was measured for never makes it negative.
+	expect(uncovered(344, 400)).toBe(0);
 });

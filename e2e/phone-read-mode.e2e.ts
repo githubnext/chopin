@@ -428,3 +428,49 @@ test("Text style turns the caret's block into a heading", async ({ baseURL, brow
 		await close();
 	}
 });
+
+test("the bar holds still while the keyboard travels frame by frame", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE, fakeKeyboard);
+	try {
+		await page.getByText("Second paragraph").tap();
+		await pencil(page).tap();
+		await setVisualViewport(page, { event: "resize", height: 500 });
+		let dock = page.getByRole("toolbar", { name: "Formatting" });
+		await dock.evaluate(element =>
+			Promise.all(
+				element.closest("[data-phone-tab-row]")!.getAnimations({ subtree: true })
+					.map(animation => animation.finished),
+			)
+		);
+		let top = () =>
+			dock.evaluate(element =>
+				new Promise<number>(resolve =>
+					requestAnimationFrame(() => resolve(element.getBoundingClientRect().top))
+				)
+			);
+		let resting = await top();
+		// Some browsers, Android Chrome among them, report the keyboard's travel every frame.
+		let travel = async (heights: number[]) => {
+			for (let height of heights) {
+				await setVisualViewport(page, { event: "resize", height });
+				expect(Math.abs((await top()) - resting)).toBeLessThanOrEqual(1);
+			}
+		};
+		let down = [500, 520, 560, 612, 680, 732, 776, 810, 832, 844];
+
+		await dock.getByRole("button", { name: "Insert block" }).tap();
+		expect(Math.abs((await top()) - resting)).toBeLessThanOrEqual(1);
+		await travel(down);
+		let panel = page.getByRole("group", { name: "Insert block" });
+		expect(Math.round((await panel.boundingBox())!.height)).toBe(344);
+
+		await page.keyboard.press("Escape");
+		await expect(content(page)).toBeFocused();
+		await travel(down.toReversed());
+		await expect(panel).toHaveCount(0);
+		expect(Math.abs((await top()) - resting)).toBeLessThanOrEqual(1);
+	} finally {
+		await close();
+	}
+});

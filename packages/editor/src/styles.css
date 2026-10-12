@@ -5638,28 +5638,21 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 /* Insert and Text style: the choices stand where the keyboard was, at its height. */
+/* Sized to what the keyboard has uncovered, down to nothing, so its edge and padding sit inside. */
 .plan-format-panel {
 	box-sizing: border-box;
 	height: var(--phone-format-panel-height);
-	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3)
-		calc(var(--spacing) * 3 + env(safe-area-inset-bottom));
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	border-top: var(--edge-width) solid var(--color-edge);
 	background: var(--color-ground);
 	-webkit-user-select: none;
 	user-select: none;
 }
 
-/* Out of the layout until the keyboard has gone, so the bar never rises over it. */
-.plan-format-panel[data-phase="opening"] {
-	height: 0;
-	padding-block: 0;
-	border-top-width: 0;
-	overflow: hidden;
-}
-
 .plan-format-panel-grid {
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3)
+		calc(var(--spacing) * 3 + env(safe-area-inset-bottom));
+	border-top: var(--edge-width) solid var(--color-edge);
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: calc(var(--spacing) * 2);

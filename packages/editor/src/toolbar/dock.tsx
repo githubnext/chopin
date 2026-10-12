@@ -36,7 +36,7 @@ import {
 
 import { listenToHistory } from "../history";
 import { $block } from "./bubble";
-import { insertChoices, keyboardCover, styleChoices } from "./dock-panel";
+import { covered, insertChoices, keyboardCover, styleChoices, uncovered } from "./dock-panel";
 import { $linkAt, OPEN_LINK_EDITOR_COMMAND } from "./link";
 
 import type { ReactNode } from "react";
@@ -88,14 +88,15 @@ export function FormatDock(
 	/** Which edges of the row have buttons scrolled past them; those edges fade. */
 	let [edges, setEdges] = useState({ start: false, end: false });
 	/**
-	 * `opening` keeps the panel out of the layout until the keyboard has gone, or the bar would
-	 * grow up the screen over the keyboard. `returning` keeps its space while the keyboard comes
-	 * back over it.
+	 * `opening` waits for the keyboard to go and `returning` for it to come back. Throughout, the
+	 * panel is only as tall as what the keyboard has uncovered, so the bar never leaves its place.
 	 */
 	let [panel, setPanel] = useState<
 		{ kind: DockPanel; block: Block; phase: "opening" | "open" | "returning" }
 	>();
 	let [panelHeight, setPanelHeight] = useState<number>();
+	/** What the keyboard covers now, followed frame by frame while a panel is up. */
+	let [cover, setCover] = useState(0);
 	let panelElement = useRef<HTMLDivElement>(null);
 	let toolbar = useRef<HTMLDivElement>(null);
 	let saved = useRef<RangeSelection | null>(null);
@@ -129,6 +130,14 @@ export function FormatDock(
 	}, [onPanel, open]);
 	useEffect(() => () => onPanel?.(false), [onPanel]);
 
+	useEffect(() => {
+		if (!open) return;
+		// Synchronous, so the panel and the workspace's height change in the same frame.
+		let measure = () => flushSync(() => setCover(covered(innerHeight, currentViewport())));
+		measure();
+		return listenToViewportChanges(measure);
+	}, [open]);
+
 	// The panel waits for the keyboard on both sides: to go before it takes its space, and to come
 	// back before it gives the space up.
 	let phase = panel?.phase;
@@ -139,8 +148,11 @@ export function FormatDock(
 				? setPanel(current => current && { ...current, phase: "open" })
 				: setPanel(undefined);
 		let check = () => {
-			let up = !!keyboardCover(innerHeight, currentViewport());
-			if (up === (phase === "returning")) settle();
+			let viewport = currentViewport();
+			let up = !!keyboardCover(innerHeight, viewport);
+			// Returning waits for the whole keyboard, or the bar would drop by what is still uncovered.
+			let whole = !panelHeight || covered(innerHeight, viewport) >= panelHeight - 1;
+			if (phase === "opening" ? !up : up && whole) settle();
 		};
 		let timer = setTimeout(settle, KEYBOARD_TIMEOUT);
 		let stop = listenToViewportChanges(check);
@@ -149,7 +161,7 @@ export function FormatDock(
 			clearTimeout(timer);
 			stop();
 		};
-	}, [phase]);
+	}, [panelHeight, phase]);
 
 	// The caret's block stays above the panel, as it would above the keyboard.
 	let shown = phase === "open";
@@ -157,7 +169,7 @@ export function FormatDock(
 		if (!shown) return;
 		// Measured where the bar will rest once the keyboard has gone, not where it is now.
 		let bar = toolbar.current?.offsetHeight;
-		let height = panelElement.current?.offsetHeight;
+		let height = panelHeight ?? panelElement.current?.offsetHeight;
 		let top = bar === undefined || height === undefined ? undefined : innerHeight - height - bar;
 		let key = saved.current?.anchor.key;
 		let block = key ? editor.getElementByKey(key)?.closest(".plan-content > *") : undefined;
@@ -192,6 +204,7 @@ export function FormatDock(
 		if (panel?.kind === kind && panel.phase !== "returning") return returnToEditor();
 		let keyboard = keyboardCover(innerHeight, currentViewport());
 		if (keyboard) setPanelHeight(keyboard);
+		setCover(covered(innerHeight, currentViewport()));
 		let next = keyboard ? "opening" as const : "open" as const;
 		if (!panel) {
 			saved.current = editor.getEditorState().read(() => {
@@ -398,7 +411,7 @@ export function FormatDock(
 					onMouseDown={event => event.preventDefault()}
 					ref={panelElement}
 					role="group"
-					style={panelHeight && panel.phase !== "opening" ? { height: panelHeight } : undefined}
+					style={panelHeight ? { height: uncovered(panelHeight, cover) } : undefined}
 					tabIndex={-1}
 				>
 					<div className="plan-format-panel-grid">
