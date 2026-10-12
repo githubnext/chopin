@@ -116,6 +116,8 @@ export type ExperimentResources = {
 	load(id: string): Promise<void>;
 	change(id: string, view: string, patch: SelectionPatch): Promise<void>;
 	place(id: string, view: string, decision?: string, remove?: boolean): Promise<void>;
+	/** Host actions under a live view, such as recording a decision from it. */
+	actions?(id: string, view: string): ReactNode;
 };
 
 export const widgets$ = Cell<WidgetOptions>({});

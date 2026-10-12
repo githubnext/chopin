@@ -47,6 +47,8 @@ export const investigationSchema = z.object({
 	updatedAt: z.number(),
 	progress: z.string().max(2000),
 	parentId: z.string().uuid().optional(),
+	/** The child document its completed result was published as. */
+	childId: z.string().min(1).max(96).optional(),
 	candidate: resultSchema.optional(),
 	result: resultSchema.optional(),
 	views: z.record(z.string(), stateSchema),
@@ -55,7 +57,24 @@ export const investigationSchema = z.object({
 }).strict();
 export type Investigation = z.infer<typeof investigationSchema>;
 export type InvestigationState = Investigation["state"];
-export type PublishedInvestigation = Omit<Investigation, "candidate" | "receipts">;
+/** The child document a completed investigation was published as, read from the channel. */
+export type InvestigationChild = {
+	id: string;
+	title: string;
+	slug: string;
+	summary: string;
+};
+/** Where an investigation child came from, read from the child's own route. */
+export type InvestigationProvenance = {
+	investigationId: string;
+	parentChannelId: string;
+	brief: string;
+	viewCount: number;
+	startedBy?: string;
+};
+export type PublishedInvestigation = Omit<Investigation, "candidate" | "receipts"> & {
+	child?: InvestigationChild;
+};
 export type InvestigationSummary =
 	& { decisionCount: number }
 	& Pick<

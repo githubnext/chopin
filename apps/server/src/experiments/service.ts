@@ -12,6 +12,8 @@ import { applySelection, selectionPatchSchema } from "@chopin/experiment/selecti
 import type { ExperimentStore } from "../storage/experiments";
 import type { Lease } from "../storage/model";
 import { z } from "zod";
+import * as Plan from "../plan/service";
+import { investigationDocument } from "./document";
 
 export const CLAIM_MS = 60_000;
 export function fingerprint(value: unknown) {
@@ -78,6 +80,7 @@ export class Experiments {
 			value.updatedAt = this.now();
 			if (await this.store.save(value, current.revision, this.lease())) {
 				this.changed(value.documentId);
+				if (value.childId) this.changed(value.childId);
 				return value;
 			}
 		}
@@ -128,26 +131,48 @@ export class Experiments {
 		let parsed = parseResult(result);
 		return this.mutate(id, value => {
 			this.assertClaim(value, connectionId, generation);
+			// Completion must not fail on content, so the child document is proven here.
+			investigationDocument(value.id, value.brief, parsed);
 			value.candidate = parsed;
 			value.state = "publishing";
 		});
 	}
-	complete(id: string, connectionId: string, generation: number) {
-		return this.mutate(id, value => {
+	/**
+	 * Promote the candidate and publish it as a child document in the same commit, so a ready card
+	 * never links a child that is not there yet.
+	 */
+	async complete(id: string, connectionId: string, generation: number) {
+		for (let attempt = 0; attempt < 5; attempt++) {
+			let current = await this.store.get(id);
+			if (!current) fail("not-found");
 			if (
-				value.state === "completed" && value.connectionId === connectionId
-				&& value.generation === generation
-			) return;
-			this.assertClaim(value, connectionId, generation);
-			if (!value.candidate) fail("missing-result");
-			value.result = value.candidate;
+				current.state === "completed" && current.connectionId === connectionId
+				&& current.generation === generation
+			) return current;
+			this.assertClaim(current, connectionId, generation);
+			if (!current.candidate) fail("missing-result");
+			let value = structuredClone(current);
+			let result = current.candidate;
+			value.result = result;
 			delete value.candidate;
-			value.views = Object.fromEntries(
-				value.result.views.map(view => [view.key, initialState(view)]),
-			);
+			value.views = Object.fromEntries(result.views.map(view => [view.key, initialState(view)]));
 			value.state = "completed";
 			value.expiresAt = 0;
-		});
+			value.revision++;
+			value.updatedAt = this.now();
+			let document = investigationDocument(value.id, value.brief, result);
+			let saved = await this.store.publish(value, current.revision, {
+				title: document.title,
+				initial: await Plan.initial(document.source),
+				now: new Date(value.updatedAt),
+			}, this.lease());
+			if (saved) {
+				this.changed(saved.documentId);
+				if (saved.childId) this.changed(saved.childId);
+				return saved;
+			}
+		}
+		fail("revision-conflict");
 	}
 	stop(
 		id: string,

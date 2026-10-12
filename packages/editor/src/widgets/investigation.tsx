@@ -25,6 +25,8 @@ const WORDS: Record<InvestigationState, string> = {
 const TRACK: InvestigationState[] = ["queued", "running", "publishing"];
 
 export type InvestigationCardProps = {
+	/** The investigation's id, so a child can find its way back to this card. */
+	id?: string;
 	brief: string;
 	state: InvestigationState;
 	/** The local agent's latest progress line. */
@@ -39,7 +41,10 @@ export type InvestigationCardProps = {
 	onStop?: () => void;
 	onRetry?: () => void;
 	onRemove?: () => void;
-	/** The completed result, owned by the host. */
+	/** The child document a completed investigation was published as. */
+	ready?: { title: string; summary: string; views: number };
+	onOpen?: (opener: HTMLElement) => void;
+	/** Host detail under a ready card, such as the decisions recorded from its views. */
 	children?: ReactNode;
 };
 
@@ -75,15 +80,19 @@ export function InvestigationCard(
 		canEdit = true,
 		children,
 		error,
+		id,
 		notice,
+		onOpen,
 		onRemove,
 		onRetry,
 		onRun,
 		onStop,
 		progress,
+		ready,
 		state,
 	}: InvestigationCardProps,
 ) {
+	let shownSummary = useLast(ready?.summary || undefined);
 	let footer = onRun ? "run" : onRetry ? "retry" : onStop ? "stop" : undefined;
 	let lead = state === "completed" || state === "failed" || state === "interrupted";
 	let at = TRACK.indexOf(state);
@@ -101,7 +110,9 @@ export function InvestigationCard(
 	return (
 		<div className="plan-research-tracked">
 			<SidecarCard
-				className="plan-research-card"
+				className={`plan-research-card${ready ? " relative" : ""}`}
+				data-investigation={id}
+				data-investigation-ready={ready ? "" : undefined}
 				data-investigation-state={state}
 				data-stage={state}
 				label="Investigation"
@@ -116,7 +127,15 @@ export function InvestigationCard(
 						<Indicator state={state} />
 					</Swap>
 					<Swap id={state}>
-						<span>{WORDS[state]}</span>
+						<span>
+							{WORDS[state]}
+							{ready && ready.views > 0 && (
+								<span className="plan-research-meta">
+									{"\u00a0· "}
+									{ready.views === 1 ? "1 view" : `${ready.views} views`}
+								</span>
+							)}
+						</span>
 					</Swap>
 					<div className="plan-research-remove">
 						<Swap id={onRemove ? "remove" : "none"}>
@@ -135,9 +154,12 @@ export function InvestigationCard(
 						</Swap>
 					</div>
 				</div>
-				<div className="plan-research-title">
-					<ResearchBrief text={brief} />
-				</div>
+				<Swap className="plan-research-title" id={ready ? "report" : "brief"}>
+					{ready ? ready.title : <ResearchBrief text={brief} />}
+				</Swap>
+				<Fold open={!!ready?.summary}>
+					{shownSummary !== undefined && <p className="plan-research-summary">{shownSummary}</p>}
+				</Fold>
 				<Fold open={live !== undefined}>
 					{shownLive !== undefined && <p className="plan-research-summary">{shownLive}</p>}
 				</Fold>
@@ -149,7 +171,7 @@ export function InvestigationCard(
 					)}
 				</Fold>
 				<Fold open={!!notice}>{notice}</Fold>
-				{children}
+				{children && <div className="plan-research-detail">{children}</div>}
 				<Fold open={!!footer}>
 					<div className="plan-research-footer">
 						<Swap id={footer ?? "none"}>
@@ -186,6 +208,15 @@ export function InvestigationCard(
 						</Swap>
 					</div>
 				</Fold>
+				{ready && onOpen && (
+					<button
+						aria-label={`Open ${ready.title}`}
+						className="plan-research-open"
+						disabled={busy}
+						onClick={event => onOpen(event.currentTarget)}
+						type="button"
+					/>
+				)}
 			</SidecarCard>
 			<Fold open={at >= 0}>
 				<div aria-hidden="true" className="plan-research-track" data-steps={TRACK.length}>

@@ -36,14 +36,7 @@ export function EvidenceActions({ store, item, view, disabled }: {
 			{error && <p role="alert" className="text-destructive-ink">{error}</p>}
 			<div className="flex flex-wrap gap-2">
 				<button
-					className="btn btn-md btn-outline"
-					disabled={disabled || busy}
-					onClick={() => void act(() => store.place(item.id, view.key))}
-				>
-					Insert view in document
-				</button>
-				<button
-					className="btn btn-md btn-primary"
+					className="btn btn-sm btn-outline"
 					disabled={disabled || busy}
 					onClick={() => {
 						setRevision(item.views[view.key].revision);
@@ -106,6 +99,20 @@ export function EvidenceActions({ store, item, view, disabled }: {
 			)}
 		</div>
 	);
+}
+
+/** Record a decision from a view embedded in a document, by the investigation's id. */
+export function ViewDecision({ store, id, view, disabled }: {
+	store: ExperimentStore;
+	id: string;
+	view: string;
+	disabled: boolean;
+}) {
+	useSyncExternalStore(store.subscribe, store.snapshot);
+	let item = store.get(id);
+	let found = item?.result?.views.find(candidate => candidate.key === view);
+	if (!item || !found) return null;
+	return <EvidenceActions store={store} item={item} view={found} disabled={disabled} />;
 }
 
 /** One recorded decision with its fixed evidence and the action that embeds it. */

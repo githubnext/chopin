@@ -7,7 +7,7 @@ import type { StorageAdapter } from "../storage/port";
 
 const MARKDOWN_PUNCTUATION = new Set(`!"#$%&'()*+,-./:;<=>?@[\\]^_\`{|}~`);
 
-function reportText(value: string): string {
+export function reportText(value: string): string {
 	return [...value.trim().replace(/\s+/g, " ")]
 		.map(point => MARKDOWN_PUNCTUATION.has(point) ? `\\${point}` : point)
 		.join("");

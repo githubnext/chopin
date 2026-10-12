@@ -167,6 +167,10 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 	expect(claim.input.requester).toBe("bob");
 	expect(claim.input.authorizer).toBe("alice");
 	expect((await tool("claim_experiment", { id }, claim.runToken)).result.isError).toBe(true);
+	let smuggled = await tool("submit_investigation_result", {
+		result: { ...performance, report: `# Report\n\n<Investigation id="${id}" />\n` },
+	}, claim.runToken);
+	expect(error(smuggled)).toStartWith("protected-report");
 	expect(
 		(await tool("submit_experiment_result", { result: performance }, claim.runToken)).result
 			.isError,
@@ -182,6 +186,36 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 	expect(value.state).toBe("completed");
 	expect(value.result.datasets[0].key).toBe("startup");
 	expect(value.candidate).toBeUndefined();
+	expect(value.child).toMatchObject({
+		title: "Startup comparison",
+		summary: "Caching reduced median startup time in the captured workload.",
+	});
+	let child = value.child.id;
+	let reached = await request(`/api/documents/${child}/experiments/${id}`, undefined, bob.cookie);
+	expect((await reached.json()).id).toBe(id);
+	let listed = await (await request(`/api/documents/${child}/experiments`, undefined, bob.cookie))
+		.json();
+	expect(listed.experiments.map((item: { id: string }) => item.id)).toEqual([id]);
+	expect(
+		await (await request(`/api/documents/${child}/investigation-provenance`, undefined, bob.cookie))
+			.json(),
+	).toEqual({
+		investigationId: id,
+		parentChannelId: documentId,
+		brief: "Measure startup",
+		viewCount: 1,
+		startedBy: "bob",
+	});
+	expect(
+		(await request(`/api/documents/${documentId}/investigation-provenance`, undefined, bob.cookie))
+			.status,
+	).toBe(404);
+	expect((await tool("complete_experiment", { id, generation: claim.generation })).result.isError)
+		.not.toBe(true);
+	expect(
+		(await (await request(`/api/documents/${documentId}/experiments/${id}`, undefined, bob.cookie))
+			.json()).child.id,
+	).toBe(child);
 	await sessions.revoke(
 		new Request(config.origin, { headers: { cookie: alice.cookie.split(";")[0] } }),
 	);

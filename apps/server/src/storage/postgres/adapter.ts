@@ -523,6 +523,7 @@ export class PostgresStorage implements StorageAdapter {
 		this.experiments = new PostgresExperimentStore(
 			this.#sql,
 			(sql, lease) => this.#assertLease(sql, lease),
+			(transaction, input) => this.#createAvailableChannelInTransaction(transaction, input),
 		);
 		this.navigation = new PostgresNavigationStore(
 			this.#sql,

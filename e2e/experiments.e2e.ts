@@ -18,6 +18,21 @@ function card(page: Page, brief: string) {
 	});
 }
 
+/** Open the child document a completed investigation published, from its inline card. */
+async function openChild(page: Page, room: string) {
+	await card(page, "Startup comparison")
+		.getByRole("button", { name: "Open Startup comparison", exact: true })
+		// Recorded decisions sit above the card-wide control, so open from its status row.
+		.click({ position: { x: 16, y: 16 } });
+	let child = page.getByRole("region", { name: "Child document: Startup comparison" });
+	let provenance = child.locator("[data-child-provenance]");
+	await expect(provenance).toContainText(`Investigation from Test ${room.slice(0, 8)}`);
+	await expect(provenance).toContainText("1 view");
+	await expect(child.getByRole("heading", { name: "Startup comparison", exact: true }))
+		.toBeVisible();
+	return child;
+}
+
 /**
  * Type `/investigate` on a new line after a prose passage, write the brief, and return the
  * created record. The passage keeps the caret in text, clear of cards and embedded evidence.
@@ -110,43 +125,44 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	let claim = await tool("claim_experiment", { id: experiment.id });
 	await tool("submit_experiment_result", { result: performance }, claim.runToken);
 	await tool("complete_experiment", { id: experiment.id, generation: claim.generation });
-	await expect(page.getByRole("table", { name: "Median startup time", exact: true })).toBeVisible();
-	await expect(page.getByRole("table", { name: "Median startup time", exact: true })).toContainText(
-		"183",
-	);
-	await peer.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+	// The result is published as a child document; the inline card only links to it.
+	let ready = card(page, "Startup comparison");
+	await expect(ready).toHaveAttribute("data-investigation-ready", "");
+	await expect(ready).toContainText("Caching reduced median startup time");
+	await expect(ready.getByRole("table")).toHaveCount(0);
+	let child = await openChild(page, room);
+	let peerChild = await openChild(peer, room);
+	let table = child.getByRole("table", { name: "Median startup time", exact: true });
+	await expect(table).toContainText("183");
+	await peerChild.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
 		JSON.stringify("small"),
 	);
-	await expect(page.getByRole("combobox", { name: "Filter Workload", exact: true })).toHaveValue(
+	await expect(child.getByRole("combobox", { name: "Filter Workload", exact: true })).toHaveValue(
 		JSON.stringify("small"),
 	);
-	await expect(page.getByRole("table", { name: "Median startup time", exact: true })).not
-		.toContainText("410");
-	await peer.getByRole("button", { name: "Select Cached", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Select Cached", exact: true })).toHaveAttribute(
+	await expect(table).not.toContainText("410");
+	await peerChild.getByRole("button", { name: "Select Cached", exact: true }).click();
+	await expect(child.getByRole("button", { name: "Select Cached", exact: true })).toHaveAttribute(
 		"aria-pressed",
 		"true",
 	);
-	await peer.getByRole("button", { name: "Record decision", exact: true }).click();
-	await peer.getByRole("textbox", { name: "Decision conclusion", exact: true }).fill(
+	await peerChild.getByRole("button", { name: "Record decision", exact: true }).click();
+	await peerChild.getByRole("textbox", { name: "Decision conclusion", exact: true }).fill(
 		"Use cached startup",
 	);
-	await peer.getByRole("textbox", { name: "Decision rationale", exact: true }).fill(
+	await peerChild.getByRole("textbox", { name: "Decision rationale", exact: true }).fill(
 		"Lower median in the captured workload",
 	);
-	await peer.getByRole("button", { name: "Save decision", exact: true }).click();
-	await expect(peer.getByRole("heading", { name: "Use cached startup", exact: true }))
-		.toBeVisible();
-	await peer.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+	await peerChild.getByRole("button", { name: "Save decision", exact: true }).click();
+	await expect.poll(async () =>
+		(await (await peer.request.get(`/api/documents/${room}/experiments/${experiment.id}`)).json())
+			.decisions.map((decision: { conclusion: string }) => decision.conclusion)
+	).toEqual(["Use cached startup"]);
+	await peerChild.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
 		JSON.stringify("large"),
 	);
-	await peer.getByRole("button", { name: "Insert decision evidence in document", exact: true })
-		.click();
-	await expect(content(page)).toHaveAttribute("contenteditable", "true");
-	let saved = page.getByRole("article", { name: "Saved investigation evidence", exact: true });
-	await expect(saved).toContainText("Use cached startup");
-	await expect(saved.getByRole("table")).toContainText("183");
-	await expect(saved.getByRole("table")).not.toContainText("410");
+	await expect(table).toContainText("410");
+	await page.goto(testChannelPath(room));
 	let second = await investigate(page, room, "Check memory use", PASSAGE);
 	let queued = card(page, "Check memory use");
 	await queued.getByRole("button", { name: "Run", exact: true }).click();
@@ -164,13 +180,10 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	await expect(queued).toHaveCount(0);
 	await tool("disconnect_workspace", {});
 	await page.reload();
-
-	await expect(
-		card(page, "Compare startup approaches").getByRole("table", {
-			name: "Median startup time",
-			exact: true,
-		}),
-	).toContainText("410");
+	await expect((await openChild(page, room)).getByRole("table", {
+		name: "Median startup time",
+		exact: true,
+	})).toContainText("410");
 });
 
 test("a proposal typed from the slash menu appears inline on a phone", async ({ join, seed, room }) => {

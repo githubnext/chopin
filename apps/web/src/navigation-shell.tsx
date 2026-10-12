@@ -158,10 +158,10 @@ let NavigationDocument = createContext<{
 	onRepositoryAccessChanged: () => void;
 	onResearchChildOpen: (
 		parentId: string,
-		child: Research.ReadyChild,
+		child: Pick<Research.ReadyChild, "slug">,
 		opener: ResearchOpener,
 	) => void;
-	onResearchChildPublished: (parentId: string, child: Research.ReadyChild) => void;
+	onResearchChildPublished: (parentId: string, child: Pick<Research.ReadyChild, "slug">) => void;
 }>({
 	onDocumentChanged() {},
 	onDocumentAction() {},
@@ -719,7 +719,7 @@ export function NavigationShell(
 	}, [documentAction]);
 	let researchChildOpen = useCallback((
 		parentId: string,
-		child: Research.ReadyChild,
+		child: Pick<Research.ReadyChild, "slug">,
 		opener: ResearchOpener,
 	) => {
 		let channel = knownChannelsRef.current.get(parentId);
@@ -730,15 +730,18 @@ export function NavigationShell(
 		let target = researchChildNavigation(channel, child, opener);
 		navigate(target.destination, { opener: target.opener });
 	}, [navigate]);
-	let researchChildPublished = useCallback((parentId: string, _child: Research.ReadyChild) => {
-		let channel = knownChannelsRef.current.get(parentId);
-		if (!channel) return;
-		let entry = projectsRef.current.find(value =>
-			value.project.repositoryId === channel.repositoryId
-		);
-		if (!entry?.project.available) return;
-		refreshProjectRef.current(entry.project);
-	}, []);
+	let researchChildPublished = useCallback(
+		(parentId: string, _child: Pick<Research.ReadyChild, "slug">) => {
+			let channel = knownChannelsRef.current.get(parentId);
+			if (!channel) return;
+			let entry = projectsRef.current.find(value =>
+				value.project.repositoryId === channel.repositoryId
+			);
+			if (!entry?.project.available) return;
+			refreshProjectRef.current(entry.project);
+		},
+		[],
+	);
 	let repositoryAccessChanged = useCallback(() => {
 		void refresh();
 	}, [refresh]);

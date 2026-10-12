@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { performance } from "@chopin/experiment/fixtures";
 import { Experiments } from "../experiments/service";
 import { openedStorage, userAndChannel } from "./contract-support";
 import type { StorageFactory } from "./contract-support";
@@ -23,6 +24,50 @@ export function experimentContract(name: string, factory: StorageFactory) {
 				await expect(
 					storage.experiments.save({ ...next, revision: 2 }, 1, { ...lease, owner: "wrong" }),
 				).rejects.toThrow();
+			} finally {
+				await storage.close();
+			}
+		});
+		test("publishes a completed investigation as one child document, idempotently", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, userId, lease } = await userAndChannel(storage);
+				let service = new Experiments(storage.experiments, () => lease);
+				let created = await service.create(channelId, userId, "Does caching help startup?");
+				let publishing = {
+					...created,
+					revision: 1,
+					state: "publishing" as const,
+					connectionId: "connection",
+					generation: 1,
+					expiresAt: Date.now() + 60_000,
+					candidate: performance,
+				};
+				expect(await storage.experiments.save(publishing, 0, lease)).toBe(true);
+				let [first, second] = await Promise.all([
+					service.complete(created.id, "connection", 1),
+					service.complete(created.id, "connection", 1),
+				]);
+				expect(first.state).toBe("completed");
+				expect(first.childId).toBeDefined();
+				expect(second.childId).toBe(first.childId);
+				expect(first.result).toEqual(performance);
+				expect(first.candidate).toBeUndefined();
+				let child = await storage.channels.get(first.childId!);
+				expect(child).toMatchObject({ parentChannelId: channelId, title: "Startup comparison" });
+				let loaded = await storage.collaboration.load(first.childId!, new Date());
+				expect(loaded?.snapshot?.source).toContain(`experiment="${created.id}"`);
+				expect((await storage.experiments.published(first.childId!))?.id).toBe(created.id);
+				expect(await storage.experiments.published(channelId)).toBeUndefined();
+				let stored = await storage.experiments.get(created.id);
+				expect(
+					await storage.experiments.publish(
+						{ ...stored!, revision: stored!.revision + 1 },
+						stored!.revision,
+						{ title: "Again", initial: loaded?.snapshot as never, now: new Date() },
+						lease,
+					),
+				).toEqual(stored!);
 			} finally {
 				await storage.close();
 			}

@@ -88,7 +88,7 @@ import { GitHubReferenceCache } from "./github-references";
 import { Wire } from "./wire";
 import { ExperimentStore } from "./experiments/store";
 import { InvestigationReference, removableInvestigation } from "./experiments/card";
-import { EvidenceDecisions } from "./experiments/evidence";
+import { EvidenceDecisions, ViewDecision } from "./experiments/evidence";
 import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
@@ -96,6 +96,7 @@ import type { ConversationPlan, Plan, Question, Research, Session } from "@chopi
 import type {
 	DecisionView,
 	DecisionViewState,
+	ExperimentResources,
 	InvestigationResources,
 	PlanState,
 	Refusal,
@@ -539,7 +540,10 @@ export function RoomWorkspace(
 		return () => removeEventListener("hashchange", followTask);
 	}, [profile.implementation]);
 	let [questions] = useState(() => new QuestionnaireStore());
-	let experiments = useMemo(() => new ExperimentStore(room), [room]);
+	let experiments = useMemo(
+		() => new ExperimentStore(room, child => onResearchChildPublished(room, child)),
+		[onResearchChildPublished, room],
+	);
 	useSyncExternalStore(experiments.subscribe, experiments.snapshot);
 	useEffect(() => experiments.connect(wire), [experiments, wire]);
 	let [cardMeta] = useState(() => new CardMetaStore());
@@ -1145,9 +1149,33 @@ export function RoomWorkspace(
 				canEdit={investigationsEditable}
 				locked={implementation.locked}
 				onRemove={remove}
+				onOpen={(child, opener) => onResearchChildOpen(room, child, { current: opener })}
 			/>
 		),
-	}), [experiments, userId, investigationsEditable, implementation.locked]);
+	}), [
+		experiments,
+		userId,
+		investigationsEditable,
+		implementation.locked,
+		onResearchChildOpen,
+		room,
+	]);
+	let experimentResources = useMemo<ExperimentResources>(() => ({
+		subscribe: experiments.subscribe,
+		snapshot: experiments.snapshot,
+		get: id => experiments.get(id),
+		load: id => experiments.load(id),
+		change: (id, view, patch) => experiments.change(id, view, patch),
+		place: (id, view, decision, remove) => experiments.place(id, view, decision, remove),
+		actions: (id, view) => (
+			<ViewDecision
+				store={experiments}
+				id={id}
+				view={view}
+				disabled={!investigationsEditable || implementation.locked}
+			/>
+		),
+	}), [experiments, investigationsEditable, implementation.locked]);
 	let actOnResearchOffer = (
 		offerId: string,
 		choice: "research" | "dismiss" | "resume",
@@ -1283,8 +1311,8 @@ export function RoomWorkspace(
 	let plan = (
 		<GitHubReferencesProvider value={githubReferences}>
 			<PlanEditor
-				experiments={experiments}
-				investigations={investigations}
+				experiments={experimentResources}
+				investigations={profile.research ? investigations : undefined}
 				cardMeta={cardMeta}
 				evidence={showEvidence}
 				onCardSource={showCardSource}

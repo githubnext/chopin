@@ -79,6 +79,7 @@ export type { PresenceAction, PresencePhase, TransitionPresence } from "./transi
 export type { Connection, Transport, Unsubscribe } from "./transport";
 export type {
 	CommentPresentation,
+	ExperimentResources,
 	GitHubReferenceEntry,
 	GitHubReferenceStore,
 	InvestigationResources,

@@ -44,8 +44,9 @@ recently active one that is not busy. When all of yours are busy, the work
 queues behind one of them and starts when it is free. Without any, the card shows the connector command to start, and you select
 **Run** again once connected. A Planner can also propose an investigation; its
 card is appended to the end of the document and still needs someone to run it.
-Progress and published results appear in that card automatically, without
-opening another tab or dialog.
+Progress appears in that card automatically, without opening another tab or
+dialog. A completed investigation is published as a child document, like a
+research report, and its card becomes a compact link to it.
 
 The card is atomic, like a research card: it can move with the prose around it,
 but its markup only ever names the record. When a browser adds a card, the server
@@ -85,8 +86,10 @@ HTTP also retains the connector's internal `read_experiment` and
 `submit_experiment_result` names.
 
 The agent reads its sealed brief and output schema through `read_investigation`,
-then calls `submit_investigation_result`. The server validates the candidate and
-publishes only after the ACP turn completes successfully. Published data remains
+then calls `submit_investigation_result`. The server validates the candidate,
+including that it converts into a valid child document, and publishes only after
+the ACP turn completes successfully. A report may not contain record-backed
+components such as `Investigation`, `Experiment`, `Research` or decisions. Published data remains
 available when the laptop disconnects. A model's interpretation and a measured
 observation remain distinct; reports should explain their method and limitations.
 
@@ -97,11 +100,20 @@ and small text evidence. Supported views are tables, metric comparisons, bars an
 simple lines. The capability response advertises size limits and schemas. No
 uploaded UI code or live application endpoint is accepted.
 
-Shared filters and row selections are revision-checked. A stale edit reports a
-conflict. **Record decision** saves the exact acknowledged selections, conclusion
-and rationale. **Insert decision evidence in document** embeds that immutable view;
-**Insert view in document** embeds the current collaborative selections. Recorded
-decisions appear on the investigation's card and in the document's Decisions surface.
+Completion promotes the candidate and creates the child document in one fenced
+commit, so the card never links a child that does not exist; a repeated
+completion returns the same child. The child is titled by the report's top
+heading, or else the brief, and holds the report, an `<Experiment>` embed for each
+view, the method and limitations, and as much raw evidence as fits the document
+size limit. Its provenance line names the parent document, who started the
+investigation and the brief. A child has no investigations or Build of its own.
+
+The child's embeds read the parent's investigation record by its id, so shared
+filters and row selections stay one collaborative state wherever they appear.
+They are revision-checked; a stale edit reports a conflict. **Record decision**
+under an embed saves the exact acknowledged selections, conclusion and rationale.
+Recorded decisions appear on the parent's investigation card and in its Decisions
+surface, where **Insert decision evidence in document** embeds that immutable view.
 
 An interrupted run is not automatically repeated. **Retry** on a failed,
 stopped or interrupted card returns the same investigation to **Ready to run**;
