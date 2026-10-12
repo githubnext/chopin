@@ -518,6 +518,11 @@ body {
 	block-size: var(--panel-header-height);
 }
 
+/* The bar clips overflow, so touch grows it to keep its controls' expanded hit areas whole. */
+:root[data-plan-coarse-pointer] {
+	--panel-header-height: calc(var(--control-target-coarse) + var(--edge-width));
+}
+
 .panel-header-control {
 	margin-inline-start: calc(-1 * var(--panel-header-control-offset));
 }
