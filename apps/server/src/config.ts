@@ -70,7 +70,7 @@ export type Config = {
 const DEFAULT_PORT = 8787;
 const DEFAULT_ATTACH_GRACE_MS = 120_000;
 export const DEFAULT_LINK_PING_MS = 15_000;
-export const DEFAULT_LINK_TIMEOUT_MS = 45_000;
+export const DEFAULT_LINK_TIMEOUT_MS = 120_000;
 const DEFAULT_MODEL = "gpt-6-luna";
 
 /** The default is a Copilot model ID. Pi and Atomic resolve IDs against their

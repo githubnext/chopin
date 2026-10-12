@@ -346,7 +346,7 @@ One client holds a document's Planner. While it is attached, every other
 message naming its GitHub login. A link that detaches or drops keeps the
 ownership for `PLANNER_ATTACH_GRACE_MS` (2 minutes by default). A link that
 answers none of the server's [protocol pings](planner-link.md#pings) for
-`PLANNER_LINK_TIMEOUT_MS` (45 seconds by default) is closed as dropped, so a
+`PLANNER_LINK_TIMEOUT_MS` (2 minutes by default) is closed as dropped, so a
 client whose network silently went away does not keep the document attached.
 Within the grace period the same account can attach again and keeps the same
 ownership generation, and anyone

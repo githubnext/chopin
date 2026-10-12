@@ -49,7 +49,10 @@ export type PlannerLinkHooks = {
 	revalidateEveryMs?: number;
 	/** How often the link is sent a protocol ping. */
 	pingEveryMs?: number;
-	/** How long the link may send nothing, not even a pong, before it is closed as dropped. */
+	/**
+	 * How long the link may send nothing, not even a pong, and read none of what the
+	 * server queued for it, before it is closed as dropped.
+	 */
 	pongTimeoutMs?: number;
 };
 
@@ -196,11 +199,26 @@ export function openPlannerLinkSocket(
 	// A network that silently goes away sends no FIN or RST. Bun's server-wide
 	// idle timeout is two minutes and every send resets it, so a link the server
 	// keeps writing to would stay attached and its document's turns go nowhere.
-	let pinging = setInterval(() => ws.ping(), hooks.pingEveryMs ?? DEFAULT_LINK_PING_MS);
-	let deadline = setTimeout(
-		() => link.close(LINK_CLOSE.unresponsive, "unresponsive"),
-		hooks.pongTimeoutMs ?? DEFAULT_LINK_TIMEOUT_MS,
-	);
+	//
+	// A client slow to read leaves the server's frames queued, and Bun drops
+	// control frames, pings included, while that queue is over its limit; an
+	// empty ping returns the same whether it was sent or dropped. So a ping goes
+	// out only once the queue is empty, and a queue that shrank since it was last
+	// looked at shows the client is reading, which counts as hearing from it.
+	let backlog = 0;
+	function reading(): boolean {
+		let previous = backlog;
+		backlog = ws.getBufferedAmount();
+		return backlog < previous;
+	}
+	let pinging = setInterval(() => {
+		if (reading()) deadline.refresh();
+		if (backlog === 0) ws.ping();
+	}, hooks.pingEveryMs ?? DEFAULT_LINK_PING_MS);
+	let deadline = setTimeout(() => {
+		if (reading()) deadline.refresh();
+		else link.close(LINK_CLOSE.unresponsive, "unresponsive");
+	}, hooks.pongTimeoutMs ?? DEFAULT_LINK_TIMEOUT_MS);
 	ws.data.alive = {
 		heard: () => void deadline.refresh(),
 		stop() {

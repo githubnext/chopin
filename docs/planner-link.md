@@ -47,13 +47,27 @@ built-in `WebSocket` and the `ws` package; pings are control frames, not
 messages, and carry no JSON. Any frame from the client, a pong or a message,
 shows the link is alive.
 
-A link the server hears nothing from for **45 seconds** is treated as dropped,
+A client that is slow to read leaves the server's frames to it queued. While
+anything is queued the server sends no ping, since a ping can be dropped from a
+full queue, and counts the queue getting shorter as hearing from the client. A
+client that has stopped reading entirely keeps a queue that never shrinks, and
+counts as silent.
+
+A link the server hears nothing from for **120 seconds** is treated as dropped,
 such as one whose network silently went away. The server closes it with 1001
 and reason `unresponsive`, without an `error` or `refused` message, and releases
 it exactly as any dropped link (see [Closing](#closing)): its account keeps the
 document's Planner for the grace period in [Ownership](#ownership). The operator
 sets the interval and timeout with `PLANNER_LINK_PING_MS` and
 `PLANNER_LINK_TIMEOUT_MS`.
+
+The server cannot see a frame until it has arrived whole, and a client's pongs
+wait behind a frame it is still sending. So every frame must arrive within the
+timeout of the last frame heard before it. With the defaults, a 2 MiB frame
+needs a sustained client upload of about **17 KiB/s** (2 MiB in 120 seconds),
+or about 20 KiB/s if it starts just before a ping is due (2 MiB in the 105
+seconds left). A client on a slower uplink is closed as unresponsive while it
+uploads its largest frames; raise `PLANNER_LINK_TIMEOUT_MS` for it.
 
 ## Frames
 

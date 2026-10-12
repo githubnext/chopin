@@ -126,11 +126,11 @@ describe("configuration", () => {
 		}
 	});
 
-	it("pings a remote Planner link every 15 seconds and drops it after 45 silent seconds unless configured", () => {
+	it("pings a remote Planner link every 15 seconds and drops it after 120 silent seconds unless configured", () => {
 		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
 		expect(configured(remote)).toMatchObject({
 			plannerLinkPingMs: 15_000,
-			plannerLinkTimeoutMs: 45_000,
+			plannerLinkTimeoutMs: 120_000,
 		});
 		expect(configured({ ...remote, PLANNER_LINK_PING_MS: "1000", PLANNER_LINK_TIMEOUT_MS: "1001" }))
 			.toMatchObject({ plannerLinkPingMs: 1_000, plannerLinkTimeoutMs: 1_001 });

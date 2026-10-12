@@ -25,6 +25,7 @@ import {
 	RIVAL_TOKEN,
 	scriptedPlanner,
 	silentLink,
+	slowUplink,
 	VIEWER_TOKEN,
 } from "../../testing/planner-link";
 import { createRemoteAdapter } from "./adapter";
@@ -123,6 +124,13 @@ async function rawAttached(server: ReturnType<typeof linkServer>, document: stri
 		return start.session as string;
 	});
 	return { raw, started };
+}
+
+/** Waits until `condition` holds, for at most `withinMs`. */
+async function until(condition: () => boolean, withinMs: number) {
+	for (let deadline = Date.now() + withinMs; !condition() && Date.now() < deadline;) {
+		await Bun.sleep(10);
+	}
 }
 
 function upgradeRequest(url: string, headers: Record<string, string> = {}) {
@@ -658,6 +666,112 @@ describe("Planner link ownership", () => {
 			expect(errors).toEqual([]);
 			expect(script.turns).toHaveLength(1);
 		});
+
+		/** Writes valid host results until the server's outbound queue passes Bun's 16 MiB limit. */
+		function flood(server: ReturnType<typeof linkServer>) {
+			let [socket] = server.sockets;
+			let result = JSON.stringify({
+				type: "host-tool-result",
+				session: "session",
+				turn: "turn",
+				toolCallId: "call",
+				output: "x".repeat(MAX_LINK_MESSAGE_BYTES - 200),
+				isError: false,
+			});
+			for (let count = 0; count < 15; count++) socket!.send(result);
+			expect(socket!.getBufferedAmount()).toBeGreaterThan(16 * 1024 * 1024);
+			return socket!;
+		}
+
+		/** Bun's client socket, which can stop reading from the network. */
+		type Readable = WebSocket & { pause(): boolean; resume(): boolean; terminate(): void };
+
+		// Bun drops control frames, pings included, while the queue is over its limit.
+		const backlogged = { pingEveryMs: 200, pongTimeoutMs: 600 };
+
+		it(
+			"keeps a client that stopped reading under a flood once it reads again and drains",
+			async () => {
+				let { auth, channel } = await linkAuth();
+				let server = linkServer(auth, 2_000, undefined, 2_000, backlogged);
+				cleanups.push(server.stop);
+				let raw = await rawLink(server.url);
+				let client = raw.socket as Readable;
+				cleanups.push(() => client.close());
+				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				await raw.next("attached");
+				client.pause();
+				let socket = flood(server);
+				await Bun.sleep(backlogged.pingEveryMs * 2.4);
+				client.resume();
+				await until(() => socket.getBufferedAmount() === 0, 3_000);
+				expect(socket.getBufferedAmount()).toBe(0);
+				await Bun.sleep(backlogged.pongTimeoutMs * 3);
+				expect(client.readyState).toBe(WebSocket.OPEN);
+				expect(server.attachments.attached(channel.id)).toBe(true);
+				expect(server.links).toHaveLength(1);
+			},
+			10_000,
+		);
+
+		it(
+			"closes a client that stops reading under a flood and never drains within about the timeout",
+			async () => {
+				let { auth, channel } = await linkAuth();
+				let server = linkServer(auth, 2_000, undefined, 2_000, backlogged);
+				cleanups.push(server.stop);
+				let raw = await rawLink(server.url);
+				let client = raw.socket as Readable;
+				cleanups.push(() => client.terminate());
+				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				await raw.next("attached");
+				client.pause();
+				let quiet = Date.now();
+				flood(server);
+				await until(() => !server.attachments.attached(channel.id), 3_000);
+				let elapsed = Date.now() - quiet;
+				expect(server.attachments.attached(channel.id)).toBe(false);
+				expect(server.links).toEqual([]);
+				expect(elapsed).toBeGreaterThan(backlogged.pongTimeoutMs - 100);
+				expect(elapsed).toBeLessThan(backlogged.pongTimeoutMs + 500);
+			},
+			10_000,
+		);
+
+		it(
+			"keeps a live client through an upload that outlasts several pings but not the timeout",
+			async () => {
+				let slow = { pingEveryMs: 100, pongTimeoutMs: 1_500 };
+				let { auth, channel } = await linkAuth();
+				let server = linkServer(auth, 2_000, undefined, 2_000, slow);
+				cleanups.push(server.stop);
+				let uplink = await slowUplink(server.url, 4_096, 10);
+				cleanups.push(uplink.stop);
+				let raw = await rawLink(uplink.url);
+				cleanups.push(() => raw.socket.close());
+				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				await raw.next("attached");
+				// One unfragmented frame: the client's pongs queue behind it until it is through.
+				let frame = JSON.stringify({
+					type: "part",
+					session: "session",
+					turn: "turn",
+					part: { type: "text-delta", id: "text", delta: "x".repeat(256 * 1024) },
+				});
+				let before = uplink.uploaded;
+				let started = Date.now();
+				raw.send(frame);
+				await until(() => uplink.uploaded - before >= frame.length, slow.pongTimeoutMs);
+				let took = Date.now() - started;
+				expect(uplink.uploaded - before).toBeGreaterThanOrEqual(frame.length);
+				expect(took).toBeGreaterThan(slow.pingEveryMs * 3);
+				expect(took).toBeLessThan(slow.pongTimeoutMs);
+				await Bun.sleep(slow.pongTimeoutMs);
+				expect(raw.socket.readyState).toBe(WebSocket.OPEN);
+				expect(server.attachments.attached(channel.id)).toBe(true);
+			},
+			10_000,
+		);
 	});
 });
 

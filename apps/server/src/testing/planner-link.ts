@@ -1,3 +1,5 @@
+import { createConnection, createServer } from "node:net";
+
 import { connectPlannerLink, linkSocket, plannerLinkUrl } from "@chopin/planner-link/client";
 
 import { AdmissionDenied } from "../auth/admission";
@@ -12,6 +14,8 @@ import type {
 	PlannerLinkHandlers,
 	TurnContext,
 } from "@chopin/planner-link/client";
+import type { AddressInfo, Socket } from "node:net";
+import type { ServerWebSocket } from "bun";
 import type { Repository } from "../github/client";
 import type { AttachmentAuth } from "../harness/remote/attachments";
 import type { PlannerLinkAuth, PlannerLinkSocketData } from "../harness/remote/endpoint";
@@ -149,6 +153,7 @@ export function linkServer(
 	liveness?: { pingEveryMs: number; pongTimeoutMs: number },
 ) {
 	let links: PlannerLink[] = [];
+	let sockets = new Set<ServerWebSocket<PlannerLinkSocketData>>();
 	let attachments = new PlannerAttachments(auth, graceMs);
 	let server = Bun.serve<PlannerLinkSocketData>({
 		hostname: "127.0.0.1",
@@ -162,6 +167,7 @@ export function linkServer(
 		},
 		websocket: {
 			open(ws) {
+				sockets.add(ws);
 				openPlannerLinkSocket(ws, auth, {
 					attachments,
 					timeoutMs,
@@ -183,6 +189,7 @@ export function linkServer(
 				ws.data.alive?.heard();
 			},
 			close(ws) {
+				sockets.delete(ws);
 				ws.data.alive?.stop();
 				ws.data.link?.disconnected();
 			},
@@ -193,6 +200,10 @@ export function linkServer(
 		attachments,
 		get links() {
 			return links;
+		},
+		/** The open link sockets as the server holds them, to write past the link itself. */
+		get sockets() {
+			return [...sockets];
 		},
 		stop: () => {
 			attachments.close();
@@ -341,6 +352,50 @@ export async function silentLink(url: string, token = MEMBER_TOKEN) {
 		},
 		closed: closed.promise,
 		end: () => socket.end(),
+	};
+}
+
+/**
+ * A TCP proxy to `url` that forwards what a client uploads at only `bytes` every
+ * `everyMs`, and what the server sends at full speed, as a client on a slow uplink.
+ * `uploaded` counts the client bytes the server has been given.
+ */
+export async function slowUplink(url: string, bytes: number, everyMs: number) {
+	let target = new URL(url);
+	let sockets: Socket[] = [];
+	let timers: ReturnType<typeof setInterval>[] = [];
+	let uploaded = 0;
+	let proxy = createServer(client => {
+		let upstream = createConnection(Number(target.port), target.hostname);
+		sockets.push(client, upstream);
+		let queued: Buffer[] = [];
+		client.on("data", (chunk: Buffer) => queued.push(chunk));
+		upstream.on("data", chunk => client.write(chunk));
+		for (let [from, to] of [[client, upstream], [upstream, client]] as const) {
+			from.on("error", () => {});
+			from.on("close", () => to.destroy());
+		}
+		timers.push(setInterval(() => {
+			let head = queued[0];
+			if (!head) return;
+			let chunk = head.subarray(0, bytes);
+			upstream.write(chunk);
+			uploaded += chunk.length;
+			if (head.length > bytes) queued[0] = head.subarray(bytes);
+			else queued.shift();
+		}, everyMs));
+	});
+	await new Promise<void>(resolve => proxy.listen(0, "127.0.0.1", resolve));
+	return {
+		url: `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`,
+		get uploaded() {
+			return uploaded;
+		},
+		stop: () => {
+			for (let timer of timers) clearInterval(timer);
+			for (let socket of sockets) socket.destroy();
+			return new Promise<void>(resolve => proxy.close(() => resolve()));
+		},
 	};
 }
 
