@@ -377,10 +377,13 @@ test("Build without a running local agent says how to start one", async ({ seed,
 	await seed("# Offline build\n\nNo local agent is connected.\n", { graph: preparedGraph() });
 	let page = await enter(person());
 	await page.getByRole("button", { name: "Build plan", exact: true }).click();
-	let stopped = page.getByRole("button", { name: /^Build stopped/ });
-	await expect(stopped).toHaveAccessibleDescription("Start your local agent, then retry");
+	let capsule = page.getByRole("button", { name: /^Start your local agent/ });
+	await expect(capsule).toHaveAccessibleDescription(
+		"Your local agent isn’t connected. Open Build for the command that starts it.",
+	);
+	await expect(page.getByRole("button", { name: /^Build stopped/ })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
-	await stopped.click();
+	await capsule.click();
 	let view = buildView(page);
 	let note = view.getByText(
 		"Your local agent isn’t connected. Run this in your project folder, then press Retry again.",

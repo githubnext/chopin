@@ -530,6 +530,8 @@ export type BuildLook =
 	| { kind: "tasks"; tip: string }
 	| { kind: "building"; done: number; total: number; tip?: string }
 	| { kind: "stopped"; tip: string; retry: boolean }
+	/** The last press found no local agent, so nothing ran; Build shows how to start one. */
+	| { kind: "agent"; tip: string; retry: boolean }
 	| { kind: "built"; pullRequests: number; tip: string }
 	/** `blocked` is why Build is inert, like Build plan's reason. */
 	| { kind: "stale"; changes: number; live: boolean; tip: string; build: boolean; blocked?: string }
@@ -695,12 +697,17 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 		return { kind: "tasks", tip: "Continues once the open decisions are answered" };
 	}
 	let retry = context.canEdit && context.connected;
+	if (context.state.stage === "failed" && context.state.agent) {
+		return {
+			kind: "agent",
+			tip: "Your local agent isn’t connected. Open Build for the command that starts it.",
+			retry,
+		};
+	}
 	if (context.state.stage === "failed") {
 		return {
 			kind: "stopped",
-			tip: context.state.agent
-				? "Start your local agent, then retry"
-				: context.state.message ?? "The build stopped before it started",
+			tip: context.state.message ?? "The build stopped before it started",
 			retry,
 		};
 	}
@@ -725,6 +732,8 @@ export function buildLabel(look: BuildLook): string {
 			return `Building · ${look.done} of ${look.total}`;
 		case "stopped":
 			return "Build stopped";
+		case "agent":
+			return "Start your local agent";
 		case "built":
 			return "Built";
 		case "stale":

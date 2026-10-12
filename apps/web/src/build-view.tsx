@@ -199,6 +199,9 @@ export function BuildView(
 			detail = commits > 0
 				? `${plural(commits, "commit", "commits")} since first build`
 				: undefined;
+		} else if (look.kind === "agent") {
+			// The note below says how to start the agent.
+			detail = undefined;
 		} else if (
 			look.kind === "failed" && phase.kind === "live" && phase.sync.kind === "needs-attention"
 		) {

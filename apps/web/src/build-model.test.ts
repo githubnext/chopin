@@ -708,12 +708,17 @@ describe("build status", () => {
 		expect(buildLabel(failed)).toBe("Build stopped");
 		expect(look(snapshot({ build: build("failed") }), { canEdit: false }))
 			.toMatchObject({ retry: false });
+		// Nothing ran, so a press that found no local agent never reads as stopped.
 		let noAgent = look(snapshot(), { state: { stage: "failed", agent: true } });
 		expect(noAgent).toEqual({
-			kind: "stopped",
-			tip: "Start your local agent, then retry",
+			kind: "agent",
+			tip: "Your local agent isn’t connected. Open Build for the command that starts it.",
 			retry: true,
 		});
+		expect(buildLabel(noAgent)).toBe("Start your local agent");
+		expect(buildTabReady(snapshot(), noAgent)).toBe(true);
+		let refused = look(snapshot(), { state: { stage: "failed", message: "Answer first." } });
+		expect(refused).toMatchObject({ kind: "stopped", tip: "Answer first." });
 	});
 
 	it("counts changes to build since the last build, and waits for edits to settle when live", () => {

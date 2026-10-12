@@ -269,7 +269,7 @@ export function BuildGlyph({ look }: { look: BuildLook }) {
 		? look.live
 			? <ClockIcon aria-hidden="true" className="build-glyph-quiet" />
 			: <span className="build-glyph-dot" data-tone="warning" />
-		: look.kind === "stopped" || look.kind === "failed"
+		: look.kind === "stopped" || look.kind === "failed" || look.kind === "agent"
 		? <WarningIcon aria-hidden="true" className="build-glyph-warning" />
 		: undefined;
 	if (!inner) return null;
@@ -421,7 +421,7 @@ export function BuildPlanButton(
 	}
 	let label = buildLabel(look);
 	let blocked = look.kind === "stale" || look.kind === "failed" ? look.blocked : undefined;
-	let action = look.kind === "stopped" && look.retry && canEdit
+	let action = (look.kind === "stopped" || look.kind === "agent") && look.retry && canEdit
 		? { name: "Retry", run: build.press }
 		: look.kind === "failed" && look.retry && canEdit
 		? { name: "Retry", run: build.rebuild }
