@@ -149,11 +149,21 @@ export function unfinishedReason(
 		: "Your agent stopped before opening a pull request";
 }
 
-/** What an unfinished task is stuck on, and that an edit retries it. */
-export function attentionHint(snapshot: Snapshot | undefined): string | undefined {
+/**
+ * What an unfinished task is stuck on, and that an edit retries it. `brief` names only the
+ * task to retry, for the Build view, whose task row already says why.
+ */
+export function attentionHint(
+	snapshot: Snapshot | undefined,
+	brief = false,
+): string | undefined {
 	let tasks = snapshot?.live?.outstandingTasks ?? [];
 	if (!tasks.length) return;
 	let first = tasks.find(task => task.blocker) ?? tasks[0]!;
+	if (brief) {
+		let others = tasks.length > 1 ? ` and ${plural(tasks.length - 1, "other", "others")}` : "";
+		return `Edit the document to retry “${first.title}”${others}`;
+	}
 	let progress = snapshot?.live?.tasks.find(task => task.id === first.id)?.progress;
 	let reason = first.blocker
 		? `“${first.title}” is blocked: ${quote(first.blocker)}`

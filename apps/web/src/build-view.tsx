@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { BuildGlyph } from "./build-plan-button";
 import {
 	ago,
+	attentionHint,
 	blockerLabelled,
 	blockerText,
 	buildLabel,
@@ -193,6 +194,15 @@ export function BuildView(
 				: who && `started by ${who === "you" ? who : `@${who}`}`;
 		} else if (look.kind === "built") {
 			label = `Built · ${plural(look.pullRequests, "pull request", "pull requests")}`;
+			let commits = snapshot?.live?.commits.length ?? 0;
+			detail = commits > 0
+				? `${plural(commits, "commit", "commits")} since first build`
+				: undefined;
+		} else if (
+			look.kind === "failed" && phase.kind === "live" && phase.sync.kind === "needs-attention"
+		) {
+			// The blocked row below shows the blocker, so the headline only says what to do.
+			detail = attentionHint(snapshot, true) ?? look.tip;
 		} else {
 			detail = look.tip;
 		}

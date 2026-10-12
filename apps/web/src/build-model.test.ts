@@ -491,6 +491,19 @@ describe("living document sync", () => {
 		);
 	});
 
+	it("leaves the blocker to the task row in the Build view's brief hint", () => {
+		let stuck = live({
+			outstandingTasks: [
+				{ id: "a", title: "Store graphs", state: "blocked", blocker: "Which database?" },
+				{ id: "b", title: "Render graphs", state: "queued" },
+			],
+		});
+		expect(attentionHint(stuck, true))
+			.toBe("Edit the document to retry “Store graphs” and 1 other");
+		let unfinished = live({ outstandingTasks: [{ id: "a", title: "Ship", state: "queued" }] });
+		expect(attentionHint(unfinished, true)).toBe("Edit the document to retry “Ship”");
+	});
+
 	it("caps a long blocker in the tooltip at a word boundary", () => {
 		let blocker = `The repository has no app.${" Should I scaffold one?".repeat(10)}`;
 		let hint = attentionHint(live({
