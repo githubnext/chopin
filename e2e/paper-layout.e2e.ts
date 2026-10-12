@@ -125,16 +125,20 @@ test("the document and Chat dissolve under their top edges only once scrolled", 
 	await document.evaluate(element => element.classList.remove("edge-fade-probe"));
 
 	await document.evaluate(element => element.scrollTo({ top: 0 }));
-	expect(await edgeFade(document)).toEqual({
+	await expect.poll(async () => (await edgeFade(document)).opacity).toBe("0");
+	expect(await edgeFade(document)).toMatchObject({
 		height: "56px",
-		opacity: "0",
 		pointerEvents: "none",
 		position: "sticky",
 	});
 	await document.evaluate(element => element.scrollTo({ top: 240 }));
 	await expect.poll(async () => (await edgeFade(document)).opacity).toBe("1");
+	// The edge follows scroll state, not a scroll timeline, so motion still settles.
+	await page.waitForFunction(() =>
+		window.document.getAnimations().every(animation => animation.playState !== "running")
+	);
 
-	// Chat opens at its newest message, already scrolled under its top edge.
+	await chat.evaluate(element => element.scrollTo({ top: element.scrollHeight }));
 	await expect.poll(async () => (await edgeFade(chat)).opacity).toBe("1");
 	await chat.evaluate(element => element.scrollTo({ top: 0 }));
 	await expect.poll(async () => (await edgeFade(chat)).opacity).toBe("0");

@@ -911,9 +911,9 @@ body {
 /*
  * Scroll edge: content dissolves into the surface as it passes under the top chrome, instead of
  * being cut by the scroller's edge. A sticky first child of each pane's scroller, folded out of
- * flow by its negative margin. It fades in over the first few pixels of scroll, so nothing is
- * veiled at rest; without scroll-driven animations it stays hidden. Phones already scroll under
- * a translucent bar.
+ * flow by its negative margin. It fades in once content has scrolled under the edge, so nothing
+ * is veiled at rest; without scroll-state queries it stays hidden. Phones already scroll under a
+ * translucent bar.
  */
 .workspace-root {
 	--scroll-edge-surface: var(--color-page);
@@ -964,19 +964,26 @@ body {
 	);
 	opacity: 0;
 	pointer-events: none;
+	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-@supports (animation-timeline: scroll()) {
+/*
+ * A scroll-state query rather than a scroll-driven animation: a scroll timeline would keep an
+ * animation running forever, and settled-motion checks wait for every animation to finish.
+ */
+.workspace-root:not([data-workspace-phone])
+	:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll]) {
+	container-type: scroll-state;
+}
+
+/* The document scroller also measures its width for wide blocks. */
+.workspace-root:not([data-workspace-phone]) .plan [data-plan-scroll] {
+	container-type: inline-size scroll-state;
+}
+
+@container scroll-state(scrollable: top) {
 	.workspace-root:not([data-workspace-phone])
 		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
-		animation: scroll-edge-reveal linear both;
-		animation-timeline: scroll();
-		animation-range: 0 var(--scroll-edge-fade-size);
-	}
-}
-
-@keyframes scroll-edge-reveal {
-	to {
 		opacity: 1;
 	}
 }
