@@ -79,6 +79,10 @@ const REFUSALS: Record<string, Record<string, { retry?: true; advice: string }>>
 		},
 	},
 	complete_task: {
+		"already-complete": {
+			advice:
+				"The task is already complete. Nothing more to report for it; move on to the next task.",
+		},
 		"pull-request": {
 			retry: true,
 			advice:
