@@ -8,13 +8,19 @@ import { createOutput } from "./output";
 
 type Tool = (args: Record<string, unknown>) => unknown | Promise<unknown>;
 
-/** A fake Chopin connector endpoint; a tool that throws answers as an MCP tool error. */
-function chopin(tools: Record<string, Tool>, port = 0) {
+/**
+ * A fake Chopin connector endpoint; a tool that throws answers as an MCP tool error. With `token`,
+ * any other bearer is refused as a restarted server refuses a connection it forgot.
+ */
+function chopin(tools: Record<string, Tool>, port = 0, token?: string) {
 	let calls: string[] = [];
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port,
 		async fetch(request) {
+			if (token && request.headers.get("authorization") !== `Bearer ${token}`) {
+				return Response.json({ error: "connection-unavailable" }, { status: 409 });
+			}
 			let mcp = new Server({ name: "fake-chopin", version: "1" }, { capabilities: { tools: {} } });
 			mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
 			mcp.setRequestHandler(CallToolRequestSchema, async request => {
@@ -217,4 +223,39 @@ test("retries back off, are announced only at first, and start over after a minu
 	expect(lines.filter(line => line.includes("Reconnecting"))).toHaveLength(9);
 	expect(lines.filter(line => line.includes("Still reconnecting"))).toHaveLength(1);
 	expect(lines.filter(line => line.includes("Reconnected"))).toHaveLength(3);
+});
+
+test("a run's reports reach a restarted server through a fresh connection", async () => {
+	let first = chopin({
+		wait_for_work: () => ({ id: "work-1", kind: "experiment" }),
+		claim_experiment: () => ({}),
+	});
+	let port = first.server.port;
+	let abort = new AbortController();
+	let connects = 0;
+	let second: ReturnType<typeof chopin> | undefined;
+	let attempts: string[] = [];
+	await serveWork({
+		// Each connection registers anew and gets its own token, as after a server restart.
+		connect: () => remote(first.url, `token-${++connects}`),
+		signal: abort.signal,
+		output: terminal().output,
+		async run(api) {
+			await first.server.stop(true);
+			second = chopin({ renew_experiment: () => ({ accepted: true }) }, port, "token-2");
+			// The first renewal still goes to the connection the server forgot.
+			for (let attempt = 0; attempt < 2; attempt++) {
+				try {
+					await api.call("renew_experiment", { id: "work-1" });
+					attempts.push("ok");
+				} catch {
+					attempts.push("failed");
+				}
+			}
+			abort.abort();
+		},
+	});
+	expect(attempts).toEqual(["failed", "ok"]);
+	expect(connects).toBe(2);
+	expect(second!.calls).toEqual(["renew_experiment", "disconnect_workspace"]);
 });

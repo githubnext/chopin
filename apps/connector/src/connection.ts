@@ -5,6 +5,8 @@ import { backoff, classifyConnectorError, delay, errorCode, HEALTHY_MS } from ".
 import type { Classify, ErrorClass } from "./reconnect";
 
 type Api = Awaited<ReturnType<typeof remote>>;
+/** The calls a run makes; they go to whichever connection is current. */
+export type Link = Pick<Api, "call">;
 export type WorkKind = "experiment" | "implementation";
 
 /** Retries announced one by one; after these the connector stays quiet until it reconnects. */
@@ -49,7 +51,7 @@ function cause(error: unknown) {
  */
 export async function serveWork(options: {
 	connect: () => Promise<Api>;
-	run: (api: Api, kind: WorkKind, claim: unknown) => Promise<void>;
+	run: (api: Link, kind: WorkKind, claim: unknown) => Promise<void>;
 	signal: AbortSignal;
 	output: Output;
 	classify?: Classify;
@@ -67,18 +69,44 @@ export async function serveWork(options: {
 	let connectedAt: number | undefined;
 	/** Whether any connection has been up, so a failure is a drop rather than a failed start. */
 	let connected = false;
+	let current: Api | undefined;
+	let connecting: Promise<Api> | undefined;
+	let drop = (api: Api) => {
+		if (current === api) current = undefined;
+		void api.close().catch(() => {});
+	};
+	// A call that fails transiently drops its connection, so a run's next report connects anew,
+	// as the token of a connection the server forgot is refused for good.
+	let link: Link = {
+		async call(name, args, callSignal) {
+			let api = current ?? await (connecting ??= options.connect().then(value => current = value)
+				.finally(() => connecting = undefined));
+			try {
+				return await api.call(name, args, callSignal);
+			} catch (error) {
+				if (classify(error) === "retry") drop(api);
+				throw error;
+			}
+		},
+	};
 	while (!signal.aborted) {
 		let api: Api | undefined;
 		try {
-			api = await options.connect();
+			api = current = await options.connect();
 			if (failures) output.reconnected();
 			failures = 0;
 			connected = true;
 			connectedAt = now();
-			await serve(api, options);
+			await serve(link, { ...options, run: (kind, claim) => options.run(link, kind, claim) });
+			// Leaving promptly matters more than being heard: a silent connection also expires.
+			let last = current;
+			if (last) {
+				await last.call("disconnect_workspace", {}, AbortSignal.timeout(5000)).catch(() => {});
+				drop(last);
+			}
 			break;
 		} catch (error) {
-			await api?.close().catch(() => {});
+			if (api) drop(api);
 			if (signal.aborted) return;
 			let kind = classify(error);
 			if (kind !== "retry") throw stopped(kind, error);
@@ -97,11 +125,11 @@ export async function serveWork(options: {
 	}
 }
 
-/** One connection's long poll for work; it returns only when `signal` aborts. */
+/** The long poll for work; it returns only when `signal` aborts. */
 async function serve(
-	api: Api,
+	api: Link,
 	options: {
-		run: (api: Api, kind: WorkKind, claim: unknown) => Promise<void>;
+		run: (kind: WorkKind, claim: unknown) => Promise<void>;
 		signal: AbortSignal;
 	},
 ) {
@@ -126,12 +154,9 @@ async function serve(
 				}
 				throw error;
 			}
-			await options.run(api, offered.kind, claim);
+			await options.run(offered.kind, claim);
 		}
 	} catch (error) {
 		if (!signal.aborted) throw error;
 	}
-	// Leaving promptly matters more than being heard: the server also expires a silent connection.
-	await api.call("disconnect_workspace", {}, AbortSignal.timeout(5000)).catch(() => {});
-	await api.close().catch(() => {});
 }
