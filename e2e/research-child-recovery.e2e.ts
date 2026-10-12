@@ -319,21 +319,22 @@ test(
 			let paragraph = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
 			let prose = paragraph.getBoundingClientRect();
 			let draft = element.getBoundingClientRect();
+			// A caret at the start of a passage puts the draft before it, otherwise after.
+			let follows = paragraph.nextElementSibling?.contains(element) === true;
 			return {
 				position: getComputedStyle(element).position,
 				proseWidth: prose.width,
 				width: draft.width,
 				left: draft.left,
 				proseLeft: prose.left,
-				top: draft.top,
-				proseBottom: prose.bottom,
+				clear: follows ? draft.top - prose.bottom : prose.top - draft.bottom,
 			};
 		});
 		expect(layout.position).toBe("static");
 		expect(layout.proseWidth).toBeCloseTo(650, 0);
 		expect(layout.width).toBeCloseTo(layout.proseWidth, 0);
 		expect(layout.left).toBeCloseTo(layout.proseLeft, 0);
-		expect(layout.top).toBeGreaterThanOrEqual(layout.proseBottom);
+		expect(layout.clear).toBeGreaterThanOrEqual(0);
 		await opened.screenshot({ path: testInfo.outputPath("research-draft-layout.png") });
 		let before = await composer.boundingBox();
 		let travelled = await editor.evaluate(element => {

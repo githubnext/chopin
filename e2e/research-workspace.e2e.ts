@@ -362,6 +362,9 @@ test("the research draft takes its line in document flow without overlapping any
 	let opening = page.getByText("Opening paragraph.", { exact: true });
 	let box = (await opening.boundingBox())!;
 	await opening.click({ position: { x: box.width - 1, y: box.height / 2 } });
+	// Enter straight after a click can reach Lexical before the click's selection does.
+	await expect.poll(() => page.evaluate(() => getSelection()?.anchorNode?.textContent))
+		.toBe("Opening paragraph.");
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
 	await page.keyboard.press("Enter");
