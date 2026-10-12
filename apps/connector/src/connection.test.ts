@@ -98,7 +98,10 @@ test("revocation, an upgrade and lost access stop at once with a message for the
 	let refusals: Array<[Tool, string]> = [
 		[() => {
 			throw new Error("machine-revoked: revoked");
-		}, "Chopin no longer accepts this machine's connection. Connect again to pair it."],
+		}, "This machine is no longer paired with Chopin. Run `chopin pair`, then connect again."],
+		[() => {
+			throw new Error("machine-reauthorize: rejected");
+		}, "GitHub no longer accepts this machine's authorization. Run `chopin pair` to authorize it"],
 		[() => {
 			throw new Error("connector-update-required: protocol 1 is too old");
 		}, "This Chopin server needs a newer connector. Update it, then connect again."],
@@ -136,7 +139,7 @@ test("a refused HTTP call for a revoked machine stops without retrying", async (
 		output,
 		sleep: () => Promise.reject(new Error("retried")),
 		run: async () => {},
-	})).rejects.toThrow("Connect again to pair it.");
+	})).rejects.toThrow("Run `chopin pair`, then connect again.");
 });
 
 test("Ctrl-C while backing off exits at once", async () => {

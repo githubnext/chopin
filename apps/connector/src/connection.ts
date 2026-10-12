@@ -19,8 +19,10 @@ export class ConnectorStopped extends Error {
 
 function stopped(reason: Exclude<ErrorClass, "retry">, error: unknown) {
 	let code = errorCode(error);
-	let message = reason === "revoked"
-		? "Chopin no longer accepts this machine's connection. Connect again to pair it."
+	let message = code === "machine-reauthorize"
+		? "GitHub no longer accepts this machine's authorization. Run `chopin pair` to authorize it again."
+		: reason === "revoked"
+		? "This machine is no longer paired with Chopin. Run `chopin pair`, then connect again."
 		: reason === "update-required"
 		? "This Chopin server needs a newer connector. Update it, then connect again."
 		: code === "repository-forbidden"
