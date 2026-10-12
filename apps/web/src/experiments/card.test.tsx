@@ -37,6 +37,7 @@ function render(store: ExperimentStore, userId = "ana", locked = false) {
 		canEdit: true,
 		locked,
 		onRemove() {},
+		onOpen() {},
 	}));
 }
 
@@ -79,10 +80,26 @@ test("settled work offers Retry", () => {
 	}
 });
 
-test("a build lock preserves shared result selections while blocking document mutations", () => {
+test("a completed investigation is a compact card that opens its child document", () => {
 	let { store, item } = setup("completed");
 	item.result = performance;
 	item.views = Object.fromEntries(performance.views.map(view => [view.key, initialState(view)]));
+	item.child = {
+		id: "child",
+		title: "Startup comparison",
+		slug: "startup-comparison",
+		summary: "Caching reduced median startup time.",
+	};
+	let markup = render(store);
+	expect(markup).toContain("Startup comparison");
+	expect(markup).toContain("Caching reduced median startup time.");
+	expect(markup).toContain("1 view");
+	expect(markup).toContain('data-investigation="investigation"');
+	expect(markup).toContain('aria-label="Open Startup comparison"');
+	expect(markup).not.toContain("Compare startup approaches");
+	expect(markup).not.toContain("<select");
+	expect(markup).not.toContain("Remove investigation");
+	expect(removableInvestigation(store, "investigation")).toBe(false);
 	item.decisions = [{
 		id: crypto.randomUUID(),
 		view: performance.views[0]!.key,
@@ -93,17 +110,11 @@ test("a build lock preserves shared result selections while blocking document mu
 		userId: "leo",
 		at: 1,
 	}];
-	let markup = render(store, "ana", false);
-	expect(markup).not.toContain("Remove investigation");
-	expect(removableInvestigation(store, "investigation")).toBe(false);
+	// Decisions recorded in the child stay reachable from the card that links it.
+	markup = render(store);
 	expect(markup).toContain("Use cached startup");
 	expect(markup).toContain("Insert decision evidence in document");
-	markup = render(store, "ana", true);
-	expect(markup).not.toContain("Insert decision evidence in document");
-	expect(markup.match(/<select[^>]*aria-label="Filter Workload"[^>]*>/)?.[0])
-		.not.toContain("disabled");
-	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Record decision<\/button>/);
-	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Insert view in document<\/button>/);
+	expect(render(store, "ana", true)).not.toContain("Insert decision evidence in document");
 });
 
 function investigation(state: PublishedInvestigation["state"]): PublishedInvestigation {

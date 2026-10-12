@@ -18,7 +18,8 @@ stopped card's **Retry** reuses the same investigation id.
 3. For performance comparisons, check correctness and measure under comparable
    conditions. Record units, samples, warm-up and aggregation. Distinguish observed,
    derived, simulated and qualitative data.
-4. Return a short report, typed datasets, supported native view mappings and useful
+4. Return a short report, led by a `#` heading that names the finding (it becomes
+   the title of the published child document), typed datasets, supported native view mappings and useful
    bounded text evidence. All required columns must be present in every row;
    nullable values are explicit and are not zero. Preserve source and capture
    provenance. Never include service credentials or indiscriminate transcripts.

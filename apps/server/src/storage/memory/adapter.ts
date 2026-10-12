@@ -132,6 +132,17 @@ export class MemoryStorage implements StorageAdapter {
 		exists: id => this.#channels.has(id),
 		active: id => !this.#channels.get(id)?.archivedAt,
 		fence: lease => this.#assertLease(lease),
+		channel: id => this.#channels.get(id),
+		createChannel: input =>
+			this.#createChannel({
+				...input,
+				title: availableChannelTitle(
+					input.title,
+					[...this.#channels.values()]
+						.filter(channel => channel.repositoryId === input.repositoryId)
+						.map(channel => channel.title),
+				),
+			}),
 	});
 
 	#users = new Map<string, UserRecord>();

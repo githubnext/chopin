@@ -72,6 +72,7 @@ function Reference(
 						})
 					)}
 			/>
+			{!decision && store.actions?.(experiment, viewKey)}
 			{canEdit && connected && (
 				<button
 					className="btn btn-sm btn-ghost"

@@ -77,6 +77,12 @@
 	background: transparent;
 }
 
+/* Host detail on a ready card stays interactive above the card-wide open control. */
+.plan-research-detail {
+	position: relative;
+	z-index: 2;
+}
+
 /* The preview sits above the whole-card open button; only its links take the pointer. */
 .plan-research-preview-toggle {
 	position: relative;
