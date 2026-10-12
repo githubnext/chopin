@@ -427,6 +427,41 @@
 		"sourceHash": "4f7d0232af2d03d5d8df9a226b48388c6a8011473ee53c2138568d77b8945bc3"
 	},
 	{
+		"file": "packages/icons/src/undo.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > UndoIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > RedoIcon > <LineIcon>",
+				1
+			]
+		],
+		"sourceHash": "d3011674899a2058c523a11a3846c8cb3dce65be5cf972c9cd75a2ef95ae088b"
+	},
+	{
+		"file": "packages/icons/src/text-style.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TextStyleIcon > <LineIcon>",
+				1
+			]
+		],
+		"sourceHash": "399f3d192bc61cae7904baf1d5d814ce711651efec54e691f73e85e72fe4cb5c"
+	},
+	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",
 		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
 		"cases": [
