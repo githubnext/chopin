@@ -699,7 +699,7 @@ export function NavigationShell(
 										`[data-project-sidebar] [data-document-id="${restored.channel.id}"] .project-sidebar-document-link`,
 									)
 										?? document.querySelector<HTMLElement>(
-											"header button[aria-label^='Actions for ']",
+											"[aria-label^='Document:'] button[aria-label^='Actions for ']",
 										))
 										?.focus({ preventScroll: true })
 								);

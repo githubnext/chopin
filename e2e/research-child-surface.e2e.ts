@@ -479,7 +479,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(surface).toBeFocused();
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 	let sheet = rootSheet(page, room);
-	await expect(sheet.locator("[data-workspace-document-swap]")).toHaveAttribute("inert", "");
+	await expect(sheet.locator('[data-document-view="plan"]')).toHaveAttribute("inert", "");
 	await expect(titleBar(page, room)).not.toHaveAttribute("inert", "");
 	// Under Zoom the child has no views, so the root's fold away while it is open.
 	await expect(sheet.locator("[data-document-toolbar]")).toHaveAttribute("data-folded", "true");
@@ -834,7 +834,7 @@ test("a child load failure preserves its mounted parent through back and retry",
 	let surface = page.locator(".anchored-child-card");
 	await expect(surface).toContainText("Couldn't open this document");
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
-	await expect(rootSheet(page, room).locator("[data-workspace-document-swap]"))
+	await expect(rootSheet(page, room).locator('[data-document-view="plan"]'))
 		.toHaveAttribute("inert", "");
 	await returnToRoot(page, room);
 	await expect(surface).toHaveCount(0);

@@ -47,7 +47,7 @@ function headerActions(page: import("@playwright/test").Page) {
 
 function documentRouteLayers(page: import("@playwright/test").Page, selector: string) {
 	return page.locator(selector).filter({
-		has: page.getByRole("banner", { includeHidden: true }),
+		has: page.getByRole("group", { includeHidden: true, name: /^Document: / }),
 	});
 }
 
@@ -994,6 +994,9 @@ test("archiving offers Undo and archived mode names itself", async ({ join, room
 		ana.getByRole("group", { name: /^Document: / }).getByRole("button", { name: /^Actions for / }),
 	)
 		.toBeFocused();
+	// Back past the sheet's expand control, Undo is the next stop.
+	await ana.keyboard.press("Shift+Tab");
+	await expect(ana.getByRole("button", { name: "Expand document" })).toBeFocused();
 	await ana.keyboard.press("Shift+Tab");
 	let undo = notice.getByRole("button", { name: "Undo", exact: true });
 	await expect(undo).toBeFocused();

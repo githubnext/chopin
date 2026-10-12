@@ -227,7 +227,7 @@ test("a lost connection is said in the document header and the composer", async 
 
 	await join("ana");
 	let chat = page.getByRole("complementary", { name: "Chat", exact: true });
-	let status = page.locator("[data-document-toolbar] .plan-status");
+	let status = page.locator("[data-document-title-bar] .plan-status");
 	let spoken = status.getByRole("status");
 	await expect(status).toHaveAttribute("data-level", "hidden");
 	// Opening a document is not news.

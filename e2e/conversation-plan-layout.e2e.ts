@@ -111,7 +111,8 @@ test("the right Chat edge grows right, keeps its left-side reopen control, and r
 	expect(openerBox.x + openerBox.width).toBeLessThanOrEqual(frame.x + frame.width);
 	expect(openerBox.x - frame.x).toBeLessThan(32);
 	let controlsBox = await box(page.getByRole("group", { name: "Document view" }));
-	expect(openerBox.x + openerBox.width).toBeLessThanOrEqual(controlsBox.x);
+	// The views sit in their own bar below the title bar that holds the opener.
+	expect(openerBox.y + openerBox.height).toBeLessThanOrEqual(controlsBox.y);
 	await opener.click();
 	await expect(chat).toBeVisible();
 	await expect.poll(async () => (await box(chat)).width).toBeCloseTo(rememberedWidth, 0);

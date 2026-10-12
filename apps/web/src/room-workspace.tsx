@@ -192,6 +192,7 @@ export function DocumentTitle(
 		archivedAt,
 		canManage,
 		editing,
+		icon,
 		label,
 		onAction,
 		onEditingChange,
@@ -199,7 +200,7 @@ export function DocumentTitle(
 		path,
 		project,
 		room,
-	}: TitleProps & { path?: TitlePath },
+	}: TitleProps & { icon?: boolean; path?: TitlePath },
 ) {
 	let group = useRef<HTMLDivElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
@@ -231,6 +232,7 @@ export function DocumentTitle(
 			ref={group}
 			role="group"
 		>
+			{icon && <DocumentIcon className="shrink-0" />}
 			{project && (
 				<>
 					<span className="document-project-prefix truncate text-xs font-medium">
@@ -329,11 +331,11 @@ export function Header(props: TitleProps & { members?: Session.Member[] }) {
 	let members = props.members;
 	return (
 		<header className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0">
-			<DocumentIcon className="shrink-0" />
 			<DocumentTitle
 				archivedAt={props.archivedAt}
 				canManage={props.canManage}
 				editing={props.editing}
+				icon
 				label={props.label}
 				onAction={props.onAction}
 				onEditingChange={props.onEditingChange}

@@ -770,7 +770,7 @@ body {
 	}
 }
 
-@container document-title-bar (max-width: 32rem) {
+@container document-title-bar (max-width: 26rem) {
 	.document-title-bar .room-member-face:nth-child(n+2),
 	.document-title-bar .room-member-overflow {
 		display: none;

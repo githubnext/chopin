@@ -81,7 +81,7 @@ test("an authenticated user adds a Project and creates its first document", asyn
 
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 	let activeRoute = page.locator("[data-content-swap-state]:not([inert])").filter({
-		has: page.getByRole("banner", { includeHidden: true }),
+		has: page.getByRole("group", { includeHidden: true, name: /^Document: / }),
 	});
 	await expect(activeRoute.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(activeRoute.getByRole("textbox", { name: "editable markdown" })).toBeVisible();
