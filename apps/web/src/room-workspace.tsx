@@ -599,8 +599,12 @@ export function RoomWorkspace(
 		};
 	});
 	let typing = useDocumentEditing(room);
+	// A child someone opened is what they came to read, so a blank root's routing to Decisions
+	// waits until it closes; an explicit choice of view still applies.
 	let view: WorkspaceDocumentView = showImplementation && profile.implementation
 		? "build"
+		: presentation.type === "parent-with-child" && decisionView.phase !== "complete"
+		? "plan"
 		: visibleDecisionView(decisionView, hasPlanContent, unanswered, typing);
 	let attention = useDecisionAttention(unanswered);
 	let latestCanEdit = useRef(canEdit);
