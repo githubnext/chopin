@@ -7,6 +7,7 @@ import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
+import { removeReplaced, update } from "./update";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { lockWorkspace, stateDirectory, workspace } from "./workspace";
 
@@ -177,6 +178,8 @@ const HELP = [
 	"Commands:",
 	"  connect [checkout] -- <agent> [ACP arguments]",
 	"      Pair a checkout with Chopin and run the work you start there with a local ACP agent.",
+	"  update [version]",
+	"      Replace this chopin with a release, by default the newest, after verifying it.",
 	"  version    Print the CLI version and the connector protocol it speaks.",
 	"  help       Show this help.",
 	"",
@@ -185,9 +188,13 @@ const HELP = [
 
 if (import.meta.main) {
 	let [mode, ...args] = process.argv.slice(2);
+	await removeReplaced();
 	try {
 		if (mode === "bridge") await bridge();
-		else if (mode === "connect") await connect(args);
+		else if (mode === "update") {
+			if (args.length > 1) throw new Error(`Usage: ${SELF} update [version]`);
+			await update(args[0]);
+		} else if (mode === "connect") await connect(args);
 		else if (mode === "version" || mode === "--version" || mode === "-v") {
 			console.log(`chopin ${VERSION} (connector protocol ${CONNECTOR_PROTOCOL})`);
 		} else if (mode === "help" || mode === "--help" || mode === "-h") console.log(HELP);

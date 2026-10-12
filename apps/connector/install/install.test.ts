@@ -12,74 +12,11 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assets, fakeChopin, fakeRelease, sha256 } from "../src/testing/release";
 
-/**
- * The release install scripts, run against a local server that serves a fake release in the
- * layout GitHub uses: `<base>/cli-v<version>/<asset>` and the API's list of releases.
- */
+/** The release install scripts, run against a local server that serves a fake release. */
 let scratch = await mkdtemp(join(tmpdir(), "chopin-install-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
-
-type Content = string | Uint8Array<ArrayBuffer>;
-/** An asset, or a redirect to another path on the same plain-HTTP server. */
-type Served = Content | { redirect: string };
-
-function sha256(content: Content) {
-	return new Bun.CryptoHasher("sha256").update(content).digest("hex");
-}
-
-function fakeRelease(releases: Record<string, Record<string, Served>>) {
-	let requests: string[] = [];
-	let server = Bun.serve({
-		hostname: "127.0.0.1",
-		port: 0,
-		fetch(request): Response {
-			let path = new URL(request.url).pathname;
-			requests.push(path);
-			if (path === "/api/releases") {
-				return Response.json(
-					// Newest first, as GitHub lists them, among tags that are not CLI releases.
-					[
-						"color-controls-slice-4",
-						...Object.keys(releases).toReversed().map(v => `cli-v${v}`),
-					].map(tag => ({
-						tag_name: tag,
-						draft: false,
-						prerelease: false,
-					})),
-				);
-			}
-			let [, tag, name] = path.split("/");
-			let content = releases[tag.replace(/^cli-v/, "")]?.[name];
-			if (content === undefined) return new Response("Not Found", { status: 404 });
-			if (typeof content === "object" && "redirect" in content) {
-				return Response.redirect(`${origin}${content.redirect}`, 302);
-			}
-			return new Response(content);
-		},
-	});
-	let origin = `http://127.0.0.1:${server.port}`;
-	return {
-		requests,
-		env: {
-			CHOPIN_RELEASE_BASE_URL: origin,
-			CHOPIN_RELEASES_API_URL: `${origin}/api/releases`,
-		},
-		[Symbol.dispose]: () => void server.stop(true),
-	};
-}
-
-function fakeChopin(version: string) {
-	return `#!/bin/sh\necho "chopin ${version} (connector protocol 1)"\n`;
-}
-
-/** A release's assets for one platform: the binary and a checksums.txt that lists it. */
-function assets(name: string, binary: Content, checksum = sha256(binary)) {
-	return {
-		[name]: binary,
-		"checksums.txt": `${"0".repeat(64)}  other-file\n${checksum}  ${name}\n`,
-	};
-}
 
 // install.sh is for Linux and macOS; its shims are shell scripts that Windows cannot run.
 describe.skipIf(process.platform === "win32")("install.sh", () => {

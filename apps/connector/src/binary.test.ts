@@ -2,29 +2,15 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { buildBinaries, hostTarget } from "../scripts/build-binaries";
+import { compiledChopin } from "./testing/binary";
 import { git } from "./workspace";
 
-/**
- * The compiled `chopin` binary, as people install it. CI passes the release build through
- * CHOPIN_BINARY; otherwise this compiles one for the host into a temporary directory.
- */
 let scratch = await mkdtemp(join(tmpdir(), "chopin-binary-"));
-let binary = process.env.CHOPIN_BINARY ? resolve(process.env.CHOPIN_BINARY) : undefined;
-if (!binary) {
-	try {
-		[binary] = await buildBinaries([hostTarget()], scratch);
-	} catch (error) {
-		console.warn(
-			"Skipping the compiled chopin binary tests: `bun build --compile` is unavailable here.\n"
-				+ (error instanceof Error ? error.message : String(error)),
-		);
-	}
-}
+let binary = await compiledChopin(scratch);
 let { version } = await Bun.file(join(import.meta.dir, "../package.json")).json() as {
 	version: string;
 };
