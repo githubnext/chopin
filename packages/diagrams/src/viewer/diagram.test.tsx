@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Diagram } from "../diagram";
+import { Diagram, DiagramDrawing } from "../diagram";
 import { DIAGRAM_FIXTURES } from "../fixtures";
 
 let graph = DIAGRAM_FIXTURES.find((fixture) => fixture.type === "architecture")?.spec;
@@ -63,5 +63,16 @@ test("a stepped diagram offers one restart control beside a labelled icon steppe
 	expect(buttons.length).toBeGreaterThanOrEqual(3);
 	for (let [, inner] of buttons) {
 		expect(inner).toMatch(/^<[^>]*aria-hidden="true"[^>]*data-nucleo-icon=""/);
+	}
+});
+
+test("a still copy is one named picture with no tab stops inside", () => {
+	let { title: _, ...untitled } = graph as Record<string, unknown>;
+	let markup = renderToStaticMarkup(<DiagramDrawing spec={untitled} availableWidth={390} />);
+	expect(markup).toContain('role="img"');
+	expect(markup).not.toContain("tabindex");
+	let [, labelledBy] = markup.match(/aria-labelledby="([^"]+)"/)!;
+	for (let id of labelledBy.split(" ")) {
+		expect(markup).toMatch(new RegExp(`id="${id}">[^<]+<`));
 	}
 });

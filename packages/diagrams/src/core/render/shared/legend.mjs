@@ -22,12 +22,14 @@ const EDGE_NAMES = {
 
 // Returns { svg, h } for a legend strip starting at (x, y) spanning width w.
 // A `size` other than the default 9 is a fitted chart's: no title, taller rows.
-export function legend({ nodeKinds = [], edgeKinds = [], x, y, w, extra = [], size = 9 }) {
+export function legend(
+	{ nodeKinds = [], edgeKinds = [], x, y, w, extra = [], size = 9, minimum = 2 },
+) {
 	const items = [];
 	for (const k of nodeKinds) items.push({ type: "node", k, label: NODE_NAMES[k] || k });
 	for (const k of edgeKinds) items.push({ type: "edge", k, label: EDGE_NAMES[k] || k });
 	items.push(...extra);
-	if (items.length < 2) return { svg: "", h: 0 };
+	if (items.length < minimum) return { svg: "", h: 0 };
 	const fitted = size !== 9;
 	const parts = [el("line", { class: "lg-rule", x1: x, y1: y, x2: x + w, y2: y })];
 	if (!fitted) parts.push(text({ class: "lg-title", x, y: y + 16 }, "LEGEND"));

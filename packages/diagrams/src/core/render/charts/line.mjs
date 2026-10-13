@@ -5,7 +5,7 @@
 import { el, text } from "../../svg.mjs";
 import { textWidth } from "../../text.mjs";
 import { fmt, niceDomain, ticks } from "./scale.mjs";
-import { FITTED_TEXT, thinLabels } from "./fit.mjs";
+import { axisLabels, FITTED_TEXT } from "./fit.mjs";
 import { legend } from "../shared/legend.mjs";
 
 export const family = "chart";
@@ -216,13 +216,18 @@ export function render(spec, { settings = {} } = {}) {
 		}
 	}
 	const every = Math.ceil(xs.length / 9);
-	const shown = fitted ? new Set(thinLabels(xs.map((_, i) => xAt(i)), fitted.xW)) : null;
+	const shown = fitted
+		? new Map(
+			axisLabels(xs.map((_, i) => xAt(i)), fitted.xW, -fitted.left, fitWidth - fitted.left)
+				.map(({ index, x }) => [index, x]),
+		)
+		: null;
 	xs.forEach((x, i) => {
 		if (shown ? shown.has(i) : v === "slope" || i % every === 0 || i === xs.length - 1) {
 			out.push(
 				text({
 					class: v === "slope" ? "ax-label" : "ax-text",
-					x: xAt(i),
+					x: shown ? shown.get(i) : xAt(i),
 					y: PH + 20,
 					"text-anchor": "middle",
 				}, x),
@@ -309,7 +314,7 @@ export function render(spec, { settings = {} } = {}) {
 	});
 	if (fitted) {
 		let h = PH + 32;
-		if (!fitted.ends && series.length > 1) {
+		if (!fitted.ends) {
 			const lg = legend({
 				x: -fitted.left,
 				y: h,
@@ -320,6 +325,7 @@ export function render(spec, { settings = {} } = {}) {
 					label: s.name,
 				})),
 				size: fitted.S,
+				minimum: 1,
 			});
 			out.push(lg.svg);
 			h += lg.h + 8;

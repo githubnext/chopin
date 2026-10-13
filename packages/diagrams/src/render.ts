@@ -266,8 +266,7 @@ export function renderDiagram(
 		let available = options.availableWidth;
 		if (!Number.isFinite(available) || !available || available <= 0) return ready;
 		if (info.family === "chart") {
-			// A near fit is only scaled, so a chart keeps its layout unless shrinking would cost.
-			if (ready.viewBox[2] * DIAGRAM_VIEWPORT.minimumZoom <= available) return ready;
+			if (ready.viewBox[2] <= available) return ready;
 			// Charts that know how redraw to the column with legible text; the rest are scaled.
 			let fitted = draw({ width: Math.floor(available) });
 			return fitted.ok && fitted.viewBox[2] <= available ? fitted : ready;

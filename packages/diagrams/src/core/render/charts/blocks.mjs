@@ -1,12 +1,143 @@
 // Waterfall (running total), treemap (squarified part-of-whole) and heatmap
 // (two categorical axes, sequential colour).
 import { el, text } from "../../svg.mjs";
-import { textWidth } from "../../text.mjs";
+import { textWidth, wrap } from "../../text.mjs";
 import { fmt, niceDomain, ticks } from "./scale.mjs";
+import { axisLabels, bands, clampCentre, FITTED_TEXT } from "./fit.mjs";
 
 export const family = "chart";
 
-export function renderWaterfall(spec) {
+const waterfallValue = (b, unit) =>
+	b.kind === "total" ? fmt(b.to, unit) : `${b.value > 0 ? "+" : ""}${fmt(b.value, unit)}`;
+
+const waterfallStep = (i) => Math.min(12, 1 + i);
+const waterfallClass = (b) => `wf-bar wf-${b.kind}${b.focal ? " is-focal" : ""}`;
+
+// Drawn to `width` with legible text: upright steps while every label fits its
+// band, otherwise one step per row, its label above; each row starts where the last ended.
+function renderWaterfallFitted(bars, dom, unit, width) {
+	const S = FITTED_TEXT;
+	const mono = { size: S, mono: true, tracking: 0.04 };
+	const out = [];
+	const catW = bars.map((b) => textWidth(b.label, { size: S }));
+	const valueW = bars.map((b) => textWidth(waterfallValue(b, unit), mono));
+	const tickValues = ticks(dom);
+	const left = Math.max(...tickValues.map((t) => textWidth(fmt(t, unit), mono))) + 8;
+	const { slot, group } = bands(bars.length, width - left);
+	const tip = (b) => `${b.label}: ${waterfallValue(b, unit)}`;
+	let h;
+	if (catW.every((w) => w <= slot - 4)) {
+		const plotTop = S + 8, plotH = 220;
+		const y = (v) => plotTop + plotH - ((v - dom.lo) / (dom.hi - dom.lo)) * plotH;
+		for (const t of tickValues) {
+			out.push(
+				el("line", {
+					class: t === 0 ? "ax-line" : "ax-grid",
+					x1: left - 4,
+					y1: y(t),
+					x2: width,
+					y2: y(t),
+				}),
+				text({ class: "ax-text", x: left - 8, y: y(t) + 4, "text-anchor": "end" }, fmt(t, unit)),
+			);
+		}
+		const labelled = valueW.every((w) => w <= slot - 2);
+		bars.forEach((b, i) => {
+			const x = left + slot * i + (slot - group) / 2;
+			const top = y(Math.max(b.from, b.to)), bot = y(Math.min(b.from, b.to));
+			out.push(el("rect", {
+				class: `${waterfallClass(b)} sc-grow-y`,
+				x,
+				y: top,
+				width: group,
+				height: Math.max(1, bot - top),
+				rx: 1.5,
+				"data-sc-step": waterfallStep(i),
+				style: `--step:${waterfallStep(i)}${b.kind === "down" ? ";transform-origin:50% 0" : ""}`,
+				"data-sc-tip": tip(b),
+			}));
+			if (i < bars.length - 1 && bars[i + 1].kind !== "total") {
+				out.push(el("line", {
+					class: "wf-link sc-fade",
+					x1: x + group,
+					y1: y(b.to),
+					x2: x + slot,
+					y2: y(b.to),
+					"data-sc-step": waterfallStep(i),
+					style: `--step:${waterfallStep(i)}`,
+				}));
+			}
+			if (labelled || b.focal || b.kind === "total") {
+				out.push(text({
+					class: `c-val sc-fade${b.focal ? " is-focal" : ""}`,
+					x: clampCentre(x + group / 2, valueW[i], left, width),
+					y: top - 6,
+					"text-anchor": "middle",
+					"data-sc-step": waterfallStep(i),
+					style: `--step:${waterfallStep(i)}`,
+				}, waterfallValue(b, unit)));
+			}
+		});
+		const centres = bars.map((_, i) => left + slot * i + slot / 2);
+		for (const { index, x } of axisLabels(centres, catW, 0, width)) {
+			out.push(
+				text(
+					{ class: "c-cat", x, y: plotTop + plotH + S + 6, "text-anchor": "middle" },
+					bars[index].label,
+				),
+			);
+		}
+		h = plotTop + plotH + S + 12;
+	} else {
+		const plotW = width - Math.max(...valueW) - 8;
+		const x = (v) => ((v - dom.lo) / (dom.hi - dom.lo)) * plotW;
+		const barH = 12;
+		let cy = 0;
+		const rows = bars.map((b) => {
+			const lines = wrap(b.label, width, { size: S });
+			const row = { lines, label: cy, bar: cy + lines.length * (S + 4) + 2 };
+			cy = row.bar + barH + 14;
+			return row;
+		});
+		const end = cy - 14;
+		if (dom.lo < 0) {
+			out.push(el("line", { class: "ax-line", x1: x(0), y1: 0, x2: x(0), y2: end }));
+		}
+		bars.forEach((b, i) => {
+			const row = rows[i];
+			row.lines.forEach((line, k) =>
+				out.push(text({ class: "c-cat", x: 0, y: row.label + S + k * (S + 4) }, line))
+			);
+			const x0 = x(Math.min(b.from, b.to)), x1 = x(Math.max(b.from, b.to));
+			out.push(el("rect", {
+				class: `${waterfallClass(b)} sc-grow-x`,
+				x: x0,
+				y: row.bar,
+				width: Math.max(1, x1 - x0),
+				height: barH,
+				rx: 1.5,
+				"data-sc-step": waterfallStep(i),
+				style: `--step:${waterfallStep(i)}${b.kind === "down" ? ";transform-origin:100% 50%" : ""}`,
+				"data-sc-tip": tip(b),
+			}));
+			out.push(text({
+				class: `c-val sc-fade${b.focal ? " is-focal" : ""}`,
+				x: x1 + 6,
+				y: row.bar + barH / 2 + S / 2 - 2,
+				"data-sc-step": waterfallStep(i),
+				style: `--step:${waterfallStep(i)}`,
+			}, waterfallValue(b, unit)));
+		});
+		h = end + 4;
+	}
+	return {
+		body: el("g", { class: "sc-fitted" }, out),
+		viewBox: [0, -4, width, h + 8],
+		steps: Math.min(12, bars.length),
+	};
+}
+
+export function renderWaterfall(spec, { settings = {} } = {}) {
 	const problems = [];
 	const steps = spec.steps.map((s) => (Array.isArray(s) ? { label: s[0], value: s[1] } : { ...s }));
 	let run = 0;
@@ -32,6 +163,9 @@ export function renderWaterfall(spec) {
 	const slot = Math.max(54, Math.min(110, 640 / bars.length));
 	const y = (v) => PH - ((v - dom.lo) / (dom.hi - dom.lo)) * PH;
 	const unit = spec.unit || "";
+	if (settings.width) {
+		return { ...renderWaterfallFitted(bars, dom, unit, settings.width), problems };
+	}
 	const out = [];
 	for (const t of ticks(dom)) {
 		out.push(

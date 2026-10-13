@@ -227,7 +227,7 @@
 	font-size: 9px;
 }
 /* A chart drawn to a narrow column: every label at one legible size. */
-.ch-diagram .sc-fitted :is(.ax-text, .ax-label, .c-cat, .c-val, .lg-text, .ln-label) {
+.ch-diagram .sc-fitted :is(.ax-text, .ax-label, .c-cat, .c-val, .lg-text, .ln-label, .sp-label) {
 	font-size: var(--diagram-sub-font-size);
 }
 .ch-diagram .sc-fitted .ax-label {

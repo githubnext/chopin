@@ -40,3 +40,17 @@ export function bands(count, length) {
 	let group = Math.max(1, Math.min(slot * 0.62, slot - 4));
 	return { slot, group };
 }
+
+/** Move a label centred at `x`, `width` wide, inward until it sits within [lo, hi]. */
+export function clampCentre(x, width, lo, hi) {
+	return Math.min(hi - width / 2, Math.max(lo + width / 2, x));
+}
+
+/**
+ * The labels to draw along an axis from `lo` to `hi`, and where: each is moved
+ * inside the axis first, then thinned, so the moved ones never collide.
+ */
+export function axisLabels(positions, widths, lo, hi) {
+	let placed = positions.map((x, i) => clampCentre(x, widths[i], lo, hi));
+	return thinLabels(placed, widths).map(index => ({ index, x: placed[index] }));
+}

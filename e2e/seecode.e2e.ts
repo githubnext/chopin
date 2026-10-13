@@ -240,8 +240,8 @@ test("a dense diagram on a phone opens full screen and closes by keyboard", asyn
 	let preview = content(page).getByRole("region", { name: "Diagram preview" });
 	let stage = preview.locator(".ch-diagram__stage");
 	await expect(stage.locator("[data-sc-node]")).toHaveCount(7);
-	// Fitted, the labels fall below legible size, so the drawing offers full screen.
-	expect((await stage.evaluate(legibility)).scale).toBeLessThan(0.75);
+	// Fitted, its smallest labels fall below 9px, so the drawing offers full screen.
+	expect((await stage.evaluate(legibility)).smallest).toBeLessThan(9);
 	let controls = preview.getByRole("group", { name: "Diagram controls", exact: true });
 	let button = (name: string) => controls.getByRole("button", { name, exact: true });
 	await expect(button("Fit to width")).toBeVisible();

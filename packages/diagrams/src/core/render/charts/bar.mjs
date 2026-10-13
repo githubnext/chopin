@@ -3,7 +3,7 @@
 import { el, text } from "../../svg.mjs";
 import { textWidth, wrap } from "../../text.mjs";
 import { fmt, niceDomain, ticks } from "./scale.mjs";
-import { bands, FITTED_TEXT, thinLabels } from "./fit.mjs";
+import { axisLabels, bands, clampCentre, FITTED_TEXT } from "./fit.mjs";
 import { legend } from "../shared/legend.mjs";
 
 export const family = "chart";
@@ -210,7 +210,7 @@ function renderFitted({ spec, cats, series, dom, multi, unit, barCls, tip, step 
 				if (!multi && labelled(s, i)) {
 					out.push(text({
 						class: `c-val sc-fade${s.focalIdx && s.focalIdx[i] ? " is-focal" : ""}`,
-						x: gx + group / 2,
+						x: clampCentre(gx + group / 2, valueW(v), left, width),
 						y: v >= 0 ? y0 - 6 : y1 + S + 2,
 						"text-anchor": "middle",
 						"data-sc-step": step(i),
@@ -220,17 +220,21 @@ function renderFitted({ spec, cats, series, dom, multi, unit, barCls, tip, step 
 			});
 		});
 		const centres = cats.map((_, i) => left + slot * i + slot / 2);
-		for (const i of thinLabels(centres, catW)) {
-			const x = Math.min(width - catW[i] / 2, Math.max(catW[i] / 2, centres[i]));
+		for (const { index, x } of axisLabels(centres, catW, 0, width)) {
 			out.push(
-				text({ class: "c-cat", x, y: plotTop + plotH + S + 6, "text-anchor": "middle" }, cats[i]),
+				text(
+					{ class: "c-cat", x, y: plotTop + plotH + S + 6, "text-anchor": "middle" },
+					cats[index],
+				),
 			);
 		}
 		h = plotTop + plotH + S + 12;
 	} else {
 		const valueRoom = multi ? 0 : Math.max(...series[0].values.map(valueW)) + 6;
-		const plotW = width - valueRoom - 2;
-		const x = (v) => ((v - dom.lo) / (dom.hi - dom.lo)) * plotW;
+		// Negative bars carry their value on the negative side, so they need room there too.
+		const negativeRoom = dom.lo < 0 ? valueRoom : 0;
+		const plotW = width - valueRoom - negativeRoom - 2;
+		const x = (v) => negativeRoom + ((v - dom.lo) / (dom.hi - dom.lo)) * plotW;
 		const barH = multi ? 8 : 12;
 		let cy = top;
 		const rows = cats.map((c, i) => {
@@ -241,8 +245,7 @@ function renderFitted({ spec, cats, series, dom, multi, unit, barCls, tip, step 
 		});
 		const end = cy - 12;
 		if (multi) {
-			const positions = tickValues.map(x);
-			const kept = thinLabels(positions, tickValues.map((t) => valueW(t)));
+			const kept = axisLabels(tickValues.map(x), tickValues.map((t) => valueW(t)), 0, width);
 			for (const t of tickValues) {
 				out.push(
 					el("line", {
@@ -254,15 +257,13 @@ function renderFitted({ spec, cats, series, dom, multi, unit, barCls, tip, step 
 					}),
 				);
 			}
-			for (const k of kept) {
-				const label = fmt(tickValues[k], unit);
-				const w = valueW(tickValues[k]);
+			for (const { index, x } of kept) {
 				out.push(text({
 					class: "ax-text",
-					x: Math.min(width - w / 2, Math.max(w / 2, positions[k])),
+					x,
 					y: end + S + 4,
 					"text-anchor": "middle",
-				}, label));
+				}, fmt(tickValues[index], unit)));
 			}
 		} else if (dom.lo < 0) {
 			out.push(el("line", { class: "ax-line", x1: x(0), y1: top, x2: x(0), y2: end }));
@@ -290,8 +291,9 @@ function renderFitted({ spec, cats, series, dom, multi, unit, barCls, tip, step 
 				if (!multi) {
 					out.push(text({
 						class: `c-val sc-fade${s.focalIdx && s.focalIdx[i] ? " is-focal" : ""}`,
-						x: x1 + 6,
+						x: v < 0 ? x0 - 6 : x1 + 6,
 						y: by + barH / 2 + S / 2 - 2,
+						"text-anchor": v < 0 ? "end" : "start",
 						"data-sc-step": step(i),
 						style: `--step:${step(i)}`,
 					}, fmt(v, unit)));

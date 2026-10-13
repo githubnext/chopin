@@ -95,6 +95,7 @@ function DiagramView({
 	onExpand,
 	onWidth,
 }: Omit<DiagramProps, "spec"> & { result: ReadyDiagram; onWidth: (width: number) => void }) {
+	let expandable = onExpand !== undefined;
 	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 	let [instance] = useState(() => ++diagramInstanceSequence);
 	let prefix = `chd-${idPrefix?.replace(/[^a-zA-Z0-9_-]/g, "") || "view"}-${id}-${instance}`;
@@ -111,6 +112,8 @@ function DiagramView({
 	let [playback, setPlayback] = useState(0);
 	let [overflowing, setOverflowing] = useState(false);
 	let [available, setAvailable] = useState(0);
+	// The drawing's smallest text at actual size; measured only where it can be expanded.
+	let [smallestText, setSmallestText] = useState(Infinity);
 	// Null follows the stage: fitted to its width when wider, otherwise actual size.
 	let [zoom, setZoom] = useState<number | null>(null);
 	let graph = result.graph;
@@ -171,11 +174,17 @@ function DiagramView({
 			onWidth(stage.clientWidth);
 		};
 		measure();
+		if (expandable) {
+			let sizes = [...svg.querySelectorAll("text")].map(text =>
+				parseFloat(getComputedStyle(text).fontSize)
+			);
+			setSmallestText(Math.min(Infinity, ...sizes.filter(Number.isFinite)));
+		}
 		let observer = new ResizeObserver(measure);
 		observer.observe(stage);
 		observer.observe(svg);
 		return () => observer.disconnect();
-	}, [body, playback, onWidth, zoom]);
+	}, [body, playback, onWidth, zoom, expandable]);
 
 	useEffect(() => {
 		let svg = svgRef.current;
@@ -328,7 +337,7 @@ function DiagramView({
 	let scale = zoom ?? fit;
 	let minimumZoom = Math.min(DIAGRAM_VIEWPORT.minimumZoom, fit);
 	let zoomable = width > available || zoom !== null;
-	let expandable = onExpand !== undefined && fit < DIAGRAM_VIEWPORT.legibleZoom;
+	let expanding = expandable && fit < 1 && smallestText * fit < DIAGRAM_VIEWPORT.legibleText;
 	let labelFor = (nodeId: string) => nodes.find((node) => node.id === nodeId)?.label ?? nodeId;
 	let status = maxStep > 0 && !isRunning && (mode.kind === "paused" || reduced)
 		? `Step ${current} of ${maxStep}`
@@ -463,7 +472,7 @@ function DiagramView({
 							>
 								<ActualSizeIcon />
 							</button>
-							{expandable && (
+							{expanding && (
 								<button
 									className="ch-diagram__control"
 									type="button"
@@ -565,7 +574,11 @@ export function DiagramDrawing(
 	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 	let result = useMemo(() => renderDiagram(spec, { availableWidth }), [spec, availableWidth]);
 	let prefix = `chd-${idPrefix?.replace(/[^a-zA-Z0-9_-]/g, "") || "drawing"}-${id}`;
-	let body = useMemo(() => result.ok ? namespaceSvgIds(result.body, prefix) : "", [result, prefix]);
+	// One picture: the renderer's focusable nodes would be dead tab stops inside it.
+	let body = useMemo(
+		() => result.ok ? namespaceSvgIds(result.body, prefix).replace(/\stabindex="[^"]*"/g, "") : "",
+		[result, prefix],
+	);
 	if (!result.ok) return null;
 	let [, , width, height] = result.viewBox;
 	return (
@@ -580,9 +593,11 @@ export function DiagramDrawing(
 				height={height}
 				style={{ "--sc-display-width": `${width}px` } as CSSProperties}
 				role="img"
-				aria-label={result.title}
+				aria-labelledby={`${prefix}-title ${prefix}-description`}
 				data-sc-type={result.type}
 			>
+				<title id={`${prefix}-title`}>{result.title}</title>
+				<desc id={`${prefix}-description`}>{result.description}</desc>
 				<DiagramBody body={body} />
 			</svg>
 		</div>

@@ -1,13 +1,109 @@
 // Scatter family: scatter (x,y), bubble (x,y,size) and beeswarm (one value
 // axis, points packed to avoid overlap, grouped by category).
 import { el, text } from "../../svg.mjs";
+import { textWidth, wrap } from "../../text.mjs";
 import { fmt, niceDomain, ticks } from "./scale.mjs";
+import { axisLabels, FITTED_TEXT } from "./fit.mjs";
 
 export const family = "chart";
 
 const PW = 520, PH = 320;
 
-export function render(spec) {
+// Drawn to `width` with legible text: the plot takes what the y labels leave,
+// x labels thin, and point labels sit on whichever side has room.
+function renderFitted({ spec, pts, dx, dy, unitX, unitY, radius, labelled, bubble }, width) {
+	const S = FITTED_TEXT;
+	const mono = { size: S, mono: true, tracking: 0.04 };
+	const axis = { ...mono, tracking: 0.08, upper: true };
+	const out = [];
+	const yTicks = ticks(dy).filter((t) => t >= dy.lo);
+	const xTicks = ticks(dx).filter((t) => t >= dx.lo);
+	const left = Math.max(...yTicks.map((t) => textWidth(fmt(t, unitY), mono))) + 8;
+	const right = 8;
+	// Bubbles keep inside the plot rather than spilling over its axes.
+	const inset = bubble ? Math.max(...pts.map(radius)) : 0;
+	const plotW = width - left - right;
+	const plotH = Math.min(PH, Math.max(200, plotW * 0.9));
+	let top = 0;
+	if (spec.yLabel) {
+		const lines = wrap(spec.yLabel, width, axis);
+		lines.forEach((line, i) =>
+			out.push(text({ class: "ax-label", x: -left, y: S + i * (S + 4) }, line))
+		);
+		top = lines.length * (S + 4) + 8;
+	}
+	top += S / 2;
+	const x = (val) => inset + ((val - dx.lo) / (dx.hi - dx.lo)) * (plotW - 2 * inset);
+	const y = (val) => top + plotH - inset - ((val - dy.lo) / (dy.hi - dy.lo)) * (plotH - 2 * inset);
+	for (const t of xTicks) {
+		out.push(el("line", { class: "ax-grid", x1: x(t), y1: top, x2: x(t), y2: top + plotH }));
+	}
+	const xLabels = xTicks.map((t) => fmt(t, unitX));
+	const placed = axisLabels(
+		xTicks.map(x),
+		xLabels.map((label) => textWidth(label, mono)),
+		-left,
+		width - left,
+	);
+	for (const { index, x: at } of placed) {
+		out.push(
+			text(
+				{ class: "ax-text", x: at, y: top + plotH + S + 6, "text-anchor": "middle" },
+				xLabels[index],
+			),
+		);
+	}
+	for (const t of yTicks) {
+		out.push(
+			el("line", { class: "ax-grid", x1: 0, y1: y(t), x2: plotW, y2: y(t) }),
+			text({ class: "ax-text", x: -8, y: y(t) + 4, "text-anchor": "end" }, fmt(t, unitY)),
+		);
+	}
+	out.push(el("line", { class: "ax-line", x1: 0, y1: top + plotH, x2: plotW, y2: top + plotH }));
+	let h = top + plotH + S + 12;
+	if (spec.xLabel) {
+		for (const line of wrap(spec.xLabel, width, axis)) {
+			h += S + 4;
+			out.push(
+				text({ class: "ax-label", x: plotW / 2, y: h, "text-anchor": "middle" }, line),
+			);
+		}
+		h += 4;
+	}
+	const order = [...pts].sort((a, b) => radius(b) - radius(a));
+	order.forEach((p, k) => {
+		const st = Math.min(12, 1 + Math.floor((k * 11) / Math.max(11, pts.length)));
+		out.push(el("circle", {
+			class: `sp-dot sc-pop${p.focal ? " is-focal" : ""}${bubble ? " is-bubble" : ""}`,
+			cx: x(p.x),
+			cy: y(p.y),
+			r: radius(p),
+			"data-sc-step": st,
+			style: `--step:${st}`,
+			"data-sc-tip": `${p.label ? `${p.label}: ` : ""}${fmt(p.x, unitX)}, ${fmt(p.y, unitY)}`,
+		}));
+	});
+	labelled.forEach((p) => {
+		const w = textWidth(p.label, { size: S });
+		const gap = radius(p) + 5;
+		const fitsRight = x(p.x) + gap + w <= plotW + right;
+		const fitsLeft = x(p.x) - gap - w >= -left;
+		const after = fitsRight || !fitsLeft;
+		out.push(
+			text({
+				class: `sp-label sc-fade${p.focal ? " is-focal-t" : ""}`,
+				x: after ? Math.min(x(p.x) + gap, plotW + right - w) : x(p.x) - gap,
+				y: y(p.y) + 4,
+				"text-anchor": after ? "start" : "end",
+				"data-sc-step": 12,
+				style: "--step:12",
+			}, p.label),
+		);
+	});
+	return { body: el("g", { class: "sc-fitted" }, out), viewBox: [-left, -4, width, h + 8] };
+}
+
+export function render(spec, { settings = {} } = {}) {
 	const problems = [];
 	const v = spec.variant || "scatter";
 	const pts = spec.points.map((
@@ -133,6 +229,16 @@ export function render(spec) {
 	const radius = (
 		p,
 	) => (v === "bubble" ? 4 + Math.sqrt((p.size || 0) / maxSize) * 26 : p.focal ? 5.5 : 4);
+	if (settings.width) {
+		return {
+			...renderFitted(
+				{ spec, pts, dx, dy, unitX, unitY, radius, labelled, bubble: v === "bubble" },
+				settings.width,
+			),
+			steps: 12,
+			problems,
+		};
+	}
 	const order = [...pts].sort((a, b) => radius(b) - radius(a));
 	order.forEach((p, k) => {
 		const st = Math.min(12, 1 + Math.floor((k * 11) / Math.max(11, pts.length)));
