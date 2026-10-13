@@ -25,6 +25,7 @@ import {
 	systemHost,
 	uninstallService,
 } from "./service";
+import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { lockWorkspace, stateDirectory, workspace } from "./workspace";
@@ -68,10 +69,33 @@ async function bridge() {
 }
 
 /** CHOPIN_URL, else the server `chopin service install` stored, else Chopin's own. */
+async function chosenServer(): Promise<{ origin: string; source: ServerSource }> {
+	if (process.env.CHOPIN_URL) {
+		return { origin: origin(process.env.CHOPIN_URL), source: "CHOPIN_URL" };
+	}
+	let stored = (await readConfig(stateDirectory())).server;
+	return stored
+		? { origin: origin(stored), source: "config" }
+		: { origin: DEFAULT_URL, source: "default" };
+}
+
 async function server() {
-	return origin(
-		process.env.CHOPIN_URL ?? (await readConfig(stateDirectory())).server ?? DEFAULT_URL,
-	);
+	return (await chosenServer()).origin;
+}
+
+/** `status [--json]`: this machine's chopin, pairing, connectors, service and log. */
+async function statusCommand(args: string[]) {
+	let parsed = parseArgs(args, { flags: ["json"] });
+	if (parsed.positional.length || parsed.rest) throw new Error(`Usage: ${SELF} status [--json]`);
+	let chosen = await chosenServer();
+	let report = await collectStatus({
+		directory: stateDirectory(),
+		server: chosen.origin,
+		source: chosen.source,
+		host: systemHost(),
+	});
+	if (parsed.flags.has("json")) console.log(JSON.stringify(report, null, 2));
+	else createOutput().say(...formatStatus(report));
 }
 
 /** Under Task Scheduler nothing collects output, so the Windows service appends it to its log. */
@@ -367,6 +391,9 @@ const HELP = [
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
+	"  status [--json]",
+	"      Show this chopin's version, the server, whether this machine is paired and Chopin",
+	"      still accepts it, the connectors running here, the service and the log path.",
 	"  service install [checkout] [--allow-downgrade] [-- <agent> [ACP arguments]]",
 	"      Run connect as this user's background service (systemd, launchd or Task Scheduler),",
 	"      so it starts again after a reboot. Takes connect's checkout and agent command, or",
@@ -407,6 +434,7 @@ if (import.meta.main) {
 			});
 		} else if (mode === "connect") await connect(args);
 		else if (mode === "service") await serviceCommand(args);
+		else if (mode === "status") await statusCommand(args);
 		else if (mode === "pair") await pairCommand(args);
 		else if (mode === "unpair") await unpairCommand(args);
 		else if (mode === "version" || mode === "--version" || mode === "-v") {
