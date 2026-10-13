@@ -167,6 +167,7 @@ test("next, previous and arrow keys cycle without moving the caret", async ({ jo
 	// The last card disables next; focus moves to previous rather than dropping to the page.
 	await expect(deck(page).getByRole("button", { name: "Previous decision" })).toBeFocused();
 	await page.keyboard.press("ArrowLeft");
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
 	await page.keyboard.press("ArrowLeft");
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
 	await expect(next).toBeFocused();
@@ -446,6 +447,8 @@ test("an interrupted move continues from its current frame", async ({ join, seed
 	for (let frame of frames!.filter(frame => frame.at < 1)) {
 		expect(frame.layer).toBeGreaterThan(100);
 	}
+	// At the end the no-fill animation releases its raised layer to the resting top slot.
+	expect(frames!.find(frame => frame.at === 1)!.layer).toBe(100);
 	expect(frames![0]!.opacity).toBeGreaterThan(0);
 	await expect.poll(() => order(page)).toEqual(fixture.ids);
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
