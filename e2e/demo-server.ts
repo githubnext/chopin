@@ -18,7 +18,7 @@ type DemoServer = {
 };
 
 export const test = base.extend<{ demo: DemoServer; room: string }>({
-	demo: async ({}, use) => {
+	demo: async ({ baseURL }, use) => {
 		let directory = await mkdtemp(join(tmpdir(), "chopin-demo-e2e-"));
 		let child: ReturnType<typeof spawn> | undefined;
 		let enabled = true;
@@ -98,7 +98,7 @@ export const test = base.extend<{ demo: DemoServer; room: string }>({
 			await start();
 			await use({
 				login: async page => {
-					await page.goto(ORIGIN);
+					await page.goto(baseURL!);
 					await page.getByRole("button", { name: /sign in|device|github/i }).first().click();
 					let instruction = page.getByText(/Enter one-time code:/);
 					await expect(instruction).toBeVisible();
