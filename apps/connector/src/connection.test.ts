@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { getEventListeners } from "node:events";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -14,10 +15,16 @@ type Tool = (args: Record<string, unknown>) => unknown | Promise<unknown>;
  */
 function chopin(tools: Record<string, Tool>, port = 0, token?: string) {
 	let calls: string[] = [];
+	/** The ids of requests the connector cancelled. */
+	let cancelled: unknown[] = [];
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port,
 		async fetch(request) {
+			let message = await request.clone().json().catch(() => undefined) as
+				| { method?: string; params?: { requestId?: unknown } }
+				| undefined;
+			if (message?.method === "notifications/cancelled") cancelled.push(message.params?.requestId);
 			if (token && request.headers.get("authorization") !== `Bearer ${token}`) {
 				return Response.json({ error: "connection-unavailable" }, { status: 409 });
 			}
@@ -42,7 +49,7 @@ function chopin(tools: Record<string, Tool>, port = 0, token?: string) {
 		},
 	});
 	servers.push(server);
-	return { server, calls, url: `http://127.0.0.1:${server.port}` };
+	return { server, calls, cancelled, url: `http://127.0.0.1:${server.port}` };
 }
 let servers: Array<ReturnType<typeof Bun.serve>> = [];
 afterEach(async () => {
@@ -221,6 +228,34 @@ test("Ctrl-C while a claim is withheld exits at once and gives the work back", a
 	expect(ran).toBe(0);
 	// Leaving interrupts whatever the server handed this connection meanwhile.
 	expect(fake.calls).toEqual(["wait_for_work", "claim_experiment", "disconnect_workspace"]);
+});
+
+test("hours of long polls on one signal leave no listeners on it, and Ctrl-C cancels only the last", async () => {
+	let polls = 0;
+	let holding = Promise.withResolvers<void>();
+	let fake = chopin({
+		wait_for_work: () => {
+			if (++polls <= 200) return {};
+			holding.resolve();
+			return new Promise(() => {});
+		},
+	});
+	let abort = new AbortController();
+	let serving = serveWork({
+		connect: signal => remote(fake.url, "token", signal),
+		signal: abort.signal,
+		output: terminal().output,
+		run: async () => {},
+	});
+	await holding.promise;
+	// Only the poll in flight listens; the 200 that were answered have let go.
+	expect(getEventListeners(abort.signal, "abort")).toHaveLength(1);
+	abort.abort();
+	await serving;
+	await Bun.sleep(100);
+	expect(getEventListeners(abort.signal, "abort")).toHaveLength(0);
+	// At most the poll in flight is cancelled; leaving may close the connection before it lands.
+	expect(fake.cancelled.length).toBeLessThanOrEqual(1);
 });
 
 test("a claim answered after Ctrl-C is given back, not run", async () => {
