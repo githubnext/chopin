@@ -21,6 +21,7 @@ import {
 	restartAfterUpdate,
 	restartService,
 	ServiceError,
+	type ServiceHost,
 	serviceStatus,
 	stablePath,
 	systemHost,
@@ -203,10 +204,17 @@ function environment(words: string[]) {
 	return env;
 }
 
-async function connect(args: string[]) {
-	// `--service` marks the connector the installed service runs, which runs what install copied.
+/**
+ * `connect`. `--service` marks the connector the installed service runs, which runs what install
+ * copied. `--install-service` installs the service once connected, then stops; `injected` stands
+ * in for this machine's service manager and chopin in tests.
+ */
+export async function connect(
+	args: string[],
+	injected: { host?: ServiceHost; executable?: string } = {},
+) {
 	let parsed = parseArgs(args, {
-		flags: ["service"],
+		flags: ["service", "install-service"],
 		options: ["planner-command"],
 		lists: ["planner", "env"],
 	});
@@ -216,13 +224,18 @@ async function connect(args: string[]) {
 	if (
 		service
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
-			|| parsed.options.has("planner-command"))
+			|| parsed.options.has("planner-command") || parsed.flags.has("install-service"))
 	) {
 		throw new Error(
 			`${SELF} connect --service takes no other arguments; it runs what ${SELF} service install saved.`,
 		);
 	}
 	if (service && !saved) throw new Error(CONNECT_FIRST);
+	let installing = parsed.flags.has("install-service");
+	let executable = injected.executable ?? installedChopin();
+	if (installing && !executable) throw new ServiceError(NOT_INSTALLED);
+	/** Set once connected under --install-service, which then stops to install. */
+	let install = false;
 	let command = saved?.command ?? parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
 	if (
 		!Array.isArray(command) || !command.length
@@ -349,6 +362,11 @@ async function connect(args: string[]) {
 							output.connected(info.repository);
 							// Only a connect that got this far saves its settings for service install.
 							if (!service) await save();
+							// The connection disconnects once it is serving, then the service installs.
+							if (installing) {
+								install = true;
+								setTimeout(() => abort.abort(), 0);
+							}
 						}
 						announced = true;
 						return api;
@@ -369,7 +387,7 @@ async function connect(args: string[]) {
 							env,
 						}),
 				});
-				return;
+				break;
 			} catch (error) {
 				if (!(error instanceof ConnectorStopped && error.reason === "revoked")) throw error;
 				// Chopin no longer accepts the token, so it is forgotten and the next connect pairs.
@@ -392,6 +410,58 @@ async function connect(args: string[]) {
 		unwatch();
 		await release();
 	}
+	if (install) await installCommand({ host: injected.host, executable });
+}
+
+const NOT_INSTALLED = "chopin service install needs the installed chopin, not connector.js. "
+	+ "Install it with install.sh or install.ps1 (see docs/local-experiments.md), then run it from "
+	+ "there.";
+
+/** This chopin's path when it is the installed binary, which the service runs. */
+function installedChopin() {
+	return Bun.isStandaloneExecutable ? process.execPath : undefined;
+}
+
+/** `chopin service install`, which `connect --install-service` also runs once connected. */
+async function installCommand(options: {
+	allowDowngrade?: boolean;
+	host?: ServiceHost | undefined;
+	executable?: string | undefined;
+}) {
+	let directory = stateDirectory();
+	let host = options.host ?? systemHost();
+	let output = createOutput();
+	if (!options.executable) throw new ServiceError(NOT_INSTALLED);
+	let saved = (await readConfig(directory)).connect;
+	if (!saved?.server) throw new ServiceError(CONNECT_FIRST);
+	let url = saved.server;
+	if (process.env.CHOPIN_URL && origin(process.env.CHOPIN_URL) !== url) {
+		throw new ServiceError(
+			`CHOPIN_URL is ${origin(process.env.CHOPIN_URL)}, but chopin connect saved ${url}. `
+				+ "Nothing was installed. Run chopin connect again with the server you want, then "
+				+ "chopin service install.",
+		);
+	}
+	if (!await machineToken(directory, url)) {
+		throw new ServiceError(
+			`This machine is not paired with ${url}. Run \`${SELF} pair\` first, then install the `
+				+ "service.",
+		);
+	}
+	let installed = await installService(host, { executable: options.executable, directory }, {
+		allowDowngrade: !!options.allowDowngrade,
+	});
+	output.say(
+		`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
+			+ `It connects ${saved.checkout} to ${url} as chopin connect last did.`,
+		output.style.dim(
+			"  To change what it runs, run chopin connect again with new arguments, then chopin "
+				+ "service install again.",
+		),
+		output.style.dim(`  Definition: ${installed.definition}`),
+		output.style.dim(`  Log: ${installed.log}`),
+		...installed.notes.map(note => output.style.dim(`  ${note}`)),
+	);
 }
 
 const SERVICE_USAGE = `Usage: ${SELF} service install [--allow-downgrade] | `
@@ -407,42 +477,10 @@ async function serviceCommand(args: string[]) {
 	let output = createOutput();
 	let lines = (notes: string[]) => notes.map(note => output.style.dim(`  ${note}`));
 	if (action === "install") {
-		if (!Bun.isStandaloneExecutable) {
-			throw new ServiceError(
-				"chopin service install needs the installed chopin, not connector.js. Install it with "
-					+ "install.sh or install.ps1 (see docs/local-experiments.md), then run it from there.",
-			);
-		}
-		let saved = (await readConfig(directory)).connect;
-		if (!saved?.server) throw new ServiceError(CONNECT_FIRST);
-		let url = saved.server;
-		if (process.env.CHOPIN_URL && origin(process.env.CHOPIN_URL) !== url) {
-			throw new ServiceError(
-				`CHOPIN_URL is ${origin(process.env.CHOPIN_URL)}, but chopin connect saved ${url}. `
-					+ "Nothing was installed. Run chopin connect again with the server you want, then "
-					+ "chopin service install.",
-			);
-		}
-		if (!await machineToken(directory, url)) {
-			throw new ServiceError(
-				`This machine is not paired with ${url}. Run \`${SELF} pair\` first, then install the `
-					+ "service.",
-			);
-		}
-		let installed = await installService(host, { executable: process.execPath, directory }, {
+		await installCommand({
 			allowDowngrade: parsed.flags.has("allow-downgrade"),
+			executable: installedChopin(),
 		});
-		output.say(
-			`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
-				+ `It connects ${saved.checkout} to ${url} as chopin connect last did.`,
-			output.style.dim(
-				"  To change what it runs, run chopin connect again with new arguments, then chopin "
-					+ "service install again.",
-			),
-			output.style.dim(`  Definition: ${installed.definition}`),
-			output.style.dim(`  Log: ${installed.log}`),
-			...lines(installed.notes),
-		);
 		return;
 	}
 	if (action === "status") {
