@@ -86,7 +86,9 @@ it installs, version pins and how the download is verified.
    freezes planning edits.
 4. The **Build** tab turns on with the press. It shows the status and the
    tasks with their goals, acceptance criteria and dependencies; opening it
-   never starts anything.
+   never starts anything. While running, it also shows the local agent's latest
+   activity and when that description changed. The build owner can select
+   **Stop build** here, including while a build is queued.
 5. The connector creates an isolated worktree at that exact commit and an
    implementation branch, preserving existing local edits. It creates an ACP
    session and claims the graph before prompting the orchestrator.
@@ -137,8 +139,12 @@ If a claimed run stops or fails, its graph remains locked. After inspecting the
 retained checkout, choose **Return to planning**, enter a reason and confirm to
 record a revision request and release the editing lock. **Build plan** then asks
 the Planner to revise the tasks and builds the replacement.
-This action is unavailable while the agent is still running; stop the connector
-in its terminal first. An admitted
+This action is unavailable while the agent is still running; select **Stop build**
+in Build first. Stop preserves existing commits and pull requests and rejects further
+reports from that run. The connector stops the agent on its next heartbeat (normally
+within 10 seconds) and stays connected. Ctrl-C in its terminal also stops the work
+and disconnects the connector. Reconnect with the updated connector to receive
+activity updates. An admitted
 repository writer can also continue the existing lifecycle through ordinary
 `/mcp`. The connector's run credential stops accepting reports when its turn ends.
 Failure does not undo local edits, and these controls do not automatically resume

@@ -546,6 +546,31 @@ test("a run Chopin has ended stops its agent at once", async () => {
 	}]);
 });
 
+test(
+	"a build carries agent activity on its heartbeat and stops when Chopin cancels it",
+	async () => {
+		let abort = new AbortController();
+		let timer = setTimeout(() => abort.abort(), 15_000);
+		try {
+			let { calls } = await run({}, ["--hang", "--activity"], (name, args) => {
+				if (name === "renew_implementation_build" && args.progress === "Running server tests") {
+					throw new ConnectorError("build-inactive", "build-inactive");
+				}
+				return {};
+			}, abort.signal);
+			expect(
+				calls.some(([name, args]) =>
+					name === "renew_implementation_build" && args.progress === "Running server tests"
+				),
+			).toBe(true);
+			expect(calls.at(-1)?.[1].error).toBe("Chopin ended this run (build-inactive).");
+		} finally {
+			clearTimeout(timer);
+		}
+	},
+	20_000,
+);
+
 test("a run whose connection a restarted server forgot stops its agent and the connector", async () => {
 	let root = await mkdtemp(join(tmpdir(), "chopin-forgotten-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-forgotten-state-"));

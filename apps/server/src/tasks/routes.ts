@@ -1,6 +1,6 @@
 import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
-import { liveSnapshot, queueBuild, queueRebuild, requestBuild } from "./builds";
+import { liveSnapshot, queueBuild, queueRebuild, reportBuild, requestBuild } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 import { implementationReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
@@ -317,6 +317,45 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			if (result.kind === "unavailable") throw new GitHubError("no-workspace", 409);
 			options.connections.wake(channel.repositoryId);
 			return json(result.build);
+		}),
+	);
+	router.on(
+		"POST",
+		"/api/channels/:id/implementation/stop",
+		safe(async (request, _url, { id }) => {
+			if (request.headers.get("origin") !== auth.config.origin) {
+				throw new GitHubError("origin is not allowed", 403);
+			}
+			let { session, channel, repository } = await browser(request, id);
+			if (!repository.permissions.push && !repository.permissions.admin || channel.archivedAt) {
+				throw new GitHubError("repository write access is required", 403);
+			}
+			let input = await body(request, z.object({ id: z.string().uuid() }).strict());
+			await options.withPlan(id, async plan => {
+				let build = plan.builds.at(-1);
+				if (build?.id !== input.id) throw new GitHubError("build has changed", 409);
+				if (build.user !== session.user.id) {
+					throw new GitHubError("only the build owner can stop it", 403);
+				}
+				if (build.state === "failed" || build.state === "stopped") return;
+				try {
+					// A human interruption must not publish unfinished work as a delivered live build.
+					await reportBuild(plan, build.user, build.connectionId, build.id, {
+						state: "failed",
+						error: "Stopped in Chopin.",
+					});
+					options.connections.release(build.connectionId, id);
+				} catch (error) {
+					if (
+						error instanceof Error && [
+							"build is unavailable",
+							"build report is out of order",
+						].includes(error.message)
+					) throw new GitHubError("build has changed", 409);
+					throw error;
+				}
+			});
+			return json({ accepted: true });
 		}),
 	);
 	router.on(

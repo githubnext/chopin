@@ -128,7 +128,7 @@ export async function runWork(
 			try {
 				let result = await reports.attempt(
 					implementation ? "renew_implementation_build" : "renew_experiment",
-					{ ...identity, ...(!implementation ? { progress: latestProgress } : {}) },
+					{ ...identity, progress: latestProgress },
 					beat,
 				);
 				failures = 0;

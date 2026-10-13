@@ -27,6 +27,7 @@ import {
 	cancelBuildRequest,
 	implementationEndpoint,
 	implementationResponse as response,
+	stopBuild,
 } from "./build-start";
 import { LocalAgentNote } from "./local-agent-note";
 
@@ -70,6 +71,7 @@ export function BuildView(
 	let { look, snapshot, loadError } = build;
 	let [actionError, setActionError] = useState<string>();
 	let [busy, setBusy] = useState(false);
+	let [stopping, setStopping] = useState(false);
 	let [returning, setReturning] = useState(false);
 	let [reason, setReason] = useState("");
 	let [open, setOpen] = useState<Record<string, boolean>>({});
@@ -79,6 +81,9 @@ export function BuildView(
 	let endpoint = implementationEndpoint(room);
 	let phase = buildPhase(snapshot);
 	let progress = buildProgress(snapshot);
+	let activeBuild = [snapshot?.live?.rebuild, snapshot?.build].find(item =>
+		item && ["queued", "starting", "running"].includes(item.state)
+	);
 
 	let pending = phase.kind === "building" || phase.kind === "live";
 	useEffect(() => {
@@ -251,6 +256,27 @@ export function BuildView(
 			</button>
 		);
 	}
+	if (activeBuild && canEdit && activeBuild.user === userId) {
+		action = (
+			<button
+				aria-busy={stopping || undefined}
+				className="btn btn-md btn-outline shrink-0"
+				disabled={stopping}
+				onClick={() => {
+					setActionError(undefined);
+					setStopping(true);
+					stopBuild(room, activeBuild.id).then(
+						() => build.reload(),
+						error =>
+							setActionError(sentence(error instanceof Error ? error.message : "Stop failed")),
+					).finally(() => setStopping(false));
+				}}
+				type="button"
+			>
+				Stop build
+			</button>
+		);
+	}
 	// A pull request shared by several tasks lists its commits under the first of them.
 	let listed = new Set<string>();
 	// A built document lists the tasks its later rebuilds added under their own heading.
@@ -312,6 +338,17 @@ export function BuildView(
 					{since && <span className="build-elapsed">{since}</span>}
 					{action}
 				</div>
+				{activeBuild?.activity && (
+					<p className="build-activity">
+						<span aria-live="polite">{activeBuild.activity.text}</span>
+						<time
+							dateTime={activeBuild.activity.at}
+							title={new Date(activeBuild.activity.at).toLocaleString()}
+						>
+							Updated {ago(activeBuild.activity.at, now)}
+						</time>
+					</p>
+				)}
 				{(build.needsAgent || snapshot?.localAgent === false && look.kind === "stopped") && (
 					<div className="mt-3">
 						<LocalAgentNote action={retryAction(look)} />

@@ -213,6 +213,61 @@ async function connector(baseURL: string, command: string[]) {
 	};
 }
 
+for (let width of [1280, 390]) {
+	test(`the build owner sees activity and stops the agent from Build at ${width}px`, async ({
+		seed,
+		join: enter,
+		room,
+		baseURL,
+	}, testInfo) => {
+		test.setTimeout(60_000);
+		await seed("# Local demo collaborators\n\nShow build activity and let its owner stop.\n", {
+			graph: preparedGraph(),
+		});
+		let local = await connector(baseURL!, [
+			"bun",
+			join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
+			"--hang",
+			"--activity",
+		]);
+		try {
+			let page = await enter(person(), { viewport: { width, height: 844 } });
+			await page.goto(await local.pairing);
+			await page.getByRole("button", { name: "Connect", exact: true }).click();
+			await expect(page.getByRole("status")).toContainText("Connected.");
+			await page.goto(testChannelPath(room));
+			await page.getByRole("button", { name: "Build plan", exact: true }).click();
+			await expect.poll(
+				async () =>
+					(await (await page.request.get(`/api/channels/${room}/implementation`)).json())
+						.build?.activity?.text,
+				{ timeout: 25_000 },
+			).toBe("Running server tests");
+			await page.getByRole("button", { name: "Build", exact: true }).click();
+			let view = page.getByRole("region", { name: "Build", exact: true });
+			await expect(view.getByText("Running server tests", { exact: true })).toBeVisible();
+			await expect(view.getByText(/^Updated /)).toBeVisible();
+			let stop = view.getByRole("button", { name: "Stop build", exact: true });
+			await expect(stop).toBeInViewport({ ratio: 1 });
+			await stop.focus();
+			await testInfo.attach("running-build", {
+				body: await view.screenshot(),
+				contentType: "image/png",
+			});
+			await page.keyboard.press("Enter");
+			await expect(view).toContainText("Build stopped");
+			await expect(stop).toHaveCount(0);
+			await expect.poll(() => local.output(), { timeout: 20_000 })
+				.toMatch(/Chopin ended this run \(build-(?:inactive|forbidden)\)/);
+			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+			expect(snapshot.build.error).toBe("Stopped in Chopin.");
+			expect(snapshot.localAgent).toBe(true);
+		} finally {
+			await local.close();
+		}
+	});
+}
+
 for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 	test(`the paired ACP connector implements a browser plan (${mode})`, async ({ seed, join: enter, room, baseURL }) => {
 		test.skip(

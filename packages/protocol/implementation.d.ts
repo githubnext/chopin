@@ -19,6 +19,8 @@ export type BuildRequest = {
 	state: "queued" | "starting" | "running" | "stopped" | "failed";
 	session?: string;
 	error?: string;
+	/** Latest coding-agent activity; `at` changes when its description changes. */
+	activity?: { text: string; at: string };
 	/** The connector's key for the report that set `state`, so a retry of it is recognized. */
 	reportKey?: string;
 	/** A rebuild carries edits since `baseRevision` onto a live build's pull requests. */

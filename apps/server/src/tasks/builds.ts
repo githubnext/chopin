@@ -44,6 +44,10 @@ let buildSchema = z.object({
 	state: z.enum(["queued", "starting", "running", "stopped", "failed"]),
 	session: z.string().min(1).max(128).optional(),
 	error: z.string().max(2000).optional(),
+	activity: z.object({
+		text: z.string().min(1).max(2000),
+		at: z.string().datetime(),
+	}).strict().optional(),
 	reportKey: z.string().uuid().optional(),
 	kind: z.literal("rebuild").optional(),
 	baseRevision: z.number().int().nonnegative().optional(),
@@ -462,6 +466,7 @@ export function reportBuild(
 		error?: string;
 		expiresAt?: number;
 		reportKey?: string;
+		progress?: string;
 	},
 ): Promise<void> {
 	return exclusive(plan, async () => {
@@ -479,9 +484,13 @@ export function reportBuild(
 		) {
 			throw new Error("build report is out of order");
 		}
+		let { progress, ...fields } = report;
 		let next = buildSchema.parse({
 			...current,
-			...report,
+			...fields,
+			...(progress && progress !== current.activity?.text
+				? { activity: { text: progress, at: new Date().toISOString() } }
+				: {}),
 			// A key names the connector report that set the state; any other change of state drops it.
 			reportKey: report.state === current.state
 				? report.reportKey ?? current.reportKey
@@ -507,6 +516,7 @@ export function reportBuild(
 		if (
 			current.state !== next.state || current.session !== next.session
 			|| current.error !== next.error
+			|| current.activity?.text !== next.activity?.text
 		) announceImplementation(plan);
 		if (current.state !== next.state && (next.state === "stopped" || next.state === "failed")) {
 			plan.persistence.onBuildStopped?.(plan.id);

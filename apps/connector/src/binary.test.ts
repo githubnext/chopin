@@ -34,7 +34,7 @@ test.skipIf(!binary)("the compiled binary prints its version and connector proto
 	for (let flag of ["--version", "version"]) {
 		let result = Bun.spawnSync([binary!, flag], { stdout: "pipe", stderr: "pipe" });
 		expect(result.stderr.toString()).toBe("");
-		expect(result.stdout.toString()).toBe(`chopin ${version} (connector protocol 2)\n`);
+		expect(result.stdout.toString()).toBe(`chopin ${version} (connector protocol 3)\n`);
 		expect(result.exitCode).toBe(0);
 	}
 	let help = Bun.spawnSync([binary!, "help"], { stdout: "pipe" });

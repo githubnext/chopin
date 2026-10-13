@@ -54,6 +54,21 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.build-activity {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--spacing) calc(var(--spacing) * 3);
+	margin: calc(var(--spacing) * 2) 0 0;
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	overflow-wrap: anywhere;
+}
+
+.build-activity time {
+	color: var(--color-text-tertiary);
+	font-variant-numeric: tabular-nums;
+}
+
 /* Tasks drafted for an earlier revision stay readable but recede. */
 .build-tasks[data-stale] {
 	opacity: var(--opacity-quiet);

@@ -82,7 +82,7 @@ export const MAX_INVESTIGATION_IMAGES = 3;
  * The connector protocols this server speaks; a connector outside them must update first.
  * Protocol 2 pairs a machine once and connects checkouts with its stored token.
  */
-export const CONNECTOR_PROTOCOLS = { min: 2, max: 2 } as const;
+export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 3 };
 
 /**
  * Refuse a connector speaking a protocol outside CONNECTOR_PROTOCOLS, naming what fixes it. One

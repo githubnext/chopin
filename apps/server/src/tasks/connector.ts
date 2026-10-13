@@ -27,7 +27,10 @@ export function implementationSchemas(
 		return {
 			wait_for_work: z.object({}).strict(),
 			claim_implementation_build: z.object({ id }).strict(),
-			renew_implementation_build: z.object({ id }).strict(),
+			renew_implementation_build: z.object({
+				id,
+				progress: z.string().min(1).max(2000).optional(),
+			}).strict(),
 			report_implementation_build: z.object({
 				id,
 				state: z.enum(["running", "stopped", "failed"]),
@@ -314,6 +317,7 @@ export function implementationConnector(
 					await reportBuild(plan, connection.owner, connection.id, build.id, {
 						state: build.state as "running" | "starting",
 						expiresAt: Date.now() + 60_000,
+						progress: args.progress as string | undefined,
 					});
 				} else if (name === "report_implementation_build") {
 					let { idempotencyKey: reportKey, ...sent } = args as {
