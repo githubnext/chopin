@@ -275,7 +275,9 @@ requires a newer connector, or the owner has lost push access to the repository.
 A running agent keeps working through a drop. Its heartbeat retries on the same
 backoff, and its session and completion reports wait in memory, in order, until
 Chopin answers. The connector stops the agent only when Chopin says the run is
-over, or after 10 minutes without reaching Chopin. Chopin itself still ends a
+over, after 10 minutes without reaching Chopin, or after two minutes in which
+Chopin only said it no longer knows the connection. Ctrl-C stops the agent at
+once and waits at most five seconds for Chopin to hear why. Chopin itself still ends a
 run whose heartbeat it has not heard for about a minute, so after a longer drop
 the agent stops as soon as the connector is back in contact. Permission prompts
 are only ever answered in the connector terminal; a drop never answers one.
@@ -293,6 +295,11 @@ it; a running connector renews it continuously. Connections live in the server's
 memory, but the machine does not: after a server restart or a deploy, a running
 connector registers its checkout again with the machine token and carries on
 without pairing, and a stopped one does the same when you start `connect` again.
+When Chopin has answered only that it does not know the connection
+(`connection-unavailable`, or HTTP 401) for two minutes, the connector stops any
+running agent, reports why, and exits with **Chopin no longer recognizes this
+connection (it may have restarted).** Run the connect command again. Network
+errors and 5xx answers do not count; the connector keeps retrying those.
 
 **"This machine is no longer paired" (`machine-revoked`) or "GitHub no longer
 accepts this machine's authorization" (`machine-reauthorize`).** The machine was

@@ -2,6 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { serveWork } from "./connection";
+import { createOutput } from "./output";
+import { processesIn } from "./processes";
 import { runWork, STOPPED } from "./run";
 import { git } from "./workspace";
 import { ConnectorError, remote } from "./mcp";
@@ -207,12 +210,16 @@ test("Ctrl-C reports the build stopped from the terminal before the run ends", a
 	]);
 });
 
-/** A fake Chopin connector endpoint over MCP, whose tools may take as long as they like. */
-function chopin(tool: (name: string) => unknown) {
+/**
+ * A fake Chopin connector endpoint over MCP, whose tools may take as long as they like. While
+ * `forgot` says so, it refuses every request as a restarted server refuses a connection it forgot.
+ */
+function chopin(tool: (name: string) => unknown, forgot = () => false) {
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
 		async fetch(request) {
+			if (forgot()) return Response.json({ error: "connection-unavailable" }, { status: 409 });
 			let mcp = new Server({ name: "fake-chopin", version: "1" }, { capabilities: { tools: {} } });
 			mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
 			mcp.setRequestHandler(CallToolRequestSchema, async request => ({
@@ -443,4 +450,72 @@ test("a run Chopin has ended stops its agent at once", async () => {
 		state: "failed",
 		error: "Chopin ended this run (build-inactive).",
 	}]);
+});
+
+test("a run whose connection a restarted server forgot stops its agent and the connector", async () => {
+	let root = await mkdtemp(join(tmpdir(), "chopin-forgotten-"));
+	let state = await mkdtemp(join(tmpdir(), "chopin-forgotten-state-"));
+	let id = crypto.randomUUID();
+	let offered = false;
+	let restartedAt = 0;
+	let server = chopin(name => {
+		if (name === "wait_for_work") {
+			if (offered) return new Promise(() => {});
+			offered = true;
+			return { id, kind: "implementation" };
+		}
+		if (name === "claim_implementation_build") {
+			return {
+				build: {
+					id,
+					repositoryId: "R_repo",
+					checkout: { repository: "org/repo", commit: git(root, "rev-parse", "HEAD") },
+				},
+				runToken: "run-token",
+			};
+		}
+		// The server restarts after the first heartbeat and forgets this connection's token.
+		if (name === "renew_implementation_build") restartedAt ||= performance.now();
+		return {};
+	}, () => restartedAt > 0);
+	try {
+		git(root, "init");
+		git(root, "config", "user.name", "Fixture");
+		git(root, "config", "user.email", "fixture@example.test");
+		git(root, "remote", "add", "origin", "git@github.com:org/repo.git");
+		await writeFile(join(root, "source.txt"), "committed");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "fixture");
+		let stream = { isTTY: false, write: () => {} };
+		let output = createOutput(stream, stream, {});
+		let signal = new AbortController().signal;
+		await expect(serveWork({
+			connect: () => remote(server.url, "token"),
+			signal,
+			output,
+			random: () => 0.01,
+			run: (api, kind, claim) =>
+				runWork(api, kind, claim, {
+					root,
+					directory: state,
+					command: [
+						process.execPath,
+						new URL("./testing/fake-implementer.ts", import.meta.url).pathname,
+						"--hang",
+					],
+					url: server.url,
+					signal,
+					output,
+					heartbeatMs: 20,
+					random: () => 0.01,
+					forgetMs: 300,
+				}),
+		})).rejects.toThrow("Chopin no longer recognizes this connection (it may have restarted).");
+		expect(performance.now() - restartedAt).toBeLessThan(1500);
+		expect(await processesIn(join(state, "runs", id))).toEqual([]);
+	} finally {
+		await server.stop();
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
 });

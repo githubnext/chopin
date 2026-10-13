@@ -13,7 +13,7 @@ function http(status: number, code?: string) {
 	);
 }
 
-test("transient failures retry, while revocation, upgrades and lost access stop", () => {
+test("transient failures retry, a forgotten connection retries for a while, and revocation, upgrades and lost access stop", () => {
 	let refused = Object.assign(new TypeError("Unable to connect."), { code: "ConnectionRefused" });
 	let cases: Array<[unknown, ErrorClass]> = [
 		[refused, "retry"],
@@ -23,16 +23,17 @@ test("transient failures retry, while revocation, upgrades and lost access stop"
 		[http(502), "retry"],
 		[http(503, "unavailable"), "retry"],
 		[http(429), "retry"],
-		[http(409, "connection-unavailable"), "retry"],
+		[http(409, "connection-unavailable"), "forgotten"],
 		[http(409, "owner-sign-in-required"), "retry"],
-		[new ConnectorError("connection-unavailable", "connection-unavailable: gone"), "retry"],
+		[new ConnectorError("connection-unavailable", "connection-unavailable: gone"), "forgotten"],
+		[http(401), "forgotten"],
 		[http(401, "machine-revoked"), "revoked"],
 		[http(401, "machine-reauthorize"), "revoked"],
 		[new ConnectorError("machine-revoked", "machine-revoked: revoked"), "revoked"],
 		[http(409, "connector-update-required"), "update-required"],
 		[http(403, "repository-forbidden"), "fatal"],
 		[new ConnectorError("repository-forbidden", "repository-forbidden: x"), "fatal"],
-		[http(401, "authentication-required"), "fatal"],
+		[http(401, "authentication-required"), "forgotten"],
 		[new Error("Missing connector response."), "fatal"],
 	];
 	expect(cases.map(([error]) => classifyConnectorError(error))).toEqual(

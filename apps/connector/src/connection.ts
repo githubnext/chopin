@@ -1,7 +1,16 @@
 import { ConnectorError } from "./mcp";
 import type { remote } from "./mcp";
 import type { Output } from "./output";
-import { backoff, classifyConnectorError, delay, errorCode, HEALTHY_MS } from "./reconnect";
+import {
+	backoff,
+	classifyConnectorError,
+	delay,
+	errorCode,
+	FORGET_MS,
+	forgottenMessage,
+	HEALTHY_MS,
+	transient,
+} from "./reconnect";
 import type { Classify, ErrorClass } from "./reconnect";
 
 type Api = Awaited<ReturnType<typeof remote>>;
@@ -19,7 +28,7 @@ export class ConnectorStopped extends Error {
 	}
 }
 
-function stopped(reason: Exclude<ErrorClass, "retry">, error: unknown) {
+function stopped(reason: Exclude<ErrorClass, "retry" | "forgotten">, error: unknown) {
 	let code = errorCode(error);
 	let message = code === "machine-reauthorize"
 		? "GitHub no longer accepts this machine's authorization. Run `chopin pair` to authorize it again."
@@ -69,15 +78,20 @@ export async function serveWork(options: {
 	random?: () => number;
 	sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 	now?: () => number;
+	/** How long only `forgotten` refusals may last before the connector stops; two minutes. */
+	forgetMs?: number;
 }) {
 	let { signal, output } = options;
 	let classify = options.classify ?? classifyConnectorError;
 	let sleep = options.sleep ?? delay;
 	let now = options.now ?? Date.now;
+	let forgetMs = options.forgetMs ?? FORGET_MS;
 	let attempt = 0;
 	/** Failed attempts since the connection was last up; zero while connected. */
 	let failures = 0;
 	let connectedAt: number | undefined;
+	/** Since when every failure has been a `forgotten` refusal. */
+	let forgottenSince: number | undefined;
 	/** Whether any connection has been up, so a failure is a drop rather than a failed start. */
 	let connected = false;
 	let current: Api | undefined;
@@ -98,7 +112,7 @@ export async function serveWork(options: {
 			try {
 				return await api.call(name, args, callSignal);
 			} catch (error) {
-				if (classify(error) === "retry") drop(api);
+				if (transient(classify(error))) drop(api);
 				throw error;
 			}
 		},
@@ -109,6 +123,7 @@ export async function serveWork(options: {
 			api = current = await options.connect();
 			if (failures) output.reconnected();
 			failures = 0;
+			forgottenSince = undefined;
 			connected = true;
 			connectedAt = now();
 			await serve(link, { ...options, run: (kind, claim) => options.run(link, kind, claim) });
@@ -122,8 +137,17 @@ export async function serveWork(options: {
 		} catch (error) {
 			if (api) drop(api);
 			if (signal.aborted) return;
+			// A run that found its connection forgotten has already stopped its agent.
+			if (error instanceof ConnectorStopped) throw error;
 			let kind = classify(error);
-			if (kind !== "retry") throw stopped(kind, error);
+			if (!transient(kind)) throw stopped(kind, error);
+			// Only refusals from a server that forgot this connection, for the whole window: retrying
+			// cannot help until someone pairs again. A network error or 5xx starts the window over.
+			if (kind === "forgotten") forgottenSince ??= now();
+			else forgottenSince = undefined;
+			if (forgottenSince !== undefined && now() - forgottenSince >= forgetMs) {
+				throw new ConnectorStopped("forgotten", forgottenMessage());
+			}
 			if (connectedAt !== undefined) {
 				if (now() - connectedAt >= HEALTHY_MS) attempt = 0;
 				connectedAt = undefined;
@@ -131,6 +155,10 @@ export async function serveWork(options: {
 			failures++;
 			// A connection that was up and just failed its liveness check is tried again at once.
 			let wait = failures === 1 && attempt === 0 && api ? 0 : backoff(attempt++, options.random);
+			// The last try for a forgotten connection comes as its window ends.
+			if (forgottenSince !== undefined) {
+				wait = Math.min(wait, forgottenSince + forgetMs - now());
+			}
 			if (failures === 1) output.unreachable(cause(error), connected);
 			if (failures <= ANNOUNCED) output.reconnecting(wait);
 			else if (failures === ANNOUNCED + 1) output.stillReconnecting();

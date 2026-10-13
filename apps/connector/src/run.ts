@@ -1,7 +1,8 @@
 import { requestSchema } from "@chopin/experiment";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
-import { backoff, delay, errorCode, RUN_GRACE_MS, runReports } from "./reconnect";
+import { ConnectorStopped } from "./connection";
+import { backoff, delay, errorCode, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
 import { runAgent } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
@@ -31,6 +32,11 @@ type Options = {
 	permissions?: ReturnType<typeof permissionMemory>;
 	/** How long the agent keeps running while Chopin is out of reach; ten minutes by default. */
 	graceMs?: number;
+	/**
+	 * How long the agent keeps running while Chopin refuses only as a server that forgot this
+	 * connection does; two minutes by default. The connector then stops, as pairing is needed.
+	 */
+	forgetMs?: number;
 	/** The jitter source for retries, for tests. */
 	random?: () => number;
 };
@@ -81,16 +87,22 @@ export async function runWork(
 	let latestProgress = "Preparing checkout";
 	/** Why the connector stopped the agent itself, when Chopin ended the run or stayed out of reach. */
 	let ended: string | undefined;
+	/** Chopin forgot this connection, so the connector must stop once the run has reported. */
+	let forgotten = false;
 	// Each build report carries its own idempotencyKey, kept across its retries, so Chopin accepts a
 	// report again whose answer was lost instead of refusing it as a second transition.
 	let reports = runReports(api, {
 		stop: options.signal,
 		graceMs: options.graceMs,
+		forgetMs: options.forgetMs,
 		random: options.random,
 		lost: () => output.offline(),
 		back: () => output.online(),
-		expired() {
-			ended ??= `Chopin was out of reach for ${minutes(options.graceMs ?? RUN_GRACE_MS)}.`;
+		expired(reason) {
+			forgotten = reason === "forgotten";
+			ended ??= forgotten
+				? forgottenMessage()
+				: `Chopin was out of reach for ${minutes(options.graceMs ?? RUN_GRACE_MS)}.`;
 			abort.abort();
 		},
 	});
@@ -280,6 +292,8 @@ export async function runWork(
 				? message.slice(0, 2000)
 				: "Local implementation failed. Inspect the connector terminal.",
 		}).catch(() => {});
+		// Retrying cannot reach a server that forgot this connection, so the connector stops too.
+		if (forgotten && !stopped) throw new ConnectorStopped("forgotten", message);
 	} finally {
 		// Servers the agent started (often in their own process group) end with its run.
 		if (prepared) await stopProcessesIn(prepared.path).catch(() => {});

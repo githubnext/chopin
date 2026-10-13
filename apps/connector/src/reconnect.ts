@@ -12,15 +12,30 @@ export function backoff(attempt: number, random = Math.random) {
 }
 
 /**
- * What to do about a failed connector call: `retry` on a transient failure; otherwise stop,
- * because the machine was revoked, the server needs a newer connector, or retrying cannot help.
+ * What to do about a failed connector call: `retry` on a transient failure, and `forgotten` when
+ * Chopin no longer recognizes the connection, as after a restart while pairings live in memory;
+ * that is retried too, but only for `FORGET_MS`. Otherwise stop, because the machine was revoked,
+ * the server needs a newer connector, or retrying cannot help.
  */
-export type ErrorClass = "retry" | "revoked" | "update-required" | "fatal";
+export type ErrorClass = "retry" | "forgotten" | "revoked" | "update-required" | "fatal";
 export type Classify = (error: unknown) => ErrorClass;
 
-/** Codes a restarting or briefly overloaded server answers with. */
-const RETRY_CODES = new Set(["connection-unavailable", "unavailable", "owner-sign-in-required"]);
+/**
+ * Codes a restarting or briefly overloaded server answers with. `owner-sign-in-required` clears
+ * once the owner signs in to Chopin again in a browser.
+ */
+const RETRY_CODES = new Set(["unavailable", "owner-sign-in-required"]);
+/** Codes for a connection token Chopin no longer knows. */
+const FORGOTTEN_CODES = new Set(["connection-unavailable", "authentication-required"]);
 const REVOKED_CODES = new Set(["machine-revoked", "machine-reauthorize"]);
+
+/** How long only `forgotten` refusals may last before the connector stops trying. */
+export const FORGET_MS = 120_000;
+
+/** Whether a failure of this class may pass, so the connector keeps trying for now. */
+export function transient(kind: ErrorClass) {
+	return kind === "retry" || kind === "forgotten";
+}
 
 /** The server's error code, from a tool's `code: message` text or a refused call's JSON body. */
 export function errorCode(error: unknown) {
@@ -33,6 +48,7 @@ export const classifyConnectorError: Classify = error => {
 	let code = errorCode(error);
 	if (code && REVOKED_CODES.has(code)) return "revoked";
 	if (code === "connector-update-required") return "update-required";
+	if (code && FORGOTTEN_CODES.has(code)) return "forgotten";
 	if (code && RETRY_CODES.has(code)) return "retry";
 	// fetch rejects with a TypeError when the network or the server is unreachable, and with a
 	// system error code when a socket breaks mid-request.
@@ -48,8 +64,18 @@ export const classifyConnectorError: Classify = error => {
 	if (typeof status !== "number") return "fatal";
 	// The MCP client's request timeout and closed connection, then an HTTP status refusal.
 	if (status === -32001 || status === -32000) return "retry";
+	if (status === 401) return "forgotten";
 	return status >= 500 || status === 429 || status === 408 ? "retry" : "fatal";
 };
+
+/** The message for a connection Chopin forgot: connecting again registers it anew. */
+export function forgottenMessage() {
+	return "Chopin no longer recognizes this connection (it may have restarted). " + (
+		typeof Bun !== "undefined" && Bun.isStandaloneExecutable
+			? "Run `chopin connect` again."
+			: "Run the connect command again."
+	);
+}
 
 /** A connection up this long has recovered; its next failure starts the backoff over. */
 export const HEALTHY_MS = 60_000;
@@ -89,36 +115,59 @@ type Caller = {
 export function runReports(api: Caller, options: {
 	stop: AbortSignal;
 	graceMs?: number;
+	/** How long only `forgotten` refusals may last; two minutes by default. */
+	forgetMs?: number;
 	random?: () => number;
 	classify?: Classify;
 	now?: () => number;
 	/** Called once when Chopin stops answering, and once when it answers again. */
 	lost?: () => void;
 	back?: () => void;
-	/** Called once when the run has been out of reach for its whole grace period. */
-	expired?: () => void;
+	/**
+	 * Called once when the run has been out of reach for its whole grace period, or when Chopin
+	 * has refused only as a server that forgot the connection does for `forgetMs`.
+	 */
+	expired?: (reason: "grace" | "forgotten") => void;
 }) {
 	let classify = options.classify ?? classifyConnectorError;
 	let now = options.now ?? Date.now;
 	let graceMs = options.graceMs ?? RUN_GRACE_MS;
+	let forgetMs = options.forgetMs ?? FORGET_MS;
 	let lostAt: number | undefined;
+	let forgottenAt: number | undefined;
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	let forgetting: ReturnType<typeof setTimeout> | undefined;
 	let gone = new AbortController();
 	let pending = 0;
 	let queue: Promise<unknown> = Promise.resolve();
+	let expire = (reason: "grace" | "forgotten") => {
+		clearTimeout(timer);
+		clearTimeout(forgetting);
+		gone.abort();
+		options.expired?.(reason);
+	};
 	let reports = {
-		/** Aborts when the grace period runs out. */
+		/** Aborts when the grace period or the forgotten window runs out. */
 		signal: gone.signal,
-		/** Out of contact for the whole grace period. */
+		/** Out of contact for the whole grace period, or forgotten by Chopin. */
 		expired: () => gone.signal.aborted,
 		/** Whether a failed call may succeed later, so the run should carry on. */
-		retryable: (error: unknown) => classify(error) === "retry" && !gone.signal.aborted,
-		/** How long a retry may still wait: what is left of the grace period. */
-		remaining: () => lostAt === undefined ? graceMs : Math.max(0, lostAt + graceMs - now()),
+		retryable: (error: unknown) => transient(classify(error)) && !gone.signal.aborted,
+		/** How long a retry may still wait: what is left of the grace period or forgotten window. */
+		remaining: () =>
+			Math.max(
+				0,
+				Math.min(
+					lostAt === undefined ? graceMs : lostAt + graceMs - now(),
+					forgottenAt === undefined ? forgetMs : forgottenAt + forgetMs - now(),
+				),
+			),
 		/** One call, which `signal` or the grace period running out abandons. */
 		async attempt(name: string, args: Record<string, unknown>, signal?: AbortSignal) {
 			try {
 				let value = await api.call(name, args, signal);
+				forgottenAt = undefined;
+				clearTimeout(forgetting);
 				if (lostAt !== undefined) {
 					lostAt = undefined;
 					clearTimeout(timer);
@@ -126,13 +175,19 @@ export function runReports(api: Caller, options: {
 				}
 				return value;
 			} catch (error) {
-				if (classify(error) === "retry" && lostAt === undefined && !gone.signal.aborted) {
+				let kind = classify(error);
+				if (transient(kind) && lostAt === undefined && !gone.signal.aborted) {
 					lostAt = now();
-					timer = setTimeout(() => {
-						gone.abort();
-						options.expired?.();
-					}, graceMs);
+					timer = setTimeout(() => expire("grace"), graceMs);
 					options.lost?.();
+				}
+				// Any other failure, such as a network error, shows Chopin may only be out of reach.
+				if (kind !== "forgotten") {
+					forgottenAt = undefined;
+					clearTimeout(forgetting);
+				} else if (forgottenAt === undefined && !gone.signal.aborted) {
+					forgottenAt = now();
+					forgetting = setTimeout(() => expire("forgotten"), forgetMs);
 				}
 				throw error;
 			}
@@ -167,9 +222,10 @@ export function runReports(api: Caller, options: {
 			queue = result.catch(() => {});
 			return result;
 		},
-		/** Stop the grace timer once the run is over. */
+		/** Stop the timers once the run is over. */
 		close() {
 			clearTimeout(timer);
+			clearTimeout(forgetting);
 		},
 	};
 	return reports;

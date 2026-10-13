@@ -289,3 +289,51 @@ test("a run's call that waits for a new connection gives up when its signal abor
 	expect(connects).toBe(2);
 	expect(elapsed).toBeLessThan(500);
 });
+
+/** A server that answers every request with one HTTP refusal. */
+function refusing(status: number, error: string) {
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch: () => Response.json({ error }, { status }),
+	});
+	servers.push(server);
+	return `http://127.0.0.1:${server.port}`;
+}
+
+test("a restarted server that no longer knows the connection stops it within two minutes", async () => {
+	let url = refusing(409, "connection-unavailable");
+	let clock = 0;
+	let { output } = terminal();
+	await expect(serveWork({
+		connect: () => remote(url, "token"),
+		signal: new AbortController().signal,
+		output,
+		random: () => 0.999_999,
+		now: () => clock,
+		async sleep(ms) {
+			clock += ms;
+		},
+		run: async () => {},
+	})).rejects.toThrow("Chopin no longer recognizes this connection (it may have restarted).");
+	expect(clock).toBe(120_000);
+});
+
+test("a server answering 503 keeps the connector retrying past two minutes", async () => {
+	let url = refusing(503, "unavailable");
+	let abort = new AbortController();
+	let clock = 0;
+	await serveWork({
+		connect: () => remote(url, "token"),
+		signal: abort.signal,
+		output: terminal().output,
+		random: () => 0.999_999,
+		now: () => clock,
+		async sleep(ms) {
+			clock += ms;
+			if (clock > 600_000) abort.abort();
+		},
+		run: async () => {},
+	});
+	expect(clock).toBeGreaterThan(600_000);
+});
