@@ -15,10 +15,19 @@ let cancelled = () => {};
 let app = new AgentApp()
 	.onRequest(
 		"initialize",
-		() => ({
-			protocolVersion: PROTOCOL_VERSION,
-			agentCapabilities: process.argv.includes("--http") ? { mcpCapabilities: { http: true } } : {},
-		}),
+		async () => {
+			if (process.argv.includes("--slow-start")) {
+				// An agent still starting, as one fetching itself on first launch is; it never answers.
+				await writeFile(process.env.CHOPIN_TEST_STARTING!, "");
+				await new Promise(() => {});
+			}
+			return {
+				protocolVersion: PROTOCOL_VERSION,
+				agentCapabilities: process.argv.includes("--http")
+					? { mcpCapabilities: { http: true } }
+					: {},
+			};
+		},
 	)
 	.onRequest("session/new", ({ params }) => {
 		servers = params.mcpServers;
@@ -34,6 +43,8 @@ let app = new AgentApp()
 			await writeFile(process.env.CHOPIN_TEST_ORPHAN_PID!, String(server.pid));
 			return { stopReason: "end_turn" as const };
 		}
+		// The agent's own turn interrupted, as when Ctrl-C reaches it with the connector.
+		if (process.argv.includes("--self-cancel")) return { stopReason: "cancelled" as const };
 		if (process.argv.includes("--hang")) {
 			await new Promise<void>(resolve => cancelled = resolve);
 			return { stopReason: "cancelled" as const };

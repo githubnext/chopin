@@ -63,6 +63,8 @@ export async function runWork(
 		live?: boolean;
 		/** An unprompted prototype under a passage, run on a throwaway branch. */
 		spike?: boolean;
+		/** A spike's passage, which names it in the terminal instead of its internal brief. */
+		passage?: string;
 		/** The document's title, for the terminal. */
 		title?: string;
 		input: unknown;
@@ -149,6 +151,7 @@ export async function runWork(
 	let spikeWork: { path: string; branch: string } | undefined;
 	let bridgeApi: Promise<Awaited<ReturnType<typeof remote>>> | undefined;
 	let prepared: Awaited<ReturnType<typeof prepareWorkspace>> | undefined;
+	let agentStop: string | undefined;
 	try {
 		prepared = await prepareWorkspace(options.root, options.directory, input);
 		let path = prepared.path;
@@ -161,8 +164,12 @@ export async function runWork(
 			git(path, "checkout", "-b", spikeWork.branch);
 		}
 		output.job(
-			implementation ? "build" : claim.spike ? "spike" : "investigation",
-			implementation ? claim.title ?? input.id : (input as { brief: string }).brief,
+			rebuild ? "rebuild" : implementation ? "build" : claim.spike ? "spike" : "investigation",
+			implementation
+				? claim.title ?? input.id
+				: claim.spike && claim.passage
+				? claim.passage
+				: (input as { brief: string }).brief,
 			path,
 		);
 		let stop = await runAgent({
@@ -266,15 +273,19 @@ export async function runWork(
 				output.agent(text);
 			},
 		});
-		if (stop !== "end_turn" || abort.signal.aborted) throw new Error(`Agent stopped: ${stop}`);
+		if (stop !== "end_turn" || abort.signal.aborted) {
+			agentStop = stop;
+			throw new Error(`Agent stopped: ${stop}`);
+		}
 		await reports.deliver(implementation ? "report_implementation_build" : "complete_experiment", {
 			...identity,
 			...(implementation ? { state: "stopped", idempotencyKey: crypto.randomUUID() } : {}),
 		});
 		output.finished();
 	} catch (error) {
-		// Ctrl-C reports why before the connector disconnects, so Chopin knows at once.
-		let stopped = options.signal.aborted;
+		// Ctrl-C reports why before the connector disconnects, so Chopin knows at once. An agent
+		// that cancelled its own turn was interrupted too, unless the connector cancelled it.
+		let stopped = options.signal.aborted || agentStop === "cancelled" && !ended;
 		let message = stopped
 			? STOPPED
 			: ended

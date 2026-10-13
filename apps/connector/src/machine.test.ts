@@ -275,6 +275,24 @@ for (let code of ["machine-revoked", "machine-reauthorize"]) {
 	});
 }
 
+test("the service's connect, started again after its token was forgotten, stops without pairing", async () => {
+	let home = await scratch("chopin-home-");
+	let root = await checkout();
+	let chopin = fakeChopin();
+	await revokedMachine(home, chopin.url);
+	let revoked = cli(["connect", root, "--service", "--", "agent"], home, chopin.url);
+	expect(await revoked.exited).toBe(1);
+	expect(await revoked.output).toContain("no longer paired");
+	// The service manager starts it again, with no token stored and no terminal to pair on.
+	let again = cli(["connect", root, "--service", "--", "agent"], home, chopin.url);
+	expect(await Promise.race([again.exited, Bun.sleep(3000).then(() => "still running")]))
+		.toBe(1);
+	let output = await again.output;
+	expect(output).toContain(`This machine is not paired with ${chopin.url}.`);
+	expect(output).toMatch(/pair` at a terminal/);
+	expect(chopin.calls.map(call => call.path)).toEqual(["/api/connector/connections"]);
+});
+
 test("on a terminal, connect with a revoked token forgets it and pairs again", async () => {
 	let home = await scratch("chopin-home-");
 	let root = await checkout();

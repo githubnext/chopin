@@ -39,8 +39,10 @@ is disconnected in the browser or unpaired with `chopin unpair`; see
 [Trouble connecting](local-experiments.md#trouble-connecting)
 for pairing problems, refusals and stale locks.
 
-Keep the connector running. Each browser Build action starts an agent process;
-automatically installing or starting the connector itself remains future work.
+Keep the connector running, or install it as a service with
+`chopin service install` so it starts again after a reboot (see
+[Run chopin as a service](local-experiments.md#run-chopin-as-a-service)).
+Each browser Build action starts an agent process.
 Standard ACP permission requests appear in its terminal with the command or
 paths involved, and are declined when no interactive terminal is available.
 The agent retains its normal tools, project instructions and configured
@@ -122,8 +124,8 @@ orchestrator instructions, not a server scheduler. The opt-in live tracer checks
 MCP reporting; it does not prove delivery of a complete multi-PR implementation.
 
 New implementation decisions appear as task blockers. Configurable decision
-policy, human resolution/resume controls, automatic connector startup and a
-browser PR-creation action remain future work. Multiple reported PRs already
+policy, human resolution/resume controls and a browser PR-creation action
+remain future work. Multiple reported PRs already
 appear beside their tasks; Chopin never merges them automatically.
 
 Inspect failures in the connector terminal and retained worktree. If startup

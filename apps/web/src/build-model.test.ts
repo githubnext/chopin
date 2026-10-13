@@ -20,6 +20,7 @@ import {
 	liveTaskState,
 	pullRequestCommits,
 	pullRequestNumber,
+	retryAction,
 	shortUrl,
 	startedBy,
 	startingHint,
@@ -703,17 +704,43 @@ describe("build status", () => {
 			lifecycle: { execution: { state: "idle" }, history: [run({ kind: "implemented" }, 2)] },
 		});
 		expect(look(done)).toMatchObject({ kind: "built", pullRequests: 2 });
+		// A pull request reported before its task completes is still building, not built.
+		let reported = run({ kind: "implemented" }, 1);
+		reported.progress.tasks = [{
+			id: "a",
+			state: "in_progress",
+			pullRequest: { url: "https://github.com/o/r/pull/1", state: "open" },
+		}] as never;
+		let early = look(
+			snapshot({ lifecycle: { execution: { state: "idle" }, history: [reported] } }),
+		);
+		expect(early).toEqual({ kind: "building", done: 0, total: 1, tip: "0 of 1 tasks built" });
+		expect(buildLabel(early)).toBe("Building · 0 of 1");
 		let failed = look(snapshot({ build: build("failed") }));
 		expect(failed).toMatchObject({ kind: "stopped", retry: true });
 		expect(buildLabel(failed)).toBe("Build stopped");
 		expect(look(snapshot({ build: build("failed") }), { canEdit: false }))
 			.toMatchObject({ retry: false });
+		// Nothing ran, so a press that found no local agent never reads as stopped.
 		let noAgent = look(snapshot(), { state: { stage: "failed", agent: true } });
 		expect(noAgent).toEqual({
-			kind: "stopped",
-			tip: "Start your local agent, then retry",
+			kind: "agent",
+			tip: "Your local agent isn’t connected. Open Build for the command that starts it.",
 			retry: true,
 		});
+		expect(buildLabel(noAgent)).toBe("Start your local agent");
+		expect(buildTabReady(snapshot(), noAgent)).toBe(true);
+		expect(retryAction(noAgent)).toBe("Retry");
+		expect(retryAction(failed)).toBe("Retry");
+		// A Ctrl-C'd build still holds its tasks: only Return to planning, so no Retry to name.
+		let held = look(snapshot({
+			build: { ...build("stopped"), error: "Stopped from the connector terminal." },
+			lifecycle: { execution: { state: "active" }, history: [] },
+		}));
+		expect(held).toMatchObject({ kind: "stopped", retry: false });
+		expect(retryAction(held)).toBeUndefined();
+		let refused = look(snapshot(), { state: { stage: "failed", message: "Answer first." } });
+		expect(refused).toMatchObject({ kind: "stopped", tip: "Answer first." });
 	});
 
 	it("counts changes to build since the last build, and waits for edits to settle when live", () => {

@@ -325,6 +325,7 @@ describe("install.ps1", () => {
 			"[Environment]::GetEnvironmentVariable('Path', 'User')",
 		], { stdout: "pipe" }).stdout.toString().trim();
 
+	// A cold PowerShell start on a shared runner can exceed Bun's five-second default.
 	test.skipIf(!pwsh)("parses as PowerShell", () => {
 		let result = Bun.spawnSync([
 			pwsh!,
@@ -335,7 +336,7 @@ describe("install.ps1", () => {
 		], { stdout: "pipe", stderr: "pipe" });
 		expect(result.stdout.toString() + result.stderr.toString()).toBe("");
 		expect(result.exitCode).toBe(0);
-	});
+	}, 30_000);
 
 	test.skipIf(!pwsh || process.platform === "win32")("refuses to run outside Windows", async () => {
 		using release = fakeRelease({});

@@ -81,7 +81,7 @@ import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
-import { PhoneHeader } from "./phone-header";
+import { PhoneHeader, PhoneHeaderContent } from "./phone-header";
 import { DocumentSkeleton } from "./phone-skeleton";
 import { useEditorFocus, useKeyboardOpen } from "./keyboard-open";
 import { motionContract } from "./motion-contract";
@@ -1129,7 +1129,7 @@ export function RoomWorkspace(
 		if (opensEditing({ empty: planState.empty })) setEditing(true);
 	}, [arrived, planState.synced, planState.empty]);
 	// A failed open says so instead; the lines would otherwise pulse beside it indefinitely.
-	let loading = phone && !arrived && !planState.failed;
+	let loading = !arrived && !planState.failed;
 	// A child on a phone borrows its parent's tab bar (see child-phone-chrome.ts).
 	let childChrome = useContext(ChildPhoneChromeContext);
 	// Where this room's title goes when it is an open child, and where its own child's goes.
@@ -1427,7 +1427,29 @@ export function RoomWorkspace(
 				<p aria-live="polite" className="sr-only" role="status">
 					<span key={announcement.sequence}>{announcement.text}</span>
 				</p>
-				{childTitle?.slot && createPortal(childTitleControl, childTitle.slot)}
+				{childTitle?.slot && (childTitle.phone
+					? createPortal(
+						<PhoneHeaderContent
+							archivedAt={workspaceArchivedAt}
+							canManage={effectiveCanManage}
+							comments={openComments}
+							editing={titleEdit}
+							editingDocument={editMode === "editing"}
+							label={metadata.title}
+							members={members}
+							onAction={action => onDocumentAction(room, action)}
+							onComments={() => {
+								childChrome?.showDocument();
+								openCommentList(room);
+							}}
+							onEditingChange={setTitleEdit}
+							onRenamed={updateMetadata}
+							lead={`in ${presentation.parent?.label ?? childTitle.parent}`}
+							room={room}
+						/>,
+						childTitle.slot,
+					)
+					: createPortal(childTitleControl, childTitle.slot))}
 				{childTitle?.motion === "lift" && (
 					<div
 						className="document-title-bar panel-header flex shrink-0 items-center px-(--panel-toolbar-padding-inline) hairline-b"
@@ -1480,24 +1502,28 @@ export function RoomWorkspace(
 				slot: setChildTitleSlot,
 			}
 			: undefined;
-	let childTitleValue = presentation.type === "parent-with-child" && mode === "split"
+	// A phone's top bar takes the child's title, controls and people in place of this room's.
+	let childTitleValue = presentation.type === "parent-with-child" && phone
+		? { motion: "zoom" as const, parent: metadata.title, phone: true, slot: childTitleSlot }
+		: presentation.type === "parent-with-child" && mode === "split"
 		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
 		: undefined;
 	// Build plan or the build capsule sits beside the people here; a child open beside its parent
-	// has no build of its own.
-	let buildSlot = profile.implementation && presentation.type !== "parent-with-child" && (
-		<BuildPlanButton
-			build={build}
-			canEdit={!!workspaceCanEdit && status === "connected"}
-			compact={mode !== "split"}
-			hot={buildHover === "tab"}
-			onExplain={phone ? explainBuild : undefined}
-			phone={phone}
-			onHover={on => setBuildHover(on ? "capsule" : undefined)}
-			onOpen={() => selectDestination("build")}
-			tabReady={build.tabReady}
-		/>
-	);
+	// has no build of its own. A phone shows this room's bar only off Document, so it keeps it.
+	let buildSlot = profile.implementation && (presentation.type !== "parent-with-child" || phone)
+		&& (
+			<BuildPlanButton
+				build={build}
+				canEdit={!!workspaceCanEdit && status === "connected"}
+				compact={mode !== "split"}
+				hot={buildHover === "tab"}
+				onExplain={phone ? explainBuild : undefined}
+				phone={phone}
+				onHover={on => setBuildHover(on ? "capsule" : undefined)}
+				onOpen={() => selectDestination("build")}
+				tabReady={build.tabReady}
+			/>
+		);
 
 	// The tab bar's pencil edits the document on screen: an open child, or else this one.
 	let barEdit = childOpen
@@ -1591,24 +1617,34 @@ export function RoomWorkspace(
 					header={phone
 						? (
 							<PhoneHeader
-								archivedAt={workspaceArchivedAt}
-								canManage={effectiveCanManage}
-								comments={openComments}
-								editing={titleEdit}
-								editingDocument={!!barEdit?.editing}
+								// The child's bar goes with its document: Chat, Decisions and Build are this room's.
+								child={presentation.type === "parent-with-child" && planVisible
+									? { onReturn: presentation.onChildClose, slot: setChildTitleSlot }
+									: undefined}
 								label={metadata.title}
-								onAction={action => onDocumentAction(room, action)}
-								onComments={() => {
-									// The list stands over the document, so it opens from any tab onto it.
-									selectDestination("plan");
-									openCommentList(room);
-								}}
-								onEditingChange={setTitleEdit}
-								onRenamed={updateMetadata}
 								presentation={presentation}
-								room={room}
-								build={buildSlot}
-							/>
+							>
+								<PhoneHeaderContent
+									archivedAt={workspaceArchivedAt}
+									canManage={effectiveCanManage}
+									comments={openComments}
+									context={buildSlot}
+									editing={titleEdit}
+									editingDocument={!childOpen && !!barEdit?.editing}
+									label={metadata.title}
+									members={members}
+									onAction={action => onDocumentAction(room, action)}
+									onComments={() => {
+										// The list stands over the document, so it opens from any tab onto it.
+										selectDestination("plan");
+										openCommentList(room);
+									}}
+									onEditingChange={setTitleEdit}
+									onRenamed={updateMetadata}
+									lead={repository.name}
+									room={room}
+								/>
+							</PhoneHeader>
 						)
 						: <Header {...titleProps} build={buildSlot} members={members} />}
 					title={
@@ -1633,7 +1669,8 @@ export function RoomWorkspace(
 							/>
 						</>
 					}
-					status={statusNotices}
+					// Build plan or its capsule closes the status, so the rule before the faces follows it.
+					status={<>{statusNotices}{mode === "split" && buildSlot}</>}
 					ids={workspaceIds}
 					phoneAction={barEdit && (
 						<button
@@ -1652,12 +1689,7 @@ export function RoomWorkspace(
 					phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
 					identity={room}
 					mode={mode}
-					presence={
-						<>
-							{mode === "split" && buildSlot}
-							<RoomMembers members={members} ring="page" />
-						</>
-					}
+					presence={<RoomMembers members={members} ring="page" />}
 					phone={phone}
 					onDesktopChatOpen={setDesktopChatOpen}
 					onChatOpen={open => dispatch({ type: "set-chat", open })}

@@ -74,7 +74,10 @@ export class PostgresExperimentStore implements ExperimentStore {
 		child: InvestigationChildInput,
 		lease: Lease,
 	): Promise<Investigation | false> {
-		if (value.revision !== expected + 1 || value.state !== "completed" || !value.result) {
+		if (
+			value.revision !== expected + 1 || value.state !== "completed" || !value.result
+			|| value.spike
+		) {
 			throw conflict("invalid experiment publication");
 		}
 		return await this.sql.begin(async sql => {

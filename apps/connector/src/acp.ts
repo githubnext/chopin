@@ -62,7 +62,13 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 	let sessionId: string | undefined;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let cancel = () => {
-		if (sessionId) void connection.agent.notify("session/cancel", { sessionId }).catch(() => {});
+		// Without a session there is no turn to wind down, so the agent's start is abandoned at once
+		// rather than waited on; the finally below stops the agent.
+		if (!sessionId) {
+			connection.close(new Error("Investigation cancelled."));
+			return;
+		}
+		void connection.agent.notify("session/cancel", { sessionId }).catch(() => {});
 		timer = setTimeout(() => {
 			kill("SIGKILL");
 			connection.close();

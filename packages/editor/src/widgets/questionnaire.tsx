@@ -80,7 +80,7 @@ export type QuestionnaireCardProps = {
 	value: Questionnaire;
 	/** Durable lifecycle state can arrive separately from the document node. */
 	meta?: Question.CardMeta;
-	presentation?: "inline" | "list";
+	presentation?: "inline" | "list" | "deck";
 	motionImmediately?: () => boolean;
 	onCardSource?: (questionnaireId: string) => void;
 	/** The viewer's own handle, who is never shown as present on a card. */
@@ -108,12 +108,14 @@ export type CardPresentation = "hidden" | "settled-line" | "resolved" | "open";
 export function cardPresentation(
 	value: Questionnaire,
 	meta: Question.CardMeta | undefined,
-	where: "inline" | "list",
+	where: "inline" | "list" | "deck",
 ): CardPresentation {
 	let status = meta?.status ?? cardStatus(value);
 	if (status === "open" || status === "reopened") return "open";
 	if (where === "list") return "resolved";
 	if (status === "discarded" || meta?.hasProse) return "hidden";
+	// In a deck a decided card keeps an open card's footprint, so the stack never shrinks to a line.
+	if (where === "deck") return "resolved";
 	// A card can resolve before its metadata reaches this client. Its document
 	// projection is still a decided card, and all prose-less decisions settle inline.
 	return "settled-line";
@@ -695,13 +697,13 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 				id: member.id,
 				settled: member.state !== "open",
 				label: member.value.questions[0]?.header ?? "Decision",
-				card: <InlineCard value={member.value} />,
+				card: <InlineCard deck value={member.value} />,
 			}))}
 		/>
 	);
 }
 
-function InlineCard({ value }: { value: Questionnaire }) {
+function InlineCard({ deck = false, value }: { deck?: boolean; value: Questionnaire }) {
 	let options = useCellValue(widgets$);
 	let meta = useCardMeta(options.cardMeta, value.id);
 	let source = options.hasCardSource?.(value.id) ? options.onCardSource : undefined;
@@ -739,6 +741,7 @@ function InlineCard({ value }: { value: Questionnaire }) {
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}
 			places={places}
 			planner={options.planner}
+			presentation={deck ? "deck" : "inline"}
 			relations={options.questions?.relations(value.id)}
 			value={value}
 			wire={options.wire}

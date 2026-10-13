@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compiledChopin } from "./testing/binary";
 import { assets, fakeChopin, fakeRelease, sha256 } from "./testing/release";
+import { systemdUnit } from "./service";
 import { recover, replace } from "./update";
 
 /**
@@ -28,7 +29,16 @@ let { version } = await Bun.file(join(import.meta.dir, "../package.json")).json(
 };
 let asset = `chopin-${process.platform}-${process.arch}`;
 
-/** A fresh copy of the compiled chopin in its own bin directory, and a gh that records calls. */
+/**
+ * The service managers chopin may run. In the fixture each is a shim that records its call and
+ * fails, unless a test replaces it, so a real one is never run.
+ */
+const MANAGERS = ["systemctl", "loginctl", "launchctl", "schtasks", "powershell", "powershell.exe"];
+
+/**
+ * A fresh copy of the compiled chopin in its own bin directory, with a gh and service managers
+ * that record calls. Its PATH is the shims alone: the compiled chopin needs no runtime.
+ */
 async function installed() {
 	let home = await mkdtemp(join(scratch, "home-"));
 	let bin = join(home, "bin");
@@ -41,9 +51,18 @@ async function installed() {
 	let log = join(home, "calls.log");
 	await writeFile(join(shims, "gh"), `#!/bin/sh\necho "gh $*" >> "${log}"\n`);
 	await chmod(join(shims, "gh"), 0o755);
+	for (let manager of MANAGERS) {
+		await writeFile(join(shims, manager), `#!/bin/sh\necho "${manager} $*" >> "${log}"\nexit 1\n`);
+		await chmod(join(shims, manager), 0o755);
+	}
+	// An x64 chopin on macOS asks sysctl whether it runs under Rosetta.
+	if (process.platform === "darwin") await fs.symlink("/usr/sbin/sysctl", join(shims, "sysctl"));
 	let original = sha256(await Bun.file(chopin).bytes());
 	return {
+		home,
 		bin,
+		shims,
+		log,
 		chopin,
 		calls: async () => (await Bun.file(log).exists()) ? (await readFile(log, "utf8")).trim() : "",
 		/** Whether the binary is still the compiled chopin, with nothing left beside it. */
@@ -53,7 +72,7 @@ async function installed() {
 		/** Without a terminal: stdin is not a TTY. */
 		async update(env: Record<string, string>, ...args: string[]) {
 			let child = Bun.spawn([chopin, "update", ...args], {
-				env: { HOME: home, PATH: `${shims}:${process.env.PATH}`, ...env },
+				env: { HOME: home, PATH: shims, ...env },
 				stdin: "ignore",
 				stdout: "pipe",
 				stderr: "pipe",
@@ -70,7 +89,7 @@ async function installed() {
 			let output = "";
 			let prompted = Promise.withResolvers<void>();
 			let child = Bun.spawn([chopin, "update", ...args], {
-				env: { HOME: home, PATH: `${shims}:${process.env.PATH}`, ...env },
+				env: { HOME: home, PATH: shims, ...env },
 				terminal: {
 					cols: 200,
 					rows: 24,
@@ -196,6 +215,56 @@ describe.skipIf(!binary)("chopin update", () => {
 		expect(await at.untouched()).toBe(true);
 		expect(await at.calls()).toBe("");
 	});
+
+	// A fake systemctl and loginctl on PATH answer for the service; the real ones are never run.
+	test.if(process.platform === "linux")(
+		"restarts a running service that runs the updated chopin",
+		async () => {
+			using release = releases();
+			using chopin = chopinServer("98.0.0");
+			let at = await installed();
+			await writeFile(
+				join(at.shims, "systemctl"),
+				`#!/bin/sh\necho "systemctl $*" >> "${at.log}"\n`
+					+ '[ "$2" = show ] && echo ActiveState=active\nexit 0\n',
+			);
+			await writeFile(
+				join(at.shims, "loginctl"),
+				`#!/bin/sh\necho "loginctl $*" >> "${at.log}"\necho yes\n`,
+			);
+			let state = join(at.home, "state");
+			await mkdir(state);
+			let service = {
+				executable: at.chopin,
+				checkout: at.home,
+				command: ["agent"],
+				directory: state,
+			};
+			// The installed unit, not config.json, says which chopin and base dir the service runs.
+			let units = join(at.home, ".config", "systemd", "user");
+			await mkdir(units, { recursive: true });
+			await writeFile(join(units, "chopin.service"), systemdUnit(service, "/usr/bin:/bin"));
+			await writeFile(
+				join(state, "config.json"),
+				JSON.stringify({ service: { ...service, version, installedAt: 1 } }),
+			);
+			let result = await at.update({
+				...release.env,
+				CHOPIN_URL: chopin.url,
+				CHOPIN_HOME: state,
+				CHOPIN_VERIFY_ATTESTATION: "0",
+			});
+			expect(result.stderr).toBe("");
+			expect(result.code).toBe(0);
+			expect(result.stdout).toContain(
+				"Updated chopin from " + version + " to 98.0.0",
+			);
+			expect(result.stdout).toContain("Restarted the chopin service, so it runs the new chopin.");
+			let calls = (await at.calls()).split("\n");
+			expect(calls).toContain("systemctl --user restart chopin.service");
+			expect(calls.some(line => line.startsWith("loginctl show-user "))).toBe(true);
+		},
+	);
 
 	test("does nothing when the release is the version already running", async () => {
 		using release = fakeRelease({ [version]: assets(asset, fakeChopin(version)) });

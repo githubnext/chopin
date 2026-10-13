@@ -123,6 +123,12 @@ async function staleLock(path: string): Promise<boolean> {
 	}
 }
 
+/** The label this machine was paired under for one Chopin server, without its token. */
+export async function machineLabel(directory: string, origin: string) {
+	let entry = (await stored(directory)).servers[origin];
+	return entry?.token ? entry.label : undefined;
+}
+
 /** The machine token stored for one Chopin server. */
 export async function machineToken(directory: string, origin: string) {
 	return (await stored(directory)).servers[origin]?.token;

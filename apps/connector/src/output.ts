@@ -27,10 +27,11 @@ export function colorful(stream: Stream, env: Record<string, string | undefined>
 	return !!stream.isTTY && !env.NO_COLOR;
 }
 
-export type JobKind = "build" | "investigation" | "spike";
+export type JobKind = "build" | "rebuild" | "investigation" | "spike";
 
 const VERBS: Record<JobKind, string> = {
 	build: "Building",
+	rebuild: "Building changes for",
 	investigation: "Investigating",
 	spike: "Prototyping",
 };
@@ -102,7 +103,7 @@ export function createOutput(
 			say(`  ${s.green("✓")} Finished`, "");
 		},
 		stopped() {
-			say(`  ${s.dim("■ Stopped from this terminal")}`, "");
+			say(`  ${s.dim("✗ Stopped from the connector terminal.")}`, "");
 		},
 		/** `agent` is the agent's last stderr lines, shown when debugging didn't already show them. */
 		failed(message: string, agent: string[] = []) {

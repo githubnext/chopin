@@ -1,3 +1,4 @@
+import { titleChannel } from "./database";
 import { expect, openIsolatedRoom, test } from "./room";
 import { expectNoHorizontalOverflow, RESPONSIVE_SOURCE } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -44,10 +45,18 @@ test("a phone gets full-bleed panes under a top bar and a bottom tab bar", async
 	await expect(page.getByRole("button", { name: "Show sidebar" })).toHaveCount(0);
 	await expect(topBar(page).getByRole("button", { name: "Documents", exact: true })).toBeVisible();
 	await expect(topBar(page).getByRole("button", { name: /^Actions for / })).toBeVisible();
-	for (let control of await topBar(page).getByRole("button").all()) {
+	// The subtitle's build links are small text with a thumb-sized invisible target of their own.
+	for (
+		let control of await topBar(page).getByRole("button")
+			.and(page.locator(":not(.phone-top-bar-subtitle *)")).all()
+	) {
 		let box = await control.boundingBox();
-		expect(box!.height).toBeGreaterThanOrEqual(44);
-		expect(box!.width).toBeGreaterThanOrEqual(44);
+		expect(box!.height).toBeGreaterThanOrEqual(43.5);
+		expect(box!.width).toBeGreaterThanOrEqual(43.5);
+	}
+	for (let link of await topBar(page).locator(".phone-top-bar-subtitle button").all()) {
+		expect(await link.evaluate(element => getComputedStyle(element, "::after").height))
+			.toBe("44px");
 	}
 	await expectNoHorizontalOverflow(page);
 });
@@ -146,6 +155,74 @@ test("the top bar hides while reading down and returns on scroll up", async ({ j
 	await scrollPane(scroller, 1600);
 	await expect(page.locator(".workspace-root")).not.toHaveAttribute("data-workspace-bar", "hidden");
 });
+
+/** Horizontal space from the subtitle's last build control to the first face beside it. */
+function buildToFaces(page: Page): Promise<number> {
+	return topBar(page).evaluate(bar => {
+		let links = [...bar.querySelectorAll(".phone-top-bar-subtitle .build-status-link")];
+		let face = bar.querySelector(".phone-top-bar-people > *")!.getBoundingClientRect();
+		return face.left - Math.max(...links.map(link => link.getBoundingClientRect().right));
+	});
+}
+
+for (let width of [390, 430]) {
+	test(`at ${width} the top bar names the project and build beside who is here`, async ({ baseURL, join, room, seed }) => {
+		await seed(RESPONSIVE_SOURCE);
+		let viewport = { width, height: width === 390 ? 844 : 932 };
+		let page = await join("ana", { ...PHONE, viewport });
+		await join("bo", { viewport: { width: 1440, height: 900 } });
+		let bar = topBar(page);
+		let people = bar.getByRole("group", { name: /^People here: / });
+		await expect(people).toHaveAccessibleName(/\bana\b/);
+		await expect(people).toHaveAccessibleName(/\bbo\b/);
+		let subtitle = bar.locator(".phone-top-bar-subtitle");
+		await expect(subtitle).toContainText("score");
+		let plan = subtitle.getByRole("button", { name: "Build plan", exact: true });
+		await expect(plan).toBeVisible();
+		// The text is small; its invisible target is a thumb's.
+		expect(await plan.evaluate(element => getComputedStyle(element, "::after").height))
+			.toBe("44px");
+
+		// At the top the title waits, and the subtitle alone sits on the bar's centre line.
+		await expect(bar.locator(".phone-top-bar-title")).toHaveCSS("opacity", "0");
+		await expect.poll(async () => {
+			let line = (await subtitle.boundingBox())!;
+			let box = (await bar.boundingBox())!;
+			return Math.abs(line.y + line.height / 2 - (box.y + box.height / 2));
+		}).toBeLessThanOrEqual(2);
+		expect(await buildToFaces(page)).toBeGreaterThanOrEqual(12);
+		let faces = people.locator(":scope > :not(.phone-top-bar-more)");
+		await expect(faces).toHaveCount(2);
+
+		// A long title truncates short of the faces, which keep their 12px from the build.
+		let long = `A very long document title that cannot fit beside the people ${room.slice(0, 6)}`;
+		await titleChannel(Number(new URL(baseURL!).port), room, long);
+		await page.reload();
+		await expect(bar).toContainText(long);
+		await page.locator("[data-plan-scroll]").evaluate(element => element.scrollTo({ top: 400 }));
+		await page.locator("[data-plan-scroll]").evaluate(element => element.scrollTo({ top: 300 }));
+		let title = bar.locator(".phone-top-bar-title > .truncate");
+		await expect(bar.locator(".phone-top-bar-title")).toHaveCSS("opacity", "1");
+		expect(await title.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
+		let titleBox = (await title.boundingBox())!;
+		let face = (await people.boundingBox())!;
+		expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(face.x);
+		// Needing room, the title takes it from the faces first: one face, the other counted.
+		await expect(faces).toHaveCount(1);
+		await expect(people.locator(".phone-top-bar-more")).toHaveText("+1");
+		await expect(people).toHaveAccessibleName(/\bbo\b/);
+		expect(await buildToFaces(page)).toBeGreaterThanOrEqual(12);
+		for (
+			let control of [
+				bar.getByRole("button", { name: "Documents", exact: true }),
+				bar.getByRole("button", { name: /^Actions for / }),
+			]
+		) {
+			let box = (await control.boundingBox())!;
+			expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(43.5);
+		}
+	});
+}
 
 /** Space between the current tab's label and its pill's rounded edge, at the label's lower part. */
 async function labelClearance(page: Page): Promise<number> {

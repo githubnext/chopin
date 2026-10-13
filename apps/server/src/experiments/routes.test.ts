@@ -644,13 +644,16 @@ test(
 					.status,
 			)
 				.toBe(200);
-			await until(
-				async () => (await runtime.service.store.get(id))?.state !== "queued",
-				"the connector to claim the run",
-			);
-			// Claimed through the connection registered after the restart.
+			// The agent is `false`, so the run fails as soon as it starts; `running` lasts only as long
+			// as its start takes, and its failure report is the stable sign the connector ran it.
+			let settled = async () => {
+				let state = (await runtime.service.store.get(id))?.state;
+				return state !== "queued" && state !== "running";
+			};
+			await until(settled, "the connector to run the work");
+			// Claimed and reported through the connection registered after the restart.
 			let claimed = await runtime.service.store.get(id);
-			expect(claimed?.state).toBe("running");
+			expect(claimed).toMatchObject({ state: "failed", generation: 1 });
 			expect(claimed?.connectionId).not.toBe(paired.connection.id);
 			expect(paths).toContain("/api/connector/connections");
 			expect(paths.filter(path => path.startsWith("/api/connector/pairings"))).toEqual([]);
@@ -709,6 +712,21 @@ test("unpairing with the machine's own token revokes it", async () => {
 	let again = await request("/api/connector/machine/revoke", {}, undefined, paired.machineToken);
 	expect(again.status).toBe(401);
 	expect((await again.json()).error).toBe("machine-revoked");
+});
+
+test("a machine checks with its own token that Chopin still accepts it", async () => {
+	let { alice, request, pair, checked } = await setup();
+	let paired = await pair(alice.cookie);
+	let before = checked.length;
+	let accepted = await request("/api/connector/machine", undefined, undefined, paired.machineToken);
+	expect(accepted.status).toBe(200);
+	expect(await accepted.json()).toEqual({ id: paired.machine, label: "Laptop", login: "alice" });
+	// The check is cheap: it never asks GitHub about a repository.
+	expect(checked.length).toBe(before);
+	await request("/api/connector/machine/revoke", {}, undefined, paired.machineToken);
+	let revoked = await request("/api/connector/machine", undefined, undefined, paired.machineToken);
+	expect(revoked.status).toBe(401);
+	expect((await revoked.json()).error).toBe("machine-revoked");
 });
 
 test("GitHub refusing a machine's authorization asks for pairing again", async () => {
@@ -868,7 +886,7 @@ test("builds queued behind a connection's build take its place in the order they
 });
 
 test("a spike runs with an image upload and a structured report, and stays out of the list", async () => {
-	let { alice, documentId, request, tool, pair, runtime } = await setup();
+	let { alice, documentId, request, tool, pair, runtime, storage } = await setup();
 	let paired = await pair(alice.cookie);
 	let id = crypto.randomUUID();
 	await runtime.service.create(documentId, "alice", "Spike brief", id, {
@@ -893,6 +911,8 @@ test("a spike runs with an image upload and a structured report, and stays out o
 	expect(listed.experiments).toEqual([]);
 	let claim = text(await tool(paired.token, "claim_experiment", { id }));
 	expect(claim.spike).toBe(true);
+	// The connector names the run by its passage rather than the internal spike brief.
+	expect(claim.passage).toBe("Unsure whether this works.");
 	let tools = await (await request(
 		"/connector/mcp",
 		{ jsonrpc: "2.0", id: 1, method: "tools/list" },
@@ -943,6 +963,9 @@ test("a spike runs with an image upload and a structured report, and stays out o
 	expect(value?.state).toBe("completed");
 	expect(value?.result?.report).toContain("**It works**");
 	expect(value?.result?.report).toContain(uploaded.path);
+	// A spike lands only as its callout: completing it never publishes a child document.
+	expect(value?.childId).toBeUndefined();
+	expect(await storage.channels.children(documentId, 10)).toEqual([]);
 });
 
 test("an ordinary run cannot upload images or send an image-sized body", async () => {

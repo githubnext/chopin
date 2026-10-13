@@ -1156,19 +1156,36 @@ test("sidebar creation failures remain retryable", async ({ join, page }) => {
 test("archiving a sidebar row by keyboard moves focus to a neighbouring row", async ({ baseURL, join }) => {
 	let page = await join("ana");
 	let port = Number(new URL(baseURL!).port);
+	let document = crypto.randomUUID();
+	await createChannel(port, document);
 	await createChannel(port, crypto.randomUUID());
-	await createChannel(port, crypto.randomUUID());
+	// A newer row models another test sharing this catalogue; it must never be archived here.
+	let unrelated = crypto.randomUUID();
+	await createChannel(port, unrelated);
 	await page.reload();
 	let links = sidebar(page).locator(".project-sidebar-document-link");
 	await expect.poll(() => links.count()).toBeGreaterThanOrEqual(3);
+	await expect(
+		sidebar(page).getByRole("link", {
+			name: `Test ${document.slice(0, 8)}`,
+			exact: true,
+		}),
+	).toBeVisible();
 	let names = (await links.allInnerTexts()).map(name => name.trim());
-	let index = await links.evaluateAll(elements =>
-		elements.findIndex(element => element.getAttribute("aria-current") !== "page")
+	let index = await links.evaluateAll(
+		(elements, path) => elements.findIndex(element => element.getAttribute("href") === path),
+		roomPath(document),
 	);
+	expect(index).toBeGreaterThanOrEqual(0);
 	let neighbour = names[index + 1] ?? names[index - 1];
 	let row = links.nth(index).locator(
 		"xpath=ancestor::div[contains(@class,'project-sidebar-document')][1]",
 	);
+	await expect(row.getByRole("button", {
+		includeHidden: true,
+		name: `Actions for Test ${document.slice(0, 8)}`,
+		exact: true,
+	})).toBeAttached();
 	let trigger = row.getByRole("button", { name: /^Actions for / });
 	await row.hover();
 	await trigger.focus();

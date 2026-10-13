@@ -434,6 +434,9 @@
 	--sheet-fall-dur: 260ms;
 	--sheet-ease: var(--tab-slide-ease);
 	--sheet-page-dur: 350ms;
+	/* A decision deck's cards change places on the same curve. */
+	--deck-move-dur: 320ms;
+	--deck-ease: var(--sheet-ease);
 	--route-swap-out-dur: 80ms;
 	--route-swap-in-dur: 150ms;
 	--icon-swap-dur: 250ms;

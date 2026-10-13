@@ -17,6 +17,7 @@ import {
 	plural,
 	pullRequestCommits,
 	pullRequestNumber,
+	retryAction,
 	startedBy,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
@@ -199,6 +200,9 @@ export function BuildView(
 			detail = commits > 0
 				? `${plural(commits, "commit", "commits")} since first build`
 				: undefined;
+		} else if (look.kind === "agent") {
+			// The note below says how to start the agent.
+			detail = undefined;
 		} else if (
 			look.kind === "failed" && phase.kind === "live" && phase.sync.kind === "needs-attention"
 		) {
@@ -310,7 +314,7 @@ export function BuildView(
 				</div>
 				{(build.needsAgent || snapshot?.localAgent === false && look.kind === "stopped") && (
 					<div className="mt-3">
-						<LocalAgentNote action="Retry" />
+						<LocalAgentNote action={retryAction(look)} />
 					</div>
 				)}
 				{phase.kind === "stopped" && returning && (
