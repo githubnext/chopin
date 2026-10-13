@@ -41,14 +41,24 @@ function stopped(reason: Exclude<ErrorClass, "retry" | "forgotten">, error: unkn
 			: code === "repository-forbidden"
 			? "Chopin refused the connection: you no longer have push access to this repository."
 			: error instanceof Error
-			? error.message
+			? redacted(error.message)
 			: "Connector failed");
 	return new ConnectorStopped(reason, message);
 }
 
-/** An error message's first sentence, without the MCP client's prefixes. */
+const USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi;
+const TOKEN = /\b(?:gh[opsur]_|github_pat_|chopin_m_|sk-)[A-Za-z0-9_-]{8,}|\b(Bearer\s+)\S{8,}/g;
+
+/** `text` with URL credentials and token-shaped strings masked, for the terminal. */
+function redacted(text: string) {
+	return text
+		.replace(USERINFO, "$1[redacted]@")
+		.replace(TOKEN, (_match, bearer?: string) => `${bearer ?? ""}[redacted]`);
+}
+
+/** An error message's first sentence, without the MCP client's prefixes or any credentials. */
 function sentence(message: string) {
-	return message.split("\n")[0]!
+	return redacted(message).split("\n")[0]!
 		.replace(/^Streamable HTTP error:\s*/, "")
 		.replace(/^Error POSTing to endpoint:\s*/, "")
 		.replace(/\.(\s.*)?$/, "")
@@ -61,7 +71,7 @@ function sentence(message: string) {
  * the network error's code, each with the first sentence of its message. A gateway answering for
  * a restarting server sends no body, so the MCP client's own message can be empty.
  */
-function cause(error: unknown) {
+export function failureCause(error: unknown) {
 	let code = errorCode(error);
 	if (code) return code;
 	let fallback: string | undefined;
@@ -219,7 +229,7 @@ export async function serveWork(options: {
 			if (forgottenSince !== undefined) {
 				wait = Math.min(wait, forgottenSince + forgetMs - now());
 			}
-			if (failures === 1) output.unreachable(cause(error), connected);
+			if (failures === 1) output.unreachable(failureCause(error), connected);
 			if (failures <= ANNOUNCED) output.reconnecting(wait);
 			else if (failures === ANNOUNCED + 1) output.stillReconnecting();
 			if (wait) await sleep(wait, signal);

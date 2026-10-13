@@ -5,7 +5,7 @@ import type { Server as NetServer } from "node:net";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { serveWork } from "./connection";
+import { failureCause, serveWork } from "./connection";
 import { SELF } from "./machine";
 import { remote } from "./mcp";
 import { createOutput } from "./output";
@@ -524,4 +524,18 @@ test("a server answering 503 keeps the connector retrying past two minutes", asy
 		run: async () => {},
 	});
 	expect(clock).toBeGreaterThan(600_000);
+});
+
+test("a connection failure's cause never shows credentials from the error", () => {
+	let reset = Object.assign(
+		new Error("connect via https://alice:supersecret@proxy.example.test:8080/ failed. More detail"),
+		{ code: "ECONNRESET" },
+	);
+	expect(failureCause(reset)).toBe("ECONNRESET: connect via https://[redacted]@proxy.example.test:8080/ failed");
+	let wrapped = new TypeError("fetch failed", {
+		cause: new Error("token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 and Bearer abcdef0123456789xyz rejected"),
+	});
+	let text = failureCause(wrapped);
+	expect(text).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+	expect(text).not.toContain("abcdef0123456789xyz");
 });
