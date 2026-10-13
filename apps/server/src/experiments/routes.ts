@@ -414,11 +414,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	/**
 	 * `chopin connect --planner`: a short-lived credential with which the machine's Planner backend
-	 * attaches one document over `/planner-link`, checked with the machine's own GitHub token.
+	 * attaches one document over `/planner-link`, checked with the machine's own GitHub token. Under
+	 * AUTH_MODE=local machines hold no GitHub token, so there is no such credential to issue.
 	 */
 	route("POST", "/api/connector/planner", async request => {
 		let planners = options.planners;
-		if (!planners) fail("not-found");
+		if (!planners || !auth.machines.durable) fail("not-found");
 		compatible(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { document } = z.object({ document: z.string().min(1).max(2048) }).strict().parse(

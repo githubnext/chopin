@@ -589,8 +589,9 @@ Authorization: Bearer <machine token>
 200 { "token": "chopin_p_…", "expiresAt": <milliseconds since the epoch>, "document": { "id": "", "url": "" } }
 ```
 
-Chopin issues it only when it runs `HARNESS=remote` with `AGENT` on (otherwise
-404), the machine is still paired and authorized (otherwise 401
+Chopin issues it only when it runs `HARNESS=remote` with `AGENT` on and not
+`AUTH_MODE=local`, where machines hold no GitHub authorization of their own
+(otherwise 404), the machine is still paired and authorized (otherwise 401
 `machine-revoked` or `machine-reauthorize`), and the machine's owner, checked
 with the machine's own GitHub authorization, can push to or administer the
 document's repository (otherwise 403 `repository-forbidden`; 404 `not-found`
@@ -602,9 +603,7 @@ forgets it as it releases every attachment.
 
 Attached this way, the document's Planner owner is a login of the machine's
 owner that no browser holds, whose GitHub token is the machine's own; Chopin's
-repository tools act with it. Under `AUTH_MODE=local`, where machines hold no
-GitHub authorization, the machine borrows its owner's browser sign-in, and
-`sign-in-required` applies as it does to a GitHub bearer.
+repository tools act with it.
 
 ### What the backend must do
 

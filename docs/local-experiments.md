@@ -108,7 +108,7 @@ revokes the machine in Chopin and deletes its token. Every command takes
 `--base-dir <dir>` (or `CHOPIN_HOME`) for where the token, locks and worktrees
 live. `chopin --version` prints the CLI version and the connector protocol it
 speaks, and `chopin help` lists the commands. On a server running
-`HARNESS=remote`, `chopin connect --planner <document URL>` (repeatable) with
+`HARNESS=remote` (not `AUTH_MODE=local`), `chopin connect --planner <document URL>` (repeatable) with
 `--planner-command <command>` also runs that command as each document's Planner,
 with no browser sign-in; see
 [Planner backend commands](planner-link.md#planner-backend-commands). The binary ignores any `.env` or

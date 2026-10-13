@@ -26,13 +26,14 @@ afterEach(async () => {
 
 /**
  * A server running HARNESS=remote whose accounts can pair machines: the connector routes, the
- * Planner link, and the machines' own GitHub tokens, which GitHub knows as their account's.
+ * Planner link, and the machines' own GitHub tokens, which GitHub knows as their account's. With
+ * `local`, as under AUTH_MODE=local, there is no machine key, so machines keep no GitHub tokens.
  */
-async function machineServer(options: { revalidateEveryMs?: number } = {}) {
+async function machineServer(options: { revalidateEveryMs?: number; local?: boolean } = {}) {
 	let linked = await linkAuth();
 	let { auth, storage, sessions } = linked;
 	let machines = new Machines(storage, () => new Date(), {
-		key: new Uint8Array(32).fill(7),
+		...(options.local ? {} : { key: new Uint8Array(32).fill(7) }),
 		origin: auth.config.origin,
 		clientId: "client",
 		authorize: async (userId, token) => (await auth.admission.user(token)).id === userId,
@@ -161,6 +162,13 @@ describe("a paired machine's Planner", () => {
 			new URL(`${auth.config.origin}/api/connector/planner`),
 		);
 		expect(response!.status).toBe(404);
+	});
+
+	it("is refused under AUTH_MODE=local, where machines hold no GitHub authorization", async () => {
+		let { pair, credential, channel } = await machineServer({ local: true });
+		let member = await pair("member", "U_member");
+		expect(await credential(member.token, channel.id))
+			.toMatchObject({ status: 404, body: { error: "not-found" } });
 	});
 
 	it("attaches with no browser sign-in, and its repository tools use the machine's token", async () => {
