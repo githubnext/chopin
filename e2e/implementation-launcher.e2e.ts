@@ -340,6 +340,49 @@ function buildView(page: import("@playwright/test").Page) {
 	return page.getByRole("region", { name: "Build", exact: true });
 }
 
+/** Whatever build shows ends 12px before the rule, and the first face starts 12px after it. */
+async function expectClearOfPeople(build: import("@playwright/test").Locator) {
+	let people = build.page().getByRole("group", { name: /^People here/ });
+	let face = people.locator(":scope > [data-tooltip]").first();
+	await expect(build).toBeVisible();
+	await expect(face).toBeVisible();
+	let control = (await build.boundingBox())!;
+	let group = (await people.boundingBox())!;
+	let first = (await face.boundingBox())!;
+	let end = control.x + control.width;
+	expect(group.x - end).toBeGreaterThanOrEqual(12);
+	expect(first.x - end).toBeGreaterThanOrEqual(24);
+	expect(await people.evaluate(element => getComputedStyle(element).borderInlineStartWidth))
+		.not.toBe("0px");
+}
+
+for (let state of ["Build plan", "Build stopped"] as const) {
+	test(`${state} keeps clear of the people here at full and narrow widths`, async ({ seed, join: enter }) => {
+		let graph = preparedGraph();
+		await seed("# Build gap\n\nBuild sits apart from the people here.\n", {
+			graph,
+			builds: state === "Build stopped" ? [failedBuild(graph)] : undefined,
+		});
+		let page = await enter("ana", { viewport: { width: 1440, height: 900 } });
+		// A collaborator's view, with two people here.
+		let other = await enter("bea", { viewport: { width: 1440, height: 900 } });
+		for (let viewer of [page, other]) {
+			// The rightmost build control: Build plan, or the capsule's Retry.
+			let build = state === "Build plan"
+				? viewer.getByRole("button", { name: "Build plan", exact: true })
+				: viewer.getByRole("button", { name: "Retry", exact: true });
+			await expect(
+				viewer.getByRole("group", { name: /^People here/ }).locator(":scope > [data-tooltip]"),
+			)
+				.toHaveCount(2);
+			for (let width of [1440, 1100]) {
+				await viewer.setViewportSize({ width, height: 900 });
+				await expectClearOfPeople(build);
+			}
+		}
+	});
+}
+
 test("a #task link opens Build on that task, and rows toggle from the keyboard", async ({ seed, join: enter, room }) => {
 	let graph = preparedGraph();
 	await seed("# Linked task\n\nThe second task is the one to read.\n", {
@@ -489,6 +532,7 @@ test("a build in progress shows who started it and offers no action", async ({ s
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
 		let capsule = page.getByRole("button", { name: /^Building · 0 of 2/ });
 		await expect(capsule).toBeVisible();
+		await expectClearOfPeople(capsule);
 		// The capsule and the Build tab light each other, and the capsule opens Build.
 		let tab = page.getByRole("group", { name: "Document view" })
 			.getByRole("button", { name: "Build", exact: true });
@@ -559,6 +603,7 @@ test("edits after a build read as changes to build, and Build sends them to the 
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
 		let built = page.getByRole("button", { name: "Built", exact: true });
 		await expect(built).toBeVisible({ timeout: 30_000 });
+		await expectClearOfPeople(built);
 		// Beside a built document's capsule there is no Build; only the tab has that name.
 		await expect(page.getByRole("button", { name: "Build", exact: true })).toHaveCount(1);
 
@@ -568,6 +613,11 @@ test("edits after a build read as changes to build, and Build sends them to the 
 		let stale = page.getByRole("button", { name: "1 change to build", exact: true });
 		await expect(stale).toBeVisible();
 		await expect(stale).toHaveAccessibleDescription("Edits since the last build");
+		await expectClearOfPeople(
+			page.getByRole("button", { name: "Build", exact: true }).and(
+				page.locator(":not([role='group'] *)"),
+			),
+		);
 		let tab = page.getByRole("group", { name: "Document view" })
 			.getByRole("button", { name: "Build", exact: true });
 		await expect(tab).toBeEnabled();

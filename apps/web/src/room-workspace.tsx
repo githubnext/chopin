@@ -1633,7 +1633,8 @@ export function RoomWorkspace(
 							/>
 						</>
 					}
-					status={statusNotices}
+					// Build plan or its capsule closes the status, so the rule before the faces follows it.
+					status={<>{statusNotices}{mode === "split" && buildSlot}</>}
 					ids={workspaceIds}
 					phoneAction={barEdit && (
 						<button
@@ -1652,12 +1653,7 @@ export function RoomWorkspace(
 					phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
 					identity={room}
 					mode={mode}
-					presence={
-						<>
-							{mode === "split" && buildSlot}
-							<RoomMembers members={members} ring="page" />
-						</>
-					}
+					presence={<RoomMembers members={members} ring="page" />}
 					phone={phone}
 					onDesktopChatOpen={setDesktopChatOpen}
 					onChatOpen={open => dispatch({ type: "set-chat", open })}
