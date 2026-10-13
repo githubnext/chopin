@@ -304,16 +304,19 @@ export function optionText(typed: string): string {
  * The draft change that chooses a just-added option, as if its row had been
  * clicked. Undefined when that would replace a collaborator's single choice in
  * the shared draft: adding is for everyone, but only the adder's own pick moves.
+ * `mine` is the last option this person chose for the question, if any; the
+ * answer is theirs only while the shared draft still holds it.
  */
 export function chooseAdded(
 	question: Item,
 	draft: Draft | undefined,
 	option: string,
-	own: boolean,
+	mine: string | null | undefined,
 ): Partial<Draft> | undefined {
 	if (question.multiple) {
 		return { mode: "choices", options: { ...draft?.options, [option]: true } };
 	}
+	let own = !!mine && draft?.mode === "choices" && draft.choice === mine;
 	if (!own && answered(question, draft)) return undefined;
 	return { mode: "choices", choice: option };
 }
@@ -348,6 +351,13 @@ function AddOption(
 	let trigger = useRef<HTMLButtonElement>(null);
 	let focus = useRef<"field" | "trigger">(undefined);
 	let edit = useRef(0);
+	let count = useRef(question.options.length);
+	count.current = question.options.length;
+	// Leaving the question abandons a pending add, except when the add itself filled
+	// the list and so removed this row.
+	useEffect(() => () => {
+		if (count.current < MAX_SHARED_OPTIONS) edit.current++;
+	}, []);
 	let label = text?.trim() ?? "";
 	let duplicate = label ? duplicateOf(question, label) : undefined;
 	let ready = !!label && !duplicate && !disabled;
@@ -401,8 +411,6 @@ function AddOption(
 			result = { ok: false, message: "Could not add this option." };
 		}
 		setPending(null);
-		// Escape or blur abandoned the field. Reaching the option limit unmounts it
-		// without abandoning anything, so that case still selects.
 		if (edit.current !== submittedEdit) return;
 		let field = group.current;
 		let ownsFocus = field
@@ -852,6 +860,8 @@ export function QuestionView(props: QuestionViewProps) {
 	let [announcement, setAnnouncement] = useState("");
 	let options = useRef<HTMLFieldSetElement>(null);
 	let focusOption = useRef<string>(undefined);
+	// The last single choice this person made per question, to tell their answer from a collaborator's.
+	let picks = useRef<Record<string, string | null>>({});
 	// The new option's row renders once its definition arrives, maybe a render later.
 	useEffect(() => {
 		let id = focusOption.current;
@@ -1035,6 +1045,7 @@ export function QuestionView(props: QuestionViewProps) {
 	};
 	let titleId = `${base}-title-${active}`;
 	let choose = (question: string, change: Partial<Draft>) => {
+		if (change.choice !== undefined) picks.current[question] = change.choice;
 		markHumanEdit();
 		setTouched(true);
 		onLocalChange?.(question, change);
@@ -1043,7 +1054,12 @@ export function QuestionView(props: QuestionViewProps) {
 	let added = (question: string, option: string, label: string, focus: boolean) => {
 		let item = latest.current.definition.questions.find(each => each.id === question);
 		if (!item) return;
-		let change = chooseAdded(item, latest.current.drafts[question], option, touched);
+		let change = chooseAdded(
+			item,
+			latest.current.drafts[question],
+			option,
+			picks.current[question],
+		);
 		if (change) choose(question, change);
 		if (focus) focusOption.current = option;
 		setAnnouncement(change ? `Added and selected ${label}` : `Added ${label}`);

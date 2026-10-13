@@ -94,6 +94,36 @@ test("adding an option shows it to everyone and keeps a selection", async ({ joi
 	}
 });
 
+test("adding an option leaves a collaborator's newer choice alone", async ({ join, seed }) => {
+	await seed(PROSE);
+	let ana = await join("ana");
+	let ben = await join("ben");
+	for (let page of [ana, ben]) await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = (page: Page) =>
+		questionnaire(page).filter({
+			has: page.getByRole("heading", { name: "Where should room state live?" }),
+		});
+
+	await card(ana).getByText("On disk as MDX", { exact: true }).click();
+	await expect(card(ben).getByRole("radio", { name: /^On disk as MDX/ })).toBeChecked();
+	await card(ben).getByText("In SQLite", { exact: true }).click();
+	let sqlite = card(ana).getByRole("radio", { name: /^In SQLite/ });
+	await expect(sqlite).toBeChecked();
+
+	await card(ana).getByRole("button", { name: "Add an option", exact: true }).click();
+	await card(ana).getByRole("textbox", { name: "New option" }).fill("In PostgreSQL");
+	await ana.keyboard.press("Enter");
+
+	let added = card(ana).getByRole("radio", { name: "In PostgreSQL", exact: true });
+	await expect(added).toBeFocused();
+	await expect(card(ana).getByText("Added In PostgreSQL", { exact: true })).toBeAttached();
+	for (let page of [ana, ben]) {
+		await expect(card(page).getByRole("radio", { name: "In PostgreSQL", exact: true }))
+			.not.toBeChecked();
+		await expect(card(page).getByRole("radio", { name: /^In SQLite/ })).toBeChecked();
+	}
+});
+
 test("adding options selects only the adder's latest one after refresh", async ({ join, page, seed }) => {
 	await seed(PROSE);
 	let snapshots: Array<{ definition: Definition; model: number[] }> = [];

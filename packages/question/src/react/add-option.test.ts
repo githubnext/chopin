@@ -63,17 +63,29 @@ test("a read-only card, with no way to add an option, hides the trigger", () => 
 
 test("a just-added option becomes this person's choice without taking a collaborator's", () => {
 	let single = AUTH.questions[0]!;
-	let other = single.options[0]!.id;
-	let theirs = { mode: "choices" as const, choice: other, options: {}, custom: "" };
-	expect(chooseAdded(single, undefined, "new", false)).toEqual({ mode: "choices", choice: "new" });
-	expect(chooseAdded(single, theirs, "new", true)).toEqual({ mode: "choices", choice: "new" });
-	expect(chooseAdded(single, theirs, "new", false)).toBeUndefined();
+	let [first, second] = single.options.map(option => option.id);
+	let holding = (choice: string) => ({ mode: "choices" as const, choice, options: {}, custom: "" });
+	expect(chooseAdded(single, undefined, "new", undefined)).toEqual({
+		mode: "choices",
+		choice: "new",
+	});
+	// Still holding this person's pick: theirs to move.
+	expect(chooseAdded(single, holding(first!), "new", first)).toEqual({
+		mode: "choices",
+		choice: "new",
+	});
+	// A collaborator chose since, or this person never chose here: left alone.
+	expect(chooseAdded(single, holding(second!), "new", first)).toBeUndefined();
+	expect(chooseAdded(single, holding(first!), "new", undefined)).toBeUndefined();
+	// Cleared answers are open to the new option.
+	expect(chooseAdded(single, { ...holding(first!), choice: null }, "new", first))
+		.toEqual({ mode: "choices", choice: "new" });
 
 	let multiple = { ...single, multiple: true };
-	let held = { mode: "choices" as const, choice: null, options: { [other]: true }, custom: "" };
-	expect(chooseAdded(multiple, held, "new", false))
-		.toEqual({ mode: "choices", options: { [other]: true, new: true } });
-	expect(chooseAdded(multiple, undefined, "new", false))
+	let held = { mode: "choices" as const, choice: null, options: { [first!]: true }, custom: "" };
+	expect(chooseAdded(multiple, held, "new", undefined))
+		.toEqual({ mode: "choices", options: { [first!]: true, new: true } });
+	expect(chooseAdded(multiple, undefined, "new", undefined))
 		.toEqual({ mode: "choices", options: { new: true } });
 });
 

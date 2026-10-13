@@ -1901,9 +1901,10 @@ button.question-add:disabled {
 	scale: 0.96;
 }
 
+/* Outside the tile: an inset brand ring would vanish on the filled brand check. */
 .question-add-confirm:focus-visible {
 	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
+	outline-offset: var(--focus-ring-width);
 }
 
 .question-add-confirm > svg {
