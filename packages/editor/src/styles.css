@@ -1147,15 +1147,30 @@
 	box-shadow: none;
 }
 
-/* The chip sits over the first line; the field indents its text past it. */
+/*
+ * The chip sits over the first line; the field indents its text past it. Touch raises
+ * the field's text to the 16px floor while the chip keeps its small size, so the chip
+ * centres itself on the field's first line from the field's own size and top padding.
+ */
 .plan-comment-composer-input {
+	--composer-pad: 0px;
+	--composer-text: var(--text-sm);
 	position: relative;
 	min-width: 0;
+	padding-top: var(--composer-pad);
+}
+
+@media (pointer: coarse) {
+	.plan-comment-composer-input {
+		--composer-text: max(var(--field-text-min), var(--text-sm));
+	}
 }
 
 .plan-comment-address-chip {
 	position: absolute;
-	top: 0;
+	top: calc(
+		var(--composer-pad) + (var(--composer-text) - var(--text-sm)) * var(--text-sm--line-height) / 2
+	);
 	left: 0;
 	display: inline-flex;
 	height: var(--text-sm--line-height);
@@ -1832,7 +1847,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 .plan-comment-sheet-content .plan-comment-composer-input {
-	padding-top: 0.5rem;
+	--composer-pad: 0.5rem;
 }
 
 .plan-comment-sheet-content .plan-comment-composer[data-open] .plan-comment-composer-footer {
