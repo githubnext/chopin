@@ -10,13 +10,7 @@
 import { useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
 import { ChevronIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
-import {
-	cardRelation,
-	NOT_LINKED,
-	QuestionView,
-	RelationNote,
-	useQuestionnaire,
-} from "@chopin/question/react";
+import { cardRelation, NOT_LINKED, QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { Provenance, SidecarCard } from "../card";
@@ -105,7 +99,7 @@ export type QuestionnaireCardProps = {
 	writing?: number;
 };
 
-export type CardPresentation = "hidden" | "settled-line" | "resolved" | "open";
+export type CardPresentation = "hidden" | "resolved" | "open";
 
 /**
  * How a card shows where it is.
@@ -210,18 +204,7 @@ export function QuestionnaireCard(
 	let immediate = motionImmediately?.() ?? false;
 	let presence = useTransitionPresence(shown === "hidden" ? undefined : value.id, 200, immediate);
 	let lastVisible = useRef<{ id: string; content: ReactNode } | undefined>(undefined);
-	let content = shown === "settled-line"
-		? (
-			<SettledLine
-				canEdit={canEdit}
-				connected={connected}
-				meta={meta}
-				value={value}
-				wire={wire}
-				{...pointing}
-			/>
-		)
-		: shown === "resolved"
+	let content = shown === "resolved"
 		? (
 			<Decided
 				canEdit={canEdit}
@@ -476,80 +459,6 @@ export function labels(value: Questionnaire): string[] {
 	});
 }
 
-function SettledLine(
-	{ canEdit, connected, meta, value, wire, ...pointing }: {
-		canEdit: boolean;
-		connected: boolean;
-		meta?: Question.CardMeta;
-		value: Questionnaire;
-		wire?: Transport;
-	} & Pointing,
-) {
-	let owner = meta?.owner ?? value.by;
-	let chosen = labels(value);
-	let first = value.questions[0]?.id;
-	let related = meta?.proseOrphaned && first
-		? { relation: "orphaned" as const, question: first }
-		: cardRelation(pointing.relations, value.questions.map(question => question.id))
-			?? (meta?.origin === "conversation" && first
-				? { relation: "pending" as const, question: first }
-				: undefined);
-	let writeup = related?.relation === "pending" && meta?.origin === "conversation"
-		&& (meta.writeup?.status === "writing" || meta.writeup?.status === "failed");
-	let state = useQuestionnaire({
-		id: value.id,
-		bridge: wire,
-		connected: canEdit && connected,
-		definition: definition(value),
-	});
-	let [error, setError] = useState<string>();
-	let [reopening, setReopening] = useState(false);
-	let reopen = async () => {
-		setError(undefined);
-		setReopening(true);
-		let result = await state.reopen();
-		if (!result.ok) setError(result.message);
-		setReopening(false);
-	};
-	return (
-		<p
-			className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-secondary"
-			data-card-settled=""
-			data-plan-sidecar-questionnaire={value.id}
-		>
-			<DecisionIcon aria-hidden="true" className="icon-first-line" size={14} />
-			<span>
-				Decided: {chosen.length ? chosen.join(", ") : "Saved decision"}
-				{owner ? ` · @${owner}` : ""}
-			</span>
-			{writeup && meta
-				? <WriteupStatus canEdit={canEdit} connected={connected} meta={meta} wire={wire} />
-				: related && (
-					<RelationNote
-						count={pointing.places?.[related.question]}
-						onEnter={pointing.onQuestionEnter}
-						onLeave={pointing.onQuestionLeave}
-						onSelect={pointing.onQuestionSelect}
-						pending={pointing.pendingRelation}
-						question={related.question}
-						relation={related.relation}
-					/>
-				)}
-			{related?.relation === "orphaned" && (
-				<button
-					className="btn btn-sm btn-secondary ml-auto"
-					disabled={!canEdit || !connected || reopening}
-					onClick={() => void reopen()}
-					type="button"
-				>
-					Reopen
-				</button>
-			)}
-			{error && <span className="text-text-tertiary" role="alert">{error}</span>}
-		</p>
-	);
-}
-
 function Decided(
 	{ canEdit, connected, discarded, meta, resolved, value, wire, ...pointing }: {
 		canEdit: boolean;
@@ -704,8 +613,20 @@ function useInlineDeck(id: string) {
 		options.cardMeta?.snapshot ?? noCards,
 	);
 	useRelations(store);
-	let run = store?.runOf(id);
-	if (!store || !run) return undefined;
+	return store ? deckOf(id, entries, cards, store) : undefined;
+}
+
+type DeckStore = Pick<QuestionnaireStore, "runOf" | "counts" | "proseKey">;
+
+/** The deck a document card belongs to, if its run forms one that includes it. */
+function deckOf(
+	id: string,
+	entries: readonly QuestionnaireEntry[],
+	cards: ReadonlyMap<string, Question.CardMeta>,
+	store: DeckStore,
+) {
+	let run = store.runOf(id);
+	if (!run) return undefined;
 	let values = new Map(entries.map(entry => [entry.id, entry.value]));
 	let members = run.flatMap(member => {
 		let value = values.get(member);
@@ -738,8 +659,11 @@ function useWritingUp(id: string): number | undefined {
 		options.cardMeta?.snapshot ?? noCards,
 	);
 	useRelations(store);
+	let phone = usePhone();
 	if (!store) return undefined;
-	let writing = writingEntries(entries, cards, store, options.planner);
+	// Phones draw no decks, so there every hidden decision is the document's to speak for.
+	let decks = !(phone && options.onShowDecision);
+	let writing = writingEntries(entries, cards, store, options.planner, decks);
 	return writing[0]?.id === id ? writing.length : undefined;
 }
 
@@ -747,8 +671,9 @@ function useWritingUp(id: string): number | undefined {
 export function writingEntries(
 	entries: readonly QuestionnaireEntry[],
 	cards: ReadonlyMap<string, Question.CardMeta>,
-	store: Pick<QuestionnaireStore, "plannerBusy" | "unwritten">,
+	store: DeckStore & Pick<QuestionnaireStore, "plannerBusy" | "unwritten">,
 	planner: boolean | undefined,
+	decks = true,
 ): QuestionnaireEntry[] {
 	let plannerBusy = planner !== false && store.plannerBusy();
 	return entries.filter(entry =>
@@ -756,6 +681,8 @@ export function writingEntries(
 			unwritten: store.unwritten(entry.id),
 			plannerBusy,
 		})
+		// A deck still draws its decided members, so they are not waiting out of sight.
+		&& !(decks && deckOf(entry.id, entries, cards, store))
 	);
 }
 

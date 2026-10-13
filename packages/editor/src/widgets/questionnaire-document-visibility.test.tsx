@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { QuestionnaireCard, writingProse } from "./questionnaire";
+import { QuestionnaireCard, writingEntries, writingProse } from "./questionnaire";
 import { DECIDED, META } from "./questionnaire-metadata.test-fixtures";
 
+import type { Question } from "@chopin/protocol";
 import type { Relation } from "@chopin/question";
 
 const PLANNER = { ...META, origin: "planner" as const };
@@ -97,4 +98,47 @@ test("a failed write-up offers Retry from the Decisions card", () => {
 	expect(markup).toMatch(
 		/<button aria-label="Retry write-up"(?![^>]*disabled)[^>]*>Retry<\/button>/,
 	);
+});
+
+test("decided cards a deck still draws are not counted as written up out of sight", () => {
+	let open = {
+		...DECIDED,
+		id: "open",
+		questions: [{ ...DECIDED.questions[0]!, answer: undefined, choices: undefined }],
+	};
+	let entries = [
+		{ id: "open", value: open },
+		{ id: "w", value: DECIDED },
+		{ id: "alone", value: { ...DECIDED, id: "alone" } },
+	];
+	let cards = new Map<string, Question.CardMeta>([
+		["open", { ...PLANNER, status: "open" as const }],
+		["w", PLANNER],
+		["alone", PLANNER],
+	]);
+	let store = {
+		runOf: (id: string) => (id === "alone" ? undefined : ["open", "w"]),
+		counts: () => ({}),
+		proseKey: () => undefined,
+		plannerBusy: () => true,
+		unwritten: () => true,
+	};
+	expect(writingEntries(entries, cards, store, true).map(entry => entry.id)).toEqual(["alone"]);
+	// Without decks, as on a phone, the deck's decided card is hidden and counts too.
+	expect(writingEntries(entries, cards, store, true, false).map(entry => entry.id))
+		.toEqual(["w", "alone"]);
+});
+
+test("the Decisions card says a conversation write-up is running only while its job does", () => {
+	let job = "prose:w:decided:w:1";
+	let card = (meta: Question.CardMeta) =>
+		renderToStaticMarkup(createElement(QuestionnaireCard, {
+			meta,
+			presentation: "list",
+			value: DECIDED,
+		}));
+	expect(card({ ...META, writeup: { status: "writing", job } })).toContain("Writing up…");
+	expect(card(META)).not.toContain("Writing up…");
+	expect(card({ ...META, origin: "planner", writeup: { status: "writing", job } }))
+		.not.toContain("Writing up…");
 });

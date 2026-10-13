@@ -2268,15 +2268,18 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	margin-block-start: 0;
 }
 
-/* The empty caret paragraph before the first block takes no room; the block sits at the top padding. */
-.plan .plan-content > p:has(> br:only-child):first-child:not(:last-child) {
+/*
+ * The empty caret paragraph before the first block takes no room; the block sits at the top padding.
+ * Not while every block after it is hidden: then it is the document's only line, and keeps its size.
+ */
+.plan .plan-content:not([data-plan-blank]) > p:has(> br:only-child):first-child:not(:last-child) {
 	block-size: 0;
 	margin-block: 0;
 	overflow: visible;
 }
 
 .plan
-	.plan-content
+	.plan-content:not([data-plan-blank])
 	> p:has(> br:only-child):first-child:not(:last-child)
 	+ :is([data-plan-questionnaire], [data-plan-decision]) {
 	margin-block-start: 0;

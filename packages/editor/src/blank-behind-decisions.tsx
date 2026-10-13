@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useSyncExternalStore } from "react";
+import { COMMAND_PRIORITY_HIGH, KEY_BACKSPACE_COMMAND, KEY_DELETE_COMMAND } from "lexical";
 
 import { useRelations } from "./questionnaires";
 import { blankBehindDecisions, writingEntries } from "./widgets/questionnaire";
@@ -53,5 +54,20 @@ export function BlankBehindDecisions(
 			root.style.removeProperty("--plan-blank-placeholder");
 		};
 	}, [blank, editor, placeholder]);
+	// Nothing visible to delete: Lexical would remove the caret's empty line and leave a block
+	// cursor beside a decision the reader cannot see.
+	useEffect(() => {
+		if (!editor || !blank) return;
+		let refuse = (event: KeyboardEvent | null) => {
+			event?.preventDefault();
+			return true;
+		};
+		let offBackspace = editor.registerCommand(KEY_BACKSPACE_COMMAND, refuse, COMMAND_PRIORITY_HIGH);
+		let offDelete = editor.registerCommand(KEY_DELETE_COMMAND, refuse, COMMAND_PRIORITY_HIGH);
+		return () => {
+			offBackspace();
+			offDelete();
+		};
+	}, [blank, editor]);
 	return null;
 }
