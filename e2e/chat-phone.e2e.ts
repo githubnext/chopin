@@ -15,6 +15,8 @@ async function openPhoneChat(page: Page): Promise<void> {
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).click();
 	await expect(chatInput(chatPane(page))).toBeVisible();
+	// The pane slides in from the side; measure it once it has arrived at the left edge.
+	await expect.poll(async () => (await chatPane(page).boundingBox())?.x).toBe(0);
 }
 
 /** From the top of the pill to the bottom of the composer, leaving out the status line above it. */
