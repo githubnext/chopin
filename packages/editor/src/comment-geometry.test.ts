@@ -241,6 +241,8 @@ test("puts a comment card in a wide gutter beside the passage's first line", () 
 	let wide = { ...host, right: 1_300, width: 1_200 };
 	expect(commentCardPoint(passage(200), column, wide, 320, 200))
 		.toEqual({ top: 100, left: 656, width: 320, side: "right" });
+	expect(commentCardPoint(passage(200), column, wide, 320, 900))
+		.toEqual({ top: 12, left: 656, width: 320, side: "right", maxHeight: 576 });
 	let snug = { ...host, right: 1_036, width: 936 };
 	expect(commentCardPoint(passage(200), column, snug, 320, 200).width).toBe(268);
 });

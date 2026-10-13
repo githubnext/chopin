@@ -342,8 +342,21 @@ function CommentSurface(
 	},
 ) {
 	let lifecycle = useCommentPresence(value, compact ? 180 : 150, immediately);
-	if (lifecycle.presence.phase === "closed") return null;
-	let surface = lifecycle.presence.value;
+	let surface = lifecycle.presence.phase === "closed" ? undefined : lifecycle.presence.value;
+	let element = useRef<HTMLDivElement | null>(null);
+	let measure = useRef(surface?.onMeasure);
+	measure.current = surface?.onMeasure;
+	let open = !!surface;
+	// Content can grow after the card is placed, as when a long thread unfolds its replies,
+	// so the card is measured again and re-placed rather than running off the document.
+	useLayoutEffect(() => {
+		let card = element.current;
+		if (!open || !card) return;
+		let observer = new ResizeObserver(() => measure.current?.(card));
+		for (let child of card.children) observer.observe(child);
+		return () => observer.disconnect();
+	}, [open, surface?.id]);
+	if (!surface) return null;
 	return (
 		<div
 			aria-hidden={lifecycle.ariaHidden}
@@ -356,7 +369,10 @@ function CommentSurface(
 			inert={lifecycle.inert}
 			onMouseEnter={surface.onMouseEnter}
 			onMouseLeave={surface.onMouseLeave}
-			ref={surface.onMeasure}
+			ref={node => {
+				element.current = node;
+				surface.onMeasure?.(node);
+			}}
 			role="dialog"
 			style={surface.style}
 		>

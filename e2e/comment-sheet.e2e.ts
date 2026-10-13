@@ -668,3 +668,29 @@ test("the desktop header has no comments list button", async ({ join, seed }) =>
 	await expect(page.getByRole("button", { name: /^Comment on “review the pilot”/ })).toBeVisible();
 	await expect(page.getByRole("button", { name: /open comments?$/ })).toHaveCount(0);
 });
+
+test("a desktop card that unfolds a long thread stays in view and scrolls to its reply box", async ({ join, seed }) => {
+	let notes = Array.from(
+		{ length: 9 },
+		(_, index) =>
+			`Reply ${index + 1}: ${"A longer note that wraps across several lines. ".repeat(3)}`,
+	);
+	await seed(SOURCE, { threads: [await open("review the pilot", notes)] });
+	let page = await join("ana", { viewport: { width: 1100, height: 640 } });
+	await page.getByRole("button", { name: /^Comment on “review the pilot”/ }).click();
+	let card = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(card).toBeVisible();
+
+	await card.getByRole("button", { name: /^Show \d+ replies$/ }).click();
+	await expect(card.getByText("Reply 2:")).toBeVisible();
+	// The card is re-placed for its new height: inside the viewport, scrolling within itself.
+	await expect.poll(async () => {
+		let box = await card.boundingBox();
+		return !!box && box.y >= 0 && box.y + box.height <= 640;
+	}).toBe(true);
+	expect(await card.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+	let reply = card.getByPlaceholder("Reply", { exact: true });
+	await reply.scrollIntoViewIfNeeded();
+	await expectInsideViewport(reply);
+	await reply.fill("Reachable.");
+});

@@ -232,11 +232,13 @@ export function commentCardPoint(
 	let gutter = host.right - inset - (column.right + lane);
 	if (gutter >= minWidth) {
 		let fitted = Math.min(width, gutter);
+		let room = host.height - inset * 2;
 		return {
 			top: clamp(passage.top - host.top, inset, host.height - height - inset),
 			left: column.right + lane - host.left,
 			width: fitted,
 			side: "right",
+			...(height > room ? { maxHeight: room } : {}),
 		};
 	}
 
