@@ -63,6 +63,7 @@ async function decide(page: Page, room: string, option = OPTION) {
 	await openJevWire(page, room);
 	let source = await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
+	await page.getByRole("button", { name: "Document", exact: true }).click();
 	let decision = card(page);
 	await expect(decision).toBeVisible();
 	await decision.getByText(option, { exact: true }).click();
@@ -158,6 +159,7 @@ test("ordinary prose edits retain the marker; deletion orphans it for both reade
 	let ben = await join("ben");
 	await openJevWire(ben, room);
 	await decide(ana, room);
+	await ben.getByRole("button", { name: "Document", exact: true }).click();
 	await expect(marker(ben)).toBeVisible();
 
 	await prose(ana).click();
@@ -315,6 +317,7 @@ test("a failed prose job is visible on the opening message and Retry uses the co
 	await openJevWire(page, room);
 	let source = await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
+	await page.getByRole("button", { name: "Document", exact: true }).click();
 	await card(page).getByText(OPTION, { exact: true }).click();
 	await card(page).getByRole("button", { name: "Save", exact: true }).click();
 	await waitForProseJob(page, "failed");
@@ -334,6 +337,7 @@ test("a write-up shows one quiet line in the document; failure and Retry live in
 	await openJevWire(page, room);
 	await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
+	await page.getByRole("button", { name: "Document", exact: true }).click();
 	await card(page).getByText(OPTION, { exact: true }).click();
 	await card(page).getByRole("button", { name: "Save", exact: true }).click();
 	await waitForProseJob(page, "failed");
@@ -343,7 +347,11 @@ test("a write-up shows one quiet line in the document; failure and Retry live in
 	let decisions = page.locator('[data-document-view="decisions"]');
 	let show = async () => {
 		await page.getByRole("button", { name: /^Decisions/ }).click();
-		await page.getByRole("button", { name: "1 resolved", exact: true }).click();
+		let history = page.getByRole("button", { name: "1 resolved", exact: true });
+		if (await history.getAttribute("aria-expanded") === "false") await history.click();
+		await expect(history).toHaveAttribute("aria-expanded", "true");
+		await expect(decisions.getByRole("button", { name: "Retry write-up", exact: true }))
+			.toBeVisible();
 		await expect(decisions).toContainText("Couldn't write this up");
 	};
 	await show();
@@ -367,54 +375,61 @@ test("a write-up shows one quiet line in the document; failure and Retry live in
 	await expect(writing).toHaveCount(0);
 });
 
-test("the collapse has an intermediate inert state, respects reduced motion, and rapid reopen remains usable", async ({ join, room }) => {
+test("the collapse is inert, shrinks, and permits a collaborator to reopen before a reduced-motion Save", async ({ join, room }) => {
 	let page = await join("ana");
-	await scriptProse(OPTION);
+	let ben = await join("ben");
+	await scriptProse(OPTION, "$target", { hold: true });
 	await openJevWire(page, room);
 	await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
+	await page.getByRole("button", { name: "Document", exact: true }).click();
 	let decision = card(page);
 	await decision.getByText(OPTION, { exact: true }).click();
+	// Hold the closing node while inspecting its transition and interrupting it with Reopen.
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	await page.evaluate(() => {
+		let observer = new MutationObserver(() => {
+			let closing = document.querySelector("[data-decision-collapsing]");
+			if (!closing) return;
+			closing.getBoundingClientRect();
+			for (let animation of closing.getAnimations({ subtree: true })) animation.pause();
+			observer.disconnect();
+		});
+		observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+	});
 	await decision.getByRole("button", { name: "Save", exact: true }).click();
 	let closing = page.locator("[data-decision-collapsing]");
 	await expect(closing).toHaveCount(1);
 	await expect(closing).toHaveAttribute("aria-hidden", "true");
 	await expect(closing).toHaveAttribute("inert", "");
-	let heights = await closing.evaluate(async element => {
+	let heights = await closing.evaluate(element => {
+		let animations = element.getAnimations({ subtree: true });
+		if (!animations.length) throw new Error("The closing card has no transition to sample.");
 		let samples: number[] = [];
-		for (let index = 0; index < 4; index++) {
-			await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+		for (let at of [0, 0.25, 0.5, 0.75]) {
+			for (let animation of animations) {
+				animation.currentTime = at * Number(animation.effect!.getTiming().duration);
+			}
 			samples.push(element.getBoundingClientRect().height);
 		}
 		return samples;
 	});
 	expect(heights[0]).toBeGreaterThan(0);
 	expect(heights.some(height => height > 0 && height < heights[0]!)).toBe(true);
-	await expect(marker(page)).toBeVisible();
-	let popover = await openPopover(page);
+	await ben.getByRole("button", { name: /^Decisions/ }).click();
+	let history = ben.getByRole("button", { name: "1 resolved", exact: true });
+	if (await history.getAttribute("aria-expanded") === "false") await history.click();
+	let reopen = ben.locator('[data-document-view="decisions"]')
+		.getByRole("button", { name: "Reopen", exact: true });
+	await expect(reopen).toBeVisible();
 	await expect(closing).toHaveCount(1);
-	let reopen = popover.getByRole("button", { name: "Reopen", exact: true });
-	await reopen.evaluate(button => {
-		document.addEventListener(
-			"click",
-			event => {
-				if (event.composedPath().includes(button)) {
-					(window as Window & { reopenedWhileClosing?: boolean }).reopenedWhileClosing =
-						document.querySelector("[data-decision-collapsing]") !== null;
-				}
-			},
-			{ capture: true, once: true },
-		);
-	});
-	let reopenBox = await reopen.boundingBox();
-	expect(reopenBox).toBeTruthy();
-	await page.mouse.click(reopenBox!.x + reopenBox!.width / 2, reopenBox!.y + reopenBox!.height / 2);
-	expect(
-		await page.evaluate(() =>
-			(window as Window & { reopenedWhileClosing?: boolean }).reopenedWhileClosing
-		),
-	)
-		.toBe(true);
+	try {
+		await reopen.click();
+	} finally {
+		await releasePlannerJob("prose");
+	}
+	await page.clock.resume();
 	await expect(card(page)).toBeVisible();
 	await card(page).getByText(OPTION, { exact: true }).click();
 	await expect(card(page).getByRole("button", { name: "Save", exact: true })).toBeEnabled();

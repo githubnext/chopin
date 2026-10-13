@@ -214,4 +214,11 @@ test("a decision asked before any prose exists still owes a review once answered
 	expect(relayed?.widgets.find(item => item.widget === id)?.questions[question]?.pending).toBe(
 		true,
 	);
+	let reopened = await restart(context);
+	expect(Questions.anchors(reopened)[0]!.questions[question]).toEqual({
+		anchors: [],
+		pending: true,
+		reason: "missing",
+	});
+	expect(Questions.outstanding(reopened)).toEqual([{ widget: id, question, reason: "missing" }]);
 });
