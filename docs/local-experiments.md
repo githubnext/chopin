@@ -101,8 +101,10 @@ installs the newest release instead. `chopin update 0.2.0` installs that
 release. It verifies the download as the installer does, with `checksums.txt`
 and, when `gh` is installed, `gh attestation verify`, then swaps the binary in
 place and prints the old and new versions. On Windows the running `chopin.exe`
-is renamed to `chopin.exe.old`, which the next `chopin` deletes. Updating to the
-version already installed does nothing.
+is renamed to `chopin.exe.old`, which the next `chopin` deletes. If an update
+on Windows is interrupted and leaves only `chopin.exe.old`, run the installer
+again to put a fresh `chopin.exe` in place. Updating to the version already
+installed does nothing.
 
 Moving to an older release than the installed one, whether named or
 recommended, needs `--allow-downgrade`; without it `chopin update` prints the

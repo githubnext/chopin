@@ -465,4 +465,37 @@ describe("install.ps1", () => {
 		},
 		120_000,
 	);
+
+	test.skipIf(!pwsh || process.platform !== "win32")(
+		"installs a fresh chopin.exe where an interrupted update left only chopin.exe.old",
+		async () => {
+			let binary = new Uint8Array(await Bun.file(process.execPath).arrayBuffer());
+			using release = fakeRelease({ "0.2.0": assets("chopin-windows-x64.exe", binary) });
+			let local = await mkdtemp(join(scratch, "localappdata-"));
+			let bin = join(local, "chopin", "bin");
+			await mkdir(bin, { recursive: true });
+			await writeFile(join(bin, "chopin.exe.old"), "the chopin an update moved aside");
+			let userPath = readUserPath();
+			try {
+				let result = await install(
+					{ ...release.env, LOCALAPPDATA: local, CHOPIN_VERIFY_ATTESTATION: "0" },
+					"0.2.0",
+				);
+				expect(result.code, result.output).toBe(0);
+				expect(result.output).toContain("left by an interrupted chopin update");
+				expect(await readdir(bin)).toEqual(["chopin.exe"]);
+				expect(sha256(await Bun.file(join(bin, "chopin.exe")).bytes())).toBe(sha256(binary));
+			} finally {
+				Bun.spawnSync([
+					pwsh!,
+					"-NoProfile",
+					"-Command",
+					`[Environment]::SetEnvironmentVariable('Path', '${
+						userPath.replaceAll("'", "''")
+					}', 'User')`,
+				]);
+			}
+		},
+		120_000,
+	);
 });

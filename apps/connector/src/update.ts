@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { chmod, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { VERSION } from "./version";
@@ -78,30 +79,70 @@ function assetName() {
 	return `chopin-${os}-${arch}${os === "windows" ? ".exe" : ""}`;
 }
 
+/** The file operations `replace` uses, which tests swap out. */
+type Files = Pick<typeof fs, "access" | "chmod" | "rm" | "writeFile"> & {
+	rename(from: string, to: string): Promise<void>;
+};
+
+let exists = (files: Files, path: string) => files.access(path).then(() => true, () => false);
+
+/**
+ * Puts `<target>.old` back at `target` when only it is there, as a Windows update leaves things
+ * if it stops between moving the old binary aside and moving the new one in.
+ */
+export async function recover(
+	target: string,
+	{ files = fs, log = console.log }: { files?: Files; log?: (line: string) => void } = {},
+) {
+	let old = `${target}.old`;
+	if (await exists(files, target) || !await exists(files, old)) return false;
+	await files.rename(old, target);
+	log(`Restored ${target} from ${old}, left by an update that was interrupted.`);
+	return true;
+}
+
 /** Leaves `target` as it was unless the new binary is fully in place. */
-async function replace(target: string, bytes: Uint8Array) {
+export async function replace(
+	target: string,
+	bytes: Uint8Array,
+	{ platform = process.platform, files = fs, log = console.log }: {
+		platform?: NodeJS.Platform;
+		files?: Files;
+		log?: (line: string) => void;
+	} = {},
+) {
+	await recover(target, { files, log });
 	// Staged beside the target, in a new file of its own, so the rename stays on one filesystem.
 	let staged = join(dirname(target), `.chopin-${randomBytes(6).toString("hex")}.new`);
 	try {
-		await writeFile(staged, bytes, { flag: "wx", mode: 0o755 });
-		await chmod(staged, 0o755);
-		if (process.platform !== "win32") {
-			await rename(staged, target);
+		await files.writeFile(staged, bytes, { flag: "wx", mode: 0o755 });
+		await files.chmod(staged, 0o755);
+		if (platform !== "win32") {
+			await files.rename(staged, target);
 			return;
 		}
 		// A running .exe cannot be replaced or deleted, but it can be renamed. The next start of
 		// chopin deletes the old one.
 		let old = `${target}.old`;
-		await rm(old, { force: true });
-		await rename(target, old);
+		await files.rm(old, { force: true });
+		await files.rename(target, old);
 		try {
-			await rename(staged, target);
+			await files.rename(staged, target);
 		} catch (error) {
-			await rename(old, target);
+			try {
+				await files.rename(old, target);
+			} catch {
+				fail(
+					`could not move the new chopin to ${target} (${
+						error instanceof Error ? error.message : error
+					}), nor move the old one back. To restore it, run: move "${old}" "${target}" `
+						+ "(or run install.ps1 again).",
+				);
+			}
 			throw error;
 		}
 	} finally {
-		await rm(staged, { force: true });
+		await files.rm(staged, { force: true });
 	}
 }
 
@@ -253,7 +294,7 @@ export async function update(
 		await rm(scratch, { recursive: true, force: true });
 	}
 
-	await replace(target, bytes);
+	await replace(target, bytes, { log });
 	// An installed background service, once chopin can install one, restarts here.
 	log(`Updated chopin from ${VERSION} to ${version} at ${target}.`);
 }

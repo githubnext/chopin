@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import * as fs from "node:fs/promises";
 import {
 	chmod,
 	copyFile,
@@ -13,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compiledChopin } from "./testing/binary";
 import { assets, fakeChopin, fakeRelease, sha256 } from "./testing/release";
+import { recover, replace } from "./update";
 
 /**
  * `chopin update`, run by an installed copy of the compiled binary against a fake release. The
@@ -244,5 +246,77 @@ describe.skipIf(!binary)("chopin update", () => {
 		expect(yes.output).not.toContain("[y/N]");
 		expect(yes.code).toBe(0);
 		expect(await readFile(fresh.chopin, "utf8")).toBe(fakeChopin("99.0.0"));
+	});
+});
+
+/** The swap itself, on a real directory, with the Windows rename-aside run on any OS. */
+describe("replacing the binary", () => {
+	async function folder(files: Record<string, string>) {
+		let dir = await mkdtemp(join(scratch, "replace-"));
+		for (let [name, text] of Object.entries(files)) await writeFile(join(dir, name), text);
+		let contents = async () =>
+			Object.fromEntries(
+				await Promise.all(
+					(await readdir(dir)).sort().map(async name => [
+						name,
+						await readFile(join(dir, name), "utf8"),
+					]),
+				),
+			);
+		return { target: join(dir, "chopin.exe"), contents };
+	}
+
+	test("restores a target that an interrupted update left only as <target>.old", async () => {
+		let at = await folder({ "chopin.exe.old": "old" });
+		let renames: string[][] = [];
+		let files = {
+			...fs,
+			rename: (from: string, to: string) => (renames.push([from, to]), fs.rename(from, to)),
+		};
+		let said: string[] = [];
+		expect(await recover(at.target, { files, log: line => said.push(line) })).toBe(true);
+		expect(renames).toEqual([[`${at.target}.old`, at.target]]);
+		expect(said).toEqual([
+			`Restored ${at.target} from ${at.target}.old, left by an update that was interrupted.`,
+		]);
+		expect(await at.contents()).toEqual({ "chopin.exe": "old" });
+
+		// With the target in place, its .old is the one a finished update leaves, and stays.
+		let done = await folder({ "chopin.exe": "new", "chopin.exe.old": "old" });
+		expect(await recover(done.target, { files, log: line => said.push(line) })).toBe(false);
+		expect(await done.contents()).toEqual({ "chopin.exe": "new", "chopin.exe.old": "old" });
+		expect(said.length).toBe(1);
+	});
+
+	test("on Windows, replaces a target left missing by an interrupted update", async () => {
+		let at = await folder({ "chopin.exe.old": "old" });
+		let said: string[] = [];
+		await replace(at.target, new TextEncoder().encode("new"), {
+			platform: "win32",
+			log: line => said.push(line),
+		});
+		expect(said).toEqual([
+			`Restored ${at.target} from ${at.target}.old, left by an update that was interrupted.`,
+		]);
+		expect(await at.contents()).toEqual({ "chopin.exe": "new", "chopin.exe.old": "old" });
+	});
+
+	test("on Windows, gives the command that restores the old binary when moving it back fails", async () => {
+		let at = await folder({ "chopin.exe": "old" });
+		let files = {
+			...fs,
+			rename: async (from: string, to: string) => {
+				if (to === at.target) throw new Error(`EBUSY: cannot rename to ${to}`);
+				await fs.rename(from, to);
+			},
+		};
+		let error = await replace(at.target, new TextEncoder().encode("new"), {
+			platform: "win32",
+			files,
+		})
+			.then(() => undefined, (error: Error) => error);
+		expect(error?.message).toContain(`move "${at.target}.old" "${at.target}"`);
+		expect(error?.message).toContain("install.ps1");
+		expect(await at.contents()).toEqual({ "chopin.exe.old": "old" });
 	});
 });

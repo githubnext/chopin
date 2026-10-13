@@ -87,6 +87,13 @@ function Install-Chopin([string]$Version) {
 	if (Test-Path -LiteralPath $Chopin -PathType Container) {
 		Stop-Install "$Chopin is a directory, so chopin cannot be installed there. Move it out of the way and run this again."
 	}
+	# A `chopin update` stopped between moving chopin.exe aside and moving the new one in leaves
+	# only chopin.exe.old. The install below writes a fresh chopin.exe, then deletes the leftover.
+	$Old = "$Chopin.old"
+	$Interrupted = -not (Test-Path -LiteralPath $Chopin) -and (Test-Path -LiteralPath $Old -PathType Leaf)
+	if ($Interrupted) {
+		Write-Host "Found $Old without $Chopin, left by an interrupted chopin update. Installing a fresh chopin.exe."
+	}
 
 	# Windows PowerShell 5.1 can default to TLS 1.0, which GitHub refuses.
 	[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -148,6 +155,7 @@ function Install-Chopin([string]$Version) {
 		New-Item -ItemType Directory -Path $Directory -Force | Out-Null
 		Move-Item -LiteralPath $Download -Destination $Chopin -Force
 		Write-Host "Installed $Reported at $Chopin"
+		if ($Interrupted) { Remove-Item -LiteralPath $Old -Force -ErrorAction SilentlyContinue }
 
 		$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 		$Entries = @($UserPath -split ';' | Where-Object { $_ })
