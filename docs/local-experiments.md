@@ -272,7 +272,8 @@ A network drop or a server restart does not end the connector. It reconnects
 at once when a working connection fails, then retries after a random delay
 below 1, 2, 4 … seconds, at most 5 minutes apart, and starts that ladder over
 once a connection has stayed up for a minute. The terminal says when the
-connection is lost, announces the first few retries, and says **Reconnected.**
+connection is lost and why, as Chopin's error code, an HTTP status such as
+`HTTP 502`, or a network error such as `ECONNRESET`, announces the first few retries, and says **Reconnected.**
 when it is back. It stops instead of retrying when Chopin refuses the machine,
 requires a newer connector, or the owner has lost push access to the repository.
 

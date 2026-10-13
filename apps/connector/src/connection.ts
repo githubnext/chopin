@@ -1,3 +1,4 @@
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { classifyConnectorError, connectorMessage, errorCode } from "./machine";
 import type { Classify, ErrorClass } from "./machine";
 import { ConnectorError } from "./mcp";
@@ -37,12 +38,40 @@ function stopped(reason: Exclude<ErrorClass, "retry" | "forgotten">, error: unkn
 	return new ConnectorStopped(reason, message);
 }
 
-/** A failure's short cause for the terminal, such as a server's error code. */
+/** An error message's first sentence, without the MCP client's prefixes. */
+function sentence(message: string) {
+	return message.split("\n")[0]!
+		.replace(/^Streamable HTTP error:\s*/, "")
+		.replace(/^Error POSTing to endpoint:\s*/, "")
+		.replace(/\.(\s.*)?$/, "")
+		.trim()
+		.slice(0, 120);
+}
+
+/**
+ * A failure's short cause for the terminal: the server's error code, else the HTTP status, else
+ * the network error's code, each with the first sentence of its message. A gateway answering for
+ * a restarting server sends no body, so the MCP client's own message can be empty.
+ */
 function cause(error: unknown) {
 	let code = errorCode(error);
 	if (code) return code;
-	if (error instanceof Error) return error.message.split("\n")[0]!.slice(0, 120);
-	return "unknown error";
+	let fallback: string | undefined;
+	let current = error;
+	// fetch may wrap the socket's error as its `cause`.
+	for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+		let detail = sentence(current.message);
+		let status = (current as { code?: unknown }).code;
+		let name = current instanceof StreamableHTTPError && typeof status === "number" && status >= 100
+			? `HTTP ${status}`
+			: typeof status === "string"
+			? status
+			: undefined;
+		if (name) return detail ? `${name}: ${detail}` : name;
+		fallback ??= detail || undefined;
+		current = current.cause;
+	}
+	return fallback ?? "connection closed";
 }
 
 /** `promise`, or its signal's reason once `signal` aborts first; the promise itself carries on. */

@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { getEventListeners } from "node:events";
+import { createServer } from "node:net";
+import type { Server as NetServer } from "node:net";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -62,6 +64,10 @@ function terminal() {
 	let text = "";
 	let stream = { isTTY: false, write: (value: string) => text += value };
 	return { output: createOutput(stream, stream, {}), text: () => text };
+}
+
+function listening(server: NetServer) {
+	return (server.address() as { port: number }).port;
 }
 
 test("a server restart mid-wait reconnects after a backoff and receives the next work", async () => {
@@ -175,6 +181,36 @@ test("Ctrl-C while backing off exits at once", async () => {
 	abort.abort();
 	await serving;
 	expect(performance.now() - started).toBeLessThan(500);
+});
+
+test("an unreachable Chopin is named by its HTTP status or network error, never an empty cause", async () => {
+	// A gateway in front of a restarting server answers with no body.
+	let gateway = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch: () => new Response(null, { status: 502 }),
+	});
+	servers.push(gateway);
+	let reset = createServer(socket => socket.on("data", () => socket.resetAndDestroy()));
+	await new Promise<void>(resolve => reset.listen(0, "127.0.0.1", resolve));
+	let lines = [];
+	for (let url of [`http://127.0.0.1:${gateway.port}`, `http://127.0.0.1:${listening(reset)}`]) {
+		let abort = new AbortController();
+		let { output, text } = terminal();
+		await serveWork({
+			connect: signal => remote(url, "token", signal),
+			signal: abort.signal,
+			output,
+			sleep: async () => abort.abort(),
+			run: async () => {},
+		});
+		lines.push(text().split("\n")[0]);
+	}
+	reset.close();
+	expect(lines).toEqual([
+		"… Can't reach Chopin (HTTP 502).",
+		"… Can't reach Chopin (ECONNRESET: The socket connection was closed unexpectedly).",
+	]);
 });
 
 test("Ctrl-C while Chopin withholds its handshake exits at once", async () => {
