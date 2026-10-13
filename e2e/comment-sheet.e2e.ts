@@ -7,6 +7,7 @@
  */
 
 import { storedResolvedComment } from "../apps/server/src/testing/plan";
+import { titleChannel } from "./database";
 import { content, expect, openIsolatedRoom, test } from "./room";
 import { expectInsideViewport } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -585,13 +586,17 @@ test("a phone marker reaches 44px into the empty margin without covering the nex
 	expect(hits).toEqual([true, true, false]);
 });
 
-test("the phone top bar lists every open thread, leads into each one and back", async ({ join, seed }) => {
+test("the phone top bar lists every open thread, leads into each one and back", async ({ baseURL, join, room, seed }) => {
 	await seed(SOURCE, {
 		threads: [
 			await open("review the pilot", ["Is two weeks enough?"], 1),
 			await open("starting with the docs team", ["Which team is next?", "Support."], 0),
 		],
 	});
+	// A title wider than the room between equal sides shifts away from the wider side, as a
+	// navigation bar's does. The generated "Test 1a2b3c4d" sits at that edge, so whether it was
+	// centred depended on its digits; six of them fit with room to spare, and stay unique.
+	await titleChannel(Number(new URL(baseURL!).port), room, room.slice(0, 6));
 	let page = await join("ana", IPHONE);
 	let comments = page.locator(".phone-top-bar").getByRole("button", { name: "2 open comments" });
 	let commentsBox = await size(comments);

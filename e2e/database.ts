@@ -41,6 +41,10 @@ async function sql<T>(port: number, action: (database: SQL) => Promise<T>): Prom
 	}
 }
 
+export async function titleChannel(port: number, id: string, title: string): Promise<void> {
+	await sql(port, database => database`UPDATE channels SET title = ${title} WHERE id = ${id}`);
+}
+
 export type TestRepository = { id: string; owner: string; name: string };
 
 const SCORE: TestRepository = { id: "R_score", owner: "octo-org", name: "score" };
