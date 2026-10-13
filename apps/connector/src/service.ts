@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
@@ -23,28 +23,40 @@ const PER_SHELL = new Set(["fnm_multishells"]);
 const DEFAULT_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 /**
+ * Whether a path lies in a directory that lasts only as long as a login or a shell: under
+ * $XDG_RUNTIME_DIR or /run/user, or in a per-shell version-manager directory.
+ */
+function temporaryPath(platform: NodeJS.Platform, env: Env) {
+	let windows = platform === "win32";
+	let path = windows ? win32 : posix;
+	let separator = windows ? "\\" : "/";
+	let runtime = [env.XDG_RUNTIME_DIR, ...(windows ? [] : ["/run/user"])]
+		.filter((value): value is string => !!value && path.isAbsolute(value))
+		.map(value => pathKey(platform, value))
+		.filter(value => value !== pathKey(platform, path.parse(value).root));
+	return (entry: string) => {
+		let value = pathKey(platform, entry);
+		return runtime.some(directory => value === directory || value.startsWith(directory + separator))
+			|| value.split(separator).some(part => PER_SHELL.has(part));
+	};
+}
+
+function pathKey(platform: NodeJS.Platform, entry: string) {
+	let windows = platform === "win32";
+	let trimmed = entry.replace(windows ? /[\\/]+$/ : /\/+$/, "") || entry;
+	return windows ? trimmed.replaceAll("/", "\\").toLowerCase() : trimmed;
+}
+
+/**
  * The PATH the service runs with: the agent executable's directory first, so the agent and a
  * Node or Bun installed beside it resolve after a reboot, then this shell's own entries without
- * empty ones, repeats, or directories that last only as long as a login or a shell: those under
- * $XDG_RUNTIME_DIR or /run/user, and per-shell version-manager directories.
+ * empty ones, repeats, or directories that last only as long as a login or a shell.
  */
 export function servicePath(platform: NodeJS.Platform, env: Env, agentDirectory: string) {
 	let windows = platform === "win32";
 	let path = windows ? win32 : posix;
-	let key = (entry: string) => {
-		let trimmed = entry.replace(windows ? /[\\/]+$/ : /\/+$/, "") || entry;
-		return windows ? trimmed.replaceAll("/", "\\").toLowerCase() : trimmed;
-	};
-	let runtime = [env.XDG_RUNTIME_DIR, ...(windows ? [] : ["/run/user"])]
-		.filter((value): value is string => !!value && path.isAbsolute(value))
-		.map(key)
-		.filter(value => value !== key(path.parse(value).root));
-	let temporary = (entry: string) => {
-		let value = key(entry);
-		let separator = windows ? "\\" : "/";
-		return runtime.some(directory => value === directory || value.startsWith(directory + separator))
-			|| value.split(separator).some(part => PER_SHELL.has(part));
-	};
+	let key = (entry: string) => pathKey(platform, entry);
+	let temporary = temporaryPath(platform, env);
 	let name = windows
 		? Object.keys(env).find(item => item.toUpperCase() === "PATH") ?? "Path"
 		: "PATH";
@@ -425,8 +437,44 @@ async function interpreter(file: string) {
 }
 
 /**
- * The PATH the service runs with, once the agent, the interpreter its script names and git all
- * resolve under it; otherwise a refusal, before anything is written.
+ * The paths `file` goes through to reach what it runs, each with its directory resolved through
+ * links: first `file` itself under its directory's real path, last its real path. The first
+ * keeps the file's own name, which shims such as mise's and Volta's dispatch on.
+ */
+async function links(platform: NodeJS.Platform, file: string) {
+	let path = paths(platform);
+	let passed: string[] = [];
+	let current = file;
+	for (let hop = 0; hop < 40; hop++) {
+		let parent = path.dirname(current);
+		let directory = await realpath(parent).catch(() => parent);
+		current = path.join(directory, path.basename(current));
+		passed.push(current);
+		let target = await readlink(current).catch(() => undefined);
+		if (target === undefined) break;
+		current = path.resolve(directory, target);
+	}
+	return passed;
+}
+
+/** Refuses a program that is, or links through, a path gone after a reboot. */
+function refuseFleeting(host: ServiceHost, passed: string[], what: string, fix: string) {
+	let fleeting = passed.find(temporaryPath(host.platform, host.env));
+	if (fleeting === undefined) return;
+	throw new ServiceError(
+		[
+			`${what} resolves to ${fleeting}, which lies in a directory that lasts only as long as `
+			+ "this login or shell, so the service would not find it after a reboot. Nothing was "
+			+ "installed.",
+			fix,
+		].join("\n"),
+	);
+}
+
+/**
+ * The agent's stable absolute path and the PATH the service runs with, once the agent, the
+ * interpreter its script names and git all resolve under it to paths that outlast this login
+ * and shell; otherwise a refusal, before anything is written.
  */
 async function agentPath(host: ServiceHost, command: string[]) {
 	let which = host.which ?? ((name, PATH) => Bun.which(name, { PATH }));
@@ -439,18 +487,35 @@ async function agentPath(host: ServiceHost, command: string[]) {
 				+ "Pass the agent's absolute path after --.",
 		);
 	}
-	let directory = path.dirname(found);
 	// A per-shell directory is often a link into a version manager's stable one.
-	if (host.platform !== "win32") directory = await realpath(directory).catch(() => directory);
-	let service = servicePath(host.platform, host.env, directory);
-	let runtime = host.platform === "win32" ? undefined : await interpreter(found);
-	for (let needed of [agent, ...(runtime ? [runtime] : []), "git"]) {
-		if (which(needed, service)) continue;
-		let what = needed === agent
+	let passed = await links(host.platform, found);
+	refuseFleeting(
+		host,
+		passed,
+		`The agent command ${agent}`,
+		"Install the agent somewhere stable, or pass a stable absolute path to it after --.",
+	);
+	let stable = passed[0]!;
+	let service = servicePath(host.platform, host.env, path.dirname(stable));
+	let runtime = host.platform === "win32" ? undefined : await interpreter(stable);
+	for (let needed of [stable, ...(runtime ? [runtime] : []), "git"]) {
+		let what = needed === stable
 			? `the agent command ${agent}`
 			: needed === "git"
 			? "git"
 			: `${needed}, which ${agent} runs with,`;
+		let resolved = which(needed, service);
+		if (resolved) {
+			if (needed !== stable) {
+				refuseFleeting(
+					host,
+					await links(host.platform, resolved),
+					needed === "git" ? "git" : `${needed}, which ${agent} runs with,`,
+					`Install ${needed} somewhere stable, outside those directories.`,
+				);
+			}
+			continue;
+		}
 		throw new ServiceError(
 			[
 				`The service would not find ${what} under the PATH it runs with:`,
@@ -461,7 +526,7 @@ async function agentPath(host: ServiceHost, command: string[]) {
 			].join("\n"),
 		);
 	}
-	return service;
+	return { path: service, agent: stable };
 }
 
 function release(version: string) {
@@ -504,9 +569,12 @@ export async function installService(
 ): Promise<Installed> {
 	let manager = serviceManager(host.platform);
 	let version = options.version ?? VERSION;
+	let resolved = await agentPath(host, program.command);
+	let path = resolved.path;
+	// The service names the agent by its stable path, not one through a shell's own links.
+	program = { ...program, command: [resolved.agent, ...program.command.slice(1)] };
 	let unusable = unsupportedPath(host.platform, program);
 	if (unusable) throw new ServiceError(unusable);
-	let path = await agentPath(host, program.command);
 	if (
 		manager === "launchd"
 		&& [path, ...program.command].some(hasControl)

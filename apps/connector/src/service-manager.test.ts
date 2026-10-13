@@ -85,10 +85,12 @@ test("on Linux, install enables linger, writes the unit and enables it", async (
 	]);
 	expect(installed).toMatchObject({ manager: "systemd", definition: unitPath(home) });
 	let unit = await readFile(unitPath(home), "utf8");
-	expect(unit).toBe(systemdUnit(program, `${await realpath(bin)}:/usr/bin:/bin`));
+	// The unit names the agent by its absolute path, as the service's PATH resolves it.
+	let agent = { ...program, command: [join(await realpath(bin), "agent"), "--acp"] };
+	expect(unit).toBe(systemdUnit(agent, `${await realpath(bin)}:/usr/bin:/bin`));
 	expect(await readConfig(directory)).toEqual({
 		server: SERVER,
-		service: { ...program, version: "0.0.2", installedAt: expect.any(Number) },
+		service: { ...agent, version: "0.0.2", installedAt: expect.any(Number) },
 	});
 });
 
@@ -145,6 +147,62 @@ test("the service PATH skips a shell's fnm directory, and an agent it can't find
 	}
 });
 
+test("an agent reached through a runtime directory runs from its stable path after a reboot", async () => {
+	let { home, directory, host, program } = await machine("linux", systemd);
+	let run = join(home, "run");
+	let stable = join(home, "fnm", "node-versions", "v22", "installation");
+	let shell = join(run, "fnm_multishells", "4242_1700000000000");
+	await mkdir(join(stable, "bin"), { recursive: true });
+	await mkdir(join(run, "fnm_multishells"), { recursive: true });
+	await symlink(stable, shell);
+	await writeFile(join(stable, "bin", "agent"), "#!/bin/sh\n", { mode: 0o755 });
+	host.env = { XDG_RUNTIME_DIR: run, PATH: "/usr/bin:/bin" };
+	// The agent's absolute path, as this shell sees it, goes through the shell's link.
+	await installService(host, { ...program, command: [join(shell, "bin", "agent"), "--acp"] }, {
+		server: SERVER,
+	});
+	let real = await realpath(join(stable, "bin"));
+	let installed = { ...program, command: [join(real, "agent"), "--acp"] };
+	let unit = await readFile(unitPath(home), "utf8");
+	expect(unit).toBe(systemdUnit(installed, `${real}:/usr/bin:/bin`));
+	expect((await readConfig(directory)).service).toMatchObject({ command: installed.command });
+	// A reboot empties the runtime directory; the agent the unit names is still there.
+	await rm(run, { recursive: true });
+	expect(existsSync(installed.command[0]!)).toBe(true);
+});
+
+test("an agent, interpreter or git that lives under a runtime directory is refused", async () => {
+	let { home, bin, host, program } = await machine("linux", systemd);
+	let run = join(home, "run");
+	let ephemeral = join(run, "tools");
+	await mkdir(ephemeral, { recursive: true });
+	for (let name of ["agent-real", "node-real", "git-real"]) {
+		await writeFile(join(ephemeral, name), "#!/bin/sh\n", { mode: 0o755 });
+	}
+	// Stable-looking names that only link into the runtime directory.
+	await symlink(join(ephemeral, "agent-real"), join(bin, "linked-agent"));
+	await writeFile(join(bin, "node-agent"), "#!/usr/bin/env linked-node\n", { mode: 0o755 });
+	await symlink(join(ephemeral, "node-real"), join(bin, "linked-node"));
+	let git = join(home, "git-bin");
+	await mkdir(git);
+	await symlink(join(ephemeral, "git-real"), join(git, "git"));
+	let cases = [
+		{ command: ["linked-agent"], path: `${bin}:/usr/bin`, named: "agent-real" },
+		{ command: ["node-agent"], path: `${bin}:/usr/bin`, named: "node-real" },
+		{ command: ["agent"], path: `${bin}:${git}:/usr/bin`, named: "git-real" },
+	];
+	for (let { command, path, named } of cases) {
+		host.env = { XDG_RUNTIME_DIR: run, PATH: path };
+		let error = await installService(host, { ...program, command }, { server: SERVER })
+			.catch(error => error);
+		expect(error).toBeInstanceOf(Error);
+		expect(error.message).toContain(join(await realpath(ephemeral), named));
+		expect(error.message).toContain("Nothing was installed.");
+		expect(error.message).toContain("somewhere stable");
+		expect(existsSync(unitPath(home))).toBe(false);
+	}
+});
+
 test("on macOS, install writes the LaunchAgent and bootstraps it into the login session", async () => {
 	let { home, bin, calls, host, program } = await machine(
 		"darwin",
@@ -157,7 +215,11 @@ test("on macOS, install writes the LaunchAgent and bootstraps it into the login 
 	let plist = join(home, "Library", "LaunchAgents", "com.github.chopin.plist");
 	expect(installed.definition).toBe(plist);
 	expect(await readFile(plist, "utf8")).toBe(
-		launchdPlist(program, home, `${await realpath(bin)}:/usr/bin:/bin`),
+		launchdPlist(
+			{ ...program, command: [join(await realpath(bin), "agent"), "--acp"] },
+			home,
+			`${await realpath(bin)}:/usr/bin:/bin`,
+		),
 	);
 	expect(calls).toEqual([
 		"launchctl print gui/501/com.github.chopin",
@@ -188,7 +250,13 @@ test("on Windows, install registers this account's task at logon and says it nee
 	expect(installed.notes.join(" ")).toContain("only while you are logged on");
 	expect(calls).toHaveLength(2);
 	expect(calls[0]).toStartWith(`${POWERSHELL}$task = Get-ScheduledTask -TaskName 'chopin-ada'`);
-	expect(calls[1]).toBe(POWERSHELL + scheduledTaskScript(program, host.home, "chopin-ada"));
+	expect(calls[1]).toBe(
+		POWERSHELL + scheduledTaskScript(
+			{ ...program, command: ["C:\\Tools\\agent.exe", "--acp"] },
+			host.home,
+			"chopin-ada",
+		),
+	);
 });
 
 test("service status reads each manager's answer, and a connector older than the binary is restart-pending", async () => {

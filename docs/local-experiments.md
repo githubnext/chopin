@@ -216,14 +216,18 @@ Running `chopin service install` again with no checkout or agent command
 reinstalls with the stored ones; naming them replaces them and restarts the
 service. There is one service per user account, whichever base dir it uses.
 
-Before writing anything, install builds the PATH the service runs with. It
-puts the agent executable's directory first, then your current PATH without
-entries that disappear on logout or reboot: anything under `$XDG_RUNTIME_DIR`
-or `/run/user/<uid>`, and per-shell version-manager directories such as fnm's
+Before writing anything, install resolves the agent command to its absolute
+path, with every directory link in it resolved, and the service runs the agent
+by that path. It builds the PATH the service runs with from the agent's
+resolved directory first, then your current PATH without entries that
+disappear on logout or reboot: anything under `$XDG_RUNTIME_DIR` or
+`/run/user/<uid>`, and per-shell version-manager directories such as fnm's
 `fnm_multishells`. A per-shell directory that links into a stable installation
 is replaced by its target. Install refuses, and writes nothing, when the agent
 command, the interpreter its script names on a `#!/usr/bin/env` line (such as
-`node` or `bun`), or `git` would not resolve under that PATH.
+`node` or `bun`), or `git` would not resolve under that PATH, or when any of
+them lives in, or links through, one of those directories. Install it somewhere
+stable, or pass a stable absolute path to the agent after `--`.
 
 Like an interactive connector, the service declines ACP permission prompts,
 because it has no terminal. Pass the agent's own approval flag after `--`, as
