@@ -97,13 +97,15 @@ export function movingCard(
 }
 
 /**
- * Where a card leaves to and arrives from: off to the left, the side previous
- * cards are on, so next and previous read as a stack being paged through.
+ * Where a card leaves to and arrives from: a short way down, in front of the
+ * deck. Short enough that it has faded before it could reach what is below.
  */
-export const AWAY = "translateX(-40%) scale(0.98)";
+export const AWAY = "translateY(0.75rem) scale(0.98)";
+/** How far `AWAY` moves a card down, in rem. */
+export const AWAY_DROP = 0.75;
 
 /**
- * The old top card slides aside and fades in front of the deck, then reappears
+ * The old top card slides down and fades in front of the deck, then reappears
  * at its new place behind. Its content stays visible until it has faded, so the
  * cover only drops over it once it is out of sight.
  */
@@ -134,7 +136,7 @@ export function leaveFrames(
 }
 
 /**
- * A card coming back to the top slides in from where a leaving card goes, over
+ * A card coming back to the top rises from where a leaving card goes, over
  * the deck. A card caught mid-move continues from where it is.
  */
 export function arriveFrames(

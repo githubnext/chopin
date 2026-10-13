@@ -17,6 +17,7 @@ import { ChevronIcon } from "@chopin/icons";
 import {
 	arrange,
 	arriveFrames,
+	AWAY_DROP,
 	bringForward,
 	leaveFrames,
 	lift,
@@ -134,6 +135,13 @@ function own(element: HTMLElement): Animation[] {
 		.filter(animation => (animation.effect as KeyframeEffect | null)?.target === element);
 }
 
+/** How far an eased move of `duration` has come at `time`, from 0 to 1. */
+function eased(time: number, duration: number, easing: string): number {
+	let probe = new Animation(new KeyframeEffect(null, null, { duration, easing }));
+	probe.currentTime = time;
+	return Number(probe.effect?.getComputedTiming().progress ?? 1);
+}
+
 /** Animate a card's content cover, which hides its content while it sits behind. */
 function cover(element: HTMLElement, frames: Keyframe[], options: KeyframeAnimationOptions) {
 	return element.animate(frames, { ...options, pseudoElement: "::after" });
@@ -205,6 +213,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 		if (kind && next[0] !== undefined) announce(kind, next[0]);
 
 		let outgoing = previous[0] === next[0] ? undefined : previous[0];
+		let after = stageElement?.getBoundingClientRect().height ?? 0;
 		if (still) {
 			// Without movement, the old top card fades out where it stood, over the new one.
 			let element = slots.current.get(outgoing ?? "");
@@ -233,9 +242,29 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 			// Only the old top card leaves in front; a card settling from behind just changes place.
 			if (id === moving?.id && moving.direction === "back" && id === outgoing) {
 				let frames = leaveFrames(from, place.transform, next.length, at > PEEKS, easing);
-				// Until it is out of sight it keeps its own height, not the new top card's.
+				// Until it is out of sight it keeps its own height, not the new top card's,
+				// but is clipped at the stage's lower edge so it never covers the pager or prose.
 				frames.card[0]!.bottom = "auto";
 				frames.card[1]!.bottom = "auto";
+				let natural = element.scrollHeight;
+				let top = element.offsetTop;
+				let drop = AWAY_DROP
+					* Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+				let before = height ?? after;
+				let leave: Keyframe[] = [];
+				for (let step = 0; step <= 5; step++) {
+					let offset = step / 10;
+					// The pager rides the stage's eased height; the card falls linearly.
+					let floor = before + (after - before) * eased(offset * duration, duration, easing);
+					let scale = 1 - 0.02 * (offset / 0.5);
+					let hidden = Math.max(0, natural - (floor - top - drop * (offset / 0.5)) / scale);
+					leave.push({ offset, clipPath: `inset(-2rem -2rem ${hidden}px -2rem)` });
+				}
+				frames.card.splice(1, 0, ...leave.slice(1, -1));
+				frames.card[0]!.clipPath = leave[0]!.clipPath;
+				frames.card[5]!.clipPath = leave[5]!.clipPath;
+				frames.card[6]!.clipPath = "inset(-2rem -2rem 0px -2rem)";
+				frames.card[7]!.clipPath = "inset(-2rem -2rem 0px -2rem)";
 				element.animate(frames.card, { id: MOVE, duration });
 				cover(element, frames.cover, { duration });
 				continue;
@@ -266,8 +295,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 		}
 		// The top card sets the stage's height; ease between the two so prose
 		// below does not jump mid-move.
-		let after = stageElement?.getBoundingClientRect().height;
-		if (stageElement && height !== undefined && after !== undefined && height !== after) {
+		if (stageElement && height !== undefined && height !== after) {
 			stageElement.animate([{ height: `${height}px` }, { height: `${after}px` }], {
 				duration,
 				easing,

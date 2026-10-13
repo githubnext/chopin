@@ -333,8 +333,10 @@ test("showing a back decision from Decisions brings it to the top and focuses it
 	await expect.poll(() => order(page)).toEqual([fixture.ids[2], fixture.ids[0], fixture.ids[1]]);
 });
 
-test("next slides the old card away in front, then brings it in behind", async ({ join, seed }) => {
-	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+test("next drops the old card a little as it fades in front, then brings it in behind", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph.", after: "Trailing paragraph." }, 3, {
+		optionCounts: [8, 1, 1],
+	});
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
 	await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -343,18 +345,54 @@ test("next slides the old card away in front, then brings it in behind", async (
 	let frames = await sampleMove(page, fixture.ids[0]!, fractions);
 	expect(frames).toBeDefined();
 
-	// Aside and fading over the deck until the midpoint, then in behind it.
+	// Down a short way and fading over the deck until the midpoint, then in behind it.
 	let away = frames!.filter(frame => frame.at < 0.5);
 	let behind = frames!.filter(frame => frame.at > 0.5 && frame.at < 1);
 	for (let index = 1; index < away.length; index++) {
-		expect(away[index]!.x).toBeLessThanOrEqual(away[index - 1]!.x);
+		expect(away[index]!.y).toBeGreaterThanOrEqual(away[index - 1]!.y);
 		expect(away[index]!.opacity).toBeLessThanOrEqual(away[index - 1]!.opacity);
 	}
 	for (let frame of away) expect(frame.layer).toBeGreaterThan(100);
 	for (let frame of behind) expect(frame.layer).toBe(0);
-	// It never drops below the deck, over the pager and prose.
-	for (let frame of frames!) expect(frame.y).toBeLessThanOrEqual(1);
+	for (let frame of frames!) {
+		expect(Math.abs(frame.x)).toBeLessThanOrEqual(1);
+		expect(frame.y).toBeLessThanOrEqual(13);
+	}
 	await expect.poll(() => order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
+});
+
+test("a tall card leaving never paints over the pager below the deck", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph.", after: "Trailing paragraph." }, 3, {
+		optionCounts: [8, 1, 1],
+	});
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await deck(page).getByRole("button", { name: "Next decision" }).click();
+	await expect.poll(() =>
+		slotOf(page, fixture.ids[0]!).evaluate(element =>
+			element.getAnimations().some(item => item.id === "deck-move")
+		)
+	).toBe(true);
+	for (let fraction of [0, 0.1, 0.2, 0.3, 0.4, 0.49]) {
+		await scrub(page, fraction);
+		let overshoot = await deck(page).evaluate((element, id) => {
+			let leaving = element.querySelector<HTMLElement>(`[data-deck-slot="${id}"]`)!;
+			let pager = element.querySelector<HTMLElement>(".decision-deck-nav")!;
+			let rect = leaving.getBoundingClientRect();
+			let scale = rect.height / leaving.offsetHeight;
+			let clip = /inset\(([^)]*)\)/.exec(getComputedStyle(leaving).clipPath)?.[1] ?? "";
+			let bottom = Number.parseFloat(clip.split(/\s+/)[2] ?? "");
+			let painted = rect.top + (leaving.offsetHeight - bottom) * scale;
+			return { bottom, overshoot: painted - pager.getBoundingClientRect().top };
+		}, fixture.ids[0]!);
+		expect(Number.isFinite(overshoot.bottom), `clip parsed at ${fraction}`).toBe(true);
+		expect(overshoot.overshoot, `at ${fraction}`).toBeLessThanOrEqual(1);
+	}
+	await deck(page).evaluate(element => {
+		for (let animation of element.getAnimations({ subtree: true })) animation.finish();
+	});
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
 });
 
 test("no frame of a move hides the front card's content", async ({ join, seed }) => {
