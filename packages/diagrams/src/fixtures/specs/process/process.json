@@ -1,27 +1,23 @@
 {
 	"type": "process",
-	"title": "From request to diagram",
+	"title": "From proposal to evidence",
 	"steps": [
 		{
-			"label": "Ask",
-			"sub": "plain words"
+			"label": "Propose proactively",
+			"sub": "Card beside relevant plan passage"
 		},
 		{
-			"label": "Pick a type",
-			"sub": "router"
+			"label": "Select Run",
+			"sub": "Human starts local work"
 		},
 		{
-			"label": "Write the spec",
-			"sub": "30–150 lines",
+			"label": "Investigate",
+			"sub": "Owned agent · worktree at source",
 			"focal": true
 		},
 		{
-			"label": "Render + fix",
-			"sub": "≤ 3 rounds"
-		},
-		{
-			"label": "Export",
-			"sub": "png · gif · mp4"
+			"label": "Report",
+			"sub": "Captured evidence and bounded result"
 		}
 	]
 }
