@@ -34,6 +34,8 @@ test.each(
 		],
 		["decided with no meta yet", DECIDED, undefined, "inline", "settled-line"],
 		["reopened", DECIDED, { ...META, status: "reopened" as const }, "inline", "open"],
+		["decided in a deck, at full size", DECIDED, META, "deck", "resolved"],
+		["discarded in a deck", DECIDED, { ...META, status: "discarded" as const }, "deck", "hidden"],
 	] as const,
 )("card presentation: %s", (_name, value, meta, where, expected) => {
 	expect(cardPresentation(value as never, meta, where)).toBe(expected);

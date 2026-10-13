@@ -96,13 +96,17 @@ export function deckSlot(page: Page, prompt: string) {
 	});
 }
 
-/** Cycle the desktop Decisions deck until a decision is on top and answerable. */
+/** Page through the desktop Decisions deck until a decision is on top and answerable. */
 export async function bringForward(page: Page, prompt: string) {
 	let slot = deckSlot(page, prompt);
-	let next = page.locator('[data-document-view="decisions"] [data-deck]')
-		.getByRole("button", { name: "Next decision" });
+	let deck = page.locator('[data-document-view="decisions"] [data-deck]');
+	let next = deck.getByRole("button", { name: "Next decision" });
+	let previous = deck.getByRole("button", { name: "Previous decision" });
+	// The deck stops at its ends, so turn back once the last card is reached.
 	await expect(async () => {
-		if (await slot.getAttribute("data-deck-top") === null) await next.click();
+		if (await slot.getAttribute("data-deck-top") === null) {
+			await (await next.isDisabled() ? previous : next).click();
+		}
 		await expect(slot).toHaveAttribute("data-deck-top", "", { timeout: 1_000 });
 	}).toPass();
 }

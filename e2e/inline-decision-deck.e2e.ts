@@ -35,32 +35,77 @@ function scrub(page: Page, fraction: number) {
 	}, fraction);
 }
 
-type Frame = { at: number; y: number; layer: number; opacity: number };
+type Frame = { at: number; x: number; y: number; layer: number; opacity: number };
 
-/** Sample a card's shuffle at fractions of its duration, then let it finish. */
-async function sampleShuffle(page: Page, id: string, fractions: number[]) {
+/** Wait for a card's move to start, then sample it at fractions of its duration. */
+async function sampleMove(page: Page, id: string, fractions: number[]) {
 	let slot = slotOf(page, id);
 	await expect.poll(() =>
-		slot.evaluate(element => element.getAnimations().some(item => item.id === "deck-shuffle"))
+		slot.evaluate(element => element.getAnimations().some(item => item.id === "deck-move"))
 	).toBe(true);
 	return slot.evaluate((element, points) => {
-		let shuffle = element.getAnimations().find(animation => animation.id === "deck-shuffle");
-		if (!shuffle) return undefined;
-		shuffle.pause();
-		let duration = Number(shuffle.effect!.getTiming().duration);
+		let move = element.getAnimations().find(animation => animation.id === "deck-move");
+		if (!move) return undefined;
+		move.pause();
+		let duration = Number(move.effect!.getTiming().duration);
 		let frames = points.map(at => {
-			shuffle!.currentTime = at * duration;
+			move!.currentTime = at * duration;
 			let style = getComputedStyle(element);
+			let matrix = new DOMMatrix(style.transform);
 			return {
 				at,
-				y: new DOMMatrix(style.transform).m42,
+				x: matrix.m41,
+				y: matrix.m42,
 				layer: Number(style.zIndex),
 				opacity: Number(style.opacity),
 			};
 		});
-		shuffle.finish();
+		move.finish();
 		return frames;
 	}, fractions) as Promise<Frame[] | undefined>;
+}
+
+/**
+ * Pause the whole deck at moments through a move and read, at each, how much of
+ * the best-shown card's content is visible: its opacity times its uncovered share.
+ */
+function contentVisibility(page: Page, times: number[]) {
+	return deck(page).evaluate((element, moments) => {
+		let animations = element.getAnimations({ subtree: true });
+		for (let animation of animations) animation.pause();
+		let readings = moments.map(time => {
+			for (let animation of animations) {
+				let end = Number(animation.effect!.getComputedTiming().endTime);
+				animation.currentTime = Math.min(time, end);
+			}
+			let slots = [...element.querySelectorAll<HTMLElement>("[data-deck-slot]")];
+			return Math.max(...slots.map(slot =>
+				Number(getComputedStyle(slot).opacity)
+				* (1 - Number(getComputedStyle(slot, "::after").opacity))
+			));
+		});
+		for (let animation of animations) animation.finish();
+		return readings;
+	}, times);
+}
+
+/** The new top card's own opacity and its content cover's, once everything has settled. */
+function settledTop(page: Page) {
+	return top(page).evaluate(element => ({
+		card: Number(getComputedStyle(element).opacity),
+		cover: Number(getComputedStyle(element, "::after").opacity),
+	}));
+}
+
+/** Deck animations that move a card rather than only fade it. */
+function movingAnimations(page: Page) {
+	return deck(page).evaluate(element =>
+		element.getAnimations({ subtree: true }).filter(animation => {
+			let frames = (animation.effect as KeyframeEffect).getKeyframes();
+			return new Set(frames.map(frame => frame.transform)).size > 1
+				|| frames.some(frame => frame.height);
+		}).length
+	);
 }
 
 test("adjacent decisions in a document form one deck", async ({ join, seed }) => {
@@ -123,6 +168,10 @@ test("next, previous and arrow keys cycle without moving the caret", async ({ jo
 	await page.keyboard.press("ArrowLeft");
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
 	await expect(next).toBeFocused();
+	// The first card is an end: previous is off and the left arrow does not wrap.
+	await expect(deck(page).getByRole("button", { name: "Previous decision" })).toBeDisabled();
+	await page.keyboard.press("ArrowLeft");
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
 
 	await content(page).getByText("Trailing paragraph.").click();
 	expect(
@@ -175,7 +224,8 @@ test("answering the last open card hands focus to its settled line", async ({ jo
 	await top(page).getByText("Option 1", { exact: true }).click();
 	await top(page).getByRole("button", { name: "Save", exact: true }).click();
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
-	await expect(deck(page).getByText("1 of 2 · 1 decided")).toBeVisible();
+	await expect(deck(page).getByText("1 of 2", { exact: true })).toBeVisible();
+	await expect(deck(page).locator("[data-deck-settled]")).toHaveCount(1);
 
 	await top(page).getByText("Option 2", { exact: true }).click();
 	await top(page).getByRole("button", { name: "Save", exact: true }).click();
@@ -194,7 +244,7 @@ test("an answered decision settles to the back and focus follows the new top", a
 	await top(page).getByRole("button", { name: "Save", exact: true }).click();
 
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
-	await expect(deck(page).getByText("1 decided")).toBeVisible();
+	await expect(deck(page).locator("[data-deck-settled]")).toHaveCount(1);
 	await expect(deck(page).getByRole("status"))
 		.toHaveText("Decided. Now showing 1 of 3: Scope");
 	await expect(top(page)).toBeFocused();
@@ -217,7 +267,7 @@ test("a collaborator's answer reorders without moving my top card", async ({ joi
 	await top(ben).getByText("Option 1", { exact: true }).click();
 	await top(ben).getByRole("button", { name: "Save", exact: true }).click();
 
-	await expect(deck(ana).getByText("1 decided")).toBeVisible();
+	await expect(deck(ana).locator("[data-deck-settled]")).toHaveCount(1);
 	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
 });
 
@@ -236,7 +286,8 @@ test("a collaborator's answer to my top card settles it and leaves my focus alon
 
 	// Ana's top card was the one answered: it goes to the back and the next open card leads.
 	await expect(top(ana).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
-	await expect(deck(ana).getByText("1 of 3 · 1 decided")).toBeVisible();
+	await expect(deck(ana).getByText("1 of 3", { exact: true })).toBeVisible();
+	await expect(deck(ana).locator("[data-deck-settled]")).toHaveCount(1);
 	await expect.poll(() => order(ana)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
 	await expect(slotOf(ana, fixture.ids[0]!)).toHaveAttribute(
 		"data-deck-settled",
@@ -282,43 +333,65 @@ test("showing a back decision from Decisions brings it to the top and focuses it
 	await expect.poll(() => order(page)).toEqual([fixture.ids[2], fixture.ids[0], fixture.ids[1]]);
 });
 
-test("cycling shuffles the outgoing card from over the deck to under it", async ({ join, seed }) => {
+test("next slides the old card away in front, then brings it in behind", async ({ join, seed }) => {
 	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
 	await page.emulateMedia({ reducedMotion: "no-preference" });
 	await deck(page).getByRole("button", { name: "Next decision" }).click();
 	let fractions = Array.from({ length: 21 }, (_, step) => step / 20);
-	let frames = await sampleShuffle(page, fixture.ids[0]!, fractions);
+	let frames = await sampleMove(page, fixture.ids[0]!, fractions);
 	expect(frames).toBeDefined();
 
-	// Out and down to the midpoint, then back up into the slot behind the deck.
-	let first = frames!.filter(frame => frame.at <= 0.45);
-	let second = frames!.filter(frame => frame.at >= 0.45);
-	for (let index = 1; index < first.length; index++) {
-		expect(first[index]!.y).toBeGreaterThanOrEqual(first[index - 1]!.y);
+	// Aside and fading over the deck until the midpoint, then in behind it.
+	let away = frames!.filter(frame => frame.at < 0.5);
+	let behind = frames!.filter(frame => frame.at > 0.5 && frame.at < 1);
+	for (let index = 1; index < away.length; index++) {
+		expect(away[index]!.x).toBeLessThanOrEqual(away[index - 1]!.x);
+		expect(away[index]!.opacity).toBeLessThanOrEqual(away[index - 1]!.opacity);
 	}
-	for (let index = 1; index < second.length; index++) {
-		expect(second[index]!.y).toBeLessThanOrEqual(second[index - 1]!.y);
-	}
-	expect(Math.max(...frames!.map(frame => frame.y))).toBeGreaterThan(40);
-	// No frame jumps: neighbouring samples stay within a card's travel.
-	let travel = Math.max(...frames!.map(frame => frame.y))
-		- Math.min(...frames!.map(frame => frame.y));
-	for (let index = 1; index < frames!.length; index++) {
-		expect(Math.abs(frames![index]!.y - frames![index - 1]!.y)).toBeLessThan(travel * 0.6);
-	}
-	// The card passes over the deck, then drops under it near the midpoint.
-	for (let frame of frames!) {
-		if (frame.at < 0.4) expect(frame.layer).toBeGreaterThan(100);
-		// At 1 the card has landed and returns to its slot's own layer.
-		if (frame.at > 0.5 && frame.at < 1) expect(frame.layer).toBe(0);
-		expect(frame.opacity).toBe(1);
-	}
+	for (let frame of away) expect(frame.layer).toBeGreaterThan(100);
+	for (let frame of behind) expect(frame.layer).toBe(0);
+	// It never drops below the deck, over the pager and prose.
+	for (let frame of frames!) expect(frame.y).toBeLessThanOrEqual(1);
 	await expect.poll(() => order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
 });
 
-test("an interrupted shuffle continues from its current frame and keeps its layer", async ({ join, seed }) => {
+test("no frame of a move hides the front card's content", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	let moments = Array.from({ length: 21 }, (_, step) => step * 16);
+	let play = async (name: "Next decision" | "Previous decision") => {
+		await deck(page).getByRole("button", { name }).click();
+		await expect.poll(() =>
+			deck(page).evaluate(element => element.getAnimations({ subtree: true }).length)
+		).toBeGreaterThan(0);
+		let visible = await contentVisibility(page, moments);
+		for (let [index, reading] of visible.entries()) {
+			expect(reading, `${name} at ${moments[index]}ms`).toBeGreaterThan(0.5);
+		}
+		expect(await settledTop(page)).toEqual({ card: 1, cover: 0 });
+	};
+	await play("Next decision");
+	await play("Previous decision");
+
+	// Answering advances on its own, with the same guarantee.
+	await top(page).getByText("Option 1", { exact: true }).click();
+	await top(page).getByRole("button", { name: "Save", exact: true }).click();
+	await expect.poll(() =>
+		slotOf(page, fixture.ids[0]!).evaluate(element =>
+			element.getAnimations().some(item => item.id === "deck-move")
+		)
+	).toBe(true);
+	let visible = await contentVisibility(page, moments);
+	for (let reading of visible) expect(reading).toBeGreaterThan(0.5);
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+	expect(await settledTop(page)).toEqual({ card: 1, cover: 0 });
+});
+
+test("an interrupted move continues from its current frame", async ({ join, seed }) => {
 	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
@@ -327,16 +400,14 @@ test("an interrupted shuffle continues from its current frame and keeps its laye
 	let previous = deck(page).getByRole("button", { name: "Previous decision" });
 	await next.click();
 	await previous.click();
-	let frames = await sampleShuffle(page, fixture.ids[0]!, [0, 0.1, 0.2, 0.3, 0.44, 0.6, 1]);
+	let frames = await sampleMove(page, fixture.ids[0]!, [0, 0.25, 0.5, 0.75, 1]);
 	expect(frames).toBeDefined();
-	// Reversed before the midpoint, the card never dips under the deck.
-	for (let frame of frames!.filter(frame => frame.at < 1)) {
-		expect(frame.layer).toBeGreaterThan(100);
-	}
-	// It resumes from where the first move had taken it, not from its slot.
-	expect(frames![0]!.y).not.toBe(0);
+	// Called back, the card comes over the deck from wherever the first move left it.
+	for (let frame of frames!) expect(frame.layer).toBeGreaterThan(100);
+	expect(frames![0]!.opacity).toBeGreaterThan(0);
 	await expect.poll(() => order(page)).toEqual(fixture.ids);
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
+	expect(await settledTop(page)).toEqual({ card: 1, cover: 0 });
 });
 
 test("a tall card coming forward never paints over what is below the deck", async ({ join, seed }) => {
@@ -370,14 +441,13 @@ test("a tall card coming forward never paints over what is below the deck", asyn
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
 });
 
-test("reduced motion reorders instantly and in the right order", async ({ join, seed }) => {
+test("reduced motion crossfades without movement, in the right order", async ({ join, seed }) => {
 	let fixture = deckSeed({ before: "Intro paragraph." }, 3);
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await deck(page).getByRole("button", { name: "Next decision" }).click();
-	expect(await deck(page).evaluate(element => element.getAnimations({ subtree: true }).length))
-		.toBe(0);
+	expect(await movingAnimations(page)).toBe(0);
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
 	expect(await order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
 
@@ -385,8 +455,29 @@ test("reduced motion reorders instantly and in the right order", async ({ join, 
 	await top(page).getByText("Option 2", { exact: true }).click();
 	await top(page).getByRole("button", { name: "Save", exact: true }).click();
 	await expect.poll(() => order(page)).toEqual([fixture.ids[2], fixture.ids[0], fixture.ids[1]]);
-	expect(await deck(page).evaluate(element => element.getAnimations({ subtree: true }).length))
-		.toBe(0);
+	expect(await movingAnimations(page)).toBe(0);
+});
+
+test("a decided card on top keeps an open card's footprint", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 3, { optionCounts: [2, 2, 2] });
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	let open = (await top(page).boundingBox())!.height;
+	await top(page).getByText("Option 1", { exact: true }).click();
+	await top(page).getByRole("button", { name: "Save", exact: true }).click();
+	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
+
+	let next = deck(page).getByRole("button", { name: "Next decision" });
+	await next.click();
+	await next.click();
+	await expect(deck(page).getByText("3 of 3", { exact: true })).toBeVisible();
+	await expect(next).toBeDisabled();
+	let decided = top(page).locator(`article[data-plan-sidecar-questionnaire="${fixture.ids[0]}"]`);
+	await expect(decided.getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
+	await expect(decided).toContainText("Answered by @ana");
+	await expect(top(page).locator("[data-card-settled]")).toHaveCount(0);
+	await expect.poll(async () => (await top(page).boundingBox())!.height / open)
+		.toBeGreaterThan(0.8);
 });
 
 test("a deck fits a 390px document without horizontal scroll", async ({ join, seed }) => {

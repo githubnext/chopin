@@ -31,9 +31,18 @@ async function answerAll(page: Page) {
 	for (let index = 0; index < 3; index++) {
 		await top(page).getByText("First option", { exact: true }).click();
 		await top(page).getByRole("button", { name: "Save", exact: true }).click();
-		if (index < 2) await expect(deck(page).getByText(`${index + 1} decided`)).toBeVisible();
+		if (index < 2) await expect(deck(page).locator("[data-deck-settled]")).toHaveCount(index + 1);
 	}
 	await expect(deck(page)).toHaveCount(0);
+}
+
+/** Deck animations that move a card rather than only fade it. */
+function movingAnimations(element: Element) {
+	return element.getAnimations({ subtree: true }).filter(animation => {
+		let frames = (animation.effect as KeyframeEffect).getKeyframes();
+		return new Set(frames.map(frame => frame.transform)).size > 1
+			|| frames.some(frame => frame.height);
+	}).length;
 }
 
 function routed(page: Page) {
@@ -102,7 +111,7 @@ test("an explicit tab pick keeps a blank document in Document when more decision
 	expect(await routings()).toBe(1);
 });
 
-test("arrow keys shuffle the Decisions deck; reduced motion reorders instantly", async ({ join }) => {
+test("arrow keys page the Decisions deck; reduced motion only crossfades", async ({ join }) => {
 	let page = await join("ana");
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await ask(page);
@@ -110,8 +119,7 @@ test("arrow keys shuffle the Decisions deck; reduced motion reorders instantly",
 	await page.keyboard.press("ArrowRight");
 	await expect(top(page).getByRole("heading", { name: "What belongs in the first cut?" }))
 		.toBeVisible();
-	expect(await deck(page).evaluate(element => element.getAnimations({ subtree: true }).length))
-		.toBe(0);
+	expect(await deck(page).evaluate(element => movingAnimations(element))).toBe(0);
 	await expect(deck(page).getByRole("status")).toHaveText("Decision 2 of 3: Scope");
 });
 

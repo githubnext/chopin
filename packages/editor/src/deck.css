@@ -52,9 +52,8 @@
 	background: var(--deck-tint);
 	opacity: 0;
 	pointer-events: none;
-	transition:
-		opacity var(--duration-linger) var(--ease-out),
-		background-color var(--duration-linger) var(--ease-out);
+	/* The deck animates the cover's opacity with each move; only the tint eases here. */
+	transition: background-color var(--deck-move-dur) var(--deck-ease);
 }
 
 .decision-deck-slot:not([data-deck-top])::after {
@@ -83,24 +82,79 @@
 	}
 }
 
-/*
- * A settled line has no card of its own; the slot gives it one. It is paper,
- * like an open card, so on top it is never darker than the slivers behind it.
- */
-.decision-deck-slot[data-deck-settled] {
-	padding: 0.625rem 0.75rem;
-	background: var(--color-page);
-}
-
 .decision-deck-nav {
 	display: flex;
+	justify-content: center;
+}
+
+/* One raised capsule: back, the top card's place, forward. */
+.decision-deck-pager {
+	display: inline-flex;
 	align-items: center;
-	gap: 0.25rem;
+	gap: var(--spacing);
+	padding: calc(var(--spacing) * 0.75);
+	border-radius: var(--radius-full);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	outline: var(--button-edge-width) solid var(--color-button-outline-edge);
+	outline-offset: calc(-1 * var(--button-edge-width));
+}
+
+.decision-deck-step {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: calc(var(--spacing) * 7);
+	height: calc(var(--spacing) * 7);
+	border: 0;
+	border-radius: var(--radius-full);
+	background: transparent;
+	color: var(--color-text-secondary);
+	transition-property: background-color, color, opacity;
+	transition-duration: var(--duration-fast);
+	transition-timing-function: var(--ease-out);
+}
+
+:root[data-plan-coarse-pointer] .decision-deck-step {
+	width: var(--control-target-coarse);
+	height: var(--control-target-coarse);
+}
+
+@media (hover: hover) {
+	.decision-deck-step:hover:not(:disabled) {
+		background: var(--color-gray-200);
+		color: var(--color-text-primary);
+	}
+}
+
+.decision-deck-step:active:not(:disabled) {
+	background: var(--color-gray-300);
+}
+
+.decision-deck-step:disabled {
+	opacity: var(--opacity-quiet);
+	cursor: default;
+}
+
+.decision-deck-step:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+.decision-deck-back {
+	transform: rotate(180deg);
 }
 
 .decision-deck-count {
-	margin-inline-end: auto;
-	font-size: var(--text-xs);
+	min-width: calc(var(--spacing) * 13);
+	text-align: center;
+	font-size: var(--text-sm);
 	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
 	color: var(--color-text-secondary);
+}
+
+.decision-deck-index {
+	font-weight: 500;
+	color: var(--color-text-primary);
 }

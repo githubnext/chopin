@@ -12,19 +12,20 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeftIcon, ArrowRightIcon } from "@chopin/icons";
+import { ChevronIcon } from "@chopin/icons";
 
 import {
 	arrange,
+	arriveFrames,
 	bringForward,
-	cycle,
+	leaveFrames,
 	lift,
 	movingCard,
 	PEEKS,
 	position,
 	settle,
-	shuffleFrames,
 	slot,
+	step as stepOrder,
 } from "./deck-order";
 
 import type { CSSProperties, ReactNode } from "react";
@@ -59,16 +60,23 @@ export function revealDeckItem(element: Element): void {
 	);
 }
 
+/** The step an arrow key asks for, or undefined when it does not move the deck or hits an end. */
 export function deckKey(
 	key: string,
 	target: "control" | "slot" | "other",
 	modifiers: { alt?: boolean; ctrl?: boolean; meta?: boolean; shift?: boolean } = {},
+	place?: { index: number; total: number },
 ): 1 | -1 | undefined {
 	if (modifiers.alt || modifiers.ctrl || modifiers.meta || modifiers.shift) return undefined;
 	if (target === "other") return undefined;
-	if (key === "ArrowRight") return 1;
-	if (key === "ArrowLeft") return -1;
-	return undefined;
+	let direction: 1 | -1 | undefined = key === "ArrowRight"
+		? 1
+		: key === "ArrowLeft"
+		? -1
+		: undefined;
+	if (!direction || !place) return direction;
+	let next = place.index + direction;
+	return next < 1 || next > place.total ? undefined : direction;
 }
 
 export function deckAnnouncement(
@@ -111,22 +119,36 @@ type Frozen = {
 	transform: string;
 	opacity: number;
 	zIndex: number;
+	/** The content cover's opacity. */
+	cover: number;
 	/** Whether the card was mid-move, so its layer and opacity are not its slot's. */
 	moving: boolean;
 };
 
 /** A move that holds the card on a layer outside its slot's. */
-const SHUFFLE = "deck-shuffle";
+const MOVE = "deck-move";
+
+/** The card's own animations, its cover's included, but not those of the card inside it. */
+function own(element: HTMLElement): Animation[] {
+	return element.getAnimations({ subtree: true })
+		.filter(animation => (animation.effect as KeyframeEffect | null)?.target === element);
+}
+
+/** Animate a card's content cover, which hides its content while it sits behind. */
+function cover(element: HTMLElement, frames: Keyframe[], options: KeyframeAnimationOptions) {
+	return element.animate(frames, { ...options, pseudoElement: "::after" });
+}
 
 /** Freeze a card where it is so a new move starts from this frame, not its end. */
 function freeze(element: HTMLElement): Frozen {
 	let style = getComputedStyle(element);
-	let animations = element.getAnimations();
+	let animations = own(element);
 	let frozen = {
 		transform: style.transform,
 		opacity: Number(style.opacity),
 		zIndex: Number(style.zIndex) || 0,
-		moving: animations.some(animation => animation.id === SHUFFLE),
+		cover: Number(getComputedStyle(element, "::after").opacity),
+		moving: animations.some(animation => animation.id === MOVE),
 	};
 	for (let animation of animations) animation.cancel();
 	return frozen;
@@ -153,7 +175,6 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 	leaveRef.current = onLeave;
 	let top = current[0];
 	topRef.current = top;
-	let decided = items.filter(item => item.settled).length;
 
 	let announce = (kind: "cycle" | "settle", id: string) => {
 		let latest = itemsRef.current;
@@ -165,66 +186,90 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 	};
 
 	/**
-	 * Commit a new order, then play it: the card that passes the others shuffles
-	 * under or over the deck, the rest slide one place, and the stage eases to
-	 * the new top card's height. Every move starts from where the cards are now,
-	 * so a reorder mid-shuffle continues the gesture instead of snapping.
+	 * Commit a new order, then play it: the old top card slides away in front of
+	 * the deck and reappears behind, or the new one slides back in over it; the
+	 * rest rise or sink one place, their covers fading as they go, and the stage
+	 * eases to the new top card's height. Every move starts from where the cards
+	 * are now, so a reorder mid-move continues the gesture instead of snapping.
 	 */
 	let reorder = (next: string[], kind: "cycle" | "settle" | undefined, direction?: 1 | -1) => {
 		let previous = arrange(orderRef.current, itemsRef.current);
 		let still = reduced();
 		let frozen = new Map<string, Frozen>();
-		let height: number | undefined;
-		for (let [id, element] of slots.current) {
-			if (still) {
-				for (let animation of element.getAnimations()) animation.cancel();
-			} else frozen.set(id, freeze(element));
-		}
+		for (let [id, element] of slots.current) frozen.set(id, freeze(element));
 		let stageElement = stage.current;
-		if (stageElement && !still) height = stageElement.getBoundingClientRect().height;
+		let height = stageElement?.getBoundingClientRect().height;
 		for (let animation of stageElement?.getAnimations() ?? []) animation.cancel();
 		orderRef.current = next;
 		flushSync(() => setOrder(next));
 		if (kind && next[0] !== undefined) announce(kind, next[0]);
-		if (still) return;
 
-		let linger = cssMs("--duration-linger", 600);
-		let easing = cssToken("--ease-out") || "ease-out";
+		let outgoing = previous[0] === next[0] ? undefined : previous[0];
+		if (still) {
+			// Without movement, the old top card fades out where it stood, over the new one.
+			let element = slots.current.get(outgoing ?? "");
+			let from = frozen.get(outgoing ?? "");
+			if (!element || !from) return;
+			let duration = cssMs("--duration-base", 200);
+			let over = 101 + next.length;
+			let front = slot(0).transform;
+			element.animate([
+				{ transform: front, opacity: from.opacity, zIndex: over, bottom: "auto" },
+				{ transform: front, opacity: 0, zIndex: over, bottom: "auto" },
+			], { id: MOVE, duration });
+			cover(element, [{ opacity: 0 }, { opacity: 0 }], { duration });
+			return;
+		}
+
+		let duration = cssMs("--deck-move-dur", 320);
+		let easing = cssToken("--deck-ease") || "ease-out";
 		let moving = movingCard(previous, next, direction);
 		for (let [id, element] of slots.current) {
 			let from = frozen.get(id);
 			let at = next.indexOf(id);
 			if (!from || at === -1) continue;
 			let place = slot(at);
-			if (id === moving?.id) {
-				let frames = shuffleFrames(
-					from.transform,
-					place.transform,
-					moving.direction,
-					next.length,
-					at > PEEKS,
-					easing,
-					from.moving ? from : undefined,
-				);
-				element.animate(frames, { id: SHUFFLE, duration: linger * 1.4 });
+			let covered = at === 0 ? 0 : 1;
+			// Only the old top card leaves in front; a card settling from behind just changes place.
+			if (id === moving?.id && moving.direction === "back" && id === outgoing) {
+				let frames = leaveFrames(from, place.transform, next.length, at > PEEKS, easing);
+				// Until it is out of sight it keeps its own height, not the new top card's.
+				frames.card[0]!.bottom = "auto";
+				frames.card[1]!.bottom = "auto";
+				element.animate(frames.card, { id: MOVE, duration });
+				cover(element, frames.cover, { duration });
 				continue;
 			}
-			// A card caught mid-shuffle eases back to its slot's layer too.
+			if (id === moving?.id && moving.direction === "front") {
+				let frames = arriveFrames(place.transform, next.length, from.moving ? from : undefined);
+				element.animate(frames, { id: MOVE, duration, easing });
+				if (from.moving && from.cover > 0) {
+					cover(element, [{ opacity: from.cover }, { opacity: 0 }], { duration, easing });
+				}
+				continue;
+			}
+			// A card caught mid-move eases back to its slot's layer too.
 			let layer = (zIndex: number) => from.moving ? { zIndex } : {};
 			element.animate(
 				[
 					{ transform: from.transform, opacity: from.opacity, ...layer(from.zIndex) },
 					{ transform: place.transform, opacity: place.opacity, ...layer(place.zIndex) },
 				],
-				{ id: from.moving ? SHUFFLE : "", duration: linger, easing },
+				{ id: from.moving ? MOVE : "", duration, easing },
 			);
+			if (from.cover !== covered) {
+				// The new top card's content arrives within the old one's fade; a card going
+				// behind keeps its content until the one arriving over it has shown its own.
+				let timing = covered === 0 ? { duration: duration / 2, easing } : { duration };
+				cover(element, [{ opacity: from.cover }, { opacity: covered }], timing);
+			}
 		}
 		// The top card sets the stage's height; ease between the two so prose
-		// below does not jump mid-shuffle.
+		// below does not jump mid-move.
 		let after = stageElement?.getBoundingClientRect().height;
 		if (stageElement && height !== undefined && after !== undefined && height !== after) {
 			stageElement.animate([{ height: `${height}px` }, { height: `${after}px` }], {
-				duration: linger * 1.4,
+				duration,
 				easing,
 			});
 		}
@@ -241,9 +286,18 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 						{ clipPath: `inset(-2rem -2rem ${hidden}px -2rem)` },
 						{ clipPath: "inset(-2rem -2rem 0px -2rem)" },
 					],
-					{ duration: linger * 1.4, easing },
+					{ duration, easing },
 				);
 			}
+		}
+	};
+
+	// Reaching an end disables the pressed arrow; keep focus in the pager.
+	let keepFocus = () => {
+		let active = document.activeElement;
+		if (active instanceof HTMLButtonElement && active.disabled) {
+			root.current?.querySelector<HTMLButtonElement>("[data-deck-control]:not(:disabled)")
+				?.focus();
 		}
 	};
 
@@ -312,19 +366,28 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 				ctrl: event.ctrlKey,
 				meta: event.metaKey,
 				shift: event.shiftKey,
+			}, {
+				index: position(itemsRef.current, orderRef.current[0]),
+				total: itemsRef.current.length,
 			});
 			if (!direction) return;
 			touch();
 			event.preventDefault();
 			event.stopPropagation();
-			let next = cycle(arrange(orderRef.current, itemsRef.current), direction);
+			let next = stepOrder(
+				arrange(orderRef.current, itemsRef.current),
+				itemsRef.current,
+				direction,
+			);
+			if (!next) return;
 			reorder(next, "cycle", direction);
 			if (kind === "slot") slots.current.get(next[0]!)?.focus({ preventScroll: true });
+			else keepFocus();
 		};
 		let front = (event: Event) => {
 			let id = (event as CustomEvent<string>).detail;
 			for (let slotElement of slots.current.values()) {
-				for (let animation of slotElement.getAnimations()) animation.cancel();
+				for (let animation of own(slotElement)) animation.cancel();
 			}
 			for (let animation of stage.current?.getAnimations() ?? []) animation.cancel();
 			let next = bringForward(arrange(orderRef.current, itemsRef.current), id);
@@ -357,8 +420,12 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 	});
 
 	let step = (direction: 1 | -1) => {
-		reorder(cycle(arrange(orderRef.current, itemsRef.current), direction), "cycle", direction);
+		let next = stepOrder(arrange(orderRef.current, itemsRef.current), itemsRef.current, direction);
+		if (!next) return;
+		reorder(next, "cycle", direction);
+		keepFocus();
 	};
+	let index = position(items, top);
 
 	return (
 		<div
@@ -404,32 +471,37 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 					);
 				})}
 			</div>
-			<div className="decision-deck-nav">
-				<span className="decision-deck-count">
-					{position(items, top)} of {items.length}
-					{decided > 0 && <span className="text-text-tertiary">{" · "}{decided} decided</span>}
-				</span>
-				<button
-					aria-controls={stageId}
-					aria-label="Previous decision"
-					className="btn btn-icon btn-ghost btn-sm"
-					data-deck-control=""
-					onClick={() => step(-1)}
-					type="button"
-				>
-					<ArrowLeftIcon aria-hidden="true" size={12} />
-				</button>
-				<button
-					aria-controls={stageId}
-					aria-label="Next decision"
-					className="btn btn-icon btn-ghost btn-sm"
-					data-deck-control=""
-					onClick={() => step(1)}
-					type="button"
-				>
-					<ArrowRightIcon aria-hidden="true" size={12} />
-				</button>
-			</div>
+			{items.length > 1 && (
+				<div className="decision-deck-nav">
+					<div className="decision-deck-pager">
+						<button
+							aria-controls={stageId}
+							aria-label="Previous decision"
+							className="decision-deck-step"
+							data-deck-control=""
+							disabled={index <= 1}
+							onClick={() => step(-1)}
+							type="button"
+						>
+							<ChevronIcon aria-hidden="true" className="decision-deck-back" size={14} />
+						</button>
+						<span className="decision-deck-count">
+							<span className="decision-deck-index">{index}</span> of {items.length}
+						</span>
+						<button
+							aria-controls={stageId}
+							aria-label="Next decision"
+							className="decision-deck-step"
+							data-deck-control=""
+							disabled={index >= items.length}
+							onClick={() => step(1)}
+							type="button"
+						>
+							<ChevronIcon aria-hidden="true" size={14} />
+						</button>
+					</div>
+				</div>
+			)}
 			<p aria-atomic="true" aria-live="polite" className="sr-only" role="status">
 				{announcement}
 			</p>

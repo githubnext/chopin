@@ -2,14 +2,16 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	arrange,
+	arriveFrames,
+	AWAY,
 	bringForward,
-	cycle,
+	leaveFrames,
 	lift,
 	movingCard,
 	position,
 	settle,
-	shuffleFrames,
 	slot,
+	step,
 } from "./deck-order";
 
 let open = (id: string) => ({ id, settled: false });
@@ -44,10 +46,20 @@ describe("deck order", () => {
 			.toEqual(["b", "d", "a", "c"]);
 	});
 
-	it("cycles through every card in both directions", () => {
-		expect(cycle(["a", "b", "c"], 1)).toEqual(["b", "c", "a"]);
-		expect(cycle(["a", "b", "c"], -1)).toEqual(["c", "a", "b"]);
-		expect(cycle([], 1)).toEqual([]);
+	it("steps through the counted order and stops at either end", () => {
+		let items = [open("a"), open("b"), open("c")];
+		expect(step(["a", "b", "c"], items, 1)).toEqual(["b", "c", "a"]);
+		expect(step(["b", "c", "a"], items, -1)).toEqual(["a", "b", "c"]);
+		expect(step(["a", "b", "c"], items, -1)).toBeUndefined();
+		expect(step(["c", "a", "b"], items, 1)).toBeUndefined();
+		expect(step([], [], 1)).toBeUndefined();
+	});
+
+	it("steps from a card brought forward to its counted neighbour", () => {
+		let items = [open("a"), open("b"), done("c"), open("d")];
+		// Counted order is a, b, d, then the decided c.
+		expect(step(["d", "a", "b", "c"], items, 1)).toEqual(["c", "a", "b", "d"]);
+		expect(step(["d", "a", "b", "c"], items, -1)).toEqual(["b", "d", "c", "a"]);
 	});
 
 	it("brings one card to the top without disturbing the rest", () => {
@@ -64,11 +76,11 @@ describe("deck order", () => {
 
 	it("peeks four cards, each showing less, and hides deeper ones", () => {
 		expect(slot(0)).toEqual({ transform: "translateY(0rem) scale(1)", zIndex: 100, opacity: 1 });
-		expect(slot(1).transform).toBe("translateY(-0.625rem) scale(0.97)");
-		expect(slot(2).transform).toBe("translateY(-1rem) scale(0.945)");
-		expect(slot(4).transform).toBe("translateY(-1.4375rem) scale(0.91)");
+		expect(slot(1).transform).toBe("translateY(-0.875rem) scale(0.97)");
+		expect(slot(2).transform).toBe("translateY(-1.5rem) scale(0.945)");
+		expect(slot(4).transform).toBe("translateY(-2.25rem) scale(0.91)");
 		expect(slot(5)).toEqual({
-			transform: "translateY(-1.4375rem) scale(0.91)",
+			transform: "translateY(-2.25rem) scale(0.91)",
 			zIndex: 95,
 			opacity: 0,
 		});
@@ -76,58 +88,47 @@ describe("deck order", () => {
 
 	it("lifts the stage by the deepest card shown", () => {
 		expect(lift(1)).toBe("0rem");
-		expect(lift(2)).toBe("0.625rem");
-		expect(lift(9)).toBe("1.4375rem");
+		expect(lift(2)).toBe("0.875rem");
+		expect(lift(9)).toBe("2.25rem");
 	});
 });
 
-describe("shuffle frames", () => {
-	it("swaps stacking at the midpoint so the card passes behind the deck", () => {
-		let frames = shuffleFrames(
-			"translateY(0rem) scale(1)",
-			"translateY(-1rem) scale(0.945)",
-			"back",
+describe("move frames", () => {
+	it("fades the old top card away in front, then brings it in behind", () => {
+		let frames = leaveFrames(
+			{ transform: "translateY(0rem) scale(1)", opacity: 1 },
+			"translateY(-1.5rem) scale(0.945)",
 			3,
 			false,
 		);
-		expect(frames.map(frame => frame.offset)).toEqual([0, 0.45, 0.45, 1]);
-		expect(frames[1]!.zIndex).toBe(104);
-		expect(frames[2]!.zIndex).toBe(0);
-		expect(frames[1]!.transform).toBe("translate(4%, 72%) rotate(2.5deg) scale(0.97)");
-		expect(frames[3]!.transform).toBe("translateY(-1rem) scale(0.945)");
+		expect(frames.card.map(frame => frame.offset)).toEqual([0, 0.5, 0.5, 1]);
+		expect(frames.card.map(frame => frame.zIndex)).toEqual([104, 104, 0, 0]);
+		expect(frames.card.map(frame => frame.opacity)).toEqual([1, 0, 0, 1]);
+		expect(frames.card[1]!.transform).toBe(AWAY);
+		expect(frames.card[3]!.transform).toBe("translateY(-1.5rem) scale(0.945)");
 	});
 
-	it("brings a card from the back over the deck", () => {
-		let frames = shuffleFrames("a", "b", "front", 3, false);
-		expect(frames[1]!.zIndex).toBe(0);
-		expect(frames[2]!.zIndex).toBe(104);
-	});
-
-	it("fades a card that lands deeper than the peeks", () => {
-		expect(shuffleFrames("a", "b", "back", 4, true)[3]!.opacity).toBe(0);
-	});
-
-	it("eases each half so the layer swap lands at the midpoint in time", () => {
-		let frames = shuffleFrames("a", "b", "back", 3, false, "ease-out");
-		expect(frames.map(frame => frame.easing)).toEqual([
-			"ease-out",
-			undefined,
-			"ease-out",
-			undefined,
+	it("keeps the leaving card's content uncovered until it is out of sight", () => {
+		let { cover } = leaveFrames({ transform: "none", opacity: 1 }, "b", 3, false);
+		expect(cover.map(frame => [frame.offset, frame.opacity])).toEqual([
+			[0, 0],
+			[0.5, 0],
+			[0.5, 1],
+			[1, 1],
 		]);
 	});
 
-	it("keeps a reversed card on its current layer and opacity until the midpoint", () => {
-		// Sent back, then called forward before the swap: it is still over the deck.
-		let frames = shuffleFrames("a", "b", "front", 3, false, undefined, {
-			zIndex: 104,
-			opacity: 0.4,
-		});
-		expect(frames.map(frame => frame.zIndex)).toEqual([104, 104, 104, 104]);
-		expect(frames[0]!.opacity).toBe(0.4);
-		// Called forward, then sent back before the swap: it is still under the deck.
-		let back = shuffleFrames("a", "b", "back", 3, false, undefined, { zIndex: 0, opacity: 1 });
-		expect(back.map(frame => frame.zIndex)).toEqual([0, 0, 0, 0]);
+	it("leaves a card that lands deeper than the peeks hidden", () => {
+		expect(leaveFrames({ transform: "a", opacity: 1 }, "b", 6, true).card[3]!.opacity).toBe(0);
+	});
+
+	it("brings a card back over the deck, from mid-move if it was caught", () => {
+		expect(arriveFrames("to", 3)).toEqual([
+			{ transform: AWAY, opacity: 0, zIndex: 104 },
+			{ transform: "to", opacity: 1, zIndex: 104 },
+		]);
+		expect(arriveFrames("to", 3, { transform: "mid", opacity: 0.4 })[0])
+			.toEqual({ transform: "mid", opacity: 0.4, zIndex: 104 });
 	});
 });
 
@@ -136,9 +137,9 @@ describe("moving card", () => {
 		expect(movingCard(["a", "b"], ["b", "a"], 1)).toEqual({ id: "a", direction: "back" });
 	});
 
-	it("brings the last card forward on previous", () => {
-		expect(movingCard(["a", "b", "c"], ["c", "a", "b"], -1))
-			.toEqual({ id: "c", direction: "front" });
+	it("brings the new top card forward on previous", () => {
+		expect(movingCard(["b", "c", "a"], ["a", "b", "c"], -1))
+			.toEqual({ id: "a", direction: "front" });
 	});
 
 	it("sends the first card that fell back when settling", () => {

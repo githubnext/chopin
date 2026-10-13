@@ -35,11 +35,24 @@ describe("deck semantics", () => {
 		expect(html.match(/data-deck-top=""/g)?.length).toBe(1);
 	});
 
-	it("offers previous and next controls and a count", () => {
+	it("offers previous and next controls around a count, bounded at the first card", () => {
 		let html = markup(["a"]);
 		expect(html).toContain('aria-label="Previous decision"');
 		expect(html).toContain('aria-label="Next decision"');
-		expect(html.replace(/<[^>]*>|<!-- -->/g, "")).toContain("1 of 3 · 1 decided");
+		expect(html.replace(/<[^>]*>|<!-- -->/g, "")).toContain("1 of 3");
+		expect(html).toMatch(
+			/disabled=""[^>]*aria-label="Previous decision"|aria-label="Previous decision"[^>]*disabled=""/,
+		);
+		expect(html).not.toMatch(/aria-label="Next decision"[^>]*disabled=""/);
+	});
+
+	it("shows no pager for a single decision", () => {
+		let html = renderToStaticMarkup(createElement(Deck, {
+			label: "1 decision",
+			reduced: () => true,
+			items: [{ id: "a", settled: false, label: "A", card: createElement("article", null, "A") }],
+		}));
+		expect(html).not.toContain("Next decision");
 	});
 
 	it("starts with open cards in front", () => {
@@ -53,6 +66,13 @@ describe("deck keyboard", () => {
 		expect(deckKey("ArrowLeft", "slot")).toBe(-1);
 		expect(deckKey("ArrowRight", "other")).toBeUndefined();
 		expect(deckKey("Enter", "control")).toBeUndefined();
+	});
+
+	it("stops at either end instead of wrapping", () => {
+		expect(deckKey("ArrowLeft", "control", {}, { index: 1, total: 3 })).toBeUndefined();
+		expect(deckKey("ArrowRight", "slot", {}, { index: 3, total: 3 })).toBeUndefined();
+		expect(deckKey("ArrowRight", "control", {}, { index: 2, total: 3 })).toBe(1);
+		expect(deckKey("ArrowLeft", "control", {}, { index: 2, total: 3 })).toBe(-1);
 	});
 
 	it("ignores modified arrows", () => {
