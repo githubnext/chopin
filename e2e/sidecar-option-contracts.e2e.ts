@@ -124,6 +124,54 @@ test("adding an option leaves a collaborator's newer choice alone", async ({ joi
 	}
 });
 
+test("a ready add-option button has a visible keyboard focus outline outside its fill", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Where should room state live?" }),
+	});
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
+	let field = card.getByRole("textbox", { name: "New option" });
+	await field.fill("In PostgreSQL");
+	await field.press("Shift+Tab");
+	let confirm = card.getByRole("button", { name: "Add option", exact: true });
+	await expect(confirm).toBeFocused();
+	let ring = await confirm.evaluate(element => {
+		let style = getComputedStyle(element);
+		return {
+			visible: element.matches(":focus-visible"),
+			width: parseFloat(style.outlineWidth),
+			offset: parseFloat(style.outlineOffset),
+			color: style.outlineColor,
+		};
+	});
+	expect(ring.visible).toBe(true);
+	expect(ring.width).toBeGreaterThan(0);
+	expect(ring.offset).toBeGreaterThan(0);
+	expect(ring.color).not.toBe("rgba(0, 0, 0, 0)");
+});
+
+test("the tenth option still selects when its composer unmounts", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Where should room state live?" }),
+	});
+	for (let index = 3; index <= 10; index++) {
+		let label = `Storage option ${index}`;
+		await card.getByRole("button", { name: "Add an option", exact: true }).click();
+		let field = card.getByRole("textbox", { name: "New option" });
+		await field.fill(label);
+		await field.press("Enter");
+		await expect(field).toHaveCount(0);
+		await expect(card.getByRole("radio", { name: label, exact: true })).toBeChecked();
+	}
+	await expect(card.getByRole("radio")).toHaveCount(10);
+	await expect(card.getByRole("button", { name: "Add an option", exact: true })).toHaveCount(0);
+});
+
 test("adding options selects only the adder's latest one after refresh", async ({ join, page, seed }) => {
 	await seed(PROSE);
 	let snapshots: Array<{ definition: Definition; model: number[] }> = [];

@@ -351,13 +351,6 @@ function AddOption(
 	let trigger = useRef<HTMLButtonElement>(null);
 	let focus = useRef<"field" | "trigger">(undefined);
 	let edit = useRef(0);
-	let count = useRef(question.options.length);
-	count.current = question.options.length;
-	// Leaving the question abandons a pending add, except when the add itself filled
-	// the list and so removed this row.
-	useEffect(() => () => {
-		if (count.current < MAX_SHARED_OPTIONS) edit.current++;
-	}, []);
 	let label = text?.trim() ?? "";
 	let duplicate = label ? duplicateOf(question, label) : undefined;
 	let ready = !!label && !duplicate && !disabled;
@@ -903,8 +896,9 @@ export function QuestionView(props: QuestionViewProps) {
 		definition.questions.filter(question => answered(question, drafts[question.id])).length;
 	let complete = answeredCount === definition.questions.length;
 	let pendingEnabled = status === "open" && !disabled && !!onSubmit && !!onChange && touched;
-	let latest = useRef({ onChange, onSubmit, markHumanEdit, drafts, definition });
-	latest.current = { onChange, onSubmit, markHumanEdit, drafts, definition };
+	let mounted = useRef(true);
+	let latest = useRef({ onChange, onSubmit, markHumanEdit, drafts, definition, active, status });
+	latest.current = { onChange, onSubmit, markHumanEdit, drafts, definition, active, status };
 	let reporting = useRef(onPending);
 	reporting.current = onPending;
 	useEffect(() => {
@@ -942,7 +936,13 @@ export function QuestionView(props: QuestionViewProps) {
 			},
 		});
 	}, [answeredCount, complete, error, pendingEnabled, submitting]);
-	useEffect(() => () => reporting.current?.(undefined), []);
+	useEffect(() => {
+		mounted.current = true;
+		return () => {
+			mounted.current = false;
+			reporting.current?.(undefined);
+		};
+	}, []);
 
 	if (status === "discarded") {
 		return (
@@ -1052,6 +1052,12 @@ export function QuestionView(props: QuestionViewProps) {
 		onChange?.(question, change);
 	};
 	let added = (question: string, option: string, label: string, focus: boolean) => {
+		// The field unmounts at capacity; the question host owns whether this add is still current.
+		if (
+			!mounted.current || latest.current.active !== question || latest.current.status !== "open"
+		) {
+			return;
+		}
 		let item = latest.current.definition.questions.find(each => each.id === question);
 		if (!item) return;
 		let change = chooseAdded(
