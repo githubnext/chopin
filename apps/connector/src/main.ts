@@ -9,6 +9,7 @@ import { parseArgs } from "./args";
 import { connectorMessage, forget, machineToken, pair, register, SELF, unpair } from "./machine";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
+import { commandWords, servePlanners } from "./planner";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
 import { removeReplaced, update } from "./update";
@@ -113,13 +114,27 @@ async function unpairCommand(args: string[]) {
 }
 
 async function connect(args: string[]) {
-	let parsed = parseArgs(args);
+	let parsed = parseArgs(args, { options: ["planner-command"], lists: ["planner"] });
 	let command = parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
 	if (
 		!Array.isArray(command) || !command.length
 		|| command.some(item => typeof item !== "string" || !item)
 	) {
 		throw new Error(USAGE);
+	}
+	let plannerDocuments = parsed.lists.get("planner") ?? [];
+	let plannerLine = parsed.options.get("planner-command");
+	let plannerCommand = plannerLine === undefined
+		? JSON.parse(process.env.CHOPIN_PLANNER_COMMAND ?? "[]")
+		: commandWords(plannerLine);
+	if (
+		!Array.isArray(plannerCommand)
+		|| plannerCommand.some(item => typeof item !== "string" || !item)
+		|| !!plannerDocuments.length !== !!plannerCommand.length
+	) {
+		throw new Error(
+			`--planner <document URL> and --planner-command <command> go together.\n\n${USAGE}`,
+		);
 	}
 	let url = server();
 	let info = await workspace(resolve(parsed.positional[0] ?? "."));
@@ -153,6 +168,18 @@ async function connect(args: string[]) {
 				});
 			if (!machine) return;
 			let announced = false;
+			// Planner backends run beside the work loop with this machine token and stop with it, so
+			// none outlives a revoked token and a machine paired again starts them with its new one.
+			let planners = new AbortController();
+			let planning = servePlanners({
+				url,
+				machine,
+				documents: plannerDocuments,
+				command: plannerCommand,
+				cwd: info.root,
+				output,
+				signal: AbortSignal.any([abort.signal, planners.signal]),
+			});
 			try {
 				await serveWork({
 					// Every connection registers anew with the machine token: a connection token lasts only
@@ -187,6 +214,9 @@ async function connect(args: string[]) {
 				// it was connected stays stopped.
 				if (!stored || announced || !process.stdin.isTTY || !process.stdout.isTTY) throw error;
 				output.say("This machine needs pairing with Chopin again.");
+			} finally {
+				planners.abort();
+				await planning;
 			}
 		}
 	} catch (error) {
@@ -198,8 +228,8 @@ async function connect(args: string[]) {
 	}
 }
 
-const USAGE = `Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] -- `
-	+ "agent [ACP arguments]";
+const USAGE = `Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] `
+	+ "[--planner <document URL>]... [--planner-command <command>] -- agent [ACP arguments]";
 
 const HELP = [
 	`Usage: ${SELF} <command> [--base-dir <dir>]`,
@@ -213,6 +243,9 @@ const HELP = [
 	"  connect [checkout] -- <agent> [ACP arguments]",
 	"      Run the work you start in the checkout's documents with a local ACP agent.",
 	"      Pairs this machine first if it isn't paired yet.",
+	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
+	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
+	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
 	"  update [version] [--allow-downgrade] [--yes]",
 	"      Replace this chopin with a verified release: by default the one your Chopin instance",
 	"      recommends, or else the newest. An older release needs --allow-downgrade; --yes skips",

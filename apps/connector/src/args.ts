@@ -7,6 +7,8 @@ export type ParsedArgs = {
 	flags: Set<string>;
 	/** Options that take a value, without their leading dashes. */
 	options: Map<string, string>;
+	/** Options that may be given more than once, every value in order. */
+	lists: Map<string, string[]>;
 	/** Everything after a bare `--`, such as an agent's ACP command; undefined without one. */
 	rest?: string[];
 };
@@ -19,11 +21,17 @@ export type ParsedArgs = {
  */
 export function parseArgs(
 	args: string[],
-	spec: { flags?: string[]; options?: string[] } = {},
+	spec: { flags?: string[]; options?: string[]; lists?: string[] } = {},
 ): ParsedArgs {
 	let flags = new Set(spec.flags ?? []);
-	let options = new Set([...(spec.options ?? []), "base-dir"]);
-	let parsed: ParsedArgs = { positional: [], flags: new Set(), options: new Map() };
+	let lists = new Set(spec.lists ?? []);
+	let options = new Set([...(spec.options ?? []), ...lists, "base-dir"]);
+	let parsed: ParsedArgs = {
+		positional: [],
+		flags: new Set(),
+		options: new Map(),
+		lists: new Map(),
+	};
 	for (let index = 0; index < args.length; index++) {
 		let arg = args[index]!;
 		if (arg === "--") {
@@ -44,6 +52,7 @@ export function parseArgs(
 				throw new Error(`--${name} needs a value.`);
 			}
 			parsed.options.set(name, value);
+			if (lists.has(name)) parsed.lists.set(name, [...parsed.lists.get(name) ?? [], value]);
 		} else {
 			throw new Error(`Unknown option: --${name}`);
 		}

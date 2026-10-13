@@ -206,6 +206,20 @@ export async function register(
 	return value.token;
 }
 
+/** A short-lived credential for this machine's Planner backend to attach one document. */
+export async function plannerCredential(
+	url: string,
+	token: string,
+	document: string,
+	signal?: AbortSignal,
+) {
+	let value = await post(url + "/api/connector/planner", { document }, token, signal);
+	if (typeof value.token !== "string" || typeof value.expiresAt !== "number") {
+		throw new Error("Missing Planner credential.");
+	}
+	return { token: value.token, expiresAt: value.expiresAt };
+}
+
 /** Revoke this machine on the server and forget its token, even if the server already had. */
 export async function unpair(url: string, directory: string): Promise<"unpaired" | "not-paired"> {
 	let token = (await stored(directory)).servers[url]?.token;
