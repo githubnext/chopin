@@ -476,10 +476,14 @@ function finder(host: ServiceHost) {
 	return host.which ?? ((name: string, PATH: string) => Bun.which(name, { PATH }));
 }
 
+/** How many `#!` interpreters install follows from a script before it refuses the chain. */
+const MAX_INTERPRETERS = 5;
+
 /**
- * `servicePath` with the stable directory of the interpreter `file`'s `#!` line names, and of the
- * one that interpreter names if it is a script too, wherever the service would not find them
- * yet. One found only through a directory gone after a reboot is refused.
+ * `servicePath` with the stable directory of the interpreter `file`'s `#!` line names, and of
+ * each interpreter that one names in turn while it is a script too, wherever the service would
+ * not find them yet. One found only through a directory gone after a reboot is refused, as is a
+ * chain longer than `MAX_INTERPRETERS` or one that loops.
  */
 async function withInterpreters(
 	host: ServiceHost,
@@ -489,9 +493,17 @@ async function withInterpreters(
 ) {
 	if (host.platform === "win32") return servicePath;
 	let which = finder(host);
-	for (let depth = 0; depth < 2; depth++) {
+	let chain = [file];
+	for (;;) {
 		let named = await interpreter(file);
-		if (!named) break;
+		if (!named) return servicePath;
+		if (chain.length > MAX_INTERPRETERS) {
+			throw new ServiceError(
+				`${chain[0]} runs through more than ${MAX_INTERPRETERS} #! interpreters (`
+					+ `${[...chain, named].join(" → ")}). Nothing was installed. Point its #! line at `
+					+ "the program that finally runs it.",
+			);
+		}
 		let absolute = posix.isAbsolute(named);
 		let found = absolute
 			? which(named, servicePath)
@@ -514,13 +526,19 @@ async function withInterpreters(
 			`Install ${named} somewhere stable, or link it into a directory on the service's PATH:\n`
 				+ `  ${servicePath}`,
 		);
+		if (chain.includes(passed[0]!)) {
+			throw new ServiceError(
+				`${chain[0]}'s #! interpreters loop (${[...chain, passed[0]].join(" → ")}), so it never `
+					+ "reaches a program to run. Nothing was installed. Fix the #! lines.",
+			);
+		}
 		if (!absolute && !which(named, servicePath)) {
 			servicePath += posix.delimiter + posix.dirname(passed[0]!);
 		}
+		chain.push(passed[0]!);
 		file = passed[0]!;
 		what = named;
 	}
-	return servicePath;
 }
 
 /**

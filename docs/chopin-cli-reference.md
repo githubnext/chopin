@@ -114,10 +114,11 @@ Planner command is looked up in the checkout.
 For the agent and the Planner command, install reads the `#!` line. It finds
 the interpreter that `#!/usr/bin/env node` names the way it found the program,
 checks an absolute one such as `#!/usr/bin/python3` as written, and does the
-same once more if that interpreter is a script too. Each interpreter's stable
-folder joins the service's PATH. Install refuses if the agent, the Planner, an
-interpreter or `git` would not be found, or is found only in a folder that
-disappears.
+same again while the interpreter is a script too, up to 5 interpreters deep.
+Each interpreter's stable folder joins the service's PATH. Install refuses if
+the agent, the Planner, an interpreter or `git` would not be found, or is found
+only in a folder that disappears, and refuses a longer chain of interpreters or
+one that loops.
 
 Then install starts the agent once with the service's PATH, your `--env`
 values, `HOME` and your user name, and nothing else from your shell. It sends

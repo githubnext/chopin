@@ -334,6 +334,56 @@ test("install checks the program behind env and both scripts' interpreters, and 
 	}
 });
 
+test("install follows a chain of #! interpreters to node and puts its stable directory on the service PATH; a deeper chain or a loop is refused", async () => {
+	let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
+	// fnm: node lives only in a stable versions directory, reached through this shell's own link.
+	let run = join(home, "run");
+	let installation = join(home, "fnm", "node-versions", "v24", "installation");
+	let stable = join(installation, "bin");
+	let shell = join(run, "fnm_multishells", "4242_1700000000000");
+	await mkdir(stable, { recursive: true });
+	await mkdir(join(run, "fnm_multishells"), { recursive: true });
+	await symlink(installation, shell);
+	await writeFile(join(stable, "node"), "#!/bin/sh\n", { mode: 0o755 });
+	// The agent runs with wrapper-a, which runs with wrapper-b, which runs with node.
+	await writeFile(join(bin, "chain-agent"), "#!/usr/bin/env wrapper-a\n", { mode: 0o755 });
+	await writeFile(join(bin, "wrapper-a"), "#!/usr/bin/env wrapper-b\n", { mode: 0o755 });
+	await writeFile(join(bin, "wrapper-b"), "#!/usr/bin/env node\n", { mode: 0o755 });
+	host.env = { XDG_RUNTIME_DIR: run, PATH: `${join(shell, "bin")}:${bin}:/usr/bin:/bin` };
+	await connected(directory, { ...settings, command: ["chain-agent", "--acp"] });
+	await installService(host, program);
+	let path = (await readFile(unitPath(home), "utf8")).match(/^Environment="PATH=(.*)"$/m)![1]!;
+	expect(Bun.which("node", { PATH: path })).toBe(join(await realpath(stable), "node"));
+	expect(path).not.toContain("fnm_multishells");
+
+	// Six interpreters deep, or a loop, never ends in a program the service can run.
+	let real = await realpath(bin);
+	for (let level = 1; level <= 6; level++) {
+		await writeFile(join(bin, `deep-${level}`), `#!/usr/bin/env deep-${level + 1}\n`, {
+			mode: 0o755,
+		});
+	}
+	await writeFile(join(bin, "deep-7"), "#!/bin/sh\n", { mode: 0o755 });
+	await writeFile(join(bin, "deep-agent"), "#!/usr/bin/env deep-1\n", { mode: 0o755 });
+	await writeFile(join(bin, "loop-a"), "#!/usr/bin/env loop-b\n", { mode: 0o755 });
+	await writeFile(join(bin, "loop-b"), "#!/usr/bin/env loop-a\n", { mode: 0o755 });
+	await writeFile(join(bin, "loop-agent"), "#!/usr/bin/env loop-a\n", { mode: 0o755 });
+	await rm(unitPath(home));
+	let cases = [
+		["deep-agent", "more than 5 #! interpreters"],
+		["loop-agent", "#! interpreters loop"],
+	];
+	for (let [agent, why] of cases) {
+		await connected(directory, { ...settings, command: [agent!] });
+		let error = await installService(host, program).catch(error => error);
+		expect(error).toBeInstanceOf(Error);
+		expect(error.message).toContain(join(real, agent!));
+		expect(error.message).toContain(why!);
+		expect(error.message).toContain("Nothing was installed.");
+		expect(existsSync(unitPath(home))).toBe(false);
+	}
+});
+
 test("an interpreter found only in a per-shell directory, or not at all, is refused by name", async () => {
 	let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
 	let run = join(home, "run");
