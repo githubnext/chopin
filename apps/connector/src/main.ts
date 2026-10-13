@@ -58,12 +58,12 @@ async function bridge() {
 	process.once("SIGINT", () => void close());
 }
 
-/** CHOPIN_URL, else the server `chopin service install` stored, else Chopin's own. */
+/** CHOPIN_URL, else the server `chopin connect` saved, else Chopin's own. */
 async function chosenServer(): Promise<{ origin: string; source: ServerSource }> {
 	if (process.env.CHOPIN_URL) {
 		return { origin: origin(process.env.CHOPIN_URL), source: "CHOPIN_URL" };
 	}
-	let stored = (await readConfig(stateDirectory())).server;
+	let stored = (await readConfig(stateDirectory())).connect?.server;
 	return stored
 		? { origin: origin(stored), source: "config" }
 		: { origin: DEFAULT_URL, source: "default" };
@@ -174,7 +174,7 @@ async function connect(args: string[]) {
 			`${SELF} connect --service takes no other arguments; it runs what ${SELF} connect saved.`,
 		);
 	}
-	if (service && !saved) throw new Error(CONNECT_FIRST);
+	if (service && !saved?.server) throw new Error(CONNECT_FIRST);
 	let command = saved?.command ?? parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
 	if (
 		!Array.isArray(command) || !command.length
@@ -197,7 +197,7 @@ async function connect(args: string[]) {
 		);
 	}
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
-	let url = await server();
+	let url = saved?.server ?? await server();
 	let info = await workspace(resolve(saved?.checkout ?? parsed.positional[0] ?? "."));
 	// The service runs what a terminal's connect saves. A relative agent path would resolve
 	// against the service's own working directory.
@@ -205,6 +205,7 @@ async function connect(args: string[]) {
 	let save = () =>
 		updateConfig(directory, value => {
 			value.connect = {
+				server: url,
 				checkout: info.root,
 				command: !isAbsolute(agent) && (agent.includes("/") || agent.includes(sep))
 					? [resolve(agent), ...command.slice(1)]
@@ -346,8 +347,15 @@ async function serviceCommand(args: string[]) {
 			);
 		}
 		let saved = (await readConfig(directory)).connect;
-		if (!saved) throw new ServiceError(CONNECT_FIRST);
-		let url = await server();
+		if (!saved?.server) throw new ServiceError(CONNECT_FIRST);
+		let url = saved.server;
+		if (process.env.CHOPIN_URL && origin(process.env.CHOPIN_URL) !== url) {
+			throw new ServiceError(
+				`CHOPIN_URL is ${origin(process.env.CHOPIN_URL)}, but chopin connect saved ${url}. `
+					+ "Nothing was installed. Run chopin connect again with the server you want, then "
+					+ "chopin service install.",
+			);
+		}
 		if (!await machineToken(directory, url)) {
 			throw new ServiceError(
 				`This machine is not paired with ${url}. Run \`${SELF} pair\` first, then install the `
@@ -355,7 +363,6 @@ async function serviceCommand(args: string[]) {
 			);
 		}
 		let installed = await installService(host, { executable: process.execPath, directory }, {
-			server: url,
 			allowDowngrade: parsed.flags.has("allow-downgrade"),
 		});
 		output.say(
@@ -434,8 +441,8 @@ const HELP = [
 	"",
 	"--base-dir (or CHOPIN_HOME) is where the machine token, locks and worktrees live",
 	"(default ~/.local/state/chopin/connector).",
-	"CHOPIN_URL names your Chopin instance (default: the one `service install` stored, else",
-	`${DEFAULT_URL}).`,
+	"CHOPIN_URL names your Chopin instance for connect, which saves it for the other commands",
+	`and the service (default: ${DEFAULT_URL}).`,
 ].join("\n");
 
 if (import.meta.main) {

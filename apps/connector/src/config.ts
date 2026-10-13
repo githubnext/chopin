@@ -11,6 +11,8 @@ export type InstalledService = ServiceProgram & {
 
 /** What `chopin connect` last ran here, which `chopin connect --service` runs. */
 export type ConnectSettings = {
+	/** The Chopin origin connect connected to: CHOPIN_URL, or the default. */
+	server: string;
 	/** The checkout's absolute root. */
 	checkout: string;
 	/** The agent's ACP command, as `connect` takes it after `--`. */
@@ -25,8 +27,6 @@ export type ConnectSettings = {
  * It holds no secret; the machine token stays in machine.json.
  */
 export type Config = {
-	/** The Chopin origin commands use when CHOPIN_URL is unset. */
-	server?: string;
 	connect?: ConnectSettings;
 	service?: InstalledService;
 };

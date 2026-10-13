@@ -69,6 +69,7 @@ async function connect(
 		},
 	});
 	let directory = state ?? await mkdtemp(join(scratch, "state-"));
+	let url = `http://127.0.0.1:${chopin.port}`;
 	let connector = Bun.spawn([
 		process.execPath,
 		"--no-env-file",
@@ -78,7 +79,7 @@ async function connect(
 	], {
 		env: {
 			...process.env,
-			CHOPIN_URL: `http://127.0.0.1:${chopin.port}`,
+			CHOPIN_URL: url,
 			CHOPIN_CONNECTOR_STATE_DIR: directory,
 		},
 		stdout: "pipe",
@@ -92,6 +93,7 @@ async function connect(
 			stderr: await new Response(connector.stderr).text(),
 			requests,
 			directory,
+			url,
 		};
 	} finally {
 		connector.kill("SIGKILL");
@@ -121,7 +123,7 @@ test("connect stops without retrying when the connector endpoint refuses its ver
 	]);
 });
 
-test("connect saves the checkout, agent and Planner it runs, which connect --service runs", async () => {
+test("connect saves the server, checkout, agent and Planner it runs, which connect --service runs", async () => {
 	let root = await checkout();
 	let planner = ["--planner", "https://chopin.example/d/one", "--planner-command", "planner --x"];
 	let started = await connect("pairing", [root, ...planner, "--", "agent", "--acp"]);
@@ -129,6 +131,7 @@ test("connect saves the checkout, agent and Planner it runs, which connect --ser
 	let file = join(started.directory, "config.json");
 	expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
 		connect: {
+			server: started.url,
 			checkout: await realpath(root),
 			command: ["agent", "--acp"],
 			planners: ["https://chopin.example/d/one"],
@@ -137,9 +140,11 @@ test("connect saves the checkout, agent and Planner it runs, which connect --ser
 	});
 	expect((await stat(file)).mode & 0o777).toBe(0o600);
 
-	// The service has no terminal to pair on, so getting that far shows it read what was saved.
+	// The service has no terminal to pair on, so getting that far shows it read what was saved:
+	// the server connect saved, not this run's CHOPIN_URL.
 	let service = await connect("pairing", ["--service"], started.directory);
-	expect(service.stderr).toContain("This machine is not paired with");
+	expect(service.url).not.toBe(started.url);
+	expect(service.stderr).toContain(`This machine is not paired with ${started.url}.`);
 	expect(service.requests).toEqual([]);
 	for (let args of [["--service", root], ["--service", "--", "agent"], ["--service", ...planner]]) {
 		let refused = await connect("pairing", args, started.directory);
@@ -182,6 +187,7 @@ test("connect on a checkout the running service holds saves its settings for a r
 	);
 	expect(saved.requests).toEqual([]);
 	expect(JSON.parse(await readFile(join(directory, "config.json"), "utf8")).connect).toEqual({
+		server: saved.url,
 		checkout: root,
 		command: ["new-agent", "--acp"],
 		planners: [],

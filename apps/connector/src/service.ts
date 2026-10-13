@@ -636,14 +636,14 @@ async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servi
 
 /**
  * Install `program` as this user's service and start it, so it starts again by itself. It runs
- * what `chopin connect` saved in config.json, checked here first; the server and the program go
- * to config.json too, where the service's connect reads them. A service an older chopin than one
- * already installed is refused without `allowDowngrade`.
+ * what `chopin connect` saved in config.json, checked here first, server included; the program
+ * goes to config.json too. A service an older chopin than one already installed is refused
+ * without `allowDowngrade`.
  */
 export async function installService(
 	host: ServiceHost,
 	program: ServiceProgram,
-	options: { server: string; allowDowngrade?: boolean; version?: string },
+	options: { allowDowngrade?: boolean; version?: string } = {},
 ): Promise<Installed> {
 	let manager = serviceManager(host.platform);
 	let version = options.version ?? VERSION;
@@ -678,7 +678,6 @@ export async function installService(
 	let log = logPath(host.platform, program.directory);
 	let record = () =>
 		updateConfig(program.directory, value => {
-			value.server = options.server;
 			value.connect = settings;
 			value.service = { ...program, version, installedAt: Date.now() };
 		});

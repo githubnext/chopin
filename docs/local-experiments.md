@@ -104,8 +104,9 @@ remains the way to connect.
 Chopin (default: the hostname), and pairing again replaces the token.
 `chopin connect` runs work exactly as `bun connector.js connect` does, pairing
 first only when the machine has no token for that server, and saves what it
-runs for `chopin service install`. `chopin` uses
-`https://chopin.githubnext.com` when `CHOPIN_URL` is unset. `chopin unpair`
+runs, server included, for `chopin service install`. Set `CHOPIN_URL` once, for
+`chopin connect`; later commands use the server it saved, and
+`https://chopin.githubnext.com` before anything is saved. `chopin unpair`
 revokes the machine in Chopin and deletes its token. Every command takes
 `--base-dir <dir>` (or `CHOPIN_HOME`) for where the token, locks and worktrees
 live. `chopin --version` prints the CLI version and the connector protocol it
@@ -128,7 +129,7 @@ workflow built it; `CHOPIN_VERIFY_ATTESTATION=0` skips that second check. When
 your shell profile.
 
 `chopin update` replaces the installed `chopin` with the release your Chopin
-server recommends, which it reads from `CHOPIN_URL`'s
+server recommends, which it reads from that server's
 `/api/connector/version`. When the server cannot be reached, it says so and
 installs the newest release instead. `chopin update 0.2.0` installs that
 release. It verifies the download as the installer does, with `checksums.txt`
@@ -169,7 +170,7 @@ without `--host` for every target. They are written to `apps/connector/dist`:
 
 - the CLI version and connector protocol;
 - the server it uses, and whether that came from `CHOPIN_URL`, from
-  `config.json` (written by `chopin service install`) or is the default;
+  `config.json` (saved by `chopin connect`) or is the default;
 - whether the machine is paired with that server, by its label (the token is
   never shown), and whether Chopin still accepts it;
 - each connector holding a checkout in the base dir, with its pid and chopin
@@ -209,14 +210,16 @@ chopin service install
 chopin service status
 ```
 
-Each time `chopin connect` starts, it saves the checkout's absolute path, the
-agent command and any Planner documents and command to `config.json` in the
-base dir. `config.json` holds no token or other secret. Install needs the
+Each time `chopin connect` starts, it saves the server, the checkout's absolute
+path, the agent command and any Planner documents and command to `config.json`
+in the base dir. `config.json` holds no token or other secret. Install needs the
 installed `chopin` binary (not `connector.js`), a machine already paired with
 the server, and those saved settings; without them it stops with "Run chopin
 connect once in your checkout first (it saves what the service runs), then
-chopin service install." It writes the server and the chopin version that
-installed it to `config.json`. The service definition runs the absolute path of
+chopin service install." It runs the server `chopin connect` saved; when
+`CHOPIN_URL` names another, install refuses and asks you to run `chopin connect`
+again with the server you want. It writes the chopin version that installed it
+to `config.json`. The service definition runs the absolute path of
 that `chopin` as `connect --base-dir <dir> --service`, which reads the saved
 settings, the server and the machine token when it starts and runs exactly
 those settings. No token or other secret is ever written into the unit, plist

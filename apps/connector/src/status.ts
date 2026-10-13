@@ -146,7 +146,7 @@ export async function collectStatus(options: {
 
 const SOURCES: Record<ServerSource, string> = {
 	CHOPIN_URL: "from CHOPIN_URL",
-	config: "stored by chopin service install",
+	config: "saved by chopin connect",
 	default: "the default; CHOPIN_URL changes it",
 };
 

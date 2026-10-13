@@ -238,3 +238,29 @@ test.skipIf(process.platform === "win32")(
 		expect(stdout).not.toContain(TOKEN);
 	},
 );
+
+test.skipIf(process.platform === "win32")(
+	"with CHOPIN_URL unset, chopin status checks and shows the server chopin connect saved",
+	async () => {
+		using server = chopin(() => Response.json({ id: "m1", label: "build-box", login: "ada" }));
+		let { directory, host } = await machine(server.url);
+		await writeFile(
+			join(directory, "config.json"),
+			JSON.stringify({
+				connect: { server: server.url, checkout: host.home, command: ["agent"], planners: [] },
+			}),
+		);
+		let child = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "main.ts"),
+			"status",
+			"--base-dir",
+			directory,
+		], { env: { PATH: process.env.PATH, HOME: host.home }, stdout: "pipe", stderr: "pipe" });
+		let [stdout, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+		expect(code).toBe(0);
+		expect(stdout).toContain(`Server:     ${server.url} (saved by chopin connect)\n`);
+		expect(stdout).toContain("Machine:    paired as build-box (ada); Chopin accepts it\n");
+	},
+);

@@ -43,6 +43,54 @@ test.skipIf(!binary)("the compiled binary prints its version and connector proto
 });
 
 test.skipIf(!binary)(
+	"service install uses the server chopin connect saved, and refuses a different CHOPIN_URL",
+	async () => {
+		let directory = await mkdtemp(join(scratch, "state-"));
+		let saved = "https://chopin.example";
+		let install = (url?: string) => {
+			let env: Record<string, string | undefined> = {
+				...process.env,
+				CHOPIN_CONNECTOR_STATE_DIR: directory,
+				CHOPIN_URL: url,
+			};
+			if (!url) delete env.CHOPIN_URL;
+			let result = Bun.spawnSync([binary!, "service", "install"], {
+				env,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			return { code: result.exitCode, stderr: result.stderr.toString() };
+		};
+		expect(install()).toEqual({
+			code: 1,
+			stderr: "Run chopin connect once in your checkout first (it saves what the service "
+				+ "runs), then chopin service install.\n",
+		});
+		let settings = { server: saved, checkout: scratch, command: ["agent"], planners: [] };
+		await writeFile(
+			join(directory, "config.json"),
+			JSON.stringify({ connect: { ...settings, plannerCommand: [] } }),
+		);
+		expect(install("https://other.example")).toEqual({
+			code: 1,
+			stderr: `CHOPIN_URL is https://other.example, but chopin connect saved ${saved}. Nothing `
+				+ "was installed. Run chopin connect again with the server you want, then chopin "
+				+ "service install.\n",
+		});
+		// With CHOPIN_URL unset, or naming the saved server, install goes on with the saved server
+		// as far as the pairing it checks before touching the service manager.
+		for (let url of [undefined, `${saved}/`]) {
+			expect(install(url)).toEqual({
+				code: 1,
+				stderr: `This machine is not paired with ${saved}. Run \`chopin pair\` first, then `
+					+ "install the service.\n",
+			});
+		}
+	},
+	60_000,
+);
+
+test.skipIf(!binary)(
 	"the compiled binary runs an investigation through its own stdio bridge",
 	async () => {
 		let root = await checkout();
