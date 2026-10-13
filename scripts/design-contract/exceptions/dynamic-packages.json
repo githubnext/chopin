@@ -84,6 +84,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > MachineIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > SearchIcon > <LineIcon>",
 				1
 			],
@@ -95,7 +102,7 @@
 				1
 			]
 		],
-		"sourceHash": "81931c163dae45bdf46196e0a5c8080f81d50712b99445e3ab2cc7f88b4cba6b"
+		"sourceHash": "53016adae456f416556996b5871337597ebcb3ce4b36b40ca24f60af50aa8dc2"
 	},
 	{
 		"file": "packages/icons/src/line.tsx",

@@ -4,6 +4,7 @@ import documentActionsIcon from "./assets/figma/navigation/document-actions.svg"
 import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { IconButton } from "./icon-button";
+import { MachinesEntry } from "./machines-entry";
 import { MenuItem, MenuSeparator } from "./menu-item";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
@@ -622,9 +623,9 @@ export function ProjectSidebar(
 				)}
 		</div>
 	);
-	let archiveFooter = !archiveMode
-		? (
-			<div className="project-sidebar-footer-actions">
+	let footer = (
+		<div className="project-sidebar-footer-actions">
+			{!archiveMode && (
 				<button
 					className="project-sidebar-primary-action"
 					onClick={() => {
@@ -637,9 +638,10 @@ export function ProjectSidebar(
 					<ArchiveIcon />
 					<span>Archived</span>
 				</button>
-			</div>
-		)
-		: null;
+			)}
+			<MachinesEntry placement="sidebar" />
+		</div>
+	);
 	return (
 		<aside
 			aria-label="Projects"
@@ -713,7 +715,7 @@ export function ProjectSidebar(
 					</ul>
 				</nav>
 			</div>
-			{archiveFooter}
+			{footer}
 			<div className="project-sidebar-account-wrap" ref={accountWrapRef}>
 				<button
 					aria-controls={accountMenu ? accountMenuId : undefined}

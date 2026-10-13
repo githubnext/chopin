@@ -18,9 +18,10 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 // The latter adds a 1 KB compressed allowance, including Linux gzip variation.
 // Shared menu dismissal and the account menu keyboard contract add 1 KB raw.
 // The combined workspace loading shapes need a further 500 B allowance on Linux.
+// The sidebar's Machines entry, its loading row and its lazy chunks add 500 B raw.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
 	gzip: 82_000,
-	raw: 256_500,
+	raw: 257_000,
 };
 
 export function enforceInitialJavaScript(

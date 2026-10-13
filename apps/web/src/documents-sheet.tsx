@@ -18,6 +18,7 @@ import {
 import { ActionSheet } from "./action-sheet";
 import { unansweredDecisionsLabel } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { MachinesEntry } from "./machines-entry";
 import {
 	browserStorage,
 	documentGroups,
@@ -381,6 +382,9 @@ export function DocumentsSheet(
 												<span className="truncate">Archived</span>
 												<ChevronIcon aria-hidden="true" className="ml-auto" size={14} />
 											</button>
+										</li>
+										<li className="documents-sheet-row">
+											<MachinesEntry placement="sheet" />
 										</li>
 										<li className="documents-sheet-row">
 											<button

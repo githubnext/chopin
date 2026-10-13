@@ -65,6 +65,10 @@ export function ProjectSidebarLoading(
 						<span className="size-3.5 shrink-0" />
 						<span>Archived</span>
 					</div>
+					<div className="project-sidebar-primary-action">
+						<span className="size-3.5 shrink-0" />
+						<span>Machines</span>
+					</div>
 				</div>
 				<div aria-hidden="true" className="project-sidebar-account-wrap pointer-events-none">
 					<div className="project-sidebar-account">

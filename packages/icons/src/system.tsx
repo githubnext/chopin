@@ -29,6 +29,17 @@ export function DocumentIcon(props: IconProps) {
 	);
 }
 
+/** A computer screen on a stand, for a paired machine. */
+export function MachineIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="9.5" rx="2" width="14.5" x="1.75" y="2.75" />
+			<line x1="9" x2="9" y1="12.25" y2="15.25" />
+			<line x1="5.75" x2="12.25" y1="15.25" y2="15.25" />
+		</LineIcon>
+	);
+}
+
 export function SearchIcon(props: IconProps) {
 	return (
 		<LineIcon viewBox="0 0 15 15" {...props}>

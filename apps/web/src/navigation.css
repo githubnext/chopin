@@ -705,6 +705,27 @@
 	overflow: visible;
 }
 
+/* Machines in the sidebar and the phone documents sheet: paired count, and a dot while connected. */
+.machines-entry-icon {
+	flex: none;
+	color: var(--color-text-tertiary);
+}
+
+.machines-entry-count {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	margin-left: auto;
+}
+
+.machines-connected-dot {
+	width: calc(var(--spacing) * 1.5);
+	height: calc(var(--spacing) * 1.5);
+	border-radius: var(--radius-full);
+	background: var(--color-success);
+}
+
 .project-sidebar-count {
 	display: flex;
 	min-width: calc(var(--spacing) * 6);
