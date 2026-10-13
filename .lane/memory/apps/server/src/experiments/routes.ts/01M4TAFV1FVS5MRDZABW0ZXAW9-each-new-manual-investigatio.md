@@ -4,8 +4,9 @@ anchor: function registerExperimentRoutes
 created: 2026-10-13T09:46:22Z
 norm: '1'
 sig: 793269d082d4aa71
-body_hash: bbcc5818febf332c
-raw_hash: 133c6c829139cbf0
+body_hash: 7c07208bead00b4e
+raw_hash: 382bc803bc256aed
+vouched: 2026-10-13T11:01:05Z
 lines: 146-1045
 ---
 

@@ -6,6 +6,7 @@ norm: '1'
 sig: 7e61b52123273461
 body_hash: f737f9229dc01791
 raw_hash: 9482ed80c96f470a
+vouched: 2026-10-13T12:03:02Z
 lines: 53-341
 supersedes: 01M4RRZZXR0F4HFSR1ZR6XFKZJ
 ---
