@@ -10,7 +10,7 @@
  * same build work on localhost, over a LAN address, and through a tunnel.
  */
 
-import { activeActor } from "./demo-actor";
+import { activeActor } from "./active-actor";
 
 import type { Session } from "@chopin/protocol";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { isDemoHandle, personName, setFaceProfiles } from "./face";
+import { isDemoHandle, personName, setFaceProfiles } from "./people";
 import { withIdentity } from "./identity";
 
 describe("withIdentity", () => {

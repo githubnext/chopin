@@ -11,7 +11,7 @@ import {
 } from "react";
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { Face } from "@chopin/editor";
+import { Face } from "@chopin/editor/face";
 import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
 
 import { activeActorRoster, launchUrl } from "./demo-actor";

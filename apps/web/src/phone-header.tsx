@@ -5,7 +5,8 @@
  */
 
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Face, personName } from "@chopin/editor";
+import { Face } from "@chopin/editor/face";
+import { personName } from "@chopin/editor/people";
 import { ArrowLeftIcon, CommentIcon, DocumentsIcon, EllipsisIcon } from "@chopin/icons";
 import type { ReactNode } from "react";
 

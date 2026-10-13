@@ -19,6 +19,14 @@
 			"types": "./src/count.tsx",
 			"default": "./src/count.tsx"
 		},
+		"./face": {
+			"types": "./src/face.tsx",
+			"default": "./src/face.tsx"
+		},
+		"./people": {
+			"types": "./src/people.ts",
+			"default": "./src/people.ts"
+		},
 		"./pointer": {
 			"types": "./src/pointer.ts",
 			"default": "./src/pointer.ts"

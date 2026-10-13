@@ -21,7 +21,7 @@ import type { ResearchOpener } from "@chopin/editor";
 import type { ChildFocusToken } from "./anchored-child-surface";
 import type { ChildFocusAttempt } from "./child-history";
 import type { DocumentWorkspaceAction } from "./document-workspace-state";
-import { activeActor } from "./demo-actor";
+import { activeActor } from "./active-actor";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
 import type { ChildOpen, WorkspacePresentation } from "./workspace-model";

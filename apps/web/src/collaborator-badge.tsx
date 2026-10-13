@@ -1,6 +1,8 @@
-import { Face } from "@chopin/editor";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
+import { Face } from "@chopin/editor/face";
 
-import type { DemoActor } from "./demo-actor";
+import type { DemoActor } from "./active-actor";
 
 /** Names the persona this tab acts as, so it is never mistaken for the presenter's tab. */
 export function CollaboratorBadge({ actor }: { actor: DemoActor }) {
@@ -14,4 +16,16 @@ export function CollaboratorBadge({ actor }: { actor: DemoActor }) {
 			<span>{actor.name} · collaborator</span>
 		</div>
 	);
+}
+
+let badge: Root | undefined;
+
+/** A separate root keeps the badge, and the editor's face, out of the initial bundle. */
+export function showCollaboratorBadge(actor: DemoActor): void {
+	if (!badge) {
+		let host = document.createElement("div");
+		document.body.append(host);
+		badge = createRoot(host);
+	}
+	badge.render(<CollaboratorBadge actor={actor} />);
 }

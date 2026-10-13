@@ -8,10 +8,15 @@
  * roster at every admission, so nothing here is authority.
  */
 
-export type DemoActor = { id: string; name: string; avatar: string };
+import { setFaceProfiles } from "@chopin/editor/people";
 
-export const PERSONA_HINT = "persona";
-export const ACTOR_STORAGE_KEY = "chopin:demo-actor";
+import { showCollaboratorBadge } from "./collaborator-badge";
+import { ACTOR_STORAGE_KEY, PERSONA_HINT, setActiveActor } from "./active-actor";
+
+import type { DemoActor } from "./active-actor";
+
+export { ACTOR_STORAGE_KEY, PERSONA_HINT };
+export type { DemoActor };
 
 type Resolution = {
 	actor: DemoActor | undefined;
@@ -67,7 +72,6 @@ export function launchUrl(href: string, actorId: string): string {
 	return url.href;
 }
 
-let current: DemoActor | undefined;
 let roster: readonly DemoActor[] = [];
 
 /** The server roster the menu offers; empty unless demo personas are enabled. */
@@ -79,14 +83,6 @@ export function setActorRoster(list: readonly DemoActor[]): void {
 	roster = list;
 }
 
-export function activeActor(): DemoActor | undefined {
-	return current;
-}
-
-export function setActiveActor(actor: DemoActor | undefined): void {
-	current = actor;
-}
-
 /** The title a collaborator tab shows, so it is never mistaken for the presenter's. */
 export function actorTitle(base: string, actor: DemoActor | undefined): string {
 	return actor ? `${actor.name} · ${base}` : base;
@@ -95,4 +91,19 @@ export function actorTitle(base: string, actor: DemoActor | undefined): string {
 /** Chat drafts are private to whoever is typing, so an actor's never mixes with another's. */
 export function chatDraftKey(room: string, actorId: string | undefined): string {
 	return actorId ? `chopin:chat-draft:${room}:${actorId}` : `chopin:chat-draft:${room}`;
+}
+
+/** Adopt this tab's actor before any socket opens; the hint never reaches the router. */
+export function adoptActor(roster: readonly DemoActor[]): void {
+	let { actor, strippedSearch } = resolveActor(location.search, roster, sessionStorage);
+	setFaceProfiles(roster);
+	setActiveActor(actor);
+	setActorRoster(roster);
+	if (actor && !document.title.startsWith(`${actor.name} · `)) {
+		document.title = actorTitle(document.title, actor);
+	}
+	if (strippedSearch !== undefined) {
+		history.replaceState(null, "", `${location.pathname}${strippedSearch}${location.hash}`);
+	}
+	if (actor) showCollaboratorBadge(actor);
 }

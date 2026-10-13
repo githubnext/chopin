@@ -1,9 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import { setFaceProfiles } from "@chopin/editor";
-
 import * as Api from "./api";
-import { actorTitle, resolveActor, setActiveActor, setActorRoster } from "./demo-actor";
+import { actorResolutionNeeded } from "./active-actor";
 import { HostedApp, HostedFailure, HostedLoading, hostedRoute } from "./hosted";
 import { clearRepositoryCache } from "./repository-cache";
 
@@ -36,32 +34,31 @@ export function App() {
 
 	useEffect(() => {
 		if (!session) return;
-		// Before any socket opens: the hint is consumed here and never reaches the router.
+		let active = true;
 		let roster = session.user ? session.demo?.actors ?? [] : [];
-		let { actor, strippedSearch } = resolveActor(location.search, roster, sessionStorage);
-		setFaceProfiles(roster);
-		setActiveActor(actor);
-		setActorRoster(roster);
-		if (actor && !document.title.startsWith(`${actor.name} · `)) {
-			document.title = actorTitle(document.title, actor);
-		}
-		if (strippedSearch !== undefined) {
-			history.replaceState(null, "", `${location.pathname}${strippedSearch}${location.hash}`);
-		}
-		let parameters = new URLSearchParams(location.search);
-		let accessChanged = parameters.get("repository_access") === "changed";
-		if (!session.user) clearRepositoryCache();
-		else if (accessChanged) clearRepositoryCache(session.user.id);
-		if (accessChanged) {
-			parameters.delete("repository_access");
-			let query = parameters.toString();
-			history.replaceState(
-				null,
-				"",
-				`${location.pathname}${query ? `?${query}` : ""}${location.hash}`,
-			);
-		}
-		setRepositoryCacheReady(true);
+		(async () => {
+			if (actorResolutionNeeded(location.search, roster.length, sessionStorage)) {
+				(await import("./demo-actor")).adoptActor(roster);
+			}
+			if (!active) return;
+			let parameters = new URLSearchParams(location.search);
+			let accessChanged = parameters.get("repository_access") === "changed";
+			if (!session.user) clearRepositoryCache();
+			else if (accessChanged) clearRepositoryCache(session.user.id);
+			if (accessChanged) {
+				parameters.delete("repository_access");
+				let query = parameters.toString();
+				history.replaceState(
+					null,
+					"",
+					`${location.pathname}${query ? `?${query}` : ""}${location.hash}`,
+				);
+			}
+			setRepositoryCacheReady(true);
+		})().catch(setError);
+		return () => {
+			active = false;
+		};
 	}, [session]);
 
 	if (error) {
