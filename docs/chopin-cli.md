@@ -123,10 +123,10 @@ chopin status
 You see something like this:
 
 ```text
-chopin 0.2.0 (connector protocol 3)
+chopin 0.0.2 (connector protocol 3)
 Server:     https://your-chopin-instance.example (saved by chopin connect)
 Machine:    paired as build-box (octocat); Chopin accepts it
-Connector:  running for /home/me/src/score (pid 4242, chopin 0.2.0, the service)
+Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
 Service:    running (systemd, pid 4242)
             definition: /home/me/.config/systemd/user/chopin.service
 Log:        /home/me/.local/state/chopin/connector/chopin.log
