@@ -42,8 +42,18 @@ let app = new AgentApp()
 			if (!cancelled) await stopped;
 			return { stopReason: "cancelled" as const };
 		}
+		if (process.argv.includes("--no-result")) {
+			await client.notify("session/update", {
+				sessionId: input.sessionId,
+				update: {
+					sessionUpdate: "agent_message_chunk",
+					content: { type: "text", text: "The Chopin MCP tools are unavailable in this session." },
+				},
+			});
+			return { stopReason: "end_turn" as const };
+		}
 		let config = servers.find(server => server.name === "chopin-investigation");
-		if (process.argv.includes("--spike")) {
+		if (process.argv.includes("--spike") || process.argv.includes("--images")) {
 			if (!config || !("url" in config) || !config.url.startsWith("http://127.0.0.1:")) {
 				throw new Error("Expected a loopback HTTP bridge");
 			}
@@ -71,7 +81,19 @@ let app = new AgentApp()
 					arguments: { path: "../outside.png" },
 				});
 				if (!escape.isError) throw new Error("Uploaded a file outside the worktree");
-				await bridge.callTool({ name: "submit_spike_result", arguments: { url: config.url } });
+				await bridge.callTool(
+					process.argv.includes("--spike")
+						? { name: "submit_spike_result", arguments: { url: config.url } }
+						: {
+							name: "submit_investigation_result",
+							arguments: {
+								result: {
+									...performance,
+									provenance: { ...performance.provenance, environment: config.url },
+								},
+							},
+						},
+				);
 			} finally {
 				await bridge.close();
 			}
@@ -94,6 +116,14 @@ let app = new AgentApp()
 			);
 			try {
 				await bridge.callTool({ name: "read_investigation", arguments: {} });
+				if (process.argv.includes("--stdio-images")) {
+					await writeFile(join(cwd, "shot.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+					let uploaded = await bridge.callTool({
+						name: "upload_image_file",
+						arguments: { path: "shot.png" },
+					});
+					if (uploaded.isError) throw new Error("Screenshot upload failed");
+				}
 				let result = await bridge.callTool({
 					name: "submit_investigation_result",
 					arguments: { result: performance },

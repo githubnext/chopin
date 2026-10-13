@@ -403,12 +403,19 @@ in between interrupts the investigation instead of stalling the connector. A
 build is itself that lock, so builds do not check it. Other document writers can inspect published results,
 change shared selections, and record decisions.
 
-The first authorized investigation supplies the document's default experiment
-commit. Later runs use that recorded source baseline. The connector creates a
+Each new investigation uses the selected connection's checkout commit. Retrying an
+investigation keeps its original source commit, even after the connection changes.
+Other investigations in the document do not choose its baseline. The connector creates a
 detached worktree and preserves existing local edits. Its local state defaults to
 `$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`; override it
 with `--base-dir`, `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR`. Worktrees are retained there for inspection.
 Remove an unwanted worktree with Git's normal `worktree remove` command.
+
+Manual investigations can upload up to three distinct screenshots, at most 1 MiB each.
+The agent saves PNG, JPEG or WebP files in its worktree and calls `upload_image_file({path})`.
+The connector refuses paths outside that worktree, including symlinks. The agent embeds the
+returned hosted paths as Markdown images in the submitted report. The run-scoped server tool
+is `upload_investigation_image`; the connector handles reading and encoding the local file.
 
 Local execution uses the agent's ordinary OS permissions, skills and configured
 services. A worktree organizes edits; it is not a sandbox. Standard ACP permission

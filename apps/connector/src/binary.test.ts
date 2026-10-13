@@ -72,6 +72,8 @@ test.skipIf(!binary)(
 			},
 			claim_experiment: () => ({ input, generation: 1, runToken: "run-token" }),
 			read_experiment: () => ({ input }),
+			read_investigation: () => ({ input }),
+			upload_investigation_image: () => ({ path: `/images/${"a".repeat(64)}.png` }),
 			complete_experiment: () => finished.resolve("complete_experiment"),
 			fail_experiment: () => finished.resolve("fail_experiment"),
 		};
@@ -101,7 +103,13 @@ test.skipIf(!binary)(
 				let server = new Server({ name: "fake-chopin", version: "1" }, {
 					capabilities: { tools: {} },
 				});
-				server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+				server.setRequestHandler(ListToolsRequestSchema, () => ({
+					tools: [
+						"read_investigation",
+						"upload_investigation_image",
+						"submit_investigation_result",
+					].map(name => ({ name, inputSchema: { type: "object" as const } })),
+				}));
 				server.setRequestHandler(CallToolRequestSchema, async request => {
 					calls.push([token, request.params.name]);
 					let result = await results[request.params.name]?.();
@@ -123,6 +131,7 @@ test.skipIf(!binary)(
 			"--",
 			process.execPath,
 			join(import.meta.dir, "testing/fake-agent.ts"),
+			"--stdio-images",
 		], {
 			env: {
 				...process.env,
@@ -144,8 +153,9 @@ test.skipIf(!binary)(
 				+ await new Response(connector.stderr).text();
 			expect(outcome, output).toBe("complete_experiment");
 			expect(calls.filter(([token]) => token === "run-token")).toEqual([
-				["run-token", "read_experiment"],
-				["run-token", "submit_experiment_result"],
+				["run-token", "read_investigation"],
+				["run-token", "upload_investigation_image"],
+				["run-token", "submit_investigation_result"],
 			]);
 			expect(calls.at(-1)).toEqual(["connection-token", "disconnect_workspace"]);
 			expect(code, output).toBe(0);

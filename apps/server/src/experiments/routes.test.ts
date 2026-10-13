@@ -410,6 +410,48 @@ test("a failure report retried after its answer was lost lands once, and another
 	expect(await stored.json()).toMatchObject({ state: "failed", progress: "The agent stopped." });
 });
 
+test("new investigations use the connected checkout while retries retain their own source", async () => {
+	let { alice, documentId, request, tool, pair } = await setup();
+	let connection = await pair(alice.cookie);
+	let firstId = crypto.randomUUID();
+	let base = `/api/documents/${documentId}/experiments`;
+	await request(base, { id: firstId, brief: "First investigation" }, alice.cookie);
+	await request(`${base}/${firstId}/run`, {}, alice.cookie);
+	let first = text(await tool(connection.token, "claim_experiment", { id: firstId }));
+	expect(first.input.source.commit).toBe("a".repeat(40));
+	await tool(connection.token, "fail_experiment", {
+		id: firstId,
+		generation: first.generation,
+		error: "Stopped before finishing.",
+	});
+	await tool(connection.token, "disconnect_workspace", {});
+	let reopened = await (await request(
+		"/api/connector/connections",
+		{
+			repository: "org/repo",
+			commit: "b".repeat(40),
+			label: "Updated checkout",
+		},
+		undefined,
+		connection.machineToken,
+	)).json();
+	let secondId = crypto.randomUUID();
+	await request(base, { id: secondId, brief: "New investigation" }, alice.cookie);
+	await request(`${base}/${secondId}/run`, {}, alice.cookie);
+	let second = text(await tool(reopened.token, "claim_experiment", { id: secondId }));
+	expect(second.input.source.commit).toBe("b".repeat(40));
+	await tool(reopened.token, "fail_experiment", {
+		id: secondId,
+		generation: second.generation,
+		error: "Stopped before finishing.",
+	});
+	await request(`${base}/${firstId}/retry`, {}, alice.cookie);
+	await request(`${base}/${firstId}/run`, {}, alice.cookie);
+	let retried = text(await tool(reopened.token, "claim_experiment", { id: firstId }));
+	expect(retried.input.source.commit).toBe("a".repeat(40));
+	expect(retried.generation).toBe(first.generation + 1);
+});
+
 test("a failure report delayed past a retry leaves the next attempt running", async () => {
 	let { alice, documentId, request, tool, pair, storage } = await setup();
 	let connection = await pair(alice.cookie);
@@ -968,8 +1010,8 @@ test("a spike runs with an image upload and a structured report, and stays out o
 	expect(await storage.channels.children(documentId, 10)).toEqual([]);
 });
 
-test("an ordinary run cannot upload images or send an image-sized body", async () => {
-	let { alice, documentId, request, tool, pair } = await setup();
+test("a manual investigation uploads screenshots and publishes them in its report", async () => {
+	let { alice, documentId, request, tool, pair, storage } = await setup();
 	let paired = await pair(alice.cookie);
 	let id = crypto.randomUUID();
 	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
@@ -982,17 +1024,27 @@ test("an ordinary run cannot upload images or send an image-sized body", async (
 		claim.runToken,
 	)).json();
 	let names = tools.result.tools.map((item: { name: string }) => item.name);
-	expect(names).not.toContain("upload_investigation_image");
+	expect(names).toContain("upload_investigation_image");
 	expect(names).not.toContain("submit_spike_result");
-	let png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
-	expect(
-		error(
-			await tool(claim.runToken, "upload_investigation_image", {
-				data: png.toString("base64"),
-				mimeType: "image/png",
-			}),
-		),
-	).toContain("tool-forbidden");
+	// Its base64 exceeds the ordinary request limit but remains below the image byte limit.
+	let png = Buffer.alloc(900_000);
+	png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+	let uploaded = text(
+		await tool(claim.runToken, "upload_investigation_image", {
+			data: png.toString("base64"),
+			mimeType: "image/png",
+		}),
+	);
+	expect(uploaded.path).toMatch(/^\/images\/[0-9a-f]{64}\.png$/);
+	let sha256 = uploaded.path.slice("/images/".length).split(".")[0];
+	expect((await storage.images.get(documentId, sha256))?.bytes).toEqual(new Uint8Array(png));
+	let result = { ...performance, report: `# Header\n\n![Real header](${uploaded.path})\n` };
+	expect(error(await tool(claim.runToken, "submit_investigation_result", { result }))).toBe("");
+	await tool(paired.token, "complete_experiment", { id, generation: claim.generation });
+	let saved = await storage.experiments.get(id);
+	expect(saved?.state).toBe("completed");
+	expect(saved?.childId).toBeString();
+	expect(saved?.result?.report).toContain(uploaded.path);
 	let large = await request(
 		"/connector/mcp",
 		{

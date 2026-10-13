@@ -30,7 +30,7 @@ export async function relay(
 				name: "upload_image_file",
 				description:
 					"Upload a PNG, JPEG or WebP screenshot (at most 1 MiB) saved in this worktree and "
-					+ "return its image path for submit_spike_result.",
+					+ "return its hosted image path for the investigation report.",
 				inputSchema: {
 					type: "object" as const,
 					properties: {

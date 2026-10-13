@@ -224,7 +224,6 @@ export class Experiments {
 			value.progress = "";
 			value.expiresAt = 0;
 			delete value.connectionId;
-			delete value.input;
 			delete value.candidate;
 		});
 	}

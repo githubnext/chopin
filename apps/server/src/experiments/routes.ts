@@ -76,8 +76,8 @@ function bearer(request: Request) {
 const MAX_BODY_BYTES = limits.resultBytes + 64 * 1024;
 /** A spike is a quick prototype; one still running this long after its claim is interrupted. */
 export const SPIKE_DEADLINE_MS = 20 * 60_000;
-/** Screenshots a spike run may upload; distinct images, so a retried upload is free. */
-export const MAX_SPIKE_IMAGES = 3;
+/** Screenshots an investigation may upload; distinct images, so a repeated upload is free. */
+export const MAX_INVESTIGATION_IMAGES = 3;
 /**
  * The connector protocols this server speaks; a connector outside them must update first.
  * Protocol 2 pairs a machine once and connects checkouts with its stored token.
@@ -554,7 +554,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!value || value.documentId !== params.id) fail("not-found");
 		let context = await options.context(params.id);
 		if (!context) fail("not-found");
-		let previous = (await service.store.list(params.id)).toReversed().find(item => item.input);
 		let connection = await choose(session.user.id, channel.repositoryId, params.id);
 		let result = await service.authorize(value.id, connection.id, {
 			id: value.id,
@@ -562,7 +561,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			requester: value.requester,
 			authorizer: session.user.id,
 			brief: value.brief,
-			source: previous?.input?.source ?? connection.source,
+			source: value.input?.source ?? connection.source,
 			context: `Document revision ${context.revision}\n${context.source}`,
 		});
 		connections.use(params.id, connection.id);
@@ -742,10 +741,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			...connectorSchemas(!!grant.run, spikeRun),
 			...(!grant.run && implementation ? implementationSchemas(false) : {}),
 		};
-		// Only a spike run's image upload may exceed the ordinary connector body limit.
+		// Only a run-scoped investigation's image upload may exceed the ordinary body limit.
 		let bytes = await raw(
 			request,
-			spikeRun ? Math.max(MAX_BODY_BYTES, MAX_IMAGE_REQUEST_BYTES) : MAX_BODY_BYTES,
+			grant.run && !implementationRun
+				? Math.max(MAX_BODY_BYTES, MAX_IMAGE_REQUEST_BYTES)
+				: MAX_BODY_BYTES,
 		);
 		let call = z.object({
 			jsonrpc: z.literal("2.0"),
@@ -919,7 +920,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 							args.progress === undefined ? undefined : z.string().max(2000).parse(args.progress),
 						);
 					} else if (name === "upload_investigation_image") {
-						if (!current.spike) fail("tool-forbidden");
 						let prepared = prepareImage({ id: current.documentId, ...args });
 						if (!prepared) fail("invalid-image");
 						if ("refusal" in prepared) fail(prepared.refusal);
@@ -930,8 +930,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						let uploaded = uploads.get(id);
 						if (!uploaded) uploads.set(id, uploaded = new Set<string>());
 						let reserved = !uploaded.has(sha256);
-						if (reserved && uploaded.size >= MAX_SPIKE_IMAGES) {
-							fail("image-limit", `A spike may upload at most ${MAX_SPIKE_IMAGES} images.`);
+						if (reserved && uploaded.size >= MAX_INVESTIGATION_IMAGES) {
+							fail(
+								"image-limit",
+								`An investigation may upload at most ${MAX_INVESTIGATION_IMAGES} images.`,
+							);
 						}
 						uploaded.add(sha256);
 						try {

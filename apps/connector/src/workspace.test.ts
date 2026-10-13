@@ -16,7 +16,7 @@ import {
 } from "./workspace";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 
-test("isolates exact source without stashing dirty work and never executes an accepted run twice", async () => {
+test("isolates exact source and allows an authorized retry without executing an attempt twice", async () => {
 	let root = await mkdtemp(join(tmpdir(), "chopin-workspace-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-state-"));
 	try {
@@ -45,8 +45,13 @@ test("isolates exact source without stashing dirty work and never executes an ac
 		expect(await readFile(join(prepared.path, "source.txt"), "utf8")).toBe("committed");
 		expect(await readFile(join(root, "source.txt"), "utf8")).toBe("user work");
 		await expect(prepareWorkspace(root, state, input)).rejects.toThrow("already accepted");
+		await writeFile(join(prepared.path, "source.txt"), "first attempt's work");
+		let retried = await prepareWorkspace(root, state, input, 2);
+		expect(retried.path).not.toBe(prepared.path);
+		expect(await readFile(join(retried.path, "source.txt"), "utf8")).toBe("committed");
+		expect(await readFile(join(prepared.path, "source.txt"), "utf8")).toBe("first attempt's work");
+		await expect(prepareWorkspace(root, state, input, 2)).rejects.toThrow("already accepted");
 		await release();
-		git(root, "worktree", "remove", prepared.path);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });

@@ -2,8 +2,6 @@ import { appendFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { basename, isAbsolute, resolve, sep } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { requestSchema } from "@chopin/experiment";
-import { createBridge } from "./bridge";
 import { ConnectorStopped, serveWork } from "./connection";
 import { remote } from "./mcp";
 import { parseArgs } from "./args";
@@ -49,16 +47,7 @@ async function bridge() {
 		origin(process.env.CHOPIN_BRIDGE_ORIGIN!),
 		process.env.CHOPIN_BRIDGE_TOKEN!,
 	);
-	let server;
-	// A spike's tools are the server's run-scoped list, relayed as they are.
-	if (["implementation", "spike"].includes(process.env.CHOPIN_BRIDGE_KIND ?? "")) {
-		server = await implementationBridge(api, process.env.CHOPIN_BRIDGE_ROOT);
-	} else {
-		let context = await api.call("read_experiment") as { input: unknown };
-		server = createBridge(requestSchema.parse(context.input), async result => {
-			await api.call("submit_experiment_result", { result });
-		});
-	}
+	let server = await implementationBridge(api, process.env.CHOPIN_BRIDGE_ROOT);
 	await server.connect(new StdioServerTransport());
 	let close = async () => {
 		await server.close();

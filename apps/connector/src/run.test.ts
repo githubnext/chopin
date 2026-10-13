@@ -104,103 +104,117 @@ test("a living document's first build gets a prompt without verification or revi
 	]);
 });
 
-test("a spike run serves connector-local tools to an HTTP agent over an authenticated loopback bridge", async () => {
-	let root = await mkdtemp(join(tmpdir(), "chopin-spike-"));
-	let state = await mkdtemp(join(tmpdir(), "chopin-spike-state-"));
-	let received: Array<[string, Record<string, unknown>]> = [];
-	let terminal = captured();
-	let chopin = Bun.serve({
-		hostname: "127.0.0.1",
-		port: 0,
-		async fetch(request) {
-			if (request.headers.get("authorization") !== "Bearer run-token") {
-				return new Response(null, { status: 401 });
-			}
-			let server = new Server({ name: "fake-chopin", version: "1" }, {
-				capabilities: { tools: {} },
-			});
-			server.setRequestHandler(ListToolsRequestSchema, () => ({
-				tools: ["upload_investigation_image", "submit_spike_result"].map(name => ({
-					name,
-					inputSchema: { type: "object" as const },
-				})),
-			}));
-			server.setRequestHandler(CallToolRequestSchema, request => {
-				received.push([request.params.name, request.params.arguments ?? {}]);
-				return { content: [{ type: "text", text: "{}" }] };
-			});
-			let transport = new WebStandardStreamableHTTPServerTransport({
-				sessionIdGenerator: undefined,
-				enableJsonResponse: true,
-			});
-			await server.connect(transport);
-			return transport.handleRequest(request);
-		},
-	});
-	try {
-		git(root, "init");
-		git(root, "config", "user.name", "Fixture");
-		git(root, "config", "user.email", "fixture@example.test");
-		git(root, "remote", "add", "origin", "git@github.com:org/repo.git");
-		await writeFile(join(root, "source.txt"), "committed");
-		git(root, "add", ".");
-		git(root, "commit", "-m", "fixture");
-		let calls: string[] = [];
-		let api = {
-			call: async (name: string) => {
-				calls.push(name);
-				return {};
+test.each([true, false])(
+	"an investigation (spike=%s) serves image tools through an authenticated local bridge",
+	async spike => {
+		let root = await mkdtemp(join(tmpdir(), "chopin-spike-"));
+		let state = await mkdtemp(join(tmpdir(), "chopin-spike-state-"));
+		let received: Array<[string, Record<string, unknown>]> = [];
+		let terminal = captured();
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request) {
+				if (request.headers.get("authorization") !== "Bearer run-token") {
+					return new Response(null, { status: 401 });
+				}
+				let server = new Server({ name: "fake-chopin", version: "1" }, {
+					capabilities: { tools: {} },
+				});
+				server.setRequestHandler(ListToolsRequestSchema, () => ({
+					tools: [
+						"upload_investigation_image",
+						spike ? "submit_spike_result" : "submit_investigation_result",
+					].map(name => ({
+						name,
+						inputSchema: { type: "object" as const },
+					})),
+				}));
+				server.setRequestHandler(CallToolRequestSchema, request => {
+					received.push([request.params.name, request.params.arguments ?? {}]);
+					return { content: [{ type: "text", text: "{}" }] };
+				});
+				let transport = new WebStandardStreamableHTTPServerTransport({
+					sessionIdGenerator: undefined,
+					enableJsonResponse: true,
+				});
+				await server.connect(transport);
+				return transport.handleRequest(request);
 			},
-		} as unknown as Awaited<ReturnType<typeof remote>>;
-		let id = crypto.randomUUID();
-		await runWork(api, "experiment", {
-			spike: true,
-			passage: "We are not sure a CSS-only fade-in on the heading works without JavaScript.",
-			generation: 1,
-			runToken: "run-token",
-			input: {
-				id,
-				documentId: crypto.randomUUID(),
-				brief: "Prototype the passage",
-				source: {
-					repositoryId: "R_repo",
-					repository: "org/repo",
-					commit: git(root, "rev-parse", "HEAD"),
-				},
-				context: "",
-				requester: "a",
-				authorizer: "a",
-			},
-		}, {
-			root,
-			directory: state,
-			command: [
-				process.execPath,
-				new URL("./testing/fake-agent.ts", import.meta.url).pathname,
-				"--http",
-				"--spike",
-			],
-			url: `http://127.0.0.1:${chopin.port}`,
-			signal: new AbortController().signal,
-			output: terminal.output,
 		});
-		expect(terminal.out()).toContain(
-			"› Prototyping We are not sure a CSS-only fade-in on the heading works without JavaScript.\n",
-		);
-		expect(calls.filter(name => name !== "renew_experiment")).toEqual(["complete_experiment"]);
-		expect(received.map(([name]) => name)).toEqual([
-			"upload_investigation_image",
-			"submit_spike_result",
-		]);
-		expect(received[0][1]).toEqual({ data: "iVBORw0KGgo=", mimeType: "image/png" });
-		// The bridge closes with the run.
-		await expect(fetch(received[1][1].url as string, { method: "POST" })).rejects.toThrow();
-	} finally {
-		await chopin.stop(true);
-		await rm(root, { recursive: true, force: true });
-		await rm(state, { recursive: true, force: true });
-	}
-});
+		try {
+			git(root, "init");
+			git(root, "config", "user.name", "Fixture");
+			git(root, "config", "user.email", "fixture@example.test");
+			git(root, "remote", "add", "origin", "git@github.com:org/repo.git");
+			await writeFile(join(root, "source.txt"), "committed");
+			git(root, "add", ".");
+			git(root, "commit", "-m", "fixture");
+			let calls: string[] = [];
+			let api = {
+				call: async (name: string) => {
+					calls.push(name);
+					return {};
+				},
+			} as unknown as Awaited<ReturnType<typeof remote>>;
+			let id = crypto.randomUUID();
+			await runWork(api, "experiment", {
+				spike,
+				passage: "We are not sure a CSS-only fade-in on the heading works without JavaScript.",
+				generation: 1,
+				runToken: "run-token",
+				input: {
+					id,
+					documentId: crypto.randomUUID(),
+					brief: "Prototype the passage",
+					source: {
+						repositoryId: "R_repo",
+						repository: "org/repo",
+						commit: git(root, "rev-parse", "HEAD"),
+					},
+					context: "",
+					requester: "a",
+					authorizer: "a",
+				},
+			}, {
+				root,
+				directory: state,
+				command: [
+					process.execPath,
+					new URL("./testing/fake-agent.ts", import.meta.url).pathname,
+					"--http",
+					spike ? "--spike" : "--images",
+				],
+				url: `http://127.0.0.1:${chopin.port}`,
+				signal: new AbortController().signal,
+				output: terminal.output,
+			});
+			expect(terminal.out()).toContain(
+				spike
+					? "› Prototyping We are not sure a CSS-only fade-in on the heading works without JavaScript.\n"
+					: "› Investigating Prototype the passage\n",
+			);
+			expect(calls.filter(name => name !== "renew_experiment"), terminal.err()).toEqual([
+				"complete_experiment",
+			]);
+			expect(received.map(([name]) => name)).toEqual([
+				"upload_investigation_image",
+				spike ? "submit_spike_result" : "submit_investigation_result",
+			]);
+			expect(received[0][1]).toEqual({ data: "iVBORw0KGgo=", mimeType: "image/png" });
+			// The bridge closes with the run.
+			let submitted = received[1][1];
+			let bridgeUrl = spike
+				? submitted.url
+				: (submitted.result as { provenance: { environment: string } }).provenance.environment;
+			await expect(fetch(bridgeUrl as string, { method: "POST" })).rejects.toThrow();
+		} finally {
+			await chopin.stop(true);
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	},
+);
 
 test("Ctrl-C reports the build stopped from the terminal before the run ends", async () => {
 	let controller = new AbortController();

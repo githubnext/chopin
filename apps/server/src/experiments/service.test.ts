@@ -115,7 +115,7 @@ test("retry returns settled work to its card under the same identity and fences 
 	await service.stop(draft.id, "failed", "Agent crashed.");
 	let retried = await service.retry(draft.id);
 	expect(retried).toMatchObject({ id: draft.id, state: "requested", progress: "" });
-	expect(retried.input).toBeUndefined();
+	expect(retried.input?.source).toEqual(input.source);
 	expect(retried.connectionId).toBeUndefined();
 	await expect(service.renew(draft.id, "connection", claimed.generation)).rejects.toThrow(
 		"stale-claim",

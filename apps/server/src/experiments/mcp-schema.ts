@@ -11,6 +11,10 @@ export function connectorSchemas(
 		return {
 			read_experiment: z.object({}).strict(),
 			read_investigation: z.object({}).strict(),
+			upload_investigation_image: z.object({
+				data: z.string().min(1),
+				mimeType: z.string().max(40),
+			}).strict(),
 			// A spike reports only through submit_spike_result, never as an investigation.
 			...(spike ? {} : {
 				submit_experiment_result: z.object({ result: resultSchema }).strict(),
@@ -18,10 +22,6 @@ export function connectorSchemas(
 			}),
 			...(spike
 				? {
-					upload_investigation_image: z.object({
-						data: z.string().min(1),
-						mimeType: z.string().max(40),
-					}).strict(),
 					submit_spike_result: spikeSubmissionSchema,
 				}
 				: {}),

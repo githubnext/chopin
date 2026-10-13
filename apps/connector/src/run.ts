@@ -82,6 +82,7 @@ export async function runWork(
 	let permissions = options.permissions ?? permissionMemory();
 	// Kept so a failed start can show why without echoing every agent log line.
 	let agentTail: string[] = [];
+	let agentMessage = "";
 	let identity = implementation ? { id: input.id } : { id: input.id, generation: claim.generation };
 	let abort = new AbortController();
 	let cancel = () => abort.abort();
@@ -153,7 +154,12 @@ export async function runWork(
 	let prepared: Awaited<ReturnType<typeof prepareWorkspace>> | undefined;
 	let agentStop: string | undefined;
 	try {
-		prepared = await prepareWorkspace(options.root, options.directory, input);
+		prepared = await prepareWorkspace(
+			options.root,
+			options.directory,
+			input,
+			implementation ? undefined : claim.generation,
+		);
 		let path = prepared.path;
 		// A rebuild commits onto the existing pull request branches the agent checks out itself.
 		if (implementation && !rebuild) {
@@ -189,12 +195,16 @@ export async function runWork(
 				: "Use read_investigation from the Chopin MCP server to read the authorized request. "
 					+ "Perform that investigation using your normal project instructions and tools. "
 					+ "Submit a bounded result with submit_investigation_result, then finish. "
+					+ "If screenshots are requested, install project dependencies as needed, capture "
+					+ "the real UI, upload at most three images (1 MiB each) with "
+					+ "upload_image_file({path}), and embed the returned "
+					+ "paths as Markdown images in result.report. "
 					+ "Do not commit or push unless the authorized brief specifically requests it.",
-			// A spike needs the connector-local upload_image_file, so its tools come from this process:
+			// Investigations need the local upload_image_file, so their tools come from this process:
 			// a loopback HTTP bridge when the agent accepts HTTP servers, the stdio bridge otherwise.
 			mcpServers(http) {
 				let name = implementation ? "chopin-implementation" : "chopin-investigation";
-				if (http && claim.spike) {
+				if (http && !implementation) {
 					let tools: ReturnType<typeof relay> | undefined;
 					local = serveLocalBridge(() => {
 						tools ??= (bridgeApi ??= remote(options.url, claim.runToken))
@@ -226,8 +236,7 @@ export async function runWork(
 					env: [
 						{ name: "CHOPIN_BRIDGE_ORIGIN", value: options.url },
 						{ name: "CHOPIN_BRIDGE_TOKEN", value: claim.runToken },
-						{ name: "CHOPIN_BRIDGE_KIND", value: claim.spike ? "spike" : kind },
-						...(claim.spike ? [{ name: "CHOPIN_BRIDGE_ROOT", value: path }] : []),
+						...(!implementation ? [{ name: "CHOPIN_BRIDGE_ROOT", value: path }] : []),
 					],
 				}];
 			},
@@ -243,7 +252,13 @@ export async function runWork(
 				: undefined,
 			onUpdate(value) {
 				if (value.update.sessionUpdate === "tool_call") {
+					agentMessage = "";
 					latestProgress = value.update.title.slice(0, 2000);
+				} else if (
+					value.update.sessionUpdate === "agent_message_chunk"
+					&& value.update.content.type === "text"
+				) {
+					agentMessage = (agentMessage + value.update.content.text).slice(-1500);
 				}
 			},
 			async permission(request) {
@@ -286,10 +301,14 @@ export async function runWork(
 		// Ctrl-C reports why before the connector disconnects, so Chopin knows at once. An agent
 		// that cancelled its own turn was interrupted too, unless the connector cancelled it.
 		let stopped = options.signal.aborted || agentStop === "cancelled" && !ended;
+		let missing = !implementation && errorCode(error) === "missing-result";
 		let message = stopped
 			? STOPPED
 			: ended
 			? ended
+			: missing
+			? "The local agent finished without submitting an investigation result."
+				+ (agentMessage.trim() ? `\n\n${agentMessage.trim()}` : "")
 			: error instanceof Error
 			? error.message
 			: "Local work failed";

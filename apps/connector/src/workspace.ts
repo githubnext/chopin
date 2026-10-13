@@ -303,13 +303,16 @@ export async function prepareWorkspace(
 	root: string,
 	directory: string,
 	input: Pick<RunInput, "id" | "source">,
+	generation = 1,
 ) {
 	let current = await workspace(root);
 	if (current.repository.toLowerCase() !== input.source.repository.toLowerCase()) {
 		throw new Error("Repository differs from the authorized run.");
 	}
 	await mkdir(join(directory, "runs"), { recursive: true, mode: 0o700 });
-	let journalPath = join(directory, "runs", `${input.id}.json`);
+	// Retry keeps the investigation ID but claims a new generation. Keep earlier work intact.
+	let attempt = generation === 1 ? input.id : `${input.id}-${generation}`;
+	let journalPath = join(directory, "runs", `${attempt}.json`);
 	let journal;
 	try {
 		journal = await open(journalPath, "wx", 0o600);
@@ -319,7 +322,7 @@ export async function prepareWorkspace(
 		);
 	}
 	await journal.writeFile(
-		JSON.stringify({ id: input.id, source: input.source, state: "accepted" }),
+		JSON.stringify({ id: input.id, generation, source: input.source, state: "accepted" }),
 	);
 	await journal.sync();
 	await journal.close();
@@ -330,7 +333,7 @@ export async function prepareWorkspace(
 			timeout: 120_000,
 		});
 	}
-	let path = join(directory, "runs", input.id);
+	let path = join(directory, "runs", attempt);
 	await promisify(execFile)("git", [
 		"-C",
 		root,
