@@ -474,7 +474,7 @@ async function installCommand(options: {
 	);
 }
 
-const SERVICE_USAGE = `Usage: ${SELF} service install [--allow-downgrade] | `
+const SERVICE_USAGE = `Usage: ${SELF} service install [--allow-downgrade] [--skip-check] | `
 	+ `${SELF} service status | restart | uninstall`;
 
 /** `service install|status|restart|uninstall`: run `connect` as this user's background service. */
@@ -522,7 +522,8 @@ async function serviceCommand(args: string[]) {
 }
 
 const USAGE = `Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] `
-	+ "[--planner <document URL>]... [--planner-command <command>] -- agent [ACP arguments]";
+	+ "[--planner <document URL>]... [--planner-command <command>] [--env KEY=VALUE]... "
+	+ "[--install-service [--skip-check]] -- agent [ACP arguments]";
 
 const HELP = [
 	`Usage: ${SELF} <command> [--base-dir <dir>]`,
@@ -536,19 +537,27 @@ const HELP = [
 	"  connect [checkout] -- <agent> [ACP arguments]",
 	"      Run the work you start in the checkout's documents with a local ACP agent.",
 	"      Pairs this machine first if it isn't paired yet. Once connected, saves what it runs",
-	"      for service install.",
+	"      for service install. A program this shell finds only through a version manager's",
+	"      per-shell directory is saved by its stable path.",
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
+	"      --env KEY=VALUE (repeatable) sets a variable for the agent and the Planner. It is saved",
+	"      in config.json, so keep secrets in the agent's own login. CHOPIN_* and PATH are refused.",
+	"      --install-service connects once, then stops and runs service install, so one command",
+	"      sets up the service. --skip-check passes on to it.",
 	"  status [--json]",
 	"      Show this chopin's version, the server, whether this machine is paired and Chopin",
-	"      still accepts it, the connectors running here and the Planners they run, the service,",
-	"      what it runs, and the log path.",
-	"  service install [--allow-downgrade]",
+	"      still accepts it, the connectors running here and the Planners they run, an agent or",
+	"      Planner that keeps failing to start, the service, what it runs, and the log path.",
+	"  service install [--allow-downgrade] [--skip-check]",
 	"      Run what connect last ran as this user's background service (systemd, launchd or Task",
-	"      Scheduler), so it starts again after a reboot. Later connects don't change it; to",
-	"      change what it runs, run connect again with new arguments, then service install again.",
-	"      A service a newer chopin installed is kept unless --allow-downgrade.",
+	"      Scheduler), so it starts again after a reboot and outlives your login session. Later",
+	"      connects don't change it; to change what it runs, run connect again with new",
+	"      arguments, then service install again. First it starts the agent as the service",
+	"      would and refuses one that doesn't answer within 10 seconds; --skip-check skips that",
+	"      for an agent that can't start without a terminal. A service a newer chopin installed",
+	"      is kept unless --allow-downgrade.",
 	"  service status | restart | uninstall",
 	"      Show whether it is running, stopped, restart-pending or not-installed; restart it;",
 	"      or stop and remove it, keeping the pairing, config and runs.",

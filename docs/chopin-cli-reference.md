@@ -29,13 +29,14 @@ it connects.
 `$XDG_STATE_HOME/chopin/connector` when that is set. `--base-dir`,
 `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR` moves it.
 
-| File or folder | Holds                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------ |
-| `machine.json` | The machine token for each server. Only you can read it (mode `0600`). `chopin` never prints it. |
-| `config.json`  | What `chopin connect` last ran, and the service with its own copy of that. No secrets.           |
-| `chopin.log`   | The service's output.                                                                            |
-| `*.lock`       | One lock for each checkout that a connector is serving.                                          |
-| `runs/`        | A Git worktree for each job, kept for you to inspect.                                            |
+| File or folder    | Holds                                                                                                                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `machine.json`    | The machine token for each server. Only you can read it (mode `0600`). `chopin` never prints it.                                                                                        |
+| `config.json`     | What `chopin connect` last ran, and the service with its own copy of that. Only you can read it (mode `0600`). It holds your `--env` values, so keep secrets in your agent's own login. |
+| `*.failures.json` | The latest failure to start of a running connector's agent and Planners, for `chopin status`.                                                                                           |
+| `chopin.log`      | The service's output.                                                                                                                                                                   |
+| `*.lock`          | One lock for each checkout that a connector is serving.                                                                                                                                 |
+| `runs/`           | A Git worktree for each job, kept for you to inspect.                                                                                                                                   |
 
 Chopin stores only a hash of the machine token, plus the machine's own GitHub
 authorization, encrypted like a browser login.
@@ -106,9 +107,27 @@ is one service per user account.
 Before writing anything, install finds the agent's absolute path and builds the
 PATH the service runs with. That PATH leaves out folders that disappear on
 logout or reboot, such as anything under `$XDG_RUNTIME_DIR` or
-`/run/user/<uid>`, and fnm's `fnm_multishells`. Install refuses if the agent,
-the interpreter on its `#!/usr/bin/env` line, or `git` would not be found. A
-relative Planner command is looked up in the checkout.
+`/run/user/<uid>`, and fnm's `fnm_multishells`. For an agent run through
+`env VAR=VALUE <program>`, install checks the program, not `env`. A relative
+Planner command is looked up in the checkout.
+
+For the agent and the Planner command, install reads the `#!` line. It finds
+the interpreter that `#!/usr/bin/env node` names the way it found the program,
+checks an absolute one such as `#!/usr/bin/python3` as written, and does the
+same once more if that interpreter is a script too. Each interpreter's stable
+folder joins the service's PATH. Install refuses if the agent, the Planner, an
+interpreter or `git` would not be found, or is found only in a folder that
+disappears.
+
+Then install starts the agent once with the service's PATH, your `--env`
+values, `HOME` and your user name, and nothing else from your shell. It sends
+ACP `initialize` and waits up to 10 seconds for an answer. If none comes,
+install refuses and shows the first line the agent printed, with anything that
+looks like a token hidden. `--skip-check` skips this. The Planner command is
+not started, since it needs a credential from Chopin.
+
+The service passes your `--env` values to the agent and the Planner. They stay
+in `config.json` and never go into the service definition.
 
 If a newer `chopin` installed the service, `chopin service install` refuses to
 replace it. Run `chopin update` first, or pass `--allow-downgrade`.
@@ -147,15 +166,16 @@ Scheduler then refuses `restart` or `uninstall`, run them as administrator too.
 
 `chopin status --json` prints one object. Later releases only add keys.
 
-| Key           | Value                                                                                                                                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `version`     | The CLI version, `dev` from source.                                                                                                                                                                                                  |
-| `protocol`    | The connector protocol it speaks.                                                                                                                                                                                                    |
-| `server`      | `origin`, and `source`: `CHOPIN_URL`, `config` (saved by `chopin connect`) or `default`.                                                                                                                                             |
-| `machine`     | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
-| `connectors`  | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601) and `planners`.                                                                      |
-| `service`     | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
-| `log`         | The service's log file.                                                                                                                                                                                                              |
-| `baseDir`     | The state directory the report is for.                                                                                                                                                                                               |
-| `serviceRuns` | What the service runs: `server`, `checkout`, `command`, `planners` and `plannerCommand`, or `null` before an install.                                                                                                                |
-| `lastConnect` | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                           |
+| Key                     | Value                                                                                                                                                                                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`               | The CLI version, `dev` from source.                                                                                                                                                                                                                        |
+| `protocol`              | The connector protocol it speaks.                                                                                                                                                                                                                          |
+| `server`                | `origin`, and `source`: `CHOPIN_URL`, `config` (saved by `chopin connect`) or `default`.                                                                                                                                                                   |
+| `machine`               | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`.                       |
+| `connectors`            | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601), `planners` and `failures`.                                                                                |
+| `connectors[].failures` | For a running connector, the latest failure to start of its agent and of each Planner: `kind` (`agent` or `planner`), `document` for a Planner, `how` it ended (`exit 127`, `signal SIGKILL`), the first `stderr` line, and `at` and `retryAt` (ISO 8601). |
+| `service`               | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                                         |
+| `log`                   | The service's log file.                                                                                                                                                                                                                                    |
+| `baseDir`               | The state directory the report is for.                                                                                                                                                                                                                     |
+| `serviceRuns`           | What the service runs: `server`, `checkout`, `command`, `planners`, `plannerCommand` and optionally `env`, or `null` before an install.                                                                                                                    |
+| `lastConnect`           | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                                                 |

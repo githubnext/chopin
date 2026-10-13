@@ -9,6 +9,37 @@ your own coding agent in your own checkout.
 The machine only makes outgoing requests. Chopin never connects in, and the
 browser never reads your files.
 
+## Set up a remote machine
+
+To run Chopin's work on a build box or cloud VM you reach over SSH:
+
+1. SSH in: `ssh me@build-box`.
+2. Install `chopin`:
+
+   ```sh
+   curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
+   ```
+
+3. Sign in to your coding agent there, as you would on your laptop.
+4. From a checkout, connect and install the service in one go:
+
+   ```sh
+   cd ~/src/score
+   CHOPIN_URL=https://your-chopin-instance.example chopin connect . --install-service -- copilot --acp --allow-all
+   ```
+
+5. The terminal prints a link and a code. Open the link in the browser on your
+   own computer, sign in, check that the code matches and choose **Connect**.
+   Pairing happens in your browser. The remote machine needs none.
+6. Once it prints `✓ Installed the chopin service`, run `chopin status` to
+   check on it.
+7. The machine shows under **Machines** in Chopin's sidebar, or at `/connect`
+   on your server.
+
+Run it as the service, as above, if it should outlive your SSH session. A
+`chopin connect` you start over SSH can stop when the session ends, even under
+`nohup` or `setsid`.
+
 ## Install
 
 On Linux or macOS (x64 or arm64):
@@ -77,11 +108,37 @@ Work from any document in that repository now runs in this checkout.
 - Set `CHOPIN_DEBUG=1` to see your agent's own log.
 - Ctrl-C stops running work and disconnects. A second Ctrl-C exits at once.
 
+To give your agent and Planner an environment variable, add `--env`, as often
+as you need:
+
+```sh
+chopin connect . --env SOME_FLAG=1 -- copilot --acp --allow-all
+```
+
+`chopin` saves these values in `config.json`, which only you can read. Keep
+secrets in your agent's own login instead. You can't set `PATH` or a
+`CHOPIN_` variable this way.
+
+If you installed your agent with a version manager such as fnm, your shell may
+find it in a folder that only lasts as long as the shell. `chopin connect`
+then saves the stable path behind it and prints a line saying so. If there is
+no stable path, it warns that `chopin service install` will refuse it.
+
 ## Keep it running
 
 `chopin service install` runs your connection in the background, so it starts
-again after a reboot and needs no open terminal. It takes no arguments. It
-copies what `chopin connect` last ran, server included, and runs that copy.
+again after a reboot and needs no open terminal. Anything that should outlive
+your login session belongs in the service. It copies what `chopin connect`
+last ran, server included, and runs that copy.
+
+The quickest way is one command. It connects, and once it sees
+`✓ Connected.` it disconnects and installs the service:
+
+```sh
+chopin connect . --install-service -- copilot --acp --allow-all
+```
+
+You can also do it in two steps:
 
 1. Run `chopin connect` once, as above, and press Ctrl-C after `✓ Connected.`
    A connect that stops before then saves nothing.
@@ -90,6 +147,12 @@ copies what `chopin connect` last ran, server included, and runs that copy.
    ```sh
    chopin service install
    ```
+
+Before installing, `chopin` starts your agent once the way the service will,
+with the service's `PATH` and your `--env` values, and waits up to 10 seconds
+for it to answer. If it doesn't, nothing is installed, and the message shows
+the first line your agent printed. For an agent that can't start without a
+terminal, pass `--skip-check`.
 
 The service can't answer permission prompts, so give your agent its approval
 flag, such as `--allow-all`.
@@ -142,6 +205,14 @@ Base dir:   /home/me/.local/state/chopin/connector
 If you have connected something else since you installed the service, status
 shows that too, with a reminder to run `chopin service install`.
 
+If the agent or a Planner keeps failing to start, status shows the latest
+failure under the connector, with the first line it printed:
+
+```text
+Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
+              Planner for https://your-chopin-instance.example/octo-org/score/plan: failing (exit 127: /usr/bin/env: 'node': No such file or directory), retrying in 22s
+```
+
 `chopin status` asks Chopin whether it still accepts this machine. It never
 pairs, connects or changes anything.
 
@@ -185,17 +256,18 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 
 ## Commands
 
-| Command                                               | What it does                                                                              |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `chopin connect [checkout] -- <agent>`                | Runs work from Chopin with your agent in this checkout. Pairs first if needed.            |
-| `chopin pair [--label <name>]`                        | Pairs this machine, or pairs it again. The label defaults to the hostname.                |
-| `chopin status [--json]`                              | Shows the server, pairing, running connectors, the service and what it runs, and the log. |
-| `chopin service install [--allow-downgrade]`          | Copies what `chopin connect` last ran and runs it as a background service.                |
-| `chopin service status`                               | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                        |
-| `chopin service restart`                              | Restarts the service with the settings it has, for example after an update.               |
-| `chopin service uninstall`                            | Removes the service. The pairing, settings and past runs stay.                            |
-| `chopin update [version] [--allow-downgrade] [--yes]` | Installs the release your server asks for, or the one you name.                           |
-| `chopin unpair`                                       | Revokes this machine in Chopin and deletes its token.                                     |
+| Command                                                     | What it does                                                                              |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `chopin connect [checkout] -- <agent>`                      | Runs work from Chopin with your agent in this checkout. Pairs first if needed.            |
+| `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                |
+| `chopin pair [--label <name>]`                              | Pairs this machine, or pairs it again. The label defaults to the hostname.                |
+| `chopin status [--json]`                                    | Shows the server, pairing, running connectors, the service and what it runs, and the log. |
+| `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                |
+| `chopin service status`                                     | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                        |
+| `chopin service restart`                                    | Restarts the service with the settings it has, for example after an update.               |
+| `chopin service uninstall`                                  | Removes the service. The pairing, settings and past runs stay.                            |
+| `chopin update [version] [--allow-downgrade] [--yes]`       | Installs the release your server asks for, or the one you name.                           |
+| `chopin unpair`                                             | Revokes this machine in Chopin and deletes its token.                                     |
 
 Every command takes `--base-dir <dir>`, or `CHOPIN_HOME`, to keep its files
 somewhere other than the default folder.
@@ -221,10 +293,19 @@ press Ctrl-C, then install again.
 accepts this machine's authorization."** Someone disconnected the machine, or
 GitHub retired its authorization. Run `chopin pair`, then connect again.
 
-**"The service would not find … under the PATH it runs with."** Your agent, its
-interpreter or `git` is only on this shell's PATH, often through a version
-manager. Install it somewhere stable, or connect again with the agent's
-absolute path after `--`.
+**"The service would not find … under the PATH it runs with."** Your agent,
+your Planner, the interpreter a script names on its `#!` line, or `git` is only
+on this shell's PATH, often through a version manager. Install it somewhere
+stable, or connect again with its absolute path.
+
+**"… lies in a directory that lasts only as long as this login or shell."**
+Install that program somewhere stable, or link it into a folder on the
+service's PATH, which the message prints.
+
+**"… didn't answer ACP initialize when started as the service would start
+it."** The message shows how the agent ended and the first line it printed.
+Fix that, often by signing in to the agent, then install again. If the agent
+can't start without a terminal, pass `--skip-check`.
 
 **"chopin can't reach your systemd user manager."** Run the command in a login
 session as the user who owns the service, not through `su` or `sudo -u`.

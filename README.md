@@ -212,7 +212,9 @@ curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install
 CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
 ```
 
-See [Use your own machine with Chopin](docs/chopin-cli.md) for Windows, the
+To set up a machine you reach over SSH, see
+[Set up a remote machine](docs/chopin-cli.md#set-up-a-remote-machine). See
+[Use your own machine with Chopin](docs/chopin-cli.md) for Windows, the
 background service and every command.
 
 ## Documentation
