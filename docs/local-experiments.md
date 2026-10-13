@@ -107,7 +107,11 @@ first only when the machine has no token for that server, and `chopin` uses
 revokes the machine in Chopin and deletes its token. Every command takes
 `--base-dir <dir>` (or `CHOPIN_HOME`) for where the token, locks and worktrees
 live. `chopin --version` prints the CLI version and the connector protocol it
-speaks, and `chopin help` lists the commands. The binary ignores any `.env` or
+speaks, and `chopin help` lists the commands. On a server running
+`HARNESS=remote`, `chopin connect --planner <document URL>` (repeatable) with
+`--planner-command <command>` also runs that command as each document's Planner,
+with no browser sign-in; see
+[Planner backend commands](planner-link.md#planner-backend-commands). The binary ignores any `.env` or
 `bunfig.toml` in the folder it runs in.
 
 The installer puts `chopin` in `~/.local/bin` (on Windows,

@@ -148,7 +148,10 @@ collaborative state and external implementation runs are durable.
   the account's live browser login the document's Planner owner, one client per
   document; nothing else claims ownership. `@chopin` and `invoke_planner` on a
   document without one fail with `planner-not-attached`. Signing out the
-  owner's login, its expiry, or a Planner reset closes the link. See
+  owner's login, its expiry, or a Planner reset closes the link. A paired
+  machine's Planner backend attaches with a document-scoped credential instead
+  and owns through a cookie-less login carrying the machine's own GitHub token,
+  which only revoking the machine or its authorization ends. See
   [Hosted agent](docs/hosted-agent.md#remote-planner).
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.

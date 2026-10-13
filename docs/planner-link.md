@@ -27,16 +27,21 @@ bearer [local agent MCP](local-agent-mcp.md) uses. Bun's and Node.js's built-in
 checked on Node.js 24); browsers cannot send it. A client should not send an
 `Origin` header; if it does, it must be the server's own origin.
 
+The bearer may instead be a paired machine's Planner credential (see
+[Planner backend commands](#planner-backend-commands)): `chopin_p_` followed by
+43 base64url characters. It attaches only the document it was issued for, and
+the account it attaches as is the machine's owner.
+
 The server checks the bearer before upgrading and answers a refusal over HTTP,
 so nothing is opened:
 
-| Status | Meaning                                                     |
-| ------ | ----------------------------------------------------------- |
-| 404    | The server does not run `HARNESS=remote` with `AGENT` on    |
-| 401    | Missing or malformed bearer, or GitHub rejected the token   |
-| 403    | The account fails instance admission, or a foreign `Origin` |
-| 503    | GitHub is unavailable or rate limiting; retry later         |
-| 500    | Any other admission failure                                 |
+| Status | Meaning                                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| 404    | The server does not run `HARNESS=remote` with `AGENT` on                                                                       |
+| 401    | Missing or malformed bearer, GitHub rejected the token, or an unknown or expired Planner credential, or its machine is revoked |
+| 403    | The account fails instance admission, or a foreign `Origin`                                                                    |
+| 503    | GitHub is unavailable or rate limiting; retry later                                                                            |
+| 500    | Any other admission failure                                                                                                    |
 
 ### Pings
 
@@ -151,6 +156,12 @@ document's Planner owner. `attach` succeeds when all of these hold:
   access to the repository.
 - No other client holds the document's Planner (see below).
 
+A client attached with a machine's Planner credential passes the same checks
+with the machine's own GitHub authorization instead of a browser sign-in, so it
+is never refused with `sign-in-required` and signing out of a browser does not
+release it. Its credential must name the document it attaches; any other is
+refused with `repository-forbidden`.
+
 These are the checks every Planner owner passes. A document has one Planner at a
 time. While a client is attached, any other `attach` for that document is
 refused with `planner-attached`, including one from the same account, and the
@@ -186,11 +197,12 @@ rests on ends or the document's Planner is reset. The server then sends
 `refused` and closes an attached link at once, and any eligible account,
 including the same one, can attach again immediately:
 
-| Cause                                                          | Refusal code       | Close code |
-| -------------------------------------------------------------- | ------------------ | ---------- |
-| The owner's browser sign-in signs out or expires               | `sign-in-required` | 4401       |
-| A repository writer resets the document's Planner              | `access-revoked`   | 4403       |
-| The stored ownership no longer names this attachment's sign-in | `access-revoked`   | 4403       |
+| Cause                                                                                         | Refusal code       | Close code |
+| --------------------------------------------------------------------------------------------- | ------------------ | ---------- |
+| The owner's browser sign-in signs out or expires                                              | `sign-in-required` | 4401       |
+| The machine whose credential attached it is disconnected, or GitHub refuses its authorization | `access-revoked`   | 4403       |
+| A repository writer resets the document's Planner                                             | `access-revoked`   | 4403       |
+| The stored ownership no longer names this attachment's sign-in                                | `access-revoked`   | 4403       |
 
 The same checks before every `start` and `turn`, and the periodic one, also
 find an expired sign-in or a released ownership that nothing reported; an
@@ -545,3 +557,74 @@ A client that receives a frame it cannot parse should close with 4400 and reason
 `malformed-message`. Node.js's `WebSocket` lets a caller close only with 1000 or
 3000 to 4999, so a client cannot answer with 1008. The package client does
 this and settles everything still waiting on the link at once.
+
+## Planner backend commands
+
+A paired machine can run a document's Planner without a browser sign-in. The
+`chopin` CLI starts a Planner backend command for each document it is given and
+hands it a credential; the backend attaches over this link like any client.
+
+```sh
+chopin connect . --planner https://chopin.example/octo-org/score/plan \
+  --planner-command "my-planner --flag" -- copilot --acp
+```
+
+`--planner` may repeat. `CHOPIN_PLANNER_COMMAND` may hold the command as a JSON
+array of words instead of `--planner-command`. The command runs in the checkout
+`connect` serves, in its own process group, with its standard output and error
+going to the connector's.
+
+### Credential
+
+The connector asks for a credential just before every launch:
+
+```text
+POST /api/connector/planner
+Authorization: Bearer <machine token>
+{ "document": "<document id or URL>" }
+
+200 { "token": "chopin_p_…", "expiresAt": <milliseconds since the epoch>, "document": { "id": "", "url": "" } }
+```
+
+Chopin issues it only when it runs `HARNESS=remote` with `AGENT` on (otherwise
+404), the machine is still paired and authorized (otherwise 401
+`machine-revoked` or `machine-reauthorize`), and the machine's owner, checked
+with the machine's own GitHub authorization, can push to or administer the
+document's repository (otherwise 403 `repository-forbidden`; 404 `not-found`
+for no such document, 409 `document-archived` for an archived one). The
+credential can open links to that one document for **15 minutes**. A link it
+opened does not depend on it afterwards: the server rechecks the machine as it
+rechecks any owner. Chopin keeps only its hash, in memory, so a server restart
+forgets it as it releases every attachment.
+
+Attached this way, the document's Planner owner is a login of the machine's
+owner that no browser holds, whose GitHub token is the machine's own; Chopin's
+repository tools act with it. Under `AUTH_MODE=local`, where machines hold no
+GitHub authorization, the machine borrows its owner's browser sign-in, and
+`sign-in-required` applies as it does to a GitHub bearer.
+
+### What the backend must do
+
+- Read `CHOPIN_URL` (the server's origin), `CHOPIN_DOCUMENT` (the document as
+  given to `--planner`) and `CHOPIN_PLANNER_TOKEN` from its environment. The
+  token is never in its arguments; do not log it.
+- Open `/planner-link` on `CHOPIN_URL` with
+  `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach` to
+  `CHOPIN_DOCUMENT`.
+- On HTTP 401 at the upgrade, or when the link closes for any reason other than
+  its own `detach`, exit. Within the credential's 15 minutes a backend may
+  instead reattach once after 1001 or a dropped socket; after that the
+  credential is refused and it must exit.
+- Exit on SIGTERM. The connector sends it on Ctrl-C and kills the process group
+  5 seconds later.
+
+The connector starts a backend that exited again, with a fresh credential, after
+the reconnect backoff (up to a second at first, doubling to at most five
+minutes, and starting over after a backend ran for a minute). When the
+credential request is refused because the machine was revoked or must be paired
+again, or Chopin refuses the document, the connector stops that document's
+backend and says why. A backend refused with `planner-attached` (4409) because
+an earlier link of the same machine still counts as attached is started again
+on that backoff until the server notices that link is gone (up to the
+120-second timeout in [Pings](#pings)); a closed link's grace period does not
+block the same machine.

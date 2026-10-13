@@ -328,6 +328,17 @@ turns of a session kept for its runs, and every 5 minutes while the link stays
 attached; losing either fails that session or turn and closes the link with
 `access-revoked`.
 
+A paired machine can attach instead with a document-scoped Planner credential
+from `POST /api/connector/planner`, which `chopin connect --planner` hands to a
+Planner backend command it starts per document
+([Planner backend commands](planner-link.md#planner-backend-commands)). Its
+access is checked with the machine's own GitHub authorization, and it owns the
+document through a delegated login of the machine's owner that no browser holds
+(`apps/server/src/harness/remote/machine-planners.ts`), so no browser sign-in is
+needed and signing out does not release it. Revoking the machine, or GitHub
+refusing its authorization, ends that login and closes its links with
+`access-revoked`.
+
 **Ownership.** Attaching makes the account the document's Planner owner through
 the same generation-guarded storage claim as any other owner
 (`apps/server/src/harness/remote/attachments.ts`). The owner record names the
