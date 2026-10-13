@@ -72,6 +72,8 @@ export function delay(ms: number, signal: AbortSignal) {
 export const RUN_GRACE_MS = 600_000;
 /** Reports a run may hold back while Chopin is out of reach. */
 export const MAX_PENDING_REPORTS = 16;
+/** How long a run's last report may take, so Ctrl-C or a run ending is never held up by it. */
+export const FINAL_REPORT_MS = 5000;
 
 type Caller = {
 	call(name: string, args?: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
@@ -80,8 +82,9 @@ type Caller = {
 /**
  * A run's reports to Chopin, which outlive a dropped connection. `attempt` makes one call;
  * `deliver` queues a report that must not be lost and retries it in order, on the reconnect
- * backoff, until it lands, Chopin refuses it, `stop` aborts, or the run has been out of contact
- * for its grace period.
+ * backoff, until it lands, Chopin refuses it, `stop` aborts, or the grace period runs out.
+ * The grace period is a timer from the first failure to reach Chopin, cleared when Chopin answers.
+ * When it fires, `signal` aborts, which ends in-flight calls and retry waits, and `expired` runs.
  */
 export function runReports(api: Caller, options: {
 	stop: AbortSignal;
@@ -92,29 +95,43 @@ export function runReports(api: Caller, options: {
 	/** Called once when Chopin stops answering, and once when it answers again. */
 	lost?: () => void;
 	back?: () => void;
+	/** Called once when the run has been out of reach for its whole grace period. */
+	expired?: () => void;
 }) {
 	let classify = options.classify ?? classifyConnectorError;
 	let now = options.now ?? Date.now;
 	let graceMs = options.graceMs ?? RUN_GRACE_MS;
 	let lostAt: number | undefined;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let gone = new AbortController();
 	let pending = 0;
 	let queue: Promise<unknown> = Promise.resolve();
 	let reports = {
-		/** Out of contact for longer than the grace period. */
-		expired: () => lostAt !== undefined && now() - lostAt >= graceMs,
+		/** Aborts when the grace period runs out. */
+		signal: gone.signal,
+		/** Out of contact for the whole grace period. */
+		expired: () => gone.signal.aborted,
 		/** Whether a failed call may succeed later, so the run should carry on. */
-		retryable: (error: unknown) => classify(error) === "retry" && !reports.expired(),
-		async attempt(name: string, args: Record<string, unknown>) {
+		retryable: (error: unknown) => classify(error) === "retry" && !gone.signal.aborted,
+		/** How long a retry may still wait: what is left of the grace period. */
+		remaining: () => lostAt === undefined ? graceMs : Math.max(0, lostAt + graceMs - now()),
+		/** One call, which `signal` or the grace period running out abandons. */
+		async attempt(name: string, args: Record<string, unknown>, signal?: AbortSignal) {
 			try {
-				let value = await api.call(name, args);
+				let value = await api.call(name, args, signal);
 				if (lostAt !== undefined) {
 					lostAt = undefined;
+					clearTimeout(timer);
 					options.back?.();
 				}
 				return value;
 			} catch (error) {
-				if (classify(error) === "retry" && lostAt === undefined) {
+				if (classify(error) === "retry" && lostAt === undefined && !gone.signal.aborted) {
 					lostAt = now();
+					timer = setTimeout(() => {
+						gone.abort();
+						options.expired?.();
+					}, graceMs);
 					options.lost?.();
 				}
 				throw error;
@@ -125,18 +142,34 @@ export function runReports(api: Caller, options: {
 				return Promise.reject(new Error("Too many reports are waiting for Chopin."));
 			}
 			pending++;
+			let waiting = AbortSignal.any([options.stop, gone.signal]);
 			let result = queue.then(async () => {
 				for (let retry = 0;; retry++) {
 					try {
-						return await reports.attempt(name, args);
+						return await reports.attempt(name, args, gone.signal);
 					} catch (error) {
-						if (!reports.retryable(error) || options.stop.aborted) throw error;
-						await delay(backoff(retry, options.random), options.stop);
+						if (!reports.retryable(error) || waiting.aborted) throw error;
+						await delay(Math.min(backoff(retry, options.random), reports.remaining()), waiting);
 					}
 				}
 			}).finally(() => pending--);
 			queue = result.catch(() => {});
 			return result;
+		},
+		/**
+		 * The run's last report, after those queued before it: one attempt bounded by
+		 * `FINAL_REPORT_MS`, sent even after Ctrl-C or the grace period, so Chopin hears why.
+		 */
+		final(name: string, args: Record<string, unknown>) {
+			let result = queue.then(() =>
+				reports.attempt(name, args, AbortSignal.timeout(FINAL_REPORT_MS))
+			);
+			queue = result.catch(() => {});
+			return result;
+		},
+		/** Stop the grace timer once the run is over. */
+		close() {
+			clearTimeout(timer);
 		},
 	};
 	return reports;

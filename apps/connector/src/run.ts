@@ -89,34 +89,42 @@ export async function runWork(
 		random: options.random,
 		lost: () => output.offline(),
 		back: () => output.online(),
+		expired() {
+			ended ??= `Chopin was out of reach for ${minutes(options.graceMs ?? RUN_GRACE_MS)}.`;
+			abort.abort();
+		},
 	});
 	// A heartbeat that fails while Chopin is out of reach retries on the reconnect backoff and
 	// leaves the agent running; only Chopin ending the run, or the grace period, stops it.
 	let beating = new AbortController();
+	let beat = AbortSignal.any([beating.signal, reports.signal]);
 	let heartbeat = (async () => {
 		let failures = 0;
-		while (!beating.signal.aborted) {
+		while (!beat.aborted) {
 			await delay(
-				failures ? backoff(failures - 1, options.random) : options.heartbeatMs ?? 10_000,
-				beating.signal,
+				failures
+					? Math.min(backoff(failures - 1, options.random), reports.remaining())
+					: options.heartbeatMs ?? 10_000,
+				beat,
 			);
-			if (beating.signal.aborted) return;
+			if (beat.aborted) return;
 			try {
 				let result = await reports.attempt(
 					implementation ? "renew_implementation_build" : "renew_experiment",
 					{ ...identity, ...(!implementation ? { progress: latestProgress } : {}) },
+					beat,
 				);
 				failures = 0;
 				// A rebuild stops once its report lands; the agent may still be finishing its turn.
 				if ((result as { state?: string } | undefined)?.state === "stopped") return;
 			} catch (error) {
+				// Ended from here: the run is over, or the grace period stopped the agent.
+				if (beat.aborted) return;
 				if (reports.retryable(error)) {
 					failures++;
 					continue;
 				}
-				ended = reports.expired()
-					? `Chopin was out of reach for ${minutes(options.graceMs ?? RUN_GRACE_MS)}.`
-					: `Chopin ended this run (${errorCode(error) ?? "refused"}).`;
+				ended ??= `Chopin ended this run (${errorCode(error) ?? "refused"}).`;
 				abort.abort();
 				return;
 			}
@@ -262,7 +270,9 @@ export async function runWork(
 			: "Local work failed";
 		if (stopped) output.stopped();
 		else output.failed(message, agentTail);
-		await reports.deliver(implementation ? "report_implementation_build" : "fail_experiment", {
+		// Out of reach for the whole grace period, the failure gets one bounded attempt.
+		let send = reports.expired() ? reports.final : reports.deliver;
+		await send(implementation ? "report_implementation_build" : "fail_experiment", {
 			...identity,
 			...(implementation ? { state: "failed", idempotencyKey: crypto.randomUUID() } : {}),
 			error: stopped || ended || !implementation
@@ -279,6 +289,7 @@ export async function runWork(
 		}
 		beating.abort();
 		await heartbeat;
+		reports.close();
 		options.signal.removeEventListener("abort", cancel);
 	}
 }

@@ -14,7 +14,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 async function run(
 	build: { kind?: "rebuild"; live?: boolean },
 	flags: string[],
-	respond: (name: string, args: Record<string, unknown>) => unknown = () => ({}),
+	respond: (name: string, args: Record<string, unknown>, signal?: AbortSignal) => unknown =
+		() => ({}),
 	signal = new AbortController().signal,
 	options: Partial<Parameters<typeof runWork>[3]> = {},
 ) {
@@ -32,11 +33,11 @@ async function run(
 		let sent: Array<[string, Record<string, unknown>]> = [];
 		let calls: Array<[string, Record<string, unknown>]> = [];
 		let api = {
-			call: async (name: string, args: Record<string, unknown> = {}) => {
+			call: async (name: string, args: Record<string, unknown> = {}, signal?: AbortSignal) => {
 				sent.push([name, args]);
 				let { idempotencyKey: _key, ...rest } = args;
 				calls.push([name, rest]);
-				return respond(name, args);
+				return respond(name, args, signal);
 			},
 		} as unknown as Awaited<ReturnType<typeof remote>>;
 		let id = crypto.randomUUID();
@@ -277,6 +278,57 @@ test("a run out of reach for its whole grace period stops its agent", async () =
 		state: "failed",
 		error: "Chopin was out of reach for 0 seconds.",
 	}]);
+});
+
+/** A call that never answers, as a request to a server that went away mid-response; only aborts. */
+function hanging(signal?: AbortSignal) {
+	return new Promise((_, reject) => {
+		signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+	});
+}
+
+test("the grace period stops the agent on time while a retry waits longer than it", async () => {
+	let lost = 0;
+	let failed = 0;
+	await run(
+		{},
+		["--hang"],
+		(name, args) => {
+			if (name === "renew_implementation_build") {
+				lost ||= performance.now();
+				throw unreachable();
+			}
+			if (args.state === "failed") failed = performance.now();
+			return {};
+		},
+		undefined,
+		{ random: () => 0.999, graceMs: 100 },
+	);
+	// The first retry would wait about a second; the agent stops when the grace period ends.
+	expect(failed - lost).toBeGreaterThanOrEqual(90);
+	expect(failed - lost).toBeLessThan(400);
+});
+
+test("the grace period stops the agent on time while a heartbeat hangs in flight", async () => {
+	let lost = 0;
+	let started = performance.now();
+	let { calls } = await run(
+		{},
+		["--hang"],
+		(name, _args, signal) => {
+			if (name !== "renew_implementation_build") return {};
+			if (lost) return hanging(signal);
+			lost = performance.now();
+			throw unreachable();
+		},
+		undefined,
+		{ random: () => 0.01, graceMs: 100 },
+	);
+	expect(performance.now() - started).toBeLessThan(1500);
+	expect(calls.at(-1)?.[1]).toMatchObject({
+		state: "failed",
+		error: "Chopin was out of reach for 0 seconds.",
+	});
 });
 
 test("a run Chopin has ended stops its agent at once", async () => {
