@@ -448,10 +448,77 @@ function pathVariable(host: ServiceHost) {
 	return host.env[name] ?? (host.platform === "win32" ? "" : DEFAULT_PATH);
 }
 
-/** The interpreter a script names through `#!/usr/bin/env`, which must resolve too. */
+/**
+ * The interpreter a script's `#!` line names: a name `#!/usr/bin/env [-S]` finds on the PATH,
+ * or an absolute path.
+ */
 async function interpreter(file: string) {
 	let head = await Bun.file(file).slice(0, 256).text().catch(() => "");
-	return head.match(/^#!\s*\S*\/env\s+(?:-S\s+)?([^\s-][^\s]*)/)?.[1];
+	return head.match(/^#!\s*\S*\/env\s+(?:-S\s+)?([^\s-][^\s]*)/)?.[1]
+		?? head.match(/^#!\s*(\/\S+)/)?.[1];
+}
+
+/**
+ * Where `command` names the program it runs: after `env` and its VAR=VALUE assignments, when it
+ * starts with `env` or an absolute path to it, else its first word.
+ */
+export function programAt(command: string[]) {
+	let first = command[0] ?? "";
+	if (first !== "env" && !(posix.isAbsolute(first) && posix.basename(first) === "env")) return 0;
+	let at = 1;
+	while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(command[at] ?? "")) at++;
+	return command[at] && !command[at]!.startsWith("-") ? at : 0;
+}
+
+function finder(host: ServiceHost) {
+	return host.which ?? ((name: string, PATH: string) => Bun.which(name, { PATH }));
+}
+
+/**
+ * `servicePath` with the stable directory of the interpreter `file`'s `#!` line names, and of the
+ * one that interpreter names if it is a script too, wherever the service would not find them
+ * yet. One found only through a directory gone after a reboot is refused.
+ */
+async function withInterpreters(
+	host: ServiceHost,
+	file: string,
+	what: string,
+	servicePath: string,
+) {
+	if (host.platform === "win32") return servicePath;
+	let which = finder(host);
+	for (let depth = 0; depth < 2; depth++) {
+		let named = await interpreter(file);
+		if (!named) break;
+		let absolute = posix.isAbsolute(named);
+		let found = absolute
+			? which(named, servicePath)
+			: which(named, servicePath) ?? which(named, pathVariable(host));
+		if (!found) {
+			throw new ServiceError(
+				[
+					`The service would not find ${named}, which ${what} runs with, under the PATH it runs `
+					+ "with:",
+					`  ${servicePath}`,
+					`Nothing was installed. Install ${named} somewhere stable and make sure it is on your PATH.`,
+				].join("\n"),
+			);
+		}
+		let passed = await links(host.platform, found);
+		refuseFleeting(
+			host,
+			passed,
+			`${named}, which ${what} runs with,`,
+			`Install ${named} somewhere stable, or link it into a directory on the service's PATH:\n`
+				+ `  ${servicePath}`,
+		);
+		if (!absolute && !which(named, servicePath)) {
+			servicePath += posix.delimiter + posix.dirname(passed[0]!);
+		}
+		file = passed[0]!;
+		what = named;
+	}
+	return servicePath;
 }
 
 /** The target of the link at `entry`, or undefined when it is not a link. */
@@ -521,62 +588,62 @@ function refuseFleeting(host: ServiceHost, passed: string[], what: string, fix: 
 }
 
 /**
- * The agent's stable absolute path and the PATH the service runs with, once the agent, the
- * interpreter its script names and git all resolve under it to paths that outlast this login
- * and shell; otherwise a refusal, before anything is written.
+ * The agent's command with stable absolute paths, and the PATH the service runs with, once the
+ * agent (the program behind `env` when it is wrapped in one), the interpreters its script names
+ * and git all resolve under it to paths that outlast this login and shell; otherwise a refusal,
+ * before anything is written.
  */
 async function agentPath(host: ServiceHost, command: string[]) {
-	let which = host.which ?? ((name, PATH) => Bun.which(name, { PATH }));
+	let which = finder(host);
 	let path = paths(host.platform);
-	let agent = command[0]!;
-	let found = which(agent, pathVariable(host));
-	if (!found) {
-		throw new ServiceError(
-			`The agent command ${agent} is not on your PATH. Nothing was installed. `
-				+ "Run chopin connect again with the agent's absolute path after --.",
-		);
-	}
-	// A per-shell directory is often a link into a version manager's stable one.
-	let passed = await links(host.platform, found);
-	refuseFleeting(
-		host,
-		passed,
-		`The agent command ${agent}`,
-		"Install the agent somewhere stable, or run chopin connect again with a stable absolute path "
-			+ "to it after --.",
-	);
-	let stable = passed[0]!;
-	let service = servicePath(host.platform, host.env, path.dirname(stable));
-	let runtime = host.platform === "win32" ? undefined : await interpreter(stable);
-	for (let needed of [stable, ...(runtime ? [runtime] : []), "git"]) {
-		let what = needed === stable
-			? `the agent command ${agent}`
-			: needed === "git"
-			? "git"
-			: `${needed}, which ${agent} runs with,`;
-		let resolved = which(needed, service);
-		if (resolved) {
-			if (needed !== stable) {
-				refuseFleeting(
-					host,
-					await links(host.platform, resolved),
-					needed === "git" ? "git" : `${needed}, which ${agent} runs with,`,
-					`Install ${needed} somewhere stable, outside those directories.`,
-				);
-			}
-			continue;
+	let at = programAt(command);
+	let resolved = [...command];
+	for (let index of new Set([0, at])) {
+		let word = command[index]!;
+		let found = which(word, pathVariable(host));
+		if (!found) {
+			throw new ServiceError(
+				`The agent command ${word} is not on your PATH. Nothing was installed. `
+					+ "Run chopin connect again with the agent's absolute path after --.",
+			);
 		}
+		// A per-shell directory is often a link into a version manager's stable one.
+		let passed = await links(host.platform, found);
+		refuseFleeting(
+			host,
+			passed,
+			`The agent command ${word}`,
+			"Install the agent somewhere stable, or run chopin connect again with a stable absolute "
+				+ "path to it after --.",
+		);
+		resolved[index] = passed[0]!;
+	}
+	let agent = command[at]!;
+	let stable = resolved[at]!;
+	let service = await withInterpreters(
+		host,
+		stable,
+		agent,
+		servicePath(host.platform, host.env, path.dirname(stable)),
+	);
+	let git = which("git", service);
+	if (!git) {
 		throw new ServiceError(
 			[
-				`The service would not find ${what} under the PATH it runs with:`,
+				"The service would not find git under the PATH it runs with:",
 				`  ${service}`,
 				"Nothing was installed. That PATH leaves out directories that last only as long as "
-				+ "this login or shell. Install it outside them, or run chopin connect again with the "
-				+ "agent's absolute path after --.",
+				+ "this login or shell. Install git outside them.",
 			].join("\n"),
 		);
 	}
-	return { path: service, agent: stable };
+	refuseFleeting(
+		host,
+		await links(host.platform, git),
+		"git",
+		"Install git somewhere stable, outside those directories.",
+	);
+	return { path: service, command: resolved };
 }
 
 function release(version: string) {
@@ -608,30 +675,33 @@ export type Installed = {
 };
 
 /**
- * Refuses a Planner backend the service would not find under its PATH, or find only through a
- * directory gone after a reboot. A relative path resolves in the checkout, where `connect`
- * starts the backend.
+ * The PATH the service runs with, once the Planner backend (the program behind `env` when it is
+ * wrapped in one) and the interpreters its script names resolve under it, adding their stable
+ * directories where needed; otherwise a refusal. A relative path resolves in the checkout,
+ * where `connect` starts the backend.
  */
 async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servicePath: string) {
-	let planner = settings.plannerCommand[0];
-	if (!settings.planners.length || !planner) return;
+	let command = settings.plannerCommand;
+	let planner = command[programAt(command)];
+	if (!settings.planners.length || !planner) return servicePath;
 	let refuse = (why: string) => new ServiceError(`${why} Nothing was installed.`);
 	let path = paths(host.platform);
 	let named = /[\\/]/.test(planner) ? path.resolve(settings.checkout, planner) : planner;
-	let which = host.which ?? ((name, PATH) => Bun.which(name, { PATH }));
-	let found = which(named, servicePath);
+	let found = finder(host)(named, servicePath);
 	if (!found) {
 		throw refuse(
 			`The service would not find the Planner command ${planner} under the PATH it runs with:\n`
 				+ `  ${servicePath}\nInstall it there, or give its absolute path in --planner-command.`,
 		);
 	}
+	let passed = await links(host.platform, found);
 	refuseFleeting(
 		host,
-		await links(host.platform, found),
+		passed,
 		`The Planner command ${planner}`,
 		"Install it somewhere stable, or give a stable absolute path to it in --planner-command.",
 	);
+	return withInterpreters(host, passed[0]!, `the Planner command ${planner}`, servicePath);
 }
 
 /**
@@ -651,12 +721,11 @@ export async function installService(
 	let settings = config.connect;
 	if (!settings) throw new ServiceError(CONNECT_FIRST);
 	let resolved = await agentPath(host, settings.command);
-	let path = resolved.path;
 	// The service runs the agent by its stable path, not one through a shell's own links.
-	settings = { ...settings, command: [resolved.agent, ...settings.command.slice(1)] };
+	settings = { ...settings, command: resolved.command };
 	let unusable = unsupportedPath(host.platform, program);
 	if (unusable) throw new ServiceError(unusable);
-	await checkPlanners(host, settings, path);
+	let path = await checkPlanners(host, settings, resolved.path);
 	if (manager === "launchd" && hasControl(path)) {
 		throw new ServiceError(
 			"The PATH holds a control character, which a LaunchAgent cannot hold. Nothing was "
