@@ -43,11 +43,13 @@ export function render(spec) {
 	const notch = 16;
 	const gap = 6;
 	let innerWidth = w - notch * 2 - LABEL_BOX.paddingInline * 2;
+	// Fitted SVG fonts round to screen pixels; keep space between subtitle line boxes.
+	let subLeading = SUB.lineHeight + LABEL_BOX.detailGap;
 	let labels = steps.map(s => {
 		let label = lines(s.label, innerWidth, LABEL);
 		let sub = s.sub ? lines(s.sub, innerWidth, SUB) : [];
 		let height = label.length * LABEL.lineHeight
-			+ (sub.length ? LABEL_BOX.detailGap + sub.length * SUB.lineHeight : 0);
+			+ (sub.length ? LABEL_BOX.detailGap + (sub.length - 1) * subLeading + SUB.lineHeight : 0);
 		return { label, sub, height };
 	});
 	let h = ceil4(Math.max(72, ...labels.map(label => label.height + LABEL_BOX.paddingBlock * 2)));
@@ -75,7 +77,7 @@ export function render(spec) {
 			content.push(
 				text({ class: "n-sub", x: x + w / 2, y: y + SUB.size, "text-anchor": "middle" }, line),
 			);
-			y += SUB.lineHeight;
+			y += subLeading;
 		}
 		out.push(group(`sc-node ${kind}`, s.id, st, [
 			el("path", { class: "n-mask", d }),
