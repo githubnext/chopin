@@ -53,7 +53,11 @@ async function setup(answer: (line: string) => Partial<Outcome> | undefined) {
 	);
 	let bin = join(home, "bin");
 	await mkdir(bin);
-	await writeFile(join(bin, "agent"), "#!/bin/sh\n", { mode: 0o755 });
+	// An agent that answers ACP initialize, as install's check needs.
+	let fake = join(import.meta.dir, "testing", "fake-agent.ts");
+	await writeFile(join(bin, "agent"), `#!/bin/sh\nexec ${process.execPath} ${fake}\n`, {
+		mode: 0o755,
+	});
 	let root = join(home, "checkout");
 	await mkdir(root);
 	git(root, "init");
@@ -85,8 +89,8 @@ async function setup(answer: (line: string) => Partial<Outcome> | undefined) {
 		tools,
 		directory,
 		bin,
-		run: () =>
-			connect([root, "--install-service", "--", "agent", "--acp"], {
+		run: (...flags: string[]) =>
+			connect([root, "--install-service", ...flags, "--", "agent", "--acp"], {
 				host,
 				executable: "/opt/chopin/bin/chopin",
 			}),
@@ -124,14 +128,20 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
-	"connect --install-service ends with install's refusal, and keeps what connect saved",
+	"connect --install-service ends with install's refusals, and keeps what connect saved",
 	async () => {
 		await using machine = await setup(line =>
 			line.startsWith("systemctl --user show")
 				? { code: 1, stderr: "Failed to connect to bus" }
 				: systemd(line)
 		);
-		let error = await machine.run().catch(error => error);
+		// An agent that can't start headless: the check refuses it, and --skip-check goes past it.
+		await writeFile(join(machine.bin, "agent"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
+		let checked = await machine.run().catch(error => error);
+		expect(checked.message).toContain("agent didn't answer ACP initialize");
+		expect(checked.message).toContain("(exit 127)");
+		expect(checked.message).toContain("--skip-check");
+		let error = await machine.run("--skip-check").catch(error => error);
 		expect(error).toBeInstanceOf(Error);
 		expect(error.message).toContain("can't reach your systemd user manager");
 		expect(error.message).toContain("Nothing was installed.");

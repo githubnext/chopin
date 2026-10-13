@@ -24,16 +24,27 @@ export type AgentOptions = {
 	 * Called once the agent has a session, or with how it ended and the first line of its stderr
 	 * when it fails before one.
 	 */
-	onStart?: (failure?: { how: string; stderr?: string }) => void;
+	onStart?: (failure?: AgentFailure) => void;
 };
 
-/** One protocol implementation; agent-specific launch arguments belong to local configuration. */
-export async function runAgent(options: AgentOptions): Promise<string> {
-	if (options.signal.aborted) throw new Error("Investigation cancelled.");
-	if (!options.command[0]) throw new Error("An ACP command is required.");
-	let child = spawn(options.command[0], options.command.slice(1), {
-		cwd: options.cwd,
-		...(options.env ? { env: { ...process.env, ...options.env } } : {}),
+/** How an agent that failed to start ended, and the first line of its stderr. */
+export type AgentFailure = { how: string; stderr?: string };
+
+/**
+ * Start `command` in its own process group and connect `app` to it over ACP. The connection
+ * closes when the agent exits. `failure` says how one that failed to start ended, and `stop`
+ * stops it and everything it started.
+ */
+function startAgent(
+	app: ClientApp,
+	command: string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+	stderr?: (chunk: string) => void,
+) {
+	let child = spawn(command[0]!, command.slice(1), {
+		cwd,
+		...(env ? { env } : {}),
 		stdio: ["pipe", "pipe", "pipe"],
 		detached: process.platform !== "win32",
 	});
@@ -46,7 +57,7 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 	let head = "";
 	child.stderr.on("data", chunk => {
 		if (head.length < 4096) head += String(chunk);
-		options.stderr?.(String(chunk));
+		stderr?.(String(chunk));
 	});
 	let ended: string | undefined;
 	let exited = new Promise(resolve => {
@@ -56,6 +67,74 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 			(code, signal) => resolve(ended ??= signal ? `signal ${signal}` : `exit ${code}`),
 		);
 	});
+	let connection = app.connect(ndJsonStream(
+		Writable.toWeb(child.stdin),
+		Readable.toWeb(child.stdout) as unknown as ReadableStream<Uint8Array>,
+	));
+	child.once("error", error => connection.close(error));
+	child.once("exit", () => connection.close(new Error("ACP agent exited.")));
+	return {
+		connection,
+		kill,
+		async failure(error: unknown): Promise<AgentFailure> {
+			// Its exit, and the rest of its stderr, may come just after the failure they caused.
+			await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 1000))]);
+			let line = head.split("\n").map(text => text.trim()).find(Boolean);
+			return {
+				how: ended ?? (error instanceof Error ? error.message : String(error)),
+				...(line ? { stderr: line } : {}),
+			};
+		},
+		stop() {
+			connection.close();
+			kill();
+			let force = setTimeout(() => kill("SIGKILL"), 1000);
+			force.unref();
+			child.once("exit", () => clearTimeout(force));
+		},
+	};
+}
+
+function initialize(connection: ReturnType<ClientApp["connect"]>) {
+	return connection.agent.request("initialize", {
+		protocolVersion: PROTOCOL_VERSION,
+		clientInfo: { name: "chopin", version: VERSION },
+		clientCapabilities: {},
+	});
+}
+
+/**
+ * Start the agent with `env` as its whole environment and ask it to initialize, then stop it.
+ * Undefined once it answers within `timeoutMs`; otherwise how it failed.
+ */
+export async function checkAgent(
+	command: string[],
+	options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs?: number },
+): Promise<AgentFailure | undefined> {
+	let timeoutMs = options.timeoutMs ?? 10_000;
+	let agent = startAgent(new ClientApp(), command, options.cwd, options.env);
+	let deadline = setTimeout(
+		() =>
+			agent.connection.close(
+				new Error(`no answer to ACP initialize within ${timeoutMs / 1000}s`),
+			),
+		timeoutMs,
+	);
+	try {
+		await initialize(agent.connection);
+		return undefined;
+	} catch (error) {
+		return await agent.failure(error);
+	} finally {
+		clearTimeout(deadline);
+		agent.stop();
+	}
+}
+
+/** One protocol implementation; agent-specific launch arguments belong to local configuration. */
+export async function runAgent(options: AgentOptions): Promise<string> {
+	if (options.signal.aborted) throw new Error("Investigation cancelled.");
+	if (!options.command[0]) throw new Error("An ACP command is required.");
 	let app = new ClientApp()
 		.onNotification("session/update", ({ params }) => options.onUpdate(params))
 		.onRequest("session/request_permission", async ({ params: request }) => {
@@ -68,10 +147,14 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 					: { outcome: "cancelled" as const },
 			};
 		});
-	let connection = app.connect(ndJsonStream(
-		Writable.toWeb(child.stdin),
-		Readable.toWeb(child.stdout) as unknown as ReadableStream<Uint8Array>,
-	));
+	let agent = startAgent(
+		app,
+		options.command,
+		options.cwd,
+		options.env ? { ...process.env, ...options.env } : undefined,
+		options.stderr,
+	);
+	let { connection } = agent;
 	let deadline = setTimeout(
 		() => connection.close(new Error("ACP initialization timed out.")),
 		30_000,
@@ -87,19 +170,13 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		}
 		void connection.agent.notify("session/cancel", { sessionId }).catch(() => {});
 		timer = setTimeout(() => {
-			kill("SIGKILL");
+			agent.kill("SIGKILL");
 			connection.close();
 		}, 3000);
 	};
-	child.once("error", error => connection.close(error));
-	child.once("exit", () => connection.close(new Error("ACP agent exited.")));
 	options.signal.addEventListener("abort", cancel, { once: true });
 	try {
-		let initialized = await connection.agent.request("initialize", {
-			protocolVersion: PROTOCOL_VERSION,
-			clientInfo: { name: "chopin", version: VERSION },
-			clientCapabilities: {},
-		});
+		let initialized = await initialize(connection);
 		if (initialized.protocolVersion !== PROTOCOL_VERSION) {
 			throw new Error("Unsupported ACP version.");
 		}
@@ -128,23 +205,13 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		return response.stopReason;
 	} catch (error) {
 		if (!sessionId && !options.signal.aborted && options.onStart) {
-			// Its exit, and the rest of its stderr, may come just after the failure they caused.
-			await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 1000))]);
-			let stderr = head.split("\n").map(line => line.trim()).find(Boolean);
-			options.onStart({
-				how: ended ?? (error instanceof Error ? error.message : String(error)),
-				...(stderr ? { stderr } : {}),
-			});
+			options.onStart(await agent.failure(error));
 		}
 		throw error;
 	} finally {
 		options.signal.removeEventListener("abort", cancel);
 		if (timer) clearTimeout(timer);
 		clearTimeout(deadline);
-		connection.close();
-		kill();
-		let force = setTimeout(() => kill("SIGKILL"), 1000);
-		force.unref();
-		child.once("exit", () => clearTimeout(force));
+		agent.stop();
 	}
 }

@@ -214,7 +214,7 @@ export async function connect(
 	injected: { host?: ServiceHost; executable?: string } = {},
 ) {
 	let parsed = parseArgs(args, {
-		flags: ["service", "install-service"],
+		flags: ["service", "install-service", "skip-check"],
 		options: ["planner-command"],
 		lists: ["planner", "env"],
 	});
@@ -224,7 +224,8 @@ export async function connect(
 	if (
 		service
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
-			|| parsed.options.has("planner-command") || parsed.flags.has("install-service"))
+			|| parsed.options.has("planner-command") || parsed.flags.has("install-service")
+			|| parsed.flags.has("skip-check"))
 	) {
 		throw new Error(
 			`${SELF} connect --service takes no other arguments; it runs what ${SELF} service install saved.`,
@@ -410,7 +411,13 @@ export async function connect(
 		unwatch();
 		await release();
 	}
-	if (install) await installCommand({ host: injected.host, executable });
+	if (install) {
+		await installCommand({
+			host: injected.host,
+			executable,
+			check: !parsed.flags.has("skip-check"),
+		});
+	}
 }
 
 const NOT_INSTALLED = "chopin service install needs the installed chopin, not connector.js. "
@@ -425,6 +432,8 @@ function installedChopin() {
 /** `chopin service install`, which `connect --install-service` also runs once connected. */
 async function installCommand(options: {
 	allowDowngrade?: boolean;
+	/** Whether to start the agent once, as the service would, before installing. */
+	check?: boolean;
 	host?: ServiceHost | undefined;
 	executable?: string | undefined;
 }) {
@@ -450,6 +459,7 @@ async function installCommand(options: {
 	}
 	let installed = await installService(host, { executable: options.executable, directory }, {
 		allowDowngrade: !!options.allowDowngrade,
+		check: !!options.check,
 	});
 	output.say(
 		`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
@@ -470,7 +480,10 @@ const SERVICE_USAGE = `Usage: ${SELF} service install [--allow-downgrade] | `
 /** `service install|status|restart|uninstall`: run `connect` as this user's background service. */
 async function serviceCommand(args: string[]) {
 	let [action, ...rest] = args;
-	let parsed = parseArgs(rest, action === "install" ? { flags: ["allow-downgrade"] } : {});
+	let parsed = parseArgs(
+		rest,
+		action === "install" ? { flags: ["allow-downgrade", "skip-check"] } : {},
+	);
 	if (parsed.positional.length || parsed.rest) throw new Error(SERVICE_USAGE);
 	let directory = stateDirectory();
 	let host = systemHost();
@@ -479,6 +492,7 @@ async function serviceCommand(args: string[]) {
 	if (action === "install") {
 		await installCommand({
 			allowDowngrade: parsed.flags.has("allow-downgrade"),
+			check: !parsed.flags.has("skip-check"),
 			executable: installedChopin(),
 		});
 		return;

@@ -134,6 +134,46 @@ test("install again replaces the service's settings with the last connect", asyn
 	expect(await readFile(unitPath(home), "utf8")).not.toContain("s3cret");
 });
 
+test.skipIf(process.platform === "win32")(
+	"install starts the agent once with the service's PATH and --env, and refuses one that can't start",
+	async () => {
+		let { home, directory, bin, calls, host, program, settings } = await machine("linux", systemd);
+		let fake = join(import.meta.dir, "testing", "fake-agent.ts");
+		let seen = join(home, "seen");
+		await writeFile(
+			join(bin, "acp-agent"),
+			`#!/bin/sh\necho "$SOME_FLAG|$PATH|$XDG_RUNTIME_DIR" > ${seen}\nexec ${process.execPath} ${fake}\n`,
+			{ mode: 0o755 },
+		);
+		await writeFile(
+			join(bin, "logged-out"),
+			`#!/bin/sh\necho "agent: not logged in (ghp_${"A".repeat(20)})" >&2\nexit 127\n`,
+			{ mode: 0o755 },
+		);
+		host.env = { ...host.env, XDG_RUNTIME_DIR: "/run/user/501" };
+		let env = { SOME_FLAG: "from connect" };
+		await connected(directory, { ...settings, command: ["acp-agent"], env });
+		await installService(host, program, { check: true });
+		let real = await realpath(bin);
+		expect(await readFile(seen, "utf8")).toBe(`from connect|${real}:/usr/bin:/bin|\n`);
+
+		calls.length = 0;
+		await rm(unitPath(home));
+		await connected(directory, { ...settings, command: ["logged-out", "--acp"], env });
+		let error = await installService(host, program, { check: true }).catch(error => error);
+		expect(error).toBeInstanceOf(Error);
+		expect(error.message).toContain("exit 127: agent: not logged in ([redacted])");
+		expect(error.message).toContain("Nothing was installed.");
+		expect(error.message).toContain("--skip-check");
+		expect(calls).toEqual([]);
+		expect(existsSync(unitPath(home))).toBe(false);
+		// Without the check, as --skip-check asks, it installs.
+		await installService(host, program);
+		expect(existsSync(unitPath(home))).toBe(true);
+	},
+	20_000,
+);
+
 test("install refuses until chopin connect has saved what the service runs", async () => {
 	let { home, directory, calls, host, program } = await machine("linux", systemd);
 	await updateConfig(directory, value => {

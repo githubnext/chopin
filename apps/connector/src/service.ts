@@ -3,7 +3,9 @@ import { lstat, mkdir, readFile, readlink, rm, writeFile } from "node:fs/promise
 import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
+import { checkAgent } from "./acp";
 import { type ConnectSettings, readConfig, updateConfig } from "./config";
+import { redacted } from "./connection";
 import { VERSION } from "./version";
 import { connectors, processStart } from "./workspace";
 
@@ -720,15 +722,46 @@ async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servi
 }
 
 /**
+ * Refuses an agent that doesn't answer ACP initialize within 10 seconds when started as the
+ * service starts it: with the service's PATH and the saved --env, and on Linux and macOS without
+ * the rest of this shell's environment.
+ */
+async function checkStart(host: ServiceHost, settings: ConnectSettings, path: string) {
+	let windows = host.platform === "win32";
+	let name = windows
+		? Object.keys(host.env).find(item => item.toUpperCase() === "PATH") ?? "Path"
+		: "PATH";
+	let env = {
+		...(windows ? host.env : { HOME: host.home, USER: host.user, LOGNAME: host.user }),
+		[name]: path,
+		...settings.env,
+	};
+	let failed = await checkAgent(settings.command, { cwd: host.home, env });
+	if (!failed) return;
+	let agent = settings.command[programAt(settings.command)];
+	throw new ServiceError(
+		[
+			`${agent} didn't answer ACP initialize when started as the service would start it (`
+			+ `${redacted(failed.how)}${
+				failed.stderr ? `: ${redacted(failed.stderr).slice(0, 200)}` : ""
+			}). Nothing was installed.`,
+			"Fix that and install again. For an agent that can't start without a terminal, pass "
+			+ "--skip-check.",
+		].join("\n"),
+	);
+}
+
+/**
  * Install `program` as this user's service and start it, so it starts again by itself. It copies
  * what the last `chopin connect` ran, checked here first, server included, into config.json as
- * the service's own settings, which a later connect leaves alone. A service an older chopin than
- * one already installed is refused without `allowDowngrade`.
+ * the service's own settings, which a later connect leaves alone. With `check`, it first starts
+ * the agent as the service would and refuses one that doesn't answer ACP initialize. A service
+ * an older chopin than one already installed is refused without `allowDowngrade`.
  */
 export async function installService(
 	host: ServiceHost,
 	program: ServiceProgram,
-	options: { allowDowngrade?: boolean; version?: string } = {},
+	options: { allowDowngrade?: boolean; version?: string; check?: boolean } = {},
 ): Promise<Installed> {
 	let manager = serviceManager(host.platform);
 	let version = options.version ?? VERSION;
@@ -747,6 +780,7 @@ export async function installService(
 				+ "installed.",
 		);
 	}
+	if (options.check) await checkStart(host, settings, path);
 	let previous = config.service?.version;
 	if (
 		!options.allowDowngrade && previous && release(previous) && release(version)
