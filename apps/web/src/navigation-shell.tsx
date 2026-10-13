@@ -290,10 +290,11 @@ export function NavigationShell(
 	}, [mode]);
 	let sidebarMotion = motionContract("sidebar");
 	let sidebarVisible = mode === "inline" && !collapsed;
+	// The sidebar slides for its shortcut as for a click; only a layout change settles it at once.
 	let sidebarPresence = useTransitionPresence(
 		sidebarVisible ? true : undefined,
 		sidebarMotion.closeDuration,
-		immediateMotion || modeChanged,
+		modeChanged,
 	);
 	let drawerPresence = useTransitionPresence(
 		mode === "drawer" && drawerOpen && !phone ? true : undefined,

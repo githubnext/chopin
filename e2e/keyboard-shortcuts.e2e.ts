@@ -117,6 +117,64 @@ test("the chat chord toggles Chat without leaving the editor", async ({ join }) 
 	await expect(chatPane(page)).toBeVisible();
 });
 
+/** Counts width transitions that start on the sidebar and Chat tracks. */
+async function recordPaneMotion(page: Page) {
+	await page.evaluate(() => {
+		let runs = { chat: 0, sidebar: 0 };
+		(window as unknown as { paneRuns: typeof runs }).paneRuns = runs;
+		document.addEventListener("transitionrun", event => {
+			if (event.propertyName !== "width" || !(event.target instanceof Element)) return;
+			if (event.target.matches(".motion-sidebar")) runs.sidebar++;
+			if (event.target.matches(".workspace-chat-panel")) runs.chat++;
+		});
+	});
+	return () =>
+		page.evaluate(() =>
+			(window as unknown as { paneRuns: { chat: number; sidebar: number } }).paneRuns
+		);
+}
+
+test("the sidebar and Chat chords slide their panes as a click does", async ({ join, page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await join("ana");
+	await expect(chatPane(page)).toBeVisible();
+	await content(page).click();
+	let runs = await recordPaneMotion(page);
+
+	await pressShortcut(page, "Backslash");
+	await expect(page.getByRole("button", { name: "Show sidebar" })).toBeVisible();
+	await expect.poll(async () => (await runs()).sidebar).toBe(1);
+	await pressShortcut(page, "Backslash");
+	await expect(page.getByRole("button", { name: "Hide sidebar" })).toBeVisible();
+	await expect.poll(async () => (await runs()).sidebar).toBe(2);
+
+	await pressShortcut(page, "Period");
+	await expect(chatPane(page)).toBeHidden();
+	await expect.poll(async () => (await runs()).chat).toBe(1);
+	await pressShortcut(page, "Period");
+	await expect(chatPane(page)).toBeVisible();
+	await expect.poll(async () => (await runs()).chat).toBe(2);
+});
+
+test("the sidebar and Chat chords settle at once under reduced motion", async ({ join, page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await join("ana");
+	await expect(chatPane(page)).toBeVisible();
+	await content(page).click();
+	let runs = await recordPaneMotion(page);
+
+	await pressShortcut(page, "Backslash");
+	await expect(page.getByRole("button", { name: "Show sidebar" })).toBeVisible();
+	await pressShortcut(page, "Backslash");
+	await expect(page.getByRole("button", { name: "Hide sidebar" })).toBeVisible();
+	await pressShortcut(page, "Period");
+	await expect(chatPane(page)).toBeHidden();
+	await pressShortcut(page, "Period");
+	await expect(chatPane(page)).toBeVisible();
+	expect(await runs()).toEqual({ chat: 0, sidebar: 0 });
+});
+
 test("Alt+N starts a new document only when nobody is typing", async ({ join }) => {
 	let page = await join("ana");
 	let created = 0;
