@@ -8,6 +8,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { parseArgs } from "./args";
+import { updateConfig } from "./config";
 import { classifyConnectorError, connectorMessage, machineFile, pair } from "./machine";
 import { createOutput } from "./output";
 import { ConnectorError } from "./mcp";
@@ -280,11 +281,15 @@ test("the service's connect, started again after its token was forgotten, stops 
 	let root = await checkout();
 	let chopin = fakeChopin();
 	await revokedMachine(home, chopin.url);
-	let revoked = cli(["connect", root, "--service", "--", "agent"], home, chopin.url);
+	// What `chopin connect` saved, which the service runs.
+	await updateConfig(home, value => {
+		value.connect = { checkout: root, command: ["agent"], planners: [], plannerCommand: [] };
+	});
+	let revoked = cli(["connect", "--service"], home, chopin.url);
 	expect(await revoked.exited).toBe(1);
 	expect(await revoked.output).toContain("no longer paired");
 	// The service manager starts it again, with no token stored and no terminal to pair on.
-	let again = cli(["connect", root, "--service", "--", "agent"], home, chopin.url);
+	let again = cli(["connect", "--service"], home, chopin.url);
 	expect(await Promise.race([again.exited, Bun.sleep(3000).then(() => "still running")]))
 		.toBe(1);
 	let output = await again.output;

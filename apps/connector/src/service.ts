@@ -3,8 +3,7 @@ import { lstat, mkdir, readFile, readlink, rm, writeFile } from "node:fs/promise
 import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
-import { readConfig, updateConfig } from "./config";
-import { commandWords } from "./planner";
+import { type ConnectSettings, readConfig, updateConfig } from "./config";
 import { VERSION } from "./version";
 import { connectors, processStart } from "./workspace";
 
@@ -73,21 +72,16 @@ export function servicePath(platform: NodeJS.Platform, env: Env, agentDirectory:
 	return [...kept.values()].join(path.delimiter);
 }
 
-/** What the service runs: the installed chopin, connecting a checkout with an agent command. */
+/** What the service runs: the installed chopin, with the state directory holding its settings. */
 export type ServiceProgram = {
 	/** The absolute path of the installed chopin. */
 	executable: string;
-	/** The checkout's absolute root. */
-	checkout: string;
-	/** The agent's ACP command, as `connect` takes it after `--`. */
-	command: string[];
-	/** The state directory, passed as `--base-dir`; machine.json, locks and the log live there. */
+	/** The state directory, passed as `--base-dir`; config.json, machine.json and the log live there. */
 	directory: string;
-	/** Documents whose Planner backend the service runs, each passed as `--planner`. */
-	planners?: string[];
-	/** The Planner backend's command line, passed unchanged as `--planner-command`. */
-	plannerCommand?: string;
 };
+
+export const CONNECT_FIRST = "Run chopin connect once in your checkout first (it saves what the "
+	+ "service runs), then chopin service install.";
 
 export const UNIT = "chopin.service";
 export const LABEL = "com.github.chopin";
@@ -107,28 +101,11 @@ export function logPath(platform: NodeJS.Platform, directory: string) {
 }
 
 /**
- * `chopin connect`'s arguments under the service; `--service` marks its lock as the service's.
- * Planner documents and command pass through as given; neither holds a credential, which each
- * backend gets afresh from Chopin when it starts.
+ * `chopin connect`'s arguments under the service. `--service` runs what `chopin connect` saved in
+ * config.json and marks its lock as the service's.
  */
 export function serviceArguments(program: ServiceProgram) {
-	let planners = program.planners?.length && program.plannerCommand
-		? [
-			...program.planners.flatMap(document => ["--planner", document]),
-			"--planner-command",
-			program.plannerCommand,
-		]
-		: [];
-	return [
-		"connect",
-		program.checkout,
-		"--base-dir",
-		program.directory,
-		"--service",
-		...planners,
-		"--",
-		...program.command,
-	];
+	return ["connect", "--base-dir", program.directory, "--service"];
 }
 
 function control(character: string) {
@@ -149,7 +126,6 @@ export function unsupportedPath(platform: NodeJS.Platform, program: ServiceProgr
 	let path = paths(platform);
 	let named = {
 		"chopin executable": program.executable,
-		checkout: program.checkout,
 		"state directory": program.directory,
 	};
 	for (let [what, value] of Object.entries(named)) {
@@ -165,21 +141,13 @@ export function unsupportedPath(platform: NodeJS.Platform, program: ServiceProgr
 			+ " a backslash. Nothing was installed. Copy chopin to a directory whose path has none,",
 			"then install the service with that copy, for example:",
 			`  sudo install -m 755 ${shellWord(program.executable)} /usr/local/bin/chopin`,
-			"  /usr/local/bin/chopin service install …",
+			"  /usr/local/bin/chopin service install",
 		].join("\n");
 	}
-	if (platform === "win32") {
-		let words = [program.executable, ...serviceArguments(program)];
-		let used = words.find(value => value.includes("%"));
-		if (used !== undefined) {
-			return `Task Scheduler would expand the % in ${JSON.stringify(used)}. Nothing was installed. `
-				+ "Use a checkout, state directory and agent command without %.";
-		}
-		let broken = words.find(hasControl);
-		if (broken !== undefined) {
-			return `The task's command line can't hold the control character in `
-				+ `${JSON.stringify(broken)}. Nothing was installed.`;
-		}
+	let used = Object.values(named).find(value => value.includes("%"));
+	if (platform === "win32" && used !== undefined) {
+		return `Task Scheduler would expand the % in ${JSON.stringify(used)}. Nothing was installed. `
+			+ "Use a chopin path and state directory without %.";
 	}
 	return undefined;
 }
@@ -565,7 +533,7 @@ async function agentPath(host: ServiceHost, command: string[]) {
 	if (!found) {
 		throw new ServiceError(
 			`The agent command ${agent} is not on your PATH. Nothing was installed. `
-				+ "Pass the agent's absolute path after --.",
+				+ "Run chopin connect again with the agent's absolute path after --.",
 		);
 	}
 	// A per-shell directory is often a link into a version manager's stable one.
@@ -574,7 +542,8 @@ async function agentPath(host: ServiceHost, command: string[]) {
 		host,
 		passed,
 		`The agent command ${agent}`,
-		"Install the agent somewhere stable, or pass a stable absolute path to it after --.",
+		"Install the agent somewhere stable, or run chopin connect again with a stable absolute path "
+			+ "to it after --.",
 	);
 	let stable = passed[0]!;
 	let service = servicePath(host.platform, host.env, path.dirname(stable));
@@ -602,8 +571,8 @@ async function agentPath(host: ServiceHost, command: string[]) {
 				`The service would not find ${what} under the PATH it runs with:`,
 				`  ${service}`,
 				"Nothing was installed. That PATH leaves out directories that last only as long as "
-				+ "this login or shell. Install it outside them, or pass the agent's absolute path "
-				+ "after --.",
+				+ "this login or shell. Install it outside them, or run chopin connect again with the "
+				+ "agent's absolute path after --.",
 			].join("\n"),
 		);
 	}
@@ -639,29 +608,16 @@ export type Installed = {
 };
 
 /**
- * Refuses Planner documents without a Planner command or the other way round, a command line
- * `connect` could not split, or a backend the service would not find under its PATH, or find
- * only through a directory gone after a reboot. A relative path resolves in the checkout, where
- * `connect` starts the backend.
+ * Refuses a Planner backend the service would not find under its PATH, or find only through a
+ * directory gone after a reboot. A relative path resolves in the checkout, where `connect`
+ * starts the backend.
  */
-async function checkPlanners(host: ServiceHost, program: ServiceProgram, servicePath: string) {
-	let documents = program.planners ?? [];
-	let line = program.plannerCommand;
-	if (!documents.length && !line) return;
+async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servicePath: string) {
+	let planner = settings.plannerCommand[0];
+	if (!settings.planners.length || !planner) return;
 	let refuse = (why: string) => new ServiceError(`${why} Nothing was installed.`);
-	if (!documents.length || !line) {
-		throw refuse("--planner <document URL> and --planner-command <command> go together.");
-	}
-	let words;
-	try {
-		words = commandWords(line);
-	} catch (error) {
-		throw refuse(error instanceof Error ? error.message : String(error));
-	}
-	let planner = words[0];
-	if (!planner) throw refuse("--planner-command names no command.");
 	let path = paths(host.platform);
-	let named = /[\\/]/.test(planner) ? path.resolve(program.checkout, planner) : planner;
+	let named = /[\\/]/.test(planner) ? path.resolve(settings.checkout, planner) : planner;
 	let which = host.which ?? ((name, PATH) => Bun.which(name, { PATH }));
 	let found = which(named, servicePath);
 	if (!found) {
@@ -679,9 +635,10 @@ async function checkPlanners(host: ServiceHost, program: ServiceProgram, service
 }
 
 /**
- * Install `program` as this user's service and start it, so it starts again by itself. The
- * server and the program go to config.json first, where the service's connect reads the server.
- * A service an older chopin than one already installed is refused without `allowDowngrade`.
+ * Install `program` as this user's service and start it, so it starts again by itself. It runs
+ * what `chopin connect` saved in config.json, checked here first; the server and the program go
+ * to config.json too, where the service's connect reads them. A service an older chopin than one
+ * already installed is refused without `allowDowngrade`.
  */
 export async function installService(
 	host: ServiceHost,
@@ -690,23 +647,23 @@ export async function installService(
 ): Promise<Installed> {
 	let manager = serviceManager(host.platform);
 	let version = options.version ?? VERSION;
-	let resolved = await agentPath(host, program.command);
+	let config = await readConfig(program.directory);
+	let settings = config.connect;
+	if (!settings) throw new ServiceError(CONNECT_FIRST);
+	let resolved = await agentPath(host, settings.command);
 	let path = resolved.path;
-	// The service names the agent by its stable path, not one through a shell's own links.
-	program = { ...program, command: [resolved.agent, ...program.command.slice(1)] };
+	// The service runs the agent by its stable path, not one through a shell's own links.
+	settings = { ...settings, command: [resolved.agent, ...settings.command.slice(1)] };
 	let unusable = unsupportedPath(host.platform, program);
 	if (unusable) throw new ServiceError(unusable);
-	await checkPlanners(host, program, path);
-	if (
-		manager === "launchd"
-		&& [path, ...serviceArguments(program)].some(hasControl)
-	) {
+	await checkPlanners(host, settings, path);
+	if (manager === "launchd" && hasControl(path)) {
 		throw new ServiceError(
-			"The agent command, Planner arguments or PATH holds a control character, which a "
-				+ "LaunchAgent cannot hold. Nothing was installed.",
+			"The PATH holds a control character, which a LaunchAgent cannot hold. Nothing was "
+				+ "installed.",
 		);
 	}
-	let previous = (await readConfig(program.directory)).service?.version;
+	let previous = config.service?.version;
 	if (
 		!options.allowDowngrade && previous && release(previous) && release(version)
 		&& Bun.semver.order(previous, version) > 0 && await installed(host)
@@ -722,6 +679,7 @@ export async function installService(
 	let record = () =>
 		updateConfig(program.directory, value => {
 			value.server = options.server;
+			value.connect = settings;
 			value.service = { ...program, version, installedAt: Date.now() };
 		});
 	let notes: string[] = [];
@@ -793,8 +751,7 @@ export async function installService(
 		if (action.execute.length + 1 + action.argument.length > CMD_LIMIT) {
 			throw new ServiceError(
 				`The task's command line, with the PATH it sets, would be longer than the ${CMD_LIMIT} `
-					+ "characters cmd runs. Nothing was installed. Shorten your PATH, the checkout path "
-					+ "or the agent command.",
+					+ "characters cmd runs. Nothing was installed. Shorten your PATH.",
 			);
 		}
 		let before = await taskState(host);
@@ -1153,13 +1110,11 @@ export async function uninstallService(host: ServiceHost, directory: string) {
 /** The chopin and base dir an installed service definition runs. */
 export type InstalledRun = { executable: string; directory: string };
 
-/** Reads `<chopin> connect <checkout> --base-dir <dir> …` back from a definition's words. */
+/** Reads `<chopin> connect --base-dir <dir> --service` back from a definition's words. */
 function runOf(words: string[]): InstalledRun | undefined {
-	let end = words.indexOf("--");
-	let options = end < 0 ? words : words.slice(0, end);
-	let at = options.indexOf("--base-dir");
+	let at = words.indexOf("--base-dir");
 	let [executable, verb] = words;
-	let directory = at < 0 ? undefined : options[at + 1];
+	let directory = at < 0 ? undefined : words[at + 1];
 	return executable && verb === "connect" && directory ? { executable, directory } : undefined;
 }
 

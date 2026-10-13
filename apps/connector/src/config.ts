@@ -9,13 +9,25 @@ export type InstalledService = ServiceProgram & {
 	installedAt: number;
 };
 
+/** What `chopin connect` last ran here, which `chopin connect --service` runs. */
+export type ConnectSettings = {
+	/** The checkout's absolute root. */
+	checkout: string;
+	/** The agent's ACP command, as `connect` takes it after `--`. */
+	command: string[];
+	/** Documents whose Planner backend connect runs, and the backend's command words. */
+	planners: string[];
+	plannerCommand: string[];
+};
+
 /**
- * config.json in the state directory: what `chopin service install` stored. It holds no secret;
- * the machine token stays in machine.json.
+ * config.json in the state directory: what `chopin connect` and `chopin service install` stored.
+ * It holds no secret; the machine token stays in machine.json.
  */
 export type Config = {
 	/** The Chopin origin commands use when CHOPIN_URL is unset. */
 	server?: string;
+	connect?: ConnectSettings;
 	service?: InstalledService;
 };
 

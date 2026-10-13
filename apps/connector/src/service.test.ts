@@ -13,15 +13,13 @@ import {
 	windowsArgument,
 } from "./service";
 
-/** A checkout and agent arguments with spaces, quotes, `%` and `$` in them. */
+/** The chopin and base dir the service runs; neither names a checkout, agent or Planner. */
 const PROGRAM = {
-	executable: "/home/ada/.local/bin/chopin",
-	checkout: '/home/ada/My "Projects"/it\'s 100%',
-	command: ["copilot", "--acp", "--model=$MODEL", "a b"],
-	directory: "/home/ada/.local/state/chopin/connector",
+	executable: "/home/ada/bin $HOME/chopin",
+	directory: '/home/ada/My "state"/it\'s 100%',
 };
 
-test("the systemd unit runs connect with every word quoted and no secret in it", () => {
+test("the systemd unit runs connect --service with every word quoted and no secret in it", () => {
 	let unit = systemdUnit(PROGRAM, "/opt/agent/bin:/usr/bin");
 	expect(unit).toBe([
 		"[Unit]",
@@ -31,18 +29,16 @@ test("the systemd unit runs connect with every word quoted and no secret in it",
 		"",
 		"[Service]",
 		"Type=simple",
-		'ExecStart="/home/ada/.local/bin/chopin" "connect" '
-		+ '"/home/ada/My \\"Projects\\"/it\'s 100%%" "--base-dir" '
-		+ '"/home/ada/.local/state/chopin/connector" "--service" "--" "copilot" "--acp" '
-		+ '"--model=$$MODEL" "a b"',
+		'ExecStart="/home/ada/bin $HOME/chopin" "connect" "--base-dir" '
+		+ '"/home/ada/My \\"state\\"/it\'s 100%%" "--service"',
 		"WorkingDirectory=~",
 		'Environment="PATH=/opt/agent/bin:/usr/bin"',
 		"Restart=always",
 		"RestartSec=5",
 		"KillMode=mixed",
 		"TimeoutStopSec=90",
-		"StandardOutput=append:/home/ada/.local/state/chopin/connector/chopin.log",
-		"StandardError=append:/home/ada/.local/state/chopin/connector/chopin.log",
+		'StandardOutput=append:/home/ada/My "state"/it\'s 100%%/chopin.log',
+		'StandardError=append:/home/ada/My "state"/it\'s 100%%/chopin.log',
 		"",
 		"[Install]",
 		"WantedBy=default.target",
@@ -53,72 +49,6 @@ test("the systemd unit runs connect with every word quoted and no secret in it",
 	expect(systemdQuote("/opt/$HOME", "executable")).toBe('"/opt/$HOME"');
 });
 
-test("a service with Planner backends passes each document and the Planner command to connect", () => {
-	let program = {
-		...PROGRAM,
-		planners: ["https://chopin.example/d/one", "https://chopin.example/d/two?x=$y&z=100%"],
-		plannerCommand: `planner --label="two words" 'it''s' $HOME`,
-	};
-	let words = [
-		"connect",
-		program.checkout,
-		"--base-dir",
-		program.directory,
-		"--service",
-		"--planner",
-		program.planners[0]!,
-		"--planner",
-		program.planners[1]!,
-		"--planner-command",
-		program.plannerCommand,
-		"--",
-		...program.command,
-	];
-	let unit = systemdUnit(program, "/usr/bin");
-	expect(unit).toContain(
-		'"--service" "--planner" "https://chopin.example/d/one" "--planner" '
-			+ '"https://chopin.example/d/two?x=$$y&z=100%%" "--planner-command" '
-			+ '"planner --label=\\"two words\\" \'it\'\'s\' $$HOME" "--" "copilot"',
-	);
-	let plist = launchdPlist(program, "/home/ada", "/usr/bin");
-	expect([...plist.matchAll(/\t\t<string>(.*)<\/string>/g)].map(match => match[1])).toEqual(
-		[program.executable, ...words].map(word =>
-			word.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("'", "&apos;")
-		).concat("/usr/bin"),
-	);
-	let windows = {
-		...program,
-		executable: "C:\\chopin\\chopin.exe",
-		checkout: "C:\\src\\score",
-		command: ["C:\\Tools\\agent.exe"],
-		directory: "C:\\state",
-		planners: ["https://chopin.example/d/one?a=1&b=2"],
-		plannerCommand: 'planner --label="two words" ^x',
-	};
-	let action = taskAction(windows, "C:\\Tools", "C:\\Windows\\System32\\cmd.exe");
-	expect(argv(cmdParse(action.argument).line.split(/ && (?=")/)[1]!)).toEqual([
-		windows.executable,
-		"connect",
-		windows.checkout,
-		"--base-dir",
-		windows.directory,
-		"--service",
-		"--planner",
-		windows.planners[0]!,
-		"--planner-command",
-		windows.plannerCommand,
-		"--",
-		...windows.command,
-	]);
-	// The service still reads its chopin and base dir back, and holds no credential.
-	let run = { executable: program.executable, directory: program.directory };
-	expect(parseUnitRun(unit)).toEqual(run);
-	expect(parsePlistRun(plist)).toEqual(run);
-	for (let definition of [unit, plist, action.argument]) {
-		expect(definition).not.toMatch(/chopin_m_|TOKEN/);
-	}
-});
-
 test("an executable path systemd cannot run is refused with a way around it", () => {
 	for (let executable of ["/home/o'neil/bin/chopin", '/opt/"x"/chopin', "/opt/a\\b/chopin"]) {
 		let problem = unsupportedPath("linux", { ...PROGRAM, executable });
@@ -126,14 +56,14 @@ test("an executable path systemd cannot run is refused with a way around it", ()
 		expect(problem).toContain("install -m 755");
 	}
 	expect(unsupportedPath("linux", { ...PROGRAM, executable: "chopin" })).toContain("absolute");
-	expect(unsupportedPath("linux", { ...PROGRAM, checkout: "/a\nb" })).toContain(
+	expect(unsupportedPath("linux", { ...PROGRAM, directory: "/a\nb" })).toContain(
 		"control character",
 	);
 	expect(unsupportedPath("linux", PROGRAM)).toBeUndefined();
 });
 
 test("the LaunchAgent escapes each argument for XML and keeps the agent running", () => {
-	let plist = launchdPlist({ ...PROGRAM, command: ["agent", "<&'\">"] }, "/home/ada", "/x:/y");
+	let plist = launchdPlist({ ...PROGRAM, executable: "/opt/<&'\">/chopin" }, "/home/ada", "/x:/y");
 	expect(plist).toBe([
 		'<?xml version="1.0" encoding="UTF-8"?>',
 		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
@@ -144,15 +74,11 @@ test("the LaunchAgent escapes each argument for XML and keeps the agent running"
 		"\t<string>com.github.chopin</string>",
 		"\t<key>ProgramArguments</key>",
 		"\t<array>",
-		"\t\t<string>/home/ada/.local/bin/chopin</string>",
+		"\t\t<string>/opt/&lt;&amp;&apos;&quot;&gt;/chopin</string>",
 		"\t\t<string>connect</string>",
-		"\t\t<string>/home/ada/My &quot;Projects&quot;/it&apos;s 100%</string>",
 		"\t\t<string>--base-dir</string>",
-		"\t\t<string>/home/ada/.local/state/chopin/connector</string>",
+		"\t\t<string>/home/ada/My &quot;state&quot;/it&apos;s 100%</string>",
 		"\t\t<string>--service</string>",
-		"\t\t<string>--</string>",
-		"\t\t<string>agent</string>",
-		"\t\t<string>&lt;&amp;&apos;&quot;&gt;</string>",
 		"\t</array>",
 		"\t<key>WorkingDirectory</key>",
 		"\t<string>/home/ada</string>",
@@ -172,9 +98,9 @@ test("the LaunchAgent escapes each argument for XML and keeps the agent running"
 		"\t<key>ProcessType</key>",
 		"\t<string>Interactive</string>",
 		"\t<key>StandardOutPath</key>",
-		"\t<string>/home/ada/.local/state/chopin/connector/chopin.log</string>",
+		"\t<string>/home/ada/My &quot;state&quot;/it&apos;s 100%/chopin.log</string>",
 		"\t<key>StandardErrorPath</key>",
-		"\t<string>/home/ada/.local/state/chopin/connector/chopin.log</string>",
+		"\t<string>/home/ada/My &quot;state&quot;/it&apos;s 100%/chopin.log</string>",
 		"</dict>",
 		"</plist>",
 		"",
@@ -241,10 +167,8 @@ function argv(line: string) {
 
 test("the scheduled task runs chopin through cmd with the service PATH set", () => {
 	let program = {
-		executable: "C:\\Users\\O'Neil\\AppData\\Local\\chopin\\bin\\chopin.exe",
-		checkout: "C:\\Users\\O'Neil\\R&D (old)\\score^1",
-		command: ["C:\\Tools\\copilot.exe", "--acp", '--note=say "hi" & <bye>|^', "a\\"],
-		directory: "C:\\Users\\O'Neil\\.chopin\\",
+		executable: "C:\\Users\\O'Neil\\AppData\\Local\\chopin (x86)\\bin\\chopin.exe",
+		directory: "C:\\Users\\O'Neil\\R&D(old)^1\\.chopin\\",
 	};
 	let path = "C:\\Tools;C:\\Program Files (x86)\\R&D\\bin";
 	let action = taskAction(program, path, "C:\\Windows\\System32\\cmd.exe");
@@ -257,12 +181,9 @@ test("the scheduled task runs chopin through cmd with the service PATH set", () 
 	expect(argv(run!)).toEqual([
 		program.executable,
 		"connect",
-		program.checkout,
 		"--base-dir",
 		program.directory,
 		"--service",
-		"--",
-		...program.command,
 	]);
 
 	let script = scheduledTaskScript(action, "C:\\Users\\O'Neil", "chopin-O~0027Neil");
@@ -361,8 +282,6 @@ test("each definition gives back the chopin and base dir it was written with", (
 	expect(parsePlistRun(launchdPlist(posix, "/home/ada", "/usr/bin"))).toEqual(run);
 	let windows = {
 		executable: "C:\\Program Files (x86)\\chopin\\chopin.exe",
-		checkout: "C:\\src\\R&D (old)",
-		command: ["C:\\Tools\\agent.exe", 'say "hi" & ^bye'],
 		directory: "C:\\Users\\Ada\\R&D ^x\\state\\",
 	};
 	let action = taskAction(windows, "C:\\Tools", "C:\\Windows\\System32\\cmd.exe");
@@ -374,7 +293,7 @@ test("each definition gives back the chopin and base dir it was written with", (
 	expect(
 		parseTaskRun(
 			"C:\\chopin\\chopin.exe",
-			'connect "C:\\a b" --base-dir "C:\\st ate\\\\" --service -- agent',
+			'connect --base-dir "C:\\st ate\\\\" --service',
 		),
 	).toEqual({ executable: "C:\\chopin\\chopin.exe", directory: "C:\\st ate\\" });
 	expect(parseUnitRun("[Service]\nExecStart=/bin/true\n")).toBeUndefined();

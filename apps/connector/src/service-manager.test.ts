@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readConfig, updateConfig } from "./config";
+import { type ConnectSettings, readConfig, updateConfig } from "./config";
 import {
 	installService,
 	launchdPlist,
@@ -29,7 +29,17 @@ afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 const SERVER = "https://chopin.example";
 
-/** A home with an agent on PATH, and a host whose runner answers from `answer`, else succeeds. */
+/** Saves what `chopin connect` ran, as it does when it starts. */
+function connected(directory: string, settings: ConnectSettings) {
+	return updateConfig(directory, value => {
+		value.connect = settings;
+	});
+}
+
+/**
+ * A home with an agent on PATH, where `chopin connect` ran the agent once, and a host whose
+ * runner answers from `answer`, else succeeds.
+ */
 async function machine(
 	platform: NodeJS.Platform = "linux",
 	answer: (line: string) => Partial<Outcome> | undefined = () => undefined,
@@ -53,13 +63,15 @@ async function machine(
 		},
 		sleep: async () => {},
 	};
-	let program = {
-		executable: "/opt/chopin/bin/chopin",
+	let program = { executable: "/opt/chopin/bin/chopin", directory };
+	let settings: ConnectSettings = {
 		checkout: join(home, "checkout"),
 		command: ["agent", "--acp"],
-		directory,
+		planners: [],
+		plannerCommand: [],
 	};
-	return { home, directory, bin, calls, host, program };
+	await connected(directory, settings);
+	return { home, directory, bin, calls, host, program, settings };
 }
 
 function unitPath(home: string) {
@@ -74,7 +86,7 @@ function systemd(line: string): Partial<Outcome> | undefined {
 }
 
 test("on Linux, install enables linger, writes the unit and enables it", async () => {
-	let { home, directory, bin, calls, host, program } = await machine("linux", systemd);
+	let { home, directory, bin, calls, host, program, settings } = await machine("linux", systemd);
 	let installed = await installService(host, program, { server: SERVER, version: "0.0.2" });
 	expect(calls).toEqual([
 		"systemctl --user show --property=Version",
@@ -86,13 +98,32 @@ test("on Linux, install enables linger, writes the unit and enables it", async (
 	]);
 	expect(installed).toMatchObject({ manager: "systemd", definition: unitPath(home) });
 	let unit = await readFile(unitPath(home), "utf8");
-	// The unit names the agent by its absolute path, as the service's PATH resolves it.
-	let agent = { ...program, command: [join(await realpath(bin), "agent"), "--acp"] };
-	expect(unit).toBe(systemdUnit(agent, `${await realpath(bin)}:/usr/bin:/bin`));
+	// The unit runs what connect saved, so it names no checkout, agent or Planner.
+	expect(unit).toContain(
+		`ExecStart="/opt/chopin/bin/chopin" "connect" "--base-dir" "${directory}" "--service"\n`,
+	);
+	expect(unit).toBe(systemdUnit(program, `${await realpath(bin)}:/usr/bin:/bin`));
+	// The service runs the agent by its absolute path, as the service's PATH resolves it.
 	expect(await readConfig(directory)).toEqual({
 		server: SERVER,
-		service: { ...agent, version: "0.0.2", installedAt: expect.any(Number) },
+		connect: { ...settings, command: [join(await realpath(bin), "agent"), "--acp"] },
+		service: { ...program, version: "0.0.2", installedAt: expect.any(Number) },
 	});
+});
+
+test("install refuses until chopin connect has saved what the service runs", async () => {
+	let { home, directory, calls, host, program } = await machine("linux", systemd);
+	await updateConfig(directory, value => {
+		delete value.connect;
+	});
+	let error = await installService(host, program, { server: SERVER }).catch(error => error);
+	expect(error.message).toBe(
+		"Run chopin connect once in your checkout first (it saves what the service runs), then "
+			+ "chopin service install.",
+	);
+	expect(calls).toEqual([]);
+	expect(existsSync(unitPath(home))).toBe(false);
+	expect(await readConfig(directory)).toEqual({});
 });
 
 test("on Linux, install stops with the one sudo command when linger needs an administrator", async () => {
@@ -109,51 +140,39 @@ test("on Linux, install stops with the one sudo command when linger needs an adm
 	expect(error.message).toContain("Nothing was installed.");
 	expect(error.message).toContain('\n  sudo loginctl enable-linger "$(id -un)"\n');
 	expect(existsSync(unitPath(home))).toBe(false);
-	expect(await readConfig(directory)).toEqual({});
+	expect((await readConfig(directory)).service).toBeUndefined();
 	expect(calls.some(line => line.includes("enable --now"))).toBe(false);
 });
 
-test("install stores the Planner documents and command, and runs them; one it can't find is refused", async () => {
-	let { home, directory, bin, host, program } = await machine("linux", systemd);
+test("install checks the saved Planner command under the service PATH; one it can't find is refused", async () => {
+	let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
 	await writeFile(join(bin, "planner"), "#!/bin/sh\n", { mode: 0o755 });
 	let planned = {
-		...program,
+		...settings,
 		planners: ["https://chopin.example/d/one", "https://chopin.example/d/two"],
-		plannerCommand: `planner --label="two words"`,
+		plannerCommand: ["planner", "--label=two words"],
 	};
-	await installService(host, planned, { server: SERVER });
-	let unit = await readFile(unitPath(home), "utf8");
-	expect(unit).toContain(
-		'"--planner" "https://chopin.example/d/one" "--planner" "https://chopin.example/d/two" '
-			+ '"--planner-command" "planner --label=\\"two words\\"" "--"',
-	);
-	expect((await readConfig(directory)).service).toMatchObject({
+	await connected(directory, planned);
+	await installService(host, program, { server: SERVER });
+	expect(await readFile(unitPath(home), "utf8")).not.toContain("planner");
+	expect((await readConfig(directory)).connect).toMatchObject({
 		planners: planned.planners,
 		plannerCommand: planned.plannerCommand,
 	});
 
 	let refused = await machine("linux", systemd);
-	for (let plannerCommand of ["no-such-planner --x", "planner 'unmatched"]) {
-		refused.host.env = { PATH: `${bin}:/usr/bin` };
-		let error = await installService(refused.host, {
-			...planned,
-			...refused.program,
-			planners: planned.planners,
-			plannerCommand,
-		}, {
-			server: SERVER,
-		}).catch(error => error);
-		expect(error.message).toContain("Nothing was installed.");
-		expect(error.message).toContain(
-			plannerCommand.startsWith("no-such") ? "no-such-planner" : "unmatched single quote",
-		);
-		expect(existsSync(unitPath(refused.home))).toBe(false);
-		expect(refused.calls).toEqual([]);
-	}
+	refused.host.env = { PATH: `${bin}:/usr/bin` };
+	await connected(refused.directory, { ...planned, plannerCommand: ["no-such-planner", "--x"] });
+	let error = await installService(refused.host, refused.program, { server: SERVER })
+		.catch(error => error);
+	expect(error.message).toContain("Nothing was installed.");
+	expect(error.message).toContain("no-such-planner");
+	expect(existsSync(unitPath(refused.home))).toBe(false);
+	expect(refused.calls).toEqual([]);
 });
 
 test("the service PATH skips a shell's fnm directory, and an agent it can't find is refused", async () => {
-	let { home, bin, host, program } = await machine("linux", systemd);
+	let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
 	// fnm links each shell's node directory into $XDG_RUNTIME_DIR, which a reboot empties.
 	let stable = join(home, "fnm", "node-versions", "v22", "installation", "bin");
 	let shell = join(home, "run", "fnm_multishells", "4242_1700000000000");
@@ -163,7 +182,8 @@ test("the service PATH skips a shell's fnm directory, and an agent it can't find
 	await writeFile(join(stable, "copilot"), "#!/usr/bin/env node\n", { mode: 0o755 });
 	await writeFile(join(stable, "node"), "#!/bin/sh\n", { mode: 0o755 });
 	host.env = { XDG_RUNTIME_DIR: join(home, "run"), PATH: `${join(shell, "bin")}:${bin}:/usr/bin` };
-	await installService(host, { ...program, command: ["copilot", "--acp"] }, { server: SERVER });
+	await connected(directory, { ...settings, command: ["copilot", "--acp"] });
+	await installService(host, program, { server: SERVER });
 	let unit = await readFile(unitPath(home), "utf8");
 	expect(unit).toContain(`Environment="PATH=${await realpath(stable)}:${bin}:/usr/bin"`);
 	expect(unit).not.toContain("fnm_multishells");
@@ -175,7 +195,8 @@ test("the service PATH skips a shell's fnm directory, and an agent it can't find
 	let refused = await machine("linux", systemd);
 	for (let command of [["runtime-agent"], ["no-such-agent"]]) {
 		refused.host.env = { PATH: `${bin}:/usr/bin` };
-		let error = await installService(refused.host, { ...refused.program, command }, {
+		await connected(refused.directory, { ...refused.settings, command });
+		let error = await installService(refused.host, refused.program, {
 			server: SERVER,
 		}).catch(error => error);
 		expect(error.message).toContain("Nothing was installed.");
@@ -188,7 +209,7 @@ test("the service PATH skips a shell's fnm directory, and an agent it can't find
 });
 
 test("an agent reached through a runtime directory runs from its stable path after a reboot", async () => {
-	let { home, directory, host, program } = await machine("linux", systemd);
+	let { home, directory, host, program, settings } = await machine("linux", systemd);
 	let run = join(home, "run");
 	let stable = join(home, "fnm", "node-versions", "v22", "installation");
 	let shell = join(run, "fnm_multishells", "4242_1700000000000");
@@ -198,21 +219,20 @@ test("an agent reached through a runtime directory runs from its stable path aft
 	await writeFile(join(stable, "bin", "agent"), "#!/bin/sh\n", { mode: 0o755 });
 	host.env = { XDG_RUNTIME_DIR: run, PATH: "/usr/bin:/bin" };
 	// The agent's absolute path, as this shell sees it, goes through the shell's link.
-	await installService(host, { ...program, command: [join(shell, "bin", "agent"), "--acp"] }, {
-		server: SERVER,
-	});
+	await connected(directory, { ...settings, command: [join(shell, "bin", "agent"), "--acp"] });
+	await installService(host, program, { server: SERVER });
 	let real = await realpath(join(stable, "bin"));
-	let installed = { ...program, command: [join(real, "agent"), "--acp"] };
 	let unit = await readFile(unitPath(home), "utf8");
-	expect(unit).toBe(systemdUnit(installed, `${real}:/usr/bin:/bin`));
-	expect((await readConfig(directory)).service).toMatchObject({ command: installed.command });
-	// A reboot empties the runtime directory; the agent the unit names is still there.
+	expect(unit).toBe(systemdUnit(program, `${real}:/usr/bin:/bin`));
+	let command = (await readConfig(directory)).connect?.command;
+	expect(command).toEqual([join(real, "agent"), "--acp"]);
+	// A reboot empties the runtime directory; the agent the service runs is still there.
 	await rm(run, { recursive: true });
-	expect(existsSync(installed.command[0]!)).toBe(true);
+	expect(existsSync(command![0]!)).toBe(true);
 });
 
 test("an agent, interpreter or git that lives under a runtime directory is refused", async () => {
-	let { home, bin, host, program } = await machine("linux", systemd);
+	let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
 	let run = join(home, "run");
 	let ephemeral = join(run, "tools");
 	await mkdir(ephemeral, { recursive: true });
@@ -233,7 +253,8 @@ test("an agent, interpreter or git that lives under a runtime directory is refus
 	];
 	for (let { command, path, named } of cases) {
 		host.env = { XDG_RUNTIME_DIR: run, PATH: path };
-		let error = await installService(host, { ...program, command }, { server: SERVER })
+		await connected(directory, { ...settings, command });
+		let error = await installService(host, program, { server: SERVER })
 			.catch(error => error);
 		expect(error).toBeInstanceOf(Error);
 		expect(error.message).toContain(join(await realpath(ephemeral), named));
@@ -269,7 +290,7 @@ test("an agent that links through a runtime directory's link to a stable one is 
 });
 
 test("a version manager's shim is installed by its own name, so it still dispatches on it", async () => {
-	let { home, host, program } = await machine("linux", systemd);
+	let { home, directory, host, program } = await machine("linux", systemd);
 	let mise = join(home, "mise");
 	await mkdir(join(mise, "shims"), { recursive: true });
 	await mkdir(join(mise, "bin"));
@@ -279,7 +300,7 @@ test("a version manager's shim is installed by its own name, so it still dispatc
 	host.env = { PATH: `${join(home, "shims")}:/usr/bin:/bin` };
 	await installService(host, program, { server: SERVER });
 	let shim = join(await realpath(join(mise, "shims")), "agent");
-	expect(await readFile(unitPath(home), "utf8")).toContain(`"${shim}" "--acp"`);
+	expect((await readConfig(directory)).connect?.command).toEqual([shim, "--acp"]);
 });
 
 test("on macOS, install writes the LaunchAgent and bootstraps it into the login session", async () => {
@@ -294,11 +315,7 @@ test("on macOS, install writes the LaunchAgent and bootstraps it into the login 
 	let plist = join(home, "Library", "LaunchAgents", "com.github.chopin.plist");
 	expect(installed.definition).toBe(plist);
 	expect(await readFile(plist, "utf8")).toBe(
-		launchdPlist(
-			{ ...program, command: [join(await realpath(bin), "agent"), "--acp"] },
-			home,
-			`${await realpath(bin)}:/usr/bin:/bin`,
-		),
+		launchdPlist(program, home, `${await realpath(bin)}:/usr/bin:/bin`),
 	);
 	expect(calls).toEqual([
 		"launchctl print gui/501/com.github.chopin",
@@ -330,11 +347,7 @@ test("on Windows, install registers this account's task at logon and says it nee
 	expect(calls).toHaveLength(2);
 	expect(calls[0]).toStartWith(`${POWERSHELL}$task = Get-ScheduledTask -TaskName 'chopin-ada'`);
 	// The task runs chopin with the PATH install checked the agent and git under.
-	let action = taskAction(
-		{ ...program, command: ["C:\\Tools\\agent.exe", "--acp"] },
-		"C:\\Tools;C:\\Git\\cmd",
-		"C:\\Windows\\System32\\cmd.exe",
-	);
+	let action = taskAction(program, "C:\\Tools;C:\\Git\\cmd", "C:\\Windows\\System32\\cmd.exe");
 	expect(action.argument).toContain('set "PATH=C:\\Tools;C:\\Git\\cmd" && ');
 	expect(calls[1]).toBe(POWERSHELL + scheduledTaskScript(action, host.home, "chopin-ada"));
 });
@@ -376,7 +389,7 @@ test("service status reads each manager's answer, and a connector older than the
 		lock,
 		JSON.stringify({
 			pid: process.pid,
-			root: linux.program.checkout,
+			root: linux.settings.checkout,
 			version: "0.0.2",
 			service: true,
 		}),
@@ -413,7 +426,7 @@ test("service status reads each manager's answer, and a connector older than the
 });
 
 test("uninstall stops and removes the service and leaves the pairing, config and runs", async () => {
-	let { home, directory, calls, host, program } = await machine("linux", systemd);
+	let { home, directory, calls, host, program, settings } = await machine("linux", systemd);
 	await installService(host, program, { server: SERVER });
 	let machineFile = join(directory, "machine.json");
 	await writeFile(machineFile, '{"servers":{}}\n');
@@ -428,7 +441,7 @@ test("uninstall stops and removes the service and leaves the pairing, config and
 	expect(existsSync(unitPath(home))).toBe(false);
 	expect(existsSync(machineFile)).toBe(true);
 	expect(existsSync(join(directory, "runs", "run-1"))).toBe(true);
-	expect((await readConfig(directory)).service).toMatchObject({ checkout: program.checkout });
+	expect((await readConfig(directory)).connect).toMatchObject({ checkout: settings.checkout });
 	expect((await uninstallService(host, directory)).removed).toBe(false);
 });
 
@@ -483,23 +496,21 @@ test("on Windows, restart asks the service's connector to stop before Task Sched
 });
 
 test("install refuses to replace a service a newer chopin installed, unless allowed", async () => {
-	let { home, directory, host, program } = await machine("linux", systemd);
+	let { directory, host, program } = await machine("linux", systemd);
 	await installService(host, program, { server: SERVER, version: "0.0.3" });
-	let error = await installService(host, { ...program, command: ["agent"] }, {
+	let error = await installService(host, program, {
 		server: SERVER,
 		version: "0.0.2",
 	}).catch(error => error);
 	expect(error.message).toContain("set up by chopin 0.0.3, which is newer than this chopin 0.0.2");
 	expect(error.message).toContain("--allow-downgrade");
 	expect((await readConfig(directory)).service).toMatchObject({ version: "0.0.3" });
-	expect(await readFile(unitPath(home), "utf8")).toContain('"--acp"');
-	await installService(host, { ...program, command: ["agent"] }, {
+	await installService(host, program, {
 		server: SERVER,
 		version: "0.0.2",
 		allowDowngrade: true,
 	});
 	expect((await readConfig(directory)).service).toMatchObject({ version: "0.0.2" });
-	expect(await readFile(unitPath(home), "utf8")).not.toContain('"--acp"');
 });
 
 test("after an update, a running service on the updated chopin restarts, and nothing else does", async () => {
@@ -570,14 +581,11 @@ test("after an update, only a service whose definition runs this chopin and base
 		};
 		// One service per user: installing from B replaces the one installed from A, whose
 		// config.json still names A's chopin.
+		for (let { directory } of [a, b]) await connected(directory, setup.settings);
 		await installService(host, a, { server: SERVER });
 		await installService(host, b, { server: SERVER });
 		if (windows) {
-			let action = taskAction(
-				{ ...b, command: ["C:\\Tools\\agent.exe", "--acp"] },
-				"C:\\Tools;C:\\Git\\cmd",
-				"C:\\Windows\\System32\\cmd.exe",
-			);
+			let action = taskAction(b, "C:\\Tools;C:\\Git\\cmd", "C:\\Windows\\System32\\cmd.exe");
 			task = { execute: action.execute, arguments: action.argument };
 		}
 		expect((await readConfig(a.directory)).service?.executable).toBe(a.executable);

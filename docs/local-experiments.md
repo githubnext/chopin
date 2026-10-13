@@ -93,6 +93,7 @@ Then, from your project folder:
 export CHOPIN_URL=https://your-chopin-instance.example
 chopin pair --label build-box      # once per machine; optional, connect pairs first if needed
 chopin connect . -- copilot --acp --allow-all
+chopin service install             # optional: run what connect ran as a background service
 ```
 
 Until the first `cli-v*` release is published, those install commands have
@@ -102,7 +103,8 @@ remains the way to connect.
 `chopin pair` pairs this machine and stores its token; `--label` names it in
 Chopin (default: the hostname), and pairing again replaces the token.
 `chopin connect` runs work exactly as `bun connector.js connect` does, pairing
-first only when the machine has no token for that server, and `chopin` uses
+first only when the machine has no token for that server, and saves what it
+runs for `chopin service install`. `chopin` uses
 `https://chopin.githubnext.com` when `CHOPIN_URL` is unset. `chopin unpair`
 revokes the machine in Chopin and deletes its token. Every command takes
 `--base-dir <dir>` (or `CHOPIN_HOME`) for where the token, locks and worktrees
@@ -195,56 +197,60 @@ rely on these keys, which later releases only add to:
 
 ## Run chopin as a service
 
-`chopin service install` runs `chopin connect` as your own background service,
-so the machine keeps serving a checkout after a reboot and without a terminal.
-It takes the same checkout and agent command as `connect`:
+`chopin service install` runs what `chopin connect` last ran as your own
+background service, so the machine keeps serving a checkout after a reboot and
+without a terminal. It takes no checkout, agent or Planner arguments:
 
 ```sh
 export CHOPIN_URL=https://your-chopin-instance.example
-chopin pair --label build-box        # once, at a terminal; the service cannot pair
-chopin service install ~/src/score -- copilot --acp --allow-all
+chopin pair --label build-box             # once, at a terminal; the service cannot pair
+chopin connect . -- copilot --acp --allow-all   # once, in your checkout; Ctrl-C when it connects
+chopin service install
 chopin service status
 ```
 
-Install needs the installed `chopin` binary (not `connector.js`) and a machine
-already paired with the server. It writes `config.json` in the base dir with
-the server, checkout, agent command and the chopin version that installed it.
-The service definition runs the absolute path of that `chopin` as
-`connect <checkout> --base-dir <dir> --service -- <agent>`. The service reads
-the server from `config.json` and the machine token from `machine.json` when it
-starts. No token or other secret is ever written into the unit, plist or task.
-Running `chopin service install` again with no checkout or agent command
-reinstalls with the stored ones; naming them replaces them and restarts the
-service. There is one service per user account, whichever base dir it uses.
+Each time `chopin connect` starts, it saves the checkout's absolute path, the
+agent command and any Planner documents and command to `config.json` in the
+base dir. `config.json` holds no token or other secret. Install needs the
+installed `chopin` binary (not `connector.js`), a machine already paired with
+the server, and those saved settings; without them it stops with "Run chopin
+connect once in your checkout first (it saves what the service runs), then
+chopin service install." It writes the server and the chopin version that
+installed it to `config.json`. The service definition runs the absolute path of
+that `chopin` as `connect --base-dir <dir> --service`, which reads the saved
+settings, the server and the machine token when it starts and runs exactly
+those settings. No token or other secret is ever written into the unit, plist
+or task. There is one service per user account, whichever base dir it uses.
 
-To have the service run Planner backends too, give install the same
-`--planner <document URL>` (repeatable) and `--planner-command <command>` as
-`connect`. Install stores them in `config.json` and the service definition
-passes each document and the command line, unchanged, to `connect`; each
-backend gets its Planner credential from Chopin when it starts, so none is
-written anywhere. Install refuses a Planner command it cannot split, or one the
-service would not find under its PATH (a relative path resolves in the
-checkout). A later install with neither Planner option and no agent command
-keeps the stored ones; one with a new agent command but no Planner options
-runs no Planner backends.
+To change what the service runs, run `chopin connect` again with the new
+checkout, agent or Planner arguments, then `chopin service restart`. While the
+service runs that checkout, `chopin connect` there only saves the new settings,
+says so, and exits without connecting.
 
-Before writing anything, install resolves the agent command to its absolute
-path, with every directory link in it resolved, and the service runs the agent
-by that path. It builds the PATH the service runs with from the agent's
-resolved directory first, then your current PATH without entries that
-disappear on logout or reboot: anything under `$XDG_RUNTIME_DIR` or
-`/run/user/<uid>`, and per-shell version-manager directories such as fnm's
+A service runs Planner backends when `chopin connect` ran them with
+`--planner <document URL>` and `--planner-command <command>`; each backend gets
+its Planner credential from Chopin when it starts, so none is written anywhere.
+Install refuses a saved Planner command the service would not find under its
+PATH (a relative path resolves in the checkout).
+
+Before writing anything, install resolves the saved agent command to its
+absolute path, with every directory link in it resolved, and saves the agent
+by that path for the service to run. It builds the PATH the service runs with
+from the agent's resolved directory first, then your current PATH without
+entries that disappear on logout or reboot: anything under `$XDG_RUNTIME_DIR`
+or `/run/user/<uid>`, and per-shell version-manager directories such as fnm's
 `fnm_multishells`. A per-shell directory that links into a stable installation
 is replaced by its target. Install refuses, and writes nothing, when the agent
 command, the interpreter its script names on a `#!/usr/bin/env` line (such as
 `node` or `bun`), or `git` would not resolve under that PATH, or when any of
 them lives in, or links through, one of those directories. Install it somewhere
-stable, or pass a stable absolute path to the agent after `--`.
+stable, or run `chopin connect` again with a stable absolute path to the agent
+after `--`.
 
 Like an interactive connector, the service declines ACP permission prompts,
-because it has no terminal. Pass the agent's own approval flag after `--`, as
-with `--allow-all` above. Its output is appended to `chopin.log` in the base
-dir.
+because it has no terminal. Give `chopin connect` the agent's own approval flag
+after `--`, as with `--allow-all` above. Its output is appended to `chopin.log`
+in the base dir.
 
 `chopin service status` reports `running`, `stopped`, `not-installed` or
 `restart-pending`, with the unit, plist or task path and the log path. The
@@ -311,10 +317,10 @@ written as `~` and four hex digits. Install registers it through
 `powershell.exe -NoProfile -NonInteractive -Command Register-ScheduledTask …`.
 The task starts at logon, restarts a minute after a failure, and has no
 execution time limit. Task Scheduler can't set environment variables, so the
-task runs `cmd.exe /d /v:off /s /c "set "PATH=…" && "<chopin.exe>" connect …"`
-with the PATH install built and checked; cmd, chopin and the agent are named by
-their absolute paths. Entries of your PATH that hold a `%` are left out of it,
-and a `%` anywhere in the command is refused, because cmd and Task Scheduler
+task runs `cmd.exe /d /v:off /s /c "set "PATH=…" && "<chopin.exe>" connect --base-dir <dir> --service"`
+with the PATH install built and checked; cmd and chopin are named by their
+absolute paths. Entries of your PATH that hold a `%` are left out of it, and a
+`%` in the chopin or base dir path is refused, because cmd and Task Scheduler
 would expand it.
 
 The task runs only while you are logged on to Windows. To start it at boot
@@ -353,8 +359,8 @@ Task Scheduler ends the task.
   then run `chopin service restart`.
 - **"The service would not find …".** The agent, its interpreter or `git` only
   resolves from your current shell, for example through a version manager's
-  per-shell directory. Install them where a login shell finds them, or pass the
-  agent's absolute path after `--`.
+  per-shell directory. Install them where a login shell finds them, or run
+  `chopin connect` again with the agent's absolute path after `--`.
 - **"chopin can't reach your systemd user manager".** Run the command in a login
   session as the user who will own the service; `su` or `sudo -u` sessions have
   no user manager.

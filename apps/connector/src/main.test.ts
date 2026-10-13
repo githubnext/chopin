@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,7 +32,11 @@ const MESSAGE = "chopin 0.0.1 speaks connector protocol 0, but this server needs
  * `connect` against a fake Chopin that refuses the connector's version at `refuse`: the pairing
  * request or the first connector call. Records each request with the version headers it carried.
  */
-async function connect(refuse: "pairing" | "connector") {
+async function connect(
+	refuse: "pairing" | "connector",
+	args?: string[],
+	state?: string,
+) {
 	let requests: Array<[string, string | null, string | null]> = [];
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
@@ -64,19 +68,18 @@ async function connect(refuse: "pairing" | "connector") {
 			return new Response(null, { status: 404 });
 		},
 	});
+	let directory = state ?? await mkdtemp(join(scratch, "state-"));
 	let connector = Bun.spawn([
 		process.execPath,
 		"--no-env-file",
 		join(import.meta.dir, "main.ts"),
 		"connect",
-		await checkout(),
-		"--",
-		"agent",
+		...args ?? [await checkout(), "--", "agent"],
 	], {
 		env: {
 			...process.env,
 			CHOPIN_URL: `http://127.0.0.1:${chopin.port}`,
-			CHOPIN_CONNECTOR_STATE_DIR: await mkdtemp(join(scratch, "state-")),
+			CHOPIN_CONNECTOR_STATE_DIR: directory,
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -85,8 +88,10 @@ async function connect(refuse: "pairing" | "connector") {
 		let code = await Promise.race([connector.exited, Bun.sleep(20_000).then(() => "timed out")]);
 		return {
 			code,
+			stdout: await new Response(connector.stdout).text(),
 			stderr: await new Response(connector.stderr).text(),
 			requests,
+			directory,
 		};
 	} finally {
 		connector.kill("SIGKILL");
@@ -114,4 +119,81 @@ test("connect stops without retrying when the connector endpoint refuses its ver
 		["/api/connector/connections", ...headers],
 		["/connector/mcp", ...headers],
 	]);
+});
+
+test("connect saves the checkout, agent and Planner it runs, which connect --service runs", async () => {
+	let root = await checkout();
+	let planner = ["--planner", "https://chopin.example/d/one", "--planner-command", "planner --x"];
+	let started = await connect("pairing", [root, ...planner, "--", "agent", "--acp"]);
+	expect(started.stderr).toBe(`${MESSAGE}\n`);
+	let file = join(started.directory, "config.json");
+	expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
+		connect: {
+			checkout: await realpath(root),
+			command: ["agent", "--acp"],
+			planners: ["https://chopin.example/d/one"],
+			plannerCommand: ["planner", "--x"],
+		},
+	});
+	expect((await stat(file)).mode & 0o777).toBe(0o600);
+
+	// The service has no terminal to pair on, so getting that far shows it read what was saved.
+	let service = await connect("pairing", ["--service"], started.directory);
+	expect(service.stderr).toContain("This machine is not paired with");
+	expect(service.requests).toEqual([]);
+	for (let args of [["--service", root], ["--service", "--", "agent"], ["--service", ...planner]]) {
+		let refused = await connect("pairing", args, started.directory);
+		expect(refused.code).toBe(1);
+		expect(refused.stderr).toContain("connect --service takes no other arguments");
+	}
+});
+
+test("connect --service stops until connect has saved what it runs", async () => {
+	let result = await connect("pairing", ["--service"]);
+	expect(result.code).toBe(1);
+	expect(result.stderr).toBe(
+		"Run chopin connect once in your checkout first (it saves what the service runs), then "
+			+ "chopin service install.\n",
+	);
+	expect(result.requests).toEqual([]);
+});
+
+test("connect on a checkout the running service holds saves its settings for a restart", async () => {
+	let root = await realpath(await checkout());
+	let directory = await mkdtemp(join(scratch, "state-"));
+	let lock = (service: boolean) =>
+		writeFile(
+			join(directory, `${new Bun.CryptoHasher("sha256").update(root).digest("hex")}.lock`),
+			JSON.stringify({ pid: process.pid, root, ...(service ? { service } : {}) }),
+		);
+	// A terminal's connect holds it: refused as before, and nothing is saved.
+	await lock(false);
+	let refused = await connect("pairing", [root, "--", "agent"], directory);
+	expect(refused.code).toBe(1);
+	expect(refused.stderr).toContain("Workspace already locked");
+	expect(await Bun.file(join(directory, "config.json")).exists()).toBe(false);
+
+	await lock(true);
+	let saved = await connect("pairing", [root, "--", "new-agent", "--acp"], directory);
+	expect(saved.code).toBe(0);
+	expect(saved.stdout).toContain(
+		"The chopin service is running this checkout. Saved your settings; run chopin service "
+			+ "restart to use them.",
+	);
+	expect(saved.requests).toEqual([]);
+	expect(JSON.parse(await readFile(join(directory, "config.json"), "utf8")).connect).toEqual({
+		checkout: root,
+		command: ["new-agent", "--acp"],
+		planners: [],
+		plannerCommand: [],
+	});
+	// Arguments connect refuses are never saved.
+	let invalid = await connect(
+		"pairing",
+		[root, "--planner", "https://x/d/1", "--", "a"],
+		directory,
+	);
+	expect(invalid.code).toBe(1);
+	expect(JSON.parse(await readFile(join(directory, "config.json"), "utf8")).connect.command)
+		.toEqual(["new-agent", "--acp"]);
 });

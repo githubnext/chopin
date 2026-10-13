@@ -11,8 +11,9 @@ import { permissionMemory } from "./permission";
 import { commandWords, servePlanners } from "./planner";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
-import { readConfig } from "./config";
+import { readConfig, updateConfig } from "./config";
 import {
+	CONNECT_FIRST,
 	installService,
 	logPath,
 	onStopRequest,
@@ -26,7 +27,7 @@ import {
 import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { lockWorkspace, stateDirectory, workspace } from "./workspace";
+import { connectors, lockWorkspace, stateDirectory, workspace } from "./workspace";
 
 const DEFAULT_URL = "https://chopin.githubnext.com";
 
@@ -155,25 +156,37 @@ async function unpairCommand(args: string[]) {
 }
 
 async function connect(args: string[]) {
-	// `--service` marks the connector the installed service runs.
+	// `--service` marks the connector the installed service runs, which runs what connect saved.
 	let parsed = parseArgs(args, {
 		flags: ["service"],
 		options: ["planner-command"],
 		lists: ["planner"],
 	});
 	let service = parsed.flags.has("service");
-	let command = parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
+	let directory = stateDirectory();
+	let saved = service ? (await readConfig(directory)).connect : undefined;
+	if (
+		service
+		&& (parsed.positional.length || parsed.rest || parsed.lists.size
+			|| parsed.options.has("planner-command"))
+	) {
+		throw new Error(
+			`${SELF} connect --service takes no other arguments; it runs what ${SELF} connect saved.`,
+		);
+	}
+	if (service && !saved) throw new Error(CONNECT_FIRST);
+	let command = saved?.command ?? parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
 	if (
 		!Array.isArray(command) || !command.length
 		|| command.some(item => typeof item !== "string" || !item)
 	) {
 		throw new Error(USAGE);
 	}
-	let plannerDocuments = parsed.lists.get("planner") ?? [];
+	let plannerDocuments = saved?.planners ?? parsed.lists.get("planner") ?? [];
 	let plannerLine = parsed.options.get("planner-command");
-	let plannerCommand = plannerLine === undefined
+	let plannerCommand = saved?.plannerCommand ?? (plannerLine === undefined
 		? JSON.parse(process.env.CHOPIN_PLANNER_COMMAND ?? "[]")
-		: commandWords(plannerLine);
+		: commandWords(plannerLine));
 	if (
 		!Array.isArray(plannerCommand)
 		|| plannerCommand.some(item => typeof item !== "string" || !item)
@@ -183,10 +196,36 @@ async function connect(args: string[]) {
 			`--planner <document URL> and --planner-command <command> go together.\n\n${USAGE}`,
 		);
 	}
-	let directory = stateDirectory();
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = await server();
-	let info = await workspace(resolve(parsed.positional[0] ?? "."));
+	let info = await workspace(resolve(saved?.checkout ?? parsed.positional[0] ?? "."));
+	// The service runs what a terminal's connect saves. A relative agent path would resolve
+	// against the service's own working directory.
+	let agent = command[0]!;
+	let save = () =>
+		updateConfig(directory, value => {
+			value.connect = {
+				checkout: info.root,
+				command: !isAbsolute(agent) && (agent.includes("/") || agent.includes(sep))
+					? [resolve(agent), ...command.slice(1)]
+					: command,
+				planners: plannerDocuments,
+				plannerCommand,
+			};
+		});
+	if (
+		!service
+		&& (await connectors(directory)).some(item =>
+			item.service && item.running && item.root === info.root
+		)
+	) {
+		await save();
+		createOutput().say(
+			"The chopin service is running this checkout. Saved your settings; run chopin service "
+				+ "restart to use them.",
+		);
+		return;
+	}
 	let release = await lockWorkspace(info.root, directory, { service, planners: plannerDocuments });
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
@@ -202,6 +241,7 @@ async function connect(args: string[]) {
 	let output = createOutput();
 	let permissions = permissionMemory();
 	try {
+		if (!service) await save();
 		let { root: _root, ...source } = info;
 		let checkout = { ...source, label: basename(info.root) };
 		for (;;) {
@@ -286,41 +326,27 @@ async function connect(args: string[]) {
 	}
 }
 
-const SERVICE_USAGE = `Usage: ${SELF} service install [checkout] [--allow-downgrade] `
-	+ "[--planner <document URL>]... [--planner-command <command>] "
-	+ `[-- agent [ACP arguments]] | ${SELF} service status | restart | uninstall`;
+const SERVICE_USAGE = `Usage: ${SELF} service install [--allow-downgrade] | `
+	+ `${SELF} service status | restart | uninstall`;
 
 /** `service install|status|restart|uninstall`: run `connect` as this user's background service. */
 async function serviceCommand(args: string[]) {
 	let [action, ...rest] = args;
-	let parsed = parseArgs(
-		rest,
-		action === "install"
-			? { flags: ["allow-downgrade"], options: ["planner-command"], lists: ["planner"] }
-			: {},
-	);
+	let parsed = parseArgs(rest, action === "install" ? { flags: ["allow-downgrade"] } : {});
+	if (parsed.positional.length || parsed.rest) throw new Error(SERVICE_USAGE);
 	let directory = stateDirectory();
 	let host = systemHost();
 	let output = createOutput();
 	let lines = (notes: string[]) => notes.map(note => output.style.dim(`  ${note}`));
 	if (action === "install") {
-		if (parsed.positional.length > 1) throw new Error(SERVICE_USAGE);
 		if (!Bun.isStandaloneExecutable) {
 			throw new ServiceError(
 				"chopin service install needs the installed chopin, not connector.js. Install it with "
 					+ "install.sh or install.ps1 (see docs/local-experiments.md), then run it from there.",
 			);
 		}
-		let stored = (await readConfig(directory)).service;
-		let command = parsed.rest ?? stored?.command;
-		if (!command?.length || command.some(item => !item)) throw new Error(SERVICE_USAGE);
-		// A relative agent path would resolve against the service's own working directory.
-		let agent = command[0]!;
-		if (!isAbsolute(agent) && (agent.includes("/") || agent.includes(sep))) {
-			command = [resolve(agent), ...command.slice(1)];
-		}
-		let checkout = parsed.positional[0] ?? stored?.checkout ?? ".";
-		let { root } = await workspace(resolve(checkout));
+		let saved = (await readConfig(directory)).connect;
+		if (!saved) throw new ServiceError(CONNECT_FIRST);
 		let url = await server();
 		if (!await machineToken(directory, url)) {
 			throw new ServiceError(
@@ -328,35 +354,23 @@ async function serviceCommand(args: string[]) {
 					+ "service.",
 			);
 		}
-		// Planner documents and command given here replace the stored ones. Without them, the
-		// stored ones are kept only while the agent command is too, so an install with a new agent
-		// command describes the whole service, as `connect` would.
-		let given = parsed.lists.has("planner") || parsed.options.has("planner-command");
-		let planners = given
-			? {
-				planners: parsed.lists.get("planner") ?? [],
-				plannerCommand: parsed.options.get("planner-command"),
-			}
-			: parsed.rest
-			? {}
-			: { planners: stored?.planners, plannerCommand: stored?.plannerCommand };
-		let installed = await installService(host, {
-			executable: process.execPath,
-			checkout: root,
-			command,
-			directory,
-			...(planners.planners?.length || planners.plannerCommand ? planners : {}),
-		}, { server: url, allowDowngrade: parsed.flags.has("allow-downgrade") });
+		let installed = await installService(host, { executable: process.execPath, directory }, {
+			server: url,
+			allowDowngrade: parsed.flags.has("allow-downgrade"),
+		});
 		output.say(
 			`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
-				+ `It connects ${root} to ${url}.`,
+				+ `It connects ${saved.checkout} to ${url} as chopin connect last did.`,
+			output.style.dim(
+				"  To change what it runs, run chopin connect again with new arguments, then chopin "
+					+ "service restart.",
+			),
 			output.style.dim(`  Definition: ${installed.definition}`),
 			output.style.dim(`  Log: ${installed.log}`),
 			...lines(installed.notes),
 		);
 		return;
 	}
-	if (parsed.positional.length || parsed.rest) throw new Error(SERVICE_USAGE);
 	if (action === "status") {
 		let status = await serviceStatus(host, directory);
 		output.say(
@@ -395,7 +409,7 @@ const HELP = [
 	"      Revoke this machine's token in Chopin and delete it here.",
 	"  connect [checkout] -- <agent> [ACP arguments]",
 	"      Run the work you start in the checkout's documents with a local ACP agent.",
-	"      Pairs this machine first if it isn't paired yet.",
+	"      Pairs this machine first if it isn't paired yet, and saves what it runs for the service.",
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
@@ -403,13 +417,11 @@ const HELP = [
 	"      Show this chopin's version, the server, whether this machine is paired and Chopin",
 	"      still accepts it, the connectors running here and the Planners they run, the service",
 	"      and the log path.",
-	"  service install [checkout] [--allow-downgrade] [--planner <document URL>]...",
-	"                  [--planner-command <command>] [-- <agent> [ACP arguments]]",
-	"      Run connect as this user's background service (systemd, launchd or Task Scheduler),",
-	"      so it starts again after a reboot. Takes connect's checkout, agent command and Planner",
-	"      options, or reuses the ones stored by the last install; a new agent command without",
-	"      Planner options drops the stored ones. A service a newer chopin installed is kept",
-	"      unless --allow-downgrade.",
+	"  service install [--allow-downgrade]",
+	"      Run what connect last ran as this user's background service (systemd, launchd or Task",
+	"      Scheduler), so it starts again after a reboot. To change what it runs, run connect",
+	"      again with new arguments, then service restart. A service a newer chopin installed is",
+	"      kept unless --allow-downgrade.",
 	"  service status | restart | uninstall",
 	"      Show whether it is running, stopped, restart-pending or not-installed; restart it;",
 	"      or stop and remove it, keeping the pairing, config and runs.",
