@@ -16,18 +16,17 @@ const SECOND_OPTION = "01K0N4W3B7P27CBAEC7A8C8WEC";
 
 const SECOND_WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YK";
 
-// Answered, so they settle as separate lines; adjacent open cards stack into a deck instead.
+// Expired, so each stays a visible card of its own: adjacent open cards stack into a deck, and
+// decided ones without prose draw nothing in the document.
 // The closing prose keeps the injected development sample out of their run.
-const ADJACENT_CARDS = `<Questionnaire id="${WIDGET}" by="ana">
+const ADJACENT_CARDS = `<Questionnaire id="${WIDGET}" by="ana" status="expired">
 <Question id="${QUESTION}" header="Rollout" prompt="How should we deploy?" multiple="false">
 <Option id="${OPTION}" label="Canary" />
-<Answer value="Canary" />
 </Question>
 </Questionnaire>
-<Questionnaire id="${SECOND_WIDGET}" by="ana">
+<Questionnaire id="${SECOND_WIDGET}" by="ana" status="expired">
 <Question id="${SECOND_QUESTION}" header="Scope" prompt="What belongs in the first cut?" multiple="false">
 <Option id="${SECOND_OPTION}" label="Anchors" />
-<Answer value="Anchors" />
 </Question>
 </Questionnaire>
 
