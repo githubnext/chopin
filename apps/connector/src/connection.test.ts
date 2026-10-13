@@ -213,6 +213,36 @@ test("an unreachable Chopin is named by its HTTP status or network error, never 
 	]);
 });
 
+test("a Chopin that never answers times out each attempt so the backoff advances", async () => {
+	// It accepts the connection and then says nothing, as a host lost mid-handshake does.
+	let sockets: Array<{ destroy(): void }> = [];
+	let silent = createServer(socket => sockets.push(socket));
+	await new Promise<void>(resolve => silent.listen(0, "127.0.0.1", resolve));
+	let abort = new AbortController();
+	let { output, text } = terminal();
+	let waits: number[] = [];
+	let started = performance.now();
+	await serveWork({
+		connect: signal => remote(`http://127.0.0.1:${listening(silent)}`, "token", signal),
+		signal: abort.signal,
+		output,
+		connectTimeoutMs: 50,
+		random: () => 0.5,
+		sleep: async ms => {
+			waits.push(ms);
+			if (waits.length === 3) abort.abort();
+		},
+		run: async () => {},
+	});
+	for (let socket of sockets) socket.destroy();
+	silent.close();
+	expect(waits).toEqual([500, 1000, 2000]);
+	expect(text()).toContain("… Can't reach Chopin (no answer within 0.05s).");
+	expect(text()).toContain("Reconnecting in 1s.");
+	expect(text()).toContain("Reconnecting in 2s.");
+	expect(performance.now() - started).toBeLessThan(2000);
+});
+
 test("Ctrl-C while Chopin withholds its handshake exits at once", async () => {
 	let entered = Promise.withResolvers<void>();
 	let server = Bun.serve({

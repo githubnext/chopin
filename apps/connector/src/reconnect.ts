@@ -29,6 +29,9 @@ export function forgottenMessage() {
 	);
 }
 
+/** How long one attempt to connect or register may go unanswered before it counts as failed. */
+export const CONNECT_TIMEOUT_MS = 15_000;
+
 /** A connection up this long has recovered; its next failure starts the backoff over. */
 export const HEALTHY_MS = 60_000;
 

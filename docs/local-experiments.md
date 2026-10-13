@@ -271,7 +271,9 @@ lock identified by the error message.
 A network drop or a server restart does not end the connector. It reconnects
 at once when a working connection fails, then retries after a random delay
 below 1, 2, 4 … seconds, at most 5 minutes apart, and starts that ladder over
-once a connection has stayed up for a minute. The terminal says when the
+once a connection has stayed up for a minute. An attempt to connect or
+register that gets no answer in 15 seconds, as while the network is down,
+counts as failed, so the retries go on through an outage. The terminal says when the
 connection is lost and why, as Chopin's error code, an HTTP status such as
 `HTTP 502`, or a network error such as `ECONNRESET`, announces the first few retries, and says **Reconnected.**
 when it is back. It stops instead of retrying when Chopin refuses the machine,

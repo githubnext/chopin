@@ -4,7 +4,15 @@ import type { Classify, ErrorClass } from "./machine";
 import { ConnectorError } from "./mcp";
 import type { remote } from "./mcp";
 import type { Output } from "./output";
-import { backoff, delay, FORGET_MS, forgottenMessage, HEALTHY_MS, transient } from "./reconnect";
+import {
+	backoff,
+	CONNECT_TIMEOUT_MS,
+	delay,
+	FORGET_MS,
+	forgottenMessage,
+	HEALTHY_MS,
+	transient,
+} from "./reconnect";
 
 type Api = Awaited<ReturnType<typeof remote>>;
 /** The calls a run makes; they go to whichever connection is current. */
@@ -93,10 +101,11 @@ function abandoned<T>(promise: Promise<T>, signal?: AbortSignal) {
  */
 export async function serveWork(options: {
 	/**
-	 * Opens a connection. The connector's own signal is passed for the first connection, so Ctrl-C
-	 * abandons its handshake; a run's report after Ctrl-C reconnects without it.
+	 * Opens a connection. Its signal aborts when the attempt runs out of time, and for a connection
+	 * the connector itself opens also on Ctrl-C, which abandons the handshake; a run's report after
+	 * Ctrl-C still reconnects.
 	 */
-	connect: (signal?: AbortSignal) => Promise<Api>;
+	connect: (signal: AbortSignal) => Promise<Api>;
 	run: (api: Link, kind: WorkKind, claim: unknown) => Promise<void>;
 	signal: AbortSignal;
 	output: Output;
@@ -106,12 +115,15 @@ export async function serveWork(options: {
 	now?: () => number;
 	/** How long only `forgotten` refusals may last before the connector stops; two minutes. */
 	forgetMs?: number;
+	/** How long one attempt to connect may take before it counts as failed; 15 seconds. */
+	connectTimeoutMs?: number;
 }) {
 	let { signal, output } = options;
 	let classify = options.classify ?? classifyConnectorError;
 	let sleep = options.sleep ?? delay;
 	let now = options.now ?? Date.now;
 	let forgetMs = options.forgetMs ?? FORGET_MS;
+	let connectTimeoutMs = options.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
 	let attempt = 0;
 	/** Failed attempts since the connection was last up; zero while connected. */
 	let failures = 0;
@@ -126,13 +138,34 @@ export async function serveWork(options: {
 		if (current === api) current = undefined;
 		void api.close().catch(() => {});
 	};
+	// An attempt that gets no answer, as when the network drops and TCP waits on its handshake,
+	// fails after the time limit, so the backoff advances instead of waiting out the outage. A
+	// connection that opens after its attempt gave up is closed unused.
+	let open = async (outer?: AbortSignal) => {
+		let timeout = new AbortController();
+		let timer = setTimeout(
+			() =>
+				timeout.abort(
+					new DOMException(`no answer within ${connectTimeoutMs / 1000}s`, "TimeoutError"),
+				),
+			connectTimeoutMs,
+		);
+		let attempt = outer ? AbortSignal.any([outer, timeout.signal]) : timeout.signal;
+		try {
+			let opening = options.connect(attempt);
+			opening.then(late => attempt.aborted && void late.close().catch(() => {}), () => {});
+			return await abandoned(opening, attempt);
+		} finally {
+			clearTimeout(timer);
+		}
+	};
 	// A call that fails transiently drops its connection, so a run's next report connects anew,
 	// as the token of a connection the server forgot is refused for good. A call Ctrl-C cut short
 	// keeps it, so the stop report and the disconnect that gives back claimed work still go out.
 	let link: Link = {
 		async call(name, args, callSignal) {
 			let api = current ?? await abandoned(
-				connecting ??= options.connect().then(value => current = value)
+				connecting ??= open().then(value => current = value)
 					.finally(() => connecting = undefined),
 				callSignal,
 			);
@@ -147,10 +180,7 @@ export async function serveWork(options: {
 	while (!signal.aborted) {
 		let api: Api | undefined;
 		try {
-			let opening = options.connect(signal);
-			// A connection that opens only after Ctrl-C is closed unused.
-			opening.then(late => signal.aborted && void late.close().catch(() => {}), () => {});
-			api = current = await abandoned(opening, signal);
+			api = current = await open(signal);
 			if (failures) output.reconnected();
 			failures = 0;
 			forgottenSince = undefined;
