@@ -754,12 +754,20 @@ test("rapid document switches and history jumps settle on one visible document",
 	await settled(documents.find(document => document.title === current)!);
 });
 
-test("overlapping document workspaces keep IDs, ARIA targets, and focus instance-scoped", async ({ baseURL, join }) => {
-	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+test("overlapping document workspaces keep IDs, ARIA targets, and focus instance-scoped", async ({ baseURL, join, page }) => {
 	let created = crypto.randomUUID();
 	await createChannel(Number(new URL(baseURL!).port), created);
 	let destination = roomPath(created);
+	// The incoming document reveals itself once it syncs, or 200ms after it was asked for. On a
+	// loaded machine both can pass before it is even laid out, and the swap goes straight to the
+	// outgoing route's exit, when neither workspace takes input. Holding its socket and the page's
+	// clock keeps both mounted with the outgoing one live; the frames the view change needs run below.
+	await page.routeWebSocket(new RegExp(`/ws\\?channel=${created}`), () => {});
+	await page.setViewportSize({ width: 390, height: 844 });
+	page = await join("ana");
 	await page.locator("body").dispatchEvent("pointerover", { pointerType: "mouse" });
+	await page.clock.install();
+	await page.clock.pauseAt(Date.now() + 1_000);
 	await page.evaluate(path => {
 		history.pushState(null, "", path);
 		dispatchEvent(new PopStateEvent("popstate"));
@@ -767,13 +775,19 @@ test("overlapping document workspaces keep IDs, ARIA targets, and focus instance
 
 	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
 	await expect(routes).toHaveCount(2);
-	let audit = await routes.evaluateAll(async layers => {
+	await expect(routes.locator(".workspace-root")).toHaveCount(2);
+	await expect(routes.and(page.locator(":not([inert])"))).toHaveCount(1);
+	await routes.evaluateAll(layers => {
 		let current = layers.find(layer => !layer.hasAttribute("inert"));
 		let decision = [...current!.querySelectorAll<HTMLButtonElement>(
 			'nav[aria-label="Workspace view"] button',
 		)].find(button => button.textContent?.includes("Decisions"));
 		decision!.click();
-		await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+	});
+	// The view change moves focus a frame later.
+	await page.clock.runFor(50);
+	let audit = await routes.evaluateAll(layers => {
+		let current = layers.find(layer => !layer.hasAttribute("inert"));
 		let roots = layers.flatMap(
 			layer => [...layer.querySelectorAll<HTMLElement>(".workspace-root")],
 		);
