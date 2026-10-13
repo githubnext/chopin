@@ -4,6 +4,7 @@ import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
 import { readConfig, updateConfig } from "./config";
+import { commandWords } from "./planner";
 import { VERSION } from "./version";
 import { connectors, processStart } from "./workspace";
 
@@ -82,6 +83,10 @@ export type ServiceProgram = {
 	command: string[];
 	/** The state directory, passed as `--base-dir`; machine.json, locks and the log live there. */
 	directory: string;
+	/** Documents whose Planner backend the service runs, each passed as `--planner`. */
+	planners?: string[];
+	/** The Planner backend's command line, passed unchanged as `--planner-command`. */
+	plannerCommand?: string;
 };
 
 export const UNIT = "chopin.service";
@@ -101,14 +106,26 @@ export function logPath(platform: NodeJS.Platform, directory: string) {
 	return paths(platform).join(directory, "chopin.log");
 }
 
-/** `chopin connect`'s arguments under the service; `--service` marks its lock as the service's. */
+/**
+ * `chopin connect`'s arguments under the service; `--service` marks its lock as the service's.
+ * Planner documents and command pass through as given; neither holds a credential, which each
+ * backend gets afresh from Chopin when it starts.
+ */
 export function serviceArguments(program: ServiceProgram) {
+	let planners = program.planners?.length && program.plannerCommand
+		? [
+			...program.planners.flatMap(document => ["--planner", document]),
+			"--planner-command",
+			program.plannerCommand,
+		]
+		: [];
 	return [
 		"connect",
 		program.checkout,
 		"--base-dir",
 		program.directory,
 		"--service",
+		...planners,
 		"--",
 		...program.command,
 	];
@@ -622,6 +639,46 @@ export type Installed = {
 };
 
 /**
+ * Refuses Planner documents without a Planner command or the other way round, a command line
+ * `connect` could not split, or a backend the service would not find under its PATH, or find
+ * only through a directory gone after a reboot. A relative path resolves in the checkout, where
+ * `connect` starts the backend.
+ */
+async function checkPlanners(host: ServiceHost, program: ServiceProgram, servicePath: string) {
+	let documents = program.planners ?? [];
+	let line = program.plannerCommand;
+	if (!documents.length && !line) return;
+	let refuse = (why: string) => new ServiceError(`${why} Nothing was installed.`);
+	if (!documents.length || !line) {
+		throw refuse("--planner <document URL> and --planner-command <command> go together.");
+	}
+	let words;
+	try {
+		words = commandWords(line);
+	} catch (error) {
+		throw refuse(error instanceof Error ? error.message : String(error));
+	}
+	let planner = words[0];
+	if (!planner) throw refuse("--planner-command names no command.");
+	let path = paths(host.platform);
+	let named = /[\\/]/.test(planner) ? path.resolve(program.checkout, planner) : planner;
+	let which = host.which ?? ((name, PATH) => Bun.which(name, { PATH }));
+	let found = which(named, servicePath);
+	if (!found) {
+		throw refuse(
+			`The service would not find the Planner command ${planner} under the PATH it runs with:\n`
+				+ `  ${servicePath}\nInstall it there, or give its absolute path in --planner-command.`,
+		);
+	}
+	refuseFleeting(
+		host,
+		await links(host.platform, found),
+		`The Planner command ${planner}`,
+		"Install it somewhere stable, or give a stable absolute path to it in --planner-command.",
+	);
+}
+
+/**
  * Install `program` as this user's service and start it, so it starts again by itself. The
  * server and the program go to config.json first, where the service's connect reads the server.
  * A service an older chopin than one already installed is refused without `allowDowngrade`.
@@ -639,13 +696,14 @@ export async function installService(
 	program = { ...program, command: [resolved.agent, ...program.command.slice(1)] };
 	let unusable = unsupportedPath(host.platform, program);
 	if (unusable) throw new ServiceError(unusable);
+	await checkPlanners(host, program, path);
 	if (
 		manager === "launchd"
-		&& [path, ...program.command].some(hasControl)
+		&& [path, ...serviceArguments(program)].some(hasControl)
 	) {
 		throw new ServiceError(
-			"The agent command or PATH holds a control character, which a LaunchAgent cannot hold. "
-				+ "Nothing was installed.",
+			"The agent command, Planner arguments or PATH holds a control character, which a "
+				+ "LaunchAgent cannot hold. Nothing was installed.",
 		);
 	}
 	let previous = (await readConfig(program.directory)).service?.version;

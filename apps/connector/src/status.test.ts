@@ -72,6 +72,7 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 			version: "0.0.1",
 			started,
 			service: true,
+			planners: ["https://chopin.example/d/one", "https://chopin.example/d/two"],
 		}),
 	);
 	let gone = Bun.spawn(["true"]);
@@ -100,6 +101,7 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 				service: true,
 				version: "0.0.1",
 				started: "2026-10-13T09:30:00.000Z",
+				planners: ["https://chopin.example/d/one", "https://chopin.example/d/two"],
 			},
 			{ pid: gone.pid, checkout: "/work/old", running: false, service: false },
 			{ pid: process.pid, checkout: "/work/reused", running: false, service: false },
@@ -121,6 +123,8 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		`Server:     ${server.url} (from CHOPIN_URL)`,
 		"Machine:    paired as build-box (ada); Chopin accepts it",
 		`Connector:  running for /work/score (pid ${process.pid}, chopin 0.0.1, the service)`,
+		"              Planner for https://chopin.example/d/one",
+		"              Planner for https://chopin.example/d/two",
 		`            stale lock for /work/old: its connector (pid ${gone.pid}) has exited; the next `
 		+ "connect replaces it",
 		`            stale lock for /work/reused: its connector (pid ${process.pid}) has exited; `

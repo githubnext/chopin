@@ -198,7 +198,7 @@ async function connect(args: string[]) {
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = await server();
 	let info = await workspace(resolve(parsed.positional[0] ?? "."));
-	let release = await lockWorkspace(info.root, directory, { service });
+	let release = await lockWorkspace(info.root, directory, { service, planners: plannerDocuments });
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
 	let stop = () => {
@@ -298,12 +298,18 @@ async function connect(args: string[]) {
 }
 
 const SERVICE_USAGE = `Usage: ${SELF} service install [checkout] [--allow-downgrade] `
+	+ "[--planner <document URL>]... [--planner-command <command>] "
 	+ `[-- agent [ACP arguments]] | ${SELF} service status | restart | uninstall`;
 
 /** `service install|status|restart|uninstall`: run `connect` as this user's background service. */
 async function serviceCommand(args: string[]) {
 	let [action, ...rest] = args;
-	let parsed = parseArgs(rest, { flags: action === "install" ? ["allow-downgrade"] : [] });
+	let parsed = parseArgs(
+		rest,
+		action === "install"
+			? { flags: ["allow-downgrade"], options: ["planner-command"], lists: ["planner"] }
+			: {},
+	);
 	let directory = stateDirectory();
 	let host = systemHost();
 	let output = createOutput();
@@ -333,11 +339,24 @@ async function serviceCommand(args: string[]) {
 					+ "service.",
 			);
 		}
+		// Planner documents and command given here replace the stored ones. Without them, the
+		// stored ones are kept only while the agent command is too, so an install with a new agent
+		// command describes the whole service, as `connect` would.
+		let given = parsed.lists.has("planner") || parsed.options.has("planner-command");
+		let planners = given
+			? {
+				planners: parsed.lists.get("planner") ?? [],
+				plannerCommand: parsed.options.get("planner-command"),
+			}
+			: parsed.rest
+			? {}
+			: { planners: stored?.planners, plannerCommand: stored?.plannerCommand };
 		let installed = await installService(host, {
 			executable: process.execPath,
 			checkout: root,
 			command,
 			directory,
+			...(planners.planners?.length || planners.plannerCommand ? planners : {}),
 		}, { server: url, allowDowngrade: parsed.flags.has("allow-downgrade") });
 		output.say(
 			`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
@@ -393,11 +412,14 @@ const HELP = [
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
 	"  status [--json]",
 	"      Show this chopin's version, the server, whether this machine is paired and Chopin",
-	"      still accepts it, the connectors running here, the service and the log path.",
-	"  service install [checkout] [--allow-downgrade] [-- <agent> [ACP arguments]]",
+	"      still accepts it, the connectors running here and the Planners they run, the service",
+	"      and the log path.",
+	"  service install [checkout] [--allow-downgrade] [--planner <document URL>]...",
+	"                  [--planner-command <command>] [-- <agent> [ACP arguments]]",
 	"      Run connect as this user's background service (systemd, launchd or Task Scheduler),",
-	"      so it starts again after a reboot. Takes connect's checkout and agent command, or",
-	"      reuses the ones stored by the last install. A service a newer chopin installed is kept",
+	"      so it starts again after a reboot. Takes connect's checkout, agent command and Planner",
+	"      options, or reuses the ones stored by the last install; a new agent command without",
+	"      Planner options drops the stored ones. A service a newer chopin installed is kept",
 	"      unless --allow-downgrade.",
 	"  service status | restart | uninstall",
 	"      Show whether it is running, stopped, restart-pending or not-installed; restart it;",

@@ -160,7 +160,8 @@ test("lists the connectors running for a state directory, and those whose proces
 	let state = await mkdtemp(join(tmpdir(), "chopin-state-"));
 	try {
 		expect(await connectors(join(state, "missing"))).toEqual([]);
-		let release = await lockWorkspace("/fixture/served", state, { service: true });
+		let planners = ["https://chopin.example/d/one"];
+		let release = await lockWorkspace("/fixture/served", state, { service: true, planners });
 		let child = Bun.spawn(["true"]);
 		await child.exited;
 		await writeFile(
@@ -178,6 +179,7 @@ test("lists the connectors running for a state directory, and those whose proces
 				root: "/fixture/served",
 				running: true,
 				service: true,
+				planners,
 				version: VERSION,
 				protocol: CONNECTOR_PROTOCOL,
 				started: expect.any(Number),

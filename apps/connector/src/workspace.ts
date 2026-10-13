@@ -129,12 +129,17 @@ export function processStart(
 /**
  * Hold a checkout for this process. The lock names the process, when it started, the checkout
  * and the chopin that holds it, so `chopin status` can list the connectors running for a state
- * directory; `service` marks the one the installed service runs.
+ * directory; `service` marks the one the installed service runs, and `planners` names the
+ * documents whose Planner backends it runs. The lock holds no credential.
  */
 export async function lockWorkspace(
 	root: string,
 	directory: string,
-	{ service = false, probe = processStart() }: { service?: boolean; probe?: StartProbe } = {},
+	{ service = false, planners = [], probe = processStart() }: {
+		service?: boolean;
+		planners?: string[];
+		probe?: StartProbe;
+	} = {},
 ) {
 	await mkdir(directory, { recursive: true, mode: 0o700 });
 	let id = createHash("sha256").update(root).digest("hex");
@@ -165,6 +170,7 @@ export async function lockWorkspace(
 		protocol: CONNECTOR_PROTOCOL,
 		started: Date.now(),
 		...(service ? { service } : {}),
+		...(planners.length ? { planners } : {}),
 	}));
 	return async () => {
 		await file.close();
@@ -221,6 +227,8 @@ export type RunningConnector = {
 	running: boolean;
 	/** Whether the installed service runs it. */
 	service: boolean;
+	/** The documents whose Planner backends it runs, when it runs any. */
+	planners?: string[];
 	/** The chopin version and protocol it runs, absent from a lock written before they were. */
 	version?: string;
 	protocol?: number;
@@ -244,13 +252,17 @@ export async function connectors(
 		} catch {
 			continue;
 		}
-		let { pid, root, version, protocol, started } = held;
+		let { pid, root, version, protocol, started, planners } = held;
 		if (!Number.isSafeInteger(pid) || (pid as number) <= 0 || typeof root !== "string") continue;
 		found.push({
 			pid: pid as number,
 			root,
 			running: await holds(held, probe),
 			service: held.service === true,
+			...(Array.isArray(planners) && planners.length
+					&& planners.every(document => typeof document === "string")
+				? { planners: planners as string[] }
+				: {}),
 			...(typeof version === "string" ? { version } : {}),
 			...(typeof protocol === "number" ? { protocol } : {}),
 			...(typeof started === "number" ? { started } : {}),

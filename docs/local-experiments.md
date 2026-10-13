@@ -171,7 +171,8 @@ without `--host` for every target. They are written to `apps/connector/dist`:
 - whether the machine is paired with that server, by its label (the token is
   never shown), and whether Chopin still accepts it;
 - each connector holding a checkout in the base dir, with its pid and chopin
-  version, and any stale lock left by one that crashed;
+  version and the documents whose Planner backends it runs, and any stale lock
+  left by one that crashed;
 - the service's state and the log path.
 
 To check the pairing, `chopin status` makes one request to Chopin and waits at
@@ -187,7 +188,7 @@ rely on these keys, which later releases only add to:
 | `protocol`   | The connector protocol it speaks.                                                                                                                                                                                                    |
 | `server`     | `origin`, and `source`: `CHOPIN_URL`, `config` or `default`.                                                                                                                                                                         |
 | `machine`    | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
-| `connectors` | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version` and `started` (ISO 8601).                                                                                  |
+| `connectors` | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601) and `planners`.                                                                      |
 | `service`    | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
 | `log`        | The service's log file.                                                                                                                                                                                                              |
 | `baseDir`    | The state directory the report is for.                                                                                                                                                                                               |
@@ -215,6 +216,17 @@ starts. No token or other secret is ever written into the unit, plist or task.
 Running `chopin service install` again with no checkout or agent command
 reinstalls with the stored ones; naming them replaces them and restarts the
 service. There is one service per user account, whichever base dir it uses.
+
+To have the service run Planner backends too, give install the same
+`--planner <document URL>` (repeatable) and `--planner-command <command>` as
+`connect`. Install stores them in `config.json` and the service definition
+passes each document and the command line, unchanged, to `connect`; each
+backend gets its Planner credential from Chopin when it starts, so none is
+written anywhere. Install refuses a Planner command it cannot split, or one the
+service would not find under its PATH (a relative path resolves in the
+checkout). A later install with neither Planner option and no agent command
+keeps the stored ones; one with a new agent command but no Planner options
+runs no Planner backends.
 
 Before writing anything, install resolves the agent command to its absolute
 path, with every directory link in it resolved, and the service runs the agent

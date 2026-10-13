@@ -53,6 +53,72 @@ test("the systemd unit runs connect with every word quoted and no secret in it",
 	expect(systemdQuote("/opt/$HOME", "executable")).toBe('"/opt/$HOME"');
 });
 
+test("a service with Planner backends passes each document and the Planner command to connect", () => {
+	let program = {
+		...PROGRAM,
+		planners: ["https://chopin.example/d/one", "https://chopin.example/d/two?x=$y&z=100%"],
+		plannerCommand: `planner --label="two words" 'it''s' $HOME`,
+	};
+	let words = [
+		"connect",
+		program.checkout,
+		"--base-dir",
+		program.directory,
+		"--service",
+		"--planner",
+		program.planners[0]!,
+		"--planner",
+		program.planners[1]!,
+		"--planner-command",
+		program.plannerCommand,
+		"--",
+		...program.command,
+	];
+	let unit = systemdUnit(program, "/usr/bin");
+	expect(unit).toContain(
+		'"--service" "--planner" "https://chopin.example/d/one" "--planner" '
+			+ '"https://chopin.example/d/two?x=$$y&z=100%%" "--planner-command" '
+			+ '"planner --label=\\"two words\\" \'it\'\'s\' $$HOME" "--" "copilot"',
+	);
+	let plist = launchdPlist(program, "/home/ada", "/usr/bin");
+	expect([...plist.matchAll(/\t\t<string>(.*)<\/string>/g)].map(match => match[1])).toEqual(
+		[program.executable, ...words].map(word =>
+			word.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("'", "&apos;")
+		).concat("/usr/bin"),
+	);
+	let windows = {
+		...program,
+		executable: "C:\\chopin\\chopin.exe",
+		checkout: "C:\\src\\score",
+		command: ["C:\\Tools\\agent.exe"],
+		directory: "C:\\state",
+		planners: ["https://chopin.example/d/one?a=1&b=2"],
+		plannerCommand: 'planner --label="two words" ^x',
+	};
+	let action = taskAction(windows, "C:\\Tools", "C:\\Windows\\System32\\cmd.exe");
+	expect(argv(cmdParse(action.argument).line.split(/ && (?=")/)[1]!)).toEqual([
+		windows.executable,
+		"connect",
+		windows.checkout,
+		"--base-dir",
+		windows.directory,
+		"--service",
+		"--planner",
+		windows.planners[0]!,
+		"--planner-command",
+		windows.plannerCommand,
+		"--",
+		...windows.command,
+	]);
+	// The service still reads its chopin and base dir back, and holds no credential.
+	let run = { executable: program.executable, directory: program.directory };
+	expect(parseUnitRun(unit)).toEqual(run);
+	expect(parsePlistRun(plist)).toEqual(run);
+	for (let definition of [unit, plist, action.argument]) {
+		expect(definition).not.toMatch(/chopin_m_|TOKEN/);
+	}
+});
+
 test("an executable path systemd cannot run is refused with a way around it", () => {
 	for (let executable of ["/home/o'neil/bin/chopin", '/opt/"x"/chopin', "/opt/a\\b/chopin"]) {
 		let problem = unsupportedPath("linux", { ...PROGRAM, executable });

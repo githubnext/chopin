@@ -113,6 +113,45 @@ test("on Linux, install stops with the one sudo command when linger needs an adm
 	expect(calls.some(line => line.includes("enable --now"))).toBe(false);
 });
 
+test("install stores the Planner documents and command, and runs them; one it can't find is refused", async () => {
+	let { home, directory, bin, host, program } = await machine("linux", systemd);
+	await writeFile(join(bin, "planner"), "#!/bin/sh\n", { mode: 0o755 });
+	let planned = {
+		...program,
+		planners: ["https://chopin.example/d/one", "https://chopin.example/d/two"],
+		plannerCommand: `planner --label="two words"`,
+	};
+	await installService(host, planned, { server: SERVER });
+	let unit = await readFile(unitPath(home), "utf8");
+	expect(unit).toContain(
+		'"--planner" "https://chopin.example/d/one" "--planner" "https://chopin.example/d/two" '
+			+ '"--planner-command" "planner --label=\\"two words\\"" "--"',
+	);
+	expect((await readConfig(directory)).service).toMatchObject({
+		planners: planned.planners,
+		plannerCommand: planned.plannerCommand,
+	});
+
+	let refused = await machine("linux", systemd);
+	for (let plannerCommand of ["no-such-planner --x", "planner 'unmatched"]) {
+		refused.host.env = { PATH: `${bin}:/usr/bin` };
+		let error = await installService(refused.host, {
+			...planned,
+			...refused.program,
+			planners: planned.planners,
+			plannerCommand,
+		}, {
+			server: SERVER,
+		}).catch(error => error);
+		expect(error.message).toContain("Nothing was installed.");
+		expect(error.message).toContain(
+			plannerCommand.startsWith("no-such") ? "no-such-planner" : "unmatched single quote",
+		);
+		expect(existsSync(unitPath(refused.home))).toBe(false);
+		expect(refused.calls).toEqual([]);
+	}
+});
+
 test("the service PATH skips a shell's fnm directory, and an agent it can't find is refused", async () => {
 	let { home, bin, host, program } = await machine("linux", systemd);
 	// fnm links each shell's node directory into $XDG_RUNTIME_DIR, which a reboot empties.

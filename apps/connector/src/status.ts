@@ -49,6 +49,8 @@ export type StatusReport = {
 		version?: string;
 		/** ISO 8601. */
 		started?: string;
+		/** The documents whose Planner backends it runs, as its lock records them. */
+		planners?: string[];
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
 	log: string;
@@ -134,6 +136,7 @@ export async function collectStatus(options: {
 			service: item.service,
 			...(item.version ? { version: item.version } : {}),
 			...(item.started ? { started: new Date(item.started).toISOString() } : {}),
+			...(item.planners ? { planners: item.planners } : {}),
 		})),
 		service,
 		log: logPath(host.platform, directory),
@@ -170,13 +173,18 @@ export function formatStatus(report: StatusReport) {
 		unreachable: `${named}; can't reach Chopin to check it (${machine.detail})`,
 		error: `${named}; Chopin's answer was ${machine.detail}`,
 	}[machine.check];
-	let held = report.connectors.map(item =>
+	let held = report.connectors.flatMap(item =>
 		item.running
-			? `running for ${item.checkout} (pid ${item.pid}${
-				item.version ? `, chopin ${item.version}` : ""
-			}${item.service ? ", the service" : ""})`
-			: `stale lock for ${item.checkout}: its connector (pid ${item.pid}) has exited; the next `
-				+ "connect replaces it"
+			? [
+				`running for ${item.checkout} (pid ${item.pid}${
+					item.version ? `, chopin ${item.version}` : ""
+				}${item.service ? ", the service" : ""})`,
+				...(item.planners ?? []).map(document => `  Planner for ${document}`),
+			]
+			: [
+				`stale lock for ${item.checkout}: its connector (pid ${item.pid}) has exited; the next `
+				+ "connect replaces it",
+			]
 	);
 	let serviceLine = service.state === "unknown"
 		? `unknown (${service.detail})`
