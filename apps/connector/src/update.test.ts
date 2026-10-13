@@ -107,10 +107,10 @@ function chopinServer(recommended: string | null) {
 	};
 }
 
-/** Releases 0.0.1, 98.0.0 and 99.0.0, the newest, on either side of the running version. */
+/** Releases 0.0.0, 98.0.0 and 99.0.0, the newest, on either side of the running version. */
 function releases() {
 	return fakeRelease({
-		"0.0.1": assets(asset, fakeChopin("0.0.1")),
+		"0.0.0": assets(asset, fakeChopin("0.0.0")),
 		"98.0.0": assets(asset, fakeChopin("98.0.0")),
 		"99.0.0": assets(asset, fakeChopin("99.0.0")),
 	});
@@ -152,16 +152,16 @@ describe.skipIf(!binary)("chopin update", () => {
 
 	test("moves to an older release only with --allow-downgrade", async () => {
 		using release = releases();
-		using chopin = chopinServer("0.0.1");
+		using chopin = chopinServer("0.0.0");
 		let env = { ...release.env, CHOPIN_URL: chopin.url, CHOPIN_VERIFY_ATTESTATION: "0" };
 		let at = await installed();
 		// Recommended by the server or named, the refusal gives the command that goes ahead.
-		for (let args of [[], ["cli-v0.0.1"]]) {
+		for (let args of [[], ["cli-v0.0.0"]]) {
 			let refused = await at.update(env, ...args);
 			expect(refused.code).toBe(1);
 			expect(refused.stderr).toContain(
-				`0.0.1 is older than the installed chopin ${version}. To install it anyway, run: `
-					+ "chopin update 0.0.1 --allow-downgrade",
+				`0.0.0 is older than the installed chopin ${version}. To install it anyway, run: `
+					+ "chopin update 0.0.0 --allow-downgrade",
 			);
 			expect(await at.untouched()).toBe(true);
 		}
@@ -170,8 +170,8 @@ describe.skipIf(!binary)("chopin update", () => {
 		let result = await at.update(env, "--allow-downgrade");
 		expect(result.stderr).toBe("");
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain(`Updated chopin from ${version} to 0.0.1`);
-		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("0.0.1"));
+		expect(result.stdout).toContain(`Updated chopin from ${version} to 0.0.0`);
+		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("0.0.0"));
 	});
 
 	test("installs a named release over the server's recommendation", async () => {
