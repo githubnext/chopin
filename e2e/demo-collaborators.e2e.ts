@@ -28,9 +28,17 @@ async function people(page: Page, names: string[]) {
 }
 
 async function append(page: Page, text: string) {
-	await content(page).locator("p").first().click();
-	await content(page).locator("p").first().selectText();
-	await page.keyboard.press("ArrowRight");
+	let paragraph = content(page).locator("p").first();
+	await paragraph.click();
+	// ArrowRight after selectText can cross into the next paragraph and escape the leading space.
+	await paragraph.evaluate(element => {
+		let range = document.createRange();
+		range.selectNodeContents(element);
+		range.collapse(false);
+		let selection = window.getSelection()!;
+		selection.removeAllRanges();
+		selection.addRange(range);
+	});
 	await page.keyboard.type(text);
 }
 
