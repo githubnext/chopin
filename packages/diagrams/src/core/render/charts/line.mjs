@@ -5,10 +5,12 @@
 import { el, text } from "../../svg.mjs";
 import { textWidth } from "../../text.mjs";
 import { fmt, niceDomain, ticks } from "./scale.mjs";
+import { FITTED_TEXT, thinLabels } from "./fit.mjs";
+import { legend } from "../shared/legend.mjs";
 
 export const family = "chart";
 
-const PW = 560, PH = 260;
+const PLOT = { w: 560, h: 260 };
 
 function smooth(pts) {
 	if (pts.length < 3) return pts.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
@@ -21,9 +23,13 @@ function smooth(pts) {
 	return d;
 }
 
-export function render(spec) {
+export function render(spec, { settings = {} } = {}) {
 	const problems = [];
 	const v = spec.variant || "line";
+	let PW = PLOT.w, PH = PLOT.h;
+	// Only the plain line chart redraws to a narrow column; its variants are scaled.
+	const fitWidth = v === "line" ? settings.width : undefined;
+	let fitted = null;
 	const xs = spec.x || spec.categories;
 	const series = spec.series.map((s, i) => ({ ...s, i }));
 	if (!xs || !xs.length) {
@@ -183,6 +189,19 @@ export function render(spec) {
 			dom = niceDomain(lo - p, hi + p);
 			dom.lo = Math.max(dom.lo, Math.floor((lo - p) / dom.step) * dom.step);
 		}
+		if (fitWidth) {
+			const S = FITTED_TEXT;
+			const mono = { size: S, mono: true, tracking: 0.04 };
+			const tickW = Math.max(...ticks(dom).map((t) => textWidth(fmt(t, unit), mono)));
+			const xW = xs.map((x) => textWidth(x, mono));
+			const left = Math.max(tickW + 8, xW[0] / 2);
+			const nameW = Math.max(...series.map((s) => textWidth(s.name, { size: S, weight: 500 })))
+				+ 10;
+			const ends = fitWidth - left - nameW - 4 >= 180;
+			PW = fitWidth - left - (ends ? nameW : Math.max(6, xW.at(-1) / 2)) - 4;
+			PH = 200;
+			fitted = { S, left, ends, xW };
+		}
 		y = (val) => PH - ((val - dom.lo) / (dom.hi - dom.lo)) * PH;
 		if (v !== "slope") {
 			for (const t of ticks(dom)) {
@@ -197,8 +216,9 @@ export function render(spec) {
 		}
 	}
 	const every = Math.ceil(xs.length / 9);
+	const shown = fitted ? new Set(thinLabels(xs.map((_, i) => xAt(i)), fitted.xW)) : null;
 	xs.forEach((x, i) => {
-		if (v === "slope" || i % every === 0 || i === xs.length - 1) {
+		if (shown ? shown.has(i) : v === "slope" || i % every === 0 || i === xs.length - 1) {
 			out.push(
 				text({
 					class: v === "slope" ? "ax-label" : "ax-text",
@@ -221,7 +241,8 @@ export function render(spec) {
 		const last = s.values.length - 1 - [...s.values].toReversed().findIndex((x) => x != null);
 		return { s, last, y: y(s.values[last]) };
 	}).sort((a, b) => a.y - b.y);
-	for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 13);
+	const lineGap = fitted ? fitted.S + 3 : 13;
+	for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + lineGap);
 	series.forEach((s, k) => {
 		const pts = s.values.map((val, i) => (val == null ? null : { x: xAt(i), y: y(val) })).filter(
 			Boolean,
@@ -259,12 +280,14 @@ export function render(spec) {
 			);
 		}
 		const e = ends.find((q) => q.s === s);
-		g.push(
-			text(
-				{ class: `ln-label ${lblCls(s)}`, x: xAt(e.last) + 10, y: e.y + 3.5 },
-				v === "slope" ? `${s.name} ${fmt(s.values[e.last], unit)}` : s.name,
-			),
-		);
+		if (!fitted || fitted.ends) {
+			g.push(
+				text(
+					{ class: `ln-label ${lblCls(s)}`, x: xAt(e.last) + 10, y: e.y + 3.5 },
+					v === "slope" ? `${s.name} ${fmt(s.values[e.last], unit)}` : s.name,
+				),
+			);
+		}
 		if (v === "slope") {
 			g.push(
 				text({
@@ -284,6 +307,30 @@ export function render(spec) {
 			}, g),
 		);
 	});
+	if (fitted) {
+		let h = PH + 32;
+		if (!fitted.ends && series.length > 1) {
+			const lg = legend({
+				x: -fitted.left,
+				y: h,
+				w: fitWidth,
+				extra: series.map((s) => ({
+					type: "swatch",
+					swatch: s.focal ? "c-bar is-focal" : anyFocal ? "c-bar" : `c-bar s-${(s.i % 5) + 1}`,
+					label: s.name,
+				})),
+				size: fitted.S,
+			});
+			out.push(lg.svg);
+			h += lg.h + 8;
+		}
+		return {
+			body: el("g", { class: "sc-fitted" }, out),
+			viewBox: [-fitted.left, -16, fitWidth, h + 16],
+			steps: Math.min(12, 1 + series.length),
+			problems,
+		};
+	}
 	return {
 		body: out.join(""),
 		viewBox: [-54, -24, PW + labelW + 70, PH + 56],

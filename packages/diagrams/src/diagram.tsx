@@ -12,6 +12,7 @@ import {
 	ActualSizeIcon,
 	ArrowLeftIcon,
 	ArrowRightIcon,
+	ExpandIcon,
 	FitWidthIcon,
 	MinusIcon,
 	PauseIcon,
@@ -43,6 +44,12 @@ export type DiagramProps = {
 	description?: string;
 	/** Optional label within generated SVG resource IDs. */
 	idPrefix?: string;
+	/**
+	 * Offered when fitting the diagram to its column would shrink its labels past
+	 * legibility. The host shows the same layout larger with `DiagramDrawing`,
+	 * given the column width it was laid out for.
+	 */
+	onExpand?: (opener: HTMLButtonElement, availableWidth: number) => void;
 };
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
@@ -85,6 +92,7 @@ function DiagramView({
 	title,
 	description,
 	idPrefix,
+	onExpand,
 	onWidth,
 }: Omit<DiagramProps, "spec"> & { result: ReadyDiagram; onWidth: (width: number) => void }) {
 	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -320,6 +328,7 @@ function DiagramView({
 	let scale = zoom ?? fit;
 	let minimumZoom = Math.min(DIAGRAM_VIEWPORT.minimumZoom, fit);
 	let zoomable = width > available || zoom !== null;
+	let expandable = onExpand !== undefined && fit < DIAGRAM_VIEWPORT.legibleZoom;
 	let labelFor = (nodeId: string) => nodes.find((node) => node.id === nodeId)?.label ?? nodeId;
 	let status = maxStep > 0 && !isRunning && (mode.kind === "paused" || reduced)
 		? `Step ${current} of ${maxStep}`
@@ -454,6 +463,16 @@ function DiagramView({
 							>
 								<ActualSizeIcon />
 							</button>
+							{expandable && (
+								<button
+									className="ch-diagram__control"
+									type="button"
+									aria-label="Expand diagram"
+									onClick={(event) => onExpand?.(event.currentTarget, available)}
+								>
+									<ExpandIcon />
+								</button>
+							)}
 						</div>
 					)}
 				</div>
@@ -530,6 +549,42 @@ export function Diagram({ spec, ...props }: DiagramProps) {
 			title={props.title}
 			description={props.description}
 			idPrefix={props.idPrefix}
+			onExpand={props.onExpand}
 		/>
+	);
+}
+
+/**
+ * A still copy of a diagram at actual size, for a host's full-screen reading,
+ * laid out as it was for `availableWidth`. Its `width` attribute is that size,
+ * so the host can choose to fit it.
+ */
+export function DiagramDrawing(
+	{ spec, idPrefix, availableWidth }: { spec: unknown; idPrefix?: string; availableWidth?: number },
+) {
+	let id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+	let result = useMemo(() => renderDiagram(spec, { availableWidth }), [spec, availableWidth]);
+	let prefix = `chd-${idPrefix?.replace(/[^a-zA-Z0-9_-]/g, "") || "drawing"}-${id}`;
+	let body = useMemo(() => result.ok ? namespaceSvgIds(result.body, prefix) : "", [result, prefix]);
+	if (!result.ok) return null;
+	let [, , width, height] = result.viewBox;
+	return (
+		<div
+			className="ch-diagram ch-diagram--drawing"
+			style={diagramTypographyVariables as CSSProperties}
+		>
+			<svg
+				className="sc-svg sc-still"
+				viewBox={result.viewBox.join(" ")}
+				width={width}
+				height={height}
+				style={{ "--sc-display-width": `${width}px` } as CSSProperties}
+				role="img"
+				aria-label={result.title}
+				data-sc-type={result.type}
+			>
+				<DiagramBody body={body} />
+			</svg>
+		</div>
 	);
 }

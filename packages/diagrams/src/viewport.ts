@@ -4,6 +4,8 @@ import type { DiagramSpec } from "./render";
 export const DIAGRAM_VIEWPORT = Object.freeze({
 	preferredWidth: 1100,
 	minimumZoom: 0.85,
+	/** Below this fitted scale a diagram's labels stop being comfortably legible. */
+	legibleZoom: 0.75,
 	maximumZoom: 2,
 	zoomStep: 0.15,
 });

@@ -219,8 +219,8 @@ export function renderDiagram(
 		spec.motion === "auto" && info.defaultMotion ? info.defaultMotion : spec.motion,
 		info.family,
 	);
-	try {
-		let result = info.renderer.render(spec, { preset: motion, settings: {} });
+	let draw = (settings: Record<string, unknown>): DiagramResult => {
+		let result = info.renderer.render(spec, { preset: motion, settings });
 		let diagnostics = ((result.problems || []) as DiagramProblem[]).map((issue) => ({
 			...issue,
 			at: issue.at || "(root)",
@@ -236,9 +236,9 @@ export function renderDiagram(
 		}
 		let viewBox = result.viewBox;
 		if (
-			!Array.isArray(viewBox) || viewBox.length !== 4 || viewBox.some((n: unknown) =>
-				typeof n !== "number" || !Number.isFinite(n)
-			) || viewBox[2] <= 0 || viewBox[3] <= 0 || typeof result.steps !== "number"
+			!Array.isArray(viewBox) || viewBox.length !== 4
+			|| viewBox.some((n: unknown) => typeof n !== "number" || !Number.isFinite(n))
+			|| viewBox[2] <= 0 || viewBox[3] <= 0 || typeof result.steps !== "number"
 			|| !Number.isInteger(result.steps) || result.steps < 0 || result.steps > 12
 			|| INVALID_GEOMETRY.test(result.body)
 		) {
@@ -247,7 +247,7 @@ export function renderDiagram(
 				problems: [{ code: "E_RENDER", at: "(root)", msg: "renderer produced invalid geometry" }],
 			};
 		}
-		let ready: Extract<DiagramResult, { ok: true }> = {
+		return {
 			ok: true,
 			body: result.body,
 			viewBox: viewBox as [number, number, number, number],
@@ -259,10 +259,20 @@ export function renderDiagram(
 			...(result.graph ? { graph: result.graph as DiagramGraph } : {}),
 			diagnostics,
 		};
+	};
+	try {
+		let ready = draw({});
+		if (!ready.ok) return ready;
 		let available = options.availableWidth;
-		if (info.family !== "graph" || !Number.isFinite(available) || !available || available <= 0) {
-			return ready;
+		if (!Number.isFinite(available) || !available || available <= 0) return ready;
+		if (info.family === "chart") {
+			// A near fit is only scaled, so a chart keeps its layout unless shrinking would cost.
+			if (ready.viewBox[2] * DIAGRAM_VIEWPORT.minimumZoom <= available) return ready;
+			// Charts that know how redraw to the column with legible text; the rest are scaled.
+			let fitted = draw({ width: Math.floor(available) });
+			return fitted.ok && fitted.viewBox[2] <= available ? fitted : ready;
 		}
+		if (info.family !== "graph") return ready;
 		let target = Math.min(DIAGRAM_VIEWPORT.preferredWidth, available);
 		if (ready.viewBox[2] <= target) return ready;
 		for (let candidate of compactGraphSpecs(spec)) {

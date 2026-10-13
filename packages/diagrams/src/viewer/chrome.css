@@ -147,6 +147,17 @@
 	user-select: none;
 }
 
+/* A still copy at its authored size; whatever holds it decides whether it shrinks. */
+.ch-diagram--drawing {
+	container-type: normal;
+	width: auto;
+}
+
+.ch-diagram--drawing .sc-svg {
+	min-width: 0;
+	max-width: 100%;
+}
+
 .ch-diagram .sc-node,
 .ch-diagram .sc-edge[role="button"] {
 	cursor: pointer;

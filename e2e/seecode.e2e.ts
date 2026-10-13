@@ -152,12 +152,32 @@ test(
 	},
 );
 
-test("a chart wider than a phone column fits it from the first frame", async ({ join, seed }) => {
+/** Smallest rendered text in a diagram, and the caption size it must not fall below. */
+function legibility(stage: HTMLElement) {
+	let svg = stage.querySelector<SVGSVGElement>("svg.sc-svg")!;
+	let scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+	let probe = document.createElement("span");
+	probe.style.fontSize = "var(--text-2xs)";
+	document.body.append(probe);
+	let caption = parseFloat(getComputedStyle(probe).fontSize);
+	probe.remove();
+	let sizes = [...svg.querySelectorAll("text")].map(text =>
+		parseFloat(getComputedStyle(text).fontSize) * scale
+	);
+	return { smallest: Math.min(...sizes), caption, scale };
+}
+
+test("a chart on a phone draws to its column from the first frame, at legible size", async ({ join, seed }) => {
 	let chart = {
 		type: "bar",
-		title: "Median startup",
-		unit: "ms",
-		data: [["Baseline", 240], ["Cached", 183], ["Cached large", 410]],
+		title: "Output tokens per diagram",
+		unit: "k",
+		axis: "tokens (thousands)",
+		focal: "SeeCode spec",
+		data: [["Hand-written SVG", 14.2], ["SVG + templates", 9.8], ["Shorthand tags", 4.1], [
+			"SeeCode spec",
+			1.6,
+		]],
 	};
 	await seed(`# Startup\n\n\`\`\`seecode\n${JSON.stringify(chart)}\n\`\`\`\n`);
 	let page = await join("ana", {
@@ -165,7 +185,7 @@ test("a chart wider than a phone column fits it from the first frame", async ({ 
 		isMobile: true,
 		hasTouch: true,
 	});
-	// Record the drawing's width in the frame it first appears, before any measurement settles.
+	// Record the drawing's geometry in the frame it first appears, before any measurement settles.
 	await page.addInitScript(() => {
 		let observer = new MutationObserver(() => {
 			let svg = document.querySelector<SVGSVGElement>(".ch-diagram__stage svg.sc-svg");
@@ -184,29 +204,83 @@ test("a chart wider than a phone column fits it from the first frame", async ({ 
 	});
 	await page.reload();
 	let preview = content(page).getByRole("region", { name: "Diagram preview" });
-	await expect(preview.locator("svg.sc-svg")).toBeVisible();
+	let stage = preview.locator(".ch-diagram__stage");
+	await expect(stage.locator("svg.sc-svg")).toBeVisible();
 	await expect(page.locator("html[data-first-frame]")).toHaveCount(1);
 	let first = JSON.parse((await page.locator("html").getAttribute("data-first-frame"))!);
-	expect(first.authored).toBeGreaterThan(first.stage);
-	expect(first.drawn).toBeLessThanOrEqual(first.stage + 1);
+	// Drawn for the column rather than shrunk into it.
+	expect(first.authored).toBeLessThanOrEqual(first.stage);
+	expect(first.drawn).toBeCloseTo(first.authored, 0);
 
-	// One row of controls: play, step, fit and actual size.
+	let text = await stage.evaluate(legibility);
+	expect(text.scale).toBeCloseTo(1, 2);
+	expect(text.smallest).toBeGreaterThanOrEqual(text.caption);
+	await expect(stage.getByText("Hand-written SVG", { exact: true })).toBeVisible();
+	expect(await stage.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+	expect(
+		await page.evaluate(() =>
+			document.documentElement.scrollWidth <= document.documentElement.clientWidth
+		),
+	).toBe(true);
+	// Nothing to zoom or expand when the whole chart is already legible.
+	let controls = preview.getByRole("group", { name: "Diagram controls", exact: true });
+	await expect(controls.getByRole("button", { name: "Fit to width", exact: true })).toHaveCount(0);
+	await expect(controls.getByRole("button", { name: "Expand diagram", exact: true }))
+		.toHaveCount(0);
+});
+
+test("a dense diagram on a phone opens full screen and closes by keyboard", async ({ join, seed }) => {
+	await seed(`# Astro runtime\n\n\`\`\`seecode\n${JSON.stringify(astro)}\n\`\`\`\n`);
+	let page = await join("ana", {
+		viewport: { width: 390, height: 844 },
+		isMobile: true,
+		hasTouch: true,
+	});
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	let preview = content(page).getByRole("region", { name: "Diagram preview" });
+	let stage = preview.locator(".ch-diagram__stage");
+	await expect(stage.locator("[data-sc-node]")).toHaveCount(7);
+	// Fitted, the labels fall below legible size, so the drawing offers full screen.
+	expect((await stage.evaluate(legibility)).scale).toBeLessThan(0.75);
 	let controls = preview.getByRole("group", { name: "Diagram controls", exact: true });
 	let button = (name: string) => controls.getByRole("button", { name, exact: true });
-	await expect(button("Fit to width")).toHaveAttribute("aria-pressed", "true");
-	await expect(button("Zoom in diagram")).toBeHidden();
+	await expect(button("Fit to width")).toBeVisible();
+	await expect(button("Actual size")).toBeVisible();
+	let expand = button("Expand diagram");
+	await expect(expand).toBeVisible();
 	let tops = await controls.locator("button:visible").evaluateAll(buttons =>
 		new Set(buttons.map(button => Math.round(button.getBoundingClientRect().top))).size
 	);
 	expect(tops).toBe(1);
-	await button("Actual size").tap();
-	await expect(button("Actual size")).toHaveAttribute("aria-pressed", "true");
-	await expect.poll(() =>
-		preview.locator(".ch-diagram__stage").evaluate(stage => stage.scrollWidth > stage.clientWidth)
-	).toBe(true);
-	await button("Fit to width").tap();
-	await expect.poll(() =>
-		preview.locator(".ch-diagram__stage").evaluate(stage => stage.scrollWidth <= stage.clientWidth)
+
+	await expand.focus();
+	await page.keyboard.press("Enter");
+	let sheet = page.getByRole("dialog", { name: "Diagram" });
+	await expect(sheet).toBeVisible();
+	await expect(sheet.getByRole("button", { name: "Close diagram" })).toBeFocused();
+	// At actual size, its text is the authored size and the drawing pans.
+	let scroller = sheet.getByRole("region", { name: "Diagram, scroll to pan" });
+	let drawing = scroller.locator("svg.sc-svg");
+	await expect(drawing.getByText("Astro project", { exact: true })).toBeVisible();
+	expect(
+		await drawing.evaluate(svg =>
+			svg.getBoundingClientRect().width / (svg as SVGSVGElement).viewBox.baseVal.width
+		),
+	).toBeCloseTo(1, 2);
+	expect(await scroller.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+
+	await page.keyboard.press("Escape");
+	await expect(sheet).toBeHidden();
+	await expect(expand).toBeFocused();
+	await page.keyboard.press("Space");
+	await expect(sheet).toBeVisible();
+	await page.keyboard.press("Enter");
+	await expect(sheet).toBeHidden();
+	await expect(expand).toBeFocused();
+	expect(
+		await page.evaluate(() =>
+			document.documentElement.scrollWidth <= document.documentElement.clientWidth
+		),
 	).toBe(true);
 });
 

@@ -1,8 +1,9 @@
 // Bar chart: single series (data) or grouped series (categories + series).
 // Accent goes to the focal bar/series only; everything else is muted.
 import { el, text } from "../../svg.mjs";
-import { textWidth } from "../../text.mjs";
+import { textWidth, wrap } from "../../text.mjs";
 import { fmt, niceDomain, ticks } from "./scale.mjs";
+import { bands, FITTED_TEXT, thinLabels } from "./fit.mjs";
 import { legend } from "../shared/legend.mjs";
 
 export const family = "chart";
@@ -142,7 +143,177 @@ function renderMarimekko(spec) {
 	};
 }
 
-export function render(spec) {
+// Drawn to `width` with legible text: upright bars while every label fits its
+// band (or there are too many bands to stack), otherwise one bar per row with
+// its label above it.
+function renderFitted({ spec, cats, series, dom, multi, unit, barCls, tip, step }, width) {
+	const S = FITTED_TEXT;
+	const mono = { size: S, mono: true, tracking: 0.04 };
+	const out = [];
+	let top = 0;
+	if (spec.axis) {
+		const lines = wrap(spec.axis, width, { ...mono, tracking: 0.08, upper: true });
+		lines.forEach((line, i) =>
+			out.push(text({ class: "ax-label", x: 0, y: S + i * (S + 4) }, line))
+		);
+		top = lines.length * (S + 4) + 8;
+	}
+	const catW = cats.map((c) => textWidth(c, { size: S }));
+	const tickValues = ticks(dom);
+	const left = Math.max(...tickValues.map((t) => textWidth(fmt(t, unit), mono))) + 8;
+	const { slot, group } = bands(cats.length, width - left);
+	const upright = spec.orientation !== "horizontal"
+		&& (catW.every((w) => w <= slot - 4) || cats.length > 12);
+	const swatches = () =>
+		series.map((s, i) => ({
+			type: "swatch",
+			swatch: s.focal ? "c-bar is-focal" : `c-bar s-${(i % 5) + 1}`,
+			label: s.name,
+		}));
+	const valueW = (v) => textWidth(fmt(v, unit), mono);
+	let h;
+
+	if (upright) {
+		const plotTop = top + S + 8, plotH = 220;
+		const y = (v) => plotTop + plotH - ((v - dom.lo) / (dom.hi - dom.lo)) * plotH;
+		for (const t of tickValues) {
+			out.push(
+				el("line", {
+					class: t === 0 ? "ax-line" : "ax-grid",
+					x1: left - 4,
+					y1: y(t),
+					x2: width,
+					y2: y(t),
+				}),
+				text({ class: "ax-text", x: left - 8, y: y(t) + 4, "text-anchor": "end" }, fmt(t, unit)),
+			);
+		}
+		const bw = group / series.length;
+		const labelled = (s, i) =>
+			series[0].values.every((v) => valueW(v) <= slot - 2) || (s.focalIdx && s.focalIdx[i]);
+		cats.forEach((_, i) => {
+			const gx = left + slot * i + (slot - group) / 2;
+			series.forEach((s, si) => {
+				const v = s.values[i];
+				const y0 = y(Math.max(0, v)), y1 = y(Math.min(0, v));
+				out.push(el("rect", {
+					class: `${barCls(s, si, i)} sc-grow-y`,
+					x: gx + bw * si + (bw > 4 ? 1 : 0),
+					y: y0,
+					width: Math.max(1, bw - (bw > 4 ? 2 : 0)),
+					height: Math.max(0.5, y1 - y0),
+					rx: 1.5,
+					"data-sc-step": step(i),
+					style: `--step:${step(i)}${v < 0 ? ";transform-origin:50% 0" : ""}`,
+					"data-sc-tip": tip(s, i),
+				}));
+				if (!multi && labelled(s, i)) {
+					out.push(text({
+						class: `c-val sc-fade${s.focalIdx && s.focalIdx[i] ? " is-focal" : ""}`,
+						x: gx + group / 2,
+						y: v >= 0 ? y0 - 6 : y1 + S + 2,
+						"text-anchor": "middle",
+						"data-sc-step": step(i),
+						style: `--step:${step(i)}`,
+					}, fmt(v, unit)));
+				}
+			});
+		});
+		const centres = cats.map((_, i) => left + slot * i + slot / 2);
+		for (const i of thinLabels(centres, catW)) {
+			const x = Math.min(width - catW[i] / 2, Math.max(catW[i] / 2, centres[i]));
+			out.push(
+				text({ class: "c-cat", x, y: plotTop + plotH + S + 6, "text-anchor": "middle" }, cats[i]),
+			);
+		}
+		h = plotTop + plotH + S + 12;
+	} else {
+		const valueRoom = multi ? 0 : Math.max(...series[0].values.map(valueW)) + 6;
+		const plotW = width - valueRoom - 2;
+		const x = (v) => ((v - dom.lo) / (dom.hi - dom.lo)) * plotW;
+		const barH = multi ? 8 : 12;
+		let cy = top;
+		const rows = cats.map((c, i) => {
+			const lines = wrap(c, width, { size: S });
+			const row = { i, lines, label: cy, bars: cy + lines.length * (S + 4) + 2 };
+			cy = row.bars + series.length * (barH + 2) + 12;
+			return row;
+		});
+		const end = cy - 12;
+		if (multi) {
+			const positions = tickValues.map(x);
+			const kept = thinLabels(positions, tickValues.map((t) => valueW(t)));
+			for (const t of tickValues) {
+				out.push(
+					el("line", {
+						class: t === 0 ? "ax-line" : "ax-grid",
+						x1: x(t),
+						y1: top,
+						x2: x(t),
+						y2: end,
+					}),
+				);
+			}
+			for (const k of kept) {
+				const label = fmt(tickValues[k], unit);
+				const w = valueW(tickValues[k]);
+				out.push(text({
+					class: "ax-text",
+					x: Math.min(width - w / 2, Math.max(w / 2, positions[k])),
+					y: end + S + 4,
+					"text-anchor": "middle",
+				}, label));
+			}
+		} else if (dom.lo < 0) {
+			out.push(el("line", { class: "ax-line", x1: x(0), y1: top, x2: x(0), y2: end }));
+		}
+		for (const row of rows) {
+			const i = row.i;
+			row.lines.forEach((line, k) =>
+				out.push(text({ class: "c-cat", x: 0, y: row.label + S + k * (S + 4) }, line))
+			);
+			series.forEach((s, si) => {
+				const v = s.values[i];
+				const x0 = x(Math.min(0, v)), x1 = x(Math.max(0, v));
+				const by = row.bars + si * (barH + 2);
+				out.push(el("rect", {
+					class: `${barCls(s, si, i)} sc-grow-x`,
+					x: x0,
+					y: by,
+					width: Math.max(0.5, x1 - x0),
+					height: barH,
+					rx: 1.5,
+					"data-sc-step": step(i),
+					style: `--step:${step(i)}`,
+					"data-sc-tip": tip(s, i),
+				}));
+				if (!multi) {
+					out.push(text({
+						class: `c-val sc-fade${s.focalIdx && s.focalIdx[i] ? " is-focal" : ""}`,
+						x: x1 + 6,
+						y: by + barH / 2 + S / 2 - 2,
+						"data-sc-step": step(i),
+						style: `--step:${step(i)}`,
+					}, fmt(v, unit)));
+				}
+			});
+		}
+		h = end + (multi ? S + 12 : 4);
+	}
+	if (multi) {
+		const lg = legend({ x: 0, y: h + 4, w: width, extra: swatches(), size: S });
+		out.push(lg.svg);
+		h += lg.h + 12;
+	}
+	return {
+		body: el("g", { class: "sc-fitted" }, out),
+		viewBox: [0, -4, width, h + 8],
+		steps: step(cats.length - 1),
+		problems: [],
+	};
+}
+
+export function render(spec, { settings = {} } = {}) {
 	if (spec.variant === "dumbbell") return renderDumbbell(spec);
 	if (spec.variant === "marimekko") return renderMarimekko(spec);
 	const problems = [];
@@ -212,6 +383,13 @@ export function render(spec) {
 		return `c-bar${focal ? " is-focal" : ""}`;
 	};
 	const tip = (s, i) => `${cats[i]}${multi ? ` · ${s.name}` : ""}: ${fmt(s.values[i], unit)}`;
+	if (settings.width) {
+		const fitted = renderFitted(
+			{ spec, cats, series, dom, multi, unit, barCls, tip, step },
+			settings.width,
+		);
+		return { ...fitted, problems };
+	}
 
 	if (!horiz) {
 		const plotH = 260;

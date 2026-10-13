@@ -21,23 +21,23 @@ const EDGE_NAMES = {
 };
 
 // Returns { svg, h } for a legend strip starting at (x, y) spanning width w.
-export function legend({ nodeKinds = [], edgeKinds = [], x, y, w, extra = [] }) {
+// A `size` other than the default 9 is a fitted chart's: no title, taller rows.
+export function legend({ nodeKinds = [], edgeKinds = [], x, y, w, extra = [], size = 9 }) {
 	const items = [];
 	for (const k of nodeKinds) items.push({ type: "node", k, label: NODE_NAMES[k] || k });
 	for (const k of edgeKinds) items.push({ type: "edge", k, label: EDGE_NAMES[k] || k });
 	items.push(...extra);
 	if (items.length < 2) return { svg: "", h: 0 };
-	const parts = [
-		el("line", { class: "lg-rule", x1: x, y1: y, x2: x + w, y2: y }),
-		text({ class: "lg-title", x, y: y + 16 }, "LEGEND"),
-	];
+	const fitted = size !== 9;
+	const parts = [el("line", { class: "lg-rule", x1: x, y1: y, x2: x + w, y2: y })];
+	if (!fitted) parts.push(text({ class: "lg-title", x, y: y + 16 }, "LEGEND"));
 	let cx = x;
-	let cy = y + 34;
+	let cy = y + (fitted ? 24 : 34);
 	for (const it of items) {
-		const tw = textWidth(it.label, { size: 9 }) + (it.type === "text" ? 24 : 44);
+		const tw = textWidth(it.label, { size }) + (it.type === "text" ? 24 : fitted ? 32 : 44);
 		if (cx + tw > x + w && cx > x) {
 			cx = x;
-			cy += 18;
+			cy += fitted ? size + 10 : 18;
 		}
 		const hit = it.type === "node"
 			? { "data-sc-kind": it.k }

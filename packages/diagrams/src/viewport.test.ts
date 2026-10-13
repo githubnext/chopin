@@ -23,8 +23,8 @@ test("a graph already within its lane keeps the authored layout", () => {
 	expect(renderDiagram(spec, { availableWidth: 900 })).toEqual(renderDiagram(spec));
 });
 
-test("semantic lane, stage and chart layouts retain their native axes", () => {
-	for (let type of ["swimlane", "medallion", "sequence", "bar"]) {
+test("semantic lane and stage layouts retain their native axes", () => {
+	for (let type of ["swimlane", "medallion", "sequence"]) {
 		let spec = DIAGRAM_FIXTURES.find(fixture => fixture.type === type)!.spec;
 		expect(renderDiagram(spec, { availableWidth: 300 })).toEqual(renderDiagram(spec));
 	}

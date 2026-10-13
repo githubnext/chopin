@@ -82,8 +82,50 @@ type Block = {
 	meta: string;
 };
 
+/**
+ * A SeeCode diagram, fitted to its column. On a phone, one whose fit would make
+ * its labels too small to read also opens full screen, like a Mermaid diagram.
+ * The sheet's copy comes from the same module, so it is drawn as the sheet opens.
+ */
 const SeeCodeDiagram = lazy(() =>
-	import("@chopin/diagrams/react").then(({ Diagram }) => ({ default: Diagram }))
+	import("@chopin/diagrams/react").then(({ Diagram, DiagramDrawing }) => ({
+		default: function SeeCodeDiagram({ spec, idPrefix }: { spec: unknown; idPrefix: string }) {
+			let phone = usePhone();
+			let [expanded, setExpanded] = useState<number>();
+			let opener = useRef<HTMLButtonElement | null>(null);
+			return (
+				<>
+					<Diagram
+						spec={spec}
+						idPrefix={idPrefix}
+						onExpand={phone
+							? (button, width) => {
+								opener.current = button;
+								setExpanded(width);
+							}
+							: undefined}
+					/>
+					{expanded !== undefined && (
+						<DiagramSheet
+							onClose={() => {
+								setExpanded(undefined);
+								// A tap never focuses the button, so closing would leave focus nowhere.
+								requestAnimationFrame(() => opener.current?.focus());
+							}}
+						>
+							<div className="plan-diagram-sheet-drawing">
+								<DiagramDrawing
+									spec={spec}
+									idPrefix={`${idPrefix}-sheet`}
+									availableWidth={expanded}
+								/>
+							</div>
+						</DiagramSheet>
+					)}
+				</>
+			);
+		},
+	}))
 );
 
 const WireframeView = lazy(() =>
