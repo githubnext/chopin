@@ -161,6 +161,187 @@ without `--host` for every target. They are written to `apps/connector/dist`:
 `chopin-darwin-arm64` and `chopin-windows-x64.exe`. See
 [Releasing the chopin CLI](releasing-cli.md) for how releases are made.
 
+### Check this machine
+
+`chopin status` shows what this machine is doing:
+
+- the CLI version and connector protocol;
+- the server it uses, and whether that came from `CHOPIN_URL`, from
+  `config.json` (written by `chopin service install`) or is the default;
+- whether the machine is paired with that server, by its label (the token is
+  never shown), and whether Chopin still accepts it;
+- each connector holding a checkout in the base dir, with its pid and chopin
+  version, and any stale lock left by one that crashed;
+- the service's state and the log path.
+
+To check the pairing, `chopin status` makes one request to Chopin and waits at
+most three seconds. When Chopin is down or slow it reports the server as
+unreachable and prints the rest. It never pairs, connects or changes anything.
+
+`chopin status --json` prints the same report as one JSON object. Scripts can
+rely on these keys, which later releases only add to:
+
+| Key          | Value                                                                                                                                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`    | The CLI version, `dev` from source.                                                                                                                                                                                                  |
+| `protocol`   | The connector protocol it speaks.                                                                                                                                                                                                    |
+| `server`     | `origin`, and `source`: `CHOPIN_URL`, `config` or `default`.                                                                                                                                                                         |
+| `machine`    | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
+| `connectors` | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version` and `started` (ISO 8601).                                                                                  |
+| `service`    | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
+| `log`        | The service's log file.                                                                                                                                                                                                              |
+| `baseDir`    | The state directory the report is for.                                                                                                                                                                                               |
+
+## Run chopin as a service
+
+`chopin service install` runs `chopin connect` as your own background service,
+so the machine keeps serving a checkout after a reboot and without a terminal.
+It takes the same checkout and agent command as `connect`:
+
+```sh
+export CHOPIN_URL=https://your-chopin-instance.example
+chopin pair --label build-box        # once, at a terminal; the service cannot pair
+chopin service install ~/src/score -- copilot --acp --allow-all
+chopin service status
+```
+
+Install needs the installed `chopin` binary (not `connector.js`) and a machine
+already paired with the server. It writes `config.json` in the base dir with
+the server, checkout, agent command and the chopin version that installed it.
+The service definition runs the absolute path of that `chopin` as
+`connect <checkout> --base-dir <dir> --service -- <agent>`. The service reads
+the server from `config.json` and the machine token from `machine.json` when it
+starts. No token or other secret is ever written into the unit, plist or task.
+Running `chopin service install` again with no checkout or agent command
+reinstalls with the stored ones; naming them replaces them and restarts the
+service. There is one service per user account, whichever base dir it uses.
+
+Before writing anything, install builds the PATH the service runs with. It
+puts the agent executable's directory first, then your current PATH without
+entries that disappear on logout or reboot: anything under `$XDG_RUNTIME_DIR`
+or `/run/user/<uid>`, and per-shell version-manager directories such as fnm's
+`fnm_multishells`. A per-shell directory that links into a stable installation
+is replaced by its target. Install refuses, and writes nothing, when the agent
+command, the interpreter its script names on a `#!/usr/bin/env` line (such as
+`node` or `bun`), or `git` would not resolve under that PATH.
+
+Like an interactive connector, the service declines ACP permission prompts,
+because it has no terminal. Pass the agent's own approval flag after `--`, as
+with `--allow-all` above. Its output is appended to `chopin.log` in the base
+dir.
+
+`chopin service status` reports `running`, `stopped`, `not-installed` or
+`restart-pending`, with the unit, plist or task path and the log path. The
+service is `restart-pending` when `chopin update` has replaced the binary but
+the service still runs the old version. `chopin service restart` restarts it.
+`chopin update` restarts a running service by itself when the service runs the
+`chopin` it just replaced. If that restart fails, the update still stands, and
+the message says to run `chopin service restart`.
+
+`chopin service uninstall` stops the service and removes its unit, plist or
+task. The pairing, `config.json`, the runs and the log stay in place, so
+`chopin connect` and a later `chopin service install` carry on without pairing
+again.
+
+If the service was installed by a newer chopin than the one you are running,
+`chopin service install` refuses to replace it. Run `chopin update` first, or
+pass `--allow-downgrade`.
+
+### Linux (systemd)
+
+The unit is `~/.config/systemd/user/chopin.service` (under `$XDG_CONFIG_HOME`
+when that is set). It uses `Restart=always`. It also uses `KillMode=mixed` and
+`TimeoutStopSec=90`, so a stop gives the connector 90 seconds to report its
+runs stopped. Install enables and starts it with
+`systemctl --user enable --now chopin.service`.
+
+A user service normally stops when you log out and starts only when you log in.
+To keep it running at boot, install enables linger with
+`loginctl enable-linger`. When that needs an administrator, install stops
+without installing anything and prints the one command to have an
+administrator run:
+
+```sh
+sudo loginctl enable-linger "$(id -un)"
+```
+
+Then run `chopin service install` again. Never run `chopin` itself with sudo.
+`chopin service uninstall` leaves linger as it was; run
+`sudo loginctl disable-linger "$(id -un)"` to turn it off if nothing else needs
+it.
+
+systemd cannot run an executable whose path holds a quote or a backslash, so
+install refuses such a `chopin` path. Copy `chopin` somewhere without them,
+for example `/usr/local/bin`, and install the service from that copy. Paths and
+arguments with spaces, `%` or `$` are quoted for you.
+
+### macOS (launchd)
+
+The LaunchAgent is `~/Library/LaunchAgents/com.github.chopin.plist`, with
+`RunAtLoad`, `KeepAlive`, `ThrottleInterval` 10, `ExitTimeOut` 90 and
+`ProcessType` `Interactive`. Install loads it with
+`launchctl bootstrap gui/<uid>`. A LaunchAgent runs while you are logged in to
+the Mac, so keep the Mac logged in and awake. Over SSH with nobody logged in at
+the Mac, there is no session to load it into. It stays installed and loads at
+your next login.
+
+### Windows (Task Scheduler)
+
+The task is `\chopin-<your user name>` in Task Scheduler's root folder.
+Characters other than letters, digits, `.`, `_` and `-` in the name are
+written as `~` and four hex digits. Install registers it through
+`powershell.exe -NoProfile -NonInteractive -Command Register-ScheduledTask …`.
+The task starts at logon, restarts a minute after a failure, and has no
+execution time limit. It inherits your user environment variables, including
+PATH, so the agent command must resolve from a new terminal. A `%` anywhere in
+the command is refused, because Task Scheduler would expand it.
+
+The task runs only while you are logged on to Windows. To start it at boot
+whether or not you are logged on, change it to an S4U task from an elevated
+PowerShell (**Run as administrator**) signed in as the same user:
+
+```powershell
+$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$name = 'chopin-' + $env:USERNAME   # as `chopin service status` shows it
+Set-ScheduledTask -TaskName $name -TaskPath '\' `
+  -Principal (New-ScheduledTaskPrincipal -UserId $user -LogonType S4U -RunLevel Limited) `
+  -Trigger (New-ScheduledTaskTrigger -AtStartup)
+```
+
+An S4U task has no access to network shares that need your password. Running
+`chopin service install` again puts the task back on the logon trigger. If
+Task Scheduler then refuses `restart` or `uninstall`, run them from an elevated
+terminal too.
+
+Task Scheduler stops a task without sending a signal. So `chopin service
+restart` and `uninstall` first write a `stop` file naming the service
+connector's pid into the base dir. The connector watches for that file,
+reports its runs stopped and exits. They wait up to 90 seconds for it before
+Task Scheduler ends the task.
+
+### Service troubleshooting
+
+- **Start with `chopin status` and the log.** The log path is in its output.
+  The service's connector prints the same lines a terminal would, including
+  why it stopped.
+- **"is not paired with …".** Run `chopin pair` at a terminal, then install
+  again. When Chopin revokes the machine, the service's connector stops with
+  `machine-revoked` and forgets the token. The service manager starts it again,
+  and with no token and no terminal to pair on it stops with "is not paired
+  with …" each time rather than wait on a browser. Pair again at a terminal,
+  then run `chopin service restart`.
+- **"The service would not find …".** The agent, its interpreter or `git` only
+  resolves from your current shell, for example through a version manager's
+  per-shell directory. Install them where a login shell finds them, or pass the
+  agent's absolute path after `--`.
+- **"chopin can't reach your systemd user manager".** Run the command in a login
+  session as the user who will own the service; `su` or `sudo -u` sessions have
+  no user manager.
+- **Stays `restart-pending`.** Run `chopin service restart`.
+- **"Workspace already locked".** An interactive `chopin connect` for the same
+  checkout and base dir is already running. Stop it before the service takes
+  over, or use another base dir for the interactive one.
+
 ## Run and inspect work
 
 On any open line of the document, type `/` and choose **Investigate**, next to
