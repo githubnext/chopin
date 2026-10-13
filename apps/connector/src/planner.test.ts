@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOutput } from "./output";
-import { servePlanners, stopBackend } from "./planner";
+import { commandWords, servePlanners, stopBackend } from "./planner";
 import { git } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-"));
@@ -244,4 +244,15 @@ test("on Windows a stopped backend's process tree is ended with taskkill", async
 	// Where taskkill cannot end it, the backend itself still is.
 	await stopBackend(backend, { platform: "win32", run: async () => 1, graceMs: 5_000 });
 	expect(backend.kill).toHaveBeenCalledTimes(1);
+});
+
+test("--planner-command splits into words as a shell would, quotes and escapes included", () => {
+	expect(commandWords(`my-planner --label="hello world" 'a b'c --x=\\"y\\" "C:\\\\dir"`))
+		.toEqual(["my-planner", "--label=hello world", "a bc", '--x="y"', "C:\\dir"]);
+	expect(commandWords(`node '/path with "quotes"/run.js' one\\ word "it's"`))
+		.toEqual(["node", '/path with "quotes"/run.js', "one word", "it's"]);
+	expect(commandWords(`  spaced   out  `)).toEqual(["spaced", "out"]);
+	expect(commandWords(`say ""`)).toEqual(["say", ""]);
+	expect(() => commandWords(`my-planner --label="hello`)).toThrow(/unmatched double quote/);
+	expect(() => commandWords(`my-planner 'hello`)).toThrow(/unmatched single quote/);
 });

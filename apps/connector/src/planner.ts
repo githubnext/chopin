@@ -7,14 +7,41 @@ import type { Output } from "./output";
 const STOP_GRACE_MS = 5000;
 
 /**
- * Split a `--planner-command` line into its words: whitespace separates them, and single or double
- * quotes keep spaces inside one.
+ * Split a `--planner-command` line into its words as a POSIX shell would, without expanding
+ * anything: whitespace separates words; single quotes keep everything inside them; double quotes
+ * keep everything but a backslash before `"`, `\`, `$` or a backquote; outside quotes a backslash
+ * keeps the character after it. Quotes may sit inside a word, as `--label="two words"`. Throws
+ * on an unmatched quote.
  */
 export function commandWords(line: string): string[] {
 	let words: string[] = [];
-	for (let match of line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)) {
-		words.push(match[1] ?? match[2] ?? match[3]!);
+	let word: string | undefined;
+	let quote: "'" | '"' | undefined;
+	for (let index = 0; index < line.length; index++) {
+		let char = line[index]!;
+		if (quote === "'") {
+			if (char === "'") quote = undefined;
+			else word += char;
+		} else if (quote === '"') {
+			if (char === '"') quote = undefined;
+			else if (char === "\\" && /["\\$`]/.test(line[index + 1] ?? "")) word += line[++index];
+			else word += char;
+		} else if (/\s/.test(char)) {
+			if (word !== undefined) words.push(word);
+			word = undefined;
+		} else {
+			word ??= "";
+			if (char === "'" || char === '"') quote = char;
+			else if (char === "\\" && index + 1 < line.length) word += line[++index];
+			else word += char;
+		}
 	}
+	if (quote) {
+		throw new Error(
+			`--planner-command has an unmatched ${quote === "'" ? "single" : "double"} quote.`,
+		);
+	}
+	if (word !== undefined) words.push(word);
 	return words;
 }
 

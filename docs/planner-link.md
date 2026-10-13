@@ -569,8 +569,11 @@ chopin connect . --planner https://chopin.example/octo-org/score/plan \
   --planner-command "my-planner --flag" -- copilot --acp
 ```
 
-`--planner` may repeat. `CHOPIN_PLANNER_COMMAND` may hold the command as a JSON
-array of words instead of `--planner-command`. The command runs in the checkout
+`--planner` may repeat. `--planner-command` is split into words as a POSIX
+shell would, without expanding anything: single and double quotes, also inside
+a word as in `--label="two words"`, and backslash escapes outside single
+quotes; an unmatched quote is refused. `CHOPIN_PLANNER_COMMAND` may hold the
+command as a JSON array of words instead. The command runs in the checkout
 `connect` serves, in its own process group, with its standard output and error
 going to the connector's.
 
