@@ -1,4 +1,4 @@
-import { buildActive, queueRebuild, settleLive } from "./builds";
+import { buildActive, queueRebuild, settleLive, stoppedForRevision } from "./builds";
 import { readCurrentDocument } from "../plan/service";
 import type { RebuildConnections } from "./builds";
 import type { DocumentTarget, Plan } from "../plan/service";
@@ -112,6 +112,7 @@ export class LiveSyncCoordinator {
 			}
 			this.#builders.set(channelId, { repositoryId: live.repositoryId, user: live.user });
 			let current = await readCurrentDocument(plan);
+			if (stoppedForRevision(plan, current.revision)) return;
 			if (current.source === live.baseSource) return;
 			if (buildActive(plan)) {
 				this.#waiting.add(channelId);

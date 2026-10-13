@@ -89,6 +89,7 @@ export async function runWork(
 	options.signal.addEventListener("abort", cancel, { once: true });
 	if (options.signal.aborted) abort.abort();
 	let latestProgress = "Preparing checkout";
+	let pendingPermissions = 0;
 	/** Why the connector stopped the agent itself, when Chopin ended the run or stayed out of reach. */
 	let ended: string | undefined;
 	/** Chopin forgot this connection, so the connector must stop once the run has reported. */
@@ -128,7 +129,12 @@ export async function runWork(
 			try {
 				let result = await reports.attempt(
 					implementation ? "renew_implementation_build" : "renew_experiment",
-					{ ...identity, progress: latestProgress },
+					{
+						...identity,
+						progress: pendingPermissions
+							? "Waiting for permission in the owner's terminal"
+							: latestProgress,
+					},
 					beat,
 				);
 				failures = 0;
@@ -251,9 +257,12 @@ export async function runWork(
 					}).then(() => {})
 				: undefined,
 			onUpdate(value) {
-				if (value.update.sessionUpdate === "tool_call") {
-					agentMessage = "";
-					latestProgress = value.update.title.slice(0, 2000);
+				if (value.update.sessionUpdate === "tool_call") agentMessage = "";
+				if (
+					(value.update.sessionUpdate === "tool_call"
+						|| value.update.sessionUpdate === "tool_call_update") && value.update.title
+				) {
+					latestProgress = value.update.title.trim().slice(0, 2000) || latestProgress;
 				} else if (
 					value.update.sessionUpdate === "agent_message_chunk"
 					&& value.update.content.type === "text"
@@ -264,24 +273,28 @@ export async function runWork(
 			async permission(request) {
 				let remembered = permissions.remembered(request);
 				if (remembered) return remembered;
-				latestProgress = "Waiting for permission in the owner's terminal";
 				if (!process.stdin.isTTY) return undefined;
-				let [heading, ...detail] = describePermission(request);
-				output.say(
-					"",
-					`  ${output.style.bold(`Allow ${heading}?`)}`,
-					...detail.map(line => `    ${line}`),
-					...request.options.map((option, index) => `  ${index + 1}. ${option.name}`),
-				);
-				let answer = await ask("  Select option (blank cancels): ", {
-					input: process.stdin,
-					output: process.stdout,
-					signal: abort.signal,
-					interrupt: options.interrupt ?? (() => abort.abort()),
-				});
-				let chosen = request.options[Number(answer) - 1]?.optionId;
-				permissions.chose(request, chosen);
-				return chosen;
+				pendingPermissions++;
+				try {
+					let [heading, ...detail] = describePermission(request);
+					output.say(
+						"",
+						`  ${output.style.bold(`Allow ${heading}?`)}`,
+						...detail.map(line => `    ${line}`),
+						...request.options.map((option, index) => `  ${index + 1}. ${option.name}`),
+					);
+					let answer = await ask("  Select option (blank cancels): ", {
+						input: process.stdin,
+						output: process.stdout,
+						signal: abort.signal,
+						interrupt: options.interrupt ?? (() => abort.abort()),
+					});
+					let chosen = request.options[Number(answer) - 1]?.optionId;
+					permissions.chose(request, chosen);
+					return chosen;
+				} finally {
+					pendingPermissions--;
+				}
 			},
 			stderr(text) {
 				agentTail = [...agentTail, ...text.split("\n").filter(Boolean)].slice(-10);

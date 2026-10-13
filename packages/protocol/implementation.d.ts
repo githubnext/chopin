@@ -21,6 +21,8 @@ export type BuildRequest = {
 	error?: string;
 	/** Latest coding-agent activity; `at` changes when its description changes. */
 	activity?: { text: string; at: string };
+	/** A human Stop suppresses automatic work for edits up through this document revision. */
+	stoppedAtRevision?: number;
 	/** The connector's key for the report that set `state`, so a retry of it is recognized. */
 	reportKey?: string;
 	/** A rebuild carries edits since `baseRevision` onto a live build's pull requests. */

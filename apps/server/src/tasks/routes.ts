@@ -343,6 +343,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 					await reportBuild(plan, build.user, build.connectionId, build.id, {
 						state: "failed",
 						error: "Stopped in Chopin.",
+						stoppedByUser: true,
 					});
 					options.connections.release(build.connectionId, id);
 				} catch (error) {

@@ -144,7 +144,9 @@ in Build first. Stop preserves existing commits and pull requests and rejects fu
 reports from that run. The connector stops the agent on its next heartbeat (normally
 within 10 seconds) and stays connected. Ctrl-C in its terminal also stops the work
 and disconnects the connector. Reconnect with the updated connector to receive
-activity updates. An admitted
+activity updates.
+Stop also cancels automatic rebuilds already waiting behind the run; a later
+document edit can start a new automatic rebuild. An admitted
 repository writer can also continue the existing lifecycle through ordinary
 `/mcp`. The connector's run credential stops accepting reports when its turn ends.
 Failure does not undo local edits, and these controls do not automatically resume

@@ -57,6 +57,23 @@ let app = new AgentApp()
 						status: "in_progress",
 					},
 				});
+				if (process.argv.includes("--permission-activity")) {
+					let answer = await ownerClient.request("session/request_permission", {
+						sessionId: params.sessionId,
+						toolCall: { toolCallId: "tests", title: "Running server tests", kind: "execute" },
+						options: [{ optionId: "allow", name: "Allow once", kind: "allow_once" }],
+					});
+					if (answer.outcome.outcome !== "selected") throw new Error("Permission was refused");
+					await ownerClient.notify("session/update", {
+						sessionId: params.sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: "tests",
+							title: "Checking test results",
+							status: "in_progress",
+						},
+					});
+				}
 			}
 			await new Promise<void>(resolve => cancelled = resolve);
 			return { stopReason: "cancelled" as const };

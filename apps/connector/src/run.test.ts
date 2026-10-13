@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import * as Permission from "./permission";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -570,6 +571,38 @@ test(
 	},
 	20_000,
 );
+
+test("activity follows tool updates after a permission is answered", async () => {
+	let descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+	Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+	let question = spyOn(Permission, "ask").mockResolvedValue("1");
+	let abort = new AbortController();
+	let timer = setTimeout(() => abort.abort(), 15_000);
+	try {
+		let { calls } = await run(
+			{},
+			["--hang", "--activity", "--permission-activity"],
+			(name, args) => {
+				if (name === "renew_implementation_build" && args.progress === "Checking test results") {
+					throw new ConnectorError("build-inactive", "build-inactive");
+				}
+				return {};
+			},
+			abort.signal,
+		);
+		expect(question).toHaveBeenCalledTimes(1);
+		expect(
+			calls.some(([name, args]) =>
+				name === "renew_implementation_build" && args.progress === "Checking test results"
+			),
+		).toBe(true);
+	} finally {
+		clearTimeout(timer);
+		question.mockRestore();
+		if (descriptor) Object.defineProperty(process.stdin, "isTTY", descriptor);
+		else Reflect.deleteProperty(process.stdin, "isTTY");
+	}
+}, 20_000);
 
 test("a run whose connection a restarted server forgot stops its agent and the connector", async () => {
 	let root = await mkdtemp(join(tmpdir(), "chopin-forgotten-"));

@@ -44,6 +44,7 @@ let buildSchema = z.object({
 	state: z.enum(["queued", "starting", "running", "stopped", "failed"]),
 	session: z.string().min(1).max(128).optional(),
 	error: z.string().max(2000).optional(),
+	stoppedAtRevision: z.number().int().nonnegative().optional(),
 	activity: z.object({
 		text: z.string().min(1).max(2000),
 		at: z.string().datetime(),
@@ -264,6 +265,12 @@ export function buildActive(plan: Plan): boolean {
 		|| plan.builds.some(build => ["queued", "starting", "running"].includes(build.state));
 }
 
+/** Stop cancels existing automatic work; a later document edit can start new work. */
+export function stoppedForRevision(plan: Plan, revision = plan.revision): boolean {
+	let stoppedAt = plan.builds.at(-1)?.stoppedAtRevision;
+	return stoppedAt !== undefined && revision <= stoppedAt;
+}
+
 /**
  * Queue a rebuild of a built document's edits onto its pull requests.
  *
@@ -286,6 +293,7 @@ export async function queueRebuild(
 	return exclusive(plan, async () => {
 		let live = plan.live;
 		if (!live) return { kind: "unavailable" };
+		if (options.automatic && stoppedForRevision(plan)) return { kind: "unavailable" };
 		if (buildActive(plan)) return { kind: "busy" };
 		if (source(plan) === live.baseSource) return { kind: "unchanged" };
 		if (options.by) {
@@ -376,6 +384,7 @@ export async function settleLive(
 		if (
 			!live || live.baseSource !== checked.baseSource || live.outstanding?.length
 			|| buildActive(plan) || checked.revision > plan.revision
+			|| stoppedForRevision(plan, checked.revision)
 		) return false;
 		let previous = live;
 		plan.live = {
@@ -467,6 +476,7 @@ export function reportBuild(
 		expiresAt?: number;
 		reportKey?: string;
 		progress?: string;
+		stoppedByUser?: true;
 	},
 ): Promise<void> {
 	return exclusive(plan, async () => {
@@ -484,10 +494,11 @@ export function reportBuild(
 		) {
 			throw new Error("build report is out of order");
 		}
-		let { progress, ...fields } = report;
+		let { progress, stoppedByUser, ...fields } = report;
 		let next = buildSchema.parse({
 			...current,
 			...fields,
+			...(stoppedByUser ? { stoppedAtRevision: plan.revision } : {}),
 			...(progress && progress !== current.activity?.text
 				? { activity: { text: progress, at: new Date().toISOString() } }
 				: {}),

@@ -11,6 +11,7 @@ import { implementationGraphs } from "./plan-graphs";
 import { registerImplementationRoutes } from "./routes";
 import { queueRebuild, requestBuild } from "./builds";
 import { implementationStatus } from "./notifications";
+import { LiveSyncCoordinator } from "./live-sync";
 import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
 
@@ -886,12 +887,12 @@ function edit(plan: Plan.Plan, text: string) {
 }
 
 /** Deliver a live build, edit the document, then queue and start a rebuild of that edit. */
-async function rebuilding() {
+async function rebuilding(autoRun = false) {
 	let context = await setup();
 	context.plan.persistence.liveBuild = true;
 	let stopped: string[] = [];
 	context.plan.persistence.onBuildStopped = id => stopped.push(id);
-	let connection = await paired(context);
+	let connection = await paired(context, undefined, autoRun);
 	let built = await (await context.call(context.path, {
 		planRevision: 0,
 		graphVersion: 1,
@@ -937,6 +938,33 @@ async function rebuilding() {
 	});
 	return { context, connection, built, claim, rebuild, builtSource, target, stopped };
 }
+
+test("Stop cancels an automatic rebuild deferred by edits until a new edit arrives", async () => {
+	let { context, rebuild } = await rebuilding(true);
+	let plan = context.plan;
+	let coordinator = new LiveSyncCoordinator({
+		withPlan: async (_id, action) => action(plan),
+		connections: context.experiments.connections,
+	});
+	plan.persistence.onBuildStopped = id => coordinator.stopped(id);
+	try {
+		expect((await edit(plan, "An edit while the rebuild runs.")).ok).toBe(true);
+		await coordinator.check(plan.id);
+		expect((await context.call(`${context.path}/stop`, { id: rebuild.build.id })).status).toBe(200);
+		await coordinator.check(plan.id);
+		expect(plan.builds).toHaveLength(2);
+		expect(plan.builds.at(-1)!.state).toBe("failed");
+		await coordinator.check(plan.id);
+		expect(plan.builds).toHaveLength(2);
+		expect((await edit(plan, "A new edit after Stop.")).ok).toBe(true);
+		await coordinator.check(plan.id);
+		expect(plan.builds).toHaveLength(3);
+		expect(plan.builds.at(-1)!.state).toBe("queued");
+	} finally {
+		coordinator.close();
+		await Plan.close(plan);
+	}
+});
 
 test("a running rebuild leaves editing open and reads its sealed delta", async () => {
 	let { context, rebuild, builtSource, target } = await rebuilding();
