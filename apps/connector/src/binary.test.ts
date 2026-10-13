@@ -63,8 +63,7 @@ test.skipIf(!binary)(
 		};
 		expect(install()).toEqual({
 			code: 1,
-			stderr: "Run chopin connect once in your checkout first (it saves what the service "
-				+ "runs), then chopin service install.\n",
+			stderr: "Run chopin connect once in your checkout first, then chopin service install.\n",
 		});
 		let settings = { server: saved, checkout: scratch, command: ["agent"], planners: [] };
 		await writeFile(

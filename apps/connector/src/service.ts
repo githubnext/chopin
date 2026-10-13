@@ -80,8 +80,8 @@ export type ServiceProgram = {
 	directory: string;
 };
 
-export const CONNECT_FIRST = "Run chopin connect once in your checkout first (it saves what the "
-	+ "service runs), then chopin service install.";
+export const CONNECT_FIRST = "Run chopin connect once in your checkout first, then chopin service "
+	+ "install.";
 
 export const UNIT = "chopin.service";
 export const LABEL = "com.github.chopin";
@@ -101,8 +101,8 @@ export function logPath(platform: NodeJS.Platform, directory: string) {
 }
 
 /**
- * `chopin connect`'s arguments under the service. `--service` runs what `chopin connect` saved in
- * config.json and marks its lock as the service's.
+ * `chopin connect`'s arguments under the service. `--service` runs the settings install copied
+ * into config.json and marks its lock as the service's.
  */
 export function serviceArguments(program: ServiceProgram) {
 	return ["connect", "--base-dir", program.directory, "--service"];
@@ -635,10 +635,10 @@ async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servi
 }
 
 /**
- * Install `program` as this user's service and start it, so it starts again by itself. It runs
- * what `chopin connect` saved in config.json, checked here first, server included; the program
- * goes to config.json too. A service an older chopin than one already installed is refused
- * without `allowDowngrade`.
+ * Install `program` as this user's service and start it, so it starts again by itself. It copies
+ * what the last `chopin connect` ran, checked here first, server included, into config.json as
+ * the service's own settings, which a later connect leaves alone. A service an older chopin than
+ * one already installed is refused without `allowDowngrade`.
  */
 export async function installService(
 	host: ServiceHost,
@@ -678,8 +678,9 @@ export async function installService(
 	let log = logPath(host.platform, program.directory);
 	let record = () =>
 		updateConfig(program.directory, value => {
+			// The agent by its resolved path in both, so status can tell when connect ran since.
 			value.connect = settings;
-			value.service = { ...program, version, installedAt: Date.now() };
+			value.service = { ...program, version, installedAt: Date.now(), settings };
 		});
 	let notes: string[] = [];
 	if (manager === "systemd") {

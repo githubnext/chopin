@@ -122,3 +122,9 @@ published release: its `checksums.txt` and attestations name their digests.
 
 The binaries are not code-signed or notarized. Installs through `curl` and
 `irm` carry no download mark, so neither Gatekeeper nor SmartScreen blocks them.
+
+## Notes for the next release
+
+- Development builds that installed a service must run `chopin connect`, then
+  `chopin service install` again: the service now runs its own copy of the
+  settings, which older builds never saved.

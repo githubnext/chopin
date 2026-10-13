@@ -115,6 +115,8 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		},
 		log: join(directory, "chopin.log"),
 		baseDir: directory,
+		serviceRuns: null,
+		lastConnect: null,
 	});
 	expect(JSON.stringify(report)).not.toContain(TOKEN);
 	let text = formatStatus(report);
@@ -134,6 +136,52 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		`Base dir:   ${directory}`,
 	]);
 	expect(text.join("\n")).not.toContain(TOKEN);
+});
+
+test("status shows what the service runs, and the last connect when it differs", async () => {
+	let { directory, host } = await machine();
+	let runs = {
+		server: "https://chopin.example",
+		checkout: "/work/score",
+		command: ["/usr/bin/agent", "--acp"],
+		planners: [],
+		plannerCommand: [],
+	};
+	let last = { ...runs, checkout: "/work/other" };
+	await writeFile(
+		join(directory, "config.json"),
+		JSON.stringify({
+			connect: last,
+			service: {
+				executable: "/opt/chopin",
+				directory,
+				version: VERSION,
+				installedAt: 1,
+				settings: runs,
+			},
+		}),
+	);
+	let report = await collectStatus({ directory, server: runs.server, source: "config", host });
+	expect(report).toMatchObject({ serviceRuns: runs, lastConnect: last });
+	let installed = {
+		...report,
+		service: {
+			state: "running" as const,
+			manager: "systemd" as const,
+			definition: "/u",
+			log: "/l",
+			notes: [],
+		},
+	};
+	expect(formatStatus(installed)).toContain(
+		"            runs /work/score with /usr/bin/agent --acp, on https://chopin.example",
+	);
+	expect(formatStatus(installed)).toContain(
+		"            chopin connect last ran /work/other with /usr/bin/agent --acp, on "
+			+ "https://chopin.example; run chopin service install to use it",
+	);
+	let same = formatStatus({ ...installed, lastConnect: runs }).join("\n");
+	expect(same).not.toContain("last ran");
 });
 
 test("status of an unpaired machine asks Chopin nothing", async () => {

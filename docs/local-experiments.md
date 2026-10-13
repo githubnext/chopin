@@ -103,8 +103,8 @@ remains the way to connect.
 `chopin pair` pairs this machine and stores its token; `--label` names it in
 Chopin (default: the hostname), and pairing again replaces the token.
 `chopin connect` runs work exactly as `bun connector.js connect` does, pairing
-first only when the machine has no token for that server, and saves what it
-runs, server included, for `chopin service install`. Set `CHOPIN_URL` once, for
+first only when the machine has no token for that server. Once it has
+connected, it saves what it runs, server included, for `chopin service install`. Set `CHOPIN_URL` once, for
 `chopin connect`; later commands use the server it saved, and
 `https://chopin.githubnext.com` before anything is saved. `chopin unpair`
 revokes the machine in Chopin and deletes its token. Every command takes
@@ -176,7 +176,9 @@ without `--host` for every target. They are written to `apps/connector/dist`:
 - each connector holding a checkout in the base dir, with its pid and chopin
   version and the documents whose Planner backends it runs, and any stale lock
   left by one that crashed;
-- the service's state and the log path.
+- the service's state, what it runs, and what `chopin connect` last ran when
+  that differs;
+- the log path.
 
 To check the pairing, `chopin status` makes one request to Chopin and waits at
 most three seconds. When Chopin is down or slow it reports the server as
@@ -185,16 +187,18 @@ unreachable and prints the rest. It never pairs, connects or changes anything.
 `chopin status --json` prints the same report as one JSON object. Scripts can
 rely on these keys, which later releases only add to:
 
-| Key          | Value                                                                                                                                                                                                                                |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `version`    | The CLI version, `dev` from source.                                                                                                                                                                                                  |
-| `protocol`   | The connector protocol it speaks.                                                                                                                                                                                                    |
-| `server`     | `origin`, and `source`: `CHOPIN_URL`, `config` or `default`.                                                                                                                                                                         |
-| `machine`    | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
-| `connectors` | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601) and `planners`.                                                                      |
-| `service`    | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
-| `log`        | The service's log file.                                                                                                                                                                                                              |
-| `baseDir`    | The state directory the report is for.                                                                                                                                                                                               |
+| Key           | Value                                                                                                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`     | The CLI version, `dev` from source.                                                                                                                                                                                                  |
+| `protocol`    | The connector protocol it speaks.                                                                                                                                                                                                    |
+| `server`      | `origin`, and `source`: `CHOPIN_URL`, `config` or `default`.                                                                                                                                                                         |
+| `machine`     | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
+| `connectors`  | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601) and `planners`.                                                                      |
+| `service`     | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
+| `log`         | The service's log file.                                                                                                                                                                                                              |
+| `baseDir`     | The state directory the report is for.                                                                                                                                                                                               |
+| `serviceRuns` | What the installed service runs: `server`, `checkout`, `command`, `planners` and `plannerCommand`, or `null` before an install.                                                                                                      |
+| `lastConnect` | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                           |
 
 ## Run chopin as a service
 
@@ -210,25 +214,31 @@ chopin service install
 chopin service status
 ```
 
-Each time `chopin connect` starts, it saves the server, the checkout's absolute
-path, the agent command and any Planner documents and command to `config.json`
-in the base dir. `config.json` holds no token or other secret. Install needs the
-installed `chopin` binary (not `connector.js`), a machine already paired with
-the server, and those saved settings; without them it stops with "Run chopin
-connect once in your checkout first (it saves what the service runs), then
-chopin service install." It runs the server `chopin connect` saved; when
-`CHOPIN_URL` names another, install refuses and asks you to run `chopin connect`
-again with the server you want. It writes the chopin version that installed it
-to `config.json`. The service definition runs the absolute path of
-that `chopin` as `connect --base-dir <dir> --service`, which reads the saved
-settings, the server and the machine token when it starts and runs exactly
-those settings. No token or other secret is ever written into the unit, plist
-or task. There is one service per user account, whichever base dir it uses.
+Once `chopin connect` has connected, it saves the server, the checkout's
+absolute path, the agent command and any Planner documents and command to
+`config.json` in the base dir. A connect that stops before that, at pairing, on
+a version refusal or on bad arguments, saves nothing. `config.json` holds no
+token or other secret. Install needs the installed `chopin` binary (not
+`connector.js`), a machine already paired with the server, and those saved
+settings; without them it stops with "Run chopin connect once in your checkout
+first, then chopin service install." It uses the server `chopin connect` saved;
+when `CHOPIN_URL` names another, install refuses and asks you to run
+`chopin connect` again with the server you want. Install copies the saved
+settings into `config.json` as the service's own, with the chopin version that
+installed it. The service definition runs the absolute path of that `chopin` as
+`connect --base-dir <dir> --service`, which reads the service's settings and
+the machine token when it starts and runs exactly those. No token or other
+secret is ever written into the unit, plist or task. There is one service per
+user account, whichever base dir it uses.
 
-To change what the service runs, run `chopin connect` again with the new
-checkout, agent or Planner arguments, then `chopin service restart`. While the
-service runs that checkout, `chopin connect` there only saves the new settings,
-says so, and exits without connecting.
+A later `chopin connect`, in this checkout or another, never changes what the
+service runs. To change it, run `chopin connect` with the new checkout, agent or
+Planner arguments, then `chopin service install` again, which replaces the
+service. If the service is running the checkout you connect, `chopin connect`
+saves your settings without connecting and prints "The chopin service is
+running this checkout. Saved your settings; run chopin service install to use
+them." `chopin service restart` restarts the service with the settings it
+already has.
 
 A service runs Planner backends when `chopin connect` ran them with
 `--planner <document URL>` and `--planner-command <command>`; each backend gets

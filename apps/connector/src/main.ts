@@ -156,7 +156,7 @@ async function unpairCommand(args: string[]) {
 }
 
 async function connect(args: string[]) {
-	// `--service` marks the connector the installed service runs, which runs what connect saved.
+	// `--service` marks the connector the installed service runs, which runs what install copied.
 	let parsed = parseArgs(args, {
 		flags: ["service"],
 		options: ["planner-command"],
@@ -164,17 +164,17 @@ async function connect(args: string[]) {
 	});
 	let service = parsed.flags.has("service");
 	let directory = stateDirectory();
-	let saved = service ? (await readConfig(directory)).connect : undefined;
+	let saved = service ? (await readConfig(directory)).service?.settings : undefined;
 	if (
 		service
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
 			|| parsed.options.has("planner-command"))
 	) {
 		throw new Error(
-			`${SELF} connect --service takes no other arguments; it runs what ${SELF} connect saved.`,
+			`${SELF} connect --service takes no other arguments; it runs what ${SELF} service install saved.`,
 		);
 	}
-	if (service && !saved?.server) throw new Error(CONNECT_FIRST);
+	if (service && !saved) throw new Error(CONNECT_FIRST);
 	let command = saved?.command ?? parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
 	if (
 		!Array.isArray(command) || !command.length
@@ -223,7 +223,7 @@ async function connect(args: string[]) {
 		await save();
 		createOutput().say(
 			"The chopin service is running this checkout. Saved your settings; run chopin service "
-				+ "restart to use them.",
+				+ "install to use them.",
 		);
 		return;
 	}
@@ -242,7 +242,6 @@ async function connect(args: string[]) {
 	let output = createOutput();
 	let permissions = permissionMemory();
 	try {
-		if (!service) await save();
 		let { root: _root, ...source } = info;
 		let checkout = { ...source, label: basename(info.root) };
 		for (;;) {
@@ -284,7 +283,11 @@ async function connect(args: string[]) {
 					// while the server runs, so after a restart Chopin refuses the old one for good.
 					connect: async signal => {
 						let api = await remote(url, await register(url, machine, checkout, signal), signal);
-						if (!announced) output.connected(info.repository);
+						if (!announced) {
+							output.connected(info.repository);
+							// Only a connect that got this far saves its settings for service install.
+							if (!service) await save();
+						}
 						announced = true;
 						return api;
 					},
@@ -370,7 +373,7 @@ async function serviceCommand(args: string[]) {
 				+ `It connects ${saved.checkout} to ${url} as chopin connect last did.`,
 			output.style.dim(
 				"  To change what it runs, run chopin connect again with new arguments, then chopin "
-					+ "service restart.",
+					+ "service install again.",
 			),
 			output.style.dim(`  Definition: ${installed.definition}`),
 			output.style.dim(`  Log: ${installed.log}`),
@@ -416,19 +419,20 @@ const HELP = [
 	"      Revoke this machine's token in Chopin and delete it here.",
 	"  connect [checkout] -- <agent> [ACP arguments]",
 	"      Run the work you start in the checkout's documents with a local ACP agent.",
-	"      Pairs this machine first if it isn't paired yet, and saves what it runs for the service.",
+	"      Pairs this machine first if it isn't paired yet. Once connected, saves what it runs",
+	"      for service install.",
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
 	"  status [--json]",
 	"      Show this chopin's version, the server, whether this machine is paired and Chopin",
-	"      still accepts it, the connectors running here and the Planners they run, the service",
-	"      and the log path.",
+	"      still accepts it, the connectors running here and the Planners they run, the service,",
+	"      what it runs, and the log path.",
 	"  service install [--allow-downgrade]",
 	"      Run what connect last ran as this user's background service (systemd, launchd or Task",
-	"      Scheduler), so it starts again after a reboot. To change what it runs, run connect",
-	"      again with new arguments, then service restart. A service a newer chopin installed is",
-	"      kept unless --allow-downgrade.",
+	"      Scheduler), so it starts again after a reboot. Later connects don't change it; to",
+	"      change what it runs, run connect again with new arguments, then service install again.",
+	"      A service a newer chopin installed is kept unless --allow-downgrade.",
 	"  service status | restart | uninstall",
 	"      Show whether it is running, stopped, restart-pending or not-installed; restart it;",
 	"      or stop and remove it, keeping the pairing, config and runs.",

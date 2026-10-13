@@ -29,7 +29,7 @@ afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 const SERVER = "https://chopin.example";
 
-/** Saves what `chopin connect` ran, as it does when it starts. */
+/** Saves what `chopin connect` ran, as it does once it has connected. */
 function connected(directory: string, settings: ConnectSettings) {
 	return updateConfig(directory, value => {
 		value.connect = settings;
@@ -99,15 +99,30 @@ test("on Linux, install enables linger, writes the unit and enables it", async (
 	]);
 	expect(installed).toMatchObject({ manager: "systemd", definition: unitPath(home) });
 	let unit = await readFile(unitPath(home), "utf8");
-	// The unit runs what connect saved, so it names no checkout, agent or Planner.
+	// The unit runs the settings install copied, so it names no checkout, agent or Planner.
 	expect(unit).toContain(
 		`ExecStart="/opt/chopin/bin/chopin" "connect" "--base-dir" "${directory}" "--service"\n`,
 	);
 	expect(unit).toBe(systemdUnit(program, `${await realpath(bin)}:/usr/bin:/bin`));
-	// The service runs the agent by its absolute path, as the service's PATH resolves it.
+	// Install copies the last connect as the service's own settings, with the agent by the
+	// absolute path the service's PATH resolves it to.
+	let copied = { ...settings, command: [join(await realpath(bin), "agent"), "--acp"] };
 	expect(await readConfig(directory)).toEqual({
-		connect: { ...settings, command: [join(await realpath(bin), "agent"), "--acp"] },
-		service: { ...program, version: "0.0.2", installedAt: expect.any(Number) },
+		connect: copied,
+		service: { ...program, version: "0.0.2", installedAt: expect.any(Number), settings: copied },
+	});
+});
+
+test("install again replaces the service's settings with the last connect", async () => {
+	let { directory, host, program, settings } = await machine("linux", systemd);
+	await installService(host, program);
+	let other = { ...settings, checkout: join(directory, "other"), command: ["agent", "--other"] };
+	await connected(directory, other);
+	expect((await readConfig(directory)).service?.settings?.checkout).toBe(settings.checkout);
+	await installService(host, program);
+	expect((await readConfig(directory)).service?.settings).toMatchObject({
+		checkout: other.checkout,
+		command: [expect.stringMatching(/agent$/), "--other"],
 	});
 });
 
@@ -118,8 +133,7 @@ test("install refuses until chopin connect has saved what the service runs", asy
 	});
 	let error = await installService(host, program).catch(error => error);
 	expect(error.message).toBe(
-		"Run chopin connect once in your checkout first (it saves what the service runs), then "
-			+ "chopin service install.",
+		"Run chopin connect once in your checkout first, then chopin service install.",
 	);
 	expect(calls).toEqual([]);
 	expect(existsSync(unitPath(home))).toBe(false);
@@ -155,7 +169,7 @@ test("install checks the saved Planner command under the service PATH; one it ca
 	await connected(directory, planned);
 	await installService(host, program);
 	expect(await readFile(unitPath(home), "utf8")).not.toContain("planner");
-	expect((await readConfig(directory)).connect).toMatchObject({
+	expect((await readConfig(directory)).service?.settings).toMatchObject({
 		planners: planned.planners,
 		plannerCommand: planned.plannerCommand,
 	});
@@ -221,7 +235,7 @@ test("an agent reached through a runtime directory runs from its stable path aft
 	let real = await realpath(join(stable, "bin"));
 	let unit = await readFile(unitPath(home), "utf8");
 	expect(unit).toBe(systemdUnit(program, `${real}:/usr/bin:/bin`));
-	let command = (await readConfig(directory)).connect?.command;
+	let command = (await readConfig(directory)).service?.settings?.command;
 	expect(command).toEqual([join(real, "agent"), "--acp"]);
 	// A reboot empties the runtime directory; the agent the service runs is still there.
 	await rm(run, { recursive: true });
@@ -297,7 +311,7 @@ test("a version manager's shim is installed by its own name, so it still dispatc
 	host.env = { PATH: `${join(home, "shims")}:/usr/bin:/bin` };
 	await installService(host, program);
 	let shim = join(await realpath(join(mise, "shims")), "agent");
-	expect((await readConfig(directory)).connect?.command).toEqual([shim, "--acp"]);
+	expect((await readConfig(directory)).service?.settings?.command).toEqual([shim, "--acp"]);
 });
 
 test("on macOS, install writes the LaunchAgent and bootstraps it into the login session", async () => {

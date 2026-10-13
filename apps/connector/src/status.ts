@@ -1,3 +1,4 @@
+import { type ConnectSettings, readConfig } from "./config";
 import { machineLabel, machineToken, SELF } from "./machine";
 import { CONNECTOR_HEADERS, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
@@ -55,6 +56,10 @@ export type StatusReport = {
 	service: ServiceStatus | { state: "unknown"; detail: string };
 	log: string;
 	baseDir: string;
+	/** What the installed service runs, as `chopin service install` copied it. */
+	serviceRuns: ConnectSettings | null;
+	/** What the last `chopin connect` that connected ran, which the next install copies. */
+	lastConnect: ConnectSettings | null;
 };
 
 const CHECK_MS = 3000;
@@ -124,6 +129,7 @@ export async function collectStatus(options: {
 	} catch (error) {
 		service = { state: "unknown", detail: error instanceof Error ? error.message : String(error) };
 	}
+	let config = await readConfig(directory);
 	return {
 		version: VERSION,
 		protocol: CONNECTOR_PROTOCOL,
@@ -141,6 +147,8 @@ export async function collectStatus(options: {
 		service,
 		log: logPath(host.platform, directory),
 		baseDir: directory,
+		serviceRuns: config.service?.settings ?? null,
+		lastConnect: config.connect ?? null,
 	};
 }
 
@@ -156,6 +164,15 @@ function row(name: string, value: string) {
 
 function more(value: string) {
 	return `${" ".repeat(12)}${value}`;
+}
+
+function describe(settings: ConnectSettings) {
+	let planners = settings.planners.length
+		? ` and Planners for ${settings.planners.join(", ")}`
+		: "";
+	return `${settings.checkout} with ${
+		settings.command.join(" ")
+	}${planners}, on ${settings.server}`;
 }
 
 /** The report as lines for a person. */
@@ -189,6 +206,7 @@ export function formatStatus(report: StatusReport) {
 	let serviceLine = service.state === "unknown"
 		? `unknown (${service.detail})`
 		: `${service.state} (${service.manager}${service.pid ? `, pid ${service.pid}` : ""})`;
+	let { serviceRuns: runs, lastConnect: last } = report;
 	return [
 		`chopin ${report.version} (connector protocol ${report.protocol})`,
 		row("Server", `${report.server.origin} (${SOURCES[report.server.source]})`),
@@ -198,7 +216,18 @@ export function formatStatus(report: StatusReport) {
 		row("Service", serviceLine),
 		...(service.state === "unknown" || service.state === "not-installed"
 			? []
-			: [more(`definition: ${service.definition}`), ...service.notes.map(more)]),
+			: [
+				more(`definition: ${service.definition}`),
+				...(runs ? [more(`runs ${describe(runs)}`)] : []),
+				...(last && !Bun.deepEquals(last, runs)
+					? [
+						more(
+							`chopin connect last ran ${describe(last)}; run chopin service install to use it`,
+						),
+					]
+					: []),
+				...service.notes.map(more),
+			]),
 		row("Log", report.log),
 		row("Base dir", report.baseDir),
 	];

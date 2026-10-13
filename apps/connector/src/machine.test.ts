@@ -281,14 +281,20 @@ test("the service's connect, started again after its token was forgotten, stops 
 	let root = await checkout();
 	let chopin = fakeChopin();
 	await revokedMachine(home, chopin.url);
-	// What `chopin connect` saved, which the service runs.
+	// The settings `chopin service install` copied, which the service runs.
 	await updateConfig(home, value => {
-		value.connect = {
-			server: chopin.url,
-			checkout: root,
-			command: ["agent"],
-			planners: [],
-			plannerCommand: [],
+		value.service = {
+			executable: "/opt/chopin",
+			directory: home,
+			version: "0.0.1",
+			installedAt: 1,
+			settings: {
+				server: chopin.url,
+				checkout: root,
+				command: ["agent"],
+				planners: [],
+				plannerCommand: [],
+			},
 		};
 	});
 	let revoked = cli(["connect", "--service"], home, chopin.url);

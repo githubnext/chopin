@@ -7,9 +7,11 @@ export type InstalledService = ServiceProgram & {
 	/** The chopin version that installed it; an older chopin refuses to replace it. */
 	version: string;
 	installedAt: number;
+	/** What the service runs: install's copy of the last connect. */
+	settings?: ConnectSettings;
 };
 
-/** What `chopin connect` last ran here, which `chopin connect --service` runs. */
+/** What a `chopin connect` that connected ran, which `chopin service install` copies. */
 export type ConnectSettings = {
 	/** The Chopin origin connect connected to: CHOPIN_URL, or the default. */
 	server: string;
