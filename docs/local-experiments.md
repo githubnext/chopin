@@ -296,9 +296,12 @@ Characters other than letters, digits, `.`, `_` and `-` in the name are
 written as `~` and four hex digits. Install registers it through
 `powershell.exe -NoProfile -NonInteractive -Command Register-ScheduledTask …`.
 The task starts at logon, restarts a minute after a failure, and has no
-execution time limit. It inherits your user environment variables, including
-PATH, so the agent command must resolve from a new terminal. A `%` anywhere in
-the command is refused, because Task Scheduler would expand it.
+execution time limit. Task Scheduler can't set environment variables, so the
+task runs `cmd.exe /d /v:off /s /c "set "PATH=…" && "<chopin.exe>" connect …"`
+with the PATH install built and checked; cmd, chopin and the agent are named by
+their absolute paths. Entries of your PATH that hold a `%` are left out of it,
+and a `%` anywhere in the command is refused, because cmd and Task Scheduler
+would expand it.
 
 The task runs only while you are logged on to Windows. To start it at boot
 whether or not you are logged on, change it to an S4U task from an elevated

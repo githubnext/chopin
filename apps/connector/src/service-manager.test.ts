@@ -16,6 +16,7 @@ import {
 	serviceStatus,
 	stopFile,
 	systemdUnit,
+	taskAction,
 	uninstallService,
 } from "./service";
 
@@ -250,13 +251,14 @@ test("on Windows, install registers this account's task at logon and says it nee
 	expect(installed.notes.join(" ")).toContain("only while you are logged on");
 	expect(calls).toHaveLength(2);
 	expect(calls[0]).toStartWith(`${POWERSHELL}$task = Get-ScheduledTask -TaskName 'chopin-ada'`);
-	expect(calls[1]).toBe(
-		POWERSHELL + scheduledTaskScript(
-			{ ...program, command: ["C:\\Tools\\agent.exe", "--acp"] },
-			host.home,
-			"chopin-ada",
-		),
+	// The task runs chopin with the PATH install checked the agent and git under.
+	let action = taskAction(
+		{ ...program, command: ["C:\\Tools\\agent.exe", "--acp"] },
+		"C:\\Tools;C:\\Git\\cmd",
+		"C:\\Windows\\System32\\cmd.exe",
 	);
+	expect(action.argument).toContain('set "PATH=C:\\Tools;C:\\Git\\cmd" && ');
+	expect(calls[1]).toBe(POWERSHELL + scheduledTaskScript(action, host.home, "chopin-ada"));
 });
 
 test("service status reads each manager's answer, and a connector older than the binary is restart-pending", async () => {

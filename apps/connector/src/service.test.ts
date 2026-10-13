@@ -5,6 +5,7 @@ import {
 	servicePath,
 	systemdQuote,
 	systemdUnit,
+	taskAction,
 	unsupportedPath,
 	windowsArgument,
 } from "./service";
@@ -119,27 +120,96 @@ test("Windows arguments are quoted the way a program splits its command line", (
 	expect(windowsArgument('a\\"b')).toBe('"a\\\\\\"b"');
 });
 
-test("the scheduled task runs at logon, restarts on failure and quotes for PowerShell", () => {
-	let script = scheduledTaskScript(
-		{
-			executable: "C:\\Users\\O'Neil\\AppData\\Local\\chopin\\bin\\chopin.exe",
-			checkout: "C:\\Users\\O'Neil\\My Projects\\score",
-			command: ["copilot", "--acp", '--note=say "hi"'],
-			directory: "C:\\Users\\O'Neil\\.chopin",
-		},
-		"C:\\Users\\O'Neil",
-		"chopin-O~0027Neil",
-	);
+/** What cmd /s /c runs: the text between the outer quotes, its carets outside quotes removed. */
+function cmdParse(argument: string) {
+	let inner = argument.match(/^\/d \/v:off \/s \/c "(.*)"$/)?.[1];
+	if (inner === undefined) throw new Error(`not a cmd /s /c line: ${argument}`);
+	let quoted = false;
+	let out = "";
+	let unquoted = "";
+	for (let index = 0; index < inner.length; index++) {
+		let character = inner[index]!;
+		if (character === '"') quoted = !quoted;
+		else if (!quoted && character === "^") character = inner[++index]!;
+		else if (!quoted) unquoted += character;
+		out += character;
+	}
+	return { line: out, unquoted };
+}
+
+/** How a program's C runtime splits its command line into arguments. */
+function argv(line: string) {
+	let words: string[] = [];
+	let word: string | undefined;
+	let quoted = false;
+	for (let index = 0; index < line.length;) {
+		let character = line[index]!;
+		if (!quoted && /\s/.test(character)) {
+			if (word !== undefined) words.push(word);
+			word = undefined;
+			index++;
+			continue;
+		}
+		word ??= "";
+		let slashes = 0;
+		while (line[index] === "\\") {
+			slashes++;
+			index++;
+		}
+		if (line[index] === '"') {
+			word += "\\".repeat(Math.floor(slashes / 2));
+			if (slashes % 2) word += '"';
+			else quoted = !quoted;
+			index++;
+		} else {
+			word += "\\".repeat(slashes);
+			if (index < line.length && !slashes) word += line[index++];
+		}
+	}
+	if (word !== undefined) words.push(word);
+	return words;
+}
+
+test("the scheduled task runs chopin through cmd with the service PATH set", () => {
+	let program = {
+		executable: "C:\\Users\\O'Neil\\AppData\\Local\\chopin\\bin\\chopin.exe",
+		checkout: "C:\\Users\\O'Neil\\R&D (old)\\score^1",
+		command: ["C:\\Tools\\copilot.exe", "--acp", '--note=say "hi" & <bye>|^', "a\\"],
+		directory: "C:\\Users\\O'Neil\\.chopin\\",
+	};
+	let path = "C:\\Tools;C:\\Program Files (x86)\\R&D\\bin";
+	let action = taskAction(program, path, "C:\\Windows\\System32\\cmd.exe");
+	expect(action.execute).toBe("C:\\Windows\\System32\\cmd.exe");
+	let { line, unquoted } = cmdParse(action.argument);
+	// cmd sees only `set`, the one `&&` and spaces outside quotes; everything else reaches chopin.
+	expect(unquoted.replaceAll(/[^&|<>()]/g, "")).toBe("&&");
+	let [set, run] = line.split(/ && (?=")/);
+	expect(set).toBe(`set "PATH=${path}"`);
+	expect(argv(run!)).toEqual([
+		program.executable,
+		"connect",
+		program.checkout,
+		"--base-dir",
+		program.directory,
+		"--service",
+		"--",
+		...program.command,
+	]);
+
+	let script = scheduledTaskScript(action, "C:\\Users\\O'Neil", "chopin-O~0027Neil");
 	let parts = script.split("; ");
 	expect(parts).toContain("$ErrorActionPreference = 'Stop'");
-	expect(parts).toContain(
-		"$action = New-ScheduledTaskAction"
-			+ " -Execute 'C:\\Users\\O''Neil\\AppData\\Local\\chopin\\bin\\chopin.exe'"
-			+ " -Argument ('connect ' + [char]34 + 'C:\\Users\\O''Neil\\My Projects\\score' + [char]34"
-			+ " + ' --base-dir C:\\Users\\O''Neil\\.chopin --service -- copilot --acp ' + [char]34"
-			+ " + '--note=say \\' + [char]34 + 'hi\\' + [char]34 + '' + [char]34 + '')"
-			+ " -WorkingDirectory 'C:\\Users\\O''Neil'",
+	let made = parts.find(part => part.startsWith("$action = "))!;
+	expect(made).toStartWith(
+		"$action = New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\cmd.exe' -Argument (",
 	);
+	expect(made).toEndWith(" -WorkingDirectory 'C:\\Users\\O''Neil'");
+	// PowerShell rebuilds the argument exactly: '' is one quote and [char]34 a double quote.
+	let expression = made.slice(made.indexOf("-Argument (") + 11, made.lastIndexOf(") -Working"));
+	expect(
+		expression.split(" + [char]34 + ").map(piece => piece.slice(1, -1).replaceAll("''", "'"))
+			.join('"'),
+	).toBe(action.argument);
 	expect(parts).toContain("$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user");
 	expect(parts).toContain(
 		"$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited",
@@ -200,4 +270,13 @@ test("the service PATH puts the agent's directory first and drops directories a 
 			"C:\\Tools",
 		),
 	).toBe("C:\\Tools;C:\\Git\\cmd");
+	// The task sets it inside cmd's quotes: a quoted entry loses its quotes, and one with a % or
+	// a control character, which cmd would expand or break on, is left out.
+	expect(
+		servicePath(
+			"win32",
+			{ Path: '"C:\\Program Files\\Tool";%USERPROFILE%\\bin;C:\\a\nb;C:\\Git\\cmd' },
+			"C:\\Tools",
+		),
+	).toBe("C:\\Tools;C:\\Program Files\\Tool;C:\\Git\\cmd");
 });

@@ -50,7 +50,9 @@ function pathKey(platform: NodeJS.Platform, entry: string) {
 /**
  * The PATH the service runs with: the agent executable's directory first, so the agent and a
  * Node or Bun installed beside it resolve after a reboot, then this shell's own entries without
- * empty ones, repeats, or directories that last only as long as a login or a shell.
+ * empty ones, repeats, or directories that last only as long as a login or a shell. On Windows,
+ * where the task sets it inside cmd's quotes, entries lose their quotes, and those with a % or a
+ * control character are left out.
  */
 export function servicePath(platform: NodeJS.Platform, env: Env, agentDirectory: string) {
 	let windows = platform === "win32";
@@ -62,7 +64,9 @@ export function servicePath(platform: NodeJS.Platform, env: Env, agentDirectory:
 		: "PATH";
 	let inherited = env[name] ?? (windows ? "" : DEFAULT_PATH);
 	let kept = new Map<string, string>([[key(agentDirectory), agentDirectory]]);
-	for (let entry of inherited.split(path.delimiter)) {
+	for (let given of inherited.split(path.delimiter)) {
+		let entry = windows ? given.replaceAll('"', "") : given;
+		if (windows && (entry.includes("%") || hasControl(entry))) continue;
 		if (entry && !kept.has(key(entry)) && !temporary(entry)) kept.set(key(entry), entry);
 	}
 	return [...kept.values()].join(path.delimiter);
@@ -148,12 +152,16 @@ export function unsupportedPath(platform: NodeJS.Platform, program: ServiceProgr
 		].join("\n");
 	}
 	if (platform === "win32") {
-		let used = [program.executable, ...serviceArguments(program)].find(value =>
-			value.includes("%")
-		);
+		let words = [program.executable, ...serviceArguments(program)];
+		let used = words.find(value => value.includes("%"));
 		if (used !== undefined) {
 			return `Task Scheduler would expand the % in ${JSON.stringify(used)}. Nothing was installed. `
 				+ "Use a checkout, state directory and agent command without %.";
+		}
+		let broken = words.find(hasControl);
+		if (broken !== undefined) {
+			return `The task's command line can't hold the control character in `
+				+ `${JSON.stringify(broken)}. Nothing was installed.`;
 		}
 	}
 	return undefined;
@@ -296,17 +304,38 @@ function taskSelector(name: string) {
 	return `-TaskName ${powershellLiteral(name)} -TaskPath '\\'`;
 }
 
+/** What the task runs: `execute` with the command line `argument`. */
+export type TaskAction = { execute: string; argument: string };
+
 /**
- * The PowerShell script that registers and starts this account's task `name`: at logon, in the
- * user's session, restarted after a failure and never stopped for running too long.
+ * The task's action: cmd sets the service's PATH, then runs chopin. Task Scheduler cannot set a
+ * variable itself. cmd reads & | < > ^ ( ) only outside double quotes, and every " toggles that,
+ * so each one it would read there is escaped with ^; chopin then splits the line as written.
+ * /d skips cmd's AutoRun commands, /v:off keeps ! literal, and a % is refused before this.
  */
-export function scheduledTaskScript(program: ServiceProgram, home: string, name: string) {
-	let argument = serviceArguments(program).map(windowsArgument).join(" ");
+export function taskAction(program: ServiceProgram, path: string, cmd: string): TaskAction {
+	let run = [`"${program.executable}"`, ...serviceArguments(program).map(windowsArgument)]
+		.join(" ");
+	let quoted = false;
+	let escaped = [...run].map(character => {
+		if (character === '"') quoted = !quoted;
+		return !quoted && /[&|<>^()]/.test(character) ? `^${character}` : character;
+	}).join("");
+	return { execute: cmd, argument: `/d /v:off /s /c "set "PATH=${path}" && ${escaped}"` };
+}
+
+/**
+ * The PowerShell script that registers and starts this account's task `name`, running `action`:
+ * at logon, in the user's session, restarted after a failure and never stopped for running too
+ * long.
+ */
+export function scheduledTaskScript(action: TaskAction, home: string, name: string) {
 	return [
 		"$ErrorActionPreference = 'Stop'",
 		"$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name",
-		`$action = New-ScheduledTaskAction -Execute ${powershellString(program.executable)}`
-		+ ` -Argument ${powershellString(argument)} -WorkingDirectory ${powershellString(home)}`,
+		`$action = New-ScheduledTaskAction -Execute ${powershellString(action.execute)}`
+		+ ` -Argument ${powershellString(action.argument)}`
+		+ ` -WorkingDirectory ${powershellString(home)}`,
 		"$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user",
 		"$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited",
 		"$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero)"
@@ -406,16 +435,20 @@ function why(outcome: Outcome) {
 	return outcome.stderr.trim() || outcome.stdout.trim() || `exit code ${outcome.code}`;
 }
 
-function windowsPowershell(env: Env) {
+/** A program in Windows' System32, under the system root named by the environment. */
+function windowsSystem(env: Env, ...file: string[]) {
 	let root =
 		[env.SystemRoot, env.SYSTEMROOT, env.windir].find(value =>
 			!!value && /^[A-Za-z]:\\[^%"]*$/.test(value) && !hasControl(value)
 		) ?? "C:\\Windows";
-	return win32.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+	return win32.join(root, "System32", ...file);
 }
 
+/** The longest command line cmd runs. */
+const CMD_LIMIT = 8191;
+
 function powershell(host: ServiceHost, script: string) {
-	return host.run(windowsPowershell(host.env), [
+	return host.run(windowsSystem(host.env, "WindowsPowerShell", "v1.0", "powershell.exe"), [
 		"-NoProfile",
 		"-NonInteractive",
 		"-Command",
@@ -667,6 +700,14 @@ export async function installService(
 			);
 		}
 	} else {
+		let action = taskAction(program, path, windowsSystem(host.env, "cmd.exe"));
+		if (action.execute.length + 1 + action.argument.length > CMD_LIMIT) {
+			throw new ServiceError(
+				`The task's command line, with the PATH it sets, would be longer than the ${CMD_LIMIT} `
+					+ "characters cmd runs. Nothing was installed. Shorten your PATH, the checkout path "
+					+ "or the agent command.",
+			);
+		}
 		let before = await taskState(host);
 		await record();
 		if (before?.state === "Running") {
@@ -674,7 +715,7 @@ export async function installService(
 		}
 		let registered = await powershell(
 			host,
-			scheduledTaskScript(program, host.home, taskName(host.user)),
+			scheduledTaskScript(action, host.home, taskName(host.user)),
 		);
 		if (registered.code !== 0) {
 			throw new ServiceError(
