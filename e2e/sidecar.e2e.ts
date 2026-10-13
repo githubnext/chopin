@@ -1036,7 +1036,11 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 		exact: true,
 		includeHidden: true,
 	});
-	let decisions = page.getByRole("button", { name: /^Decisions/, includeHidden: true });
+	let documents = page.locator(".phone-top-bar").getByRole("button", {
+		name: "Documents",
+		exact: true,
+		includeHidden: true,
+	});
 
 	let openDraft = async () => {
 		await editor.locator("p").nth(1).selectText();
@@ -1048,21 +1052,30 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 	};
 
 	let sheet = await openDraft();
-	let destination = await decisions.boundingBox();
+	// Once risen, the sheet covers the tab bar; the scrim still covers the top bar's navigation.
+	// Measuring before it stands on the viewport's foot would race its rise.
+	await expect.poll(() =>
+		sheet.evaluate(element =>
+			element.getAnimations().length === 0
+			&& Math.round(element.getBoundingClientRect().bottom) === window.innerHeight
+		)
+	).toBe(true);
+	let destination = await documents.boundingBox();
 	expect(destination).not.toBeNull();
 	let destinationPoint = {
 		x: destination!.x + destination!.width / 2,
 		y: destination!.y + destination!.height / 2,
 	};
-	await expect.poll(() =>
-		page.evaluate(
+	expect(
+		await page.evaluate(
 			({ x, y }) =>
 				!!document.elementFromPoint(x, y)?.closest("[data-plan-comment-sheet-backdrop]"),
 			destinationPoint,
-		)
+		),
 	).toBe(true);
 	await page.mouse.click(destinationPoint.x, destinationPoint.y);
 	await expect(sheet).toHaveCount(0);
+	await expect(page.getByRole("dialog", { name: "Documents" })).toHaveCount(0);
 	await expect(plan).toHaveAttribute("aria-current", "page");
 	await expect(editor).toBeFocused();
 	sheet = await openDraft();
