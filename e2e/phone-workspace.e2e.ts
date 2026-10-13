@@ -191,6 +191,8 @@ for (let width of [390, 430]) {
 			return Math.abs(line.y + line.height / 2 - (box.y + box.height / 2));
 		}).toBeLessThanOrEqual(2);
 		expect(await buildToFaces(page)).toBeGreaterThanOrEqual(12);
+		let faces = people.locator(":scope > :not(.phone-top-bar-more)");
+		await expect(faces).toHaveCount(2);
 
 		// A long title truncates short of the faces, which keep their 12px from the build.
 		let long = `A very long document title that cannot fit beside the people ${room.slice(0, 6)}`;
@@ -205,6 +207,10 @@ for (let width of [390, 430]) {
 		let titleBox = (await title.boundingBox())!;
 		let face = (await people.boundingBox())!;
 		expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(face.x);
+		// Needing room, the title takes it from the faces first: one face, the other counted.
+		await expect(faces).toHaveCount(1);
+		await expect(people.locator(".phone-top-bar-more")).toHaveText("+1");
+		await expect(people).toHaveAccessibleName(/\bbo\b/);
 		expect(await buildToFaces(page)).toBeGreaterThanOrEqual(12);
 		for (
 			let control of [

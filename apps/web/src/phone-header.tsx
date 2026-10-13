@@ -4,7 +4,7 @@
  * Back on the left, and the child room renders its own title and trailing controls into it.
  */
 
-import { useContext, useEffect, useLayoutEffect, useRef } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Face } from "@chopin/editor";
 import { ArrowLeftIcon, CommentIcon, DocumentsIcon, EllipsisIcon } from "@chopin/icons";
 import type { ReactNode } from "react";
@@ -20,6 +20,12 @@ import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { TitleEdit } from "./title-edit";
 import type { WorkspacePresentation } from "./workspace-model";
+
+/**
+ * What a second face can give back to a centred title: its width less the overlap, from each
+ * side, since the bar keeps its sides equal while it can.
+ */
+const FACE_ROOM = 28;
 
 // Warmed before the first tap, so opening the sheet never waits on its code.
 function prefetchDocumentsSheet() {
@@ -148,6 +154,24 @@ export function PhoneHeaderContent(
 		? <span className="phone-top-bar-mode">Editing</span>
 		: context;
 	let people = peopleHere(members);
+	// A title that needs room takes it from the faces first: one face, and the rest counted.
+	let [oneFace, setOneFace] = useState(false);
+	let crowd = people.length > 1;
+	useLayoutEffect(() => {
+		let title = center.current?.querySelector<HTMLElement>(".phone-top-bar-title > .truncate");
+		if (!title || !crowd) {
+			setOneFace(false);
+			return;
+		}
+		// Back to two only once the title would still fit beside them, so it never flickers.
+		let measure = () =>
+			setOneFace(one => title.scrollWidth > title.clientWidth - (one ? FACE_ROOM : 0));
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(title);
+		return () => observer.disconnect();
+	}, [crowd, editing, label]);
+	let shown = oneFace ? 1 : 2;
 
 	return (
 		<>
@@ -187,9 +211,10 @@ export function PhoneHeaderContent(
 					<div
 						aria-label={`People here: ${people.join(", ")}`}
 						className="phone-top-bar-people"
+						data-one-face={oneFace || undefined}
 						role="group"
 					>
-						{people.slice(0, 2).map(handle => (
+						{people.slice(0, shown).map(handle => (
 							<Face
 								handle={handle}
 								key={handle.toLowerCase()}
@@ -199,8 +224,10 @@ export function PhoneHeaderContent(
 								titled={false}
 							/>
 						))}
-						{people.length > 2 && (
-							<span aria-hidden="true" className="phone-top-bar-more">+{people.length - 2}</span>
+						{people.length > shown && (
+							<span aria-hidden="true" className="phone-top-bar-more">
+								+{people.length - shown}
+							</span>
 						)}
 					</div>
 				)}
