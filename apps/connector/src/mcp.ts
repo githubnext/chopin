@@ -8,7 +8,7 @@ import {
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 
 export class ConnectorError extends Error {
-	constructor(readonly code: string, message: string) {
+	constructor(readonly code: string, message: string, readonly status?: number) {
 		super(message);
 	}
 }

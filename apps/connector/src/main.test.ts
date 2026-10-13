@@ -56,6 +56,9 @@ async function connect(refuse: "pairing" | "connector") {
 				return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
 			}
 			if (path === "/api/connector/pairings/pairing/claim") {
+				return Response.json({ token: `chopin_m_${"M".repeat(43)}` });
+			}
+			if (path === "/api/connector/connections") {
 				return Response.json({ token: "connection-token" });
 			}
 			return new Response(null, { status: 404 });
@@ -108,6 +111,7 @@ test("connect stops without retrying when the connector endpoint refuses its ver
 	expect(result.requests).toEqual([
 		["/api/connector/pairings", ...headers],
 		["/api/connector/pairings/pairing/claim", ...headers],
+		["/api/connector/connections", ...headers],
 		["/connector/mcp", ...headers],
 	]);
 });

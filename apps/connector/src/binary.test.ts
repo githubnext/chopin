@@ -89,6 +89,9 @@ test.skipIf(!binary)(
 					});
 				}
 				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: `chopin_m_${"M".repeat(43)}` });
+				}
+				if (path === "/api/connector/connections") {
 					return Response.json({ token: "connection-token" });
 				}
 				let token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";

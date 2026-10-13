@@ -27,9 +27,10 @@ export async function workspace(path: string) {
 	};
 }
 
+/** Where the machine token, locks and worktrees live: `--base-dir`, CHOPIN_HOME, or the default. */
 export function stateDirectory() {
-	return process.env.CHOPIN_CONNECTOR_STATE_DIR
-		?? join(
+	return process.env.CHOPIN_HOME || process.env.CHOPIN_CONNECTOR_STATE_DIR
+		|| join(
 			process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
 			"chopin",
 			"connector",
