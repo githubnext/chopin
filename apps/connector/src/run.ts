@@ -81,6 +81,8 @@ export async function runWork(
 	let latestProgress = "Preparing checkout";
 	/** Why the connector stopped the agent itself, when Chopin ended the run or stayed out of reach. */
 	let ended: string | undefined;
+	// Each build report carries its own idempotencyKey, kept across its retries, so Chopin accepts a
+	// report again whose answer was lost instead of refusing it as a second transition.
 	let reports = runReports(api, {
 		stop: options.signal,
 		graceMs: options.graceMs,
@@ -207,6 +209,7 @@ export async function runWork(
 						...identity,
 						state: "running",
 						session,
+						idempotencyKey: crypto.randomUUID(),
 					}).then(() => {})
 				: undefined,
 			onUpdate(value) {
@@ -244,7 +247,7 @@ export async function runWork(
 		if (stop !== "end_turn" || abort.signal.aborted) throw new Error(`Agent stopped: ${stop}`);
 		await reports.deliver(implementation ? "report_implementation_build" : "complete_experiment", {
 			...identity,
-			...(implementation ? { state: "stopped" } : {}),
+			...(implementation ? { state: "stopped", idempotencyKey: crypto.randomUUID() } : {}),
 		});
 		output.finished();
 	} catch (error) {
@@ -261,7 +264,7 @@ export async function runWork(
 		else output.failed(message, agentTail);
 		await reports.deliver(implementation ? "report_implementation_build" : "fail_experiment", {
 			...identity,
-			...(implementation ? { state: "failed" } : {}),
+			...(implementation ? { state: "failed", idempotencyKey: crypto.randomUUID() } : {}),
 			error: stopped || ended || !implementation
 				? message.slice(0, 2000)
 				: "Local implementation failed. Inspect the connector terminal.",

@@ -44,6 +44,7 @@ let buildSchema = z.object({
 	state: z.enum(["queued", "starting", "running", "stopped", "failed"]),
 	session: z.string().min(1).max(128).optional(),
 	error: z.string().max(2000).optional(),
+	reportKey: z.string().uuid().optional(),
 	kind: z.literal("rebuild").optional(),
 	baseRevision: z.number().int().nonnegative().optional(),
 	targetRevision: z.number().int().nonnegative().optional(),
@@ -460,6 +461,7 @@ export function reportBuild(
 		session?: string;
 		error?: string;
 		expiresAt?: number;
+		reportKey?: string;
 	},
 ): Promise<void> {
 	return exclusive(plan, async () => {
@@ -477,7 +479,14 @@ export function reportBuild(
 		) {
 			throw new Error("build report is out of order");
 		}
-		let next = buildSchema.parse({ ...current, ...report });
+		let next = buildSchema.parse({
+			...current,
+			...report,
+			// A key names the connector report that set the state; any other change of state drops it.
+			reportKey: report.state === current.state
+				? report.reportKey ?? current.reportKey
+				: report.reportKey,
+		});
 		let previous = {
 			builds: plan.builds,
 			graph: plan.graph,

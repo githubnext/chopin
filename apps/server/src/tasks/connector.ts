@@ -33,6 +33,8 @@ export function implementationSchemas(
 				state: z.enum(["running", "stopped", "failed"]),
 				session: z.string().min(1).max(128).optional(),
 				error: z.string().max(2000).optional(),
+				/** Kept across the connector's retries of one report, so a repeat is recognized. */
+				idempotencyKey: z.string().uuid().optional(),
 			}).strict(),
 		};
 	}
@@ -298,6 +300,13 @@ export function implementationConnector(
 						return { accepted: true };
 					}
 				}
+				// A report whose answer was lost comes again with the same key; the build already shows it.
+				if (
+					name === "report_implementation_build" && args.idempotencyKey !== undefined
+					&& build.reportKey === args.idempotencyKey
+				) {
+					return { accepted: true };
+				}
 				if (!["starting", "running"].includes(build.state) || build.expiresAt <= Date.now()) {
 					fail("build-inactive");
 				}
@@ -307,16 +316,19 @@ export function implementationConnector(
 						expiresAt: Date.now() + 60_000,
 					});
 				} else if (name === "report_implementation_build") {
-					let report = args as {
+					let { idempotencyKey: reportKey, ...sent } = args as {
 						state: "running" | "stopped" | "failed";
 						session?: string;
 						error?: string;
+						idempotencyKey?: string;
 					};
+					let report: typeof sent & { reportKey?: string } = { ...sent, reportKey };
 					if (build.kind === "rebuild" && report.state === "stopped") {
 						// Only report_rebuild lands a rebuild; ending without it leaves the live base alone.
 						report = {
 							state: "failed",
 							error: "The agent finished without reporting the rebuild.",
+							reportKey,
 						};
 					}
 					if (report.state === "running") {

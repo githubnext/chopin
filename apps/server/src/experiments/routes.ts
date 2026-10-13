@@ -864,6 +864,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				) fail("tool-forbidden");
 				if (name === "complete_experiment") {
 					value = await service.complete(id, connection.id, generation);
+				} else if (
+					name === "fail_experiment" && current.state === "failed"
+					&& current.connectionId === connection.id && current.generation === generation
+					&& current.progress === args.error
+				) {
+					// A failure report whose answer was lost comes again; the run already shows it.
+					value = current;
 				} else {
 					service.assertClaim(current, connection.id, generation);
 					if (name === "read_experiment") value = { input: current.input, capabilities };

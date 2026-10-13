@@ -375,6 +375,32 @@ test("one connection serves every document in its repository and no other", asyn
 	expect(claimed.result.content[0].text).toStartWith("connection-forbidden");
 });
 
+test("a failure report retried after its answer was lost lands once, and another is still refused", async () => {
+	let { alice, documentId, request, tool, pair } = await setup();
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
+	let claim = text(await tool(connection.token, "claim_experiment", { id }));
+	let report = { id, generation: claim.generation, error: "The agent stopped." };
+	expect(error(await tool(connection.token, "fail_experiment", report))).toBe("");
+	// The connector never saw that answer, so it sends the same report again.
+	expect(error(await tool(connection.token, "fail_experiment", report))).toBe("");
+	expect(error(await tool(connection.token, "fail_experiment", { ...report, error: "Other" })))
+		.toStartWith("stale-claim");
+	expect(
+		error(
+			await tool(connection.token, "complete_experiment", { id, generation: claim.generation }),
+		),
+	).toStartWith("stale-claim");
+	let stored = await request(
+		`/api/documents/${documentId}/experiments/${id}`,
+		undefined,
+		alice.cookie,
+	);
+	expect(await stored.json()).toMatchObject({ state: "failed", progress: "The agent stopped." });
+});
+
 test("a claim refuses a document in another repository and interrupts archived or locked ones", async () => {
 	let { alice, document, documentId, request, tool, pair, lock, runtime, storage } = await setup();
 	let connection = await pair(alice.cookie);

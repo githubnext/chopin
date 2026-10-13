@@ -469,6 +469,56 @@ test("disconnecting fails a running build at once and announces it after persist
 	await Plan.close(context.plan);
 });
 
+test("a build report retried after its answer was lost lands once, and an invalid one is still refused", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	let running = {
+		id: built.id,
+		state: "running",
+		session: "acp-session",
+		idempotencyKey: crypto.randomUUID(),
+	};
+	expect(await tool(context, connection.token, "report_implementation_build", running)).toEqual({
+		accepted: true,
+	});
+	// The connector never saw that answer, so it sends the same report again.
+	expect(await tool(context, connection.token, "report_implementation_build", running)).toEqual({
+		accepted: true,
+	});
+	expect(context.plan.builds.at(-1)).toMatchObject({ state: "running", session: "acp-session" });
+	// A different running report is a second start, not a retry.
+	let second = await tool(context, connection.token, "report_implementation_build", {
+		...running,
+		idempotencyKey: crypto.randomUUID(),
+	});
+	expect(second.isError && second.content[0].text).toMatch(/^invalid-state:/);
+	let stopped = { id: built.id, state: "stopped", idempotencyKey: crypto.randomUUID() };
+	await tool(context, connection.token, "report_implementation_build", stopped);
+	expect(await tool(context, connection.token, "report_implementation_build", stopped)).toEqual({
+		accepted: true,
+	});
+	expect(context.plan.builds.at(-1)!.state).toBe("stopped");
+	// The run's earlier report no longer describes the build, so its key no longer passes.
+	expect((await tool(context, connection.token, "report_implementation_build", running)).isError)
+		.toBe(true);
+	expect(
+		(await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "failed",
+			error: "late",
+			idempotencyKey: crypto.randomUUID(),
+		})).isError,
+	).toBe(true);
+	expect(context.plan.builds.at(-1)!.state).toBe("stopped");
+	await Plan.close(context.plan);
+});
+
 test("a deleted document cannot block implementation recovery sweeps", async () => {
 	let context = await setup();
 	let connection = await paired(context);

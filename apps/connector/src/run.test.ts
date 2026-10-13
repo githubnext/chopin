@@ -28,10 +28,14 @@ async function run(
 		await writeFile(join(root, "source.txt"), "committed");
 		git(root, "add", ".");
 		git(root, "commit", "-m", "fixture");
+		/** Calls as sent, and without their report keys, which are random. */
+		let sent: Array<[string, Record<string, unknown>]> = [];
 		let calls: Array<[string, Record<string, unknown>]> = [];
 		let api = {
 			call: async (name: string, args: Record<string, unknown> = {}) => {
-				calls.push([name, args]);
+				sent.push([name, args]);
+				let { idempotencyKey: _key, ...rest } = args;
+				calls.push([name, rest]);
 				return respond(name, args);
 			},
 		} as unknown as Awaited<ReturnType<typeof remote>>;
@@ -58,7 +62,7 @@ async function run(
 			heartbeatMs: 20,
 			...options,
 		});
-		return { id, calls, branches: git(root, "branch", "--list", "chopin/*") };
+		return { id, calls, sent, branches: git(root, "branch", "--list", "chopin/*") };
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
@@ -225,7 +229,7 @@ function unreachable() {
 test("a network drop mid-run keeps the agent running and delivers its completion once back", async () => {
 	let renewals = 0;
 	let reports = 0;
-	let { id, calls } = await run(
+	let { id, sent } = await run(
 		{ kind: "rebuild" },
 		["--rebuild", "--slow"],
 		(name, args) => {
@@ -240,15 +244,21 @@ test("a network drop mid-run keeps the agent running and delivers its completion
 		{ random: () => 0.01 },
 	);
 	expect(renewals).toBeGreaterThan(3);
-	expect(calls.filter(([name]) => name === "report_implementation_build")).toEqual([
+	let reported = sent.filter(([name]) => name === "report_implementation_build");
+	expect(reported).toEqual([
 		["report_implementation_build", {
 			id,
 			state: "running",
 			session: "implementation-acp-session",
+			idempotencyKey: expect.any(String),
 		}],
-		["report_implementation_build", { id, state: "stopped" }],
-		["report_implementation_build", { id, state: "stopped" }],
+		["report_implementation_build", { id, state: "stopped", idempotencyKey: expect.any(String) }],
+		["report_implementation_build", { id, state: "stopped", idempotencyKey: expect.any(String) }],
 	]);
+	// The retry is the same report, so Chopin can tell it from a second one.
+	let [running, stopped, retried] = reported.map(([, args]) => args.idempotencyKey);
+	expect(retried).toBe(stopped);
+	expect(stopped).not.toBe(running);
 });
 
 test("a run out of reach for its whole grace period stops its agent", async () => {
