@@ -59,6 +59,13 @@ export type WorkspaceEvent =
 	| { type: "set-chat"; open: boolean }
 	| { type: "set-desktop-chat"; open: boolean };
 
+export const CHAT_CHOICE_STORAGE_KEY = "chopin:pane:chat:choice";
+
+export function storedDesktopChat(value: string | null): boolean | undefined {
+	if (value === "true") return true;
+	if (value === "false") return false;
+}
+
 export function initialWorkspaceState(
 	desktopChatOpen: boolean | undefined,
 ): WorkspaceState {

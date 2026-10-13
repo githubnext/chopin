@@ -95,8 +95,7 @@ import { Wire } from "./wire";
 import { ExperimentStore } from "./experiments/store";
 import { InvestigationReference, removableInvestigation } from "./experiments/card";
 import { EvidenceDecisions, ViewDecision } from "./experiments/evidence";
-import { useWorkspaceIds, useWorkspaceState, Workspace } from "./workspace";
-import { useWorkspaceLayout } from "./workspace-layout";
+import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
 import type { ConversationPlan, Plan, Question, Research, Session } from "@chopin/protocol";
