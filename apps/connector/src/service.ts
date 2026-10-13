@@ -5,7 +5,7 @@ import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
 import { readConfig, updateConfig } from "./config";
 import { VERSION } from "./version";
-import { connectors } from "./workspace";
+import { connectors, processStart } from "./workspace";
 
 /**
  * `chopin service`: run `chopin connect` as this user's background service, so the machine keeps
@@ -775,13 +775,16 @@ export function stopFile(directory: string) {
  * macOS: Task Scheduler ends a task without a signal. Waits up to STOP_SECONDS for it to exit.
  */
 async function requestStop(host: ServiceHost, directory: string) {
-	let held = (await connectors(directory)).find(item => item.service && item.running);
+	let probe = processStart(host.platform, host.run);
+	let held = (await connectors(directory, probe)).find(item => item.service && item.running);
 	if (!held) return "not-running";
 	let sleep = host.sleep ?? Bun.sleep;
 	await writeFile(stopFile(directory), `${held.pid}\n`, { mode: 0o600 });
 	try {
 		for (let waited = 0; waited < STOP_SECONDS; waited++) {
-			if (!(await connectors(directory)).some(item => item.pid === held.pid && item.running)) {
+			if (
+				!(await connectors(directory, probe)).some(item => item.pid === held.pid && item.running)
+			) {
 				return "stopped";
 			}
 			await sleep(1000);
@@ -941,7 +944,9 @@ export async function serviceStatus(host: ServiceHost, directory: string): Promi
 	}
 	if (status.state !== "running") return status;
 	let executable = (await readConfig(directory)).service?.executable;
-	let connector = (await connectors(directory)).find(item => item.service && item.running);
+	let connector = (await connectors(directory, processStart(host.platform, host.run))).find(item =>
+		item.service && item.running
+	);
 	let installedVersion = executable ? await executableVersion(host, executable) : undefined;
 	if (connector?.version) status.running = connector.version;
 	if (installedVersion) status.installed = installedVersion;

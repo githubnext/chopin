@@ -7,6 +7,7 @@ import { SELF } from "./machine";
 import type { ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
+import { processStart } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-status-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -66,6 +67,7 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		join(directory, `${"a".repeat(64)}.lock`),
 		JSON.stringify({
 			pid: process.pid,
+			processStart: (await processStart()(process.pid))!.id,
 			root: "/work/score",
 			version: "0.0.1",
 			started,
@@ -77,6 +79,11 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 	await writeFile(
 		join(directory, `${"b".repeat(64)}.lock`),
 		JSON.stringify({ pid: gone.pid, root: "/work/old" }),
+	);
+	// A connector whose pid another process holds now, one that started at another time.
+	await writeFile(
+		join(directory, `${"c".repeat(64)}.lock`),
+		JSON.stringify({ pid: process.pid, processStart: "1", root: "/work/reused" }),
 	);
 	let report = await collectStatus({ directory, server: server.url, source: "CHOPIN_URL", host });
 	expect(server.bearers).toEqual([`Bearer ${TOKEN}`]);
@@ -95,6 +102,7 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 				started: "2026-10-13T09:30:00.000Z",
 			},
 			{ pid: gone.pid, checkout: "/work/old", running: false, service: false },
+			{ pid: process.pid, checkout: "/work/reused", running: false, service: false },
 		],
 		service: {
 			state: "not-installed",
@@ -113,7 +121,10 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		`Server:     ${server.url} (from CHOPIN_URL)`,
 		"Machine:    paired as build-box (ada); Chopin accepts it",
 		`Connector:  running for /work/score (pid ${process.pid}, chopin 0.0.1, the service)`,
-		`            stale lock for /work/old: process ${gone.pid} is gone; the next connect replaces it`,
+		`            stale lock for /work/old: its connector (pid ${gone.pid}) has exited; the next `
+		+ "connect replaces it",
+		`            stale lock for /work/reused: its connector (pid ${process.pid}) has exited; `
+		+ "the next connect replaces it",
 		"Service:    not-installed (systemd)",
 		`Log:        ${join(directory, "chopin.log")}`,
 		`Base dir:   ${directory}`,

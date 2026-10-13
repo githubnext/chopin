@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, open, readdir, readFile, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import type { RunInput } from "@chopin/experiment";
@@ -38,15 +38,103 @@ export function stateDirectory() {
 		);
 }
 
+/** When a process started: `id` differs for each process that held a pid, `at` is in ms. */
+export type ProcessStart = { id: string; at: number };
+
+/** Reads when process `pid` started; undefined when it can't be read, as when it is gone. */
+export type StartProbe = (pid: number) => Promise<ProcessStart | undefined>;
+
+type Run = (command: string, args: string[]) => Promise<{ code: number; stdout: string }>;
+
+const runFile: Run = (command, args) =>
+	new Promise(resolve => {
+		execFile(command, args, { timeout: 30_000, windowsHide: true }, (error, stdout) => {
+			resolve({ code: error ? 1 : 0, stdout: String(stdout) });
+		});
+	});
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Windows FILETIME counts 100 ns from 1601; this many ms lie between 1601 and 1970. */
+const FILETIME_EPOCH_MS = 11644473600000n;
+
 /**
- * Hold a checkout for this process. The lock names the process, the checkout and the chopin that
- * holds it, so `chopin status` can list the connectors running for a state directory; `service`
- * marks the one the installed service runs.
+ * How this machine reads a process's start: on Linux field 22 of /proc/<pid>/stat, in clock
+ * ticks since boot; on macOS `ps -o lstart=` in the C locale and UTC, so the service and a
+ * terminal read it the same; on Windows the process's creation time. Commands go through `run`.
+ */
+export function processStart(
+	platform: NodeJS.Platform = process.platform,
+	run: Run = runFile,
+): StartProbe {
+	if (platform === "linux") {
+		return async pid => {
+			let stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => "");
+			// The command name, in parentheses, may hold spaces; field 3 follows its last `)`.
+			let ticks = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+			let boot = (await readFile("/proc/stat", "utf8").catch(() => "")).match(/^btime (\d+)$/m);
+			if (!ticks || !/^\d+$/.test(ticks)) return undefined;
+			// USER_HZ, the tick /proc reports in, is 100 on every Linux architecture.
+			let at = boot ? Number(boot[1]) * 1000 + Number(ticks) * 10 : Number.NaN;
+			return { id: ticks, at };
+		};
+	}
+	if (platform === "darwin") {
+		return async pid => {
+			let shown = await run("/usr/bin/env", [
+				"-i",
+				"LC_ALL=C",
+				"TZ=UTC",
+				"/bin/ps",
+				"-o",
+				"lstart=",
+				"-p",
+				String(pid),
+			]);
+			let id = shown.code === 0 ? shown.stdout.trim().replaceAll(/\s+/g, " ") : "";
+			let part = id.match(/^\w{3} (\w{3}) (\d+) (\d+):(\d+):(\d+) (\d{4})$/);
+			if (!part) return undefined;
+			let [, month, day, hour, minute, second, year] = part;
+			let at = Date.UTC(
+				Number(year),
+				MONTHS.indexOf(month!),
+				Number(day),
+				Number(hour),
+				Number(minute),
+				Number(second),
+			);
+			return { id, at };
+		};
+	}
+	if (platform === "win32") {
+		return async pid => {
+			let root = process.env.SystemRoot ?? "C:\\Windows";
+			let shown = await run(
+				win32.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+				[
+					"-NoProfile",
+					"-NonInteractive",
+					"-Command",
+					`try { (Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToFileTimeUtc() } catch {}`,
+				],
+			);
+			let id = shown.code === 0 ? shown.stdout.trim() : "";
+			if (!/^\d+$/.test(id)) return undefined;
+			return { id, at: Number(BigInt(id) / 10000n - FILETIME_EPOCH_MS) };
+		};
+	}
+	return async () => undefined;
+}
+
+/**
+ * Hold a checkout for this process. The lock names the process, when it started, the checkout
+ * and the chopin that holds it, so `chopin status` can list the connectors running for a state
+ * directory; `service` marks the one the installed service runs.
  */
 export async function lockWorkspace(
 	root: string,
 	directory: string,
-	{ service = false }: { service?: boolean } = {},
+	{ service = false, probe = processStart() }: { service?: boolean; probe?: StartProbe } = {},
 ) {
 	await mkdir(directory, { recursive: true, mode: 0o700 });
 	let id = createHash("sha256").update(root).digest("hex");
@@ -56,7 +144,7 @@ export async function lockWorkspace(
 		file = await open(path, "wx", 0o600);
 	} catch {
 		// A connector that crashed leaves its lock behind; replace it once its process is gone.
-		if (!await staleLock(path)) {
+		if (!await staleLock(path, probe)) {
 			throw new Error(
 				`Workspace already locked. After confirming no connector is running, remove ${path}`,
 			);
@@ -68,8 +156,10 @@ export async function lockWorkspace(
 			throw new Error(`Workspace already locked by a connector that just started. ${path}`);
 		}
 	}
+	let started = await probe(process.pid);
 	await file.writeFile(JSON.stringify({
 		pid: process.pid,
+		...(started ? { processStart: started.id } : {}),
 		root,
 		version: VERSION,
 		protocol: CONNECTOR_PROTOCOL,
@@ -92,22 +182,42 @@ function gone(pid: number) {
 	}
 }
 
-/** Only a lock naming a process that no longer exists is stale; unreadable locks are kept. */
-async function staleLock(path: string): Promise<boolean> {
-	let pid: unknown;
+/** How far a start time read back may sit after the moment it was read, from rounding. */
+const START_SLACK_MS = 2000;
+
+/**
+ * Whether the process that wrote a lock still runs: a process has its pid and started when the
+ * lock says. A lock without a start time that can be compared is held while its pid exists,
+ * unless it was written before the process now holding that pid started.
+ */
+async function holds(held: Record<string, unknown>, probe: StartProbe) {
+	let pid = held.pid as number;
+	if (gone(pid)) return false;
+	let now = await probe(pid);
+	if (!now) return true;
+	if (typeof held.processStart === "string") return held.processStart === now.id;
+	return !(typeof held.started === "number" && held.started + START_SLACK_MS < now.at);
+}
+
+/** Only a lock naming a process that no longer runs is stale; unreadable locks are kept. */
+async function staleLock(path: string, probe: StartProbe): Promise<boolean> {
+	let held: Record<string, unknown>;
 	try {
-		pid = JSON.parse(await readFile(path, "utf8")).pid;
+		held = JSON.parse(await readFile(path, "utf8"));
 	} catch {
 		return false;
 	}
-	return Number.isSafeInteger(pid) && (pid as number) > 0 && gone(pid as number);
+	return Number.isSafeInteger(held?.pid) && (held.pid as number) > 0 && !await holds(held, probe);
 }
 
 /** A connector that holds, or held until it crashed, a checkout's lock in a state directory. */
 export type RunningConnector = {
 	pid: number;
 	root: string;
-	/** False when its process is gone and the lock is stale; the next `connect` replaces it. */
+	/**
+	 * False when the lock is stale: its process is gone, or its pid now belongs to a process that
+	 * started at another time. The next `connect` replaces it.
+	 */
 	running: boolean;
 	/** Whether the installed service runs it. */
 	service: boolean;
@@ -117,8 +227,14 @@ export type RunningConnector = {
 	started?: number;
 };
 
-/** Every checkout lock in `directory`, skipping any that is unreadable or still being written. */
-export async function connectors(directory: string): Promise<RunningConnector[]> {
+/**
+ * Every checkout lock in `directory`, skipping any that is unreadable or still being written.
+ * `probe` reads when each lock's process started.
+ */
+export async function connectors(
+	directory: string,
+	probe: StartProbe = processStart(),
+): Promise<RunningConnector[]> {
 	let names = await readdir(directory).catch(() => [] as string[]);
 	let found: RunningConnector[] = [];
 	for (let name of names.filter(name => /^[0-9a-f]{64}\.lock$/.test(name))) {
@@ -133,7 +249,7 @@ export async function connectors(directory: string): Promise<RunningConnector[]>
 		found.push({
 			pid: pid as number,
 			root,
-			running: !gone(pid as number),
+			running: await holds(held, probe),
 			service: held.service === true,
 			...(typeof version === "string" ? { version } : {}),
 			...(typeof protocol === "number" ? { protocol } : {}),

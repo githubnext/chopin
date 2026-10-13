@@ -531,8 +531,11 @@ downloads the connector again, so it matches the server.
 
 **Stale lock after a crash.** Each checkout has a lock in the connector's state
 directory, `$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`
-(or `--base-dir`, `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR`). A lock whose process has exited is replaced
-automatically. If the connector still reports _Workspace already locked_, confirm
+(or `--base-dir`, `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR`). The lock
+records when its connector's process started. A lock whose process has exited
+is replaced automatically, even when another process has since been given the
+same pid: a process with that pid that started at another time is not the
+connector. If the connector still reports _Workspace already locked_, confirm
 no connector is running for that checkout and delete the `.lock` file the error
 names.
 

@@ -2,7 +2,7 @@ import { machineLabel, machineToken, SELF } from "./machine";
 import { CONNECTOR_HEADERS, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { connectors } from "./workspace";
+import { connectors, processStart } from "./workspace";
 
 /** Where the server origin came from: CHOPIN_URL, config.json, or Chopin's own default. */
 export type ServerSource = "CHOPIN_URL" | "config" | "default";
@@ -113,7 +113,7 @@ export async function collectStatus(options: {
 			...await check(server, token, options.timeoutMs ?? CHECK_MS),
 		}
 		: { paired: false, label: null, check: "not-paired", accepted: null };
-	let held = (await connectors(directory)).sort((a, b) =>
+	let held = (await connectors(directory, processStart(host.platform, host.run))).sort((a, b) =>
 		Number(b.running) - Number(a.running) || a.root.localeCompare(b.root)
 	);
 	let service: StatusReport["service"];
@@ -175,7 +175,8 @@ export function formatStatus(report: StatusReport) {
 			? `running for ${item.checkout} (pid ${item.pid}${
 				item.version ? `, chopin ${item.version}` : ""
 			}${item.service ? ", the service" : ""})`
-			: `stale lock for ${item.checkout}: process ${item.pid} is gone; the next connect replaces it`
+			: `stale lock for ${item.checkout}: its connector (pid ${item.pid}) has exited; the next `
+				+ "connect replaces it"
 	);
 	let serviceLine = service.state === "unknown"
 		? `unknown (${service.detail})`
