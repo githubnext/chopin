@@ -103,7 +103,8 @@ function DiagramView({
 	let [playback, setPlayback] = useState(0);
 	let [overflowing, setOverflowing] = useState(false);
 	let [available, setAvailable] = useState(0);
-	let [zoom, setZoom] = useState(1);
+	// Null follows the stage: fitted to its width when wider, otherwise actual size.
+	let [zoom, setZoom] = useState<number | null>(null);
 	let graph = result.graph;
 	let nodes = graph?.nodes ?? [];
 	let edges = graph?.edges ?? [];
@@ -151,7 +152,8 @@ function DiagramView({
 		return () => clearTimeout(timer);
 	}, [reachedEnd, playback, maxStep, reduced]);
 
-	useEffect(() => {
+	// Before paint, so the first frame already knows whether the controls are needed.
+	useLayoutEffect(() => {
 		let stage = stageRef.current;
 		let svg = svgRef.current;
 		if (!stage || !svg) return;
@@ -313,7 +315,11 @@ function DiagramView({
 		? edges.filter((edge) => edge.from === selectedNode.id || edge.to === selectedNode.id)
 		: [];
 	let stepping = maxStep > 0;
-	let zoomable = result.viewBox[2] > available || zoom !== 1;
+	let width = result.viewBox[2];
+	let fit = available > 0 ? fitDiagram(width, available) : 1;
+	let scale = zoom ?? fit;
+	let minimumZoom = Math.min(DIAGRAM_VIEWPORT.minimumZoom, fit);
+	let zoomable = width > available || zoom !== null;
 	let labelFor = (nodeId: string) => nodes.find((node) => node.id === nodeId)?.label ?? nodeId;
 	let status = maxStep > 0 && !isRunning && (mode.kind === "paused" || reduced)
 		? `Step ${current} of ${maxStep}`
@@ -334,7 +340,8 @@ function DiagramView({
 				<svg
 					ref={svgRef}
 					style={{
-						"--sc-display-width": `${result.viewBox[2] * zoom}px`,
+						// Fitting in CSS holds on the first frame and through every resize.
+						"--sc-display-width": zoom === null ? `min(100%, ${width}px)` : `${width * zoom}px`,
 						"--sc-from": animated ? playingFrom ?? 0 : 0,
 					} as CSSProperties}
 					className={`sc-svg${animated ? "" : " sc-still"}${step !== null ? " sc-stepping" : ""}`}
@@ -378,7 +385,7 @@ function DiagramView({
 							>
 								<ArrowLeftIcon />
 							</button>
-							<span className="ch-diagram__step" aria-hidden="true">
+							<span className="ch-diagram__step ch-diagram__optional" aria-hidden="true">
 								{current} / {maxStep}
 							</span>
 							<button
@@ -392,7 +399,7 @@ function DiagramView({
 								<ArrowRightIcon />
 							</button>
 							<button
-								className="ch-diagram__control"
+								className="ch-diagram__control ch-diagram__optional"
 								type="button"
 								onClick={() =>
 									startPlayback(restartPlayback())}
@@ -405,28 +412,25 @@ function DiagramView({
 					{zoomable && (
 						<div className="ch-diagram__control-group">
 							<button
-								className="ch-diagram__control"
+								className="ch-diagram__control ch-diagram__optional"
 								type="button"
 								aria-label="Zoom out diagram"
-								aria-disabled={zoom <= DIAGRAM_VIEWPORT.minimumZoom}
-								onClick={() =>
-									setZoom(current =>
-										Math.max(DIAGRAM_VIEWPORT.minimumZoom, current - DIAGRAM_VIEWPORT.zoomStep)
-									)}
+								aria-disabled={scale <= minimumZoom}
+								onClick={() => setZoom(Math.max(minimumZoom, scale - DIAGRAM_VIEWPORT.zoomStep))}
 							>
 								<MinusIcon />
 							</button>
-							<output className="ch-diagram__zoom" aria-label="Diagram zoom">
-								{Math.round(zoom * 100)}%
+							<output className="ch-diagram__zoom ch-diagram__optional" aria-label="Diagram zoom">
+								{Math.round(scale * 100)}%
 							</output>
 							<button
-								className="ch-diagram__control"
+								className="ch-diagram__control ch-diagram__optional"
 								type="button"
 								aria-label="Zoom in diagram"
-								aria-disabled={zoom >= DIAGRAM_VIEWPORT.maximumZoom}
+								aria-disabled={scale >= DIAGRAM_VIEWPORT.maximumZoom}
 								onClick={() =>
-									setZoom(current =>
-										Math.min(DIAGRAM_VIEWPORT.maximumZoom, current + DIAGRAM_VIEWPORT.zoomStep)
+									setZoom(
+										Math.min(DIAGRAM_VIEWPORT.maximumZoom, scale + DIAGRAM_VIEWPORT.zoomStep),
 									)}
 							>
 								<PlusIcon />
@@ -435,7 +439,9 @@ function DiagramView({
 								className="ch-diagram__control"
 								type="button"
 								aria-label="Fit to width"
-								onClick={() => setZoom(fitDiagram(result.viewBox[2], available))}
+								aria-pressed={zoom === null}
+								onClick={() =>
+									setZoom(null)}
 							>
 								<FitWidthIcon />
 							</button>
@@ -443,9 +449,8 @@ function DiagramView({
 								className="ch-diagram__control"
 								type="button"
 								aria-label="Actual size"
-								aria-pressed={zoom === 1}
-								onClick={() =>
-									setZoom(1)}
+								aria-pressed={scale === 1}
+								onClick={() => setZoom(1)}
 							>
 								<ActualSizeIcon />
 							</button>

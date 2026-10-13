@@ -90,6 +90,17 @@
 	margin: 0;
 }
 
+/* Its own wrapper scrolls; an authored table's column floor would push the last column out. */
+.plan-content .plan-evidence table {
+	display: table;
+	margin-block: 0;
+}
+
+.plan-content .plan-evidence :is(th, td) {
+	min-inline-size: 0;
+	padding-inline: calc(var(--spacing) * 1.5);
+}
+
 /* Host detail on a ready card stays interactive above the card-wide open control. */
 .plan-research-detail {
 	position: relative;

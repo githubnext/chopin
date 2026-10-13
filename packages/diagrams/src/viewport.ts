@@ -8,8 +8,9 @@ export const DIAGRAM_VIEWPORT = Object.freeze({
 	zoomStep: 0.15,
 });
 
+/** The scale that shows the whole width; never enlarges a diagram that already fits. */
 export function fitDiagram(width: number, available: number): number {
-	return Math.max(DIAGRAM_VIEWPORT.minimumZoom, Math.min(1, available / width));
+	return Math.min(1, available / width);
 }
 
 /** Preserve lanes and stages; their axes carry meaning beyond graph connectivity. */

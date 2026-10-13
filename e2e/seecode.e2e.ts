@@ -34,7 +34,7 @@ let astro = {
 };
 
 test(
-	"a wide diagram derives a readable narrower view with bounded zoom and unchanged source",
+	"a wide diagram derives a narrower view, fits its column and keeps a chosen zoom",
 	async ({ join, room, seed }, testInfo) => {
 		let source =
 			`# Astro runtime\n\nThe build and release stages have different dependencies.\n\n\`\`\`seecode\n${
@@ -83,47 +83,53 @@ test(
 				};
 			});
 			expect(geometry.viewBoxWidth).toBeLessThanOrEqual(1100);
-			expect(geometry.scale).toBeGreaterThanOrEqual(1);
-			if (geometry.viewBoxWidth <= geometry.stageWidth) {
-				expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.stageWidth + 1);
-			} else {
-				expect(geometry.scrollWidth).toBeGreaterThan(geometry.stageWidth);
-			}
+			// Fitted to the column when wider than it; otherwise drawn at its actual size.
+			expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.stageWidth + 1);
+			if (geometry.viewBoxWidth <= geometry.stageWidth) expect(geometry.scale).toBeCloseTo(1, 2);
+			else expect(geometry.scale).toBeLessThan(1);
 			expect(geometry.pageScrollWidth).toBeLessThanOrEqual(geometry.pageWidth + 1);
 			expect(geometry.documentScrollWidth).toBeLessThanOrEqual(geometry.documentWidth + 1);
 			expect(geometry.stageLeft).toBeGreaterThanOrEqual(geometry.documentLeft - 1);
 			expect(geometry.stageRight).toBeLessThanOrEqual(geometry.documentRight + 1);
-			if (geometry.scrollWidth <= geometry.stageWidth + 1) continue;
-			await expect(stage).toHaveAttribute("tabindex", "0");
-			await stage.focus();
-			await stage.evaluate(element => {
-				element.setAttribute("data-keyboard-scroll-complete", "false");
-				element.addEventListener("scrollend", () => {
-					element.setAttribute("data-keyboard-scroll-complete", "true");
-				}, { once: true });
-			});
-			await stage.press("ArrowRight");
-			await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
-			await expect(stage).toHaveAttribute("data-keyboard-scroll-complete", "true");
-			let end = await stage.evaluate(element => {
-				element.scrollLeft = element.scrollWidth;
-				return { actual: element.scrollLeft, maximum: element.scrollWidth - element.clientWidth };
-			});
-			expect(end.actual).toBeGreaterThanOrEqual(end.maximum - 1);
-			await stage.evaluate(element => element.scrollLeft = 0);
-			await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBe(0);
 			await page.screenshot({ path: testInfo.outputPath(`astro-${viewport.width}.png`) });
 		}
+
+		// At actual size the drawing overflows the phone column and scrolls by keyboard.
+		let actual = preview.getByRole("button", { name: "Actual size", exact: true });
+		await actual.click();
+		await expect(actual).toHaveAttribute("aria-pressed", "true");
+		await expect.poll(() => stage.evaluate(element => element.scrollWidth > element.clientWidth))
+			.toBe(true);
+		await stage.focus();
+		await stage.evaluate(element => {
+			element.setAttribute("data-keyboard-scroll-complete", "false");
+			element.addEventListener("scrollend", () => {
+				element.setAttribute("data-keyboard-scroll-complete", "true");
+			}, { once: true });
+		});
+		await stage.press("ArrowRight");
+		await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+		await expect(stage).toHaveAttribute("data-keyboard-scroll-complete", "true");
+		let end = await stage.evaluate(element => {
+			element.scrollLeft = element.scrollWidth;
+			return { actual: element.scrollLeft, maximum: element.scrollWidth - element.clientWidth };
+		});
+		expect(end.actual).toBeGreaterThanOrEqual(end.maximum - 1);
+		await stage.evaluate(element => element.scrollLeft = 0);
+		await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBe(0);
 
 		await svg.getByRole("button", { name: "Astro project", exact: true }).click();
 		await expect(preview.getByRole("complementary", { name: "Diagram details" }))
 			.toBeVisible();
-		let nativeWidth = await svg.evaluate(element => element.getBoundingClientRect().width);
 		await preview.getByRole("button", { name: "Fit to width", exact: true }).click();
-		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("85%");
-		await expect.poll(() => svg.evaluate(element => element.getBoundingClientRect().width))
-			.toBeCloseTo(nativeWidth * 0.85, 0);
-		await preview.getByRole("button", { name: "Zoom in diagram", exact: true }).click();
+		await expect.poll(() =>
+			stage.evaluate(element =>
+				element.querySelector("svg")!.getBoundingClientRect().width - element.clientWidth
+			)
+		).toBeLessThanOrEqual(1);
+		// A chosen size survives resizing.
+		await actual.click();
+		await page.setViewportSize({ width: 1440, height: 960 });
 		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("100%");
 		await preview.getByRole("button", { name: "Zoom in diagram", exact: true }).click();
 		await expect(preview.getByLabel("Diagram zoom", { exact: true })).toHaveText("115%");
@@ -145,6 +151,64 @@ test(
 		await written(page, room, /production install may include CLI deps/);
 	},
 );
+
+test("a chart wider than a phone column fits it from the first frame", async ({ join, seed }) => {
+	let chart = {
+		type: "bar",
+		title: "Median startup",
+		unit: "ms",
+		data: [["Baseline", 240], ["Cached", 183], ["Cached large", 410]],
+	};
+	await seed(`# Startup\n\n\`\`\`seecode\n${JSON.stringify(chart)}\n\`\`\`\n`);
+	let page = await join("ana", {
+		viewport: { width: 390, height: 844 },
+		isMobile: true,
+		hasTouch: true,
+	});
+	// Record the drawing's width in the frame it first appears, before any measurement settles.
+	await page.addInitScript(() => {
+		let observer = new MutationObserver(() => {
+			let svg = document.querySelector<SVGSVGElement>(".ch-diagram__stage svg.sc-svg");
+			if (!svg) return;
+			observer.disconnect();
+			requestAnimationFrame(() => {
+				let stage = svg.parentElement!;
+				document.documentElement.dataset.firstFrame = JSON.stringify({
+					drawn: svg.getBoundingClientRect().width,
+					authored: svg.viewBox.baseVal.width,
+					stage: stage.clientWidth,
+				});
+			});
+		});
+		observer.observe(document, { childList: true, subtree: true });
+	});
+	await page.reload();
+	let preview = content(page).getByRole("region", { name: "Diagram preview" });
+	await expect(preview.locator("svg.sc-svg")).toBeVisible();
+	await expect(page.locator("html[data-first-frame]")).toHaveCount(1);
+	let first = JSON.parse((await page.locator("html").getAttribute("data-first-frame"))!);
+	expect(first.authored).toBeGreaterThan(first.stage);
+	expect(first.drawn).toBeLessThanOrEqual(first.stage + 1);
+
+	// One row of controls: play, step, fit and actual size.
+	let controls = preview.getByRole("group", { name: "Diagram controls", exact: true });
+	let button = (name: string) => controls.getByRole("button", { name, exact: true });
+	await expect(button("Fit to width")).toHaveAttribute("aria-pressed", "true");
+	await expect(button("Zoom in diagram")).toBeHidden();
+	let tops = await controls.locator("button:visible").evaluateAll(buttons =>
+		new Set(buttons.map(button => Math.round(button.getBoundingClientRect().top))).size
+	);
+	expect(tops).toBe(1);
+	await button("Actual size").tap();
+	await expect(button("Actual size")).toHaveAttribute("aria-pressed", "true");
+	await expect.poll(() =>
+		preview.locator(".ch-diagram__stage").evaluate(stage => stage.scrollWidth > stage.clientWidth)
+	).toBe(true);
+	await button("Fit to width").tap();
+	await expect.poll(() =>
+		preview.locator(".ch-diagram__stage").evaluate(stage => stage.scrollWidth <= stage.clientWidth)
+	).toBe(true);
+});
 
 test("a saved SeeCode block renders for two readers and revises through shared source", async ({ join, room, seed }) => {
 	await seed(

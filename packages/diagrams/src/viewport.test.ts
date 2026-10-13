@@ -30,8 +30,8 @@ test("semantic lane, stage and chart layouts retain their native axes", () => {
 	}
 });
 
-test("fit retains a readable lower bound for dense diagrams and never enlarges small diagrams", () => {
-	expect(fitDiagram(2000, 300)).toBe(0.85);
+test("fit shows the whole width and never enlarges small diagrams", () => {
+	expect(fitDiagram(2000, 300)).toBe(0.15);
 	expect(fitDiagram(1000, 900)).toBe(0.9);
 	expect(fitDiagram(500, 900)).toBe(1);
 });

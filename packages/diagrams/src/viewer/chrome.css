@@ -1,5 +1,6 @@
 /* Local browser adapter. The authored document retains its own keyboard and scroll behavior. */
 .ch-diagram {
+	container: ch-diagram / inline-size;
 	width: 100%;
 	margin: 0;
 	font-family: var(--font-sans);
@@ -112,6 +113,24 @@
 .ch-diagram__inspector button:hover {
 	color: var(--color-brand-ink);
 	border-color: var(--color-brand);
+}
+
+/*
+ * A column too narrow for the whole bar keeps it to one row: play, step, fit and
+ * actual size. Play restarts a finished diagram, and a pinch still zooms the page.
+ */
+@container ch-diagram (max-width: 21rem) {
+	.ch-diagram__optional {
+		display: none;
+	}
+}
+
+@media (pointer: coarse) {
+	@container ch-diagram (max-width: 30rem) {
+		.ch-diagram__optional {
+			display: none;
+		}
+	}
 }
 
 .ch-diagram__stage {
