@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs/promises";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +8,8 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { parseArgs } from "./args";
-import { classifyConnectorError, connectorMessage } from "./machine";
+import { classifyConnectorError, connectorMessage, machineFile, pair } from "./machine";
+import { createOutput } from "./output";
 import { ConnectorError } from "./mcp";
 import { git, stateDirectory } from "./workspace";
 
@@ -134,6 +136,64 @@ test("pair stores the machine token at 0600 beside its server, and never prints 
 	expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
 		servers: { [chopin.url]: { token: MACHINE_TOKEN, label: "build-box" } },
 	});
+});
+
+function quietPair(url: string, label: string, directory: string) {
+	let sink = { write: () => true };
+	return pair({
+		url,
+		label,
+		directory,
+		output: createOutput(sink, sink, {}),
+		signal: new AbortController().signal,
+	});
+}
+
+test("two connectors pairing different servers at once both keep their tokens", async () => {
+	let home = await scratch("chopin-home-");
+	let first = fakeChopin();
+	let second = fakeChopin();
+	// Each read of machine.json is slow, so both pairings read it before either writes.
+	let read = fs.readFile;
+	let slow = spyOn(fs, "readFile").mockImplementation(
+		(async (...args: Parameters<typeof read>) => {
+			await Bun.sleep(50);
+			return read(...args);
+		}) as typeof read,
+	);
+	cleanup.push(() => slow.mockRestore());
+	await Promise.all([
+		quietPair(first.url, "first", home),
+		quietPair(second.url, "second", home),
+	]);
+	slow.mockRestore();
+	expect(JSON.parse(await readFile(machineFile(home), "utf8"))).toEqual({
+		servers: {
+			[first.url]: { token: MACHINE_TOKEN, label: "first" },
+			[second.url]: { token: MACHINE_TOKEN, label: "second" },
+		},
+	});
+	expect(await Bun.file(`${machineFile(home)}.lock`).exists()).toBe(false);
+});
+
+test("pairing replaces a lock left by a connector that died or hung", async () => {
+	let home = await scratch("chopin-home-");
+	let chopin = fakeChopin();
+	let lock = `${machineFile(home)}.lock`;
+	let gone = Bun.spawn([process.execPath, "-e", ""]);
+	await gone.exited;
+	let stale = [
+		// Windows cannot tell whether the process lives, so it relies on the lock's age alone.
+		...(process.platform === "win32" ? [] : [{ pid: gone.pid, time: Date.now() }]),
+		{ pid: process.pid, time: Date.now() - 60_000 },
+	];
+	for (let held of stale) {
+		await writeFile(lock, JSON.stringify(held), { mode: 0o600 });
+		let started = Date.now();
+		expect(await quietPair(chopin.url, "box", home)).toBe(MACHINE_TOKEN);
+		expect(Date.now() - started).toBeLessThan(5_000);
+		expect(await Bun.file(lock).exists()).toBe(false);
+	}
 });
 
 test("connect reuses a stored machine token without pairing again", async () => {

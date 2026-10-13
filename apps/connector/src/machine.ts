@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CONNECTOR_HEADERS, ConnectorError, refusal } from "./mcp";
 import type { Output } from "./output";
@@ -49,6 +49,77 @@ async function save(directory: string, value: Stored) {
 	await writeFile(temporary, JSON.stringify(value, null, "\t") + "\n", { mode: 0o600 });
 	await chmod(temporary, 0o600);
 	await rename(temporary, path);
+}
+
+const LOCK_WAIT_MS = 10_000;
+const LOCK_STALE_MS = 30_000;
+
+/**
+ * Change machine.json under a lock file beside it, so connectors pairing or unpairing at once
+ * never lose each other's tokens: the file is read again inside the lock and written whole.
+ */
+async function update(directory: string, change: (value: Stored) => void) {
+	await mkdir(directory, { recursive: true, mode: 0o700 });
+	let lock = `${machineFile(directory)}.lock`;
+	let deadline = Date.now() + LOCK_WAIT_MS;
+	let file;
+	for (let wait = 10;; wait = Math.min(wait * 2, 200)) {
+		try {
+			file = await open(lock, "wx", 0o600);
+			break;
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+		}
+		if (await staleLock(lock)) {
+			await rm(lock, { force: true });
+			continue;
+		}
+		if (Date.now() >= deadline) {
+			throw new Error(
+				`Another chopin process is changing ${machineFile(directory)}. `
+					+ `If none is running, remove ${lock}.`,
+			);
+		}
+		await Bun.sleep(wait);
+	}
+	try {
+		await file.writeFile(JSON.stringify({ pid: process.pid, time: Date.now() }));
+		let value = await stored(directory);
+		change(value);
+		await save(directory, value);
+	} finally {
+		await file.close().catch(() => {});
+		await rm(lock, { force: true });
+	}
+}
+
+/**
+ * A lock is stale once it is older than any change takes, or, where processes can be checked,
+ * once the process that holds it is gone. A lock still being written counts by its file's age.
+ */
+async function staleLock(path: string): Promise<boolean> {
+	let held: { pid?: unknown; time?: unknown } | null = null;
+	let modified: number | undefined;
+	try {
+		modified = (await stat(path)).mtimeMs;
+		held = JSON.parse(await readFile(path, "utf8"));
+	} catch (err) {
+		// Gone already, so the next attempt takes it; otherwise it is still being written.
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+	}
+	let time = typeof held?.time === "number" ? held.time : modified;
+	if (time !== undefined && Date.now() - time > LOCK_STALE_MS) return true;
+	let pid = held?.pid;
+	if (process.platform === "win32" || !Number.isSafeInteger(pid) || (pid as number) <= 0) {
+		return false;
+	}
+	try {
+		process.kill(pid as number, 0);
+		return false;
+	} catch (err) {
+		// EPERM means the process exists but belongs to someone else.
+		return (err as NodeJS.ErrnoException).code === "ESRCH";
+	}
 }
 
 /** The machine token stored for one Chopin server. */
@@ -116,9 +187,9 @@ export async function pair(options: {
 		if (!token) await delay(1000, options.signal);
 	}
 	if (!token) return undefined;
-	let value = await stored(options.directory);
-	value.servers[options.url] = { token, label: options.label };
-	await save(options.directory, value);
+	await update(options.directory, value => {
+		value.servers[options.url] = { token, label: options.label };
+	});
 	return token;
 }
 
@@ -136,16 +207,17 @@ export async function register(
 
 /** Revoke this machine on the server and forget its token, even if the server already had. */
 export async function unpair(url: string, directory: string): Promise<"unpaired" | "not-paired"> {
-	let value = await stored(directory);
-	let token = value.servers[url]?.token;
+	let token = (await stored(directory)).servers[url]?.token;
 	if (!token) return "not-paired";
 	try {
 		await post(url + "/api/connector/machine/revoke", {}, token);
 	} catch (error) {
 		if (classifyConnectorError(error) !== "revoked") throw error;
 	}
-	delete value.servers[url];
-	await save(directory, value);
+	await update(directory, value => {
+		// A pairing that finished meanwhile stored a new token, which stays.
+		if (value.servers[url]?.token === token) delete value.servers[url];
+	});
 	return "unpaired";
 }
 
