@@ -147,10 +147,11 @@ test("connect stops without retrying when the connector endpoint refuses its ver
 	expect(await Bun.file(join(result.directory, "config.json")).exists()).toBe(false);
 });
 
-test("connect saves the server, checkout, agent and Planner it ran once it has connected", async () => {
+test("connect saves the server, checkout, agent, Planner and --env it ran once it has connected", async () => {
 	let root = await checkout();
 	let planner = ["--planner", "https://chopin.example/d/one", "--planner-command", "planner --x"];
-	let started = await connect("nothing", [root, ...planner, "--", "agent", "--acp"]);
+	let env = ["--env", "SOME_FLAG=1", "--env=LABEL=two words="];
+	let started = await connect("nothing", [root, ...planner, ...env, "--", "agent", "--acp"]);
 	expect(started.stdout).toContain("✓ Connected.");
 	expect(started.code).toBe(0);
 	let file = join(started.directory, "config.json");
@@ -161,9 +162,20 @@ test("connect saves the server, checkout, agent and Planner it ran once it has c
 			command: ["agent", "--acp"],
 			planners: ["https://chopin.example/d/one"],
 			plannerCommand: ["planner", "--x"],
+			env: { SOME_FLAG: "1", LABEL: "two words=" },
 		},
 	});
 	expect((await stat(file)).mode & 0o777).toBe(0o600);
+});
+
+test("connect refuses an --env it can't pass on, before it pairs", async () => {
+	let root = await checkout();
+	for (let bad of ["CHOPIN_URL=https://x", "PATH=/opt/bin", "1FLAG=x", "FLAG", "A-B=1"]) {
+		let refused = await connect("pairing", [root, "--env", bad, "--", "agent"]);
+		expect(refused.code).toBe(1);
+		expect(refused.stderr).toContain("--env");
+		expect(refused.requests).toEqual([]);
+	}
 });
 
 /** The settings `chopin service install` copied for a service that runs `checkout` on `server`. */

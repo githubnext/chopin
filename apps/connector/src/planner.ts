@@ -63,6 +63,8 @@ export async function servePlanners(options: {
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
+	/** The `--env` variables connect saved, added to each backend's environment. */
+	env?: Record<string, string>;
 	healthyMs?: number;
 }) {
 	await Promise.all(options.documents.map(document => servePlanner({ ...options, document })));
@@ -77,6 +79,7 @@ async function servePlanner(options: {
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
+	env?: Record<string, string>;
 	healthyMs?: number;
 }) {
 	let { output, signal, document } = options;
@@ -144,11 +147,13 @@ async function launch(options: {
 	command: string[];
 	cwd: string;
 	signal: AbortSignal;
+	env?: Record<string, string>;
 }, token: string): Promise<{ how: string; stderr?: string }> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
 		env: {
 			...process.env,
+			...options.env,
 			CHOPIN_URL: options.url,
 			CHOPIN_DOCUMENT: options.document,
 			CHOPIN_PLANNER_TOKEN: token,

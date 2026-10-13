@@ -114,16 +114,24 @@ test("on Linux, install enables linger, writes the unit and enables it", async (
 });
 
 test("install again replaces the service's settings with the last connect", async () => {
-	let { directory, host, program, settings } = await machine("linux", systemd);
+	let { home, directory, host, program, settings } = await machine("linux", systemd);
 	await installService(host, program);
-	let other = { ...settings, checkout: join(directory, "other"), command: ["agent", "--other"] };
+	let other = {
+		...settings,
+		checkout: join(directory, "other"),
+		command: ["agent", "--other"],
+		env: { API_MODE: "s3cret-value" },
+	};
 	await connected(directory, other);
 	expect((await readConfig(directory)).service?.settings?.checkout).toBe(settings.checkout);
 	await installService(host, program);
 	expect((await readConfig(directory)).service?.settings).toMatchObject({
 		checkout: other.checkout,
 		command: [expect.stringMatching(/agent$/), "--other"],
+		env: { API_MODE: "s3cret-value" },
 	});
+	// The service reads its --env from config.json; its definition never holds it.
+	expect(await readFile(unitPath(home), "utf8")).not.toContain("s3cret");
 });
 
 test("install refuses until chopin connect has saved what the service runs", async () => {

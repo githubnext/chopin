@@ -155,12 +155,32 @@ async function unpairCommand(args: string[]) {
 	);
 }
 
+/**
+ * `--env KEY=VALUE` words as variables. Chopin sets CHOPIN_* itself and the service sets PATH, so
+ * neither can be given.
+ */
+function environment(words: string[]) {
+	let env: Record<string, string> = {};
+	for (let word of words) {
+		let at = word.indexOf("=");
+		let key = at < 0 ? word : word.slice(0, at);
+		if (at < 0 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+			throw new Error(`--env takes KEY=VALUE, with a KEY of letters, digits and _; not "${word}".`);
+		}
+		if (key.toUpperCase() === "PATH" || key.toUpperCase().startsWith("CHOPIN_")) {
+			throw new Error(`--env can't set ${key}; chopin sets it.`);
+		}
+		env[key] = word.slice(at + 1);
+	}
+	return env;
+}
+
 async function connect(args: string[]) {
 	// `--service` marks the connector the installed service runs, which runs what install copied.
 	let parsed = parseArgs(args, {
 		flags: ["service"],
 		options: ["planner-command"],
-		lists: ["planner"],
+		lists: ["planner", "env"],
 	});
 	let service = parsed.flags.has("service");
 	let directory = stateDirectory();
@@ -196,6 +216,7 @@ async function connect(args: string[]) {
 			`--planner <document URL> and --planner-command <command> go together.\n\n${USAGE}`,
 		);
 	}
+	let env = saved?.env ?? environment(parsed.lists.get("env") ?? []);
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = saved?.server ?? await server();
 	let info = await workspace(resolve(saved?.checkout ?? parsed.positional[0] ?? "."));
@@ -212,6 +233,7 @@ async function connect(args: string[]) {
 					: command,
 				planners: plannerDocuments,
 				plannerCommand,
+				...(Object.keys(env).length ? { env } : {}),
 			};
 		});
 	if (
@@ -278,6 +300,7 @@ async function connect(args: string[]) {
 				output,
 				signal: AbortSignal.any([abort.signal, planners.signal]),
 				failures,
+				env,
 			});
 			try {
 				await serveWork({
@@ -306,6 +329,7 @@ async function connect(args: string[]) {
 							permissions,
 							interrupt: stop,
 							failures,
+							env,
 						}),
 				});
 				return;

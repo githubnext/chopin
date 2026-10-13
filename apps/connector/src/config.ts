@@ -22,11 +22,14 @@ export type ConnectSettings = {
 	/** Documents whose Planner backend connect runs, and the backend's command words. */
 	planners: string[];
 	plannerCommand: string[];
+	/** `--env` variables for the agent and the Planner backend. Stored here, so not for secrets. */
+	env?: Record<string, string>;
 };
 
 /**
  * config.json in the state directory: what `chopin connect` and `chopin service install` stored.
- * It holds no secret; the machine token stays in machine.json.
+ * Only you can read it (mode 0600). The machine token stays in machine.json; `--env` values live
+ * here, so a secret belongs in the agent's own login instead.
  */
 export type Config = {
 	connect?: ConnectSettings;

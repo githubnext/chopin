@@ -36,7 +36,7 @@ let log = process.argv[2];
 let launches = 0;
 try { launches = readFileSync(log, "utf8").split("\\n").filter(line => line.includes('"argv"')).length; } catch {}
 let env = Object.fromEntries(
-	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN"].map(name => [name, process.env[name]]),
+	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN", "SOME_FLAG"].map(name => [name, process.env[name]]),
 );
 appendFileSync(log, JSON.stringify({ pid: process.pid, cwd: process.cwd(), argv: process.argv, env }) + "\\n");
 if (launches === 0) process.exit(3);
@@ -112,6 +112,8 @@ test(
 			document,
 			"--planner-command",
 			`${process.execPath} ${script} ${log}`,
+			"--env",
+			"SOME_FLAG=1",
 			"--",
 			"agent",
 		], {
@@ -131,8 +133,18 @@ test(
 			await until(async () => (await entries(log)).filter(entry => entry.argv).length >= 2, 15_000);
 			let launches = (await entries(log)).filter(entry => entry.argv);
 			expect(launches.map(launch => launch.env)).toEqual([
-				{ CHOPIN_URL: origin, CHOPIN_DOCUMENT: document, CHOPIN_PLANNER_TOKEN: issued[0] },
-				{ CHOPIN_URL: origin, CHOPIN_DOCUMENT: document, CHOPIN_PLANNER_TOKEN: issued[1] },
+				{
+					CHOPIN_URL: origin,
+					CHOPIN_DOCUMENT: document,
+					CHOPIN_PLANNER_TOKEN: issued[0],
+					SOME_FLAG: "1",
+				},
+				{
+					CHOPIN_URL: origin,
+					CHOPIN_DOCUMENT: document,
+					CHOPIN_PLANNER_TOKEN: issued[1],
+					SOME_FLAG: "1",
+				},
 			]);
 			expect(launches.map(launch => launch.argv.slice(1))).toEqual([[script, log], [script, log]]);
 			expect(asked).toEqual([

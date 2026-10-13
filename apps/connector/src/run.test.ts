@@ -105,6 +105,28 @@ test("a living document's first build gets a prompt without verification or revi
 	]);
 });
 
+test.skipIf(process.platform === "win32")(
+	"the agent runs with the --env connect saved",
+	async () => {
+		let file = join(await mkdtemp(join(tmpdir(), "chopin-env-")), "seen");
+		let implementer = new URL("./testing/fake-implementer.ts", import.meta.url).pathname;
+		let { calls } = await run({ live: true }, [], undefined, undefined, {
+			command: [
+				"/bin/sh",
+				"-c",
+				'printf %s "$SOME_FLAG" > "$0"; exec "$1" "$2" --live',
+				file,
+				process.execPath,
+				implementer,
+			],
+			env: { SOME_FLAG: "from connect" },
+		});
+		expect(calls.findLast(([name]) => name !== "renew_implementation_build")?.[1])
+			.toMatchObject({ state: "stopped" });
+		expect(await readFile(file, "utf8")).toBe("from connect");
+	},
+);
+
 test.each([true, false])(
 	"an investigation (spike=%s) serves image tools through an authenticated local bridge",
 	async spike => {

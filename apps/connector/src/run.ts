@@ -48,6 +48,8 @@ type Options = {
 	random?: () => number;
 	/** Where an agent that fails to start is recorded for `chopin status`. */
 	failures?: StartFailures;
+	/** The `--env` variables connect saved, for the agent. */
+	env?: Record<string, string>;
 };
 export const STOPPED = "Stopped from the connector terminal.";
 
@@ -195,7 +197,9 @@ export async function runWork(
 		let stop = await runAgent({
 			command: options.command,
 			cwd: path,
-			...(claim.spike ? { env: noPushEnvironment() } : {}),
+			...(claim.spike || options.env
+				? { env: { ...options.env, ...(claim.spike ? noPushEnvironment() : {}) } }
+				: {}),
 			onStart: failure =>
 				void (failure
 					? options.failures?.failed({ kind: "agent", ...failure, at: Date.now() })
