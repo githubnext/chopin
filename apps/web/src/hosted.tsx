@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePhone } from "@chopin/editor/pointer";
 import { parseChildDocumentPath, parseDocumentPath } from "@chopin/protocol/document-url";
 
@@ -8,6 +8,7 @@ import { rememberOriginRect } from "./child-origin";
 import { WorkspaceNotice } from "./workspace-notice";
 import { NavigationShell } from "./navigation-shell";
 import { PhoneDocumentSkeleton } from "./phone-skeleton";
+import { SidebarTrigger } from "./project-sidebar-chrome";
 import { WorkspaceSkeleton } from "./workspace-skeleton";
 
 import type { ReactNode } from "react";
@@ -104,7 +105,15 @@ export function retryableChannelFailure(error: unknown): boolean {
 /** A document's loading state is the workspace's own shape rather than a label. */
 function Loading({ document, label = "Loading" }: { document?: boolean; label?: string }) {
 	let phone = usePhone();
-	if (document) return phone ? <PhoneDocumentSkeleton /> : <WorkspaceSkeleton label={label} />;
+	let shell = useContext(SidebarTrigger);
+	if (document && phone) return <PhoneDocumentSkeleton />;
+	// Before the session the sidebar has yet to take its width, so the ground stays blank. A child
+	// opens as a card over its parent, not in this shape, so it keeps the label.
+	if (document && hostedRoute(location.pathname).page !== "child") {
+		return shell
+			? <WorkspaceSkeleton label={label} />
+			: <p className="sr-only" role="status">{label}</p>;
+	}
 	return (
 		<div
 			className="hosted-loading flex h-full items-center justify-center bg-ground px-4 text-sm text-text-tertiary"

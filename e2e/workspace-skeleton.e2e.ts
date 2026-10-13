@@ -24,13 +24,13 @@ function expectSameBox(actual: Box, expected: Box, label: string) {
 }
 
 const SKELETON: Record<Part, string> = {
-	sheet: ".workspace-skeleton .workspace-document-panel",
+	sheet: ".workspace-skeleton-sheet",
 	title: ".workspace-skeleton-title",
 	views: ".workspace-skeleton-views",
-	chat: ".workspace-skeleton .workspace-chat-body",
-	header: ".workspace-skeleton .room-header",
+	chat: ".workspace-skeleton-chat",
+	header: ".workspace-skeleton > .room-header",
 	tabs: ".workspace-skeleton-tabs",
-	frame: ".workspace-skeleton .workspace-frame",
+	frame: ".workspace-skeleton-frame",
 };
 
 const LOADED: Record<Part, string> = {
@@ -40,7 +40,7 @@ const LOADED: Record<Part, string> = {
 	chat: "aside.workspace-chat-panel .workspace-chat-body",
 	header: ".workspace-header-slot .room-header",
 	tabs: "nav.workspace-navigation",
-	frame: ".workspace-root:not(.workspace-skeleton) .workspace-frame",
+	frame: ".workspace-root .workspace-frame",
 };
 
 async function measure(page: Page, selectors: Record<Part, string>, parts: Part[]) {
@@ -49,38 +49,52 @@ async function measure(page: Page, selectors: Record<Part, string>, parts: Part[
 	return boxes;
 }
 
-const CASES = [
-	{
-		name: "split",
-		viewport: { width: 1440, height: 900 },
-		parts: ["sheet", "title", "views", "chat"] as Part[],
-	},
+const CHAT_CLOSED = { "chopin:pane:chat:choice": "false" };
+const SIDEBAR_COLLAPSED = { "chopin:pane:projects:collapsed": "true" };
+const SPLIT = { width: 1440, height: 900 };
+
+const CASES: { name: string; viewport: typeof SPLIT; storage?: object; parts: Part[] }[] = [
+	{ name: "split", viewport: SPLIT, parts: ["sheet", "title", "views", "chat"] },
 	{
 		name: "split with Chat closed",
-		viewport: { width: 1440, height: 900 },
-		chat: "false",
-		parts: ["sheet", "title", "views"] as Part[],
+		viewport: SPLIT,
+		storage: CHAT_CLOSED,
+		parts: ["sheet", "title", "views"],
 	},
 	{
-		name: "compact",
-		viewport: { width: 390, height: 844 },
-		parts: ["header", "tabs", "frame"] as Part[],
+		name: "split under the sidebar trigger",
+		viewport: SPLIT,
+		storage: { ...SIDEBAR_COLLAPSED, "chopin:pane:chat": "640" },
+		parts: ["sheet", "title", "views", "chat"],
 	},
+	{
+		name: "expanded split under the sidebar trigger",
+		viewport: SPLIT,
+		storage: { ...SIDEBAR_COLLAPSED, ...CHAT_CLOSED },
+		parts: ["sheet", "title", "views"],
+	},
+	{ name: "compact", viewport: { width: 390, height: 844 }, parts: ["header", "tabs", "frame"] },
 ];
 
-for (let { chat, name, parts, viewport } of CASES) {
+for (let { name, parts, storage, viewport } of CASES) {
 	test(`the ${name} skeleton holds the loaded workspace's geometry`, async ({ baseURL, browser, room, seed }) => {
 		await seed(RESPONSIVE_SOURCE);
 		let context = await browser.newContext({ baseURL, viewport });
 		try {
 			let page = await context.newPage();
 			await authenticate(page, "ana", baseURL!);
-			if (chat) {
-				await page.addInitScript(value => {
-					localStorage.setItem("chopin:pane:chat:choice", value);
-				}, chat);
+			if (storage) {
+				await page.addInitScript(entries => {
+					for (let [key, value] of Object.entries(entries)) localStorage.setItem(key, value);
+				}, storage as Record<string, string>);
 			}
-			// Hold the workspace's code, then its document, so each loading stage stays on screen.
+			// Hold the session, the workspace's code, then its document, so each stage stays on screen.
+			let releaseSession!: () => void;
+			let session = new Promise<void>(resolve => (releaseSession = resolve));
+			await page.route("**/api/session", async route => {
+				await session;
+				await route.continue();
+			});
 			let releaseCode!: () => void;
 			let code = new Promise<void>(resolve => (releaseCode = resolve));
 			await page.route(/\/assets\/(document-route-view|room-workspace)-[^/]*\.js$/, async route => {
@@ -95,16 +109,20 @@ for (let { chat, name, parts, viewport } of CASES) {
 			});
 			await page.goto(roomPath(room));
 
+			// Before the session the sidebar has no width yet, so the ground stays blank.
+			await expect(page.getByRole("status")).toHaveText("Loading");
 			let skeleton = page.locator(".workspace-skeleton");
+			await expect(skeleton).toHaveCount(0);
+			releaseSession();
 			await expect(skeleton).toBeVisible();
 			await expect(skeleton.getByRole("status")).toHaveText("Opening document…");
 			let heading = skeleton.locator(".phone-skeleton-heading");
 			await expect(heading).toBeVisible();
 			let shell = await measure(page, SKELETON, parts);
 			let lines = await box(heading);
-			await expect(skeleton.locator(".workspace-chat-panel")).toHaveCount(
-				name === "split" ? 1 : 0,
-			);
+			await expect(skeleton.locator(".workspace-skeleton-chat")).toBeVisible({
+				visible: !!parts.includes("chat"),
+			});
 
 			// The workspace mounts before its document arrives, with the same lines in the column.
 			releaseCode();
@@ -140,7 +158,7 @@ test("a split workspace notice rises to the sheet's top margin, with no header r
 		await page.goto("/documents/nobody/nothing");
 		let title = page.getByRole("heading", { name: "nobody/nothing isn't one of your projects" });
 		await expect(title).toBeVisible();
-		await expect(page.locator(".room-header")).toHaveCount(0);
+		await expect(page.locator(".room-header")).toBeHidden();
 		let notice = await box(title.locator(".."));
 		expect(Math.abs(notice.y - sheet.y)).toBeLessThanOrEqual(1);
 		expect(Math.abs(notice.y + notice.height - (sheet.y + sheet.height))).toBeLessThanOrEqual(1);
