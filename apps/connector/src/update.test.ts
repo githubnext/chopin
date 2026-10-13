@@ -29,7 +29,16 @@ let { version } = await Bun.file(join(import.meta.dir, "../package.json")).json(
 };
 let asset = `chopin-${process.platform}-${process.arch}`;
 
-/** A fresh copy of the compiled chopin in its own bin directory, and a gh that records calls. */
+/**
+ * The service managers chopin may run. In the fixture each is a shim that records its call and
+ * fails, unless a test replaces it, so a real one is never run.
+ */
+const MANAGERS = ["systemctl", "loginctl", "launchctl", "schtasks", "powershell", "powershell.exe"];
+
+/**
+ * A fresh copy of the compiled chopin in its own bin directory, with a gh and service managers
+ * that record calls. Its PATH is the shims alone: the compiled chopin needs no runtime.
+ */
 async function installed() {
 	let home = await mkdtemp(join(scratch, "home-"));
 	let bin = join(home, "bin");
@@ -42,6 +51,12 @@ async function installed() {
 	let log = join(home, "calls.log");
 	await writeFile(join(shims, "gh"), `#!/bin/sh\necho "gh $*" >> "${log}"\n`);
 	await chmod(join(shims, "gh"), 0o755);
+	for (let manager of MANAGERS) {
+		await writeFile(join(shims, manager), `#!/bin/sh\necho "${manager} $*" >> "${log}"\nexit 1\n`);
+		await chmod(join(shims, manager), 0o755);
+	}
+	// An x64 chopin on macOS asks sysctl whether it runs under Rosetta.
+	if (process.platform === "darwin") await fs.symlink("/usr/sbin/sysctl", join(shims, "sysctl"));
 	let original = sha256(await Bun.file(chopin).bytes());
 	return {
 		home,
@@ -57,7 +72,7 @@ async function installed() {
 		/** Without a terminal: stdin is not a TTY. */
 		async update(env: Record<string, string>, ...args: string[]) {
 			let child = Bun.spawn([chopin, "update", ...args], {
-				env: { HOME: home, PATH: `${shims}:${process.env.PATH}`, ...env },
+				env: { HOME: home, PATH: shims, ...env },
 				stdin: "ignore",
 				stdout: "pipe",
 				stderr: "pipe",
@@ -74,7 +89,7 @@ async function installed() {
 			let output = "";
 			let prompted = Promise.withResolvers<void>();
 			let child = Bun.spawn([chopin, "update", ...args], {
-				env: { HOME: home, PATH: `${shims}:${process.env.PATH}`, ...env },
+				env: { HOME: home, PATH: shims, ...env },
 				terminal: {
 					cols: 200,
 					rows: 24,
@@ -201,7 +216,7 @@ describe.skipIf(!binary)("chopin update", () => {
 		expect(await at.calls()).toBe("");
 	});
 
-	// A fake systemctl on PATH answers for the service; the real one is never run.
+	// A fake systemctl and loginctl on PATH answer for the service; the real ones are never run.
 	test.if(process.platform === "linux")(
 		"restarts a running service that runs the updated chopin",
 		async () => {
@@ -213,7 +228,10 @@ describe.skipIf(!binary)("chopin update", () => {
 				`#!/bin/sh\necho "systemctl $*" >> "${at.log}"\n`
 					+ '[ "$2" = show ] && echo ActiveState=active\nexit 0\n',
 			);
-			await chmod(join(at.shims, "systemctl"), 0o755);
+			await writeFile(
+				join(at.shims, "loginctl"),
+				`#!/bin/sh\necho "loginctl $*" >> "${at.log}"\necho yes\n`,
+			);
 			let state = join(at.home, "state");
 			await mkdir(state);
 			let service = {
@@ -242,7 +260,9 @@ describe.skipIf(!binary)("chopin update", () => {
 				"Updated chopin from " + version + " to 98.0.0",
 			);
 			expect(result.stdout).toContain("Restarted the chopin service, so it runs the new chopin.");
-			expect((await at.calls()).split("\n")).toContain("systemctl --user restart chopin.service");
+			let calls = (await at.calls()).split("\n");
+			expect(calls).toContain("systemctl --user restart chopin.service");
+			expect(calls.some(line => line.startsWith("loginctl show-user "))).toBe(true);
 		},
 	);
 
