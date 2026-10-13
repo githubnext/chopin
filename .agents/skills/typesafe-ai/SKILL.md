@@ -29,8 +29,6 @@ Read only the reference needed for the task:
   judgments, choosing primitives, and fixing ambiguous instructions or criteria.
 - [Composition and evaluation](references/composition-and-evaluation.md): batching,
   extraction, retrieval, routing, confidence, regression cases, and agent economics.
-- [Research sources](references/sources.md): Diogo Almeida's writing and appearances,
-  timestamped listening guide, other builders, and evidence/access limitations.
 
 ## Find the useful shape
 
