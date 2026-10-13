@@ -322,22 +322,22 @@ test("a human choice overrides an advisory chat suggestion", async ({ join, room
 	await sendChat(ana, "Should we ship a small pilot?");
 	await waitForEvent(ana, "thread.opened");
 	await sendChat(bo, "Start with a small pilot.");
-	let withOption = await waitForEvent(ana, "option.added");
-	let humanOptionId = withOption.threads[0]!.contributions.find(item => item.kind === "option")!.id;
+	await waitForEvent(ana, "option.added");
 	let card = decisionCard(ana);
+	await sendChat(bo, "Let's just go with a small pilot.");
+	await waitForEvent(ana, "settle.suggested");
+	let suggestion = card.getByRole("radio", { name: "Start with a small pilot." });
+	await expect(suggestion).toBeChecked();
+	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
+	// Adding an option is choosing it, so it replaces the suggestion in one step.
 	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	await card.getByRole("textbox", { name: "New option" }).fill("Ship to everyone");
 	await ana.keyboard.press("Enter");
-	let suggestion = card.getByRole("radio", { name: "Ship to everyone" });
-	await expect(suggestion).toBeVisible();
-	await sendChat(bo, "Let's just go with Ship to everyone.");
-	await waitForEvent(ana, "settle.suggested");
-	await expect(suggestion).toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
-	let humanChoice = card.getByRole("radio", { name: "Start with a small pilot." });
-	await card.getByText("Start with a small pilot.", { exact: true }).click();
+	let humanChoice = card.getByRole("radio", { name: "Ship to everyone" });
 	await expect(humanChoice).toBeChecked();
+	await expect(suggestion).not.toBeChecked();
 	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
+	let humanOptionId = await humanChoice.getAttribute("value");
 	await card.getByRole("button", { name: "Save", exact: true }).click();
 	let decided = await waitForEvent(ana, "decision.recorded");
 	expect(decided.threads[0]!.decision).toMatchObject({
@@ -373,7 +373,7 @@ test("typing an option before a suggestion keeps the composer intent until Escap
 	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
 });
 
-test("adding an option does not suppress a later chat suggestion", async ({ join, room }) => {
+test("an added option stays the adder's choice when chat later suggests it", async ({ join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
 	await openJevWire(ana, room);
@@ -404,7 +404,7 @@ test("adding an option does not suppress a later chat suggestion", async ({ join
 	expect(label).toBeTruthy();
 	await expect(card.getByRole("radio", { name: label! })).toBeChecked();
 	await expect(card.getByRole("radio", { name: "Start with a small pilot." })).not.toBeChecked();
-	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
+	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
 });
 
 test("failed analysis retries in Chat while editor selection survives hiding Chat", async ({ join, room, seed }) => {

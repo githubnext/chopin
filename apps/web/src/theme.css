@@ -1624,7 +1624,7 @@ button.chat-tool-call-toggle {
 }
 
 /* Coloured icon holders: the global icon colour would otherwise win. */
-:is(.question-mark, .question-check) [data-nucleo-icon],
+:is(.question-mark, .question-check, .question-add-confirm) [data-nucleo-icon],
 .question-callout .plan-research-badge [data-nucleo-icon] {
 	color: inherit;
 }
@@ -1767,6 +1767,7 @@ label.question-option:has(.question-input:not(:disabled)) {
 	display: grid;
 	flex: 1;
 	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .question-label {
@@ -1856,8 +1857,97 @@ button.question-add:disabled {
 }
 
 .question-adding {
+	align-items: flex-start;
 	outline: var(--edge-width) solid var(--color-control-edge);
 	outline-offset: calc(-1 * var(--edge-width));
+}
+
+/* The leading tile: a quiet plus while the field is empty, the confirm check once it has text. */
+.question-add-confirm {
+	position: relative;
+	display: grid;
+	place-items: center;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: var(--color-inset);
+	color: var(--color-text-tertiary);
+	cursor: pointer;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out),
+		scale var(--duration-fast) var(--ease-out);
+}
+
+/* A touch-sized target around the small tile. */
+.question-add-confirm::after {
+	content: "";
+	position: absolute;
+	inset: calc(var(--spacing) * -1.5);
+}
+
+.question-add-confirm:disabled {
+	cursor: default;
+}
+
+.question-add-confirm[data-ready] {
+	background: var(--color-brand);
+	color: var(--color-white);
+}
+
+.question-add-confirm[data-ready]:hover {
+	background: var(--color-brand-hover);
+}
+
+.question-add-confirm[data-ready]:active {
+	scale: 0.96;
+}
+
+/* Outside the tile: an inset brand ring would vanish on the filled brand check. */
+.question-add-confirm:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-width);
+}
+
+.question-add-confirm > svg {
+	grid-area: 1 / 1;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.question-add-confirm > svg:last-child,
+.question-add-confirm[data-ready] > svg:first-child {
+	opacity: 0;
+}
+
+.question-add-confirm[data-ready] > svg:last-child {
+	opacity: 1;
+}
+
+.question-adding[aria-busy] .question-add-confirm {
+	cursor: progress;
+	opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.question-add-confirm > svg {
+		transition:
+			opacity var(--duration-fast) var(--ease-out),
+			scale var(--duration-fast) var(--ease-out),
+			filter var(--duration-fast) var(--ease-out);
+	}
+
+	.question-add-confirm > svg:last-child,
+	.question-add-confirm[data-ready] > svg:first-child {
+		scale: 0.25;
+		filter: blur(4px);
+	}
+
+	.question-add-confirm[data-ready] > svg:last-child {
+		scale: 1;
+		filter: none;
+	}
 }
 
 .question-adding:focus-within {
@@ -1890,6 +1980,7 @@ button.question-add:disabled {
 	outline: none;
 	resize: none;
 	field-sizing: content;
+	overflow-wrap: anywhere;
 }
 
 .question-field:focus-visible {

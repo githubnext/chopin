@@ -96,7 +96,11 @@ test("adding an option keeps focus through a delayed definition update", async (
 	await expect(field).toHaveJSProperty("readOnly", true);
 	held.releaseReply();
 	await expect(field).toHaveCount(0);
-	await expect(trigger).toBeFocused();
+	// The confirmed option is chosen and takes focus; the add row is quiet again.
+	let added = card.getByRole("radio", { name: "A delayed refresh option", exact: true });
+	await expect(added).toBeChecked();
+	await expect(added).toBeFocused();
+	await expect(trigger).toBeVisible();
 });
 
 test("Escape during a delayed option reply restores focus and respects moving away", async ({ join, page, seed }) => {

@@ -119,8 +119,9 @@ describe("QuestionnaireController option-growth", () => {
 			ok: false,
 			message: "A decision holds at most 10 options",
 		});
-		result = { ok: true };
-		expect(await controller.addOption("q0", "New option")).toEqual({ ok: true });
+		result = { ok: true, option: { id: "o9", label: "New option", description: "" } };
+		// The server's id comes back so the view can select the option it just added.
+		expect(await controller.addOption("q0", "New option")).toEqual({ ok: true, option: "o9" });
 		expect(asked.map(call => call.kind)).toEqual([
 			"question:option",
 			"question:option",
