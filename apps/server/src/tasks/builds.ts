@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { changedBlocks } from "./changes";
 import { approveGraph, validate } from "./graphs";
-import { implementationReadiness } from "./plan-graphs";
+import { planningReadiness } from "./plan-graphs";
 import {
 	claimEligibility,
 	historyFor,
@@ -209,7 +209,7 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 				plan.execution
 				|| plan.builds.some(build => ["queued", "starting", "running"].includes(build.state))
 			) throw new Error("implementation is already active");
-			let ready = implementationReadiness(plan, input.planRevision);
+			let ready = await planningReadiness(plan, input.planRevision);
 			if (!ready.ok) throw new Error(ready.blockers.join(", "));
 			let id = crypto.randomUUID();
 			let eligibility = claimEligibility(plan.lifecycle, version, id);
@@ -296,8 +296,8 @@ export async function queueRebuild(
 		if (options.automatic && stoppedForRevision(plan)) return { kind: "unavailable" };
 		if (buildActive(plan)) return { kind: "busy" };
 		if (source(plan) === live.baseSource) return { kind: "unchanged" };
-		if (options.by) {
-			let ready = implementationReadiness(plan, plan.revision);
+		{
+			let ready = await planningReadiness(plan, plan.revision);
 			if (!ready.ok) return { kind: "blocked", blockers: ready.blockers };
 		}
 		let owner = options.by ?? live.user;

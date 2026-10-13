@@ -20,6 +20,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"edit_implementation_graph",
 	"create_research_workspace",
 	"propose_investigation",
+	"set_investigation_build_blocker",
 	"revise_open_decision",
 	"edit_child",
 	"anchor_child",

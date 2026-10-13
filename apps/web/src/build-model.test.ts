@@ -654,6 +654,24 @@ describe("build status", () => {
 	let look = (value: ImplementationSnapshot | undefined, change = {}) =>
 		buildLook(value, { ...context, ...change });
 
+	it("names decisions and investigations together instead of a hidden completeness veto", () => {
+		expect(look(
+			snapshot({
+				blockers: ["unanswered questionnaires", "required investigations"],
+				buildInvestigations: [{
+					id: "investigation",
+					brief: "Measure startup",
+					reason: "Choose approach",
+				}],
+			}),
+			{ unanswered: 2 },
+		)).toEqual({
+			kind: "plan",
+			blocked: "Waiting on 2 decisions and 1 investigation",
+		});
+		expect(look(snapshot({ buildReady: false }))).toEqual({ kind: "plan", blocked: undefined });
+	});
+
 	it("offers Build plan before the first build, inert with its reason", () => {
 		expect(look(snapshot())).toEqual({ kind: "plan", blocked: undefined });
 		expect(look(snapshot(), { hasContent: false })).toEqual({
@@ -661,12 +679,12 @@ describe("build status", () => {
 			blocked: "Write the document first",
 		});
 		expect(look(snapshot({ blockers: ["unanswered questionnaires"] }), { unanswered: 2 }))
-			.toEqual({ kind: "plan", blocked: "Answer 2 open decisions first" });
+			.toEqual({ kind: "plan", blocked: "Waiting on 2 decisions" });
 		expect(look(snapshot({ blockers: ["accepted comments awaiting plan changes"] })).kind)
 			.toBe("plan");
 		expect(look(snapshot({ buildReady: false }))).toEqual({
 			kind: "plan",
-			blocked: "Add more detail before building",
+			blocked: undefined,
 		});
 		expect(look(snapshot({ graph: undefined }), { planner: false })).toEqual({
 			kind: "plan",
@@ -773,7 +791,7 @@ describe("build status", () => {
 		expect(look(blocked, { unanswered: 1 })).toMatchObject({
 			kind: "stale",
 			build: true,
-			blocked: "Answer 1 open decision first",
+			blocked: "Waiting on 1 decision",
 		});
 		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
 		failed.blockers = ["accepted comments awaiting plan changes"];
@@ -781,6 +799,19 @@ describe("build status", () => {
 			retry: true,
 			blocked: "Update the document for accepted comments first",
 		});
+	});
+
+	it("names live rebuild blockers even without a manual Build action", () => {
+		let blocked = live({ outOfSync: true, changes: 2 });
+		blocked.blockers = ["required investigations", "unanswered questionnaires"];
+		blocked.buildInvestigations = [{ id: "evidence", brief: "Measure startup", reason: "Choose" }];
+		let result = look(blocked, { live: true, unanswered: 2 });
+		expect(result).toMatchObject({
+			kind: "stale",
+			build: false,
+			tip: "Waiting on 2 decisions and 1 investigation",
+		});
+		expect(buildLabel(result)).toBe("Waiting on 2 decisions and 1 investigation");
 	});
 
 	it("says building runs on your agent only to someone who can build", () => {

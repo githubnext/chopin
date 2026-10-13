@@ -305,6 +305,31 @@ export function createFakeHarness(
 								turn.abortSignal?.removeEventListener("abort", onAbort);
 							}
 						})();
+					} else if (prompt.includes("REQUIRE-REMOVED-INVESTIGATION")) {
+						void (async () => {
+							try {
+								let listed = await callTool("list_investigations");
+								let { investigations } = JSON.parse(String(listed.output)) as {
+									investigations: { id: string; revision: number; state: string }[];
+								};
+								let value = investigations.find(item => item.state === "cancelled");
+								if (!value) throw new Error("No withdrawn investigation");
+								let result = await callTool("set_investigation_build_blocker", undefined, {
+									id: value.id,
+									revision: value.revision,
+									reason: "Choose a cache",
+								});
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({ type: "text-delta", id, delta: String(result.output) });
+								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							}
+						})();
 					} else if (prompt.includes(INVESTIGATE_PROMPT)) {
 						void (async () => {
 							try {
@@ -317,6 +342,11 @@ export function createFakeHarness(
 								if (!block) throw new Error("read_plan has no block to investigate");
 								let proposed = await callTool("propose_investigation", undefined, {
 									brief: "Measure cold start time on a local checkout.",
+									...(prompt.includes("REQUIRED")
+										? {
+											buildBlocker: "Choose the cache approach from measured cold start times.",
+										}
+										: {}),
 									key: "anchor",
 									after: { index: block.index, digest: block.digest },
 								});

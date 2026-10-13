@@ -3,7 +3,7 @@ import * as Rooms from "../rooms";
 import type * as Service from "../plan/service";
 import type * as Chat from "./service";
 
-export type Instruction = { handle: string; text: string; said: string };
+export type Instruction = { handle: string; text: string; said: string; about?: Chat.Instruction };
 
 export type ServerInstructionDeps = {
 	agent: boolean;

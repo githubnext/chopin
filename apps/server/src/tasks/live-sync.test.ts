@@ -4,6 +4,7 @@ import { LiveSyncCoordinator } from "./live-sync";
 import { liveSnapshot, reportBuild, reportRebuild } from "./builds";
 import { implementationStatus } from "./notifications";
 import { MemoryStorage } from "../storage/memory/adapter";
+import { Experiments } from "../experiments/service";
 import { close, implementationActive, open, rewrite, source } from "../plan/service";
 
 import type { Server } from "bun";
@@ -14,6 +15,32 @@ import type { SocketData } from "../wire";
 
 const now = new Date("2026-10-10T12:00:00.000Z");
 const buildId = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+
+it("clearing an investigation resumes a blocked rebuild without resetting edit timers", async () => {
+	let { plan, coordinator, queued, edit, advance } = await harness();
+	try {
+		let service = new Experiments(plan.persistence.storage.experiments, plan.persistence.lease);
+		let value = await service.create(
+			plan.id,
+			"U_octocat",
+			"Measure startup",
+			crypto.randomUUID(),
+			undefined,
+			"Choose approach",
+		);
+		edit();
+		await advance(30_000);
+		await coordinator.blockersChanged(plan.id);
+		await advance(15_000);
+		expect(queued).toEqual([]);
+		await service.setBuildBlocker(plan.id, value.id, value.revision, null);
+		await coordinator.blockersChanged(plan.id);
+		expect(queued).toHaveLength(1);
+	} finally {
+		coordinator.close();
+		await close(plan);
+	}
+});
 
 function connection(id: string, owner = "octocat", autoRun = true): Connection {
 	return {

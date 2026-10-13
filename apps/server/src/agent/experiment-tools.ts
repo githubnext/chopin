@@ -10,7 +10,14 @@ export type InvestigationTools = {
 		key: string;
 		userId: string;
 		entryId: string;
+		buildBlocker?: string;
 		after?: { index: number; digest: string };
+	}): Promise<unknown>;
+	setBuildBlocker?(input: {
+		id: string;
+		revision: number;
+		reason: string | null;
+		userId: string;
 	}): Promise<unknown>;
 };
 let contextSchema = z.object({ room: z.custom<DocumentRoom>() });
@@ -55,6 +62,9 @@ export const experimentTools = {
 		inputSchema: z.object({
 			brief: z.string().trim().min(1).max(8000),
 			key: z.string().min(1).max(128),
+			buildBlocker: z.string().trim().min(1).max(1000).optional().describe(
+				"Only when implementation depends on this evidence: explain the exact unresolved choice. Optional exploration must omit this.",
+			),
 			after: z.object({
 				index: z.number().int().min(0),
 				digest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
@@ -63,18 +73,40 @@ export const experimentTools = {
 			),
 		}).strict(),
 		description:
-			"Propose a local investigation from the current member request. Explain the objective and required evidence. Give `after` as the block the question concerns so the card sits beside it; when that block has changed or its digest repeats, the card goes at the end of the document and the result says so. A person must select Run on its card, which runs it on their own local agent; this tool never executes code. Reuse key for retries.",
+			"Propose a local investigation from the current member request or a server-authored readiness review or Build task draft. Explain the objective and required evidence. Give `after` as the block the question concerns so the card sits beside it; when that block has changed or its digest repeats, the card goes at the end of the document and the result says so. A person must select Run on its card, which runs it on their own local agent; this tool never executes code. Reuse key for retries.",
 		execute: (input, { context: { room } }) =>
 			answer(async () => {
-				let request = room.currentMemberRequest?.();
+				let request = room.currentMemberRequest?.() ?? await room.readinessInvestigationRequest?.();
 				if (!request || !room.investigations) {
-					throw new Error("A current member request is required");
+					throw new Error(
+						"A current member request, readiness review or Build task draft is required",
+					);
 				}
 				return room.investigations.propose({
 					...input,
 					userId: request.userId,
 					entryId: request.entryId,
 				});
+			}),
+	}),
+	set_investigation_build_blocker: tool({
+		contextSchema,
+		inputSchema: z.object({
+			id: z.string().uuid(),
+			revision: z.number().int().nonnegative(),
+			reason: z.string().trim().min(1).max(1000).nullable(),
+		}).strict(),
+		description:
+			"Mark an existing investigation as required before building, with its concrete reason. Pass null only after completed findings have been incorporated into the document and any necessary human choices exist as decision cards, or a human explicitly withdrew the requirement. Read its current revision first. Never clear a blocker merely because work failed or stopped.",
+		execute: (input, { context: { room } }) =>
+			answer(async () => {
+				let request = room.currentMemberRequest?.() ?? await room.readinessInvestigationRequest?.();
+				if (!request || !room.investigations?.setBuildBlocker) {
+					throw new Error(
+						"A current member request, readiness review or Build task draft is required",
+					);
+				}
+				return room.investigations.setBuildBlocker({ ...input, userId: request.userId });
 			}),
 	}),
 };

@@ -1622,7 +1622,8 @@ async function commit(plan: Plan): Promise<void> {
 				if (action === "add") return !!value && !plan.parentChannelId;
 				// Only stopped or failed work leaves the document: a ready card is withdrawn first,
 				// and running or completed work keeps its card.
-				return !value || ["failed", "cancelled", "interrupted"].includes(value.state);
+				return !value || !value.buildBlocker
+						&& ["failed", "cancelled", "interrupted"].includes(value.state);
 			}
 			let request = await plan.persistence.storage.research.get(plan.id, id);
 			let initial = request?.turns.find(turn => turn.kind === "initial");

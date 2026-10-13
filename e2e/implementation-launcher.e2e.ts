@@ -571,8 +571,11 @@ test("Build plan waits for unanswered decisions and says so", async ({ seed, joi
 	let page = await enter("ana");
 	let plan = page.getByRole("button", { name: "Build plan", exact: true });
 	await expect(plan).toHaveAttribute("aria-disabled", "true");
-	await expect(plan).toHaveAccessibleDescription("Answer 1 open decision first");
+	await expect(plan).toHaveAccessibleDescription("Waiting on 1 decision");
+	await expect(plan).toContainText("Waiting on 1 decision");
 	await plan.click({ force: true });
+	await expect(page.locator(`article[data-plan-sidecar-questionnaire="${widget}"]`).first())
+		.toBeFocused();
 	await expect(page.getByRole("button", { name: /^Breaking into tasks/ })).toHaveCount(0);
 	await expect(
 		page.getByRole("group", { name: "Document view" })

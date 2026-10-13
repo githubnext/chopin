@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BuildReadiness, judgeBuildable, looksBuildable, withoutCallouts } from "./readiness";
+import { BuildReadiness, judgeBuildable, withoutCallouts } from "./readiness";
 
 import type { JevRequest, JevResult } from "../conversation-plan/jev";
 import type { DocumentTarget } from "../plan/service";
@@ -39,15 +39,6 @@ function timers() {
 	};
 }
 
-describe("looksBuildable", () => {
-	test("needs enough words and two headings", () => {
-		expect(looksBuildable(long)).toBe(true);
-		expect(looksBuildable(`# One\n\n${"word ".repeat(200)}`)).toBe(false);
-		expect(looksBuildable("# One\n\n## Two\n\nShort.")).toBe(false);
-		expect(looksBuildable("")).toBe(false);
-	});
-});
-
 describe("judgeBuildable", () => {
 	test("asks Jev one noul question about the document", async () => {
 		let seen: JevRequest[] = [];
@@ -57,17 +48,53 @@ describe("judgeBuildable", () => {
 		expect(await judgeBuildable(long, jev(0.2))).toBe(false);
 	});
 
-	test("falls back to the heuristic when Jev fails or is absent", async () => {
+	test("does not invent a completeness requirement when the classifier is unavailable", async () => {
 		let failing = async () => {
 			throw new Error("Jev API key is not configured");
 		};
 		expect(await judgeBuildable(long, failing)).toBe(true);
-		expect(await judgeBuildable("tiny", failing)).toBe(false);
+		expect(await judgeBuildable("tiny", failing)).toBe(true);
 		expect(await judgeBuildable(long)).toBe(true);
 	});
 });
 
 describe("BuildReadiness", () => {
+	test("a negative assessment starts visible Planner help once per unchanged document", async () => {
+		let reviews: number[] = [];
+		let readiness = new BuildReadiness({
+			current: async () => target(long),
+			ask: jev(0.1),
+			review: async (_id, revision) => {
+				reviews.push(revision);
+				return true;
+			},
+		});
+		readiness.ready("doc", 1);
+		await Bun.sleep(0);
+		readiness.ready("doc", 1);
+		await Bun.sleep(0);
+		expect(reviews).toEqual([1]);
+	});
+
+	test("a review unable to run is retried when its owner becomes available", async () => {
+		let available = false;
+		let reviewed = 0;
+		let readiness = new BuildReadiness({
+			current: async () => target(long),
+			ask: jev(0.1),
+			review: async () => {
+				if (!available) return false;
+				reviewed++;
+				return true;
+			},
+		});
+		readiness.ready("doc", 1);
+		await Bun.sleep(0);
+		available = true;
+		readiness.ready("doc", 1);
+		await Bun.sleep(0);
+		expect(reviewed).toBe(1);
+	});
 	test("judges once edits settle and reports a change", async () => {
 		let clock = timers();
 		let source = "tiny";
@@ -155,7 +182,7 @@ describe("BuildReadiness", () => {
 		expect(withoutCallouts(source)).toBe(withoutCallouts("Intro.\n\nOutro.\n"));
 	});
 
-	test("without Jev, the heuristic decides", async () => {
+	test("without Jev, content cannot produce a hidden veto", async () => {
 		let readiness = new BuildReadiness({ current: async () => target(long) });
 		readiness.ready("doc", 1);
 		await Bun.sleep(0);

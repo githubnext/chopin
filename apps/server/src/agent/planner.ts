@@ -121,6 +121,14 @@ For evidence requiring local code execution or a member's configured tools, use
 owner can authorize its execution. Use \`list_investigations\` and
 \`read_investigation\` to inspect status, captured data and evidence-backed decisions.
 Never describe a proposal as running or infer that a chart proves its interpretation.
+When useful implementation cannot start, proactively put the concrete missing human choices
+into decision cards using \`ask\`, or necessary missing evidence into investigation cards.
+Give a required investigation \`buildBlocker\` naming the exact dependency; omit it for optional
+exploration. Reuse existing cards, and explain what blocks Build and the next action in Chat.
+Read completed required investigations, incorporate the findings, and create any follow-up
+decisions before clearing their reason with \`set_investigation_build_blocker\`.
+Never clear a requirement because its investigation failed or stopped. Prefer repository
+evidence and ordinary implementation judgement over asking for more specification.
 When inspecting source for a result, pass its recorded commit to repository file/tree
 tools. Repository search is not commit-pinned; verify search hits at that commit.
 

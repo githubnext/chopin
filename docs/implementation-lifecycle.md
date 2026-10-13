@@ -40,8 +40,12 @@ only when the document has no tasks for its current revision, or its last build
 was returned for changes. Opening the Build tab never drafts or starts anything;
 the tab stays off until the plan has been built or a press is under way. Build
 plan is always present for writers. While the document is empty, has open
-decisions or accepted comments, or is not yet judged ready, it is inert and its
-tooltip says why. After the press the same slot becomes a status capsule:
+decisions, accepted comments, or required investigations, it is inert and names
+what is waiting. Pressing a blocked Build reveals the related decision or
+investigation card. A completeness score cannot disable Build. With `LIVE_BUILD`,
+a debounced assessment instead asks the existing owner-bound Planner to place
+necessary decisions and investigations in the document and explain them in Chat.
+It never claims an owner or runs an investigation. After the press the same slot becomes a status capsule:
 **Breaking into tasks…**, **Building · 3 of 8**, **Built**, **N changes to
 build**, **Building changes…**, or **Build stopped**/**Build failed** with
 **Retry**. The Build tab carries the same glyph, and the change count is the

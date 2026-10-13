@@ -16,6 +16,62 @@ import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
 
 let checkout = { repository: "owner/repository", branch: "main", commit: "a".repeat(40) };
+
+test("opening an archived document cannot start a new readiness review", async () => {
+	let assessments = 0;
+	let context = await setup({ assess: () => assessments++ });
+	try {
+		await context.call(context.path);
+		expect(assessments).toBe(1);
+		await context.storage.channels.archive({ id: context.plan.id, now: context.now });
+		await context.call(context.path);
+		expect(assessments).toBe(1);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("Build names required investigations and refuses to queue until they are resolved", async () => {
+	let context = await setup();
+	try {
+		await paired(context);
+		let optional = await context.experiments.service.create(
+			context.plan.id,
+			"U_test",
+			"Explore UI",
+		);
+		let value = await context.experiments.service.create(
+			context.plan.id,
+			"U_test",
+			"Measure startup",
+			crypto.randomUUID(),
+			undefined,
+			"Choose a startup approach from measured evidence",
+		);
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.buildReady).toBe(false);
+		expect(snapshot.buildInvestigations).toEqual([{
+			id: value.id,
+			brief: "Measure startup",
+			reason: "Choose a startup approach from measured evidence",
+		}]);
+		expect(snapshot.buildInvestigations.some((item: { id: string }) => item.id === optional.id))
+			.toBe(false);
+		let response = await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		});
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toContain("required investigations");
+		expect(context.plan.builds).toHaveLength(0);
+		await context.experiments.service.stop(value.id, "failed", "Disconnected");
+		expect((await (await context.call(context.path)).json()).buildReady).toBe(false);
+		await context.experiments.service.stop(optional.id, "cancelled");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
 async function prepare(plan: Plan.Plan) {
 	await implementationGraphs().revise(plan, {
 		planRevision: 0,
@@ -35,7 +91,7 @@ async function prepare(plan: Plan.Plan) {
 }
 
 async function setup(
-	options: { liveBuild?: boolean } = {},
+	options: { liveBuild?: boolean; assess?: (id: string, revision: number) => void } = {},
 ) {
 	let context = await openPlan("# Launcher plan\n");
 	let github = {
@@ -106,6 +162,7 @@ async function setup(
 		implementations: () => implementations,
 	});
 	implementations = registerImplementationRoutes(router, auth, {
+		assess: options.assess,
 		liveBuild: options.liveBuild ?? false,
 		connections: experiments.connections,
 		busy: async connectionId =>

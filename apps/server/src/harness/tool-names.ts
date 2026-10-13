@@ -5,6 +5,7 @@ export const PLANNER_TOOL_NAMES = [
 	"list_investigations",
 	"read_investigation",
 	"propose_investigation",
+	"set_investigation_build_blocker",
 	"read_plan",
 	"read_reference",
 	"list_background_jobs",

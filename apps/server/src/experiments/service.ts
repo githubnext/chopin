@@ -36,12 +36,14 @@ export class Experiments {
 		brief: string,
 		id: string = crypto.randomUUID(),
 		spike?: Spike,
+		buildBlocker?: string,
 	) {
 		let existing = await this.store.get(id);
 		if (existing) {
 			if (
 				existing.documentId !== documentId || existing.requester !== requester
 				|| existing.brief !== brief
+				|| existing.buildBlocker !== buildBlocker
 			) fail("idempotency-conflict");
 			return existing;
 		}
@@ -53,6 +55,7 @@ export class Experiments {
 			documentId,
 			requester,
 			brief,
+			...(buildBlocker ? { buildBlocker } : {}),
 			...(spike ? { spike } : {}),
 			revision: 0,
 			state: "requested",
@@ -68,6 +71,16 @@ export class Experiments {
 		if (!await this.store.save(value, undefined, this.lease())) fail("revision-conflict");
 		this.changed(documentId);
 		return value;
+	}
+	setBuildBlocker(documentId: string, id: string, revision: number, reason: string | null) {
+		if (reason !== null && (!reason.trim() || reason.length > 1000)) fail("invalid-reason");
+		return this.mutate(id, value => {
+			if (value.documentId !== documentId || value.spike) fail("not-found");
+			if (value.buildBlocker === (reason ?? undefined)) return;
+			if (value.revision !== revision) fail("revision-conflict");
+			if (reason === null) delete value.buildBlocker;
+			else value.buildBlocker = reason;
+		});
 	}
 	async mutate(id: string, action: (value: Investigation) => void) {
 		for (let attempt = 0; attempt < 5; attempt++) {
@@ -191,6 +204,8 @@ export class Experiments {
 		return this.mutate(id, value => {
 			if (["completed", "cancelled", "failed", "interrupted"].includes(value.state)) return;
 			allowed?.(value);
+			// Removing a proposal withdraws its requirement; stopping execution does not.
+			if (state === "cancelled" && value.state === "requested") delete value.buildBlocker;
 			value.state = state;
 			value.progress = progress.slice(0, 2000);
 			value.expiresAt = 0;

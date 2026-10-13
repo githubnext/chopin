@@ -111,10 +111,9 @@ export type ImplementationSnapshot = {
 	/** Whether the viewer has a connected local agent for this repository; it may be busy. */
 	localAgent: boolean;
 	blockers: string[];
-	/**
-	 * The document reads as complete enough to build and nothing blocks it.
-	 * Judged in memory once edits settle, so it may lag the latest revision.
-	 */
+	/** Required investigations, with concrete reasons; completion still needs evidence review. */
+	buildInvestigations?: Array<{ id: string; brief: string; reason: string }>;
+	/** No unresolved decisions, accepted changes, or required investigations. */
 	buildReady: boolean;
 	/** `build` is queued on a connection that starts it once its running prototype finishes. */
 	waitingForPrototype?: true;

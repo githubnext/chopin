@@ -187,3 +187,14 @@ export function implementationReadiness(
 	}
 	return blockers.length > 0 ? { ok: false, blockers } : { ok: true, revision: plan.revision };
 }
+
+/** Record-backed blockers shared by drafting, first builds and rebuilds. */
+export async function planningReadiness(plan: Plan, revision: unknown) {
+	let investigations = (await plan.persistence.storage.experiments.list(plan.id))
+		.filter(value => value.buildBlocker)
+		.map(value => ({ id: value.id, brief: value.brief, reason: value.buildBlocker! }));
+	let ready = implementationReadiness(plan, revision);
+	let blockers = ready.ok ? [] : [...ready.blockers];
+	if (investigations.length > 0) blockers.push("required investigations");
+	return { ok: blockers.length === 0, blockers, investigations };
+}

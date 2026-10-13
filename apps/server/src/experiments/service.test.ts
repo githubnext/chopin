@@ -4,6 +4,87 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { userAndChannel } from "../storage/contract-support";
 import { Experiments } from "./service";
 
+test("required investigation keeps its build blocker through failure and retry", async () => {
+	let storage = new MemoryStorage();
+	let { channelId, userId, lease } = await userAndChannel(storage);
+	let service = new Experiments(storage.experiments, () => lease);
+	let value = await service.create(
+		channelId,
+		userId,
+		"Measure startup",
+		crypto.randomUUID(),
+		undefined,
+		"Choose a startup approach from measured evidence",
+	);
+	expect((await storage.experiments.get(value.id))?.buildBlocker)
+		.toBe("Choose a startup approach from measured evidence");
+	await service.stop(value.id, "failed", "Agent disconnected");
+	expect((await service.retry(value.id)).buildBlocker)
+		.toBe("Choose a startup approach from measured evidence");
+});
+
+test("reviewing an investigation refuses stale and cross-document updates", async () => {
+	let storage = new MemoryStorage();
+	let { channelId, userId, lease } = await userAndChannel(storage);
+	let service = new Experiments(storage.experiments, () => lease);
+	let value = await service.create(channelId, userId, "Measure startup");
+	await service.setBuildBlocker(channelId, value.id, value.revision, "Choose an approach");
+	await expect(service.setBuildBlocker(channelId, value.id, value.revision, null))
+		.rejects.toThrow("revision-conflict");
+	let current = (await storage.experiments.get(value.id))!;
+	await expect(service.setBuildBlocker("other", value.id, current.revision, null))
+		.rejects.toThrow("not-found");
+	await service.setBuildBlocker(channelId, value.id, current.revision, null);
+	expect((await storage.experiments.get(value.id))?.buildBlocker).toBeUndefined();
+});
+
+test("withdrawing an unstarted proposal clears its requirement but stopping a run retains it", async () => {
+	let storage = new MemoryStorage();
+	let { userId, lease } = await userAndChannel(storage);
+	let documentId = crypto.randomUUID();
+	await storage.channels.create({
+		id: documentId,
+		repositoryId: "repo",
+		repositoryOwner: "org",
+		repositoryName: "repo",
+		title: "Investigation",
+		createdBy: userId,
+		now: new Date(),
+	});
+	let service = new Experiments(storage.experiments, () => lease);
+	let create = () =>
+		service.create(
+			documentId,
+			userId,
+			"Measure startup",
+			crypto.randomUUID(),
+			undefined,
+			"Choose approach",
+		);
+	let proposal = await create();
+	expect((await service.stop(proposal.id, "cancelled")).buildBlocker).toBeUndefined();
+	let running = await create();
+	await service.authorize(running.id, "connection", {
+		id: running.id,
+		documentId,
+		requester: userId,
+		authorizer: userId,
+		brief: running.brief,
+		context: "",
+		source: { repositoryId: "repo", repository: "org/repo", commit: "a".repeat(40) },
+	});
+	let claimed = await service.claim(running.id, "connection");
+	expect((await service.stop(running.id, "cancelled")).buildBlocker).toBe("Choose approach");
+	await service.retry(running.id);
+	await service.authorize(running.id, "connection", { ...claimed.input! });
+	let retry = await service.claim(running.id, "connection");
+	await service.candidate(running.id, "connection", retry.generation, performance);
+	let completed = await service.complete(running.id, "connection", retry.generation);
+	expect(completed.buildBlocker).toBe("Choose approach");
+	await service.setBuildBlocker(documentId, completed.id, completed.revision, null);
+	expect((await storage.experiments.get(completed.id))?.buildBlocker).toBeUndefined();
+});
+
 test("claims expire, stale workers cannot publish and completion replays atomically", async () => {
 	let storage = new MemoryStorage();
 	let { channelId, userId, lease } = await userAndChannel(storage);

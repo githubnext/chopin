@@ -38,8 +38,22 @@ function render(store: ExperimentStore, userId = "ana", locked = false) {
 		locked,
 		onRemove() {},
 		onOpen() {},
+		onApply() {
+			return Promise.resolve();
+		},
 	}));
 }
+
+test("a required investigation explains why it blocks Build even after failure", () => {
+	let { store, item } = setup("failed");
+	item.buildBlocker = "Choose a startup approach from measured evidence";
+	store.items[0]!.buildBlocker = item.buildBlocker;
+	let markup = render(store);
+	expect(markup).toContain("Required before building");
+	expect(markup).toContain("Choose a startup approach from measured evidence");
+	expect(markup).not.toContain("Remove investigation");
+	expect(removableInvestigation(store, "investigation")).toBe(false);
+});
 
 test("a requested investigation offers Run and can be withdrawn", () => {
 	let { store } = setup("requested");
@@ -123,4 +137,16 @@ test("a completed investigation whose child is gone says so", () => {
 	let markup = render(store);
 	expect(markup).toContain("Its published document is no longer available.");
 	expect(markup).not.toContain("Open ");
+});
+
+test("completed required findings offer a fresh Planner review after a failed attempt", () => {
+	let { store, item } = setup("completed");
+	item.buildBlocker = "Choose a startup approach";
+	store.items[0]!.buildBlocker = item.buildBlocker;
+	let markup = render(store);
+	expect(markup).toContain("Apply the findings before building.");
+	expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>Apply findings<\/button>/);
+	expect(render(store, "ana", true)).toMatch(
+		/<button[^>]*disabled=""[^>]*>Apply findings<\/button>/,
+	);
 });

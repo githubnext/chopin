@@ -35,20 +35,23 @@ function latest(store: ExperimentStore, id: string) {
  */
 export function removableInvestigation(store: ExperimentStore, id: string): boolean {
 	let state = latest(store, id)?.state;
-	return !!state && SETTLED.has(state);
+	return !!state && SETTLED.has(state) && !latest(store, id)?.buildBlocker;
 }
 
 /** The inline card for one investigation, placed in the document by its id. */
-export function InvestigationReference({ store, id, userId, canEdit, locked, onRemove, onOpen }: {
-	store: ExperimentStore;
-	id: string;
-	userId: string;
-	canEdit: boolean;
-	locked: boolean;
-	onRemove: () => void;
-	/** Open the child document a completed investigation was published as. */
-	onOpen?: (child: InvestigationChild, opener: HTMLElement) => void;
-}) {
+export function InvestigationReference(
+	{ store, id, userId, canEdit, locked, onRemove, onOpen, onApply }: {
+		store: ExperimentStore;
+		id: string;
+		userId: string;
+		canEdit: boolean;
+		locked: boolean;
+		onRemove: () => void;
+		onApply?: () => Promise<unknown>;
+		/** Open the child document a completed investigation was published as. */
+		onOpen?: (child: InvestigationChild, opener: HTMLElement) => void;
+	},
+) {
 	useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
 	let [needsAgent, setNeedsAgent] = useState(false);
 	let [busy, setBusy] = useState(false);
@@ -98,13 +101,33 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 			canEdit={canEdit && (stoppable || !locked)}
 			error={error}
 			id={id}
-			notice={needsAgent
-				? <AgentHint />
-				: orphaned && (
-					<p className="m-0 text-sm text-text-secondary">
-						Its published document is no longer available.
-					</p>
-				)}
+			notice={
+				<>
+					{current?.buildBlocker && (
+						<p className="m-0 text-sm text-text-secondary">
+							<strong>Required before building:</strong> {current.buildBlocker}
+							{state === "completed" && " · Apply the findings before building."}
+						</p>
+					)}
+					{state === "completed" && current?.buildBlocker && onApply && canEdit && (
+						<div>
+							<button
+								className="btn btn-compact btn-outline"
+								disabled={busy || locked}
+								onClick={() => void act(onApply)}
+								type="button"
+							>
+								Apply findings
+							</button>
+						</div>
+					)}
+					{needsAgent ? <AgentHint /> : orphaned && (
+						<p className="m-0 text-sm text-text-secondary">
+							Its published document is no longer available.
+						</p>
+					)}
+				</>
+			}
 			onOpen={child && onOpen ? opener => onOpen(child, opener) : undefined}
 			onRemove={canEdit && state === "requested"
 				? () =>
@@ -113,7 +136,7 @@ export function InvestigationReference({ store, id, userId, canEdit, locked, onR
 						await store.action(id, "cancel", {});
 						onRemove();
 					})
-				: canEdit && SETTLED.has(state)
+				: canEdit && removableInvestigation(store, id)
 				? onRemove
 				: undefined}
 			onRetry={canEdit && SETTLED.has(state)

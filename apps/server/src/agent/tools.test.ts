@@ -79,6 +79,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"list_investigations",
 		"read_investigation",
 		"propose_investigation",
+		"set_investigation_build_blocker",
 		"read_plan",
 		"read_reference",
 		"list_background_jobs",

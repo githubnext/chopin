@@ -86,6 +86,7 @@ const LINGER_MS = 5_000;
  * shape stays exactly `Wire.Waiting`.
  */
 export type Waiting = Wire.Waiting & {
+	readiness?: boolean;
 	delivery?: Delivery;
 	spent?: () => boolean;
 	/** True when this came from the composer rather than another instruction. */
@@ -144,6 +145,8 @@ export type Ended = {
 
 /** What a turn other than a message needs to say about itself. */
 export type Instruction = {
+	/** Server-authored review of blockers; never supplies an explicit member research request. */
+	readiness?: boolean;
 	spent?: () => boolean;
 	thread?: string;
 	/**
@@ -228,6 +231,7 @@ export function workingFor(chat: Chat | undefined, thread: string, channel?: str
 }
 
 export type Chat = {
+	readiness?: boolean;
 	job?: ConversationPlan.Job;
 	jobOutput?: string;
 	jobFailures?: number;
@@ -1590,6 +1594,28 @@ export function documentRoom(context: Room): DocumentRoom {
 		jobs: context.jobs,
 		children: context.children,
 		currentMemberRequest: () => currentMemberRequest(chat),
+		readinessInvestigationRequest: async () => {
+			let eligible = () =>
+				chat.readiness || context.draft && chat.draft?.id === context.draft
+					&& chat.draft.state === "running" && chat.draft.turn === chat.turn?.id;
+			if (
+				!eligible() || chat.closed || !chat.busy || !chat.turnController
+				|| chat.turnController.signal.aborted || !chat.turn
+			) return;
+			let turn = chat.turn.id;
+			let binding = await context.activeOwner?.();
+			if (!binding) return;
+			try {
+				let owner = await context.auth.sessions.resolve(binding.ownerSessionId);
+				if (
+					!owner || !eligible() || chat.turn?.id !== turn
+					|| !chat.turnController || chat.turnController.signal.aborted
+				) return;
+				return { userId: owner.user.id, entryId: `readiness:${turn}` };
+			} finally {
+				binding.release();
+			}
+		},
 		...(visualRouting(context) && {
 			visual: {
 				ask: (request: Parameters<typeof askJev>[0]) =>
@@ -1937,6 +1963,7 @@ async function run(
 		drafting(server, room, draft, "running");
 	}
 
+	chat.readiness = about?.readiness;
 	chat.activeRequest = member && chat.turn
 		? {
 			entryId: member.entryId,
@@ -2043,6 +2070,7 @@ async function run(
 	} finally {
 		releaseJobAbort?.();
 		chat.activeRequest = undefined;
+		chat.readiness = undefined;
 		chat.turnController = undefined;
 		chat.toolFinished = undefined;
 		chat.toolProgress = undefined;
@@ -2146,7 +2174,7 @@ async function run(
 
 	// Before the drain, so what it records is in place before the next turn reads anything.
 	// A failed save closes the chat, and its owner still needs to hear that the turn failed.
-	if (about?.ended && (!chat.closed || persistenceError)) {
+	if (about?.ended && (!chat.closed || persistenceError || about.readiness)) {
 		// The turn is over: nothing it does can be attributed to the thread any more,
 		// and anyone joining before the drain must not read it as still working.
 		if (chat.acting === thread && chat.actingChannel === about.threadChannel) {
@@ -2207,6 +2235,7 @@ async function run(
 	chat.acting = undefined;
 	chat.actingChannel = undefined;
 	(jobTurn ? jobState : state)(chat, server, room);
+	if (context.ownerAvailable && !chat.closed) void context.ownerAvailable().catch(() => {});
 }
 
 function startRun(

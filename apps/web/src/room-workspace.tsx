@@ -980,6 +980,32 @@ export function RoomWorkspace(
 		});
 	};
 
+	let showBuildBlocker = (reason: string) => {
+		let entry = firstOpenDecision(entries, cardMetadata);
+		let question = entry?.value.questions.find(value => value.answer === undefined)?.id
+			?? entry?.value.questions[0]?.id;
+		if (build.snapshot?.blockers.includes("unanswered questionnaires") && entry && question) {
+			showPlan(entry.id, question);
+			return;
+		}
+		let investigation = build.snapshot?.buildInvestigations?.[0];
+		if (investigation) {
+			selectDestination("plan");
+			requestAnimationFrame(() => {
+				let card = document.querySelector<HTMLElement>(
+					`[data-workspace-room="${CSS.escape(room)}"] [data-investigation="${
+						CSS.escape(investigation.id)
+					}"]`,
+				);
+				if (!card) return;
+				card.scrollIntoView({ block: "center" });
+				card.focus({ preventScroll: true });
+			});
+			return;
+		}
+		if (phone) explainBuild(reason);
+	};
+
 	let startResearch = async (brief: string): Promise<ResearchLaunchResult> => {
 		let checked = researchLauncher.check(brief);
 		if (!checked.ok) return checked;
@@ -1203,11 +1229,21 @@ export function RoomWorkspace(
 				canEdit={investigationsEditable}
 				locked={implementation.locked}
 				onRemove={remove}
+				onApply={async () => {
+					if (!wire?.connected) throw new Error("Chopin isn’t connected. Reconnect, then retry.");
+					await wire.ask("chat:send", {
+						requestId: crypto.randomUUID(),
+						to: "planner",
+						text:
+							`Apply the completed findings from investigation ${id} to this document. Surface any necessary human decisions, then clear its Build requirement once the findings are handled.`,
+					});
+				}}
 				onOpen={(child, opener) => onResearchChildOpen(room, child, { current: opener })}
 			/>
 		),
 	}), [
 		experiments,
+		wire,
 		userId,
 		investigationsEditable,
 		implementation.locked,
@@ -1523,7 +1559,7 @@ export function RoomWorkspace(
 				canEdit={!!workspaceCanEdit && status === "connected"}
 				compact={mode !== "split"}
 				hot={buildHover === "tab"}
-				onExplain={phone ? explainBuild : undefined}
+				onExplain={showBuildBlocker}
 				phone={phone}
 				onHover={on => setBuildHover(on ? "capsule" : undefined)}
 				onOpen={() => selectDestination("build")}

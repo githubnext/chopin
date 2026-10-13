@@ -392,6 +392,7 @@ export function BuildPlanButton(
 		return (
 			<>
 				<button
+					aria-label="Build plan"
 					aria-describedby={blocked ? reason : undefined}
 					aria-disabled={blocked ? true : undefined}
 					className={phone
@@ -410,7 +411,7 @@ export function BuildPlanButton(
 					}}
 					type="button"
 				>
-					Build plan
+					{blocked?.startsWith("Waiting on ") ? blocked : "Build plan"}
 				</button>
 				{blocked && <span className="sr-only" id={reason}>{blocked}</span>}
 				{live}
@@ -443,7 +444,8 @@ export function BuildPlanButton(
 					data-tooltip-verbatim=""
 					onBlur={() => onHover(false)}
 					onClick={() => {
-						if (!tabReady && onExplain) onExplain(look.tip ?? label);
+						if (blocked && onExplain) onExplain(blocked);
+						else if (!tabReady && onExplain) onExplain(look.tip ?? label);
 						else onOpen();
 					}}
 					onFocus={() => onHover(true)}

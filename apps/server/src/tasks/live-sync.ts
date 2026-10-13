@@ -1,5 +1,6 @@
 import { buildActive, queueRebuild, settleLive, stoppedForRevision } from "./builds";
 import { readCurrentDocument } from "../plan/service";
+import { planningReadiness } from "./plan-graphs";
 import type { RebuildConnections } from "./builds";
 import type { DocumentTarget, Plan } from "../plan/service";
 import type { BuildRequest } from "@chopin/protocol/implementation";
@@ -44,6 +45,7 @@ export class LiveSyncCoordinator {
 	#debounceMs: number;
 	#pending = new Map<string, { cancel: () => void }>();
 	#waiting = new Set<string>();
+	#blocked = new Set<string>();
 	#chains = new Map<string, Promise<void>>();
 	/** Living documents seen by a check, so a reconnecting builder can find its own. */
 	#builders = new Map<string, { repositoryId: string; user: string }>();
@@ -75,6 +77,18 @@ export class LiveSyncCoordinator {
 	stopped(channelId: string): void {
 		if (!this.#waiting.delete(channelId) || this.#closed) return;
 		if (!this.#pending.has(channelId)) void this.check(channelId);
+	}
+
+	/** A sidecar blocker cleared; keep any existing editing deadline intact. */
+	async blockersChanged(channelId: string): Promise<void> {
+		if (this.#closed || !this.#blocked.has(channelId) || this.#pending.has(channelId)) return;
+		let ready = await this.#options.withPlan(
+			channelId,
+			plan => planningReadiness(plan, plan.revision),
+		);
+		if (!ready.ok || this.#closed || this.#pending.has(channelId)) return;
+		this.#blocked.delete(channelId);
+		await this.check(channelId);
 	}
 
 	/**
@@ -148,6 +162,8 @@ export class LiveSyncCoordinator {
 			let queued = await queueRebuild(plan, this.#options.connections, { automatic: true });
 			// Under the lock, so a build that stops right after still finds this check waiting.
 			if (queued.kind === "busy") this.#waiting.add(channelId);
+			if (queued.kind === "blocked") this.#blocked.add(channelId);
+			else this.#blocked.delete(channelId);
 			return queued;
 		});
 		if (result.kind === "queued") this.#options.queued?.(channelId, result.build);
@@ -158,6 +174,7 @@ export class LiveSyncCoordinator {
 		for (let pending of this.#pending.values()) pending.cancel();
 		this.#pending.clear();
 		this.#waiting.clear();
+		this.#blocked.clear();
 		this.#builders.clear();
 	}
 }

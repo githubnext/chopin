@@ -646,6 +646,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			].map(value => ({
 				id: value.id,
 				brief: value.brief,
+				buildBlocker: value.buildBlocker,
 				state: value.state,
 				revision: value.revision,
 				requester: value.requester,

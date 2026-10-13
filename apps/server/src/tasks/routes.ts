@@ -2,7 +2,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
 import { liveSnapshot, queueBuild, queueRebuild, reportBuild, requestBuild } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
-import { implementationReadiness, reportImplementationLifecycle } from "./plan-graphs";
+import { planningReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
 import { GitHubError } from "../github/client";
 import { AdmissionDenied } from "../auth/admission";
@@ -18,11 +18,8 @@ type Options = {
 	connections: Connections;
 	/** Whether an investigation is executing on a connection, in any document. */
 	busy?: (connectionId: string) => Promise<boolean>;
-	/**
-	 * Whether the document reads as ready to build, apart from its blockers. Without a judge, a
-	 * document with no blockers is ready.
-	 */
-	buildable?: (id: string, planRevision: number) => boolean;
+	/** Opening the snapshot may schedule Planner help; it never contributes a hidden veto. */
+	assess?: (id: string, planRevision: number) => void;
 	/** LIVE_BUILD: builds may queue behind a prototype or another document's build. */
 	liveBuild?: boolean;
 };
@@ -164,7 +161,8 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				&& !!await options.busy?.(queued.connectionId);
 			let current = await options.withPlan(id, plan =>
 				exclusive(plan, async () => {
-					let ready = implementationReadiness(plan, plan.revision);
+					let ready = await planningReadiness(plan, plan.revision);
+					if (!channel.archivedAt) options.assess?.(id, plan.revision);
 					let live = liveSnapshot(
 						plan,
 						options.connections.list(channel.repositoryId),
@@ -178,9 +176,10 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							let graph = plan.graph?.versions.at(-1);
 							return build.graphVersion === graph?.number && build.graphRevision === graph.revision;
 						}),
-						blockers: ready.ok ? [] : ready.blockers,
+						blockers: ready.blockers,
+						buildInvestigations: ready.investigations,
 						localAgent,
-						buildReady: ready.ok && (options.buildable?.(id, plan.revision) ?? true),
+						buildReady: ready.ok,
 						...(waiting ? { waitingForPrototype: true as const } : {}),
 						...(ahead ? { waitingForDocument: aheadTitle ? { title: aheadTitle } : {} } : {}),
 						...(plan.buildRequested ? { buildRequested: { ...plan.buildRequested } } : {}),

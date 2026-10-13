@@ -109,6 +109,17 @@ observation remain distinct; reports should explain their method and limitations
 
 ## Results and decisions
 
+A Planner proposal may mark an investigation as required before building and
+explain the specific dependency. Its card shows that reason, and Build names and
+reveals the card. Optional investigations do not block Build. Failure, interruption
+and stopping execution retain the requirement so it can be retried. Removing an
+unstarted proposal withdraws the requirement. Completed required evidence remains
+blocking until the Planner incorporates its findings and creates any necessary
+human decision cards; it then clears the investigation's reason. These reviews run
+under the existing Planner owner, without starting local work. If a review fails or
+is interrupted, select **Apply findings** on the completed card to start a fresh
+Planner request.
+
 Results contain restricted document MDX, typed datasets, native view specifications
 and small text evidence. Supported views are tables, metric comparisons, bars and
 simple lines. The capability response advertises size limits and schemas. No

@@ -1,5 +1,8 @@
 import { registerImplementationRoutes } from "./tasks/routes";
 import { draftInstruction, draftRefusal } from "./tasks/draft";
+import { planningReadiness } from "./tasks/plan-graphs";
+import { READINESS_INSTRUCTION } from "./tasks/readiness-instruction";
+import { ReadinessReviews } from "./tasks/readiness-review";
 /**
  * The server.
  *
@@ -10,7 +13,7 @@ import { draftInstruction, draftRefusal } from "./tasks/draft";
  */
 
 import { join } from "node:path";
-import { ulid } from "@chopin/dialect";
+import { parse, ulid } from "@chopin/dialect";
 
 import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import {
@@ -164,6 +167,27 @@ let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
 let buildReadiness: BuildReadiness | undefined;
+let readinessReviews = new ReadinessReviews({
+	list: id => experiments!.service.store.list(id),
+	start: (channelId, about) =>
+		startSettle(
+			{
+				instruction: serverInstructionDeps(),
+				channel: id => storage.channels.get(id),
+				attached: plannerAttachments ? id => plannerAttachments!.confirmed(id) : undefined,
+			},
+			channelId,
+			current => {
+				if (Service.implementationActive(current) || current.chat?.busy) return;
+				return {
+					handle: "Chopin",
+					said: "Checking decisions and investigations needed before building",
+					text: READINESS_INSTRUCTION,
+					about,
+				};
+			},
+		),
+});
 let spikeScout: SpikeScout | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
 let researchBriefJobs: JobService | undefined;
@@ -321,6 +345,10 @@ function settlePendingSpikes(channelId: string): void {
 /** Wake owner-bound work: background jobs and spike settlements that waited for an owner. */
 function ownerAvailable(channelId: string): Promise<void> {
 	settlePendingSpikes(channelId);
+	void reviewCompletedInvestigations(channelId);
+	void currentDocumentTarget(channelId).then(target => {
+		if (target) buildReadiness?.schedule(target);
+	});
 	return jobRunner?.ownerAvailable(channelId) ?? Promise.resolve();
 }
 
@@ -332,7 +360,11 @@ function serverInstructionDeps(): ServerInstructionDeps {
 		transition: withDocumentTransition,
 		open: room => plan(room, server),
 		conversation,
-		instruct: (context, { handle, text, said }) => Chat.instruct(context, handle, text, said),
+		instruct: async (context, { handle, text, said, about }) => {
+			// This runs inside the document transition, after any archive has committed.
+			if (about?.readiness && (await storage.channels.get(context.room))?.archivedAt) return;
+			return Chat.instruct(context, handle, text, said, about);
+		},
 		evict,
 	};
 }
@@ -519,9 +551,18 @@ function conversation(
 			? {
 				async list() {
 					return {
-						investigations: (await experiments!.service.store.list(room.id)).slice(0, 20).map(
-							value => ({ id: value.id, brief: value.brief.slice(0, 400), state: value.state }),
-						),
+						investigations: (await experiments!.service.store.list(room.id))
+							.filter(value => !value.spike)
+							.sort((a, b) => Number(!!b.buildBlocker) - Number(!!a.buildBlocker))
+							.map(
+								value => ({
+									id: value.id,
+									brief: value.brief.slice(0, 400),
+									state: value.state,
+									revision: value.revision,
+									buildBlocker: value.buildBlocker,
+								}),
+							),
 					};
 				},
 				async read(id, dataset, offset = 0) {
@@ -551,6 +592,8 @@ function conversation(
 					}
 					return {
 						id: value.id,
+						revision: value.revision,
+						buildBlocker: value.buildBlocker,
 						state: value.state,
 						source: value.input?.source,
 						report: value.result?.report.slice(0, 16_000),
@@ -582,7 +625,14 @@ function conversation(
 					let id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${
 						hash.slice(17, 20)
 					}-${hash.slice(20, 32)}`;
-					let value = await experiments!.service.create(room.id, request.userId, request.brief, id);
+					let value = await experiments!.service.create(
+						room.id,
+						request.userId,
+						request.brief,
+						id,
+						undefined,
+						request.buildBlocker,
+					);
 					let placed: InvestigationPlacement | "closing" | "unopened" | "locked";
 					try {
 						placed = await placeInvestigationReference(room.id, value.id, request.after);
@@ -620,6 +670,43 @@ function conversation(
 							? "The document is closing, so its card was not placed and the proposal was withdrawn. Propose it again once the document is open."
 							: "The document was not open to place its card, so the proposal was withdrawn. Propose it again while the document is open.",
 					};
+				},
+				async setBuildBlocker(request) {
+					await experiments!.access(
+						await hostedAuth.sessions.forUser(request.userId),
+						room.id,
+						true,
+					);
+					if (
+						deletingChannels.has(room.id) || archivingChannels.has(room.id)
+						|| Rooms.get(room.id)?.closing
+					) throw new Error("The document is closing");
+					return withDocumentLock(room.id, async () => {
+						await experiments!.mutationAllowed(room.id);
+						let plan = Rooms.get(room.id)?.plan;
+						if (!plan) throw new Error("The document is not open");
+						return Service.exclusive(plan, async () => {
+							if (
+								request.reason
+								&& !parse(Service.source(plan)).children.some(node =>
+									node.type === "mdxJsxFlowElement" && node.name === "Investigation"
+									&& node.attributes.some(attribute =>
+										"name" in attribute && attribute.name === "id" && attribute.value === request.id
+									)
+								)
+							) {
+								throw new Error(
+									"Place its investigation card in the document before requiring it for Build",
+								);
+							}
+							return experiments!.service.setBuildBlocker(
+								room.id,
+								request.id,
+								request.revision,
+								request.reason,
+							);
+						});
+					});
 				},
 			}
 			: undefined,
@@ -894,6 +981,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				let refusal = draftRefusal(opened);
 				if (refusal) {
 					fail(ws, frame.rid, refusal);
+					return;
+				}
+				let readiness = await planningReadiness(opened, opened.revision);
+				if (!readiness.ok) {
+					fail(ws, frame.rid, `Resolve ${readiness.blockers.join(" and ")} first`);
 					return;
 				}
 				let { text, said } = draftInstruction(opened, ws.data.handle, frame.build);
@@ -2001,6 +2093,9 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
 		}
 		void spikeScout?.refresh(documentId);
+		void reviewCompletedInvestigations(documentId);
+		void liveSync?.blockersChanged(documentId)
+			.catch(err => console.error("chopin: investigation build scheduling failed -", err));
 	},
 	async canMutate(id) {
 		let active = Rooms.get(id)?.plan;
@@ -2021,7 +2116,9 @@ if (config.agent && config.harness === "remote") {
 		}
 		// Settlements that waited for a Planner can run now.
 		if (planner.state === "attached") {
-			settlePendingSpikes(channelId);
+			void ownerAvailable(channelId).catch(err =>
+				console.error("chopin: could not wake work after a Planner attached -", err)
+			);
 			void relinkDecisions(channelId).catch(err =>
 				console.error("chopin: could not re-link decisions after a Planner attached -", err)
 			);
@@ -2093,25 +2190,30 @@ referenceService = new ReferenceService({
 	research: researchService,
 	id: ulid,
 });
-// A living document or one with build history is past the question of readiness.
+// Existing visible decisions and active work do not need another readiness turn.
 function pastReadiness(channelId: string): boolean {
 	let held = Rooms.get(channelId)?.plan;
-	return !!held && (!!held.live || held.builds.length > 0 || held.lifecycle.history.length > 0);
+	return !!held && (Service.implementationActive(held) || !!held.chat?.busy
+		|| [...held.records.values()].some(record => record.status === "open"));
 }
+
+async function reviewCompletedInvestigations(channelId: string): Promise<void> {
+	if (!config.agent || !experiments || draining) return;
+	try {
+		await readinessReviews.evidence(channelId);
+	} catch (err) {
+		console.error("chopin: investigation evidence review failed -", err);
+	}
+}
+
 if (config.liveBuild) {
 	buildReadiness = new BuildReadiness({
 		current: currentDocumentTarget,
 		skip: pastReadiness,
+		review: id => readinessReviews.review(id),
 		ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
 			? request => askJev(request)
 			: undefined,
-		changed: (channelId, planRevision, ready) =>
-			broadcast(server, channelId, {
-				kind: "implementation:readiness",
-				ts: 0,
-				planRevision,
-				ready,
-			}),
 		error: err => console.error("chopin: build readiness failed -", err),
 	});
 }
@@ -2210,7 +2312,9 @@ registerMcpRoutes(router, hostedAuth, {
 		withDocumentTransition(channelId, () => withDocumentLock(channelId, action)),
 });
 implementations = registerImplementationRoutes(router, hostedAuth, {
-	buildable: buildReadiness && buildReadiness.ready.bind(buildReadiness),
+	assess: buildReadiness && ((id, revision) => {
+		buildReadiness!.ready(id, revision);
+	}),
 	liveBuild: !!config.liveBuild,
 	connections: experiments.connections,
 	busy: async connectionId =>

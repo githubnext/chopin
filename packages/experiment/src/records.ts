@@ -64,6 +64,8 @@ export const investigationSchema = z.object({
 	documentId: z.string(),
 	revision: z.number().int().nonnegative(),
 	brief: z.string().min(1).max(8000),
+	/** The concrete uncertainty this investigation must resolve before implementation. */
+	buildBlocker: z.string().trim().min(1).max(1000).optional(),
 	requester: z.string(),
 	state: z.enum([
 		"requested",
@@ -118,7 +120,7 @@ export type InvestigationSummary =
 	& { decisionCount: number }
 	& Pick<
 		Investigation,
-		"id" | "brief" | "state" | "revision" | "requester" | "progress" | "createdAt"
+		"id" | "brief" | "state" | "revision" | "requester" | "progress" | "createdAt" | "buildBlocker"
 	>;
 export function publicInvestigation(
 	value: Investigation,
