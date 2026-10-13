@@ -28,13 +28,15 @@ confirmation code printed in your terminal, and select **Connect**. Leave
 **Let Chopin build and prototype automatically on this laptop** unticked unless
 you want Chopin to start work there by itself: rebuilds of a living document
 (`LIVE_BUILD`) and, where enabled, prototypes. Without it, only work a person
-presses Build or Run for reaches the laptop. The choice lives with the
-connection in server memory, so pairing again asks again. This is
+presses Build or Run for reaches the laptop. The choice is stored with the paired
+machine, so reconnecting keeps it and pairing again asks again. This is
 the existing investigation pairing flow; one connection serves every document in
 the checkout's repository. No GitHub bearer
-needs to be configured in a second companion. The connector credential is held
-in memory and tied to the owner's browser login. Reconnect after a server
-restart or logout. See [Trouble connecting](local-experiments.md#trouble-connecting)
+needs to be configured in a second companion. Pairing stores a machine token
+that outlives server restarts, deploys and browser sign-out, until the machine
+is disconnected in the browser or unpaired with `chopin unpair`; see
+[Connect a checkout](local-experiments.md#connect-a-checkout). See
+[Trouble connecting](local-experiments.md#trouble-connecting)
 for pairing problems, refusals and stale locks.
 
 Keep the connector running. Each browser Build action starts an agent process;

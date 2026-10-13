@@ -149,6 +149,15 @@ export async function unpair(url: string, directory: string): Promise<"unpaired"
 	return "unpaired";
 }
 
+/** What to tell the person when the server refused this machine, wherever the refusal came from. */
+export function connectorMessage(error: unknown): string | undefined {
+	if (!(error instanceof Error)) return undefined;
+	let code = error instanceof ConnectorError
+		? error.code
+		: error.message.match(/"error"\s*:\s*"([a-z0-9-]+)"/)?.[1];
+	return code ? MESSAGES[code] : undefined;
+}
+
 /**
  * How a connector should treat a failed request: retry transient failures, stop and tell the user
  * on a revoked machine or an outdated connector, and stop on anything else.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { experimentRequest } from "./api";
 import { LocalLoginShell } from "../local-login-shell";
+import { Machines } from "./machines";
 
 type Pairing = {
 	input: { repository?: string; label: string };
@@ -20,10 +21,8 @@ export default function PairingPage() {
 	let [autoRun, setAutoRun] = useState(false);
 	useEffect(() => {
 		let abort = new AbortController();
-		if (!id) {
-			setError("Pairing link is missing.");
-			return;
-		}
+		// Without a pairing, /connect lists the person's machines.
+		if (!id) return;
 		experimentRequest<Pairing>(
 			`/api/connector/pairings/${encodeURIComponent(id)}`,
 			undefined,
@@ -58,6 +57,13 @@ export default function PairingPage() {
 		}
 	}
 	let repository = pairing?.input.repository;
+	if (!id) {
+		return (
+			<LocalLoginShell title="Your local agents">
+				<Machines />
+			</LocalLoginShell>
+		);
+	}
 	return (
 		<LocalLoginShell title="Connect your local agent">
 			{error && <p role="alert" className="m-0 text-sm text-destructive-ink">{error}</p>}
@@ -70,6 +76,7 @@ export default function PairingPage() {
 								<a className="btn btn-md btn-primary" href={url}>
 									{repository ? `Open ${repository}` : "Open Chopin"}
 								</a>
+								<Machines />
 							</>
 						)
 						: (

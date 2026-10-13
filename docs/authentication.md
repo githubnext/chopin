@@ -329,6 +329,18 @@ browser secret or GitHub token; access to the deployment key as well permits
 token decryption. Backups retain encrypted credentials according to their own
 retention policy and need the same key protection as the live database.
 
+A paired connector machine holds its own GitHub App user token pair, because
+refresh tokens are single-use and cannot be shared with the browser login that
+approved the pairing. Pressing **Connect** on the pairing page sends the
+browser through `/auth/github/connector`, a second authorization that GitHub
+grants at once for an App the person already authorized; the callback accepts
+it only for the account that approved the pairing and starts no browser
+session. The machine's pair is encrypted like session credentials, under its
+own HKDF context (`chopin:machine-credential:v1`) and bound to the origin,
+client ID, machine and user IDs, token hash and revision. Its bearer token is
+stored only as a SHA-256 hash. A refused refresh marks the machine for
+re-authorization; an owner who fails admission loses the machine.
+
 After a restart, a valid browser cookie lazily restores its session and checks
 GitHub identity and current instance admission before authenticating a request.
 Knowing a session ID or user ID cannot restore it for internal Planner or MCP

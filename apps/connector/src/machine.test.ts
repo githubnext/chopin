@@ -7,7 +7,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { parseArgs } from "./args";
-import { classifyConnectorError } from "./machine";
+import { classifyConnectorError, connectorMessage } from "./machine";
 import { ConnectorError } from "./mcp";
 import { git, stateDirectory } from "./workspace";
 
@@ -226,6 +226,11 @@ test("connector errors are classified so a reconnect loop stops on revocation", 
 		),
 	).toBe("revoked");
 	expect(classifyConnectorError(new StreamableHTTPError(502, "Bad gateway"))).toBe("retry");
+	// A connection revoked mid-run reports through a tool error, and still says what to do.
+	expect(
+		connectorMessage(new ConnectorError("machine-revoked", "machine-revoked: machine-revoked")),
+	)
+		.toContain("pair`");
 	expect(
 		classifyConnectorError(
 			new StreamableHTTPError(409, 'Error POSTing to endpoint: {"error":"connection-unavailable"}'),

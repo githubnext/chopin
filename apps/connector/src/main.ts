@@ -5,7 +5,7 @@ import { requestSchema } from "@chopin/experiment";
 import { createBridge } from "./bridge";
 import { ConnectorError, remote } from "./mcp";
 import { parseArgs } from "./args";
-import { delay, machineToken, pair, register, SELF, unpair } from "./machine";
+import { connectorMessage, delay, machineToken, pair, register, SELF, unpair } from "./machine";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { runWork } from "./run";
@@ -255,7 +255,9 @@ if (import.meta.main) {
 		else throw new Error(mode ? `Unknown command: ${mode}\n\n${HELP}` : HELP);
 	} catch (error) {
 		if (!(error instanceof Error && error.name === "AbortError")) {
-			createOutput().error(error instanceof Error ? error.message : "Connector failed");
+			createOutput().error(
+				connectorMessage(error) ?? (error instanceof Error ? error.message : "Connector failed"),
+			);
 			process.exitCode = 1;
 		}
 	}

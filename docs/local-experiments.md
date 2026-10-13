@@ -34,16 +34,33 @@ client implementation; it does not invoke a vendor-specific SDK. The connector
 requires [Bun](https://bun.sh) 1.4.2 and Git. The agent must support local stdio ACP sessions and
 MCP tools through either advertised HTTP support or the default stdio transport. Authenticate the agent normally before connecting it.
 
-Open the printed pairing link, sign into Chopin with push access to the
-checkout's repository, check that the page shows the same confirmation code as
-your terminal, and choose **Connect**. One connection serves every
-document in that repository; there is no per-document pairing. Both the browser
-and connector contact the server over outbound requests. The browser does not
-access your filesystem.
+The first time, the connector pairs this machine with Chopin. Open the printed
+pairing link, sign into Chopin with push access to the checkout's repository,
+check that the page shows the same confirmation code as your terminal, and
+choose **Connect**. GitHub then authorizes the machine on its own, which takes
+no extra step for an App you already authorized, and the page says
+**Connected.** One connection serves every document in that repository; there
+is no per-document pairing. Both the browser and connector contact the server
+over outbound requests. The browser does not access your filesystem.
 
-The connector credential is held in memory and tied to your browser login.
-Connector grants are deliberately process-bound even though hosted browser
-sessions can survive releases. Reconnect after a server restart or logout.
+Pairing stores a machine token in `machine.json` in the connector's state
+directory, readable only by you (mode `0600`; on Windows, your user profile's
+permissions). The token is never printed. Chopin keeps only a hash of it, plus
+the machine's own GitHub authorization encrypted like a browser login's. Later
+`connect` commands, also after a server restart, a deploy or signing out of the
+browser, use the stored token and do not pair again. On each connector call the
+server rechecks your push access with the machine's own GitHub authorization.
+
+A machine stays paired until you disconnect it: choose **Disconnect machine**
+for it under **Your local agents** at `/connect`, or run `chopin unpair` on the
+machine. Either way its connector stops at once with `machine-revoked` and does
+not retry. GitHub allows ten active authorizations per account for an App. A
+new sign-in or pairing beyond that silently retires the oldest one, which can be
+a machine's. Chopin then marks that machine as needing pairing again
+(`machine-reauthorize`) rather than revoking it, its connector stops, and
+`chopin pair` on it authorizes it again. Under `AUTH_MODE=local`, which has no
+client secret to authorize a machine with, connector calls instead use your
+live browser login and wait while you are signed out.
 
 The terminal prints the pairing link and confirmation code, then
 **✓ Connected.** and a line for each job it starts, finishes or fails. Styling
@@ -69,18 +86,24 @@ irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | 
 Then, from your project folder:
 
 ```sh
-CHOPIN_URL=https://your-chopin-instance.example \
-  chopin connect . -- copilot --acp --allow-all
+export CHOPIN_URL=https://your-chopin-instance.example
+chopin pair --label build-box      # once per machine; optional, connect pairs first if needed
+chopin connect . -- copilot --acp --allow-all
 ```
 
 Until the first `cli-v*` release is published, those install commands have
 nothing to download, and the `curl … connector.js` and `bun` command above
 remains the way to connect.
 
-`chopin connect` pairs and runs work exactly as `bun connector.js connect` does,
-and `chopin` uses `https://chopin.githubnext.com` when `CHOPIN_URL` is unset.
-`chopin --version` prints the CLI version and the connector protocol it speaks,
-and `chopin help` lists the commands. The binary ignores any `.env` or
+`chopin pair` pairs this machine and stores its token; `--label` names it in
+Chopin (default: the hostname), and pairing again replaces the token.
+`chopin connect` runs work exactly as `bun connector.js connect` does, pairing
+first only when the machine has no token for that server, and `chopin` uses
+`https://chopin.githubnext.com` when `CHOPIN_URL` is unset. `chopin unpair`
+revokes the machine in Chopin and deletes its token. Every command takes
+`--base-dir <dir>` (or `CHOPIN_HOME`) for where the token, locks and worktrees
+live. `chopin --version` prints the CLI version and the connector protocol it
+speaks, and `chopin help` lists the commands. The binary ignores any `.env` or
 `bunfig.toml` in the folder it runs in.
 
 The installer puts `chopin` in `~/.local/bin` (on Windows,
@@ -172,7 +195,7 @@ The first authorized investigation supplies the document's default experiment
 commit. Later runs use that recorded source baseline. The connector creates a
 detached worktree and preserves existing local edits. Its local state defaults to
 `$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`; override it
-with `CHOPIN_CONNECTOR_STATE_DIR`. Worktrees are retained there for inspection.
+with `--base-dir`, `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR`. Worktrees are retained there for inspection.
 Remove an unwanted worktree with Git's normal `worktree remove` command.
 
 Local execution uses the agent's ordinary OS permissions, skills and configured
@@ -241,14 +264,21 @@ lock identified by the error message.
 
 ## Trouble connecting
 
-**How pairing works.** The connector registers the checkout's repository, commit
-and branch, then prints a link and an eight-character code. Signing in at the
-link with push access and choosing **Connect** after checking the code hands the
-connector a credential. One connector process serves one checkout, and its
-connection serves every document in that repository. The server forgets a
-connection 90 seconds after it last heard from it; a running connector renews it
-continuously. Connections live only in the server's memory, so reconnect after a
-server restart, a deploy or signing out.
+**How pairing works.** An unpaired connector prints a link and an
+eight-character code. Signing in at the link with push access, choosing
+**Connect** after checking the code, and the GitHub authorization that follows
+hand the machine a long-lived token. Each `connect` then registers the
+checkout's repository, commit and branch with that token. One connector process
+serves one checkout, and its connection serves every document in that
+repository. The server forgets a connection 90 seconds after it last heard from
+it; a running connector renews it continuously. Connections live in the server's
+memory, but the machine does not: after a server restart or a deploy, start
+`connect` again and it reconnects without pairing.
+
+**"This machine is no longer paired" (`machine-revoked`) or "GitHub no longer
+accepts this machine's authorization" (`machine-reauthorize`).** The machine was
+disconnected in the browser or unpaired, or GitHub retired its authorization.
+Run `chopin pair` on it, then connect again.
 
 **`script not found: connector`.** `bun run connector` only works inside a Chopin
 checkout. Use the `curl … connector.js` command above from your project folder.
@@ -270,7 +300,7 @@ downloads the connector again, so it matches the server.
 
 **Stale lock after a crash.** Each checkout has a lock in the connector's state
 directory, `$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`
-(or `CHOPIN_CONNECTOR_STATE_DIR`). A lock whose process has exited is replaced
+(or `--base-dir`, `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR`). A lock whose process has exited is replaced
 automatically. If the connector still reports _Workspace already locked_, confirm
 no connector is running for that checkout and delete the `.lock` file the error
 names.
