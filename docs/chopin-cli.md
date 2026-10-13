@@ -302,6 +302,17 @@ stable, or connect again with its absolute path.
 Install that program somewhere stable, or link it into a folder on the
 service's PATH, which the message prints.
 
+**"… has Windows line endings in its first line; convert it with dos2unix."**
+The system would read the interpreter's name with a carriage return on the end.
+Run `dos2unix` on the script the message names, then install again.
+
+**"…'s #! line must name an absolute path or use /usr/bin/env."** A `#!` line
+such as `#!node` finds nothing when the service runs the script. Change it to
+`#!/usr/bin/env node` or the interpreter's absolute path.
+
+**"… runs through more than 5 #! interpreters"** or **"…'s #! interpreters
+loop"**. Point the script's `#!` line at the program that finally runs it.
+
 **"… didn't answer ACP initialize when started as the service would start
 it."** The message shows how the agent ended and the first line it printed.
 Fix that, often by signing in to the agent, then install again. If the agent

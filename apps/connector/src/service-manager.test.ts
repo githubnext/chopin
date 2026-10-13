@@ -412,6 +412,40 @@ test("an interpreter found only in a per-shell directory, or not at all, is refu
 	}
 });
 
+test("a #! line with Windows line endings, or one that names no absolute path or /usr/bin/env, is refused for the agent and the Planner command", async () => {
+	let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
+	await writeFile(join(bin, "node"), "#!/bin/sh\n", { mode: 0o755 });
+	let real = await realpath(bin);
+	let scripts = {
+		crlf: "#!/usr/bin/env node\r\nconsole.log('started')\r\n",
+		bare: "#!node\nconsole.log('started')\n",
+		relative: "#!./bin/python\nprint('started')\n",
+		options: "#!/usr/bin/env -i node\n",
+	};
+	for (let [name, text] of Object.entries(scripts)) {
+		await writeFile(join(bin, name), text, { mode: 0o755 });
+	}
+	let crlf = "has Windows line endings in its first line; convert it with dos2unix";
+	let form = "'s #! line must name an absolute path or use /usr/bin/env";
+	for (
+		let [script, why] of [["crlf", crlf], ["bare", form], ["relative", form], ["options", form]]
+	) {
+		for (let as of ["agent", "planner"]) {
+			await connected(directory, {
+				...settings,
+				...(as === "agent"
+					? { command: [script!, "--acp"] }
+					: { planners: ["https://chopin.example/d/one"], plannerCommand: [join(bin, script!)] }),
+			});
+			let error = await installService(host, program).catch(error => error);
+			expect(error).toBeInstanceOf(Error);
+			expect(error.message).toContain(`${join(real, script!)}${why === form ? "" : " "}${why}`);
+			expect(error.message).toContain("Nothing was installed.");
+			expect(existsSync(unitPath(home))).toBe(false);
+		}
+	}
+});
+
 test("an agent, interpreter or git that lives under a runtime directory is refused", async () => {
 	let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
 	let run = join(home, "run");

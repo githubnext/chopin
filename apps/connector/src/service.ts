@@ -452,12 +452,29 @@ function pathVariable(host: ServiceHost) {
 
 /**
  * The interpreter a script's `#!` line names: a name `#!/usr/bin/env [-S]` finds on the PATH,
- * or an absolute path.
+ * or an absolute path. Refuses a `#!` line the system would misread: one ending in a carriage
+ * return, or one that names neither an absolute path nor `/usr/bin/env [-S] <name>`.
  */
 async function interpreter(file: string) {
 	let head = await Bun.file(file).slice(0, 256).text().catch(() => "");
-	return head.match(/^#!\s*\S*\/env\s+(?:-S\s+)?([^\s-][^\s]*)/)?.[1]
-		?? head.match(/^#!\s*(\/\S+)/)?.[1];
+	if (!head.startsWith("#!")) return undefined;
+	let line = head.split("\n")[0]!;
+	if (line.endsWith("\r")) {
+		throw new ServiceError(
+			`${file} has Windows line endings in its first line; convert it with dos2unix. Nothing `
+				+ "was installed.",
+		);
+	}
+	let viaEnv = line.match(/^#!\s*\/(?:\S*\/)?env\s+(?:-S\s+)?([^\s-]\S*)/)?.[1];
+	let absolute = line.match(/^#!\s*(\/\S+)/)?.[1];
+	let named = viaEnv ?? (absolute && posix.basename(absolute) !== "env" ? absolute : undefined);
+	if (!named) {
+		throw new ServiceError(
+			`${file}'s #! line must name an absolute path or use /usr/bin/env [-S] <name>. Nothing `
+				+ "was installed.",
+		);
+	}
+	return named;
 }
 
 /**
