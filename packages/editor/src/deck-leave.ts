@@ -18,7 +18,8 @@ export function $caretAfterRun(run: readonly string[]): boolean {
 	let ids = new Set(run);
 	let children = $getRoot().getChildren();
 	let last = children.findLastIndex(node => $isQuestionnaireNode(node) && ids.has(node.getId()));
-	let next = children.slice(last + 1).find(node => !$isQuestionnaireNode(node))
+	// Hidden comment decisions and other decorators cannot receive a text caret.
+	let next = children.slice(last + 1).find($isElementNode)
 		?? children.find(node => $isParagraphNode(node));
 	if (!next || !$isElementNode(next)) return false;
 	next.selectStart();
