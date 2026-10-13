@@ -12,11 +12,13 @@ import { cardStatus } from "@chopin/dialect";
 import { ChevronIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
 import { cardRelation, NOT_LINKED, QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 
 import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { Deck } from "../deck";
+import { leaveDeck } from "../deck-leave";
 import { deckLayout } from "../deck-runs";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
@@ -30,6 +32,7 @@ import { WriteupStatus } from "./writeup-status";
 
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
+import type { LexicalEditor } from "lexical";
 import type { Transport } from "@chopin/question/react";
 import type { Answer, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
@@ -704,14 +707,20 @@ export function blankBehindDecisions(
 		);
 }
 
-/** Where focus goes when a deck dissolves under the reader: the card that was on top. */
-function focusCard(id: string) {
+/**
+ * Where focus goes when a deck dissolves under the reader: the card that was on top, or, when
+ * that card is decided and so draws nothing, the prose after the run.
+ */
+function focusCard(editor: LexicalEditor, run: readonly string[], id: string) {
 	let active = document.activeElement;
 	if (active && active !== document.body) return;
 	let card = document.querySelector<HTMLElement>(
 		`[data-plan-questionnaire="${CSS.escape(id)}"] [data-plan-sidecar-questionnaire]:not([hidden])`,
 	);
-	if (!card) return;
+	if (!card) {
+		leaveDeck(editor, run);
+		return;
+	}
 	if (card.tabIndex < 0 && !card.hasAttribute("tabindex")) card.tabIndex = -1;
 	card.focus({ preventScroll: true });
 }
@@ -720,6 +729,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
 	let phone = usePhone();
 	let deck = useInlineDeck(value.id);
+	let [editor] = useLexicalComposerContext();
 	// Phones answer in the Decisions pane, so each card is already a one-line chip; stacking
 	// chips in a deck would hide all but one pointer behind a gesture.
 	if (!deck || (phone && options.onShowDecision)) return <InlineCard value={value} />;
@@ -728,7 +738,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	return (
 		<Deck
 			label={`${deck.members.length} decisions`}
-			onLeave={focusCard}
+			onLeave={id => focusCard(editor, options.questions?.runOf(value.id) ?? [value.id], id)}
 			items={deck.members.map(member => ({
 				id: member.id,
 				settled: member.state !== "open",

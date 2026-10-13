@@ -219,8 +219,8 @@ test("the deck keeps its top card, focus and draft when its first card leaves", 
 	await expect(draft).toBeFocused();
 });
 
-test("answering the last open card dissolves the deck without settled lines", async ({ join, seed }) => {
-	let fixture = deckSeed({ before: "Intro paragraph." }, 2);
+test("answering the last open card dissolves the deck and hands the caret to the prose after it", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph.", after: "Closing paragraph." }, 2);
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
 
@@ -236,6 +236,28 @@ test("answering the last open card dissolves the deck without settled lines", as
 	// Without prose a decided card draws nothing in the document; Decisions keeps it.
 	await expect(content(page).locator("[data-card-settled]")).toHaveCount(0);
 	await expect(content(page)).toContainText("Intro paragraph.");
+	await expect(content(page)).toBeFocused();
+	await expect(page.locator("[data-plan-announcer]")).toHaveText("Decision saved");
+	await page.keyboard.type("Then ");
+	await expect(content(page).locator("p").filter({ hasText: "Closing paragraph." }))
+		.toHaveText("Then Closing paragraph.");
+});
+
+test("a dissolving deck in a blank document puts the caret on its first line", async ({ join, seed }) => {
+	let fixture = deckSeed({}, 2);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	// A blank document opens on Decisions; answer in the document instead.
+	await page.getByRole("button", { name: "Document", exact: true }).click();
+	for (let index = 0; index < 2; index++) {
+		await top(page).getByText(`Option ${index + 1}`, { exact: true }).click();
+		await top(page).getByRole("button", { name: "Save", exact: true }).click();
+	}
+	await expect(deck(page)).toHaveCount(0);
+	await expect(content(page)).toBeFocused();
+	await expect(page.locator("[data-plan-announcer]")).toHaveText("Decision saved");
+	await page.keyboard.type("First words");
+	await expect(content(page).locator("p").first()).toHaveText("First words");
 });
 
 test("an answered decision settles to the back and focus follows the new top", async ({ join, seed }) => {
