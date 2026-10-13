@@ -121,11 +121,13 @@ only in a folder that disappears, and refuses a longer chain of interpreters or
 one that loops.
 
 Then install starts the agent once with the service's PATH, your `--env`
-values, `HOME` and your user name, and nothing else from your shell. It sends
+values, `HOME` and your user name, and nothing else from your shell. On Windows
+it also passes `SystemRoot`, `ComSpec`, `PATHEXT`, `TEMP`, `TMP`, `USERPROFILE`,
+`APPDATA` and `LOCALAPPDATA`, which Windows needs to start a program. It sends
 ACP `initialize` and waits up to 10 seconds for an answer. If none comes,
 install refuses and shows the first line the agent printed, with anything that
-looks like a token, and your `--env` values, hidden. `--skip-check` skips this. The Planner command is
-not started, since it needs a credential from Chopin.
+looks like a token, and your `--env` values, hidden. `--skip-check` skips this.
+The Planner command is not started, since it needs a credential from Chopin.
 
 The service passes your `--env` values to the agent and the Planner. They stay
 in `config.json` and never go into the service definition.

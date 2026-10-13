@@ -14,6 +14,7 @@ import {
 	scheduledTaskScript,
 	type ServiceHost,
 	serviceStatus,
+	startEnvironment,
 	stopFile,
 	systemdUnit,
 	taskAction,
@@ -206,6 +207,49 @@ test.skipIf(process.platform === "win32")(
 	},
 	20_000,
 );
+
+test("the start check gives the agent the service PATH, --env, the home and user name, and on Windows only what starting a process needs besides", async () => {
+	let { host } = await machine("linux");
+	let env = { API_MODE: "from connect" };
+	host.env = {
+		PATH: "/usr/bin",
+		SHELL_SECRET: "from this shell",
+		XDG_RUNTIME_DIR: "/run/user/501",
+	};
+	expect(startEnvironment(host, env, "/stable/bin:/usr/bin")).toEqual({
+		HOME: host.home,
+		USER: "ada",
+		LOGNAME: "ada",
+		PATH: "/stable/bin:/usr/bin",
+		API_MODE: "from connect",
+	});
+	let windows: ServiceHost = {
+		...host,
+		platform: "win32",
+		home: "C:\\Users\\ada",
+		env: {
+			Path: "C:\\Windows\\System32;C:\\tools",
+			SystemRoot: "C:\\Windows",
+			ComSpec: "C:\\Windows\\System32\\cmd.exe",
+			PATHEXT: ".COM;.EXE;.BAT;.CMD",
+			TEMP: "C:\\Users\\ada\\AppData\\Local\\Temp",
+			TMP: "C:\\Users\\ada\\AppData\\Local\\Temp",
+			USERPROFILE: "C:\\Users\\ada",
+			APPDATA: "C:\\Users\\ada\\AppData\\Roaming",
+			LOCALAPPDATA: "C:\\Users\\ada\\AppData\\Local",
+			SHELL_SECRET: "from this shell",
+			GITHUB_TOKEN: "from this shell",
+		},
+	};
+	let { SHELL_SECRET: _secret, GITHUB_TOKEN: _token, Path: _path, ...needed } = windows.env;
+	expect(startEnvironment(windows, env, "C:\\tools")).toEqual({
+		...needed,
+		HOME: "C:\\Users\\ada",
+		USERNAME: "ada",
+		Path: "C:\\tools",
+		API_MODE: "from connect",
+	});
+});
 
 test("install refuses until chopin connect has saved what the service runs", async () => {
 	let { home, directory, calls, host, program } = await machine("linux", systemd);

@@ -756,21 +756,45 @@ async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servi
 	return withInterpreters(host, passed[0]!, `the Planner command ${planner}`, servicePath);
 }
 
+/** What Windows needs in the environment to start a process and find a user's folders. */
+const WINDOWS_START = [
+	"SYSTEMROOT",
+	"COMSPEC",
+	"PATHEXT",
+	"TEMP",
+	"TMP",
+	"USERPROFILE",
+	"APPDATA",
+	"LOCALAPPDATA",
+];
+
+/**
+ * The whole environment the start check gives the agent: the service's PATH, the saved --env,
+ * HOME and the user's name, and on Windows the variables in `WINDOWS_START` from this shell.
+ */
+export function startEnvironment(host: ServiceHost, env: Env | undefined, path: string): Env {
+	if (host.platform !== "win32") {
+		return { HOME: host.home, USER: host.user, LOGNAME: host.user, PATH: path, ...env };
+	}
+	let name = Object.keys(host.env).find(item => item.toUpperCase() === "PATH") ?? "Path";
+	let needed = Object.entries(host.env).filter(([key]) =>
+		WINDOWS_START.includes(key.toUpperCase())
+	);
+	return {
+		...Object.fromEntries(needed),
+		HOME: host.home,
+		USERNAME: host.user,
+		[name]: path,
+		...env,
+	};
+}
+
 /**
  * Refuses an agent that doesn't answer ACP initialize within 10 seconds when started as the
- * service starts it: with the service's PATH and the saved --env, and on Linux and macOS without
- * the rest of this shell's environment.
+ * service starts it, with `startEnvironment` and nothing else from this shell.
  */
 async function checkStart(host: ServiceHost, settings: ConnectSettings, path: string) {
-	let windows = host.platform === "win32";
-	let name = windows
-		? Object.keys(host.env).find(item => item.toUpperCase() === "PATH") ?? "Path"
-		: "PATH";
-	let env = {
-		...(windows ? host.env : { HOME: host.home, USER: host.user, LOGNAME: host.user }),
-		[name]: path,
-		...settings.env,
-	};
+	let env = startEnvironment(host, settings.env, path);
 	let failed = await checkAgent(settings.command, { cwd: host.home, env });
 	if (!failed) return;
 	let agent = settings.command[programAt(settings.command)];
