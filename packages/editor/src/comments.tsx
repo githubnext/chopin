@@ -301,6 +301,7 @@ export function mention(
  * text and is never sent: the destination is.
  */
 function Composer({
+	addressed: initial = false,
 	autoFocus,
 	expanded,
 	mode,
@@ -308,6 +309,8 @@ function Composer({
 	onSend,
 	onTyping,
 }: {
+	/** Start with Send to Chopin ticked, and return to it after each send. */
+	addressed?: boolean;
 	autoFocus?: boolean;
 	/** Keep Send to Chopin showing, as a sheet's pinned composer does. */
 	expanded?: boolean;
@@ -317,7 +320,7 @@ function Composer({
 	onTyping?: (writing: boolean) => void;
 }) {
 	let [text, setText] = useState("");
-	let [to, setTo] = useState(false);
+	let [to, setTo] = useState(initial);
 	let [focused, setFocused] = useState(false);
 	let [coarse, setCoarse] = useState(false);
 	let [indent, setIndent] = useState(0);
@@ -380,7 +383,7 @@ function Composer({
 			return;
 		}
 		setText("");
-		setTo(false);
+		setTo(initial);
 		setRefusal(undefined);
 		onTyping?.(false);
 		let sent = onSend(value, addressed ? "planner" : undefined);
@@ -718,11 +721,13 @@ export function ThreadList(
 export type DraftCardProps = {
 	onSend: (text: string, to?: "planner") => void | Promise<Sent>;
 	onCancel: () => void;
+	/** False when no Planner runs here, so a new comment is not sent to Chopin by default. */
+	planner?: boolean;
 	sheet?: boolean;
 };
 
 /** A new comment: only the composer, with no header to say what the card already shows. */
-export function DraftCard({ onCancel, onSend, sheet }: DraftCardProps) {
+export function DraftCard({ onCancel, onSend, planner = true, sheet }: DraftCardProps) {
 	return (
 		<article
 			aria-label="New comment"
@@ -732,7 +737,13 @@ export function DraftCard({ onCancel, onSend, sheet }: DraftCardProps) {
 			data-plan-comment-draft
 		>
 			<Pinned sheet={sheet}>
-				<Composer autoFocus mode="new" onCancel={onCancel} onSend={onSend} />
+				<Composer
+					addressed={planner}
+					autoFocus
+					mode="new"
+					onCancel={onCancel}
+					onSend={onSend}
+				/>
 			</Pinned>
 		</article>
 	);

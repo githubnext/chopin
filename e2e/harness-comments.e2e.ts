@@ -25,7 +25,11 @@ test("typing @chopin addresses Chopin, who replies in the thread while Chat reco
 	let field = card.getByRole("textbox", { name: "Comment" });
 	let box = card.getByRole("checkbox", { name: "Send to Chopin" });
 
-	await expect(box).not.toBeChecked();
+	// With a Planner running, a new comment goes to Chopin unless it is unticked.
+	await expect(box).toBeChecked();
+	await expect(card.locator(".plan-comment-address-chip")).toHaveText("@Chopin");
+	await box.uncheck();
+	await expect(card.locator(".plan-comment-address-chip")).toHaveCount(0);
 	await field.pressSequentially("@chopin tighten this");
 	await expect(box).toBeChecked();
 	await expect(card.locator(".plan-comment-address-chip")).toHaveText("@Chopin");

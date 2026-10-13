@@ -7,7 +7,10 @@ test("a comment sent to Chopin with no Planner running is saved and says Chopin 
 	await content(page).locator("p").first().selectText();
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let card = page.getByRole("dialog", { name: "New comment" });
-	await card.getByRole("checkbox", { name: "Send to Chopin" }).check();
+	// No Planner runs here, so a new comment is not sent to Chopin unless asked.
+	let address = card.getByRole("checkbox", { name: "Send to Chopin" });
+	await expect(address).not.toBeChecked();
+	await address.check();
 	await card.getByRole("textbox", { name: "Comment" }).fill("Can you shorten this?");
 	await card.getByRole("button", { name: "Post comment", exact: true }).click();
 
