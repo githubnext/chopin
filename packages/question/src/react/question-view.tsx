@@ -1151,7 +1151,7 @@ export function QuestionView(props: QuestionViewProps) {
 				return renderStep ? renderStep({ children: panel, question: current.id }) : panel;
 			})()}
 
-			<span className="sr-only" role="status">{announcement}</span>
+			<span aria-live="polite" className="sr-only">{announcement}</span>
 			{addError && <Callout title="Couldn’t add option" message={addError} />}
 			{error && (
 				<Callout

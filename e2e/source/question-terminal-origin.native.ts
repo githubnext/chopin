@@ -125,7 +125,7 @@ test("a real human edit removes from chat until the suggestion lifecycle is clea
 	// The acknowledged option is chosen in the same step, so Save is ready.
 	await expect(option).toBeChecked();
 	await expect(option).toBeFocused();
-	await expect(page.getByRole("status").filter({ hasText: "Added and selected Another approach" }))
+	await expect(page.getByText("Added and selected Another approach", { exact: true }))
 		.toBeAttached();
 	await expect(badge).toHaveCount(0);
 	await expect(save).toBeEnabled();
