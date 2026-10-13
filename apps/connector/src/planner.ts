@@ -149,10 +149,15 @@ async function servePlanner(options: {
 	}
 }
 
+/** Longer than this, a backend's stderr line is dropped rather than passed on unmasked. */
+const LONGEST_LINE = 65_536;
+const DROPPED = `[chopin: dropped a stderr line longer than ${LONGEST_LINE} characters]`;
+
 /**
  * Run the backend once; resolves with how it exited and the first line of its stderr, which
  * still reaches this process's own a line at a time, with its credential, the --env values and
- * anything token-shaped masked. Aborting stops it, then kills it.
+ * anything token-shaped masked. A line too long to hold whole is dropped, a marker in its place,
+ * since a secret split across it could not be masked. Aborting stops it, then kills it.
  */
 async function launch(options: {
 	url: string;
@@ -176,20 +181,32 @@ async function launch(options: {
 		detached: process.platform !== "win32",
 	});
 	let secrets = [token, ...Object.values(options.env ?? {})];
-	let pass = (text: string) => text && process.stderr.write(redacted(text, secrets));
-	let head = "";
+	let first: string | undefined;
+	let pass = (text: string) => {
+		first ??= text.split("\n").map(line => line.trim()).find(Boolean);
+		if (text) process.stderr.write(redacted(text, secrets));
+	};
 	let pending = "";
+	let dropping = false;
 	child.stderr!.setEncoding("utf8");
 	child.stderr!.on("data", (chunk: string) => {
-		if (head.length < 4096) head += chunk;
 		// Whole lines, so a secret split between chunks is still masked.
-		let end = (pending += chunk).lastIndexOf("\n") + 1;
-		if (end || pending.length > 65_536) {
-			pass(end ? pending.slice(0, end) : pending);
-			pending = end ? pending.slice(end) : "";
+		let lines = (pending + chunk).split("\n");
+		pending = lines.pop()!;
+		let whole: string[] = [];
+		for (let line of lines) {
+			// The first newline ends a line already dropped.
+			if (dropping) dropping = false;
+			else whole.push(line.length > LONGEST_LINE ? DROPPED : line);
 		}
+		if (pending.length > LONGEST_LINE) {
+			if (!dropping) whole.push(DROPPED);
+			dropping = true;
+			pending = "";
+		}
+		if (whole.length) pass(whole.map(line => `${line}\n`).join(""));
 	});
-	child.stderr!.once("end", () => pass(pending));
+	child.stderr!.once("end", () => dropping || pass(pending));
 	let drained = new Promise(resolve => child.stderr!.once("close", resolve));
 	let exited = new Promise<string>(resolve => {
 		child.once("error", error => resolve(error.message));
@@ -208,8 +225,7 @@ async function launch(options: {
 	if (how === undefined || process.platform !== "win32") await stopBackend(child);
 	how ??= await exited;
 	await Promise.race([drained, new Promise(resolve => setTimeout(resolve, 500))]);
-	let stderr = head.split("\n").map(line => line.trim()).find(Boolean);
-	return { how, ...(stderr ? { stderr } : {}) };
+	return { how, ...(first ? { stderr: first } : {}) };
 }
 
 /** How a backend's processes are stopped: on which platform, running which commands, how patiently. */

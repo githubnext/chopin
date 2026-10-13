@@ -538,6 +538,95 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+	"a Planner stderr line too long to mask is dropped whole, so a credential split across it leaks nowhere",
+	async () => {
+		let token = `chopin_p_${"Kq4Zt9Wm".repeat(6).slice(0, 43)}`;
+		let marker = "[chopin: dropped a stderr line longer than 65536 characters]";
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: () =>
+				Response.json({ token, expiresAt: Date.now() + 15 * 60_000, document: { id: "D_1" } }),
+		});
+		let directory = await mkdtemp(join(scratch, "long-line-"));
+		let script = join(directory, "backend.ts");
+		// The first 8 characters of the credential end a 65,545-character piece without a newline;
+		// the rest comes after a pause, then a normal line.
+		await writeFile(
+			script,
+			[
+				"let token = process.env.CHOPIN_PLANNER_TOKEN;",
+				"process.stderr.write(`${'x'.repeat(65536)} ${token.slice(0, 8)}`, () => setTimeout(() => {",
+				"\tprocess.stderr.write(`${token.slice(8)}\\nnext CHOPIN_PLANNER_TOKEN=${token}\\n`,",
+				"\t\t() => process.exit(127));",
+				"}, 300));",
+				"",
+			].join("\n"),
+		);
+		let release = await lockWorkspace(directory, directory, { planners: ["D_1"] });
+		let host: ServiceHost = {
+			platform: "linux",
+			home: directory,
+			user: "ada",
+			uid: 501,
+			env: {},
+			run: async () => ({ code: 1, stdout: "", stderr: "" }),
+		};
+		let status = () =>
+			collectStatus({ directory, server: "https://chopin.example", source: "config", host });
+		let written = "";
+		let capture = {
+			write: (chunk: string | Uint8Array) => {
+				written += String(chunk);
+				return true;
+			},
+		};
+		let stderr = process.stderr.write;
+		process.stderr.write = capture.write as typeof process.stderr.write;
+		let abort = new AbortController();
+		let serving = servePlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script],
+			cwd: directory,
+			output: createOutput(capture, capture, {}),
+			signal: abort.signal,
+			failures: startFailures(directory, directory),
+		});
+		try {
+			await until(async () => !!(await status()).connectors[0]?.failures, 10_000);
+			abort.abort();
+			await serving;
+			let report = await status();
+			let failures = await readFile(
+				join(
+					directory,
+					`${new Bun.CryptoHasher("sha256").update(directory).digest("hex")}.failures.json`,
+				),
+				"utf8",
+			);
+			let pieces = Array.from({ length: token.length - 7 }, (_, at) => token.slice(at, at + 8));
+			let shown = { failures, status: formatStatus(report).join("\n"), written };
+			for (let [where, text] of Object.entries(shown)) {
+				expect({ where, leaked: pieces.filter(piece => text.includes(piece)) })
+					.toEqual({ where, leaked: [] });
+			}
+			expect(written.split(marker).length - 1).toBe(1);
+			expect(written).toContain(`${marker}\nnext CHOPIN_PLANNER_TOKEN=[redacted]\n`);
+			expect(report.connectors[0]!.failures![0]!.stderr).toBe(marker);
+		} finally {
+			process.stderr.write = stderr;
+			abort.abort();
+			await serving;
+			await release();
+			await chopin.stop(true);
+		}
+	},
+	30_000,
+);
+
+test.skipIf(process.platform === "win32")(
 	"chopin status shows a Planner stopped for good, not retrying, once Chopin refuses its credential",
 	async () => {
 		let asked = 0;
