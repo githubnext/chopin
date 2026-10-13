@@ -16,6 +16,7 @@ import {
 	rawLink,
 	scriptedPlanner,
 } from "../../testing/planner-link";
+import { plannerLink } from "./endpoint";
 import { MachinePlanners } from "./machine-planners";
 
 let cleanups: Array<() => unknown> = [];
@@ -91,7 +92,7 @@ async function machineServer(options: { revalidateEveryMs?: number } = {}) {
 	async function owner(channelId: string) {
 		return (await storage.channels.readAgent(channelId, new Date()))?.agent;
 	}
-	return { ...linked, machines, server, pair, credential, owner, time };
+	return { ...linked, machines, planners, server, pair, credential, owner, time };
 }
 
 describe("a paired machine's Planner", () => {
@@ -281,5 +282,85 @@ describe("a paired machine's Planner", () => {
 		expect((await upgrade("chopin_p_" + "x".repeat(43))).status).toBe(401);
 		time.offsetMs = 15 * 60_000 + 1;
 		expect((await upgrade(body.token)).status).toBe(401);
+	});
+
+	it("releases every document when a machine whose login expired, then reattached at once, is revoked", async () => {
+		let {
+			pair,
+			credential,
+			channel,
+			server,
+			machines,
+			planners,
+			storage,
+			sessions,
+			clock,
+			owner,
+			auth,
+		} = await machineServer();
+		let other = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Other document",
+			createdBy: "U_member",
+			now: new Date(),
+		});
+		let member = await pair("member", "U_member");
+		/** Both documents' backends attach, their attach frames handled in the same turn. */
+		async function reattach() {
+			let links = await Promise.all([channel.id, other.id].map(async id => {
+				let { body } = await credential(member.token, id);
+				let grant = await planners.redeem(body.token);
+				let frames: Array<Record<string, any>> = [];
+				let closes: number[] = [];
+				let link = plannerLink(
+					{ oauthToken: "", user: { id: "U_member", login: "member", avatarUrl: "" } },
+					auth,
+					{
+						send: text => void frames.push(JSON.parse(text)),
+						close: code => void closes.push(code),
+					},
+					{ attachments: server.attachments },
+					{ ...grant!, planners },
+				);
+				return { id, link, frames, closes };
+			}));
+			for (let { id, link } of links) {
+				link.receive(
+					JSON.stringify({ type: "attach", version: PLANNER_LINK_VERSION, document: id }),
+				);
+			}
+			for (let deadline = Date.now() + 4_000; Date.now() < deadline; await Bun.sleep(10)) {
+				if (links.every(({ frames }) => frames.some(frame => frame.type === "attached"))) break;
+			}
+			expect(links.map(({ frames }) => frames.some(frame => frame.type === "attached")))
+				.toEqual([true, true]);
+			return links;
+		}
+		await reattach();
+		// The machine's login reaches its 30-day expiry while the machine stays paired.
+		clock.skewMs = 31 * 24 * 60 * 60_000;
+		await sessions.cleanupExpired();
+		let links = await reattach();
+		let logins = [
+			(await owner(channel.id))?.ownerSessionId,
+			(await owner(other.id))?.ownerSessionId,
+		];
+		expect(logins[0]).toBeDefined();
+		// One login per machine at a time: the documents reattached together share the new one.
+		expect(logins[1]).toBe(logins[0]);
+
+		await machines.revoke(member.machine.id, "U_member");
+		for (let deadline = Date.now() + 4_000; Date.now() < deadline; await Bun.sleep(10)) {
+			if (links.every(({ closes }) => closes.length > 0)) break;
+		}
+		expect(links.map(({ closes }) => closes)).toEqual([[LINK_CLOSE.forbidden], [
+			LINK_CLOSE.forbidden,
+		]]);
+		expect([server.attachments.attached(channel.id), server.attachments.attached(other.id)])
+			.toEqual([false, false]);
+		expect(logins.map(id => sessions.isLive(id!))).toEqual([false, false]);
 	});
 });

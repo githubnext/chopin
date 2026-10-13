@@ -40,7 +40,10 @@ function digest(token: string): string {
 export class MachinePlanners {
 	#auth: MachinePlannerAuth;
 	#issued = new Map<string, Issued>();
+	/** The login each machine's links attach through now, while it is created or once it is. */
 	#logins = new Map<string, Promise<string>>();
+	/** Every login created for each machine that may still be live, all ended with the machine. */
+	#delegated = new Map<string, Set<string>>();
 
 	constructor(auth: MachinePlannerAuth) {
 		this.#auth = auth;
@@ -103,13 +106,25 @@ export class MachinePlanners {
 	 */
 	async login(machine: StoredMachine): Promise<string | undefined> {
 		if (!this.#auth.machines.durable) return undefined;
-		let existing = this.#logins.get(machine.id);
-		if (existing) {
+		for (let existing; (existing = this.#logins.get(machine.id));) {
 			let id = await existing.catch(() => undefined);
+			// Another call replaced it while this one waited: share that one, never create a second.
+			if (this.#logins.get(machine.id) !== existing) continue;
 			if (id && this.#auth.sessions.isLive(id)) return id;
-			if (this.#logins.get(machine.id) === existing) this.#logins.delete(machine.id);
+			this.#logins.delete(machine.id);
+			if (id) void this.#end(machine.id, id);
+			break;
 		}
-		let created = this.#auth.sessions.delegate(machine.userId, async rejected => {
+		let created = this.#delegate(machine);
+		this.#logins.set(machine.id, created);
+		void created.catch(() => {
+			if (this.#logins.get(machine.id) === created) this.#logins.delete(machine.id);
+		});
+		return created;
+	}
+
+	async #delegate(machine: StoredMachine): Promise<string> {
+		let id = await this.#auth.sessions.delegate(machine.userId, async rejected => {
 			try {
 				return await this.#auth.machines.access(
 					await this.#auth.machines.current(machine.id),
@@ -120,22 +135,26 @@ export class MachinePlanners {
 				throw error;
 			}
 		});
-		this.#logins.set(machine.id, created);
-		void created.catch(() => {
-			if (this.#logins.get(machine.id) === created) this.#logins.delete(machine.id);
-		});
-		return created;
+		let delegated = this.#delegated.get(machine.id) ?? new Set();
+		this.#delegated.set(machine.id, delegated.add(id));
+		return id;
 	}
 
-	/** A revoked or unauthorized machine's credentials and login end now. */
+	/** A revoked or unauthorized machine's credentials and every login it holds end now. */
 	async #ended(machineId: string): Promise<void> {
 		for (let [key, issued] of this.#issued) {
 			if (issued.machineId === machineId) this.#issued.delete(key);
 		}
-		let login = this.#logins.get(machineId);
+		let current = this.#logins.get(machineId);
 		this.#logins.delete(machineId);
-		let id = await login?.catch(() => undefined);
-		if (!id) return;
+		await current?.catch(() => undefined);
+		let delegated = this.#delegated.get(machineId) ?? new Set<string>();
+		this.#delegated.delete(machineId);
+		await Promise.all([...delegated].map(id => this.#end(machineId, id)));
+	}
+
+	async #end(machineId: string, id: string): Promise<void> {
+		this.#delegated.get(machineId)?.delete(id);
 		try {
 			await this.#auth.sessions.end(id);
 		} catch (error) {
