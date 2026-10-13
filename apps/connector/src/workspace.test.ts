@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
+	connectors,
 	discardWorkspace,
 	git,
 	lockWorkspace,
@@ -12,6 +13,7 @@ import {
 	prepareWorkspace,
 	workspace,
 } from "./workspace";
+import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 
 test("isolates exact source without stashing dirty work and never executes an accepted run twice", async () => {
 	let root = await mkdtemp(join(tmpdir(), "chopin-workspace-"));
@@ -74,6 +76,39 @@ test("replaces a lock left by a connector whose process is gone, and keeps a liv
 		// A lock that does not name a process is left for a person to check.
 		await writeFile(path, "");
 		await expect(lockWorkspace(root, state)).rejects.toThrow("already locked");
+	} finally {
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
+test("lists the connectors running for a state directory, and those whose process is gone", async () => {
+	let state = await mkdtemp(join(tmpdir(), "chopin-state-"));
+	try {
+		expect(await connectors(join(state, "missing"))).toEqual([]);
+		let release = await lockWorkspace("/fixture/served", state, { service: true });
+		let child = Bun.spawn(["true"]);
+		await child.exited;
+		await writeFile(
+			join(state, `${"a".repeat(64)}.lock`),
+			JSON.stringify({ pid: child.pid, root: "/fixture/crashed" }),
+		);
+		// machine.json's own lock and a lock still being written are not connectors.
+		await writeFile(join(state, "machine.json.lock"), JSON.stringify({ pid: process.pid }));
+		await writeFile(join(state, `${"b".repeat(64)}.lock`), "");
+		let listed = await connectors(state);
+		expect(listed.sort((a, b) => a.root.localeCompare(b.root))).toEqual([
+			{ pid: child.pid, root: "/fixture/crashed", running: false, service: false },
+			{
+				pid: process.pid,
+				root: "/fixture/served",
+				running: true,
+				service: true,
+				version: VERSION,
+				protocol: CONNECTOR_PROTOCOL,
+				started: expect.any(Number),
+			},
+		]);
+		await release();
 	} finally {
 		await rm(state, { recursive: true, force: true });
 	}

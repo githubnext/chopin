@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, readFile, realpath, rm } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import type { RunInput } from "@chopin/experiment";
+import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 
 export function git(cwd: string, ...args: string[]): string {
 	let result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 120_000 });
@@ -37,7 +38,16 @@ export function stateDirectory() {
 		);
 }
 
-export async function lockWorkspace(root: string, directory: string) {
+/**
+ * Hold a checkout for this process. The lock names the process, the checkout and the chopin that
+ * holds it, so `chopin status` can list the connectors running for a state directory; `service`
+ * marks the one the installed service runs.
+ */
+export async function lockWorkspace(
+	root: string,
+	directory: string,
+	{ service = false }: { service?: boolean } = {},
+) {
 	await mkdir(directory, { recursive: true, mode: 0o700 });
 	let id = createHash("sha256").update(root).digest("hex");
 	let path = join(directory, `${id}.lock`);
@@ -58,11 +68,28 @@ export async function lockWorkspace(root: string, directory: string) {
 			throw new Error(`Workspace already locked by a connector that just started. ${path}`);
 		}
 	}
-	await file.writeFile(JSON.stringify({ pid: process.pid, root }));
+	await file.writeFile(JSON.stringify({
+		pid: process.pid,
+		root,
+		version: VERSION,
+		protocol: CONNECTOR_PROTOCOL,
+		started: Date.now(),
+		...(service ? { service } : {}),
+	}));
 	return async () => {
 		await file.close();
 		await rm(path, { force: true });
 	};
+}
+
+/** Whether no process `pid` exists; EPERM means it exists but belongs to someone else. */
+function gone(pid: number) {
+	try {
+		process.kill(pid, 0);
+		return false;
+	} catch (err) {
+		return (err as NodeJS.ErrnoException).code === "ESRCH";
+	}
 }
 
 /** Only a lock naming a process that no longer exists is stale; unreadable locks are kept. */
@@ -73,14 +100,47 @@ async function staleLock(path: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
-	if (!Number.isSafeInteger(pid) || (pid as number) <= 0) return false;
-	try {
-		process.kill(pid as number, 0);
-		return false;
-	} catch (err) {
-		// EPERM means the process exists but belongs to someone else.
-		return (err as NodeJS.ErrnoException).code === "ESRCH";
+	return Number.isSafeInteger(pid) && (pid as number) > 0 && gone(pid as number);
+}
+
+/** A connector that holds, or held until it crashed, a checkout's lock in a state directory. */
+export type RunningConnector = {
+	pid: number;
+	root: string;
+	/** False when its process is gone and the lock is stale; the next `connect` replaces it. */
+	running: boolean;
+	/** Whether the installed service runs it. */
+	service: boolean;
+	/** The chopin version and protocol it runs, absent from a lock written before they were. */
+	version?: string;
+	protocol?: number;
+	started?: number;
+};
+
+/** Every checkout lock in `directory`, skipping any that is unreadable or still being written. */
+export async function connectors(directory: string): Promise<RunningConnector[]> {
+	let names = await readdir(directory).catch(() => [] as string[]);
+	let found: RunningConnector[] = [];
+	for (let name of names.filter(name => /^[0-9a-f]{64}\.lock$/.test(name))) {
+		let held: Record<string, unknown>;
+		try {
+			held = JSON.parse(await readFile(join(directory, name), "utf8"));
+		} catch {
+			continue;
+		}
+		let { pid, root, version, protocol, started } = held;
+		if (!Number.isSafeInteger(pid) || (pid as number) <= 0 || typeof root !== "string") continue;
+		found.push({
+			pid: pid as number,
+			root,
+			running: !gone(pid as number),
+			service: held.service === true,
+			...(typeof version === "string" ? { version } : {}),
+			...(typeof protocol === "number" ? { protocol } : {}),
+			...(typeof started === "number" ? { started } : {}),
+		});
 	}
+	return found;
 }
 
 /**
