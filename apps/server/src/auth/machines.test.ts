@@ -33,12 +33,12 @@ async function setup() {
 		},
 	};
 	let admitted = true;
-	let create = () =>
+	let create = (refresh = (token: string) => github.refresh(token)) =>
 		new Machines(storage, () => now, {
 			key: KEY,
 			origin: "https://chopin.test",
 			clientId: "client",
-			refresh: token => github.refresh(token),
+			refresh,
 			authorize: async () => admitted,
 		});
 	let machines = create();
@@ -156,4 +156,38 @@ test("an owner who is no longer admitted loses the machine", async () => {
 	let machine = await machines.authenticate(paired.token);
 	expect(await failure(machines.use(machine, async token => token))).toBe("machine-revoked");
 	expect(await failure(machines.authenticate(paired.token))).toBe("machine-revoked");
+});
+
+test("a refresh refused because another instance rotated first uses that instance's credentials", async () => {
+	let { storage, create, paired, advance } = await setup();
+	// GitHub refresh tokens are single-use: the second instance to spend ghr_machine_1 is refused.
+	let spent = new Set<string>();
+	let issued = 1;
+	let github = async (token: string) => {
+		if (spent.has(token)) {
+			throw new GitHubTokenError("GitHub rejected the token refresh", 400, true);
+		}
+		spent.add(token);
+		issued++;
+		return grant(`ghu_machine_${issued}`, `ghr_machine_${issued}`);
+	};
+	let reached = Promise.withResolvers<void>();
+	let held = Promise.withResolvers<void>();
+	let slow = create(async token => {
+		reached.resolve();
+		await held.promise;
+		return github(token);
+	});
+	let fast = create(github);
+	advance(28_800_000);
+	let late = slow.use(await slow.authenticate(paired.token), async token => token);
+	await reached.promise;
+	expect(await fast.use(await fast.authenticate(paired.token), async token => token))
+		.toBe("ghu_machine_2");
+	held.resolve();
+	expect(await late).toBe("ghu_machine_2");
+	let stored = (await storage.machines.get(paired.machine.id))!;
+	expect(stored.credentials?.revision).toBe(2);
+	expect(stored.reauthorizeAt).toBeUndefined();
+	expect(spent).toEqual(new Set(["ghr_machine_1"]));
 });

@@ -222,7 +222,7 @@ export class Machines {
 		try {
 			issued = await this.#options.refresh(from.refreshToken);
 		} catch (err) {
-			if (err instanceof GitHubTokenError && err.terminal) return this.#reauthorize(machine, from);
+			if (err instanceof GitHubTokenError && err.terminal) return this.#refused(machine, from);
 			throw err;
 		}
 		let next = this.#fromGrant(issued, from.revision + 1);
@@ -239,6 +239,30 @@ export class Machines {
 		}
 		this.#grants.set(machine.id, next);
 		return next;
+	}
+
+	/**
+	 * GitHub refused the refresh token. Another instance may have spent it and saved a newer
+	 * revision, which this call then uses; otherwise the machine needs re-authorization, marked only
+	 * while the refused revision is still the stored one.
+	 */
+	async #refused(machine: StoredMachine, from: Grant): Promise<Grant> {
+		let newer = await this.#newer(machine, from);
+		if (newer) return newer;
+		if (!await this.#storage.machines.reauthorize(machine.id, from.revision, this.#clock())) {
+			// Rotated between the read and the mark.
+			newer = await this.#newer(machine, from);
+			if (newer) return newer;
+		}
+		this.#forget(machine.id);
+		throw new MachineError("machine-reauthorize");
+	}
+
+	/** The stored credentials, when another instance has rotated past `from`. */
+	async #newer(machine: StoredMachine, from: Grant): Promise<Grant | undefined> {
+		this.#forget(machine.id);
+		let stored = await this.#grant(machine);
+		return stored.revision > from.revision ? stored : undefined;
 	}
 
 	async #reauthorize(machine: StoredMachine, grant: Grant): Promise<never> {
