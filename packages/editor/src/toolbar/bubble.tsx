@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ChevronIcon, CodeIcon, LinkPlusIcon, ListIcon, MessagePlusIcon } from "@chopin/icons";
 
+import { insertList } from "./block-target";
 import { $linkAt, OPEN_LINK_EDITOR_COMMAND } from "./link";
 import { placeSurface, visibleAnchor } from "./placement";
 import { shortcut } from "./shortcut";
@@ -27,13 +28,7 @@ import {
 	SEAM,
 	SHELL,
 } from "./surface";
-import {
-	$isListItemNode,
-	$isListNode,
-	INSERT_ORDERED_LIST_COMMAND,
-	INSERT_UNORDERED_LIST_COMMAND,
-	REMOVE_LIST_COMMAND,
-} from "@lexical/list";
+import { $isListItemNode, $isListNode, REMOVE_LIST_COMMAND } from "@lexical/list";
 import {
 	$createHeadingNode,
 	$createQuoteNode,
@@ -153,12 +148,8 @@ export function convertBlock(editor: LexicalEditor, block: Block, next: Block): 
 	// Already a quote: converting again would nest one inside the other.
 	if (next === block || next === "task") return;
 
-	if (next === "bullet") {
-		editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
-		return;
-	}
-	if (next === "number") {
-		editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
+	if (next === "bullet" || next === "number") {
+		insertList(editor, next);
 		return;
 	}
 	// Containers are unwrapped, not swapped: `$setBlocksType` converts the

@@ -44,7 +44,6 @@ import {
 	ulid,
 } from "@chopin/dialect";
 
-import { INSERT_CHECK_LIST_COMMAND } from "@lexical/list";
 import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
@@ -63,7 +62,7 @@ import {
 	WrenchIcon,
 } from "@chopin/icons";
 
-import { $insertBlock, $leaveForBlock, $openBlock, $taskListInContainer } from "./block-target";
+import { $insertBlock, $leaveForBlock, $openBlock, insertList } from "./block-target";
 import { askForUrl } from "./url";
 import { placeSurface } from "./placement";
 import { OPEN_INVESTIGATION_COMMAND, OPEN_RESEARCH_COMMAND } from "./research";
@@ -227,8 +226,7 @@ const COMMANDS: SlashCommand[] = [
 				if (topLevel && !$isParagraphNode(topLevel)) topLevel.insertAfter(columns);
 				else $insertNodes([columns]);
 				first.getFirstChild()?.selectStart();
-			})
-		),
+			}), "Columns"),
 	},
 	{
 		id: "tasks",
@@ -238,9 +236,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["task", "todo", "checklist", "checkbox"],
 		kind: "insert",
-		run: placed(editor => {
-			if (!$taskListInContainer()) editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined);
-		}),
+		run: placed(editor => insertList(editor, "check")),
 	},
 	{
 		id: "code",

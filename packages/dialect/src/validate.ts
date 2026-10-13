@@ -161,8 +161,8 @@ class Validator {
 			this.add("unknown-component", `\`${node.name}\` is not a plan component`, path, node);
 			return;
 		}
-		if (spec.name === "Columns" && depth !== 1) {
-			this.add("bad-layout-placement", "`Columns` must be a top-level block", path, node);
+		if (spec.topLevel && depth !== 1) {
+			this.add("bad-layout-placement", `\`${spec.name}\` must be a top-level block`, path, node);
 		}
 
 		let expected = node.type === "mdxJsxFlowElement" ? "flow" : "text";

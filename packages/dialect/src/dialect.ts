@@ -44,6 +44,8 @@ export type Component = {
 	forbids?: readonly string[];
 	/** Only valid as a direct child of these components. */
 	parent?: readonly string[];
+	/** Only valid as a direct child of the document root. */
+	topLevel?: true;
 };
 
 const ID: Attribute = { type: "id", required: true };
@@ -232,6 +234,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		kind: "flow",
 		content: { type: "components", names: ["Column"] },
 		forbids: ["Columns"],
+		topLevel: true,
 	}),
 
 	Column: component({

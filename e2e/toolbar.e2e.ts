@@ -281,6 +281,22 @@ test("a block chosen in a table cell goes after the table", async ({ join, room,
 	await expect(page.getByText("Edits not saved")).toHaveCount(0);
 });
 
+test("a list made from the block type menu stays inside its callout", async ({ join, room, seed }) => {
+	await seed(
+		'<Callout id="01K0N4W3B7P27CBAEC7A8C8WEA" type="note">\n\nKeep me inside\n\n</Callout>\n',
+	);
+	let page = await join("ana");
+	await edit(page);
+
+	await content(page).getByText("Keep me inside").dblclick();
+	let bubble = page.getByRole("toolbar", BUBBLE);
+	await bubble.getByRole("button", { name: "Block type: Text" }).click();
+	await bubble.getByRole("button", { name: "Bulleted list" }).click();
+
+	await written(page, room, /<Callout [^>]*>\n {2}- Keep me inside\n<\/Callout>/);
+	await expect(page.getByText("Edits not saved")).toHaveCount(0);
+});
+
 test("a selection raises exactly one toolbar", async ({ join }) => {
 	let page = await join("ana");
 
