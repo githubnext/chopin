@@ -841,12 +841,12 @@
 
 .plan-comment-card[data-side="below"] {
 	--enter-y: -0.25rem;
-	transform-origin: top left;
+	transform-origin: top right;
 }
 
 .plan-comment-card[data-side="above"] {
 	--enter-y: 0.25rem;
-	transform-origin: bottom left;
+	transform-origin: bottom right;
 }
 
 /*
@@ -899,7 +899,7 @@
 	text-wrap: pretty;
 }
 
-/* Revealed on hover or focus, always on touch; inset equally from the card's top and right. */
+/* Inset equally from the card's top and right. */
 .plan-comment-actions {
 	display: flex;
 	flex: none;
@@ -907,17 +907,21 @@
 	align-self: flex-start;
 	gap: 0.125rem;
 	margin: -0.375rem -0.375rem 0 auto;
+}
+
+/* Resolve stays in view; the `…` menu is revealed on hover or focus, always on touch. */
+.plan-comment-menu-anchor {
 	opacity: 0;
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-.plan-comment-thread:is(:hover, :focus-within) .plan-comment-actions,
-.plan-comment-actions[data-open] {
+.plan-comment-thread:is(:hover, :focus-within) .plan-comment-menu-anchor,
+.plan-comment-actions[data-open] .plan-comment-menu-anchor {
 	opacity: 1;
 }
 
 @media (hover: none) {
-	.plan-comment-actions {
+	.plan-comment-menu-anchor {
 		opacity: 1;
 	}
 }
@@ -1876,6 +1880,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 /* Actions are always shown in a sheet, each a full 44px target that keeps the note head's line. */
 .plan-comment-sheet-content .plan-comment-actions {
 	margin: -0.625rem -0.75rem -0.625rem auto;
+}
+
+.plan-comment-sheet-content .plan-comment-menu-anchor {
 	opacity: 1;
 }
 
@@ -1913,7 +1920,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 		animation: none;
 	}
 
-	.plan-comment-actions,
+	.plan-comment-menu-anchor,
 	.plan-comment-composer-fold,
 	.plan-comment-composer-footer,
 	.plan-comment-menu,

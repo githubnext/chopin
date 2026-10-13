@@ -209,7 +209,7 @@ export type CardPoint = Point & { width: number; side: CardSide; maxHeight?: num
  * When the gutter right of the prose column holds the card beyond the marker
  * lane, it sits there beside the passage's first line. Otherwise it sits
  * directly below the passage, or above it when only that side has room, aligned
- * to the passage's left edge and kept inside the column. When neither side
+ * to the column's right edge so it opens beneath the marker that raised it. When neither side
  * holds the whole card, the roomier side caps its height so it scrolls instead.
  * A passage scrolled out of view lets the card clamp back inside the document.
  */
@@ -238,11 +238,7 @@ export function commentCardPoint(
 	}
 
 	let fitted = Math.min(width, column.width);
-	let left = clamp(
-		passage.left - host.left,
-		column.left - host.left,
-		column.right - host.left - fitted,
-	);
+	let left = clamp(column.right - host.left - fitted, 0, host.width - fitted);
 	let below = host.bottom - inset - (passage.bottom + gap);
 	let above = passage.top - gap - (host.top + inset);
 	let point: CardPoint = {

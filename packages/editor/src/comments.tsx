@@ -163,7 +163,7 @@ function PlannerStatus({ state }: { state: NonNullable<ThreadView["planner"]> })
 	);
 }
 
-/** The `…` menu and the resolve check, revealed on hover or focus and always shown on touch. */
+/** The resolve check, always shown, and the `…` menu, revealed on hover or focus. */
 function Actions({ link, onResolve }: { link?: string; onResolve?: () => void }) {
 	let [menu, setMenu] = useState(false);
 	let trigger = useRef<HTMLButtonElement>(null);
