@@ -228,8 +228,8 @@
 	min-height: 0;
 }
 
-/* The project gives way first; the build's state is what changes. */
-.phone-top-bar-project {
+/* The lead gives way first; the build's state is what changes. */
+.phone-top-bar-lead {
 	flex: 0 1 auto;
 }
 
@@ -667,6 +667,7 @@
 	}
 
 	.workspace-root[data-workspace-phone] > .phone-top-bar,
+	.phone-top-bar-center,
 	.phone-tab-indicator,
 	.phone-tab-row,
 	.phone-tab-bar,

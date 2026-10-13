@@ -43,9 +43,10 @@ type PhoneHeaderDocument = {
 	onEditingChange: (editing?: TitleEdit) => void;
 	onRenamed: (channel: DocumentMetadata) => void;
 	room: string;
-	/** What the subtitle says after the project: the build's status, or the child's parent. */
+	/** What the subtitle says after its lead: the build's status. Editing or Archived replace it. */
 	context?: ReactNode;
-	project?: string;
+	/** The subtitle's lead, which always shows: the project, or for a child, where it sits. */
+	lead?: string;
 };
 
 export function PhoneHeader(
@@ -122,7 +123,7 @@ export function PhoneHeaderContent(
 		onComments,
 		onEditingChange,
 		onRenamed,
-		project,
+		lead,
 		room,
 	}: PhoneHeaderDocument,
 ) {
@@ -173,10 +174,10 @@ export function PhoneHeaderContent(
 						)
 						: <span className="truncate">{label}</span>}
 				</div>
-				{(project || status) && (
+				{(lead || status) && (
 					<div className="phone-top-bar-subtitle">
-						{project && <span className="phone-top-bar-project truncate">{project}</span>}
-						{project && status && <span aria-hidden="true">·</span>}
+						{lead && <span className="phone-top-bar-lead truncate">{lead}</span>}
+						{lead && status && <span aria-hidden="true">·</span>}
 						{status}
 					</div>
 				)}
@@ -193,7 +194,7 @@ export function PhoneHeaderContent(
 								handle={handle}
 								key={handle.toLowerCase()}
 								ring="page"
-								size={24}
+								size={20}
 								textSize="2xs"
 								titled={false}
 							/>

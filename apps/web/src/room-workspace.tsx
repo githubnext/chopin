@@ -1444,11 +1444,7 @@ export function RoomWorkspace(
 							}}
 							onEditingChange={setTitleEdit}
 							onRenamed={updateMetadata}
-							context={
-								<span className="truncate">
-									in {presentation.parent?.label ?? childTitle.parent}
-								</span>
-							}
+							lead={`in ${presentation.parent?.label ?? childTitle.parent}`}
 							room={room}
 						/>,
 						childTitle.slot,
@@ -1643,7 +1639,7 @@ export function RoomWorkspace(
 									}}
 									onEditingChange={setTitleEdit}
 									onRenamed={updateMetadata}
-									project={repository.name}
+									lead={repository.name}
 									room={room}
 								/>
 							</PhoneHeader>
