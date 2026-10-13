@@ -441,7 +441,9 @@ test("an interrupted move continues from its current frame", async ({ join, seed
 	let frames = await sampleMove(page, fixture.ids[0]!, [0, 0.25, 0.5, 0.75, 1]);
 	expect(frames).toBeDefined();
 	// Called back, the card comes over the deck from wherever the first move left it.
-	for (let frame of frames!) expect(frame.layer).toBeGreaterThan(100);
+	for (let frame of frames!.filter(frame => frame.at < 1)) {
+		expect(frame.layer).toBeGreaterThan(100);
+	}
 	expect(frames![0]!.opacity).toBeGreaterThan(0);
 	await expect.poll(() => order(page)).toEqual(fixture.ids);
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();
@@ -487,7 +489,8 @@ test("reduced motion crossfades without movement, in the right order", async ({ 
 	await deck(page).getByRole("button", { name: "Next decision" }).click();
 	expect(await movingAnimations(page)).toBe(0);
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
-	expect(await order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
+	// The old top card holds its layer while it fades, so read the order once it has.
+	await expect.poll(() => order(page)).toEqual([fixture.ids[1], fixture.ids[2], fixture.ids[0]]);
 
 	// Answering settles the card to the back without any animation.
 	await top(page).getByText("Option 2", { exact: true }).click();

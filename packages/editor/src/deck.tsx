@@ -320,13 +320,14 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 		}
 	};
 
-	// Reaching an end disables the pressed arrow; keep focus in the pager.
-	let keepFocus = () => {
+	// Reaching an end disables the pressed arrow, which drops its focus; keep focus in the pager.
+	let pagerFocused = () => !!document.activeElement?.closest("[data-deck-control]");
+	let keepFocus = (had: boolean) => {
 		let active = document.activeElement;
-		if (active instanceof HTMLButtonElement && active.disabled) {
-			root.current?.querySelector<HTMLButtonElement>("[data-deck-control]:not(:disabled)")
-				?.focus();
-		}
+		let lost = active === null || active === document.body
+			|| (active instanceof HTMLButtonElement && active.disabled);
+		if (!had || !lost) return;
+		root.current?.querySelector<HTMLButtonElement>("[data-deck-control]:not(:disabled)")?.focus();
 	};
 
 	// Keyed on settled state, so a reader may cycle a settled card back to the
@@ -408,9 +409,10 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 				direction,
 			);
 			if (!next) return;
+			let had = pagerFocused();
 			reorder(next, "cycle", direction);
 			if (kind === "slot") slots.current.get(next[0]!)?.focus({ preventScroll: true });
-			else keepFocus();
+			else keepFocus(had);
 		};
 		let front = (event: Event) => {
 			let id = (event as CustomEvent<string>).detail;
@@ -450,8 +452,9 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 	let step = (direction: 1 | -1) => {
 		let next = stepOrder(arrange(orderRef.current, itemsRef.current), itemsRef.current, direction);
 		if (!next) return;
+		let had = pagerFocused();
 		reorder(next, "cycle", direction);
-		keepFocus();
+		keepFocus(had);
 	};
 	let index = position(items, top);
 

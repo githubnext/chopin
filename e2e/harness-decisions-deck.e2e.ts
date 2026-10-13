@@ -36,15 +36,6 @@ async function answerAll(page: Page) {
 	await expect(deck(page)).toHaveCount(0);
 }
 
-/** Deck animations that move a card rather than only fade it. */
-function movingAnimations(element: Element) {
-	return element.getAnimations({ subtree: true }).filter(animation => {
-		let frames = (animation.effect as KeyframeEffect).getKeyframes();
-		return new Set(frames.map(frame => frame.transform)).size > 1
-			|| frames.some(frame => frame.height);
-	}).length;
-}
-
 function routed(page: Page) {
 	return page.getByRole("status").filter({ hasText: "Showing Decisions:" });
 }
@@ -119,7 +110,15 @@ test("arrow keys page the Decisions deck; reduced motion only crossfades", async
 	await page.keyboard.press("ArrowRight");
 	await expect(top(page).getByRole("heading", { name: "What belongs in the first cut?" }))
 		.toBeVisible();
-	expect(await deck(page).evaluate(element => movingAnimations(element))).toBe(0);
+	// Only a crossfade: no deck animation moves a card or the stage.
+	let moving = await deck(page).evaluate(element =>
+		element.getAnimations({ subtree: true }).filter(animation => {
+			let frames = (animation.effect as KeyframeEffect).getKeyframes();
+			return new Set(frames.map(frame => frame.transform)).size > 1
+				|| frames.some(frame => frame.height);
+		}).length
+	);
+	expect(moving).toBe(0);
 	await expect(deck(page).getByRole("status")).toHaveText("Decision 2 of 3: Scope");
 });
 
