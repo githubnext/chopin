@@ -250,8 +250,10 @@ for (let width of [1280, 390]) {
 			let stop = view.getByRole("button", { name: "Stop build", exact: true });
 			await expect(stop).toBeInViewport({ ratio: 1 });
 			await stop.focus();
+			let screenshot = testInfo.outputPath("running-build.png");
+			await view.screenshot({ path: screenshot });
 			await testInfo.attach("running-build", {
-				body: await view.screenshot(),
+				path: screenshot,
 				contentType: "image/png",
 			});
 			await page.keyboard.press("Enter");

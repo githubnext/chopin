@@ -4,9 +4,9 @@ anchor: function runWork
 created: 2026-10-13T07:28:02Z
 norm: '1'
 sig: 7e61b52123273461
-body_hash: f737f9229dc01791
-raw_hash: 9482ed80c96f470a
-vouched: 2026-10-13T12:03:02Z
+body_hash: 25becab3e865eac8
+raw_hash: 9fe15a3fc87695a1
+vouched: 2026-10-13T12:38:04Z
 lines: 53-341
 supersedes: 01M4RRZZXR0F4HFSR1ZR6XFKZJ
 ---
