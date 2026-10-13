@@ -90,7 +90,11 @@ test("gallery has no page-level horizontal overflow", async ({ page }) => {
 
 test("a narrow diagram exposes keyboard horizontal scrolling", async ({ page }, testInfo) => {
 	test.skip(testInfo.project.name !== "narrow", "The document-width view fits at wide widths.");
-	let stage = page.locator('[data-specimen-diagram="first"] .ch-diagram__stage');
+	let first = page.locator('[data-specimen-diagram="first"]');
+	let stage = first.locator(".ch-diagram__stage");
+	// A wide diagram opens fitted; at actual size it overflows and scrolls.
+	await expect(stage).not.toHaveAttribute("tabindex", "0");
+	await first.getByRole("button", { name: "Actual size", exact: true }).click();
 	await expect(stage).toHaveAttribute("tabindex", "0");
 	await expect(stage).toHaveAttribute("aria-label", /scroll horizontally/i);
 	await stage.focus();
@@ -99,96 +103,136 @@ test("a narrow diagram exposes keyboard horizontal scrolling", async ({ page }, 
 	await expect.poll(() => stage.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
 });
 
-test("reduced motion opens on the whole diagram and plays only when asked", async ({ page }) => {
-	await page.emulateMedia({ reducedMotion: "reduce" });
-	await reload(page);
-	let first = page.locator('[data-specimen-diagram="first"]');
-	let svg = first.locator("svg.sc-svg");
-	await expect(svg).toBeVisible();
-	let total = Number(await svg.getAttribute("data-sc-steps"));
-	let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
-	let counter = (step: number) => controls.getByText(`${step} / ${total}`, { exact: true });
-	await expect(counter(total)).toBeVisible();
-	await page.waitForTimeout(1000);
-	await expect(counter(total)).toBeVisible();
-	await expect(controls.getByRole("button", { name: "Next step", exact: true })).toBeDisabled();
+test(
+	"reduced motion opens on the whole diagram and plays only when asked",
+	async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== "wide", "A narrow bar has no step counter or Restart.");
+		await page.emulateMedia({ reducedMotion: "reduce" });
+		await reload(page);
+		let first = page.locator('[data-specimen-diagram="first"]');
+		let svg = first.locator("svg.sc-svg");
+		await expect(svg).toBeVisible();
+		let total = Number(await svg.getAttribute("data-sc-steps"));
+		let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
+		let counter = (step: number) => controls.getByText(`${step} / ${total}`, { exact: true });
+		await expect(counter(total)).toBeVisible();
+		await page.waitForTimeout(1000);
+		await expect(counter(total)).toBeVisible();
+		await expect(controls.getByRole("button", { name: "Next step", exact: true })).toBeDisabled();
 
-	await controls.getByRole("button", { name: "Play diagram", exact: true }).click();
-	await expect(counter(1)).toBeVisible();
-	await expect(svg).toHaveClass(/sc-stepping/);
-	await expect(controls.getByRole("button", { name: "Pause diagram", exact: true })).toBeVisible();
-	let shown = controls.locator(".ch-diagram__step");
-	// Each step shows for one stagger; poll faster than expect's backoff.
-	await expect.poll(async () => Number((await shown.textContent())!.split(" / ")[0]), {
-		intervals: [50],
-	}).toBeGreaterThan(1);
-	await controls.getByRole("button", { name: "Restart diagram", exact: true }).click();
-	await expect(counter(1)).toBeVisible();
-	await expect(first.locator(".ch-diagram__status")).toBeEmpty();
-});
+		await controls.getByRole("button", { name: "Play diagram", exact: true }).click();
+		await expect(counter(1)).toBeVisible();
+		await expect(svg).toHaveClass(/sc-stepping/);
+		await expect(controls.getByRole("button", { name: "Pause diagram", exact: true }))
+			.toBeVisible();
+		let shown = controls.locator(".ch-diagram__step");
+		// Each step shows for one stagger; poll faster than expect's backoff.
+		await expect.poll(async () => Number((await shown.textContent())!.split(" / ")[0]), {
+			intervals: [50],
+		}).toBeGreaterThan(1);
+		await controls.getByRole("button", { name: "Restart diagram", exact: true }).click();
+		await expect(counter(1)).toBeVisible();
+		await expect(first.locator(".ch-diagram__status")).toBeEmpty();
+	},
+);
 
-test("diagram controls sit centred below the drawing and step to either end", async ({ page }) => {
-	let first = page.locator('[data-specimen-diagram="first"]');
-	let stage = first.locator(".ch-diagram__stage");
-	let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
-	await expect(controls).toBeVisible();
-	let [stageBox, controlsBox] = [await stage.boundingBox(), await controls.boundingBox()];
-	expect(controlsBox!.y).toBeGreaterThanOrEqual(stageBox!.y + stageBox!.height);
-	expect(
-		Math.abs(
-			controlsBox!.x + controlsBox!.width / 2 - (stageBox!.x + stageBox!.width / 2),
-		),
-	).toBeLessThanOrEqual(1);
+test(
+	"diagram controls sit centred below the drawing and step to either end",
+	async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== "wide", "A narrow bar has no step counter or Restart.");
+		let first = page.locator('[data-specimen-diagram="first"]');
+		let stage = first.locator(".ch-diagram__stage");
+		let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
+		await expect(controls).toBeVisible();
+		let [stageBox, controlsBox] = [await stage.boundingBox(), await controls.boundingBox()];
+		expect(controlsBox!.y).toBeGreaterThanOrEqual(stageBox!.y + stageBox!.height);
+		expect(
+			Math.abs(
+				controlsBox!.x + controlsBox!.width / 2 - (stageBox!.x + stageBox!.width / 2),
+			),
+		).toBeLessThanOrEqual(1);
 
-	let toggle = (name: "Play diagram" | "Pause diagram") =>
-		controls.getByRole("button", { name, exact: true });
-	let previous = controls.getByRole("button", { name: "Previous step", exact: true });
-	let next = controls.getByRole("button", { name: "Next step", exact: true });
-	let restart = controls.getByRole("button", { name: "Restart diagram", exact: true });
-	let shown = controls.locator(".ch-diagram__step");
-	let total = Number(await first.locator("svg.sc-svg").getAttribute("data-sc-steps"));
-	expect(total).toBeGreaterThan(3);
-	let counter = (step: number) => controls.getByText(`${step} / ${total}`, { exact: true });
-	let at = async () => Number((await shown.textContent())!.split(" / ")[0]);
+		let toggle = (name: "Play diagram" | "Pause diagram") =>
+			controls.getByRole("button", { name, exact: true });
+		let previous = controls.getByRole("button", { name: "Previous step", exact: true });
+		let next = controls.getByRole("button", { name: "Next step", exact: true });
+		let restart = controls.getByRole("button", { name: "Restart diagram", exact: true });
+		let shown = controls.locator(".ch-diagram__step");
+		let total = Number(await first.locator("svg.sc-svg").getAttribute("data-sc-steps"));
+		expect(total).toBeGreaterThan(3);
+		let counter = (step: number) => controls.getByText(`${step} / ${total}`, { exact: true });
+		let at = async () => Number((await shown.textContent())!.split(" / ")[0]);
 
-	// Playing counts the step being played, and the arrows wait for a pause.
-	await restart.click();
-	await expect(counter(1)).toBeVisible();
-	await expect(previous).toBeDisabled();
-	await expect(next).toBeDisabled();
-	await expect.poll(at, { intervals: [50] }).toBeGreaterThan(1);
-	await toggle("Pause diagram").click();
-	await expect(toggle("Play diagram")).toBeFocused();
-	let paused = await at();
-	expect(paused).toBeLessThan(total);
-	await page.waitForTimeout(1000);
-	await expect(counter(paused)).toBeVisible();
+		// Playing counts the step being played, and the arrows wait for a pause.
+		await restart.click();
+		await expect(counter(1)).toBeVisible();
+		await expect(previous).toBeDisabled();
+		await expect(next).toBeDisabled();
+		await expect.poll(at, { intervals: [50] }).toBeGreaterThan(1);
+		await toggle("Pause diagram").click();
+		await expect(toggle("Play diagram")).toBeFocused();
+		let paused = await at();
+		expect(paused).toBeLessThan(total);
+		await page.waitForTimeout(1000);
+		await expect(counter(paused)).toBeVisible();
 
-	await next.click();
-	await expect(counter(paused + 1)).toBeVisible();
-	for (let step = paused; step >= 1; step--) {
-		await previous.click();
-		await expect(counter(step)).toBeVisible();
-	}
-	// A disabled arrow keeps focus, so the keyboard never drops out of the bar.
-	await expect(previous).toBeDisabled();
-	await expect(previous).toBeFocused();
+		await next.click();
+		await expect(counter(paused + 1)).toBeVisible();
+		for (let step = paused; step >= 1; step--) {
+			await previous.click();
+			await expect(counter(step)).toBeVisible();
+		}
+		// A disabled arrow keeps focus, so the keyboard never drops out of the bar.
+		await expect(previous).toBeDisabled();
+		await expect(previous).toBeFocused();
 
-	// Play resumes from the step on screen and stops at the last one.
-	await toggle("Play diagram").click();
-	await expect(toggle("Pause diagram")).toBeVisible();
-	await expect.poll(at, { intervals: [50] }).toBeGreaterThan(1);
-	await expect(counter(total)).toBeVisible({ timeout: 10_000 });
-	await expect(toggle("Play diagram")).toBeVisible();
-	await expect(next).toBeDisabled();
-	await expect(previous).toBeEnabled();
+		// Play resumes from the step on screen and stops at the last one.
+		await toggle("Play diagram").click();
+		await expect(toggle("Pause diagram")).toBeVisible();
+		await expect.poll(at, { intervals: [50] }).toBeGreaterThan(1);
+		await expect(counter(total)).toBeVisible({ timeout: 10_000 });
+		await expect(toggle("Play diagram")).toBeVisible();
+		await expect(next).toBeDisabled();
+		await expect(previous).toBeEnabled();
 
-	await restart.click();
-	await expect(counter(1)).toBeVisible();
-	await expect(toggle("Pause diagram")).toBeVisible();
-	await expect(controls.getByRole("button", { name: "Replay diagram" })).toHaveCount(0);
-	await expect(controls.getByRole("button", { name: "Reset diagram" })).toHaveCount(0);
-});
+		await restart.click();
+		await expect(counter(1)).toBeVisible();
+		await expect(toggle("Pause diagram")).toBeVisible();
+		await expect(controls.getByRole("button", { name: "Replay diagram" })).toHaveCount(0);
+		await expect(controls.getByRole("button", { name: "Reset diagram" })).toHaveCount(0);
+	},
+);
+
+test(
+	"a narrow bar keeps one row, and Play restarts a finished diagram",
+	async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== "narrow", "The whole bar fits at wide widths.");
+		await page.emulateMedia({ reducedMotion: "reduce" });
+		await reload(page);
+		let first = page.locator('[data-specimen-diagram="first"]');
+		let svg = first.locator("svg.sc-svg");
+		await expect(svg).toBeVisible();
+		let total = Number(await svg.getAttribute("data-sc-steps"));
+		let controls = first.getByRole("group", { name: "Diagram controls", exact: true });
+		let status = first.locator(".ch-diagram__status");
+		await expect(controls.getByRole("button", { name: "Restart diagram", exact: true }))
+			.toBeHidden();
+		await expect(controls.locator(".ch-diagram__step")).toBeHidden();
+		let tops = await controls.locator("button:visible").evaluateAll(buttons =>
+			new Set(buttons.map(button => Math.round(button.getBoundingClientRect().top))).size
+		);
+		expect(tops).toBe(1);
+		// Reduced motion opens finished, on the last step.
+		await expect(status).toHaveText(`Step ${total} of ${total}`);
+		await controls.getByRole("button", { name: "Play diagram", exact: true }).click();
+		// Playing again starts over: the last step waits for its turn.
+		await expect(controls.getByRole("button", { name: "Pause diagram", exact: true }))
+			.toBeVisible();
+		await expect(svg.locator(`[data-sc-step="${total}"][aria-hidden="true"]`).first())
+			.toBeAttached();
+		await expect(status).toHaveText(`Step ${total} of ${total}`, { timeout: 10_000 });
+	},
+);
 
 test("a wireframe fence is drawn chromeless, and an invalid one stays code", async ({ page }) => {
 	let blocks = page.locator("[data-wireframe-document] .planCode");
