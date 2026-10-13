@@ -744,6 +744,23 @@ test("disconnecting a machine in the browser ends it with machine-revoked", asyn
 		.toEqual([]);
 });
 
+test("the machine list reports the chopin release each connected machine runs", async () => {
+	let { alice, request, pair } = await setup();
+	// A source run sends no release version, so there is none to report.
+	let paired = await pair(alice.cookie);
+	let list = async () =>
+		(await (await request("/api/connector/machines", undefined, alice.cookie)).json()).machines;
+	expect(await list()).toEqual([expect.objectContaining({ id: paired.machine, version: null })]);
+	await request(
+		"/api/connector/connections",
+		{ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" },
+		undefined,
+		paired.machineToken,
+		{ ...CURRENT, [CONNECTOR_VERSION_HEADER]: "0.1.2" },
+	);
+	expect(await list()).toEqual([expect.objectContaining({ id: paired.machine, version: "0.1.2" })]);
+});
+
 test("unpairing with the machine's own token revokes it", async () => {
 	let { alice, request, pair, open } = await setup();
 	let paired = await pair(alice.cookie);

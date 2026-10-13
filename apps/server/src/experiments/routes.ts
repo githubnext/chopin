@@ -84,6 +84,12 @@ export const MAX_INVESTIGATION_IMAGES = 3;
  */
 export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 3 };
 
+/** The chopin release a connector says it runs; a script or source run has none. */
+function releaseVersion(request: Request): string | undefined {
+	let version = request.headers.get(CONNECTOR_VERSION_HEADER) ?? "";
+	return /^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/.test(version) ? version : undefined;
+}
+
 /**
  * Refuse a connector speaking a protocol outside CONNECTOR_PROTOCOLS, naming what fixes it. One
  * without the header is a `/connector.js` from before the check, which speaks protocol 1.
@@ -103,9 +109,8 @@ function compatible(
 	let protocol = Number(header);
 	let { min, max } = CONNECTOR_PROTOCOLS;
 	if (protocol >= min && protocol <= max) return;
-	// Only a release version is echoed; a script or source run has none.
-	let version = request.headers.get(CONNECTOR_VERSION_HEADER) ?? "";
-	let release = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/.test(version);
+	// Only a release version is echoed.
+	let release = releaseVersion(request);
 	let fix = !release
 		? "Download the connector again: mkdir -p ~/.chopin && curl -fsSL "
 			+ `${origin}/connector.js -o ~/.chopin/connector.js`
@@ -117,7 +122,7 @@ function compatible(
 			+ "server to update it.";
 	fail(
 		CONNECTOR_UPDATE_REQUIRED,
-		`${release ? `chopin ${version}` : "This connector"} speaks connector protocol ${protocol}, `
+		`${release ? `chopin ${release}` : "This connector"} speaks connector protocol ${protocol}, `
 			+ `but ${origin} needs protocol ${min === max ? min : `${min} to ${max}`}. ${fix}`,
 	);
 }
@@ -399,6 +404,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				owner: machine.userId,
 				login: user?.login ?? machine.userId,
 				autoRun: machine.autoRun,
+				version: releaseVersion(request),
 			},
 			label,
 			{ ...checkout, repositoryId: repository.id },
@@ -472,6 +478,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				createdAt: machine.createdAt.getTime(),
 				lastSeenAt: machine.lastSeenAt.getTime(),
 				connected: connections.machine(machine.id).length > 0,
+				version: connections.machine(machine.id).find(value => value.version)?.version ?? null,
 				reauthorize: !!machine.reauthorizeAt,
 			})),
 		});

@@ -20,6 +20,8 @@ export type Connection = {
 	 * Stored with the machine, so a reconnect keeps it.
 	 */
 	autoRun?: boolean;
+	/** The chopin release that opened it, when it said; known only while it is connected. */
+	version?: string;
 };
 /** The browser's approval of a pairing, waiting for GitHub to authorize the machine. */
 export type Approval = {
@@ -111,7 +113,7 @@ export class Connections {
 	}
 	/** A paired machine's checkout comes online; its token lives only in this process. */
 	open(
-		machine: { id: string; owner: string; login: string; autoRun: boolean },
+		machine: { id: string; owner: string; login: string; autoRun: boolean; version?: string },
 		label: string,
 		source: Source,
 	) {
@@ -126,6 +128,7 @@ export class Connections {
 			source,
 			expiresAt: this.now() + CONNECTION_MS,
 			autoRun: machine.autoRun,
+			...(machine.version ? { version: machine.version } : {}),
 		};
 		let token = randomBytes(32).toString("base64url");
 		this.#connections.set(connection.id, connection);
