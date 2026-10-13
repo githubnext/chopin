@@ -274,8 +274,9 @@ test("connector errors are classified so a reconnect loop stops on revocation", 
 	expect(classifyConnectorError(new ConnectorError("machine-reauthorize", "pair"))).toBe("revoked");
 	expect(classifyConnectorError(new ConnectorError("connector-update-required", "update")))
 		.toBe("update-required");
+	// A restarted server forgot the connection: retried for a while, as registering again helps.
 	expect(classifyConnectorError(new ConnectorError("connection-unavailable", "restart")))
-		.toBe("retry");
+		.toBe("forgotten");
 	expect(classifyConnectorError(new ConnectorError("owner-sign-in-required", "sign in")))
 		.toBe("retry");
 	expect(classifyConnectorError(new ConnectorError("repository-forbidden", "no"))).toBe("fatal");
@@ -295,7 +296,7 @@ test("connector errors are classified so a reconnect loop stops on revocation", 
 		classifyConnectorError(
 			new StreamableHTTPError(409, 'Error POSTing to endpoint: {"error":"connection-unavailable"}'),
 		),
-	).toBe("retry");
+	).toBe("forgotten");
 });
 
 test("every command takes --base-dir, which moves the state directory", () => {

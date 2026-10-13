@@ -295,9 +295,12 @@ it; a running connector renews it continuously. Connections live in the server's
 memory, but the machine does not: after a server restart or a deploy, a running
 connector registers its checkout again with the machine token and carries on
 without pairing, and a stopped one does the same when you start `connect` again.
-When Chopin has answered only that it does not know the connection
-(`connection-unavailable`, or HTTP 401) for two minutes, the connector stops any
-running agent, reports why, and exits with **Chopin no longer recognizes this
+A run that was going at the restart cannot go on: Chopin refuses it on the new
+connection, so the connector stops its agent with **Chopin ended this run
+(connection-forbidden).** and waits for the next work. When Chopin has answered
+only that it does not know the connection (`connection-unavailable`, or HTTP 401)
+for two minutes, the connector stops any running agent, reports why, and exits
+with **Chopin no longer recognizes this
 connection (it may have restarted).** Run the connect command again. Network
 errors and 5xx answers do not count; the connector keeps retrying those.
 

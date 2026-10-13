@@ -19,14 +19,17 @@ export const CONNECTOR_HEADERS = {
 	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
 };
 
-/** The server's refusal of this connector's version, which no retry can fix. */
+/**
+ * The server's refusal of this connector's version, which no retry can fix. Its message names the
+ * release to install.
+ */
 export async function refusal(response: Response) {
 	if (response.status !== 409) return;
 	let body = await response.clone().json().catch(() => undefined) as
 		| { error?: unknown; message?: unknown }
 		| undefined;
 	if (body?.error === CONNECTOR_UPDATE_REQUIRED && typeof body.message === "string") {
-		return new ConnectorError(CONNECTOR_UPDATE_REQUIRED, body.message);
+		return new ConnectorError(CONNECTOR_UPDATE_REQUIRED, body.message, 409);
 	}
 }
 

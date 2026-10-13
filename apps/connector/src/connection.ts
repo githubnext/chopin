@@ -1,17 +1,9 @@
+import { classifyConnectorError, connectorMessage, errorCode } from "./machine";
+import type { Classify, ErrorClass } from "./machine";
 import { ConnectorError } from "./mcp";
 import type { remote } from "./mcp";
 import type { Output } from "./output";
-import {
-	backoff,
-	classifyConnectorError,
-	delay,
-	errorCode,
-	FORGET_MS,
-	forgottenMessage,
-	HEALTHY_MS,
-	transient,
-} from "./reconnect";
-import type { Classify, ErrorClass } from "./reconnect";
+import { backoff, delay, FORGET_MS, forgottenMessage, HEALTHY_MS, transient } from "./reconnect";
 
 type Api = Awaited<ReturnType<typeof remote>>;
 /** The calls a run makes; they go to whichever connection is current. */
@@ -30,17 +22,18 @@ export class ConnectorStopped extends Error {
 
 function stopped(reason: Exclude<ErrorClass, "retry" | "forgotten">, error: unknown) {
 	let code = errorCode(error);
-	let message = code === "machine-reauthorize"
-		? "GitHub no longer accepts this machine's authorization. Run `chopin pair` to authorize it again."
-		: reason === "revoked"
-		? "This machine is no longer paired with Chopin. Run `chopin pair`, then connect again."
-		: reason === "update-required"
-		? "This Chopin server needs a newer connector. Update it, then connect again."
-		: code === "repository-forbidden"
-		? "Chopin refused the connection: you no longer have push access to this repository."
-		: error instanceof Error
-		? error.message
-		: "Connector failed";
+	// A revoked machine is told to pair again. The server's refusal of an outdated connector says
+	// which release to install, so it is shown as it came.
+	let message = connectorMessage(error)
+		?? (reason === "update-required"
+			? error instanceof ConnectorError && error.status === 409
+				? error.message
+				: "This Chopin server needs a newer connector. Update it, then connect again."
+			: code === "repository-forbidden"
+			? "Chopin refused the connection: you no longer have push access to this repository."
+			: error instanceof Error
+			? error.message
+			: "Connector failed");
 	return new ConnectorStopped(reason, message);
 }
 

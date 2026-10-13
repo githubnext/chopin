@@ -1,5 +1,6 @@
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CONNECTOR_UPDATE_REQUIRED } from "@chopin/protocol/connector";
 import { CONNECTOR_HEADERS, ConnectorError, refusal } from "./mcp";
 import type { Output } from "./output";
 
@@ -221,42 +222,73 @@ export async function unpair(url: string, directory: string): Promise<"unpaired"
 	return "unpaired";
 }
 
+/**
+ * What to do about a failed connector call: `retry` on a transient failure, and `forgotten` when
+ * Chopin no longer recognizes the connection, as after a restart while connections live in
+ * memory; that is retried too, but only for a while. Otherwise stop, because the machine was
+ * revoked, the server needs a newer connector, or retrying cannot help.
+ */
+export type ErrorClass = "retry" | "forgotten" | "revoked" | "update-required" | "fatal";
+export type Classify = (error: unknown) => ErrorClass;
+
+/**
+ * Codes a restarting or briefly overloaded server answers with. `owner-sign-in-required` clears
+ * once the owner signs in to Chopin again in a browser.
+ */
+const RETRY_CODES = new Set(["unavailable", "owner-sign-in-required"]);
+/** Codes for a connection token Chopin no longer knows. */
+const FORGOTTEN_CODES = new Set(["connection-unavailable", "authentication-required"]);
+const REVOKED_CODES = new Set(["machine-revoked", "machine-reauthorize"]);
+
+/** The server's error code, from a tool's `code: message` text or a refused call's JSON body. */
+export function errorCode(error: unknown) {
+	if (error instanceof ConnectorError) return error.code;
+	let message = error instanceof Error ? error.message : "";
+	return message.match(/"error"\s*:\s*"([a-z][a-z0-9-]*)"/)?.[1];
+}
+
 /** What to tell the person when the server refused this machine, wherever the refusal came from. */
 export function connectorMessage(error: unknown): string | undefined {
-	if (!(error instanceof Error)) return undefined;
-	let code = error instanceof ConnectorError
-		? error.code
-		: error.message.match(/"error"\s*:\s*"([a-z0-9-]+)"/)?.[1];
+	let code = errorCode(error);
 	return code ? MESSAGES[code] : undefined;
 }
 
 /**
- * How a connector should treat a failed request: retry transient failures, stop and tell the user
- * on a revoked machine or an outdated connector, and stop on anything else.
+ * How a connector should treat a failed request, from pairing, registering or any connector call:
+ * retry transient failures, retry a forgotten connection for a while, stop and tell the person on
+ * a revoked machine or an outdated connector, and stop on anything else.
  */
-export function classifyConnectorError(
-	error: unknown,
-): "retry" | "revoked" | "update-required" | "fatal" {
+export const classifyConnectorError: Classify = error => {
+	let code = errorCode(error);
+	if (code && REVOKED_CODES.has(code)) return "revoked";
+	if (code === CONNECTOR_UPDATE_REQUIRED) return "update-required";
+	if (code && FORGOTTEN_CODES.has(code)) return "forgotten";
+	if (code && RETRY_CODES.has(code)) return "retry";
+	// fetch rejects with a TypeError when the network or the server is unreachable, and with a
+	// system error code when a socket breaks mid-request.
 	if (error instanceof TypeError) return "retry";
 	if (!(error instanceof Error)) return "fatal";
-	let code = error instanceof ConnectorError
-		? error.code
-		: error.message.match(/"error"\s*:\s*"([a-z0-9-]+)"/)?.[1];
-	let raw = (error as Error & { code?: unknown }).code;
+	if (error.name === "TimeoutError") return "retry";
+	// A refused pairing or registration carries its HTTP status; the MCP client's errors carry it,
+	// or their own code, as `code`.
 	let status = error instanceof ConnectorError
 		? error.status
-		: typeof raw === "number"
-		? raw
-		: undefined;
-	if (code === "machine-revoked" || code === "machine-reauthorize") return "revoked";
-	if (code === "connector-update-required") return "update-required";
-	if (
-		code && ["connection-unavailable", "unavailable", "owner-sign-in-required"].includes(code)
-	) return "retry";
-	if (status !== undefined && (status >= 500 || status === 429 || status === 408)) return "retry";
-	if (/timed out|ECONNRESET|ECONNREFUSED|socket/i.test(error.message) && !code) return "retry";
-	return "fatal";
-}
+		: (error as { code?: unknown }).code;
+	if (typeof status === "string") {
+		return /^(E[A-Z]+|Connection\w+|FailedToOpenSocket|UND_ERR\w*)$/.test(status)
+			? "retry"
+			: "fatal";
+	}
+	if (typeof status !== "number") {
+		return !code && /timed out|ECONNRESET|ECONNREFUSED|socket/i.test(error.message)
+			? "retry"
+			: "fatal";
+	}
+	// The MCP client's request timeout and closed connection, then an HTTP status refusal.
+	if (status === -32001 || status === -32000) return "retry";
+	if (status === 401) return "forgotten";
+	return status >= 500 || status === 429 || status === 408 ? "retry" : "fatal";
+};
 
 export function delay(ms: number, signal: AbortSignal) {
 	return new Promise<void>(resolve => {

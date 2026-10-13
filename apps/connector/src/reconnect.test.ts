@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { classifyConnectorError } from "./machine";
+import type { ErrorClass } from "./machine";
 import { ConnectorError } from "./mcp";
-import { backoff, classifyConnectorError } from "./reconnect";
-import type { ErrorClass } from "./reconnect";
+import { backoff } from "./reconnect";
 
 /** How the MCP client reports a refused HTTP call: the status and the server's JSON body. */
 function http(status: number, code?: string) {

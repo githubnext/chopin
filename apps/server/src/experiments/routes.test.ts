@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { performance } from "@chopin/experiment/fixtures";
 import {
 	CONNECTOR_PROTOCOL_HEADER,
@@ -14,6 +17,7 @@ import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { CONNECTOR_PROTOCOLS, registerExperimentRoutes } from "./routes";
 import { Connections } from "./connections";
+import type { ImplementationConnector } from "../tasks/connector";
 
 function text(value: { result: { content: Array<{ text: string }> } }) {
 	return JSON.parse(value.result.content[0].text);
@@ -29,7 +33,10 @@ const CURRENT = {
 	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
 };
 
-async function setup(shared?: { storage: MemoryStorage; lease: unknown }) {
+async function setup(
+	shared?: { storage: MemoryStorage; lease: unknown },
+	extra: { implementations?: () => ImplementationConnector | undefined } = {},
+) {
 	let storage = shared?.storage ?? new MemoryStorage();
 	let now = new Date();
 	for (let id of ["alice", "bob"]) await storage.users.put({ id, login: id, avatarUrl: "", now });
@@ -112,6 +119,7 @@ async function setup(shared?: { storage: MemoryStorage; lease: unknown }) {
 		context: async () => ({ source: "# Context", revision: 0 }),
 		canMutate: async id => !lock.locked && !lock.documents.has(id),
 		connectorVersion: "0.1.3",
+		...extra,
 	});
 	async function request(
 		path: string,
@@ -183,6 +191,7 @@ async function setup(shared?: { storage: MemoryStorage; lease: unknown }) {
 		return { ...pending, machineToken: claimed.token as string, ...opened };
 	}
 	return {
+		router,
 		storage,
 		lease,
 		sessions,
@@ -533,6 +542,128 @@ test("a paired machine connects again after a server restart without pairing", a
 	expect(ping.status).toBe(200);
 	expect(restarted.checked.at(-1)).toBe("ghu_machine_1");
 });
+
+test(
+	"a waiting connector registers again with its machine token after a server restart and runs the next work",
+	async () => {
+		// The routes' long poll asks the implementation connector first; this server has no builds.
+		let builds = {
+			implementations: () =>
+				({
+					waiting: async () => undefined,
+					busy: async () => false,
+					disconnected: async () => {},
+				}) as unknown as ImplementationConnector,
+		};
+		let first = await setup(undefined, builds);
+		let paired = await first.pair(first.alice.cookie);
+		let scratch = await mkdtemp(join(tmpdir(), "chopin-restart-"));
+		let root = join(scratch, "repo");
+		let git = (...args: string[]) => {
+			let result = Bun.spawnSync(["git", "-C", root, ...args]);
+			if (result.exitCode) throw new Error(result.stderr.toString());
+		};
+		await mkdir(root);
+		git("init");
+		git("config", "user.name", "Fixture");
+		git("config", "user.email", "fixture@example.test");
+		git("remote", "add", "origin", "https://github.com/org/repo.git");
+		await writeFile(join(root, "README.md"), "fixture");
+		git("add", ".");
+		git("commit", "-m", "fixture");
+		/** The paths the connector asked for, so a second pairing would show. */
+		let paths: string[] = [];
+		let handler = first.router;
+		let serve = (port = 0) =>
+			Bun.serve({
+				hostname: "127.0.0.1",
+				port,
+				idleTimeout: 0,
+				async fetch(request) {
+					paths.push(new URL(request.url).pathname);
+					return await handler.handle(request) ?? new Response(null, { status: 404 });
+				},
+			});
+		let server = serve();
+		let url = `http://127.0.0.1:${server.port}`;
+		// The machine was paired once and its token stored, as `chopin pair` leaves it.
+		let home = join(scratch, "home");
+		await mkdir(home);
+		await writeFile(
+			join(home, "machine.json"),
+			JSON.stringify({ servers: { [url]: { token: paired.machineToken, label: "Laptop" } } }),
+		);
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "../../../connector/src/main.ts"),
+			"connect",
+			root,
+			"--",
+			"false",
+		], {
+			env: { ...process.env, CHOPIN_URL: url, CHOPIN_HOME: home, NO_COLOR: "1" },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		let output = "";
+		for (let stream of [connector.stdout, connector.stderr]) {
+			void (async () => {
+				for await (let chunk of stream) output += new TextDecoder().decode(chunk);
+			})();
+		}
+		let until = async (done: () => boolean | Promise<boolean>, what: string) => {
+			for (let start = Date.now(); !await done();) {
+				if (Date.now() - start > 15_000) {
+					throw new Error(`Timed out waiting for ${what}:\n${output}`);
+				}
+				await Bun.sleep(25);
+			}
+		};
+		try {
+			await until(() => output.includes("Connected."), "the connector to connect");
+			await until(() => paths.at(-1) === "/connector/mcp", "the long poll");
+			// A new process: new routes, connections and credential cache over the same storage, on the
+			// same address. Stopping the old one drops the connector's long poll.
+			let restarted = await setup({ storage: first.storage, lease: first.lease }, builds);
+			let port = server.port;
+			await server.stop(true);
+			handler = restarted.router;
+			paths.length = 0;
+			server = serve(port);
+			await until(() => output.includes("Reconnected."), "the connector to reconnect");
+			let id = crypto.randomUUID();
+			let { documentId, request, alice, runtime } = restarted;
+			await request(
+				`/api/documents/${documentId}/experiments`,
+				{ id, brief: "Measure" },
+				alice.cookie,
+			);
+			expect(
+				(await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie))
+					.status,
+			)
+				.toBe(200);
+			await until(
+				async () => (await runtime.service.store.get(id))?.state !== "queued",
+				"the connector to claim the run",
+			);
+			// Claimed through the connection registered after the restart.
+			let claimed = await runtime.service.store.get(id);
+			expect(claimed?.state).toBe("running");
+			expect(claimed?.connectionId).not.toBe(paired.connection.id);
+			expect(paths).toContain("/api/connector/connections");
+			expect(paths.filter(path => path.startsWith("/api/connector/pairings"))).toEqual([]);
+			expect(output).not.toContain("/connect?pairing=");
+		} finally {
+			connector.kill("SIGKILL");
+			await connector.exited;
+			await server.stop(true);
+			await rm(scratch, { recursive: true, force: true });
+		}
+	},
+	30_000,
+);
 
 test("disconnecting a machine in the browser ends it with machine-revoked", async () => {
 	let { alice, bob, request, pair, open } = await setup();
