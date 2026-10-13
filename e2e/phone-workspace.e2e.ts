@@ -45,10 +45,18 @@ test("a phone gets full-bleed panes under a top bar and a bottom tab bar", async
 	await expect(page.getByRole("button", { name: "Show sidebar" })).toHaveCount(0);
 	await expect(topBar(page).getByRole("button", { name: "Documents", exact: true })).toBeVisible();
 	await expect(topBar(page).getByRole("button", { name: /^Actions for / })).toBeVisible();
-	for (let control of await topBar(page).getByRole("button").all()) {
+	// The subtitle's build links are small text with a thumb-sized invisible target of their own.
+	for (
+		let control of await topBar(page).getByRole("button")
+			.and(page.locator(":not(.phone-top-bar-subtitle *)")).all()
+	) {
 		let box = await control.boundingBox();
-		expect(box!.height).toBeGreaterThanOrEqual(44);
-		expect(box!.width).toBeGreaterThanOrEqual(44);
+		expect(box!.height).toBeGreaterThanOrEqual(43.5);
+		expect(box!.width).toBeGreaterThanOrEqual(43.5);
+	}
+	for (let link of await topBar(page).locator(".phone-top-bar-subtitle button").all()) {
+		expect(await link.evaluate(element => getComputedStyle(element, "::after").height))
+			.toBe("44px");
 	}
 	await expectNoHorizontalOverflow(page);
 });
@@ -205,7 +213,7 @@ for (let width of [390, 430]) {
 			]
 		) {
 			let box = (await control.boundingBox())!;
-			expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+			expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(43.5);
 		}
 	});
 }

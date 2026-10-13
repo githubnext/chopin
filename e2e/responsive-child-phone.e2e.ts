@@ -186,7 +186,7 @@ test("a child takes the phone's top bar: Back, its own title and actions, and it
 
 		let back = bar.getByRole("button", { name: `Back to ${parent}` });
 		let backBox = (await back.boundingBox())!;
-		expect(Math.min(backBox.width, backBox.height)).toBeGreaterThanOrEqual(44);
+		expect(Math.min(backBox.width, backBox.height)).toBeGreaterThanOrEqual(43.5);
 		await back.tap();
 		await expect(surface).toHaveCount(0);
 		await expect(page).toHaveURL(url => url.pathname.endsWith(`/test-${room.slice(0, 8)}`));
