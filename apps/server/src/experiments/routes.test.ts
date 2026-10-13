@@ -401,6 +401,45 @@ test("a failure report retried after its answer was lost lands once, and another
 	expect(await stored.json()).toMatchObject({ state: "failed", progress: "The agent stopped." });
 });
 
+test("a failure report delayed past a retry leaves the next attempt running", async () => {
+	let { alice, documentId, request, tool, pair, storage } = await setup();
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	let path = `/api/documents/${documentId}/experiments/${id}`;
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`${path}/run`, {}, alice.cookie);
+	let first = text(await tool(connection.token, "claim_experiment", { id }));
+	// Hold the first failure's write until the run has been retried and claimed again.
+	let save = storage.experiments.save.bind(storage.experiments);
+	let held = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let holding = true;
+	storage.experiments.save = async (value, revision, lease) => {
+		if (holding && value.id === id && value.state === "failed") {
+			holding = false;
+			held.resolve();
+			await release.promise;
+		}
+		return save(value, revision, lease);
+	};
+	let report = { id, generation: first.generation, error: "The first attempt failed." };
+	let delayed = tool(connection.token, "fail_experiment", report);
+	await held.promise;
+	// The same report, sent again, lands while the first copy is still in flight.
+	expect(error(await tool(connection.token, "fail_experiment", report))).toBe("");
+	await request(`${path}/retry`, {}, alice.cookie);
+	await request(`${path}/run`, {}, alice.cookie);
+	let second = text(await tool(connection.token, "claim_experiment", { id }));
+	expect(second.generation).toBe(first.generation + 1);
+	release.resolve();
+	expect(error(await delayed)).toStartWith("stale-claim");
+	expect(await storage.experiments.get(id)).toMatchObject({
+		state: "running",
+		generation: second.generation,
+		progress: "",
+	});
+});
+
 test("a claim refuses a document in another repository and interrupts archived or locked ones", async () => {
 	let { alice, document, documentId, request, tool, pair, lock, runtime, storage } = await setup();
 	let connection = await pair(alice.cookie);

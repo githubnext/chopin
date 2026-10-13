@@ -191,6 +191,24 @@ export class Experiments {
 			delete value.candidate;
 		});
 	}
+	/**
+	 * A connector's failure report. The claim is checked on the record each write attempt reads, so a
+	 * report delayed past a retry cannot fail the next attempt; the same report again is a no-op.
+	 */
+	failClaim(id: string, connectionId: string, generation: number, error: string) {
+		let progress = error.slice(0, 2000);
+		return this.mutate(id, value => {
+			if (
+				value.state === "failed" && value.connectionId === connectionId
+				&& value.generation === generation && value.progress === progress
+			) return;
+			this.assertClaim(value, connectionId, generation);
+			value.state = "failed";
+			value.progress = progress;
+			value.expiresAt = 0;
+			delete value.candidate;
+		});
+	}
 	/** Return settled, unfinished work to its card under the same identity; Run starts it again. */
 	retry(id: string) {
 		return this.mutate(id, value => {

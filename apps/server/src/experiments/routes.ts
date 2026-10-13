@@ -864,13 +864,15 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				) fail("tool-forbidden");
 				if (name === "complete_experiment") {
 					value = await service.complete(id, connection.id, generation);
-				} else if (
-					name === "fail_experiment" && current.state === "failed"
-					&& current.connectionId === connection.id && current.generation === generation
-					&& current.progress === args.error
-				) {
-					// A failure report whose answer was lost comes again; the run already shows it.
-					value = current;
+				} else if (name === "fail_experiment") {
+					// Checked inside the write, so a report retried after a lost answer lands once and a
+					// report delayed past a retry is refused rather than failing the next attempt.
+					value = await service.failClaim(
+						id,
+						connection.id,
+						generation,
+						z.string().max(2000).parse(args.error),
+					);
 				} else {
 					service.assertClaim(current, connection.id, generation);
 					if (name === "read_experiment") value = { input: current.input, capabilities };
@@ -881,8 +883,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 							generation,
 							args.progress === undefined ? undefined : z.string().max(2000).parse(args.progress),
 						);
-					} else if (name === "fail_experiment") {
-						value = await service.stop(id, "failed", z.string().max(2000).parse(args.error));
 					} else if (name === "upload_investigation_image") {
 						if (!current.spike) fail("tool-forbidden");
 						let prepared = prepareImage({ id: current.documentId, ...args });
