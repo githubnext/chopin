@@ -1,6 +1,5 @@
 ---
 name: typesafe-ai
-license: MIT
 description: >
   Design, implement, and evaluate software using TypeSafe's Jev System One model.
   Use when a feature needs semantic routing, ranking, extraction, verification,

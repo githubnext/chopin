@@ -4,7 +4,7 @@ Research checked **13 October 2026**. This is a public-source catalogue, not a c
 to have recovered every social reply, private Discord discussion, or recording.
 Technical guidance comes from current TypeSafe docs; Diogo's talks explain design
 intent. Community measurements describe their own workloads, not guarantees.
-This package adapts the existing TypeSafe AI MIT-licensed skill with sourced research.
+This package combines TypeSafe guidance with sourced research.
 
 ## Start with these
 
