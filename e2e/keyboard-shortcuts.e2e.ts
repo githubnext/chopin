@@ -70,6 +70,32 @@ test("the search chord opens search, even from the editor", async ({ join }) => 
 	await expect(page.getByRole("dialog", { name: "Search documents" })).toHaveCount(0);
 });
 
+test("the link chord takes a keyboard selection the editor has not heard about yet", async ({ join }) => {
+	let page = await join("ana");
+	await content(page).click();
+	await page.keyboard.type("linked");
+	// The selection change that tells the editor runs as its own task, so the next key can beat it.
+	await content(page).evaluate(editor => {
+		let selection = getSelection()!;
+		for (let step = 0; step < "linked".length; step++) {
+			selection.modify("extend", "backward", "character");
+		}
+		let mac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+		editor.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				bubbles: true,
+				cancelable: true,
+				code: "KeyK",
+				ctrlKey: !mac,
+				key: "k",
+				metaKey: mac,
+			}),
+		);
+	});
+	await expect(page.getByRole("textbox", { name: "Link URL" })).toBeFocused();
+	await expect(page.getByRole("dialog", { name: "Search documents" })).toHaveCount(0);
+});
+
 test("the sidebar chord hides and shows Projects", async ({ join }) => {
 	let page = await join("ana");
 	await content(page).click();

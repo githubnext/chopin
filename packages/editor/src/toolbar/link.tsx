@@ -15,6 +15,7 @@ import { $isLinkNode, $toggleLink } from "@lexical/link";
 import { createDOMRange } from "@lexical/selection";
 import { LINK_PROTOCOLS } from "@chopin/dialect";
 import {
+	$createRangeSelectionFromDom,
 	$findMatchingParent,
 	$getNearestNodeFromDOMNode,
 	$getNodeByKey,
@@ -24,6 +25,7 @@ import {
 	BLUR_COMMAND,
 	COMMAND_PRIORITY_LOW,
 	createCommand,
+	getDOMSelectionFromTarget,
 	KEY_DOWN_COMMAND,
 	SELECTION_CHANGE_COMMAND,
 } from "lexical";
@@ -113,6 +115,25 @@ function $selectionFor(state: Editing, binding: Binding | undefined): RangeSelec
 	return state.selection.clone();
 }
 
+/** What the link editor opens on for a selection, if anything. Call inside a read or update. */
+function $linkEditing(
+	binding: Binding | undefined,
+	selection: BaseSelection | null = $getSelection(),
+): Editing | undefined {
+	if (!$isRangeSelection(selection)) return;
+	let link = $linkAt(selection);
+	if (selection.isCollapsed() && !link) return;
+	let anchor = binding && $relativePosition(binding, selection.anchor);
+	let focus = binding && $relativePosition(binding, selection.focus);
+	return {
+		mode: "edit",
+		key: link?.getKey(),
+		url: link?.getURL() ?? "",
+		selection: selection.clone(),
+		target: anchor && focus ? { anchor, focus, text: selection.getTextContent() } : undefined,
+	};
+}
+
 function follow(editor: LexicalEditor, key: NodeKey, url: string): void {
 	let href = editor.getElementByKey(key)?.closest("a")?.href ?? url;
 	window.open(href, "_blank", "noopener,noreferrer");
@@ -138,21 +159,7 @@ export function LinkSurface(
 
 	let edit = useCallback(() => {
 		if (disabled) return false;
-		let next = editor.getEditorState().read((): Editing | undefined => {
-			let selection = $getSelection();
-			if (!$isRangeSelection(selection)) return;
-			let link = $linkAt(selection);
-			if (selection.isCollapsed() && !link) return;
-			let anchor = binding && $relativePosition(binding, selection.anchor);
-			let focus = binding && $relativePosition(binding, selection.focus);
-			return {
-				mode: "edit",
-				key: link?.getKey(),
-				url: link?.getURL() ?? "",
-				selection: selection.clone(),
-				target: anchor && focus ? { anchor, focus, text: selection.getTextContent() } : undefined,
-			};
-		});
+		let next = editor.getEditorState().read(() => $linkEditing(binding));
 		if (!next) return false;
 		setOpen(next);
 		return true;
@@ -187,7 +194,15 @@ export function LinkSurface(
 				(event: KeyboardEvent) => {
 					if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return false;
 					if (event.key.toLowerCase() === "k") {
-						if (!edit()) return false;
+						// A keyboard selection reaches the editor in a later selectionchange task, which
+						// this key can beat; link what is selected on screen rather than fall through to search.
+						let shown = $createRangeSelectionFromDom(
+							getDOMSelectionFromTarget(event.target),
+							editor,
+						);
+						let next = $linkEditing(binding, shown ?? $getSelection());
+						if (!next) return false;
+						setOpen(next);
 						event.preventDefault();
 						return true;
 					}
