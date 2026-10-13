@@ -9,7 +9,7 @@
  * as they arrive rather than tracking local state.
  */
 
-import { useEffect, useId, useReducer, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
 import { INPUT_EXPIRY_MS, MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
@@ -34,7 +34,8 @@ export type Collaborator = {
 	question?: string;
 };
 
-export type AddOptionResult = { ok: true } | { ok: false; message: string };
+/** `option` is the id the server gave the new option, so the view can select it. */
+export type AddOptionResult = { ok: true; option?: string } | { ok: false; message: string };
 
 export type QuestionStepRenderProps = {
 	children: ReactNode;
@@ -219,6 +220,7 @@ function Choices(
 						<input
 							type={question.multiple ? "checkbox" : "radio"}
 							name={question.multiple ? undefined : name}
+							value={option.id}
 							checked={!custom && selected}
 							disabled={disabled}
 							onChange={event => {
@@ -293,20 +295,45 @@ export function duplicateOf(question: Item, label: string) {
 	return question.options.find(option => option.label.trim().toLowerCase() === key);
 }
 
+/** Option labels are one line in the document, so a pasted line break becomes a space. */
+export function optionText(typed: string): string {
+	return typed.replace(/\s*[\r\n]+\s*/g, " ");
+}
+
+/**
+ * The draft change that chooses a just-added option, as if its row had been
+ * clicked. Undefined when that would replace a collaborator's single choice in
+ * the shared draft: adding is for everyone, but only the adder's own pick moves.
+ */
+export function chooseAdded(
+	question: Item,
+	draft: Draft | undefined,
+	option: string,
+	own: boolean,
+): Partial<Draft> | undefined {
+	if (question.multiple) {
+		return { mode: "choices", options: { ...draft?.options, [option]: true } };
+	}
+	if (!own && answered(question, draft)) return undefined;
+	return { mode: "choices", choice: option };
+}
+
 /**
  * The last row: a prompt to add an option, which becomes the field for it.
  *
- * Enter adds it for everyone, Escape closes the field. While confirmation is
- * pending the field stays focusable so Escape still works; a rejection keeps
- * the text intact.
+ * The leading tile turns into the confirm button once there is text. Enter or
+ * the tile adds the option for everyone; once the server has made it durable
+ * the host selects it for this person. Escape closes the field. While
+ * confirmation is pending the field stays focusable so Escape still works; a
+ * rejection keeps the text intact.
  */
 function AddOption(
-	{ question, offset, disabled, onAdd, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
+	{ question, disabled, onAdd, onAdded, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
 		question: Item;
-		/** Rows already shown below the options, such as a legacy custom answer. */
-		offset: number;
 		disabled: boolean;
 		onAdd?: (label: string) => Promise<AddOptionResult>;
+		/** The server added the option; `focus` when this field still held focus. */
+		onAdded: (option: string, label: string, focus: boolean) => void;
 		onFailed: (message: string | undefined) => void;
 		onEdit?: () => void;
 		onCancelEdit?: () => void;
@@ -316,15 +343,14 @@ function AddOption(
 	let [text, setText] = useState<string | null>(null);
 	let [pending, setPending] = useState<string | null>(null);
 	let hintId = useId();
-	let input = useRef<HTMLInputElement>(null);
+	let group = useRef<HTMLDivElement>(null);
+	let input = useRef<HTMLTextAreaElement>(null);
 	let trigger = useRef<HTMLButtonElement>(null);
 	let focus = useRef<"field" | "trigger">(undefined);
 	let edit = useRef(0);
-	let letterIndex = question.options.length + offset;
-	let duplicate = text ? duplicateOf(question, text.trim()) : undefined;
-	useEffect(() => () => {
-		edit.current++;
-	}, []);
+	let label = text?.trim() ?? "";
+	let duplicate = label ? duplicateOf(question, label) : undefined;
+	let ready = !!label && !duplicate && !disabled;
 
 	useEffect(() => {
 		let target = focus.current;
@@ -332,6 +358,14 @@ function AddOption(
 		if (target === "field") input.current?.focus();
 		else if (target === "trigger") trigger.current?.focus();
 	});
+
+	// Browsers without `field-sizing` would otherwise scroll a long option inside one line.
+	useLayoutEffect(() => {
+		let field = input.current;
+		if (!field || CSS.supports("field-sizing", "content")) return;
+		field.style.blockSize = "auto";
+		field.style.blockSize = `${field.scrollHeight}px`;
+	}, [text]);
 
 	useEffect(() => {
 		let viewport = window.visualViewport;
@@ -356,7 +390,6 @@ function AddOption(
 	}, []);
 
 	let add = async () => {
-		let label = text?.trim();
 		if (!label || !onAdd || pending !== null || duplicateOf(question, label)) return;
 		let submittedEdit = edit.current;
 		setPending(label);
@@ -368,12 +401,18 @@ function AddOption(
 			result = { ok: false, message: "Could not add this option." };
 		}
 		setPending(null);
+		// Escape or blur abandoned the field. Reaching the option limit unmounts it
+		// without abandoning anything, so that case still selects.
 		if (edit.current !== submittedEdit) return;
-		let ownsFocus = document.activeElement === input.current;
+		let field = group.current;
+		let ownsFocus = field
+			? field.contains(document.activeElement)
+			: document.activeElement === document.body;
 		if (result.ok) {
 			onCommitEdit?.();
 			setText(null);
-			if (ownsFocus) focus.current = "trigger";
+			if (result.option) onAdded(result.option, label, ownsFocus);
+			else if (ownsFocus) focus.current = "trigger";
 		} else {
 			onFailed(result.message);
 			if (ownsFocus) focus.current = "field";
@@ -403,13 +442,26 @@ function AddOption(
 	}
 
 	return (
-		<div className="question-adding-group">
+		<div className="question-adding-group" ref={group}>
 			<div
 				aria-busy={pending !== null || undefined}
 				className="question-choice-row question-option question-adding"
 			>
-				<Key>{letter(letterIndex)}</Key>
-				<input
+				<span className="question-key">
+					<button
+						aria-disabled={pending !== null || undefined}
+						aria-label="Add option"
+						className="question-add-confirm"
+						data-ready={ready || pending !== null ? "" : undefined}
+						disabled={!ready && pending === null}
+						onClick={() => void add()}
+						type="button"
+					>
+						<PlusIcon aria-hidden="true" />
+						<CheckIcon aria-hidden="true" />
+					</button>
+				</span>
+				<textarea
 					aria-disabled={pending !== null || undefined}
 					aria-describedby={hintId}
 					aria-invalid={duplicate ? true : undefined}
@@ -417,10 +469,12 @@ function AddOption(
 					autoComplete="off"
 					className="question-field"
 					disabled={disabled}
+					enterKeyHint="done"
 					maxLength={MAX_LABEL}
-					onBlur={() => {
+					onBlur={event => {
 						// Only an empty field collapses by itself. Typed text is kept, because
 						// adding an option is visible to everyone and should be deliberate.
+						if (group.current?.contains(event.relatedTarget)) return;
 						if (!text.trim() && pending === null) {
 							edit.current++;
 							onCancelEdit?.();
@@ -429,7 +483,7 @@ function AddOption(
 					}}
 					onChange={event => {
 						onEdit?.();
-						setText(event.currentTarget.value);
+						setText(optionText(event.currentTarget.value));
 						onFailed(undefined);
 					}}
 					onKeyDown={event => {
@@ -449,6 +503,7 @@ function AddOption(
 					placeholder="Add an option"
 					readOnly={pending !== null}
 					ref={input}
+					rows={1}
 					value={text}
 				/>
 				{pending !== null && <span className="sr-only" role="status">Adding option</span>}
@@ -794,6 +849,19 @@ export function QuestionView(props: QuestionViewProps) {
 	focusing.current = onQuestionFocus;
 	useEffect(() => () => focusing.current?.(undefined), [active]);
 	let [addError, setAddError] = useState<string>();
+	let [announcement, setAnnouncement] = useState("");
+	let options = useRef<HTMLFieldSetElement>(null);
+	let focusOption = useRef<string>(undefined);
+	// The new option's row renders once its definition arrives, maybe a render later.
+	useEffect(() => {
+		let id = focusOption.current;
+		if (!id) return;
+		let row = [...options.current?.querySelectorAll<HTMLInputElement>(".question-input") ?? []]
+			.find(input => input.value === id);
+		if (!row) return;
+		focusOption.current = undefined;
+		row.focus();
+	});
 	let previous = useRef<HTMLButtonElement>(null);
 	let next = useRef<HTMLButtonElement>(null);
 	let primary = useRef<HTMLButtonElement>(null);
@@ -959,12 +1027,27 @@ export function QuestionView(props: QuestionViewProps) {
 		if (!question) return;
 		setActive(question.id);
 		setAddError(undefined);
+		setAnnouncement("");
 		let arrived = index + offset;
 		if (from) refocus.current = "primary";
 		else if (arrived === 0) refocus.current = "next";
 		else if (arrived === total - 1) refocus.current = "previous";
 	};
 	let titleId = `${base}-title-${active}`;
+	let choose = (question: string, change: Partial<Draft>) => {
+		markHumanEdit();
+		setTouched(true);
+		onLocalChange?.(question, change);
+		onChange?.(question, change);
+	};
+	let added = (question: string, option: string, label: string, focus: boolean) => {
+		let item = latest.current.definition.questions.find(each => each.id === question);
+		if (!item) return;
+		let change = chooseAdded(item, latest.current.drafts[question], option, touched);
+		if (change) choose(question, change);
+		if (focus) focusOption.current = option;
+		setAnnouncement(change ? `Added and selected ${label}` : `Added ${label}`);
+	};
 
 	return (
 		<div aria-busy={submitting} className="question-card" data-saving={submitting ? "" : undefined}>
@@ -1030,19 +1113,15 @@ export function QuestionView(props: QuestionViewProps) {
 							</span>
 						</header>
 
-						<fieldset disabled={disabled} className="question-options">
+						<fieldset disabled={disabled} className="question-options" ref={options}>
 							<legend className="sr-only">{current.header}</legend>
 							<Choices
 								question={current}
 								draft={projection.draft}
 								disabled={disabled}
 								name={`${base}-${current.id}`}
-								onChange={change => {
-									markHumanEdit();
-									setTouched(true);
-									onLocalChange?.(current.id, change);
-									onChange?.(current.id, change);
-								}}
+								onChange={change =>
+									choose(current.id, change)}
 								suggestedOptionId={projection.suggestion?.optionId}
 							/>
 							{drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim() && (
@@ -1056,11 +1135,9 @@ export function QuestionView(props: QuestionViewProps) {
 								<AddOption
 									key={current.id}
 									question={current}
-									offset={drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim()
-										? 1
-										: 0}
 									disabled={disabled}
 									onAdd={label => onAddOption(current.id, label)}
+									onAdded={(option, label, focus) => added(current.id, option, label, focus)}
 									onFailed={setAddError}
 									onEdit={markComposerEdit}
 									onCancelEdit={cancelComposerEdit}
@@ -1074,6 +1151,7 @@ export function QuestionView(props: QuestionViewProps) {
 				return renderStep ? renderStep({ children: panel, question: current.id }) : panel;
 			})()}
 
+			<span className="sr-only" role="status">{announcement}</span>
 			{addError && <Callout title="Couldn’t add option" message={addError} />}
 			{error && (
 				<Callout
@@ -1136,8 +1214,7 @@ export function QuestionView(props: QuestionViewProps) {
 											aria-label="Next question"
 											className="btn btn-icon btn-ghost question-caret"
 											disabled={last}
-											onClick={() =>
-												step(1)}
+											onClick={() => step(1)}
 											ref={next}
 										>
 											<ChevronIcon size={16} />

@@ -38,7 +38,7 @@ function SuggestionFixture({ legacy = false }) {
  };
  window.terminalOriginFixture.acknowledgeOption = () => {
   if (!pending.current) throw new Error("No pending option to acknowledge");
-  pending.current.resolve({ ok: true });
+  pending.current.resolve({ ok: true, option: "native-added" });
   pending.current = undefined;
  };
  return createElement(QuestionView, { definition, drafts: { q: draft }, suggested,

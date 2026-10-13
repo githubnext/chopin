@@ -52,7 +52,7 @@ export function SidecarCard(
 	return (
 		<article
 			aria-label={label}
-			className={`flex flex-col overflow-hidden rounded-lg ring-hairline ${surface} ${
+			className={`flex flex-col overflow-clip rounded-lg ring-hairline ${surface} ${
 				focused ? "bg-selected" : ""
 			} ${className ?? ""}`}
 			data-focus-boundary=""

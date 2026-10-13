@@ -554,3 +554,41 @@ test("on a phone, adjacent decisions stay chips instead of a deck", async ({ joi
 	}
 	await expect(deck(page)).toHaveCount(0);
 });
+
+test("a long new option wraps in place and one confirm adds and chooses it", async ({ join, seed }) => {
+	let fixture = deckSeed({ before: "Intro paragraph." }, 2);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana");
+	let card = top(page);
+	let save = card.getByRole("button", { name: "Save", exact: true });
+	await expect(save).toBeDisabled();
+
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
+	let field = card.getByRole("textbox", { name: "New option" });
+	let confirm = card.getByRole("button", { name: "Add option", exact: true });
+	await expect(confirm).toBeDisabled();
+	let label = "Keep room state in a small embedded database next to the server process, "
+		+ "so it survives restarts and needs no separate service";
+	await field.pressSequentially(label);
+	await expect(confirm).toBeEnabled();
+
+	// The field grows downwards; nothing around it scrolls sideways to follow the caret.
+	let geometry = await field.evaluate(node => {
+		let line = parseFloat(getComputedStyle(node).lineHeight);
+		let scrolled: string[] = [];
+		for (let at: Element | null = node.parentElement; at; at = at.parentElement) {
+			if (at.scrollLeft !== 0) scrolled.push(at.tagName);
+		}
+		return { height: node.getBoundingClientRect().height, line, scrolled };
+	});
+	expect(geometry.height).toBeGreaterThan(geometry.line * 1.5);
+	expect(geometry.scrolled).toEqual([]);
+	await expect(card.getByRole("heading", { name: fixture.prompts[0] })).toBeInViewport();
+
+	await confirm.click();
+	let added = card.getByRole("radio", { name: label, exact: true });
+	await expect(added).toBeChecked();
+	await expect(field).toHaveCount(0);
+	await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeVisible();
+	await expect(save).toBeEnabled();
+});

@@ -374,6 +374,7 @@ export class QuestionnaireController {
 		let reply: {
 			ok?: boolean;
 			message?: string;
+			option?: { id: string };
 			definition?: Definition;
 		};
 		try {
@@ -389,7 +390,7 @@ export class QuestionnaireController {
 		if (!reply.ok) return { ok: false, message: reply.message ?? "Could not add this option." };
 		this.#adding = undefined;
 		if (reply.definition) this.#redefine(reply.definition);
-		return { ok: true };
+		return { ok: true, option: reply.option?.id };
 	};
 
 	/** Take the server's definition when it has gained options. */

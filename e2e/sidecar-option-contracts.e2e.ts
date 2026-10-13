@@ -67,8 +67,11 @@ test("adding an option shows it to everyone and keeps a selection", async ({ joi
 	await expect(card(ben).getByRole("radio", { name: "In PostgreSQL" })).toBeVisible();
 	await expect(card(ben).getByRole("radio", { name: "In SQLite" })).toBeChecked();
 	await expect(card(ana).getByRole("textbox", { name: "New option" })).toHaveCount(0);
-	await expect(card(ana).getByRole("button", { name: "Add an option", exact: true })).toBeFocused();
+	// Ben's choice is his: Ana's option is added for everyone but not chosen over it.
+	await expect(card(ana).getByRole("radio", { name: "In PostgreSQL" })).toBeFocused();
+	await expect(card(ana).getByRole("radio", { name: "In PostgreSQL" })).not.toBeChecked();
 
+	// Ben's own add replaces his own choice; Ana's next add still leaves it.
 	for (let [writer, label] of [[ben, "In MySQL"], [ana, "In files"]] as const) {
 		await card(writer).getByRole("button", { name: "Add an option", exact: true }).click();
 		let field = card(writer).getByRole("textbox", { name: "New option" });
@@ -77,25 +80,21 @@ test("adding an option shows it to everyone and keeps a selection", async ({ joi
 		await expect(field).toHaveCount(0);
 		for (let page of [ana, ben]) {
 			await expect(card(page).getByRole("radio", { name: label, exact: true })).toBeVisible();
-			await expect(
-				card(page).getByRole("radio", {
-					name: "In SQLite Transactional, but opaque without a client.",
-					exact: true,
-				}),
-			).toBeChecked();
+			await expect(card(page).getByRole("radio", { name: "In MySQL", exact: true }))
+				.toBeChecked();
 		}
 	}
 	for (let page of [ana, ben]) {
 		await expect(card(page).getByRole("radio")).toHaveCount(5);
-		for (let label of ["In PostgreSQL", "In MySQL", "In files"]) {
-			await expect(card(page).getByRole("radio", { name: label, exact: true })).not.toBeChecked();
+		for (let label of ["In SQLite", "In PostgreSQL", "In files"]) {
+			await expect(card(page).getByRole("radio", { name: label })).not.toBeChecked();
 		}
 		await expect(card(page).getByRole("button", { name: "Add an option", exact: true }))
 			.toBeEnabled();
 	}
 });
 
-test("adding an option leaves an unanswered decision unselected after refresh", async ({ join, page, seed }) => {
+test("adding options selects only the adder's latest one after refresh", async ({ join, page, seed }) => {
 	await seed(PROSE);
 	let snapshots: Array<{ definition: Definition; model: number[] }> = [];
 	let definition: Definition | undefined;
@@ -139,21 +138,28 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	let save = card.getByRole("button", { name: "Save", exact: true });
 	await expect(options).toHaveCount(2);
 	await expect.poll(() => snapshots.length).toBeGreaterThan(0);
-	let unanswered = () => {
+	let chosen = (label: string | null) => {
 		let snapshot = snapshots.at(-1)!;
 		let current = definition!;
 		let question = current.questions[0]!;
 		let draft = read(restore(snapshot.model, current), current)[question.id];
-		expect(draft?.choice).toBeNull();
+		let id = question.options.find(option => option.label === label)?.id ?? null;
+		expect(draft?.choice).toBe(id);
 		expect(draft?.mode).toBe("choices");
 		expect(Object.values(draft?.options ?? {})).toEqual(
 			Array.from({ length: question.options.length }, () => false),
 		);
 	};
-	let checkVisible = async (count: number) => {
+	let checkVisible = async (count: number, label: string | null) => {
 		await expect(options).toHaveCount(count);
-		for (let option of await options.all()) await expect(option).not.toBeChecked();
-		await expect(save).toBeDisabled();
+		for (let option of await options.all()) {
+			let name = await option.getAttribute("value");
+			let match = label
+				&& definition!.questions[0]!.options.find(each => each.id === name)?.label === label;
+			if (match) await expect(option).toBeChecked();
+			else await expect(option).not.toBeChecked();
+		}
+		if (!label) await expect(save).toBeDisabled();
 	};
 	let ana = await join("ana");
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
@@ -173,8 +179,9 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	}
 	await expect.poll(() => definition?.questions[0]?.options.length).toBe(6);
 	let beforeIds = definition!.questions[0]!.options.map(option => option.id);
-	unanswered();
-	await checkVisible(6);
+	// This snapshot predates the adds; the live card already shows Ana's latest choice.
+	chosen(null);
+	await checkVisible(6, "In memory");
 	let previousChanges = changed;
 
 	await add("In a repository");
@@ -186,8 +193,8 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 		beforeIds,
 	);
 	expect(after.questions[0]!.options[6]?.label).toBe("In a repository");
-	unanswered();
-	await checkVisible(7);
+	chosen(null);
+	await checkVisible(7, "In a repository");
 	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
 
 	let previousSnapshots = snapshots.length;
@@ -195,8 +202,8 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
 	await expect.poll(() => snapshots.length).toBeGreaterThan(previousSnapshots);
 	await expect.poll(() => definition?.questions[0]?.options.length).toBe(7);
-	unanswered();
-	await checkVisible(7);
+	chosen("In a repository");
+	await checkVisible(7, "In a repository");
 });
 
 test("a duplicate option is refused inline", async ({ join, seed }) => {
