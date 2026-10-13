@@ -227,7 +227,7 @@
 				1
 			]
 		],
-		"sourceHash": "de727fb577f1efb11edfdc6aa89005d18b9eef7e445a6aabcffebf1f5b74aea3"
+		"sourceHash": "fb9410656b9c10750c96c18da033f999266277037b6caabc276d69860478f44c"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",
@@ -276,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "6dcdd2c5d6243bdc297c311742fc47e8e5da433d201b6e1b728c42c714d9a9c4"
+		"sourceHash": "39847923947ec187c3f3cb1973ab1df745dea4bcaff882fc5dbbf9bd2108d42f"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",

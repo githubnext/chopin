@@ -303,18 +303,23 @@ export function Workspace(
 	let liftCovered = lift && !childClosing;
 	// Split Zoom puts the child at the end of the title bar's path and folds the views away, since
 	// a child has none. Compact has no title bar, so it keeps the stack bar, on every view, so a
-	// child left open under Decisions or Build is still in sight and one click away.
+	// child left open under Decisions or Build is still in sight and one click away. A phone's top
+	// bar becomes the child's, with Back, so it needs no stack bar.
 	let zoom = !!nested && !lift;
-	let stackBar = zoom && mode !== "split";
+	let stackBar = zoom && mode !== "split" && !phone;
 	let planCovered = zoom && view === "plan";
 	let viewsFolded = zoom && mode === "split" && view === "plan" && !childClosing;
 	// Phones crossfade rather than cut under reduced motion, so only keyboard input is immediate.
 	let immediately = phone ? motionImmediately(undefined, false) : motionImmediately();
 	let contentSwapMotion = phone ? motionContract("tab-slide") : motionContract("content-swap");
+	let previousMode = useRef(mode);
+	let modeChanged = previousMode.current !== mode;
+	// Split Chat slides for its shortcut as for a click; compact panes still swap at once by keyboard,
+	// and a layout change settles Chat where it lands.
 	let chatPresence = useTransitionPresence(
 		presentation.chatVisible ? true : undefined,
 		phone ? contentSwapMotion.closeDuration : 220,
-		immediately,
+		modeChanged || (mode !== "split" && immediately),
 	);
 	let chatTrack = usePaneMotion(chatPresence.phase);
 	let documentSwap = useRef<HTMLDivElement>(null);
@@ -358,7 +363,6 @@ export function Workspace(
 		previousChatOpen.current = state.chatOpen;
 	}, [mode, state.chatOpen]);
 
-	let previousMode = useRef(mode);
 	useLayoutEffect(() => {
 		if (previousMode.current === mode) return;
 		previousMode.current = mode;

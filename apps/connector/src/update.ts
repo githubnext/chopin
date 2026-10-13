@@ -198,7 +198,14 @@ async function confirm(question: string) {
  * `yes`. Without a terminal it goes ahead, since only an upgrade or an allowed downgrade gets here.
  */
 export async function update(
-	options: { version?: string; allowDowngrade?: boolean; yes?: boolean; server: string },
+	options: {
+		version?: string;
+		allowDowngrade?: boolean;
+		yes?: boolean;
+		server: string;
+		/** Runs once the new binary is in place, as restarting the service that runs it; says what it did. */
+		afterUpdate?: (target: string) => Promise<string | undefined>;
+	},
 	log = console.log,
 ) {
 	if (!Bun.isStandaloneExecutable) {
@@ -295,6 +302,7 @@ export async function update(
 	}
 
 	await replace(target, bytes, { log });
-	// An installed background service, once chopin can install one, restarts here.
 	log(`Updated chopin from ${VERSION} to ${version} at ${target}.`);
+	let after = await options.afterUpdate?.(target);
+	if (after) log(after);
 }

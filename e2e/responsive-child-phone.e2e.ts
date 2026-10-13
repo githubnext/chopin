@@ -136,6 +136,10 @@ test("a child opens for reading on a phone and the tab bar's pencil edits it", a
 		await expect(childText(surface)).toBeFocused();
 		await expect(done(page)).toBeVisible();
 		await expect(page.locator(".phone-top-bar-mode")).toHaveText("Editing");
+		// Editing joins the child's place rather than replacing it.
+		await expect(page.locator(".phone-top-bar-subtitle")).toHaveText(
+			new RegExp(`^in Test ${room.slice(0, 8)}\\s*·\\s*Editing$`),
+		);
 		// The parent beneath keeps reading.
 		await expect(parentText(page)).toHaveAttribute("contenteditable", "false");
 		await page.keyboard.type("Typed ");
@@ -150,6 +154,63 @@ test("a child opens for reading on a phone and the tab bar's pencil edits it", a
 		await expect(surface).toBeVisible();
 		await expect(childText(surface)).toHaveAttribute("contenteditable", "true");
 		await expect(childText(surface)).toBeFocused();
+	} finally {
+		await context.close();
+	}
+});
+
+test("a child takes the phone's top bar: Back, its own title and actions, and its parent", async ({ baseURL, browser, room, seed }) => {
+	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	let { context, page, surface } = await openChild(browser, baseURL!, room, "ana", PHONE);
+	try {
+		let parent = `Test ${room.slice(0, 8)}`;
+		let child = (await surface.getAttribute("aria-label"))!.replace("Child document: ", "");
+		let bar = page.locator(".phone-top-bar");
+		await expect(bar).toHaveCount(1);
+		// The bar replaces the stack bar the compact layout keeps.
+		await expect(page.getByRole("navigation", { name: "Document stack" })).toHaveCount(0);
+		await expect(bar.getByRole("button", { name: "Documents", exact: true })).toHaveCount(0);
+		await expect(bar.locator(".phone-top-bar-title")).toHaveText(child);
+		await expect(bar.locator(".phone-top-bar-title")).toHaveCSS("opacity", "1");
+		await expect(bar.locator(".phone-top-bar-subtitle")).toHaveText(`in ${parent}`);
+		await expect(bar.getByRole("group", { name: /^People here: .*\bana\b/ })).toBeVisible();
+		// The document under the bar starts below it.
+		let barBox = (await bar.boundingBox())!;
+		let heading = (await surface.getByRole("heading", { level: 1 }).boundingBox())!;
+		expect(heading.y).toBeGreaterThanOrEqual(barBox.y + barBox.height);
+
+		// Its actions are the child's.
+		await bar.getByRole("button", { name: `Actions for ${child}` }).tap();
+		await page.getByRole("button", { name: "Rename", exact: true }).tap();
+		let field = page.getByRole("textbox", { name: "Document title" });
+		await expect(field).toBeFocused();
+		await expect(field).toHaveValue(child);
+		await field.press("Escape");
+		await expect(field).toHaveCount(0);
+
+		// Off Document the bar is the root's again: its Documents, title and build.
+		let tabs = page.getByRole("navigation", { name: "Workspace view" });
+		for (let tab of [/^Chat/, /^Decisions/]) {
+			await tabs.getByRole("button", { name: tab }).tap();
+			await expect(bar.getByRole("button", { name: "Documents", exact: true })).toBeVisible();
+			await expect(bar.getByRole("button", { name: /^Back to / })).toHaveCount(0);
+			await expect(bar.locator(".phone-top-bar-title")).toHaveText(parent);
+			await expect(bar.locator(".phone-top-bar-subtitle")).toContainText("score");
+			await expect(bar.getByRole("button", { name: `Actions for ${parent}` })).toBeVisible();
+		}
+		await tabs.getByRole("button", { name: "Document", exact: true }).tap();
+		await expect(surface).toBeVisible();
+		await expect(bar.locator(".phone-top-bar-title")).toHaveText(child);
+		await expect(bar.locator(".phone-top-bar-subtitle")).toHaveText(`in ${parent}`);
+
+		let back = bar.getByRole("button", { name: `Back to ${parent}` });
+		let backBox = (await back.boundingBox())!;
+		expect(Math.min(backBox.width, backBox.height)).toBeGreaterThanOrEqual(43.5);
+		await back.tap();
+		await expect(surface).toHaveCount(0);
+		await expect(page).toHaveURL(url => url.pathname.endsWith(`/test-${room.slice(0, 8)}`));
+		await expect(bar.getByRole("button", { name: "Documents", exact: true })).toBeVisible();
+		await expect(bar.locator(".phone-top-bar-subtitle")).toContainText("score");
 	} finally {
 		await context.close();
 	}

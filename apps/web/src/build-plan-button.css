@@ -53,7 +53,66 @@
 	transform: translate(-50%, -50%);
 }
 
-/* Phone: the glyph alone, without the pill, so it reads as status rather than a control. */
+/* Phone: the build's state and its action read as links in the top bar's subtitle. */
+.build-status {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: var(--spacing);
+}
+
+.build-status-link {
+	position: relative;
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: var(--spacing);
+	color: inherit;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+/* A thumb-sized target around the small text, as the capsule has. */
+.build-status-link::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, var(--control-target-coarse));
+	height: var(--control-target-coarse);
+	transform: translate(-50%, -50%);
+}
+
+.build-status-link:active {
+	opacity: 0.6;
+}
+
+/* Build plan and the action are things to do, so they take the brand's ink. */
+.build-status-link:not(:has(.build-capsule-label)) {
+	color: var(--color-brand-ink);
+	font-weight: var(--font-weight-medium);
+}
+
+.build-status-link[aria-disabled="true"] {
+	color: inherit;
+	font-weight: inherit;
+}
+
+.build-status-link .build-capsule-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.build-status-link .build-glyph {
+	width: calc(var(--spacing) * 3);
+	height: calc(var(--spacing) * 3);
+}
+
+/* Compact: the glyph alone, without the pill, so it reads as status rather than a control. */
 .build-capsule[data-compact] {
 	justify-content: center;
 	width: var(--control-height-compact);

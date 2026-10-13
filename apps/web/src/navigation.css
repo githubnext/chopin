@@ -56,6 +56,70 @@
 	padding-left: calc(44px - var(--spacing) * 3);
 }
 
+/*
+ * A workspace notice (workspace-notice.tsx) keeps the document's frame: split puts its sheet at
+ * the top margin, clear of the floating Show sidebar trigger as an expanded document is; compact
+ * keeps the ground header above it. Split starts with a 700px frame, as `workspaceSizing` does.
+ */
+.workspace-notice {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background: var(--color-ground);
+	container: workspace-notice / inline-size;
+
+	& > .room-header {
+		display: none;
+	}
+}
+
+.workspace-notice-frame {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	margin: calc(var(--spacing) * 3) calc(var(--spacing) * 3 + env(safe-area-inset-right))
+		calc(var(--spacing) * 3) calc(var(--spacing) * 3 + env(safe-area-inset-left));
+}
+
+.navigation-content[data-project-sidebar-trigger] .workspace-notice-frame {
+	padding-left: calc(44px - var(--spacing) * 3);
+}
+
+.workspace-notice-sheet {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--spacing);
+	min-width: 0;
+	padding-inline: calc(var(--spacing) * 4);
+	overflow: hidden;
+	border-radius: var(--radius-panel);
+	background: var(--color-ground);
+	box-shadow: var(--shadow-raised);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	text-align: center;
+}
+
+@container workspace-notice (width < 724px) {
+	.workspace-notice > .room-header {
+		display: block;
+		flex: none;
+	}
+
+	.navigation-content[data-project-sidebar-trigger] .workspace-notice-frame,
+	.workspace-notice-frame {
+		margin: calc(var(--spacing) * 2);
+		padding-left: 0;
+	}
+
+	.workspace-notice-sheet {
+		box-shadow: var(--shadow-resting);
+	}
+}
+
 .anchored-child-host {
 	position: relative;
 	height: 100%;

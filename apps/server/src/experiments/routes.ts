@@ -433,6 +433,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
 		return json({ ...planners.issue(machine, channel.id), document: { id: channel.id, url } });
 	});
+	/**
+	 * `chopin status`: whether Chopin still accepts this machine's token, without registering a
+	 * connection or asking GitHub anything.
+	 */
+	route("GET", "/api/connector/machine", async request => {
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		let user = await auth.storage.users.get(machine.userId);
+		return json({ id: machine.id, label: machine.label, login: user?.login ?? null });
+	});
 	/** `chopin unpair`: the machine revokes itself with its own token. */
 	route("POST", "/api/connector/machine/revoke", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);

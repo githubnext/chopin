@@ -714,6 +714,21 @@ test("unpairing with the machine's own token revokes it", async () => {
 	expect((await again.json()).error).toBe("machine-revoked");
 });
 
+test("a machine checks with its own token that Chopin still accepts it", async () => {
+	let { alice, request, pair, checked } = await setup();
+	let paired = await pair(alice.cookie);
+	let before = checked.length;
+	let accepted = await request("/api/connector/machine", undefined, undefined, paired.machineToken);
+	expect(accepted.status).toBe(200);
+	expect(await accepted.json()).toEqual({ id: paired.machine, label: "Laptop", login: "alice" });
+	// The check is cheap: it never asks GitHub about a repository.
+	expect(checked.length).toBe(before);
+	await request("/api/connector/machine/revoke", {}, undefined, paired.machineToken);
+	let revoked = await request("/api/connector/machine", undefined, undefined, paired.machineToken);
+	expect(revoked.status).toBe(401);
+	expect((await revoked.json()).error).toBe("machine-revoked");
+});
+
 test("GitHub refusing a machine's authorization asks for pairing again", async () => {
 	let { alice, request, pair, open, refresh, clock } = await setup();
 	let paired = await pair(alice.cookie);
