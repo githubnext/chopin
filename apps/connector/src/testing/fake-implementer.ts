@@ -15,10 +15,19 @@ let cancelled = () => {};
 let app = new AgentApp()
 	.onRequest(
 		"initialize",
-		() => ({
-			protocolVersion: PROTOCOL_VERSION,
-			agentCapabilities: process.argv.includes("--http") ? { mcpCapabilities: { http: true } } : {},
-		}),
+		async () => {
+			if (process.argv.includes("--slow-start")) {
+				// An agent still starting, as one fetching itself on first launch is; it never answers.
+				await writeFile(process.env.CHOPIN_TEST_STARTING!, "");
+				await new Promise(() => {});
+			}
+			return {
+				protocolVersion: PROTOCOL_VERSION,
+				agentCapabilities: process.argv.includes("--http")
+					? { mcpCapabilities: { http: true } }
+					: {},
+			};
+		},
 	)
 	.onRequest("session/new", ({ params }) => {
 		servers = params.mcpServers;

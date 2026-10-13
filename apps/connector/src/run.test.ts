@@ -294,6 +294,32 @@ test("Ctrl-C ends a run at once while a report waits on Chopin", async () => {
 	}]);
 });
 
+test("Ctrl-C ends a run at once while its agent is still starting", async () => {
+	let file = join(await mkdtemp(join(tmpdir(), "chopin-starting-")), "started");
+	process.env.CHOPIN_TEST_STARTING = file;
+	let controller = new AbortController();
+	try {
+		let settled = false;
+		let running = run({}, ["--slow-start"], () => ({}), controller.signal, {
+			heartbeatMs: 10_000,
+		}).finally(() => settled = true);
+		// The agent has the connector's initialize request and will not answer it.
+		while (!settled && !await Bun.file(file).exists()) await Bun.sleep(10);
+		let interrupted = performance.now();
+		controller.abort();
+		let { id, calls } = await running;
+		expect(performance.now() - interrupted).toBeLessThan(1000);
+		expect(calls.at(-1)).toEqual(["report_implementation_build", {
+			id,
+			state: "failed",
+			error: STOPPED,
+		}]);
+	} finally {
+		delete process.env.CHOPIN_TEST_STARTING;
+		await rm(dirname(file), { recursive: true, force: true });
+	}
+});
+
 test("Ctrl-C waits at most five seconds for its stop report to reach Chopin", async () => {
 	let controller = new AbortController();
 	let interrupted = 0;
