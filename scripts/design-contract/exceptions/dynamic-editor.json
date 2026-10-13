@@ -11,7 +11,7 @@
 				1
 			]
 		],
-		"sourceHash": "15e75053a320e6d67b970ae2ad4ef973c0059c5cb85bb74ac44e30449a559272"
+		"sourceHash": "1db89aae832fad8cce550bacf81ed1cb9a9ee2a0746576406e35ae006aa3b427"
 	},
 	{
 		"file": "packages/editor/src/card.tsx",
@@ -25,7 +25,7 @@
 				1
 			]
 		],
-		"sourceHash": "15e75053a320e6d67b970ae2ad4ef973c0059c5cb85bb74ac44e30449a559272"
+		"sourceHash": "1db89aae832fad8cce550bacf81ed1cb9a9ee2a0746576406e35ae006aa3b427"
 	},
 	{
 		"file": "packages/editor/src/content-swap.tsx",
