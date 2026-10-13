@@ -102,7 +102,7 @@
 				1
 			]
 		],
-		"sourceHash": "5808e40b60d5785d699d6bd83d3a25e2fffbf657bf434d36eb03e1fd823a9627"
+		"sourceHash": "326aa36a7e079207307a5376046e3137275f089776b35ad341db80732a4add05"
 	},
 	{
 		"file": "packages/editor/src/toolbar/bubble.tsx",
