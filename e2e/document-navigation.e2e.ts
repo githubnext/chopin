@@ -208,6 +208,22 @@ test("account menu closes on Escape and outside click, and returns focus", async
 	await expect(account).toHaveAttribute("aria-expanded", "false");
 });
 
+test("the account menu takes arrow keys from the moment it appears", async ({ join }) => {
+	let page = await join("ana");
+	let menu = page.getByRole("menu").filter({
+		has: page.getByRole("menuitem", { name: "Sign out" }),
+	});
+	// A key can arrive before the next frame is drawn; it must already move through the menu.
+	await sidebar(page).locator(".project-sidebar-account").evaluate(async account => {
+		(account as HTMLElement).click();
+		await new Promise<void>(resolve => queueMicrotask(resolve));
+		document.activeElement!.dispatchEvent(
+			new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "ArrowDown" }),
+		);
+	});
+	await expect(menu.getByRole("menuitem", { name: "Keyboard shortcuts" })).toBeFocused();
+});
+
 test("document action menu motion settles keyboard opening immediately", async ({ join }) => {
 	let page = await join("ana");
 	let trigger = headerActions(page);

@@ -309,12 +309,10 @@ export function NavigationShell(
 		if (restoreFocus) accountTrigger.current?.focus();
 	};
 	useMenuDismissal(accountOpen, [accountWrap], closeAccount);
-	useEffect(() => {
+	// Focus moves in as the menu mounts, not a frame later, so no key pressed meanwhile is lost.
+	useLayoutEffect(() => {
 		if (!accountOpen) return;
-		let frame = requestAnimationFrame(() => {
-			accountWrap.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
-		});
-		return () => cancelAnimationFrame(frame);
+		accountWrap.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
 	}, [accountOpen]);
 	let accountPresence = useTransitionPresence(
 		accountOpen ? true : undefined,
