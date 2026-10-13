@@ -80,11 +80,15 @@ jobs:
       # unit command leaves this one skipped so it stays usable without Docker.
       - run: bun run test:postgres
 
-  browser:
-    name: e2e
+  browser-integration:
+    name: e2e (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
-      CHOPIN_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PLAYWRIGHT_BLOB_OUTPUT_DIR: e2e/blob-report
     steps:
       - uses: actions/checkout@v7
 
@@ -113,12 +117,6 @@ jobs:
       # Chromium's shared libraries, so do not make E2E depend on its apt mirror.
       - run: bun node_modules/@playwright/test/cli.js install chromium
 
-      - name: Design behaviour (keyboard, focus, motion, and scrolling)
-        run: bun run design:behavior
-
-      - name: Diagram gallery (rendering and keyboard behaviour)
-        run: bun run diagrams:test
-
       # Build once, and reject development previews before the long browser suite. The browser
       # suite reuses this build, so it carries the same child-motion toggle as scripts/e2e.ts.
       - run: bun run build
@@ -133,7 +131,119 @@ jobs:
           docker pull mirror.gcr.io/library/postgres:17-alpine
           docker tag mirror.gcr.io/library/postgres:17-alpine postgres:17-alpine
 
-      - run: E2E_SKIP_BUILD=1 bun run e2e
+      # Each runner owns its servers and databases. Keep two workers per runner so motion
+      # assertions do not compete with more browser processes on the same machine.
+      - run: E2E_SKIP_BUILD=1 bun run e2e --shard=${{ matrix.shard }}/4 --workers=2 --reporter=github,blob
+
+      - name: Save integration report and attachments
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-blob-report-${{ matrix.shard }}
+          path: e2e/blob-report/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  browser-design:
+    name: browser design and diagrams
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Resolve the Playwright version
+        id: playwright
+        run: |
+          version=$(bun --print 'require("./package.json").devDependencies["@playwright/test"]')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - run: bun node_modules/@playwright/test/cli.js install chromium
+
+      - name: Design behaviour (keyboard, focus, motion, and scrolling)
+        run: bun run design:behavior
+
+      - name: Diagram gallery (rendering and keyboard behaviour)
+        run: bun run diagrams:test
+
+      - name: Save design and gallery results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-design-results
+          path: e2e/.scratch/ci-reports/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+      - if: ${{ !cancelled() && failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-design-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  # Keep the existing `e2e` check as the gate for every browser job. A partial merged report
+  # can still help diagnose a failed shard, but must never turn that failure green.
+  browser:
+    name: e2e
+    needs: [browser-integration, browser-design]
+    # GitHub accepts skipped required checks, so cancellation must still reach the result gate.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    env:
+      CHOPIN_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Collect integration reports
+        id: blobs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: browser-blob-report-*
+          path: e2e/blob-report
+          merge-multiple: true
+
+      - name: Merge integration results, retries, and traces
+        if: ${{ !cancelled() && steps.blobs.outcome == 'success' }}
+        run: bun node_modules/@playwright/test/cli.js merge-reports --reporter=html,json e2e/blob-report
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          PLAYWRIGHT_HTML_OUTPUT_DIR: e2e/playwright-report/integration
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e/.scratch/ci-reports/integration.json
+
+      - name: Collect design and gallery results
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@v8
+        with:
+          name: browser-design-results
+          path: e2e/.scratch/ci-reports
+
+      - name: Require every browser job to pass
+        if: ${{ always() }}
+        env:
+          INTEGRATION_RESULT: ${{ needs.browser-integration.result }}
+          DESIGN_RESULT: ${{ needs.browser-design.result }}
+        run: |
+          test "$INTEGRATION_RESULT" = success
+          test "$DESIGN_RESULT" = success
 
       - name: Summarise browser results and retries
         id: browser_summary
@@ -150,8 +260,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # Retry passes need their traces too. Keep each suite's output separate
-      # so integration setup does not erase earlier design/gallery evidence.
+      # Retry passes need their traces too; the merged HTML report contains their attachments.
       - if: ${{ !cancelled() && (failure() || steps.browser_summary.outputs.has_flaky == 'true') }}
         uses: actions/upload-artifact@v7
         with:
