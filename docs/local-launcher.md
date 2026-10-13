@@ -25,7 +25,7 @@ with or run code through a `preload`. The `chopin` binary below ignores both by 
 
 Open the printed pairing link, sign into Chopin, check that the page shows the
 confirmation code printed in your terminal, and select **Connect**. Leave
-**Let Chopin build and prototype automatically on this laptop** unticked unless
+**Let Chopin build and prototype automatically on this machine** unticked unless
 you want Chopin to start work there by itself: rebuilds of a living document
 (`LIVE_BUILD`) and, where enabled, prototypes. Without it, only work a person
 presses Build or Run for reaches the laptop. The choice is stored with the paired

@@ -52,7 +52,7 @@ browser, use the stored token and do not pair again. On each connector call the
 server rechecks your push access with the machine's own GitHub authorization.
 
 A machine stays paired until you disconnect it: choose **Disconnect machine**
-for it under **Your local agents** at `/connect`, or run `chopin unpair` on the
+for it under **Your machines** at `/connect` and confirm, or run `chopin unpair` on the
 machine. Either way its connector stops at once with `machine-revoked`, does
 not retry, and deletes the token from `machine.json`. The next `chopin connect`
 on a terminal then pairs again, as on a machine never paired; without a
@@ -372,8 +372,8 @@ stops the spike, and that passage is not spiked again.
 
 The trust model is deliberately narrow:
 
-- **Consent.** A spike runs only on a laptop whose owner ticked **Let Chopin
-  build and prototype automatically on this laptop** when pairing it, and only
+- **Consent.** A spike runs only on a machine whose owner ticked **Let Chopin
+  build and prototype automatically on this machine** when pairing it, and only
   for passages that person changed. Another editor's text never runs on
   someone else's agent.
 - **Judge.** Without Jev nothing is spiked. `LIVE_SPIKES_REGEX_JUDGE=on` opts

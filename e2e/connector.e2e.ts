@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { authenticate, content, expect, test } from "./room";
@@ -158,6 +158,12 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 		let page = await enter(handle);
 		// Connect goes through the machine's own GitHub authorization and back.
 		await page.goto(first.output().match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/)![0]);
+		await expect(
+			page.getByRole("checkbox", {
+				name: "Let Chopin build and prototype automatically on this machine",
+				exact: true,
+			}),
+		).not.toBeChecked();
 		await page.getByRole("button", { name: "Connect", exact: true }).click();
 		await expect(page.getByRole("status")).toHaveText("Connected.");
 		await expect.poll(first.output).toContain("✓ Connected.");
@@ -172,13 +178,28 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 
 		await authenticate(page, handle, baseURL!);
 		await page.goto("/connect");
+		await expect(page.getByRole("heading", { name: "Your machines", exact: true })).toHaveCount(1);
 		let machines = page.getByRole("list", { name: "Paired machines" });
 		await expect(machines.getByText(hostname(), { exact: true })).toBeVisible();
 		await expect(machines).toContainText("Connected");
-		await machines.getByRole("button", { name: `Disconnect machine ${hostname()}` }).click();
+		// Disconnecting asks first, naming the machine; cancelling keeps it connected.
+		let disconnect = machines.getByRole("button", { name: `Disconnect machine ${hostname()}` });
+		let confirm = page.getByRole("dialog", { name: `Disconnect ${hostname()}?`, exact: true });
+		await disconnect.click();
+		await expect(confirm).toContainText(`The connector on ${hostname()} stops`);
+		await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+		await expect(confirm).toHaveCount(0);
+		await expect(machines).toContainText("Connected");
+		expect(second.child.exitCode).toBeNull();
+		await disconnect.click();
+		await confirm.getByRole("button", { name: "Disconnect machine", exact: true }).click();
 		await expect(machines).toHaveCount(0);
 		expect(await second.exited, second.output()).toBe(1);
 		expect(second.output()).toContain("no longer paired");
+		// The refused token is forgotten, so the next connect pairs again.
+		expect(JSON.parse(await readFile(join(state, "machine.json"), "utf8"))).toEqual({
+			servers: {},
+		});
 		for (let secret of second.output().match(/chopin_m_[\w-]+/g) ?? []) {
 			throw new Error(`The connector printed its machine token: ${secret.slice(0, 12)}…`);
 		}

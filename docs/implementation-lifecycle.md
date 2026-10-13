@@ -228,7 +228,7 @@ press, so its trust model is narrow on purpose.
 - **Consent at pairing.** An automatic rebuild is dispatched only to a
   connection of the live build's own user, for the live build's repository,
   whose owner ticked **Let Chopin build and prototype automatically on this
-  laptop** when pairing it. The consent is held in memory with the connection.
+  machine** when pairing it. The consent is held in memory with the connection.
   Without it the document stays out of sync until someone presses Build.
 - **Writers trigger.** Only edits that persist through a path requiring push or
   administration access schedule a rebuild check: browser edits (every

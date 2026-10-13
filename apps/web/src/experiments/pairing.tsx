@@ -17,7 +17,7 @@ export default function PairingPage() {
 	let [error, setError] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [url, setUrl] = useState("");
-	// Off by default: without it, work reaches this laptop only when a person presses Build or Run.
+	// Off by default: without it, work reaches this machine only when a person presses Build or Run.
 	let [autoRun, setAutoRun] = useState(false);
 	useEffect(() => {
 		let abort = new AbortController();
@@ -59,8 +59,8 @@ export default function PairingPage() {
 	let repository = pairing?.input.repository;
 	if (!id) {
 		return (
-			<LocalLoginShell title="Your local agents">
-				<Machines />
+			<LocalLoginShell title="Your machines">
+				<Machines titled={false} />
 			</LocalLoginShell>
 		);
 	}
@@ -98,7 +98,7 @@ export default function PairingPage() {
 										onChange={event => setAutoRun(event.target.checked)}
 										type="checkbox"
 									/>
-									<span>Let Chopin build and prototype automatically on this laptop</span>
+									<span>Let Chopin build and prototype automatically on this machine</span>
 								</label>
 								<button
 									className="btn btn-md btn-primary"
