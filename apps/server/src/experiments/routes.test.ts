@@ -23,6 +23,12 @@ function error(value: { result: { isError?: boolean; content: Array<{ text: stri
 	return value.result.isError ? value.result.content[0].text : "";
 }
 
+/** What a current connector sends with every request; browser routes ignore it. */
+const CURRENT = {
+	[CONNECTOR_VERSION_HEADER]: "dev",
+	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
+};
+
 async function setup(shared?: { storage: MemoryStorage; lease: unknown }) {
 	let storage = shared?.storage ?? new MemoryStorage();
 	let now = new Date();
@@ -112,7 +118,7 @@ async function setup(shared?: { storage: MemoryStorage; lease: unknown }) {
 		body?: unknown,
 		cookie?: string,
 		token?: string,
-		extra: Record<string, string> = {},
+		extra: Record<string, string> = CURRENT,
 	) {
 		return (await router.handle(
 			new Request(`https://chopin.test${path}`, {
@@ -869,20 +875,34 @@ test("a spike still running 20 minutes after its claim is interrupted", async ()
 });
 
 test("a connector outside the supported protocol range is refused with the command that fixes it", async () => {
-	let { alice, request, pair, authorized } = await setup();
+	let context = await setup();
+	let { alice, request, pair, authorized } = context;
 	let { min, max } = CONNECTOR_PROTOCOLS;
 	let headers = (version: string, protocol: number) => ({
 		[CONNECTOR_VERSION_HEADER]: version,
 		[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
 	});
 	let source = { repository: "org/repo", commit: "a".repeat(40), label: "Laptop" };
-	// A legacy /connector.js sends neither header, and is still served.
-	let legacy = await pair(alice.cookie);
-	expect(legacy.token).toBeString();
 	let initialize = { jsonrpc: "2.0", id: 1, method: "initialize", params: {} };
 	let mcp = (token: string, extra: Record<string, string>) =>
 		request("/connector/mcp", initialize, undefined, token, extra);
-	expect((await mcp(legacy.token, {})).status).toBe(200);
+	// A /connector.js from before the check sends neither header. It speaks protocol 1, which
+	// pairs a checkout rather than a machine, so it must download this server's connector again.
+	let paired = await pair(alice.cookie);
+	for (
+		let legacy of [
+			await request("/api/connector/pairings", source, undefined, undefined, {}),
+			await mcp(paired.token, {}),
+		]
+	) {
+		expect(legacy.status).toBe(409);
+		let body = await legacy.json();
+		expect(body.error).toBe(CONNECTOR_UPDATE_REQUIRED);
+		expect(body.message).toContain("connector protocol 1");
+		expect(body.message).toContain(
+			"curl -fsSL https://chopin.test/connector.js -o ~/.chopin/connector.js",
+		);
+	}
 
 	// In range: pairing, claiming and connector calls all go through.
 	let current = headers("0.2.0", max);
@@ -961,6 +981,25 @@ test("a connector outside the supported protocol range is refused with the comma
 	}
 	// The refusals left the paired machine and its connection alone.
 	expect((await mcp(token, current)).status).toBe(200);
+
+	// The agent itself reaches a run over HTTP MCP with the run token and no connector headers.
+	let { documentId } = context;
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
+	let claim = await (await request(
+		"/connector/mcp",
+		{
+			jsonrpc: "2.0",
+			id: 1,
+			method: "tools/call",
+			params: { name: "claim_experiment", arguments: { id } },
+		},
+		undefined,
+		token,
+	)).json();
+	let { runToken } = JSON.parse(claim.result.content[0].text);
+	expect((await mcp(runToken, {})).status).toBe(200);
 });
 
 test("the connector versions this server wants are public", async () => {

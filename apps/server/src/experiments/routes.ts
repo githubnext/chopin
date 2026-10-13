@@ -74,16 +74,27 @@ const MAX_BODY_BYTES = limits.resultBytes + 64 * 1024;
 export const SPIKE_DEADLINE_MS = 20 * 60_000;
 /** Screenshots a spike run may upload; distinct images, so a retried upload is free. */
 export const MAX_SPIKE_IMAGES = 3;
-/** The connector protocols this server speaks; a connector outside them must update first. */
-export const CONNECTOR_PROTOCOLS = { min: 1, max: 1 } as const;
+/**
+ * The connector protocols this server speaks; a connector outside them must update first.
+ * Protocol 2 pairs a machine once and connects checkouts with its stored token.
+ */
+export const CONNECTOR_PROTOCOLS = { min: 2, max: 2 } as const;
 
 /**
  * Refuse a connector speaking a protocol outside CONNECTOR_PROTOCOLS, naming what fixes it. One
  * without the header is a `/connector.js` from before the check, which speaks protocol 1.
  */
-function compatible(request: Request, origin: string, recommended: string | undefined) {
+function compatible(
+	request: Request,
+	origin: string,
+	recommended: string | undefined,
+	agent = false,
+) {
 	let header = request.headers.get(CONNECTOR_PROTOCOL_HEADER);
-	if (header === null) return;
+	// A coding agent reaches its run over HTTP MCP with only the run token, which a connector
+	// speaking a supported protocol claimed for it.
+	if (header === null && agent) return;
+	header ??= "1";
 	if (!/^\d{1,9}$/.test(header)) fail("invalid-request");
 	let protocol = Number(header);
 	let { min, max } = CONNECTOR_PROTOCOLS;
@@ -674,14 +685,19 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	route("GET", "/connector/mcp", async () => new Response(null, { status: 405 }));
 	route("DELETE", "/connector/mcp", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(
+			request,
+			auth.config.origin,
+			options.connectorVersion,
+			connections.run(bearer(request)),
+		);
 		let { connection, grant } = await connector(bearer(request));
 		if (!grant.run) connections.revoke(connection.id);
 		return new Response(null, { status: 204 });
 	});
 	route("POST", "/connector/mcp", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
 		let token = bearer(request);
+		compatible(request, auth.config.origin, options.connectorVersion, connections.run(token));
 		let { connection, grant, caller } = await connector(token);
 		let implementation = options.implementations?.();
 		let implementationRun = grant.run?.kind === "implementation" || grant.run?.kind === "rebuild";

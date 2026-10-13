@@ -68,6 +68,12 @@ and the range a server accepts in `CONNECTOR_PROTOCOLS` in
 `apps/server/src/experiments/routes.ts`. A server refuses a connector outside
 its range and tells the person to run `chopin update <version>`.
 
+Connector protocol 2 pairs a machine once and connects checkouts with its
+stored machine token; a protocol 1 connector cannot connect to a server that
+speaks it. Publish a `chopin` release built with protocol 2 before deploying a
+server with this change, so `chopin update` has a release to install; the first
+published release is `cli-v0.0.1`.
+
 A server recommends the version in its own `apps/connector/package.json`
 unless `CONNECTOR_VERSION` names another, and `chopin update` with no version
 installs that release. Publish a release before deploying a server whose

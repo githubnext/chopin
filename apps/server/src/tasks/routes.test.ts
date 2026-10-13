@@ -1,11 +1,12 @@
-import { Machines } from "../auth/machines";
 import { expect, test } from "bun:test";
+import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
 import { Admission } from "../auth/admission";
 import { Router } from "../http/router";
 import { openPlan, openSiblingPlan } from "../testing/plan";
 import * as Plan from "../plan/service";
-import { registerExperimentRoutes } from "../experiments/routes";
+import { CONNECTOR_PROTOCOL_HEADER } from "@chopin/protocol/connector";
+import { CONNECTOR_PROTOCOLS, registerExperimentRoutes } from "../experiments/routes";
 import { implementationGraphs } from "./plan-graphs";
 import { registerImplementationRoutes } from "./routes";
 import { queueRebuild, requestBuild } from "./builds";
@@ -133,6 +134,8 @@ async function setup(
 					origin,
 					cookie: cookie.split(";")[0],
 					...(token ? { authorization: `Bearer ${token}` } : {}),
+					// What a current connector sends; browser routes ignore it.
+					[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
 				},
 				...(value ? { body: JSON.stringify(value) } : {}),
 			}),

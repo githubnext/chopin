@@ -142,7 +142,9 @@ every request. A server that does not speak that protocol refuses it with
 `connector-update-required` and says what to run: `chopin update <version>`
 with the release the server recommends, or downloading `connector.js` again for
 the script. The connector prints that message and exits instead of retrying. A
-`connector.js` from before this check sends no version and is still accepted.
+`connector.js` from before this check sends no version; it is treated as
+protocol 1, which predates machine pairing, and is told to download
+`connector.js` again.
 
 To build the binaries from a Chopin checkout instead, run
 `bun run --cwd apps/connector build:binaries --host` for this machine, or

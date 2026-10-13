@@ -138,6 +138,10 @@ export class Connections {
 			value.machineId === machineId && value.expiresAt > this.now()
 		);
 	}
+	/** Whether a token is a run's, which the coding agent itself presents. */
+	run(token: string) {
+		return !!this.#tokens.get(fingerprint(token))?.run;
+	}
 	lookup(token: string) {
 		let refused = this.#revoked.get(fingerprint(token));
 		if (refused) fail(refused);
