@@ -154,8 +154,8 @@ test("edits made during a blip are dropped, and said to be, when the document wa
 
 	ana.state.offline = true;
 	await ana.sockets.at(-1)!.close();
-	await content(page).getByText("Shared prose.").click();
-	await page.keyboard.press("End");
+	await content(page).getByText("Shared prose.").selectText();
+	await page.keyboard.press("ArrowRight");
 	await page.keyboard.type(" STALE");
 
 	// A Callout with no id is well-formed MDX and outside the dialect, so the
@@ -196,8 +196,8 @@ test("edits made during a blip are dropped, and said to be, when the document wa
 	await expect(content(page)).not.toContainText("STALE");
 
 	// Back in step: what Ana types now reaches Ben.
-	await content(page).getByText("Shared prose.").click();
-	await page.keyboard.press("End");
+	await content(page).getByText("Shared prose.").selectText();
+	await page.keyboard.press("ArrowRight");
 	await page.keyboard.type(" AFTER");
 	await expect(content(ben)).toContainText("Shared prose. AFTER");
 	await expect(content(ben)).not.toContainText("STALE");

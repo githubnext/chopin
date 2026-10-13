@@ -214,6 +214,42 @@ The authentication mode does not change the Planner's tools. Under
 filesystem access as the server process's user; loopback binding is not a
 filesystem sandbox. See [Full Atomic Planner](hosted-agent.md#full-atomic-planner).
 
+### Rehearse with local collaborators
+
+To demo collaboration from one browser, enable device flow on your GitHub App,
+configure the usual local database and App values, then start the development
+server with:
+
+```bash
+AUTH_MODE=local DEMO_PERSONAS=on SERVER_HOST=127.0.0.1 APP_ORIGIN=http://127.0.0.1:8787 bun run dev
+```
+
+Sign in once with GitHub. Lily and Felix are fictional collaborators who use
+your existing repository permissions; they need no separate accounts. Demo
+personas require local mode and a loopback address. The flag defaults to off.
+
+A short demo:
+
+1. Open a document as yourself. In its title menu, choose **Open as collaborator:
+   Lily**. Put the two tabs side by side; both show your face and Lily's.
+2. Edit a paragraph in each tab and watch the other tab's cursor and prose
+   update. Send a Chat message and add a comment as Lily. If a decision is open,
+   answer it from Lily's tab to show her attribution.
+3. Reload Lily's tab; it keeps her identity and catches up with the document.
+   Close it and watch only Lily disappear. Launch Lily again; her earlier
+   messages, comments, and answers still belong to her, including after a
+   server restart.
+
+The collaborator tab has a badge and a named browser title. Its launch hint
+disappears from the URL; a plain document link opened in a fresh tab uses your
+own identity. Each tab remembers its actor through reload in `sessionStorage`,
+and each actor keeps a separate private Chat draft. To return to ordinary
+collaboration, restart with `DEMO_PERSONAS=off` and reload the tabs.
+
+Run the browser rehearsal with `bun run e2e --project auth`. It uses two pages
+in one browser context, fake GitHub responses, and disposable PostgreSQL
+storage to exercise transport loss, reload, tab closure, and server restart.
+
 ## Instance admission
 
 `GITHUB_ALLOWED_USERS` and `GITHUB_ALLOWED_ORGANIZATIONS` are optional,

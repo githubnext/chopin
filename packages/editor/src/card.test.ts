@@ -11,8 +11,20 @@
  */
 
 import { describe, expect, it } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
-import { when } from "./card";
+import { Provenance, when } from "./card";
+
+it("attributes a decision to its demo persona while preserving GitHub handles", () => {
+	let actor = renderToStaticMarkup(
+		createElement(Provenance, { by: "demo:lily", verb: "Answered" }),
+	);
+	expect(actor).toContain(">Lily</span>");
+	expect(actor).not.toContain("@demo:");
+	let member = renderToStaticMarkup(createElement(Provenance, { by: "ana", verb: "Answered" }));
+	expect(member).toContain(">@ana</span>");
+});
 
 describe("saying when", () => {
 	it("reads a comment's seconds and a questionnaire's ISO string the same way", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { isDemoHandle, personName, setFaceProfiles } from "./people";
 import { withIdentity } from "./identity";
+import { displayName } from "./display-name";
 
 describe("withIdentity", () => {
 	it("rebuilds the whole state and keeps the caret", () => {
@@ -19,6 +20,16 @@ describe("withIdentity", () => {
 });
 
 describe("face identity", () => {
+	it("uses the same actor name in Chat and comments as beside the cursor", () => {
+		setFaceProfiles([{ id: "demo:lily", name: "Lily", avatar: "/demo/lily.svg" }]);
+		try {
+			expect(displayName("demo:lily")).toBe("Lily");
+			expect(displayName("demo:felix")).toBe("Felix");
+			expect(displayName("octocat")).toBe("Octocat");
+		} finally {
+			setFaceProfiles([]);
+		}
+	});
 	it("names demo actors from the roster and never treats them as GitHub logins", () => {
 		setFaceProfiles([{ id: "demo:lily", name: "Lily", avatar: "/demo/lily.svg" }]);
 		expect(personName("demo:lily")).toBe("Lily");

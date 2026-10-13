@@ -174,6 +174,7 @@ export default defineConfig({
 				"**/harness-children.e2e.ts",
 				"**/harness-investigation.e2e.ts",
 				"**/auth-lifecycle.e2e.ts",
+				"**/demo-collaborators.e2e.ts",
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
 		},
@@ -209,7 +210,9 @@ export default defineConfig({
 		},
 		{
 			name: "auth",
-			testMatch: "**/auth-lifecycle.e2e.ts",
+			testMatch: ["**/auth-lifecycle.e2e.ts", "**/demo-collaborators.e2e.ts"],
+			// These files own the same local-mode port and disposable database.
+			workers: 1,
 			use: { ...devices["Desktop Chrome"], baseURL: "http://127.0.0.1:8791" },
 		},
 	],

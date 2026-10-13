@@ -11,6 +11,7 @@ const ORIGIN = "http://127.0.0.1:8791";
 const BASE_ENV = {
 	...process.env,
 	AUTH_MODE: "local",
+	DEMO_PERSONAS: "off",
 	APP_ORIGIN: ORIGIN,
 	SERVER_HOST: "127.0.0.1",
 	PORT: "8791",
@@ -228,6 +229,10 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
 	await expect(page.getByText("Enter one-time code:")).toHaveCount(0);
+	// Other local-mode tests persist documents for this fake GitHub account.
+	if (!await page.getByRole("button", { name: "Close Add project" }).isVisible()) {
+		await page.getByRole("button", { name: "Add project", exact: true }).click();
+	}
 	await expect(page.getByRole("textbox", { name: "Search repositories" })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("button", { name: "Close Add project" })).toHaveCount(0);

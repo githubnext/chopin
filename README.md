@@ -156,6 +156,9 @@ create a channel, then start writing. The current interface calls these planning
 channels. Opening the channel in a second browser profile shows the multiplayer
 path.
 
+For a one-browser demo, [enable local collaborators](docs/authentication.md#rehearse-with-local-collaborators)
+to open Lily or Felix in a separate tab using your existing login.
+
 Ctrl-C stops the development supervisor. `bun run db:down` tears down the local
 Compose project. Set `AGENT=off` to prevent Planner turns and disable the
 background-job runner; this does not disable the `/mcp` endpoint used by external
