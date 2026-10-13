@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
 import { readConfig, updateConfig } from "./config";
@@ -944,4 +945,53 @@ export async function uninstallService(host: ServiceHost, directory: string) {
 	}
 	notes.push(`The pairing, config.json and runs in ${directory} stay in place.`);
 	return { manager, definition, removed: true, notes };
+}
+
+/**
+ * After `chopin update` replaced `executable`, restart a running service that runs it, so it is
+ * not left restart-pending. Returns what to tell the person, if anything; a failed restart does
+ * not undo the update.
+ */
+export async function restartAfterUpdate(host: ServiceHost, directory: string, executable: string) {
+	let service = (await readConfig(directory)).service;
+	if (service?.executable !== executable) return undefined;
+	try {
+		let status = await serviceStatus(host, directory);
+		if (status.state !== "running" && status.state !== "restart-pending") return undefined;
+		await restartService(host, directory);
+		return "Restarted the chopin service, so it runs the new chopin.";
+	} catch (error) {
+		return `Could not restart the chopin service (${
+			error instanceof Error ? error.message : error
+		}). Run chopin service restart.`;
+	}
+}
+
+/**
+ * Call `stop` once the stop request names this process, as `service restart` and `uninstall`
+ * write it on Windows. Returns a function that stops watching.
+ */
+export function onStopRequest(directory: string, stop: () => void, intervalMs = 1000) {
+	let file = stopFile(directory);
+	let timer = setInterval(async () => {
+		let pid = await Bun.file(file).text().catch(() => "");
+		if (pid.trim() === String(process.pid)) {
+			clearInterval(timer);
+			stop();
+		}
+	}, intervalMs);
+	timer.unref?.();
+	return () => clearInterval(timer);
+}
+
+/** This machine and user, with the real service manager behind runProcess. */
+export function systemHost(): ServiceHost {
+	return {
+		platform: process.platform,
+		home: homedir(),
+		user: userInfo().username,
+		uid: process.getuid?.() ?? -1,
+		env: process.env,
+		run: runProcess,
+	};
 }

@@ -7,7 +7,9 @@ import { readConfig, updateConfig } from "./config";
 import {
 	installService,
 	launchdPlist,
+	onStopRequest,
 	type Outcome,
+	restartAfterUpdate,
 	restartService,
 	scheduledTaskScript,
 	type ServiceHost,
@@ -350,4 +352,54 @@ test("install refuses to replace a service a newer chopin installed, unless allo
 	});
 	expect((await readConfig(directory)).service).toMatchObject({ version: "0.0.2" });
 	expect(await readFile(unitPath(home), "utf8")).not.toContain('"--acp"');
+});
+
+test("after an update, a running service on the updated chopin restarts, and nothing else does", async () => {
+	let active = "active";
+	let failRestart = false;
+	let { directory, calls, host, program } = await machine("linux", line => {
+		if (line.startsWith("systemctl --user show chopin.service")) {
+			return { stdout: `ActiveState=${active}\nUnitFileState=enabled\n` };
+		}
+		if (line === "systemctl --user restart chopin.service" && failRestart) {
+			return { code: 1, stderr: "Failed to restart chopin.service" };
+		}
+		return systemd(line);
+	});
+	expect(await restartAfterUpdate(host, directory, program.executable)).toBeUndefined();
+	await installService(host, program, { server: SERVER });
+	calls.length = 0;
+	expect(await restartAfterUpdate(host, directory, "/elsewhere/chopin")).toBeUndefined();
+	expect(calls).toEqual([]);
+	expect(await restartAfterUpdate(host, directory, program.executable)).toBe(
+		"Restarted the chopin service, so it runs the new chopin.",
+	);
+	expect(calls).toContain("systemctl --user restart chopin.service");
+	// A stopped service stays stopped, and a failed restart doesn't undo the update.
+	calls.length = 0;
+	active = "inactive";
+	expect(await restartAfterUpdate(host, directory, program.executable)).toBeUndefined();
+	expect(calls).not.toContain("systemctl --user restart chopin.service");
+	active = "active";
+	failRestart = true;
+	expect(await restartAfterUpdate(host, directory, program.executable)).toContain(
+		"Run chopin service restart",
+	);
+});
+
+test("a service connector stops when a stop request names its own process", async () => {
+	let { directory } = await machine();
+	await mkdir(directory, { recursive: true });
+	let stopped = 0;
+	let watch = onStopRequest(directory, () => stopped++, 10);
+	try {
+		await writeFile(stopFile(directory), `${process.pid + 1}\n`);
+		await Bun.sleep(50);
+		expect(stopped).toBe(0);
+		await writeFile(stopFile(directory), `${process.pid}\n`);
+		await Bun.sleep(50);
+		expect(stopped).toBe(1);
+	} finally {
+		watch();
+	}
 });

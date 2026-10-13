@@ -43,7 +43,10 @@ async function installed() {
 	await chmod(join(shims, "gh"), 0o755);
 	let original = sha256(await Bun.file(chopin).bytes());
 	return {
+		home,
 		bin,
+		shims,
+		log,
 		chopin,
 		calls: async () => (await Bun.file(log).exists()) ? (await readFile(log, "utf8")).trim() : "",
 		/** Whether the binary is still the compiled chopin, with nothing left beside it. */
@@ -196,6 +199,50 @@ describe.skipIf(!binary)("chopin update", () => {
 		expect(await at.untouched()).toBe(true);
 		expect(await at.calls()).toBe("");
 	});
+
+	// A fake systemctl on PATH answers for the service; the real one is never run.
+	test.if(process.platform === "linux")(
+		"restarts a running service that runs the updated chopin",
+		async () => {
+			using release = releases();
+			using chopin = chopinServer("98.0.0");
+			let at = await installed();
+			await writeFile(
+				join(at.shims, "systemctl"),
+				`#!/bin/sh\necho "systemctl $*" >> "${at.log}"\n`
+					+ '[ "$2" = show ] && echo ActiveState=active\nexit 0\n',
+			);
+			await chmod(join(at.shims, "systemctl"), 0o755);
+			let units = join(at.home, ".config", "systemd", "user");
+			await mkdir(units, { recursive: true });
+			await writeFile(join(units, "chopin.service"), "[Unit]\n");
+			let state = join(at.home, "state");
+			await mkdir(state);
+			let service = {
+				executable: at.chopin,
+				checkout: at.home,
+				command: ["agent"],
+				directory: state,
+			};
+			await writeFile(
+				join(state, "config.json"),
+				JSON.stringify({ service: { ...service, version, installedAt: 1 } }),
+			);
+			let result = await at.update({
+				...release.env,
+				CHOPIN_URL: chopin.url,
+				CHOPIN_HOME: state,
+				CHOPIN_VERIFY_ATTESTATION: "0",
+			});
+			expect(result.stderr).toBe("");
+			expect(result.code).toBe(0);
+			expect(result.stdout).toContain(
+				"Updated chopin from " + version + " to 98.0.0",
+			);
+			expect(result.stdout).toContain("Restarted the chopin service, so it runs the new chopin.");
+			expect((await at.calls()).split("\n")).toContain("systemctl --user restart chopin.service");
+		},
+	);
 
 	test("does nothing when the release is the version already running", async () => {
 		using release = fakeRelease({ [version]: assets(asset, fakeChopin(version)) });

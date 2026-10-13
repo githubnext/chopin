@@ -1,5 +1,6 @@
+import { appendFileSync } from "node:fs";
 import { hostname } from "node:os";
-import { basename, resolve } from "node:path";
+import { basename, isAbsolute, resolve, sep } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { requestSchema } from "@chopin/experiment";
 import { createBridge } from "./bridge";
@@ -12,6 +13,18 @@ import { permissionMemory } from "./permission";
 import { commandWords, servePlanners } from "./planner";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
+import { readConfig } from "./config";
+import {
+	installService,
+	logPath,
+	onStopRequest,
+	restartAfterUpdate,
+	restartService,
+	ServiceError,
+	serviceStatus,
+	systemHost,
+	uninstallService,
+} from "./service";
 import { removeReplaced, update } from "./update";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { lockWorkspace, stateDirectory, workspace } from "./workspace";
@@ -54,8 +67,23 @@ async function bridge() {
 	process.once("SIGINT", () => void close());
 }
 
-function server() {
-	return origin(process.env.CHOPIN_URL ?? DEFAULT_URL);
+/** CHOPIN_URL, else the server `chopin service install` stored, else Chopin's own. */
+async function server() {
+	return origin(
+		process.env.CHOPIN_URL ?? (await readConfig(stateDirectory())).server ?? DEFAULT_URL,
+	);
+}
+
+/** Under Task Scheduler nothing collects output, so the Windows service appends it to its log. */
+function appendOutput(path: string) {
+	let write = (chunk: string | Uint8Array) => {
+		try {
+			appendFileSync(path, chunk);
+		} catch { /* A full or vanished log must not stop the connector. */ }
+		return true;
+	};
+	process.stdout.write = write as typeof process.stdout.write;
+	process.stderr.write = write as typeof process.stderr.write;
 }
 
 /** Interrupt a command at the first Ctrl-C; a second exits at once. */
@@ -88,7 +116,7 @@ async function pairCommand(args: string[]) {
 	let run = interruptible();
 	try {
 		let token = await pair({
-			url: server(),
+			url: await server(),
 			label,
 			directory: stateDirectory(),
 			output,
@@ -104,7 +132,7 @@ async function pairCommand(args: string[]) {
 async function unpairCommand(args: string[]) {
 	let parsed = parseArgs(args);
 	if (parsed.positional.length || parsed.rest) throw new Error(`Usage: ${SELF} unpair`);
-	let url = server();
+	let url = await server();
 	let result = await unpair(url, stateDirectory());
 	createOutput().say(
 		result === "unpaired"
@@ -114,7 +142,13 @@ async function unpairCommand(args: string[]) {
 }
 
 async function connect(args: string[]) {
-	let parsed = parseArgs(args, { options: ["planner-command"], lists: ["planner"] });
+	// `--service` marks the connector the installed service runs.
+	let parsed = parseArgs(args, {
+		flags: ["service"],
+		options: ["planner-command"],
+		lists: ["planner"],
+	});
+	let service = parsed.flags.has("service");
 	let command = parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
 	if (
 		!Array.isArray(command) || !command.length
@@ -136,10 +170,11 @@ async function connect(args: string[]) {
 			`--planner <document URL> and --planner-command <command> go together.\n\n${USAGE}`,
 		);
 	}
-	let url = server();
-	let info = await workspace(resolve(parsed.positional[0] ?? "."));
 	let directory = stateDirectory();
-	let release = await lockWorkspace(info.root, directory);
+	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
+	let url = await server();
+	let info = await workspace(resolve(parsed.positional[0] ?? "."));
+	let release = await lockWorkspace(info.root, directory, { service });
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
 	let stop = () => {
@@ -149,6 +184,8 @@ async function connect(args: string[]) {
 	};
 	process.once("SIGINT", stop);
 	process.once("SIGTERM", stop);
+	// Task Scheduler ends a task without a signal, so `service restart` asks through a file.
+	let unwatch = service ? onStopRequest(directory, stop) : () => {};
 	let output = createOutput();
 	let permissions = permissionMemory();
 	try {
@@ -157,6 +194,13 @@ async function connect(args: string[]) {
 		for (;;) {
 			// A machine paired once reconnects with its stored token; an unpaired one pairs first.
 			let stored = await machineToken(directory, url);
+			// The service has no terminal to pair on, so it stops rather than wait on a browser.
+			if (!stored && service && !(process.stdin.isTTY && process.stdout.isTTY)) {
+				throw new Error(
+					`This machine is not paired with ${url}. Run \`${SELF} pair\` at a terminal, then `
+						+ `\`${SELF} service restart\`.`,
+				);
+			}
 			let machine = stored
 				?? await pair({
 					url,
@@ -224,7 +268,84 @@ async function connect(args: string[]) {
 	} finally {
 		process.removeListener("SIGINT", stop);
 		process.removeListener("SIGTERM", stop);
+		unwatch();
 		await release();
+	}
+}
+
+const SERVICE_USAGE = `Usage: ${SELF} service install [checkout] [--allow-downgrade] `
+	+ `[-- agent [ACP arguments]] | ${SELF} service status | restart | uninstall`;
+
+/** `service install|status|restart|uninstall`: run `connect` as this user's background service. */
+async function serviceCommand(args: string[]) {
+	let [action, ...rest] = args;
+	let parsed = parseArgs(rest, { flags: action === "install" ? ["allow-downgrade"] : [] });
+	let directory = stateDirectory();
+	let host = systemHost();
+	let output = createOutput();
+	let lines = (notes: string[]) => notes.map(note => output.style.dim(`  ${note}`));
+	if (action === "install") {
+		if (parsed.positional.length > 1) throw new Error(SERVICE_USAGE);
+		if (!Bun.isStandaloneExecutable) {
+			throw new ServiceError(
+				"chopin service install needs the installed chopin, not connector.js. Install it with "
+					+ "install.sh or install.ps1 (see docs/local-experiments.md), then run it from there.",
+			);
+		}
+		let stored = (await readConfig(directory)).service;
+		let command = parsed.rest ?? stored?.command;
+		if (!command?.length || command.some(item => !item)) throw new Error(SERVICE_USAGE);
+		// A relative agent path would resolve against the service's own working directory.
+		let agent = command[0]!;
+		if (!isAbsolute(agent) && (agent.includes("/") || agent.includes(sep))) {
+			command = [resolve(agent), ...command.slice(1)];
+		}
+		let checkout = parsed.positional[0] ?? stored?.checkout ?? ".";
+		let { root } = await workspace(resolve(checkout));
+		let url = await server();
+		if (!await machineToken(directory, url)) {
+			throw new ServiceError(
+				`This machine is not paired with ${url}. Run \`${SELF} pair\` first, then install the `
+					+ "service.",
+			);
+		}
+		let installed = await installService(host, {
+			executable: process.execPath,
+			checkout: root,
+			command,
+			directory,
+		}, { server: url, allowDowngrade: parsed.flags.has("allow-downgrade") });
+		output.say(
+			`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
+				+ `It connects ${root} to ${url}.`,
+			output.style.dim(`  Definition: ${installed.definition}`),
+			output.style.dim(`  Log: ${installed.log}`),
+			...lines(installed.notes),
+		);
+		return;
+	}
+	if (parsed.positional.length || parsed.rest) throw new Error(SERVICE_USAGE);
+	if (action === "status") {
+		let status = await serviceStatus(host, directory);
+		output.say(
+			`Service: ${status.state} (${status.manager}${status.pid ? `, pid ${status.pid}` : ""})`,
+			output.style.dim(`  Definition: ${status.definition}`),
+			output.style.dim(`  Log: ${status.log}`),
+			...lines(status.notes),
+		);
+	} else if (action === "restart") {
+		let restarted = await restartService(host, directory);
+		output.say(`${output.style.green("✓ Restarted the chopin service")} (${restarted.manager}).`);
+	} else if (action === "uninstall") {
+		let removed = await uninstallService(host, directory);
+		output.say(
+			removed.removed
+				? `${output.style.green("✓ Removed the chopin service")} (${removed.definition}).`
+				: "The chopin service is not installed.",
+			...lines(removed.notes),
+		);
+	} else {
+		throw new Error(SERVICE_USAGE);
 	}
 }
 
@@ -246,16 +367,25 @@ const HELP = [
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
+	"  service install [checkout] [--allow-downgrade] [-- <agent> [ACP arguments]]",
+	"      Run connect as this user's background service (systemd, launchd or Task Scheduler),",
+	"      so it starts again after a reboot. Takes connect's checkout and agent command, or",
+	"      reuses the ones stored by the last install. A service a newer chopin installed is kept",
+	"      unless --allow-downgrade.",
+	"  service status | restart | uninstall",
+	"      Show whether it is running, stopped, restart-pending or not-installed; restart it;",
+	"      or stop and remove it, keeping the pairing, config and runs.",
 	"  update [version] [--allow-downgrade] [--yes]",
 	"      Replace this chopin with a verified release: by default the one your Chopin instance",
 	"      recommends, or else the newest. An older release needs --allow-downgrade; --yes skips",
-	"      the question asked on a terminal.",
+	"      the question asked on a terminal. A running service on this chopin restarts.",
 	"  version    Print the CLI version and the connector protocol it speaks.",
 	"  help       Show this help.",
 	"",
 	"--base-dir (or CHOPIN_HOME) is where the machine token, locks and worktrees live",
 	"(default ~/.local/state/chopin/connector).",
-	`CHOPIN_URL names your Chopin instance (default ${DEFAULT_URL}).`,
+	"CHOPIN_URL names your Chopin instance (default: the one `service install` stored, else",
+	`${DEFAULT_URL}).`,
 ].join("\n");
 
 if (import.meta.main) {
@@ -272,9 +402,11 @@ if (import.meta.main) {
 				version: parsed.positional[0],
 				allowDowngrade: parsed.flags.has("allow-downgrade"),
 				yes: parsed.flags.has("yes"),
-				server: server(),
+				server: await server(),
+				afterUpdate: target => restartAfterUpdate(systemHost(), stateDirectory(), target),
 			});
 		} else if (mode === "connect") await connect(args);
+		else if (mode === "service") await serviceCommand(args);
 		else if (mode === "pair") await pairCommand(args);
 		else if (mode === "unpair") await unpairCommand(args);
 		else if (mode === "version" || mode === "--version" || mode === "-v") {
