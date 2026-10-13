@@ -7,7 +7,7 @@
  */
 
 import { content, expect, test } from "./room";
-import { CHOSEN, SETTLED_ANSWER, SOURCE, STATE } from "./source/icon-size.fixture";
+import { CHOSEN, SOURCE, STATE } from "./source/icon-size.fixture";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -49,12 +49,7 @@ test("icons keep their size and sit on the first line beside wrapped decision te
 	await seed(SOURCE, STATE);
 	let page = await join("ana");
 	await phone(page);
-
-	let settled = content(page).locator("[data-card-settled]");
-	await expect(settled).toContainText(SETTLED_ANSWER);
-	expect((await settled.boundingBox())!.height).toBeGreaterThan(30);
-	expect(await squeezed(settled)).toEqual([]);
-	expect(await firstLineOffset(settled)).toBeLessThan(1.5);
+	await expect(content(page).locator("[data-card-settled]")).toHaveCount(0);
 
 	await page.getByRole("button", { name: `Decision: ${CHOSEN}` }).click();
 	let dialog = page.getByRole("dialog", { name: "Decision" });

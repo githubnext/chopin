@@ -219,7 +219,7 @@ test("the deck keeps its top card, focus and draft when its first card leaves", 
 	await expect(draft).toBeFocused();
 });
 
-test("answering the last open card hands focus to its settled line", async ({ join, seed }) => {
+test("answering the last open card dissolves the deck without settled lines", async ({ join, seed }) => {
 	let fixture = deckSeed({ before: "Intro paragraph." }, 2);
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
@@ -233,10 +233,9 @@ test("answering the last open card hands focus to its settled line", async ({ jo
 	await top(page).getByText("Option 2", { exact: true }).click();
 	await top(page).getByRole("button", { name: "Save", exact: true }).click();
 	await expect(deck(page)).toHaveCount(0);
-	let settled = content(page).locator(
-		`[data-plan-questionnaire="${fixture.ids[1]}"] [data-card-settled]`,
-	);
-	await expect(settled).toBeFocused();
+	// Without prose a decided card draws nothing in the document; Decisions keeps it.
+	await expect(content(page).locator("[data-card-settled]")).toHaveCount(0);
+	await expect(content(page)).toContainText("Intro paragraph.");
 });
 
 test("an answered decision settles to the back and focus follows the new top", async ({ join, seed }) => {
@@ -310,7 +309,7 @@ test("answering every decision dissolves the deck", async ({ join, seed }) => {
 		await top(page).getByRole("button", { name: "Save", exact: true }).click();
 	}
 	await expect(deck(page)).toHaveCount(0);
-	await expect(page.locator('[data-document-view="plan"] [data-card-settled]')).toHaveCount(2);
+	await expect(page.locator('[data-document-view="plan"] [data-card-settled]')).toHaveCount(0);
 });
 
 test("showing a back decision from Decisions brings it to the top and focuses it", async ({ join, seed }) => {

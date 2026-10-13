@@ -363,7 +363,7 @@ test("a touch marker reaches 44px tall within the gutter, and a tap pins without
 	}
 });
 
-test("a decision with no prose keeps a compact settled line instead of a marker", async ({ join, seed }) => {
+test("a decision with no prose draws nothing in the document, beside a marked one", async ({ join, seed }) => {
 	let orphan = {
 		...STATE.questions[0]!,
 		anchors: { widget: WIDGET_A, questions: { [QUESTION_A]: { anchors: [], pending: false } } },
@@ -373,12 +373,10 @@ test("a decision with no prose keeps a compact settled line instead of a marker"
 	await open(page, "Two weeks");
 
 	await expect(marker(page)).toHaveCount(0);
-	let settled = page.locator(
-		`[data-document-view="plan"] [data-card-settled][data-plan-sidecar-questionnaire="${WIDGET_A}"]`,
-	);
-	await expect(settled).toBeVisible();
-	await expect(settled.getByText("Decided: Team by team · @ana", { exact: true }))
-		.toBeVisible();
+	await expect(page.locator('[data-document-view="plan"] [data-card-settled]')).toHaveCount(0);
+	await expect(
+		page.locator(`[data-document-view="plan"] [data-plan-sidecar-questionnaire="${WIDGET_A}"]`),
+	).toBeHidden();
 	await expect(marker(page, "Two weeks")).toBeVisible();
 });
 
@@ -476,7 +474,7 @@ function settle(page: Page) {
 	);
 }
 
-test("a second click where the caret already is does not send typing on a selected card to the document start", async ({ join, seed }) => {
+test("a second click where the caret already is never sends typing past a hidden card to the document start", async ({ join, seed }) => {
 	let orphan = {
 		...STATE.questions[0]!,
 		anchors: { widget: WIDGET_A, questions: { [QUESTION_A]: { anchors: [], pending: false } } },
@@ -497,7 +495,8 @@ test("a second click where the caret already is does not send typing on a select
 		await page.keyboard.type("xyz");
 		await expect(content(page).locator("p").first()).toHaveText(FIRST);
 	}
-	await expect(content(page)).not.toContainText("xyz");
+	// The prose-less card draws nothing, so the caret passes it into the next paragraph.
+	await expect(content(page).locator("p").nth(1)).toContainText("xyz");
 });
 
 const hiddenCard = (page: Page, widget: string) =>

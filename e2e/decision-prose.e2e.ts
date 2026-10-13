@@ -328,7 +328,7 @@ test("a failed prose job is visible on the opening message and Retry uses the co
 	await expect(prose(page)).toBeVisible();
 });
 
-test("the settled line follows its prose job through failure, Retry, writing, and done", async ({ join, room }) => {
+test("a write-up shows one quiet line in the document; failure and Retry live in Decisions", async ({ join, room }) => {
 	let page = await join("ana");
 	await scriptProse(OPTION, "another-card");
 	await openJevWire(page, room);
@@ -337,26 +337,34 @@ test("the settled line follows its prose job through failure, Retry, writing, an
 	await card(page).getByText(OPTION, { exact: true }).click();
 	await card(page).getByRole("button", { name: "Save", exact: true }).click();
 	await waitForProseJob(page, "failed");
-	let settled = content(page).locator("[data-card-settled]");
-	await expect(settled).toContainText(`Decided: ${OPTION} · @ana`);
-	await expect(settled).toContainText("Couldn't write this up");
-	await expect(settled).not.toContainText("Writing up…");
+	let writing = content(page).locator("[data-plan-writing-up]");
+	await expect(content(page).locator("[data-card-settled]")).toHaveCount(0);
+	await expect(writing).toHaveCount(0);
+	let decisions = page.locator('[data-document-view="decisions"]');
+	let show = async () => {
+		await page.getByRole("button", { name: /^Decisions/ }).click();
+		await page.getByRole("button", { name: "1 resolved", exact: true }).click();
+		await expect(decisions).toContainText("Couldn't write this up");
+	};
+	await show();
 
 	await page.reload();
 	await ready(page);
-	await expect(settled).toContainText("Couldn't write this up");
+	await show();
 	await openJevWire(page, room);
 	await scriptProse(OPTION, "$target", { hold: true });
 	try {
-		await settled.getByRole("button", { name: "Retry write-up", exact: true }).click();
-		await expect(settled).toContainText("Writing up…");
-		await expect(settled).not.toContainText("Couldn't write this up");
+		await decisions.getByRole("button", { name: "Retry write-up", exact: true }).click();
+		await expect(decisions).toContainText("Writing up…");
+		await expect(decisions).not.toContainText("Couldn't write this up");
+		await page.getByRole("button", { name: "Document", exact: true }).click();
+		await expect(writing).toHaveText("Writing up a decision…");
 	} finally {
 		await releasePlannerJob("prose");
 	}
 	await waitForProseJob(page, "done");
 	await expect(prose(page)).toBeVisible();
-	await expect(settled).toHaveCount(0);
+	await expect(writing).toHaveCount(0);
 });
 
 test("the collapse has an intermediate inert state, respects reduced motion, and rapid reopen remains usable", async ({ join, room }) => {

@@ -25,6 +25,8 @@ const COMMENT_THREAD = /using thread ([0-9A-HJKMNP-TV-Z]{26})/;
 const BACKSTOP_PROMPT = "COMMENT-BACKSTOP";
 /** Makes the fake Planner ask three decisions, appended without linked prose. */
 const ASK_PROMPT = "ASK-DECISIONS";
+/** With the ask, writes up and links the answered decisions before the turn ends. */
+const WRITE_PROMPT = "THEN-WRITE";
 const ASKED = [
 	{ header: "Storage", question: "Where should room state live?" },
 	{ header: "Scope", question: "What belongs in the first cut?" },
@@ -147,6 +149,40 @@ export function createFakeHarness(
 						});
 					};
 
+					// Writes a paragraph per answered decision and links each, as a real Planner
+					// does after its ask returns. Paused first, so the wait is observable.
+					let writeUp = async () => {
+						await pause();
+						let read = await callTool("read_plan");
+						let current = (JSON.parse(String(read.output)) as { revision: number }).revision;
+						let edited = await callTool("edit_plan", undefined, {
+							revision: current,
+							operations: [{
+								op: "insert",
+								index: 0,
+								source: ASKED.map(item => `${item.header}: we chose the first option.`)
+									.join("\n\n"),
+							}],
+						});
+						let result = JSON.parse(String(edited.output)) as {
+							revision: number;
+							blocks: Array<{ index: number; type: string; digest: string }>;
+							anchors_pending: Array<{ widget: string; question: string }>;
+						};
+						let paragraphs = result.blocks.filter(block => block.type === "paragraph");
+						let anchored = await callTool("anchor_plan", undefined, {
+							revision: result.revision,
+							anchors: result.anchors_pending.map((item, index) => ({
+								widget: item.widget,
+								question: item.question,
+								blocks: [{ index: paragraphs[index]!.index, digest: paragraphs[index]!.digest }],
+							})),
+						});
+						if (anchored.isError || !(JSON.parse(String(anchored.output)) as { ok: boolean }).ok) {
+							throw new Error(`anchor_plan failed: ${String(anchored.output)}`);
+						}
+					};
+
 					if (thread && !prompt.includes(SLOW_PROMPT)) {
 						// A comment sent to Chopin: answer in the thread, unless the comment
 						// asks to be answered only in Chat so the server's backstop is exercised.
@@ -212,6 +248,7 @@ export function createFakeHarness(
 										],
 									})),
 								});
+								if (prompt.includes(WRITE_PROMPT)) await writeUp();
 								finish();
 								settled.resolve();
 							} catch (err) {

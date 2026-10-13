@@ -31,25 +31,13 @@ test("actual decided inline node hides while its list card remains expanded", as
 	]);
 });
 
-test("actual presentation transitions through a settled line without deleting the node", async ({ page }) => {
+test("actual decided inline node stays hidden with or without prose, without deleting it", async ({ page }) => {
 	await loadCollapse(page);
 	await page.evaluate(() => window.collapseFixture.status("decided", false));
-	await expect(inline(page)).toBeVisible();
-	await expect(inline(page)).toContainText("Decided: GitHub Apps");
-	await expect(summary(page)).toContainText("GitHub Apps");
-	await page.clock.install();
-	await page.clock.pauseAt(new Date());
-	await page.evaluate(() => window.collapseFixture.status("decided", true));
-	await expect(inline(page)).toBeVisible();
-	let closing = content(page).locator('[data-decision-collapsing="reader-card"]');
-	await expect(closing).toHaveAttribute("inert", "");
-	await expect(closing).toHaveAttribute("aria-hidden", "true");
-	await page.clock.runFor(260);
 	await expect(inline(page)).toBeHidden();
-	expect(await page.evaluate(() => window.collapseFixture.signals)).toEqual([{
-		kind: "question:presence",
-		payload: { id: "reader-card" },
-	}]);
+	await expect(summary(page)).toContainText("GitHub Apps");
+	await page.evaluate(() => window.collapseFixture.status("decided", true));
+	await expect(inline(page)).toBeHidden();
 	expect((await page.evaluate(() => window.collapseFixture.snapshot())).cards).toContain(
 		"reader-card",
 	);

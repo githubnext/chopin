@@ -395,12 +395,17 @@ test("an orphaned prose anchor retains its authoritative state and resolved card
 		.toContainText("Canary");
 });
 
-test("conversation decisions settle inline without claiming a write-up no job is doing", async ({ join, seed }) => {
+test("a conversation decision without prose stays out of the document and claims no write-up", async ({ join, seed }) => {
 	await seed(`${PROSE}\n${DECIDED_CARD}`, {
 		questions: [{ ...DECIDED_RECORD, origin: "conversation" }],
 	});
 	let page = await join("ana");
-	let settled = content(page).locator("[data-card-settled]");
-	await expect(settled).toContainText("Decided: Canary · @ana");
-	await expect(settled).not.toContainText("Writing up…");
+	await expect(content(page)).toContainText("Room state lives on disk as MDX");
+	await expect(content(page).locator("[data-card-settled]")).toHaveCount(0);
+	await expect(content(page).locator("[data-plan-writing-up]")).toHaveCount(0);
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	await page.getByRole("button", { name: "1 resolved" }).click();
+	let decisions = page.locator('[data-document-view="decisions"]');
+	await expect(decisions).toContainText("Canary");
+	await expect(decisions).not.toContainText("Writing up…");
 });
