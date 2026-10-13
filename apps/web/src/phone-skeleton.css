@@ -254,8 +254,6 @@
 	border-radius: var(--radius-panel);
 	background: var(--color-page);
 	box-shadow: var(--shadow-raised);
-	outline: var(--edge-width) solid var(--color-edge);
-	outline-offset: calc(-1 * var(--edge-width));
 }
 
 .workspace-skeleton[data-chat="closed"] .workspace-skeleton-chat {
@@ -268,6 +266,11 @@
 }
 
 @container workspace-skeleton (width >= 724px) {
+	.workspace-skeleton-sheet {
+		outline: var(--edge-width) solid var(--color-edge);
+		outline-offset: calc(-1 * var(--edge-width));
+	}
+
 	.navigation-content[data-project-sidebar-trigger]
 		.workspace-skeleton[data-chat="closed"]
 		.workspace-skeleton-frame {
@@ -375,7 +378,6 @@
 		margin-top: 0;
 		border-radius: 0;
 		box-shadow: none;
-		outline: none;
 	}
 }
 
