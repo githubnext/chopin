@@ -4,8 +4,7 @@ The `chopin` CLI is the connector in `apps/connector`, compiled into one
 executable per platform. It is released as GitHub release assets of this
 repository by [`.github/workflows/release-cli.yml`](../.github/workflows/release-cli.yml),
 and installed with the scripts in `apps/connector/install`. See
-[Install the chopin CLI](local-experiments.md#install-the-chopin-cli) for the
-user side.
+[Use your own machine with Chopin](chopin-cli.md) for the user side.
 
 ## One-time setup
 

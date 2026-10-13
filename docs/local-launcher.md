@@ -8,64 +8,15 @@ separate from passing implementation verification.
 
 ## Connect a workspace
 
-Authenticate an ACP-compatible coding agent normally, then connect a checkout
-from its folder. [Bun](https://bun.sh) is required:
+Connect a checkout with the `chopin` CLI, as
+[Use your own machine with Chopin](chopin-cli.md) describes. See
+[Trouble connecting](local-experiments.md#trouble-connecting) for pairing
+problems, refusals and stale locks.
 
-```sh
-mkdir -p ~/.chopin \
-  && curl -fsSL https://your-chopin-instance.example/connector.js -o ~/.chopin/connector.js \
-  && CHOPIN_URL=https://your-chopin-instance.example \
-    bun --no-env-file --config=/dev/null \
-      ~/.chopin/connector.js connect . -- copilot --acp --allow-all
-```
-
-`--no-env-file` and `--config=/dev/null` stop Bun from loading the project folder's
-`.env` and `bunfig.toml`: a checkout must not choose which server the connector pairs
-with or run code through a `preload`. The `chopin` binary below ignores both by itself.
-
-Open the printed pairing link, sign into Chopin, check that the page shows the
-confirmation code printed in your terminal, and select **Connect**. Leave
-**Let Chopin build and prototype automatically on this machine** unticked unless
-you want Chopin to start work there by itself: rebuilds of a living document
-(`LIVE_BUILD`) and, where enabled, prototypes. Without it, only work a person
-presses Build or Run for reaches the laptop. The choice is stored with the paired
-machine, so reconnecting keeps it and pairing again asks again. This is
-the existing investigation pairing flow; one connection serves every document in
-the checkout's repository. No GitHub bearer
-needs to be configured in a second companion. Pairing stores a machine token
-that outlives server restarts, deploys and browser sign-out, until the machine
-is disconnected in the browser or unpaired with `chopin unpair`; see
-[Connect a checkout](local-experiments.md#connect-a-checkout). See
-[Trouble connecting](local-experiments.md#trouble-connecting)
-for pairing problems, refusals and stale locks.
-
-Keep the connector running, or install it as a service with
-`chopin service install` so it starts again after a reboot (see
-[Run chopin as a service](local-experiments.md#run-chopin-as-a-service)).
-Each browser Build action starts an agent process.
-Standard ACP permission requests appear in its terminal with the command or
-paths involved, and are declined when no interactive terminal is available.
-The agent retains its normal tools, project instructions and configured
-services.
-
-### Install the chopin CLI
-
-The connector is also released as `chopin`, one executable that needs no Bun.
-Install it, then connect from the checkout's folder:
-
-```sh
-curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
-CHOPIN_URL=https://your-chopin-instance.example \
-  chopin connect . -- copilot --acp --allow-all
-```
-
-On Windows, install it in PowerShell with
-`irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | iex`.
-`chopin connect` behaves exactly like the `bun` command above. Until the first
-`cli-v*` release is published, the installers have nothing to download, and the
-`curl` and `bun` command above remains the way to connect. See
-[Install the chopin CLI](local-experiments.md#install-the-chopin-cli) for where
-it installs, version pins and how the download is verified.
+Each browser Build action starts an agent process. Standard ACP permission
+requests appear in its terminal with the command or paths involved, and are
+declined when no interactive terminal is available. The agent retains its
+normal tools, project instructions and configured services.
 
 ## Build a settled plan
 

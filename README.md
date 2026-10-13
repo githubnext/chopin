@@ -3,11 +3,13 @@
 Chopin is a GitHub Next research prototype exploring how people and
 repository-grounded agents can author durable documents together. A document
 might be an implementation plan, technical specification, RFC, proposal, or
-decision record. People shape the document and own its decisions; the hosted
-agent, currently named **Planner**, reads the selected repository, proposes
-changes, and asks the team when the code cannot settle a choice.
+decision record.
 
-To learn more about our design priciples, and why we're building Chopin check out our recent blog post - https://githubnext.com/projects/chopin/
+People shape the document and own its decisions. The hosted agent, currently
+named **Planner**, reads the selected repository, proposes changes, and asks the
+team when the code cannot settle a choice.
+
+To learn more about our design principles, and why we're building Chopin check out our recent blog post - https://githubnext.com/projects/chopin/
 
 > [!IMPORTANT]
 > Chopin is experimental research software, not a supported GitHub product or a
@@ -129,10 +131,15 @@ Callback:  http://127.0.0.1:8787/auth/github/callback
 Setup URL: http://127.0.0.1:8787/auth/github/setup
 ```
 
-Enable expiring user authorization tokens, disable OAuth during installation,
-disable webhooks, and grant read access to Contents, Pull requests, Checks, and
-Commit statuses. See [Authentication](docs/authentication.md) for the exact App
-settings and the additional permission needed for organization admission.
+Then, on the App:
+
+- enable expiring user authorization tokens;
+- disable OAuth during installation;
+- disable webhooks; and
+- grant read access to Contents, Pull requests, Checks, and Commit statuses.
+
+See [Authentication](docs/authentication.md) for the exact App settings and the
+additional permission needed for organization admission.
 
 Install, configure, and start Chopin:
 
@@ -150,19 +157,21 @@ The committed local Compose override publishes PostgreSQL on host port 5432 and
 is intended only for a trusted development machine. Do not use it on an exposed
 host. See [Self-hosting](docs/self-hosting.md) for an internet-facing deployment.
 
-Open [http://127.0.0.1:8787](http://127.0.0.1:8787), sign in, and install or
-update the GitHub App when the repository picker asks. Select a repository and
-create a channel, then start writing. The current interface calls these planning
-channels. Opening the channel in a second browser profile shows the multiplayer
-path.
+1. Open [http://127.0.0.1:8787](http://127.0.0.1:8787) and sign in.
+2. Install or update the GitHub App when the repository picker asks.
+3. Select a repository and create a channel, then start writing. The current
+   interface calls these planning channels.
+
+Opening the channel in a second browser profile shows the multiplayer path.
 
 For a one-browser demo, [enable local collaborators](docs/authentication.md#rehearse-with-local-collaborators)
 to open Lily or Felix in a separate tab using your existing login.
 
 Ctrl-C stops the development supervisor. `bun run db:down` tears down the local
-Compose project. Set `AGENT=off` to prevent Planner turns and disable the
-background-job runner; this does not disable the `/mcp` endpoint used by external
-coding agents.
+Compose project.
+
+Set `AGENT=off` to prevent Planner turns and disable the background-job runner.
+This does not disable the `/mcp` endpoint used by external coding agents.
 
 ## Collaborate with the Planner
 
@@ -190,23 +199,21 @@ at their latest revision, and references never change which document its editing
 tools target. Research starts from `/research` in the document rather than from
 a Chat reference.
 
-## Connect a coding agent
+## Use your own machine
 
-Chopin exposes a bearer-authenticated Streamable HTTP MCP endpoint. See
-[Connect a local coding agent](docs/local-agent-mcp.md) for Claude Code, Codex
-CLI, and GitHub Copilot CLI configuration. Its document tools include
-[`upload_image`](docs/local-agent-mcp.md#upload-an-image), which hosts a PNG,
-JPEG, WebP, or GIF of at most 1 MiB for a document; only people who can read
-that document can load it.
+The `chopin` CLI connects a machine you control to your Chopin server, so
+builds, investigations and Planner work run in your own checkout with your own
+coding agent. Install it, then connect your checkout once with your server's
+origin in `CHOPIN_URL`. `chopin connect` pairs the machine the first time and
+saves the server for later commands.
 
-Planning is one way to use a Chopin document today. The optional
-[creating-chopin-plans skill](skills/creating-chopin-plans/SKILL.md) turns a
-settled coding-agent conversation into an initial plan document.
-[Implementation handoff](docs/implementation-lifecycle.md) and the
-[implementing-chopin-plans skill](skills/implementing-chopin-plans/SKILL.md) are
-experimental. The supported read-before-claim flow works only for documents
-created through MCP, and Chopin does not yet provide a user-facing way to approve
-a draft graph.
+```bash
+curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
+CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
+```
+
+See [Use your own machine with Chopin](docs/chopin-cli.md) for Windows, the
+background service and every command.
 
 ## Documentation
 
@@ -219,6 +226,7 @@ in a local checkout and publishes captured evidence to Chopin's native views.
 | Deploy and operate an instance             | [Self-hosting](docs/self-hosting.md)                         |
 | Configure identity and access              | [Authentication](docs/authentication.md)                     |
 | Connect an external coding agent           | [Local agent MCP](docs/local-agent-mcp.md)                   |
+| Run Chopin's work on your own machine      | [chopin CLI](docs/chopin-cli.md)                             |
 | Understand the system                      | [Architecture](docs/architecture.md)                         |
 | Understand channel identity and access     | [Repository channels](docs/channels.md)                      |
 | Understand persistence                     | [Storage](docs/storage.md)                                   |

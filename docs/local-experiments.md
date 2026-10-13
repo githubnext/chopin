@@ -7,380 +7,30 @@ tables and charts, shares selections, and records decisions against fixed eviden
 
 ## Connect a checkout
 
-From your project folder, download the connector this Chopin server serves and
-connect the checkout:
+Connect a checkout of the document's repository with the `chopin` CLI, as
+[Use your own machine with Chopin](chopin-cli.md) describes.
 
-```sh
-mkdir -p ~/.chopin \
-  && curl -fsSL https://your-chopin-instance.example/connector.js -o ~/.chopin/connector.js \
-  && CHOPIN_URL=https://your-chopin-instance.example \
-    bun --no-env-file --config=/dev/null \
-      ~/.chopin/connector.js connect . -- copilot --acp --allow-all
-```
+The command after `--` is your agent's ACP launch command. Chopin uses one ACP
+client implementation; it does not invoke a vendor-specific SDK. The agent must
+support local stdio ACP sessions and MCP tools through either advertised HTTP
+support or the default stdio transport.
 
-`--no-env-file` and `--config=/dev/null` stop Bun from loading the project folder's
-`.env` and `bunfig.toml`: a checkout must not choose which server the connector pairs
-with or run code through a `preload`. The `chopin` binary below ignores both by itself.
+One connection serves every document in the checkout's repository; there is no
+per-document pairing. Under `AUTH_MODE=local`, which has no client secret to
+authorize a machine with, connector calls use your live browser login instead
+and wait while you are signed out.
 
-The Build view and an investigation card show this command with your server's
-origin filled in when no local agent is connected. `GET /connector.js` serves one
-bundled file with no sign-in; `bun run build` and the Docker image produce it, and
-a development server bundles it from source. Chopin contributors can still run
+`GET /connector.js` serves the connector as one bundled file with no sign-in;
+`bun run build` and the Docker image produce it, and a development server
+bundles it from source. Chopin contributors can still run
 `bun run connector connect /path/to/project -- copilot --acp` from a Chopin
 checkout.
 
-The command after `--` is your agent's ACP launch command. Chopin uses one ACP
-client implementation; it does not invoke a vendor-specific SDK. The connector
-requires [Bun](https://bun.sh) 1.4.2 and Git. The agent must support local stdio ACP sessions and
-MCP tools through either advertised HTTP support or the default stdio transport. Authenticate the agent normally before connecting it.
-
-The first time, the connector pairs this machine with Chopin. Open the printed
-pairing link, sign into Chopin with push access to the checkout's repository,
-check that the page shows the same confirmation code as your terminal, and
-choose **Connect**. GitHub then authorizes the machine on its own, which takes
-no extra step for an App you already authorized, and the page says
-**Connected.** One connection serves every document in that repository; there
-is no per-document pairing. Both the browser and connector contact the server
-over outbound requests. The browser does not access your filesystem.
-
-Pairing stores a machine token in `machine.json` in the connector's state
-directory, readable only by you (mode `0600`; on Windows, your user profile's
-permissions). The token is never printed. Chopin keeps only a hash of it, plus
-the machine's own GitHub authorization encrypted like a browser login's. Later
-`connect` commands, also after a server restart, a deploy or signing out of the
-browser, use the stored token and do not pair again. On each connector call the
-server rechecks your push access with the machine's own GitHub authorization.
-
-A machine stays paired until you disconnect it: choose **Disconnect machine**
-for it under **Your machines** at `/connect` and confirm, or run `chopin unpair` on the
-machine. Either way its connector stops at once with `machine-revoked`, does
-not retry, and deletes the token from `machine.json`. The next `chopin connect`
-on a terminal then pairs again, as on a machine never paired; without a
-terminal, as when run as a service, it stops with the same message instead of
-waiting on a browser. GitHub allows ten active authorizations per account for an App. A
-new sign-in or pairing beyond that silently retires the oldest one, which can be
-a machine's. Chopin then marks that machine as needing pairing again
-(`machine-reauthorize`) rather than revoking it, its connector stops and
-forgets the token in the same way, and `chopin pair`, or `chopin connect` on a
-terminal, authorizes it again. Under `AUTH_MODE=local`, which has no
-client secret to authorize a machine with, connector calls instead use your
-live browser login and wait while you are signed out.
-
-The terminal prints the pairing link and confirmation code, then
-**✓ Connected.** and a line for each job it starts, finishes or fails. Styling
-appears only on an interactive terminal and is off under `NO_COLOR`. The agent's
-own log output is hidden unless `CHOPIN_DEBUG=1`; its last lines are shown when a
-job fails.
-
-### Install the chopin CLI
-
-The connector is also released as `chopin`, one executable for Linux, macOS
-(x64 or arm64) and Windows (x64) that runs without Bun. Install it with:
-
-```sh
-curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
-```
-
-On Windows, in PowerShell:
-
-```powershell
-irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | iex
-```
-
-Then, from your project folder:
-
-```sh
-export CHOPIN_URL=https://your-chopin-instance.example
-chopin pair --label build-box      # once per machine; optional, connect pairs first if needed
-chopin connect . -- copilot --acp --allow-all
-chopin service install             # optional: run what connect ran as a background service
-```
-
-Until the first `cli-v*` release is published, those install commands have
-nothing to download, and the `curl … connector.js` and `bun` command above
-remains the way to connect.
-
-`chopin pair` pairs this machine and stores its token; `--label` names it in
-Chopin (default: the hostname), and pairing again replaces the token.
-`chopin connect` runs work exactly as `bun connector.js connect` does, pairing
-first only when the machine has no token for that server. Once it has
-connected, it saves what it runs, server included, for `chopin service install`. Set `CHOPIN_URL` once, for
-`chopin connect`; later commands use the server it saved, and
-`https://chopin.githubnext.com` before anything is saved. `chopin unpair`
-revokes the machine in Chopin and deletes its token. Every command takes
-`--base-dir <dir>` (or `CHOPIN_HOME`) for where the token, locks and worktrees
-live. `chopin --version` prints the CLI version and the connector protocol it
-speaks, and `chopin help` lists the commands. On a server running
-`HARNESS=remote` (not `AUTH_MODE=local`), `chopin connect --planner <document URL>` (repeatable) with
-`--planner-command <command>` also runs that command as each document's Planner,
-with no browser sign-in; see
-[Planner backend commands](planner-link.md#planner-backend-commands). The binary ignores any `.env` or
-`bunfig.toml` in the folder it runs in.
-
-The installer puts `chopin` in `~/.local/bin` (on Windows,
-`%LOCALAPPDATA%\chopin\bin`, which it adds to your user PATH) and never needs
-administrator rights. It installs the newest release unless you name a version,
-either as an argument (`… | sh -s -- 0.2.0`) or with `CHOPIN_VERSION`. Before
-installing, it checks the download against the release's `checksums.txt`, and,
-when the [GitHub CLI](https://cli.github.com) is installed, runs
-`gh attestation verify <file> -R githubnext/chopin` to confirm the release
-workflow built it; `CHOPIN_VERIFY_ATTESTATION=0` skips that second check. When
-`~/.local/bin` is not on your `PATH`, the installer prints the line to add to
-your shell profile.
-
-`chopin update` replaces the installed `chopin` with the release your Chopin
-server recommends, which it reads from that server's
-`/api/connector/version`. When the server cannot be reached, it says so and
-installs the newest release instead. `chopin update 0.2.0` installs that
-release. It verifies the download as the installer does, with `checksums.txt`
-and, when `gh` is installed, `gh attestation verify`, then swaps the binary in
-place and prints the old and new versions. On Windows the running `chopin.exe`
-is renamed to `chopin.exe.old`, which the next `chopin` deletes. If an update
-on Windows is interrupted and leaves only `chopin.exe.old`, run the installer
-again to put a fresh `chopin.exe` in place. Updating to the version already
-installed does nothing.
-
-Moving to an older release than the installed one, whether named or
-recommended, needs `--allow-downgrade`; without it `chopin update` prints the
-command with the flag and changes nothing. On a terminal, `chopin update` asks
-before replacing itself unless you pass `--yes`. Without a terminal, as in a
-script, it goes ahead without asking: an upgrade needs no confirmation, and a
-downgrade has already been confirmed by `--allow-downgrade`. Running the
-installer again also updates `chopin`.
-
-The connector sends its version and connector protocol when it pairs and on
-every request. A server that does not speak that protocol refuses it with
-`connector-update-required` and says what to run: `chopin update <version>`
-with the release the server recommends, or downloading `connector.js` again for
-the script. The connector prints that message and exits instead of retrying. A
-`connector.js` from before this check sends no version; it is treated as
-protocol 1, which predates machine pairing, and is told to download
-`connector.js` again.
-
-To build the binaries from a Chopin checkout instead, run
-`bun run --cwd apps/connector build:binaries --host` for this machine, or
-without `--host` for every target. They are written to `apps/connector/dist`:
-`chopin-linux-x64`, `chopin-linux-arm64`, `chopin-darwin-x64`,
-`chopin-darwin-arm64` and `chopin-windows-x64.exe`. See
-[Releasing the chopin CLI](releasing-cli.md) for how releases are made.
-
-### Check this machine
-
-`chopin status` shows what this machine is doing:
-
-- the CLI version and connector protocol;
-- the server it uses, and whether that came from `CHOPIN_URL`, from
-  `config.json` (saved by `chopin connect`) or is the default;
-- whether the machine is paired with that server, by its label (the token is
-  never shown), and whether Chopin still accepts it;
-- each connector holding a checkout in the base dir, with its pid and chopin
-  version and the documents whose Planner backends it runs, and any stale lock
-  left by one that crashed;
-- the service's state, what it runs, and what `chopin connect` last ran when
-  that differs;
-- the log path.
-
-To check the pairing, `chopin status` makes one request to Chopin and waits at
-most three seconds. When Chopin is down or slow it reports the server as
-unreachable and prints the rest. It never pairs, connects or changes anything.
-
-`chopin status --json` prints the same report as one JSON object. Scripts can
-rely on these keys, which later releases only add to:
-
-| Key           | Value                                                                                                                                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `version`     | The CLI version, `dev` from source.                                                                                                                                                                                                  |
-| `protocol`    | The connector protocol it speaks.                                                                                                                                                                                                    |
-| `server`      | `origin`, and `source`: `CHOPIN_URL`, `config` or `default`.                                                                                                                                                                         |
-| `machine`     | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
-| `connectors`  | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601) and `planners`.                                                                      |
-| `service`     | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
-| `log`         | The service's log file.                                                                                                                                                                                                              |
-| `baseDir`     | The state directory the report is for.                                                                                                                                                                                               |
-| `serviceRuns` | What the installed service runs: `server`, `checkout`, `command`, `planners` and `plannerCommand`, or `null` before an install.                                                                                                      |
-| `lastConnect` | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                           |
-
 ## Run chopin as a service
 
-`chopin service install` runs what `chopin connect` last ran as your own
-background service, so the machine keeps serving a checkout after a reboot and
-without a terminal. It takes no checkout, agent or Planner arguments:
-
-```sh
-export CHOPIN_URL=https://your-chopin-instance.example
-chopin pair --label build-box             # once, at a terminal; the service cannot pair
-chopin connect . -- copilot --acp --allow-all   # once, in your checkout; Ctrl-C when it connects
-chopin service install
-chopin service status
-```
-
-Once `chopin connect` has connected, it saves the server, the checkout's
-absolute path, the agent command and any Planner documents and command to
-`config.json` in the base dir. A connect that stops before that, at pairing, on
-a version refusal or on bad arguments, saves nothing. `config.json` holds no
-token or other secret. Install needs the installed `chopin` binary (not
-`connector.js`), a machine already paired with the server, and those saved
-settings; without them it stops with "Run chopin connect once in your checkout
-first, then chopin service install." It uses the server `chopin connect` saved;
-when `CHOPIN_URL` names another, install refuses and asks you to run
-`chopin connect` again with the server you want. Install copies the saved
-settings into `config.json` as the service's own, with the chopin version that
-installed it. The service definition runs the absolute path of that `chopin` as
-`connect --base-dir <dir> --service`, which reads the service's settings and
-the machine token when it starts and runs exactly those. No token or other
-secret is ever written into the unit, plist or task. There is one service per
-user account, whichever base dir it uses.
-
-A later `chopin connect`, in this checkout or another, never changes what the
-service runs. To change it, run `chopin connect` with the new checkout, agent or
-Planner arguments, then `chopin service install` again, which replaces the
-service. If the service is running the checkout you connect, `chopin connect`
-saves your settings without connecting and prints "The chopin service is
-running this checkout. Saved your settings; run chopin service install to use
-them." `chopin service restart` restarts the service with the settings it
-already has.
-
-A service runs Planner backends when `chopin connect` ran them with
-`--planner <document URL>` and `--planner-command <command>`; each backend gets
-its Planner credential from Chopin when it starts, so none is written anywhere.
-Install refuses a saved Planner command the service would not find under its
-PATH (a relative path resolves in the checkout).
-
-Before writing anything, install resolves the saved agent command to its
-absolute path, with every directory link in it resolved, and saves the agent
-by that path for the service to run. It builds the PATH the service runs with
-from the agent's resolved directory first, then your current PATH without
-entries that disappear on logout or reboot: anything under `$XDG_RUNTIME_DIR`
-or `/run/user/<uid>`, and per-shell version-manager directories such as fnm's
-`fnm_multishells`. A per-shell directory that links into a stable installation
-is replaced by its target. Install refuses, and writes nothing, when the agent
-command, the interpreter its script names on a `#!/usr/bin/env` line (such as
-`node` or `bun`), or `git` would not resolve under that PATH, or when any of
-them lives in, or links through, one of those directories. Install it somewhere
-stable, or run `chopin connect` again with a stable absolute path to the agent
-after `--`.
-
-Like an interactive connector, the service declines ACP permission prompts,
-because it has no terminal. Give `chopin connect` the agent's own approval flag
-after `--`, as with `--allow-all` above. Its output is appended to `chopin.log`
-in the base dir.
-
-`chopin service status` reports `running`, `stopped`, `not-installed` or
-`restart-pending`, with the unit, plist or task path and the log path. The
-service is `restart-pending` when `chopin update` has replaced the binary but
-the service still runs the old version. `chopin service restart` restarts it.
-`chopin update` restarts a running service by itself when the installed unit,
-plist or task runs the `chopin` it just replaced with the same base dir. A
-service that runs another `chopin` or base dir is left alone, and update says
-so. If that restart fails, the update still stands, and the message says to run
-`chopin service restart`.
-
-`chopin service uninstall` stops the service and removes its unit, plist or
-task. The pairing, `config.json`, the runs and the log stay in place, so
-`chopin connect` and a later `chopin service install` carry on without pairing
-again.
-
-If the service was installed by a newer chopin than the one you are running,
-`chopin service install` refuses to replace it. Run `chopin update` first, or
-pass `--allow-downgrade`.
-
-### Linux (systemd)
-
-The unit is `~/.config/systemd/user/chopin.service` (under `$XDG_CONFIG_HOME`
-when that is set). It uses `Restart=always`. It also uses `KillMode=mixed` and
-`TimeoutStopSec=90`, so a stop gives the connector 90 seconds to report its
-runs stopped. Install enables and starts it with
-`systemctl --user enable --now chopin.service`.
-
-A user service normally stops when you log out and starts only when you log in.
-To keep it running at boot, install enables linger with
-`loginctl enable-linger`. When that needs an administrator, install stops
-without installing anything and prints the one command to have an
-administrator run:
-
-```sh
-sudo loginctl enable-linger "$(id -un)"
-```
-
-Then run `chopin service install` again. Never run `chopin` itself with sudo.
-`chopin service uninstall` leaves linger as it was; run
-`sudo loginctl disable-linger "$(id -un)"` to turn it off if nothing else needs
-it.
-
-systemd cannot run an executable whose path holds a quote or a backslash, so
-install refuses such a `chopin` path. Copy `chopin` somewhere without them,
-for example `/usr/local/bin`, and install the service from that copy. Paths and
-arguments with spaces, `%` or `$` are quoted for you.
-
-### macOS (launchd)
-
-The LaunchAgent is `~/Library/LaunchAgents/com.github.chopin.plist`, with
-`RunAtLoad`, `KeepAlive`, `ThrottleInterval` 10, `ExitTimeOut` 90 and
-`ProcessType` `Interactive`. Install loads it with
-`launchctl bootstrap gui/<uid>`. A LaunchAgent runs while you are logged in to
-the Mac, so keep the Mac logged in and awake. Over SSH with nobody logged in at
-the Mac, there is no session to load it into. It stays installed and loads at
-your next login.
-
-### Windows (Task Scheduler)
-
-The task is `\chopin-<your user name>` in Task Scheduler's root folder.
-Characters other than letters, digits, `.`, `_` and `-` in the name are
-written as `~` and four hex digits. Install registers it through
-`powershell.exe -NoProfile -NonInteractive -Command Register-ScheduledTask …`.
-The task starts at logon, restarts a minute after a failure, and has no
-execution time limit. Task Scheduler can't set environment variables, so the
-task runs `cmd.exe /d /v:off /s /c "set "PATH=…" && "<chopin.exe>" connect --base-dir <dir> --service"`
-with the PATH install built and checked; cmd and chopin are named by their
-absolute paths. Entries of your PATH that hold a `%` are left out of it, and a
-`%` in the chopin or base dir path is refused, because cmd and Task Scheduler
-would expand it.
-
-The task runs only while you are logged on to Windows. To start it at boot
-whether or not you are logged on, change it to an S4U task from an elevated
-PowerShell (**Run as administrator**) signed in as the same user:
-
-```powershell
-$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$name = 'chopin-' + $env:USERNAME   # as `chopin service status` shows it
-Set-ScheduledTask -TaskName $name -TaskPath '\' `
-  -Principal (New-ScheduledTaskPrincipal -UserId $user -LogonType S4U -RunLevel Limited) `
-  -Trigger (New-ScheduledTaskTrigger -AtStartup)
-```
-
-An S4U task has no access to network shares that need your password. Running
-`chopin service install` again puts the task back on the logon trigger. If
-Task Scheduler then refuses `restart` or `uninstall`, run them from an elevated
-terminal too.
-
-Task Scheduler stops a task without sending a signal. So `chopin service
-restart` and `uninstall` first write a `stop` file naming the service
-connector's pid into the base dir. The connector watches for that file,
-reports its runs stopped and exits. They wait up to 90 seconds for it before
-Task Scheduler ends the task.
-
-### Service troubleshooting
-
-- **Start with `chopin status` and the log.** The log path is in its output.
-  The service's connector prints the same lines a terminal would, including
-  why it stopped.
-- **"is not paired with …".** Run `chopin pair` at a terminal, then install
-  again. When Chopin revokes the machine, the service's connector stops with
-  `machine-revoked` and forgets the token. The service manager starts it again,
-  and with no token and no terminal to pair on it stops with "is not paired
-  with …" each time rather than wait on a browser. Pair again at a terminal,
-  then run `chopin service restart`.
-- **"The service would not find …".** The agent, its interpreter or `git` only
-  resolves from your current shell, for example through a version manager's
-  per-shell directory. Install them where a login shell finds them, or run
-  `chopin connect` again with the agent's absolute path after `--`.
-- **"chopin can't reach your systemd user manager".** Run the command in a login
-  session as the user who will own the service; `su` or `sudo -u` sessions have
-  no user manager.
-- **Stays `restart-pending`.** Run `chopin service restart`.
-- **"Workspace already locked".** An interactive `chopin connect` for the same
-  checkout and base dir is already running. Stop it before the service takes
-  over, or use another base dir for the interactive one.
+To keep a connection running in the background, and to start the Windows task
+at boot, see [Keep it running](chopin-cli.md#keep-it-running) and
+[Start the Windows task at boot](chopin-cli-reference.md#start-the-windows-task-at-boot).
 
 ## Run and inspect work
 
@@ -550,7 +200,8 @@ The connector has deleted the refused token. Run `chopin connect` again on a
 terminal, which pairs first, or `chopin pair` and then connect.
 
 **`script not found: connector`.** `bun run connector` only works inside a Chopin
-checkout. Use the `curl … connector.js` command above from your project folder.
+checkout. From your project folder, use `chopin connect` or the `connector.js`
+command in [Run without installing](chopin-cli-reference.md#run-without-installing).
 
 **"Your local agent isn't connected" (HTTP 409 `no-workspace`).** No connector of
 yours is connected for this document's repository. Start the command shown, open
@@ -564,8 +215,9 @@ repository differs from the authorized one. If a run's recorded commit is not in
 your checkout, the connector fetches it from `origin`; push or fetch the commit
 if that fails.
 
-**Connector version mismatch after a deploy.** Rerun the whole command. It
-downloads the connector again, so it matches the server.
+**Connector version mismatch after a deploy.** Run `chopin update`, or rerun the
+whole `connector.js` command, which downloads the connector again so it matches
+the server.
 
 **Stale lock after a crash.** Each checkout has a lock in the connector's state
 directory, `$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`
