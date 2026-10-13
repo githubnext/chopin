@@ -1147,7 +1147,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			<DraftCard
 				onCancel={cancelDraft}
 				onSend={(text, to) => store.start(text, to)}
-				planner={options.planner !== false}
+				planner={options.commentPlanner !== false}
 				sheet
 			/>
 		);
@@ -1407,7 +1407,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							<DraftCard
 								onCancel={cancelDraft}
 								onSend={(text, to) => store.start(text, to)}
-								planner={options.planner !== false}
+								planner={options.commentPlanner !== false}
 							/>
 						),
 						className: "plan-comment-card",

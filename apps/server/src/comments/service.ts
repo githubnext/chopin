@@ -320,14 +320,16 @@ function said(text: string): string | undefined {
 /** How the Planner is reached, for a note sent to it. Absent for an ordinary note. */
 export type Addressed = Chat.Room;
 
-type Admitted = { planner?: Wire.Planner } | { refused: string };
+type Admitted =
+	| { planner?: Wire.Planner }
+	| { refused: string; code?: "planner-not-attached" };
 
 /**
  * Whether a note sent to the Planner can be acted on, asked before it is saved.
  *
- * A full queue refuses the note rather than saving one nobody will act on. A
- * server without a Planner still takes it — it is a comment either way — and
- * says so. A child's note is admitted by its root's queue, which runs its turn,
+ * A full queue refuses the note rather than saving one nobody will act on, as
+ * does a remote Planner nobody has attached. A server without a Planner still
+ * takes it — it is a comment either way — and says so. A child's note is admitted by its root's queue, which runs its turn,
  * and refused if the child no longer belongs to a live root.
  */
 async function admit(
@@ -345,7 +347,12 @@ async function admit(
 			console.error("[comments] could not reach the root document's Chat:", err);
 			return { refused: "Chopin can't be reached from this document right now." };
 		}
-	} else admitted = Chat.admission(context, thread);
+	} else {
+		// Under HARNESS=remote a turn with no Planner attached would never run.
+		let unattached = context.config.agent ? await context.plannerNotAttached?.() : undefined;
+		if (unattached) return { refused: unattached, code: "planner-not-attached" };
+		admitted = Chat.admission(context, thread);
+	}
 	if (admitted === "busy") {
 		return { refused: "Chopin has too much waiting already. Try again when it has caught up." };
 	}
@@ -361,8 +368,19 @@ export async function start(
 	msg: Request<Wire.Start.Ask>,
 	context?: Addressed,
 ): Promise<void> {
-	let refuse = (reason: "invalid" | "full" | "busy", message: string) =>
-		reply(ws, msg.rid, { kind: "comment:start", ts: 0, ok: false, reason, message });
+	let refuse = (
+		reason: "invalid" | "full" | "busy",
+		message: string,
+		code?: "planner-not-attached",
+	) =>
+		reply(ws, msg.rid, {
+			kind: "comment:start",
+			ts: 0,
+			ok: false,
+			reason,
+			message,
+			...(code ? { code } : {}),
+		});
 
 	let full = Store.room(plan.threads);
 	if (full) return refuse("full", full.message);
@@ -372,7 +390,7 @@ export async function start(
 
 	let admitted = await admit(msg, context);
 	if ("refused" in admitted) {
-		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused);
+		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused, admitted.code);
 	}
 
 	let passage: Wired.Passage;
@@ -409,15 +427,23 @@ export async function respond(
 	msg: Request<Wire.Reply.Ask>,
 	context?: Addressed,
 ): Promise<void> {
-	let refuse = (reason: "invalid" | "busy", message: string) =>
-		reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ok: false, reason, message });
+	let refuse = (reason: "invalid" | "busy", message: string, code?: "planner-not-attached") =>
+		reply(ws, msg.rid, {
+			kind: "comment:reply",
+			ts: 0,
+			id: msg.id,
+			ok: false,
+			reason,
+			message,
+			...(code ? { code } : {}),
+		});
 
 	let text = said(msg.text);
 	if (!text) return refuse("invalid", "A comment needs something in it.");
 
 	let admitted = await admit(msg, context, msg.id);
 	if ("refused" in admitted) {
-		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused);
+		return refuse(msg.to === "planner" ? "busy" : "invalid", admitted.refused, admitted.code);
 	}
 
 	let outcome = Store.reply(

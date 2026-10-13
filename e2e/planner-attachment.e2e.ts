@@ -9,8 +9,8 @@ import { spawn } from "node:child_process";
 import { SQL } from "bun";
 
 import { connectPlannerLink } from "../packages/planner-link/src/client";
-import { createChannel, registerTestDatabase } from "./database";
-import { authenticate, expect, ready, roomPath, test } from "./room";
+import { createChannel, registerTestDatabase, seedChannel } from "./database";
+import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { HARNESS, HOST, ROOT } from "./servers";
 
 import type { Page } from "@playwright/test";
@@ -171,6 +171,58 @@ test("Chat says live who holds the document's remote Planner", async ({ page }) 
 		timeout: GRACE_MS + 5_000,
 	});
 	await expect(status).toHaveAttribute("data-planner-state", "none");
+});
+
+/** Open a new comment on the document's first paragraph. */
+async function draft(page: Page) {
+	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
+	await content(page).locator("p").first().selectText();
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	return page.getByRole("dialog", { name: "New comment" });
+}
+
+test("a new comment is sent to Chopin by default only while a Planner is attached", async ({ page }) => {
+	test.setTimeout(90_000);
+	let database = await freshDatabase();
+	await migrate(database);
+	await remoteServer(database);
+	registerTestDatabase(PORT, database);
+	let room = crypto.randomUUID();
+	await createChannel(PORT, room);
+	await seedChannel(PORT, room, "# Remote comments\nThe harp needs new strings.\n");
+
+	await authenticate(page, HANDLE, ORIGIN);
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+	await expect(plannerStatus(page)).toHaveAttribute("data-planner-state", "none");
+
+	let card = await draft(page);
+	let box = card.getByRole("checkbox", { name: "Send to Chopin" });
+	await expect(box).not.toBeChecked();
+
+	// Ticked anyway, the server refuses it, says how to attach one, and keeps the words.
+	await box.check();
+	let field = card.getByRole("textbox", { name: "Comment" });
+	await field.fill("Can you shorten this?");
+	await card.getByRole("button", { name: "Post comment", exact: true }).click();
+	await expect(card.getByRole("alert")).toContainText("No Planner is attached to this document.");
+	await expect(field).toHaveValue("Can you shorten this?");
+	await page.keyboard.press("Escape");
+	await expect(card).toHaveCount(0);
+
+	let client = await connectPlannerLink({
+		url: ORIGIN,
+		token: `ghu_e2e_${HANDLE}_1`,
+		document: room,
+		handlers: { turn() {} },
+	});
+	try {
+		await expect(plannerStatus(page)).toHaveAttribute("data-planner-state", "attached");
+		await expect((await draft(page)).getByRole("checkbox", { name: "Send to Chopin" }))
+			.toBeChecked();
+	} finally {
+		await client.detach();
+	}
 });
 
 type Probe = { frames: string[]; closed?: { code: number; at: number } };

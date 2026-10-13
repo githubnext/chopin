@@ -131,9 +131,20 @@ export declare namespace Comment {
 			& KIND<"comment:start">
 			& (
 				| { ok: true; thread: Thread; planner?: Planner }
-				| { ok: false; reason: "invalid" | "full" | "busy"; message: string }
+				| Refused
 			);
 	}
+
+	/**
+	 * A note that was not saved. `planner-not-attached`: sent to the Planner under
+	 * `HARNESS=remote` with no client attached; `message` says how to attach one.
+	 */
+	type Refused = {
+		ok: false;
+		reason: "invalid" | "full" | "busy";
+		message: string;
+		code?: "planner-not-attached";
+	};
 
 	/** A new thread, announced to the room. Followed by a `plan:anchors`. */
 	export type Opened = KIND<"comment:opened"> & { thread: Thread };
@@ -157,7 +168,7 @@ export declare namespace Comment {
 			& { id: string }
 			& (
 				| { ok: true; note: Note; planner?: Planner }
-				| { ok: false; reason: "invalid" | "full" | "busy"; message: string }
+				| Refused
 				| Blocked
 			);
 	}

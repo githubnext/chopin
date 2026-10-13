@@ -627,6 +627,8 @@ export function RoomWorkspace(
 		};
 	});
 	let typing = useDocumentEditing(room);
+	let plannerDetached = plannerAttachment.wire === wire && !!plannerAttachment.planner
+		&& plannerAttachment.planner.state !== "attached";
 	let build = useBuildPlan({
 		canEdit: effectiveCanEdit && !(archivedAt ?? metadata.archivedAt) && status === "connected",
 		connected: status === "connected",
@@ -634,8 +636,7 @@ export function RoomWorkspace(
 		hasContent: hasPlanContent,
 		live: liveBuild,
 		planner: agent,
-		plannerDetached: plannerAttachment.wire === wire && !!plannerAttachment.planner
-			&& plannerAttachment.planner.state !== "attached",
+		plannerDetached,
 		room,
 		unanswered,
 		userId,
@@ -1369,6 +1370,7 @@ export function RoomWorkspace(
 				// A child has no Decisions pane to open, so its decisions stay inline.
 				onShowDecision={presentation.type === "child" ? undefined : showDecision}
 				planner={agent}
+				commentPlanner={agent && !plannerDetached}
 				commentPresentation={mode === "split" ? "popover" : "sheet"}
 				connection={status === "deleted" ? "closed" : status}
 				key={workspaceArchivedAt ? "archived" : "active"}

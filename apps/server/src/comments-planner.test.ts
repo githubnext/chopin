@@ -197,6 +197,31 @@ describe("sending a new comment to the Planner", () => {
 		expect(plan.chat.waiting).toHaveLength(20);
 	});
 
+	it("refuses before saving anything when no remote Planner is attached", async () => {
+		let { broadcasts, context, plan } = await opened({ busy: false });
+		context.plannerNotAttached = async () => "Attach a Planner to this document first.";
+		let ana = member("ana");
+
+		let answered = await start(context, ana);
+		expect(answered).toMatchObject({
+			ok: false,
+			reason: "busy",
+			code: "planner-not-attached",
+			message: "Attach a Planner to this document first.",
+		});
+		expect(plan.threads.size).toBe(0);
+		expect(working(broadcasts)).toHaveLength(0);
+
+		let open = idOf(await start(context, ana, "Plain note.", null));
+		let replied = await reply(context, ana, open, "Now you, Chopin.");
+		expect(replied).toMatchObject({ ok: false, code: "planner-not-attached" });
+		expect(plan.threads.get(open)?.notes).toHaveLength(1);
+		expect(plan.chat.waiting).toHaveLength(0);
+
+		// An ordinary comment is not the Planner's business, attached or not.
+		expect(await reply(context, ana, open, "Just us.", null)).toMatchObject({ ok: true });
+	});
+
 	it("saves the note but says so when no Planner is running", async () => {
 		let { broadcasts, context, plan } = await opened({ agent: false });
 		let ana = member("ana");

@@ -85,6 +85,8 @@ export type WidgetOptions = {
 	onShowDecision?: (questionnaireId: string) => void;
 	/** False when no Planner will review where decisions live. */
 	planner?: boolean;
+	/** False when no Planner can take a turn now, so a new comment is not sent to Chopin by default. */
+	commentPlanner?: boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;
