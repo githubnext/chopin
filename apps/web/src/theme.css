@@ -790,7 +790,7 @@ body {
 
 /*
  * Status keeps its live regions mounted, so the rule before the faces follows visible notices and
- * Build. Build stays 12px clear of the rule on both sides.
+ * Build. Status and Build stay 12px clear of the rule, as do the faces after it.
  */
 .document-title-status {
 	display: flex;

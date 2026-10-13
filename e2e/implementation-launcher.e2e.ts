@@ -340,20 +340,43 @@ function buildView(page: import("@playwright/test").Page) {
 	return page.getByRole("region", { name: "Build", exact: true });
 }
 
-/** Whatever build shows ends 12px before the rule, and the first face starts 12px after it. */
+/** The capsule's own Build, not the Document view tab of the same name. */
+function capsuleBuild(page: import("@playwright/test").Page) {
+	return page.getByRole("button", { name: "Build", exact: true })
+		.and(page.locator(":not([role='group'] *)"));
+}
+
+/**
+ * Build ends 12px before the rule and the first face starts 12px after it; the faces sit as far
+ * from the bar's end as from its top and bottom.
+ */
 async function expectClearOfPeople(build: import("@playwright/test").Locator) {
 	let people = build.page().getByRole("group", { name: /^People here/ });
-	let face = people.locator(":scope > [data-tooltip]").first();
 	await expect(build).toBeVisible();
-	await expect(face).toBeVisible();
-	let control = (await build.boundingBox())!;
-	let group = (await people.boundingBox())!;
-	let first = (await face.boundingBox())!;
-	let end = control.x + control.width;
-	expect(group.x - end).toBeGreaterThanOrEqual(12);
-	expect(first.x - end).toBeGreaterThanOrEqual(24);
-	expect(await people.evaluate(element => getComputedStyle(element).borderInlineStartWidth))
-		.not.toBe("0px");
+	await expect(people.locator(":scope > [data-tooltip]").first()).toBeVisible();
+	let control = await build.evaluate(element => element.getBoundingClientRect().right);
+	let gaps = await people.evaluate(group => {
+		let rule = parseFloat(getComputedStyle(group).borderInlineStartWidth);
+		let bar = group.closest("[data-document-title-bar]")!;
+		let edge = parseFloat(getComputedStyle(bar).borderBlockEndWidth);
+		let outer = bar.getBoundingClientRect();
+		let box = group.getBoundingClientRect();
+		let face = group.querySelector(":scope > [data-tooltip]")!.getBoundingClientRect();
+		return {
+			rule,
+			start: box.left,
+			face: face.left - box.left - rule,
+			end: outer.right - box.right,
+			top: face.top - outer.top,
+			bottom: outer.bottom - edge - face.bottom,
+		};
+	});
+	let before = gaps.start - control;
+	expect(gaps.rule).toBeGreaterThan(0);
+	expect(before).toBeGreaterThanOrEqual(12);
+	expect(Math.abs(before - gaps.face)).toBeLessThanOrEqual(0.5);
+	expect(Math.abs(gaps.top - gaps.bottom)).toBeLessThanOrEqual(0.5);
+	expect(Math.abs(gaps.end - gaps.top)).toBeLessThanOrEqual(0.5);
 }
 
 for (let state of ["Build plan", "Build stopped"] as const) {
@@ -613,18 +636,12 @@ test("edits after a build read as changes to build, and Build sends them to the 
 		let stale = page.getByRole("button", { name: "1 change to build", exact: true });
 		await expect(stale).toBeVisible();
 		await expect(stale).toHaveAccessibleDescription("Edits since the last build");
-		await expectClearOfPeople(
-			page.getByRole("button", { name: "Build", exact: true }).and(
-				page.locator(":not([role='group'] *)"),
-			),
-		);
+		await expectClearOfPeople(capsuleBuild(page));
 		let tab = page.getByRole("group", { name: "Document view" })
 			.getByRole("button", { name: "Build", exact: true });
 		await expect(tab).toBeEnabled();
 		// The capsule's own Build, not the tab, sends the changes.
-		await page.getByRole("button", { name: "Build", exact: true })
-			.and(page.locator(":not([role='group'] *)"))
-			.click();
+		await capsuleBuild(page).click();
 		await expect.poll(async () => {
 			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
 			return snapshot.live?.rebuild?.kind;
