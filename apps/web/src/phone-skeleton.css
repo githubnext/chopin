@@ -208,21 +208,95 @@
 }
 
 /*
- * The desktop loading shape (workspace-skeleton.tsx). The workspace's own classes place its panes
- * and bars; these only draw quiet marks in them, and the lines sit where the document's preface
- * puts them.
+ * The desktop loading shape (workspace-skeleton.tsx), drawn to the loaded workspace's geometry:
+ * split from a 700px frame (`workspaceSizing`), Chat clamped between 250px and leaving the
+ * document 450px, and compact with the ground header and tab row. `workspace-skeleton.e2e.ts`
+ * holds the two together.
  */
+.workspace-skeleton {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	background: var(--color-ground);
+	container: workspace-skeleton / inline-size;
+}
+
+.workspace-skeleton > .room-header,
+.workspace-skeleton-tabs {
+	display: none;
+}
+
+.workspace-skeleton-frame {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	margin: 0 calc(var(--spacing) * 3 + env(safe-area-inset-right)) calc(var(--spacing) * 3)
+		calc(var(--spacing) * 3 + env(safe-area-inset-left));
+}
+
+.workspace-skeleton-chat {
+	flex: none;
+	width: min(
+		max(250px, 100% - 450px),
+		max(250px, var(--saved-chat-width, 500px))
+	);
+	margin-top: calc(var(--spacing) * 3);
+}
+
+.workspace-skeleton-sheet {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	margin-top: calc(var(--spacing) * 3);
+	overflow: hidden;
+	border-radius: var(--radius-panel);
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.workspace-skeleton[data-chat="closed"] .workspace-skeleton-chat {
+	display: none;
+}
+
+/* The floating Show sidebar trigger: Chat starts below it, or the sheet clears it. */
+.navigation-content[data-project-sidebar-trigger] .workspace-skeleton-chat {
+	margin-top: var(--document-shell-header-height);
+}
+
+@container workspace-skeleton (width >= 724px) {
+	.navigation-content[data-project-sidebar-trigger]
+		.workspace-skeleton[data-chat="closed"]
+		.workspace-skeleton-frame {
+		padding-left: calc(44px - var(--spacing) * 3);
+	}
+}
+
 .workspace-skeleton-title,
 .workspace-skeleton-views {
+	display: flex;
+	flex: none;
+	align-items: center;
 	gap: calc(var(--spacing) * 3);
+	block-size: var(--panel-header-height);
+	padding-inline: var(--panel-toolbar-padding-inline);
+}
 
-	& > span {
-		height: calc(var(--spacing) * 3);
-		border-radius: var(--radius-sm);
-		background: var(--color-selected);
-		animation: phone-skeleton-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
-			alternate;
-	}
+.workspace-skeleton-title {
+	border-bottom: var(--edge-width) solid var(--color-edge);
+}
+
+.workspace-skeleton-title > span,
+.workspace-skeleton-views > span,
+.workspace-skeleton-tabs > span::before {
+	height: calc(var(--spacing) * 3);
+	border-radius: var(--radius-sm);
+	background: var(--color-selected);
+	animation: phone-skeleton-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
+		alternate;
 }
 
 .workspace-skeleton-title > span {
@@ -235,25 +309,11 @@
 	margin-inline-start: calc(var(--spacing) * 2);
 }
 
-.workspace-skeleton-tabs > span {
-	display: grid;
-	place-items: center;
-
-	&::before {
-		width: calc(var(--spacing) * 16);
-		height: calc(var(--spacing) * 3);
-		border-radius: var(--radius-sm);
-		background: var(--color-selected);
-		content: "";
-		animation: phone-skeleton-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
-			alternate;
-	}
-}
-
 .workspace-skeleton-page {
 	--workspace-skeleton-gutter: var(--document-gutter);
+	flex: 1;
+	min-height: 0;
 	overflow: hidden;
-	background: var(--color-page);
 
 	& > .phone-skeleton-page {
 		max-width: calc(var(--document-prose-measure) + var(--workspace-skeleton-gutter) * 2);
@@ -265,6 +325,57 @@
 @media (max-width: 600px) {
 	.workspace-skeleton-page {
 		--workspace-skeleton-gutter: var(--document-gutter-compact);
+	}
+}
+
+/* Compact: the 700px frame plus its two 12px margins. */
+@container workspace-skeleton (width < 724px) {
+	.workspace-skeleton > .room-header {
+		display: block;
+		flex: none;
+	}
+
+	.workspace-skeleton-tabs {
+		display: grid;
+		flex: none;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		padding: var(--spacing) calc(var(--spacing) + env(safe-area-inset-right)) var(--spacing)
+			calc(var(--spacing) + env(safe-area-inset-left));
+		border-bottom: var(--edge-width) solid var(--color-edge);
+
+		& > span {
+			display: grid;
+			min-height: calc(var(--spacing) * 11);
+			place-items: center;
+		}
+
+		& > span::before {
+			width: calc(var(--spacing) * 16);
+			content: "";
+		}
+	}
+
+	.workspace-skeleton-frame {
+		margin-block: calc(var(--spacing) * 2);
+		overflow: hidden;
+		border-radius: var(--radius-panel);
+		background: var(--color-page);
+		box-shadow: var(--shadow-resting);
+		outline: var(--edge-width) solid var(--color-edge);
+		outline-offset: calc(-1 * var(--edge-width));
+	}
+
+	.workspace-skeleton-chat,
+	.workspace-skeleton-title,
+	.workspace-skeleton-views {
+		display: none;
+	}
+
+	.workspace-skeleton-sheet {
+		margin-top: 0;
+		border-radius: 0;
+		box-shadow: none;
+		outline: none;
 	}
 }
 
