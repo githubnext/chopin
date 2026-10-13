@@ -521,6 +521,21 @@ async function withInterpreters(
 	return servicePath;
 }
 
+/**
+ * What the service would make of the program at `found`: undefined when it lies in no directory
+ * that lasts only as long as a login or a shell; its stable path when it reaches one only
+ * through such a directory, as a version manager's per-shell link does; else the path that
+ * lies in one, which install refuses.
+ */
+export async function stablePath(platform: NodeJS.Platform, env: Env, found: string) {
+	let temporary = temporaryPath(platform, env);
+	let passed = await links(platform, found);
+	let fleeting = passed.find(temporary);
+	if (fleeting !== undefined) return { fleeting };
+	let through = (await walk(platform, paths(platform).dirname(found))).hops;
+	return temporary(found) || through.some(temporary) ? { stable: passed[0]! } : undefined;
+}
+
 /** The target of the link at `entry`, or undefined when it is not a link. */
 async function linkTarget(entry: string) {
 	let stats = await lstat(entry).catch(() => undefined);

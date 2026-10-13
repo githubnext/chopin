@@ -17,10 +17,12 @@ import {
 	installService,
 	logPath,
 	onStopRequest,
+	programAt,
 	restartAfterUpdate,
 	restartService,
 	ServiceError,
 	serviceStatus,
+	stablePath,
 	systemHost,
 	uninstallService,
 } from "./service";
@@ -156,6 +158,32 @@ async function unpairCommand(args: string[]) {
 }
 
 /**
+ * `command` with its program, or the one behind `env`, by its stable path when this shell finds
+ * it only through a per-shell or temporary directory, as fnm's, saying so. One with no stable
+ * path is kept, with a warning, as service install would refuse it.
+ */
+async function stableCommand(command: string[], base: string) {
+	let at = programAt(command);
+	let word = command[at]!;
+	let found = /[\\/]/.test(word) ? resolve(base, word) : Bun.which(word);
+	if (!found) return command;
+	let host = systemHost();
+	let seen = await stablePath(host.platform, host.env, found);
+	if (!seen) return command;
+	if ("fleeting" in seen) {
+		createOutput().error(
+			`${word} is ${found}, which lasts only as long as this shell, so chopin service install `
+				+ "will refuse it.",
+		);
+		return command;
+	}
+	createOutput().say(
+		`Saved ${word} as ${seen.stable}, since ${found} lasts only as long as this shell.`,
+	);
+	return [...command.slice(0, at), seen.stable, ...command.slice(at + 1)];
+}
+
+/**
  * `--env KEY=VALUE` words as variables. Chopin sets CHOPIN_* itself and the service sets PATH, so
  * neither can be given.
  */
@@ -223,16 +251,25 @@ async function connect(args: string[]) {
 	// The service runs what a terminal's connect saves. A relative agent path would resolve
 	// against the service's own working directory.
 	let agent = command[0]!;
+	let saving = service ? { command, plannerCommand } : {
+		command: await stableCommand(
+			!isAbsolute(agent) && (agent.includes("/") || agent.includes(sep))
+				? [resolve(agent), ...command.slice(1)]
+				: command,
+			process.cwd(),
+		),
+		plannerCommand: plannerCommand.length
+			? await stableCommand(plannerCommand, info.root)
+			: plannerCommand,
+	};
 	let save = () =>
 		updateConfig(directory, value => {
 			value.connect = {
 				server: url,
 				checkout: info.root,
-				command: !isAbsolute(agent) && (agent.includes("/") || agent.includes(sep))
-					? [resolve(agent), ...command.slice(1)]
-					: command,
+				command: saving.command,
 				planners: plannerDocuments,
-				plannerCommand,
+				plannerCommand: saving.plannerCommand,
 				...(Object.keys(env).length ? { env } : {}),
 			};
 		});

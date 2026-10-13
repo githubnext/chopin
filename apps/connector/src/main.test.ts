@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -41,6 +41,7 @@ async function connect(
 	refuse: "pairing" | "connector" | "nothing",
 	args?: string[],
 	state?: string,
+	extra: Record<string, string> = {},
 ) {
 	let requests: Array<[string, string | null, string | null]> = [];
 	let chopin = Bun.serve({
@@ -102,6 +103,7 @@ async function connect(
 			...process.env,
 			CHOPIN_URL: url,
 			CHOPIN_CONNECTOR_STATE_DIR: directory,
+			...extra,
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -177,6 +179,69 @@ test("connect refuses an --env it can't pass on, before it pairs", async () => {
 		expect(refused.requests).toEqual([]);
 	}
 });
+
+test.skipIf(process.platform === "win32")(
+	"connect saves the stable path behind a shell's fnm directory, and warns when there is none",
+	async () => {
+		let root = await checkout();
+		let home = await realpath(await mkdtemp(join(scratch, "home-")));
+		let run = join(home, "run");
+		let installation = join(home, "fnm", "node-versions", "v24", "installation");
+		let stable = join(installation, "bin");
+		let shell = join(run, "fnm_multishells", "4242_1700000000000");
+		await mkdir(stable, { recursive: true });
+		await mkdir(join(run, "fnm_multishells"), { recursive: true });
+		await symlink(installation, shell);
+		for (let name of ["my-agent", "my-planner"]) {
+			await writeFile(join(stable, name), "#!/bin/sh\n", { mode: 0o755 });
+		}
+		let env = { XDG_RUNTIME_DIR: run, PATH: `${join(shell, "bin")}:${process.env.PATH}` };
+		let planner = [
+			"--planner",
+			"https://chopin.example/d/one",
+			"--planner-command",
+			"my-planner x",
+		];
+		let started = await connect(
+			"nothing",
+			[root, ...planner, "--", "env", "SOME_FLAG=1", "my-agent", "--acp"],
+			undefined,
+			env,
+		);
+		expect(started.code).toBe(0);
+		let saved = JSON.parse(await readFile(join(started.directory, "config.json"), "utf8"));
+		expect(saved.connect.command).toEqual([
+			"env",
+			"SOME_FLAG=1",
+			join(stable, "my-agent"),
+			"--acp",
+		]);
+		expect(saved.connect.plannerCommand).toEqual([join(stable, "my-planner"), "x"]);
+		expect(started.stdout).toContain(
+			`Saved my-agent as ${join(stable, "my-agent")}, since ${join(shell, "bin", "my-agent")} `
+				+ "lasts only as long as this shell.",
+		);
+		expect(started.stdout).toContain(`Saved my-planner as ${join(stable, "my-planner")}`);
+
+		// A program that lives only in a per-shell directory is saved as given, with a warning.
+		let only = join(run, "fnm_multishells", "9_9", "bin");
+		await mkdir(only, { recursive: true });
+		await writeFile(join(only, "shell-agent"), "#!/bin/sh\n", { mode: 0o755 });
+		let warned = await connect("nothing", [root, "--", "shell-agent"], undefined, {
+			XDG_RUNTIME_DIR: run,
+			PATH: `${only}:${process.env.PATH}`,
+		});
+		expect(warned.code).toBe(0);
+		expect(
+			JSON.parse(await readFile(join(warned.directory, "config.json"), "utf8")).connect.command,
+		)
+			.toEqual(["shell-agent"]);
+		expect(warned.stderr).toContain(
+			`shell-agent is ${join(only, "shell-agent")}, which lasts only as long as this shell, so `
+				+ "chopin service install will refuse it.",
+		);
+	},
+);
 
 /** The settings `chopin service install` copied for a service that runs `checkout` on `server`. */
 function installed(directory: string, server: string, checkout: string) {
