@@ -8,6 +8,7 @@ export type AuthConfig = {
 	allowedUsers?: ReadonlySet<string>;
 	allowedOrganizations?: ReadonlySet<string>;
 	local?: { installation: string; credentialsDir: string; port: number };
+	demoPersonas?: true;
 };
 
 const GITHUB_USER_LOGIN = /^[a-z0-9](?:[a-z0-9_-]{0,37}[a-z0-9_])?$/i;
@@ -82,6 +83,11 @@ export function loadAuth(port = 8787, host = process.env.SERVER_HOST || "127.0.0
 				!== port
 		)
 	) throw new Error("AUTH_MODE=local requires a loopback SERVER_HOST and APP_ORIGIN on PORT");
+	let demo = process.env.DEMO_PERSONAS || "off";
+	if (demo !== "on" && demo !== "off") throw new Error("DEMO_PERSONAS must be on or off");
+	if (demo === "on" && mode !== "local") {
+		throw new Error("DEMO_PERSONAS=on requires AUTH_MODE=local on a loopback bind");
+	}
 	return {
 		origin: appOrigin,
 		appSlug,
@@ -105,6 +111,7 @@ export function loadAuth(port = 8787, host = process.env.SERVER_HOST || "127.0.0
 				},
 			}
 			: {}),
+		...(demo === "on" ? { demoPersonas: true as const } : {}),
 		allowedUsers: allowed(
 			"GITHUB_ALLOWED_USERS",
 			process.env.GITHUB_ALLOWED_USERS,
