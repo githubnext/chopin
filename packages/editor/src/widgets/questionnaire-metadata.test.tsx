@@ -19,6 +19,7 @@ test("reopened metadata ignores a delayed answered projection", () => {
 
 test("an older custom answer still renders its text", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		value: {
 			id: "w",
 			by: "ana",

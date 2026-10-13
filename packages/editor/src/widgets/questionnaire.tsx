@@ -41,7 +41,7 @@ import type { Answer, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
 import type { QuestionStepMotion } from "../widget-options";
 import type { MemberState } from "../deck-runs";
-import type { QuestionnaireEntry } from "../questionnaires";
+import type { QuestionnaireEntry, QuestionnaireStore } from "../questionnaires";
 
 /** The plan stores the chosen text; the shared view wants answer records. */
 function answers(value: Questionnaire): Answer[] | undefined {
@@ -80,7 +80,7 @@ export type QuestionnaireCardProps = {
 	value: Questionnaire;
 	/** Durable lifecycle state can arrive separately from the document node. */
 	meta?: Question.CardMeta;
-	presentation?: "inline" | "list" | "deck";
+	presentation?: "inline" | "deck" | "list";
 	motionImmediately?: () => boolean;
 	onCardSource?: (questionnaireId: string) => void;
 	/** The viewer's own handle, who is never shown as present on a card. */
@@ -101,24 +101,68 @@ export type QuestionnaireCardProps = {
 	/** Take the reader to that prose. Without it the shared view's jump is inert. */
 	onQuestionSelect?: (question: string) => void;
 	motion?: QuestionStepMotion;
+	/** How many hidden decisions are being written up, when this card speaks for them all. */
+	writing?: number;
 };
 
 export type CardPresentation = "hidden" | "settled-line" | "resolved" | "open";
 
+/**
+ * How a card shows where it is.
+ *
+ * In the document a decided card is shown only through the prose it lives in:
+ * pending, deliberately empty and orphaned decisions have no prose to mark, so
+ * they stay out of the reading flow and keep their full card in Decisions. The
+ * projection node itself stays; this only decides what its decorator draws. A
+ * deck keeps its decided members at full size while it holds an open one.
+ */
 export function cardPresentation(
 	value: Questionnaire,
 	meta: Question.CardMeta | undefined,
-	where: "inline" | "list" | "deck",
+	where: "inline" | "deck" | "list",
 ): CardPresentation {
 	let status = meta?.status ?? cardStatus(value);
 	if (status === "open" || status === "reopened") return "open";
 	if (where === "list") return "resolved";
-	if (status === "discarded" || meta?.hasProse) return "hidden";
+	if (where === "inline" || status === "discarded" || meta?.hasProse) return "hidden";
 	// In a deck a decided card keeps an open card's footprint, so the stack never shrinks to a line.
-	if (where === "deck") return "resolved";
-	// A card can resolve before its metadata reaches this client. Its document
-	// projection is still a decided card, and all prose-less decisions settle inline.
-	return "settled-line";
+	return "resolved";
+}
+
+/**
+ * Whether a decision the document hides is having its prose written right now.
+ *
+ * Only work that is actually running counts: a conversation decision's write-up
+ * job, or a Planner turn that owes this decision a review and has no prose for
+ * it yet. Deliberately empty and orphaned decisions wait on nothing.
+ */
+export function writingProse(
+	value: Questionnaire,
+	meta: Question.CardMeta | undefined,
+	work: { unwritten: boolean; plannerBusy: boolean },
+): boolean {
+	if (value.status === "expired" || cardPresentation(value, meta, "inline") !== "hidden") {
+		return false;
+	}
+	if ((meta?.status ?? cardStatus(value)) !== "decided" || meta?.hasProse) return false;
+	if (meta?.proseOrphaned) return false;
+	if (meta?.origin === "conversation") return meta.writeup?.status === "writing";
+	return work.plannerBusy && work.unwritten;
+}
+
+/** One quiet line where prose is about to land, however many decisions it is for. */
+function WritingUp({ count, id }: { count: number; id: string }) {
+	return (
+		<p
+			className="m-0 flex items-center gap-1.5 text-sm text-text-tertiary"
+			data-plan-sidecar-questionnaire={id}
+			data-plan-writing-up=""
+			role="status"
+		>
+			<span aria-hidden="true" className="plan-research-dot" />
+			{count === 1 ? "Writing up a decision…" : `Writing up ${count} decisions…`}
+		</p>
+	);
 }
 
 export function QuestionnaireCard(
@@ -140,6 +184,7 @@ export function QuestionnaireCard(
 		relations,
 		value,
 		wire,
+		writing,
 	}: QuestionnaireCardProps,
 ) {
 	if (value.status === "expired") return <Expired value={value} />;
@@ -207,6 +252,7 @@ export function QuestionnaireCard(
 		&& presence.phase === "closing"
 		&& lastVisible.current?.id === presence.value;
 	if (shown === "hidden" && !closing) {
+		if (writing) return <WritingUp count={writing} id={value.id} />;
 		return (
 			<div
 				data-plan-sidecar-questionnaire={value.id}
@@ -554,6 +600,12 @@ function Decided(
 			verb={discarded ? "Discarded" : "Answered"}
 		/>
 	);
+	// The document hides a decision without prose, so its write-up's progress and Retry live
+	// here until the paragraph lands.
+	let linked = cardRelation(pointing.relations, value.questions.map(question => question.id))
+		?.relation === "linked";
+	let writeup = !discarded && !linked && meta?.origin === "conversation" && !meta.hasProse
+		&& !meta.proseOrphaned && !!meta.writeup;
 	return (
 		<SidecarCard
 			data-plan-sidecar-questionnaire={value.id}
@@ -572,6 +624,9 @@ function Decided(
 				errorClassName="editor-motion-feedback"
 				onDiscard={editable ? () => request("question:discard") : undefined}
 				onReopen={editable ? () => request("question:reopen") : undefined}
+				relationNote={writeup && meta
+					? <WriteupStatus canEdit={canEdit} connected={connected} meta={meta} wire={wire} />
+					: undefined}
 				resolver={discarded ? meta?.resolver : undefined}
 				status={discarded ? "discarded" : "answered"}
 				submitting={submitting}
@@ -624,7 +679,7 @@ export function inlineMemberState(
 	if ((!meta || meta.status === "decided") && carriedByMarkers(value, places) && !hasProseKey) {
 		return "hidden";
 	}
-	let shown = cardPresentation(value, meta, "inline");
+	let shown = cardPresentation(value, meta, "deck");
 	return shown === "open" ? "open" : shown === "hidden" ? "hidden" : "settled";
 }
 
@@ -666,6 +721,60 @@ function useInlineDeck(id: string) {
 	let layout = deckLayout(members);
 	if (!layout || (layout.lead !== id && !layout.members.includes(id))) return undefined;
 	return { layout, members: members.filter(member => layout.members.includes(member.id)) };
+}
+
+/** How many hidden decisions are being written up, told only to the first of them. */
+function useWritingUp(id: string): number | undefined {
+	let options = useCellValue(widgets$);
+	let store = options.questions;
+	let entries = useSyncExternalStore(
+		store?.subscribe ?? noop,
+		store?.snapshot ?? noEntries,
+		store?.snapshot ?? noEntries,
+	);
+	let cards = useSyncExternalStore(
+		options.cardMeta?.subscribe ?? noop,
+		options.cardMeta?.snapshot ?? noCards,
+		options.cardMeta?.snapshot ?? noCards,
+	);
+	useRelations(store);
+	if (!store) return undefined;
+	let writing = writingEntries(entries, cards, store, options.planner);
+	return writing[0]?.id === id ? writing.length : undefined;
+}
+
+/** The hidden decisions whose prose is being written now, in document order. */
+export function writingEntries(
+	entries: readonly QuestionnaireEntry[],
+	cards: ReadonlyMap<string, Question.CardMeta>,
+	store: Pick<QuestionnaireStore, "plannerBusy" | "unwritten">,
+	planner: boolean | undefined,
+): QuestionnaireEntry[] {
+	let plannerBusy = planner !== false && store.plannerBusy();
+	return entries.filter(entry =>
+		writingProse(entry.value, cards.get(entry.id), {
+			unwritten: store.unwritten(entry.id),
+			plannerBusy,
+		})
+	);
+}
+
+/**
+ * Whether decisions are all a document holds, and the document draws none of them.
+ *
+ * Lexical shows no placeholder beside a decorator node, so a blank document that
+ * keeps hidden decision projections needs the host to say it is blank.
+ */
+export function blankBehindDecisions(
+	entries: readonly QuestionnaireEntry[],
+	cards: ReadonlyMap<string, Question.CardMeta>,
+	writing: readonly QuestionnaireEntry[],
+): boolean {
+	return entries.length > 0 && writing.length === 0
+		&& entries.every(entry =>
+			entry.value.status !== "expired"
+			&& cardPresentation(entry.value, cards.get(entry.id), "inline") === "hidden"
+		);
 }
 
 /** Where focus goes when a deck dissolves under the reader: the card that was on top. */
@@ -713,6 +822,7 @@ function InlineCard({ deck = false, value }: { deck?: boolean; value: Questionna
 	// Re-render when anchors arrive: whether the card collapses depends on them.
 	useRelations(options.questions);
 	let phone = usePhone();
+	let writing = useWritingUp(value.id);
 	let places = options.questions?.counts(value.id);
 	if (
 		phone && options.onShowDecision && cardPresentation(value, meta, "inline") === "open"
@@ -740,11 +850,12 @@ function InlineCard({ deck = false, value }: { deck?: boolean; value: Questionna
 			onQuestionLeave={() => options.questions?.clear()}
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}
 			places={places}
-			planner={options.planner}
+			planner={options.planner !== false && !!options.questions?.plannerBusy()}
 			presentation={deck ? "deck" : "inline"}
 			relations={options.questions?.relations(value.id)}
 			value={value}
 			wire={options.wire}
+			writing={deck ? undefined : writing}
 		/>
 	);
 }

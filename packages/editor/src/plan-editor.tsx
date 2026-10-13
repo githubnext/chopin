@@ -24,6 +24,7 @@ import "./styles.css";
 import "./feedback.css";
 import { plugins as dialectPlugins } from "@chopin/dialect";
 
+import { BlankBehindDecisions } from "./blank-behind-decisions";
 import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
@@ -557,6 +558,8 @@ export function PlanEditor(
 		setGeneration(value => value + 1);
 	}
 
+	let placeholder = readOnly ? "This document is empty." : "Start writing, or ask Chopin to plan";
+
 	if (!wire) {
 		return (
 			<div
@@ -598,14 +601,21 @@ export function PlanEditor(
 							plugins={plugins}
 							lexicalTheme={PLAN_LEXICAL_THEME}
 							contentEditableClassName="plan-content focus-caret"
-							placeholder={readOnly
-								? "This document is empty."
-								: "Start writing, or ask Chopin to plan"}
+							placeholder={placeholder}
 							spellCheck
 							// The dialect has no raw HTML. Left on, MDXEditor registers
 							// its HTML visitors and quietly admits `html` nodes.
 							suppressHtmlProcessing
 						/>
+						{questions && (
+							<BlankBehindDecisions
+								cardMeta={cardMeta}
+								editor={binding?.editor}
+								placeholder={placeholder}
+								planner={planner}
+								questions={questions}
+							/>
+						)}
 					</div>
 					{/* In the document column, so they track the prose, not the pane. */}
 					<PlanChanges motionImmediately={motionImmediately} store={changes} />

@@ -79,6 +79,7 @@ export class QuestionnaireStore {
 	#prose: Array<{ widget: string; key: string }> = [];
 	#hasBound = false;
 	#relations = 0;
+	#plannerBusy = false;
 	#relationListeners = new Set<() => void>();
 	/**
 	 * Which decision the reader last asked to be taken to, and how far along
@@ -276,6 +277,28 @@ export class QuestionnaireStore {
 		}
 		this.#relations++;
 		for (let listener of this.#listeners) listener();
+		for (let listener of this.#relationListeners) listener();
+	}
+
+	/**
+	 * Whether any of a decision's questions waits on prose nobody has written yet.
+	 *
+	 * Owed a review and naming no block: answered before its prose existed. Once
+	 * a Planner has anchored it, a later review keeps the blocks it named.
+	 */
+	unwritten(widget: string): boolean {
+		return this.#related.some(item =>
+			item.widget === widget && item.pending && item.anchored === 0 && !item.orphaned
+		);
+	}
+
+	/** Whether a Planner turn is running in this document, as the host last said. */
+	plannerBusy = (): boolean => this.#plannerBusy;
+
+	setPlannerBusy(busy: boolean): void {
+		if (this.#plannerBusy === busy) return;
+		this.#plannerBusy = busy;
+		this.#relations++;
 		for (let listener of this.#relationListeners) listener();
 	}
 

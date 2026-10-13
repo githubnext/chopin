@@ -9,6 +9,7 @@ const JOB = "prose:card:decided:card:1";
 
 test("a settled line says a conversation decision is being written up only while its job runs", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		meta: { ...META, writeup: { status: "writing", job: JOB } },
 		value: DECIDED,
 	}));
@@ -18,7 +19,11 @@ test("a settled line says a conversation decision is being written up only while
 	expect(markup).toContain("Writing up…");
 	expect(markup).not.toContain("Retry");
 
-	let idle = renderToStaticMarkup(createElement(QuestionnaireCard, { meta: META, value: DECIDED }));
+	let idle = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
+		meta: META,
+		value: DECIDED,
+	}));
 	expect(idle).toContain("Decided: GitHub Apps · @ana");
 	expect(idle).not.toContain("Writing up…");
 	expect(idle).toContain("Not linked yet");
@@ -27,6 +32,7 @@ test("a settled line says a conversation decision is being written up only while
 test("a failed write-up says so and offers Retry only to an editable connected viewer", () => {
 	let failed = { ...META, writeup: { status: "failed" as const, job: JOB } };
 	let editable = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		canEdit: true,
 		connected: true,
 		meta: failed,
@@ -34,6 +40,7 @@ test("a failed write-up says so and offers Retry only to an editable connected v
 		wire: { ask: async () => ({}), send() {}, on: () => () => {} } as never,
 	}));
 	let reader = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		canEdit: false,
 		connected: true,
 		meta: failed,
@@ -51,6 +58,7 @@ test("a failed write-up says so and offers Retry only to an editable connected v
 
 test("a linked relation stays the sole control after a write-up failure", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		meta: { ...META, writeup: { status: "failed", job: JOB } },
 		onQuestionSelect: () => {},
 		relations: { [DECIDED.questions[0]!.id]: "linked" },
@@ -63,6 +71,7 @@ test("a linked relation stays the sole control after a write-up failure", () => 
 
 test("an orphaned settled line says the prose was removed", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		meta: { ...META, proseOrphaned: true },
 		value: DECIDED,
 	}));
@@ -73,18 +82,21 @@ test("an orphaned settled line says the prose was removed", () => {
 
 test("an orphaned settled line offers Reopen only to an editable connected viewer", () => {
 	let editable = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		canEdit: true,
 		connected: true,
 		meta: { ...META, proseOrphaned: true },
 		value: DECIDED,
 	}));
 	let reader = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		canEdit: false,
 		connected: true,
 		meta: { ...META, proseOrphaned: true },
 		value: DECIDED,
 	}));
 	let offline = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		canEdit: true,
 		connected: false,
 		meta: { ...META, proseOrphaned: true },
@@ -97,6 +109,7 @@ test("an orphaned settled line offers Reopen only to an editable connected viewe
 
 test("a Planner settled line never claims it is writing prose", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		meta: { ...META, origin: "planner", writeup: { status: "writing", job: JOB } },
 		value: DECIDED,
 	}));
@@ -106,6 +119,7 @@ test("a Planner settled line never claims it is writing prose", () => {
 
 test("decided metadata keeps a delayed unanswered projection safely settled", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		meta: META,
 		value: {
 			...DECIDED,
@@ -121,6 +135,7 @@ test("decided metadata keeps a delayed unanswered projection safely settled", ()
 test("a Planner settled line names each relationship state", () => {
 	let line = (relation: "pending" | "empty" | "orphaned") =>
 		renderToStaticMarkup(createElement(QuestionnaireCard, {
+			presentation: "deck",
 			meta: { ...META, origin: "planner" },
 			relations: { [DECIDED.questions[0]!.id]: relation },
 			value: DECIDED,
@@ -134,6 +149,7 @@ test("a Planner settled line names each relationship state", () => {
 
 test("a pending line without a Planner does not promise linking", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "deck",
 		meta: { ...META, origin: "planner" },
 		planner: false,
 		relations: { [DECIDED.questions[0]!.id]: "pending" },

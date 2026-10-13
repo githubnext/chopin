@@ -689,6 +689,8 @@ export function RoomWorkspace(
 	latestPlanVisible.current = planVisible;
 	let latestBusy = useRef(chatActivity.busy);
 	latestBusy.current = chatActivity.busy;
+	// A running turn is what lets the document say decisions are being written up.
+	useEffect(() => questions.setPlannerBusy(chatActivity.busy), [questions, chatActivity.busy]);
 	let [documentWatch, setDocumentWatch] = useState(QUIET_DOCUMENT);
 	// Read through a ref: the host's callback changes as its route does, and the socket below must
 	// not reconnect (remounting the editor and losing its scroll) when a child opens over it.

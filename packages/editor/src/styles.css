@@ -2315,6 +2315,23 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	margin-block: 0;
 }
 
+/*
+ * A document whose only blocks are decisions it hides reads as empty. Lexical
+ * shows no placeholder beside a decorator, so the first empty paragraph, where a
+ * click puts the caret, says it instead. Out of flow, like the formula placeholder.
+ */
+.plan .plan-content[data-plan-blank] > p:first-of-type {
+	position: relative;
+}
+
+.plan .plan-content[data-plan-blank] > p:first-of-type::before {
+	content: var(--plan-blank-placeholder, none);
+	position: absolute;
+	inset-inline-start: 0;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
+}
+
 /* A deck member drawn by its run's lead takes no room of its own. */
 .plan .plan-content [data-plan-questionnaire]:has(> [data-deck-follower]) {
 	display: none;

@@ -11,7 +11,11 @@ test("evidence inspection is available only on an open inline conversation card"
 		questions: [{ ...DECIDED.questions[0]!, answer: undefined, choices: undefined }],
 	};
 	let evidence = createElement("p", null, "Evidence");
-	let render = (value: typeof open, status: "open" | "decided", presentation?: "inline" | "list") =>
+	let render = (
+		value: typeof open,
+		status: "open" | "decided",
+		presentation?: "inline" | "deck" | "list",
+	) =>
 		renderToStaticMarkup(createElement(QuestionnaireCard, {
 			evidence,
 			meta: { ...META, status },
@@ -20,7 +24,7 @@ test("evidence inspection is available only on an open inline conversation card"
 		}));
 	let eligible = render(open, "open");
 	let noThread = render({ ...open, thread: undefined } as never, "open");
-	let settled = render(open, "decided");
+	let settled = render(open, "decided", "deck");
 	let list = render(open, "open", "list");
 	let noEvidence = renderToStaticMarkup(createElement(QuestionnaireCard, {
 		meta: { ...META, status: "open" },

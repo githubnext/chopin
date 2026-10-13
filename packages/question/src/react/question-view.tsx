@@ -100,6 +100,8 @@ export type QuestionViewProps = {
 	relations?: Record<string, Relation>;
 	/** What a pending relationship is waiting on, when the host knows better than "Linking…". */
 	pendingRelation?: string;
+	/** A host's own word on an answered decision's prose, in place of the relation note. */
+	relationNote?: ReactNode;
 	collaborators?: Collaborator[];
 	/**
 	 * Replaces the `@handle` pills for people on the current question. The view
@@ -795,6 +797,7 @@ export function QuestionView(props: QuestionViewProps) {
 		places,
 		relations,
 		pendingRelation,
+		relationNote: hostNote,
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionFocus,
@@ -973,7 +976,7 @@ export function QuestionView(props: QuestionViewProps) {
 		let related = answers
 			? cardRelation(relations, definition.questions.map(question => question.id))
 			: undefined;
-		let relationNote = related && (
+		let relationNote = hostNote ?? (related && (
 			<RelationNote
 				count={places?.[related.question]}
 				onEnter={onQuestionEnter}
@@ -983,7 +986,7 @@ export function QuestionView(props: QuestionViewProps) {
 				question={related.question}
 				relation={related.relation}
 			/>
-		);
+		));
 		return (
 			<div className="question-card">
 				{answers

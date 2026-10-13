@@ -15,7 +15,7 @@ import { decisionsDeck } from "./decision-state";
 import { Deck, revealDeckItem } from "./deck";
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { usePhone } from "./pointer";
-import { useQuestionnaires } from "./questionnaires";
+import { useQuestionnaires, useRelations } from "./questionnaires";
 import { PendingAnswersContext, PendingAnswersStore, SaveBar } from "./save-bar";
 import { forget } from "./touched";
 import { labels, QuestionnaireCard } from "./widgets/questionnaire";
@@ -233,6 +233,9 @@ export function Decisions(
 	}: DecisionsProps,
 ) {
 	let entries = useQuestionnaires(store);
+	useRelations(store);
+	// "Linking…" promises work; without a running turn a pending decision is plainly unlinked.
+	let linking = planner !== false && store.plannerBusy();
 	let readiness = useSyncExternalStore(
 		store.subscribe,
 		store.readinessSnapshot,
@@ -390,7 +393,7 @@ export function Decisions(
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
 			meta={metadata.get(entry.id)}
-			planner={planner}
+			planner={linking}
 			relations={store.relations(entry.id)}
 			canEdit={canEdit}
 			connected={connected}
