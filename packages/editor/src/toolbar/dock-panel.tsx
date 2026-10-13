@@ -8,8 +8,8 @@
 
 import { CheckIcon, ListIcon } from "@chopin/icons";
 import { INSERT_CHECK_LIST_COMMAND } from "@lexical/list";
-import { $createParagraphNode, $getSelection, $isRangeSelection } from "lexical";
 
+import { $openBlock } from "./block-target";
 import { convertBlock } from "./bubble";
 import { availableCommands } from "./slash";
 import { nativeSelectionRect } from "./surface";
@@ -56,18 +56,6 @@ export type PanelChoice = {
 	current?: boolean;
 	run: (editor: LexicalEditor) => void;
 };
-
-/** A new block goes after one with words in it, as the slash menu's does, never inside them. */
-function $openBlock() {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection)) return;
-	let block = selection.anchor.getNode().getTopLevelElement();
-	if (block && block.getTextContentSize() > 0) {
-		let paragraph = $createParagraphNode();
-		block.insertAfter(paragraph);
-		paragraph.select();
-	}
-}
 
 /** Kinds of list belong with the other text styles, not with the blocks. */
 const STYLED = new Set(["tasks"]);

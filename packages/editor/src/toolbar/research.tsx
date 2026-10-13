@@ -16,7 +16,6 @@ import {
 	$insertNodes,
 	$isElementNode,
 	$isRangeSelection,
-	$isRootNode,
 	$setSelection,
 	COMMAND_PRIORITY_LOW,
 	createCommand,
@@ -33,6 +32,7 @@ import * as Y from "yjs";
 import { blockElement } from "../scroll";
 import { useTransitionPresence } from "../transition-presence";
 import { ResearchComposer } from "../widgets/research";
+import { $topLevel } from "./block-target";
 import { $relativePosition } from "./position";
 
 import type { Binding } from "@lexical/yjs";
@@ -191,23 +191,6 @@ export function retainDraftBlock<Block>(
 	previous: Block | undefined,
 ): Block | undefined {
 	return resolved ?? previous;
-}
-
-/** The top-level block holding a node, and whether the node sits deeper, in a list item or cell. */
-function $topLevel(node: LexicalNode): { block: LexicalNode; nested: boolean } | undefined {
-	// Not `getTopLevelElement`: a table cell is a shadow root, so it stops inside the table.
-	let block: LexicalNode = node;
-	for (
-		let parent = block.getParent();
-		parent && !$isRootNode(parent);
-		parent = parent.getParent()
-	) {
-		block = parent;
-	}
-	if (!$isRootNode(block.getParent())) return undefined;
-	let host: LexicalNode | null = node;
-	while (host && !($isElementNode(host) && !host.isInline())) host = host.getParent();
-	return { block, nested: host !== block };
 }
 
 /**

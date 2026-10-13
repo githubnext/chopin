@@ -63,6 +63,7 @@ import {
 	WrenchIcon,
 } from "@chopin/icons";
 
+import { $insertBlock, $leaveForBlock, $openBlock, $taskListInContainer } from "./block-target";
 import { askForUrl } from "./url";
 import { placeSurface } from "./placement";
 import { OPEN_INVESTIGATION_COMMAND, OPEN_RESEARCH_COMMAND } from "./research";
@@ -99,6 +100,18 @@ export type SlashCommand =
 		| { kind: "insert"; run: (editor: LexicalEditor) => void }
 		| { kind: "action"; run: (editor: LexicalEditor, action: OpenResearch) => boolean }
 	);
+
+/**
+ * Run a block command where its block may live, in the same update so one undo removes both.
+ * `component` names the dialect component it creates, for the containers that forbid one.
+ */
+function placed(run: (editor: LexicalEditor) => void, component?: string) {
+	return (editor: LexicalEditor) =>
+		editor.update(() => {
+			$leaveForBlock(component);
+			run(editor);
+		});
+}
 
 /** Replace the current block, dropping the `/query` the user typed. */
 function replace(editor: LexicalEditor, build: () => ElementNode) {
@@ -167,7 +180,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["note", "warning", "aside", "admonition"],
 		kind: "insert",
-		run: editor => insertContainer(editor, () => $createCalloutNode(ulid())),
+		run: placed(editor => insertContainer(editor, () => $createCalloutNode(ulid())), "Callout"),
 	},
 	{
 		id: "table",
@@ -177,7 +190,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["table", "grid", "row", "column", "spreadsheet"],
 		kind: "insert",
-		run: editor =>
+		run: placed(editor =>
 			editor.update(() => {
 				/*
 				 * Row headers only.
@@ -187,8 +200,9 @@ const COMMANDS: SlashCommand[] = [
 				 * GFM has no way to write one, so the table would claim
 				 * something on screen that the saved source does not say.
 				 */
-				$insertNodes([$createTableNodeWithDimensions(3, 3, { rows: true, columns: false })]);
-			}),
+				$insertBlock($createTableNodeWithDimensions(3, 3, { rows: true, columns: false }));
+			})
+		),
 	},
 	{
 		id: "columns",
@@ -198,7 +212,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["column", "layout", "side by side", "compare"],
 		kind: "insert",
-		run: editor =>
+		run: placed(editor =>
 			editor.update(() => {
 				let selection = $getSelection();
 				let topLevel = $isRangeSelection(selection)
@@ -213,7 +227,8 @@ const COMMANDS: SlashCommand[] = [
 				if (topLevel && !$isParagraphNode(topLevel)) topLevel.insertAfter(columns);
 				else $insertNodes([columns]);
 				first.getFirstChild()?.selectStart();
-			}),
+			})
+		),
 	},
 	{
 		id: "tasks",
@@ -223,7 +238,9 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["task", "todo", "checklist", "checkbox"],
 		kind: "insert",
-		run: editor => editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined),
+		run: placed(editor => {
+			if (!$taskListInContainer()) editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined);
+		}),
 	},
 	{
 		id: "code",
@@ -233,7 +250,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["code", "snippet", "fence"],
 		kind: "insert",
-		run: editor => replace(editor, () => $createCodeBlockNode("")),
+		run: placed(editor => replace(editor, () => $createCodeBlockNode(""))),
 	},
 	{
 		id: "image",
@@ -259,7 +276,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["mermaid", "diagram", "flowchart", "graph"],
 		kind: "insert",
-		run: editor => replace(editor, () => $createCodeBlockNode(MERMAID_LANGUAGE)),
+		run: placed(editor => replace(editor, () => $createCodeBlockNode(MERMAID_LANGUAGE))),
 	},
 	{
 		id: "math",
@@ -269,7 +286,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["math", "latex", "katex", "equation"],
 		kind: "insert",
-		run: editor => replace(editor, () => $createMathNode(false)),
+		run: placed(editor => replace(editor, () => $createMathNode(false))),
 	},
 	{
 		id: "tabs",
@@ -279,7 +296,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["tab", "switch", "panel"],
 		kind: "insert",
-		run: editor =>
+		run: placed(editor =>
 			editor.update(() => {
 				let tabs = $createTabsNode();
 				tabs.setId(ulid());
@@ -290,8 +307,8 @@ const COMMANDS: SlashCommand[] = [
 					tab.append($createParagraphNode().append($createTextNode("")));
 					tabs.append(tab);
 				}
-				$insertNodes([tabs]);
-			}),
+				$insertBlock(tabs);
+			}), "Tabs"),
 	},
 	{
 		id: "diff",
@@ -301,7 +318,7 @@ const COMMANDS: SlashCommand[] = [
 		group: "Blocks",
 		keywords: ["diff", "patch", "change"],
 		kind: "insert",
-		run: editor => replace(editor, () => $createCodeBlockNode(DIFF_LANGUAGE)),
+		run: placed(editor => replace(editor, () => $createCodeBlockNode(DIFF_LANGUAGE))),
 	},
 	{
 		id: "research",
@@ -522,18 +539,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 			() => {
 				armed.current = true;
 				editor.update(() => {
-					let selection = $getSelection();
-					if (!$isRangeSelection(selection)) return;
-					// A block with words in it gets a new paragraph after it, rather than a slash
-					// splitting a word or trailing a sentence. Deliberately the top-level block: a
-					// table cell holds only inline text in the dialect, and the inserted components
-					// cannot live inside a list item, so those go after the whole table or list.
-					let block = selection.anchor.getNode().getTopLevelElement();
-					if (block && block.getTextContentSize() > 0) {
-						let paragraph = $createParagraphNode();
-						block.insertAfter(paragraph);
-						paragraph.select();
-					}
+					$openBlock();
 					let next = $getSelection();
 					if ($isRangeSelection(next)) next.insertText("/");
 				});
