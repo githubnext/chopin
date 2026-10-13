@@ -5,24 +5,26 @@ import { Count } from "@chopin/editor/count";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, ChevronIcon, ExpandIcon, MessageIcon } from "@chopin/icons";
-import { usePhone } from "@chopin/editor/pointer";
 
 import {
-	CHAT_CHOICE_STORAGE_KEY,
 	initialWorkspaceState,
 	presentWorkspace,
-	storedDesktopChat,
 	transitionWorkspace,
 	workspaceDestinations,
 	workspaceHeadingId,
 	workspaceProfile,
 } from "./workspace-model";
 import { clampPane, ResizeHandle, usePaneWidth } from "./resizable-pane";
-import { workspaceSizing } from "./workspace-sizing";
+import {
+	CHAT_CHOICE_STORAGE_KEY,
+	CHAT_PANE,
+	storedDesktopChat,
+	workspaceSizing,
+} from "./workspace-sizing";
 import "./workspace-sizing.css";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
-import { sidebarMoving, usePaneMotion, usePaneSettledWidth } from "./pane-motion";
+import { usePaneMotion, usePaneSettledWidth } from "./pane-motion";
 import { listenForShortcuts } from "./global-shortcuts";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
@@ -43,13 +45,6 @@ import type {
 
 export type Pane = "chat";
 
-const CHAT_PANE = {
-	initial: 500,
-	max: Number.MAX_SAFE_INTEGER,
-	min: 250,
-	storageKey: "chopin:pane:chat",
-};
-
 export type WorkspaceIds = {
 	heading: Record<WorkspaceDestination, string>;
 	pane: Record<Pane, string>;
@@ -65,36 +60,6 @@ export function useWorkspaceIds(): WorkspaceIds {
 			chat: workspaceHeadingId("chat", instance),
 		},
 		pane: { chat: `${instance}-pane-chat` },
-	};
-}
-
-export function useWorkspaceLayout() {
-	let frame = useRef<HTMLDivElement>(null);
-	let [available, setAvailable] = useState(() => Math.max(0, window.innerWidth - 24));
-	useLayoutEffect(() => {
-		let element = frame.current;
-		if (!element) return;
-		let measure = () => {
-			if (!sidebarMoving()) setAvailable(element.clientWidth);
-		};
-		measure();
-		let observer = new ResizeObserver(measure);
-		observer.observe(element);
-		document.addEventListener("transitionend", measure);
-		document.addEventListener("transitioncancel", measure);
-		return () => {
-			observer.disconnect();
-			document.removeEventListener("transitionend", measure);
-			document.removeEventListener("transitioncancel", measure);
-		};
-	}, []);
-	// A phone keeps one destination at a time even when landscape gives it a wide window.
-	let phone = usePhone();
-	return {
-		available,
-		frame,
-		mode: phone ? "compact" as const : workspaceSizing(available, 500).mode,
-		phone,
 	};
 }
 

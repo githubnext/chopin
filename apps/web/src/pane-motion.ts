@@ -86,13 +86,3 @@ export function usePaneSettledWidth(target: RefObject<HTMLElement | null>) {
 		};
 	}, [target]);
 }
-
-/** The workspace waits for the sidebar track to settle before it re-measures its layout. */
-export function sidebarMoving(): boolean {
-	return document.getAnimations().some(animation =>
-		animation instanceof CSSTransition && animation.transitionProperty === "width"
-		&& animation.effect instanceof KeyframeEffect
-		&& animation.effect.target instanceof Element
-		&& animation.effect.target.matches(".motion-sidebar")
-	);
-}

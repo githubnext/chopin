@@ -95,7 +95,8 @@ import { Wire } from "./wire";
 import { ExperimentStore } from "./experiments/store";
 import { InvestigationReference, removableInvestigation } from "./experiments/card";
 import { EvidenceDecisions, ViewDecision } from "./experiments/evidence";
-import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } from "./workspace";
+import { useWorkspaceIds, useWorkspaceState, Workspace } from "./workspace";
+import { useWorkspaceLayout } from "./workspace-layout";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
 import type { ConversationPlan, Plan, Question, Research, Session } from "@chopin/protocol";
@@ -1129,7 +1130,7 @@ export function RoomWorkspace(
 		if (opensEditing({ empty: planState.empty })) setEditing(true);
 	}, [arrived, planState.synced, planState.empty]);
 	// A failed open says so instead; the lines would otherwise pulse beside it indefinitely.
-	let loading = phone && !arrived && !planState.failed;
+	let loading = !arrived && !planState.failed;
 	// A child on a phone borrows its parent's tab bar (see child-phone-chrome.ts).
 	let childChrome = useContext(ChildPhoneChromeContext);
 	// Where this room's title goes when it is an open child, and where its own child's goes.

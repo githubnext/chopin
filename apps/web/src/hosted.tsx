@@ -8,6 +8,7 @@ import { rememberOriginRect } from "./child-origin";
 import { WorkspaceNotice } from "./workspace-notice";
 import { NavigationShell } from "./navigation-shell";
 import { PhoneDocumentSkeleton } from "./phone-skeleton";
+import { WorkspaceSkeleton } from "./workspace-skeleton";
 
 import type { ReactNode } from "react";
 import type { ResearchOpener } from "@chopin/editor";
@@ -100,10 +101,10 @@ export function retryableChannelFailure(error: unknown): boolean {
 		|| error.status >= 500;
 }
 
-/** On a phone, a document's loading state is the workspace's own shape rather than a label. */
+/** A document's loading state is the workspace's own shape rather than a label. */
 function Loading({ document, label = "Loading" }: { document?: boolean; label?: string }) {
 	let phone = usePhone();
-	if (document && phone) return <PhoneDocumentSkeleton />;
+	if (document) return phone ? <PhoneDocumentSkeleton /> : <WorkspaceSkeleton label={label} />;
 	return (
 		<div
 			className="hosted-loading flex h-full items-center justify-center bg-ground px-4 text-sm text-text-tertiary"

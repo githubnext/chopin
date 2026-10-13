@@ -1,16 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-	CHAT_CHOICE_STORAGE_KEY,
 	initialDocumentView,
 	initialWorkspaceState,
 	presentWorkspace,
-	storedDesktopChat,
 	transitionWorkspace,
 	workspaceDestinations,
 	workspaceHeadingId,
 	workspaceProfile,
 } from "./workspace-model";
+import { CHAT_CHOICE_STORAGE_KEY, storedDesktopChat } from "./workspace-sizing";
 
 import type { WorkspaceState } from "./workspace-model";
 

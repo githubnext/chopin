@@ -207,6 +207,67 @@
 	}
 }
 
+/*
+ * The desktop loading shape (workspace-skeleton.tsx). The workspace's own classes place its panes
+ * and bars; these only draw quiet marks in them, and the lines sit where the document's preface
+ * puts them.
+ */
+.workspace-skeleton-title,
+.workspace-skeleton-views {
+	gap: calc(var(--spacing) * 3);
+
+	& > span {
+		height: calc(var(--spacing) * 3);
+		border-radius: var(--radius-sm);
+		background: var(--color-selected);
+		animation: phone-skeleton-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
+			alternate;
+	}
+}
+
+.workspace-skeleton-title > span {
+	width: calc(var(--spacing) * 36);
+	margin-inline-start: calc(var(--spacing) * 10);
+}
+
+.workspace-skeleton-views > span {
+	width: calc(var(--spacing) * 16);
+	margin-inline-start: calc(var(--spacing) * 2);
+}
+
+.workspace-skeleton-tabs > span {
+	display: grid;
+	place-items: center;
+
+	&::before {
+		width: calc(var(--spacing) * 16);
+		height: calc(var(--spacing) * 3);
+		border-radius: var(--radius-sm);
+		background: var(--color-selected);
+		content: "";
+		animation: phone-skeleton-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
+			alternate;
+	}
+}
+
+.workspace-skeleton-page {
+	--workspace-skeleton-gutter: var(--document-gutter);
+	overflow: hidden;
+	background: var(--color-page);
+
+	& > .phone-skeleton-page {
+		max-width: calc(var(--document-prose-measure) + var(--workspace-skeleton-gutter) * 2);
+		margin-inline: auto;
+		padding: var(--document-top-inset) var(--workspace-skeleton-gutter) 0;
+	}
+}
+
+@media (max-width: 600px) {
+	.workspace-skeleton-page {
+		--workspace-skeleton-gutter: var(--document-gutter-compact);
+	}
+}
+
 /* Until a document first arrives, its column shows the same lines in place of the empty editor. */
 [data-plan-scroll]:has(> .plan-preface > .phone-skeleton-page) > .mdxeditor {
 	visibility: hidden;
@@ -220,6 +281,9 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.phone-skeleton-page > span,
+	.workspace-skeleton-title > span,
+	.workspace-skeleton-views > span,
+	.workspace-skeleton-tabs > span::before,
 	.phone-skeleton-bar > span::before,
 	.phone-skeleton-bar > span::after {
 		animation: none;
