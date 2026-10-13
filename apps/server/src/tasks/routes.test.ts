@@ -263,6 +263,26 @@ test("the build owner can stop from the browser without losing reported pull req
 	await Plan.close(context.plan);
 });
 
+test("a stale Stop rejects a naturally ended build instead of claiming cancellation", async () => {
+	for (let state of ["failed", "stopped"] as const) {
+		let context = await setup();
+		let connection = await paired(context);
+		let build = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		await tool(context, connection.token, "claim_implementation_build", { id: build.id });
+		await tool(context, connection.token, "report_implementation_build", { id: build.id, state });
+		expect(context.plan.builds.at(-1)?.state).toBe(state);
+		let stopped = await context.call(`${context.path}/stop`, { id: build.id });
+		expect(stopped.status).toBe(409);
+		expect(context.plan.builds.at(-1)?.state).toBe(state);
+		expect(context.plan.builds.at(-1)?.stoppedAtRevision).toBeUndefined();
+		await Plan.close(context.plan);
+	}
+});
+
 test("build heartbeats persist changed activity without resetting its age on every renewal", async () => {
 	let context = await setup();
 	let connection = await paired(context);

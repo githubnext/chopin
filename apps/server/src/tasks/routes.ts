@@ -337,7 +337,10 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				if (build.user !== session.user.id) {
 					throw new GitHubError("only the build owner can stop it", 403);
 				}
-				if (build.state === "failed" || build.state === "stopped") return;
+				if (build.state === "failed" || build.state === "stopped") {
+					if (build.stoppedAtRevision !== undefined) return;
+					throw new GitHubError("build has already ended", 409);
+				}
 				try {
 					// A human interruption must not publish unfinished work as a delivered live build.
 					await reportBuild(plan, build.user, build.connectionId, build.id, {
