@@ -2,6 +2,7 @@ import { afterAll, expect, mock, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { machineFile } from "./machine";
 import { createOutput } from "./output";
 import { commandWords, servePlanners, stopBackend } from "./planner";
 import { git } from "./workspace";
@@ -155,6 +156,119 @@ test(
 		}
 	},
 	30_000,
+);
+
+/** A Planner backend that records each launch and runs until it is told to stop. */
+const STAYING_BACKEND = `
+import { appendFileSync } from "node:fs";
+let log = process.argv[2];
+appendFileSync(log, JSON.stringify({ pid: process.pid, token: process.env.CHOPIN_PLANNER_TOKEN }) + "\\n");
+process.on("SIGTERM", () => {
+	appendFileSync(log, JSON.stringify({ stopped: process.pid }) + "\\n");
+	process.exit(0);
+});
+setInterval(() => {}, 1000);
+`;
+
+test(
+	"on a terminal, a machine paired again after its token was revoked stops the old Planner backend and starts one with a credential from its new token",
+	async () => {
+		const REVOKED = `chopin_m_${"R".repeat(43)}`;
+		let directory = await mkdtemp(join(scratch, "repair-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, STAYING_BACKEND);
+		let issued: Array<{ machine: string; token: string }> = [];
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request): Promise<Response> {
+				let path = new URL(request.url).pathname;
+				let bearer = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+				if (path === "/api/connector/pairings") {
+					return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
+				}
+				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: MACHINE });
+				}
+				if (path === "/api/connector/connections") {
+					if (bearer === MACHINE) return Response.json({ token: "connection-token" });
+					// The machine is revoked once its Planner backend is already running.
+					await until(async () => (await entries(log)).length >= 1, 15_000);
+					return Response.json({ error: "machine-revoked" }, { status: 401 });
+				}
+				if (path === "/api/connector/planner") {
+					let token = `chopin_p_${String(issued.length).padStart(43, "P")}`;
+					issued.push({ machine: bearer, token });
+					return Response.json({
+						token,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", url: document },
+					});
+				}
+				// Chopin is out of reach for the build channel; the Planner keeps going regardless.
+				return new Response(null, { status: 503 });
+			},
+		});
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		let document = `${origin}/octo-org/score/plan`;
+		let home = await mkdtemp(join(scratch, "home-"));
+		await writeFile(
+			machineFile(home),
+			JSON.stringify({ servers: { [origin]: { token: REVOKED, label: "box" } } }),
+			{ mode: 0o600 },
+		);
+		let root = await checkout();
+		let output = "";
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "main.ts"),
+			"connect",
+			root,
+			"--planner",
+			document,
+			"--planner-command",
+			`${process.execPath} ${script} ${log}`,
+			"--",
+			"agent",
+		], {
+			env: {
+				...process.env,
+				CHOPIN_URL: origin,
+				CHOPIN_HOME: home,
+				CHOPIN_CONNECTOR_STATE_DIR: "",
+			},
+			terminal: {
+				cols: 200,
+				rows: 24,
+				data(_terminal, data) {
+					output += new TextDecoder().decode(data);
+				},
+			},
+		});
+		try {
+			await until(async () => (await entries(log)).filter(entry => entry.pid).length >= 2, 20_000);
+			let [first, stopped, second] = await entries(log);
+			expect(output).toContain("needs pairing with Chopin again");
+			expect(issued.map(credential => credential.machine)).toEqual([REVOKED, MACHINE]);
+			// The old backend stopped before the new one started, which holds the new token's credential.
+			expect(stopped).toEqual({ stopped: first.pid });
+			expect(first.token).toBe(issued[0]!.token);
+			expect(second.token).toBe(issued[1]!.token);
+			expect(alive(first.pid)).toBe(false);
+
+			connector.kill("SIGINT");
+			expect(await Promise.race([connector.exited, Bun.sleep(10_000).then(() => "timed out")]))
+				.toBe(0);
+			expect((await entries(log)).at(-1)).toEqual({ stopped: second.pid });
+		} finally {
+			connector.kill("SIGKILL");
+			connector.terminal?.close();
+			await chopin.stop(true);
+		}
+	},
+	40_000,
 );
 
 /**
