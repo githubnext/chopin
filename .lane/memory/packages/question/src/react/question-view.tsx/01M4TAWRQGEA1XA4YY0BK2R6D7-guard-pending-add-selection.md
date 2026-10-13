@@ -4,8 +4,9 @@ anchor: function QuestionView
 created: 2026-10-13T09:53:26Z
 norm: '1'
 sig: dfb307d59bab0014
-body_hash: cd15378d7927a778
-raw_hash: 505d1899c58e147b
+body_hash: 786699c942c22472
+raw_hash: 2f2a6568bcdbe842
+vouched: 2026-10-13T12:08:28Z
 lines: 770-1308
 ---
 
