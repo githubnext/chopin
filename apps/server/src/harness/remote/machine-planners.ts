@@ -54,12 +54,17 @@ export class MachinePlanners {
 		return (this.#auth.clock ?? (() => new Date()))().getTime();
 	}
 
-	/** A credential for `machine` to attach as `channelId`'s Planner; only its hash is kept. */
-	issue(machine: StoredMachine, channelId: string): { token: string; expiresAt: number } {
-		let now = this.#now();
+	/** Forgets every credential that can no longer open a link. */
+	#prune(now: number): void {
 		for (let [key, issued] of this.#issued) {
 			if (issued.expiresAt <= now) this.#issued.delete(key);
 		}
+	}
+
+	/** A credential for `machine` to attach as `channelId`'s Planner; only its hash is kept. */
+	issue(machine: StoredMachine, channelId: string): { token: string; expiresAt: number } {
+		let now = this.#now();
+		this.#prune(now);
 		let token = PREFIX + randomBytes(32).toString("base64url");
 		let expiresAt = now + PLANNER_CREDENTIAL_MS;
 		this.#issued.set(digest(token), { machineId: machine.id, channelId, expiresAt });
@@ -71,10 +76,14 @@ export class MachinePlanners {
 		return token.startsWith(PREFIX);
 	}
 
-	/** The live machine and document an unexpired credential names; throws `MachineError`. */
+	/**
+	 * The live machine and document an unexpired credential names; throws `MachineError`. Until it
+	 * expires a credential may open links again, so a backend can reattach after a dropped socket.
+	 */
 	async redeem(token: string): Promise<MachineGrant | undefined> {
+		this.#prune(this.#now());
 		let issued = TOKEN.test(token) ? this.#issued.get(digest(token)) : undefined;
-		if (!issued || issued.expiresAt <= this.#now()) return undefined;
+		if (!issued) return undefined;
 		let machine = await this.current({ id: issued.machineId } as StoredMachine);
 		return { machine, channelId: issued.channelId };
 	}

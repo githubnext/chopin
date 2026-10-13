@@ -614,9 +614,10 @@ repository tools act with it.
   `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach` to
   `CHOPIN_DOCUMENT`.
 - On HTTP 401 at the upgrade, or when the link closes for any reason other than
-  its own `detach`, exit. Within the credential's 15 minutes a backend may
-  instead reattach once after 1001 or a dropped socket; after that the
-  credential is refused and it must exit.
+  its own `detach`, exit. Until the credential's 15 minutes have passed a
+  backend may instead reattach with it after 1001 or a dropped socket; after
+  that the credential is refused and it must exit. Chopin forgets a credential
+  once it has expired.
 - Exit on SIGTERM. On Ctrl-C the connector sends it to the backend's process
   group and, 5 seconds later, kills whatever is left in that group, including
   processes the backend started that ignored it. A backend that exits by itself

@@ -273,8 +273,8 @@ describe("a paired machine's Planner", () => {
 		expect(server.attachments.attached(other.id)).toBe(true);
 	});
 
-	it("refuses an unknown or expired credential before upgrading", async () => {
-		let { pair, credential, channel, server, time } = await machineServer();
+	it("opens links with a credential until it expires, then refuses it before upgrading", async () => {
+		let { pair, credential, channel, server, time, planners } = await machineServer();
 		let member = await pair("member", "U_member");
 		let { body } = await credential(member.token, channel.id);
 		let upgrade = (token: string) =>
@@ -288,8 +288,12 @@ describe("a paired machine's Planner", () => {
 				},
 			});
 		expect((await upgrade("chopin_p_" + "x".repeat(43))).status).toBe(401);
+		// A backend whose socket dropped reattaches with the same credential.
+		expect(await planners.redeem(body.token)).toMatchObject({ channelId: channel.id });
+		expect(await planners.redeem(body.token)).toMatchObject({ channelId: channel.id });
 		time.offsetMs = 15 * 60_000 + 1;
 		expect((await upgrade(body.token)).status).toBe(401);
+		expect(await planners.redeem(body.token)).toBeUndefined();
 	});
 
 	it("releases every document when a machine whose login expired, then reattached at once, is revoked", async () => {
