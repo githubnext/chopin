@@ -11,8 +11,10 @@ import {
 } from "react";
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
+import { Face } from "@chopin/editor";
 import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
 
+import { activeActorRoster, launchUrl } from "./demo-actor";
 import { motionContract } from "./motion-contract";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
@@ -21,6 +23,7 @@ import { IconButton } from "./icon-button";
 
 import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
+import type { DemoActor } from "./demo-actor";
 import type { ComponentProps, ComponentType, CSSProperties, KeyboardEvent, ReactNode } from "react";
 
 // Once prefetched, the sheet renders directly: lazy() would still suspend its first render.
@@ -32,14 +35,24 @@ let LazyActionSheet = lazy(() =>
 
 export type DocumentAction = "copy-link" | "rename" | "archive" | "restore" | "delete";
 
+export type CollaboratorAction = `collaborator:${string}`;
+
 export type DocumentMenuItem = {
-	action: DocumentAction;
+	action: DocumentAction | CollaboratorAction;
 	label: string;
 	destructive?: boolean;
 	icon: (props: IconProps) => ReactNode;
 };
 
-export function documentMenuItems(channel: Pick<Api.Channel, "archivedAt">): DocumentMenuItem[] {
+export function documentMenuItems(
+	channel: Pick<Api.Channel, "archivedAt">,
+	collaborators: readonly DemoActor[] = [],
+): DocumentMenuItem[] {
+	let personas: DocumentMenuItem[] = channel.archivedAt ? [] : collaborators.map(actor => ({
+		action: `collaborator:${actor.id}` as const,
+		label: `Open as collaborator: ${actor.name}`,
+		icon: () => <Face decorative handle={actor.id} size={14} titled={false} />,
+	}));
 	return channel.archivedAt
 		? [
 			{ action: "restore", label: "Restore", icon: ArrowUpIcon },
@@ -48,6 +61,7 @@ export function documentMenuItems(channel: Pick<Api.Channel, "archivedAt">): Doc
 		: [
 			{ action: "copy-link", label: "Copy link", icon: LinkIcon },
 			{ action: "rename", label: "Rename", icon: PencilIcon },
+			...personas,
 			{ action: "archive", label: "Archive", icon: ArchiveIcon },
 		];
 }
@@ -70,6 +84,7 @@ export function DocumentActionsMenu(
 		className = "",
 		iconButton = false,
 		onAction,
+		openDocument = false,
 		trigger,
 	}: {
 		align?: "start" | "end";
@@ -77,6 +92,8 @@ export function DocumentActionsMenu(
 		className?: string;
 		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
+		/** This menu is for the document open in this tab, so it can launch collaborator tabs. */
+		openDocument?: boolean;
 		trigger: ReactNode;
 	},
 ) {
@@ -93,7 +110,16 @@ export function DocumentActionsMenu(
 	let [open, setOpen] = useState(false);
 	let [sheetOpen, setSheetOpen] = useState(false);
 	let [position, setPosition] = useState<CSSProperties>();
-	let items = documentMenuItems(channel);
+	let items = documentMenuItems(channel, openDocument ? activeActorRoster() : []);
+	let select = (action: DocumentMenuItem["action"]) => {
+		if (action.startsWith("collaborator:")) {
+			window.open(
+				launchUrl(location.href, action.slice("collaborator:".length)),
+				"_blank",
+				"noopener",
+			);
+		} else onAction(action as DocumentAction);
+	};
 	let immediately = motionImmediately();
 	let motion = motionContract("popover");
 	let presence = useTransitionPresence(
@@ -270,7 +296,7 @@ export function DocumentActionsMenu(
 						items={items}
 						label={`Actions for ${channel.title}`}
 						onClose={() => setSheetOpen(false)}
-						onSelect={action => onAction(action as DocumentAction)}
+						onSelect={action => select(action as DocumentMenuItem["action"])}
 						title={channel.title}
 					/>
 				</Suspense>
@@ -293,7 +319,7 @@ export function DocumentActionsMenu(
 							key={item.action}
 							onClick={() => {
 								closeMenu(true);
-								onAction(item.action);
+								select(item.action);
 							}}
 							tone={item.destructive ? "destructive" : "normal"}
 						>

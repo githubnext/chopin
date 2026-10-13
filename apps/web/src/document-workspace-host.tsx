@@ -21,6 +21,7 @@ import type { ResearchOpener } from "@chopin/editor";
 import type { ChildFocusToken } from "./anchored-child-surface";
 import type { ChildFocusAttempt } from "./child-history";
 import type { DocumentWorkspaceAction } from "./document-workspace-state";
+import { activeActor } from "./demo-actor";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
 import type { ChildOpen, WorkspacePresentation } from "./workspace-model";
@@ -60,7 +61,7 @@ function workspaceProps(
 		canManage: detail.canManage,
 		description: channel.description,
 		descriptionRevision: channel.descriptionRevision,
-		handle: user.login,
+		handle: activeActor()?.id ?? user.login,
 		label: channel.title,
 		onMetadataChanged,
 		repository: detail.repository,

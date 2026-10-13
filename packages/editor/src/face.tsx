@@ -22,6 +22,28 @@ import { useState } from "react";
 
 import { color } from "./cursor";
 
+export type FaceProfile = { name: string; avatar: string };
+
+const DEMO_PREFIX = "demo:";
+let profiles = new Map<string, FaceProfile>();
+
+/** Server-owned roster profiles, keyed by their IDs; `handle` is the ID for a demo actor. */
+export function setFaceProfiles(list: readonly (FaceProfile & { id: string })[]): void {
+	profiles = new Map(list.map(({ id, ...profile }) => [id, profile]));
+}
+
+/** A roster ID is never a GitHub login, so it must never reach github.com. */
+export function isDemoHandle(handle: string): boolean {
+	return handle.startsWith(DEMO_PREFIX);
+}
+
+/** What a person is called: a roster name for a demo actor, otherwise the handle. */
+export function personName(handle: string): string {
+	let profile = profiles.get(handle);
+	if (profile) return profile.name;
+	return isDemoHandle(handle) ? handle.slice(DEMO_PREFIX.length) || handle : handle;
+}
+
 /** Retina-sharp at the rendered size. */
 function photograph(handle: string, size: number): string {
 	return `https://github.com/${encodeURIComponent(handle)}.png?size=${size * 2}`;
@@ -77,12 +99,15 @@ function Portrait(
 	let [failed, setFailed] = useState(false);
 	let [loaded, setLoaded] = useState(false);
 	let tone = color(handle);
+	let name = personName(handle);
+	let local = profiles.get(handle)?.avatar;
+	let source = local ?? (isDemoHandle(handle) ? undefined : photograph(handle, size));
 	let edge = `${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
 
 	return (
 		<span
 			aria-hidden={decorative || undefined}
-			aria-label={decorative ? undefined : handle}
+			aria-label={decorative ? undefined : name}
 			role={decorative ? undefined : "img"}
 			className={`relative grid shrink-0 place-items-center overflow-hidden ${
 				textSize === "2xs" ? "text-2xs" : "text-xs"
@@ -93,17 +118,17 @@ function Portrait(
 				background: `color-mix(in srgb, ${tone} 18%, var(--color-page))`,
 				color: `color-mix(in srgb, ${tone} 80%, var(--color-text-primary))`,
 			}}
-			title={titled ? handle : undefined}
+			title={titled ? name : undefined}
 		>
-			{!loaded && <span aria-hidden="true">{handle.slice(0, 1)}</span>}
-			{!failed && (
+			{!loaded && <span aria-hidden="true">{name.slice(0, 1)}</span>}
+			{!failed && source && (
 				<img
 					alt=""
 					className={`absolute inset-0 size-full object-cover ${loaded ? "" : "opacity-0"}`}
 					onError={() => setFailed(true)}
 					onLoad={() => setLoaded(true)}
 					referrerPolicy="no-referrer"
-					src={photograph(handle, size)}
+					src={source}
 				/>
 			)}
 		</span>

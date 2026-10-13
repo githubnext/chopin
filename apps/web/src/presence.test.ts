@@ -24,4 +24,14 @@ describe("people here", () => {
 			{ handle: "e2e", client: "tab-3" },
 		])).toEqual(["e2e"]);
 	});
+
+	it("shows a presenter and personas together, merging only repeat tabs of one actor", () => {
+		let lily = { name: "Lily", avatar: "/demo/lily.svg" };
+		expect(peopleHere([
+			{ handle: "maggie", client: "a" },
+			{ handle: "demo:lily", client: "b", actor: lily },
+			{ handle: "demo:lily", client: "c", actor: lily },
+			{ handle: "demo:felix", client: "d", actor: { name: "Felix", avatar: "/demo/felix.svg" } },
+		])).toEqual(["maggie", "demo:lily", "demo:felix"]);
+	});
 });

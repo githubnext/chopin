@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Felix">
+	<rect width="64" height="64" fill="currentColor" opacity=".12" /><circle
+		cx="32"
+		cy="25"
+		r="11"
+		fill="currentColor"
+		opacity=".55"
+	/><path d="M10 64c2-16 12-23 22-23s20 7 22 23z" fill="currentColor" opacity=".55" />
+</svg>

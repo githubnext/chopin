@@ -5,7 +5,7 @@
  */
 
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Face } from "@chopin/editor";
+import { Face, personName } from "@chopin/editor";
 import { ArrowLeftIcon, CommentIcon, DocumentsIcon, EllipsisIcon } from "@chopin/icons";
 import type { ReactNode } from "react";
 
@@ -209,7 +209,7 @@ export function PhoneHeaderContent(
 			<div className="phone-top-bar-slot">
 				{people.length > 0 && (
 					<div
-						aria-label={`People here: ${people.join(", ")}`}
+						aria-label={`People here: ${people.map(personName).join(", ")}`}
 						className="phone-top-bar-people"
 						data-one-face={oneFace || undefined}
 						role="group"
@@ -246,6 +246,7 @@ export function PhoneHeaderContent(
 				)}
 				{canManage && (
 					<DocumentActionsMenu
+						openDocument
 						channel={{ archivedAt, title: label }}
 						className="btn btn-icon btn-ghost"
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}

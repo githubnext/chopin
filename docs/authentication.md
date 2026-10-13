@@ -451,3 +451,10 @@ ignoring client-supplied authors. Chat retry fingerprints include the actor,
 queued messages are withdrawn only by their author, and questionnaires keep one
 shared draft and one winning submission. Stored fictional authors are plain
 strings, so they survive restart and are never resolved as GitHub users.
+
+`GET /api/session` lists the roster under `demo.actors` only when the flag is on.
+The document actions menu then offers "Open as collaborator", which opens a tab
+with a one-time `persona` hint. The tab consumes the hint before any socket
+opens, removes it from the URL, and keeps the actor only in that tab's
+`sessionStorage`, so a plain document link never adopts one. Private Chat drafts
+are keyed by actor, and presence keeps the presenter and each persona apart.

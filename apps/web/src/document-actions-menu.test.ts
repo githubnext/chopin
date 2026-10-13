@@ -17,6 +17,24 @@ describe("document actions menu", () => {
 		]);
 	});
 
+	it("offers roster personas only for an open, unarchived document", () => {
+		let roster = [
+			{ id: "demo:lily", name: "Lily", avatar: "/demo/lily.svg" },
+			{ id: "demo:felix", name: "Felix", avatar: "/demo/felix.svg" },
+		];
+		let actions = (channel: Parameters<typeof documentMenuItems>[0], list = roster) =>
+			documentMenuItems(channel, list).map(item => item.action);
+		expect(actions({})).toEqual([
+			"copy-link",
+			"rename",
+			"collaborator:demo:lily",
+			"collaborator:demo:felix",
+			"archive",
+		]);
+		expect(actions({}, [])).toEqual(["copy-link", "rename", "archive"]);
+		expect(actions({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual(["restore", "delete"]);
+	});
+
 	it("maps standard menu navigation keys without consuming unrelated keys", () => {
 		expect(documentMenuKeyAction("ArrowDown")).toBe("next");
 		expect(documentMenuKeyAction("ArrowUp")).toBe("previous");

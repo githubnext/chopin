@@ -11,6 +11,7 @@ export type Session = {
 	installUrl?: string;
 	expiresAt?: string;
 	auth?: "local";
+	demo?: { actors: { id: string; name: string; avatar: string }[] };
 };
 
 export type Repository = {

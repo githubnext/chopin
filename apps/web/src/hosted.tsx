@@ -14,6 +14,8 @@ import { WorkspaceSkeleton } from "./workspace-skeleton";
 import type { ReactNode } from "react";
 import type { ResearchOpener } from "@chopin/editor";
 import type { ChildFocusEvent, ChildFocusState, ChildFocusToken } from "./child-history";
+import { CollaboratorBadge } from "./collaborator-badge";
+import { activeActor } from "./demo-actor";
 import type { ParentFocusTarget } from "./document-workspace-host";
 import type { DocumentRouteIdentitySource } from "./document-route-swap";
 import type { WorkspacePresentation } from "./workspace-model";
@@ -312,15 +314,19 @@ export function HostedApp(
 			);
 			break;
 	}
+	let actor = activeActor();
 	return (
-		<NavigationShell
-			navigate={navigate}
-			navigationRevision={navigationRevision}
-			route={route}
-			user={user}
-		>
-			{workspace}
-		</NavigationShell>
+		<>
+			<NavigationShell
+				navigate={navigate}
+				navigationRevision={navigationRevision}
+				route={route}
+				user={user}
+			>
+				{workspace}
+			</NavigationShell>
+			{actor && <CollaboratorBadge actor={actor} />}
+		</>
 	);
 }
 

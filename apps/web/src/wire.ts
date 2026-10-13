@@ -10,6 +10,8 @@
  * same build work on localhost, over a LAN address, and through a tunnel.
  */
 
+import { activeActor } from "./demo-actor";
+
 import type { Session } from "@chopin/protocol";
 
 export type Status =
@@ -68,7 +70,11 @@ const RESCUE_AT = 1200;
 function endpoint(options: WireOptions): string {
 	let url = new URL("sidebar" in options ? "/ws/sidebar" : "/ws", location.href);
 	url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-	if ("channelId" in options) url.searchParams.set("channel", options.channelId);
+	if ("channelId" in options) {
+		url.searchParams.set("channel", options.channelId);
+		let actor = activeActor();
+		if (actor) url.searchParams.set("actor", actor.id);
+	}
 	return url.href;
 }
 

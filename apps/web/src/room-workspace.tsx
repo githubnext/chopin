@@ -34,6 +34,7 @@ import {
 	GitHubReferencesProvider,
 	openCommentList,
 	opensEditing,
+	personName,
 	PlanEditor,
 	PlanStatus,
 	QuestionnaireStore,
@@ -146,14 +147,14 @@ export function RoomMembers(
 	let people = peopleHere(members);
 	return (
 		<div
-			aria-label={`People here: ${people.join(", ")}`}
+			aria-label={`People here: ${people.map(personName).join(", ")}`}
 			className="room-members ml-auto flex shrink-0 items-center"
 			role="group"
 		>
 			{people.map(handle => (
 				<span
 					className="room-member-face -ml-1.5 first:ml-0"
-					data-tooltip={handle}
+					data-tooltip={personName(handle)}
 					data-tooltip-verbatim=""
 					key={handle.toLowerCase()}
 				>
@@ -328,6 +329,7 @@ export function DocumentTitle(
 					: <span className="title-control-label truncate">{label}</span>}
 				{canManage && (
 					<DocumentActionsMenu
+						openDocument
 						align="start"
 						channel={{ archivedAt, title: label }}
 						className="title-control-action"
@@ -522,7 +524,7 @@ export function RoomWorkspace(
 	let metadataRef = useRef(metadata);
 	let repositoryRef = useRef(repository);
 	repositoryRef.current = repository;
-	let user = useMemo(() => cursor(handle), [handle]);
+	let user = useMemo(() => ({ name: personName(handle), color: cursor(handle).color }), [handle]);
 	let { available, frame, mode, phone } = useWorkspaceLayout();
 	let workspaceIds = useWorkspaceIds();
 	let profile = workspaceProfile(presentation);

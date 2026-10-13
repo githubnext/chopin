@@ -1,5 +1,6 @@
 import { GitHubClient, GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
+import { demoRoster } from "../demo/roster";
 import { Admission, AdmissionDenied } from "./admission";
 import { OAuthAttempts, Sessions } from "./session";
 import { Machines } from "./machines";
@@ -408,6 +409,7 @@ export function registerAuthRoutes(
 					agent: dependencies.agent ?? true,
 					...(dependencies.liveBuild ? { liveBuild: true } : {}),
 					...(local ? { auth: "local" } : {}),
+					...(config.demoPersonas ? { demo: { actors: demoRoster(config).list() } } : {}),
 					installUrl: "/auth/github/install",
 					user: {
 						id: authenticated.user.id,

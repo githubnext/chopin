@@ -382,7 +382,7 @@
 				1
 			]
 		],
-		"sourceHash": "22c33a6f68fa66902159bda6643bc6d81acfa36107e722e428580d970f60e142"
+		"sourceHash": "abe90d6bc426ffea321f1c207d1e394e51101de33dd1b23f12ee78c681b58cea"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",

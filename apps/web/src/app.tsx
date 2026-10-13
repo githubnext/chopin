@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
+import { setFaceProfiles } from "@chopin/editor";
+
 import * as Api from "./api";
+import { actorTitle, resolveActor, setActiveActor, setActorRoster } from "./demo-actor";
 import { HostedApp, HostedFailure, HostedLoading, hostedRoute } from "./hosted";
 import { clearRepositoryCache } from "./repository-cache";
 
@@ -33,6 +36,18 @@ export function App() {
 
 	useEffect(() => {
 		if (!session) return;
+		// Before any socket opens: the hint is consumed here and never reaches the router.
+		let roster = session.user ? session.demo?.actors ?? [] : [];
+		let { actor, strippedSearch } = resolveActor(location.search, roster, sessionStorage);
+		setFaceProfiles(roster);
+		setActiveActor(actor);
+		setActorRoster(roster);
+		if (actor && !document.title.startsWith(`${actor.name} · `)) {
+			document.title = actorTitle(document.title, actor);
+		}
+		if (strippedSearch !== undefined) {
+			history.replaceState(null, "", `${location.pathname}${strippedSearch}${location.hash}`);
+		}
 		let parameters = new URLSearchParams(location.search);
 		let accessChanged = parameters.get("repository_access") === "changed";
 		if (!session.user) clearRepositoryCache();

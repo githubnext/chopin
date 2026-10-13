@@ -12,6 +12,7 @@ import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from 
 import {
 	ChopinMark,
 	CONNECTION_GRACE,
+	isDemoHandle,
 	MAX_RESEARCH_BRIEF,
 	SendAction,
 	useConnectionNotice,
@@ -20,6 +21,8 @@ import {
 import { usePhone } from "@chopin/editor/pointer";
 import { MENTION } from "@chopin/protocol/address";
 import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { chatDraftKey } from "../demo-actor";
+import { canWithdraw } from "./withdraw";
 import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
 import { ModeSwitch } from "./mode-switch";
@@ -148,16 +151,16 @@ export function runCounts(runs: Wire.Runs | undefined): { active: number; paused
 	};
 }
 
-function draftKey(room: string): string {
-	return `chopin:chat-draft:${room}`;
+function draftKey(room: string, handle: string): string {
+	return chatDraftKey(room, isDemoHandle(handle) ? handle : undefined);
 }
 
 /** Holds an unsent message across a reload of this tab; storage may refuse. */
-function keepDraft(room: string, draft: ComposerDraft): void {
+function keepDraft(room: string, handle: string, draft: ComposerDraft): void {
 	try {
-		if (!draft.text.trim()) return sessionStorage.removeItem(draftKey(room));
+		if (!draft.text.trim()) return sessionStorage.removeItem(draftKey(room, handle));
 		sessionStorage.setItem(
-			draftKey(room),
+			draftKey(room, handle),
 			JSON.stringify({ text: draft.text, references: draft.references }),
 		);
 	} catch {
@@ -166,10 +169,10 @@ function keepDraft(room: string, draft: ComposerDraft): void {
 }
 
 /** The message a reload interrupted; anything malformed starts empty. */
-function restoreDraft(room: string): ComposerDraft {
+function restoreDraft(room: string, handle: string): ComposerDraft {
 	let empty = { text: "", references: [] };
 	try {
-		let raw = sessionStorage.getItem(draftKey(room));
+		let raw = sessionStorage.getItem(draftKey(room, handle));
 		if (!raw) return empty;
 		let saved = JSON.parse(raw) as Partial<ComposerDraft>;
 		if (typeof saved.text !== "string") return empty;
@@ -227,7 +230,7 @@ export function Chat(
 	let [busy, setBusy] = useState(false);
 	let [runs, setRuns] = useState<Wire.Runs>();
 	let counts = runCounts(runs);
-	let [draft, setDraft] = useState<ComposerDraft>(() => restoreDraft(room));
+	let [draft, setDraft] = useState<ComposerDraft>(() => restoreDraft(room, handle));
 	let [submitting, setSubmitting] = useState(false);
 	// A send pressed during a blip, made once the connection is back.
 	let [held, setHeld] = useState(false);
@@ -251,7 +254,7 @@ export function Chat(
 	// A reload, including the header's fallback when reconnecting keeps
 	// failing, must not take an unsent message with it. Kept as it changes
 	// rather than on unload, which a browser does not promise to announce.
-	useEffect(() => keepDraft(room, draft), [room, draft]);
+	useEffect(() => keepDraft(room, handle, draft), [room, handle, draft]);
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let commandPickerId = useId();
@@ -671,7 +674,9 @@ export function Chat(
 			suspendedWork={suspendedWork}
 			handle={handle}
 			live={transcriptReady}
-			onWithdraw={id => wire?.send("chat:unqueue", { id })}
+			onWithdraw={id => {
+				if (canWithdraw(queue, id, handle)) wire?.send("chat:unqueue", { id });
+			}}
 			queued={queue}
 			working={workingTurn}
 		/>

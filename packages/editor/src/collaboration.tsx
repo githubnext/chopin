@@ -9,7 +9,7 @@
  * registered here (see `history.ts`).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	addComposerChild$,
 	contentEditableWrapperElement$,
@@ -31,6 +31,7 @@ import * as Y from "yjs";
 
 import { collapsed, enclosing } from "./collapse";
 import { registerPlanHistory } from "./history";
+import { withIdentity } from "./identity";
 import { labels } from "./labels";
 import { PlanProvider } from "./provider";
 
@@ -111,6 +112,19 @@ function Collaboration(options: CollaborationOptions) {
 	let editor = useCellValue(rootEditor$) as LexicalEditor | null;
 	let frame = useCellValue(contentEditableWrapperElement$);
 	let [collab, setCollab] = useState<{ binding: Binding; provider: PlanProvider }>();
+	let userRef = useRef(options.user);
+	userRef.current = options.user;
+	let { name: userName, color: userColor } = options.user;
+
+	useEffect(() => {
+		if (!collab) return;
+		let { awareness } = collab.provider;
+		let next = withIdentity(awareness.getLocalState() as UserState | null, {
+			name: userName,
+			color: userColor,
+		});
+		if (next && next !== awareness.getLocalState()) awareness.setLocalState(next);
+	}, [collab, userName, userColor]);
 
 	useEffect(() => {
 		if (!editor) return;
@@ -155,17 +169,21 @@ function Collaboration(options: CollaborationOptions) {
 		// local state and gives up if that shape is not already there, so
 		// setting only name and colour publishes presence without a cursor.
 		let root = editor.getRootElement();
-		let name = options.user.name;
-		let color = options.user.color;
-		initLocalState(provider, name, color, root !== null && document.activeElement === root, {});
+		initLocalState(
+			provider,
+			userRef.current.name,
+			userRef.current.color,
+			root !== null && document.activeElement === root,
+			{},
+		);
 
 		let focus = editor.registerCommand(FOCUS_COMMAND, () => {
-			setLocalStateFocus(provider, name, color, true, {});
+			setLocalStateFocus(provider, userRef.current.name, userRef.current.color, true, {});
 			return false;
 		}, COMMAND_PRIORITY_EDITOR);
 
 		let blur = editor.registerCommand(BLUR_COMMAND, () => {
-			setLocalStateFocus(provider, name, color, false, {});
+			setLocalStateFocus(provider, userRef.current.name, userRef.current.color, false, {});
 			return false;
 		}, COMMAND_PRIORITY_EDITOR);
 
