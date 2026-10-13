@@ -80,7 +80,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		}),
 	})).json();
 	await page.goto(pairing.url);
-	await expect(page.getByRole("heading", { name: "Connect your local agent", exact: true }))
+	await expect(page.getByRole("heading", { name: "Connect this machine?", exact: true }))
 		.toBeVisible();
 	await expect(page.getByText("Connect this checkout of octo-org/score so Chopin can run work"))
 		.toBeVisible();

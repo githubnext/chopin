@@ -254,8 +254,9 @@ its own.
 chopin unpair
 ```
 
-This revokes the machine in Chopin and deletes its token. You can also choose
-**Disconnect machine** under **Your machines** at `/connect` on your server.
+This revokes the machine in Chopin and deletes its token. You can also open
+**Machines** in Chopin's sidebar, which goes to `/connect` on your server, and
+choose **Disconnect machine** from the machine's menu under **Your machines**.
 
 A running `chopin connect` then stops. The next `chopin connect` at a terminal
 pairs again. To remove the service as well, run `chopin service uninstall`.

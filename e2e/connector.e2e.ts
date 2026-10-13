@@ -179,21 +179,27 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 		await authenticate(page, handle, baseURL!);
 		await page.goto("/connect");
 		await expect(page.getByRole("heading", { name: "Your machines", exact: true })).toHaveCount(1);
-		let machines = page.getByRole("list", { name: "Paired machines" });
+		let machines = page.getByRole("table", { name: "Your machines" });
 		await expect(machines.getByText(hostname(), { exact: true })).toBeVisible();
 		await expect(machines).toContainText("Connected");
-		// Disconnecting asks first, naming the machine; cancelling keeps it connected.
-		let disconnect = machines.getByRole("button", { name: `Disconnect machine ${hostname()}` });
+		// Disconnecting is in the machine's menu and asks first, naming the machine; cancelling keeps
+		// it connected.
+		let disconnect = async () => {
+			await machines.getByRole("button", { name: `Actions for ${hostname()}`, exact: true })
+				.click();
+			await page.getByRole("menuitem", { name: "Disconnect machine", exact: true }).click();
+		};
 		let confirm = page.getByRole("dialog", { name: `Disconnect ${hostname()}?`, exact: true });
-		await disconnect.click();
+		await disconnect();
 		await expect(confirm).toContainText(`The connector on ${hostname()} stops`);
 		await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
 		await expect(confirm).toHaveCount(0);
 		await expect(machines).toContainText("Connected");
 		expect(second.child.exitCode).toBeNull();
-		await disconnect.click();
+		await disconnect();
 		await confirm.getByRole("button", { name: "Disconnect machine", exact: true }).click();
 		await expect(machines).toHaveCount(0);
+		await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
 		expect(await second.exited, second.output()).toBe(1);
 		expect(second.output()).toContain("no longer paired");
 		// The refused token is forgotten, so the next connect pairs again.

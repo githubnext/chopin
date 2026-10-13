@@ -1,28 +1,69 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
+import { ArrowUpIcon, CloseIcon, EllipsisIcon } from "@chopin/icons";
+import {
+	Badge,
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@chopin/visuals";
 import { ago } from "../build-model";
+import { IconButton } from "../icon-button";
+import { listMachines, updateAvailable } from "../machine-summary";
+import { useMenuDismissal } from "../menu-dismissal";
+import { MenuItem } from "../menu-item";
 import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
 import { experimentRequest } from "./api";
 
+import type { Machine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 
-type Machine = {
-	id: string;
-	label: string;
-	repositories: string[];
-	autoRun: boolean;
-	lastSeenAt: number;
-	connected: boolean;
-	/** GitHub stopped accepting the machine's authorization; it needs pairing again. */
-	reauthorize: boolean;
-};
+/** How often /connect asks again, so a machine that pairs shows up without a reload. */
+const POLL_MS = 3000;
 
-function status(machine: Machine, now: number) {
-	if (machine.reauthorize) return "Needs pairing again: run chopin pair on it";
-	if (machine.connected) return "Connected";
-	return `Last seen ${ago(new Date(machine.lastSeenAt).toISOString(), now) ?? "a while ago"}`;
+/**
+ * The signed-in person's machines, asked for again every few seconds while the page is in view.
+ * `machines` is undefined until the first answer.
+ */
+export function useMachines() {
+	let [machines, setMachines] = useState<Machine[]>();
+	let [error, setError] = useState("");
+	let [recommended, setRecommended] = useState<string | null>(null);
+	useEffect(() => {
+		let abort = new AbortController();
+		let timer: number | undefined;
+		let load = async () => {
+			window.clearTimeout(timer);
+			if (document.visibilityState !== "hidden") {
+				try {
+					setMachines(await listMachines(abort.signal));
+					setError("");
+				} catch (error) {
+					if (abort.signal.aborted) return;
+					setError(error instanceof Error ? error.message : "Could not load your machines");
+				}
+			}
+			if (!abort.signal.aborted) timer = window.setTimeout(load, POLL_MS);
+		};
+		void load();
+		document.addEventListener("visibilitychange", load);
+		fetch("/api/connector/version", { signal: abort.signal })
+			.then(response => response.ok ? response.json() : undefined)
+			.then(value => setRecommended(value?.version ?? null), () => {});
+		return () => {
+			abort.abort();
+			window.clearTimeout(timer);
+			document.removeEventListener("visibilitychange", load);
+		};
+	}, []);
+	let forget = (id: string) => setMachines(current => current?.filter(value => value.id !== id));
+	return { machines, error, recommended, forget };
 }
 
 /** Asks before disconnecting a machine for good, which also stops the connector running on it. */
@@ -97,77 +138,187 @@ function DisconnectMachineDialog(
 }
 
 /**
- * The signed-in person's paired machines, each of which they can disconnect for good. `titled`
- * is false where the page's own heading already names the list.
+ * A row's actions menu. Disconnect is its one action, and it asks first. The menu sits on the
+ * page, below its button, because the table's scrolling container would clip it.
  */
-export function Machines({ titled = true }: { titled?: boolean }) {
-	let [machines, setMachines] = useState<Machine[]>();
-	let [error, setError] = useState("");
+function MachineActions({ machine, onDisconnect }: { machine: Machine; onDisconnect: () => void }) {
+	let id = useId();
+	let trigger = useRef<HTMLButtonElement>(null);
+	let menu = useRef<HTMLDivElement>(null);
+	let [open, setOpen] = useState(false);
+	let presence = useTransitionPresence(open ? true : undefined, 150, motionImmediately());
+	let mounted = presence.phase !== "closed";
+	let close = (restoreFocus: boolean) => {
+		setOpen(false);
+		if (restoreFocus) trigger.current?.focus();
+	};
+	useMenuDismissal(open, [trigger, menu], close);
+	useLayoutEffect(() => {
+		if (!mounted) return;
+		let place = () => {
+			let anchor = trigger.current?.getBoundingClientRect();
+			if (!anchor || !menu.current) return;
+			menu.current.style.top = `${anchor.bottom + 4}px`;
+			menu.current.style.right = `${document.documentElement.clientWidth - anchor.right}px`;
+		};
+		place();
+		window.addEventListener("resize", place);
+		document.addEventListener("scroll", place, true);
+		return () => {
+			window.removeEventListener("resize", place);
+			document.removeEventListener("scroll", place, true);
+		};
+	}, [mounted]);
+	useEffect(() => {
+		if (open) menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+	}, [open]);
+	return (
+		<>
+			<IconButton
+				aria-controls={open ? id : undefined}
+				aria-expanded={open}
+				aria-haspopup="menu"
+				aria-label={`Actions for ${machine.label}`}
+				data-tooltip="Machine actions"
+				onClick={() => setOpen(value => !value)}
+				ref={trigger}
+			>
+				<EllipsisIcon aria-hidden="true" />
+			</IconButton>
+			{mounted && createPortal(
+				<div
+					aria-hidden={presence.phase === "closing" ? "true" : undefined}
+					aria-label={`Actions for ${machine.label}`}
+					className={`machines-menu motion-dropdown ${presence.className}`}
+					id={id}
+					inert={presence.phase === "closing"}
+					onKeyDown={event => {
+						if (event.key === "Tab") close(false);
+					}}
+					ref={menu}
+					role="menu"
+				>
+					<MenuItem
+						onClick={() => {
+							setOpen(false);
+							onDisconnect();
+						}}
+						tone="destructive"
+					>
+						<CloseIcon aria-hidden="true" size={14} />
+						Disconnect machine
+					</MenuItem>
+				</div>,
+				document.body,
+			)}
+		</>
+	);
+}
+
+function Status({ machine, now }: { machine: Machine; now: number }) {
+	if (machine.reauthorize) {
+		return (
+			<span className="machines-stack">
+				<span className="text-warning-ink">Needs pairing again</span>
+				<span className="machines-detail">
+					Run <code className="font-mono">chopin pair</code> on it
+				</span>
+			</span>
+		);
+	}
+	if (machine.connected) {
+		return (
+			<span className="machines-connected">
+				<span aria-hidden="true" className="machines-connected-dot" />
+				Connected
+			</span>
+		);
+	}
+	return (
+		<span className="text-text-secondary">
+			Last seen {ago(new Date(machine.lastSeenAt).toISOString(), now) ?? "a while ago"}
+		</span>
+	);
+}
+
+function Version({ machine, recommended }: { machine: Machine; recommended: string | null }) {
+	if (!machine.version) return <span className="text-text-tertiary">Unknown</span>;
+	return (
+		<span className="machines-version">
+			<span className="tabular-nums">{machine.version}</span>
+			{updateAvailable(machine.version, recommended) && (
+				<Badge icon={ArrowUpIcon} label="Update available" size="sm" tone="warning" />
+			)}
+		</span>
+	);
+}
+
+/** The person's paired machines as a table: what each runs, whether it is up, and its actions. */
+export function MachineTable(
+	{ labelledBy, machines, onForget, recommended }: {
+		labelledBy: string;
+		machines: Machine[];
+		onForget: (id: string) => void;
+		recommended: string | null;
+	},
+) {
 	let [confirming, setConfirming] = useState<Machine>();
 	let presence = useTransitionPresence(confirming, 150, motionImmediately());
-	useEffect(() => {
-		let abort = new AbortController();
-		experimentRequest<{ machines: Machine[] }>("/api/connector/machines", undefined, abort.signal)
-			.then(value => setMachines(value.machines))
-			.catch(error => {
-				if (!abort.signal.aborted) setError(String(error.message));
-			});
-		return () => abort.abort();
-	}, []);
 	let now = Date.now();
 	return (
-		<section
-			aria-labelledby={titled ? "machines-heading" : undefined}
-			className="flex flex-col gap-3 text-sm"
-		>
-			{titled && (
-				<h3 className="m-0 text-base font-semibold" id="machines-heading">Your machines</h3>
-			)}
-			{error && <p role="alert" className="m-0 text-destructive-ink">{error}</p>}
-			{machines?.length === 0 && (
-				<p className="m-0 text-text-secondary">No machines are paired with your account.</p>
-			)}
-			{!!machines?.length && (
-				<ul aria-label="Paired machines" className="m-0 flex list-none flex-col gap-3 p-0">
+		<>
+			<Table aria-labelledby={labelledBy} className="machines-table" variant="contained">
+				<TableHeader>
+					<TableRow>
+						<TableHead>Machine</TableHead>
+						<TableHead className="machines-version-column">Version</TableHead>
+						<TableHead>Status</TableHead>
+						<TableHead className="machines-actions-column">
+							<span className="sr-only">Actions</span>
+						</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
 					{machines.map(machine => (
-						<li className="flex items-start justify-between gap-3" key={machine.id}>
-							<div className="flex min-w-0 flex-col gap-0.5">
-								<span className="font-medium">{machine.label}</span>
-								<span className="text-text-secondary">{status(machine, now)}</span>
-								{!!machine.repositories.length && (
-									<span className="truncate text-text-tertiary">
-										{machine.repositories.join(", ")}
+						<TableRow key={machine.id}>
+							<TableCell>
+								<span className="machines-stack">
+									<span className="font-medium [overflow-wrap:anywhere]">{machine.label}</span>
+									{!!machine.repositories.length && (
+										<span className="machines-detail">{machine.repositories.join(", ")}</span>
+									)}
+									{machine.autoRun && (
+										<span className="machines-detail">Builds and prototypes automatically</span>
+									)}
+									<span className="machines-version-inline machines-detail">
+										<Version machine={machine} recommended={recommended} />
 									</span>
-								)}
-								{machine.autoRun && (
-									<span className="text-text-tertiary">Builds and prototypes automatically</span>
-								)}
-							</div>
-							<button
-								aria-label={`Disconnect machine ${machine.label}`}
-								className="btn btn-sm btn-outline-danger shrink-0"
-								onClick={() =>
-									setConfirming(machine)}
-								type="button"
-							>
-								Disconnect machine
-							</button>
-						</li>
+								</span>
+							</TableCell>
+							<TableCell className="machines-version-column">
+								<Version machine={machine} recommended={recommended} />
+							</TableCell>
+							<TableCell>
+								<Status machine={machine} now={now} />
+							</TableCell>
+							<TableCell className="machines-actions-column">
+								<MachineActions machine={machine} onDisconnect={() => setConfirming(machine)} />
+							</TableCell>
+						</TableRow>
 					))}
-				</ul>
-			)}
+				</TableBody>
+			</Table>
 			{presence.phase !== "closed" && (
 				<DisconnectMachineDialog
 					machine={presence.value}
 					motion={presence}
 					onDisconnected={() => {
-						let gone = presence.value.id;
-						setMachines(current => current?.filter(value => value.id !== gone));
+						onForget(presence.value.id);
 						setConfirming(undefined);
 					}}
 					onDismiss={() => setConfirming(undefined)}
 				/>
 			)}
-		</section>
+		</>
 	);
 }
