@@ -199,8 +199,9 @@ export type StartFailure = {
 
 /**
  * The latest start failure of a connector's agent and of each of its Planner backends, kept for
- * `chopin status` in a file beside the checkout's lock, without credentials. A successful start
- * clears its own.
+ * `chopin status` in a file beside the checkout's lock, without credentials: token-shaped
+ * strings and the `secrets` each failure names, such as --env values, are masked. A successful
+ * start clears its own.
  */
 export function startFailures(directory: string, root: string) {
 	let path = join(directory, `${lockId(root)}.failures.json`);
@@ -214,11 +215,11 @@ export function startFailures(directory: string, root: string) {
 				: rm(path, { force: true })
 		).catch(() => {});
 	return {
-		failed(failure: StartFailure) {
+		failed(failure: StartFailure, secrets: string[] = []) {
 			current.set(failure.document ?? "", {
 				...failure,
-				how: redacted(failure.how).slice(0, 200),
-				...(failure.stderr ? { stderr: redacted(failure.stderr).slice(0, 200) } : {}),
+				how: redacted(failure.how, secrets).slice(0, 200),
+				...(failure.stderr ? { stderr: redacted(failure.stderr, secrets).slice(0, 200) } : {}),
 			});
 			return save();
 		},

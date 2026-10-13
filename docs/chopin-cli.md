@@ -206,7 +206,10 @@ If you have connected something else since you installed the service, status
 shows that too, with a reminder to run `chopin service install`.
 
 If the agent or a Planner keeps failing to start, status shows the latest
-failure under the connector, with the first line it printed:
+failure under the connector, with the first line it printed. That line, and
+what a Planner prints to chopin's output, has anything that looks like a token,
+your `--env` values of 8 characters or more and the Planner's credential
+replaced with `[redacted]`:
 
 ```text
 Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)

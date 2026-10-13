@@ -774,11 +774,12 @@ async function checkStart(host: ServiceHost, settings: ConnectSettings, path: st
 	let failed = await checkAgent(settings.command, { cwd: host.home, env });
 	if (!failed) return;
 	let agent = settings.command[programAt(settings.command)];
+	let secrets = Object.values(settings.env ?? {});
 	throw new ServiceError(
 		[
 			`${agent} didn't answer ACP initialize when started as the service would start it (`
-			+ `${redacted(failed.how)}${
-				failed.stderr ? `: ${redacted(failed.stderr).slice(0, 200)}` : ""
+			+ `${redacted(failed.how, secrets)}${
+				failed.stderr ? `: ${redacted(failed.stderr, secrets).slice(0, 200)}` : ""
 			}). Nothing was installed.`,
 			"Fix that and install again. For an agent that can't start without a terminal, pass "
 			+ "--skip-check.",

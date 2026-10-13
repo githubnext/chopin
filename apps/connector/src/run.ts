@@ -1,7 +1,7 @@
 import { requestSchema } from "@chopin/experiment";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
-import { ConnectorStopped } from "./connection";
+import { ConnectorStopped, redacted } from "./connection";
 import { errorCode } from "./machine";
 import { backoff, delay, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
@@ -202,7 +202,10 @@ export async function runWork(
 				: {}),
 			onStart: failure =>
 				void (failure
-					? options.failures?.failed({ kind: "agent", ...failure, at: Date.now() })
+					? options.failures?.failed(
+						{ kind: "agent", ...failure, at: Date.now() },
+						Object.values(options.env ?? {}),
+					)
 					: options.failures?.started()),
 			prompt: rebuild
 				? rebuildPrompt
@@ -342,7 +345,10 @@ export async function runWork(
 			? error.message
 			: "Local work failed";
 		if (stopped) output.stopped();
-		else output.failed(message, agentTail);
+		else {
+			let secrets = Object.values(options.env ?? {});
+			output.failed(message, agentTail.map(line => redacted(line, secrets)));
+		}
 		// After Ctrl-C, or out of reach for the whole grace period, the failure gets one bounded attempt.
 		let send = stopped || reports.expired() ? reports.final : reports.deliver;
 		await send(implementation ? "report_implementation_build" : "fail_experiment", {

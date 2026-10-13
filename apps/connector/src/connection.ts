@@ -47,10 +47,18 @@ function stopped(reason: Exclude<ErrorClass, "retry" | "forgotten">, error: unkn
 }
 
 const USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi;
-const TOKEN = /\b(?:gh[opsur]_|github_pat_|chopin_m_|sk-)[A-Za-z0-9_-]{8,}|\b(Bearer\s+)\S{8,}/g;
+const TOKEN = /\b(?:gh[opsur]_|github_pat_|chopin_[mp]_|sk-)[A-Za-z0-9_-]{8,}|\b(Bearer\s+)\S{8,}/g;
 
-/** `text` with URL credentials and token-shaped strings masked, for the terminal. */
-export function redacted(text: string) {
+/**
+ * `text` with URL credentials, token-shaped strings and each of the `secrets` it knows, such as
+ * --env values and a Planner credential, masked, for the terminal. Secrets shorter than 8
+ * characters are left, since they would mask ordinary words.
+ */
+export function redacted(text: string, secrets: string[] = []) {
+	// The longest first, so one that contains another is masked whole.
+	for (let secret of [...secrets].sort((a, b) => b.length - a.length)) {
+		if (secret.length >= 8) text = text.replaceAll(secret, "[redacted]");
+	}
 	return text
 		.replace(USERINFO, "$1[redacted]@")
 		.replace(TOKEN, (_match, bearer?: string) => `${bearer ?? ""}[redacted]`);

@@ -449,6 +449,94 @@ test.skipIf(process.platform === "win32")(
 	30_000,
 );
 
+test.skipIf(process.platform === "win32")(
+	"a Planner backend that prints its credential and an --env value leaves neither in the failures file, chopin status or chopin's own output",
+	async () => {
+		let token = `chopin_p_${"P".repeat(43)}`;
+		let secret = "review-opaque-api-secret";
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: () =>
+				Response.json({ token, expiresAt: Date.now() + 15 * 60_000, document: { id: "D_1" } }),
+		});
+		let directory = await mkdtemp(join(scratch, "leaking-"));
+		let script = join(directory, "backend.ts");
+		await writeFile(
+			script,
+			"process.stderr.write(`CHOPIN_PLANNER_TOKEN=${process.env.CHOPIN_PLANNER_TOKEN} "
+				+ "OPAQUE_API_KEY=${process.env.OPAQUE_API_KEY}\\n`);\nprocess.exit(127);\n",
+		);
+		let release = await lockWorkspace(directory, directory, { planners: ["D_1"] });
+		let host: ServiceHost = {
+			platform: "linux",
+			home: directory,
+			user: "ada",
+			uid: 501,
+			env: {},
+			run: async () => ({ code: 1, stdout: "", stderr: "" }),
+		};
+		let status = () =>
+			collectStatus({ directory, server: "https://chopin.example", source: "config", host });
+		// Everything chopin writes: its own lines, and the backend's stderr it passes on.
+		let written = "";
+		let capture = {
+			write: (chunk: string | Uint8Array) => {
+				written += String(chunk);
+				return true;
+			},
+		};
+		let stderr = process.stderr.write;
+		process.stderr.write = capture.write as typeof process.stderr.write;
+		let abort = new AbortController();
+		let serving = servePlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script],
+			cwd: directory,
+			output: createOutput(capture, capture, {}),
+			signal: abort.signal,
+			failures: startFailures(directory, directory),
+			env: { OPAQUE_API_KEY: secret },
+		});
+		try {
+			await until(async () => !!(await status()).connectors[0]?.failures, 10_000);
+			abort.abort();
+			await serving;
+			let report = await status();
+			expect(report.connectors[0]!.failures![0]!.stderr).toBe(
+				"CHOPIN_PLANNER_TOKEN=[redacted] OPAQUE_API_KEY=[redacted]",
+			);
+			let failures = await readFile(
+				join(
+					directory,
+					`${new Bun.CryptoHasher("sha256").update(directory).digest("hex")}.failures.json`,
+				),
+				"utf8",
+			);
+			let shown = {
+				failures,
+				status: formatStatus(report).join("\n"),
+				json: JSON.stringify(report, null, 2),
+				written,
+			};
+			for (let [where, text] of Object.entries(shown)) {
+				expect({ where, token: text.includes(token), secret: text.includes(secret) })
+					.toEqual({ where, token: false, secret: false });
+			}
+			expect(written).toContain("Planner for D_1 exited (exit 127)");
+		} finally {
+			process.stderr.write = stderr;
+			abort.abort();
+			await serving;
+			await release();
+			await chopin.stop(true);
+		}
+	},
+	30_000,
+);
+
 test("on Windows a stopped backend's process tree is ended with taskkill", async () => {
 	let backend = { pid: 4321, kill: mock(() => true) };
 	let run = mock(async (_command: string[]) => 0);

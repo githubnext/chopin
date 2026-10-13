@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { redacted } from "./connection";
 import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
@@ -84,6 +85,7 @@ async function servePlanner(options: {
 }) {
 	let { output, signal, document } = options;
 	let healthyMs = options.healthyMs ?? HEALTHY_MS;
+	let values = Object.values(options.env ?? {});
 	for (let attempt = 0; !signal.aborted;) {
 		let started = Date.now();
 		let credential;
@@ -94,7 +96,10 @@ async function servePlanner(options: {
 			if (!transient(classifyConnectorError(error))) {
 				output.error(
 					`Stopped the Planner for ${document}: ${
-						connectorMessage(error) ?? (error instanceof Error ? error.message : String(error))
+						redacted(
+							connectorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
+							values,
+						)
 					}`,
 				);
 				return;
@@ -113,6 +118,8 @@ async function servePlanner(options: {
 		let { how, stderr } = await launch(options, credential.token);
 		clearTimeout(healthy);
 		if (signal.aborted) return;
+		// What the backend printed may hold its credential or an --env value.
+		let secrets = [credential.token, ...values];
 		if (Date.now() - started >= HEALTHY_MS) attempt = 0;
 		let wait = backoff(attempt++);
 		if (Date.now() - launched < healthyMs) {
@@ -124,11 +131,11 @@ async function servePlanner(options: {
 				...(stderr ? { stderr } : {}),
 				at,
 				retryAt: at + wait,
-			});
+			}, secrets);
 		}
 		output.say(
 			output.style.dim(
-				`… Planner for ${document} exited (${how}); starting it again in ${
+				`… Planner for ${document} exited (${redacted(how, secrets)}); starting it again in ${
 					Math.ceil(wait / 1000)
 				}s.`,
 			),
@@ -139,7 +146,8 @@ async function servePlanner(options: {
 
 /**
  * Run the backend once; resolves with how it exited and the first line of its stderr, which
- * still reaches this process's own. Aborting stops it, then kills it.
+ * still reaches this process's own a line at a time, with its credential, the --env values and
+ * anything token-shaped masked. Aborting stops it, then kills it.
  */
 async function launch(options: {
 	url: string;
@@ -162,11 +170,21 @@ async function launch(options: {
 		// Its own process group, so Ctrl-C reaches it only through the connector stopping it.
 		detached: process.platform !== "win32",
 	});
+	let secrets = [token, ...Object.values(options.env ?? {})];
+	let pass = (text: string) => text && process.stderr.write(redacted(text, secrets));
 	let head = "";
-	child.stderr!.on("data", chunk => {
-		process.stderr.write(chunk);
-		if (head.length < 4096) head += String(chunk);
+	let pending = "";
+	child.stderr!.setEncoding("utf8");
+	child.stderr!.on("data", (chunk: string) => {
+		if (head.length < 4096) head += chunk;
+		// Whole lines, so a secret split between chunks is still masked.
+		let end = (pending += chunk).lastIndexOf("\n") + 1;
+		if (end || pending.length > 65_536) {
+			pass(end ? pending.slice(0, end) : pending);
+			pending = end ? pending.slice(end) : "";
+		}
 	});
+	child.stderr!.once("end", () => pass(pending));
 	let drained = new Promise(resolve => child.stderr!.once("close", resolve));
 	let exited = new Promise<string>(resolve => {
 		child.once("error", error => resolve(error.message));
