@@ -12,10 +12,14 @@ export const CONNECT_ARGUMENTS = ["connect .", "--install-service", "-- copilot 
 
 export const SETUP_GUIDE = "https://github.com/githubnext/chopin/blob/main/docs/chopin-cli.md";
 
+/**
+ * The installer, piped into the shell. The sh form breaks before the pipe so the pipe stays in view
+ * on a narrow screen; the continuation keeps the copied text one command.
+ */
 export function installCommand(shell: SetupShell): string {
 	return shell === "powershell"
 		? `irm ${RELEASES}/install.ps1 | iex`
-		: `curl -fsSL ${RELEASES}/install.sh | sh`;
+		: `curl -fsSL ${RELEASES}/install.sh \\\n  | sh`;
 }
 
 /**

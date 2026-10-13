@@ -1,9 +1,12 @@
 import { expect, test } from "bun:test";
 import { connectCommand, installCommand } from "./setup-commands";
 
-test("install uses the released installer for each shell", () => {
+test("install uses the released installer for each shell, breaking before the pipe where the shell can", () => {
 	expect(installCommand("sh")).toBe(
-		"curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh",
+		[
+			"curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh \\",
+			"  | sh",
+		].join("\n"),
 	);
 	expect(installCommand("powershell")).toBe(
 		"irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | iex",

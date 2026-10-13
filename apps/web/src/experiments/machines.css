@@ -124,24 +124,27 @@
 	}
 }
 
+/* A command well: a header row holding Copy, then the command, so the button never sits on it. */
 .machines-command {
-	display: flex;
-	align-items: flex-start;
-	gap: calc(var(--spacing) * 2);
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-md);
 	background: var(--color-inset);
-	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1)
-		calc(var(--spacing) * 3);
 
-	/* Lines break only where the command does; a line too long for the box scrolls instead. */
+	& .machines-command-head {
+		display: flex;
+		justify-content: flex-end;
+		border-bottom: var(--edge-width) solid var(--color-edge);
+		padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1);
+	}
+
+	/*
+	 * Lines break only where the command does; a line too long for the box scrolls instead, on the
+	 * theme's own scrollbar.
+	 */
 	& pre {
-		flex: 1;
-		min-width: 0;
 		margin: 0;
 		overflow-x: auto;
-		padding-block: calc(var(--spacing) * 1);
-		scrollbar-width: thin;
+		padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
 		white-space: pre;
 	}
 

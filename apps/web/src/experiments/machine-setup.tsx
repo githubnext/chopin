@@ -4,7 +4,10 @@ import { connectCommand, installCommand, SETUP_GUIDE } from "./setup-commands";
 
 import type { SetupShell } from "./setup-commands";
 
-/** A command to run, with a button that copies it. Its lines break only where the command does. */
+/**
+ * A command to run, with a button above it that copies it, so the button never covers the command.
+ * Its lines break only where the command does; a longer line scrolls.
+ */
 function Command({ label, text }: { label: string; text: string }) {
 	let [copied, setCopied] = useState<"copied" | "failed">();
 	useEffect(() => {
@@ -14,22 +17,24 @@ function Command({ label, text }: { label: string; text: string }) {
 	}, [copied]);
 	return (
 		<div className="machines-command">
+			<div className="machines-command-head">
+				<button
+					aria-label={copied === "copied" ? "Copied" : `Copy ${label}`}
+					className="btn btn-sm btn-ghost shrink-0"
+					onClick={() =>
+						navigator.clipboard.writeText(text).then(
+							() => setCopied("copied"),
+							() => setCopied("failed"),
+						)}
+					type="button"
+				>
+					{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
+					{copied === "copied" ? "Copied" : copied === "failed" ? "Select to copy" : "Copy"}
+				</button>
+			</div>
 			<pre>
 				<code>{text}</code>
 			</pre>
-			<button
-				aria-label={copied === "copied" ? "Copied" : `Copy ${label}`}
-				className="btn btn-sm btn-ghost shrink-0"
-				onClick={() =>
-					navigator.clipboard.writeText(text).then(
-						() => setCopied("copied"),
-						() => setCopied("failed"),
-					)}
-				type="button"
-			>
-				{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
-				{copied === "copied" ? "Copied" : copied === "failed" ? "Select to copy" : "Copy"}
-			</button>
 		</div>
 	);
 }

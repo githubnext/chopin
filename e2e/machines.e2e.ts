@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { connectCommand } from "../apps/web/src/experiments/setup-commands";
+import { connectCommand, installCommand } from "../apps/web/src/experiments/setup-commands";
 import { expect, test } from "./room";
 import { ROOT } from "./servers";
 
@@ -76,14 +76,15 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	let setup = page.getByRole("region", { name: "Add your first machine", exact: true });
 	let steps = setup.getByRole("listitem");
 	await expect(steps).toHaveCount(3);
-	// The browser's own system is chosen first; either can be picked. The connect command keeps
-	// its own line breaks, each with the shell's continuation.
+	// The browser's own system is chosen first; either can be picked. Each command keeps its own
+	// line breaks, each with the shell's continuation.
+	let install = steps.nth(0).locator("code");
 	let command = steps.nth(1).locator("code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
-	await expect(steps.nth(0)).toContainText("install.sh | sh");
+	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "sh"));
 	await setup.getByRole("button", { name: "Windows", exact: true }).click();
-	await expect(steps.nth(0)).toContainText("install.ps1 | iex");
+	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "powershell"));
 	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
 
