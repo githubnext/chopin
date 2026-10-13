@@ -6,7 +6,11 @@ import type {
 	RequestPermissionRequest,
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
+import { PROCESSES, stopBackend } from "./planner";
 import { VERSION } from "./version";
+
+/** How long a stopped agent's process group has to exit before it is killed. */
+const AGENT_STOP = { ...PROCESSES, graceMs: 1000 };
 
 export type AgentOptions = {
 	command: string[];
@@ -33,7 +37,7 @@ export type AgentFailure = { how: string; stderr?: string };
 /**
  * Start `command` in its own process group and connect `app` to it over ACP. The connection
  * closes when the agent exits. `failure` says how one that failed to start ended, and `stop`
- * stops it and everything it started.
+ * stops it and everything it started, resolving once they are gone.
  */
 function startAgent(
 	app: ClientApp,
@@ -85,12 +89,17 @@ function startAgent(
 				...(line ? { stderr: line } : {}),
 			};
 		},
-		stop() {
+		/**
+		 * SIGTERM to its process group, then SIGKILL after a second unless the whole group has
+		 * gone, even when the agent itself exited first; on Windows `taskkill /T /F`.
+		 */
+		async stop() {
 			connection.close();
-			kill();
-			let force = setTimeout(() => kill("SIGKILL"), 1000);
-			force.unref();
-			child.once("exit", () => clearTimeout(force));
+			// On Windows an exited agent's process id may already belong to another process.
+			if (process.platform === "win32" && (child.exitCode !== null || child.signalCode !== null)) {
+				return;
+			}
+			await stopBackend(child, AGENT_STOP);
 		},
 	};
 }
@@ -127,7 +136,7 @@ export async function checkAgent(
 		return await agent.failure(error);
 	} finally {
 		clearTimeout(deadline);
-		agent.stop();
+		await agent.stop();
 	}
 }
 
@@ -212,6 +221,6 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		options.signal.removeEventListener("abort", cancel);
 		if (timer) clearTimeout(timer);
 		clearTimeout(deadline);
-		agent.stop();
+		await agent.stop();
 	}
 }

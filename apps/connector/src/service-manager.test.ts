@@ -174,6 +174,39 @@ test.skipIf(process.platform === "win32")(
 	20_000,
 );
 
+test.skipIf(process.platform === "win32")(
+	"install's start check leaves nothing of the agent's process group running, even a child that ignores SIGTERM",
+	async () => {
+		let { home, directory, bin, host, program, settings } = await machine("linux", systemd);
+		let fake = join(import.meta.dir, "testing", "fake-agent.ts");
+		let group = join(home, "group");
+		// The agent's shell records its process group, starts a child that ignores SIGTERM, then
+		// becomes an agent that answers initialize and exits on SIGTERM.
+		await writeFile(
+			join(bin, "forking-agent"),
+			`#!/bin/sh\necho $$ > ${group}\n(trap '' TERM; while :; do sleep 1; done) &\n`
+				+ `exec ${process.execPath} ${fake}\n`,
+			{ mode: 0o755 },
+		);
+		await connected(directory, { ...settings, command: ["forking-agent"] });
+		let pgid = 0;
+		try {
+			await installService(host, program, { check: true });
+			pgid = Number(await readFile(group, "utf8"));
+			let { stdout } = Bun.spawnSync(["ps", "-A", "-o", "pgid=,stat="]);
+			let alive = String(stdout).split("\n").map(line => line.trim().split(/\s+/))
+				.filter(([id, stat]) => Number(id) === pgid && !stat?.startsWith("Z"));
+			expect(alive).toEqual([]);
+		} finally {
+			pgid ||= Number(await readFile(group, "utf8").catch(() => 0));
+			try {
+				if (pgid) process.kill(-pgid, "SIGKILL");
+			} catch { /* The group is gone. */ }
+		}
+	},
+	20_000,
+);
+
 test("install refuses until chopin connect has saved what the service runs", async () => {
 	let { home, directory, calls, host, program } = await machine("linux", systemd);
 	await updateConfig(directory, value => {

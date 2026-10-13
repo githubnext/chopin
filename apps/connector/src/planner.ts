@@ -198,7 +198,7 @@ export type Processes = {
 	graceMs: number;
 };
 
-const PROCESSES: Processes = {
+export const PROCESSES: Processes = {
 	platform: process.platform,
 	run: command =>
 		new Promise(resolve => {
@@ -212,8 +212,8 @@ const PROCESSES: Processes = {
 /**
  * Stop a backend and everything it started. On POSIX its process group gets SIGTERM, then SIGKILL
  * after the grace period unless the whole group has gone by then, even when the backend itself
- * exited first. On Windows `taskkill /T /F` ends its process tree, or the backend alone when
- * taskkill cannot.
+ * exited first; it resolves once the group is gone, or a second after SIGKILL. On Windows
+ * `taskkill /T /F` ends its process tree, or the backend alone when taskkill cannot.
  */
 export async function stopBackend(
 	child: { pid?: number | undefined; kill(signal?: NodeJS.Signals): boolean },
@@ -230,11 +230,15 @@ export async function stopBackend(
 		return;
 	}
 	if (!pid || !signalGroup(pid, "SIGTERM")) return;
-	for (let deadline = Date.now() + processes.graceMs; Date.now() < deadline;) {
-		await new Promise(resolve => setTimeout(resolve, 50));
-		if (!signalGroup(pid, 0)) return;
-	}
-	signalGroup(pid, "SIGKILL");
+	let gone = async (ms: number) => {
+		for (let deadline = Date.now() + ms; Date.now() < deadline;) {
+			await new Promise(resolve => setTimeout(resolve, 50));
+			if (!signalGroup(pid, 0)) return true;
+		}
+		return false;
+	};
+	if (await gone(processes.graceMs) || !signalGroup(pid, "SIGKILL")) return;
+	await gone(1000);
 }
 
 /** Signals process group `pgid`; false once no process is left in it. */
