@@ -57,6 +57,8 @@ export declare namespace Session {
 		handle: string;
 		/** Distinguishes two tabs belonging to the same handle. */
 		client: string;
+		/** Roster profile when the connection claimed a demo actor; the handle is the roster ID. */
+		actor?: { name: string; avatar: string };
 	};
 
 	/** Sent once, immediately, to the socket that just joined. */

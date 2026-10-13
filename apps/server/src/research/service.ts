@@ -183,7 +183,7 @@ const MAX_EVIDENCE_SOURCES = 64;
 const MAX_TARGET_SCAN = 1_000;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
-const HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+const HANDLE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})|demo:[a-z0-9-]{1,32})$/;
 const ACTIVE_JOB_STATES = new Set(["pending", "paused", "running"]);
 
 function safeId(value: unknown, field: string, maximum = MAX_ID): string {

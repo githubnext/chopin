@@ -12,6 +12,7 @@
 
 import type { Server, ServerWebSocket } from "bun";
 import type { Frame, Outgoing, Session } from "@chopin/protocol";
+import type { DemoActor } from "./demo/roster";
 import type { DecisionWatch } from "./socket/decision-watch";
 
 export type Identity = {
@@ -19,6 +20,8 @@ export type Identity = {
 	handle: string;
 	/** Distinguishes two tabs belonging to the same handle. */
 	client: string;
+	/** Validated demo actor bound at admission; `handle` is then the roster ID. */
+	actor?: DemoActor;
 };
 
 export type AuthorizationResult = "allowed" | "denied" | "unavailable";

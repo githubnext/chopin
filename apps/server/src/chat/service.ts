@@ -373,7 +373,11 @@ function digest(value: string): string {
 	return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function requestFingerprint(msg: Request<Wire.Send>, principalId: string): string {
+function requestFingerprint(
+	msg: Request<Wire.Send>,
+	principalId: string,
+	actor?: string,
+): string {
 	let references = Array.isArray(msg.references)
 		? msg.references.map(value => {
 			if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -389,6 +393,7 @@ function requestFingerprint(msg: Request<Wire.Send>, principalId: string): strin
 		msg.text,
 		references,
 		...(focus !== undefined ? [focus] : []),
+		...(actor ? [{ actor }] : []),
 	]));
 }
 
@@ -769,7 +774,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	if (Buffer.byteLength(msg.text) > MAX_MESSAGE_BYTES) {
 		return fail(ws, msg.rid, "chat message exceeds the 64 KiB limit");
 	}
-	let request = requestFingerprint(msg, ws.data.principalId);
+	let request = requestFingerprint(msg, ws.data.principalId, ws.data.actor?.id);
 	if (replay(chat, ws, msg, requestId, request)) return;
 	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
 	let focus: Focus | undefined;

@@ -2,6 +2,7 @@ import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { uid } from "../ids";
 import { StorageError } from "../storage/errors";
+import { demoRoster } from "../demo/roster";
 import { decisionWatch } from "./decision-watch";
 
 import type { HostedAuth } from "../auth/routes";
@@ -58,6 +59,12 @@ export async function admit(
 		}
 		let session = await auth.sessions.authenticate(request);
 		if (!session) return { status: 401, reason: "authentication required" };
+		let claimed = url.searchParams.getAll("actor");
+		let actor;
+		if (claimed.length) {
+			actor = claimed.length === 1 ? demoRoster(auth.config).get(claimed[0]!) : undefined;
+			if (!actor) return { status: 403, reason: "actor is not allowed" };
+		}
 		let id = (url.searchParams.get("channel") || "").toLowerCase();
 		if (!isChannelId(id)) return { status: 400, reason: "bad channel" };
 		if (options.deleting?.(id)) return { status: 404, reason: "channel not found" };
@@ -93,7 +100,8 @@ export async function admit(
 				...(channel.archivedAt
 					? { channelArchivedAt: channel.archivedAt.toISOString() }
 					: {}),
-				handle: session.user.login,
+				handle: actor ? actor.id : session.user.login,
+				...(actor ? { actor } : {}),
 				client: uid(),
 				canEdit: canManage && !channel.archivedAt && !options.readOnly?.(channel.id),
 				canManage,

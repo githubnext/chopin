@@ -9,7 +9,8 @@
  * and the agent session attach to the same record as they arrive.
  */
 
-import type { Identity, Socket } from "./wire";
+import type { Session } from "@chopin/protocol";
+import type { Socket } from "./wire";
 // Type-only: the plan attaches to a room, but a room knows nothing about how
 // one is built, and a value import here would close a cycle.
 import type { Plan } from "./plan/service";
@@ -96,8 +97,14 @@ export function forget(room: Room): void {
 	if (rooms.get(room.id) === room) rooms.delete(room.id);
 }
 
-export function members(room: Room): Identity[] {
+export function members(room: Room): Session.Member[] {
 	return [...room.members.values()]
-		.map(ws => ({ handle: ws.data.handle, client: ws.data.client }))
+		.map(ws => ({
+			handle: ws.data.handle,
+			client: ws.data.client,
+			...(ws.data.actor
+				? { actor: { name: ws.data.actor.name, avatar: ws.data.actor.avatar } }
+				: {}),
+		}))
 		.sort((a, b) => a.handle.localeCompare(b.handle) || a.client.localeCompare(b.client));
 }

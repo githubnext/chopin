@@ -439,3 +439,15 @@ that repository's decision counts; see [Repository channels](channels.md). Exter
 separate Streamable HTTP endpoint at `/mcp`; unlike the browser API, its
 caller-supplied bearer is independent of the GitHub App installation and can
 perform write-authorized document and implementation lifecycle operations.
+
+With `DEMO_PERSONAS=on`, `/ws` also accepts one `actor` query parameter naming a
+roster ID (`demo:lily`). Every admission, including each reconnect, checks it
+against the server roster and refuses an unknown, repeated, or any actor with
+the flag off (403). The operator's principal, session, repository role and Planner
+ownership are unchanged; only authorship changes. The connection's `handle`
+becomes the roster ID (never a GitHub login, because a colon is not valid in
+one) and every handler derives chat, comment, and decision authorship from it,
+ignoring client-supplied authors. Chat retry fingerprints include the actor,
+queued messages are withdrawn only by their author, and questionnaires keep one
+shared draft and one winning submission. Stored fictional authors are plain
+strings, so they survive restart and are never resolved as GitHub users.

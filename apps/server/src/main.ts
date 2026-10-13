@@ -1377,7 +1377,13 @@ function openRoomSocket(ws: Socket): void {
 		...(ws.data.channelDescription
 			? { description: ws.data.channelDescription }
 			: {}),
-		you: { handle: ws.data.handle, client: ws.data.client },
+		you: {
+			handle: ws.data.handle,
+			client: ws.data.client,
+			...(ws.data.actor
+				? { actor: { name: ws.data.actor.name, avatar: ws.data.actor.avatar } }
+				: {}),
+		},
 		members: Rooms.members(room),
 		canEdit: ws.data.canEdit,
 		canManage: ws.data.canManage,
