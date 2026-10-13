@@ -615,8 +615,11 @@ GitHub authorization, the machine borrows its owner's browser sign-in, and
   its own `detach`, exit. Within the credential's 15 minutes a backend may
   instead reattach once after 1001 or a dropped socket; after that the
   credential is refused and it must exit.
-- Exit on SIGTERM. The connector sends it on Ctrl-C and kills the process group
-  5 seconds later.
+- Exit on SIGTERM. On Ctrl-C the connector sends it to the backend's process
+  group and, 5 seconds later, kills whatever is left in that group, including
+  processes the backend started that ignored it. A backend that exits by itself
+  has its group stopped the same way before it is started again. On Windows the
+  connector ends the backend's process tree with `taskkill /T /F` instead.
 
 The connector starts a backend that exited again, with a fresh credential, after
 the reconnect backoff (up to a second at first, doubling to at most five

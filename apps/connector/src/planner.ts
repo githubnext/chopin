@@ -87,13 +87,13 @@ async function servePlanner(options: {
 }
 
 /** Run the backend once; resolves with how it exited. Aborting stops it, then kills it. */
-function launch(options: {
+async function launch(options: {
 	url: string;
 	document: string;
 	command: string[];
 	cwd: string;
 	signal: AbortSignal;
-}, token: string) {
+}, token: string): Promise<string> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
 		env: {
@@ -106,26 +106,78 @@ function launch(options: {
 		// Its own process group, so Ctrl-C reaches it only through the connector stopping it.
 		detached: process.platform !== "win32",
 	});
-	let kill = (name: NodeJS.Signals) => {
-		try {
-			if (process.platform !== "win32" && child.pid) process.kill(-child.pid, name);
-			else child.kill(name);
-		} catch { /* It has already exited. */ }
-	};
-	return new Promise<string>(resolve => {
-		let force: ReturnType<typeof setTimeout> | undefined;
-		let stop = () => {
-			kill("SIGTERM");
-			force = setTimeout(() => kill("SIGKILL"), STOP_GRACE_MS);
-		};
+	let exited = new Promise<string>(resolve => {
+		child.once("error", error => resolve(error.message));
+		child.once("exit", (code, name) => resolve(name ? `signal ${name}` : `code ${code}`));
+	});
+	let stop!: () => void;
+	let stopped = new Promise<undefined>(resolve => {
+		stop = () => resolve(undefined);
 		options.signal.addEventListener("abort", stop, { once: true });
 		if (options.signal.aborted) stop();
-		let done = (how: string) => {
-			clearTimeout(force);
-			options.signal.removeEventListener("abort", stop);
-			resolve(how);
-		};
-		child.once("error", error => done(error.message));
-		child.once("exit", (code, name) => done(name ? `signal ${name}` : `code ${code}`));
 	});
+	let how = await Promise.race([exited, stopped]);
+	options.signal.removeEventListener("abort", stop);
+	// A backend that exited by itself may leave children in its process group; they go too. On
+	// Windows its process id may already belong to another process, so nothing more is stopped.
+	if (how === undefined || process.platform !== "win32") await stopBackend(child);
+	return how ?? await exited;
+}
+
+/** How a backend's processes are stopped: on which platform, running which commands, how patiently. */
+export type Processes = {
+	platform: NodeJS.Platform;
+	/** Runs a command to its end; resolves with its exit code, or null when it could not run. */
+	run(command: string[]): Promise<number | null>;
+	/** How long a stopped process group has to exit before it is killed. */
+	graceMs: number;
+};
+
+const PROCESSES: Processes = {
+	platform: process.platform,
+	run: command =>
+		new Promise(resolve => {
+			let child = spawn(command[0]!, command.slice(1), { stdio: "ignore", windowsHide: true });
+			child.once("error", () => resolve(null));
+			child.once("exit", code => resolve(code));
+		}),
+	graceMs: STOP_GRACE_MS,
+};
+
+/**
+ * Stop a backend and everything it started. On POSIX its process group gets SIGTERM, then SIGKILL
+ * after the grace period unless the whole group has gone by then, even when the backend itself
+ * exited first. On Windows `taskkill /T /F` ends its process tree, or the backend alone when
+ * taskkill cannot.
+ */
+export async function stopBackend(
+	child: { pid?: number | undefined; kill(signal?: NodeJS.Signals): boolean },
+	processes: Processes = PROCESSES,
+): Promise<void> {
+	let pid = child.pid;
+	if (processes.platform === "win32") {
+		let code = pid ? await processes.run(["taskkill", "/T", "/F", "/PID", String(pid)]) : null;
+		if (code !== 0) {
+			try {
+				child.kill();
+			} catch { /* It has already exited. */ }
+		}
+		return;
+	}
+	if (!pid || !signalGroup(pid, "SIGTERM")) return;
+	for (let deadline = Date.now() + processes.graceMs; Date.now() < deadline;) {
+		await new Promise(resolve => setTimeout(resolve, 50));
+		if (!signalGroup(pid, 0)) return;
+	}
+	signalGroup(pid, "SIGKILL");
+}
+
+/** Signals process group `pgid`; false once no process is left in it. */
+function signalGroup(pgid: number, signal: NodeJS.Signals | 0): boolean {
+	try {
+		process.kill(-pgid, signal);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code !== "ESRCH";
+	}
 }

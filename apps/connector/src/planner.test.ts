@@ -1,7 +1,9 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, mock, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createOutput } from "./output";
+import { servePlanners, stopBackend } from "./planner";
 import { git } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-"));
@@ -154,3 +156,92 @@ test(
 	},
 	30_000,
 );
+
+/**
+ * A backend that forks a helper which ignores SIGTERM, as a shell wrapper or a language server
+ * might. The first launch exits on its own once its helper runs; the next exits on SIGTERM.
+ */
+const FORKING_BACKEND = `
+import { spawn } from "node:child_process";
+import { appendFileSync, readFileSync } from "node:fs";
+let log = process.argv[2];
+let launches = 0;
+try { launches = readFileSync(log, "utf8").split("\\n").filter(line => line.includes('"helper"')).length; } catch {}
+let helper = spawn(process.execPath, ["-e", 'process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000);'], { stdio: ["ignore", "pipe", "ignore"] });
+await new Promise(resolve => helper.stdout.once("data", resolve));
+appendFileSync(log, JSON.stringify({ backend: process.pid, helper: helper.pid }) + "\\n");
+if (launches === 0) process.exit(3);
+process.on("SIGTERM", () => process.exit(0));
+setInterval(() => {}, 1000);
+`;
+
+function alive(pid: number) {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+test.skipIf(process.platform === "win32")(
+	"a backend's own children are killed with it, whether it exits by itself or is stopped",
+	async () => {
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: () =>
+				Response.json({
+					token: `chopin_p_${"P".repeat(43)}`,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id: "D_1", url: "http://x" },
+				}),
+		});
+		let directory = await mkdtemp(join(scratch, "forking-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, FORKING_BACKEND);
+		let abort = new AbortController();
+		let quiet = { write: () => true };
+		let serving = servePlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script, log],
+			cwd: directory,
+			output: createOutput(quiet, quiet, {}),
+			signal: abort.signal,
+		});
+		let helpers: number[] = [];
+		try {
+			await until(async () => (await entries(log)).length >= 2, 20_000);
+			helpers = (await entries(log)).map(entry => entry.helper as number);
+			// The first backend's helper went before the backend was started again.
+			expect(alive(helpers[0]!)).toBe(false);
+			expect(alive(helpers[1]!)).toBe(true);
+
+			let stopping = Date.now();
+			abort.abort();
+			await serving;
+			expect(Date.now() - stopping).toBeLessThan(5_000 + 2_000);
+			await until(async () => !alive(helpers[1]!), 1_000);
+		} finally {
+			abort.abort();
+			for (let pid of helpers) if (alive(pid)) process.kill(pid, "SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+test("on Windows a stopped backend's process tree is ended with taskkill", async () => {
+	let backend = { pid: 4321, kill: mock(() => true) };
+	let run = mock(async (_command: string[]) => 0);
+	await stopBackend(backend, { platform: "win32", run, graceMs: 5_000 });
+	expect(run.mock.calls).toEqual([[["taskkill", "/T", "/F", "/PID", "4321"]]]);
+	expect(backend.kill).not.toHaveBeenCalled();
+
+	// Where taskkill cannot end it, the backend itself still is.
+	await stopBackend(backend, { platform: "win32", run: async () => 1, graceMs: 5_000 });
+	expect(backend.kill).toHaveBeenCalledTimes(1);
+});
