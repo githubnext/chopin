@@ -175,3 +175,43 @@ test("a discarded or unknown card cannot be discarded again", async () => {
 	expect(after).toBeGreaterThan(before);
 	expect(context.broadcasts).toHaveLength(after);
 });
+
+test("a decision asked before any prose exists still owes a review once answered", async () => {
+	let context = await openPlan();
+	let plan = context.plan;
+	plans.push(plan);
+	let asked = asking(plan, context.server, definition(), { revision: plan.revision, blocks: [[]] });
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let question = plan.records.get(id)!.definition.questions[0]!.id;
+	// Any commit before the answer stores the open question's empty set as it reads.
+	Questions.rebase(plan);
+	expect(plan.records.get(id)!.anchors?.questions[question]).toEqual({
+		anchors: [],
+		pending: false,
+	});
+	let ana = member("ana");
+	await selectFirstOption(plan, ana.ws, id);
+	await Questions.submit(plan, context.server, "test", ana.ws, {
+		kind: "question:submit",
+		ts: 0,
+		rid: "save",
+		id,
+		revision: Store.get(plan.questions, id)!.revision,
+	});
+	await asked.waiting;
+
+	// An empty document gave the question nothing to point at; that is not a review.
+	expect(Questions.anchors(plan)[0]!.questions[question]).toEqual({
+		anchors: [],
+		pending: true,
+		reason: "missing",
+	});
+	expect(Questions.outstanding(plan)).toEqual([{ widget: id, question, reason: "missing" }]);
+	let relayed = context.broadcasts.findLast(frame => frame.kind === "plan:anchors") as
+		| { widgets: Array<{ widget: string; questions: Record<string, { pending: boolean }> }> }
+		| undefined;
+	expect(relayed?.widgets.find(item => item.widget === id)?.questions[question]?.pending).toBe(
+		true,
+	);
+});

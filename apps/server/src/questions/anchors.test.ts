@@ -108,3 +108,25 @@ describe("what a question owes the agent", () => {
 		expect(Anchors.pending({ ...open, anchors: value })).toEqual([]);
 	});
 });
+
+describe("answering", () => {
+	it("owes a review for each question that points at nothing yet", () => {
+		let open = record({ anchors: Anchors.read(record()) });
+		expect(Anchors.answer(open).questions).toEqual({
+			q1: { anchors: [], pending: true, reason: "missing" },
+			q2: { anchors: [], pending: true, reason: "missing" },
+		});
+	});
+
+	it("keeps a placement the question already has, and a review already owed", () => {
+		let placed = Anchors.set(Anchors.read(record()), "q1", [anchor("a")]);
+		let owed = {
+			...placed,
+			questions: {
+				...placed.questions,
+				q2: { anchors: [], pending: true, reason: "plan_changed" as const },
+			},
+		};
+		expect(Anchors.answer(record({ anchors: owed })).questions).toEqual(owed.questions);
+	});
+});

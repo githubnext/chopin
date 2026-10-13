@@ -73,6 +73,21 @@ export function invalidate(record: Question, reason: Plan.AnchorReason): Plan.Wi
 	return value;
 }
 
+/**
+ * A decision's relationships once it is answered.
+ *
+ * A question asked before any prose existed, or never placed, points at
+ * nothing; that is not a review. Answering it puts it on the Planner's list,
+ * so the reader is told its prose is owed rather than that it has none.
+ */
+export function answer(record: Question): Plan.WidgetAnchors {
+	let value = read({ ...record, status: "answered" });
+	for (let [id, set] of Object.entries(value.questions)) {
+		if (set.anchors.length === 0 && !set.pending) value.questions[id] = empty(true, "missing");
+	}
+	return value;
+}
+
 /** Everything the agent still owes a review on. */
 export function pending(record: Question): Pending[] {
 	let value = read(record);

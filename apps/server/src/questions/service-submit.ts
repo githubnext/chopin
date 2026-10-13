@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import { activeSettleDeferral } from "../conversation-plan/preference";
 import { ConversationCapacityError } from "../conversation-plan/events";
 
+import * as Anchors from "./anchors";
 import { isOpenStatus } from "./records";
 
 import * as room from "../plan/room";
@@ -123,6 +124,7 @@ export async function submit(
 					decidedAt: at,
 					choices: optionIds,
 					editors: [...new Set([...record.editors, ...claimed.claim.entry.editors])],
+					anchors: Anchors.answer(record),
 				};
 				records.set(msg.id, answered);
 				let intent = proseIntent(answered);
@@ -224,6 +226,8 @@ export async function submit(
 					answers: claimed.answers,
 				}),
 			() => announce(plan, server, roomId, msg.id),
+			// An answer can put a review on the Planner's list; readers learn its prose is owed.
+			() => Service.anchors(plan, server, roomId),
 			() => emit(plan, event),
 		]
 	) {
