@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compiledChopin } from "./testing/binary";
 import { assets, fakeChopin, fakeRelease, sha256 } from "./testing/release";
+import { systemdUnit } from "./service";
 import { recover, replace } from "./update";
 
 /**
@@ -213,9 +214,6 @@ describe.skipIf(!binary)("chopin update", () => {
 					+ '[ "$2" = show ] && echo ActiveState=active\nexit 0\n',
 			);
 			await chmod(join(at.shims, "systemctl"), 0o755);
-			let units = join(at.home, ".config", "systemd", "user");
-			await mkdir(units, { recursive: true });
-			await writeFile(join(units, "chopin.service"), "[Unit]\n");
 			let state = join(at.home, "state");
 			await mkdir(state);
 			let service = {
@@ -224,6 +222,10 @@ describe.skipIf(!binary)("chopin update", () => {
 				command: ["agent"],
 				directory: state,
 			};
+			// The installed unit, not config.json, says which chopin and base dir the service runs.
+			let units = join(at.home, ".config", "systemd", "user");
+			await mkdir(units, { recursive: true });
+			await writeFile(join(units, "chopin.service"), systemdUnit(service, "/usr/bin:/bin"));
 			await writeFile(
 				join(state, "config.json"),
 				JSON.stringify({ service: { ...service, version, installedAt: 1 } }),

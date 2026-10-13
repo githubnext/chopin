@@ -238,9 +238,11 @@ dir.
 `restart-pending`, with the unit, plist or task path and the log path. The
 service is `restart-pending` when `chopin update` has replaced the binary but
 the service still runs the old version. `chopin service restart` restarts it.
-`chopin update` restarts a running service by itself when the service runs the
-`chopin` it just replaced. If that restart fails, the update still stands, and
-the message says to run `chopin service restart`.
+`chopin update` restarts a running service by itself when the installed unit,
+plist or task runs the `chopin` it just replaced with the same base dir. A
+service that runs another `chopin` or base dir is left alone, and update says
+so. If that restart fails, the update still stands, and the message says to run
+`chopin service restart`.
 
 `chopin service uninstall` stops the service and removes its unit, plist or
 task. The pairing, `config.json`, the runs and the log stay in place, so

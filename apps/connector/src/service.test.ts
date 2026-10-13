@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import {
 	launchdPlist,
+	parsePlistRun,
+	parseTaskRun,
+	parseUnitRun,
 	scheduledTaskScript,
 	servicePath,
 	systemdQuote,
@@ -279,4 +282,34 @@ test("the service PATH puts the agent's directory first and drops directories a 
 			"C:\\Tools",
 		),
 	).toBe("C:\\Tools;C:\\Program Files\\Tool;C:\\Git\\cmd");
+});
+
+test("each definition gives back the chopin and base dir it was written with", () => {
+	let posix = {
+		...PROGRAM,
+		executable: "/home/ada/bin $HOME 100%/chopin",
+		directory: '/home/ada/st "a" 100% $HOME\\x\t&<>',
+	};
+	let run = { executable: posix.executable, directory: posix.directory };
+	expect(parseUnitRun(systemdUnit(posix, "/usr/bin"))).toEqual(run);
+	expect(parsePlistRun(launchdPlist(posix, "/home/ada", "/usr/bin"))).toEqual(run);
+	let windows = {
+		executable: "C:\\Program Files (x86)\\chopin\\chopin.exe",
+		checkout: "C:\\src\\R&D (old)",
+		command: ["C:\\Tools\\agent.exe", 'say "hi" & ^bye'],
+		directory: "C:\\Users\\Ada\\R&D ^x\\state\\",
+	};
+	let action = taskAction(windows, "C:\\Tools", "C:\\Windows\\System32\\cmd.exe");
+	expect(parseTaskRun(action.execute, action.argument)).toEqual({
+		executable: windows.executable,
+		directory: windows.directory,
+	});
+	// A task that runs chopin directly, without cmd setting PATH.
+	expect(
+		parseTaskRun(
+			"C:\\chopin\\chopin.exe",
+			'connect "C:\\a b" --base-dir "C:\\st ate\\\\" --service -- agent',
+		),
+	).toEqual({ executable: "C:\\chopin\\chopin.exe", directory: "C:\\st ate\\" });
+	expect(parseUnitRun("[Service]\nExecStart=/bin/true\n")).toBeUndefined();
 });

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
@@ -1056,14 +1056,164 @@ export async function uninstallService(host: ServiceHost, directory: string) {
 	return { manager, definition, removed: true, notes };
 }
 
+/** The chopin and base dir an installed service definition runs. */
+export type InstalledRun = { executable: string; directory: string };
+
+/** Reads `<chopin> connect <checkout> --base-dir <dir> …` back from a definition's words. */
+function runOf(words: string[]): InstalledRun | undefined {
+	let end = words.indexOf("--");
+	let options = end < 0 ? words : words.slice(0, end);
+	let at = options.indexOf("--base-dir");
+	let [executable, verb] = words;
+	let directory = at < 0 ? undefined : options[at + 1];
+	return executable && verb === "connect" && directory ? { executable, directory } : undefined;
+}
+
+/** Reads the run back from a systemd unit's ExecStart, undoing systemdQuote. */
+export function parseUnitRun(text: string) {
+	let line = text.match(/^ExecStart=(.*)$/m)?.[1];
+	if (!line) return undefined;
+	let words = [...line.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((match, index) => {
+		let value = match[1]!.replaceAll("%%", "%");
+		if (index > 0) value = value.replaceAll("$$", () => "$");
+		return value.replace(
+			/\\x([0-9a-fA-F]{2})|\\(.)/g,
+			(_, hex: string | undefined, character) =>
+				hex ? String.fromCharCode(Number.parseInt(hex, 16)) : character,
+		);
+	});
+	return runOf(words);
+}
+
+/** Reads the run back from a LaunchAgent's ProgramArguments. */
+export function parsePlistRun(text: string) {
+	let array = text.match(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/)?.[1];
+	if (array === undefined) return undefined;
+	let entities: Record<string, string> = { lt: "<", gt: ">", quot: '"', apos: "'", amp: "&" };
+	let words = [...array.matchAll(/<string>([\s\S]*?)<\/string>/g)].map(match =>
+		match[1]!.replace(/&(lt|gt|quot|apos|amp);/g, (_, name: string) => entities[name]!)
+	);
+	return runOf(words);
+}
+
+/** Splits a Windows command line the way a program's C runtime does. */
+function windowsSplit(line: string) {
+	let words: string[] = [];
+	let word: string | undefined;
+	let quoted = false;
+	let index = 0;
+	while (index < line.length) {
+		if (!quoted && /\s/.test(line[index]!)) {
+			if (word !== undefined) words.push(word);
+			word = undefined;
+			index++;
+			continue;
+		}
+		let slashes = 0;
+		while (line[index] === "\\") {
+			slashes++;
+			index++;
+		}
+		word = (word ?? "") + "\\".repeat(line[index] === '"' ? Math.floor(slashes / 2) : slashes);
+		if (line[index] === '"') {
+			if (slashes % 2) word += '"';
+			else quoted = !quoted;
+			index++;
+		} else if (!slashes && index < line.length) {
+			word += line[index++];
+		}
+	}
+	if (word !== undefined) words.push(word);
+	return words;
+}
+
+/** Reads the run back from a task's action, built by taskAction or running chopin directly. */
+export function parseTaskRun(execute: string, argument: string) {
+	let inner = argument.match(/^\/d \/v:off \/s \/c "([\s\S]*)"$/)?.[1];
+	if (inner === undefined) return runOf([execute, ...windowsSplit(argument)]);
+	let quoted = false;
+	let line = "";
+	for (let index = 0; index < inner.length; index++) {
+		let character = inner[index]!;
+		if (character === '"') quoted = !quoted;
+		else if (!quoted && character === "^") character = inner[++index] ?? "";
+		line += character;
+	}
+	let run = line.match(/^set "PATH=[^"]*" && ([\s\S]*)$/)?.[1];
+	return run === undefined ? undefined : runOf(windowsSplit(run));
+}
+
+function taskActionScript(name: string) {
+	return [
+		`$task = Get-ScheduledTask ${taskSelector(name)} -ErrorAction SilentlyContinue`,
+		"if ($null -eq $task) { 'not-installed' } else { $action = @($task.Actions)[0]; "
+		+ "[pscustomobject]@{ execute = [string]$action.Execute; arguments = [string]$action.Arguments } "
+		+ "| ConvertTo-Json -Compress }",
+	].join("; ");
+}
+
 /**
- * After `chopin update` replaced `executable`, restart a running service that runs it, so it is
- * not left restart-pending. Returns what to tell the person, if anything; a failed restart does
- * not undo the update.
+ * The chopin and base dir the installed service runs, read from its unit, plist or task rather
+ * than config.json, which another base dir's install may have outdated; undefined when its
+ * definition says something else.
+ */
+async function installedRun(
+	host: ServiceHost,
+): Promise<InstalledRun | "not-installed" | undefined> {
+	if (serviceManager(host.platform) === "task-scheduler") {
+		let outcome = await powershell(host, taskActionScript(taskName(host.user)));
+		if (outcome.code !== 0) {
+			throw new ServiceError(
+				`Task Scheduler couldn't be asked about the ${definitionPath(host)} task: ${why(outcome)}`,
+			);
+		}
+		let text = outcome.stdout.trim();
+		if (text === "not-installed") return "not-installed";
+		let action: { execute?: unknown; arguments?: unknown };
+		try {
+			action = JSON.parse(text);
+		} catch {
+			return undefined;
+		}
+		return typeof action.execute === "string" && typeof action.arguments === "string"
+			? parseTaskRun(action.execute, action.arguments)
+			: undefined;
+	}
+	let definition = definitionPath(host);
+	if (!existsSync(definition)) return "not-installed";
+	let text = await readFile(definition, "utf8");
+	return host.platform === "darwin" ? parsePlistRun(text) : parseUnitRun(text);
+}
+
+function samePath(platform: NodeJS.Platform, one: string, other: string) {
+	return pathKey(platform, one) === pathKey(platform, other);
+}
+
+/**
+ * After `chopin update` replaced `executable`, restart a running service whose definition runs
+ * that chopin with this base dir, so it is not left restart-pending. A service that runs another
+ * chopin or base dir is left alone. Returns what to tell the person, if anything; a failed
+ * restart does not undo the update.
  */
 export async function restartAfterUpdate(host: ServiceHost, directory: string, executable: string) {
-	let service = (await readConfig(directory)).service;
-	if (service?.executable !== executable) return undefined;
+	if (!["linux", "darwin", "win32"].includes(host.platform)) return undefined;
+	let run;
+	try {
+		run = await installedRun(host);
+	} catch (error) {
+		return `Could not check which chopin the service runs (${
+			error instanceof Error ? error.message : error
+		}). If it runs this one, run chopin service restart.`;
+	}
+	if (run === "not-installed") return undefined;
+	if (
+		!run || !samePath(host.platform, run.executable, executable)
+		|| !samePath(host.platform, run.directory, directory)
+	) {
+		return `The chopin service runs a different chopin${
+			run ? ` (${run.executable} with base dir ${run.directory})` : ""
+		}, so this update left it alone.`;
+	}
 	try {
 		let status = await serviceStatus(host, directory);
 		if (status.state !== "running" && status.state !== "restart-pending") return undefined;

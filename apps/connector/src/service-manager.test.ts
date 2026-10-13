@@ -439,7 +439,9 @@ test("after an update, a running service on the updated chopin restarts, and not
 	expect(await restartAfterUpdate(host, directory, program.executable)).toBeUndefined();
 	await installService(host, program, { server: SERVER });
 	calls.length = 0;
-	expect(await restartAfterUpdate(host, directory, "/elsewhere/chopin")).toBeUndefined();
+	expect(await restartAfterUpdate(host, directory, "/elsewhere/chopin")).toContain(
+		"runs a different chopin",
+	);
 	expect(calls).toEqual([]);
 	expect(await restartAfterUpdate(host, directory, program.executable)).toBe(
 		"Restarted the chopin service, so it runs the new chopin.",
@@ -455,6 +457,71 @@ test("after an update, a running service on the updated chopin restarts, and not
 	expect(await restartAfterUpdate(host, directory, program.executable)).toContain(
 		"Run chopin service restart",
 	);
+});
+
+test("after an update, only a service whose definition runs this chopin and base dir restarts", async () => {
+	for (let platform of ["linux", "darwin", "win32"] as const) {
+		let task: { execute: string; arguments: string } | undefined;
+		let setup = await machine(platform, line => {
+			if (line.startsWith("systemctl --user show chopin.service")) {
+				return { stdout: "ActiveState=active\nUnitFileState=enabled\n" };
+			}
+			if (line.startsWith("launchctl print")) {
+				return { stdout: "gui/501/com.github.chopin = {\n\tstate = running\n}\n" };
+			}
+			if (line.includes("Get-ScheduledTaskInfo")) return { stdout: '{"state":"Running"}' };
+			if (line.includes(".Actions")) return { stdout: task ? JSON.stringify(task) : "" };
+			return systemd(line);
+		});
+		let { host, home, calls } = setup;
+		if (platform === "win32") {
+			host.env = { Path: "C:\\Tools;C:\\Git\\cmd", SystemRoot: "C:\\Windows" };
+			host.which = (name, path) =>
+				path.split(";").includes("C:\\Tools") ? `C:\\Tools\\${name}.exe` : null;
+		}
+		let windows = platform === "win32";
+		let a = {
+			...setup.program,
+			executable: windows ? "C:\\chopin-a\\chopin.exe" : "/opt/chopin-a/chopin",
+			directory: join(home, "a"),
+		};
+		let b = {
+			...a,
+			executable: windows ? "C:\\chopin-b\\chopin.exe" : "/opt/chopin-b/chopin",
+			directory: join(home, "b"),
+		};
+		// One service per user: installing from B replaces the one installed from A, whose
+		// config.json still names A's chopin.
+		await installService(host, a, { server: SERVER });
+		await installService(host, b, { server: SERVER });
+		if (windows) {
+			let action = taskAction(
+				{ ...b, command: ["C:\\Tools\\agent.exe", "--acp"] },
+				"C:\\Tools;C:\\Git\\cmd",
+				"C:\\Windows\\System32\\cmd.exe",
+			);
+			task = { execute: action.execute, arguments: action.argument };
+		}
+		expect((await readConfig(a.directory)).service?.executable).toBe(a.executable);
+		for (
+			let [executable, directory] of [
+				[a.executable, a.directory],
+				[a.executable, b.directory],
+				[b.executable, a.directory],
+			] as const
+		) {
+			calls.length = 0;
+			let said = await restartAfterUpdate(host, directory, executable);
+			expect(said).toContain("runs a different chopin");
+			expect(said).toContain(b.executable);
+			expect(calls.join("\n")).not.toMatch(/restart chopin|bootout|Stop-Sch|Start-Sch/);
+		}
+		calls.length = 0;
+		expect(await restartAfterUpdate(host, b.directory, b.executable)).toBe(
+			"Restarted the chopin service, so it runs the new chopin.",
+		);
+		expect(calls.join("\n")).toMatch(/restart chopin|bootout|Start-Sch/);
+	}
 });
 
 test("a service connector stops when a stop request names its own process", async () => {
