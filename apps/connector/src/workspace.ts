@@ -186,13 +186,15 @@ function lockId(root: string) {
 /**
  * How the agent or a document's Planner backend last failed to start or exited early: how it
  * ended, the first line of its stderr, when, and when the Planner backend is started again.
- * Times are in ms.
+ * A Planner that Chopin refused for good is `stopped`, with the refusal as `how`, and is not
+ * started again. Times are in ms.
  */
 export type StartFailure = {
 	kind: "agent" | "planner";
 	document?: string;
 	how: string;
 	stderr?: string;
+	stopped?: true;
 	at: number;
 	retryAt?: number;
 };

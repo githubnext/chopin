@@ -94,14 +94,19 @@ async function servePlanner(options: {
 		} catch (error) {
 			if (signal.aborted) return;
 			if (!transient(classifyConnectorError(error))) {
-				output.error(
-					`Stopped the Planner for ${document}: ${
-						redacted(
-							connectorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
-							values,
-						)
-					}`,
+				let reason = redacted(
+					connectorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
+					values,
 				);
+				output.error(`Stopped the Planner for ${document}: ${reason}`);
+				// Status shows it stopped, not still retrying an earlier failed start.
+				await options.failures?.failed({
+					kind: "planner",
+					document,
+					how: reason,
+					stopped: true,
+					at: Date.now(),
+				});
 				return;
 			}
 			let wait = backoff(attempt++);

@@ -55,7 +55,8 @@ export type StatusReport = {
 		/**
 		 * The latest failure to start of its agent and of each Planner backend, while it runs:
 		 * `kind` (`agent` or `planner`), `document` for a Planner, `how` it ended (`exit 127`,
-		 * `signal SIGKILL`), the first line of its `stderr`, `at` and the Planner's `retryAt`.
+		 * `signal SIGKILL`), the first line of its `stderr`, `at` and the Planner's `retryAt`; or
+		 * for a Planner Chopin refused for good, `stopped` with the refusal as `how`.
 		 */
 		failures?: Array<
 			Omit<StartFailure, "at" | "retryAt"> & { at: string; retryAt?: string }
@@ -195,6 +196,7 @@ function describe(settings: ConnectSettings) {
 type Failure = NonNullable<StatusReport["connectors"][number]["failures"]>[number];
 
 function failing(failure: Failure, now: number) {
+	if (failure.stopped) return `: stopped: ${failure.how}`;
 	let wait = failure.retryAt ? Math.ceil((Date.parse(failure.retryAt) - now) / 1000) : undefined;
 	return `: failing (${failure.how}${failure.stderr ? `: ${failure.stderr}` : ""})${
 		wait === undefined ? "" : wait > 0 ? `, retrying in ${wait}s` : ", retrying now"

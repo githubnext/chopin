@@ -537,6 +537,67 @@ test.skipIf(process.platform === "win32")(
 	30_000,
 );
 
+test.skipIf(process.platform === "win32")(
+	"chopin status shows a Planner stopped for good, not retrying, once Chopin refuses its credential",
+	async () => {
+		let asked = 0;
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: () =>
+				asked++
+					? Response.json({}, { status: 404 })
+					: Response.json({ token: `chopin_p_${"P".repeat(43)}`, expiresAt: Date.now() + 60_000 }),
+		});
+		let directory = await mkdtemp(join(scratch, "refused-"));
+		let script = join(directory, "backend.ts");
+		await writeFile(script, "process.stderr.write('node: not found\\n');\nprocess.exit(127);\n");
+		let release = await lockWorkspace(directory, directory, { planners: ["D_1"] });
+		let host: ServiceHost = {
+			platform: "linux",
+			home: directory,
+			user: "ada",
+			uid: 501,
+			env: {},
+			run: async () => ({ code: 1, stdout: "", stderr: "" }),
+		};
+		let quiet = { write: () => true };
+		try {
+			// The backend exits 127, then Chopin refuses the next credential, which ends the Planner.
+			await servePlanners({
+				url: `http://127.0.0.1:${chopin.port}`,
+				machine: MACHINE,
+				documents: ["D_1"],
+				command: [process.execPath, script],
+				cwd: directory,
+				output: createOutput(quiet, quiet, {}),
+				signal: new AbortController().signal,
+				failures: startFailures(directory, directory),
+			});
+			let report = await collectStatus({
+				directory,
+				server: "https://chopin.example",
+				source: "config",
+				host,
+			});
+			expect(report.connectors[0]!.failures).toEqual([{
+				kind: "planner",
+				document: "D_1",
+				how: "Chopin refused the request (http-404).",
+				stopped: true,
+				at: expect.any(String),
+			}]);
+			expect(formatStatus(report, Date.now() + 60_000)).toContain(
+				"              Planner for D_1: stopped: Chopin refused the request (http-404).",
+			);
+		} finally {
+			await release();
+			await chopin.stop(true);
+		}
+	},
+	30_000,
+);
+
 test("on Windows a stopped backend's process tree is ended with taskkill", async () => {
 	let backend = { pid: 4321, kill: mock(() => true) };
 	let run = mock(async (_command: string[]) => 0);

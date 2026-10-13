@@ -216,6 +216,9 @@ Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
               Planner for https://your-chopin-instance.example/octo-org/score/plan: failing (exit 127: /usr/bin/env: 'node': No such file or directory), retrying in 22s
 ```
 
+A Planner that Chopin refused for good, such as one for a deleted document,
+shows `stopped:` and the reason instead of `failing`.
+
 `chopin status` asks Chopin whether it still accepts this machine. It never
 pairs, connects or changes anything.
 
