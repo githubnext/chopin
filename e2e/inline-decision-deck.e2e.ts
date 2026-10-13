@@ -164,6 +164,8 @@ test("next, previous and arrow keys cycle without moving the caret", async ({ jo
 	await next.focus();
 	await page.keyboard.press("ArrowRight");
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[2] })).toBeVisible();
+	// The last card disables next; focus moves to previous rather than dropping to the page.
+	await expect(deck(page).getByRole("button", { name: "Previous decision" })).toBeFocused();
 	await page.keyboard.press("ArrowLeft");
 	await page.keyboard.press("ArrowLeft");
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[0] })).toBeVisible();

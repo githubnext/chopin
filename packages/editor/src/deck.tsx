@@ -246,7 +246,10 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 				// but is clipped at the stage's lower edge so it never covers the pager or prose.
 				frames.card[0]!.bottom = "auto";
 				frames.card[1]!.bottom = "auto";
-				let natural = element.scrollHeight;
+				// Its own height: after the commit its box is stretched to the new top card's.
+				element.style.bottom = "auto";
+				let natural = element.offsetHeight;
+				element.style.bottom = "";
 				let top = element.offsetTop;
 				let drop = AWAY_DROP
 					* Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
@@ -265,6 +268,9 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 				frames.card[5]!.clipPath = leave[5]!.clipPath;
 				frames.card[6]!.clipPath = "inset(-2rem -2rem 0px -2rem)";
 				frames.card[7]!.clipPath = "inset(-2rem -2rem 0px -2rem)";
+				// Behind the deck it takes the stage's height again, or a tall card would show below it.
+				frames.card[6]!.bottom = "0px";
+				frames.card[7]!.bottom = "0px";
 				element.animate(frames.card, { id: MOVE, duration });
 				cover(element, frames.cover, { duration });
 				continue;
