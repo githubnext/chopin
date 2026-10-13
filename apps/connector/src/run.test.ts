@@ -419,44 +419,45 @@ function hanging(signal?: AbortSignal) {
 	});
 }
 
-test("the grace period stops the agent on time while a retry waits longer than it", async () => {
-	let lost = 0;
-	let failed = 0;
-	await run(
-		{},
-		["--hang"],
-		(name, args) => {
-			if (name === "renew_implementation_build") {
-				lost ||= performance.now();
-				throw unreachable();
-			}
-			if (args.state === "failed") failed = performance.now();
+/**
+ * A fake Chopin that goes out of reach at the run's first heartbeat, which it refuses as an
+ * unreachable server does, and stays out of reach for every later call but the run's failure
+ * report: each gets `during`. The agent's session report may arrive during the outage, and
+ * answering it would rightly tell the run Chopin is back and clear the grace period being timed.
+ */
+function outage(during: (signal?: AbortSignal) => unknown) {
+	let times = { lost: 0, failed: 0 };
+	let respond = (name: string, args: Record<string, unknown>, signal?: AbortSignal) => {
+		if (args.state === "failed") {
+			times.failed = performance.now();
 			return {};
-		},
-		undefined,
-		{ random: () => 0.999, graceMs: 100 },
-	);
+		}
+		if (times.lost) return during(signal);
+		if (name !== "renew_implementation_build") return {};
+		times.lost = performance.now();
+		throw unreachable();
+	};
+	return { times, respond };
+}
+
+test("the grace period stops the agent on time while a retry waits longer than it", async () => {
+	let { times, respond } = outage(() => {
+		throw unreachable();
+	});
+	await run({}, ["--hang"], respond, undefined, { random: () => 0.999, graceMs: 100 });
 	// The first retry would wait about a second; the agent stops when the grace period ends.
-	expect(failed - lost).toBeGreaterThanOrEqual(90);
-	expect(failed - lost).toBeLessThan(400);
+	expect(times.failed - times.lost).toBeGreaterThanOrEqual(90);
+	expect(times.failed - times.lost).toBeLessThan(400);
 });
 
 test("the grace period stops the agent on time while a heartbeat hangs in flight", async () => {
-	let lost = 0;
-	let started = performance.now();
-	let { calls } = await run(
-		{},
-		["--hang"],
-		(name, _args, signal) => {
-			if (name !== "renew_implementation_build") return {};
-			if (lost) return hanging(signal);
-			lost = performance.now();
-			throw unreachable();
-		},
-		undefined,
-		{ random: () => 0.01, graceMs: 100 },
-	);
-	expect(performance.now() - started).toBeLessThan(1500);
+	let { times, respond } = outage(hanging);
+	let { calls } = await run({}, ["--hang"], respond, undefined, {
+		random: () => 0.01,
+		graceMs: 100,
+	});
+	// Timed from the loss, which is when the grace period starts, to the end of the run.
+	expect(performance.now() - times.lost).toBeLessThan(1500);
 	expect(calls.at(-1)?.[1]).toMatchObject({
 		state: "failed",
 		error: "Chopin was out of reach for 0 seconds.",
