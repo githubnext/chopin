@@ -247,6 +247,12 @@
 .ch-diagram:has(.is-focal) .sk-node:not(.is-focal) {
 	fill: var(--sc-wash);
 }
+.ch-diagram:has(.is-focal) .pl-stem:not(.is-focal) {
+	stroke: var(--sc-wash);
+}
+.ch-diagram:has(.is-focal) .pl-dot:not(.is-focal) {
+	fill: var(--sc-wash);
+}
 .ch-diagram .c-bar:is(.s-1, .s-2, .s-3, .s-4, .s-5) {
 	fill-opacity: 0.75;
 }
@@ -999,7 +1005,7 @@
 	fill: none;
 }
 .ch-diagram .pl-stem {
-	stroke: var(--sc-wash);
+	stroke: var(--sc-wash-strong);
 	stroke-width: 1.4;
 }
 .ch-diagram .pl-stem.is-focal {
@@ -1007,7 +1013,7 @@
 	stroke-width: 2;
 }
 .ch-diagram .pl-dot {
-	fill: var(--sc-wash);
+	fill: var(--sc-wash-strong);
 }
 .ch-diagram .pl-dot.is-focal {
 	fill: var(--sc-accent);
@@ -1058,7 +1064,8 @@
 	fill: var(--sc-paper);
 }
 .ch-diagram .tm-val {
-	fill: var(--sc-muted);
+	fill: var(--sc-ink);
+	fill-opacity: 0.75;
 	font-family: var(--font-mono);
 	font-size: 9px;
 }
@@ -1101,12 +1108,10 @@
 .ch-diagram .db-b {
 	fill: var(--sc-accent);
 }
-.ch-diagram .db-b.is-focal {
-	fill: var(--sc-accent);
-}
 .ch-diagram .mk-seg {
 	fill-opacity: 0.68;
 	stroke: var(--sc-paper);
+	rx: 0;
 }
 .ch-diagram .mk-pct {
 	fill: var(--sc-ink-strong);
