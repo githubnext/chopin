@@ -146,7 +146,7 @@ export function runReports(api: Caller, options: {
 			let result = queue.then(async () => {
 				for (let retry = 0;; retry++) {
 					try {
-						return await reports.attempt(name, args, gone.signal);
+						return await reports.attempt(name, args, waiting);
 					} catch (error) {
 						if (!reports.retryable(error) || waiting.aborted) throw error;
 						await delay(Math.min(backoff(retry, options.random), reports.remaining()), waiting);

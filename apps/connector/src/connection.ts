@@ -43,6 +43,17 @@ function cause(error: unknown) {
 	return "unknown error";
 }
 
+/** `promise`, or its signal's reason once `signal` aborts first; the promise itself carries on. */
+function abandoned<T>(promise: Promise<T>, signal?: AbortSignal) {
+	if (!signal) return promise;
+	return new Promise<T>((resolve, reject) => {
+		let give = () => reject(signal.reason);
+		if (signal.aborted) give();
+		signal.addEventListener("abort", give, { once: true });
+		promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", give));
+	});
+}
+
 /**
  * Wait for work and run it, reconnecting after a transient failure: once at once when a working
  * connection drops, then with capped full-jitter backoff. The ladder starts over once a
@@ -79,8 +90,11 @@ export async function serveWork(options: {
 	// as the token of a connection the server forgot is refused for good.
 	let link: Link = {
 		async call(name, args, callSignal) {
-			let api = current ?? await (connecting ??= options.connect().then(value => current = value)
-				.finally(() => connecting = undefined));
+			let api = current ?? await abandoned(
+				connecting ??= options.connect().then(value => current = value)
+					.finally(() => connecting = undefined),
+				callSignal,
+			);
 			try {
 				return await api.call(name, args, callSignal);
 			} catch (error) {

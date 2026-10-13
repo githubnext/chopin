@@ -97,7 +97,8 @@ export async function runWork(
 	// A heartbeat that fails while Chopin is out of reach retries on the reconnect backoff and
 	// leaves the agent running; only Chopin ending the run, or the grace period, stops it.
 	let beating = new AbortController();
-	let beat = AbortSignal.any([beating.signal, reports.signal]);
+	// Ctrl-C, the run ending and the grace period running out each abandon a heartbeat in flight.
+	let beat = AbortSignal.any([beating.signal, options.signal, reports.signal]);
 	let heartbeat = (async () => {
 		let failures = 0;
 		while (!beat.aborted) {
@@ -270,8 +271,8 @@ export async function runWork(
 			: "Local work failed";
 		if (stopped) output.stopped();
 		else output.failed(message, agentTail);
-		// Out of reach for the whole grace period, the failure gets one bounded attempt.
-		let send = reports.expired() ? reports.final : reports.deliver;
+		// After Ctrl-C, or out of reach for the whole grace period, the failure gets one bounded attempt.
+		let send = stopped || reports.expired() ? reports.final : reports.deliver;
 		await send(implementation ? "report_implementation_build" : "fail_experiment", {
 			...identity,
 			...(implementation ? { state: "failed", idempotencyKey: crypto.randomUUID() } : {}),

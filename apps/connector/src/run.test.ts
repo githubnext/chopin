@@ -4,8 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runWork, STOPPED } from "./run";
 import { git } from "./workspace";
-import { ConnectorError } from "./mcp";
-import type { remote } from "./mcp";
+import { ConnectorError, remote } from "./mcp";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -207,6 +206,106 @@ test("Ctrl-C reports the build stopped from the terminal before the run ends", a
 		{ id, state: "failed", error: STOPPED },
 	]);
 });
+
+/** A fake Chopin connector endpoint over MCP, whose tools may take as long as they like. */
+function chopin(tool: (name: string) => unknown) {
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			let mcp = new Server({ name: "fake-chopin", version: "1" }, { capabilities: { tools: {} } });
+			mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+			mcp.setRequestHandler(CallToolRequestSchema, async request => ({
+				content: [{ type: "text", text: JSON.stringify(await tool(request.params.name) ?? {}) }],
+			}));
+			let transport = new WebStandardStreamableHTTPServerTransport({
+				sessionIdGenerator: undefined,
+				enableJsonResponse: true,
+			});
+			await mcp.connect(transport);
+			return transport.handleRequest(request);
+		},
+	});
+	return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+}
+
+test("Ctrl-C ends a run at once while its heartbeat hangs on the server", async () => {
+	let release = Promise.withResolvers<void>();
+	let server = chopin(name => name === "renew_implementation_build" ? release.promise : {});
+	let api = await remote(server.url, "token");
+	let controller = new AbortController();
+	let interrupted = 0;
+	try {
+		let { id, calls } = await run(
+			{},
+			["--hang"],
+			(name, args, signal) => {
+				if (name === "renew_implementation_build" && !interrupted) {
+					interrupted = performance.now() + 100;
+					setTimeout(() => controller.abort(), 100);
+				}
+				return api.call(name, args, signal);
+			},
+			controller.signal,
+			{ heartbeatMs: 20 },
+		);
+		expect(performance.now() - interrupted).toBeLessThan(1000);
+		expect(calls.at(-1)).toEqual(["report_implementation_build", {
+			id,
+			state: "failed",
+			error: STOPPED,
+		}]);
+	} finally {
+		release.resolve();
+		await api.close();
+		await server.stop();
+	}
+});
+
+test("Ctrl-C ends a run at once while a report waits on Chopin", async () => {
+	let controller = new AbortController();
+	let interrupted = 0;
+	let { id, calls } = await run(
+		{},
+		["--hang"],
+		(name, args, signal) => {
+			if (name === "report_implementation_build" && args.state === "running") {
+				interrupted = performance.now() + 50;
+				setTimeout(() => controller.abort(), 50);
+				return hanging(signal);
+			}
+			return {};
+		},
+		controller.signal,
+		{ heartbeatMs: 10_000 },
+	);
+	expect(performance.now() - interrupted).toBeLessThan(1000);
+	expect(calls.at(-1)).toEqual(["report_implementation_build", {
+		id,
+		state: "failed",
+		error: STOPPED,
+	}]);
+});
+
+test("Ctrl-C waits at most five seconds for its stop report to reach Chopin", async () => {
+	let controller = new AbortController();
+	let interrupted = 0;
+	await run(
+		{},
+		["--hang"],
+		(name, args, signal) => {
+			if (args.state === "running") {
+				interrupted = performance.now() + 50;
+				setTimeout(() => controller.abort(), 50);
+			}
+			return args.state === "failed" ? hanging(signal) : {};
+		},
+		controller.signal,
+		{ heartbeatMs: 10_000 },
+	);
+	expect(performance.now() - interrupted).toBeGreaterThanOrEqual(4900);
+	expect(performance.now() - interrupted).toBeLessThan(6500);
+}, 10_000);
 
 test("servers the agent left running in its worktree end with the run", async () => {
 	let file = join(await mkdtemp(join(tmpdir(), "chopin-orphan-")), "pid");

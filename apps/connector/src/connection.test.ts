@@ -259,3 +259,33 @@ test("a run's reports reach a restarted server through a fresh connection", asyn
 	expect(connects).toBe(2);
 	expect(second!.calls).toEqual(["renew_experiment", "disconnect_workspace"]);
 });
+
+test("a run's call that waits for a new connection gives up when its signal aborts", async () => {
+	let first = chopin({
+		wait_for_work: () => ({ id: "work-1", kind: "experiment" }),
+		claim_experiment: () => ({}),
+		renew_experiment: () => {
+			throw new Error("unavailable: restarting");
+		},
+	});
+	let connects = 0;
+	let abort = new AbortController();
+	let elapsed = 0;
+	await serveWork({
+		// The server accepts the reconnect but never answers it.
+		connect: () => ++connects === 1 ? remote(first.url, "token") : new Promise(() => {}),
+		signal: abort.signal,
+		output: terminal().output,
+		async run(api) {
+			// A transient failure drops the connection, so the next call connects again.
+			await api.call("renew_experiment", { id: "work-1" }).catch(() => {});
+			let started = performance.now();
+			let call = api.call("renew_experiment", { id: "work-1" }, AbortSignal.timeout(100));
+			await expect(call).rejects.toThrow();
+			elapsed = performance.now() - started;
+			abort.abort();
+		},
+	});
+	expect(connects).toBe(2);
+	expect(elapsed).toBeLessThan(500);
+});
