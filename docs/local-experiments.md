@@ -53,12 +53,16 @@ server rechecks your push access with the machine's own GitHub authorization.
 
 A machine stays paired until you disconnect it: choose **Disconnect machine**
 for it under **Your local agents** at `/connect`, or run `chopin unpair` on the
-machine. Either way its connector stops at once with `machine-revoked` and does
-not retry. GitHub allows ten active authorizations per account for an App. A
+machine. Either way its connector stops at once with `machine-revoked`, does
+not retry, and deletes the token from `machine.json`. The next `chopin connect`
+on a terminal then pairs again, as on a machine never paired; without a
+terminal, as when run as a service, it stops with the same message instead of
+waiting on a browser. GitHub allows ten active authorizations per account for an App. A
 new sign-in or pairing beyond that silently retires the oldest one, which can be
 a machine's. Chopin then marks that machine as needing pairing again
-(`machine-reauthorize`) rather than revoking it, its connector stops, and
-`chopin pair` on it authorizes it again. Under `AUTH_MODE=local`, which has no
+(`machine-reauthorize`) rather than revoking it, its connector stops and
+forgets the token in the same way, and `chopin pair`, or `chopin connect` on a
+terminal, authorizes it again. Under `AUTH_MODE=local`, which has no
 client secret to authorize a machine with, connector calls instead use your
 live browser login and wait while you are signed out.
 
@@ -307,7 +311,8 @@ errors and 5xx answers do not count; the connector keeps retrying those.
 **"This machine is no longer paired" (`machine-revoked`) or "GitHub no longer
 accepts this machine's authorization" (`machine-reauthorize`).** The machine was
 disconnected in the browser or unpaired, or GitHub retired its authorization.
-Run `chopin pair` on it, then connect again.
+The connector has deleted the refused token. Run `chopin connect` again on a
+terminal, which pairs first, or `chopin pair` and then connect.
 
 **`script not found: connector`.** `bun run connector` only works inside a Chopin
 checkout. Use the `curl … connector.js` command above from your project folder.

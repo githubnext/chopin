@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -39,8 +39,11 @@ async function checkout() {
 	return root;
 }
 
-/** A Chopin server that pairs, registers checkouts and serves wait_for_work, recording calls. */
-function fakeChopin(options: { connections?: () => Response } = {}) {
+/**
+ * A Chopin server that pairs, registers checkouts and serves wait_for_work, recording calls. It
+ * refuses any machine token but the one it paired with `stale`, machine-revoked by default.
+ */
+function fakeChopin(options: { connections?: () => Response; stale?: string } = {}) {
 	let calls: Array<{ path: string; bearer: string; body: unknown }> = [];
 	let waited = Promise.withResolvers<void>();
 	let server = Bun.serve({
@@ -68,7 +71,7 @@ function fakeChopin(options: { connections?: () => Response } = {}) {
 			}
 			if (path === "/api/connector/connections") {
 				if (bearer !== MACHINE_TOKEN) {
-					return Response.json({ error: "machine-revoked" }, { status: 401 });
+					return Response.json({ error: options.stale ?? "machine-revoked" }, { status: 401 });
 				}
 				return options.connections?.() ?? Response.json({ token: "connection-token" });
 			}
@@ -235,20 +238,84 @@ test("connect pairs first when this machine has no token for the server", async 
 		.toBe(MACHINE_TOKEN);
 });
 
-test("a revoked machine stops connect at once and says to pair again", async () => {
+const REVOKED_TOKEN = `chopin_m_${"R".repeat(43)}`;
+const ELSEWHERE = "https://other-chopin.example";
+
+/** A machine.json holding a token Chopin has revoked, beside another server's token. */
+async function revokedMachine(home: string, url: string) {
+	await writeFile(
+		machineFile(home),
+		JSON.stringify({
+			servers: {
+				[url]: { token: REVOKED_TOKEN, label: "box" },
+				[ELSEWHERE]: { token: MACHINE_TOKEN, label: "box" },
+			},
+		}),
+		{ mode: 0o600 },
+	);
+}
+
+for (let code of ["machine-revoked", "machine-reauthorize"]) {
+	test(`without a terminal, ${code} stops connect, says to pair again and forgets the token`, async () => {
+		let home = await scratch("chopin-home-");
+		let root = await checkout();
+		let chopin = fakeChopin({ stale: code });
+		await revokedMachine(home, chopin.url);
+		let connected = cli(["connect", root, "--", "agent"], home, chopin.url);
+		expect(await connected.exited).toBe(1);
+		let output = await connected.output;
+		expect(output).toContain(
+			code === "machine-revoked" ? "no longer paired" : "authorize it again",
+		);
+		expect(output).toMatch(/pair`/);
+		expect(chopin.calls.map(call => call.path)).toEqual(["/api/connector/connections"]);
+		expect(JSON.parse(await readFile(machineFile(home), "utf8"))).toEqual({
+			servers: { [ELSEWHERE]: { token: MACHINE_TOKEN, label: "box" } },
+		});
+	});
+}
+
+test("on a terminal, connect with a revoked token forgets it and pairs again", async () => {
 	let home = await scratch("chopin-home-");
 	let root = await checkout();
-	let chopin = fakeChopin({
-		connections: () => Response.json({ error: "machine-revoked" }, { status: 401 }),
+	let chopin = fakeChopin();
+	await revokedMachine(home, chopin.url);
+	let output = "";
+	let child = Bun.spawn([process.execPath, MAIN, "connect", root, "--", "agent-that-never-runs"], {
+		env: {
+			...process.env,
+			CHOPIN_URL: chopin.url,
+			CHOPIN_HOME: home,
+			CHOPIN_CONNECTOR_STATE_DIR: "",
+		},
+		terminal: {
+			cols: 200,
+			rows: 24,
+			data(_terminal, data) {
+				output += new TextDecoder().decode(data);
+			},
+		},
 	});
-	expect(await cli(["pair"], home, chopin.url).exited).toBe(0);
-	chopin.calls.length = 0;
-	let connected = cli(["connect", root, "--", "agent"], home, chopin.url);
-	expect(await connected.exited).toBe(1);
-	let output = await connected.output;
-	expect(output).toContain("no longer paired");
-	expect(output).toMatch(/pair`/);
-	expect(chopin.calls.map(call => call.path)).toEqual(["/api/connector/connections"]);
+	cleanup.push(() => {
+		child.kill("SIGKILL");
+		child.terminal?.close();
+	});
+	await Promise.race([chopin.waited, child.exited]);
+	child.kill("SIGINT");
+	expect(await child.exited, output).toBe(0);
+	expect(output).toContain("ABCD-EFGH");
+	expect(chopin.calls.map(call => [call.path, call.bearer]).slice(0, 4)).toEqual([
+		["/api/connector/connections", REVOKED_TOKEN],
+		["/api/connector/pairings", ""],
+		["/api/connector/pairings/pairing/claim", ""],
+		["/api/connector/connections", MACHINE_TOKEN],
+	]);
+	expect(JSON.parse(await readFile(machineFile(home), "utf8"))).toEqual({
+		servers: {
+			[chopin.url]: { token: MACHINE_TOKEN, label: hostname() },
+			[ELSEWHERE]: { token: MACHINE_TOKEN, label: "box" },
+		},
+	});
 });
 
 test("unpair revokes the machine on the server and deletes the local token", async () => {

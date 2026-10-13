@@ -215,11 +215,18 @@ export async function unpair(url: string, directory: string): Promise<"unpaired"
 	} catch (error) {
 		if (classifyConnectorError(error) !== "revoked") throw error;
 	}
+	await forget(url, directory, token);
+	return "unpaired";
+}
+
+/**
+ * Delete the token stored for `url`, as Chopin revoked it or no longer accepts it. A pairing that
+ * finished meanwhile stored a new token, which stays.
+ */
+export async function forget(url: string, directory: string, token: string) {
 	await update(directory, value => {
-		// A pairing that finished meanwhile stored a new token, which stays.
 		if (value.servers[url]?.token === token) delete value.servers[url];
 	});
-	return "unpaired";
 }
 
 /**

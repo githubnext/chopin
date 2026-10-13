@@ -3,10 +3,10 @@ import { basename, resolve } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { requestSchema } from "@chopin/experiment";
 import { createBridge } from "./bridge";
-import { serveWork } from "./connection";
+import { ConnectorStopped, serveWork } from "./connection";
 import { remote } from "./mcp";
 import { parseArgs } from "./args";
-import { connectorMessage, machineToken, pair, register, SELF, unpair } from "./machine";
+import { connectorMessage, forget, machineToken, pair, register, SELF, unpair } from "./machine";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { runWork } from "./run";
@@ -138,42 +138,57 @@ async function connect(args: string[]) {
 	let permissions = permissionMemory();
 	try {
 		let { root: _root, ...source } = info;
-		// A machine paired once reconnects with its stored token; an unpaired one pairs first.
-		let machine = await machineToken(directory, url)
-			?? await pair({
-				url,
-				label: hostname(),
-				directory,
-				output,
-				signal: abort.signal,
-				checkout: source,
-			});
-		if (!machine) return;
 		let checkout = { ...source, label: basename(info.root) };
-		let announced = false;
-		await serveWork({
-			// Every connection registers anew with the machine token: a connection token lasts only
-			// while the server runs, so after a restart Chopin refuses the old one for good.
-			connect: async signal => {
-				let api = await remote(url, await register(url, machine, checkout, signal), signal);
-				if (!announced) output.connected(info.repository);
-				announced = true;
-				return api;
-			},
-			signal: abort.signal,
-			output,
-			run: (api, kind, claim) =>
-				runWork(api, kind, claim, {
-					root: info.root,
-					directory,
-					command,
+		for (;;) {
+			// A machine paired once reconnects with its stored token; an unpaired one pairs first.
+			let stored = await machineToken(directory, url);
+			let machine = stored
+				?? await pair({
 					url,
+					label: hostname(),
+					directory,
+					output,
+					signal: abort.signal,
+					checkout: source,
+				});
+			if (!machine) return;
+			let announced = false;
+			try {
+				await serveWork({
+					// Every connection registers anew with the machine token: a connection token lasts only
+					// while the server runs, so after a restart Chopin refuses the old one for good.
+					connect: async signal => {
+						let api = await remote(url, await register(url, machine, checkout, signal), signal);
+						if (!announced) output.connected(info.repository);
+						announced = true;
+						return api;
+					},
 					signal: abort.signal,
 					output,
-					permissions,
-					interrupt: stop,
-				}),
-		});
+					run: (api, kind, claim) =>
+						runWork(api, kind, claim, {
+							root: info.root,
+							directory,
+							command,
+							url,
+							signal: abort.signal,
+							output,
+							permissions,
+							interrupt: stop,
+						}),
+				});
+				return;
+			} catch (error) {
+				if (!(error instanceof ConnectorStopped && error.reason === "revoked")) throw error;
+				// Chopin no longer accepts the token, so it is forgotten and the next connect pairs.
+				await forget(url, directory, machine);
+				// A stored token refused at the start pairs again at once on a terminal, as if none were
+				// stored. A service stops rather than wait on a browser, and a machine disconnected while
+				// it was connected stays stopped.
+				if (!stored || announced || !process.stdin.isTTY || !process.stdout.isTTY) throw error;
+				output.say("This machine needs pairing with Chopin again.");
+			}
+		}
 	} catch (error) {
 		if (!abort.signal.aborted) throw error;
 	} finally {
